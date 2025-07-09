@@ -25,12 +25,14 @@
  */
 
 import { EventEmitter } from 'events';
-import { AlgorithmFactory, MultiAlgorithmMiner, ProfitSwitcher } from './algorithms/mining-algorithms';
+import { OptimizedAlgorithmFactory as AlgorithmFactory, OptimizedMultiMiner as MultiAlgorithmMiner, OptimizedProfitSwitcher as ProfitSwitcher } from './algorithms/optimized-mining-algorithms';
 import { StratumV2Server } from './stratum-v2/stratum-v2-protocol';
 import { OneClickSetup } from './setup/one-click-setup';
 import { HardwareMonitoringSystem, createHardwareMonitoringSystem } from './monitoring/hardware-monitoring';
+import { SimpleHashrateMonitor, createHashrateMonitor } from './monitoring/simple-hashrate-monitor';
 import { RevenueCalculationEngine, AutoProfitSwitcher } from './revenue/real-time-revenue-calculator';
 import { Enhanced100LanguageSystem, initI18n, t } from './i18n/enhanced-100lang-system';
+import { SimpleAPIServer } from './api/simple-api-server';
 
 // === 型定義 - 実用的でクリーンな設計 ===
 export interface OtedamaConfig {
@@ -78,6 +80,15 @@ export interface OtedamaConfig {
     theme: 'light' | 'dark' | 'auto';
     notifications: boolean;
   };
+  api: {
+    enabled: boolean;
+    port: number;
+    cors: boolean;
+    auth?: {
+      enabled: boolean;
+      apiKey?: string;
+    };
+  };
   security: {
     encryption: boolean;
     authentication: boolean;
@@ -92,10 +103,12 @@ export interface OtedamaSystemStatus {
     algorithms: boolean;
     stratum: boolean;
     hardware: boolean;
+    hashrate: boolean;
     revenue: boolean;
     ai: boolean;
     security: boolean;
     i18n: boolean;
+    api: boolean;
   };
   performance: {
     totalHashrate: number;
@@ -163,6 +176,14 @@ const DEFAULT_CONFIG: OtedamaConfig = {
     theme: 'auto',
     notifications: true
   },
+  api: {
+    enabled: true,
+    port: 8080,
+    cors: true,
+    auth: {
+      enabled: false
+    }
+  },
   security: {
     encryption: true,
     authentication: false, // P2Pなので基本不要
@@ -177,10 +198,12 @@ export class OtedamaMainApplication extends EventEmitter {
   private components: {
     stratum?: StratumV2Server;
     hardware?: HardwareMonitoringSystem;
+    hashrate?: SimpleHashrateMonitor;
     revenue?: RevenueCalculationEngine;
     profitSwitcher?: AutoProfitSwitcher;
     miner?: MultiAlgorithmMiner;
     i18n?: Enhanced100LanguageSystem;
+    api?: SimpleAPIServer;
   } = {};
   private startTime = 0;
   private isInitialized = false;
@@ -199,10 +222,12 @@ export class OtedamaMainApplication extends EventEmitter {
         algorithms: false,
         stratum: false,
         hardware: false,
+        hashrate: false,
         revenue: false,
         ai: false,
         security: false,
-        i18n: false
+        i18n: false,
+        api: false
       },
       performance: {
         totalHashrate: 0,
@@ -247,16 +272,22 @@ export class OtedamaMainApplication extends EventEmitter {
       // 2. ハードウェア監視初期化
       await this.initializeHardwareMonitoring();
       
-      // 3. 収益計算エンジン初期化
+      // 3. ハッシュレート監視初期化
+      await this.initializeHashrateMonitoring();
+      
+      // 4. 収益計算エンジン初期化
       await this.initializeRevenueEngine();
       
-      // 4. マイニングアルゴリズム初期化
+      // 5. マイニングアルゴリズム初期化
       await this.initializeMiningAlgorithms();
       
-      // 5. Stratum V2サーバー初期化
+      // 6. Stratum V2サーバー初期化
       await this.initializeStratumServer();
       
-      // 6. 定期タスク開始
+      // 7. APIサーバー初期化
+      await this.initializeAPIServer();
+      
+      // 8. 定期タスク開始
       this.startPeriodicTasks();
 
       this.isInitialized = true;
@@ -322,6 +353,28 @@ export class OtedamaMainApplication extends EventEmitter {
 
     this.status.components.hardware = true;
     console.log('✅ Hardware monitoring initialized');
+  }
+
+  // === ハッシュレート監視初期化 ===
+  private async initializeHashrateMonitoring(): Promise<void> {
+    console.log('📊 Initializing hashrate monitoring...');
+    
+    this.components.hashrate = createHashrateMonitor();
+    
+    // イベントハンドラー設定
+    this.components.hashrate.on('alert', (alert) => {
+      console.log(`🚨 Hashrate alert: ${alert.message}`);
+      this.emit('hashrateAlert', alert);
+    });
+
+    this.components.hashrate.on('dataAdded', (data) => {
+      this.status.performance.totalHashrate = data.hashrate;
+      this.status.mining.shares.accepted = data.shares.accepted;
+      this.status.mining.shares.rejected = data.shares.rejected;
+    });
+
+    this.status.components.hashrate = true;
+    console.log('✅ Hashrate monitoring initialized');
   }
 
   // === 収益計算エンジン初期化 ===
@@ -406,6 +459,37 @@ export class OtedamaMainApplication extends EventEmitter {
     console.log(`✅ Stratum V2 server initialized on port ${this.config.pool.stratumPort}`);
   }
 
+  // === APIサーバー初期化 ===
+  private async initializeAPIServer(): Promise<void> {
+    if (!this.config.api.enabled) {
+      console.log('⏭️ API server disabled');
+      return;
+    }
+
+    console.log('🚀 Initializing API server...');
+    
+    this.components.api = new SimpleAPIServer({
+      port: this.config.api.port,
+      cors: this.config.api.cors,
+      auth: this.config.api.auth
+    });
+    
+    // イベントハンドラー設定
+    this.components.api.on('request', (data) => {
+      if (data.status >= 400) {
+        console.log(`⚠️ API ${data.method} ${data.path} - ${data.status}`);
+      }
+    });
+
+    this.components.api.on('error', (error) => {
+      console.error('❌ API server error:', error);
+      this.emit('apiError', error);
+    });
+
+    this.status.components.api = true;
+    console.log(`✅ API server initialized on port ${this.config.api.port}`);
+  }
+
   // === アプリケーション開始 ===
   async start(): Promise<void> {
     if (!this.isInitialized) {
@@ -443,6 +527,11 @@ export class OtedamaMainApplication extends EventEmitter {
         await this.components.stratum.start();
       }
 
+      // 5. APIサーバー開始
+      if (this.components.api) {
+        await this.components.api.start();
+      }
+
       this.status.status = 'running';
       console.log('✅ Otedama started successfully!');
       console.log(`🎯 Features: Zero-fee P2P pool, ${this.config.mining.algorithms.join('/')}, 100 languages`);
@@ -472,6 +561,10 @@ export class OtedamaMainApplication extends EventEmitter {
       this.emit('statusChanged', this.status);
 
       // 各コンポーネントを安全に停止
+      if (this.components.api) {
+        await this.components.api.stop();
+      }
+
       if (this.components.stratum) {
         await this.components.stratum.stop();
       }

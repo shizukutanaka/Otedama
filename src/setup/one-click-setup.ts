@@ -12,7 +12,7 @@
 import * as os from 'os';
 import { execSync, exec } from 'child_process';
 import { EventEmitter } from 'events';
-import { AlgorithmFactory } from '../algorithms/unified-mining-algorithms';
+import { OptimizedAlgorithmFactory as AlgorithmFactory } from '../algorithms/optimized-mining-algorithms';
 
 // === 型定義 ===
 export interface HardwareInfo {
