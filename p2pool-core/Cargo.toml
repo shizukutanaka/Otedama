@@ -57,7 +57,7 @@ thiserror = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Metrics
-metrics = "0.21"
+metrics = "0.24"
 metrics-exporter-prometheus = "0.12"
 
 [dev-dependencies]
