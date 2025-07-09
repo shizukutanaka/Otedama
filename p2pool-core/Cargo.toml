@@ -46,7 +46,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Configuration
-config = "0.13"
+config = "0.15"
 clap = { version = "4.0", features = ["derive"] }
 
 # Error handling
