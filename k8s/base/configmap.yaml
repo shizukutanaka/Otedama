@@ -1,0 +1,94 @@
+# ConfigMap for Otedama Mining Pool
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  labels:
+    app: otedama-pool
+data:
+  # Basic configuration
+  stratum-port: "3333"
+  stratum-v2-port: "3334"
+  proxy-port: "3335"
+  api-port: "8088"
+  dashboard-port: "8080"
+  metrics-port: "9090"
+  health-port: "3001"
+  
+  # RPC configuration
+  rpc-url: "http://bitcoin-node:8332"
+  
+  # Pool configuration
+  pool-fee: "1.0"
+  min-payout: "0.001"
+  payout-scheme: "pplns"
+  payout-window-type: "count"
+  payout-window-value: "1000000"
+  
+  # Feature flags
+  monitoring-enabled: "true"
+  api-enabled: "true"
+  dashboard-enabled: "true"
+  backup-enabled: "true"
+  multi-algorithm-enabled: "true"
+  merge-mining-enabled: "false"
+  wallet-integration-enabled: "true"
+  stratum-v2-enabled: "true"
+  
+  # Performance settings
+  enable-parallel-validation: "true"
+  parallel-workers: "4"
+  cpu-affinity-enabled: "true"
+  memory-alignment-enabled: "true"
+  wasm-acceleration-enabled: "true"
+  
+  # Cache settings
+  stats-cache-timeout: "60"
+  
+  # Security
+  public-stats: "true"
+  cors-enabled: "true"
+  cors-origins: "*"
+  
+  # Logging
+  log-level: "INFO"
+  log-console: "true"
+  
+  # Difficulty adjustment
+  vardiff-strategy: "classic"
+  vardiff-target-time: "10"
+  vardiff-retarget-time: "90"
+  vardiff-min-diff: "64"
+  vardiff-max-diff: "4294967296"
+---
+# Secret template (create actual secrets with sensitive data)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets
+  labels:
+    app: otedama-pool
+type: Opaque
+stringData:
+  # IMPORTANT: Replace these with actual values
+  pool-address: "bc1qxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  rpc-user: "bitcoinrpc"
+  rpc-password: "changeme"
+  jwt-secret: "change-this-to-a-secure-secret"
+  redis-password: "redis-password-changeme"
+  database-url: "postgresql://otedama:password@postgres:5432/otedama_pool"
+  
+  # API keys
+  fcm-key: ""
+  apns-key: ""
+  
+  # Alert webhooks
+  alert-webhook-url: ""
+  telegram-bot-token: ""
+  telegram-chat-id: ""
+  
+  # Merge mining credentials (if enabled)
+  namecoin-rpc-user: ""
+  namecoin-rpc-password: ""
+  rsk-rpc-user: ""
+  rsk-rpc-password: ""

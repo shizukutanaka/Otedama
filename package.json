@@ -1,0 +1,303 @@
+{
+  "name": "otedama-mining-app",
+  "version": "2.1.0",
+  "description": "🌟 World's First True Zero-Fee P2P Mining Pool - Complete Mining Solution with AI Optimization",
+  "main": "dist/index.js",
+  "homepage": "https://github.com/shizukutanaka/Otedama",
+  "author": {
+    "name": "Shizuku Tanaka",
+    "email": "shizukutanaka@proton.me",
+    "url": "https://github.com/shizukutanaka"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shizukutanaka/Otedama.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shizukutanaka/Otedama/issues"
+  },
+  "keywords": [
+    "mining",
+    "pool", 
+    "p2p",
+    "zero-fee",
+    "stratum-v2",
+    "ai-optimization",
+    "auto-setup",
+    "profit-switching",
+    "hardware-monitoring",
+    "bitcoin",
+    "monero", 
+    "ravencoin",
+    "ethereum-classic",
+    "cryptocurrency",
+    "100-languages",
+    "enterprise-security",
+    "multi-pool"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:prod": "tsc --project tsconfig.production.json",
+    "build:watch": "tsc --watch",
+    
+    "start": "npm run build && node dist/main-unified.js",
+    "start:quick": "npm run build && node -e \"require('./dist/index').quickStart().catch(console.error)\"",
+    "start:demo": "npm run build && node -e \"require('./dist/index').demoStart().catch(console.error)\"",
+    
+    "setup": "npm run build && node -e \"require('./dist/setup/one-click-setup').performOneClickSetup().then(r => console.log('Setup completed:', r)).catch(console.error)\"",
+    "setup:auto": "npm run setup",
+    
+    "mining:start": "npm run start:quick",
+    "mining:demo": "npm run start:demo",
+    
+    "hardware:monitor": "npm run build && node -e \"require('./dist/monitoring/hardware-monitoring').createHardwareMonitoringSystem().then(m => { m.start(); setTimeout(() => m.stop(), 30000); })\"",
+    "revenue:check": "npm run build && node -e \"const { RevenueCalculationEngine } = require('./dist/revenue/real-time-revenue-calculator'); const engine = new RevenueCalculationEngine(0.12); engine.start().then(() => console.log('Revenue engine started'));\"",
+    "ai:optimize": "npm run build && node -e \"require('./dist/ai/optimization-engine').startAIOptimization().then(() => console.log('AI optimization started'));\"",
+    "security:test": "npm run build && node -e \"require('./dist/security/security-manager').initializeSecurity().then(() => console.log('Security initialized'));\"",
+    "pools:manage": "npm run build && node -e \"require('./dist/pool/multi-pool-manager').startMultiPoolMining().then(() => console.log('Multi-pool started'));\"",
+    
+    "algorithms:test": "npm run build && node -e \"const { AlgorithmFactory } = require('./dist/algorithms/mining-algorithms'); console.log('Available algorithms:', AlgorithmFactory.list());\"",
+    "algorithms:benchmark": "npm run build && node -e \"console.log('Benchmarking algorithms...'); require('./dist/algorithms/mining-algorithms');\"",
+    
+    "i18n:test": "npm run build && node -e \"require('./dist/i18n/enhanced-100lang-system').initI18n('ja').then(() => console.log('Languages:', require('./dist/i18n/enhanced-100lang-system').getSupportedLanguages().length));\"",
+    
+    "electron": "electron .",
+    "electron:dev": "npm run build && electron . --dev",
+    "app": "npm run build && electron .",
+    
+    "pack": "electron-builder --dir", 
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac", 
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder --win --mac --linux",
+    "publish": "electron-builder --publish=always",
+    "postinstall": "electron-builder install-app-deps",
+    
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "npm run build && npm run test",
+    
+    "lint": "eslint src --ext .ts --max-warnings 0",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\"",
+    "type-check": "tsc --noEmit",
+    
+    "clean": "rimraf dist build coverage",
+    "clean:all": "npm run clean && rimraf node_modules",
+    
+    "docs": "typedoc",
+    "docs:serve": "typedoc && npx http-server docs",
+    
+    "precommit": "npm run lint && npm run type-check && npm run test",
+    "release": "npm run build:prod && npm run test && npm run dist",
+    "release:patch": "npm version patch && npm run release",
+    "release:minor": "npm version minor && npm run release", 
+    "release:major": "npm version major && npm run release",
+    
+    "security:check": "npm audit --audit-level=moderate",
+    "security:fix": "npm audit fix",
+    "performance:test": "npm run algorithms:benchmark",
+    "github:validate": "npm run lint && npm run type-check && npm run test && npm run build"
+  },
+  "bin": {
+    "otedama": "./dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "assets/**/*",
+    "public/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "build": {
+    "productName": "Otedama Mining",
+    "appId": "com.otedama.mining",
+    "copyright": "Copyright © 2025 Otedama Team",
+    "directories": {
+      "output": "build",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/**/*", 
+      "public/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/miners",
+        "to": "miners"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip", 
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "publisherName": "Otedama Team",
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "snap",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "deb", 
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "desktop": {
+        "StartupWMClass": "otedama-mining"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Otedama Mining"
+    },
+    "dmg": {
+      "title": "Otedama Mining ${version}",
+      "icon": "assets/icon.icns",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "snap": {
+      "summary": "Zero fee P2P mining pool with AI optimization"
+    },
+    "protocols": [
+      {
+        "name": "Otedama Mining Protocol",
+        "schemes": ["otedama"]
+      }
+    ]
+  },
+  "dependencies": {
+    "electron": "^28.0.0",
+    "ws": "^8.16.0",
+    "dotenv": "^16.3.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.0",
+    "node-fetch": "^3.3.2",
+    "ethers": "^6.11.1",
+    "libp2p": "^1.2.0",
+    "@libp2p/tcp": "^9.0.0",
+    "@chainsafe/libp2p-noise": "^14.0.0",
+    "@libp2p/mplex": "^10.0.0",
+    "@libp2p/bootstrap": "^10.0.0",
+    "@libp2p/kad-dht": "^12.0.0",
+    "@chainsafe/libp2p-gossipsub": "^13.0.0",
+    "papaparse": "^5.4.1",
+    "mathjs": "^12.2.0",
+    "lodash": "^4.17.21",
+    "blake2b": "^2.1.4",
+    "blake2s": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.10",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17", 
+    "@types/papaparse": "^5.3.14",
+    "@types/lodash": "^4.14.202",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "concurrently": "^8.2.2",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.10",
+    "ts-jest": "^29.1.1",
+    "nodemon": "^3.0.2",
+    "prettier": "^3.1.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.0",
+    "typedoc": "^0.25.4",
+    "wait-on": "^7.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/src"],
+    "testMatch": ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/*.d.ts",
+      "!src/archive/**",
+      "!src/**/*.test.ts"
+    ]
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": true,
+    "printWidth": 100,
+    "tabWidth": 2
+  },
+  "eslintConfig": {
+    "parser": "@typescript-eslint/parser",
+    "extends": [
+      "eslint:recommended",
+      "@typescript-eslint/recommended"
+    ],
+    "rules": {
+      "@typescript-eslint/no-unused-vars": "error",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "prefer-const": "error",
+      "no-var": "error"
+    },
+    "ignorePatterns": ["dist/", "build/", "coverage/", "src/archive/"]
+  }
+}

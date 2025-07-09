@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2Pool - Distributed Mining Pool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Consolas', monospace;
+            background: #0a0a0a;
+            color: #00ff00;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            background: rgba(0, 255, 0, 0.05);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ff00;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #00ffff;
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 10px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 5px 0;
+        }
+
+        .metric-label {
+            opacity: 0.8;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .status-offline {
+            background: #ff0000;
+        }
+
+        .logs {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+            padding: 20px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9rem;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+
+        .log-info {
+            color: #00ff00;
+        }
+
+        .log-warn {
+            color: #ffff00;
+        }
+
+        .log-error {
+            color: #ff0000;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            border-top: 1px solid #00ff00;
+            opacity: 0.6;
+        }
+
+        .blink {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.5; }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+        }
+
+        /* Connection status animation */
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 5px rgba(0, 255, 0, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(0, 255, 0, 0.8); }
+            100% { box-shadow: 0 0 5px rgba(0, 255, 0, 0.5); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⛏️ P2Pool</h1>
+            <div class="subtitle">Distributed Mining Pool - Decentralized & Trustless</div>
+            <div style="margin-top: 10px;">
+                <span class="status-indicator status-online pulse"></span>
+                <span id="connection-status">Connected</span>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <div class="card">
+                <div class="card-title">📊 Pool Statistics</div>
+                <div class="metric">
+                    <span class="metric-label">Hash Rate:</span>
+                    <span class="metric-value" id="hash-rate">0 H/s</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Difficulty:</span>
+                    <span class="metric-value" id="difficulty">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Shares/sec:</span>
+                    <span class="metric-value" id="shares-per-sec">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Blocks Found:</span>
+                    <span class="metric-value" id="blocks-found">0</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🌐 Network Status</div>
+                <div class="metric">
+                    <span class="metric-label">Connected Peers:</span>
+                    <span class="metric-value" id="connected-peers">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Uptime:</span>
+                    <span class="metric-value" id="uptime">0s</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Version:</span>
+                    <span class="metric-value" id="version">0.1.0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Block:</span>
+                    <span class="metric-value" id="last-block">Never</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">👥 Miners</div>
+                <div class="metric">
+                    <span class="metric-label">Active Miners:</span>
+                    <span class="metric-value" id="active-miners">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Miners:</span>
+                    <span class="metric-value" id="total-miners">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Pool Fee:</span>
+                    <span class="metric-value">1.0%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payout Method:</span>
+                    <span class="metric-value">PPLNS</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">⚡ Performance</div>
+                <div class="metric">
+                    <span class="metric-label">CPU Usage:</span>
+                    <span class="metric-value" id="cpu-usage">0%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Memory Usage:</span>
+                    <span class="metric-value" id="memory-usage">0 MB</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Network I/O:</span>
+                    <span class="metric-value" id="network-io">0 KB/s</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">DB Size:</span>
+                    <span class="metric-value" id="db-size">0 MB</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📜 System Logs</div>
+            <div class="logs" id="logs">
+                <div class="log-entry">
+                    <span class="log-timestamp">[2025-01-06 12:00:00]</span>
+                    <span class="log-info">[INFO]</span> P2Pool started successfully
+                </div>
+                <div class="log-entry">
+                    <span class="log-timestamp">[2025-01-06 12:00:01]</span>
+                    <span class="log-info">[INFO]</span> Listening on 0.0.0.0:37124
+                </div>
+                <div class="log-entry">
+                    <span class="log-timestamp">[2025-01-06 12:00:02]</span>
+                    <span class="log-info">[INFO]</span> WebSocket server started
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>P2Pool - Distributed Mining Pool v0.1.0</p>
+            <p>Built with ❤️ following Carmack, Martin & Pike principles</p>
+        </div>
+    </div>
+
+    <script>
+        class P2PoolDashboard {
+            constructor() {
+                this.ws = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.reconnectInterval = 5000;
+                this.startTime = Date.now();
+                
+                this.initWebSocket();
+                this.startPeriodicUpdates();
+            }
+
+            initWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                console.log('Connecting to WebSocket:', wsUrl);
+                
+                this.ws = new WebSocket(wsUrl);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.reconnectAttempts = 0;
+                    this.updateConnectionStatus(true);
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleMessage(data);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+                
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    this.updateConnectionStatus(false);
+                    this.attemptReconnect();
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus(false);
+                };
+            }
+
+            attemptReconnect() {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    console.log(`Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+                    
+                    setTimeout(() => {
+                        this.initWebSocket();
+                    }, this.reconnectInterval);
+                } else {
+                    console.log('Max reconnect attempts reached');
+                    this.addLogEntry('ERROR', 'WebSocket connection failed');
+                }
+            }
+
+            handleMessage(data) {
+                switch (data.type) {
+                    case 'stats_update':
+                    case 'initial_stats':
+                        this.updateStats(data.data);
+                        break;
+                    case 'new_share':
+                        this.addLogEntry('INFO', `New share: ${data.data.id}`);
+                        break;
+                    case 'new_block':
+                        this.addLogEntry('INFO', `🎉 Block found: ${data.data.hash}`);
+                        break;
+                    case 'peer_connected':
+                        this.addLogEntry('INFO', `Peer connected: ${data.data.id}`);
+                        break;
+                    default:
+                        console.log('Unknown message type:', data.type);
+                }
+            }
+
+            updateStats(stats) {
+                document.getElementById('hash-rate').textContent = this.formatHashRate(stats.hash_rate);
+                document.getElementById('difficulty').textContent = this.formatNumber(stats.difficulty);
+                document.getElementById('shares-per-sec').textContent = stats.shares_per_second || 0;
+                document.getElementById('blocks-found').textContent = stats.blocks_found || 0;
+                document.getElementById('connected-peers').textContent = stats.connected_peers || 0;
+                document.getElementById('uptime').textContent = this.formatUptime(stats.uptime || 0);
+                document.getElementById('version').textContent = stats.version || '0.1.0';
+                
+                if (stats.last_block_time) {
+                    document.getElementById('last-block').textContent = this.formatTime(new Date(stats.last_block_time));
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connection-status');
+                const indicator = document.querySelector('.status-indicator');
+                
+                if (connected) {
+                    statusElement.textContent = 'Connected';
+                    indicator.className = 'status-indicator status-online pulse';
+                } else {
+                    statusElement.textContent = 'Disconnected';
+                    indicator.className = 'status-indicator status-offline';
+                }
+            }
+
+            addLogEntry(level, message) {
+                const logsContainer = document.getElementById('logs');
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                
+                const timestamp = new Date().toISOString().replace('T', ' ').substr(0, 19);
+                const levelClass = `log-${level.toLowerCase()}`;
+                
+                entry.innerHTML = `
+                    <span class="log-timestamp">[${timestamp}]</span>
+                    <span class="${levelClass}">[${level}]</span> ${message}
+                `;
+                
+                logsContainer.appendChild(entry);
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+                
+                // Keep only last 100 log entries
+                const entries = logsContainer.children;
+                if (entries.length > 100) {
+                    logsContainer.removeChild(entries[0]);
+                }
+            }
+
+            startPeriodicUpdates() {
+                setInterval(() => {
+                    // Update uptime
+                    const uptime = Math.floor((Date.now() - this.startTime) / 1000);
+                    
+                    // Simulate some metrics for demo
+                    document.getElementById('cpu-usage').textContent = Math.floor(Math.random() * 20 + 5) + '%';
+                    document.getElementById('memory-usage').textContent = Math.floor(Math.random() * 100 + 50) + ' MB';
+                    document.getElementById('network-io').textContent = Math.floor(Math.random() * 100) + ' KB/s';
+                    document.getElementById('db-size').textContent = Math.floor(Math.random() * 50 + 10) + ' MB';
+                    document.getElementById('active-miners').textContent = Math.floor(Math.random() * 10 + 1);
+                    document.getElementById('total-miners').textContent = Math.floor(Math.random() * 50 + 10);
+                }, 5000);
+            }
+
+            formatHashRate(hashRate) {
+                if (hashRate >= 1e12) return (hashRate / 1e12).toFixed(2) + ' TH/s';
+                if (hashRate >= 1e9) return (hashRate / 1e9).toFixed(2) + ' GH/s';
+                if (hashRate >= 1e6) return (hashRate / 1e6).toFixed(2) + ' MH/s';
+                if (hashRate >= 1e3) return (hashRate / 1e3).toFixed(2) + ' KH/s';
+                return hashRate + ' H/s';
+            }
+
+            formatNumber(num) {
+                return new Intl.NumberFormat().format(Math.floor(num));
+            }
+
+            formatUptime(seconds) {
+                const days = Math.floor(seconds / 86400);
+                const hours = Math.floor((seconds % 86400) / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                
+                if (days > 0) return `${days}d ${hours}h ${mins}m`;
+                if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+                if (mins > 0) return `${mins}m ${secs}s`;
+                return `${secs}s`;
+            }
+
+            formatTime(date) {
+                return date.toLocaleString();
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new P2PoolDashboard();
+        });
+    </script>
+</body>
+</html>

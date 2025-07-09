@@ -1,0 +1,103 @@
+# Service definitions for Otedama Mining Pool
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-pool-service
+  labels:
+    app: otedama-pool
+    component: pool
+spec:
+  type: ClusterIP
+  selector:
+    app: otedama-pool
+    component: pool
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: stratum
+    protocol: TCP
+  - name: stratum-v2
+    port: 3334
+    targetPort: stratum-v2
+    protocol: TCP
+  - name: api
+    port: 8088
+    targetPort: api
+    protocol: TCP
+  - name: dashboard
+    port: 8080
+    targetPort: dashboard
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+---
+# LoadBalancer Service for external Stratum access
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-stratum-lb
+  labels:
+    app: otedama-pool
+    component: stratum
+  annotations:
+    # For cloud providers
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama-pool
+    component: pool
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: stratum
+    protocol: TCP
+  - name: stratum-v2
+    port: 3334
+    targetPort: stratum-v2
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+---
+# Service for Mining Proxy
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-proxy-service
+  labels:
+    app: otedama-pool
+    component: proxy
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama-pool
+    component: proxy
+  ports:
+  - name: proxy
+    port: 3335
+    targetPort: proxy
+    protocol: TCP
+  sessionAffinity: ClientIP
+---
+# Headless Service for Redis
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-redis
+  labels:
+    app: otedama-pool
+    component: redis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: otedama-pool
+    component: redis
+  ports:
+  - port: 6379
+    targetPort: 6379

@@ -1,0 +1,360 @@
+/**
+ * Authentication and authorization system for miners
+ * Following Clean Code principles: single responsibility, clear interfaces
+ */
+
+import * as crypto from 'crypto';
+import { EventEmitter } from 'events';
+import { PoolDatabase } from '../database/pool-database';
+import { AuthenticationError, AuthorizationError } from '../errors/pool-errors';
+
+export interface AuthConfig {
+  requireAuth: boolean;
+  allowAnonymous: boolean;
+  defaultRole: MinerRole;
+  sessionTimeout: number; // in seconds
+  maxSessionsPerUser: number;
+}
+
+export enum MinerRole {
+  ANONYMOUS = 'anonymous',
+  BASIC = 'basic',
+  TRUSTED = 'trusted',
+  ADMIN = 'admin'
+}
+
+export interface MinerAuth {
+  userId: string;
+  username: string;
+  passwordHash?: string;
+  apiKey?: string;
+  role: MinerRole;
+  addresses: string[];
+  createdAt: number;
+  lastLogin?: number;
+  disabled: boolean;
+}
+
+export interface Session {
+  sessionId: string;
+  userId: string;
+  minerId: string;
+  address: string;
+  role: MinerRole;
+  createdAt: number;
+  lastActivity: number;
+  ip: string;
+}
+
+export class AuthManager extends EventEmitter {
+  private sessions = new Map<string, Session>();
+  private minerSessions = new Map<string, string>(); // minerId -> sessionId
+  private userSessions = new Map<string, Set<string>>(); // userId -> Set<sessionId>
+  private cleanupTimer?: NodeJS.Timeout;
+
+  constructor(
+    private config: AuthConfig,
+    private database: PoolDatabase
+  ) {
+    super();
+    this.startCleanupTimer();
+  }
+
+  async authenticate(username: string, password: string, minerData: {
+    minerId: string;
+    address: string;
+    ip: string;
+  }): Promise<Session> {
+    // Check if anonymous mining is allowed
+    if (!this.config.requireAuth && this.config.allowAnonymous) {
+      return this.createAnonymousSession(username, minerData);
+    }
+
+    // Validate credentials
+    const [walletAddress, workerName] = username.split('.');
+    const user = await this.validateUser(walletAddress, password);
+
+    // Check if user is disabled
+    if (user.disabled) {
+      throw new AuthenticationError('Account is disabled', username);
+    }
+
+    // Check session limits
+    const userSessionCount = this.userSessions.get(user.userId)?.size || 0;
+    if (userSessionCount >= this.config.maxSessionsPerUser) {
+      throw new AuthenticationError('Maximum sessions exceeded', username);
+    }
+
+    // Create session
+    const session = await this.createSession(user, minerData);
+    
+    // Update last login
+    await this.updateLastLogin(user.userId);
+
+    this.emit('authenticated', { userId: user.userId, minerId: minerData.minerId });
+    
+    return session;
+  }
+
+  private async validateUser(address: string, password?: string): Promise<MinerAuth> {
+    // For simple wallet-based auth, the address is the username
+    // In production, this would check against a user database
+    
+    // Check if this is a registered address
+    const user: MinerAuth = {
+      userId: this.generateUserId(address),
+      username: address,
+      role: this.config.defaultRole,
+      addresses: [address],
+      createdAt: Date.now(),
+      disabled: false
+    };
+
+    // If password is provided, validate it
+    if (password && user.passwordHash) {
+      const isValid = await this.verifyPassword(password, user.passwordHash);
+      if (!isValid) {
+        throw new AuthenticationError('Invalid credentials', address);
+      }
+    }
+
+    return user;
+  }
+
+  private async createAnonymousSession(username: string, minerData: {
+    minerId: string;
+    address: string;
+    ip: string;
+  }): Promise<Session> {
+    const [walletAddress] = username.split('.');
+    
+    const session: Session = {
+      sessionId: this.generateSessionId(),
+      userId: 'anonymous',
+      minerId: minerData.minerId,
+      address: walletAddress,
+      role: MinerRole.ANONYMOUS,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      ip: minerData.ip
+    };
+
+    this.sessions.set(session.sessionId, session);
+    this.minerSessions.set(minerData.minerId, session.sessionId);
+
+    return session;
+  }
+
+  private async createSession(user: MinerAuth, minerData: {
+    minerId: string;
+    address: string;
+    ip: string;
+  }): Promise<Session> {
+    const session: Session = {
+      sessionId: this.generateSessionId(),
+      userId: user.userId,
+      minerId: minerData.minerId,
+      address: minerData.address,
+      role: user.role,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      ip: minerData.ip
+    };
+
+    // Store session
+    this.sessions.set(session.sessionId, session);
+    this.minerSessions.set(minerData.minerId, session.sessionId);
+
+    // Track user sessions
+    if (!this.userSessions.has(user.userId)) {
+      this.userSessions.set(user.userId, new Set());
+    }
+    this.userSessions.get(user.userId)!.add(session.sessionId);
+
+    return session;
+  }
+
+  async authorize(minerId: string, action: string, resource?: string): Promise<boolean> {
+    const session = this.getSessionByMinerId(minerId);
+    if (!session) {
+      if (this.config.requireAuth) {
+        throw new AuthorizationError('No active session', undefined, resource);
+      }
+      return this.config.allowAnonymous;
+    }
+
+    // Update activity
+    session.lastActivity = Date.now();
+
+    // Check permissions based on role
+    return this.checkPermission(session.role, action, resource);
+  }
+
+  private checkPermission(role: MinerRole, action: string, resource?: string): boolean {
+    // Define permission matrix
+    const permissions: Record<MinerRole, Set<string>> = {
+      [MinerRole.ANONYMOUS]: new Set(['submit_share']),
+      [MinerRole.BASIC]: new Set(['submit_share', 'view_stats', 'view_balance']),
+      [MinerRole.TRUSTED]: new Set([
+        'submit_share', 'view_stats', 'view_balance', 
+        'withdraw', 'view_detailed_stats'
+      ]),
+      [MinerRole.ADMIN]: new Set([
+        'submit_share', 'view_stats', 'view_balance',
+        'withdraw', 'view_detailed_stats', 'manage_users',
+        'manage_pool', 'view_all_stats'
+      ])
+    };
+
+    const userPermissions = permissions[role] || new Set();
+    return userPermissions.has(action) || userPermissions.has('*');
+  }
+
+  getSessionByMinerId(minerId: string): Session | undefined {
+    const sessionId = this.minerSessions.get(minerId);
+    if (!sessionId) return undefined;
+
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      this.minerSessions.delete(minerId);
+      return undefined;
+    }
+
+    // Check if session is expired
+    if (this.isSessionExpired(session)) {
+      this.removeSession(sessionId);
+      return undefined;
+    }
+
+    return session;
+  }
+
+  private isSessionExpired(session: Session): boolean {
+    const now = Date.now();
+    const timeout = this.config.sessionTimeout * 1000;
+    return (now - session.lastActivity) > timeout;
+  }
+
+  removeSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    // Remove from all maps
+    this.sessions.delete(sessionId);
+    this.minerSessions.delete(session.minerId);
+
+    if (session.userId !== 'anonymous') {
+      const userSessions = this.userSessions.get(session.userId);
+      if (userSessions) {
+        userSessions.delete(sessionId);
+        if (userSessions.size === 0) {
+          this.userSessions.delete(session.userId);
+        }
+      }
+    }
+
+    this.emit('sessionEnded', { sessionId, userId: session.userId });
+  }
+
+  disconnectMiner(minerId: string): void {
+    const sessionId = this.minerSessions.get(minerId);
+    if (sessionId) {
+      this.removeSession(sessionId);
+    }
+  }
+
+  // API key management
+  async generateApiKey(userId: string): Promise<string> {
+    const apiKey = this.generateSecureToken(32);
+    const hashedKey = this.hashApiKey(apiKey);
+    
+    // Store hashed key in database
+    // await this.database.updateUserApiKey(userId, hashedKey);
+    
+    return apiKey;
+  }
+
+  async validateApiKey(apiKey: string): Promise<MinerAuth | null> {
+    const hashedKey = this.hashApiKey(apiKey);
+    
+    // Look up user by API key
+    // const user = await this.database.getUserByApiKey(hashedKey);
+    
+    return null; // Placeholder
+  }
+
+  // Utility methods
+  private generateSessionId(): string {
+    return this.generateSecureToken(16);
+  }
+
+  private generateUserId(address: string): string {
+    return crypto.createHash('sha256').update(address).digest('hex').substring(0, 16);
+  }
+
+  private generateSecureToken(length: number): string {
+    return crypto.randomBytes(length).toString('hex');
+  }
+
+  private hashApiKey(apiKey: string): string {
+    return crypto.createHash('sha256').update(apiKey).digest('hex');
+  }
+
+  private async verifyPassword(password: string, hash: string): Promise<boolean> {
+    // In production, use bcrypt or argon2
+    const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+    return passwordHash === hash;
+  }
+
+  private async updateLastLogin(userId: string): Promise<void> {
+    // Update in database
+    // await this.database.updateUserLastLogin(userId, Date.now());
+  }
+
+  private startCleanupTimer(): void {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpiredSessions();
+    }, 60000); // Run every minute
+  }
+
+  private cleanupExpiredSessions(): void {
+    const expiredSessions: string[] = [];
+
+    for (const [sessionId, session] of this.sessions) {
+      if (this.isSessionExpired(session)) {
+        expiredSessions.push(sessionId);
+      }
+    }
+
+    for (const sessionId of expiredSessions) {
+      this.removeSession(sessionId);
+    }
+
+    if (expiredSessions.length > 0) {
+      this.emit('sessionsCleanedUp', { count: expiredSessions.length });
+    }
+  }
+
+  stop(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+
+    // Clear all sessions
+    this.sessions.clear();
+    this.minerSessions.clear();
+    this.userSessions.clear();
+  }
+
+  getStats() {
+    return {
+      totalSessions: this.sessions.size,
+      anonymousSessions: Array.from(this.sessions.values())
+        .filter(s => s.role === MinerRole.ANONYMOUS).length,
+      authenticatedSessions: Array.from(this.sessions.values())
+        .filter(s => s.role !== MinerRole.ANONYMOUS).length,
+      uniqueUsers: this.userSessions.size
+    };
+  }
+}

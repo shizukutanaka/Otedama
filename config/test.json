@@ -1,0 +1,58 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "otedama_test",
+    "username": "otedama",
+    "password": "test_password",
+    "ssl": false,
+    "poolSize": 2,
+    "timeout": 10000
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "database": 15,
+    "keyPrefix": "otedama:test:",
+    "ttl": 300
+  },
+  "server": {
+    "apiPort": 3001,
+    "stratumPort": 3334,
+    "host": "localhost",
+    "workers": 1,
+    "timeout": 10000,
+    "keepAlive": false,
+    "cors": true
+  },
+  "security": {
+    "jwtSecret": "test-jwt-secret",
+    "jwtExpiration": "1h",
+    "bcryptRounds": 4,
+    "rateLimitWindow": 60000,
+    "rateLimitMax": 1000,
+    "enableHttps": false
+  },
+  "pool": {
+    "address": "bcrt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "fee": 0.0,
+    "minPayout": 0.00001,
+    "maxPayout": 0.1,
+    "payoutInterval": 10000,
+    "blockConfirmations": 1,
+    "difficulty": 0.01,
+    "retargetTime": 10000
+  },
+  "logging": {
+    "level": "error",
+    "format": "text",
+    "file": false,
+    "console": false
+  },
+  "monitoring": {
+    "enabled": false,
+    "metricsPort": 9091,
+    "healthCheckInterval": 5000,
+    "alerting": false
+  }
+}

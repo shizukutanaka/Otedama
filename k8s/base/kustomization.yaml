@@ -1,0 +1,57 @@
+# Kustomization for base Kubernetes resources
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: otedama-pool
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - storage-ingress.yaml
+
+commonLabels:
+  app: otedama-pool
+  version: v1.0.0
+
+images:
+  - name: otedama/pool
+    newTag: latest
+  - name: redis
+    newName: redis
+    newTag: 7-alpine
+
+configMapGenerator:
+  - name: otedama-config
+    behavior: merge
+    literals:
+      - node-env=production
+
+secretGenerator:
+  - name: otedama-secrets
+    behavior: merge
+    files:
+      - secrets/pool-address.txt
+      - secrets/rpc-user.txt
+      - secrets/rpc-password.txt
+      - secrets/jwt-secret.txt
+
+patchesStrategicMerge:
+  - |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: otedama-pool
+    spec:
+      replicas: 1
+      template:
+        spec:
+          containers:
+          - name: pool
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "2000m"

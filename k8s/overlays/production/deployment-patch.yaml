@@ -1,0 +1,83 @@
+# Production deployment patches
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-pool
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: pool
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "2000m"
+          limits:
+            memory: "8Gi"
+            cpu: "8000m"
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: LOG_LEVEL
+          value: "WARN"
+        # Production-specific optimizations
+        - name: ENABLE_PARALLEL_VALIDATION
+          value: "true"
+        - name: PARALLEL_WORKERS
+          value: "8"
+        - name: CPU_AFFINITY_ENABLED
+          value: "true"
+        - name: MEMORY_ALIGNMENT_ENABLED
+          value: "true"
+        - name: WASM_ACCELERATION_ENABLED
+          value: "true"
+        - name: AI_OPTIMIZATION_ENABLED
+          value: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-proxy
+spec:
+  replicas: 5
+  template:
+    spec:
+      containers:
+      - name: proxy
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "4000m"
+        env:
+        - name: PROXY_MAX_CONNECTIONS
+          value: "50000"
+        - name: PROXY_WORK_CACHE_SIZE
+          value: "10000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-redis
+spec:
+  template:
+    spec:
+      containers:
+      - name: redis
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        args:
+        - redis-server
+        - --maxmemory 3gb
+        - --maxmemory-policy allkeys-lru
+        - --save 900 1
+        - --save 300 10
+        - --save 60 10000

@@ -1,0 +1,121 @@
+{
+  "pool": {
+    "name": "Otedama Development Pool",
+    "port": 3333,
+    "difficulty": {
+      "initial": 1,
+      "retarget": 15,
+      "min": 0.1,
+      "max": 1000000
+    },
+    "coinbase": {
+      "address": "bc1qexampleaddresschangethisinproduction",
+      "message": "Mined by Otedama Development Pool",
+      "fee": 0.01
+    },
+    "algorithms": ["sha256d"],
+    "payouts": {
+      "method": "PPLNS",
+      "interval": 300,
+      "threshold": 0.001,
+      "fee": 0.01
+    },
+    "shareChain": {
+      "enabled": true,
+      "interval": 30,
+      "blockTime": 600
+    }
+  },
+  "database": {
+    "type": "sqlite",
+    "path": "./data/pool.db",
+    "connectionLimit": 10,
+    "acquireTimeout": 60000,
+    "timeout": 60000,
+    "ssl": false,
+    "schema": "public"
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "file": {
+      "enabled": true,
+      "path": "./logs",
+      "maxSize": "10m",
+      "maxFiles": "10",
+      "datePattern": "YYYY-MM-DD"
+    },
+    "console": {
+      "enabled": true,
+      "colorize": true
+    }
+  },
+  "security": {
+    "rateLimit": {
+      "windowMs": 900000,
+      "maxRequests": 100,
+      "skipSuccessfulRequests": false
+    },
+    "cors": {
+      "enabled": true,
+      "origins": ["*"],
+      "credentials": false
+    },
+    "jwt": {
+      "secret": "development-secret-change-in-production",
+      "expiresIn": "24h"
+    },
+    "tls": {
+      "enabled": false
+    },
+    "ddos": {
+      "burst": 10,
+      "limit": 15,
+      "maxconnections": 50,
+      "errdelay": 500
+    }
+  },
+  "p2p": {
+    "enabled": true,
+    "port": 9000,
+    "bootstrap": [],
+    "maxPeers": 50,
+    "minPeers": 3,
+    "protocols": ["/otedama/1.0.0"],
+    "dht": {
+      "enabled": true,
+      "kBucketSize": 20
+    },
+    "discovery": {
+      "mdns": true,
+      "bootstrap": true,
+      "dht": true
+    }
+  },
+  "metrics": {
+    "enabled": true,
+    "port": 9090,
+    "prefix": "otedama_",
+    "interval": 15000,
+    "prometheus": {
+      "enabled": true,
+      "endpoint": "/metrics"
+    },
+    "jaeger": {
+      "enabled": false,
+      "endpoint": "http://localhost:14268/api/traces",
+      "serviceName": "otedama-pool"
+    }
+  },
+  "serviceMesh": {
+    "enabled": false,
+    "type": "istio",
+    "namespace": "default",
+    "discovery": {
+      "enabled": true,
+      "interval": 30000
+    }
+  },
+  "nodeEnv": "development",
+  "clusterMode": false
+}

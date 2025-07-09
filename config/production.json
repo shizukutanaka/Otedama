@@ -1,0 +1,52 @@
+{
+  "database": {
+    "ssl": true,
+    "poolSize": 20,
+    "timeout": 60000
+  },
+  "redis": {
+    "database": 0,
+    "keyPrefix": "otedama:",
+    "ttl": 7200
+  },
+  "server": {
+    "apiPort": 3000,
+    "stratumPort": 3333,
+    "host": "0.0.0.0",
+    "workers": 4,
+    "timeout": 60000,
+    "keepAlive": true,
+    "cors": false
+  },
+  "security": {
+    "jwtExpiration": "6h",
+    "bcryptRounds": 12,
+    "rateLimitWindow": 900000,
+    "rateLimitMax": 100,
+    "enableHttps": true
+  },
+  "pool": {
+    "fee": 2.5,
+    "minPayout": 0.001,
+    "maxPayout": 10.0,
+    "payoutInterval": 3600000,
+    "blockConfirmations": 6,
+    "difficulty": 1,
+    "retargetTime": 600000
+  },
+  "logging": {
+    "level": "warn",
+    "format": "json",
+    "file": true,
+    "filePath": "./logs/production.log",
+    "maxSize": "50m",
+    "maxFiles": 10,
+    "console": false
+  },
+  "monitoring": {
+    "enabled": true,
+    "metricsPort": 9090,
+    "healthCheckInterval": 30000,
+    "alerting": true
+  }
+}

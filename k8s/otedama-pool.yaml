@@ -1,0 +1,433 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otedama-pool
+---
+# ConfigMap for pool configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  namespace: otedama-pool
+data:
+  STRATUM_PORT: "3333"
+  STRATUM_V2_PORT: "3334"
+  API_PORT: "8088"
+  DASHBOARD_PORT: "8080"
+  METRICS_PORT: "9090"
+  POOL_FEE: "1.0"
+  LOG_LEVEL: "INFO"
+  MONITORING_ENABLED: "true"
+  API_ENABLED: "true"
+  DASHBOARD_ENABLED: "true"
+  MULTI_ALGORITHM_ENABLED: "true"
+  SUPPORTED_ALGORITHMS: "sha256d,scrypt,x11"
+  PUBLIC_STATS: "true"
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets
+  namespace: otedama-pool
+type: Opaque
+stringData:
+  RPC_URL: "http://bitcoin-node:8332"
+  RPC_USER: "bitcoinrpc"
+  RPC_PASSWORD: "changeme"
+  POOL_ADDRESS: "bc1qxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  JWT_SECRET: "your-secure-jwt-secret"
+  REDIS_PASSWORD: "redis-password"
+  POSTGRES_PASSWORD: "postgres-password"
+---
+# PersistentVolumeClaim for data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data-pvc
+  namespace: otedama-pool
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: otedama-pool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+          - redis-server
+          - --requirepass
+          - $(REDIS_PASSWORD)
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: REDIS_PASSWORD
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: otedama-pool
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+---
+# PostgreSQL StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: otedama-pool
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_DB
+          value: otedama
+        - name: POSTGRES_USER
+          value: otedama
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: POSTGRES_PASSWORD
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 20Gi
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: otedama-pool
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+# Main Pool Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-pool
+  namespace: otedama-pool
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: otedama-pool
+  template:
+    metadata:
+      labels:
+        app: otedama-pool
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      containers:
+      - name: pool
+        image: otedama/pool:latest
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: otedama-config
+        - secretRef:
+            name: otedama-secrets
+        env:
+        - name: REDIS_HOST
+          value: redis
+        - name: REDIS_PORT
+          value: "6379"
+        - name: DATABASE_URL
+          value: "postgresql://otedama:$(POSTGRES_PASSWORD)@postgres:5432/otedama"
+        - name: DATA_DIR
+          value: "/data"
+        ports:
+        - name: stratum
+          containerPort: 3333
+          protocol: TCP
+        - name: stratum-v2
+          containerPort: 3334
+          protocol: TCP
+        - name: api
+          containerPort: 8088
+          protocol: TCP
+        - name: dashboard
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: otedama-data-pvc
+---
+# Mining Proxy Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-proxy
+  namespace: otedama-pool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: otedama-proxy
+  template:
+    metadata:
+      labels:
+        app: otedama-proxy
+    spec:
+      containers:
+      - name: proxy
+        image: otedama/pool:latest
+        command: ["node", "dist/proxy-server.js"]
+        env:
+        - name: PROXY_PORT
+          value: "3335"
+        - name: POOL_HOST
+          value: otedama-pool-stratum
+        - name: POOL_PORT
+          value: "3333"
+        - name: PROXY_STRATEGY
+          value: "least-connections"
+        ports:
+        - name: proxy
+          containerPort: 3335
+          protocol: TCP
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+# Service for Stratum
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-pool-stratum
+  namespace: otedama-pool
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama-pool
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: 3333
+    protocol: TCP
+  - name: stratum-v2
+    port: 3334
+    targetPort: 3334
+    protocol: TCP
+---
+# Service for API/Dashboard
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-pool-web
+  namespace: otedama-pool
+spec:
+  type: ClusterIP
+  selector:
+    app: otedama-pool
+  ports:
+  - name: api
+    port: 8088
+    targetPort: 8088
+  - name: dashboard
+    port: 8080
+    targetPort: 8080
+---
+# Service for Proxy
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-proxy
+  namespace: otedama-pool
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama-proxy
+  ports:
+  - name: proxy
+    port: 3335
+    targetPort: 3335
+    protocol: TCP
+---
+# Ingress for Web Services
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otedama-pool-ingress
+  namespace: otedama-pool
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  tls:
+  - hosts:
+    - pool.example.com
+    - api.pool.example.com
+    secretName: otedama-pool-tls
+  rules:
+  - host: pool.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-web
+            port:
+              number: 8080
+  - host: api.pool.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-web
+            port:
+              number: 8088
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otedama-pool-hpa
+  namespace: otedama-pool
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama-pool
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otedama-pool-metrics
+  namespace: otedama-pool
+spec:
+  selector:
+    matchLabels:
+      app: otedama-pool
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics

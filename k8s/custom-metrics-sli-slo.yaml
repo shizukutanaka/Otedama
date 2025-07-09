@@ -1,0 +1,491 @@
+---
+# Custom Metrics and SLI/SLO Configuration
+# Implements Items 115 & 116 from IMPROVEMENTS_300.md
+
+# ServiceLevelObjective CRD
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: servicelevelobjectives.monitoring.otedama.io
+spec:
+  group: monitoring.otedama.io
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              service:
+                type: string
+                description: "Target service name"
+              sliSpecs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    description:
+                      type: string
+                    query:
+                      type: string
+                      description: "PromQL query for the SLI"
+                    threshold:
+                      type: number
+                      description: "SLO threshold (0-100)"
+                    timeWindow:
+                      type: string
+                      description: "Time window for evaluation"
+              alertPolicy:
+                type: object
+                properties:
+                  burnRateMultiplier:
+                    type: number
+                    default: 2.0
+                  alertWindows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        window:
+                          type: string
+                        burnRate:
+                          type: number
+          status:
+            type: object
+            properties:
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+                    reason:
+                      type: string
+                    message:
+                      type: string
+  scope: Namespaced
+  names:
+    plural: servicelevelobjectives
+    singular: servicelevelobjective
+    kind: ServiceLevelObjective
+    shortNames:
+    - slo
+
+---
+# Otedama Pool SLO Definition
+apiVersion: monitoring.otedama.io/v1
+kind: ServiceLevelObjective
+metadata:
+  name: otedama-pool-slo
+  namespace: otedama-pool
+spec:
+  service: otedama-pool
+  sliSpecs:
+  # Availability SLI - 99.9% uptime
+  - name: availability
+    description: "Pool service availability"
+    query: |
+      (
+        sum(rate(otedama_pool_http_requests_total{status_code!~"5.."}[5m]))
+        /
+        sum(rate(otedama_pool_http_requests_total[5m]))
+      ) * 100
+    threshold: 99.9
+    timeWindow: "30d"
+    
+  # Latency SLI - 95% of requests under 100ms
+  - name: latency
+    description: "Pool response latency"
+    query: |
+      histogram_quantile(0.95,
+        sum(rate(otedama_pool_http_request_duration_seconds_bucket[5m])) by (le)
+      ) * 1000
+    threshold: 100
+    timeWindow: "24h"
+    
+  # Share Acceptance Rate - 99% of valid shares accepted
+  - name: share_acceptance
+    description: "Share acceptance rate"
+    query: |
+      (
+        sum(rate(otedama_pool_shares_valid_total[5m]))
+        /
+        sum(rate(otedama_pool_shares_submitted_total[5m]))
+      ) * 100
+    threshold: 99.0
+    timeWindow: "1h"
+    
+  # Pool Efficiency - 95% efficiency target
+  - name: pool_efficiency
+    description: "Pool mining efficiency"
+    query: |
+      otedama_pool_efficiency_percent
+    threshold: 95.0
+    timeWindow: "24h"
+    
+  alertPolicy:
+    burnRateMultiplier: 2.0
+    alertWindows:
+    - window: "1h"
+      burnRate: 14.4
+    - window: "6h"
+      burnRate: 6.0
+
+---
+# Custom Metrics Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-custom-metrics
+  namespace: otedama-pool
+data:
+  custom-metrics.yaml: |
+    # Business Metrics
+    business_metrics:
+      - name: pool_revenue_btc
+        type: counter
+        help: "Total pool revenue in BTC"
+        labels: ["currency", "period"]
+        
+      - name: pool_hashrate_distribution
+        type: histogram
+        help: "Hashrate distribution across miners"
+        buckets: [1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12]
+        labels: ["algorithm"]
+        
+      - name: miner_count_by_region
+        type: gauge
+        help: "Number of miners by geographic region"
+        labels: ["region", "country"]
+        
+      - name: block_discovery_time
+        type: histogram
+        help: "Time between block discoveries"
+        buckets: [60, 300, 600, 1800, 3600, 7200, 14400]
+        labels: ["algorithm"]
+        
+    # Pool Performance Metrics
+    performance_metrics:
+      - name: stratum_connection_latency
+        type: histogram
+        help: "Stratum connection establishment latency"
+        buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
+        labels: ["region"]
+        
+      - name: share_validation_time
+        type: histogram
+        help: "Share validation processing time"
+        buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
+        labels: ["algorithm", "difficulty_tier"]
+        
+      - name: database_query_duration
+        type: histogram
+        help: "Database query execution time"
+        buckets: [0.001, 0.01, 0.1, 1.0, 10.0]
+        labels: ["operation", "table"]
+        
+      - name: memory_pool_size
+        type: gauge
+        help: "Memory pool size in bytes"
+        labels: ["pool_type"]
+        
+    # Security Metrics
+    security_metrics:
+      - name: failed_auth_attempts
+        type: counter
+        help: "Failed authentication attempts"
+        labels: ["source_ip", "reason"]
+        
+      - name: rate_limit_hits
+        type: counter
+        help: "Rate limit violations"
+        labels: ["limit_type", "source"]
+        
+      - name: suspicious_shares
+        type: counter
+        help: "Suspicious share submissions"
+        labels: ["reason", "miner_id"]
+
+---
+# PrometheusRule for Custom Metrics and SLI/SLO
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otedama-custom-metrics-rules
+  namespace: otedama-pool
+spec:
+  groups:
+  - name: otedama.custom.business
+    interval: 30s
+    rules:
+    # Revenue per hour calculation
+    - record: otedama:business:revenue_per_hour
+      expr: |
+        sum(increase(otedama_pool_revenue_total[1h])) by (currency)
+        
+    # Average hashrate per miner
+    - record: otedama:business:avg_hashrate_per_miner
+      expr: |
+        sum(otedama_pool_pool_hashrate) by (algorithm) 
+        / 
+        sum(otedama_pool_miners_active_total) by (algorithm)
+        
+    # Pool market share (simplified - would need external data)
+    - record: otedama:business:estimated_market_share
+      expr: |
+        (sum(otedama_pool_pool_hashrate) / 1e18) * 100
+        
+    # Miner retention rate (7-day)
+    - record: otedama:business:miner_retention_7d
+      expr: |
+        (
+          count(count by (miner_id)(otedama_pool_shares_submitted_total offset 7d))
+          /
+          count(count by (miner_id)(otedama_pool_shares_submitted_total))
+        ) * 100
+        
+  - name: otedama.custom.performance
+    interval: 15s
+    rules:
+    # Request success rate by endpoint
+    - record: otedama:performance:success_rate_by_endpoint
+      expr: |
+        (
+          sum(rate(otedama_pool_http_requests_total{status_code!~"[45].."}[5m])) by (route)
+          /
+          sum(rate(otedama_pool_http_requests_total[5m])) by (route)
+        ) * 100
+        
+    # Database connection utilization
+    - record: otedama:performance:db_connection_utilization
+      expr: |
+        (
+          sum(otedama_pool_db_connections{state="active"})
+          /
+          sum(otedama_pool_db_connections)
+        ) * 100
+        
+    # Memory efficiency
+    - record: otedama:performance:memory_efficiency
+      expr: |
+        (
+          sum(otedama_pool_memory_usage_bytes{type="heap_used"})
+          /
+          sum(otedama_pool_memory_usage_bytes{type="heap_total"})
+        ) * 100
+        
+    # Share processing rate
+    - record: otedama:performance:share_processing_rate
+      expr: |
+        sum(rate(otedama_pool_shares_submitted_total[1m]))
+        
+  - name: otedama.custom.security
+    interval: 30s
+    rules:
+    # Failed authentication rate
+    - record: otedama:security:failed_auth_rate
+      expr: |
+        sum(rate(otedama_pool_failed_auth_attempts_total[5m]))
+        
+    # Suspicious activity score
+    - record: otedama:security:suspicious_activity_score
+      expr: |
+        (
+          sum(rate(otedama_pool_suspicious_shares_total[5m])) * 10 +
+          sum(rate(otedama_pool_rate_limit_hits_total[5m])) * 5 +
+          sum(rate(otedama_pool_failed_auth_attempts_total[5m])) * 3
+        )
+        
+  - name: otedama.sli.definitions
+    interval: 10s
+    rules:
+    # Availability SLI (4 nines target: 99.99%)
+    - record: otedama:sli:availability_4nines
+      expr: |
+        (
+          sum(rate(otedama_pool_http_requests_total{status_code!~"5.."}[5m]))
+          /
+          sum(rate(otedama_pool_http_requests_total[5m]))
+        )
+        
+    # Latency SLI (P95 < 50ms)
+    - record: otedama:sli:latency_p95_fast
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(otedama_pool_http_request_duration_seconds_bucket[5m])) by (le)
+        )
+        
+    # Throughput SLI (> 1000 shares/min)
+    - record: otedama:sli:throughput_high
+      expr: |
+        sum(rate(otedama_pool_shares_submitted_total[1m])) * 60
+        
+    # Error Budget Burn Rate
+    - record: otedama:sli:error_budget_burn_rate
+      expr: |
+        (1 - otedama:sli:availability_4nines) * 14400 # 1% per hour = burn rate of 1
+        
+  - name: otedama.slo.alerts
+    rules:
+    # SLO Violation: Availability
+    - alert: SLOViolationAvailability
+      expr: otedama:sli:availability_4nines < 0.999
+      for: 2m
+      labels:
+        severity: warning
+        slo_type: availability
+        service: otedama-pool
+      annotations:
+        summary: "Pool availability SLO violation"
+        description: "Pool availability is {{ $value | humanizePercentage }}, below 99.9% SLO"
+        runbook_url: "https://docs.pool.example.com/runbooks/availability"
+        
+    # SLO Violation: Latency
+    - alert: SLOViolationLatency
+      expr: otedama:sli:latency_p95_fast > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        slo_type: latency
+        service: otedama-pool
+      annotations:
+        summary: "Pool latency SLO violation"
+        description: "P95 latency is {{ $value }}s, above 100ms SLO"
+        
+    # Error Budget Exhaustion Warning
+    - alert: ErrorBudgetExhaustionWarning
+      expr: otedama:sli:error_budget_burn_rate > 2
+      for: 1h
+      labels:
+        severity: warning
+        slo_type: error_budget
+      annotations:
+        summary: "Error budget burning too fast"
+        description: "Error budget burn rate is {{ $value }}, consuming budget 2x faster than expected"
+        
+    # Error Budget Critical
+    - alert: ErrorBudgetCritical
+      expr: otedama:sli:error_budget_burn_rate > 10
+      for: 5m
+      labels:
+        severity: critical
+        slo_type: error_budget
+      annotations:
+        summary: "Critical error budget burn rate"
+        description: "Error budget burn rate is {{ $value }}, budget will be exhausted soon"
+
+---
+# Grafana Dashboard for SLI/SLO
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-sli-slo-dashboard
+  namespace: otedama-pool
+data:
+  sli-slo-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Otedama Pool - SLI/SLO Dashboard",
+        "tags": ["otedama", "slo", "sli"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Service Level Indicators",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "otedama:sli:availability_4nines * 100",
+                "legendFormat": "Availability %"
+              },
+              {
+                "expr": "otedama:sli:latency_p95_fast * 1000",
+                "legendFormat": "P95 Latency (ms)"
+              },
+              {
+                "expr": "otedama:sli:throughput_high",
+                "legendFormat": "Throughput (shares/min)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Error Budget Status",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "otedama:sli:error_budget_burn_rate",
+                "legendFormat": "Burn Rate"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Burn Rate",
+                "min": 0,
+                "max": 20
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {"params": [2], "type": "gt"},
+                  "operator": {"type": "and"},
+                  "query": {"params": ["A", "5m", "now"]},
+                  "reducer": {"type": "avg"},
+                  "type": "query"
+                }
+              ],
+              "executionErrorState": "alerting",
+              "for": "5m",
+              "frequency": "10s",
+              "handler": 1,
+              "name": "Error Budget Burn Rate Alert",
+              "noDataState": "no_data",
+              "notifications": []
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 3,
+            "title": "SLO Compliance Trend",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "otedama:sli:availability_4nines",
+                "legendFormat": "Availability SLI"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          }
+        ],
+        "time": {"from": "now-24h", "to": "now"},
+        "refresh": "30s"
+      }
+    }

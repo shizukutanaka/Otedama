@@ -1,0 +1,58 @@
+{
+  "database": {
+    "host": "staging-db.example.com",
+    "port": 5432,
+    "database": "otedama_staging",
+    "username": "otedama",
+    "ssl": true,
+    "poolSize": 10,
+    "timeout": 30000
+  },
+  "redis": {
+    "host": "staging-redis.example.com",
+    "port": 6379,
+    "database": 1,
+    "keyPrefix": "otedama:staging:",
+    "ttl": 3600
+  },
+  "server": {
+    "apiPort": 3000,
+    "stratumPort": 3333,
+    "host": "0.0.0.0",
+    "workers": 2,
+    "timeout": 30000,
+    "keepAlive": true,
+    "cors": true
+  },
+  "security": {
+    "jwtExpiration": "12h",
+    "bcryptRounds": 10,
+    "rateLimitWindow": 900000,
+    "rateLimitMax": 200,
+    "enableHttps": true
+  },
+  "pool": {
+    "fee": 2.0,
+    "minPayout": 0.001,
+    "maxPayout": 5.0,
+    "payoutInterval": 1800000,
+    "blockConfirmations": 3,
+    "difficulty": 1,
+    "retargetTime": 300000
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "file": true,
+    "filePath": "./logs/staging.log",
+    "maxSize": "10m",
+    "maxFiles": 5,
+    "console": false
+  },
+  "monitoring": {
+    "enabled": true,
+    "metricsPort": 9090,
+    "healthCheckInterval": 30000,
+    "alerting": true
+  }
+}

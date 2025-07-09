@@ -1,0 +1,238 @@
+# Kubernetes Deployment for Otedama Mining Pool
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-pool
+  labels:
+    app: otedama-pool
+    component: pool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otedama-pool
+      component: pool
+  template:
+    metadata:
+      labels:
+        app: otedama-pool
+        component: pool
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: pool
+        image: otedama/pool:latest
+        imagePullPolicy: Always
+        ports:
+        - name: stratum
+          containerPort: 3333
+          protocol: TCP
+        - name: stratum-v2
+          containerPort: 3334
+          protocol: TCP
+        - name: dashboard
+          containerPort: 8080
+          protocol: TCP
+        - name: api
+          containerPort: 8088
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        - name: health
+          containerPort: 3001
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: POOL_ADDRESS
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: pool-address
+        - name: RPC_URL
+          valueFrom:
+            configMapKeyRef:
+              name: otedama-config
+              key: rpc-url
+        - name: RPC_USER
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: rpc-user
+        - name: RPC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: rpc-password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: jwt-secret
+        - name: REDIS_HOST
+          value: "otedama-redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: database-url
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: otedama-data-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: otedama-logs-pvc
+      - name: config
+        configMap:
+          name: otedama-config
+---
+# Deployment for Mining Proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-proxy
+  labels:
+    app: otedama-pool
+    component: proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: otedama-pool
+      component: proxy
+  template:
+    metadata:
+      labels:
+        app: otedama-pool
+        component: proxy
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - otedama-pool
+                - key: component
+                  operator: In
+                  values:
+                  - proxy
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: proxy
+        image: otedama/pool:latest
+        command: ["node", "dist/proxy-server.js"]
+        ports:
+        - name: proxy
+          containerPort: 3335
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: POOL_HOST
+          value: "otedama-pool-service"
+        - name: POOL_PORT
+          value: "3333"
+        - name: PROXY_PORT
+          value: "3335"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-redis
+  labels:
+    app: otedama-pool
+    component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otedama-pool
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: otedama-pool
+        component: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --requirepass
+        - "$(REDIS_PASSWORD)"
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: redis-password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: otedama-redis-pvc

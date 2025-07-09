@@ -1,0 +1,495 @@
+---
+# Enhanced APM Integration with Prometheus and Grafana
+# Comprehensive Application Performance Monitoring for Otedama Pool
+
+# Grafana Configuration with APM-focused setup
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-apm-config
+  namespace: otedama-pool
+data:
+  grafana.ini: |
+    [analytics]
+    reporting_enabled = false
+    
+    [security]
+    admin_user = admin
+    admin_password = admin
+    allow_embedding = true
+    
+    [users]
+    allow_sign_up = false
+    auto_assign_org = true
+    auto_assign_org_role = Viewer
+    
+    [auth.anonymous]
+    enabled = true
+    org_role = Viewer
+    
+    [plugins]
+    enable_alpha = true
+    
+    [alerting]
+    enabled = true
+    execute_alerts = true
+    
+    [unified_alerting]
+    enabled = true
+    
+    [feature_toggles]
+    enable = ngalert prometheusAzureOverrideAudience
+    
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus:9090
+      isDefault: true
+      jsonData:
+        timeInterval: "5s"
+        queryTimeout: "300s"
+        httpMethod: POST
+        manageAlerts: true
+        prometheusType: Prometheus
+        prometheusVersion: 2.40.0
+        cacheLevel: 'High'
+        disableMetricsLookup: false
+        customQueryParameters: ''
+        exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+          
+    - name: Jaeger
+      type: jaeger
+      uid: jaeger
+      access: proxy
+      url: http://otedama-jaeger-query:16686
+      jsonData:
+        tracesToLogs:
+          datasourceUid: loki
+          tags: ['job', 'instance', 'pod', 'namespace']
+          mappedTags: [{ key: 'service.name', value: 'service' }]
+          mapTagNamesEnabled: false
+          spanStartTimeShift: '1h'
+          spanEndTimeShift: '1h'
+          filterByTraceID: false
+          filterBySpanID: false
+          
+    - name: Loki
+      type: loki
+      uid: loki
+      access: proxy
+      url: http://loki:3100
+      jsonData:
+        derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+          
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards
+
+---
+# Grafana Deployment with APM focus
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-apm
+  namespace: otedama-pool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grafana-apm
+  template:
+    metadata:
+      labels:
+        app: grafana-apm
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.2.0
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secrets
+              key: admin-password
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-piechart-panel,grafana-clock-panel,grafana-simple-json-datasource,grafana-kubernetes-app,redis-datasource,grafana-image-renderer"
+        volumeMounts:
+        - name: grafana-config
+          mountPath: /etc/grafana
+        - name: grafana-dashboards
+          mountPath: /var/lib/grafana/dashboards
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 1Gi
+            cpu: 500m
+      volumes:
+      - name: grafana-config
+        configMap:
+          name: grafana-apm-config
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-apm-dashboards
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-storage-pvc
+
+---
+# APM-focused Dashboards ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-apm-dashboards
+  namespace: otedama-pool
+data:
+  otedama-pool-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Otedama Pool - APM Overview",
+        "tags": ["otedama", "apm", "pool"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Pool Performance Summary",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "rate(otedama_pool_shares_submitted_total[5m])",
+                "legendFormat": "Shares/sec"
+              },
+              {
+                "expr": "otedama_pool_miners_active_total",
+                "legendFormat": "Active Miners"
+              },
+              {
+                "expr": "rate(otedama_pool_blocks_found_total[1h])",
+                "legendFormat": "Blocks/hour"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 50},
+                    {"color": "green", "value": 100}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Request Latency Distribution",
+            "type": "heatmap",
+            "targets": [
+              {
+                "expr": "increase(otedama_pool_request_duration_bucket[5m])",
+                "legendFormat": "{{le}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 3,
+            "title": "Error Rate by Component",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(otedama_pool_errors_total[5m])",
+                "legendFormat": "{{component}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          }
+        ],
+        "time": {"from": "now-1h", "to": "now"},
+        "refresh": "5s"
+      }
+    }
+    
+  otedama-application-metrics.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Otedama Pool - Application Metrics",
+        "tags": ["otedama", "application", "performance"],
+        "panels": [
+          {
+            "id": 1,
+            "title": "Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "process_resident_memory_bytes{job='otedama-pool'}",
+                "legendFormat": "RSS Memory"
+              },
+              {
+                "expr": "process_virtual_memory_bytes{job='otedama-pool'}",
+                "legendFormat": "Virtual Memory"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(process_cpu_seconds_total{job='otedama-pool'}[5m]) * 100",
+                "legendFormat": "CPU %"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Database Performance",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(otedama_pool_db_operations_total[5m])",
+                "legendFormat": "{{operation}}"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(otedama_pool_db_duration_bucket[5m]))",
+                "legendFormat": "95th percentile"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+---
+# Enhanced Prometheus Rules for APM
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otedama-apm-rules
+  namespace: otedama-pool
+spec:
+  groups:
+  - name: otedama.apm.sli
+    interval: 15s
+    rules:
+    # Service Level Indicators (SLIs)
+    - record: otedama:sli:availability
+      expr: |
+        (
+          sum(rate(otedama_pool_http_requests_total{code!~"5.."}[5m]))
+          /
+          sum(rate(otedama_pool_http_requests_total[5m]))
+        ) * 100
+        
+    - record: otedama:sli:latency_p99
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(otedama_pool_request_duration_bucket[5m])) by (le)
+        )
+        
+    - record: otedama:sli:throughput
+      expr: |
+        sum(rate(otedama_pool_shares_submitted_total[5m]))
+        
+    - record: otedama:sli:error_rate
+      expr: |
+        (
+          sum(rate(otedama_pool_errors_total[5m]))
+          /
+          sum(rate(otedama_pool_operations_total[5m]))
+        ) * 100
+        
+    # Business KPIs
+    - record: otedama:kpi:pool_efficiency
+      expr: |
+        (
+          sum(rate(otedama_pool_shares_valid_total[1h]))
+          /
+          sum(rate(otedama_pool_shares_submitted_total[1h]))
+        ) * 100
+        
+    - record: otedama:kpi:revenue_per_hour
+      expr: |
+        sum(rate(otedama_pool_rewards_total[1h])) * 3600
+        
+  - name: otedama.apm.alerts
+    rules:
+    # SLO Alerts
+    - alert: HighErrorRate
+      expr: otedama:sli:error_rate > 1
+      for: 2m
+      labels:
+        severity: warning
+        slo: error_budget
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value }}% (threshold: 1%)"
+        
+    - alert: HighLatency
+      expr: otedama:sli:latency_p99 > 1000
+      for: 5m
+      labels:
+        severity: warning
+        slo: latency
+      annotations:
+        summary: "High latency detected"
+        description: "99th percentile latency is {{ $value }}ms"
+        
+    - alert: LowThroughput
+      expr: otedama:sli:throughput < 10
+      for: 10m
+      labels:
+        severity: warning
+        slo: throughput
+      annotations:
+        summary: "Low throughput detected"
+        description: "Share submission rate is {{ $value }}/sec"
+        
+    # Application Health Alerts
+    - alert: MemoryLeak
+      expr: |
+        increase(process_resident_memory_bytes{job="otedama-pool"}[1h]) > 100 * 1024 * 1024
+      for: 30m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Potential memory leak detected"
+        description: "Memory usage increased by {{ $value | humanize }}B in the last hour"
+        
+    - alert: DatabaseSlowQuery
+      expr: |
+        histogram_quantile(0.95, rate(otedama_pool_db_duration_bucket[5m])) > 5
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Slow database queries detected"
+        description: "95th percentile DB query time is {{ $value }}s"
+
+---
+# APM Service for Grafana
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-apm
+  namespace: otedama-pool
+spec:
+  selector:
+    app: grafana-apm
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+
+---
+# Grafana Storage PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage-pvc
+  namespace: otedama-pool
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Grafana Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-secrets
+  namespace: otedama-pool
+type: Opaque
+stringData:
+  admin-password: "otedama-grafana-admin"
+
+---
+# Grafana Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-apm-ingress
+  namespace: otedama-pool
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+  - hosts:
+    - apm.pool.example.com
+    secretName: grafana-apm-tls
+  rules:
+  - host: apm.pool.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-apm
+            port:
+              number: 3000
+
+---
+# ServiceMonitor for detailed APM metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otedama-apm-detailed
+  namespace: otedama-pool
+  labels:
+    app: otedama-pool
+    monitoring: apm
+spec:
+  selector:
+    matchLabels:
+      app: otedama-pool
+  endpoints:
+  - port: metrics
+    interval: 5s  # High frequency for APM
+    path: /metrics
+    honorLabels: true
+    scrapeTimeout: 4s
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'otedama_pool_.*'
+      action: keep
+    - sourceLabels: [__name__]
+      regex: 'http_request_duration_seconds.*'
+      action: keep
+    - sourceLabels: [__name__]
+      regex: 'process_.*'
+      action: keep

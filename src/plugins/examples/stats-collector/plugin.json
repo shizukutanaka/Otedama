@@ -1,0 +1,25 @@
+{
+  "name": "stats-collector",
+  "version": "1.0.0",
+  "description": "Advanced statistics collection and analysis plugin",
+  "author": "Otedama Pool",
+  "license": "MIT",
+  "main": "index.ts",
+  "hooks": [
+    "poolStatsUpdate",
+    "shareSubmitted",
+    "shareAccepted",
+    "shareRejected",
+    "minerConnected",
+    "minerDisconnected"
+  ],
+  "permissions": [
+    "read:stats",
+    "write:stats"
+  ],
+  "config": {
+    "updateInterval": 60000,
+    "retentionPeriod": 86400000,
+    "aggregationLevels": ["1m", "5m", "1h", "1d"]
+  }
+}

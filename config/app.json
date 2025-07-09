@@ -1,0 +1,56 @@
+{
+  "app": {
+    "name": "Otedama Mining App",
+    "version": "1.0.0",
+    "port": 8080,
+    "host": "0.0.0.0",
+    "mode": "hybrid"
+  },
+  "mining": {
+    "algorithms": ["sha256", "scrypt", "ethash", "randomx"],
+    "difficulty": 1,
+    "autoSwitch": true,
+    "hardwareDetection": true
+  },
+  "p2p": {
+    "enabled": true,
+    "port": 6666,
+    "bootstrapNodes": [],
+    "maxPeers": 50
+  },
+  "pool": {
+    "enabled": true,
+    "stratumPort": 3333,
+    "feePercent": 0,
+    "payoutInterval": 300000
+  },
+  "database": {
+    "type": "sqlite",
+    "path": "./data/mining-app.db"
+  },
+  "logging": {
+    "level": "info",
+    "format": "text",
+    "file": {
+      "enabled": true,
+      "path": "./logs",
+      "maxSize": "10m",
+      "maxFiles": "5",
+      "datePattern": "YYYY-MM-DD"
+    },
+    "console": {
+      "enabled": true,
+      "colorize": true
+    }
+  },
+  "security": {
+    "rateLimit": {
+      "windowMs": 900000,
+      "maxRequests": 100
+    },
+    "cors": {
+      "enabled": true,
+      "origins": ["*"]
+    }
+  }
+}

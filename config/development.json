@@ -1,0 +1,61 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "otedama_dev",
+    "username": "otedama",
+    "password": "dev_password",
+    "ssl": false,
+    "poolSize": 5,
+    "timeout": 30000
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "database": 0,
+    "keyPrefix": "otedama:dev:",
+    "ttl": 1800
+  },
+  "server": {
+    "apiPort": 3000,
+    "stratumPort": 3333,
+    "host": "localhost",
+    "workers": 1,
+    "timeout": 30000,
+    "keepAlive": true,
+    "cors": true
+  },
+  "security": {
+    "jwtSecret": "dev-jwt-secret-key",
+    "jwtExpiration": "24h",
+    "bcryptRounds": 8,
+    "rateLimitWindow": 900000,
+    "rateLimitMax": 1000,
+    "enableHttps": false
+  },
+  "pool": {
+    "address": "bcrt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "fee": 1.0,
+    "minPayout": 0.0001,
+    "maxPayout": 1.0,
+    "payoutInterval": 300000,
+    "blockConfirmations": 1,
+    "difficulty": 0.1,
+    "retargetTime": 60000
+  },
+  "logging": {
+    "level": "debug",
+    "format": "text",
+    "file": true,
+    "filePath": "./logs/dev.log",
+    "maxSize": "5m",
+    "maxFiles": 3,
+    "console": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "metricsPort": 9090,
+    "healthCheckInterval": 10000,
+    "alerting": false
+  }
+}

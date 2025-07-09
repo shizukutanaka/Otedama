@@ -1,0 +1,70 @@
+name: Test and Coverage
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint
+    
+    - name: Run type check
+      run: npm run type-check:strict
+    
+    - name: Run tests with coverage
+      run: npm run test:coverage
+    
+    - name: Generate coverage badges
+      run: npm run coverage:badges
+    
+    - name: Upload coverage to Codecov
+      if: matrix.node-version == '20.x'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: otedama-pool-coverage
+        fail_ci_if_error: false
+    
+    - name: Upload coverage reports
+      if: matrix.node-version == '20.x'
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: |
+          coverage/
+          test-results/
+    
+    - name: Comment PR with coverage
+      if: github.event_name == 'pull_request' && matrix.node-version == '20.x'
+      uses: romeovs/lcov-reporter-action@v0.3.1
+      with:
+        lcov-file: ./coverage/lcov.info
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        title: Coverage Report
+    
+    - name: Check coverage thresholds
+      run: |
+        npm run coverage:compare || true
+        npm run test:coverage -- --coverage-threshold='{"global":{"branches":70,"functions":75,"lines":80,"statements":80}}'

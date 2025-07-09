@@ -1,0 +1,83 @@
+# Production Ingress patches
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otedama-ingress
+  annotations:
+    # Production SSL configuration
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';";
+    
+    # Rate limiting for production
+    nginx.ingress.kubernetes.io/limit-rps: "1000"
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    
+    # DDoS protection
+    nginx.ingress.kubernetes.io/limit-whitelist: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    
+    # WebSocket configuration
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "otedama-pool-service"
+    
+    # Body size for API uploads
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+spec:
+  tls:
+  - hosts:
+    - pool.yourdomain.com
+    - api.pool.yourdomain.com
+    - stats.pool.yourdomain.com
+    - dashboard.pool.yourdomain.com
+    secretName: otedama-tls-cert-prod
+  rules:
+  - host: pool.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-service
+            port:
+              number: 8080
+  - host: api.pool.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-service
+            port:
+              number: 8088
+  - host: stats.pool.yourdomain.com
+    http:
+      paths:
+      - path: /api/stats
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-service
+            port:
+              number: 8088
+  - host: dashboard.pool.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-service
+            port:
+              number: 8080

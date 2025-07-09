@@ -1,0 +1,45 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: otedama-pool
+  namespace: otedama-pool
+spec:
+  hosts:
+    - "otedama-pool"
+  http:
+    - match:
+        - uri:
+            prefix: /api
+      route:
+        - destination:
+            host: otedama-pool
+            port:
+              number: 8080
+      retries:
+        attempts: 3
+        perTryTimeout: 1s
+        retryOn: connect-failure,refused-stream,unavailable,cancelled,deadline-exceeded
+
+---
+
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: otedama-pool
+  namespace: otedama-pool
+spec:
+  host: otedama-pool
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        maxRequestsPerConnection: 100
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 1m
+      baseEjectionTime: 3m
+      maxEjectionPercent: 10

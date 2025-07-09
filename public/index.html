@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama - ゼロ手数料マイニングプール</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #00ff88;
+            color: #000;
+            border-radius: 25px;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card h3 {
+            font-size: 1.1em;
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .unit {
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        .revenue-card {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #000;
+        }
+
+        .miners-card {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        }
+
+        .hashrate-card {
+            background: linear-gradient(135deg, #4ecdc4, #44a08d);
+        }
+
+        .efficiency-card {
+            background: linear-gradient(135deg, #feca57, #ff9ff3);
+            color: #000;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section h2 {
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        .miners-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .miners-table th,
+        .miners-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .miners-table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: bold;
+        }
+
+        .miners-table tr:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .algorithm-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .randomx { background: #e74c3c; color: white; }
+        .kawpow { background: #3498db; color: white; }
+        .sha256d { background: #f39c12; color: white; }
+        .ethash { background: #9b59b6; color: white; }
+
+        .control-panel {
+            display: grid;
+            gap: 20px;
+        }
+
+        .control-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .control-card h3 {
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .toggle-button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .toggle-button.enabled {
+            background: #00ff88;
+            color: #000;
+        }
+
+        .toggle-button.disabled {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .toggle-button:hover {
+            transform: scale(1.02);
+        }
+
+        .revenue-chart {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .chart-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .chart-label {
+            width: 80px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .chart-progress {
+            flex: 1;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            margin: 0 10px;
+            overflow: hidden;
+        }
+
+        .chart-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+
+        .chart-value {
+            width: 80px;
+            text-align: right;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .connection-status.connected {
+            background: #00ff88;
+            color: #000;
+        }
+
+        .connection-status.disconnected {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .footer p {
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+
+        .feature-list {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .feature {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .alert.success {
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid #00ff88;
+        }
+
+        .alert.warning {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+        }
+
+        .alert.info {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid #3498db;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        接続中...
+    </div>
+
+    <div class="container">
+        <header class="header">
+            <h1>⛏️ Otedama</h1>
+            <p class="subtitle">ゼロ手数料マイニングプール</p>
+            <div class="status-badge" id="statusBadge">
+                🚀 LIVE - 0% 手数料
+            </div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card revenue-card">
+                <h3>💰 日次収益</h3>
+                <div class="value" id="dailyRevenue">$0.00</div>
+                <div class="unit">USD/日</div>
+            </div>
+            
+            <div class="stat-card miners-card">
+                <h3>👥 アクティブマイナー</h3>
+                <div class="value" id="activeMiners">0</div>
+                <div class="unit">接続中</div>
+            </div>
+            
+            <div class="stat-card hashrate-card">
+                <h3>⚡ 総ハッシュレート</h3>
+                <div class="value" id="totalHashrate">0</div>
+                <div class="unit" id="hashrateUnit">H/s</div>
+            </div>
+            
+            <div class="stat-card efficiency-card">
+                <h3>🎯 効率</h3>
+                <div class="value" id="efficiency">100%</div>
+                <div class="unit">手数料0%保証</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="section">
+                <h2>📊 マイナー一覧</h2>
+                <div class="alert info" id="minerAlert">
+                    Stratum V2接続で50%帯域節約・暗号化通信対応
+                </div>
+                <table class="miners-table" id="minersTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>アルゴリズム</th>
+                            <th>ハッシュレート</th>
+                            <th>日次収益</th>
+                            <th>効率</th>
+                            <th>Stratum</th>
+                        </tr>
+                    </thead>
+                    <tbody id="minersTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; opacity: 0.7;">
+                                マイナーの接続を待機中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="control-panel">
+                <div class="control-card">
+                    <h3>🔄 自動プロフィットスイッチング</h3>
+                    <button class="toggle-button enabled" id="profitSwitchToggle">
+                        有効
+                    </button>
+                    <p style="font-size: 0.9em; opacity: 0.8; margin-top: 10px;">
+                        最も収益性の高いコインに自動切り替え
+                    </p>
+                </div>
+
+                <div class="control-card">
+                    <h3>💎 最も収益性の高いコイン</h3>
+                    <div id="mostProfitableCoin" style="font-size: 1.5em; font-weight: bold; color: #00ff88; margin-bottom: 10px;">
+                        計算中...
+                    </div>
+                    <div id="profitabilityIndex" style="font-size: 0.9em; opacity: 0.8;">
+                        収益性指標: 計算中
+                    </div>
+                </div>
+
+                <div class="control-card">
+                    <h3>🌐 ネットワーク状態</h3>
+                    <div style="margin-bottom: 10px;">
+                        <strong>Stratum V2:</strong> <span id="stratumPort">3334</span>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong>P2P Peers:</strong> <span id="p2pPeers">0</span>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong>帯域節約:</strong> <span style="color: #00ff88;">50%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📈 リアルタイム収益性</h2>
+            <div class="revenue-chart" id="revenueChart">
+                <div class="chart-bar">
+                    <div class="chart-label">XMR</div>
+                    <div class="chart-progress">
+                        <div class="chart-fill" style="width: 85%"></div>
+                    </div>
+                    <div class="chart-value">$12.50</div>
+                </div>
+                <div class="chart-bar">
+                    <div class="chart-label">RVN</div>
+                    <div class="chart-progress">
+                        <div class="chart-fill" style="width: 75%"></div>
+                    </div>
+                    <div class="chart-value">$11.20</div>
+                </div>
+                <div class="chart-bar">
+                    <div class="chart-label">ETC</div>
+                    <div class="chart-progress">
+                        <div class="chart-fill" style="width: 60%"></div>
+                    </div>
+                    <div class="chart-value">$9.80</div>
+                </div>
+                <div class="chart-bar">
+                    <div class="chart-label">BTC</div>
+                    <div class="chart-progress">
+                        <div class="chart-fill" style="width: 40%"></div>
+                    </div>
+                    <div class="chart-value">$7.40</div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p><strong>Otedama</strong> - The World's First True Zero-Fee Mining Pool</p>
+            <p>P2P分散・手数料0%・直接ペイアウト・リアルタイム収益計算</p>
+            <div class="feature-list">
+                <div class="feature">✅ Stratum V2</div>
+                <div class="feature">✅ マルチアルゴリズム</div>
+                <div class="feature">✅ 自動プロフィットスイッチング</div>
+                <div class="feature">✅ リアルタイム収益</div>
+                <div class="feature">✅ ワンクリックセットアップ</div>
+                <div class="feature">✅ P2P分散</div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        class OtedamaDashboard {
+            constructor() {
+                this.ws = null;
+                this.reconnectInterval = 5000;
+                this.data = {
+                    miners: { active: 0, total: 0 },
+                    revenue: null,
+                    mostProfitable: null
+                };
+                
+                this.init();
+            }
+
+            init() {
+                this.connectWebSocket();
+                this.setupEventListeners();
+                this.fetchInitialData();
+                
+                // 定期的にデータを更新
+                setInterval(() => this.fetchStats(), 10000);
+            }
+
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const port = window.location.port ? parseInt(window.location.port) + 1 : 3002;
+                const wsUrl = `${protocol}//${window.location.hostname}:${port}`;
+                
+                console.log('Connecting to WebSocket:', wsUrl);
+                
+                try {
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.updateConnectionStatus(true);
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.handleWebSocketMessage(data);
+                        } catch (error) {
+                            console.error('Failed to parse WebSocket message:', error);
+                        }
+                    };
+                    
+                    this.ws.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.updateConnectionStatus(false);
+                        setTimeout(() => this.connectWebSocket(), this.reconnectInterval);
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus(false);
+                    };
+                } catch (error) {
+                    console.error('Failed to create WebSocket:', error);
+                    this.updateConnectionStatus(false);
+                    setTimeout(() => this.connectWebSocket(), this.reconnectInterval);
+                }
+            }
+
+            handleWebSocketMessage(data) {
+                switch (data.type) {
+                    case 'stats':
+                        this.updateStats(data.data);
+                        break;
+                    case 'realtime_update':
+                        this.updateRealtimeData(data.data);
+                        break;
+                    default:
+                        console.log('Unknown message type:', data.type);
+                }
+            }
+
+            async fetchInitialData() {
+                try {
+                    const [statsResponse, minersResponse, revenueResponse] = await Promise.all([
+                        fetch('/api/stats'),
+                        fetch('/api/miners'),
+                        fetch('/api/revenue')
+                    ]);
+
+                    if (statsResponse.ok) {
+                        const stats = await statsResponse.json();
+                        this.updateStats(stats);
+                    }
+
+                    if (minersResponse.ok) {
+                        const miners = await minersResponse.json();
+                        this.updateMinersTable(miners);
+                    }
+
+                    if (revenueResponse.ok) {
+                        const revenue = await revenueResponse.json();
+                        this.updateRevenueData(revenue);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch initial data:', error);
+                }
+            }
+
+            async fetchStats() {
+                try {
+                    const response = await fetch('/api/stats');
+                    if (response.ok) {
+                        const stats = await response.json();
+                        this.updateStats(stats);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch stats:', error);
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusEl = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusEl.textContent = '🟢 接続済み';
+                    statusEl.className = 'connection-status connected';
+                } else {
+                    statusEl.textContent = '🔴 切断';
+                    statusEl.className = 'connection-status disconnected';
+                }
+            }
+
+            updateStats(stats) {
+                this.data = { ...this.data, ...stats };
+                
+                // 基本統計更新
+                document.getElementById('activeMiners').textContent = stats.miners?.active || 0;
+                
+                const totalHashrate = stats.miners?.totalHashrate || 0;
+                const { value, unit } = this.formatHashrate(totalHashrate);
+                document.getElementById('totalHashrate').textContent = value;
+                document.getElementById('hashrateUnit').textContent = unit;
+                
+                // 収益情報更新
+                if (stats.revenue) {
+                    const dailyRevenue = stats.revenue.totalDailyRevenue || 0;
+                    document.getElementById('dailyRevenue').textContent = `$${dailyRevenue.toFixed(2)}`;
+                    
+                    if (stats.revenue.mostProfitable) {
+                        this.updateMostProfitable(stats.revenue.mostProfitable);
+                    }
+                }
+                
+                // ネットワーク情報更新
+                if (stats.network) {
+                    document.getElementById('stratumPort').textContent = stats.network.stratumV2Port || 'N/A';
+                }
+                
+                if (stats.pool) {
+                    document.getElementById('p2pPeers').textContent = stats.pool.p2pNodes || 0;
+                }
+            }
+
+            updateRealtimeData(data) {
+                if (data.revenue) {
+                    this.updateRevenueChart(data.revenue);
+                }
+                
+                if (data.mostProfitable) {
+                    this.updateMostProfitable(data.mostProfitable);
+                }
+                
+                if (data.miners) {
+                    this.updateMinersDisplay(data.miners);
+                }
+            }
+
+            updateMostProfitable(mostProfitable) {
+                const coinEl = document.getElementById('mostProfitableCoin');
+                const indexEl = document.getElementById('profitabilityIndex');
+                
+                if (mostProfitable) {
+                    coinEl.textContent = `${mostProfitable.coin} (${mostProfitable.algorithm})`;
+                    indexEl.textContent = `収益性指標: ${mostProfitable.profitabilityIndex.toFixed(4)}`;
+                } else {
+                    coinEl.textContent = '計算中...';
+                    indexEl.textContent = '収益性指標: 計算中';
+                }
+            }
+
+            async updateMinersTable(miners) {
+                const tbody = document.getElementById('minersTableBody');
+                
+                if (!miners || miners.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" style="text-align: center; opacity: 0.7;">
+                                マイナーの接続を待機中...
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = miners.map(miner => `
+                    <tr>
+                        <td>${miner.id.substring(0, 8)}...</td>
+                        <td><span class="algorithm-badge ${miner.algorithm}">${miner.algorithm.toUpperCase()}</span></td>
+                        <td>${this.formatHashrate(miner.hashrate).value} ${this.formatHashrate(miner.hashrate).unit}</td>
+                        <td>$${(miner.revenue || 0).toFixed(2)}</td>
+                        <td>${(miner.efficiency || 0).toFixed(3)}</td>
+                        <td>${miner.stratum}</td>
+                    </tr>
+                `).join('');
+            }
+
+            updateRevenueChart(revenueData) {
+                if (!revenueData || !Array.isArray(revenueData)) return;
+                
+                const chartEl = document.getElementById('revenueChart');
+                const maxRevenue = Math.max(...revenueData.map(r => r.dailyProfit || 0));
+                
+                chartEl.innerHTML = revenueData.map(revenue => {
+                    const width = maxRevenue > 0 ? (revenue.dailyProfit / maxRevenue) * 100 : 0;
+                    return `
+                        <div class="chart-bar">
+                            <div class="chart-label">${revenue.coin}</div>
+                            <div class="chart-progress">
+                                <div class="chart-fill" style="width: ${width}%"></div>
+                            </div>
+                            <div class="chart-value">$${revenue.dailyProfit.toFixed(2)}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            formatHashrate(hashrate) {
+                if (hashrate >= 1e18) return { value: (hashrate / 1e18).toFixed(2), unit: 'EH/s' };
+                if (hashrate >= 1e15) return { value: (hashrate / 1e15).toFixed(2), unit: 'PH/s' };
+                if (hashrate >= 1e12) return { value: (hashrate / 1e12).toFixed(2), unit: 'TH/s' };
+                if (hashrate >= 1e9) return { value: (hashrate / 1e9).toFixed(2), unit: 'GH/s' };
+                if (hashrate >= 1e6) return { value: (hashrate / 1e6).toFixed(2), unit: 'MH/s' };
+                if (hashrate >= 1e3) return { value: (hashrate / 1e3).toFixed(2), unit: 'KH/s' };
+                return { value: hashrate.toFixed(2), unit: 'H/s' };
+            }
+
+            setupEventListeners() {
+                // プロフィットスイッチングトグル
+                const profitSwitchToggle = document.getElementById('profitSwitchToggle');
+                profitSwitchToggle.addEventListener('click', async () => {
+                    const isEnabled = profitSwitchToggle.classList.contains('enabled');
+                    const action = isEnabled ? 'disable' : 'enable';
+                    
+                    try {
+                        const response = await fetch(`/api/profit-switching/${action}`, {
+                            method: 'POST'
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            this.updateProfitSwitchButton(result.enabled);
+                        }
+                    } catch (error) {
+                        console.error('Failed to toggle profit switching:', error);
+                    }
+                });
+            }
+
+            updateProfitSwitchButton(enabled) {
+                const button = document.getElementById('profitSwitchToggle');
+                if (enabled) {
+                    button.className = 'toggle-button enabled';
+                    button.textContent = '有効';
+                } else {
+                    button.className = 'toggle-button disabled';
+                    button.textContent = '無効';
+                }
+            }
+        }
+
+        // アプリケーション開始
+        document.addEventListener('DOMContentLoaded', () => {
+            new OtedamaDashboard();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+# Prettier無視ファイル
+# 基本的にESLintと同じファイルを無視
+
+# ビルド出力
+dist/
+build/
+out/
+coverage/
+
+# 依存関係
+node_modules/
+
+# ログ
+logs/
+*.log
+
+# データファイル
+data/
+backups/
+*.db
+*.sqlite
+
+# 環境ファイル
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ドキュメント（Markdownは整形する）
+docs/**/*.html
+docs/**/*.css
+docs/**/*.js
+
+# TypeScript
+*.d.ts
+tsconfig.json
+tsconfig.*.json
+
+# 設定ファイル
+.eslintrc.json
+.prettierrc
+
+# その他
+LICENSE
+*.md
+*.yml
+*.yaml

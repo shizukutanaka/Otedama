@@ -1,0 +1,39 @@
+{
+  "network": {
+    "listen_port": 37124,
+    "bootstrap_peers": [
+      "/ip4/127.0.0.1/tcp/37125"
+    ],
+    "max_peers": 100,
+    "connection_timeout": 30,
+    "heartbeat_interval": 60
+  },
+  "mining": {
+    "algorithm": "SHA256",
+    "stratum_port": 3333,
+    "difficulty_retarget_interval": 2016,
+    "min_difficulty": 1.0,
+    "max_difficulty": 1000000000000.0,
+    "share_target_time": 10
+  },
+  "pool": {
+    "pool_address": "",
+    "fee_percentage": 1.0,
+    "min_payout": 10000,
+    "share_window_size": 2160,
+    "target_block_time": 10
+  },
+  "storage": {
+    "database_path": "./data/p2pool.db",
+    "max_db_size": 1024,
+    "backup_interval": 3600,
+    "retention_days": 30
+  },
+  "api": {
+    "enabled": true,
+    "bind_address": "127.0.0.1",
+    "port": 8080,
+    "enable_cors": true,
+    "rate_limit": 60
+  }
+}

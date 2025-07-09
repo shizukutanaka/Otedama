@@ -1,0 +1,98 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+
+# Allow specific JS files
+!/scripts/**/*.js
+!/*.config.js
+!/.eslintrc.js
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+stdout.log
+stderr.log
+
+# Mining data
+data/
+backups/
+*.dat
+*.wallet
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Archive deleted folder
+src/archive_deleted/
+
+# Docker
+.dockerignore
+Dockerfile.prod
+
+# Package managers
+yarn.lock
+package-lock.json
+
+# Electron
+out/
+
+# Monitoring
+prometheus/data/
+grafana/data/
+
+# Runtime
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# Benchmark results
+benchmark-results.json

@@ -1,0 +1,54 @@
+# ESLint無視ファイル
+# Rob Pike: "Simplicity is the ultimate sophistication"
+
+# ビルド出力
+dist/
+build/
+out/
+coverage/
+
+# 依存関係
+node_modules/
+
+# ログ
+logs/
+*.log
+
+# データファイル
+data/
+backups/
+*.db
+*.sqlite
+
+# 環境ファイル
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# テスト関連
+__mocks__/
+__fixtures__/
+
+# ドキュメント
+docs/
+
+# 一時ファイル
+temp/
+tmp/
+*.tmp
+
+# TypeScript
+*.d.ts
+tsconfig.tsbuildinfo
+
+# プラグイン
+plugins/

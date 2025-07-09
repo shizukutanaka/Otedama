@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # Development pool service with hot reload
+  pool-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: otedama-pool-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+      # Use host's blockchain node
+      - RPC_URL=http://host.docker.internal:8332
+      - DATABASE_PATH=/app/data/pool.db
+    ports:
+      - "3333:3333"    # Stratum
+      - "3001:3001"    # API
+      - "4333:4333"    # P2P
+      - "9090:9090"    # Metrics
+      - "9229:9229"    # Node.js debugger
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./.env:/app/.env
+      # Exclude node_modules
+      - /app/node_modules
+    networks:
+      - pool-dev-network
+    depends_on:
+      - redis-dev
+    command: npm run dev:watch
+
+  # Redis for development
+  redis-dev:
+    image: redis:7-alpine
+    container_name: otedama-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - pool-dev-network
+
+  # Redis Commander for Redis GUI
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: otedama-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis-dev:6379
+    ports:
+      - "8081:8081"
+    networks:
+      - pool-dev-network
+    depends_on:
+      - redis-dev
+    profiles:
+      - tools
+
+  # Test Bitcoin node (regtest mode)
+  bitcoin-regtest:
+    image: ruimarinho/bitcoin-core:latest
+    container_name: otedama-bitcoin-regtest
+    restart: unless-stopped
+    ports:
+      - "18443:18443"
+      - "18444:18444"
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+    command:
+      - -regtest
+      - -server
+      - -rpcuser=test
+      - -rpcpassword=test
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -printtoconsole
+    networks:
+      - pool-dev-network
+    profiles:
+      - blockchain
+
+networks:
+  pool-dev-network:
+    driver: bridge
+
+volumes:
+  bitcoin-data:

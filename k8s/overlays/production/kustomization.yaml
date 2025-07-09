@@ -1,0 +1,38 @@
+# Production overlay for Otedama Mining Pool
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: otedama-production
+
+bases:
+  - ../../base
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+  - ingress-patch.yaml
+
+configMapGenerator:
+  - name: otedama-config
+    behavior: merge
+    literals:
+      - node-env=production
+      - log-level=WARN
+      - monitoring-enabled=true
+      - backup-enabled=true
+      - ai-optimization-enabled=true
+
+secretGenerator:
+  - name: otedama-secrets
+    behavior: merge
+    envs:
+      - production.env
+
+replicas:
+  - name: otedama-pool
+    count: 3
+  - name: otedama-proxy
+    count: 5
+
+images:
+  - name: otedama/pool
+    newTag: v1.0.0-stable

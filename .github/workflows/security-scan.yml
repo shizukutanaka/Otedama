@@ -1,0 +1,473 @@
+# Security Scanning Workflow (Items 76-77: Security Enhancements)
+# Automated security vulnerability detection and compliance checking
+
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Dependency Vulnerability Scanning
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (production dependencies)
+        run: npm audit --production --audit-level moderate
+
+      - name: npm audit (all dependencies)
+        run: npm audit --audit-level low
+        continue-on-error: true
+
+      - name: Snyk vulnerability scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=medium --file=package.json
+
+      - name: Retire.js scan
+        run: |
+          npm install -g retire
+          retire --path . --outputformat json --outputpath retire-report.json || true
+
+      - name: Upload vulnerability reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: vulnerability-reports
+          path: |
+            retire-report.json
+            snyk-report.json
+
+  # Static Code Security Analysis
+  static-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: typescript
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: ESLint Security Rules
+        run: |
+          npm ci
+          npm run lint -- --format json --output-file eslint-security.json || true
+
+      - name: Semgrep Security Scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/typescript
+            p/nodejs
+            p/docker
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # Docker Image Security Scanning
+  docker-security:
+    name: Docker Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.production
+          load: true
+          tags: otedama-pool:scan
+          cache-from: type=gha
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'otedama-pool:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: 'otedama-pool:scan'
+          fail-build: false
+          severity-cutoff: medium
+
+      - name: Docker Bench Security
+        run: |
+          docker run --rm --net host --pid host --userns host --cap-add audit_control \
+            -e DOCKER_CONTENT_TRUST=$DOCKER_CONTENT_TRUST \
+            -v /etc:/etc:ro \
+            -v /var/lib:/var/lib:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v /usr/lib/systemd:/usr/lib/systemd:ro \
+            -v /etc/systemd:/etc/systemd:ro \
+            --label docker_bench_security \
+            docker/docker-bench-security > docker-bench-report.txt || true
+
+      - name: Upload Docker security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: docker-security-reports
+          path: |
+            trivy-results.sarif
+            docker-bench-report.txt
+
+  # Infrastructure Security Scanning
+  infrastructure-scan:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Terraform Security Scan (if applicable)
+        if: hashFiles('**/*.tf') != ''
+        uses: aquasecurity/tfsec-action@v1.0.2
+        with:
+          soft_fail: true
+
+      - name: Kubernetes manifest security scan
+        if: hashFiles('k8s/**/*.yaml') != ''
+        run: |
+          # Install kube-score
+          wget https://github.com/zegl/kube-score/releases/latest/download/kube-score_linux_amd64
+          chmod +x kube-score_linux_amd64
+          
+          # Scan Kubernetes manifests
+          ./kube-score_linux_amd64 score k8s/*.yaml > kube-score-report.txt || true
+
+      - name: Docker Compose security scan
+        if: hashFiles('**/docker-compose*.yml') != ''
+        run: |
+          # Install docker-compose-security-scanner
+          pip install docker-compose-security-scanner
+          
+          # Scan docker-compose files
+          docker-compose-security-scanner docker-compose.yml > compose-security-report.txt || true
+
+      - name: Upload infrastructure reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: infrastructure-reports
+          path: |
+            kube-score-report.txt
+            compose-security-report.txt
+
+  # Secret Scanning
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for secret scanning
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: GitLeaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect Hardcoded Secrets
+        run: |
+          # Custom script to detect common secret patterns
+          grep -r -E "(password|secret|key|token)\s*[:=]\s*['\"][^'\"]{8,}" . \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude="*.md" \
+            > potential-secrets.txt || true
+
+      - name: Upload secret scan results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: secret-scan-results
+          path: |
+            potential-secrets.txt
+
+  # Mining Pool Specific Security Checks
+  mining-security:
+    name: Mining Pool Security Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Bitcoin address formats
+        run: |
+          node -e "
+          const fs = require('fs');
+          const files = fs.readdirSync('./src', {recursive: true})
+            .filter(f => f.endsWith('.ts'));
+          
+          let issues = [];
+          files.forEach(file => {
+            const content = fs.readFileSync(\`./src/\${file}\`, 'utf8');
+            // Check for hardcoded addresses
+            const addressMatches = content.match(/[13][a-km-zA-HJ-NP-Z1-9]{25,34}/g);
+            if (addressMatches) {
+              issues.push(\`\${file}: Potential hardcoded Bitcoin address\`);
+            }
+          });
+          
+          if (issues.length > 0) {
+            console.log('Security issues found:');
+            issues.forEach(issue => console.log(issue));
+          } else {
+            console.log('No Bitcoin address security issues found');
+          }
+          "
+
+      - name: Check for unsafe crypto practices
+        run: |
+          # Check for weak crypto usage
+          grep -r -E "(md5|sha1|des|3des)" src/ > crypto-issues.txt || true
+          
+          # Check for hardcoded private keys or seeds
+          grep -r -E "(private.?key|seed|mnemonic)\s*[:=]" src/ >> crypto-issues.txt || true
+          
+          if [ -s crypto-issues.txt ]; then
+            echo "Potential crypto security issues found:"
+            cat crypto-issues.txt
+            exit 1
+          fi
+
+      - name: Validate input sanitization
+        run: npm run security:validate
+
+      - name: Check for SQL injection vulnerabilities
+        run: |
+          # Look for potentially unsafe SQL queries
+          grep -r -E "(SELECT|INSERT|UPDATE|DELETE).*\+.*" src/ > sql-issues.txt || true
+          
+          if [ -s sql-issues.txt ]; then
+            echo "Potential SQL injection vulnerabilities:"
+            cat sql-issues.txt
+            exit 1
+          fi
+
+      - name: Check CORS configuration
+        run: |
+          node -e "
+          const fs = require('fs');
+          const content = fs.readFileSync('./src/security/cors-headers.ts', 'utf8');
+          
+          if (content.includes('origins: \"*\"')) {
+            console.log('Warning: Wildcard CORS origin detected');
+            process.exit(1);
+          }
+          
+          console.log('CORS configuration appears secure');
+          "
+
+  # Compliance and Best Practices Check
+  compliance:
+    name: Security Compliance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for security headers implementation
+        run: |
+          if ! grep -q "Content-Security-Policy" src/security/cors-headers.ts; then
+            echo "Error: CSP header not implemented"
+            exit 1
+          fi
+          
+          if ! grep -q "Strict-Transport-Security" src/security/cors-headers.ts; then
+            echo "Error: HSTS header not implemented"
+            exit 1
+          fi
+          
+          echo "Security headers properly implemented"
+
+      - name: Validate environment variable usage
+        run: |
+          # Check for direct secret usage instead of env vars
+          grep -r -E "password.*=.*['\"]" src/ > env-issues.txt || true
+          
+          if [ -s env-issues.txt ]; then
+            echo "Potential hardcoded credentials found:"
+            cat env-issues.txt
+            exit 1
+          fi
+
+      - name: Check Docker security best practices
+        run: |
+          if grep -q "USER root" Dockerfile*; then
+            echo "Error: Running as root user in Docker"
+            exit 1
+          fi
+          
+          if ! grep -q "USER.*[0-9]" Dockerfile*; then
+            echo "Warning: Non-root user not explicitly set"
+          fi
+          
+          echo "Docker security practices validated"
+
+      - name: Validate backup encryption
+        run: |
+          if ! grep -q "encrypt" src/backup/backup-manager.ts; then
+            echo "Warning: Backup encryption not detected"
+          fi
+          
+          echo "Backup security validated"
+
+  # Generate Security Report
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, static-analysis, docker-security, secret-scan, mining-security, compliance]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate consolidated security report
+        run: |
+          cat > security-report.md << 'EOF'
+          # Otedama Pool Security Scan Report
+          
+          **Scan Date**: $(date)
+          **Commit**: ${{ github.sha }}
+          **Branch**: ${{ github.ref_name }}
+          
+          ## Summary
+          
+          | Category | Status |
+          |----------|--------|
+          | Dependency Scan | ${{ needs.dependency-scan.result }} |
+          | Static Analysis | ${{ needs.static-analysis.result }} |
+          | Docker Security | ${{ needs.docker-security.result }} |
+          | Secret Scan | ${{ needs.secret-scan.result }} |
+          | Mining Security | ${{ needs.mining-security.result }} |
+          | Compliance | ${{ needs.compliance.result }} |
+          
+          ## Recommendations
+          
+          - Keep dependencies updated
+          - Regular security training for developers
+          - Implement automated security testing in development workflow
+          - Review and update security policies quarterly
+          
+          EOF
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.md
+
+      - name: Comment on PR with security summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('security-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Security Scan Results\n\n${report}`
+            });
+
+  # Security Notification
+  notify-security:
+    name: Security Notification
+    runs-on: ubuntu-latest
+    needs: [security-report]
+    if: failure()
+    
+    steps:
+      - name: Notify security team
+        run: |
+          curl -H "Content-Type: application/json" \
+            -X POST \
+            -d "{\"content\":\"🔒 Security scan failed for Otedama Pool. Immediate attention required!\"}" \
+            ${{ secrets.SECURITY_WEBHOOK_URL }}

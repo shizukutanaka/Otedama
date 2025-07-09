@@ -1,0 +1,60 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for better analysis
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check code formatting
+      run: npm run format:check
+    
+    - name: Run tests with coverage
+      run: npm run test:coverage
+    
+    - name: SonarCloud Scan
+      if: github.event.pull_request.head.repo.full_name == github.repository
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    
+    - name: Coverage Report
+      uses: 5monkeys/cobertura-action@master
+      with:
+        path: coverage/cobertura-coverage.xml
+        minimum_coverage: 80
+        fail_below_threshold: true
+        show_line: true
+        show_branch: true
+        show_missing: true
+    
+    - name: Comment PR with coverage
+      uses: 5monkeys/cobertura-action@master
+      if: github.event_name == 'pull_request'
+      with:
+        path: coverage/cobertura-coverage.xml
+        skip_covered: false
+        minimum_coverage: 80
+        fail_below_threshold: false
+        show_line: true
+        show_branch: true
+        show_class_names: true
+        only_changed_files: true

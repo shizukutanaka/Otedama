@@ -1,0 +1,71 @@
+openapi: 3.0.0
+info:
+  title: Otedama Mining Pool API
+  description: API for interacting with the Otedama mining pool, retrieving statistics, and managing miners.
+  version: 1.0.0
+  contact:
+    email: api-support@example.com
+
+servers:
+  - url: http://localhost:8080/api
+    description: Development server
+
+paths:
+  /stats:
+    get:
+      summary: Get Pool Statistics
+      description: Retrieves real-time statistics for the entire mining pool.
+      tags:
+        - Statistics
+      responses:
+        '200':
+          description: Successful response with pool statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  poolHashrate:
+                    type: number
+                    description: The total hashrate of the pool in H/s.
+                  networkHashrate:
+                    type: number
+                    description: The estimated network hashrate in H/s.
+                  activeMiners:
+                    type: integer
+                    description: The number of currently active miners.
+                  blocksFound:
+                    type: integer
+                    description: The total number of blocks found by the pool.
+
+  /miner/{address}/stats:
+    get:
+      summary: Get Miner Statistics
+      description: Retrieves statistics for a specific miner, identified by their wallet address.
+      tags:
+        - Miner
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: The wallet address of the miner.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response with miner-specific statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address:
+                    type: string
+                  hashrate:
+                    type: number
+                  sharesSubmitted:
+                    type: integer
+                  balance:
+                    type: number
+        '404':
+          description: Miner not found.

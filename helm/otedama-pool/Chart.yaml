@@ -1,0 +1,28 @@
+# Helm Chart for Otedama Pool (Item 62: Kubernetes Support)
+apiVersion: v2
+name: otedama-pool
+description: A professional Bitcoin mining pool software following Carmack, Martin, and Pike principles
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - bitcoin
+  - mining
+  - pool
+  - cryptocurrency
+  - stratum
+  - blockchain
+
+home: https://github.com/otedama/pool
+sources:
+  - https://github.com/otedama/pool
+
+maintainers:
+  - name: Otedama Team
+    email: team@otedama-pool.com
+    url: https://otedama-pool.com
+
+annotations:
+  category: Blockchain
+  licenses: MIT

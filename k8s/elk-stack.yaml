@@ -1,0 +1,462 @@
+---
+# Elasticsearch
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: otedama-elasticsearch
+  namespace: otedama-pool
+spec:
+  version: 8.11.0
+  nodeSets:
+  - name: default
+    count: 3
+    config:
+      node.store.allow_mmap: false
+      xpack.security.enabled: true
+      xpack.security.authc:
+        anonymous:
+          username: anonymous_user
+          roles: monitoring
+          authz_exception: false
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 500m
+            limits:
+              memory: 4Gi
+              cpu: 1000m
+          env:
+          - name: ES_JAVA_OPTS
+            value: "-Xms2g -Xmx2g"
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 50Gi
+        storageClassName: fast-ssd
+
+---
+# Kibana
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: otedama-kibana
+  namespace: otedama-pool
+spec:
+  version: 8.11.0
+  count: 2
+  elasticsearchRef:
+    name: otedama-elasticsearch
+  config:
+    server.publicBaseUrl: "https://logs.pool.example.com"
+    xpack.security.enabled: true
+    xpack.fleet.agents.elasticsearch.hosts: ["https://otedama-elasticsearch-es-http:9200"]
+    xpack.fleet.agents.fleet_server.hosts: ["https://fleet-server:8220"]
+  podTemplate:
+    spec:
+      containers:
+      - name: kibana
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: 250m
+          limits:
+            memory: 2Gi
+            cpu: 500m
+
+---
+# Logstash
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: otedama-pool
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    path.config: /usr/share/logstash/pipeline
+    xpack.monitoring.enabled: true
+    xpack.monitoring.elasticsearch.hosts: ["https://otedama-elasticsearch-es-http:9200"]
+    xpack.monitoring.elasticsearch.username: "elastic"
+    xpack.monitoring.elasticsearch.password: "${ELASTICSEARCH_PASSWORD}"
+    
+  pipelines.yml: |
+    - pipeline.id: mining-logs
+      path.config: "/usr/share/logstash/pipeline/mining.conf"
+      pipeline.workers: 2
+    - pipeline.id: pool-stats
+      path.config: "/usr/share/logstash/pipeline/stats.conf"
+      pipeline.workers: 1
+
+  mining.conf: |
+    input {
+      beats {
+        port => 5044
+        host => "0.0.0.0"
+      }
+      tcp {
+        port => 5000
+        codec => json_lines
+        tags => ["pool_logs"]
+      }
+    }
+
+    filter {
+      if [fields][service] == "otedama-pool" {
+        json {
+          source => "message"
+        }
+        
+        date {
+          match => [ "timestamp", "ISO8601" ]
+        }
+        
+        if [level] {
+          mutate {
+            add_field => { "log_level" => "%{level}" }
+          }
+        }
+        
+        if [component] {
+          mutate {
+            add_field => { "service_component" => "%{component}" }
+          }
+        }
+        
+        if [minerId] {
+          mutate {
+            add_field => { "mining_miner_id" => "%{minerId}" }
+          }
+        }
+        
+        if [error] {
+          mutate {
+            add_tag => ["error"]
+            add_field => { "error_message" => "%{error}" }
+          }
+        }
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts => ["https://otedama-elasticsearch-es-http:9200"]
+        user => "elastic"
+        password => "${ELASTICSEARCH_PASSWORD}"
+        index => "otedama-pool-logs-%{+YYYY.MM.dd}"
+        template_name => "otedama-pool"
+        template => "/usr/share/logstash/templates/otedama-template.json"
+        template_overwrite => true
+      }
+      
+      if "error" in [tags] {
+        elasticsearch {
+          hosts => ["https://otedama-elasticsearch-es-http:9200"]
+          user => "elastic"
+          password => "${ELASTICSEARCH_PASSWORD}"
+          index => "otedama-pool-errors-%{+YYYY.MM.dd}"
+        }
+      }
+    }
+
+  stats.conf: |
+    input {
+      http_poller {
+        urls => {
+          pool_stats => "http://otedama-pool-web:8088/stats"
+        }
+        request_timeout => 60
+        schedule => { every => "30s" }
+        codec => "json"
+        metadata_target => "http_poller_metadata"
+      }
+    }
+
+    filter {
+      mutate {
+        add_field => { "[@metadata][index]" => "otedama-pool-stats" }
+        add_field => { "data_type" => "pool_statistics" }
+      }
+      
+      date {
+        match => [ "@timestamp", "ISO8601" ]
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts => ["https://otedama-elasticsearch-es-http:9200"]
+        user => "elastic"
+        password => "${ELASTICSEARCH_PASSWORD}"
+        index => "otedama-pool-stats-%{+YYYY.MM.dd}"
+      }
+    }
+
+  otedama-template.json: |
+    {
+      "index_patterns": ["otedama-pool-*"],
+      "settings": {
+        "number_of_shards": 2,
+        "number_of_replicas": 1,
+        "index.refresh_interval": "5s"
+      },
+      "mappings": {
+        "properties": {
+          "@timestamp": {
+            "type": "date"
+          },
+          "level": {
+            "type": "keyword"
+          },
+          "component": {
+            "type": "keyword"
+          },
+          "message": {
+            "type": "text",
+            "analyzer": "standard"
+          },
+          "minerId": {
+            "type": "keyword"
+          },
+          "error": {
+            "type": "text"
+          },
+          "hashrate": {
+            "type": "double"
+          },
+          "difficulty": {
+            "type": "double"
+          },
+          "shares": {
+            "type": "long"
+          }
+        }
+      }
+    }
+
+---
+# Logstash Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: otedama-pool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      containers:
+      - name: logstash
+        image: docker.elastic.co/logstash/logstash:8.11.0
+        ports:
+        - containerPort: 5044
+          name: beats
+        - containerPort: 5000
+          name: tcp
+        - containerPort: 9600
+          name: http
+        env:
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-elasticsearch-es-elastic-user
+              key: elastic
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/logstash/config
+        - name: pipeline
+          mountPath: /usr/share/logstash/pipeline
+        - name: templates
+          mountPath: /usr/share/logstash/templates
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: 500m
+          limits:
+            memory: 2Gi
+            cpu: 1000m
+      volumes:
+      - name: config
+        configMap:
+          name: logstash-config
+          items:
+          - key: logstash.yml
+            path: logstash.yml
+          - key: pipelines.yml
+            path: pipelines.yml
+      - name: pipeline
+        configMap:
+          name: logstash-config
+          items:
+          - key: mining.conf
+            path: mining.conf
+          - key: stats.conf
+            path: stats.conf
+      - name: templates
+        configMap:
+          name: logstash-config
+          items:
+          - key: otedama-template.json
+            path: otedama-template.json
+
+---
+# Logstash Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  namespace: otedama-pool
+spec:
+  selector:
+    app: logstash
+  ports:
+  - name: beats
+    port: 5044
+    targetPort: 5044
+  - name: tcp
+    port: 5000
+    targetPort: 5000
+  - name: http
+    port: 9600
+    targetPort: 9600
+
+---
+# Filebeat DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+  namespace: otedama-pool
+spec:
+  selector:
+    matchLabels:
+      app: filebeat
+  template:
+    metadata:
+      labels:
+        app: filebeat
+    spec:
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:8.11.0
+        env:
+        - name: ELASTICSEARCH_HOST
+          value: "otedama-elasticsearch-es-http"
+        - name: ELASTICSEARCH_PORT
+          value: "9200"
+        - name: ELASTICSEARCH_USERNAME
+          value: "elastic"
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-elasticsearch-es-elastic-user
+              key: elastic
+        - name: LOGSTASH_HOST
+          value: "logstash"
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/filebeat/filebeat.yml
+          subPath: filebeat.yml
+          readOnly: true
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: 100m
+          limits:
+            memory: 200Mi
+            cpu: 200m
+      volumes:
+      - name: config
+        configMap:
+          name: filebeat-config
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+
+---
+# Filebeat ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+  namespace: otedama-pool
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+    - type: container
+      paths:
+        - '/var/log/containers/otedama-pool-*.log'
+      processors:
+      - add_kubernetes_metadata:
+          host: ${NODE_NAME}
+          matchers:
+          - logs_path:
+              logs_path: "/var/log/containers/"
+
+    output.logstash:
+      hosts: ["${LOGSTASH_HOST}:5044"]
+
+    processors:
+    - add_host_metadata:
+        when.not.contains.tags: forwarded
+    - add_docker_metadata: ~
+    - add_kubernetes_metadata: ~
+
+    logging.level: info
+    logging.to_files: true
+    logging.files:
+      path: /var/log/filebeat
+      name: filebeat
+      keepfiles: 7
+      permissions: 0644
+
+---
+# Kibana Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kibana-ingress
+  namespace: otedama-pool
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  tls:
+  - hosts:
+    - logs.pool.example.com
+    secretName: kibana-tls
+  rules:
+  - host: logs.pool.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-kibana-kb-http
+            port:
+              number: 5601

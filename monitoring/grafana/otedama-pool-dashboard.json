@@ -1,0 +1,376 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Otedama Pool - Mining Operations Dashboard",
+    "tags": ["otedama", "mining", "pool", "bitcoin"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "5s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h"],
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(otedama_pool_info, instance)",
+          "refresh": 1,
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "interval",
+          "type": "interval",
+          "query": "5s,10s,30s,1m,5m,10m,30m",
+          "auto": true,
+          "auto_count": 30,
+          "auto_min": "10s"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Pool Overview",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "otedama_pool_info{instance=~\"$instance\"}",
+            "legendFormat": "Pool Status",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"options": {"1": {"text": "Online", "color": "green"}}, "type": "value"},
+              {"options": {"0": {"text": "Offline", "color": "red"}}, "type": "value"}
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Active Miners",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "otedama_miners_active{instance=~\"$instance\"}",
+            "legendFormat": "Active Miners",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Total Hashrate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "otedama_pool_hashrate_total{instance=~\"$instance\"}",
+            "legendFormat": "Pool Hashrate",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "hash/sec",
+            "custom": {
+              "displayMode": "gradient",
+              "orientation": "horizontal"
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Blocks Found",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "increase(otedama_blocks_found_total{instance=~\"$instance\"}[24h])",
+            "legendFormat": "Blocks (24h)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center"
+        }
+      },
+      {
+        "id": 5,
+        "title": "Hashrate Over Time",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "rate(otedama_pool_hashrate_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "Pool Hashrate",
+            "refId": "A"
+          },
+          {
+            "expr": "avg(rate(otedama_miner_hashrate{instance=~\"$instance\"}[$interval])) by (miner)",
+            "legendFormat": "{{miner}}",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Hash/sec",
+            "logBase": 1,
+            "unit": "hash/sec"
+          }
+        ],
+        "xAxis": {
+          "mode": "time"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Active Connections",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "targets": [
+          {
+            "expr": "otedama_connections_active{instance=~\"$instance\"}",
+            "legendFormat": "Active Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "otedama_connections_stratum{instance=~\"$instance\"}",
+            "legendFormat": "Stratum Connections",
+            "refId": "B"
+          },
+          {
+            "expr": "otedama_connections_websocket{instance=~\"$instance\"}",
+            "legendFormat": "WebSocket Connections",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Connections",
+            "logBase": 1,
+            "unit": "short"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Shares Statistics",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+        "targets": [
+          {
+            "expr": "rate(otedama_shares_submitted_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "Shares Submitted/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(otedama_shares_accepted_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "Shares Accepted/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(otedama_shares_rejected_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "Shares Rejected/sec",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Shares/sec",
+            "logBase": 1,
+            "unit": "short"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Performance Metrics",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+        "targets": [
+          {
+            "expr": "otedama_response_time_seconds{instance=~\"$instance\"}",
+            "legendFormat": "{{percentile}} Response Time",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(otedama_http_requests_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "{{method}} {{status}}",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds",
+            "logBase": 1,
+            "unit": "s"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "System Resources",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{instance=~\"$instance\"} / 1024 / 1024",
+            "legendFormat": "Memory Usage (MB)",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(process_cpu_seconds_total{instance=~\"$instance\"}[$interval]) * 100",
+            "legendFormat": "CPU Usage (%)",
+            "refId": "B"
+          },
+          {
+            "expr": "nodejs_heap_size_used_bytes{instance=~\"$instance\"} / 1024 / 1024",
+            "legendFormat": "Heap Used (MB)",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "MB / %",
+            "logBase": 1,
+            "unit": "short"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Database Performance",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "targets": [
+          {
+            "expr": "otedama_database_query_duration_seconds{instance=~\"$instance\"}",
+            "legendFormat": "{{operation}} Query Time",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(otedama_database_queries_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "{{operation}} Queries/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "otedama_database_connections_active{instance=~\"$instance\"}",
+            "legendFormat": "Active DB Connections",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds / Count",
+            "logBase": 1,
+            "unit": "short"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "rate(otedama_errors_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "{{type}} Errors/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(otedama_security_violations_total{instance=~\"$instance\"}[$interval])",
+            "legendFormat": "Security Violations/sec",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Errors/sec",
+            "logBase": 1,
+            "unit": "short"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.1], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "for": "1m",
+          "frequency": "10s",
+          "handler": 1,
+          "name": "High Error Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "prometheus",
+          "expr": "otedama_deployment_info",
+          "enable": true,
+          "iconColor": "green",
+          "titleFormat": "Deployment {{version}}"
+        },
+        {
+          "name": "Alerts",
+          "datasource": "prometheus",
+          "expr": "ALERTS{alertname=~\".*Otedama.*\"}",
+          "enable": true,
+          "iconColor": "red",
+          "titleFormat": "{{alertname}}"
+        }
+      ]
+    }
+  },
+  "overwrite": true,
+  "inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "value": "prometheus"
+    }
+  ]
+}

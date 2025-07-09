@@ -1,0 +1,84 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otedama-pool
+  namespace: otedama-pool
+spec:
+  selector:
+    matchLabels:
+      app: otedama-pool
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+
+---
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otedama-pool-alerts
+  namespace: otedama-pool
+spec:
+  groups:
+    - name: otedama-pool.rules
+      rules:
+        - alert: HighCPUUsage
+          expr: process_cpu_seconds_total{app="otedama-pool"} > 0.8
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High CPU usage on Otedama Pool"
+            description: "{{ $labels.instance }} has been using more than 80% CPU for 5 minutes"
+
+        - alert: HighMemoryUsage
+          expr: process_resident_memory_bytes{app="otedama-pool"} > 1024 * 1024 * 1024
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage on Otedama Pool"
+            description: "{{ $labels.instance }} has been using more than 1GB of memory for 5 minutes"
+
+        - alert: ActiveMinersLow
+          expr: active_miners{app="otedama-pool"} < 100
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low active miners"
+            description: "Number of active miners has been below 100 for 15 minutes"
+
+        - alert: MiningPerformanceLow
+          expr: rate(mining_hashrate{app="otedama-pool"}[5m]) < 1000000000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low mining performance"
+            description: "Mining hashrate has been below 1GH/s for 10 minutes"
+
+---
+
+apiVersion: monitoring.coreos.com/v1
+kind: AlertmanagerConfig
+metadata:
+  name: otedama-pool-alerts
+  namespace: otedama-pool
+spec:
+  route:
+    receiver: slack-notifications
+    groupBy: ['alertname']
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 12h
+    routes:
+      - receiver: slack-notifications
+        matchers:
+          - name: severity
+            value: critical
+          - name: severity
+            value: warning

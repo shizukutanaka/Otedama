@@ -1,0 +1,563 @@
+---
+# Advanced Alert Rules and Escalation Policies
+# Implements Item 117 from IMPROVEMENTS_300.md
+
+# AlertManager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: otedama-pool
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'localhost:587'
+      smtp_from: 'alerts@pool.example.com'
+      slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+      
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+    
+    route:
+      group_by: ['alertname', 'severity', 'service']
+      group_wait: 10s
+      group_interval: 30s
+      repeat_interval: 12h
+      receiver: 'default'
+      routes:
+      # Critical alerts - immediate escalation
+      - match:
+          severity: critical
+        receiver: 'critical-escalation'
+        group_wait: 0s
+        group_interval: 1m
+        repeat_interval: 5m
+        routes:
+        - match:
+            service: otedama-pool
+          receiver: 'pool-critical'
+          
+      # Pool-specific warnings
+      - match:
+          service: otedama-pool
+          severity: warning
+        receiver: 'pool-warnings'
+        group_interval: 5m
+        repeat_interval: 30m
+        
+      # Infrastructure alerts
+      - match:
+          component: infrastructure
+        receiver: 'infrastructure-team'
+        
+      # Security alerts
+      - match:
+          category: security
+        receiver: 'security-team'
+        group_wait: 0s
+        repeat_interval: 1h
+    
+    inhibit_rules:
+    # Inhibit warning alerts when critical alerts are firing
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'service', 'instance']
+      
+    # Inhibit individual alerts when aggregate alert is firing
+    - source_match:
+        alertname: 'PoolDown'
+      target_match_re:
+        alertname: '(HighErrorRate|HighLatency|LowThroughput)'
+      equal: ['service']
+    
+    receivers:
+    - name: 'default'
+      slack_configs:
+      - channel: '#alerts'
+        title: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        
+    - name: 'critical-escalation'
+      slack_configs:
+      - channel: '#critical-alerts'
+        title: '🚨 CRITICAL: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        text: |
+          {{ range .Alerts }}
+          *Severity:* {{ .Labels.severity }}
+          *Service:* {{ .Labels.service }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+        send_resolved: true
+      pagerduty_configs:
+      - routing_key: 'YOUR_PAGERDUTY_INTEGRATION_KEY'
+        description: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        severity: '{{ .GroupLabels.severity }}'
+        
+    - name: 'pool-critical'
+      slack_configs:
+      - channel: '#pool-critical'
+        title: '🚨 POOL CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          *Pool Status:* {{ .CommonLabels.service }}
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Description:* {{ .Annotations.description }}
+          *Value:* {{ .Annotations.value }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+      webhook_configs:
+      - url: 'http://otedama-pool-web:8088/webhook/alerts'
+        send_resolved: true
+        
+    - name: 'pool-warnings'
+      slack_configs:
+      - channel: '#pool-alerts'
+        title: '⚠️ Pool Warning: {{ .GroupLabels.alertname }}'
+        
+    - name: 'infrastructure-team'
+      email_configs:
+      - to: 'infrastructure@pool.example.com'
+        subject: '[INFRA] {{ .GroupLabels.alertname }}'
+        
+    - name: 'security-team'
+      slack_configs:
+      - channel: '#security-alerts'
+        title: '🔒 Security Alert: {{ .GroupLabels.alertname }}'
+      email_configs:
+      - to: 'security@pool.example.com'
+        subject: '[SECURITY] {{ .GroupLabels.alertname }}'
+
+  templates.tmpl: |
+    {{ define "slack.title" }}
+    {{ if eq .Status "firing" }}🚨{{ else }}✅{{ end }} 
+    {{ .GroupLabels.alertname }} - {{ .GroupLabels.service }}
+    {{ end }}
+    
+    {{ define "slack.text" }}
+    {{ range .Alerts }}
+    *Status:* {{ .Status | title }}
+    *Severity:* {{ .Labels.severity }}
+    {{ if .Annotations.summary }}*Summary:* {{ .Annotations.summary }}{{ end }}
+    {{ if .Annotations.description }}*Description:* {{ .Annotations.description }}{{ end }}
+    {{ if .Annotations.runbook_url }}*Runbook:* {{ .Annotations.runbook_url }}{{ end }}
+    *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+    {{ if .EndsAt }}*Ended:* {{ .EndsAt.Format "2006-01-02 15:04:05 UTC" }}{{ end }}
+    ---
+    {{ end }}
+    {{ end }}
+
+---
+# AlertManager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: otedama-pool
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        args:
+        - --config.file=/etc/alertmanager/alertmanager.yml
+        - --storage.path=/alertmanager
+        - --data.retention=120h
+        - --cluster.listen-address=0.0.0.0:9094
+        - --cluster.advertise-address=$(POD_IP):9094
+        - --cluster.peer=alertmanager-0.alertmanager:9094
+        - --cluster.peer=alertmanager-1.alertmanager:9094
+        - --web.listen-address=0.0.0.0:9093
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        ports:
+        - containerPort: 9093
+          name: web
+        - containerPort: 9094
+          name: cluster
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+        - name: storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 200m
+      volumes:
+      - name: config
+        configMap:
+          name: alertmanager-config
+      - name: storage
+        persistentVolumeClaim:
+          claimName: alertmanager-storage
+
+---
+# AlertManager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: otedama-pool
+spec:
+  selector:
+    app: alertmanager
+  ports:
+  - name: web
+    port: 9093
+    targetPort: 9093
+  - name: cluster
+    port: 9094
+    targetPort: 9094
+
+---
+# AlertManager Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-storage
+  namespace: otedama-pool
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Enhanced Prometheus Rules with Advanced Alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otedama-advanced-alerts
+  namespace: otedama-pool
+spec:
+  groups:
+  - name: otedama.pool.critical
+    interval: 15s
+    rules:
+    # Pool Down - Critical
+    - alert: PoolDown
+      expr: up{job="otedama-pool"} == 0
+      for: 30s
+      labels:
+        severity: critical
+        service: otedama-pool
+        category: availability
+      annotations:
+        summary: "Otedama Pool is down"
+        description: "Pool service has been down for more than 30 seconds"
+        runbook_url: "https://docs.pool.example.com/runbooks/pool-down"
+        value: "{{ $value }}"
+        
+    # Block Discovery Failure - Critical
+    - alert: BlockDiscoveryFailure
+      expr: increase(otedama_pool_blocks_found_total[1h]) == 0 and otedama_pool_miners_active_total > 100
+      for: 2h
+      labels:
+        severity: critical
+        service: otedama-pool
+        category: mining
+      annotations:
+        summary: "No blocks found in 2 hours despite active mining"
+        description: "Pool has {{ query \"otedama_pool_miners_active_total\" }} active miners but no blocks found in 2 hours"
+        runbook_url: "https://docs.pool.example.com/runbooks/block-discovery"
+        
+    # Database Connection Failure - Critical
+    - alert: DatabaseDown
+      expr: otedama_pool_db_connections{state="active"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: otedama-pool
+        component: database
+      annotations:
+        summary: "Database connection lost"
+        description: "No active database connections available"
+        runbook_url: "https://docs.pool.example.com/runbooks/database-down"
+        
+  - name: otedama.pool.performance
+    interval: 30s
+    rules:
+    # High Error Rate - Warning → Critical escalation
+    - alert: HighErrorRateWarning
+      expr: otedama:sli:error_rate > 1
+      for: 2m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: performance
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value }}% (threshold: 1%)"
+        
+    - alert: HighErrorRateCritical
+      expr: otedama:sli:error_rate > 5
+      for: 1m
+      labels:
+        severity: critical
+        service: otedama-pool
+        category: performance
+      annotations:
+        summary: "Critical error rate detected"
+        description: "Error rate is {{ $value }}% (threshold: 5%)"
+        runbook_url: "https://docs.pool.example.com/runbooks/high-error-rate"
+        
+    # Memory Leak Detection
+    - alert: MemoryLeakDetected
+      expr: |
+        (
+          increase(process_resident_memory_bytes{job="otedama-pool"}[1h])
+          / (1024 * 1024)
+        ) > 100
+      for: 30m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: performance
+      annotations:
+        summary: "Potential memory leak detected"
+        description: "Memory usage increased by {{ $value }}MB in the last hour"
+        runbook_url: "https://docs.pool.example.com/runbooks/memory-leak"
+        
+    # High CPU Usage
+    - alert: HighCPUUsage
+      expr: |
+        (
+          rate(process_cpu_seconds_total{job="otedama-pool"}[5m]) * 100
+        ) > 80
+      for: 10m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: performance
+      annotations:
+        summary: "High CPU usage detected"
+        description: "CPU usage is {{ $value }}% (threshold: 80%)"
+        
+  - name: otedama.pool.business
+    interval: 60s
+    rules:
+    # Low Pool Efficiency
+    - alert: LowPoolEfficiency
+      expr: otedama_pool_efficiency_percent < 90
+      for: 15m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: business
+      annotations:
+        summary: "Pool efficiency below target"
+        description: "Pool efficiency is {{ $value }}% (target: >90%)"
+        runbook_url: "https://docs.pool.example.com/runbooks/low-efficiency"
+        
+    # Miner Exodus Warning
+    - alert: MinerExodus
+      expr: |
+        (
+          (otedama_pool_miners_active_total offset 1h) - otedama_pool_miners_active_total
+        ) / (otedama_pool_miners_active_total offset 1h) * 100 > 20
+      for: 5m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: business
+      annotations:
+        summary: "Significant miner departure detected"
+        description: "{{ $value }}% of miners have left in the last hour"
+        
+    # Revenue Drop
+    - alert: RevenueDrop
+      expr: |
+        (
+          rate(otedama_pool_revenue_total[1h]) offset 24h
+          - rate(otedama_pool_revenue_total[1h])
+        ) / rate(otedama_pool_revenue_total[1h]) offset 24h * 100 > 30
+      for: 2h
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: business
+      annotations:
+        summary: "Significant revenue drop detected"
+        description: "Revenue dropped by {{ $value }}% compared to 24h ago"
+        
+  - name: otedama.pool.security
+    interval: 30s
+    rules:
+    # DDoS Attack Detection
+    - alert: DDoSAttackDetected
+      expr: |
+        sum(rate(otedama_pool_rate_limit_hits_total[5m])) > 100
+      for: 1m
+      labels:
+        severity: critical
+        service: otedama-pool
+        category: security
+      annotations:
+        summary: "Potential DDoS attack detected"
+        description: "Rate limit hits: {{ $value }}/sec (threshold: 100/sec)"
+        runbook_url: "https://docs.pool.example.com/runbooks/ddos-attack"
+        
+    # Suspicious Share Pattern
+    - alert: SuspiciousSharePattern
+      expr: |
+        sum(rate(otedama_pool_suspicious_shares_total[5m])) > 10
+      for: 2m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: security
+      annotations:
+        summary: "Suspicious share submission pattern detected"
+        description: "Suspicious shares: {{ $value }}/sec"
+        
+    # Failed Authentication Spike
+    - alert: AuthenticationFailureSpike
+      expr: |
+        sum(rate(otedama_pool_failed_auth_attempts_total[5m])) > 5
+      for: 2m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: security
+      annotations:
+        summary: "High authentication failure rate"
+        description: "Failed auth attempts: {{ $value }}/sec"
+        
+  - name: otedama.pool.slo.alerts
+    interval: 30s
+    rules:
+    # SLO Burn Rate Alerts (Multi-Window)
+    - alert: SLOBurnRateFast
+      expr: |
+        (
+          otedama:sli:error_budget_burn_rate > 14.4
+          and otedama:sli:error_budget_burn_rate > 6
+        )
+      for: 2m
+      labels:
+        severity: critical
+        service: otedama-pool
+        category: slo
+        window: fast
+      annotations:
+        summary: "Fast SLO burn rate detected"
+        description: "Error budget will be exhausted in {{ $value }} hours at current rate"
+        
+    - alert: SLOBurnRateSlow
+      expr: |
+        (
+          otedama:sli:error_budget_burn_rate > 6
+          and otedama:sli:error_budget_burn_rate > 1
+        )
+      for: 15m
+      labels:
+        severity: warning
+        service: otedama-pool
+        category: slo
+        window: slow
+      annotations:
+        summary: "Sustained SLO burn rate detected"
+        description: "Error budget burning at {{ $value }}x normal rate"
+        
+  - name: otedama.pool.infrastructure
+    interval: 60s
+    rules:
+    # Kubernetes Pod Issues
+    - alert: PodCrashLooping
+      expr: |
+        rate(kube_pod_container_status_restarts_total{pod=~"otedama-pool-.*"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        service: otedama-pool
+        component: infrastructure
+      annotations:
+        summary: "Pod is crash looping"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+        
+    # Storage Issues
+    - alert: StorageSpaceLow
+      expr: |
+        (
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100
+        ) < 20
+      for: 5m
+      labels:
+        severity: warning
+        service: otedama-pool
+        component: infrastructure
+      annotations:
+        summary: "Low disk space on node"
+        description: "Disk space is {{ $value }}% (threshold: 20%)"
+
+---
+# Dead Man's Switch for monitoring the monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otedama-deadmans-switch
+  namespace: otedama-pool
+spec:
+  groups:
+  - name: deadmans.switch
+    interval: 30s
+    rules:
+    - alert: DeadMansSwitch
+      expr: vector(1)
+      labels:
+        severity: info
+        service: monitoring
+      annotations:
+        summary: "Monitoring is alive"
+        description: "This is a DeadMansSwitch meant to ensure that the monitoring system is working"
+
+---
+# Alert Webhook Handler ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-alert-webhook
+  namespace: otedama-pool
+data:
+  webhook-handler.js: |
+    const express = require('express');
+    const app = express();
+    app.use(express.json());
+    
+    app.post('/webhook/alerts', (req, res) => {
+      const alerts = req.body.alerts || [];
+      
+      alerts.forEach(alert => {
+        console.log(`Alert: ${alert.labels.alertname}`);
+        console.log(`Status: ${alert.status}`);
+        console.log(`Summary: ${alert.annotations.summary}`);
+        
+        // Custom alert processing logic here
+        // e.g., trigger auto-remediation, create tickets, etc.
+      });
+      
+      res.status(200).json({ received: alerts.length });
+    });
+    
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+      console.log(`Alert webhook handler listening on port ${port}`);
+    });

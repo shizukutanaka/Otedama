@@ -1,0 +1,33 @@
+# P2Pool Bridge Configuration
+
+api:
+  port: 8080
+  host: "0.0.0.0"
+  debug: false
+  cors_mode: "release"
+
+stratum:
+  port: 3333
+  host: "0.0.0.0"
+  pool_address: ""  # Set your pool's Bitcoin address
+  extranonce1_size: 4
+
+core:
+  executable_path: "../p2pool-core/target/release/p2pool"
+  config_path: "../p2pool-core/config.json"
+  data_dir: "./data"
+
+metrics:
+  enabled: true
+  port: 9090
+
+# Logging configuration
+log:
+  level: "info"
+  format: "text"
+  output: "stdout"
+
+# Optional: Override with environment variables
+# P2POOL_API_PORT=8080
+# P2POOL_STRATUM_PORT=3333
+# P2POOL_CORE_EXECUTABLE_PATH=/path/to/p2pool

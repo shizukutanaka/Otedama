@@ -1,0 +1,713 @@
+# Production-Ready Kubernetes Manifests (Item 62: Operations)
+# Complete Kubernetes deployment with advanced features
+
+# Namespace with resource quotas
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otedama-pool-prod
+  labels:
+    name: otedama-pool-prod
+    environment: production
+    app.kubernetes.io/name: otedama-pool
+    app.kubernetes.io/version: "1.0.0"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: otedama-pool-quota
+  namespace: otedama-pool-prod
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    persistentvolumeclaims: "10"
+    services.loadbalancers: "2"
+    services.nodeports: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: otedama-pool-limits
+  namespace: otedama-pool-prod
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: "2Gi"
+    defaultRequest:
+      cpu: "500m"
+      memory: "1Gi"
+    type: Container
+---
+# Network Policies for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otedama-pool-netpol
+  namespace: otedama-pool-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: otedama-pool
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 3333  # Stratum
+    - protocol: TCP
+      port: 8080  # API
+    - protocol: TCP
+      port: 8081  # Dashboard
+    - protocol: TCP
+      port: 9090  # Metrics
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: bitcoin-node
+    ports:
+    - protocol: TCP
+      port: 8332
+  - to: []  # Allow all egress for external APIs
+    ports:
+    - protocol: TCP
+      port: 53   # DNS
+    - protocol: UDP
+      port: 53   # DNS
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+---
+# Production ConfigMap with comprehensive settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config-prod
+  namespace: otedama-pool-prod
+data:
+  # Core Pool Configuration
+  NODE_ENV: "production"
+  POOL_ADDRESS: "YOUR_PRODUCTION_BITCOIN_ADDRESS"
+  POOL_FEE: "1.0"
+  
+  # Network Ports
+  STRATUM_PORT: "3333"
+  API_PORT: "8080"
+  DASHBOARD_PORT: "8081"
+  METRICS_PORT: "9090"
+  
+  # Bitcoin Node Configuration
+  RPC_URL: "http://bitcoin-node:8332"
+  RPC_TIMEOUT: "30000"
+  RPC_RETRY_COUNT: "3"
+  
+  # Performance Optimizations
+  ENABLE_PARALLEL_VALIDATION: "true"
+  PARALLEL_WORKERS: "8"
+  MEMORY_ALIGNMENT_ENABLED: "true"
+  BINARY_PROTOCOL_ENABLED: "true"
+  JIT_WARMUP_ENABLED: "true"
+  
+  # Database Configuration
+  DB_TYPE: "postgres"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "otedama_pool"
+  POSTGRES_MAX_CONNECTIONS: "20"
+  
+  # Redis Configuration
+  REDIS_ENABLED: "true"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_MAX_RETRIES: "3"
+  REDIS_RETRY_DELAY: "100"
+  
+  # Security Settings
+  SSL_ENABLED: "true"
+  AUTH_ENABLED: "true"
+  DDOS_PROTECTION: "true"
+  RATE_LIMITING_ENABLED: "true"
+  IP_WHITELIST_ENABLED: "false"
+  CORS_ENABLED: "true"
+  SECURITY_HEADERS_ENABLED: "true"
+  
+  # Monitoring & Logging
+  MONITORING_ENABLED: "true"
+  PROMETHEUS_ENABLED: "true"
+  DASHBOARD_ENABLED: "true"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  
+  # Backup & Recovery
+  BACKUP_ENABLED: "true"
+  BACKUP_INTERVAL_HOURS: "6"
+  BACKUP_RETENTION_DAYS: "30"
+  BACKUP_S3_ENABLED: "true"
+  
+  # Auto-scaling Configuration
+  AUTO_SCALING_ENABLED: "true"
+  AUTO_SCALING_MIN_REPLICAS: "3"
+  AUTO_SCALING_MAX_REPLICAS: "20"
+  AUTO_SCALING_TARGET_CPU: "70"
+  AUTO_SCALING_TARGET_MEMORY: "80"
+  
+  # Feature Flags
+  WEBSOCKET_ENABLED: "true"
+  GEOGRAPHIC_DISTRIBUTION: "true"
+  SMART_POOL_FEATURES: "true"
+  STRATUM_V2_ENABLED: "true"
+  ANOMALY_DETECTION_ENABLED: "true"
+---
+# Secrets for production
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets-prod
+  namespace: otedama-pool-prod
+type: Opaque
+stringData:
+  # Bitcoin Node Credentials
+  RPC_USER: "your_production_rpc_user"
+  RPC_PASSWORD: "your_production_rpc_password"
+  
+  # Database Credentials
+  POSTGRES_USER: "otedama_prod"
+  POSTGRES_PASSWORD: "your_secure_password"
+  
+  # External Service Tokens
+  DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/..."
+  TELEGRAM_BOT_TOKEN: "your_telegram_token"
+  TELEGRAM_CHAT_ID: "your_chat_id"
+  
+  # SSL Certificates (if not using cert-manager)
+  TLS_CERT: ""
+  TLS_KEY: ""
+  
+  # Backup Storage Credentials
+  AWS_ACCESS_KEY_ID: "your_aws_key"
+  AWS_SECRET_ACCESS_KEY: "your_aws_secret"
+  S3_BUCKET_NAME: "otedama-backups-prod"
+  
+  # JWT Secrets
+  JWT_SECRET: "your_jwt_secret_key"
+  SESSION_SECRET: "your_session_secret"
+---
+# Storage Classes for different performance needs
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: otedama-fast-ssd
+  namespace: otedama-pool-prod
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+---
+# High-performance storage for database
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data-prod
+  namespace: otedama-pool-prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: otedama-fast-ssd
+  resources:
+    requests:
+      storage: 100Gi
+---
+# Large storage for backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-backups-prod
+  namespace: otedama-pool-prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 500Gi
+---
+# Production deployment with advanced configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-pool-prod
+  namespace: otedama-pool-prod
+  labels:
+    app: otedama-pool
+    environment: production
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: otedama-pool
+      environment: production
+  template:
+    metadata:
+      labels:
+        app: otedama-pool
+        environment: production
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: otedama-pool-sa
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        runAsNonRoot: true
+      nodeSelector:
+        node-type: compute-optimized
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "otedama"
+        effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - otedama-pool
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: otedama-pool
+        image: ghcr.io/otedama/pool:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: stratum
+          containerPort: 3333
+          protocol: TCP
+        - name: api
+          containerPort: 8080
+          protocol: TCP
+        - name: dashboard
+          containerPort: 8081
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: otedama-config-prod
+        - secretRef:
+            name: otedama-secrets-prod
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+            ephemeral-storage: "10Gi"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+            ephemeral-storage: "20Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: api
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: backups
+          mountPath: /app/backups
+        - name: logs
+          mountPath: /app/logs
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      initContainers:
+      - name: init-db
+        image: postgres:15-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          until pg_isready -h postgres -U $(POSTGRES_USER); do
+            echo "Waiting for database..."
+            sleep 2
+          done
+          echo "Database is ready!"
+        envFrom:
+        - secretRef:
+            name: otedama-secrets-prod
+      - name: init-redis
+        image: redis:7-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          until redis-cli -h redis ping; do
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+          echo "Redis is ready!"
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: otedama-data-prod
+      - name: backups
+        persistentVolumeClaim:
+          claimName: otedama-backups-prod
+      - name: logs
+        emptyDir:
+          sizeLimit: 5Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      terminationGracePeriodSeconds: 60
+---
+# Service Account with RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otedama-pool-sa
+  namespace: otedama-pool-prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: otedama-pool-prod
+  name: otedama-pool-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: otedama-pool-rolebinding
+  namespace: otedama-pool-prod
+subjects:
+- kind: ServiceAccount
+  name: otedama-pool-sa
+  namespace: otedama-pool-prod
+roleRef:
+  kind: Role
+  name: otedama-pool-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Load Balancer Service for Stratum protocol
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-stratum-prod
+  namespace: otedama-pool-prod
+  labels:
+    app: otedama-pool
+    service-type: stratum
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+    service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "3600"
+spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges:
+  - 0.0.0.0/0  # Restrict this in production
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: stratum
+    protocol: TCP
+  selector:
+    app: otedama-pool
+    environment: production
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 86400  # 24 hours
+---
+# ClusterIP Service for internal APIs
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-api-prod
+  namespace: otedama-pool-prod
+  labels:
+    app: otedama-pool
+    service-type: api
+spec:
+  type: ClusterIP
+  ports:
+  - name: api
+    port: 8080
+    targetPort: api
+    protocol: TCP
+  - name: dashboard
+    port: 8081
+    targetPort: dashboard
+    protocol: TCP
+  selector:
+    app: otedama-pool
+    environment: production
+---
+# Headless service for metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-metrics-prod
+  namespace: otedama-pool-prod
+  labels:
+    app: otedama-pool
+    service-type: metrics
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: otedama-pool
+    environment: production
+---
+# Horizontal Pod Autoscaler with custom metrics
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otedama-pool-hpa-prod
+  namespace: otedama-pool-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama-pool-prod
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: otedama_active_connections
+      target:
+        type: AverageValue
+        averageValue: "1000"
+  - type: Pods
+    pods:
+      metric:
+        name: otedama_shares_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+---
+# Pod Disruption Budget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otedama-pool-pdb-prod
+  namespace: otedama-pool-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: otedama-pool
+      environment: production
+---
+# Ingress with SSL termination
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otedama-ingress-prod
+  namespace: otedama-pool-prod
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+spec:
+  tls:
+  - hosts:
+    - api.otedama-pool.com
+    - dashboard.otedama-pool.com
+    secretName: otedama-tls-prod
+  rules:
+  - host: api.otedama-pool.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-api-prod
+            port:
+              number: 8080
+  - host: dashboard.otedama-pool.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-api-prod
+            port:
+              number: 8081
+---
+# ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otedama-pool-monitor
+  namespace: otedama-pool-prod
+  labels:
+    app: otedama-pool
+    environment: production
+spec:
+  selector:
+    matchLabels:
+      app: otedama-pool
+      service-type: metrics
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+---
+# Vertical Pod Autoscaler (optional)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: otedama-pool-vpa-prod
+  namespace: otedama-pool-prod
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama-pool-prod
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: otedama-pool
+      minAllowed:
+        cpu: 500m
+        memory: 2Gi
+      maxAllowed:
+        cpu: 8
+        memory: 16Gi
+      controlledResources: ["cpu", "memory"]

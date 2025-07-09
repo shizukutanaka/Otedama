@@ -1,0 +1,51 @@
+#!/bin/sh
+# Pre-commit hook for code quality
+# John Carmack: "If you want to set off and go develop some grand new thing, you don't need millions of dollars of capitalization. You need enough pizza and Diet Coke to stick in your refrigerator, a cheap PC to work on, and the dedication to go through with it."
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+echo "🔍 Running pre-commit checks..."
+
+# Run type checking
+echo "📝 Type checking..."
+npm run type-check --silent
+if [ $? -ne 0 ]; then
+    echo "${RED}❌ Type checking failed${NC}"
+    exit 1
+fi
+
+# Run ESLint
+echo "🧹 Running ESLint..."
+npm run lint --silent
+if [ $? -ne 0 ]; then
+    echo "${RED}❌ ESLint found issues${NC}"
+    echo "${YELLOW}💡 Run 'npm run lint:fix' to fix automatically${NC}"
+    exit 1
+fi
+
+# Run Prettier check
+echo "💅 Checking code formatting..."
+npm run format:check --silent
+if [ $? -ne 0 ]; then
+    echo "${RED}❌ Code formatting issues found${NC}"
+    echo "${YELLOW}💡 Run 'npm run format' to fix automatically${NC}"
+    exit 1
+fi
+
+# Run unit tests for changed files
+echo "🧪 Running tests for changed files..."
+git diff --cached --name-only --diff-filter=ACM | grep '\.ts$' | grep -E '\.test\.|\.spec\.' > /dev/null
+if [ $? -eq 0 ]; then
+    npm run test:unit -- --passWithNoTests --findRelatedTests $(git diff --cached --name-only --diff-filter=ACM | grep '\.ts$')
+    if [ $? -ne 0 ]; then
+        echo "${RED}❌ Unit tests failed${NC}"
+        exit 1
+    fi
+fi
+
+echo "${GREEN}✅ All pre-commit checks passed!${NC}"
+exit 0

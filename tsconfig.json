@@ -1,0 +1,96 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    /* Modules */
+    "module": "commonjs",
+    "rootDir": "./src",
+    "moduleResolution": "node",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"],
+      "@config/*": ["src/config/*"],
+      "@core/*": ["src/core/*"],
+      "@utils/*": ["src/utils/*"],
+      "@security/*": ["src/security/*"],
+      "@api/*": ["src/api/*"],
+      "@p2p/*": ["src/p2p/*"],
+      "@blockchain/*": ["src/blockchain/*"],
+      "@database/*": ["src/database/*"],
+      "@errors/*": ["src/errors/*"],
+      "@monitoring/*": ["src/monitoring/*"],
+      "@logging/*": ["src/logging/*"]
+    },
+    "resolveJsonModule": true,
+
+    /* JavaScript Support */
+    "allowJs": false,
+    "checkJs": false,
+
+    /* Emit */
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "./dist",
+    "removeComments": false,
+    "sourceMap": true,
+    "inlineSources": true,
+    "importHelpers": true,
+    "downlevelIteration": true,
+    "preserveConstEnums": true,
+
+    /* Interop Constraints */
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Type Checking - STRICT MODE ENABLED */
+    "strict": true,                           // Enable all strict type checking options
+    "noImplicitAny": true,                   // Error on expressions with 'any' type
+    "strictNullChecks": true,                // Enable strict null checks
+    "strictFunctionTypes": true,             // Enable strict checking of function types
+    "strictBindCallApply": true,             // Enable strict 'bind', 'call', and 'apply' methods
+    "strictPropertyInitialization": true,    // Enable strict checking of property initialization
+    "noImplicitThis": true,                  // Error on 'this' expressions with 'any' type
+    "useUnknownInCatchVariables": true,     // Type catch clause variables as 'unknown'
+    "alwaysStrict": true,                    // Ensure 'use strict' is always emitted
+
+    /* Additional Checks */
+    "noUnusedLocals": true,                  // Report errors on unused locals
+    "noUnusedParameters": true,              // Report errors on unused parameters
+    "exactOptionalPropertyTypes": true,      // Differentiate between undefined and not present
+    "noImplicitReturns": true,               // Report error when not all code paths return
+    "noFallthroughCasesInSwitch": true,     // Report errors for fallthrough cases in switch
+    "noUncheckedIndexedAccess": true,       // Include 'undefined' in index signature results
+    "noImplicitOverride": true,              // Ensure overriding members are marked 'override'
+    "noPropertyAccessFromIndexSignature": true, // Require index signatures to use bracket notation
+    "allowUnusedLabels": false,              // Disable unused labels
+    "allowUnreachableCode": false,           // Disable unreachable code
+
+    /* Completeness */
+    "skipDefaultLibCheck": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "coverage",
+    "jest.config.js",
+    "scripts",
+    "docs"
+  ],
+  "ts-node": {
+    "require": ["tsconfig-paths/register"],
+    "transpileOnly": true,
+    "files": true
+  }
+}

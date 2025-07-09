@@ -1,0 +1,58 @@
+[Unit]
+Description=Otedama Light Mining Pool
+Documentation=https://github.com/otedama/otedama-light
+After=network.target
+
+[Service]
+Type=simple
+User=pooluser
+Group=pooluser
+WorkingDirectory=/opt/otedama-pool
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="NODE_OPTIONS=--max-old-space-size=2048"
+EnvironmentFile=-/opt/otedama-pool/.env
+
+# Start command
+ExecStart=/usr/bin/node /opt/otedama-pool/dist/main.js
+
+# Restart configuration
+Restart=always
+RestartSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/otedama-pool/data /opt/otedama-pool/logs
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# Resource limits
+LimitNOFILE=65535
+LimitCORE=0
+MemoryMax=4G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=otedama-pool
+
+# Health check
+ExecStartPost=/bin/sleep 5
+ExecStartPost=/usr/bin/curl -f http://localhost:3001/health/ready || exit 1
+
+[Install]
+WantedBy=multi-user.target
