@@ -11,6 +11,8 @@
  */
 
 import { EventEmitter } from 'events';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
 // === 型定義 ===
 export interface Language {
@@ -185,46 +187,55 @@ export class Enhanced100LanguageSystem extends EventEmitter {
 
   async loadLanguage(languageCode: string): Promise<void> {
     if (this.loadedLanguages.has(languageCode)) {
-      return; // 既にロード済み
+      return; // Already loaded
     }
 
-    // メモリ制限チェック
     if (this.loadedLanguages.size >= this.memoryLimit) {
       await this.unloadLeastUsedLanguages();
     }
 
+    const filePath = path.join(__dirname, '..', 'locales', `${languageCode}.json`);
+
     try {
-      // 基本翻訳を生成（実際の実装では外部ファイル/APIから取得）
-      const translations = this.generateBaseTranslations(languageCode);
-      this.translations.set(languageCode, translations);
+      const fileContent = await fs.readFile(filePath, 'utf-8');
+      const translationData: Translation = JSON.parse(fileContent);
+      this.translations.set(languageCode, translationData);
       this.loadedLanguages.add(languageCode);
-      
-      this.emit('languageLoaded', { 
-        code: languageCode, 
-        name: this.languageMap.get(languageCode)?.name 
-      });
-      
+      this.cache.clear(); // Invalidate cache
+      this.emit('languageLoaded', languageCode);
+      console.log(`[i18n] Successfully loaded language "${languageCode}".`);
     } catch (error) {
-      console.error(`Failed to load language ${languageCode}:`, error);
-      throw error;
+      console.error(`[i18n] Failed to load language "${languageCode}" from ${filePath}.`, error);
+      if (languageCode !== this.fallbackLanguage) {
+        // If loading fails, generate a placeholder to avoid crashing
+        console.warn(`[i18n] Generating placeholder translations for "${languageCode}".`);
+        const baseTranslation = this.generateBaseTranslations(languageCode);
+        this.translations.set(languageCode, baseTranslation);
+        this.loadedLanguages.add(languageCode);
+      } else {
+        // If the fallback language itself fails, it's a critical error.
+        throw new Error(`[i18n] Critical error: Fallback language "${this.fallbackLanguage}" could not be loaded.`);
+      }
     }
   }
 
   private async unloadLeastUsedLanguages(): Promise<void> {
-    // 優先度の低い言語から順にアンロード
-    const languagesToUnload = Array.from(this.loadedLanguages)
-      .filter(code => code !== this.currentLanguage && code !== this.fallbackLanguage)
-      .sort((a, b) => {
-        const priorityA = this.languageMap.get(a)?.priority || 999;
-        const priorityB = this.languageMap.get(b)?.priority || 999;
-        return priorityB - priorityA; // 高い優先度（数値が小さい）順
-      })
-      .slice(0, 5); // 最大5言語をアンロード
+    if (this.loadedLanguages.size < this.memoryLimit) {
+      return;
+    }
 
-    for (const code of languagesToUnload) {
-      this.translations.delete(code);
-      this.loadedLanguages.delete(code);
-      this.emit('languageUnloaded', { code });
+    // Simple strategy: remove the first loaded language that isn't the current or fallback language.
+    // A more robust LRU strategy could be implemented if needed.
+    const languageToUnload = Array.from(this.loadedLanguages).find(
+      (lang) => lang !== this.currentLanguage && lang !== this.fallbackLanguage
+    );
+
+    if (languageToUnload) {
+      this.translations.delete(languageToUnload);
+      this.loadedLanguages.delete(languageToUnload);
+      this.cache.clear(); // Invalidate cache
+      console.log(`[i18n] Unloaded language "${languageToUnload}" to free up memory.`);
+      this.emit('languageUnloaded', languageToUnload);
     }
   }
 

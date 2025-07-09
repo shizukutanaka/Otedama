@@ -147,9 +147,6 @@
 
 ## 📞 追加サポート / Additional Support
 
-セキュリティ関連の質問や懸念がある場合は、お気軽にお問い合わせください：
-
-- **Email**: shizukutanaka@proton.me
 - **GitHub**: [Discussions](https://github.com/shizukutanaka/Otedama/discussions) (非機密事項のみ)
 
 ---
