@@ -38,7 +38,7 @@ rand = "0.8"
 hex = "0.4"
 
 # Database
-rocksdb = "0.21"
+rocksdb = "0.23"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
 
 # Logging
