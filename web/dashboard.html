@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama - Commercial Mining Pool Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+        }
+        .stat-card {
+            backdrop-filter: blur(10px);
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="gradient-bg">
+        <!-- Header -->
+        <header class="border-b border-gray-800 bg-black bg-opacity-50">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-4">
+                        <h1 class="text-3xl font-bold">Otedama</h1>
+                        <span class="text-sm bg-green-500 px-2 py-1 rounded">Ver.0.5</span>
+                        <span class="text-sm bg-blue-500 px-2 py-1 rounded animate-pulse">LIVE</span>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <div class="text-right">
+                            <p class="text-xs text-gray-400">運営手数料 (固定)</p>
+                            <p class="text-lg font-bold">0.1% + 1.4% = 1.5%</p>
+                        </div>
+                        <div id="connectionStatus" class="flex items-center">
+                            <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                            <span>Connected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Critical Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <!-- Total Hashrate -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm">Pool Hashrate</p>
+                            <p id="poolHashrate" class="text-3xl font-bold mt-2">0 H/s</p>
+                            <p id="hashrateChange" class="text-sm mt-1 text-green-400">+0%</p>
+                        </div>
+                        <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Active Miners -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm">Active Miners</p>
+                            <p id="activeMiners" class="text-3xl font-bold mt-2">0</p>
+                            <p id="minerChange" class="text-sm mt-1 text-green-400">+0</p>
+                        </div>
+                        <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Operator Fees Collected -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm">運営手数料 (BTC)</p>
+                            <p id="operatorFees" class="text-3xl font-bold mt-2">0.00000000</p>
+                            <p class="text-sm mt-1 text-yellow-400">自動徴収中</p>
+                        </div>
+                        <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Pending Payouts -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm">Pending Payouts</p>
+                            <p id="pendingPayouts" class="text-3xl font-bold mt-2">0</p>
+                            <p class="text-sm mt-1 text-blue-400">次回: <span id="nextPayout">--:--</span></p>
+                        </div>
+                        <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Hashrate Chart -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <h3 class="text-xl font-semibold mb-4">Hashrate History (24h)</h3>
+                    <canvas id="hashrateChart" height="200"></canvas>
+                </div>
+
+                <!-- Share Distribution -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <h3 class="text-xl font-semibold mb-4">Share Distribution</h3>
+                    <canvas id="shareChart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Automated Systems Status -->
+            <div class="stat-card rounded-lg p-6 mb-8 card-shadow">
+                <h3 class="text-xl font-semibold mb-4">自動化システムステータス</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="flex items-center">
+                        <div id="feeCollectionStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <span>手数料徴収</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div id="paymentStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <span>自動支払い</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div id="dexStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <span>DEXリバランス</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div id="liquidationStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <span>自動清算</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DEX/DeFi Stats -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <!-- DEX Volume -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <h3 class="text-lg font-semibold mb-3">DEX取引量 (24h)</h3>
+                    <p class="text-2xl font-bold" id="dexVolume">$0.00</p>
+                    <p class="text-sm text-gray-400 mt-1">手数料収入: <span id="dexFees">$0.00</span></p>
+                </div>
+
+                <!-- Total Value Locked -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <h3 class="text-lg font-semibold mb-3">Total Value Locked</h3>
+                    <p class="text-2xl font-bold" id="tvl">$0.00</p>
+                    <p class="text-sm text-gray-400 mt-1">Pools: <span id="poolCount">0</span></p>
+                </div>
+
+                <!-- Active Loans -->
+                <div class="stat-card rounded-lg p-6 card-shadow">
+                    <h3 class="text-lg font-semibold mb-3">Active Loans</h3>
+                    <p class="text-2xl font-bold" id="activeLoans">0</p>
+                    <p class="text-sm text-gray-400 mt-1">健全性: <span id="healthScore" class="text-green-400">100%</span></p>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="stat-card rounded-lg p-6 card-shadow">
+                <h3 class="text-xl font-semibold mb-4">Recent Activity</h3>
+                <div id="activityLog" class="space-y-2 max-h-60 overflow-y-auto">
+                    <!-- Activity items will be populated here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // WebSocket connection
+        let ws;
+        let reconnectInterval;
+        
+        // Chart instances
+        let hashrateChart;
+        let shareChart;
+        
+        // Data storage
+        const hashrateHistory = [];
+        const activityLog = [];
+        
+        // Initialize dashboard
+        function initDashboard() {
+            // Setup WebSocket
+            connectWebSocket();
+            
+            // Setup charts
+            setupCharts();
+            
+            // Update time-based elements
+            updateTimes();
+            setInterval(updateTimes, 1000);
+        }
+        
+        // WebSocket connection
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.hostname}:8080`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                document.getElementById('connectionStatus').innerHTML = `
+                    <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                    <span>Connected</span>
+                `;
+                
+                // Subscribe to channels
+                ws.send(JSON.stringify({
+                    type: 'subscribe',
+                    channels: ['stats', 'mining', 'dex', 'fees', 'payments']
+                }));
+                
+                // Clear reconnect interval
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (error) {
+                    console.error('WebSocket message error:', error);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                document.getElementById('connectionStatus').innerHTML = `
+                    <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                    <span>Disconnected</span>
+                `;
+                
+                // Attempt reconnection
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(connectWebSocket, 5000);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        // Handle WebSocket messages
+        function handleWebSocketMessage(data) {
+            switch (data.channel) {
+                case 'stats':
+                    updateStats(data.data);
+                    break;
+                case 'mining':
+                    updateMiningData(data.data);
+                    break;
+                case 'dex':
+                    updateDexData(data.data);
+                    break;
+                case 'fees':
+                    updateFeeData(data.data);
+                    break;
+                case 'payments':
+                    updatePaymentData(data.data);
+                    break;
+            }
+        }
+        
+        // Update main stats
+        function updateStats(stats) {
+            // Pool stats
+            if (stats.pool) {
+                document.getElementById('poolHashrate').textContent = formatHashrate(stats.pool.hashrate || 0);
+                document.getElementById('activeMiners').textContent = stats.pool.miners || 0;
+                
+                // Add to hashrate history
+                hashrateHistory.push({
+                    time: new Date(),
+                    value: stats.pool.hashrate || 0
+                });
+                
+                // Keep only last 24 hours
+                const cutoff = new Date() - 24 * 60 * 60 * 1000;
+                while (hashrateHistory.length > 0 && hashrateHistory[0].time < cutoff) {
+                    hashrateHistory.shift();
+                }
+                
+                updateHashrateChart();
+            }
+            
+            // Fee stats
+            if (stats.fees) {
+                document.getElementById('operatorFees').textContent = 
+                    (stats.fees.totalCollectedBTC || 0).toFixed(8);
+            }
+            
+            // Payment stats
+            if (stats.payments) {
+                document.getElementById('pendingPayouts').textContent = 
+                    stats.payments.queueLength || 0;
+            }
+            
+            // DEX stats
+            if (stats.dex) {
+                const tvl = (stats.dex.v2?.tvl || 0) + (stats.dex.v3?.tvl || 0);
+                document.getElementById('tvl').textContent = `$${formatNumber(tvl)}`;
+                document.getElementById('poolCount').textContent = 
+                    (stats.dex.v2?.pools || 0) + (stats.dex.v3?.pools || 0);
+            }
+            
+            // Update automation status
+            if (stats.automation) {
+                updateAutomationStatus(stats.automation);
+            }
+        }
+        
+        // Update automation status indicators
+        function updateAutomationStatus(automation) {
+            const statusMap = {
+                feeCollectionStatus: automation.operatorFeeCollection,
+                paymentStatus: automation.automaticPayouts,
+                dexStatus: automation.dexRebalancing,
+                liquidationStatus: automation.lendingLiquidation
+            };
+            
+            for (const [elementId, isActive] of Object.entries(statusMap)) {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.className = isActive 
+                        ? 'w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse'
+                        : 'w-3 h-3 bg-red-500 rounded-full mr-2';
+                }
+            }
+        }
+        
+        // Setup charts
+        function setupCharts() {
+            // Hashrate chart
+            const hashrateCtx = document.getElementById('hashrateChart').getContext('2d');
+            hashrateChart = new Chart(hashrateCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Hashrate',
+                        data: [],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+                        },
+                        y: {
+                            display: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { 
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                callback: function(value) {
+                                    return formatHashrate(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Share distribution chart
+            const shareCtx = document.getElementById('shareChart').getContext('2d');
+            shareChart = new Chart(shareCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Valid', 'Invalid', 'Stale'],
+                    datasets: [{
+                        data: [95, 3, 2],
+                        backgroundColor: [
+                            'rgba(34, 197, 94, 0.8)',
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(251, 191, 36, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(34, 197, 94)',
+                            'rgb(239, 68, 68)',
+                            'rgb(251, 191, 36)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: 'rgba(255, 255, 255, 0.7)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update hashrate chart
+        function updateHashrateChart() {
+            if (!hashrateChart || hashrateHistory.length === 0) return;
+            
+            const labels = hashrateHistory.map(h => 
+                h.time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+            );
+            const data = hashrateHistory.map(h => h.value);
+            
+            hashrateChart.data.labels = labels;
+            hashrateChart.data.datasets[0].data = data;
+            hashrateChart.update('none');
+        }
+        
+        // Add activity log entry
+        function addActivity(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString('ja-JP');
+            const colorClass = {
+                info: 'text-gray-400',
+                success: 'text-green-400',
+                warning: 'text-yellow-400',
+                error: 'text-red-400'
+            }[type] || 'text-gray-400';
+            
+            const entry = document.createElement('div');
+            entry.className = 'flex justify-between items-center py-1 border-b border-gray-800';
+            entry.innerHTML = `
+                <span class="${colorClass}">${message}</span>
+                <span class="text-xs text-gray-500">${timestamp}</span>
+            `;
+            
+            const logContainer = document.getElementById('activityLog');
+            logContainer.insertBefore(entry, logContainer.firstChild);
+            
+            // Keep only last 20 entries
+            while (logContainer.children.length > 20) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+        
+        // Format hashrate
+        function formatHashrate(hashrate) {
+            if (!hashrate || hashrate === 0) return '0 H/s';
+            if (hashrate > 1e15) return (hashrate / 1e15).toFixed(2) + ' PH/s';
+            if (hashrate > 1e12) return (hashrate / 1e12).toFixed(2) + ' TH/s';
+            if (hashrate > 1e9) return (hashrate / 1e9).toFixed(2) + ' GH/s';
+            if (hashrate > 1e6) return (hashrate / 1e6).toFixed(2) + ' MH/s';
+            if (hashrate > 1e3) return (hashrate / 1e3).toFixed(2) + ' kH/s';
+            return hashrate.toFixed(0) + ' H/s';
+        }
+        
+        // Format number
+        function formatNumber(num) {
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+            return num.toFixed(2);
+        }
+        
+        // Update time-based elements
+        function updateTimes() {
+            // Next payout time
+            const now = new Date();
+            const nextHour = new Date(now);
+            nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
+            const timeUntilPayout = nextHour - now;
+            const minutes = Math.floor(timeUntilPayout / 60000);
+            const seconds = Math.floor((timeUntilPayout % 60000) / 1000);
+            document.getElementById('nextPayout').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        // Fetch initial data
+        async function fetchInitialData() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                updateStats(stats);
+                addActivity('Dashboard initialized', 'success');
+            } catch (error) {
+                console.error('Failed to fetch initial data:', error);
+                addActivity('Failed to load initial data', 'error');
+            }
+        }
+        
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            initDashboard();
+            fetchInitialData();
+            
+            // Add sample activities
+            addActivity('システム起動完了', 'success');
+            addActivity('自動化システム稼働中', 'info');
+            addActivity('手数料徴収スケジュール: 5分ごと', 'info');
+        });
+    </script>
+</body>
+</html>

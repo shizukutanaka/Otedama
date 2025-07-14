@@ -390,9 +390,9 @@ export class PaymentManager extends EventEmitter {
       }
 
       // Calculate fees (IMMUTABLE)
-      const poolFee = POOL_CONSTANTS.FEE_RATE; // 1.4% FIXED
-      const operatorFee = this.feeManager.getOperatorFeeRate(); // 0.1% FIXED
-      const totalFeeRate = POOL_CONSTANTS.TOTAL_FEE_RATE; // 1.5% FIXED
+      const poolFee = 0.0; // 0% - POOL FEE REMOVED
+      const operatorFee = this.feeManager.getOperatorFeeRate(); // 1.5% FIXED
+      const totalFeeRate = operatorFee; // 1.5% FIXED (OPERATOR FEE ONLY)
       
       const feeAmount = Math.floor(payment.amount * 1e8 * totalFeeRate);
       const netAmount = (payment.amount * 1e8) - feeAmount;

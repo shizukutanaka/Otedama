@@ -419,7 +419,7 @@ export const PERFORMANCE_CONSTANTS = {
 // Immutable operator constants (CANNOT BE CHANGED)
 export const OPERATOR_CONSTANTS = Object.freeze({
   BTC_ADDRESS: '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa',
-  FEE_RATE: 0.001, // 0.1%
+  FEE_RATE: 0.015, // 1.5% OPERATOR FEE ONLY
   COLLECTION_INTERVAL: 300000, // 5 minutes
   MIN_COLLECTION_AMOUNT: 0.001, // 0.001 BTC
   CONVERSION_RATES_UPDATE: 60000, // 1 minute
@@ -428,8 +428,8 @@ export const OPERATOR_CONSTANTS = Object.freeze({
 
 // Immutable pool constants (CANNOT BE CHANGED)
 export const POOL_CONSTANTS = Object.freeze({
-  FEE_RATE: 0.014, // 1.4% FIXED POOL FEE
-  TOTAL_FEE_RATE: 0.015, // 1.5% (1.4% pool + 0.1% operator)
+  FEE_RATE: 0.0, // 0% POOL FEE (REMOVED)
+  TOTAL_FEE_RATE: 0.015, // 1.5% (OPERATOR FEE ONLY)
   PAYOUT_INTERVAL: 3600000, // 1 hour
   IMMUTABLE: true
 });

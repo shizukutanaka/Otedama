@@ -18,9 +18,12 @@ import { PerformanceOptimizer } from './performance-optimizer.js';
 import { AutoRecovery } from './auto-recovery.js';
 import { BackupManager } from './backup-manager.js';
 import { MonitoringSystem } from './monitoring-system.js';
+import { AdvancedMonitoringSystem } from './advanced-monitoring.js';
 import { DDoSProtection } from './ddos-protection.js';
 import { RateLimiter } from './rate-limiter.js';
 import { AuthenticationSystem } from './authentication.js';
+import { PriceFeedSystem } from './price-feed.js';
+import { AIOptimizationEngine } from './ai-optimizer.js';
 import { ALGO_CONFIG } from './constants.js';
 
 /**
@@ -157,7 +160,24 @@ export class OtedamaCore extends EventEmitter {
       // Initialize monitoring system
       this.components.monitoring = new MonitoringSystem();
       global.monitoring = this.components.monitoring;
+      this.logger.info('Basic monitoring system initialized');
+      
+      // Initialize advanced monitoring system
+      this.components.advancedMonitoring = new AdvancedMonitoringSystem();
+      global.advancedMonitoring = this.components.advancedMonitoring;
       this.logger.info('Advanced monitoring system initialized');
+      
+      // Initialize price feed system
+      this.components.priceFeed = new PriceFeedSystem();
+      await this.components.priceFeed.initialize();
+      global.priceFeed = this.components.priceFeed;
+      this.logger.info('Real-time price feed system initialized');
+      
+      // Initialize AI optimization engine
+      this.components.aiOptimizer = new AIOptimizationEngine();
+      await this.components.aiOptimizer.initialize();
+      global.aiOptimizer = this.components.aiOptimizer;
+      this.logger.info('AI optimization engine initialized');
       
       // Initialize mining engine if enabled
       if (this.config.get('mining.enabled')) {
@@ -292,10 +312,10 @@ export class OtedamaCore extends EventEmitter {
     
     // Stop components in reverse order
     const stopOrder = [
-      'api', 'auth', 'rateLimiter', 'ddosProtection', 'monitoring', 
-      'backupManager', 'autoRecovery', 'performance', 'bridge', 
-      'governance', 'lending', 'dex', 'stratum', 'mining', 
-      'p2p', 'paymentManager', 'feeManager', 'db'
+      'api', 'auth', 'rateLimiter', 'ddosProtection', 'aiOptimizer',
+      'priceFeed', 'advancedMonitoring', 'monitoring', 'backupManager', 
+      'autoRecovery', 'performance', 'bridge', 'governance', 'lending', 
+      'dex', 'stratum', 'mining', 'p2p', 'paymentManager', 'feeManager', 'db'
     ];
     
     for (const component of stopOrder) {
@@ -414,6 +434,44 @@ export class OtedamaCore extends EventEmitter {
     this.components.monitoring.on('alert:cleared', (data) => {
       this.logger.info(`Alert cleared: ${data.name}`);
       this.broadcast('alert', { event: 'cleared', ...data });
+    });
+    
+    // Advanced monitoring events
+    this.components.advancedMonitoring.on('alert:triggered', (data) => {
+      this.logger.warn(`Advanced alert: ${data.alert.name}`);
+      this.broadcast('advanced-alert', data);
+    });
+    
+    this.components.advancedMonitoring.on('anomaly:detected', (anomaly) => {
+      this.logger.warn(`Anomaly detected: ${anomaly.metric}`);
+      this.broadcast('anomaly', anomaly);
+    });
+    
+    this.components.advancedMonitoring.on('prediction:hashrate_decline', (prediction) => {
+      this.logger.info(`Hashrate decline predicted: ${prediction.predictedDrop}`);
+      this.broadcast('prediction', { type: 'hashrate_decline', ...prediction });
+    });
+    
+    // Price feed events
+    this.components.priceFeed.on('price:updated', (data) => {
+      this.broadcast('price', data);
+    });
+    
+    this.components.priceFeed.on('price:manipulation', (data) => {
+      this.logger.error(`Price manipulation detected for ${data.pair}`);
+      this.broadcast('security', { type: 'price_manipulation', ...data });
+    });
+    
+    // AI optimizer events
+    this.components.aiOptimizer.on('optimization:complete', (data) => {
+      this.logger.info('AI optimization cycle completed');
+      this.broadcast('ai-optimization', data);
+    });
+    
+    this.components.aiOptimizer.on('optimization:evaluated', (data) => {
+      if (data.performance.improved) {
+        this.logger.info(`Optimization improved ${data.optimization.type} by ${data.performance.improvement}%`);
+      }
     });
     
     // Mining automated events
@@ -622,6 +680,9 @@ export class OtedamaCore extends EventEmitter {
     const ddosStats = this.components.ddosProtection ? this.components.ddosProtection.getStats() : null;
     const rateLimiterStats = this.components.rateLimiter ? this.components.rateLimiter.getStats() : null;
     const authStats = this.components.auth ? this.components.auth.getStats() : null;
+    const priceFeedStats = this.components.priceFeed ? this.components.priceFeed.getStats() : null;
+    const aiOptimizerStats = this.components.aiOptimizer ? this.components.aiOptimizer.getStats() : null;
+    const advancedMonitoringStats = this.components.advancedMonitoring ? this.components.advancedMonitoring.getStats() : null;
     
     const memUsage = process.memoryUsage();
     
@@ -682,6 +743,9 @@ export class OtedamaCore extends EventEmitter {
       },
       health: this.components.autoRecovery ? this.components.autoRecovery.getSystemHealth() : null,
       monitoring: this.components.monitoring ? this.components.monitoring.getCurrentMetrics() : null,
+      advancedMonitoring: advancedMonitoringStats,
+      priceFeed: priceFeedStats,
+      aiOptimizer: aiOptimizerStats,
       backup: {
         lastBackup: this.components.backupManager?.lastBackupTime || 0,
         backups: this.components.backupManager?.getBackupList().length || 0

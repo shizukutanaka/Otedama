@@ -21,10 +21,10 @@ export class FeeManager extends EventEmitter {
     this.logger = new Logger('FeeManager');
     
     // IMMUTABLE OPERATOR SETTINGS (CANNOT BE CHANGED)
-    this.OPERATOR_BTC_ADDRESS = '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa';
-    this.OPERATOR_FEE_RATE = 0.001; // 0.1% - FIXED AND UNCHANGEABLE
-    this.POOL_FEE_RATE = POOL_CONSTANTS.FEE_RATE; // 1.4% - FIXED AND UNCHANGEABLE
-    this.TOTAL_FEE_RATE = POOL_CONSTANTS.TOTAL_FEE_RATE; // 1.5% - FIXED AND UNCHANGEABLE
+    this.OPERATOR_BTC_ADDRESS = '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa'; // FINAL AND UNCHANGEABLE
+    this.OPERATOR_FEE_RATE = 0.015; // 1.5% - FIXED AND UNCHANGEABLE (OPERATOR FEE ONLY)
+    this.POOL_FEE_RATE = 0.0; // 0% - POOL FEE REMOVED
+    this.TOTAL_FEE_RATE = 0.015; // 1.5% - FIXED AND UNCHANGEABLE (OPERATOR FEE ONLY)
     this.MINIMUM_COLLECTION_AMOUNT = 0.001; // Minimum 0.001 BTC
     
     // Security: Double protection with encrypted backup
@@ -504,8 +504,8 @@ export class FeeManager extends EventEmitter {
   verifyIntegrity() {
     const checks = {
       operatorAddress: this.OPERATOR_BTC_ADDRESS === '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa',
-      operatorFeeRate: this.OPERATOR_FEE_RATE === 0.001,
-      poolFeeRate: this.POOL_FEE_RATE === 0.014,
+      operatorFeeRate: this.OPERATOR_FEE_RATE === 0.015,
+      poolFeeRate: this.POOL_FEE_RATE === 0.0,
       totalFeeRate: this.TOTAL_FEE_RATE === 0.015,
       collectionTimer: this.collectionTimer !== null,
       rateTimer: this.rateTimer !== null,

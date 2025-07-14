@@ -14,9 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const EXPECTED_VERSION = '0.5';
-const EXPECTED_POOL_FEE = 0.014; // 1.4%
-const EXPECTED_OPERATOR_FEE = 0.001; // 0.1%
-const EXPECTED_TOTAL_FEE = 0.015; // 1.5%
+const EXPECTED_POOL_FEE = 0.0; // 0% (REMOVED)
+const EXPECTED_OPERATOR_FEE = 0.015; // 1.5%
+const EXPECTED_TOTAL_FEE = 0.015; // 1.5% (OPERATOR FEE ONLY)
 const EXPECTED_OPERATOR_ADDRESS = '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa';
 
 async function validateSystem() {
@@ -129,8 +129,8 @@ async function validateSystem() {
       checks.push({ name: 'Fee Manager Address', status: '❌', details: 'Operator address not found' });
     }
     
-    if (feeManagerContent.includes('0.001; // 0.1%')) {
-      checks.push({ name: 'Fee Manager Rate', status: '✅', details: '0.1% rate hardcoded' });
+    if (feeManagerContent.includes('0.015; // 1.5%')) {
+      checks.push({ name: 'Fee Manager Rate', status: '✅', details: '1.5% rate hardcoded' });
     } else {
       checks.push({ name: 'Fee Manager Rate', status: '❌', details: 'Operator fee rate not found' });
     }
@@ -148,7 +148,7 @@ async function validateSystem() {
   // Check 5: Total Fee Calculation
   const totalFee = EXPECTED_POOL_FEE + EXPECTED_OPERATOR_FEE;
   if (Math.abs(totalFee - EXPECTED_TOTAL_FEE) < 0.0001) {
-    checks.push({ name: 'Total Fee', status: '✅', details: `${EXPECTED_TOTAL_FEE * 100}% (1.4% + 0.1%)` });
+    checks.push({ name: 'Total Fee', status: '✅', details: `${EXPECTED_TOTAL_FEE * 100}% (Operator fee only)` });
   } else {
     checks.push({ name: 'Total Fee', status: '❌', details: `Incorrect total fee calculation` });
   }

@@ -13,11 +13,10 @@
     "test:performance": "node scripts/performance-test.js",
     "benchmark": "node scripts/performance-benchmark.js",
     "benchmark:quick": "node scripts/performance-benchmark.js --quick",
-    "clean": "node scripts/clean.js",
-    "build": "node scripts/build.js",
+
     "docker:build": "docker build -t otedama:latest .",
     "docker:run": "docker run -d --name otedama -p 8080:8080 -p 3333:3333 otedama:latest",
-    "validate": "node validate.js"
+    "validate": "node validate-v05.js"
   },
   "keywords": [
     "mining",
