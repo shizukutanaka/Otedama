@@ -1,0 +1,31 @@
+[Unit]
+Description=Otedama Mining Pool
+After=network.target
+
+[Service]
+Type=simple
+User=otedama
+Group=otedama
+WorkingDirectory=/opt/otedama
+ExecStart=/usr/bin/node /opt/otedama/index.js
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/otedama/data /opt/otedama/logs /opt/otedama/backups
+
+# Resource Limits
+LimitNOFILE=65536
+MemoryLimit=2G
+CPUQuota=80%
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="NODE_OPTIONS=--max-old-space-size=1024"
+
+[Install]
+WantedBy=multi-user.target

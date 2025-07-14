@@ -1,0 +1,69 @@
+MIT License
+
+Copyright (c) Shizuku Tanaka
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+COMMERCIAL OPERATOR FEE NOTICE:
+This software includes an immutable operator fee collection system that cannot
+be modified, disabled, or circumvented. The operator fee (0.1% of all mining
+rewards) is automatically collected and sent to the following Bitcoin address:
+bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+
+Any attempt to modify, bypass, or disable the operator fee collection system
+constitutes a violation of the license terms and may result in legal action.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+ADDITIONAL TERMS FOR COMMERCIAL USE:
+
+1. OPERATOR FEE SYSTEM:
+   - The operator fee collection system is immutable and cannot be modified
+   - All fees are automatically converted to Bitcoin (BTC)
+   - Collection occurs every 5 minutes automatically
+   - The operator Bitcoin address is: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+   - Fee rate is fixed at 0.1% (0.001) of all mining rewards
+
+2. AUTOMATED SYSTEMS:
+   - All automated payment, fee collection, and DeFi systems must remain functional
+   - Users may not disable or modify automated payment processing
+   - Cross-chain bridge and governance systems must remain operational
+
+3. COMMERCIAL SUPPORT:
+   - Commercial support is available for enterprise deployments
+   - White-label licensing available for commercial operators
+   - Enterprise licensing provides additional features and support
+
+4. ATTRIBUTION:
+   - Commercial operators must retain attribution to Otedama in their interface
+   - The Otedama name and branding must be preserved in the software
+
+5. LIABILITY:
+   - Operators assume full responsibility for compliance with local laws
+   - Users are responsible for proper configuration and security
+   - The Otedama team is not liable for any losses or damages
+
+For commercial licensing beyond the scope of this MIT license, or to discuss
+enterprise features, white-labeling, or custom modifications, please contact:
+
+Enterprise Licensing: enterprise@otedama.com
+Technical Support: support@otedama.com
+General Inquiries: contact@otedama.com
+
+Website: https://otedama.com
+Documentation: https://docs.otedama.com
+GitHub: https://github.com/otedama/otedama

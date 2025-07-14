@@ -1,0 +1,101 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'otedama-commercial'
+    environment: 'production'
+
+rule_files:
+  - "alerts.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Otedama main application metrics
+  - job_name: 'otedama'
+    static_configs:
+      - targets: ['otedama:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    params:
+      format: ['prometheus']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: otedama:9090
+
+  # System metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Mining pool specific metrics
+  - job_name: 'otedama-stratum'
+    static_configs:
+      - targets: ['otedama:3333']
+    metrics_path: '/stratum/metrics'
+    scrape_interval: 5s
+
+  # DEX metrics
+  - job_name: 'otedama-dex'
+    static_configs:
+      - targets: ['otedama:8080']
+    metrics_path: '/api/dex/metrics'
+    scrape_interval: 30s
+
+  # P2P network metrics
+  - job_name: 'otedama-p2p'
+    static_configs:
+      - targets: ['otedama:8333']
+    metrics_path: '/p2p/metrics'
+    scrape_interval: 30s
+
+  # Operator fee collection metrics
+  - job_name: 'otedama-fees'
+    static_configs:
+      - targets: ['otedama:8080']
+    metrics_path: '/api/fees/metrics'
+    scrape_interval: 60s
+    params:
+      operator: ['bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh']
+
+# Remote write configuration for long-term storage
+remote_write:
+  - url: 'http://thanos-receive:19291/api/v1/receive'
+    queue_config:
+      capacity: 10000
+      max_shards: 50
+      min_shards: 1
+      max_samples_per_send: 5000
+      batch_send_deadline: 5s
+
+# Storage configuration
+storage:
+  tsdb:
+    path: /prometheus
+    retention:
+      time: 90d
+      size: 50GB
+    min_block_duration: 2h
+    max_block_duration: 25h
+    wal_compression: true

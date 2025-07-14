@@ -1,0 +1,254 @@
+groups:
+  - name: otedama.critical
+    interval: 30s
+    rules:
+      # Application availability
+      - alert: OtedamaDown
+        expr: up{job="otedama"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: otedama
+        annotations:
+          summary: "Otedama application is down"
+          description: "Otedama has been down for more than 1 minute"
+
+      # Mining pool alerts
+      - alert: HighMinerDisconnectRate
+        expr: rate(otedama_miners_disconnected_total[5m]) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "High miner disconnect rate detected"
+          description: "{{ $value }} miners per second are disconnecting"
+
+      - alert: NoMinersConnected
+        expr: otedama_miners_connected == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "No miners connected to pool"
+          description: "Pool has no active miners for 5 minutes"
+
+      - alert: HashrateDropSignificant
+        expr: (rate(otedama_hashrate_total[10m]) / rate(otedama_hashrate_total[1h] offset 1h)) < 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "Significant hashrate drop detected"
+          description: "Pool hashrate dropped by more than 50% in the last 10 minutes"
+
+      # Fee collection alerts
+      - alert: OperatorFeeCollectionFailed
+        expr: increase(otedama_operator_fee_collection_failures_total[1h]) > 5
+        for: 0m
+        labels:
+          severity: critical
+          service: fees
+        annotations:
+          summary: "Operator fee collection failing"
+          description: "{{ $value }} fee collection failures in the last hour"
+
+      - alert: OperatorFeeCollectionStuck
+        expr: time() - otedama_operator_fee_last_collection_timestamp > 900
+        for: 0m
+        labels:
+          severity: critical
+          service: fees
+        annotations:
+          summary: "Operator fee collection stuck"
+          description: "No fee collection for {{ $value | humanizeDuration }}"
+
+      # DEX alerts
+      - alert: DEXHighSlippage
+        expr: otedama_dex_slippage_percent > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: dex
+        annotations:
+          summary: "High DEX slippage detected"
+          description: "DEX slippage is {{ $value }}% for pool {{ $labels.pool }}"
+
+      - alert: DEXLowLiquidity
+        expr: otedama_dex_pool_liquidity_usd < 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: dex
+        annotations:
+          summary: "Low DEX liquidity"
+          description: "Pool {{ $labels.pool }} has only ${{ $value }} liquidity"
+
+      # System resource alerts
+      - alert: HighCPUUsage
+        expr: otedama_cpu_usage_percent > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%"
+
+      - alert: HighMemoryUsage
+        expr: otedama_memory_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}%"
+
+      - alert: DatabaseConnectionsFull
+        expr: otedama_database_connections_active / otedama_database_connections_max > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Database connections nearly exhausted"
+          description: "{{ $value | humanizePercentage }} of database connections in use"
+
+  - name: otedama.performance
+    interval: 60s
+    rules:
+      # Performance monitoring
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(otedama_api_request_duration_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API latency"
+          description: "95th percentile latency is {{ $value }}s"
+
+      - alert: ErrorRateHigh
+        expr: rate(otedama_api_requests_total{status=~"5.."}[5m]) / rate(otedama_api_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+
+      - alert: ShareEfficiencyLow
+        expr: otedama_pool_efficiency_percent < 80
+        for: 10m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "Low pool efficiency"
+          description: "Pool efficiency is {{ $value }}%"
+
+  - name: otedama.security
+    interval: 30s
+    rules:
+      # Security alerts
+      - alert: UnauthorizedAPIAccess
+        expr: rate(otedama_api_requests_total{status="401"}[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High number of unauthorized API requests"
+          description: "{{ $value }} unauthorized requests per second"
+
+      - alert: SuspiciousLoginAttempts
+        expr: rate(otedama_login_failures_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Suspicious login attempts"
+          description: "{{ $value }} failed login attempts per second"
+
+      - alert: ConfigurationTamperAttempt
+        expr: increase(otedama_config_modification_attempts_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "Configuration tampering detected"
+          description: "{{ $value }} unauthorized configuration modification attempts"
+
+  - name: otedama.business
+    interval: 300s
+    rules:
+      # Business logic alerts
+      - alert: PaymentBacklog
+        expr: otedama_payment_queue_size > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: payments
+        annotations:
+          summary: "Payment queue backlog"
+          description: "{{ $value }} payments pending"
+
+      - alert: BlocksNotFound
+        expr: time() - otedama_last_block_found_timestamp > 86400
+        for: 0m
+        labels:
+          severity: info
+          service: mining
+        annotations:
+          summary: "No blocks found recently"
+          description: "No blocks found in the last 24 hours"
+
+      - alert: OperatorFeesNotCollected
+        expr: sum(otedama_operator_fees_pending_by_currency) > 0.01
+        for: 600
+        labels:
+          severity: warning
+          service: fees
+        annotations:
+          summary: "Operator fees accumulating"
+          description: "{{ $value }} BTC equivalent in fees pending collection"
+
+  - name: otedama.network
+    interval: 60s
+    rules:
+      # Network and connectivity
+      - alert: LowPeerCount
+        expr: otedama_p2p_peers_connected < 5
+        for: 5m
+        labels:
+          severity: warning
+          service: p2p
+        annotations:
+          summary: "Low P2P peer count"
+          description: "Only {{ $value }} peers connected"
+
+      - alert: NetworkPartition
+        expr: otedama_p2p_peers_connected == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: p2p
+        annotations:
+          summary: "Network partition detected"
+          description: "No P2P peers connected - possible network partition"
+
+      - alert: StratumConnectionDrop
+        expr: rate(otedama_stratum_connections_dropped_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: stratum
+        annotations:
+          summary: "High Stratum connection drop rate"
+          description: "{{ $value }} Stratum connections per second being dropped"

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama - Mining Pool Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: #1a1a1a;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #fff;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: #555;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 600;
+            color: #4CAF50;
+        }
+
+        .miners-section {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+
+        th {
+            background: #0a0a0a;
+            color: #888;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+
+        tr:hover {
+            background: #222;
+        }
+
+        .status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status.online {
+            background: #4CAF50;
+        }
+
+        .status.offline {
+            background: #f44336;
+        }
+
+        .footer {
+            text-align: center;
+            color: #666;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+        }
+
+        .error {
+            background: #f44336;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-wrapper {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Otedama Mining Pool</h1>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="error" id="error-message"></div>
+
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Hashrate</div>
+                <div class="stat-value" id="total-hashrate">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Miners</div>
+                <div class="stat-value" id="active-miners">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Network Difficulty</div>
+                <div class="stat-value" id="difficulty">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Block Height</div>
+                <div class="stat-value" id="block-height">--</div>
+            </div>
+        </div>
+
+        <div class="miners-section">
+            <h2 class="section-title">Connected Miners</h2>
+            <div class="table-wrapper">
+                <table id="miners-table">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Miner ID</th>
+                            <th>Type</th>
+                            <th>Hashrate</th>
+                            <th>Accepted</th>
+                            <th>Rejected</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="miners-tbody">
+                        <tr>
+                            <td colspan="7" class="loading">Loading miners...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Otedama - Lightweight P2P Mining Pool Software</p>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.protocol + '//' + window.location.hostname + ':8080';
+        const WS_URL = 'ws://' + window.location.hostname + ':8080';
+        
+        let ws = null;
+
+        function formatHashrate(hashrate) {
+            if (!hashrate || hashrate === 0) return '0 H/s';
+            
+            const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s'];
+            let unitIndex = 0;
+            let value = hashrate;
+            
+            while (value >= 1000 && unitIndex < units.length - 1) {
+                value /= 1000;
+                unitIndex++;
+            }
+            
+            return value.toFixed(2) + ' ' + units[unitIndex];
+        }
+
+        function formatNumber(num) {
+            return new Intl.NumberFormat().format(num);
+        }
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + ' min ago';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + ' hours ago';
+            return date.toLocaleDateString();
+        }
+
+        async function fetchStats() {
+            try {
+                const response = await fetch(API_BASE + '/stats');
+                if (!response.ok) throw new Error('Failed to fetch stats');
+                
+                const data = await response.json();
+                updateStats(data);
+                hideError();
+            } catch (error) {
+                showError('Failed to connect to API server');
+            }
+        }
+
+        async function fetchMiners() {
+            try {
+                const response = await fetch(API_BASE + '/miners');
+                if (!response.ok) throw new Error('Failed to fetch miners');
+                
+                const data = await response.json();
+                updateMinersTable(data.miners);
+            } catch (error) {
+                console.error('Failed to fetch miners:', error);
+            }
+        }
+
+        function updateStats(stats) {
+            if (stats.mining) {
+                document.getElementById('total-hashrate').textContent = formatHashrate(stats.mining.hashrate);
+                document.getElementById('active-miners').textContent = formatNumber(stats.mining.miners);
+                document.getElementById('difficulty').textContent = formatNumber(stats.mining.difficulty);
+                document.getElementById('block-height').textContent = formatNumber(stats.mining.height);
+            }
+        }
+
+        function updateMinersTable(miners) {
+            const tbody = document.getElementById('miners-tbody');
+            
+            if (!miners || miners.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No miners connected</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = miners.map(miner => {
+                const isOnline = (Date.now() - miner.lastSeen) < 120000; // 2 minutes
+                return `
+                    <tr>
+                        <td><span class="status ${isOnline ? 'online' : 'offline'}"></span></td>
+                        <td>${miner.id.substring(0, 8)}...</td>
+                        <td>${miner.hardwareType}</td>
+                        <td>${formatHashrate(miner.hashrate)}</td>
+                        <td>${formatNumber(miner.shares.accepted)}</td>
+                        <td>${formatNumber(miner.shares.rejected)}</td>
+                        <td>${formatTime(miner.lastSeen)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error-message').style.display = 'none';
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) return;
+            
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                hideError();
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'stats_update') {
+                        updateStats(data.data);
+                    } else if (data.type === 'block_found') {
+                        showError('Block found! Hash: ' + data.data.hash);
+                    }
+                } catch (error) {
+                    console.error('WebSocket message error:', error);
+                }
+            };
+            
+            ws.onerror = () => {
+                console.error('WebSocket error');
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
+            };
+        }
+
+        // Initial load
+        fetchStats();
+        fetchMiners();
+
+        // Periodic updates
+        setInterval(fetchStats, 5000);
+        setInterval(fetchMiners, 10000);
+
+        // Connect WebSocket
+        connectWebSocket();
+    </script>
+</body>
+</html>

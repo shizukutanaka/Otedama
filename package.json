@@ -1,0 +1,49 @@
+{
+  "name": "otedama",
+  "version": "0.5.0",
+  "description": "Enterprise-Grade P2P Mining Pool + DeFi Platform",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --max-old-space-size=4096 index.js",
+    "dev": "node --inspect index.js",
+    "test": "node test/run-tests.js",
+    "test:unit": "node test/unit/index.js",
+    "test:integration": "node test/integration/index.js",
+    "test:performance": "node scripts/performance-test.js",
+    "benchmark": "node scripts/performance-benchmark.js",
+    "benchmark:quick": "node scripts/performance-benchmark.js --quick",
+    "clean": "node scripts/clean.js",
+    "build": "node scripts/build.js",
+    "docker:build": "docker build -t otedama:latest .",
+    "docker:run": "docker run -d --name otedama -p 8080:8080 -p 3333:3333 otedama:latest",
+    "validate": "node validate.js"
+  },
+  "keywords": [
+    "mining",
+    "pool",
+    "p2p",
+    "cryptocurrency",
+    "defi",
+    "dex",
+    "blockchain"
+  ],
+  "author": "Otedama Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.2.2",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/otedama/otedama.git"
+  },
+  "bugs": {
+    "url": "https://github.com/otedama/otedama/issues"
+  },
+  "homepage": "https://otedama.com"
+}
