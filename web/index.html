@@ -3,368 +3,690 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Otedama - Mining Pool Dashboard</title>
+    <title>₿ Otedama Ver0.6 - BTC Only Mining Pool ₿</title>
+    <meta name="description" content="Professional mining pool with BTC-only payouts. Mine any currency, get paid in Bitcoin. 1% + 0.5% fees, hourly payouts.">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#FF6B35">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Otedama BTC Pool">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNGRkQ3MDAiLz4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHlsZT0idHJhbnNmb3JtOiB0cmFuc2xhdGUoNnB4LCA2cHgpIj4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIGZpbGw9IiMwMDAiPgo8L3N2Zz4KPC9zdmc+">
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0a0a0a;
-            color: #e0e0e0;
-            line-height: 1.6;
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 30%, #FFD700 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
-
+        
+        .btc-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 20%, rgba(255,215,0,0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255,215,0,0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 3px solid #FFD700;
+            backdrop-filter: blur(10px);
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .btc-badge {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #000;
+            padding: 8px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 10px;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(255,215,0,0.3);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .version-tag {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,215,0,0.9);
+            color: #000;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }
-
-        header {
-            background: #1a1a1a;
-            padding: 20px 0;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #333;
-        }
-
-        h1 {
-            text-align: center;
-            color: #fff;
-            font-size: 2.5em;
-            font-weight: 300;
-        }
-
+        
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin: 20px 0;
         }
-
+        
         .stat-card {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 20px;
-            transition: transform 0.2s, border-color 0.2s;
+            background: rgba(255,255,255,0.15);
+            padding: 25px;
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            border: 2px solid rgba(255,215,0,0.3);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+            position: relative;
         }
-
+        
         .stat-card:hover {
-            transform: translateY(-2px);
-            border-color: #555;
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.3);
         }
-
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+        
         .stat-label {
-            color: #888;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-size: 1em;
+            opacity: 0.9;
             margin-bottom: 5px;
         }
-
-        .stat-value {
-            font-size: 2em;
-            font-weight: 600;
-            color: #4CAF50;
+        
+        .stat-subtitle {
+            font-size: 0.8em;
+            opacity: 0.7;
+            font-style: italic;
         }
-
-        .miners-section {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 30px;
-        }
-
-        .section-title {
+        
+        .btc-icon {
+            position: absolute;
+            top: 15px;
+            right: 15px;
             font-size: 1.5em;
-            margin-bottom: 20px;
-            color: #fff;
+            color: #FFD700;
+            opacity: 0.8;
         }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        
+        .section {
+            margin: 30px 0;
+            padding: 25px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(255,215,0,0.2);
+            backdrop-filter: blur(10px);
         }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #333;
+        
+        .section h2 {
+            margin-bottom: 15px;
+            color: #FFD700;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }
-
-        th {
-            background: #0a0a0a;
-            color: #888;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.85em;
-            letter-spacing: 1px;
-        }
-
-        tr:hover {
-            background: #222;
-        }
-
-        .status {
+        
+        .button {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 8px;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(255,215,0,0.3);
+            text-decoration: none;
             display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 8px;
         }
-
-        .status.online {
-            background: #4CAF50;
+        
+        .button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255,215,0,0.4);
+            background: linear-gradient(45deg, #FFA500, #FFD700);
         }
-
-        .status.offline {
-            background: #f44336;
-        }
-
-        .footer {
+        
+        .fee-info {
+            background: rgba(255,215,0,0.15);
+            border: 2px solid #FFD700;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
             text-align: center;
-            color: #666;
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #333;
         }
-
-        .error {
-            background: #f44336;
-            color: white;
+        
+        .fee-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .fee-item {
+            background: rgba(255,255,255,0.1);
             padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            display: none;
+            border-radius: 10px;
+            border: 1px solid rgba(255,215,0,0.3);
         }
-
-        .loading {
+        
+        .language-selector {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        
+        .language-selector select {
+            background: rgba(0,0,0,0.3);
+            color: white;
+            border: 2px solid #FFD700;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
+        .conversion-tracker {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        .currency-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .currency-item {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
             text-align: center;
-            padding: 40px;
-            color: #666;
+            border: 1px solid rgba(255,215,0,0.2);
         }
-
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00FF00;
+            display: inline-block;
+            margin-right: 8px;
+            animation: blink 1.5s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+        
+        .mobile-notice {
+            background: rgba(255,215,0,0.1);
+            border: 1px solid #FFD700;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        
         @media (max-width: 768px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .table-wrapper {
-                overflow-x: auto;
-            }
+            .header h1 { font-size: 2em; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .fee-breakdown { grid-template-columns: 1fr; }
+            .container { padding: 15px; }
+            .stat-card { padding: 20px; }
+            .language-selector { position: relative; margin-bottom: 10px; }
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,215,0,0.3);
+            border-radius: 50%;
+            border-top-color: #FFD700;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>Otedama Mining Pool</h1>
-        </div>
-    </header>
-
-    <div class="container">
-        <div class="error" id="error-message"></div>
-
-        <div class="stats-grid" id="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Total Hashrate</div>
-                <div class="stat-value" id="total-hashrate">--</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Active Miners</div>
-                <div class="stat-value" id="active-miners">--</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Network Difficulty</div>
-                <div class="stat-value" id="difficulty">--</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Block Height</div>
-                <div class="stat-value" id="block-height">--</div>
-            </div>
-        </div>
-
-        <div class="miners-section">
-            <h2 class="section-title">Connected Miners</h2>
-            <div class="table-wrapper">
-                <table id="miners-table">
-                    <thead>
-                        <tr>
-                            <th>Status</th>
-                            <th>Miner ID</th>
-                            <th>Type</th>
-                            <th>Hashrate</th>
-                            <th>Accepted</th>
-                            <th>Rejected</th>
-                            <th>Last Seen</th>
-                        </tr>
-                    </thead>
-                    <tbody id="miners-tbody">
-                        <tr>
-                            <td colspan="7" class="loading">Loading miners...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>Otedama - Lightweight P2P Mining Pool Software</p>
+    <div class="btc-pattern"></div>
+    
+    <div class="language-selector">
+        <select id="language-select" onchange="changeLanguage(this.value)">
+            <option value="en">🇺🇸 English</option>
+            <option value="ja">🇯🇵 日本語</option>
+            <option value="zh">🇨🇳 中文</option>
+            <option value="ko">🇰🇷 한국어</option>
+            <option value="es">🇪🇸 Español</option>
+            <option value="fr">🇫🇷 Français</option>
+            <option value="de">🇩🇪 Deutsch</option>
+            <option value="ru">🇷🇺 Русский</option>
+            <option value="it">🇮🇹 Italiano</option>
+            <option value="pt">🇵🇹 Português</option>
+            <option value="ar">🇸🇦 العربية</option>
+        </select>
+    </div>
+    
+    <div class="header">
+        <div class="version-tag">Ver 0.6.0</div>
+        <h1>₿ Otedama Ver0.6 ₿</h1>
+        <p id="welcome-text">Professional Mining Pool - All Payouts in Bitcoin</p>
+        <div class="btc-badge">
+            <span class="status-indicator"></span>
+            <span id="btc-only-text">🟡 BTC ONLY PAYOUTS 🟡</span>
         </div>
     </div>
-
-    <script>
-        const API_BASE = window.location.protocol + '//' + window.location.hostname + ':8080';
-        const WS_URL = 'ws://' + window.location.hostname + ':8080';
+    
+    <div class="container">
+        <div class="mobile-notice">
+            📱 <strong>Mobile Users:</strong> Add this page to your home screen for the best experience!
+        </div>
         
-        let ws = null;
-
-        function formatHashrate(hashrate) {
-            if (!hashrate || hashrate === 0) return '0 H/s';
+        <div class="fee-info">
+            <h3>₿ <span id="fee-title">New Ver0.6 Fee Structure</span> ₿</h3>
+            <div class="fee-breakdown">
+                <div class="fee-item">
+                    <strong>Mining Fee</strong><br>
+                    1% of minimum payout
+                </div>
+                <div class="fee-item">
+                    <strong>BTC Conversion</strong><br>
+                    0.5% of BTC amount
+                </div>
+                <div class="fee-item">
+                    <strong>Total</strong><br>
+                    ~1.5% (industry lowest)
+                </div>
+                <div class="fee-item">
+                    <strong>Payout Currency</strong><br>
+                    Bitcoin (BTC) Only
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="btc-icon">₿</div>
+                <div class="stat-value" id="hashrate">
+                    <span class="loading"></span>
+                </div>
+                <div class="stat-label" id="hashrate-label">Total Hashrate</div>
+                <div class="stat-subtitle">All algorithms combined</div>
+            </div>
             
-            const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s'];
-            let unitIndex = 0;
-            let value = hashrate;
+            <div class="stat-card">
+                <div class="btc-icon">👥</div>
+                <div class="stat-value" id="miners">
+                    <span class="loading"></span>
+                </div>
+                <div class="stat-label" id="miners-label">Active Miners</div>
+                <div class="stat-subtitle">Mining for BTC</div>
+            </div>
             
-            while (value >= 1000 && unitIndex < units.length - 1) {
-                value /= 1000;
-                unitIndex++;
+            <div class="stat-card">
+                <div class="btc-icon">₿</div>
+                <div class="stat-value" id="btc-paid">
+                    <span class="loading"></span>
+                </div>
+                <div class="stat-label" id="btc-paid-label">Total BTC Paid</div>
+                <div class="stat-subtitle">Hourly automatic payouts</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="btc-icon">⚡</div>
+                <div class="stat-value" id="efficiency">
+                    <span class="loading"></span>
+                </div>
+                <div class="stat-label" id="efficiency-label">Pool Efficiency</div>
+                <div class="stat-subtitle">Valid shares ratio</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>₿ <span id="mining-title">BTC Mining Setup</span></h2>
+            <p><strong>Stratum URL:</strong> stratum+tcp://localhost:3333</p>
+            <p><strong>Supported Currencies:</strong> 13 (all converted to BTC)</p>
+            <p><strong>Supported Algorithms:</strong> 10 major algorithms</p>
+            <p><strong>Payout Schedule:</strong> Every hour to BTC addresses</p>
+            
+            <div class="conversion-tracker">
+                <h4>🔄 Auto-Conversion Rates (to BTC)</h4>
+                <div class="currency-grid" id="conversion-rates">
+                    <div class="currency-item">
+                        <strong>Loading...</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>₿ <span id="dex-title">BTC Trading Pairs</span></h2>
+            <div id="dex-stats">
+                <div class="loading"></div> Loading BTC trading data...
+            </div>
+            <button class="button" onclick="refreshDexStats()">
+                🔄 <span id="refresh-text">Refresh Rates</span>
+            </button>
+        </div>
+        
+        <div class="section">
+            <h2>🚀 <span id="start-title">Start Mining for BTC</span></h2>
+            <p><strong>Command:</strong> <code>node index.js --wallet YOUR_WALLET --currency RVN</code></p>
+            <p><strong>Example:</strong> <code>node index.js --wallet RYourAddress --currency RVN</code></p>
+            <p><em>⚠️ Note: You will receive payouts in BTC regardless of mining currency</em></p>
+            
+            <div style="margin-top: 15px;">
+                <a href="#" class="button" onclick="downloadConfig()">
+                    📥 Download Config
+                </a>
+                <a href="/api/health" class="button" target="_blank">
+                    🏥 Health Check
+                </a>
+                <a href="/api/fees" class="button" target="_blank">
+                    💰 Fee Calculator
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // WebSocket connection
+        let ws;
+        let reconnectInterval = 5000;
+        let maxReconnectInterval = 30000;
+        let reconnectDecay = 1.5;
+        let connectionTimeout = 4000;
+        
+        // Translation system
+        const translations = {
+            en: {
+                welcome: 'Professional Mining Pool - All Payouts in Bitcoin',
+                btcOnly: '🟡 BTC ONLY PAYOUTS 🟡',
+                feeTitle: 'New Ver0.6 Fee Structure',
+                hashrateLabel: 'Total Hashrate',
+                minersLabel: 'Active Miners',
+                btcPaidLabel: 'Total BTC Paid',
+                efficiencyLabel: 'Pool Efficiency',
+                miningTitle: 'BTC Mining Setup',
+                dexTitle: 'BTC Trading Pairs',
+                startTitle: 'Start Mining for BTC',
+                refreshText: 'Refresh Rates'
+            },
+            ja: {
+                welcome: 'プロフェッショナルマイニングプール - 全支払いBitcoin',
+                btcOnly: '🟡 BTC支払いのみ 🟡',
+                feeTitle: '新Ver0.6手数料構造',
+                hashrateLabel: '総ハッシュレート',
+                minersLabel: 'アクティブマイナー',
+                btcPaidLabel: '総BTC支払額',
+                efficiencyLabel: 'プール効率',
+                miningTitle: 'BTCマイニング設定',
+                dexTitle: 'BTC取引ペア',
+                startTitle: 'BTCマイニング開始',
+                refreshText: 'レート更新'
+            },
+            zh: {
+                welcome: '专业挖矿池 - 全部以比特币支付',
+                btcOnly: '🟡 仅BTC支付 🟡',
+                feeTitle: '新Ver0.6费用结构',
+                hashrateLabel: '总算力',
+                minersLabel: '活跃矿工',
+                btcPaidLabel: '总BTC支付',
+                efficiencyLabel: '矿池效率',
+                miningTitle: 'BTC挖矿设置',
+                dexTitle: 'BTC交易对',
+                startTitle: '开始BTC挖矿',
+                refreshText: '刷新汇率'
             }
-            
-            return value.toFixed(2) + ' ' + units[unitIndex];
-        }
-
-        function formatNumber(num) {
-            return new Intl.NumberFormat().format(num);
-        }
-
-        function formatTime(timestamp) {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diff = now - date;
-            
-            if (diff < 60000) return 'Just now';
-            if (diff < 3600000) return Math.floor(diff / 60000) + ' min ago';
-            if (diff < 86400000) return Math.floor(diff / 3600000) + ' hours ago';
-            return date.toLocaleDateString();
-        }
-
-        async function fetchStats() {
-            try {
-                const response = await fetch(API_BASE + '/stats');
-                if (!response.ok) throw new Error('Failed to fetch stats');
-                
-                const data = await response.json();
-                updateStats(data);
-                hideError();
-            } catch (error) {
-                showError('Failed to connect to API server');
-            }
-        }
-
-        async function fetchMiners() {
-            try {
-                const response = await fetch(API_BASE + '/miners');
-                if (!response.ok) throw new Error('Failed to fetch miners');
-                
-                const data = await response.json();
-                updateMinersTable(data.miners);
-            } catch (error) {
-                console.error('Failed to fetch miners:', error);
-            }
-        }
-
-        function updateStats(stats) {
-            if (stats.mining) {
-                document.getElementById('total-hashrate').textContent = formatHashrate(stats.mining.hashrate);
-                document.getElementById('active-miners').textContent = formatNumber(stats.mining.miners);
-                document.getElementById('difficulty').textContent = formatNumber(stats.mining.difficulty);
-                document.getElementById('block-height').textContent = formatNumber(stats.mining.height);
-            }
-        }
-
-        function updateMinersTable(miners) {
-            const tbody = document.getElementById('miners-tbody');
-            
-            if (!miners || miners.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No miners connected</td></tr>';
-                return;
-            }
-            
-            tbody.innerHTML = miners.map(miner => {
-                const isOnline = (Date.now() - miner.lastSeen) < 120000; // 2 minutes
-                return `
-                    <tr>
-                        <td><span class="status ${isOnline ? 'online' : 'offline'}"></span></td>
-                        <td>${miner.id.substring(0, 8)}...</td>
-                        <td>${miner.hardwareType}</td>
-                        <td>${formatHashrate(miner.hashrate)}</td>
-                        <td>${formatNumber(miner.shares.accepted)}</td>
-                        <td>${formatNumber(miner.shares.rejected)}</td>
-                        <td>${formatTime(miner.lastSeen)}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function showError(message) {
-            const errorEl = document.getElementById('error-message');
-            errorEl.textContent = message;
-            errorEl.style.display = 'block';
-        }
-
-        function hideError() {
-            document.getElementById('error-message').style.display = 'none';
-        }
-
+        };
+        
+        let currentLanguage = 'en';
+        
         function connectWebSocket() {
-            if (ws && ws.readyState === WebSocket.OPEN) return;
-            
-            ws = new WebSocket(WS_URL);
-            
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                hideError();
-            };
-            
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'stats_update') {
-                        updateStats(data.data);
-                    } else if (data.type === 'block_found') {
-                        showError('Block found! Hash: ' + data.data.hash);
+            try {
+                ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}`);
+                
+                ws.onopen = function() {
+                    console.log('🔗 Connected to Otedama Ver0.6');
+                    reconnectInterval = 5000;
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateStats(data);
+                    } catch (error) {
+                        console.error('📊 Stats parsing error:', error);
                     }
-                } catch (error) {
-                    console.error('WebSocket message error:', error);
-                }
-            };
-            
-            ws.onerror = () => {
-                console.error('WebSocket error');
-            };
-            
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
-            };
+                };
+                
+                ws.onclose = function() {
+                    console.log('🔌 WebSocket disconnected, attempting reconnection...');
+                    setTimeout(connectWebSocket, reconnectInterval);
+                    reconnectInterval = Math.min(reconnectInterval * reconnectDecay, maxReconnectInterval);
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('🚨 WebSocket error:', error);
+                };
+                
+            } catch (error) {
+                console.error('🔗 WebSocket connection failed:', error);
+                setTimeout(connectWebSocket, reconnectInterval);
+            }
         }
-
-        // Initial load
-        fetchStats();
-        fetchMiners();
-
-        // Periodic updates
-        setInterval(fetchStats, 5000);
-        setInterval(fetchMiners, 10000);
-
-        // Connect WebSocket
-        connectWebSocket();
+        
+        function updateStats(data) {
+            if (data.type === 'pool_stats') {
+                document.getElementById('hashrate').textContent = formatHashrate(data.hashrate || 0);
+                document.getElementById('miners').textContent = data.miners || 0;
+                document.getElementById('btc-paid').textContent = formatBTC(data.totalBTCPaid || 0);
+                document.getElementById('efficiency').textContent = (data.efficiency || 0).toFixed(1) + '%';
+            }
+            
+            if (data.type === 'dex_stats') {
+                updateDexStats(data);
+            }
+            
+            if (data.type === 'conversion_rates') {
+                updateConversionRates(data.rates);
+            }
+        }
+        
+        function formatHashrate(hashrate) {
+            if (hashrate >= 1e12) return (hashrate / 1e12).toFixed(2) + ' TH/s';
+            if (hashrate >= 1e9) return (hashrate / 1e9).toFixed(2) + ' GH/s';
+            if (hashrate >= 1e6) return (hashrate / 1e6).toFixed(2) + ' MH/s';
+            if (hashrate >= 1e3) return (hashrate / 1e3).toFixed(2) + ' kH/s';
+            return hashrate.toFixed(2) + ' H/s';
+        }
+        
+        function formatBTC(amount) {
+            return (amount || 0).toFixed(8) + ' ₿';
+        }
+        
+        function updateDexStats(data) {
+            const dexStatsDiv = document.getElementById('dex-stats');
+            dexStatsDiv.innerHTML = '<h4>₿ Active BTC Trading Pairs</h4>';
+            
+            if (data.pairs && data.pairs.length > 0) {
+                data.pairs.forEach(pair => {
+                    if (pair.token0 === 'BTC' || pair.token1 === 'BTC') {
+                        const pairDiv = document.createElement('div');
+                        pairDiv.className = 'currency-item';
+                        pairDiv.innerHTML = `
+                            <strong>${pair.token0}/${pair.token1}</strong><br>
+                            ${pair.price.toFixed(8)}
+                        `;
+                        dexStatsDiv.appendChild(pairDiv);
+                    }
+                });
+            } else {
+                dexStatsDiv.innerHTML += '<p>Loading BTC pairs...</p>';
+            }
+        }
+        
+        function updateConversionRates(rates) {
+            const ratesDiv = document.getElementById('conversion-rates');
+            ratesDiv.innerHTML = '';
+            
+            const currencies = ['ETH', 'RVN', 'XMR', 'LTC', 'DOGE', 'ZEC', 'DASH', 'ERGO'];
+            
+            currencies.forEach(currency => {
+                if (rates && rates[currency]) {
+                    const rateDiv = document.createElement('div');
+                    rateDiv.className = 'currency-item';
+                    rateDiv.innerHTML = `
+                        <strong>${currency}</strong><br>
+                        ${rates[currency].toFixed(8)} ₿
+                    `;
+                    ratesDiv.appendChild(rateDiv);
+                }
+            });
+        }
+        
+        function changeLanguage(lang) {
+            currentLanguage = lang;
+            const t = translations[lang] || translations.en;
+            
+            document.getElementById('welcome-text').textContent = t.welcome;
+            document.getElementById('btc-only-text').textContent = t.btcOnly;
+            document.getElementById('fee-title').textContent = t.feeTitle;
+            document.getElementById('hashrate-label').textContent = t.hashrateLabel;
+            document.getElementById('miners-label').textContent = t.minersLabel;
+            document.getElementById('btc-paid-label').textContent = t.btcPaidLabel;
+            document.getElementById('efficiency-label').textContent = t.efficiencyLabel;
+            document.getElementById('mining-title').textContent = t.miningTitle;
+            document.getElementById('dex-title').textContent = t.dexTitle;
+            document.getElementById('start-title').textContent = t.startTitle;
+            document.getElementById('refresh-text').textContent = t.refreshText;
+            
+            // Update URL
+            const url = new URL(window.location);
+            url.searchParams.set('lang', lang);
+            window.history.replaceState(null, '', url);
+        }
+        
+        function refreshDexStats() {
+            fetch('/api/dex')
+                .then(response => response.json())
+                .then(data => updateDexStats(data))
+                .catch(error => console.error('DEX stats error:', error));
+        }
+        
+        function downloadConfig() {
+            const config = {
+                pool: 'stratum+tcp://localhost:3333',
+                fee: '1% + 0.5% BTC conversion',
+                payouts: 'BTC only, hourly',
+                currencies: '13 supported (all → BTC)',
+                algorithms: '10 supported'
+            };
+            
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'otedama-v06-config.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Initialize app
+        function initializeApp() {
+            // Detect language from URL or browser
+            const urlParams = new URLSearchParams(window.location.search);
+            const langParam = urlParams.get('lang');
+            const browserLang = navigator.language.split('-')[0];
+            
+            const initialLang = langParam || (translations[browserLang] ? browserLang : 'en');
+            
+            document.getElementById('language-select').value = initialLang;
+            changeLanguage(initialLang);
+            
+            // Connect WebSocket
+            connectWebSocket();
+            
+            // Load initial data
+            Promise.all([
+                fetch('/api/stats').then(r => r.json()),
+                fetch('/api/dex').then(r => r.json()),
+                fetch('/api/fees').then(r => r.json())
+            ]).then(([stats, dex, fees]) => {
+                updateStats({ type: 'pool_stats', ...stats });
+                updateStats({ type: 'dex_stats', ...dex });
+                if (fees.btcConversionRates) {
+                    updateConversionRates(fees.btcConversionRates);
+                }
+            }).catch(error => {
+                console.error('Initial data load error:', error);
+            });
+            
+            // Register service worker for PWA
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => console.log('📱 PWA registered'))
+                    .catch(error => console.log('PWA registration failed:', error));
+            }
+        }
+        
+        // Start the app
+        document.addEventListener('DOMContentLoaded', initializeApp);
+        
+        // Handle visibility change
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && (!ws || ws.readyState !== WebSocket.OPEN)) {
+                connectWebSocket();
+            }
+        });
     </script>
 </body>
 </html>

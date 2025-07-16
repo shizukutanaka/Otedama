@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama - Professional Mining Pool Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --success-color: #4CAF50;
+            --warning-color: #FF9800;
+            --danger-color: #f44336;
+            --dark-bg: #0a0a0a;
+            --card-bg: #1a1a1a;
+            --border-color: #333;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #666;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--card-bg) 0%, #252525 100%);
+            padding: 20px 0;
+            border-bottom: 2px solid var(--border-color);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--primary-color), var(--success-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo i {
+            font-size: 2.5em;
+            color: var(--primary-color);
+            animation: spin 4s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .connection-status.connected {
+            background: rgba(76, 175, 80, 0.2);
+            color: var(--success-color);
+        }
+
+        .connection-status.disconnected {
+            background: rgba(244, 67, 54, 0.2);
+            color: var(--danger-color);
+        }
+
+        /* Main Content */
+        .main-content {
+            padding: 30px 0;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--card-bg) 0%, #1f1f1f 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(33, 150, 243, 0.2);
+            border-color: var(--primary-color);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+        }
+
+        .stat-icon.hashrate { background: rgba(33, 150, 243, 0.2); color: var(--primary-color); }
+        .stat-icon.miners { background: rgba(76, 175, 80, 0.2); color: var(--success-color); }
+        .stat-icon.difficulty { background: rgba(255, 152, 0, 0.2); color: var(--warning-color); }
+        .stat-icon.blocks { background: rgba(156, 39, 176, 0.2); color: #9C27B0; }
+
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .stat-change {
+            font-size: 0.85em;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stat-change.positive { color: var(--success-color); }
+        .stat-change.negative { color: var(--danger-color); }
+
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .chart-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        /* Miners Table */
+        .miners-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 40px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--dark-bg);
+        }
+
+        th {
+            background: var(--card-bg);
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+            padding: 15px;
+            text-align: left;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        tbody tr:hover {
+            background: rgba(33, 150, 243, 0.1);
+        }
+
+        .miner-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.online { background: var(--success-color); }
+        .status-dot.offline { background: var(--danger-color); }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .miner-id {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            color: var(--primary-color);
+        }
+
+        /* Notifications */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success { background: var(--success-color); }
+        .notification.error { background: var(--danger-color); }
+        .notification.info { background: var(--primary-color); }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px 0;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            margin-top: 40px;
+        }
+
+        /* Loading States */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            color: var(--text-muted);
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            .header-stats {
+                justify-content: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+
+            .logo h1 {
+                font-size: 1.8em;
+            }
+
+            .stat-value {
+                font-size: 1.8em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0 15px;
+            }
+
+            .stat-card, .chart-card, .miners-section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-coins"></i>
+                    <h1>Otedama Pool</h1>
+                </div>
+                <div class="header-stats">
+                    <div class="connection-status" id="connection-status">
+                        <i class="fas fa-circle"></i>
+                        <span>Connecting...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-label">Total Hashrate</div>
+                        <div class="stat-icon hashrate">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="total-hashrate">--</div>
+                    <div class="stat-change" id="hashrate-change">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>--</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-label">Active Miners</div>
+                        <div class="stat-icon miners">
+                            <i class="fas fa-users"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="active-miners">--</div>
+                    <div class="stat-change" id="miners-change">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>--</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-label">Network Difficulty</div>
+                        <div class="stat-icon difficulty">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="difficulty">--</div>
+                    <div class="stat-change" id="difficulty-change">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>--</span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-label">Blocks Found</div>
+                        <div class="stat-icon blocks">
+                            <i class="fas fa-cube"></i>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="blocks-found">--</div>
+                    <div class="stat-change" id="blocks-change">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>24h</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="charts-section">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-area"></i>
+                        Hashrate History
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="hashrateChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-pie"></i>
+                        Mining Distribution
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Miners Table -->
+            <div class="miners-section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-server"></i>
+                        Connected Miners
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Miner ID</th>
+                                <th>Hardware</th>
+                                <th>Hashrate</th>
+                                <th>Shares</th>
+                                <th>Efficiency</th>
+                                <th>Last Seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="miners-tbody">
+                            <tr>
+                                <td colspan="7" class="loading">
+                                    <div class="spinner"></div>
+                                    Loading miners...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Otedama Mining Pool - 低手数料 (1.5%) で高性能なマイニングプール</p>
+        </div>
+    </footer>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            API_BASE: window.location.protocol + '//' + window.location.hostname + ':8080',
+            WS_URL: 'ws://' + window.location.hostname + ':8080',
+            UPDATE_INTERVAL: 5000,
+            CHART_POINTS: 20
+        };
+
+        // Global state
+        const state = {
+            isConnected: false,
+            hashrateHistory: [],
+            charts: {}
+        };
+
+        // Utility functions
+        function formatHashrate(hashrate) {
+            if (!hashrate || hashrate === 0) return '0 H/s';
+            
+            const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s'];
+            let unitIndex = 0;
+            let value = parseFloat(hashrate);
+            
+            while (value >= 1000 && unitIndex < units.length - 1) {
+                value /= 1000;
+                unitIndex++;
+            }
+            
+            return value.toFixed(2) + ' ' + units[unitIndex];
+        }
+
+        function formatNumber(num) {
+            if (!num && num !== 0) return '--';
+            return new Intl.NumberFormat().format(Math.floor(num));
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return 'Never';
+            
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + ' min ago';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+            return date.toLocaleDateString();
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                ${message}
+            `;
+            
+            document.getElementById('notification-container').appendChild(notification);
+            
+            setTimeout(() => notification.classList.add('show'), 100);
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // API functions
+        async function fetchStats() {
+            try {
+                const response = await fetch(CONFIG.API_BASE + '/api/stats');
+                if (!response.ok) throw new Error('API request failed');
+                
+                const data = await response.json();
+                updateStats(data);
+                updateConnectionStatus(true);
+                
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+                updateConnectionStatus(false);
+            }
+        }
+
+        async function fetchMiners() {
+            try {
+                const response = await fetch(CONFIG.API_BASE + '/api/miners');
+                if (!response.ok) throw new Error('API request failed');
+                
+                const data = await response.json();
+                updateMinersTable(data.miners || []);
+                
+            } catch (error) {
+                console.error('Failed to fetch miners:', error);
+            }
+        }
+
+        // Update functions
+        function updateStats(stats) {
+            if (stats.mining) {
+                document.getElementById('total-hashrate').textContent = formatHashrate(stats.mining.hashrate);
+                document.getElementById('active-miners').textContent = formatNumber(stats.mining.miners);
+                document.getElementById('difficulty').textContent = formatNumber(stats.mining.difficulty);
+                document.getElementById('blocks-found').textContent = formatNumber(stats.mining.blocksFound || 0);
+                
+                // Update hashrate history for chart
+                updateHashrateChart(stats.mining.hashrate);
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            state.isConnected = connected;
+            const statusEl = document.getElementById('connection-status');
+            
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                statusEl.innerHTML = '<i class="fas fa-circle"></i><span>Connected</span>';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.innerHTML = '<i class="fas fa-circle"></i><span>Disconnected</span>';
+            }
+        }
+
+        function updateMinersTable(miners) {
+            const tbody = document.getElementById('miners-tbody');
+            
+            if (!miners || miners.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No miners connected</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = miners.map(miner => {
+                const isOnline = (Date.now() - (miner.lastSeen || 0)) < 120000;
+                const efficiency = miner.shares ? 
+                    ((miner.shares.accepted / (miner.shares.accepted + miner.shares.rejected)) * 100).toFixed(1) : '0';
+                
+                return `
+                    <tr>
+                        <td>
+                            <div class="miner-status">
+                                <div class="status-dot ${isOnline ? 'online' : 'offline'}"></div>
+                                ${isOnline ? 'Online' : 'Offline'}
+                            </div>
+                        </td>
+                        <td><span class="miner-id">${(miner.id || 'unknown').substring(0, 12)}...</span></td>
+                        <td>${miner.hardwareType || 'Unknown'}</td>
+                        <td>${formatHashrate(miner.hashrate || 0)}</td>
+                        <td>${formatNumber(miner.shares?.accepted || 0)} / ${formatNumber(miner.shares?.rejected || 0)}</td>
+                        <td>${efficiency}%</td>
+                        <td>${formatTime(miner.lastSeen)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateHashrateChart(hashrate) {
+            const now = new Date();
+            state.hashrateHistory.push({
+                time: now.toLocaleTimeString(),
+                value: hashrate || 0
+            });
+            
+            // Keep only last 20 points
+            if (state.hashrateHistory.length > CONFIG.CHART_POINTS) {
+                state.hashrateHistory.shift();
+            }
+            
+            if (state.charts.hashrate) {
+                state.charts.hashrate.data.labels = state.hashrateHistory.map(p => p.time);
+                state.charts.hashrate.data.datasets[0].data = state.hashrateHistory.map(p => p.value);
+                state.charts.hashrate.update('none');
+            }
+        }
+
+        // Chart initialization
+        function initCharts() {
+            const hashrateCtx = document.getElementById('hashrateChart').getContext('2d');
+            
+            state.charts.hashrate = new Chart(hashrateCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Hashrate',
+                        data: [],
+                        borderColor: '#2196F3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: '#b0b0b0'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: '#b0b0b0'
+                            }
+                        }
+                    }
+                }
+            });
+
+            const distributionCtx = document.getElementById('distributionChart').getContext('2d');
+            
+            state.charts.distribution = new Chart(distributionCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['CPU', 'GPU', 'ASIC'],
+                    datasets: [{
+                        data: [30, 45, 25],
+                        backgroundColor: [
+                            '#2196F3',
+                            '#4CAF50',
+                            '#FF9800'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#b0b0b0',
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // WebSocket connection
+        function initWebSocket() {
+            const ws = new WebSocket(CONFIG.WS_URL);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                updateConnectionStatus(true);
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'stats_update') {
+                        updateStats(data.data);
+                    } else if (data.type === 'block_found') {
+                        showNotification(`Block found! Hash: ${data.data.hash}`, 'success');
+                    } else if (data.type === 'new_miner') {
+                        showNotification('New miner connected', 'info');
+                        fetchMiners();
+                    }
+                } catch (error) {
+                    console.error('WebSocket message error:', error);
+                }
+            };
+            
+            ws.onerror = () => {
+                console.error('WebSocket error');
+                updateConnectionStatus(false);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateConnectionStatus(false);
+                setTimeout(initWebSocket, 5000);
+            };
+        }
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Initializing Otedama Dashboard...');
+            
+            // Initialize charts
+            initCharts();
+            
+            // Initial data fetch
+            fetchStats();
+            fetchMiners();
+            
+            // Setup periodic updates
+            setInterval(fetchStats, CONFIG.UPDATE_INTERVAL);
+            setInterval(fetchMiners, CONFIG.UPDATE_INTERVAL * 2);
+            
+            // Initialize WebSocket
+            initWebSocket();
+            
+            console.log('Dashboard ready!');
+        });
+    </script>
+</body>
+</html>

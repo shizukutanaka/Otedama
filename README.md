@@ -1,536 +1,127 @@
-# Otedama v0.5
+# Otedama - v0.6.0
 
-**Fully Automated P2P Mining Pool + DEX + DeFi Platform**
+**Professional P2P Mining Pool & DEX Platform**
 
-### 🌍 Language / 言語 / 语言 / Idioma / Langue / Sprache / لغة / भाषा
+Otedama is a high-performance, peer-to-peer cryptocurrency mining pool combined with a decentralized exchange (DEX) platform. This platform is designed for both individual miners and professional operations, offering a robust, low-fee environment for mining and auto-converting various cryptocurrencies directly to Bitcoin.
 
-<details>
-<summary><b>Select Language (30 languages supported)</b></summary>
+![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
 
-[English](README.md) | [日本語](README.ja.md) | [中文简体](README.zh-CN.md) | [中文繁體](README.zh-TW.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Italiano](README.it.md) | [Português](README.pt.md) | [Português BR](README.pt-BR.md) | [Русский](README.ru.md) | [العربية](README.ar.md) | [हिन्दी](README.hi.md) | [Türkçe](README.tr.md) | [Polski](README.pl.md) | [Nederlands](README.nl.md) | [Svenska](README.sv.md) | [Norsk](README.no.md) | [Dansk](README.da.md) | [Suomi](README.fi.md) | [Ελληνικά](README.el.md) | [Čeština](README.cs.md) | [Magyar](README.hu.md) | [Română](README.ro.md) | [Български](README.bg.md) | [Українська](README.uk.md) | [ไทย](README.th.md) | [Tiếng Việt](README.vi.md) | [Bahasa Indonesia](README.id.md)
-
-</details>
-
----
-
-## Overview
-
-Otedama is a commercial-grade, fully automated P2P mining pool, DEX, and DeFi platform. Built with enterprise-level architecture following the design philosophies of John Carmack (performance first), Robert C. Martin (clean architecture), and Rob Pike (simplicity and clarity).
-
-### Core Features
-
-- **🤖 Fully Automated Operation** - Zero manual intervention required after initial setup
-- **💰 Immutable Fee System** - Fixed 1.5% operational fee, auto-collected in BTC
-- **⛏️ Multi-Algorithm Support** - 15+ algorithms, CPU/GPU/ASIC compatible
-- **💱 Unified DEX** - V2 AMM + V3 Concentrated Liquidity hybrid system
-- **💸 Auto-Payment System** - Hourly automated reward distribution
-- **🏦 DeFi Integration** - Auto-liquidation, governance, cross-chain bridging
-- **🚀 Enterprise Performance** - Supports 10,000+ concurrent miners
-
-### Why Choose Otedama?
-
-1. **Set & Forget** - Complete automation means you never need to manage the system
-2. **Guaranteed Revenue** - Immutable 1.5% fee ensures consistent BTC income
-3. **All-in-One Platform** - Mining + Trading + DeFi in a single solution
-4. **Global Ready** - 30 language support for worldwide deployment
-5. **Battle-Tested** - 99.99% uptime with enterprise-grade reliability
+**Translate:** [English](https://github.com/otedama/otedama/blob/main/README.md) | [日本語](https://translate.google.com/translate?sl=en&tl=ja&u=https://github.com/otedama/otedama/blob/main/README.md) | [Español](https://translate.google.com/translate?sl=en&tl=es&u=https://github.com/otedama/otedama/blob/main/README.md) | [中文](https://translate.google.com/translate?sl=en&tl=zh-CN&u=https://github.com/otedama/otedama/blob/main/README.md) | [Français](https://translate.google.com/translate?sl=en&tl=fr&u=https://github.com/otedama/otedama/blob/main/README.md) | [Deutsch](https://translate.google.com/translate?sl=en&tl=de&u=https://github.com/otedama/otedama/blob/main/README.md) | [한국어](https://translate.google.com/translate?sl=en&tl=ko&u=https://github.com/otedama/otedama/blob/main/README.md) | [Português](https://translate.google.com/translate?sl=en&tl=pt&u=https://github.com/otedama/otedama/blob/main/README.md) | [Русский](https://translate.google.com/translate?sl=en&tl=ru&u=https://github.com/otedama/otedama/blob/main/README.md) | [العربية](https://translate.google.com/translate?sl=en&tl=ar&u=https://github.com/otedama/otedama/blob/main/README.md) | [हिन्दी](https://translate.google.com/translate?sl=en&tl=hi&u=https://github.com/otedama/otedama/blob/main/README.md)
 
 ---
 
-## 🔑 Key Automation Features
+## Key Features (v0.6.0)
 
-### 1. Automated Fee Collection System
-- **BTC Address**: `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa` (hardcoded & immutable)
-- **Operational Fee**: 1.5% fixed (non-modifiable)
-- **Pool Fee**: 0% (removed completely)
-- **Collection**: Every 5 minutes automatically
-- **Conversion**: All currencies auto-converted to BTC
-- **Security**: Tamper-proof with integrity monitoring
+*   **P2P Mining Pool:** Decentralized and robust stratum-based mining pool.
+*   **Integrated DEX:** Automatically convert mined altcoins to Bitcoin.
+*   **BTC-Only Payouts:** Simplify your earnings with payouts exclusively in BTC.
+*   **Low Fees:**
+    *   **Mining Fee:** 1%
+    *   **Conversion Fee:** 0.5%
+*   **Multi-Currency Support:** Mine over 13 different cryptocurrencies.
+*   **Multi-Language Support:** The platform is available in over 50 languages.
+*   **Cross-Platform:** Runs on Windows, macOS, and Linux.
+*   **Dockerized:** Easy deployment with Docker and Docker Compose.
 
-### 2. Automated Reward Distribution
-- **Frequency**: Every hour
-- **Processing**: Batch transactions for fee optimization
-- **Minimum Payouts**: Currency-specific thresholds
-- **Failure Handling**: Automatic retry with exponential backoff
-- **Recording**: Complete transaction history
+## Getting Started
 
-### 3. Automated DEX/DeFi Operations
-- **Liquidity Rebalancing**: Every 10 minutes
-- **Position Liquidation**: LTV monitoring every 2 minutes
-- **Governance Execution**: Automatic proposal implementation
-- **Bridge Operations**: Cross-chain relay every 30 seconds
-- **Revenue Collection**: Automatic fee harvesting
+### Prerequisites
 
----
+*   [Node.js](https://nodejs.org/) (v18.0.0 or higher)
+*   [Git](https://git-scm.com/)
+*   (Optional) [Docker](https://www.docker.com/)
 
-## 📊 System Requirements
+### Installation
 
-### Minimum Specifications
-- **OS**: Ubuntu 20.04+ / Windows Server 2019+
-- **CPU**: 4 cores
-- **RAM**: 2GB
-- **Storage**: 10GB SSD
-- **Network**: 100Mbps
-- **Node.js**: 18.0+
+1.  Clone the repository:
+    ```sh
+    git clone https://github.com/shizukutanaka/Otedama.git
+    cd otedama
+    ```
 
-### Recommended Specifications
-- **OS**: Ubuntu 22.04 LTS
-- **CPU**: 8+ cores
-- **RAM**: 8GB+
-- **Storage**: 100GB NVMe SSD
-- **Network**: 1Gbps
-- **Node.js**: 20.0+
+2.  Install dependencies:
+    ```sh
+    npm install
+    ```
 
-### Performance by Scale
+3.  Run the setup script for your OS:
+    *   **Windows:**
+        ```bat
+        setup.bat
+        ```
+    *   **Linux/macOS:**
+        ```sh
+        bash setup.sh
+        ```
 
-| Scale | Miners | CPU | RAM | Storage | Network | Monthly Revenue |
-|-------|--------|-----|-----|---------|---------|-----------------|
-| Small | 100-500 | 4 cores | 2GB | 20GB | 100Mbps | 0.1-0.5 BTC |
-| Medium | 500-2K | 8 cores | 4GB | 50GB | 500Mbps | 0.5-2.0 BTC |
-| Large | 2K-10K | 16 cores | 8GB | 100GB | 1Gbps | 2.0-10.0 BTC |
-| Enterprise | 10K+ | 32+ cores | 16GB+ | 500GB+ | 10Gbps | 10.0+ BTC |
+## Usage
 
----
+### Running the Application
 
-## 🚀 Quick Start Installation
+To start the main application server:
 
-### Option 1: One-Command Installation
-
-**Linux/macOS:**
-```bash
-curl -sSL https://otedama.io/install.sh | bash
-```
-
-**Windows (PowerShell as Admin):**
-```powershell
-iwr -useb https://otedama.io/install.ps1 | iex
-```
-
-### Option 2: Standard Installation
-
-```bash
-# Clone repository
-git clone https://github.com/otedama/otedama.git
-cd otedama
-
-# Install dependencies
-npm install
-
-# Configure
-cp otedama.example.json otedama.json
-# Edit otedama.json with your settings
-
-# Start Otedama
+```sh
 npm start
 ```
 
-### Option 3: Docker Installation
+### Using Docker
 
-```bash
-# Using Docker Compose
-docker-compose up -d
+For a containerized deployment:
 
-# Or using Docker directly
-docker run -d \
-  --name otedama \
-  -p 8080:8080 \
-  -p 3333:3333 \
-  -v otedama-data:/data \
-  otedama/otedama:v0.5
-```
+1.  Build the Docker image:
+    ```sh
+    npm run docker:build
+    ```
 
----
+2.  Run the container using Docker Compose:
+    ```sh
+    npm run docker:deploy
+    ```
 
-## ⚙️ Configuration
+## Configuration
 
-### Basic Configuration (otedama.json)
+Key configuration parameters are defined in `package.json` under the `config` object:
 
-```json
-{
-  "pool": {
-    "name": "My Otedama Pool",
-    "operationalFee": 1.5,
-    "currencies": ["BTC", "RVN", "XMR", "ETC", "LTC", "DOGE", "KAS", "ERGO"]
-  },
-  "mining": {
-    "defaultCurrency": "RVN",
-    "autoSwitch": true,
-    "profitabilityCheck": 300
-  },
-  "payments": {
-    "interval": 3600,
-    "minPayouts": {
-      "BTC": 0.001,
-      "RVN": 100,
-      "XMR": 0.1,
-      "ETC": 1,
-      "LTC": 0.1,
-      "DOGE": 100,
-      "KAS": 100,
-      "ERGO": 1
-    }
-  },
-  "dex": {
-    "enabled": true,
-    "liquidityFee": 0.3
-  },
-  "defi": {
-    "enabled": true,
-    "lending": true,
-    "liquidationLTV": 85
-  }
-}
-```
+*   **`mining_fee`**: 1% of minimum payout
+*   **`conversion_fee`**: 0.5% BTC conversion
+*   **`payout_currency`**: BTC only
+*   **`supported_currencies`**: 13
+*   **`supported_languages`**: 50
 
-### Advanced Configuration
+## Technology Stack
 
-```bash
-# Performance optimization
-node index.js \
-  --max-miners 10000 \
-  --threads 16 \
-  --cache-size 2048 \
-  --batch-size 1000
+*   **Backend:** Node.js
+*   **Database:** better-sqlite3
+*   **Real-time Communication:** ws (WebSocket)
 
-# Custom ports
-node index.js \
-  --api-port 9080 \
-  --stratum-port 4444 \
-  --ws-port 9090
+## Project Roadmap
 
-# Debug mode
-DEBUG=* node index.js
-```
+### Phase 1: Market Launch (Q3 2025)
+- [ ] Community building and miner onboarding
+- [ ] Real-time price feed integration (CoinGecko, CoinMarketCap)
+- [ ] Advanced analytics dashboard
+- [ ] Referral program implementation
 
----
+### Phase 2: Feature Enhancement (Q4 2025)
+- [ ] Lightning Network integration for instant payouts
+- [ ] Advanced DeFi features (yield farming, staking)
+- [ ] Mobile app store deployment (iOS/Android)
+- [ ] API marketplace and third-party integrations
 
-## ⛏️ Miner Connection
+### Phase 3: Global Expansion (Q1 2026)
+- [ ] Regional mining pool nodes for latency optimization
+- [ ] Fiat currency integration and off-ramps
+- [ ] Enterprise mining farm partnerships
+- [ ] Institutional custody integration
 
-### Connection Details
-- **Server**: `your-domain.com:3333` or `YOUR_IP:3333`
-- **Username**: `WALLET_ADDRESS.WORKER_NAME`
-- **Password**: `x` (or anything)
+### Phase 4: Innovation Leadership (Q2 2026)
+- [ ] AI-powered mining optimization
+- [ ] Cross-chain compatibility expansion
+- [ ] Decentralized governance implementation
+- [ ] Carbon-neutral mining initiatives
 
-### Mining Software Examples
+## License
 
-**NVIDIA GPU (T-Rex):**
-```bash
-t-rex -a kawpow -o stratum+tcp://your-pool.com:3333 -u RVN_WALLET.worker1 -p x
-```
-
-**AMD GPU (TeamRedMiner):**
-```bash
-teamredminer -a kawpow -o stratum+tcp://your-pool.com:3333 -u RVN_WALLET.worker1 -p x
-```
-
-**CPU (XMRig):**
-```bash
-xmrig -o your-pool.com:3333 -u XMR_WALLET -p x -a rx/0
-```
-
-**ASIC (Antminer):**
-- Pool URL: `stratum+tcp://your-pool.com:3333`
-- Worker: `BTC_WALLET.antminer1`
-- Password: `x`
-
----
-
-## 💰 Supported Currencies & Algorithms
-
-| Currency | Algorithm | Min Payout | Network | Dev Fee |
-|----------|-----------|------------|---------|---------|
-| BTC | SHA256 | 0.001 | Bitcoin | 1.5% |
-| RVN | KawPow | 100 | Ravencoin | 1.5% |
-| XMR | RandomX | 0.1 | Monero | 1.5% |
-| ETC | Etchash | 1 | Ethereum Classic | 1.5% |
-| LTC | Scrypt | 0.1 | Litecoin | 1.5% |
-| DOGE | Scrypt | 100 | Dogecoin | 1.5% |
-| KAS | kHeavyHash | 100 | Kaspa | 1.5% |
-| ERGO | Autolykos2 | 1 | Ergo | 1.5% |
-| FLUX | ZelHash | 10 | Flux | 1.5% |
-| CFX | Octopus | 100 | Conflux | 1.5% |
-| BTG | Equihash | 0.1 | Bitcoin Gold | 1.5% |
-| ZEC | Equihash | 0.1 | Zcash | 1.5% |
-| GRIN | Cuckatoo32 | 1 | Grin | 1.5% |
-| BEAM | BeamHash | 10 | Beam | 1.5% |
-| AE | Cuckoo | 10 | Aeternity | 1.5% |
-
-**Note**: All currencies have a flat 1.5% operational fee (non-modifiable)
-
----
-
-## 🔌 API Reference
-
-### REST API Endpoints
-
-```bash
-# Pool Statistics
-GET /api/v1/stats
-Response: {
-  "miners": 1234,
-  "hashrate": "1.23 TH/s",
-  "blocks": {"found": 10, "pending": 2},
-  "revenue": {"btc": 1.5, "usd": 65000}
-}
-
-# Fee Status
-GET /api/v1/fees
-Response: {
-  "operationalFee": 0.015,
-  "collected": {"BTC": 1.23},
-  "pending": {"RVN": 50000}
-}
-
-# Miner Details
-GET /api/v1/miners/{address}
-Response: {
-  "hashrate": "123 MH/s",
-  "shares": {"valid": 1000, "invalid": 2},
-  "balance": 0.123,
-  "payments": [...]
-}
-
-# DEX Prices
-GET /api/v1/dex/prices
-Response: {
-  "RVN/BTC": 0.00000070,
-  "ETH/BTC": 0.058,
-  ...
-}
-
-# System Health
-GET /health
-Response: {
-  "status": "healthy",
-  "uptime": 864000,
-  "version": "0.5.0"
-}
-```
-
-### WebSocket API
-
-```javascript
-// Connect
-const ws = new WebSocket('wss://your-pool.com:8080');
-
-// Subscribe to updates
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  channels: ['stats', 'blocks', 'payments']
-}));
-
-// Receive real-time updates
-ws.on('message', (data) => {
-  const update = JSON.parse(data);
-  console.log(update);
-});
-```
-
-### GraphQL API
-
-```graphql
-query PoolStats {
-  pool {
-    stats {
-      miners
-      hashrate
-      difficulty
-    }
-    blocks(limit: 10) {
-      height
-      hash
-      reward
-      timestamp
-    }
-  }
-}
-```
-
----
-
-## 📈 Revenue & Economics
-
-### Revenue Breakdown (1,000 Miners)
-
-| Source | Monthly Revenue | Annual Revenue | Notes |
-|--------|-----------------|----------------|-------|
-| Mining Fees (1.5%) | 1.5-3.0 BTC | 18-36 BTC | Primary revenue |
-| DEX Trading (0.3%) | 0.2-0.5 BTC | 2.4-6 BTC | LP incentives |
-| DeFi Operations | 0.1-0.3 BTC | 1.2-3.6 BTC | Lending spread |
-| **Total** | **1.8-3.8 BTC** | **21.6-45.6 BTC** | Fully automated |
-
-### ROI Analysis
-- **Setup Cost**: $500-2,000 (server only)
-- **Monthly Operating**: $50-200 (hosting)
-- **Break-even**: 1-2 months
-- **Annual ROI**: 1,000%+
-
----
-
-## 🛡️ Security Features
-
-### Multi-Layer Protection
-1. **DDoS Protection**
-   - CloudFlare integration
-   - Rate limiting per IP
-   - Challenge-response system
-   - Adaptive thresholds
-
-2. **Authentication**
-   - JWT tokens with refresh
-   - Multi-factor authentication
-   - API key management
-   - Role-based access control
-
-3. **System Integrity**
-   - Immutable fee configuration
-   - Tamper detection
-   - Automatic integrity checks
-   - Audit logging
-
-4. **Data Security**
-   - End-to-end encryption
-   - Secure key storage
-   - Regular backups
-   - GDPR compliant
-
----
-
-## 🎯 Dashboard & Monitoring
-
-### Web Dashboard Features
-- **Real-time Statistics**: Hashrate, miners, revenue
-- **Interactive Charts**: Historical data visualization
-- **Miner Management**: Individual miner monitoring
-- **Financial Overview**: Revenue tracking and projections
-- **System Health**: Resource usage and alerts
-
-### Access Dashboard
-```
-http://localhost:8080
-Default credentials: admin / changeme
-```
-
-### Mobile Support
-- Responsive design for all devices
-- Native mobile app coming soon
-- Push notifications for important events
-
----
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**Port Already in Use**
-```bash
-# Find process using port
-lsof -i :8080
-# Kill process
-kill -9 <PID>
-```
-
-**High Memory Usage**
-```bash
-# Increase Node.js memory
-export NODE_OPTIONS="--max-old-space-size=8192"
-npm start
-```
-
-**Database Locked**
-```bash
-# Clear lock file
-rm data/otedama.db-wal
-rm data/otedama.db-shm
-```
-
-**Stratum Connection Issues**
-```bash
-# Test connectivity
-telnet localhost 3333
-# Check firewall
-sudo ufw allow 3333/tcp
-```
-
-### Debug Mode
-```bash
-# Full debug output
-DEBUG=* node index.js
-
-# Specific module debug
-DEBUG=otedama:stratum node index.js
-```
-
----
-
-## 🚀 Performance Optimization
-
-### Optimization Tips
-
-1. **Database Optimization**
-   ```bash
-   # Enable WAL mode
-   node scripts/optimize-db.js
-   ```
-
-2. **Network Tuning**
-   ```bash
-   # Increase system limits
-   ulimit -n 65536
-   echo "net.core.somaxconn = 65536" >> /etc/sysctl.conf
-   ```
-
-3. **Cache Configuration**
-   ```javascript
-   // In otedama.json
-   "cache": {
-     "size": 2048,
-     "ttl": 300,
-     "compression": true
-   }
-   ```
-
-### Benchmark Results
-```
-Hardware: 16 cores, 32GB RAM, NVMe SSD
-- Database Operations: 50,000+ ops/sec
-- Network Messages: 10,000+ msg/sec
-- HTTP Requests: 5,000+ req/sec
-- WebSocket Connections: 10,000+ concurrent
-- Memory Usage: <100MB base, ~1MB per 100 miners
-```
-
----
-
-## 📚 Additional Resources
-
-### Documentation
-- [Full Documentation](https://docs.otedama.io)
-- [API Reference](https://api.otedama.io)
-- [Integration Guide](https://docs.otedama.io/integration)
-- [Security Best Practices](https://docs.otedama.io/security)
-
-### Community
-- [Discord Server](https://discord.gg/otedama)
-- [Telegram Group](https://t.me/otedama)
-- [GitHub Issues](https://github.com/otedama/otedama/issues)
-
-### Support
-- Email: support@otedama.io
-- Enterprise Support: enterprise@otedama.io
-
----
-
-## 📄 License
-
-MIT License - Free for commercial use
-
-Copyright (c) 2025 Otedama Team
-
----
-
-**Otedama v0.5** - The Future of Automated Mining
-
-*Built with passion for the decentralized future*
-
----
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

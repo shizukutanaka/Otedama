@@ -1,240 +1,372 @@
 @echo off
+REM Otedama Windows Deployment Script - Optimized for Production
+REM Supports Windows 10/11 and Windows Server
+
 setlocal enabledelayedexpansion
 
-REM Otedama Windows Deployment Script
-REM Unified installation and update script
-
-REM Colors (using ANSI escape codes - Windows 10+)
-set "RED=[31m"
-set "GREEN=[32m"
-set "YELLOW=[33m"
-set "BLUE=[34m"
-set "NC=[0m"
-
-REM Detect if updating or installing
-set "MODE=install"
-if exist "C:\Otedama\index.js" (
-    set "MODE=update"
-)
-
-REM Header
 echo.
-echo %BLUE%========================================%NC%
-echo %BLUE%     Otedama Deployment Script%NC%
-echo %BLUE%     Mode: %MODE%%NC%
-echo %BLUE%========================================%NC%
-echo.
+echo 🚀 Otedama Windows Production Deployment
+echo ========================================
 
-REM Check administrator privileges
+REM Configuration
+set OTEDAMA_VERSION=0.6.0
+set NODE_MIN_VERSION=18.0.0
+set INSTALL_DIR=%PROGRAMFILES%\Otedama
+set SERVICE_NAME=Otedama
+set WEB_PORT=8080
+set STRATUM_PORT=3333
+
+REM Check if running as administrator
 net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo %RED%This script requires administrator privileges%NC%
-    echo Please run as administrator
+if %errorLevel% == 0 (
+    echo [INFO] Running as Administrator. Installing system-wide.
+    set INSTALL_DIR=%PROGRAMFILES%\Otedama
+) else (
+    echo [INFO] Running as User. Installing to user directory.
+    set INSTALL_DIR=%USERPROFILE%\Otedama
+)
+
+echo [INFO] Installation directory: %INSTALL_DIR%
+
+REM Check requirements
+echo [INFO] Checking system requirements...
+
+REM Check Node.js
+where node >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Node.js is not installed
+    echo [INFO] Please install Node.js from https://nodejs.org/
+    echo [INFO] Download the LTS version for Windows
     pause
     exit /b 1
 )
 
-REM Function: Install Node.js check
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo %RED%Node.js is not installed%NC%
-    echo Please install Node.js 18.0.0 or higher from https://nodejs.org/
-    echo Then run this script again
+for /f "tokens=*" %%i in ('node --version') do set NODE_VERSION=%%i
+set NODE_VERSION=!NODE_VERSION:v=!
+echo [SUCCESS] Node.js version !NODE_VERSION! found
+
+REM Simple version check (not perfect but works for basic cases)
+for /f "tokens=1,2,3 delims=." %%a in ("!NODE_VERSION!") do (
+    set NODE_MAJOR=%%a
+    set NODE_MINOR=%%b
+)
+if !NODE_MAJOR! lss 18 (
+    echo [ERROR] Node.js version 18.0.0 or higher is required
+    echo [INFO] Current version: !NODE_VERSION!
     pause
     exit /b 1
 )
 
-REM Check Node.js version
-for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i
-echo %GREEN%√ Node.js version: %NODE_VERSION%%NC%
-
-REM Set paths
-set "OTEDAMA_PATH=C:\Otedama"
-set "BACKUP_PATH=C:\Otedama-backup-%date:~-4%%date:~4,2%%date:~7,2%-%time:~0,2%%time:~3,2%%time:~6,2%"
-set "BACKUP_PATH=%BACKUP_PATH: =0%"
-
-if "%MODE%"=="install" goto :install
-if "%MODE%"=="update" goto :update
-
-:install
-echo.
-echo %YELLOW%Installing Otedama...%NC%
-echo.
-
-REM Create directory
-echo Creating directory...
-if not exist "%OTEDAMA_PATH%" (
-    mkdir "%OTEDAMA_PATH%"
-    mkdir "%OTEDAMA_PATH%\data"
-    mkdir "%OTEDAMA_PATH%\logs"
-    mkdir "%OTEDAMA_PATH%\backups"
-)
-
-REM Copy files
-echo Copying files...
-xcopy /E /Y /Q . "%OTEDAMA_PATH%\" >nul
-echo %GREEN%√ Files copied%NC%
-
-REM Install dependencies
-echo Installing dependencies...
-cd /d "%OTEDAMA_PATH%"
-call npm install
-if %errorlevel% neq 0 (
-    echo %RED%Failed to install dependencies%NC%
+REM Check npm
+where npm >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] npm is not installed
     pause
     exit /b 1
 )
-echo %GREEN%√ Dependencies installed%NC%
 
-REM Configure
-if not exist "%OTEDAMA_PATH%\otedama.json" (
-    echo.
-    echo %BLUE%======== Configuration ========%NC%
-    echo.
-    
-    set /p WALLET="Enter your wallet address: "
-    set /p CURRENCY="Enter currency (RVN/BTC/XMR/LTC/DOGE): "
-    set /p POOL_NAME="Enter pool name [Otedama Pool]: "
-    
-    if "!POOL_NAME!"=="" set "POOL_NAME=Otedama Pool"
-    
-    node index.js --wallet "!WALLET!" --currency "!CURRENCY!"
-    echo %GREEN%√ Configuration saved%NC%
+for /f "tokens=*" %%i in ('npm --version') do set NPM_VERSION=%%i
+echo [SUCCESS] npm version !NPM_VERSION! found
+
+REM Check if ports are in use
+echo [INFO] Checking if ports are available...
+netstat -an | findstr ":!WEB_PORT! " >nul 2>&1
+if %errorLevel% == 0 (
+    echo [WARNING] Port !WEB_PORT! is already in use
 )
 
-REM Create service
-echo.
-echo %YELLOW%Creating Windows service...%NC%
-
-REM Create service wrapper script
-echo @echo off > "%OTEDAMA_PATH%\otedama-service.bat"
-echo cd /d "%OTEDAMA_PATH%" >> "%OTEDAMA_PATH%\otedama-service.bat"
-echo node index.js >> "%OTEDAMA_PATH%\otedama-service.bat"
-
-REM Install NSSM if not present
-if not exist "%OTEDAMA_PATH%\nssm.exe" (
-    echo Downloading NSSM...
-    powershell -Command "Invoke-WebRequest -Uri 'https://nssm.cc/release/nssm-2.24.zip' -OutFile '%TEMP%\nssm.zip'"
-    powershell -Command "Expand-Archive -Path '%TEMP%\nssm.zip' -DestinationPath '%TEMP%\nssm' -Force"
-    copy "%TEMP%\nssm\nssm-2.24\win64\nssm.exe" "%OTEDAMA_PATH%\"
-    del "%TEMP%\nssm.zip"
-    rmdir /S /Q "%TEMP%\nssm"
+netstat -an | findstr ":!STRATUM_PORT! " >nul 2>&1
+if %errorLevel% == 0 (
+    echo [WARNING] Port !STRATUM_PORT! is already in use
 )
 
-REM Create service using NSSM
-"%OTEDAMA_PATH%\nssm.exe" install Otedama "%OTEDAMA_PATH%\otedama-service.bat"
-"%OTEDAMA_PATH%\nssm.exe" set Otedama AppDirectory "%OTEDAMA_PATH%"
-"%OTEDAMA_PATH%\nssm.exe" set Otedama DisplayName "Otedama Mining Pool"
-"%OTEDAMA_PATH%\nssm.exe" set Otedama Description "Commercial Grade P2P Mining Pool & DEX"
-"%OTEDAMA_PATH%\nssm.exe" set Otedama Start SERVICE_AUTO_START
-
-echo %GREEN%√ Service created%NC%
-
-REM Configure firewall
-echo.
-echo %YELLOW%Configuring Windows Firewall...%NC%
-netsh advfirewall firewall add rule name="Otedama API" dir=in action=allow protocol=TCP localport=8080 >nul 2>&1
-netsh advfirewall firewall add rule name="Otedama Stratum" dir=in action=allow protocol=TCP localport=3333 >nul 2>&1
-netsh advfirewall firewall add rule name="Otedama P2P" dir=in action=allow protocol=TCP localport=8333 >nul 2>&1
-echo %GREEN%√ Firewall configured%NC%
-
-REM Create scheduled tasks
-echo.
-echo %YELLOW%Creating scheduled tasks...%NC%
-
-REM Monitor task
-schtasks /create /tn "Otedama Monitor" /tr "\"%OTEDAMA_PATH%\node.exe\" \"%OTEDAMA_PATH%\monitor.js\"" /sc minute /mo 5 /f >nul 2>&1
-
-REM Backup task
-schtasks /create /tn "Otedama Backup" /tr "\"%OTEDAMA_PATH%\node.exe\" \"%OTEDAMA_PATH%\backup.js\" create" /sc daily /st 02:00 /f >nul 2>&1
-
-REM Payment task
-schtasks /create /tn "Otedama Payments" /tr "\"%OTEDAMA_PATH%\node.exe\" \"%OTEDAMA_PATH%\payment.js\"" /sc hourly /f >nul 2>&1
-
-echo %GREEN%√ Scheduled tasks created%NC%
-
-REM Start service
-echo.
-echo %YELLOW%Starting Otedama service...%NC%
-net start Otedama >nul 2>&1
-echo %GREEN%√ Service started%NC%
-
-goto :complete
-
-:update
-echo.
-echo %YELLOW%Updating Otedama...%NC%
-echo.
-
-REM Stop service
-echo Stopping service...
-net stop Otedama >nul 2>&1
-echo %GREEN%√ Service stopped%NC%
-
-REM Create backup
-echo Creating backup...
-xcopy /E /I /Q "%OTEDAMA_PATH%" "%BACKUP_PATH%" >nul
-echo %GREEN%√ Backup created at %BACKUP_PATH%%NC%
-
-REM Update files
-echo Updating files...
-for %%f in (index.js monitor.js payment.js gpu.js backup.js package.json README.md) do (
-    if exist "%%f" copy /Y "%%f" "%OTEDAMA_PATH%\" >nul
-)
-
-REM Update directories
-for %%d in (web examples docs monitoring) do (
-    if exist "%%d" xcopy /E /Y /Q "%%d" "%OTEDAMA_PATH%\%%d\" >nul
-)
-
-REM Update dependencies
-echo Updating dependencies...
-cd /d "%OTEDAMA_PATH%"
-call npm install --production
-echo %GREEN%√ Dependencies updated%NC%
-
-REM Start service
-echo Starting service...
-net start Otedama >nul 2>&1
-echo %GREEN%√ Service started%NC%
-
-:complete
-REM Get IP address
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
-    for /f "tokens=1" %%b in ("%%a") do (
-        set "IP=%%b"
-        goto :gotip
+REM Create installation directory
+echo [INFO] Creating installation directory...
+if not exist "!INSTALL_DIR!" (
+    mkdir "!INSTALL_DIR!"
+    if %errorLevel% neq 0 (
+        echo [ERROR] Failed to create installation directory
+        echo [INFO] Try running as Administrator or choose a different location
+        pause
+        exit /b 1
     )
 )
-:gotip
 
-echo.
-echo %BLUE%========================================%NC%
-echo %GREEN%%MODE% Complete!%NC%
-echo %BLUE%========================================%NC%
-echo.
-echo Dashboard: http://%IP%:8080
-echo           http://localhost:8080
-echo Stratum:  stratum+tcp://%IP%:3333
-echo.
-echo Commands:
-echo   net start Otedama      - Start service
-echo   net stop Otedama       - Stop service
-echo   sc query Otedama       - Check status
-echo.
-echo Management:
-echo   node "%OTEDAMA_PATH%\monitor.js"    - Run monitor
-echo   node "%OTEDAMA_PATH%\payment.js"    - Process payments
-echo   node "%OTEDAMA_PATH%\backup.js"     - Manage backups
-echo.
-echo Files:
-echo   Config: %OTEDAMA_PATH%\otedama.json
-echo   Logs:   %OTEDAMA_PATH%\logs\
-echo   Data:   %OTEDAMA_PATH%\data\
+REM Install Otedama
+echo [INFO] Installing Otedama to !INSTALL_DIR!...
+cd /d "!INSTALL_DIR!"
 
-if "%MODE%"=="update" (
-    echo   Backup: %BACKUP_PATH%
+REM Copy or download files
+if exist "%~dp0..\index.js" (
+    echo [INFO] Copying local files...
+    copy "%~dp0..\index.js" . >nul
+    copy "%~dp0..\package.json" . >nul
+    copy "%~dp0..\README.md" . >nul
+    copy "%~dp0..\LICENSE" . >nul
+    if exist "%~dp0..\otedama.json" (
+        copy "%~dp0..\otedama.json" . >nul
+    )
+    
+    if exist "%~dp0..\web" (
+        xcopy "%~dp0..\web" "web" /E /I /Q >nul
+    )
+    if exist "%~dp0..\mobile" (
+        xcopy "%~dp0..\mobile" "mobile" /E /I /Q >nul
+    )
+    if exist "%~dp0..\test" (
+        xcopy "%~dp0..\test" "test" /E /I /Q >nul
+    )
+) else (
+    echo [INFO] Downloading from repository...
+    where curl >nul 2>&1
+    if %errorLevel% == 0 (
+        curl -L -o otedama.zip https://github.com/otedama/otedama/archive/main.zip
+        if %errorLevel% == 0 (
+            powershell -command "Expand-Archive -Path 'otedama.zip' -DestinationPath '.' -Force"
+            move otedama-main\* . >nul 2>&1
+            rmdir /s /q otedama-main >nul 2>&1
+            del otedama.zip >nul 2>&1
+        ) else (
+            echo [ERROR] Failed to download Otedama
+            pause
+            exit /b 1
+        )
+    ) else (
+        echo [ERROR] curl is not available for downloading
+        echo [INFO] Please download manually from https://github.com/otedama/otedama
+        pause
+        exit /b 1
+    )
 )
 
+REM Install dependencies
+echo [INFO] Installing dependencies...
+npm install --production --no-audit --no-fund
+if %errorLevel% neq 0 (
+    echo [ERROR] Failed to install dependencies
+    pause
+    exit /b 1
+)
+
+echo [SUCCESS] Otedama installed successfully
+
+REM Create default configuration
+echo [INFO] Creating default configuration...
+if not exist "otedama.json" (
+    (
+        echo {
+        echo   "pool": {
+        echo     "name": "Otedama Windows Pool",
+        echo     "fee": 1.5,
+        echo     "minPayout": {
+        echo       "BTC": 0.001,
+        echo       "ETH": 0.01,
+        echo       "RVN": 100,
+        echo       "XMR": 0.1,
+        echo       "LTC": 0.1
+        echo     },
+        echo     "payoutInterval": 3600000
+        echo   },
+        echo   "mining": {
+        echo     "enabled": true,
+        echo     "currency": "RVN",
+        echo     "algorithm": "kawpow",
+        echo     "walletAddress": "",
+        echo     "threads": 0,
+        echo     "intensity": 100
+        echo   },
+        echo   "network": {
+        echo     "p2pPort": 8333,
+        echo     "stratumPort": !STRATUM_PORT!,
+        echo     "apiPort": !WEB_PORT!,
+        echo     "maxPeers": 100,
+        echo     "maxMiners": 10000
+        echo   },
+        echo   "dex": {
+        echo     "enabled": true,
+        echo     "tradingFee": 0.003,
+        echo     "minLiquidity": 0.001,
+        echo     "maxSlippage": 0.05
+        echo   },
+        echo   "security": {
+        echo     "enableRateLimit": true,
+        echo     "maxRequestsPerMinute": 1000,
+        echo     "enableDDoSProtection": true,
+        echo     "maxConnectionsPerIP": 10
+        echo   },
+        echo   "monitoring": {
+        echo     "enableMetrics": true,
+        echo     "enableAlerts": true,
+        echo     "retention": 604800000
+        echo   }
+        echo }
+    ) > otedama.json
+    echo [SUCCESS] Default configuration created
+) else (
+    echo [INFO] Configuration file already exists
+)
+
+REM Create logs directory
+if not exist "logs" (
+    mkdir "logs"
+)
+
+REM Create Windows service (if running as admin)
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    echo [INFO] Creating Windows service...
+    
+    REM Create service wrapper script
+    (
+        echo @echo off
+        echo cd /d "!INSTALL_DIR!"
+        echo node index.js
+    ) > otedama-service.bat
+    
+    REM Use nssm if available, otherwise use sc
+    where nssm >nul 2>&1
+    if %errorLevel% == 0 (
+        echo [INFO] Using NSSM to create service...
+        nssm install "!SERVICE_NAME!" "!INSTALL_DIR!\otedama-service.bat"
+        nssm set "!SERVICE_NAME!" DisplayName "Otedama Mining Pool & DEX"
+        nssm set "!SERVICE_NAME!" Description "Professional P2P Mining Pool with integrated DEX"
+        nssm set "!SERVICE_NAME!" Start SERVICE_AUTO_START
+        nssm set "!SERVICE_NAME!" AppStdout "!INSTALL_DIR!\logs\service.log"
+        nssm set "!SERVICE_NAME!" AppStderr "!INSTALL_DIR!\logs\service-error.log"
+        echo [SUCCESS] Windows service created with NSSM
+    ) else (
+        echo [INFO] Using built-in sc command...
+        sc create "!SERVICE_NAME!" binpath= "cmd /c \"!INSTALL_DIR!\otedama-service.bat\"" start= auto DisplayName= "Otedama Mining Pool"
+        if %errorLevel% == 0 (
+            echo [SUCCESS] Windows service created
+        ) else (
+            echo [WARNING] Failed to create Windows service
+        )
+    )
+) else (
+    echo [INFO] Not running as Administrator. Service not created.
+    echo [INFO] Run as Administrator to install as Windows service.
+)
+
+REM Configure Windows Firewall
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    echo [INFO] Configuring Windows Firewall...
+    netsh advfirewall firewall add rule name="Otedama Web Interface" dir=in action=allow protocol=TCP localport=!WEB_PORT! >nul 2>&1
+    netsh advfirewall firewall add rule name="Otedama Stratum Server" dir=in action=allow protocol=TCP localport=!STRATUM_PORT! >nul 2>&1
+    echo [SUCCESS] Firewall rules added
+) else (
+    echo [WARNING] Cannot configure firewall. Run as Administrator to configure.
+    echo [INFO] Manually allow ports !WEB_PORT! and !STRATUM_PORT! in Windows Firewall
+)
+
+REM Create desktop shortcut
+echo [INFO] Creating desktop shortcut...
+set DESKTOP=%USERPROFILE%\Desktop
+(
+    echo @echo off
+    echo start "" "http://localhost:!WEB_PORT!"
+) > "%DESKTOP%\Otedama Dashboard.bat"
+
+REM Create start/stop scripts
+(
+    echo @echo off
+    echo echo Starting Otedama...
+    echo cd /d "!INSTALL_DIR!"
+    echo start "Otedama" node index.js
+    echo echo Otedama started. Dashboard: http://localhost:!WEB_PORT!
+    echo pause
+) > "!INSTALL_DIR!\start-otedama.bat"
+
+(
+    echo @echo off
+    echo echo Stopping Otedama...
+    echo taskkill /f /im node.exe /fi "WINDOWTITLE eq Otedama*" >nul 2>&1
+    echo echo Otedama stopped.
+    echo pause
+) > "!INSTALL_DIR!\stop-otedama.bat"
+
+REM Run basic tests
+echo [INFO] Running system tests...
+timeout /t 3 >nul
+node test\otedama-test.js
+if %errorLevel% neq 0 (
+    echo [WARNING] Some tests failed, but installation can continue
+)
+
+REM Start Otedama
+echo [INFO] Starting Otedama...
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    REM Try to start as service
+    sc query "!SERVICE_NAME!" >nul 2>&1
+    if %errorLevel% == 0 (
+        net start "!SERVICE_NAME!" >nul 2>&1
+        if %errorLevel! == 0 (
+            echo [SUCCESS] Service started
+        ) else (
+            echo [INFO] Starting manually...
+            start "Otedama" node index.js
+        )
+    ) else (
+        echo [INFO] Starting manually...
+        start "Otedama" node index.js
+    )
+) else (
+    echo [INFO] Starting manually...
+    start "Otedama" node index.js
+)
+
+REM Wait for startup
+echo [INFO] Waiting for Otedama to start...
+timeout /t 10 >nul
+
+REM Test endpoints
+where curl >nul 2>&1
+if %errorLevel% == 0 (
+    echo [INFO] Testing API endpoints...
+    curl -s -f "http://localhost:!WEB_PORT!/api/health" >nul 2>&1
+    if %errorLevel% == 0 (
+        echo [SUCCESS] Health check passed
+    ) else (
+        echo [WARNING] Health check failed - may need more time to start
+    )
+)
+
+REM Print completion message
 echo.
-pause
+echo [SUCCESS] Otedama deployment completed!
+echo.
+echo 🎉 Installation Summary:
+echo ========================
+echo • Installation Directory: !INSTALL_DIR!
+echo • Web Dashboard: http://localhost:!WEB_PORT!
+echo • Stratum Server: stratum+tcp://localhost:!STRATUM_PORT!
+echo • Configuration: !INSTALL_DIR!\otedama.json
+echo • Logs: !INSTALL_DIR!\logs\
+echo.
+echo 📝 Next Steps:
+echo • Edit !INSTALL_DIR!\otedama.json to configure your wallet
+echo • Visit http://localhost:!WEB_PORT! to monitor mining
+echo • Desktop shortcut created: Otedama Dashboard.bat
+echo.
+echo 🛠️  Management:
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    echo • Start Service: net start "!SERVICE_NAME!"
+    echo • Stop Service: net stop "!SERVICE_NAME!"
+    echo • Service Status: sc query "!SERVICE_NAME!"
+) else (
+    echo • Start: !INSTALL_DIR!\start-otedama.bat
+    echo • Stop: !INSTALL_DIR!\stop-otedama.bat
+)
+echo.
+echo 💰 Start mining with 1.5%% fee - the industry's lowest!
+echo 🌍 Supports 50+ languages and mobile PWA
+echo 📱 Add to home screen: http://localhost:!WEB_PORT!
+echo.
+echo Press any key to open the dashboard...
+pause >nul
+start "" "http://localhost:!WEB_PORT!"
+
+endlocal

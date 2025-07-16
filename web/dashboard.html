@@ -3,477 +3,1112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Otedama - Commercial Mining Pool Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Otedama - Professional Mining Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+    <!-- Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .animate-pulse-slow {
-            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            overflow-x: hidden;
         }
-        .gradient-bg {
-            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
-        }
-        .card-shadow {
-            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
-        }
-        .stat-card {
+
+        .dashboard-container {
+            min-height: 100vh;
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
-            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Header */
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            text-decoration: none;
+        }
+
+        .logo i {
+            margin-right: 0.5rem;
+            color: #00d4ff;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .stat-item {
+            text-align: center;
+            color: white;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 0.875rem;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff88;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            border-radius: 20px 20px 0 0;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-icon {
+            color: #667eea;
+        }
+
+        .card-large {
+            grid-column: span 2;
+        }
+
+        .card-full {
+            grid-column: span 3;
+        }
+
+        /* Stats Cards */
+        .big-stat {
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .big-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .big-label {
+            font-size: 0.875rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .trend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .trend.up {
+            color: #00c851;
+        }
+
+        .trend.down {
+            color: #ff4444;
+        }
+
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 200px;
+            margin-top: 1rem;
+        }
+
+        .chart-container-large {
+            height: 300px;
+        }
+
+        /* Miners List */
+        .miners-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .miner-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .miner-item:last-child {
+            border-bottom: none;
+        }
+
+        .miner-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .miner-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00c851;
+        }
+
+        .miner-status.offline {
+            background: #ff4444;
+        }
+
+        .miner-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .miner-hashrate {
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        .miner-stats {
+            text-align: right;
+        }
+
+        /* Transactions */
+        .transaction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .transaction-item:last-child {
+            border-bottom: none;
+        }
+
+        .transaction-type {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .transaction-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+        }
+
+        .transaction-icon.mining {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .transaction-icon.payout {
+            background: #e8f5e8;
+            color: #388e3c;
+        }
+
+        .transaction-details {
+            flex: 1;
+            margin-left: 0.75rem;
+        }
+
+        .transaction-hash {
+            font-weight: 500;
+            color: #333;
+            font-size: 0.875rem;
+        }
+
+        .transaction-time {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .transaction-amount {
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .amount-positive {
+            color: #00c851;
+        }
+
+        .amount-negative {
+            color: #ff4444;
+        }
+
+        /* Network Stats */
+        .network-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .network-stat {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(103, 126, 234, 0.1);
+            border-radius: 12px;
+        }
+
+        .network-stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .network-stat-label {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        /* DEX Section */
+        .dex-pairs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .pair-item {
+            padding: 1rem;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .pair-item:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .pair-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .pair-price {
+            font-size: 1.1rem;
+            color: #667eea;
+            margin-bottom: 0.25rem;
+        }
+
+        .pair-change {
+            font-size: 0.875rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .card-full {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            
+            .card-large,
+            .card-full {
+                grid-column: span 1;
+            }
+            
+            .header-stats {
+                display: none;
+            }
+            
+            .header {
+                padding: 1rem;
+            }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(103, 126, 234, 0.5);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(103, 126, 234, 0.8);
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(103, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Alert Messages */
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            border-left: 4px solid;
+        }
+
+        .alert-success {
+            background: #e8f5e8;
+            border-color: #4caf50;
+            color: #2e7d32;
+        }
+
+        .alert-warning {
+            background: #fff3e0;
+            border-color: #ff9800;
+            color: #f57c00;
+        }
+
+        .alert-error {
+            background: #ffebee;
+            border-color: #f44336;
+            color: #c62828;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <div class="gradient-bg">
+<body>
+    <div class="dashboard-container">
         <!-- Header -->
-        <header class="border-b border-gray-800 bg-black bg-opacity-50">
-            <div class="container mx-auto px-4 py-4">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center space-x-4">
-                        <h1 class="text-3xl font-bold">Otedama</h1>
-                        <span class="text-sm bg-green-500 px-2 py-1 rounded">Ver.0.5</span>
-                        <span class="text-sm bg-blue-500 px-2 py-1 rounded animate-pulse">LIVE</span>
+        <header class="header">
+            <div class="header-content">
+                <a href="#" class="logo">
+                    <i class="fas fa-cubes"></i>
+                    Otedama Professional
+                </a>
+                
+                <div class="header-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Total Hashrate</div>
+                        <div class="stat-value" id="headerHashrate">Loading...</div>
                     </div>
-                    <div class="flex items-center space-x-6">
-                        <div class="text-right">
-                            <p class="text-xs text-gray-400">運営手数料 (固定)</p>
-                            <p class="text-lg font-bold">0.1% + 1.4% = 1.5%</p>
-                        </div>
-                        <div id="connectionStatus" class="flex items-center">
-                            <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                            <span>Connected</span>
-                        </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Pool Fee</div>
+                        <div class="stat-value">1.5%</div>
                     </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Miners</div>
+                        <div class="stat-value" id="headerMiners">0</div>
+                    </div>
+                </div>
+                
+                <div class="connection-status" id="connectionStatus">
+                    <div class="status-indicator"></div>
+                    <span>Connected</span>
                 </div>
             </div>
         </header>
 
         <!-- Main Content -->
-        <main class="container mx-auto px-4 py-8">
-            <!-- Critical Stats -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <!-- Total Hashrate -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-gray-400 text-sm">Pool Hashrate</p>
-                            <p id="poolHashrate" class="text-3xl font-bold mt-2">0 H/s</p>
-                            <p id="hashrateChange" class="text-sm mt-1 text-green-400">+0%</p>
-                        </div>
-                        <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                        </svg>
-                    </div>
+        <main class="main-content">
+            <!-- Hashrate Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-tachometer-alt card-icon"></i>
+                        Current Hashrate
+                    </h3>
                 </div>
-
-                <!-- Active Miners -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-gray-400 text-sm">Active Miners</p>
-                            <p id="activeMiners" class="text-3xl font-bold mt-2">0</p>
-                            <p id="minerChange" class="text-sm mt-1 text-green-400">+0</p>
-                        </div>
-                        <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                        </svg>
-                    </div>
-                </div>
-
-                <!-- Operator Fees Collected -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-gray-400 text-sm">運営手数料 (BTC)</p>
-                            <p id="operatorFees" class="text-3xl font-bold mt-2">0.00000000</p>
-                            <p class="text-sm mt-1 text-yellow-400">自動徴収中</p>
-                        </div>
-                        <svg class="w-8 h-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </div>
-                </div>
-
-                <!-- Pending Payouts -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-gray-400 text-sm">Pending Payouts</p>
-                            <p id="pendingPayouts" class="text-3xl font-bold mt-2">0</p>
-                            <p class="text-sm mt-1 text-blue-400">次回: <span id="nextPayout">--:--</span></p>
-                        </div>
-                        <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
+                <div class="big-stat">
+                    <div class="big-number" id="currentHashrate">0 H/s</div>
+                    <div class="big-label">Pool Hashrate</div>
+                    <div class="trend up" id="hashrateTrend">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>+12.5%</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Charts Section -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                <!-- Hashrate Chart -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <h3 class="text-xl font-semibold mb-4">Hashrate History (24h)</h3>
-                    <canvas id="hashrateChart" height="200"></canvas>
+            <!-- Miners Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-users card-icon"></i>
+                        Active Miners
+                    </h3>
                 </div>
-
-                <!-- Share Distribution -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <h3 class="text-xl font-semibold mb-4">Share Distribution</h3>
-                    <canvas id="shareChart" height="200"></canvas>
-                </div>
-            </div>
-
-            <!-- Automated Systems Status -->
-            <div class="stat-card rounded-lg p-6 mb-8 card-shadow">
-                <h3 class="text-xl font-semibold mb-4">自動化システムステータス</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="flex items-center">
-                        <div id="feeCollectionStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                        <span>手数料徴収</span>
-                    </div>
-                    <div class="flex items-center">
-                        <div id="paymentStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                        <span>自動支払い</span>
-                    </div>
-                    <div class="flex items-center">
-                        <div id="dexStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                        <span>DEXリバランス</span>
-                    </div>
-                    <div class="flex items-center">
-                        <div id="liquidationStatus" class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                        <span>自動清算</span>
+                <div class="big-stat">
+                    <div class="big-number" id="activeMiners">0</div>
+                    <div class="big-label">Connected</div>
+                    <div class="trend up" id="minersTrend">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>+3</span>
                     </div>
                 </div>
             </div>
 
-            <!-- DEX/DeFi Stats -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <!-- DEX Volume -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <h3 class="text-lg font-semibold mb-3">DEX取引量 (24h)</h3>
-                    <p class="text-2xl font-bold" id="dexVolume">$0.00</p>
-                    <p class="text-sm text-gray-400 mt-1">手数料収入: <span id="dexFees">$0.00</span></p>
+            <!-- Earnings Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-dollar-sign card-icon"></i>
+                        Today's Earnings
+                    </h3>
                 </div>
-
-                <!-- Total Value Locked -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <h3 class="text-lg font-semibold mb-3">Total Value Locked</h3>
-                    <p class="text-2xl font-bold" id="tvl">$0.00</p>
-                    <p class="text-sm text-gray-400 mt-1">Pools: <span id="poolCount">0</span></p>
-                </div>
-
-                <!-- Active Loans -->
-                <div class="stat-card rounded-lg p-6 card-shadow">
-                    <h3 class="text-lg font-semibold mb-3">Active Loans</h3>
-                    <p class="text-2xl font-bold" id="activeLoans">0</p>
-                    <p class="text-sm text-gray-400 mt-1">健全性: <span id="healthScore" class="text-green-400">100%</span></p>
+                <div class="big-stat">
+                    <div class="big-number" id="todayEarnings">$0.00</div>
+                    <div class="big-label">Total Pool</div>
+                    <div class="trend up" id="earningsTrend">
+                        <i class="fas fa-arrow-up"></i>
+                        <span>+8.2%</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Recent Activity -->
-            <div class="stat-card rounded-lg p-6 card-shadow">
-                <h3 class="text-xl font-semibold mb-4">Recent Activity</h3>
-                <div id="activityLog" class="space-y-2 max-h-60 overflow-y-auto">
-                    <!-- Activity items will be populated here -->
+            <!-- Hashrate Chart -->
+            <div class="card card-large">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-chart-line card-icon"></i>
+                        Hashrate History (24h)
+                    </h3>
+                </div>
+                <div class="chart-container chart-container-large">
+                    <canvas id="hashrateChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Miners List -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-server card-icon"></i>
+                        Miner Status
+                    </h3>
+                </div>
+                <div class="miners-list" id="minersList">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+
+            <!-- Network Stats -->
+            <div class="card card-large">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-network-wired card-icon"></i>
+                        Network Statistics
+                    </h3>
+                </div>
+                <div class="network-grid">
+                    <div class="network-stat">
+                        <div class="network-stat-value" id="blockHeight">0</div>
+                        <div class="network-stat-label">Block Height</div>
+                    </div>
+                    <div class="network-stat">
+                        <div class="network-stat-value" id="difficulty">0</div>
+                        <div class="network-stat-label">Difficulty</div>
+                    </div>
+                    <div class="network-stat">
+                        <div class="network-stat-value" id="shareCount">0</div>
+                        <div class="network-stat-label">Shares Found</div>
+                    </div>
+                    <div class="network-stat">
+                        <div class="network-stat-value" id="efficiency">100%</div>
+                        <div class="network-stat-label">Pool Efficiency</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DEX Trading -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-exchange-alt card-icon"></i>
+                        DEX Pairs
+                    </h3>
+                </div>
+                <div class="dex-pairs" id="dexPairs">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-history card-icon"></i>
+                        Recent Transactions
+                    </h3>
+                </div>
+                <div id="transactionsList">
+                    <!-- Dynamically populated -->
                 </div>
             </div>
         </main>
     </div>
 
     <script>
-        // WebSocket connection
-        let ws;
-        let reconnectInterval;
-        
-        // Chart instances
-        let hashrateChart;
-        let shareChart;
-        
-        // Data storage
-        const hashrateHistory = [];
-        const activityLog = [];
-        
-        // Initialize dashboard
-        function initDashboard() {
-            // Setup WebSocket
-            connectWebSocket();
-            
-            // Setup charts
-            setupCharts();
-            
-            // Update time-based elements
-            updateTimes();
-            setInterval(updateTimes, 1000);
-        }
-        
-        // WebSocket connection
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.hostname}:8080`;
-            
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                document.getElementById('connectionStatus').innerHTML = `
-                    <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                    <span>Connected</span>
-                `;
+        class OtedamaDashboard {
+            constructor() {
+                this.ws = null;
+                this.data = {
+                    hashrate: 0,
+                    miners: 0,
+                    earnings: 0,
+                    hashrateHistory: [],
+                    minersList: [],
+                    transactions: [],
+                    dexPairs: [],
+                    networkStats: {}
+                };
+                this.charts = {};
+                this.connectionRetryCount = 0;
+                this.maxRetries = 5;
                 
-                // Subscribe to channels
-                ws.send(JSON.stringify({
-                    type: 'subscribe',
-                    channels: ['stats', 'mining', 'dex', 'fees', 'payments']
-                }));
+                this.init();
+            }
+
+            async init() {
+                this.setupWebSocket();
+                this.setupCharts();
+                this.startDataFetch();
+                this.setupEventListeners();
                 
-                // Clear reconnect interval
-                if (reconnectInterval) {
-                    clearInterval(reconnectInterval);
-                    reconnectInterval = null;
-                }
-            };
-            
-            ws.onmessage = (event) => {
+                // Initial data load
+                await this.fetchInitialData();
+                this.updateUI();
+            }
+
+            setupWebSocket() {
                 try {
-                    const data = JSON.parse(event.data);
-                    handleWebSocketMessage(data);
+                    this.ws = new WebSocket('ws://localhost:8080/ws');
+                    
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.connectionRetryCount = 0;
+                        this.updateConnectionStatus(true);
+                        
+                        // Subscribe to all channels
+                        this.ws.send(JSON.stringify({
+                            type: 'subscribe',
+                            channels: ['stats', 'miners', 'shares', 'trades', 'blocks']
+                        }));
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.handleWebSocketMessage(data);
+                        } catch (error) {
+                            console.error('WebSocket message parse error:', error);
+                        }
+                    };
+
+                    this.ws.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.updateConnectionStatus(false);
+                        this.scheduleReconnect();
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus(false);
+                    };
                 } catch (error) {
-                    console.error('WebSocket message error:', error);
-                }
-            };
-            
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                document.getElementById('connectionStatus').innerHTML = `
-                    <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                    <span>Disconnected</span>
-                `;
-                
-                // Attempt reconnection
-                if (!reconnectInterval) {
-                    reconnectInterval = setInterval(connectWebSocket, 5000);
-                }
-            };
-            
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-        }
-        
-        // Handle WebSocket messages
-        function handleWebSocketMessage(data) {
-            switch (data.channel) {
-                case 'stats':
-                    updateStats(data.data);
-                    break;
-                case 'mining':
-                    updateMiningData(data.data);
-                    break;
-                case 'dex':
-                    updateDexData(data.data);
-                    break;
-                case 'fees':
-                    updateFeeData(data.data);
-                    break;
-                case 'payments':
-                    updatePaymentData(data.data);
-                    break;
-            }
-        }
-        
-        // Update main stats
-        function updateStats(stats) {
-            // Pool stats
-            if (stats.pool) {
-                document.getElementById('poolHashrate').textContent = formatHashrate(stats.pool.hashrate || 0);
-                document.getElementById('activeMiners').textContent = stats.pool.miners || 0;
-                
-                // Add to hashrate history
-                hashrateHistory.push({
-                    time: new Date(),
-                    value: stats.pool.hashrate || 0
-                });
-                
-                // Keep only last 24 hours
-                const cutoff = new Date() - 24 * 60 * 60 * 1000;
-                while (hashrateHistory.length > 0 && hashrateHistory[0].time < cutoff) {
-                    hashrateHistory.shift();
-                }
-                
-                updateHashrateChart();
-            }
-            
-            // Fee stats
-            if (stats.fees) {
-                document.getElementById('operatorFees').textContent = 
-                    (stats.fees.totalCollectedBTC || 0).toFixed(8);
-            }
-            
-            // Payment stats
-            if (stats.payments) {
-                document.getElementById('pendingPayouts').textContent = 
-                    stats.payments.queueLength || 0;
-            }
-            
-            // DEX stats
-            if (stats.dex) {
-                const tvl = (stats.dex.v2?.tvl || 0) + (stats.dex.v3?.tvl || 0);
-                document.getElementById('tvl').textContent = `$${formatNumber(tvl)}`;
-                document.getElementById('poolCount').textContent = 
-                    (stats.dex.v2?.pools || 0) + (stats.dex.v3?.pools || 0);
-            }
-            
-            // Update automation status
-            if (stats.automation) {
-                updateAutomationStatus(stats.automation);
-            }
-        }
-        
-        // Update automation status indicators
-        function updateAutomationStatus(automation) {
-            const statusMap = {
-                feeCollectionStatus: automation.operatorFeeCollection,
-                paymentStatus: automation.automaticPayouts,
-                dexStatus: automation.dexRebalancing,
-                liquidationStatus: automation.lendingLiquidation
-            };
-            
-            for (const [elementId, isActive] of Object.entries(statusMap)) {
-                const element = document.getElementById(elementId);
-                if (element) {
-                    element.className = isActive 
-                        ? 'w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse'
-                        : 'w-3 h-3 bg-red-500 rounded-full mr-2';
+                    console.error('WebSocket setup failed:', error);
+                    this.updateConnectionStatus(false);
                 }
             }
-        }
-        
-        // Setup charts
-        function setupCharts() {
-            // Hashrate chart
-            const hashrateCtx = document.getElementById('hashrateChart').getContext('2d');
-            hashrateChart = new Chart(hashrateCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Hashrate',
-                        data: [],
-                        borderColor: 'rgb(59, 130, 246)',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
+
+            handleWebSocketMessage(message) {
+                switch (message.channel) {
+                    case 'stats':
+                        this.data = { ...this.data, ...message.data };
+                        this.updateStats();
+                        break;
+                    case 'miners':
+                        this.data.minersList = message.data.miners || [];
+                        this.updateMinersList();
+                        break;
+                    case 'shares':
+                        this.addHashratePoint(message.data.hashrate);
+                        this.updateHashrateChart();
+                        break;
+                    case 'trades':
+                        this.addTransaction({
+                            type: 'trade',
+                            ...message.data
+                        });
+                        break;
+                    case 'blocks':
+                        this.addTransaction({
+                            type: 'block',
+                            ...message.data
+                        });
+                        this.showBlockFoundAlert(message.data);
+                        break;
+                }
+            }
+
+            async fetchInitialData() {
+                try {
+                    const [stats, miners, dex] = await Promise.all([
+                        fetch('/api/v1/stats').then(r => r.json()),
+                        fetch('/api/v1/miners').then(r => r.json()),
+                        fetch('/api/v1/dex/pairs').then(r => r.json())
+                    ]);
+
+                    this.data = {
+                        ...this.data,
+                        ...stats,
+                        minersList: miners.miners || [],
+                        dexPairs: dex.pairs || []
+                    };
+
+                    // Initialize hashrate history
+                    if (stats.hashrateHistory) {
+                        this.data.hashrateHistory = stats.hashrateHistory.slice(-24);
+                    }
+
+                } catch (error) {
+                    console.error('Failed to fetch initial data:', error);
+                }
+            }
+
+            setupCharts() {
+                // Hashrate Chart
+                const hashrateCtx = document.getElementById('hashrateChart').getContext('2d');
+                this.charts.hashrate = new Chart(hashrateCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Hashrate',
+                            data: [],
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#667eea',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
                     },
-                    scales: {
-                        x: {
-                            display: true,
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
                         },
-                        y: {
-                            display: true,
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { 
-                                color: 'rgba(255, 255, 255, 0.7)',
-                                callback: function(value) {
-                                    return formatHashrate(value);
+                        scales: {
+                            x: {
+                                display: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
                                 }
+                            },
+                            y: {
+                                display: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return formatHashrate(value);
+                                    }
+                                }
+                            }
+                        },
+                        elements: {
+                            point: {
+                                hoverBorderWidth: 3
                             }
                         }
                     }
+                });
+            }
+
+            addHashratePoint(hashrate) {
+                const now = new Date();
+                const timeLabel = now.toLocaleTimeString();
+                
+                this.data.hashrateHistory.push({
+                    time: timeLabel,
+                    value: hashrate
+                });
+
+                // Keep only last 24 points
+                if (this.data.hashrateHistory.length > 24) {
+                    this.data.hashrateHistory.shift();
                 }
-            });
-            
-            // Share distribution chart
-            const shareCtx = document.getElementById('shareChart').getContext('2d');
-            shareChart = new Chart(shareCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Valid', 'Invalid', 'Stale'],
-                    datasets: [{
-                        data: [95, 3, 2],
-                        backgroundColor: [
-                            'rgba(34, 197, 94, 0.8)',
-                            'rgba(239, 68, 68, 0.8)',
-                            'rgba(251, 191, 36, 0.8)'
-                        ],
-                        borderColor: [
-                            'rgb(34, 197, 94)',
-                            'rgb(239, 68, 68)',
-                            'rgb(251, 191, 36)'
-                        ],
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { color: 'rgba(255, 255, 255, 0.7)' }
-                        }
+            }
+
+            updateHashrateChart() {
+                if (!this.charts.hashrate) return;
+
+                const chart = this.charts.hashrate;
+                chart.data.labels = this.data.hashrateHistory.map(point => point.time);
+                chart.data.datasets[0].data = this.data.hashrateHistory.map(point => point.value);
+                chart.update('none');
+            }
+
+            updateStats() {
+                // Update header stats
+                document.getElementById('headerHashrate').textContent = formatHashrate(this.data.pool?.hashrate || 0);
+                document.getElementById('headerMiners').textContent = this.data.pool?.miners || 0;
+
+                // Update main stats
+                document.getElementById('currentHashrate').textContent = formatHashrate(this.data.pool?.hashrate || 0);
+                document.getElementById('activeMiners').textContent = this.data.pool?.miners || 0;
+                document.getElementById('todayEarnings').textContent = formatCurrency(this.data.pool?.todayEarnings || 0);
+
+                // Update network stats
+                if (this.data.pool) {
+                    document.getElementById('blockHeight').textContent = this.data.pool.blockHeight || 0;
+                    document.getElementById('difficulty').textContent = formatNumber(this.data.pool.difficulty || 0);
+                    document.getElementById('shareCount').textContent = this.data.pool.shares?.valid || 0;
+                    document.getElementById('efficiency').textContent = (this.data.pool.efficiency || 100).toFixed(1) + '%';
+                }
+            }
+
+            updateMinersList() {
+                const container = document.getElementById('minersList');
+                container.innerHTML = '';
+
+                if (!this.data.minersList.length) {
+                    container.innerHTML = '<div style="text-align: center; color: #666; padding: 2rem;">No miners connected</div>';
+                    return;
+                }
+
+                this.data.minersList.forEach(miner => {
+                    const minerElement = document.createElement('div');
+                    minerElement.className = 'miner-item';
+                    minerElement.innerHTML = `
+                        <div class="miner-info">
+                            <div class="miner-status ${miner.online ? '' : 'offline'}"></div>
+                            <div>
+                                <div class="miner-name">${miner.name || 'Unknown'}</div>
+                                <div class="miner-hashrate">${formatHashrate(miner.hashrate || 0)}</div>
+                            </div>
+                        </div>
+                        <div class="miner-stats">
+                            <div>${miner.shares || 0} shares</div>
+                            <div style="font-size: 0.75rem; color: #666;">
+                                ${miner.lastSeen ? new Date(miner.lastSeen).toLocaleTimeString() : 'N/A'}
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(minerElement);
+                });
+            }
+
+            updateDEXPairs() {
+                const container = document.getElementById('dexPairs');
+                container.innerHTML = '';
+
+                const defaultPairs = [
+                    { name: 'BTC/USDT', price: 43000, change: 2.5 },
+                    { name: 'RVN/BTC', price: 0.00000068, change: -1.2 },
+                    { name: 'ETH/USDT', price: 2500, change: 1.8 },
+                    { name: 'LTC/BTC', price: 0.00186, change: 0.5 }
+                ];
+
+                const pairs = this.data.dexPairs.length ? this.data.dexPairs : defaultPairs;
+
+                pairs.slice(0, 4).forEach(pair => {
+                    const pairElement = document.createElement('div');
+                    pairElement.className = 'pair-item';
+                    pairElement.innerHTML = `
+                        <div class="pair-name">${pair.name}</div>
+                        <div class="pair-price">${formatPrice(pair.price)}</div>
+                        <div class="pair-change ${pair.change >= 0 ? 'amount-positive' : 'amount-negative'}">
+                            ${pair.change >= 0 ? '+' : ''}${pair.change.toFixed(2)}%
+                        </div>
+                    `;
+                    container.appendChild(pairElement);
+                });
+            }
+
+            addTransaction(transaction) {
+                this.data.transactions.unshift({
+                    id: Date.now(),
+                    timestamp: new Date(),
+                    ...transaction
+                });
+
+                // Keep only last 20 transactions
+                if (this.data.transactions.length > 20) {
+                    this.data.transactions = this.data.transactions.slice(0, 20);
+                }
+
+                this.updateTransactionsList();
+            }
+
+            updateTransactionsList() {
+                const container = document.getElementById('transactionsList');
+                container.innerHTML = '';
+
+                if (!this.data.transactions.length) {
+                    container.innerHTML = '<div style="text-align: center; color: #666; padding: 2rem;">No recent transactions</div>';
+                    return;
+                }
+
+                this.data.transactions.forEach(tx => {
+                    const txElement = document.createElement('div');
+                    txElement.className = 'transaction-item';
+                    
+                    const iconClass = tx.type === 'block' ? 'fas fa-cube' : 
+                                     tx.type === 'payout' ? 'fas fa-arrow-up' : 'fas fa-exchange-alt';
+                    const iconBg = tx.type === 'block' ? 'mining' : 'payout';
+                    
+                    txElement.innerHTML = `
+                        <div class="transaction-type">
+                            <div class="transaction-icon ${iconBg}">
+                                <i class="${iconClass}"></i>
+                            </div>
+                            <div class="transaction-details">
+                                <div class="transaction-hash">
+                                    ${tx.type === 'block' ? 'Block Found' : 
+                                      tx.type === 'payout' ? 'Payout' : 'Trade'}
+                                </div>
+                                <div class="transaction-time">
+                                    ${tx.timestamp.toLocaleTimeString()}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="transaction-amount amount-positive">
+                            ${tx.amount ? formatCurrency(tx.amount) : 'N/A'}
+                        </div>
+                    `;
+                    container.appendChild(txElement);
+                });
+            }
+
+            showBlockFoundAlert(blockData) {
+                // Create alert element
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success';
+                alertDiv.innerHTML = `
+                    <strong>🎉 Block Found!</strong> 
+                    Block #${blockData.height || 'Unknown'} found by the pool. 
+                    Reward: ${formatCurrency(blockData.reward || 0)}
+                `;
+
+                // Insert at top of main content
+                const mainContent = document.querySelector('.main-content');
+                mainContent.insertBefore(alertDiv, mainContent.firstChild);
+
+                // Remove after 10 seconds
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
                     }
+                }, 10000);
+            }
+
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connectionStatus');
+                const indicator = statusElement.querySelector('.status-indicator');
+                const text = statusElement.querySelector('span');
+
+                if (connected) {
+                    indicator.style.background = '#00ff88';
+                    text.textContent = 'Connected';
+                    statusElement.style.background = 'rgba(0, 255, 136, 0.2)';
+                } else {
+                    indicator.style.background = '#ff4444';
+                    text.textContent = 'Disconnected';
+                    statusElement.style.background = 'rgba(255, 68, 68, 0.2)';
                 }
-            });
-        }
-        
-        // Update hashrate chart
-        function updateHashrateChart() {
-            if (!hashrateChart || hashrateHistory.length === 0) return;
-            
-            const labels = hashrateHistory.map(h => 
-                h.time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
-            );
-            const data = hashrateHistory.map(h => h.value);
-            
-            hashrateChart.data.labels = labels;
-            hashrateChart.data.datasets[0].data = data;
-            hashrateChart.update('none');
-        }
-        
-        // Add activity log entry
-        function addActivity(message, type = 'info') {
-            const timestamp = new Date().toLocaleTimeString('ja-JP');
-            const colorClass = {
-                info: 'text-gray-400',
-                success: 'text-green-400',
-                warning: 'text-yellow-400',
-                error: 'text-red-400'
-            }[type] || 'text-gray-400';
-            
-            const entry = document.createElement('div');
-            entry.className = 'flex justify-between items-center py-1 border-b border-gray-800';
-            entry.innerHTML = `
-                <span class="${colorClass}">${message}</span>
-                <span class="text-xs text-gray-500">${timestamp}</span>
-            `;
-            
-            const logContainer = document.getElementById('activityLog');
-            logContainer.insertBefore(entry, logContainer.firstChild);
-            
-            // Keep only last 20 entries
-            while (logContainer.children.length > 20) {
-                logContainer.removeChild(logContainer.lastChild);
+            }
+
+            scheduleReconnect() {
+                if (this.connectionRetryCount >= this.maxRetries) {
+                    console.log('Max reconnection attempts reached');
+                    return;
+                }
+
+                this.connectionRetryCount++;
+                const delay = Math.min(1000 * Math.pow(2, this.connectionRetryCount), 30000);
+                
+                setTimeout(() => {
+                    console.log(`Reconnecting... (attempt ${this.connectionRetryCount})`);
+                    this.setupWebSocket();
+                }, delay);
+            }
+
+            startDataFetch() {
+                // Fetch data every 30 seconds if WebSocket is not connected
+                setInterval(() => {
+                    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                        this.fetchInitialData().then(() => {
+                            this.updateUI();
+                        });
+                    }
+                }, 30000);
+            }
+
+            updateUI() {
+                this.updateStats();
+                this.updateMinersList();
+                this.updateDEXPairs();
+                this.updateTransactionsList();
+                this.updateHashrateChart();
+            }
+
+            setupEventListeners() {
+                // Handle page visibility changes
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible' && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+                        this.setupWebSocket();
+                    }
+                });
+
+                // Handle window resize for charts
+                window.addEventListener('resize', () => {
+                    Object.values(this.charts).forEach(chart => {
+                        chart.resize();
+                    });
+                });
             }
         }
-        
-        // Format hashrate
+
+        // Utility functions
         function formatHashrate(hashrate) {
-            if (!hashrate || hashrate === 0) return '0 H/s';
             if (hashrate > 1e15) return (hashrate / 1e15).toFixed(2) + ' PH/s';
             if (hashrate > 1e12) return (hashrate / 1e12).toFixed(2) + ' TH/s';
             if (hashrate > 1e9) return (hashrate / 1e9).toFixed(2) + ' GH/s';
@@ -481,50 +1116,32 @@
             if (hashrate > 1e3) return (hashrate / 1e3).toFixed(2) + ' kH/s';
             return hashrate.toFixed(0) + ' H/s';
         }
-        
-        // Format number
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(amount);
+        }
+
         function formatNumber(num) {
-            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-            return num.toFixed(2);
+            if (num > 1e9) return (num / 1e9).toFixed(1) + 'B';
+            if (num > 1e6) return (num / 1e6).toFixed(1) + 'M';
+            if (num > 1e3) return (num / 1e3).toFixed(1) + 'K';
+            return num.toString();
         }
-        
-        // Update time-based elements
-        function updateTimes() {
-            // Next payout time
-            const now = new Date();
-            const nextHour = new Date(now);
-            nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
-            const timeUntilPayout = nextHour - now;
-            const minutes = Math.floor(timeUntilPayout / 60000);
-            const seconds = Math.floor((timeUntilPayout % 60000) / 1000);
-            document.getElementById('nextPayout').textContent = 
-                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        function formatPrice(price) {
+            if (price < 0.01) return price.toFixed(8);
+            if (price < 1) return price.toFixed(4);
+            return price.toFixed(2);
         }
-        
-        // Fetch initial data
-        async function fetchInitialData() {
-            try {
-                const response = await fetch('/api/stats');
-                const stats = await response.json();
-                updateStats(stats);
-                addActivity('Dashboard initialized', 'success');
-            } catch (error) {
-                console.error('Failed to fetch initial data:', error);
-                addActivity('Failed to load initial data', 'error');
-            }
-        }
-        
-        // Initialize on load
+
+        // Initialize dashboard when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            initDashboard();
-            fetchInitialData();
-            
-            // Add sample activities
-            addActivity('システム起動完了', 'success');
-            addActivity('自動化システム稼働中', 'info');
-            addActivity('手数料徴収スケジュール: 5分ごと', 'info');
+            new OtedamaDashboard();
         });
     </script>
 </body>

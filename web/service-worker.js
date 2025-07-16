@@ -1,58 +1,79 @@
-// Otedama Service Worker v0.5
-// Provides offline functionality and performance optimization
+/**
+ * Otedama Ver0.6 Service Worker
+ * PWA support for BTC-only mining pool
+ */
 
-const CACHE_NAME = 'otedama-v0.5';
-const STATIC_CACHE = 'otedama-static-v0.5';
-const API_CACHE = 'otedama-api-v0.5';
+const CACHE_NAME = 'otedama-v0.6.0';
+const STATIC_CACHE = 'otedama-static-v0.6.0';
+const DYNAMIC_CACHE = 'otedama-dynamic-v0.6.0';
 
 // Files to cache for offline use
 const STATIC_FILES = [
-  '/mobile.html',
-  '/dashboard.html',
+  '/',
+  '/index.html',
   '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  '/api/health',
+  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNGRkQ3MDAiLz4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHlsZT0idHJhbnNmb3JtOiB0cmFuc2xhdGUoNnB4LCA2cHgpIj4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIGZpbGw9IiMwMDAiPgo8L3N2Zz4KPC9zdmc+'
 ];
 
-// Install event - cache static assets
-self.addEventListener('install', (event) => {
-  console.log('[ServiceWorker] Install');
+// API endpoints to cache dynamically
+const API_ENDPOINTS = [
+  '/api/stats',
+  '/api/pool',
+  '/api/dex',
+  '/api/fees',
+  '/api/languages'
+];
+
+// Install event - cache static files
+self.addEventListener('install', event => {
+  console.log('🔧 Service Worker Ver0.6 installing...');
   
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => {
-      console.log('[ServiceWorker] Caching static assets');
-      return cache.addAll(STATIC_FILES);
-    }).then(() => {
-      return self.skipWaiting();
+    caches.open(STATIC_CACHE)
+      .then(cache => {
+        console.log('📦 Caching static files for offline use');
+        return cache.addAll(STATIC_FILES);
+      })
+      .then(() => {
+        console.log('✅ Service Worker Ver0.6 installed successfully');
+        return self.skipWaiting();
+      })
+      .catch(error => {
+        console.error('❌ Service Worker installation failed:', error);
+      })
+  );
+});
+
+// Activate event - clean old caches
+self.addEventListener('activate', event => {
+  console.log('🚀 Service Worker Ver0.6 activating...');
+  
+  event.waitUntil(
+    Promise.all([
+      // Clean old caches
+      caches.keys().then(cacheNames => {
+        return Promise.all(
+          cacheNames.map(cacheName => {
+            if (cacheName !== STATIC_CACHE && cacheName !== DYNAMIC_CACHE) {
+              console.log('🗑️ Deleting old cache:', cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      }),
+      // Take control of all pages
+      self.clients.claim()
+    ])
+    .then(() => {
+      console.log('✅ Service Worker Ver0.6 activated and ready');
     })
   );
 });
 
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  console.log('[ServiceWorker] Activate');
-  
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && 
-              cacheName !== STATIC_CACHE && 
-              cacheName !== API_CACHE) {
-            console.log('[ServiceWorker] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
-      return self.clients.claim();
-    })
-  );
-});
-
-// Fetch event - serve from cache when possible
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
+// Fetch event - serve from cache or network
+self.addEventListener('fetch', event => {
+  const request = event.request;
   const url = new URL(request.url);
   
   // Skip non-GET requests
@@ -60,44 +81,90 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Handle API requests
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(handleApiRequest(request));
+  // Skip WebSocket connections
+  if (url.protocol === 'ws:' || url.protocol === 'wss:') {
     return;
   }
   
-  // Handle static assets
-  event.respondWith(handleStaticRequest(request));
+  // Handle different types of requests
+  if (url.pathname.startsWith('/api/')) {
+    // API requests - network first, cache fallback
+    event.respondWith(handleAPIRequest(request));
+  } else {
+    // Static files - cache first, network fallback
+    event.respondWith(handleStaticRequest(request));
+  }
 });
 
 // Handle API requests with network-first strategy
-async function handleApiRequest(request) {
-  const cache = await caches.open(API_CACHE);
+async function handleAPIRequest(request) {
+  const url = new URL(request.url);
   
   try {
     // Try network first
-    const response = await fetch(request);
+    const networkResponse = await fetch(request);
     
-    // Cache successful responses
-    if (response.status === 200) {
-      const clonedResponse = response.clone();
-      cache.put(request, clonedResponse);
+    if (networkResponse.ok) {
+      // Cache successful API responses
+      const cache = await caches.open(DYNAMIC_CACHE);
+      cache.put(request, networkResponse.clone());
+      
+      // Add BTC-specific headers
+      const modifiedResponse = new Response(networkResponse.body, {
+        status: networkResponse.status,
+        statusText: networkResponse.statusText,
+        headers: {
+          ...Object.fromEntries(networkResponse.headers.entries()),
+          'X-Otedama-Version': '0.6.0',
+          'X-Payout-Currency': 'BTC'
+        }
+      });
+      
+      return modifiedResponse;
     }
     
-    return response;
-  } catch (error) {
-    // Fallback to cache
-    const cachedResponse = await cache.match(request);
+    throw new Error('Network response not ok');
     
+  } catch (error) {
+    console.log('🌐 Network failed for API, trying cache:', url.pathname);
+    
+    // Fallback to cache
+    const cachedResponse = await caches.match(request);
     if (cachedResponse) {
-      console.log('[ServiceWorker] Serving API from cache:', request.url);
       return cachedResponse;
     }
     
-    // Return offline response
+    // Return offline response for critical API endpoints
+    if (url.pathname === '/api/health') {
+      return new Response(JSON.stringify({
+        status: 'offline',
+        message: 'Service Worker active, app cached',
+        version: '0.6.0',
+        payoutCurrency: 'BTC',
+        btcOnlyPayouts: true
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (url.pathname === '/api/stats') {
+      return new Response(JSON.stringify({
+        miners: 0,
+        hashrate: 0,
+        totalBTCPaid: 0,
+        efficiency: 0,
+        status: 'offline',
+        version: '0.6.0'
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Generic API error response
     return new Response(JSON.stringify({
-      error: 'Offline',
-      message: 'Data not available offline'
+      error: 'Offline - cached data not available',
+      version: '0.6.0',
+      btcOnlyPayouts: true
     }), {
       status: 503,
       headers: { 'Content-Type': 'application/json' }
@@ -105,209 +172,274 @@ async function handleApiRequest(request) {
   }
 }
 
-// Handle static assets with cache-first strategy
+// Handle static requests with cache-first strategy
 async function handleStaticRequest(request) {
-  const cache = await caches.open(STATIC_CACHE);
-  
-  // Check cache first
-  const cachedResponse = await cache.match(request);
-  if (cachedResponse) {
-    return cachedResponse;
-  }
-  
   try {
-    // Fetch from network
-    const response = await fetch(request);
-    
-    // Cache successful responses
-    if (response.status === 200) {
-      const clonedResponse = response.clone();
-      cache.put(request, clonedResponse);
+    // Try cache first
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
     }
     
-    return response;
+    // Try network
+    const networkResponse = await fetch(request);
+    
+    if (networkResponse.ok) {
+      // Cache new static content
+      const cache = await caches.open(STATIC_CACHE);
+      cache.put(request, networkResponse.clone());
+    }
+    
+    return networkResponse;
+    
   } catch (error) {
+    console.log('🌐 Request failed:', request.url);
+    
     // Return offline page for navigation requests
     if (request.mode === 'navigate') {
-      const offlineResponse = await cache.match('/mobile.html');
-      if (offlineResponse) {
-        return offlineResponse;
-      }
-    }
-    
-    // Return 404 for other requests
-    return new Response('Not found', { status: 404 });
-  }
-}
-
-// Background sync for offline actions
-self.addEventListener('sync', (event) => {
-  console.log('[ServiceWorker] Sync event:', event.tag);
-  
-  if (event.tag === 'sync-stats') {
-    event.waitUntil(syncStats());
-  }
-});
-
-// Sync stats when back online
-async function syncStats() {
-  try {
-    const response = await fetch('/api/stats');
-    const data = await response.json();
-    
-    // Send update to all clients
-    const clients = await self.clients.matchAll();
-    clients.forEach(client => {
-      client.postMessage({
-        type: 'stats-update',
-        data: data
+      const offlineHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Otedama Ver0.6 - Offline</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    background: linear-gradient(135deg, #FF6B35, #FFD700);
+                    color: white; 
+                    text-align: center; 
+                    padding: 50px;
+                    margin: 0;
+                }
+                .container { 
+                    max-width: 600px; 
+                    margin: 0 auto; 
+                    background: rgba(0,0,0,0.2);
+                    padding: 40px;
+                    border-radius: 20px;
+                    backdrop-filter: blur(10px);
+                }
+                .btc-icon { font-size: 4em; margin-bottom: 20px; }
+                h1 { color: #FFD700; margin-bottom: 20px; }
+                .button { 
+                    background: #FFD700; 
+                    color: #000; 
+                    padding: 15px 30px; 
+                    border: none; 
+                    border-radius: 10px; 
+                    font-weight: bold;
+                    margin: 10px;
+                    cursor: pointer;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="btc-icon">₿</div>
+                <h1>Otedama Ver0.6 - Offline Mode</h1>
+                <p>You're currently offline, but don't worry!</p>
+                <p>Your BTC mining data is cached and will sync when you're back online.</p>
+                <p><strong>Features available offline:</strong></p>
+                <ul style="text-align: left; display: inline-block;">
+                    <li>✅ Cached mining statistics</li>
+                    <li>✅ BTC conversion rates</li>
+                    <li>✅ Pool configuration</li>
+                    <li>✅ Language settings</li>
+                </ul>
+                <br><br>
+                <button class="button" onclick="window.location.reload()">
+                    🔄 Try Again
+                </button>
+                <button class="button" onclick="window.location.href='/'">
+                    🏠 Home
+                </button>
+            </div>
+            
+            <script>
+                // Auto-refresh when back online
+                window.addEventListener('online', function() {
+                    setTimeout(() => window.location.reload(), 1000);
+                });
+                
+                // Show online status
+                if (navigator.onLine) {
+                    document.body.innerHTML += '<p style="margin-top: 20px;">🟢 Connection restored - refreshing...</p>';
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+            </script>
+        </body>
+        </html>
+      `;
+      
+      return new Response(offlineHTML, {
+        headers: { 'Content-Type': 'text/html' }
       });
+    }
+    
+    // Return error for other requests
+    return new Response('Offline', {
+      status: 503,
+      statusText: 'Service Unavailable'
     });
-  } catch (error) {
-    console.error('[ServiceWorker] Sync failed:', error);
   }
 }
 
-// Push notifications
-self.addEventListener('push', (event) => {
-  console.log('[ServiceWorker] Push received');
+// Handle messages from main thread
+self.addEventListener('message', event => {
+  const { type, data } = event.data;
   
-  let options = {
-    body: 'New update from Otedama',
-    icon: '/icon-192.png',
-    badge: '/icon-96.png',
-    vibrate: [200, 100, 200],
-    data: {
-      timestamp: Date.now()
-    },
-    actions: [
-      {
-        action: 'open',
-        title: 'Open Dashboard',
-        icon: '/icon-96.png'
-      }
-    ]
-  };
-  
-  if (event.data) {
-    try {
-      const data = event.data.json();
-      options = { ...options, ...data };
-    } catch (e) {
-      options.body = event.data.text();
-    }
+  switch (type) {
+    case 'SKIP_WAITING':
+      self.skipWaiting();
+      break;
+      
+    case 'GET_VERSION':
+      event.ports[0].postMessage({ 
+        version: '0.6.0',
+        btcOnlyPayouts: true,
+        cacheStatus: 'active'
+      });
+      break;
+      
+    case 'CACHE_BTC_DATA':
+      cacheBTCData(data);
+      break;
+      
+    case 'CLEAR_CACHE':
+      clearAllCaches();
+      break;
+      
+    default:
+      console.log('Unknown message type:', type);
   }
-  
-  event.waitUntil(
-    self.registration.showNotification('Otedama Mining Pool', options)
-  );
 });
 
-// Notification click handling
-self.addEventListener('notificationclick', (event) => {
-  console.log('[ServiceWorker] Notification click');
+// Cache BTC-specific data
+async function cacheBTCData(data) {
+  try {
+    const cache = await caches.open(DYNAMIC_CACHE);
+    
+    // Cache BTC conversion rates
+    if (data.rates) {
+      const ratesResponse = new Response(JSON.stringify(data.rates), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      await cache.put('/api/btc-rates', ratesResponse);
+    }
+    
+    // Cache BTC balance data
+    if (data.balance) {
+      const balanceResponse = new Response(JSON.stringify(data.balance), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      await cache.put('/api/btc-balance', balanceResponse);
+    }
+    
+    console.log('✅ BTC data cached successfully');
+    
+  } catch (error) {
+    console.error('❌ Failed to cache BTC data:', error);
+  }
+}
+
+// Clear all caches
+async function clearAllCaches() {
+  try {
+    const cacheNames = await caches.keys();
+    await Promise.all(
+      cacheNames.map(cacheName => caches.delete(cacheName))
+    );
+    console.log('🗑️ All caches cleared');
+  } catch (error) {
+    console.error('❌ Failed to clear caches:', error);
+  }
+}
+
+// Background sync for BTC data
+self.addEventListener('sync', event => {
+  if (event.tag === 'btc-sync') {
+    event.waitUntil(syncBTCData());
+  }
+});
+
+async function syncBTCData() {
+  try {
+    console.log('🔄 Syncing BTC data in background...');
+    
+    const responses = await Promise.allSettled([
+      fetch('/api/stats'),
+      fetch('/api/fees'),
+      fetch('/api/pool')
+    ]);
+    
+    const cache = await caches.open(DYNAMIC_CACHE);
+    
+    responses.forEach((response, index) => {
+      if (response.status === 'fulfilled' && response.value.ok) {
+        const endpoints = ['/api/stats', '/api/fees', '/api/pool'];
+        cache.put(endpoints[index], response.value.clone());
+      }
+    });
+    
+    console.log('✅ BTC data sync completed');
+    
+  } catch (error) {
+    console.error('❌ BTC data sync failed:', error);
+  }
+}
+
+// Push notifications for BTC payouts
+self.addEventListener('push', event => {
+  if (!event.data) return;
   
+  try {
+    const data = event.data.json();
+    
+    if (data.type === 'btc_payout') {
+      const options = {
+        body: `You received ${data.amount} BTC! 💰`,
+        icon: '/icon-192.png',
+        badge: '/badge-72.png',
+        tag: 'btc-payout',
+        requireInteraction: true,
+        actions: [
+          {
+            action: 'view',
+            title: 'View Balance',
+            icon: '/action-view.png'
+          },
+          {
+            action: 'close',
+            title: 'Close',
+            icon: '/action-close.png'
+          }
+        ],
+        data: {
+          url: '/?page=balance',
+          amount: data.amount
+        }
+      };
+      
+      event.waitUntil(
+        self.registration.showNotification('₿ BTC Payout Received!', options)
+      );
+    }
+    
+  } catch (error) {
+    console.error('❌ Push notification error:', error);
+  }
+});
+
+// Notification click handler
+self.addEventListener('notificationclick', event => {
   event.notification.close();
   
-  if (event.action === 'open') {
+  if (event.action === 'view') {
     event.waitUntil(
-      clients.openWindow('/mobile.html')
-    );
-  } else {
-    event.waitUntil(
-      clients.matchAll({ type: 'window' }).then(clientList => {
-        // Focus existing window or open new one
-        for (const client of clientList) {
-          if (client.url.includes('/mobile.html') && 'focus' in client) {
-            return client.focus();
-          }
-        }
-        return clients.openWindow('/mobile.html');
-      })
+      clients.openWindow(event.notification.data.url || '/')
     );
   }
 });
 
-// Periodic background sync for regular updates
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'update-stats') {
-    event.waitUntil(updateStats());
-  }
-});
-
-// Update stats in background
-async function updateStats() {
-  try {
-    const response = await fetch('/api/stats');
-    const data = await response.json();
-    
-    // Check for important alerts
-    if (data.alerts && data.alerts.active > 0) {
-      await self.registration.showNotification('Otedama Alert', {
-        body: `${data.alerts.active} active alerts`,
-        icon: '/icon-192.png',
-        badge: '/icon-96.png',
-        tag: 'alert',
-        renotify: true
-      });
-    }
-    
-    // Check fee collection status
-    if (data.fees && data.fees.totalCollectedBTC > 0) {
-      const cache = await caches.open(API_CACHE);
-      const lastFeesResponse = await cache.match('/api/fees');
-      
-      if (lastFeesResponse) {
-        const lastFees = await lastFeesResponse.json();
-        const newFees = data.fees.totalCollectedBTC - (lastFees.totalCollectedBTC || 0);
-        
-        if (newFees > 0.001) { // Significant fee collection
-          await self.registration.showNotification('Fee Collection', {
-            body: `Collected ${newFees.toFixed(8)} BTC`,
-            icon: '/icon-192.png',
-            badge: '/icon-96.png',
-            tag: 'fees'
-          });
-        }
-      }
-    }
-  } catch (error) {
-    console.error('[ServiceWorker] Background update failed:', error);
-  }
-}
-
-// Message handling
-self.addEventListener('message', (event) => {
-  console.log('[ServiceWorker] Message received:', event.data);
-  
-  if (event.data.type === 'skip-waiting') {
-    self.skipWaiting();
-  }
-});
-
-// Performance optimization - precache important API responses
-async function precacheApiData() {
-  const apiEndpoints = [
-    '/api/stats',
-    '/api/fees', 
-    '/api/dex/prices'
-  ];
-  
-  const cache = await caches.open(API_CACHE);
-  
-  for (const endpoint of apiEndpoints) {
-    try {
-      const response = await fetch(endpoint);
-      if (response.ok) {
-        await cache.put(endpoint, response);
-      }
-    } catch (error) {
-      console.error(`[ServiceWorker] Failed to precache ${endpoint}:`, error);
-    }
-  }
-}
-
-// Precache on activation
-self.addEventListener('activate', event => {
-  event.waitUntil(precacheApiData());
-});
+console.log('🚀 Otedama Ver0.6 Service Worker loaded - BTC-only payouts ready!');

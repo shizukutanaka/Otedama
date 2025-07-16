@@ -1,101 +1,124 @@
+# Otedama Prometheus Configuration
+# Monitors mining pool performance, system health, and business metrics
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    monitor: 'otedama-commercial'
+    monitor: 'otedama-pool'
     environment: 'production'
 
-rule_files:
-  - "alerts.yml"
-
+# Alertmanager configuration
 alerting:
   alertmanagers:
     - static_configs:
         - targets:
           - alertmanager:9093
 
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
 scrape_configs:
   # Otedama main application metrics
-  - job_name: 'otedama'
+  - job_name: 'otedama-pool'
     static_configs:
-      - targets: ['otedama:9090']
-    metrics_path: '/metrics'
+      - targets: ['otedama:8080']
+    metrics_path: '/api/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
-    params:
-      format: ['prometheus']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: otedama:9090
-
-  # System metrics
+    
+  # Otedama health check
+  - job_name: 'otedama-health'
+    static_configs:
+      - targets: ['otedama:8080']
+    metrics_path: '/api/health'
+    scrape_interval: 30s
+    
+  # Node exporter for system metrics
   - job_name: 'node-exporter'
     static_configs:
       - targets: ['node-exporter:9100']
     scrape_interval: 15s
-
-  # Container metrics
-  - job_name: 'cadvisor'
+    
+  # Redis metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+    
+  # Nginx metrics
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    scrape_interval: 15s
+    
+  # Docker container metrics
+  - job_name: 'docker'
     static_configs:
       - targets: ['cadvisor:8080']
     scrape_interval: 15s
-
+    
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
-
-  # Mining pool specific metrics
-  - job_name: 'otedama-stratum'
+    scrape_interval: 15s
+    
+  # Alertmanager metrics
+  - job_name: 'alertmanager'
     static_configs:
-      - targets: ['otedama:3333']
-    metrics_path: '/stratum/metrics'
-    scrape_interval: 5s
+      - targets: ['alertmanager:9093']
+    scrape_interval: 15s
 
-  # DEX metrics
-  - job_name: 'otedama-dex'
-    static_configs:
-      - targets: ['otedama:8080']
-    metrics_path: '/api/dex/metrics'
-    scrape_interval: 30s
-
-  # P2P network metrics
-  - job_name: 'otedama-p2p'
-    static_configs:
-      - targets: ['otedama:8333']
-    metrics_path: '/p2p/metrics'
-    scrape_interval: 30s
-
-  # Operator fee collection metrics
-  - job_name: 'otedama-fees'
-    static_configs:
-      - targets: ['otedama:8080']
-    metrics_path: '/api/fees/metrics'
-    scrape_interval: 60s
-    params:
-      operator: ['bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh']
-
-# Remote write configuration for long-term storage
+# Remote write configuration (for external monitoring)
 remote_write:
-  - url: 'http://thanos-receive:19291/api/v1/receive'
-    queue_config:
-      capacity: 10000
-      max_shards: 50
-      min_shards: 1
-      max_samples_per_send: 5000
-      batch_send_deadline: 5s
+  - url: "https://prometheus-us-central1.grafana.net/api/prom/push"
+    basic_auth:
+      username: "${GRAFANA_CLOUD_USERNAME}"
+      password: "${GRAFANA_CLOUD_PASSWORD}"
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'otedama_.*'
+        target_label: __tmp_relabel
+        replacement: 'keep'
 
 # Storage configuration
 storage:
   tsdb:
-    path: /prometheus
-    retention:
-      time: 90d
-      size: 50GB
-    min_block_duration: 2h
-    max_block_duration: 25h
-    wal_compression: true
+    retention.time: 30d
+    retention.size: 10GB
+    min-block-duration: 2h
+    max-block-duration: 25h
+
+# Recording rules for performance optimization
+recording_rules:
+  - name: otedama.rules
+    rules:
+      # Pool performance metrics
+      - record: otedama:pool_hashrate_total
+        expr: sum(otedama_pool_hashrate)
+        
+      - record: otedama:pool_efficiency_avg
+        expr: avg(otedama_pool_efficiency)
+        
+      - record: otedama:miners_active_total
+        expr: sum(otedama_miners_active)
+        
+      # System performance metrics
+      - record: otedama:cpu_usage_avg
+        expr: avg(100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100))
+        
+      - record: otedama:memory_usage_percent
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+        
+      # Business metrics
+      - record: otedama:revenue_total
+        expr: sum(increase(otedama_fees_collected_total[1h]))
+        
+      - record: otedama:payouts_hourly
+        expr: sum(increase(otedama_payouts_total[1h]))
+
+# Query logging (for debugging)
+query_log_file: /prometheus/query.log

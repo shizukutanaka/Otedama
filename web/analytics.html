@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama Advanced Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #007AFF 0%, #0051D5 100%);
+            padding: 30px 0;
+            margin-bottom: 30px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #1a1a1a;
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid #2a2a2a;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 122, 255, 0.2);
+            border-color: #007AFF;
+        }
+
+        .card h2 {
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            color: #007AFF;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: #888;
+            font-size: 0.95em;
+        }
+
+        .metric-value {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .metric-value.positive {
+            color: #4CAF50;
+        }
+
+        .metric-value.negative {
+            color: #F44336;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .filter-bar {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar select, .filter-bar input {
+            background: #2a2a2a;
+            color: #fff;
+            border: 1px solid #3a3a3a;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .filter-bar button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .filter-bar button:hover {
+            background: #0051D5;
+            transform: scale(1.05);
+        }
+
+        .revenue-projections {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .projection-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .projection-item {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 122, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(0, 122, 255, 0.3);
+        }
+
+        .projection-amount {
+            font-size: 2em;
+            font-weight: 700;
+            color: #007AFF;
+            margin-bottom: 5px;
+        }
+
+        .projection-label {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        .alert-section {
+            background: #1a1a1a;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .alert-item.warning {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid rgba(255, 152, 0, 0.3);
+        }
+
+        .alert-item.error {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .alert-item.info {
+            background: rgba(0, 122, 255, 0.1);
+            border: 1px solid rgba(0, 122, 255, 0.3);
+        }
+
+        .alert-icon {
+            font-size: 1.5em;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .alert-message {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        .performance-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .perf-card {
+            background: #1a1a1a;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .perf-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #007AFF 0%, #00D4FF 100%);
+        }
+
+        .perf-value {
+            font-size: 3em;
+            font-weight: 700;
+            margin: 20px 0;
+            background: linear-gradient(135deg, #007AFF 0%, #00D4FF 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .perf-label {
+            color: #888;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .trend-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: rgba(76, 175, 80, 0.1);
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: #4CAF50;
+        }
+
+        .trend-indicator.down {
+            background: rgba(244, 67, 54, 0.1);
+            color: #F44336;
+        }
+
+        @media (max-width: 768px) {
+            .analytics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filter-bar select, .filter-bar input, .filter-bar button {
+                width: 100%;
+            }
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+            font-size: 1.2em;
+            color: #888;
+        }
+
+        .loading::after {
+            content: '';
+            width: 30px;
+            height: 30px;
+            margin-left: 15px;
+            border: 3px solid #2a2a2a;
+            border-top-color: #007AFF;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Advanced Analytics Dashboard</h1>
+            <div class="subtitle">Real-time Mining Pool Intelligence</div>
+        </header>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <select id="timeRange">
+                <option value="1h">Last 1 Hour</option>
+                <option value="24h" selected>Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="custom">Custom Range</option>
+            </select>
+            <input type="date" id="startDate" style="display: none;">
+            <input type="date" id="endDate" style="display: none;">
+            <select id="currency">
+                <option value="all">All Currencies</option>
+                <option value="BTC">Bitcoin (BTC)</option>
+                <option value="RVN">Ravencoin (RVN)</option>
+                <option value="XMR">Monero (XMR)</option>
+                <option value="ETC">Ethereum Classic (ETC)</option>
+                <option value="LTC">Litecoin (LTC)</option>
+            </select>
+            <button onclick="refreshAnalytics()">🔄 Refresh</button>
+            <button onclick="exportData()">📊 Export</button>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="performance-metrics">
+            <div class="perf-card">
+                <div class="perf-label">Pool Hashrate</div>
+                <div class="perf-value" id="poolHashrate">0</div>
+                <div class="trend-indicator" id="hashrateTrend">
+                    <span>↑</span>
+                    <span>+12.5%</span>
+                </div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">Active Miners</div>
+                <div class="perf-value" id="activeMiners">0</div>
+                <div class="trend-indicator" id="minersTrend">
+                    <span>↑</span>
+                    <span>+8.3%</span>
+                </div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">Daily Revenue</div>
+                <div class="perf-value" id="dailyRevenue">0</div>
+                <div class="trend-indicator" id="revenueTrend">
+                    <span>↑</span>
+                    <span>+15.7%</span>
+                </div>
+            </div>
+            <div class="perf-card">
+                <div class="perf-label">Pool Efficiency</div>
+                <div class="perf-value" id="poolEfficiency">0%</div>
+                <div class="trend-indicator" id="efficiencyTrend">
+                    <span>↑</span>
+                    <span>+0.5%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Projections -->
+        <div class="revenue-projections">
+            <h2>💰 Revenue Projections</h2>
+            <div class="projection-grid">
+                <div class="projection-item">
+                    <div class="projection-amount" id="weeklyProjection">0 BTC</div>
+                    <div class="projection-label">Weekly Estimate</div>
+                </div>
+                <div class="projection-item">
+                    <div class="projection-amount" id="monthlyProjection">0 BTC</div>
+                    <div class="projection-label">Monthly Estimate</div>
+                </div>
+                <div class="projection-item">
+                    <div class="projection-amount" id="quarterlyProjection">0 BTC</div>
+                    <div class="projection-label">Quarterly Estimate</div>
+                </div>
+                <div class="projection-item">
+                    <div class="projection-amount" id="yearlyProjection">0 BTC</div>
+                    <div class="projection-label">Yearly Estimate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        <div class="alert-section">
+            <h2>🔔 Smart Alerts</h2>
+            <div id="alertsContainer">
+                <div class="loading">Loading alerts</div>
+            </div>
+        </div>
+
+        <!-- Analytics Grid -->
+        <div class="analytics-grid">
+            <!-- Hashrate Chart -->
+            <div class="card">
+                <h2>📊 Hashrate Trend</h2>
+                <div class="chart-container">
+                    <canvas id="hashrateChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Miner Distribution -->
+            <div class="card">
+                <h2>👥 Miner Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="minerChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Revenue Analysis -->
+            <div class="card">
+                <h2>💵 Revenue Analysis</h2>
+                <div class="chart-container">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Coin Performance -->
+            <div class="card">
+                <h2>🪙 Coin Performance</h2>
+                <div class="chart-container">
+                    <canvas id="coinChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Network Statistics -->
+            <div class="card">
+                <h2>🌐 Network Statistics</h2>
+                <div class="metric">
+                    <span class="metric-label">Total Blocks Found</span>
+                    <span class="metric-value" id="totalBlocks">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Average Block Time</span>
+                    <span class="metric-value" id="avgBlockTime">0s</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Pool Luck (24h)</span>
+                    <span class="metric-value positive" id="poolLuck">0%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Orphan Rate</span>
+                    <span class="metric-value" id="orphanRate">0%</span>
+                </div>
+            </div>
+
+            <!-- Worker Analysis -->
+            <div class="card">
+                <h2>⚙️ Worker Analysis</h2>
+                <div class="metric">
+                    <span class="metric-label">Total Workers</span>
+                    <span class="metric-value" id="totalWorkers">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Average Workers/Miner</span>
+                    <span class="metric-value" id="avgWorkers">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Top Miner Hashrate</span>
+                    <span class="metric-value" id="topMinerHash">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Worker Efficiency</span>
+                    <span class="metric-value positive" id="workerEfficiency">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Analysis -->
+        <div class="analytics-grid">
+            <!-- Geographic Distribution -->
+            <div class="card">
+                <h2>🌍 Geographic Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="geoChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Profitability Trends -->
+            <div class="card">
+                <h2>📈 Profitability Trends</h2>
+                <div class="chart-container">
+                    <canvas id="profitChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize all charts
+        let charts = {};
+        const API_BASE = '/api/v1';
+        
+        // Chart configurations
+        const chartConfigs = {
+            hashrateChart: {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Pool Hashrate',
+                        data: [],
+                        borderColor: '#007AFF',
+                        backgroundColor: 'rgba(0, 122, 255, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#2a2a2a' },
+                            ticks: { color: '#888' }
+                        },
+                        x: {
+                            grid: { color: '#2a2a2a' },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            },
+            
+            minerChart: {
+                type: 'doughnut',
+                data: {
+                    labels: ['GPU Miners', 'ASIC Miners', 'CPU Miners'],
+                    datasets: [{
+                        data: [65, 25, 10],
+                        backgroundColor: ['#007AFF', '#00D4FF', '#0051D5'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#888' }
+                        }
+                    }
+                }
+            },
+            
+            revenueChart: {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Daily Revenue (BTC)',
+                        data: [],
+                        backgroundColor: '#4CAF50',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#2a2a2a' },
+                            ticks: { color: '#888' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            },
+            
+            coinChart: {
+                type: 'radar',
+                data: {
+                    labels: ['Hashrate', 'Miners', 'Profitability', 'Stability', 'Volume'],
+                    datasets: [
+                        {
+                            label: 'RVN',
+                            data: [85, 90, 75, 80, 70],
+                            borderColor: '#FF6B00',
+                            backgroundColor: 'rgba(255, 107, 0, 0.2)'
+                        },
+                        {
+                            label: 'XMR',
+                            data: [70, 60, 85, 90, 65],
+                            borderColor: '#FF6600',
+                            backgroundColor: 'rgba(255, 102, 0, 0.2)'
+                        },
+                        {
+                            label: 'ETC',
+                            data: [75, 70, 70, 85, 80],
+                            borderColor: '#328332',
+                            backgroundColor: 'rgba(50, 131, 50, 0.2)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#888' }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: '#2a2a2a' },
+                            pointLabels: { color: '#888' },
+                            ticks: { display: false }
+                        }
+                    }
+                }
+            },
+            
+            geoChart: {
+                type: 'bar',
+                data: {
+                    labels: ['North America', 'Europe', 'Asia', 'South America', 'Others'],
+                    datasets: [{
+                        label: 'Miners by Region',
+                        data: [35, 30, 25, 7, 3],
+                        backgroundColor: [
+                            '#007AFF',
+                            '#00D4FF',
+                            '#0051D5',
+                            '#00A6FF',
+                            '#0080FF'
+                        ],
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: '#2a2a2a' },
+                            ticks: { 
+                                color: '#888',
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            },
+            
+            profitChart: {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'RVN Profitability',
+                            data: [],
+                            borderColor: '#FF6B00',
+                            backgroundColor: 'rgba(255, 107, 0, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'XMR Profitability',
+                            data: [],
+                            borderColor: '#FF6600',
+                            backgroundColor: 'rgba(255, 102, 0, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#888' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#2a2a2a' },
+                            ticks: { 
+                                color: '#888',
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { color: '#2a2a2a' },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            }
+        };
+
+        // Initialize all charts
+        function initCharts() {
+            Object.keys(chartConfigs).forEach(chartId => {
+                const ctx = document.getElementById(chartId).getContext('2d');
+                charts[chartId] = new Chart(ctx, chartConfigs[chartId]);
+            });
+        }
+
+        // Fetch and update analytics data
+        async function fetchAnalytics() {
+            try {
+                const timeRange = document.getElementById('timeRange').value;
+                const currency = document.getElementById('currency').value;
+                
+                // Show loading state
+                updateLoadingState(true);
+                
+                // Fetch data from API
+                const response = await fetch(`${API_BASE}/analytics?range=${timeRange}&currency=${currency}`);
+                const data = await response.json();
+                
+                // Update all components
+                updatePerformanceMetrics(data.performance);
+                updateProjections(data.projections);
+                updateAlerts(data.alerts);
+                updateCharts(data.charts);
+                updateStats(data.stats);
+                
+                updateLoadingState(false);
+            } catch (error) {
+                console.error('Error fetching analytics:', error);
+                showError('Failed to load analytics data');
+            }
+        }
+
+        // Update performance metrics
+        function updatePerformanceMetrics(performance) {
+            document.getElementById('poolHashrate').textContent = formatHashrate(performance.hashrate);
+            document.getElementById('activeMiners').textContent = performance.miners.toLocaleString();
+            document.getElementById('dailyRevenue').textContent = performance.revenue.toFixed(4) + ' BTC';
+            document.getElementById('poolEfficiency').textContent = performance.efficiency + '%';
+            
+            // Update trends
+            updateTrend('hashrateTrend', performance.hashrateTrend);
+            updateTrend('minersTrend', performance.minersTrend);
+            updateTrend('revenueTrend', performance.revenueTrend);
+            updateTrend('efficiencyTrend', performance.efficiencyTrend);
+        }
+
+        // Update trend indicators
+        function updateTrend(elementId, trend) {
+            const element = document.getElementById(elementId);
+            if (trend > 0) {
+                element.className = 'trend-indicator';
+                element.innerHTML = `<span>↑</span><span>+${trend}%</span>`;
+            } else if (trend < 0) {
+                element.className = 'trend-indicator down';
+                element.innerHTML = `<span>↓</span><span>${trend}%</span>`;
+            } else {
+                element.innerHTML = `<span>→</span><span>0%</span>`;
+            }
+        }
+
+        // Update revenue projections
+        function updateProjections(projections) {
+            document.getElementById('weeklyProjection').textContent = projections.weekly.toFixed(4) + ' BTC';
+            document.getElementById('monthlyProjection').textContent = projections.monthly.toFixed(4) + ' BTC';
+            document.getElementById('quarterlyProjection').textContent = projections.quarterly.toFixed(3) + ' BTC';
+            document.getElementById('yearlyProjection').textContent = projections.yearly.toFixed(2) + ' BTC';
+        }
+
+        // Update alerts
+        function updateAlerts(alerts) {
+            const container = document.getElementById('alertsContainer');
+            container.innerHTML = '';
+            
+            if (alerts.length === 0) {
+                container.innerHTML = '<div class="alert-item info"><div class="alert-icon">✅</div><div class="alert-content"><div class="alert-title">All Systems Operational</div><div class="alert-message">No issues detected</div></div></div>';
+                return;
+            }
+            
+            alerts.forEach(alert => {
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert-item ${alert.severity}`;
+                alertDiv.innerHTML = `
+                    <div class="alert-icon">${getAlertIcon(alert.severity)}</div>
+                    <div class="alert-content">
+                        <div class="alert-title">${alert.title}</div>
+                        <div class="alert-message">${alert.message}</div>
+                    </div>
+                `;
+                container.appendChild(alertDiv);
+            });
+        }
+
+        // Get alert icon based on severity
+        function getAlertIcon(severity) {
+            switch(severity) {
+                case 'error': return '🚨';
+                case 'warning': return '⚠️';
+                case 'info': return 'ℹ️';
+                default: return '📌';
+            }
+        }
+
+        // Update charts with new data
+        function updateCharts(chartData) {
+            // Update hashrate chart
+            if (charts.hashrateChart && chartData.hashrate) {
+                charts.hashrateChart.data.labels = chartData.hashrate.labels;
+                charts.hashrateChart.data.datasets[0].data = chartData.hashrate.data;
+                charts.hashrateChart.update();
+            }
+            
+            // Update revenue chart
+            if (charts.revenueChart && chartData.revenue) {
+                charts.revenueChart.data.labels = chartData.revenue.labels;
+                charts.revenueChart.data.datasets[0].data = chartData.revenue.data;
+                charts.revenueChart.update();
+            }
+            
+            // Update profitability chart
+            if (charts.profitChart && chartData.profitability) {
+                charts.profitChart.data.labels = chartData.profitability.labels;
+                charts.profitChart.data.datasets[0].data = chartData.profitability.rvn;
+                charts.profitChart.data.datasets[1].data = chartData.profitability.xmr;
+                charts.profitChart.update();
+            }
+        }
+
+        // Update statistics
+        function updateStats(stats) {
+            document.getElementById('totalBlocks').textContent = stats.totalBlocks.toLocaleString();
+            document.getElementById('avgBlockTime').textContent = stats.avgBlockTime + 's';
+            document.getElementById('poolLuck').textContent = stats.poolLuck + '%';
+            document.getElementById('orphanRate').textContent = stats.orphanRate + '%';
+            document.getElementById('totalWorkers').textContent = stats.totalWorkers.toLocaleString();
+            document.getElementById('avgWorkers').textContent = stats.avgWorkersPerMiner.toFixed(1);
+            document.getElementById('topMinerHash').textContent = formatHashrate(stats.topMinerHashrate);
+            document.getElementById('workerEfficiency').textContent = stats.workerEfficiency + '%';
+        }
+
+        // Format hashrate for display
+        function formatHashrate(hashrate) {
+            if (hashrate > 1e15) return (hashrate / 1e15).toFixed(2) + ' PH/s';
+            if (hashrate > 1e12) return (hashrate / 1e12).toFixed(2) + ' TH/s';
+            if (hashrate > 1e9) return (hashrate / 1e9).toFixed(2) + ' GH/s';
+            if (hashrate > 1e6) return (hashrate / 1e6).toFixed(2) + ' MH/s';
+            if (hashrate > 1e3) return (hashrate / 1e3).toFixed(2) + ' KH/s';
+            return hashrate.toFixed(0) + ' H/s';
+        }
+
+        // Refresh analytics
+        function refreshAnalytics() {
+            fetchAnalytics();
+        }
+
+        // Export data
+        function exportData() {
+            // TODO: Implement data export functionality
+            alert('Export feature coming soon!');
+        }
+
+        // Show/hide date inputs for custom range
+        document.getElementById('timeRange').addEventListener('change', function(e) {
+            const isCustom = e.target.value === 'custom';
+            document.getElementById('startDate').style.display = isCustom ? 'block' : 'none';
+            document.getElementById('endDate').style.display = isCustom ? 'block' : 'none';
+        });
+
+        // Update loading state
+        function updateLoadingState(isLoading) {
+            // TODO: Implement loading indicators
+        }
+
+        // Show error message
+        function showError(message) {
+            console.error(message);
+            // TODO: Implement user-friendly error display
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            
+            // Set default dates
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30);
+            
+            document.getElementById('endDate').valueAsDate = endDate;
+            document.getElementById('startDate').valueAsDate = startDate;
+            
+            // Fetch initial data
+            fetchAnalytics();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(fetchAnalytics, 30000);
+        });
+
+        // Simulate real data for demo
+        function simulateData() {
+            // Update performance metrics
+            updatePerformanceMetrics({
+                hashrate: 850e12 + Math.random() * 50e12,
+                miners: 12345 + Math.floor(Math.random() * 500),
+                revenue: 2.3456 + Math.random() * 0.5,
+                efficiency: 98.5 + Math.random() * 1.5,
+                hashrateTrend: (Math.random() * 20 - 10).toFixed(1),
+                minersTrend: (Math.random() * 10 - 5).toFixed(1),
+                revenueTrend: (Math.random() * 30 - 15).toFixed(1),
+                efficiencyTrend: (Math.random() * 2 - 1).toFixed(1)
+            });
+            
+            // Update projections
+            updateProjections({
+                weekly: 16.2345 + Math.random() * 2,
+                monthly: 70.5678 + Math.random() * 10,
+                quarterly: 211.234 + Math.random() * 30,
+                yearly: 845.678 + Math.random() * 100
+            });
+            
+            // Update alerts
+            updateAlerts([
+                {
+                    severity: 'info',
+                    title: 'New Efficiency Record',
+                    message: 'Pool efficiency reached 99.2% in the last hour'
+                },
+                {
+                    severity: 'warning',
+                    title: 'High Network Latency',
+                    message: 'Asia region experiencing 150ms+ latency'
+                }
+            ]);
+            
+            // Update statistics
+            updateStats({
+                totalBlocks: 47523,
+                avgBlockTime: 142,
+                poolLuck: 102.3,
+                orphanRate: 0.8,
+                totalWorkers: 45678,
+                avgWorkersPerMiner: 3.7,
+                topMinerHashrate: 12.5e12,
+                workerEfficiency: 98.7
+            });
+            
+            // Update hashrate chart
+            const now = new Date();
+            const hashrateLabels = [];
+            const hashrateData = [];
+            for (let i = 23; i >= 0; i--) {
+                const time = new Date(now.getTime() - i * 3600000);
+                hashrateLabels.push(time.toLocaleTimeString([], { hour: '2-digit' }));
+                hashrateData.push(800e12 + Math.random() * 100e12);
+            }
+            
+            charts.hashrateChart.data.labels = hashrateLabels;
+            charts.hashrateChart.data.datasets[0].data = hashrateData;
+            charts.hashrateChart.update();
+            
+            // Update revenue chart
+            const revenueLabels = [];
+            const revenueData = [];
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(now.getTime() - i * 86400000);
+                revenueLabels.push(date.toLocaleDateString([], { weekday: 'short' }));
+                revenueData.push(2 + Math.random() * 0.8);
+            }
+            
+            charts.revenueChart.data.labels = revenueLabels;
+            charts.revenueChart.data.datasets[0].data = revenueData;
+            charts.revenueChart.update();
+            
+            // Update profitability chart
+            const profitLabels = [];
+            const rvnProfit = [];
+            const xmrProfit = [];
+            for (let i = 11; i >= 0; i--) {
+                const time = new Date(now.getTime() - i * 7200000);
+                profitLabels.push(time.toLocaleTimeString([], { hour: '2-digit' }));
+                rvnProfit.push(0.8 + Math.random() * 0.4);
+                xmrProfit.push(1.2 + Math.random() * 0.3);
+            }
+            
+            charts.profitChart.data.labels = profitLabels;
+            charts.profitChart.data.datasets[0].data = rvnProfit;
+            charts.profitChart.data.datasets[1].data = xmrProfit;
+            charts.profitChart.update();
+        }
+        
+        // Use simulated data for demo
+        setTimeout(simulateData, 1000);
+        setInterval(simulateData, 30000);
+    </script>
+</body>
+</html>
