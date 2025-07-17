@@ -5,7 +5,7 @@
   "version": "0.6.0",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "theme_color": "#FF6B35",
   "background_color": "#FF6B35",
   "categories": ["finance", "utilities", "productivity"],

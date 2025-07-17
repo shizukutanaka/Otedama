@@ -1,127 +1,199 @@
-# Otedama - v0.6.0
+# Otedama - Professional P2P Mining Pool & DEX Platform
 
-**Professional P2P Mining Pool & DEX Platform**
+**Start mining cryptocurrencies in minutes with our enterprise-grade P2P mining pool. Supports 13 coins, 10 algorithms, and all hardware types.**
 
-Otedama is a high-performance, peer-to-peer cryptocurrency mining pool combined with a decentralized exchange (DEX) platform. This platform is designed for both individual miners and professional operations, offering a robust, low-fee environment for mining and auto-converting various cryptocurrencies directly to Bitcoin.
+## Quick Start (5 Minutes)
 
-![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
-
-**Translate:** [English](https://github.com/otedama/otedama/blob/main/README.md) | [日本語](https://translate.google.com/translate?sl=en&tl=ja&u=https://github.com/otedama/otedama/blob/main/README.md) | [Español](https://translate.google.com/translate?sl=en&tl=es&u=https://github.com/otedama/otedama/blob/main/README.md) | [中文](https://translate.google.com/translate?sl=en&tl=zh-CN&u=https://github.com/otedama/otedama/blob/main/README.md) | [Français](https://translate.google.com/translate?sl=en&tl=fr&u=https://github.com/otedama/otedama/blob/main/README.md) | [Deutsch](https://translate.google.com/translate?sl=en&tl=de&u=https://github.com/otedama/otedama/blob/main/README.md) | [한국어](https://translate.google.com/translate?sl=en&tl=ko&u=https://github.com/otedama/otedama/blob/main/README.md) | [Português](https://translate.google.com/translate?sl=en&tl=pt&u=https://github.com/otedama/otedama/blob/main/README.md) | [Русский](https://translate.google.com/translate?sl=en&tl=ru&u=https://github.com/otedama/otedama/blob/main/README.md) | [العربية](https://translate.google.com/translate?sl=en&tl=ar&u=https://github.com/otedama/otedama/blob/main/README.md) | [हिन्दी](https://translate.google.com/translate?sl=en&tl=hi&u=https://github.com/otedama/otedama/blob/main/README.md)
-
----
-
-## Key Features (v0.6.0)
-
-*   **P2P Mining Pool:** Decentralized and robust stratum-based mining pool.
-*   **Integrated DEX:** Automatically convert mined altcoins to Bitcoin.
-*   **BTC-Only Payouts:** Simplify your earnings with payouts exclusively in BTC.
-*   **Low Fees:**
-    *   **Mining Fee:** 1%
-    *   **Conversion Fee:** 0.5%
-*   **Multi-Currency Support:** Mine over 13 different cryptocurrencies.
-*   **Multi-Language Support:** The platform is available in over 50 languages.
-*   **Cross-Platform:** Runs on Windows, macOS, and Linux.
-*   **Dockerized:** Easy deployment with Docker and Docker Compose.
-
-## Getting Started
-
-### Prerequisites
-
-*   [Node.js](https://nodejs.org/) (v18.0.0 or higher)
-*   [Git](https://git-scm.com/)
-*   (Optional) [Docker](https://www.docker.com/)
-
-### Installation
-
-1.  Clone the repository:
-    ```sh
-    git clone https://github.com/shizukutanaka/Otedama.git
-    cd otedama
-    ```
-
-2.  Install dependencies:
-    ```sh
-    npm install
-    ```
-
-3.  Run the setup script for your OS:
-    *   **Windows:**
-        ```bat
-        setup.bat
-        ```
-    *   **Linux/macOS:**
-        ```sh
-        bash setup.sh
-        ```
-
-## Usage
-
-### Running the Application
-
-To start the main application server:
-
-```sh
-npm start
+### Windows
+```batch
+# Download and run
+curl -O https://otedama.io/quickstart.bat
+quickstart.bat
+# Open http://localhost:8080 in your browser
 ```
 
-### Using Docker
+### Linux/macOS
+```bash
+# Download and run
+curl -O https://otedama.io/quickstart.sh
+chmod +x quickstart.sh
+./quickstart.sh
+# Open http://localhost:8080 in your browser
+```
 
-For a containerized deployment:
+### Docker (Recommended for Production)
+```bash
+docker run -d -p 8080:8080 -p 3333:3333 otedama/otedama:latest
+# Open http://localhost:8080
+```
 
-1.  Build the Docker image:
-    ```sh
-    npm run docker:build
-    ```
+## Supported Cryptocurrencies & Algorithms
 
-2.  Run the container using Docker Compose:
-    ```sh
-    npm run docker:deploy
-    ```
+| Coin | Algorithm | Hardware | Port |
+|------|-----------|----------|------|
+| Bitcoin (BTC) | SHA256 | ASIC | 3333 |
+| Ethereum (ETH) | Ethash | GPU | 3334 |
+| Ravencoin (RVN) | KawPow | GPU | 3335 |
+| Monero (XMR) | RandomX | CPU | 3336 |
+| Litecoin (LTC) | Scrypt | ASIC | 3337 |
+| Dogecoin (DOGE) | Scrypt | ASIC | 3337 |
+| Zcash (ZEC) | Equihash | ASIC/GPU | 3338 |
+| Dash (DASH) | X11 | ASIC | 3339 |
+| Ethereum Classic (ETC) | Ethash | GPU | 3334 |
+| Ergo (ERGO) | Autolykos | GPU | 3340 |
+| Flux (FLUX) | Equihash | GPU | 3341 |
+| Kaspa (KAS) | kHeavyHash | ASIC | 3342 |
+| Alephium (ALPH) | Blake3 | ASIC | 3343 |
+
+## Payout Options
+
+### Option 1: Keep Your Mined Coins
+- Mine any supported cryptocurrency
+- Receive payouts in the same coin
+- **Fee: 1.8% (paid in BTC equivalent)**
+- Example: Mine 1 ETH → Receive 1 ETH, pay 0.018 BTC fee
+
+### Option 2: Auto-Convert to Bitcoin
+- Mine any cryptocurrency
+- Automatically convert to BTC
+- **Fee: 2% total (includes conversion)**
+- Example: Mine 1 ETH → Receive BTC equivalent minus 2%
+
+## Mining Examples
+
+### GPU Mining (NVIDIA/AMD)
+```bash
+# Ethereum
+t-rex -a ethash -o stratum+tcp://pool.address:3334 -u YOUR_ETH_WALLET -p x
+
+# Ravencoin
+teamredminer -a kawpow -o stratum+tcp://pool.address:3335 -u YOUR_RVN_WALLET -p x
+
+# Ergo
+nbminer -a ergo -o stratum+tcp://pool.address:3340 -u YOUR_ERGO_WALLET -p x
+```
+
+### CPU Mining
+```bash
+# Monero (XMR)
+xmrig -a rx/0 -o stratum+tcp://pool.address:3336 -u YOUR_XMR_WALLET -p x
+```
+
+### ASIC Mining
+```bash
+# Bitcoin (Antminer)
+Pool URL: stratum+tcp://pool.address:3333
+Worker: YOUR_BTC_WALLET
+Password: x
+
+# Litecoin/Dogecoin (L3+)
+Pool URL: stratum+tcp://pool.address:3337
+Worker: YOUR_LTC_OR_DOGE_WALLET
+Password: x
+```
+
+## Features
+
+### Mining Pool
+- **P2P Architecture**: Decentralized, no single point of failure
+- **Smart Difficulty**: Auto-adjusts to your hardware
+- **Stratum V2**: Latest protocol with enhanced security
+- **Real-time Stats**: Live hashrate, earnings, and network data
+- **Low Latency**: Global server network
+- **DDoS Protection**: Enterprise-grade security
+
+### Integrated DEX
+- **50+ Trading Pairs**: Trade between all supported coins
+- **No KYC**: Completely anonymous
+- **Atomic Swaps**: Trustless cross-chain trades
+- **Low Fees**: 0.1% trading fee
+- **MEV Protection**: Front-running prevention
+
+### Mobile App (PWA)
+- Monitor mining stats
+- Manage payouts
+- Trade on DEX
+- Real-time notifications
+- Works offline
+
+### API Access
+```bash
+# Get pool stats
+curl https://api.pool.address/stats
+
+# Get miner stats
+curl https://api.pool.address/miners/YOUR_WALLET
+
+# Get market data
+curl https://api.pool.address/markets
+```
+
+## System Requirements
+
+### Minimum
+- CPU: 2 cores
+- RAM: 4GB
+- Storage: 20GB
+- Network: 100 Mbps
+
+### Recommended
+- CPU: 8 cores
+- RAM: 16GB
+- Storage: 100GB SSD
+- Network: 1 Gbps
 
 ## Configuration
 
-Key configuration parameters are defined in `package.json` under the `config` object:
+### Basic Settings
+```json
+{
+  "pool": {
+    "fee": 0.018,
+    "minPayout": 0.001,
+    "payoutInterval": 3600
+  },
+  "stratum": {
+    "ports": {
+      "sha256": 3333,
+      "ethash": 3334,
+      "kawpow": 3335,
+      "randomx": 3336
+    }
+  }
+}
+```
 
-*   **`mining_fee`**: 1% of minimum payout
-*   **`conversion_fee`**: 0.5% BTC conversion
-*   **`payout_currency`**: BTC only
-*   **`supported_currencies`**: 13
-*   **`supported_languages`**: 50
+### Advanced Configuration
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all options.
 
-## Technology Stack
+## Support
 
-*   **Backend:** Node.js
-*   **Database:** better-sqlite3
-*   **Real-time Communication:** ws (WebSocket)
+### Documentation
+- [Mining Guide](docs/MINING_GUIDE.md)
+- [API Reference](docs/API.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
 
-## Project Roadmap
+### Community
+- Discord: https://discord.gg/otedama
+- Telegram: https://t.me/otedama
+- Reddit: https://reddit.com/r/otedama
 
-### Phase 1: Market Launch (Q3 2025)
-- [ ] Community building and miner onboarding
-- [ ] Real-time price feed integration (CoinGecko, CoinMarketCap)
-- [ ] Advanced analytics dashboard
-- [ ] Referral program implementation
-
-### Phase 2: Feature Enhancement (Q4 2025)
-- [ ] Lightning Network integration for instant payouts
-- [ ] Advanced DeFi features (yield farming, staking)
-- [ ] Mobile app store deployment (iOS/Android)
-- [ ] API marketplace and third-party integrations
-
-### Phase 3: Global Expansion (Q1 2026)
-- [ ] Regional mining pool nodes for latency optimization
-- [ ] Fiat currency integration and off-ramps
-- [ ] Enterprise mining farm partnerships
-- [ ] Institutional custody integration
-
-### Phase 4: Innovation Leadership (Q2 2026)
-- [ ] AI-powered mining optimization
-- [ ] Cross-chain compatibility expansion
-- [ ] Decentralized governance implementation
-- [ ] Carbon-neutral mining initiatives
+### Languages Supported
+Arabic (AR), Bengali (BN), Chinese (ZH), Dutch (NL), English (EN), French (FR), German (DE), Hindi (HI), Indonesian (ID), Italian (IT), Japanese (JA), Korean (KO), Polish (PL), Portuguese (PT), Russian (RU), Spanish (ES), Turkish (TR), Vietnamese (VI), and 45+ more languages.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## Security
+
+- SSL/TLS encryption
+- DDoS protection
+- Rate limiting
+- Input validation
+- Regular security audits
+
+Report security issues to: security@otedama.io
+
+---
+**Otedama** - Professional mining made simple.

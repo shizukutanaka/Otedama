@@ -1,0 +1,23 @@
+{
+  "name": "otedama-example-algorithm",
+  "version": "1.0.0",
+  "description": "Example mining algorithm plugin for Otedama",
+  "main": "index.js",
+  "type": "module",
+  "author": "Otedama Team",
+  "license": "MIT",
+  "otedama": {
+    "minVersion": "0.6.0",
+    "maxVersion": "*",
+    "capabilities": [
+      "mining.algorithm"
+    ],
+    "dependencies": {},
+    "autoEnable": true,
+    "config": {
+      "algorithm": "example-pow",
+      "difficulty": 16,
+      "blockTime": 10000
+    }
+  }
+}

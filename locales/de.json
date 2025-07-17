@@ -1,0 +1,196 @@
+{
+  "common": {
+    "appName": "Otedama Mining Pool",
+    "version": "Version {{version}}",
+    "loading": "Laden...",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "warning": "Warnung",
+    "info": "Information",
+    "confirm": "Bestätigen",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "search": "Suchen",
+    "filter": "Filtern",
+    "refresh": "Aktualisieren",
+    "back": "Zurück",
+    "next": "Nächste",
+    "previous": "Vorherige",
+    "close": "Schließen",
+    "yes": "Ja",
+    "no": "Nein"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "mining": "Mining",
+    "wallet": "Wallet",
+    "payouts": "Auszahlungen",
+    "exchange": "Börse",
+    "settings": "Einstellungen",
+    "help": "Hilfe",
+    "logout": "Abmelden"
+  },
+  "mining": {
+    "title": "Mining-Übersicht",
+    "status": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "connecting": "Verbinde..."
+    },
+    "stats": {
+      "hashrate": "Hashrate",
+      "shares": "Anteile",
+      "efficiency": "Effizienz",
+      "uptime": "Betriebszeit",
+      "workers": {
+        "one": "{{count}} Arbeiter",
+        "other": "{{count}} Arbeiter"
+      }
+    },
+    "pool": {
+      "name": "Pool-Name",
+      "algorithm": "Algorithmus",
+      "difficulty": "Schwierigkeit",
+      "connectedMiners": {
+        "one": "{{count}} verbundener Miner",
+        "other": "{{count}} verbundene Miner"
+      },
+      "fee": "Pool-Gebühr: {{fee}}%",
+      "nextPayout": "Nächste Auszahlung in {{time}}"
+    }
+  },
+  "wallet": {
+    "title": "Wallet",
+    "address": "Wallet-Adresse",
+    "balance": "Saldo",
+    "pendingBalance": "Ausstehender Saldo",
+    "totalPaid": "Gesamtauszahlung",
+    "currency": "Währung",
+    "btcOnly": "Nur BTC-Auszahlungen",
+    "conversionNotice": "Geschürftes {{currency}} wird automatisch in BTC umgewandelt",
+    "transactions": {
+      "title": "Transaktionsverlauf",
+      "date": "Datum",
+      "amount": "Betrag",
+      "status": "Status",
+      "txid": "Transaktions-ID",
+      "fee": "Gebühr",
+      "noTransactions": "Noch keine Transaktionen"
+    }
+  },
+  "payouts": {
+    "title": "Auszahlungen",
+    "minimumPayout": "Mindestausschüttung",
+    "payoutThreshold": "Auszahlungsschwelle",
+    "estimatedPayout": "Geschätzte Auszahlung",
+    "lastPayout": "Letzte Auszahlung",
+    "nextPayout": "Nächste Auszahlung",
+    "automatic": "Automatische Auszahlungen jede Stunde",
+    "manual": "Manuelle Auszahlung anfordern",
+    "history": {
+      "title": "Auszahlungsverlauf",
+      "date": "Datum",
+      "amount": "Betrag",
+      "status": "Status",
+      "address": "Adresse",
+      "transactionId": "Transaktions-ID"
+    }
+  },
+  "exchange": {
+    "title": "Dezentrale Börse",
+    "swap": "Tauschen",
+    "liquidity": "Liquidität",
+    "from": "Von",
+    "to": "Zu",
+    "amount": "Betrag",
+    "estimatedReceived": "Geschätzt erhalten",
+    "price": "Preis",
+    "priceImpact": "Preisauswirkung",
+    "fee": "Handelsegbühr",
+    "slippage": "Slippage-Toleranz",
+    "deadline": "Transaktionsfrist",
+    "addLiquidity": "Liquidität hinzufügen",
+    "removeLiquidity": "Liquidität entfernen",
+    "yourLiquidity": "Ihre Liquidität",
+    "poolShare": "Pool-Anteil"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "account": {
+      "title": "Kontoeinstellungen",
+      "email": "E-Mail-Adresse",
+      "password": "Passwort",
+      "twoFactor": "Zwei-Faktor-Authentifizierung",
+      "apiKeys": "API-Schlüssel"
+    },
+    "mining": {
+      "title": "Mining-Einstellungen",
+      "workerName": "Arbeiter-Name",
+      "difficultyAdjustment": "Schwierigkeitsanpassung",
+      "autoSwitch": "Automatischer Algorithmus-Wechsel"
+    },
+    "notifications": {
+      "title": "Benachrichtigungen",
+      "email": "E-Mail-Benachrichtigungen",
+      "webhook": "Webhooks",
+      "events": {
+        "workerOffline": "Arbeiter offline",
+        "blockFound": "Block gefunden",
+        "payoutSent": "Auszahlung gesendet",
+        "lowHashrate": "Niedrige Hashrate-Warnung"
+      }
+    },
+    "preferences": {
+      "title": "Einstellungen",
+      "language": "Sprache",
+      "theme": "Theme",
+      "timezone": "Zeitzone",
+      "currency": "Anzeigewährung"
+    }
+  },
+  "messages": {
+    "welcome": "Willkommen bei Otedama Mining Pool",
+    "connectionLost": "Verbindung verloren. Versuche wieder zu verbinden...",
+    "connectionRestored": "Verbindung wiederhergestellt",
+    "shareAccepted": "Anteil akzeptiert",
+    "shareRejected": "Anteil abgelehnt: {{reason}}",
+    "payoutSent": "Auszahlung von {{amount}} BTC erfolgreich gesendet",
+    "insufficientBalance": "Unzureichender Saldo",
+    "invalidAddress": "Ungültige Wallet-Adresse",
+    "settingsSaved": "Einstellungen erfolgreich gespeichert",
+    "errorOccurred": "Ein Fehler ist aufgetreten: {{error}}",
+    "copied": "In die Zwischenablage kopiert",
+    "confirmDelete": "Sind Sie sicher, dass Sie dies löschen möchten?",
+    "rateLimit": "Zu viele Anfragen. Bitte versuchen Sie es später erneut."
+  },
+  "time": {
+    "seconds": {
+      "one": "{{count}} Sekunde",
+      "other": "{{count}} Sekunden"
+    },
+    "minutes": {
+      "one": "{{count}} Minute",
+      "other": "{{count}} Minuten"
+    },
+    "hours": {
+      "one": "{{count}} Stunde",
+      "other": "{{count}} Stunden"
+    },
+    "days": {
+      "one": "{{count}} Tag",
+      "other": "{{count}} Tage"
+    },
+    "ago": "vor {{time}}",
+    "in": "in {{time}}",
+    "justNow": "gerade eben"
+  },
+  "help": {
+    "gettingStarted": "Erste Schritte",
+    "faq": "Häufig gestellte Fragen",
+    "supportCenter": "Support-Center",
+    "documentation": "Dokumentation",
+    "contact": "Kontakt"
+  }
+}

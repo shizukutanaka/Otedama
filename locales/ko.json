@@ -1,0 +1,196 @@
+{
+  "common": {
+    "appName": "Otedama 마이닝 풀",
+    "version": "버전 {{version}}",
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공",
+    "warning": "경고",
+    "info": "정보",
+    "confirm": "확인",
+    "cancel": "취소",
+    "save": "저장",
+    "delete": "삭제",
+    "edit": "편집",
+    "search": "검색",
+    "filter": "필터",
+    "refresh": "새로고침",
+    "back": "뒤로",
+    "next": "다음",
+    "previous": "이전",
+    "close": "닫기",
+    "yes": "예",
+    "no": "아니오"
+  },
+  "navigation": {
+    "dashboard": "대시보드",
+    "mining": "마이닝",
+    "wallet": "지갑",
+    "payouts": "지급",
+    "exchange": "거래소",
+    "settings": "설정",
+    "help": "도움말",
+    "logout": "로그아웃"
+  },
+  "mining": {
+    "title": "마이닝 개요",
+    "status": {
+      "active": "활성",
+      "inactive": "비활성",
+      "connecting": "연결 중..."
+    },
+    "stats": {
+      "hashrate": "해시레이트",
+      "shares": "주식",
+      "efficiency": "효율성",
+      "uptime": "가동 시간",
+      "workers": {
+        "one": "{{count}}개 작업자",
+        "other": "{{count}}개 작업자"
+      }
+    },
+    "pool": {
+      "name": "풀 이름",
+      "algorithm": "알고리즘",
+      "difficulty": "난이도",
+      "connectedMiners": {
+        "one": "{{count}}명의 연결된 채굴자",
+        "other": "{{count}}명의 연결된 채굴자"
+      },
+      "fee": "풀 수수료: {{fee}}%",
+      "nextPayout": "다음 지급까지 {{time}}"
+    }
+  },
+  "wallet": {
+    "title": "지갑",
+    "address": "지갑 주소",
+    "balance": "잔액",
+    "pendingBalance": "대기 중인 잔액",
+    "totalPaid": "총 지급액",
+    "currency": "통화",
+    "btcOnly": "BTC 지급만",
+    "conversionNotice": "채굴된 {{currency}}는 자동으로 BTC로 변환됩니다",
+    "transactions": {
+      "title": "거래 내역",
+      "date": "날짜",
+      "amount": "금액",
+      "status": "상태",
+      "txid": "거래 ID",
+      "fee": "수수료",
+      "noTransactions": "아직 거래가 없습니다"
+    }
+  },
+  "payouts": {
+    "title": "지급",
+    "minimumPayout": "최소 지급",
+    "payoutThreshold": "지급 임계값",
+    "estimatedPayout": "예상 지급",
+    "lastPayout": "마지막 지급",
+    "nextPayout": "다음 지급",
+    "automatic": "매시간 자동 지급",
+    "manual": "수동 지급 요청",
+    "history": {
+      "title": "지급 내역",
+      "date": "날짜",
+      "amount": "금액",
+      "status": "상태",
+      "address": "주소",
+      "transactionId": "거래 ID"
+    }
+  },
+  "exchange": {
+    "title": "탈중앙화 거래소",
+    "swap": "스왑",
+    "liquidity": "유동성",
+    "from": "에서",
+    "to": "로",
+    "amount": "금액",
+    "estimatedReceived": "예상 수령",
+    "price": "가격",
+    "priceImpact": "가격 영향",
+    "fee": "거래 수수료",
+    "slippage": "슬리피지 허용",
+    "deadline": "거래 마감일",
+    "addLiquidity": "유동성 추가",
+    "removeLiquidity": "유동성 제거",
+    "yourLiquidity": "내 유동성",
+    "poolShare": "풀 지분"
+  },
+  "settings": {
+    "title": "설정",
+    "account": {
+      "title": "계정 설정",
+      "email": "이메일 주소",
+      "password": "비밀번호",
+      "twoFactor": "2단계 인증",
+      "apiKeys": "API 키"
+    },
+    "mining": {
+      "title": "마이닝 설정",
+      "workerName": "작업자 이름",
+      "difficultyAdjustment": "난이도 조정",
+      "autoSwitch": "알고리즘 자동 전환"
+    },
+    "notifications": {
+      "title": "알림",
+      "email": "이메일 알림",
+      "webhook": "웹훅",
+      "events": {
+        "workerOffline": "작업자 오프라인",
+        "blockFound": "블록 발견",
+        "payoutSent": "지급 전송",
+        "lowHashrate": "낮은 해시레이트 경고"
+      }
+    },
+    "preferences": {
+      "title": "환경설정",
+      "language": "언어",
+      "theme": "테마",
+      "timezone": "시간대",
+      "currency": "표시 통화"
+    }
+  },
+  "messages": {
+    "welcome": "Otedama 마이닝 풀에 오신 것을 환영합니다",
+    "connectionLost": "연결이 끊어졌습니다. 재연결을 시도합니다...",
+    "connectionRestored": "연결이 복구되었습니다",
+    "shareAccepted": "주식이 승인되었습니다",
+    "shareRejected": "주식이 거부되었습니다: {{reason}}",
+    "payoutSent": "{{amount}} BTC 지급이 성공적으로 전송되었습니다",
+    "insufficientBalance": "잔액 부족",
+    "invalidAddress": "유효하지 않은 지갑 주소",
+    "settingsSaved": "설정이 성공적으로 저장되었습니다",
+    "errorOccurred": "오류가 발생했습니다: {{error}}",
+    "copied": "클립보드에 복사됨",
+    "confirmDelete": "정말로 삭제하시겠습니까?",
+    "rateLimit": "요청이 너무 많습니다. 나중에 다시 시도해주세요."
+  },
+  "time": {
+    "seconds": {
+      "one": "{{count}}초",
+      "other": "{{count}}초"
+    },
+    "minutes": {
+      "one": "{{count}}분",
+      "other": "{{count}}분"
+    },
+    "hours": {
+      "one": "{{count}}시간",
+      "other": "{{count}}시간"
+    },
+    "days": {
+      "one": "{{count}}일",
+      "other": "{{count}}일"
+    },
+    "ago": "{{time}} 전",
+    "in": "{{time}} 후",
+    "justNow": "방금 전"
+  },
+  "help": {
+    "gettingStarted": "시작하기",
+    "faq": "자주 묻는 질문",
+    "supportCenter": "지원 센터",
+    "documentation": "문서",
+    "contact": "문의하기"
+  }
+}

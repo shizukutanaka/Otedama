@@ -1,0 +1,463 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otedama
+  labels:
+    name: otedama
+    
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-pool
+  namespace: otedama
+  labels:
+    app: otedama-pool
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: otedama-pool
+  template:
+    metadata:
+      labels:
+        app: otedama-pool
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: otedama-service-account
+      securityContext:
+        fsGroup: 1001
+      containers:
+      - name: otedama-pool
+        image: otedama/otedama:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3333
+          name: stratum
+          protocol: TCP
+        - containerPort: 8080
+          name: api
+          protocol: TCP
+        - containerPort: 8333
+          name: p2p
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: CONFIG_PATH
+          value: "/app/config/production.json"
+        - name: DATABASE_PATH
+          value: "/app/data/production.db"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: otedama-config
+              key: redis-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: jwt-secret
+        - name: PROMETHEUS_PORT
+          value: "9090"
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: data-volume
+          mountPath: /app/data
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: ssl-volume
+          mountPath: /app/ssl
+          readOnly: true
+        - name: backup-volume
+          mountPath: /app/backups
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: otedama-data-pvc
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: otedama-logs-pvc
+      - name: config-volume
+        configMap:
+          name: otedama-config
+      - name: ssl-volume
+        secret:
+          secretName: otedama-ssl
+      - name: backup-volume
+        persistentVolumeClaim:
+          claimName: otedama-backup-pvc
+      
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-pool-service
+  namespace: otedama
+  labels:
+    app: otedama-pool
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama-pool
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: 3333
+    protocol: TCP
+  - name: api
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: p2p
+    port: 8333
+    targetPort: 8333
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-metrics-service
+  namespace: otedama
+  labels:
+    app: otedama-pool
+spec:
+  selector:
+    app: otedama-pool
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otedama-pool-hpa
+  namespace: otedama
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama-pool
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data-pvc
+  namespace: otedama
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gp2
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-logs-pvc
+  namespace: otedama
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp2
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-backup-pvc
+  namespace: otedama
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: gp2
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  namespace: otedama
+data:
+  redis-url: "redis://otedama-redis:6379"
+  production.json: |
+    {
+      "version": "1.0.0",
+      "environment": "production",
+      "pool": {
+        "fee": 0.01,
+        "minimumPayout": 0.001,
+        "payoutInterval": 3600000,
+        "maxMiners": 50000
+      },
+      "network": {
+        "stratumPort": 3333,
+        "apiPort": 8080,
+        "p2pPort": 8333
+      },
+      "database": {
+        "path": "/app/data/production.db",
+        "poolSize": 50
+      },
+      "defi": {
+        "enabled": true,
+        "dex": {
+          "enabled": true,
+          "tradingFee": 0.003
+        }
+      },
+      "security": {
+        "rateLimiting": {
+          "enabled": true,
+          "maxRequests": 1000
+        }
+      },
+      "performance": {
+        "clustering": {
+          "enabled": false
+        },
+        "caching": {
+          "enabled": true,
+          "provider": "redis"
+        }
+      },
+      "monitoring": {
+        "prometheus": {
+          "enabled": true,
+          "port": 9090
+        }
+      }
+    }
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets
+  namespace: otedama
+type: Opaque
+data:
+  jwt-secret: bXktc2VjcmV0LWp3dC1rZXktY2hhbmdlLXRoaXM=
+  db-password: cGFzc3dvcmQ=
+  redis-password: cmVkaXNwYXNzd29yZA==
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-ssl
+  namespace: otedama
+type: kubernetes.io/tls
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otedama-service-account
+  namespace: otedama
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: otedama-role
+  namespace: otedama
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: otedama-role-binding
+  namespace: otedama
+subjects:
+- kind: ServiceAccount
+  name: otedama-service-account
+  namespace: otedama
+roleRef:
+  kind: Role
+  name: otedama-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otedama-ingress
+  namespace: otedama
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - otedama.io
+    - api.otedama.io
+    secretName: otedama-tls
+  rules:
+  - host: otedama.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-service
+            port:
+              number: 8080
+  - host: api.otedama.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-pool-service
+            port:
+              number: 8080
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otedama-pdb
+  namespace: otedama
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: otedama-pool
+
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: otedama-limits
+  namespace: otedama
+spec:
+  limits:
+  - default:
+      cpu: "2"
+      memory: "4Gi"
+    defaultRequest:
+      cpu: "1"
+      memory: "2Gi"
+    type: Container
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: otedama-quota
+  namespace: otedama
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: "40Gi"
+    limits.cpu: "40"
+    limits.memory: "80Gi"
+    persistentvolumeclaims: "10"
+    pods: "50"

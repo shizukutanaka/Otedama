@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>₿ Otedama Ver0.6 - BTC Only Mining Pool ₿</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>₿ Otedama - BTC Only Mining Pool ₿</title>
     <meta name="description" content="Professional mining pool with BTC-only payouts. Mine any currency, get paid in Bitcoin. 1% + 0.5% fees, hourly payouts.">
     
     <!-- PWA Meta Tags -->
@@ -18,19 +18,15 @@
     <!-- Icons -->
     <link rel="icon" type="image/png" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNGRkQ3MDAiLz4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHlsZT0idHJhbnNmb3JtOiB0cmFuc2xhdGUoNnB4LCA2cHgpIj4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIGZpbGw9IiMwMDAiPgo8L3N2Zz4KPC9zdmc+">
     
+    <!-- Responsive CSS Framework -->
+    <link rel="stylesheet" href="css/responsive.css">
+    
     <style>
-        * { 
-            margin: 0; 
-            padding: 0; 
-            box-sizing: border-box; 
-        }
-        
+        /* Custom Styles for Otedama */
         body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #FF6B35 0%, #F7931E 30%, #FFD700 100%);
             color: white;
             min-height: 100vh;
-            overflow-x: hidden;
         }
         
         .btc-pattern {
@@ -46,29 +42,36 @@
             z-index: -1;
         }
         
+        /* Header */
         .header {
             background: rgba(0,0,0,0.3);
-            padding: 20px;
+            padding: var(--spacing-lg);
             text-align: center;
-            border-bottom: 3px solid #FFD700;
+            border-bottom: 3px solid var(--secondary);
             backdrop-filter: blur(10px);
             position: relative;
         }
         
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 2.5rem;
+            margin-bottom: var(--spacing-md);
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
         
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2rem; }
+            .header { padding: var(--spacing-md); }
+        }
+        
+        /* BTC Badge */
         .btc-badge {
-            background: linear-gradient(45deg, #FFD700, #FFA500);
+            background: linear-gradient(45deg, var(--secondary), var(--secondary-dark));
             color: #000;
-            padding: 8px 20px;
-            border-radius: 25px;
+            padding: var(--spacing-sm) var(--spacing-lg);
+            border-radius: var(--radius-full);
             font-weight: bold;
-            font-size: 16px;
-            margin: 10px;
+            font-size: 1rem;
+            margin: var(--spacing-md);
             display: inline-block;
             box-shadow: 0 4px 15px rgba(255,215,0,0.3);
             animation: pulse 2s infinite;
@@ -80,40 +83,34 @@
             100% { transform: scale(1); }
         }
         
+        /* Version Tag */
         .version-tag {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: var(--spacing-md);
+            right: var(--spacing-md);
             background: rgba(255,215,0,0.9);
             color: #000;
-            padding: 5px 10px;
-            border-radius: 10px;
-            font-size: 12px;
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-md);
+            font-size: 0.75rem;
             font-weight: bold;
         }
         
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
+        @media (max-width: 576px) {
+            .version-tag {
+                top: var(--spacing-sm);
+                right: var(--spacing-sm);
+                font-size: 0.625rem;
+            }
         }
         
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        
+        /* Stats Cards */
         .stat-card {
             background: rgba(255,255,255,0.15);
-            padding: 25px;
-            border-radius: 20px;
             backdrop-filter: blur(15px);
             border: 2px solid rgba(255,215,0,0.3);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
             position: relative;
+            overflow: hidden;
         }
         
         .stat-card:hover {
@@ -122,139 +119,123 @@
         }
         
         .stat-value {
-            font-size: 2.5em;
+            font-size: 2.5rem;
             font-weight: bold;
-            color: #FFD700;
+            color: var(--secondary);
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            margin-bottom: 10px;
+            margin-bottom: var(--spacing-sm);
+        }
+        
+        @media (max-width: 768px) {
+            .stat-value { font-size: 2rem; }
         }
         
         .stat-label {
-            font-size: 1em;
+            font-size: 1rem;
             opacity: 0.9;
-            margin-bottom: 5px;
+            margin-bottom: var(--spacing-xs);
         }
         
         .stat-subtitle {
-            font-size: 0.8em;
+            font-size: 0.875rem;
             opacity: 0.7;
             font-style: italic;
         }
         
         .btc-icon {
             position: absolute;
-            top: 15px;
-            right: 15px;
-            font-size: 1.5em;
-            color: #FFD700;
+            top: var(--spacing-md);
+            right: var(--spacing-md);
+            font-size: 1.5rem;
+            color: var(--secondary);
             opacity: 0.8;
         }
         
+        /* Sections */
         .section {
-            margin: 30px 0;
-            padding: 25px;
             background: rgba(255,255,255,0.1);
-            border-radius: 20px;
-            border: 1px solid rgba(255,215,0,0.2);
             backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,215,0,0.2);
         }
         
         .section h2 {
-            margin-bottom: 15px;
-            color: #FFD700;
+            color: var(--secondary);
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }
         
-        .button {
-            background: linear-gradient(45deg, #FFD700, #FFA500);
-            color: #000;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            margin: 8px;
-            transition: all 0.3s;
-            box-shadow: 0 5px 20px rgba(255,215,0,0.3);
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(255,215,0,0.4);
-            background: linear-gradient(45deg, #FFA500, #FFD700);
-        }
-        
+        /* Fee Info */
         .fee-info {
             background: rgba(255,215,0,0.15);
-            border: 2px solid #FFD700;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px 0;
+            border: 2px solid var(--secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin: var(--spacing-lg) 0;
             text-align: center;
-        }
-        
-        .fee-breakdown {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
         }
         
         .fee-item {
             background: rgba(255,255,255,0.1);
-            padding: 15px;
-            border-radius: 10px;
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
             border: 1px solid rgba(255,215,0,0.3);
         }
         
+        /* Language Selector */
         .language-selector {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
+            top: var(--spacing-lg);
+            left: var(--spacing-lg);
+            z-index: var(--z-dropdown);
+        }
+        
+        @media (max-width: 768px) {
+            .language-selector {
+                position: static;
+                margin-bottom: var(--spacing-md);
+                text-align: center;
+            }
         }
         
         .language-selector select {
             background: rgba(0,0,0,0.3);
             color: white;
-            border: 2px solid #FFD700;
-            padding: 8px 12px;
-            border-radius: 8px;
+            border: 2px solid var(--secondary);
+            padding: var(--spacing-sm) var(--spacing-md);
+            border-radius: var(--radius-md);
             font-weight: bold;
+            font-size: 1rem;
         }
         
+        /* Currency Grid */
         .conversion-tracker {
             background: rgba(0,0,0,0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-        }
-        
-        .currency-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 10px;
-            margin: 15px 0;
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            margin: var(--spacing-md) 0;
         }
         
         .currency-item {
             background: rgba(255,255,255,0.1);
-            padding: 10px;
-            border-radius: 8px;
+            padding: var(--spacing-sm);
+            border-radius: var(--radius-sm);
             text-align: center;
             border: 1px solid rgba(255,215,0,0.2);
+            transition: var(--transition-base);
         }
         
+        .currency-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* Status Indicator */
         .status-indicator {
             width: 12px;
             height: 12px;
             border-radius: 50%;
             background: #00FF00;
             display: inline-block;
-            margin-right: 8px;
+            margin-right: var(--spacing-sm);
             animation: blink 1.5s infinite;
         }
         
@@ -263,179 +244,271 @@
             51%, 100% { opacity: 0.3; }
         }
         
+        /* Mobile Notice */
         .mobile-notice {
             background: rgba(255,215,0,0.1);
-            border: 1px solid #FFD700;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
+            border: 1px solid var(--secondary);
         }
         
+        @media (min-width: 769px) {
+            .mobile-notice { display: none; }
+        }
+        
+        /* Custom Button Overrides */
+        .btn-gold {
+            background: linear-gradient(45deg, var(--secondary), var(--secondary-dark));
+            color: #000;
+            border: none;
+            font-weight: bold;
+            box-shadow: 0 5px 20px rgba(255,215,0,0.3);
+        }
+        
+        .btn-gold:hover {
+            background: linear-gradient(45deg, var(--secondary-dark), var(--secondary));
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255,215,0,0.4);
+        }
+        
+        /* Code Block */
+        code {
+            background: rgba(0,0,0,0.3);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+        }
+        
+        /* Responsive Tables */
         @media (max-width: 768px) {
-            .header h1 { font-size: 2em; }
-            .stats-grid { grid-template-columns: 1fr; }
-            .fee-breakdown { grid-template-columns: 1fr; }
-            .container { padding: 15px; }
-            .stat-card { padding: 20px; }
-            .language-selector { position: relative; margin-bottom: 10px; }
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,215,0,0.3);
-            border-radius: 50%;
-            border-top-color: #FFD700;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+            .table-responsive table {
+                font-size: 0.875rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="btc-pattern"></div>
     
-    <div class="language-selector">
-        <select id="language-select" onchange="changeLanguage(this.value)">
-            <option value="en">🇺🇸 English</option>
-            <option value="ja">🇯🇵 日本語</option>
-            <option value="zh">🇨🇳 中文</option>
-            <option value="ko">🇰🇷 한국어</option>
-            <option value="es">🇪🇸 Español</option>
-            <option value="fr">🇫🇷 Français</option>
-            <option value="de">🇩🇪 Deutsch</option>
-            <option value="ru">🇷🇺 Русский</option>
-            <option value="it">🇮🇹 Italiano</option>
-            <option value="pt">🇵🇹 Português</option>
-            <option value="ar">🇸🇦 العربية</option>
-        </select>
-    </div>
+    <!-- Mobile-friendly Navigation -->
+    <nav class="navbar">
+        <div class="container d-flex justify-content-between align-items-center">
+            <div class="language-selector">
+                <select id="language-select" class="form-control" onchange="changeLanguage(this.value)">
+                    <option value="en">🇺🇸 English</option>
+                    <option value="ja">🇯🇵 日本語</option>
+                    <option value="zh">🇨🇳 中文</option>
+                    <option value="ko">🇰🇷 한국어</option>
+                    <option value="es">🇪🇸 Español</option>
+                    <option value="fr">🇫🇷 Français</option>
+                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="ru">🇷🇺 Русский</option>
+                    <option value="it">🇮🇹 Italiano</option>
+                    <option value="pt">🇵🇹 Português</option>
+                    <option value="ar">🇸🇦 العربية</option>
+                </select>
+            </div>
+        </div>
+    </nav>
     
-    <div class="header">
+    <!-- Header -->
+    <header class="header">
         <div class="version-tag">Ver 0.6.0</div>
-        <h1>₿ Otedama Ver0.6 ₿</h1>
-        <p id="welcome-text">Professional Mining Pool - All Payouts in Bitcoin</p>
-        <div class="btc-badge">
-            <span class="status-indicator"></span>
-            <span id="btc-only-text">🟡 BTC ONLY PAYOUTS 🟡</span>
+        <div class="container">
+            <h1>₿ Otedama ₿</h1>
+            <p id="welcome-text" class="mb-3">Professional Mining Pool - All Payouts in Bitcoin</p>
+            <div class="btc-badge">
+                <span class="status-indicator"></span>
+                <span id="btc-only-text">🟡 BTC ONLY PAYOUTS 🟡</span>
+            </div>
         </div>
-    </div>
+    </header>
     
-    <div class="container">
-        <div class="mobile-notice">
-            📱 <strong>Mobile Users:</strong> Add this page to your home screen for the best experience!
-        </div>
-        
-        <div class="fee-info">
-            <h3>₿ <span id="fee-title">New Ver0.6 Fee Structure</span> ₿</h3>
-            <div class="fee-breakdown">
-                <div class="fee-item">
-                    <strong>Mining Fee</strong><br>
-                    1% of minimum payout
-                </div>
-                <div class="fee-item">
-                    <strong>BTC Conversion</strong><br>
-                    0.5% of BTC amount
-                </div>
-                <div class="fee-item">
-                    <strong>Total</strong><br>
-                    ~1.5% (industry lowest)
-                </div>
-                <div class="fee-item">
-                    <strong>Payout Currency</strong><br>
-                    Bitcoin (BTC) Only
-                </div>
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Mobile Notice -->
+        <div class="card mobile-notice mb-4">
+            <div class="card-body text-center">
+                📱 <strong>Mobile Users:</strong> Add this page to your home screen for the best experience!
             </div>
         </div>
         
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="btc-icon">₿</div>
-                <div class="stat-value" id="hashrate">
-                    <span class="loading"></span>
-                </div>
-                <div class="stat-label" id="hashrate-label">Total Hashrate</div>
-                <div class="stat-subtitle">All algorithms combined</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="btc-icon">👥</div>
-                <div class="stat-value" id="miners">
-                    <span class="loading"></span>
-                </div>
-                <div class="stat-label" id="miners-label">Active Miners</div>
-                <div class="stat-subtitle">Mining for BTC</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="btc-icon">₿</div>
-                <div class="stat-value" id="btc-paid">
-                    <span class="loading"></span>
-                </div>
-                <div class="stat-label" id="btc-paid-label">Total BTC Paid</div>
-                <div class="stat-subtitle">Hourly automatic payouts</div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="btc-icon">⚡</div>
-                <div class="stat-value" id="efficiency">
-                    <span class="loading"></span>
-                </div>
-                <div class="stat-label" id="efficiency-label">Pool Efficiency</div>
-                <div class="stat-subtitle">Valid shares ratio</div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <h2>₿ <span id="mining-title">BTC Mining Setup</span></h2>
-            <p><strong>Stratum URL:</strong> stratum+tcp://localhost:3333</p>
-            <p><strong>Supported Currencies:</strong> 13 (all converted to BTC)</p>
-            <p><strong>Supported Algorithms:</strong> 10 major algorithms</p>
-            <p><strong>Payout Schedule:</strong> Every hour to BTC addresses</p>
-            
-            <div class="conversion-tracker">
-                <h4>🔄 Auto-Conversion Rates (to BTC)</h4>
-                <div class="currency-grid" id="conversion-rates">
-                    <div class="currency-item">
-                        <strong>Loading...</strong>
+        <!-- Fee Information -->
+        <div class="card fee-info mb-4">
+            <div class="card-body">
+                <h3 class="text-center mb-3">₿ <span id="fee-title">New Ver0.6 Fee Structure</span> ₿</h3>
+                <div class="row">
+                    <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                        <div class="fee-item h-100">
+                            <strong>Mining Fee</strong><br>
+                            1% of minimum payout
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                        <div class="fee-item h-100">
+                            <strong>BTC Conversion</strong><br>
+                            0.5% of BTC amount
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                        <div class="fee-item h-100">
+                            <strong>Total</strong><br>
+                            ~1.5% (industry lowest)
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                        <div class="fee-item h-100">
+                            <strong>Payout Currency</strong><br>
+                            Bitcoin (BTC) Only
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="section">
-            <h2>₿ <span id="dex-title">BTC Trading Pairs</span></h2>
-            <div id="dex-stats">
-                <div class="loading"></div> Loading BTC trading data...
+        <!-- Stats Grid -->
+        <div class="row mb-4">
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="btc-icon">₿</div>
+                        <div class="stat-value" id="hashrate">
+                            <span class="spinner"></span>
+                        </div>
+                        <div class="stat-label" id="hashrate-label">Total Hashrate</div>
+                        <div class="stat-subtitle">All algorithms combined</div>
+                    </div>
+                </div>
             </div>
-            <button class="button" onclick="refreshDexStats()">
-                🔄 <span id="refresh-text">Refresh Rates</span>
-            </button>
+            
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="btc-icon">👥</div>
+                        <div class="stat-value" id="miners">
+                            <span class="spinner"></span>
+                        </div>
+                        <div class="stat-label" id="miners-label">Active Miners</div>
+                        <div class="stat-subtitle">Mining for BTC</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="btc-icon">₿</div>
+                        <div class="stat-value" id="btc-paid">
+                            <span class="spinner"></span>
+                        </div>
+                        <div class="stat-label" id="btc-paid-label">Total BTC Paid</div>
+                        <div class="stat-subtitle">Hourly automatic payouts</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="btc-icon">⚡</div>
+                        <div class="stat-value" id="efficiency">
+                            <span class="spinner"></span>
+                        </div>
+                        <div class="stat-label" id="efficiency-label">Pool Efficiency</div>
+                        <div class="stat-subtitle">Valid shares ratio</div>
+                    </div>
+                </div>
+            </div>
         </div>
         
-        <div class="section">
-            <h2>🚀 <span id="start-title">Start Mining for BTC</span></h2>
-            <p><strong>Command:</strong> <code>node index.js --wallet YOUR_WALLET --currency RVN</code></p>
-            <p><strong>Example:</strong> <code>node index.js --wallet RYourAddress --currency RVN</code></p>
-            <p><em>⚠️ Note: You will receive payouts in BTC regardless of mining currency</em></p>
-            
-            <div style="margin-top: 15px;">
-                <a href="#" class="button" onclick="downloadConfig()">
-                    📥 Download Config
-                </a>
-                <a href="/api/health" class="button" target="_blank">
-                    🏥 Health Check
-                </a>
-                <a href="/api/fees" class="button" target="_blank">
-                    💰 Fee Calculator
-                </a>
+        <!-- Mining Setup Section -->
+        <div class="card section mb-4">
+            <div class="card-body">
+                <h2 class="card-title">₿ <span id="mining-title">BTC Mining Setup</span></h2>
+                <div class="table-responsive">
+                    <table class="table table-mobile">
+                        <tbody>
+                            <tr>
+                                <td data-label="Stratum URL"><strong>Stratum URL:</strong></td>
+                                <td>stratum+tcp://localhost:3333</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Supported Currencies"><strong>Supported Currencies:</strong></td>
+                                <td>13 (all converted to BTC)</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Supported Algorithms"><strong>Supported Algorithms:</strong></td>
+                                <td>10 major algorithms</td>
+                            </tr>
+                            <tr>
+                                <td data-label="Payout Schedule"><strong>Payout Schedule:</strong></td>
+                                <td>Every hour to BTC addresses</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="conversion-tracker">
+                    <h4 class="mb-3">🔄 Auto-Conversion Rates (to BTC)</h4>
+                    <div class="row" id="conversion-rates">
+                        <div class="col-6 col-sm-4 col-md-3 mb-2">
+                            <div class="currency-item">
+                                <strong>Loading...</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+        
+        <!-- DEX Trading Section -->
+        <div class="card section mb-4">
+            <div class="card-body">
+                <h2 class="card-title">₿ <span id="dex-title">BTC Trading Pairs</span></h2>
+                <div id="dex-stats" class="mb-3">
+                    <div class="text-center">
+                        <span class="spinner"></span> Loading BTC trading data...
+                    </div>
+                </div>
+                <div class="text-center">
+                    <button class="btn btn-gold" onclick="refreshDexStats()">
+                        🔄 <span id="refresh-text">Refresh Rates</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Start Mining Section -->
+        <div class="card section mb-4">
+            <div class="card-body">
+                <h2 class="card-title">🚀 <span id="start-title">Start Mining for BTC</span></h2>
+                <div class="mb-3">
+                    <p><strong>Command:</strong></p>
+                    <code class="d-block p-2 mb-2">node index.js --wallet YOUR_WALLET --currency RVN</code>
+                    <p><strong>Example:</strong></p>
+                    <code class="d-block p-2 mb-2">node index.js --wallet RYourAddress --currency RVN</code>
+                    <p class="text-warning mt-3">⚠️ Note: You will receive payouts in BTC regardless of mining currency</p>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12 col-sm-4 mb-2">
+                        <button class="btn btn-gold btn-block" onclick="downloadConfig()">
+                            📥 Download Config
+                        </button>
+                    </div>
+                    <div class="col-12 col-sm-4 mb-2">
+                        <a href="/api/health" class="btn btn-gold btn-block" target="_blank">
+                            🏥 Health Check
+                        </a>
+                    </div>
+                    <div class="col-12 col-sm-4 mb-2">
+                        <a href="/api/fees" class="btn btn-gold btn-block" target="_blank">
+                            💰 Fee Calculator
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
     
     <script>
         // WebSocket connection
@@ -555,22 +628,32 @@
         
         function updateDexStats(data) {
             const dexStatsDiv = document.getElementById('dex-stats');
-            dexStatsDiv.innerHTML = '<h4>₿ Active BTC Trading Pairs</h4>';
+            dexStatsDiv.innerHTML = '<h4 class="mb-3">₿ Active BTC Trading Pairs</h4>';
             
             if (data.pairs && data.pairs.length > 0) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'row';
+                
                 data.pairs.forEach(pair => {
                     if (pair.token0 === 'BTC' || pair.token1 === 'BTC') {
+                        const colDiv = document.createElement('div');
+                        colDiv.className = 'col-6 col-sm-4 col-md-3 mb-2';
+                        
                         const pairDiv = document.createElement('div');
                         pairDiv.className = 'currency-item';
                         pairDiv.innerHTML = `
                             <strong>${pair.token0}/${pair.token1}</strong><br>
                             ${pair.price.toFixed(8)}
                         `;
-                        dexStatsDiv.appendChild(pairDiv);
+                        
+                        colDiv.appendChild(pairDiv);
+                        rowDiv.appendChild(colDiv);
                     }
                 });
+                
+                dexStatsDiv.appendChild(rowDiv);
             } else {
-                dexStatsDiv.innerHTML += '<p>Loading BTC pairs...</p>';
+                dexStatsDiv.innerHTML += '<p class="text-center">Loading BTC pairs...</p>';
             }
         }
         
@@ -582,13 +665,18 @@
             
             currencies.forEach(currency => {
                 if (rates && rates[currency]) {
+                    const colDiv = document.createElement('div');
+                    colDiv.className = 'col-6 col-sm-4 col-md-3 mb-2';
+                    
                     const rateDiv = document.createElement('div');
                     rateDiv.className = 'currency-item';
                     rateDiv.innerHTML = `
                         <strong>${currency}</strong><br>
                         ${rates[currency].toFixed(8)} ₿
                     `;
-                    ratesDiv.appendChild(rateDiv);
+                    
+                    colDiv.appendChild(rateDiv);
+                    ratesDiv.appendChild(colDiv);
                 }
             });
         }

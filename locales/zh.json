@@ -1,0 +1,196 @@
+{
+  "common": {
+    "appName": "Otedama挖矿池",
+    "version": "版本 {{version}}",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "warning": "警告",
+    "info": "信息",
+    "confirm": "确认",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "search": "搜索",
+    "filter": "过滤",
+    "refresh": "刷新",
+    "back": "返回",
+    "next": "下一页",
+    "previous": "上一页",
+    "close": "关闭",
+    "yes": "是",
+    "no": "否"
+  },
+  "navigation": {
+    "dashboard": "仪表板",
+    "mining": "挖矿",
+    "wallet": "钱包",
+    "payouts": "支付",
+    "exchange": "交易所",
+    "settings": "设置",
+    "help": "帮助",
+    "logout": "登出"
+  },
+  "mining": {
+    "title": "挖矿概览",
+    "status": {
+      "active": "活跃",
+      "inactive": "不活跃",
+      "connecting": "连接中..."
+    },
+    "stats": {
+      "hashrate": "算力",
+      "shares": "份额",
+      "efficiency": "效率",
+      "uptime": "运行时间",
+      "workers": {
+        "one": "{{count}} 个工作者",
+        "other": "{{count}} 个工作者"
+      }
+    },
+    "pool": {
+      "name": "矿池名称",
+      "algorithm": "算法",
+      "difficulty": "难度",
+      "connectedMiners": {
+        "one": "{{count}} 个连接的矿工",
+        "other": "{{count}} 个连接的矿工"
+      },
+      "fee": "矿池费用: {{fee}}%",
+      "nextPayout": "下次支付时间: {{time}}"
+    }
+  },
+  "wallet": {
+    "title": "钱包",
+    "address": "钱包地址",
+    "balance": "余额",
+    "pendingBalance": "待确认余额",
+    "totalPaid": "总计支付",
+    "currency": "货币",
+    "btcOnly": "仅BTC支付",
+    "conversionNotice": "挖矿所得的{{currency}}将自动转换为BTC",
+    "transactions": {
+      "title": "交易历史",
+      "date": "日期",
+      "amount": "数量",
+      "status": "状态",
+      "txid": "交易ID",
+      "fee": "费用",
+      "noTransactions": "暂无交易"
+    }
+  },
+  "payouts": {
+    "title": "支付",
+    "minimumPayout": "最低支付",
+    "payoutThreshold": "支付阈值",
+    "estimatedPayout": "预估支付",
+    "lastPayout": "上次支付",
+    "nextPayout": "下次支付",
+    "automatic": "每小时自动支付",
+    "manual": "请求手动支付",
+    "history": {
+      "title": "支付历史",
+      "date": "日期",
+      "amount": "数量",
+      "status": "状态",
+      "address": "地址",
+      "transactionId": "交易ID"
+    }
+  },
+  "exchange": {
+    "title": "去中心化交易所",
+    "swap": "兑换",
+    "liquidity": "流动性",
+    "from": "从",
+    "to": "到",
+    "amount": "数量",
+    "estimatedReceived": "预估收到",
+    "price": "价格",
+    "priceImpact": "价格影响",
+    "fee": "交易费用",
+    "slippage": "滑点容忍度",
+    "deadline": "交易期限",
+    "addLiquidity": "添加流动性",
+    "removeLiquidity": "移除流动性",
+    "yourLiquidity": "您的流动性",
+    "poolShare": "池份额"
+  },
+  "settings": {
+    "title": "设置",
+    "account": {
+      "title": "账户设置",
+      "email": "邮箱地址",
+      "password": "密码",
+      "twoFactor": "双因素认证",
+      "apiKeys": "API密钥"
+    },
+    "mining": {
+      "title": "挖矿设置",
+      "workerName": "工作者名称",
+      "difficultyAdjustment": "难度调整",
+      "autoSwitch": "自动切换算法"
+    },
+    "notifications": {
+      "title": "通知",
+      "email": "邮件通知",
+      "webhook": "Webhooks",
+      "events": {
+        "workerOffline": "工作者离线",
+        "blockFound": "发现区块",
+        "payoutSent": "支付已发送",
+        "lowHashrate": "低算力警告"
+      }
+    },
+    "preferences": {
+      "title": "偏好设置",
+      "language": "语言",
+      "theme": "主题",
+      "timezone": "时区",
+      "currency": "显示货币"
+    }
+  },
+  "messages": {
+    "welcome": "欢迎来到Otedama挖矿池",
+    "connectionLost": "连接丢失。正在尝试重新连接...",
+    "connectionRestored": "连接已恢复",
+    "shareAccepted": "份额已接受",
+    "shareRejected": "份额被拒绝: {{reason}}",
+    "payoutSent": "{{amount}} BTC支付成功发送",
+    "insufficientBalance": "余额不足",
+    "invalidAddress": "无效钱包地址",
+    "settingsSaved": "设置保存成功",
+    "errorOccurred": "发生错误: {{error}}",
+    "copied": "已复制到剪贴板",
+    "confirmDelete": "您确定要删除吗？",
+    "rateLimit": "请求过于频繁。请稍后再试。"
+  },
+  "time": {
+    "seconds": {
+      "one": "{{count}} 秒",
+      "other": "{{count}} 秒"
+    },
+    "minutes": {
+      "one": "{{count}} 分钟",
+      "other": "{{count}} 分钟"
+    },
+    "hours": {
+      "one": "{{count}} 小时",
+      "other": "{{count}} 小时"
+    },
+    "days": {
+      "one": "{{count}} 天",
+      "other": "{{count}} 天"
+    },
+    "ago": "{{time}} 前",
+    "in": "{{time}} 后",
+    "justNow": "刚刚"
+  },
+  "help": {
+    "gettingStarted": "入门指南",
+    "faq": "常见问题",
+    "supportCenter": "支持中心",
+    "documentation": "文档",
+    "contact": "联系我们"
+  }
+}

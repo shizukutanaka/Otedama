@@ -1,0 +1,190 @@
+{
+  "common": {
+    "appName": "Otedamaマイニングプール",
+    "version": "バージョン {{version}}",
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功",
+    "warning": "警告",
+    "info": "情報",
+    "confirm": "確認",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "search": "検索",
+    "filter": "フィルター",
+    "refresh": "更新",
+    "back": "戻る",
+    "next": "次へ",
+    "previous": "前へ",
+    "close": "閉じる",
+    "yes": "はい",
+    "no": "いいえ"
+  },
+  "navigation": {
+    "dashboard": "ダッシュボード",
+    "mining": "マイニング",
+    "wallet": "ウォレット",
+    "payouts": "支払い",
+    "exchange": "取引所",
+    "settings": "設定",
+    "help": "ヘルプ",
+    "logout": "ログアウト"
+  },
+  "mining": {
+    "title": "マイニング概要",
+    "status": {
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "connecting": "接続中..."
+    },
+    "stats": {
+      "hashrate": "ハッシュレート",
+      "shares": "シェア",
+      "efficiency": "効率",
+      "uptime": "稼働時間",
+      "workers": {
+        "other": "{{count}} ワーカー"
+      }
+    },
+    "pool": {
+      "name": "プール名",
+      "algorithm": "アルゴリズム",
+      "difficulty": "難易度",
+      "connectedMiners": {
+        "other": "{{count}} 接続中のマイナー"
+      },
+      "fee": "プール手数料: {{fee}}%",
+      "nextPayout": "次の支払いまで {{time}}"
+    }
+  },
+  "wallet": {
+    "title": "ウォレット",
+    "address": "ウォレットアドレス",
+    "balance": "残高",
+    "pendingBalance": "保留中の残高",
+    "totalPaid": "総支払額",
+    "currency": "通貨",
+    "btcOnly": "すべての支払いはBTCのみ",
+    "conversionNotice": "マイニングされた{{currency}}は自動的にBTCに変換されます",
+    "transactions": {
+      "title": "取引履歴",
+      "date": "日付",
+      "amount": "金額",
+      "status": "ステータス",
+      "txid": "取引ID",
+      "fee": "手数料",
+      "noTransactions": "まだ取引がありません"
+    }
+  },
+  "payouts": {
+    "title": "支払い",
+    "minimumPayout": "最小支払額",
+    "payoutThreshold": "支払いしきい値",
+    "estimatedPayout": "推定支払額",
+    "lastPayout": "最後の支払い",
+    "nextPayout": "次の支払い",
+    "automatic": "毎時間自動支払い",
+    "manual": "手動支払いをリクエスト",
+    "history": {
+      "title": "支払い履歴",
+      "date": "日付",
+      "amount": "金額",
+      "status": "ステータス",
+      "address": "アドレス",
+      "transactionId": "取引ID"
+    }
+  },
+  "exchange": {
+    "title": "分散型取引所",
+    "swap": "スワップ",
+    "liquidity": "流動性",
+    "from": "から",
+    "to": "へ",
+    "amount": "金額",
+    "estimatedReceived": "受取予定額",
+    "price": "価格",
+    "priceImpact": "価格への影響",
+    "fee": "取引手数料",
+    "slippage": "スリッページ許容度",
+    "deadline": "取引期限",
+    "addLiquidity": "流動性を追加",
+    "removeLiquidity": "流動性を削除",
+    "yourLiquidity": "あなたの流動性",
+    "poolShare": "プールシェア"
+  },
+  "settings": {
+    "title": "設定",
+    "account": {
+      "title": "アカウント設定",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "twoFactor": "二要素認証",
+      "apiKeys": "APIキー"
+    },
+    "mining": {
+      "title": "マイニング設定",
+      "workerName": "ワーカー名",
+      "difficultyAdjustment": "難易度調整",
+      "autoSwitch": "アルゴリズム自動切替"
+    },
+    "notifications": {
+      "title": "通知",
+      "email": "メール通知",
+      "webhook": "Webhook",
+      "events": {
+        "workerOffline": "ワーカーがオフライン",
+        "blockFound": "ブロック発見",
+        "payoutSent": "支払い完了",
+        "lowHashrate": "低ハッシュレート警告"
+      }
+    },
+    "preferences": {
+      "title": "設定",
+      "language": "言語",
+      "theme": "テーマ",
+      "timezone": "タイムゾーン",
+      "currency": "表示通貨"
+    }
+  },
+  "messages": {
+    "welcome": "Otedamaマイニングプールへようこそ",
+    "connectionLost": "接続が失われました。再接続を試みています...",
+    "connectionRestored": "接続が復元されました",
+    "shareAccepted": "シェアが承認されました",
+    "shareRejected": "シェアが拒否されました: {{reason}}",
+    "payoutSent": "{{amount}} BTCの支払いが正常に送信されました",
+    "insufficientBalance": "残高不足",
+    "invalidAddress": "無効なウォレットアドレス",
+    "settingsSaved": "設定が正常に保存されました",
+    "errorOccurred": "エラーが発生しました: {{error}}",
+    "copied": "クリップボードにコピーされました",
+    "confirmDelete": "本当に削除しますか？",
+    "rateLimit": "リクエストが多すぎます。後でもう一度お試しください。"
+  },
+  "time": {
+    "seconds": {
+      "other": "{{count}} 秒"
+    },
+    "minutes": {
+      "other": "{{count}} 分"
+    },
+    "hours": {
+      "other": "{{count}} 時間"
+    },
+    "days": {
+      "other": "{{count}} 日"
+    },
+    "ago": "{{time}}前",
+    "in": "{{time}}後",
+    "justNow": "たった今"
+  },
+  "help": {
+    "gettingStarted": "はじめに",
+    "faq": "よくある質問",
+    "supportCenter": "サポートセンター",
+    "documentation": "ドキュメント",
+    "contact": "お問い合わせ"
+  }
+}

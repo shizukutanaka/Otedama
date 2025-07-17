@@ -1,0 +1,208 @@
+{
+  "common": {
+    "appName": "Пул майнинга Otedama",
+    "version": "Версия {{version}}",
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "success": "Успех",
+    "warning": "Предупреждение",
+    "info": "Информация",
+    "confirm": "Подтвердить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "search": "Поиск",
+    "filter": "Фильтр",
+    "refresh": "Обновить",
+    "back": "Назад",
+    "next": "Далее",
+    "previous": "Предыдущий",
+    "close": "Закрыть",
+    "yes": "Да",
+    "no": "Нет"
+  },
+  "navigation": {
+    "dashboard": "Панель управления",
+    "mining": "Майнинг",
+    "wallet": "Кошелек",
+    "payouts": "Выплаты",
+    "exchange": "Биржа",
+    "settings": "Настройки",
+    "help": "Помощь",
+    "logout": "Выход"
+  },
+  "mining": {
+    "title": "Обзор майнинга",
+    "status": {
+      "active": "Активен",
+      "inactive": "Неактивен",
+      "connecting": "Подключение..."
+    },
+    "stats": {
+      "hashrate": "Хешрейт",
+      "shares": "Шары",
+      "efficiency": "Эффективность",
+      "uptime": "Время работы",
+      "workers": {
+        "one": "{{count}} Воркер",
+        "few": "{{count}} Воркера",
+        "many": "{{count}} Воркеров",
+        "other": "{{count}} Воркеров"
+      }
+    },
+    "pool": {
+      "name": "Название пула",
+      "algorithm": "Алгоритм",
+      "difficulty": "Сложность",
+      "connectedMiners": {
+        "one": "{{count}} подключенный майнер",
+        "few": "{{count}} подключенных майнера",
+        "many": "{{count}} подключенных майнеров",
+        "other": "{{count}} подключенных майнеров"
+      },
+      "fee": "Комиссия пула: {{fee}}%",
+      "nextPayout": "Следующая выплата через {{time}}"
+    }
+  },
+  "wallet": {
+    "title": "Кошелек",
+    "address": "Адрес кошелька",
+    "balance": "Баланс",
+    "pendingBalance": "Баланс в ожидании",
+    "totalPaid": "Общая выплата",
+    "currency": "Валюта",
+    "btcOnly": "Только выплаты в BTC",
+    "conversionNotice": "Добытая {{currency}} будет автоматически конвертирована в BTC",
+    "transactions": {
+      "title": "История транзакций",
+      "date": "Дата",
+      "amount": "Сумма",
+      "status": "Статус",
+      "txid": "ID транзакции",
+      "fee": "Комиссия",
+      "noTransactions": "Транзакций пока нет"
+    }
+  },
+  "payouts": {
+    "title": "Выплаты",
+    "minimumPayout": "Минимальная выплата",
+    "payoutThreshold": "Порог выплаты",
+    "estimatedPayout": "Расчетная выплата",
+    "lastPayout": "Последняя выплата",
+    "nextPayout": "Следующая выплата",
+    "automatic": "Автоматические выплаты каждый час",
+    "manual": "Запросить ручную выплату",
+    "history": {
+      "title": "История выплат",
+      "date": "Дата",
+      "amount": "Сумма",
+      "status": "Статус",
+      "address": "Адрес",
+      "transactionId": "ID транзакции"
+    }
+  },
+  "exchange": {
+    "title": "Децентрализованная биржа",
+    "swap": "Обмен",
+    "liquidity": "Ликвидность",
+    "from": "Из",
+    "to": "В",
+    "amount": "Сумма",
+    "estimatedReceived": "Ожидаемо получено",
+    "price": "Цена",
+    "priceImpact": "Влияние на цену",
+    "fee": "Комиссия за торговлю",
+    "slippage": "Толерантность к проскальзыванию",
+    "deadline": "Срок транзакции",
+    "addLiquidity": "Добавить ликвидность",
+    "removeLiquidity": "Удалить ликвидность",
+    "yourLiquidity": "Ваша ликвидность",
+    "poolShare": "Доля пула"
+  },
+  "settings": {
+    "title": "Настройки",
+    "account": {
+      "title": "Настройки аккаунта",
+      "email": "Email адрес",
+      "password": "Пароль",
+      "twoFactor": "Двухфакторная аутентификация",
+      "apiKeys": "API ключи"
+    },
+    "mining": {
+      "title": "Настройки майнинга",
+      "workerName": "Имя воркера",
+      "difficultyAdjustment": "Настройка сложности",
+      "autoSwitch": "Автопереключение алгоритма"
+    },
+    "notifications": {
+      "title": "Уведомления",
+      "email": "Email уведомления",
+      "webhook": "Веб-хуки",
+      "events": {
+        "workerOffline": "Воркер отключен",
+        "blockFound": "Блок найден",
+        "payoutSent": "Выплата отправлена",
+        "lowHashrate": "Предупреждение о низком хешрейте"
+      }
+    },
+    "preferences": {
+      "title": "Предпочтения",
+      "language": "Язык",
+      "theme": "Тема",
+      "timezone": "Часовой пояс",
+      "currency": "Валюта отображения"
+    }
+  },
+  "messages": {
+    "welcome": "Добро пожаловать в Otedama Mining Pool",
+    "connectionLost": "Соединение потеряно. Попытка переподключения...",
+    "connectionRestored": "Соединение восстановлено",
+    "shareAccepted": "Шара принята",
+    "shareRejected": "Шара отклонена: {{reason}}",
+    "payoutSent": "Выплата {{amount}} BTC успешно отправлена",
+    "insufficientBalance": "Недостаточный баланс",
+    "invalidAddress": "Неверный адрес кошелька",
+    "settingsSaved": "Настройки успешно сохранены",
+    "errorOccurred": "Произошла ошибка: {{error}}",
+    "copied": "Скопировано в буфер обмена",
+    "confirmDelete": "Вы уверены, что хотите это удалить?",
+    "rateLimit": "Слишком много запросов. Попробуйте позже."
+  },
+  "time": {
+    "seconds": {
+      "one": "{{count}} секунда",
+      "few": "{{count}} секунды",
+      "many": "{{count}} секунд",
+      "other": "{{count}} секунд"
+    },
+    "minutes": {
+      "one": "{{count}} минута",
+      "few": "{{count}} минуты",
+      "many": "{{count}} минут",
+      "other": "{{count}} минут"
+    },
+    "hours": {
+      "one": "{{count}} час",
+      "few": "{{count}} часа",
+      "many": "{{count}} часов",
+      "other": "{{count}} часов"
+    },
+    "days": {
+      "one": "{{count}} день",
+      "few": "{{count}} дня",
+      "many": "{{count}} дней",
+      "other": "{{count}} дней"
+    },
+    "ago": "{{time}} назад",
+    "in": "через {{time}}",
+    "justNow": "только что"
+  },
+  "help": {
+    "gettingStarted": "Начало работы",
+    "faq": "Часто задаваемые вопросы",
+    "supportCenter": "Центр поддержки",
+    "documentation": "Документация",
+    "contact": "Связаться с нами"
+  }
+}

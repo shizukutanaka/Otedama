@@ -1,0 +1,200 @@
+# Multi-stage production Dockerfile for Otedama
+# Optimized for commercial deployment
+
+# Stage 1: Build stage
+FROM node:18-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    sqlite-dev
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies (production only)
+RUN npm ci --only=production --no-audit --no-fund
+
+# Copy source code
+COPY . .
+
+# Build optimizations
+RUN npm run build 2>/dev/null || true
+RUN npm prune --production
+
+# Stage 2: Production stage
+FROM node:18-alpine AS production
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    sqlite \
+    curl \
+    ca-certificates \
+    tzdata \
+    dumb-init
+
+# Create non-root user
+RUN addgroup -g 1001 -S otedama && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G otedama otedama
+
+# Set working directory
+WORKDIR /app
+
+# Copy application files from builder
+COPY --from=builder --chown=otedama:otedama /app/node_modules ./node_modules
+COPY --from=builder --chown=otedama:otedama /app/package*.json ./
+COPY --chown=otedama:otedama . .
+
+# Create necessary directories
+RUN mkdir -p /app/data /app/logs /app/backups /app/ssl && \
+    chown -R otedama:otedama /app
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=4096" \
+    UV_THREADPOOL_SIZE=32 \
+    PORT=8080 \
+    STRATUM_PORT=3333 \
+    P2P_PORT=8333
+
+# Expose ports
+EXPOSE 3333 8080 8333 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Use dumb-init for proper signal handling
+USER otedama
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start application
+CMD ["node", "index.js"]
+
+# Stage 3: Development stage
+FROM node:18-alpine AS development
+
+# Install development dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    sqlite-dev \
+    git
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev)
+RUN npm ci --no-audit --no-fund
+
+# Copy source code
+COPY . .
+
+# Create non-root user
+RUN addgroup -g 1001 -S otedama && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G otedama otedama
+
+# Create directories
+RUN mkdir -p /app/data /app/logs /app/backups /app/ssl && \
+    chown -R otedama:otedama /app
+
+# Set environment variables
+ENV NODE_ENV=development \
+    NODE_OPTIONS="--max-old-space-size=2048" \
+    PORT=8080 \
+    STRATUM_PORT=3333 \
+    P2P_PORT=8333
+
+# Expose ports
+EXPOSE 3333 8080 8333 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+USER otedama
+
+# Start with nodemon for development
+CMD ["npm", "run", "dev"]
+
+# Stage 4: Testing stage
+FROM node:18-alpine AS testing
+
+# Install testing dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    sqlite-dev \
+    git \
+    curl
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies
+RUN npm ci --no-audit --no-fund
+
+# Copy source code
+COPY . .
+
+# Set environment variables
+ENV NODE_ENV=test \
+    NODE_OPTIONS="--max-old-space-size=2048"
+
+# Run tests
+RUN npm test
+
+# Default command for testing
+CMD ["npm", "test"]
+
+# Stage 5: Benchmark stage
+FROM node:18-alpine AS benchmark
+
+# Install benchmark dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    sqlite \
+    sqlite-dev \
+    git \
+    curl \
+    wrk
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --no-audit --no-fund
+
+# Copy source code
+COPY . .
+
+# Set environment variables
+ENV NODE_ENV=benchmark \
+    NODE_OPTIONS="--max-old-space-size=4096"
+
+# Expose ports
+EXPOSE 3333 8080 8333
+
+# Run benchmarks
+CMD ["npm", "run", "benchmark"]

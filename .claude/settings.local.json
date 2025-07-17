@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(npx:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run:*)",
+      "Bash(rm:*)",
+      "Bash(true)",
+      "Bash(mv:*)",
+      "Bash(ls:*)",
+      "Bash(node:*)",
+      "Bash(del /s /q \"C:\\Users\\irosa\\Desktop\\Otedama\\lib\\cache\")",
+      "Bash(npm test:*)",
+      "Bash(dir)",
+      "Bash(cp:*)",
+      "Bash(touch:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}

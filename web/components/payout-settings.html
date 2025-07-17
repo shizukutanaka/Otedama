@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payout Settings - Otedama</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 30px;
+            background: linear-gradient(45deg, #00d4ff, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .settings-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #00d4ff;
+        }
+
+        .payout-option {
+            background: #252525;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .payout-option:hover {
+            border-color: #00d4ff;
+            transform: translateY(-2px);
+        }
+
+        .payout-option.selected {
+            border-color: #00d4ff;
+            background: #1a2332;
+        }
+
+        .payout-option.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #00d4ff;
+            font-size: 24px;
+        }
+
+        .option-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .option-description {
+            color: #999;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .fee-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+
+        .fee-label {
+            color: #666;
+        }
+
+        .fee-value {
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 10px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #252525;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .wallet-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .wallet-input input {
+            flex: 1;
+        }
+
+        .load-btn {
+            padding: 12px 20px;
+            background: #00d4ff;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .load-btn:hover {
+            background: #00a8cc;
+        }
+
+        .balance-card {
+            background: #252525;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .balance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .balance-title {
+            font-size: 16px;
+            color: #999;
+        }
+
+        .balance-amount {
+            font-size: 24px;
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .balance-currency {
+            font-size: 16px;
+            color: #666;
+            margin-left: 5px;
+        }
+
+        .next-payout {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .save-button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(45deg, #00d4ff, #0099ff);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 30px;
+        }
+
+        .save-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 212, 255, 0.3);
+        }
+
+        .save-button:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .estimate-section {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        .estimate-result {
+            background: #252525;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .estimate-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .estimate-label {
+            color: #999;
+        }
+
+        .estimate-value {
+            font-weight: 600;
+        }
+
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert.success {
+            background: #0d3317;
+            border: 1px solid #0f5132;
+            color: #75dd9d;
+        }
+
+        .alert.error {
+            background: #3d0d0d;
+            border: 1px solid #842029;
+            color: #ea868f;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #333;
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Payout Settings</h1>
+
+        <!-- Wallet Input -->
+        <div class="settings-card">
+            <div class="section-title">Wallet Address</div>
+            <div class="form-group">
+                <div class="wallet-input">
+                    <input 
+                        type="text" 
+                        id="walletAddress" 
+                        class="form-input" 
+                        placeholder="Enter your wallet address"
+                        value=""
+                    >
+                    <button class="load-btn" onclick="loadSettings()">Load Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Message -->
+        <div id="alert" class="alert" style="display: none;"></div>
+
+        <!-- Settings Content -->
+        <div id="settingsContent" style="display: none;">
+            <!-- Balance Display -->
+            <div class="settings-card">
+                <div class="section-title">Pending Balance</div>
+                <div id="balanceContainer"></div>
+            </div>
+
+            <!-- Payout Options -->
+            <div class="settings-card">
+                <div class="section-title">Payout Method</div>
+                
+                <div class="payout-option" onclick="selectPayoutMode('direct')">
+                    <div class="option-title">Direct Currency Payout</div>
+                    <div class="option-description">
+                        Receive your mined currency directly without conversion. 
+                        A 1.8% pool fee will be deducted in BTC based on current exchange rates.
+                    </div>
+                    <div class="fee-info">
+                        <span class="fee-label">Pool Fee:</span>
+                        <span class="fee-value">1.8%</span>
+                    </div>
+                </div>
+
+                <div class="payout-option" onclick="selectPayoutMode('convert')">
+                    <div class="option-title">Auto-Convert to BTC</div>
+                    <div class="option-description">
+                        Automatically convert all mined currencies to BTC. 
+                        Includes a 2% total fee covering both pool usage and conversion.
+                    </div>
+                    <div class="fee-info">
+                        <span class="fee-label">Total Fee:</span>
+                        <span class="fee-value">2.0%</span>
+                    </div>
+                </div>
+
+                <!-- Minimum Payout -->
+                <div class="form-group" style="margin-top: 30px;">
+                    <label class="form-label">Minimum Payout Amount (BTC)</label>
+                    <input 
+                        type="number" 
+                        id="minimumPayout" 
+                        class="form-input" 
+                        value="0.001" 
+                        min="0.0001" 
+                        max="1" 
+                        step="0.0001"
+                    >
+                </div>
+
+                <button class="save-button" onclick="saveSettings()">Save Settings</button>
+            </div>
+
+            <!-- Payout Estimator -->
+            <div class="estimate-section">
+                <div class="section-title">Payout Estimator</div>
+                <div class="form-group">
+                    <label class="form-label">Currency</label>
+                    <select id="estimateCurrency" class="form-input">
+                        <option value="BTC">BTC - Bitcoin</option>
+                        <option value="ETH">ETH - Ethereum</option>
+                        <option value="RVN">RVN - Ravencoin</option>
+                        <option value="XMR">XMR - Monero</option>
+                        <option value="LTC">LTC - Litecoin</option>
+                        <option value="DOGE">DOGE - Dogecoin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount</label>
+                    <input 
+                        type="number" 
+                        id="estimateAmount" 
+                        class="form-input" 
+                        placeholder="0.0" 
+                        step="0.00000001"
+                    >
+                </div>
+                <button class="load-btn" onclick="calculateEstimate()">Calculate</button>
+                
+                <div id="estimateResult" class="estimate-result" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSettings = {
+            payoutMode: 'convert',
+            minimumPayout: 0.001
+        };
+
+        async function loadSettings() {
+            const walletAddress = document.getElementById('walletAddress').value.trim();
+            
+            if (!walletAddress) {
+                showAlert('Please enter a wallet address', 'error');
+                return;
+            }
+
+            try {
+                // Get preferences
+                const prefResponse = await fetch(`/api/payout/preferences/${walletAddress}`);
+                const prefData = await prefResponse.json();
+                
+                if (prefData.success) {
+                    currentSettings = {
+                        payoutMode: prefData.preference.payoutMode,
+                        minimumPayout: prefData.preference.minimumPayout
+                    };
+                    
+                    // Update UI
+                    selectPayoutMode(currentSettings.payoutMode);
+                    document.getElementById('minimumPayout').value = currentSettings.minimumPayout;
+                }
+
+                // Get balance
+                const balanceResponse = await fetch(`/api/payout/balance/${walletAddress}`);
+                const balanceData = await balanceResponse.json();
+                
+                if (balanceData.success) {
+                    displayBalance(balanceData);
+                }
+
+                document.getElementById('settingsContent').style.display = 'block';
+                showAlert('Settings loaded successfully', 'success');
+            } catch (error) {
+                showAlert('Failed to load settings: ' + error.message, 'error');
+            }
+        }
+
+        function selectPayoutMode(mode) {
+            currentSettings.payoutMode = mode;
+            
+            // Update UI
+            document.querySelectorAll('.payout-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            const options = document.querySelectorAll('.payout-option');
+            if (mode === 'direct') {
+                options[0].classList.add('selected');
+            } else {
+                options[1].classList.add('selected');
+            }
+        }
+
+        function displayBalance(data) {
+            const container = document.getElementById('balanceContainer');
+            let html = '';
+            
+            if (data.balances && data.balances.length > 0) {
+                data.balances.forEach(balance => {
+                    html += `
+                        <div class="balance-card">
+                            <div class="balance-header">
+                                <div>
+                                    <div class="balance-title">Pending Balance</div>
+                                    <div class="balance-amount">
+                                        ${balance.balance.toFixed(8)}
+                                        <span class="balance-currency">${balance.currency}</span>
+                                    </div>
+                                </div>
+                                <div class="next-payout">
+                                    Next payout in ${data.nextPayoutIn.relative}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                html = `
+                    <div class="balance-card">
+                        <div class="balance-title">No pending balance</div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        async function saveSettings() {
+            const walletAddress = document.getElementById('walletAddress').value.trim();
+            const minimumPayout = parseFloat(document.getElementById('minimumPayout').value);
+            
+            if (!walletAddress) {
+                showAlert('Please enter a wallet address', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/payout/preferences/${walletAddress}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        payoutMode: currentSettings.payoutMode,
+                        minimumPayout: minimumPayout
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Settings saved successfully', 'success');
+                } else {
+                    showAlert('Failed to save settings', 'error');
+                }
+            } catch (error) {
+                showAlert('Error saving settings: ' + error.message, 'error');
+            }
+        }
+
+        async function calculateEstimate() {
+            const walletAddress = document.getElementById('walletAddress').value.trim();
+            const currency = document.getElementById('estimateCurrency').value;
+            const amount = parseFloat(document.getElementById('estimateAmount').value);
+            
+            if (!walletAddress || !amount) {
+                showAlert('Please enter wallet address and amount', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/payout/estimate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        walletAddress,
+                        currency,
+                        amount
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayEstimate(data.estimate);
+                } else {
+                    showAlert('Failed to calculate estimate', 'error');
+                }
+            } catch (error) {
+                showAlert('Error calculating estimate: ' + error.message, 'error');
+            }
+        }
+
+        function displayEstimate(estimate) {
+            const resultDiv = document.getElementById('estimateResult');
+            
+            let html = `
+                <div class="estimate-row">
+                    <span class="estimate-label">Payout Mode:</span>
+                    <span class="estimate-value">${estimate.mode === 'direct' ? 'Direct Currency' : 'Auto-Convert to BTC'}</span>
+                </div>
+                <div class="estimate-row">
+                    <span class="estimate-label">Gross Amount:</span>
+                    <span class="estimate-value">${estimate.grossAmount.toFixed(8)} ${estimate.currency}</span>
+                </div>
+                <div class="estimate-row">
+                    <span class="estimate-label">Pool Fee:</span>
+                    <span class="estimate-value">${estimate.poolFeeBtc.toFixed(8)} BTC</span>
+                </div>
+                <div class="estimate-row" style="padding-top: 10px; border-top: 1px solid #333;">
+                    <span class="estimate-label">You Receive:</span>
+                    <span class="estimate-value" style="color: #00d4ff; font-size: 18px;">
+                        ${estimate.netAmount.toFixed(8)} ${estimate.netCurrency}
+                    </span>
+                </div>
+                <div style="margin-top: 15px; color: #666; font-size: 14px;">
+                    ${estimate.explanation}
+                </div>
+            `;
+            
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = document.getElementById('alert');
+            alertDiv.className = `alert ${type}`;
+            alertDiv.textContent = message;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Load settings if wallet address is in URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const walletParam = urlParams.get('wallet');
+        if (walletParam) {
+            document.getElementById('walletAddress').value = walletParam;
+            loadSettings();
+        }
+    </script>
+</body>
+</html>

@@ -25,16 +25,26 @@
 import { Worker } from 'worker_threads';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { createHash, randomBytes } from 'crypto';
+import crypto, { createHash, randomBytes } from 'crypto';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { cpus, freemem, totalmem } from 'os';
 import { resolve, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import Database from 'better-sqlite3';
 import { getPrices } from './services/price-feed.js';
+import { AMMOptimizer } from './lib/dex/amm/index.js';
+import { SecurityAuditManager } from './lib/security/index.js';
+import { RealTimeMonitor } from './lib/monitoring/index.js';
+import { WorkerPool } from './lib/worker-pool.js';
+import { MemoryCache, LoadingCache } from './lib/memory-cache.js';
+import { DatabaseOptimizer } from './lib/database-optimizer.js';
+import { P2PController } from './lib/p2p/p2p-controller.js';
+import { DEXEngine } from './lib/dex-engine.js';
+import { SecurityEnhanced } from './lib/security/index.js';
+import { createI18n } from './lib/i18n.js';
 
-// ===== CONSTANTS Ver0.6 =====
-const VERSION = '0.6.0';
+// ===== CONSTANTS =====
+const VERSION = '0.7.0';
 const OPERATOR_ADDRESS = '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa';
 
 // NEW Ver0.6: Updated fee structure
@@ -589,8 +599,56 @@ class OtedamaApp {
   constructor() {
     this.logger = new Logger('App');
     this.config = new ConfigManager();
-    this.db = new DatabaseManager();
-    this.dex = new DEXEngine(this.config.get('dex'), this.db, () => liveCoinPrices);
+    
+    // Initialize optimized database
+    const dbPath = './otedama.db';
+    this.dbOptimizer = new DatabaseOptimizer(dbPath, {
+      poolSize: 5,
+      enableQueryCache: true,
+      cacheSize: 100 * 1024 * 1024 // 100MB
+    });
+    
+    // For compatibility, expose db property
+    this.db = {
+      db: this.dbOptimizer.pool[0].db,
+      query: (sql, params) => this.dbOptimizer.query(sql, params),
+      get: (sql, params) => this.dbOptimizer.get(sql, params),
+      run: (sql, params) => this.dbOptimizer.run(sql, params)
+    };
+    
+    // Initialize worker pool
+    this.workerPool = new WorkerPool({
+      minWorkers: 2,
+      maxWorkers: cpus().length,
+      workerScript: './workers/mining-worker.js'
+    });
+    
+    // Initialize memory cache
+    this.cache = new MemoryCache({
+      maxSize: 200 * 1024 * 1024, // 200MB
+      ttl: 3600000 // 1 hour
+    });
+    
+    // Initialize P2P controller (will be started in start())
+    this.p2pController = null;
+    
+    // Initialize DEX (will be created in start())
+    this.dex = null;
+    
+    // Initialize enhanced security
+    this.securityEnhanced = null;
+    
+    // Initialize i18n
+    this.i18n = createI18n({
+      defaultLanguage: 'en',
+      fallbackLanguage: 'en',
+      localesPath: './locales',
+      autoDetect: true
+    });
+    
+    this.ammOptimizer = null;
+    this.securityAudit = null;
+    this.realTimeMonitor = null;
     this.miningEngine = null;
     this.stratumServer = null;
     this.apiServer = null;
@@ -627,10 +685,120 @@ class OtedamaApp {
     }, 5 * 60 * 1000); // 300,000 milliseconds = 5 minutes
   }
 
+  showBanner() {
+    console.log(`
+████████╗███████╗██████╗ ██╗  ██╗    ██████╗  ██████╗  ██████╗ ██╗     
+╚══██╔══╝██╔════╝██╔══██╗╚██╗██╔╝    ██╔══██╗██╔═══██╗██╔═══██╗██║     
+   ██║   █████╗  ██████╔╝ ╚███╔╝     ██████╔╝██║   ██║██║   ██║██║     
+   ██║   ██╔══╝  ██╔══██╗ ██╔██╗     ██╔═══╝ ██║   ██║██║   ██║██║     
+   ██║   ███████╗██║  ██║██╔╝ ██╗    ██║     ╚██████╔╝╚██████╔╝███████╗
+   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝    ╚═╝      ╚═════╝  ╚═════╝ ╚══════╝
+
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║                      Otedama Professional Mining Pool                            ║
+║                      Advanced P2P Mining with DeFi Integration                   ║
+║                      Built for Performance, Security & Simplicity               ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+System Information:
+├─ Node.js Version: ${process.version}
+├─ Platform: ${process.platform}
+├─ Architecture: ${process.arch}
+├─ Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB / ${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB
+├─ CPU Cores: ${cpus().length}
+└─ Free Memory: ${Math.round(freemem() / 1024 / 1024)}MB / ${Math.round(totalmem() / 1024 / 1024)}MB
+
+Mining Pool Features:
+├─ 13 Supported Currencies: BTC, ETH, RVN, XMR, LTC, DOGE, ETC, ZEC, DASH, ERGO, FLUX, KAS, ALPH  
+├─ 10 Mining Algorithms: SHA256, Scrypt, Ethash, RandomX, KawPow, X11, Equihash, Autolykos, kHeavyHash, Blake3
+├─ Hardware Support: CPU, GPU (NVIDIA/AMD), ASIC
+├─ Payout Options: Direct Currency (1.8% fee) | Auto-Convert to BTC (2% fee)
+├─ P2P Network: Decentralized pool coordination
+└─ Pool Operator: ${OPERATOR_ADDRESS}
+
+DeFi Platform Features:
+├─ Automated Market Maker: Concentrated liquidity with dynamic fees
+├─ MEV Protection: Commit-reveal scheme prevents frontrunning
+├─ Cross-Chain Bridge: Multi-blockchain asset transfers
+├─ Yield Farming: Stake earnings for additional rewards
+├─ Flash Loans: Uncollateralized lending for arbitrage
+└─ 50+ Trading Pairs: Low fees, atomic swaps, no KYC
+
+Security & Performance:
+├─ Enterprise Security: Rate limiting, DDoS protection, audit logging
+├─ Real-time Monitoring: Prometheus metrics, Grafana dashboards
+├─ Multi-language Support: 50+ languages supported
+├─ Mobile PWA: Full mobile app experience
+├─ API Gateway: Complete REST/WebSocket API
+└─ Production Ready: Docker, Kubernetes, bare metal deployment
+
+Design Philosophy:
+├─ Performance First (John Carmack): Minimal overhead, optimize hot paths
+├─ Clean Code (Robert C. Martin): SOLID principles, clear responsibilities
+└─ Simplicity (Rob Pike): Obvious solutions over clever ones
+
+Starting Otedama...
+`);
+  }
+
   async start() {
     this.showBanner();
     await this.startPriceFeed(); // Fetch initial prices before starting other services
+    
+    // Load all language files
+    await this.i18n.loadAllLanguages();
+    this.logger.info(`Loaded ${this.i18n.getSupportedLanguages().length} languages`);
+    
     try {
+      
+      // Initialize P2P Controller
+      this.p2pController = new P2PController({
+        nodeId: this.config.get('p2p.nodeId'),
+        port: this.config.get('p2p.port') || 3333,
+        maxPeers: 50,
+        logger: this.logger
+      });
+      await this.p2pController.initialize();
+      this.logger.info('P2P Controller initialized for decentralized pool operation');
+      
+      // Initialize DEX Engine with optimized database
+      this.dex = new DEXEngine(this.dbOptimizer, {
+        logger: this.logger,
+        enableAMM: true,
+        enableAtomicSwaps: true
+      });
+      this.logger.info('DEX Engine initialized with AMM and atomic swaps');
+      
+      // Initialize AMM optimizer
+      this.ammOptimizer = new AMMOptimizer({
+        enableConcentratedLiquidity: true,
+        enableDynamicFees: true,
+        enableMEVProtection: true,
+        commitDelay: 1000,
+        batchInterval: 1000
+      });
+      this.logger.info('AMM Optimizer initialized with concentrated liquidity and MEV protection');
+      
+      // Initialize Enhanced Security
+      this.securityEnhanced = new SecurityEnhanced({
+        enableEncryption: true,
+        enableDDoSProtection: true,
+        enableAuditLog: true,
+        enableHoneypot: true,
+        logger: this.logger
+      });
+      this.setupEnhancedSecurityHandlers();
+      this.logger.info('Enhanced Security initialized with DDoS protection and encryption');
+      
+      // Initialize Security Audit Manager
+      this.securityAudit = new SecurityAuditManager();
+      this.setupSecurityEventHandlers();
+      this.logger.info('Security Audit Manager initialized with comprehensive threat detection');
+      
+      // Initialize Real-time Monitor
+      this.realTimeMonitor = new RealTimeMonitor();
+      this.setupMonitoringEventHandlers();
+      this.logger.info('Real-time Monitor initialized with comprehensive system monitoring');
       
       // Initialize mining engine if enabled
       if (this.config.get('mining.enabled')) {
@@ -652,7 +820,10 @@ class OtedamaApp {
         this.config.get('network'),
         this.db,
         this.dex,
-        this.stratumServer
+        this.stratumServer,
+        this.ammOptimizer,
+        this.securityAudit,
+        this.realTimeMonitor
       );
       this.apiServer.start();
       
@@ -806,24 +977,149 @@ class OtedamaApp {
   }
 
   setupProcessHandlers() {
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
       this.logger.info('Received SIGINT, shutting down...');
-      this.shutdown();
+      await this.shutdown();
     });
 
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
       this.logger.info('Received SIGTERM, shutting down...');
-      this.shutdown();
+      await this.shutdown();
     });
 
-    process.on('uncaughtException', (error) => {
+    process.on('uncaughtException', async (error) => {
       this.logger.error('Uncaught exception:', error);
-      this.shutdown();
+      await this.shutdown();
     });
 
     process.on('unhandledRejection', (reason, promise) => {
       this.logger.error('Unhandled rejection at:', promise, 'reason:', reason);
     });
+  }
+
+  setupEnhancedSecurityHandlers() {
+    this.securityEnhanced.on('suspicious_activity', (entry) => {
+      this.logger.warn(`Suspicious activity: ${entry.type}`, entry);
+      
+      // Take action based on severity
+      if (entry.severity === 'critical') {
+        // Could implement auto-blocking or alert mechanisms
+        this.logger.error('Critical security threat detected!', entry);
+      }
+    });
+  }
+
+  setupSecurityEventHandlers() {
+    this.securityAudit.on('auditCompleted', (audit) => {
+      this.logger.info(`Security audit completed. Score: ${audit.securityScore}/100, Findings: ${audit.findings.length}`);
+    });
+
+    this.securityAudit.on('securityAlert', (finding) => {
+      this.logger.warn(`Security alert: ${finding.type} - ${finding.description}`);
+    });
+
+    this.securityAudit.on('vulnerabilityScanCompleted', (results) => {
+      this.logger.info(`Vulnerability scan completed. Found ${results.totalVulnerabilities} vulnerabilities (${results.criticalVulnerabilities} critical)`);
+    });
+
+    this.securityAudit.on('securityMetricsUpdated', (metrics) => {
+      if (metrics.securityScore < 70) {
+        this.logger.warn(`Security score dropped to ${metrics.securityScore}. Immediate attention required.`);
+      }
+    });
+  }
+
+  setupMonitoringEventHandlers() {
+    this.realTimeMonitor.on('alert', (alert) => {
+      this.logger.warn(`Monitoring alert [${alert.severity}]: ${alert.message}`);
+    });
+
+    this.realTimeMonitor.on('metrics', (data) => {
+      // Log critical metrics
+      if (data.metrics.system.cpuUsage > 90) {
+        this.logger.error(`Critical: CPU usage at ${data.metrics.system.cpuUsage}%`);
+      }
+      if (data.metrics.system.memoryUsage > 95) {
+        this.logger.error(`Critical: Memory usage at ${data.metrics.system.memoryUsage}%`);
+      }
+    });
+
+    this.realTimeMonitor.on('thresholdsUpdated', (thresholds) => {
+      this.logger.info('Monitoring thresholds updated');
+    });
+
+    this.realTimeMonitor.on('alertAcknowledged', (alert) => {
+      this.logger.info(`Alert acknowledged: ${alert.id}`);
+    });
+  }
+
+  async shutdown() {
+    try {
+      this.logger.info('Shutting down Otedama...');
+      
+      // Stop P2P Controller
+      if (this.p2pController) {
+        await this.p2pController.shutdown();
+        this.logger.info('P2P controller stopped');
+      }
+      
+      // Stop Worker Pool
+      if (this.workerPool) {
+        await this.workerPool.shutdown();
+        this.logger.info('Worker pool stopped');
+      }
+      
+      // Stop Enhanced Security
+      if (this.securityEnhanced) {
+        this.securityEnhanced.destroy();
+        this.logger.info('Enhanced security stopped');
+      }
+      
+      // Stop Security Audit Manager
+      if (this.securityAudit) {
+        this.securityAudit.destroy();
+        this.logger.info('Security audit manager stopped');
+      }
+      
+      // Stop AMM optimizer
+      if (this.ammOptimizer) {
+        this.ammOptimizer.destroy();
+        this.logger.info('AMM optimizer stopped');
+      }
+      
+      // Clear caches
+      if (this.cache) {
+        this.cache.destroy();
+        this.logger.info('Memory cache cleared');
+      }
+      
+      // Stop Stratum server
+      if (this.stratumServer) {
+        this.stratumServer.stop();
+      }
+      
+      // Stop API server
+      if (this.apiServer) {
+        this.apiServer.stop();
+      }
+      
+      // Stop mining engine
+      if (this.miningEngine) {
+        this.miningEngine.stop();
+      }
+      
+      // Close database optimizer
+      if (this.dbOptimizer) {
+        this.dbOptimizer.close();
+        this.logger.info('Database connections closed');
+      }
+      
+      this.logger.info('Shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      this.logger.error('Error during shutdown:', error);
+      process.exit(1);
+    }
   }
 
 
@@ -1156,11 +1452,14 @@ class StratumServer {
 
 // ===== API SERVER =====
 class APIServer {
-  constructor(config, db, dex, stratum) {
+  constructor(config, db, dex, stratum, ammOptimizer, securityAudit, realTimeMonitor) {
     this.config = config;
     this.db = db;
     this.dex = dex;
     this.stratum = stratum;
+    this.ammOptimizer = ammOptimizer;
+    this.securityAudit = securityAudit;
+    this.realTimeMonitor = realTimeMonitor;
     this.logger = new Logger('API');
     this.server = null;
   }
@@ -1180,20 +1479,62 @@ class APIServer {
   }
 
   handleRequest(req, res) {
+    // Enhanced security checks
+    const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    // Detect language preference
+    const acceptLanguage = req.headers['accept-language'] || 'en';
+    const detectedLang = this.ammOptimizer?.i18n?.detectLanguage({ 
+      headers: { 'accept-language': acceptLanguage } 
+    }) || 'en';
+    
+    // DDoS protection
+    if (this.ammOptimizer?.securityEnhanced) {
+      const ddosCheck = this.ammOptimizer.securityEnhanced.checkDDoS(clientIP);
+      if (!ddosCheck.allowed) {
+        res.statusCode = 429;
+        res.end(JSON.stringify({ 
+          error: 'Too many requests', 
+          reason: ddosCheck.reason,
+          retryAfter: ddosCheck.until 
+        }));
+        return;
+      }
+    }
+    
+    // Honeypot check
+    if (this.ammOptimizer?.securityEnhanced?.checkHoneypot(req.url)) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*'); // For development
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 200;
+      res.end();
+      return;
+    }
 
     const url = new URL(req.url, `http://${req.headers.host}`);
 
-    if (url.pathname === '/api/stats') {
-      const stats = this.getStats();
-      res.end(JSON.stringify(stats));
-    } else if (url.pathname === '/api/miner' && url.searchParams.has('address')) {
-      const minerStats = this.getMinerStats(url.searchParams.get('address'));
-      res.end(JSON.stringify(minerStats));
-    } else if (url.pathname === '/api/prices') {
+    try {
+      if (url.pathname === '/api/stats') {
+        const stats = this.getStats();
+        res.end(JSON.stringify(stats));
+      } else if (url.pathname === '/api/miner' && url.searchParams.has('address')) {
+        const minerStats = this.getMinerStats(url.searchParams.get('address'));
+        res.end(JSON.stringify(minerStats));
+      } else if (url.pathname === '/api/prices') {
         res.end(JSON.stringify(liveCoinPrices));
-    } else if (url.pathname === '/api/fees') {
+      } else if (url.pathname === '/api/fees') {
         // Return BTC conversion rates and predefined conversion cost percentages
         const btcConversionRates = {};
         for (const currency of Object.keys(WALLET_PATTERNS)) {
@@ -1208,9 +1549,45 @@ class APIServer {
           btcConversionRates,
           conversionCosts: BTC_CONVERSION_COSTS
         }));
-    } else {
-      res.statusCode = 404;
-      res.end(JSON.stringify({ error: 'Not Found' }));
+      } else if (url.pathname === '/api/amm/pools' && req.method === 'POST') {
+        this.handleCreatePool(req, res);
+      } else if (url.pathname === '/api/amm/pools' && req.method === 'GET') {
+        this.handleGetPools(req, res);
+      } else if (url.pathname === '/api/amm/swap' && req.method === 'POST') {
+        this.handleSwap(req, res);
+      } else if (url.pathname === '/api/amm/liquidity' && req.method === 'POST') {
+        this.handleAddLiquidity(req, res);
+      } else if (url.pathname === '/api/amm/route' && req.method === 'GET') {
+        this.handleGetRoute(req, res);
+      } else if (url.pathname === '/api/amm/metrics') {
+        const metrics = this.ammOptimizer ? this.ammOptimizer.getMetrics() : { error: 'AMM not initialized' };
+        res.end(JSON.stringify(metrics));
+      } else if (url.pathname === '/api/security/report') {
+        const report = this.securityAudit ? this.securityAudit.getSecurityReport() : { error: 'Security audit not initialized' };
+        res.end(JSON.stringify(report));
+      } else if (url.pathname === '/api/security/audit' && req.method === 'POST') {
+        this.handleSecurityAudit(req, res);
+      } else if (url.pathname === '/api/security/metrics') {
+        const metrics = this.securityAudit ? this.securityAudit.securityMetrics : { error: 'Security audit not initialized' };
+        res.end(JSON.stringify(metrics));
+      } else if (url.pathname === '/api/security/rules') {
+        const rules = this.securityAudit ? Array.from(this.securityAudit.securityRules.values()) : { error: 'Security audit not initialized' };
+        res.end(JSON.stringify(rules));
+      } else if (url.pathname === '/api/monitoring/metrics') {
+        const metrics = this.realTimeMonitor ? this.realTimeMonitor.getMetrics() : { error: 'Real-time monitor not initialized' };
+        res.end(JSON.stringify(metrics));
+      } else if (url.pathname === '/api/monitoring/alerts') {
+        const alerts = this.realTimeMonitor ? this.realTimeMonitor.getAlerts() : { error: 'Real-time monitor not initialized' };
+        res.end(JSON.stringify(alerts));
+      } else if (url.pathname.startsWith('/api/monitoring/alerts/') && req.method === 'POST') {
+        this.handleAcknowledgeAlert(req, res);
+      } else {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'Not Found' }));
+      }
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
     }
   }
 
@@ -1233,6 +1610,221 @@ class APIServer {
       return { miner, payouts };
     } else {
       return { error: 'Miner not found' };
+    }
+  }
+
+  async handleCreatePool(req, res) {
+    try {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const { token0, token1, sqrtPriceX96, baseFee } = JSON.parse(body);
+          
+          if (!this.ammOptimizer) {
+            res.statusCode = 503;
+            res.end(JSON.stringify({ error: 'AMM not available' }));
+            return;
+          }
+
+          const result = await this.ammOptimizer.createPool(token0, token1, {
+            sqrtPriceX96: BigInt(sqrtPriceX96),
+            baseFee: baseFee || 30
+          });
+
+          res.end(JSON.stringify({
+            success: true,
+            poolId: result.poolId,
+            features: {
+              concentratedLiquidity: true,
+              dynamicFees: true,
+              mevProtection: true
+            }
+          }));
+        } catch (error) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  handleGetPools(req, res) {
+    try {
+      if (!this.ammOptimizer) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'AMM not available' }));
+        return;
+      }
+
+      const pools = Array.from(this.ammOptimizer.pools.entries()).map(([poolId, pool]) => ({
+        poolId,
+        token0: pool.token0,
+        token1: pool.token1,
+        liquidity: pool.liquidity.toString(),
+        sqrtPriceX96: pool.sqrtPriceX96.toString(),
+        tick: pool.tick,
+        feeTier: pool.config.feeTiers[0]
+      }));
+
+      res.end(JSON.stringify({ pools }));
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  async handleSwap(req, res) {
+    try {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const swapParams = JSON.parse(body);
+          
+          if (!this.ammOptimizer) {
+            res.statusCode = 503;
+            res.end(JSON.stringify({ error: 'AMM not available' }));
+            return;
+          }
+
+          const result = await this.ammOptimizer.swap(swapParams);
+          res.end(JSON.stringify(result));
+        } catch (error) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  async handleAddLiquidity(req, res) {
+    try {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const liquidityParams = JSON.parse(body);
+          
+          if (!this.ammOptimizer) {
+            res.statusCode = 503;
+            res.end(JSON.stringify({ error: 'AMM not available' }));
+            return;
+          }
+
+          const result = await this.ammOptimizer.addLiquidity(liquidityParams);
+          res.end(JSON.stringify(result));
+        } catch (error) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  async handleGetRoute(req, res) {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const tokenIn = url.searchParams.get('tokenIn');
+      const tokenOut = url.searchParams.get('tokenOut');
+      const amountIn = url.searchParams.get('amountIn');
+      const amountOut = url.searchParams.get('amountOut');
+
+      if (!this.ammOptimizer) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'AMM not available' }));
+        return;
+      }
+
+      const route = await this.ammOptimizer.findOptimalRoute(
+        tokenIn,
+        tokenOut,
+        amountIn ? BigInt(amountIn) : null,
+        amountOut ? BigInt(amountOut) : null
+      );
+
+      if (!route) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'No route found' }));
+        return;
+      }
+
+      res.end(JSON.stringify({
+        route: route.path.map(hop => ({
+          poolId: hop.poolId,
+          tokenIn: hop.tokenIn,
+          tokenOut: hop.tokenOut
+        })),
+        expectedOutput: route.expectedOutput.toString(),
+        priceImpact: route.priceImpact,
+        totalGas: route.totalGas,
+        totalFees: route.totalFees
+      }));
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  async handleSecurityAudit(req, res) {
+    try {
+      if (!this.securityAudit) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'Security audit not available' }));
+        return;
+      }
+
+      // Trigger manual security audit
+      await this.securityAudit.runSecurityAudit();
+      
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Security audit initiated',
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+
+  async handleAcknowledgeAlert(req, res) {
+    try {
+      if (!this.realTimeMonitor) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'Real-time monitor not available' }));
+        return;
+      }
+      
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const alertId = url.pathname.split('/').pop();
+      
+      if (!alertId) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: 'Alert ID is required' }));
+        return;
+      }
+      
+      this.realTimeMonitor.acknowledgeAlert(alertId);
+      
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Alert acknowledged',
+        alertId: alertId,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: error.message }));
     }
   }
 }

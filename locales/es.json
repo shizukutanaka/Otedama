@@ -1,0 +1,196 @@
+{
+  "common": {
+    "appName": "Otedama Mining Pool",
+    "version": "Versión {{version}}",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "warning": "Advertencia",
+    "info": "Información",
+    "confirm": "Confirmar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "refresh": "Actualizar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "close": "Cerrar",
+    "yes": "Sí",
+    "no": "No"
+  },
+  "navigation": {
+    "dashboard": "Panel de control",
+    "mining": "Minería",
+    "wallet": "Cartera",
+    "payouts": "Pagos",
+    "exchange": "Intercambio",
+    "settings": "Configuración",
+    "help": "Ayuda",
+    "logout": "Cerrar sesión"
+  },
+  "mining": {
+    "title": "Resumen de minería",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "connecting": "Conectando..."
+    },
+    "stats": {
+      "hashrate": "Tasa de hash",
+      "shares": "Compartir",
+      "efficiency": "Eficiencia",
+      "uptime": "Tiempo de actividad",
+      "workers": {
+        "one": "{{count}} Trabajador",
+        "other": "{{count}} Trabajadores"
+      }
+    },
+    "pool": {
+      "name": "Nombre del pool",
+      "algorithm": "Algoritmo",
+      "difficulty": "Dificultad",
+      "connectedMiners": {
+        "one": "{{count}} Minero conectado",
+        "other": "{{count}} Mineros conectados"
+      },
+      "fee": "Tarifa del pool: {{fee}}%",
+      "nextPayout": "Próximo pago en {{time}}"
+    }
+  },
+  "wallet": {
+    "title": "Cartera",
+    "address": "Dirección de cartera",
+    "balance": "Saldo",
+    "pendingBalance": "Saldo pendiente",
+    "totalPaid": "Total pagado",
+    "currency": "Moneda",
+    "btcOnly": "Solo pagos en BTC",
+    "conversionNotice": "El {{currency}} minado se convertirá automáticamente a BTC",
+    "transactions": {
+      "title": "Historial de transacciones",
+      "date": "Fecha",
+      "amount": "Cantidad",
+      "status": "Estado",
+      "txid": "ID de transacción",
+      "fee": "Tarifa",
+      "noTransactions": "Aún no hay transacciones"
+    }
+  },
+  "payouts": {
+    "title": "Pagos",
+    "minimumPayout": "Pago mínimo",
+    "payoutThreshold": "Umbral de pago",
+    "estimatedPayout": "Pago estimado",
+    "lastPayout": "Último pago",
+    "nextPayout": "Próximo pago",
+    "automatic": "Pagos automáticos cada hora",
+    "manual": "Solicitar pago manual",
+    "history": {
+      "title": "Historial de pagos",
+      "date": "Fecha",
+      "amount": "Cantidad",
+      "status": "Estado",
+      "address": "Dirección",
+      "transactionId": "ID de transacción"
+    }
+  },
+  "exchange": {
+    "title": "Intercambio descentralizado",
+    "swap": "Intercambiar",
+    "liquidity": "Liquidez",
+    "from": "De",
+    "to": "A",
+    "amount": "Cantidad",
+    "estimatedReceived": "Estimado recibido",
+    "price": "Precio",
+    "priceImpact": "Impacto del precio",
+    "fee": "Tarifa de intercambio",
+    "slippage": "Tolerancia al deslizamiento",
+    "deadline": "Límite de transacción",
+    "addLiquidity": "Agregar liquidez",
+    "removeLiquidity": "Eliminar liquidez",
+    "yourLiquidity": "Su liquidez",
+    "poolShare": "Participación del pool"
+  },
+  "settings": {
+    "title": "Configuración",
+    "account": {
+      "title": "Configuración de cuenta",
+      "email": "Dirección de correo electrónico",
+      "password": "Contraseña",
+      "twoFactor": "Autenticación de dos factores",
+      "apiKeys": "Claves API"
+    },
+    "mining": {
+      "title": "Configuración de minería",
+      "workerName": "Nombre del trabajador",
+      "difficultyAdjustment": "Ajuste de dificultad",
+      "autoSwitch": "Cambio automático de algoritmo"
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "email": "Notificaciones por correo electrónico",
+      "webhook": "Webhooks",
+      "events": {
+        "workerOffline": "Trabajador desconectado",
+        "blockFound": "Bloque encontrado",
+        "payoutSent": "Pago enviado",
+        "lowHashrate": "Advertencia de tasa de hash baja"
+      }
+    },
+    "preferences": {
+      "title": "Preferencias",
+      "language": "Idioma",
+      "theme": "Tema",
+      "timezone": "Zona horaria",
+      "currency": "Moneda de visualización"
+    }
+  },
+  "messages": {
+    "welcome": "Bienvenido a Otedama Mining Pool",
+    "connectionLost": "Conexión perdida. Intentando reconectar...",
+    "connectionRestored": "Conexión restaurada",
+    "shareAccepted": "Compartir aceptado",
+    "shareRejected": "Compartir rechazado: {{reason}}",
+    "payoutSent": "Pago de {{amount}} BTC enviado exitosamente",
+    "insufficientBalance": "Saldo insuficiente",
+    "invalidAddress": "Dirección de cartera inválida",
+    "settingsSaved": "Configuración guardada exitosamente",
+    "errorOccurred": "Ocurrió un error: {{error}}",
+    "copied": "Copiado al portapapeles",
+    "confirmDelete": "¿Está seguro de que desea eliminar esto?",
+    "rateLimit": "Demasiadas solicitudes. Inténtelo de nuevo más tarde."
+  },
+  "time": {
+    "seconds": {
+      "one": "{{count}} segundo",
+      "other": "{{count}} segundos"
+    },
+    "minutes": {
+      "one": "{{count}} minuto",
+      "other": "{{count}} minutos"
+    },
+    "hours": {
+      "one": "{{count}} hora",
+      "other": "{{count}} horas"
+    },
+    "days": {
+      "one": "{{count}} día",
+      "other": "{{count}} días"
+    },
+    "ago": "hace {{time}}",
+    "in": "en {{time}}",
+    "justNow": "ahora mismo"
+  },
+  "help": {
+    "gettingStarted": "Comenzando",
+    "faq": "Preguntas frecuentes",
+    "supportCenter": "Centro de soporte",
+    "documentation": "Documentación",
+    "contact": "Contáctanos"
+  }
+}

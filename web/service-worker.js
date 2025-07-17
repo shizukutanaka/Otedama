@@ -11,7 +11,12 @@ const DYNAMIC_CACHE = 'otedama-dynamic-v0.6.0';
 const STATIC_FILES = [
   '/',
   '/index.html',
+  '/dashboard.html',
+  '/analytics.html',
+  '/mobile-app.html',
   '/manifest.json',
+  '/css/responsive.css',
+  '/components/mobile-nav.js',
   '/api/health',
   'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNGRkQ3MDAiLz4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBzdHlsZT0idHJhbnNmb3JtOiB0cmFuc2xhdGUoNnB4LCA2cHgpIj4KPHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIGZpbGw9IiMwMDAiPgo8L3N2Zz4KPC9zdmc+'
 ];

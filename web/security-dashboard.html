@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Dashboard - Otedama Mining Pool</title>
+    <link rel="stylesheet" href="css/responsive.css">
+    <style>
+        .security-dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .security-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .security-score h2 {
+            margin: 0 0 10px 0;
+            font-size: 2.5em;
+        }
+        
+        .security-score .score {
+            font-size: 4em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .security-score .score.good { color: #4CAF50; }
+        .security-score .score.warning { color: #FF9800; }
+        .security-score .score.danger { color: #F44336; }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .metric-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .audit-results {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .audit-results h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .finding {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ddd;
+        }
+        
+        .finding.critical {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        
+        .finding.high {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+        
+        .finding.medium {
+            background: #f3e5f5;
+            border-left-color: #9c27b0;
+        }
+        
+        .finding.low {
+            background: #e8f5e8;
+            border-left-color: #4caf50;
+        }
+        
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .finding-type {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .severity-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            color: white;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .severity-badge.critical { background: #f44336; }
+        .severity-badge.high { background: #ff9800; }
+        .severity-badge.medium { background: #9c27b0; }
+        .severity-badge.low { background: #4caf50; }
+        
+        .finding-description {
+            margin-bottom: 10px;
+            color: #666;
+        }
+        
+        .finding-recommendation {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            font-style: italic;
+        }
+        
+        .security-rules {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .rule-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .rule-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .rule-description {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .rule-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .status-indicator.enabled { background: #4caf50; }
+        .status-indicator.disabled { background: #f44336; }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .security-dashboard {
+                padding: 10px;
+            }
+            
+            .security-score {
+                padding: 20px;
+            }
+            
+            .security-score .score {
+                font-size: 3em;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="security-dashboard">
+        <header>
+            <h1>Security Dashboard</h1>
+            <p>Real-time security monitoring and threat detection for Otedama Mining Pool</p>
+        </header>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="runSecurityAudit()">Run Security Audit</button>
+            <button class="btn btn-secondary" onclick="refreshData()">Refresh Data</button>
+        </div>
+
+        <div class="security-score">
+            <h2>Security Score</h2>
+            <div class="score" id="securityScore">--</div>
+            <div id="securityStatus">Loading...</div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3>Total Audits</h3>
+                <div class="metric-value" id="totalAudits">0</div>
+            </div>
+            <div class="metric-card">
+                <h3>Threats Detected</h3>
+                <div class="metric-value" id="threatsDetected">0</div>
+            </div>
+            <div class="metric-card">
+                <h3>Vulnerabilities Found</h3>
+                <div class="metric-value" id="vulnerabilitiesFound">0</div>
+            </div>
+            <div class="metric-card">
+                <h3>Last Audit</h3>
+                <div class="metric-value" id="lastAudit">--</div>
+            </div>
+        </div>
+
+        <div class="audit-results">
+            <h3>Recent Security Findings</h3>
+            <div id="auditFindings">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading security audit results...
+                </div>
+            </div>
+        </div>
+
+        <div class="security-rules">
+            <h3>Security Rules</h3>
+            <div id="securityRules">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading security rules...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let securityData = null;
+        let auditInProgress = false;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSecurityData();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadSecurityData, 30000);
+        });
+
+        async function loadSecurityData() {
+            try {
+                const [reportResponse, metricsResponse, rulesResponse] = await Promise.all([
+                    fetch('/api/security/report'),
+                    fetch('/api/security/metrics'),
+                    fetch('/api/security/rules')
+                ]);
+
+                const report = await reportResponse.json();
+                const metrics = await metricsResponse.json();
+                const rules = await rulesResponse.json();
+
+                securityData = { report, metrics, rules };
+                updateDashboard();
+            } catch (error) {
+                console.error('Error loading security data:', error);
+                showError('Failed to load security data');
+            }
+        }
+
+        function updateDashboard() {
+            if (!securityData) return;
+
+            const { report, metrics, rules } = securityData;
+
+            // Update security score
+            updateSecurityScore(report.overview.currentSecurityScore);
+
+            // Update metrics
+            document.getElementById('totalAudits').textContent = report.overview.totalAudits;
+            document.getElementById('threatsDetected').textContent = report.overview.threatsDetected;
+            document.getElementById('vulnerabilitiesFound').textContent = report.overview.vulnerabilitiesFound;
+            document.getElementById('lastAudit').textContent = formatTime(report.overview.lastAuditTime);
+
+            // Update findings
+            updateAuditFindings(report.recentAudits);
+
+            // Update rules
+            updateSecurityRules(rules);
+        }
+
+        function updateSecurityScore(score) {
+            const scoreElement = document.getElementById('securityScore');
+            const statusElement = document.getElementById('securityStatus');
+
+            scoreElement.textContent = score;
+            
+            // Remove existing classes
+            scoreElement.classList.remove('good', 'warning', 'danger');
+            
+            // Add appropriate class and status
+            if (score >= 80) {
+                scoreElement.classList.add('good');
+                statusElement.textContent = 'Excellent Security';
+            } else if (score >= 60) {
+                scoreElement.classList.add('warning');
+                statusElement.textContent = 'Good Security - Minor Issues';
+            } else {
+                scoreElement.classList.add('danger');
+                statusElement.textContent = 'Security Issues Detected';
+            }
+        }
+
+        function updateAuditFindings(audits) {
+            const container = document.getElementById('auditFindings');
+            
+            if (!audits || audits.length === 0) {
+                container.innerHTML = '<p>No recent audit findings</p>';
+                return;
+            }
+
+            let html = '';
+            audits.forEach(audit => {
+                if (audit.findings && audit.findings.length > 0) {
+                    audit.findings.forEach(finding => {
+                        html += `
+                            <div class="finding ${finding.severity}">
+                                <div class="finding-header">
+                                    <span class="finding-type">${finding.type.replace(/_/g, ' ').toUpperCase()}</span>
+                                    <span class="severity-badge ${finding.severity}">${finding.severity}</span>
+                                </div>
+                                <div class="finding-description">${finding.description}</div>
+                                <div class="finding-recommendation">
+                                    <strong>Recommendation:</strong> ${finding.recommendation}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            });
+
+            container.innerHTML = html || '<p>No security findings</p>';
+        }
+
+        function updateSecurityRules(rules) {
+            const container = document.getElementById('securityRules');
+            
+            if (!rules || rules.length === 0) {
+                container.innerHTML = '<p>No security rules configured</p>';
+                return;
+            }
+
+            let html = '';
+            rules.forEach(rule => {
+                html += `
+                    <div class="rule-item">
+                        <div>
+                            <div class="rule-name">${rule.name}</div>
+                            <div class="rule-description">${rule.description}</div>
+                        </div>
+                        <div class="rule-status">
+                            <span class="status-indicator ${rule.enabled ? 'enabled' : 'disabled'}"></span>
+                            <span>${rule.enabled ? 'Enabled' : 'Disabled'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function runSecurityAudit() {
+            if (auditInProgress) return;
+            
+            auditInProgress = true;
+            const button = document.querySelector('.btn-primary');
+            button.disabled = true;
+            button.textContent = 'Running Audit...';
+
+            try {
+                const response = await fetch('/api/security/audit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    showSuccess('Security audit initiated successfully');
+                    
+                    // Refresh data after a short delay
+                    setTimeout(loadSecurityData, 2000);
+                } else {
+                    throw new Error('Failed to initiate security audit');
+                }
+            } catch (error) {
+                console.error('Error running security audit:', error);
+                showError('Failed to run security audit');
+            } finally {
+                auditInProgress = false;
+                button.disabled = false;
+                button.textContent = 'Run Security Audit';
+            }
+        }
+
+        function refreshData() {
+            loadSecurityData();
+            showSuccess('Data refreshed');
+        }
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        function showSuccess(message) {
+            // Simple success notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #4CAF50;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 5px;
+                z-index: 1000;
+                font-weight: bold;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+
+        function showError(message) {
+            // Simple error notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #F44336;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 5px;
+                z-index: 1000;
+                font-weight: bold;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -269,3 +269,194 @@ groups:
         annotations:
           summary: "High application error rate"
           description: "Application error rate is above 5% for more than 3 minutes."
+
+  # DeFi Platform Alerts
+  - name: otedama.defi
+    rules:
+      # Liquidity pool health
+      - alert: LiquidityPoolImbalance
+        expr: abs(otedama_defi_pool_balance_ratio - 0.5) > 0.3
+        for: 30m
+        labels:
+          severity: warning
+          category: defi
+        annotations:
+          summary: "Liquidity pool imbalance detected"
+          description: "Liquidity pool balance ratio is {{ $value }} for more than 30 minutes."
+          
+      # Yield farming
+      - alert: YieldFarmingRewardsLow
+        expr: otedama_defi_farming_rewards_rate < 0.05
+        for: 1h
+        labels:
+          severity: warning
+          category: defi
+        annotations:
+          summary: "Low yield farming rewards"
+          description: "Yield farming rewards rate is {{ $value }}% for more than 1 hour."
+          
+      # Slippage monitoring
+      - alert: HighSlippage
+        expr: otedama_defi_slippage_percent > 5
+        for: 15m
+        labels:
+          severity: warning
+          category: defi
+        annotations:
+          summary: "High DeFi slippage"
+          description: "DeFi slippage is {{ $value }}% for more than 15 minutes."
+          
+      # Flash loan monitoring
+      - alert: FlashLoanFailed
+        expr: increase(otedama_defi_flash_loan_failures_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: defi
+        annotations:
+          summary: "Flash loan failures detected"
+          description: "{{ $value }} flash loan failures in the last hour."
+
+  # Advanced Security Alerts
+  - name: otedama.security.advanced
+    rules:
+      # MEV protection
+      - alert: MEVExploitDetected
+        expr: otedama_mev_exploits_detected_total > 0
+        for: 0s
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "MEV exploit detected"
+          description: "{{ $value }} MEV exploits detected."
+          
+      # Suspicious wallet activity
+      - alert: WalletBlacklisted
+        expr: increase(otedama_wallet_blacklist_hits_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Blacklisted wallet activity"
+          description: "{{ $value }} transactions from blacklisted wallets in the last hour."
+          
+      # Rate limiting
+      - alert: RateLimitExceeded
+        expr: rate(otedama_rate_limit_exceeded_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Rate limit frequently exceeded"
+          description: "Rate limit exceeded {{ $value }} times per second for more than 5 minutes."
+
+  # Performance Optimization Alerts
+  - name: otedama.performance
+    rules:
+      # Response time degradation
+      - alert: ResponseTimeDegraded
+        expr: histogram_quantile(0.95, rate(otedama_http_request_duration_seconds_bucket[5m])) > 2
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Response time degraded"
+          description: "95th percentile response time is {{ $value }}s for more than 10 minutes."
+          
+      # Database performance
+      - alert: DatabaseSlowQueries
+        expr: histogram_quantile(0.95, rate(otedama_database_query_duration_seconds_bucket[5m])) > 1
+        for: 15m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow database queries"
+          description: "95th percentile database query time is {{ $value }}s for more than 15 minutes."
+          
+      # Connection pool exhaustion
+      - alert: ConnectionPoolExhausted
+        expr: otedama_database_connections_active / otedama_database_connections_max > 0.9
+        for: 10m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Database connection pool is {{ $value }}% full for more than 10 minutes."
+
+  # Compliance and Regulatory Alerts
+  - name: otedama.compliance
+    rules:
+      # AML monitoring
+      - alert: AMLSuspiciousTransaction
+        expr: otedama_aml_suspicious_transactions_total > 0
+        for: 0s
+        labels:
+          severity: warning
+          category: compliance
+        annotations:
+          summary: "AML suspicious transaction detected"
+          description: "{{ $value }} suspicious transactions detected by AML system."
+          
+      # KYC verification backlog
+      - alert: KYCVerificationBacklog
+        expr: otedama_kyc_pending_verifications > 100
+        for: 4h
+        labels:
+          severity: warning
+          category: compliance
+        annotations:
+          summary: "KYC verification backlog"
+          description: "{{ $value }} KYC verifications pending for more than 4 hours."
+          
+      # Regulatory reporting
+      - alert: RegulatoryReportingDelayed
+        expr: time() - otedama_last_regulatory_report_timestamp > 86400
+        for: 0s
+        labels:
+          severity: warning
+          category: compliance
+        annotations:
+          summary: "Regulatory reporting delayed"
+          description: "Regulatory report has not been generated for more than 24 hours."
+
+  # Business Intelligence Alerts
+  - name: otedama.business.intelligence
+    rules:
+      # Revenue anomaly detection
+      - alert: RevenueAnomalyDetected
+        expr: abs(otedama_revenue_hourly - otedama_revenue_hourly_avg_24h) > otedama_revenue_hourly_std_24h * 2
+        for: 2h
+        labels:
+          severity: info
+          category: business
+        annotations:
+          summary: "Revenue anomaly detected"
+          description: "Hourly revenue deviates significantly from 24-hour average."
+          
+      # User activity patterns
+      - alert: UserActivityAnomalyDetected
+        expr: abs(otedama_active_users_hourly - otedama_active_users_hourly_avg_24h) > otedama_active_users_hourly_std_24h * 2
+        for: 2h
+        labels:
+          severity: info
+          category: business
+        annotations:
+          summary: "User activity anomaly detected"
+          description: "Hourly user activity deviates significantly from 24-hour average."
+          
+      # Market volatility impact
+      - alert: MarketVolatilityImpact
+        expr: abs(otedama_price_btc_change_1h) > 0.1
+        for: 1h
+        labels:
+          severity: info
+          category: business
+        annotations:
+          summary: "High market volatility detected"
+          description: "BTC price changed by {{ $value }}% in the last hour."
