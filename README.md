@@ -153,6 +153,26 @@ await otedama.stake({
 
 ## 📊 Performance Metrics
 
+## 📈 Monitoring & Observability
+Otedama exposes a Prometheus-compatible `/metrics` endpoint (enabled by default).
+
+### Quick Start with Prometheus
+```yaml
+scrape_configs:
+  - job_name: otedama
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['otedama:8080']
+```
+Restart Prometheus and open `http://<prometheus-host>:9090` to query metrics such as `process_cpu_user_seconds_total`, `http_requests_total`, `otedama_cache_hits_total`, etc.
+
+Grafana dashboards are provisioned automatically when you enable the `monitoring` profile in `docker-compose.yml`:
+```bash
+docker-compose --profile monitoring up -d prometheus grafana
+```
+Login to Grafana (`localhost:3000`, default `admin/admin`) and import dashboard ID **179** for a ready-made Otedama overview.
+
+
 ### Mining Pool Statistics
 - **Global Hashrate**: Supporting up to 1 EH/s
 - **Active Miners**: 100,000+ concurrent connections

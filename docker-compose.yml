@@ -40,6 +40,7 @@ services:
       - "${STRATUM_PORT:-3333}:3333"    # Stratum port
       - "${P2P_PORT:-8333}:8333"        # P2P port
       - "${WS_PORT:-3334}:3334"         # WebSocket port
+      - "${API_PORT:-8080}:8080"        # HTTP API port
     volumes:
       - otedama-data:/data
       - otedama-logs:/logs
@@ -49,7 +50,7 @@ services:
     networks:
       - otedama-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "node /app/scripts/healthcheck.js"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -150,6 +151,36 @@ services:
       - "9090:9090"
     networks:
       - otedama-net
+    profiles:
+      - monitoring
+
+  redis_exporter:
+    image: bitnami/redis-exporter:latest
+    container_name: otedama-redis-exporter
+    restart: unless-stopped
+    environment:
+      - REDIS_EXPORTER_URI=redis://redis:6379
+    networks:
+      - otedama-net
+    depends_on:
+      - redis
+    ports:
+      - "9121:9121"
+    profiles:
+      - monitoring
+
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: otedama-postgres-exporter
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://otedama:${POSTGRES_PASSWORD:-otedama}@postgres:5432/otedama?sslmode=disable
+    networks:
+      - otedama-net
+    depends_on:
+      - postgres
+    ports:
+      - "9187:9187"
     profiles:
       - monitoring
 
