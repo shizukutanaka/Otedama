@@ -25,6 +25,9 @@
     "ws": "^8.14.2"
   },
   "devDependencies": {
+    "prettier": "^3.3.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
 
     "eslint": "^8.55.0",
     "eslint-plugin-import": "^2.29.0",
@@ -35,11 +38,14 @@
     "supertest": "^6.3.3"
   },
   "scripts": {
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
     "start": "node lib/main.js",
     "lint": "eslint .",
     "test": "node --import test/node-test-setup.js --test",
     "security-audit": "node scripts/run-security-audit.js",
-    "scalability-test": "node scripts/run-scalability-tests.js"
+    "scalability-test": "node scripts/run-scalability-tests.js",
+    "prepare": "husky install"
   },
   "keywords": [
     "otedama",
@@ -50,6 +56,11 @@
     "blockchain"
   ],
   "author": "Otedama Team",
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,css,md}": [
+      "prettier --write"
+    ]
+  },
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
