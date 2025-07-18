@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0] - 2025-07-18
+
+### Added
+- **Documentation Overhaul**
+  - Unified README.md and SOW.md, removed redundant sections.
+  - Added version badges and updated titles to v0.8.
+  - Prepared CHANGELOG entry for transparency.
+- **Testing Stability**
+  - Migrated entire test suite from Chai to Node.js built-in `assert`.
+  - Resolved long-standing `ERR_MODULE_NOT_FOUND` issues.
+
+### Changed
+- **Package Cleanup**
+  - Removed `chai`, `chai-as-promised`, and other unused dev dependencies.
+  - Simplified test setup (`test/node-test-setup.js`).
+- **CI/CD**
+  - Updated pipelines to reflect new test commands.
+
+### Fixed
+- Module resolution errors in Windows + ESM environment.
+- Duplicate documentation sections.
+
+
+
 ## [0.7.0] - 2025-07-17
 
 ### Added
