@@ -1,86 +1,57 @@
 {
   "name": "otedama",
-  "version": "0.7.0",
-  "description": "Professional P2P Mining Pool & DEX Platform with advanced DeFi features",
+  "version": "0.8.0",
+  "description": "Otedama Next-Generation Platform",
+  "main": "lib/main.js",
   "type": "module",
-  "main": "index.js",
+
+  "directories": {
+    "lib": "lib"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.2",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.0.1",
+    "pg": "^8.11.3",
+    "prom-client": "^15.0.0",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+
+    "eslint": "^8.55.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "nodemon": "^3.0.2",
+    "sinon": "^17.0.1",
+    "supertest": "^6.3.3"
+  },
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js",
-    "test": "node test/test-suite.js",
-    "test:simple": "node test/simple-test.js",
-    "test:unit": "node test/test-suite.js --filter=unit",
-    "test:integration": "node test/test-suite.js --filter=integration",
-    "test:performance": "node test/performance.test.js",
-    "test:security": "node test/security-audit.js",
-    "test:verbose": "node test/test-suite.js --verbose",
-    "test:report": "node test/test-suite.js --report",
-    "test:watch": "node --watch test/test-suite.js",
+    "start": "node lib/main.js",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "security:audit": "npm audit",
-    "security:check": "node scripts/security-check.js",
-    "db:migrate": "node scripts/migrate.js",
-    "db:backup": "node scripts/backup.js",
-    "monitor": "node scripts/monitor.js",
-    "benchmark": "node scripts/benchmark.js",
-    "load-test": "node scripts/load-test.js",
-    "stress-test": "node scripts/load-test.js stress",
-    "performance-report": "node scripts/performance-reporter.js",
-    "performance-report:daily": "node scripts/performance-reporter.js daily",
-    "performance-report:weekly": "node scripts/performance-reporter.js weekly",
-    "performance-report:monthly": "node scripts/performance-reporter.js monthly",
-    "deploy:production": "bash scripts/production-deploy.sh",
-    "deploy:docker": "bash scripts/production-deploy.sh docker",
-    "deploy:kubernetes": "bash scripts/production-deploy.sh kubernetes",
-    "deploy:bare-metal": "bash scripts/production-deploy.sh bare-metal",
-    "build": "echo 'Build complete - ready for production'",
-    "build:docker": "docker build -f Dockerfile.production -t otedama/otedama:latest .",
-    "build:test": "docker build -f Dockerfile.production --target testing -t otedama/otedama:test .",
-    "build:benchmark": "docker build -f Dockerfile.production --target benchmark -t otedama/otedama:benchmark .",
-    "docker:up": "docker-compose -f docker-compose.production.yml up -d",
-    "docker:down": "docker-compose -f docker-compose.production.yml down",
-    "docker:logs": "docker-compose -f docker-compose.production.yml logs -f"
+    "test": "node --import test/node-test-setup.js --test",
+    "security-audit": "node scripts/run-security-audit.js",
+    "scalability-test": "node scripts/run-scalability-tests.js"
   },
   "keywords": [
-    "mining",
-    "pool",
-    "cryptocurrency",
-    "bitcoin",
+    "otedama",
+    "platform",
+    "next-generation",
+    "api",
     "p2p",
-    "dex",
     "blockchain"
   ],
   "author": "Otedama Team",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
-  },
-  "dependencies": {
-    "better-sqlite3": "^9.2.2",
-    "ws": "^8.16.0",
-    "jsonwebtoken": "^9.0.2",
-    "node-cron": "^3.0.3",
-    "dotenv": "^16.3.1"
-  },
-  "devDependencies": {
-    "eslint": "^8.56.0",
-    "prettier": "^3.1.1",
-    "jest": "^29.7.0",
-    "@types/node": "^20.10.6",
-    "@types/ws": "^8.5.10",
-    "@types/better-sqlite3": "^7.6.8"
-  },
-  "optionalDependencies": {
-    "bufferutil": "^4.0.8",
-    "utf-8-validate": "^6.0.3"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/otedama/mining-pool.git"
-  },
-  "bugs": {
-    "url": "https://github.com/otedama/mining-pool/issues"
-  },
-  "homepage": "https://otedama.io"
+  }
 }
