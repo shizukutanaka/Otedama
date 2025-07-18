@@ -1,37 +1,55 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  # Enhanced Otedama Mining Pool
+  # Main Otedama Mining Pool & DEX Platform
   otedama:
     build:
       context: .
-      dockerfile: Dockerfile.enhanced
+      dockerfile: Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
-        VERSION: 0.6.1-enhanced
-    image: otedama:0.6.1-enhanced
-    container_name: otedama-pool
+        VERSION: 0.8.0
+    image: otedama/otedama:${OTEDAMA_VERSION:-0.8.0}
+    container_name: otedama-main
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3333
       - API_PORT=8080
-      - WALLET_ADDRESS=${WALLET_ADDRESS}
-      - POOL_NAME=${POOL_NAME:-Otedama Enhanced Pool}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - STRATUM_PORT=3333
+      - P2P_PORT=8333
+      - WS_PORT=3334
+      - DB_PATH=/data/otedama.db
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - WALLET_ADDRESS=${WALLET_ADDRESS}
+      - POOL_NAME=${POOL_NAME:-Otedama Professional Pool}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      # Mining configuration
+      - MINING_ENABLED=${MINING_ENABLED:-true}
+      - MINING_ALGORITHM=${MINING_ALGORITHM:-kawpow}
+      - MINING_CURRENCY=${MINING_CURRENCY:-RVN}
+      # DEX configuration
+      - DEX_ENABLED=${DEX_ENABLED:-true}
+      - DEX_FEE=${DEX_FEE:-0.003}
+      # P2P configuration
+      - P2P_ENABLED=${P2P_ENABLED:-true}
+      - MAX_PEERS=${MAX_PEERS:-100}
     ports:
-      - "3333:3333"     # Stratum port
-      - "8080:8080"     # Web/API port
+      - "${API_PORT:-8080}:8080"        # API/Web port
+      - "${STRATUM_PORT:-3333}:3333"    # Stratum port
+      - "${P2P_PORT:-8333}:8333"        # P2P port
+      - "${WS_PORT:-3334}:3334"         # WebSocket port
     volumes:
-      - otedama-data:/app/data
-      - otedama-logs:/app/logs
-      - otedama-backups:/app/backups
+      - otedama-data:/data
+      - otedama-logs:/logs
+      - otedama-backups:/backups
+      - ./otedama.json:/app/otedama.json:ro
+      - ./ssl:/app/ssl:ro
     networks:
-      - otedama-net
+      - otedama-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -42,11 +60,14 @@ services:
           cpus: '2'
           memory: 2G
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
     labels:
-      - "com.otedama.service=pool"
-      - "com.otedama.version=0.6.1-enhanced"
+      - "com.otedama.service=main"
+      - "com.otedama.version=0.8.0"
+      - "traefik.enable=true"
+      - "traefik.http.routers.otedama.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.services.otedama.loadbalancer.server.port=8080"
 
   # Redis for caching
   redis:
@@ -152,29 +173,122 @@ services:
     profiles:
       - monitoring
 
-  # Backup service
+  # Advanced backup service with our custom scheduler
   backup:
-    image: offen/docker-volume-backup:latest
+    image: otedama/otedama:${OTEDAMA_VERSION:-0.8.0}
     container_name: otedama-backup
     restart: unless-stopped
+    command: node /app/scripts/backup-service.js
     environment:
-      - BACKUP_CRON_EXPRESSION=${BACKUP_SCHEDULE:-0 2 * * *}
-      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
-      - BACKUP_FILENAME=otedama-backup-%Y-%m-%d.tar.gz
-      - AWS_S3_BUCKET_NAME=${S3_BUCKET}
+      - NODE_ENV=production
+      - DB_PATH=/data/otedama.db
+      - BACKUP_DIR=/backups
+      - BACKUP_STRATEGY=${BACKUP_STRATEGY:-adaptive}
+      - BACKUP_SCHEDULE_DAILY=${BACKUP_SCHEDULE_DAILY:-0 2 * * *}
+      - BACKUP_SCHEDULE_WEEKLY=${BACKUP_SCHEDULE_WEEKLY:-0 3 * * 0}
+      - BACKUP_SCHEDULE_MONTHLY=${BACKUP_SCHEDULE_MONTHLY:-0 4 1 * *}
+      - RETENTION_DAILY=${RETENTION_DAILY:-7}
+      - RETENTION_WEEKLY=${RETENTION_WEEKLY:-4}
+      - RETENTION_MONTHLY=${RETENTION_MONTHLY:-6}
+      # S3 backup support
+      - S3_ENABLED=${S3_ENABLED:-false}
+      - AWS_S3_BUCKET=${S3_BUCKET}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     volumes:
-      - otedama-data:/backup/data:ro
-      - postgres-data:/backup/postgres:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - otedama-data:/data:ro
+      - otedama-backups:/backups
+      - backup-logs:/logs
     networks:
-      - otedama-net
+      - otedama-network
+    depends_on:
+      - otedama
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     profiles:
       - backup
 
+  # Traefik reverse proxy with automatic SSL
+  traefik:
+    image: traefik:v3.0
+    container_name: otedama-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - otedama-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`traefik.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_AUTH}"
+    profiles:
+      - production
+
+  # Mining worker nodes (scalable)
+  mining-worker:
+    image: otedama/otedama:${OTEDAMA_VERSION:-0.8.0}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - WORKER_MODE=mining
+      - POOL_URL=http://otedama:8080
+      - WORKER_NAME=${HOSTNAME}-${WORKER_ID}
+      - WORKER_THREADS=${WORKER_THREADS:-4}
+      - ALGORITHM=${MINING_ALGORITHM:-kawpow}
+    networks:
+      - otedama-network
+    depends_on:
+      - otedama
+    deploy:
+      mode: replicated
+      replicas: ${MINING_WORKERS:-2}
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    profiles:
+      - mining
+
+  # Load balancer for high availability
+  haproxy:
+    image: haproxy:alpine
+    container_name: otedama-haproxy
+    restart: unless-stopped
+    ports:
+      - "8081:8080"  # Load balanced API
+      - "3335:3333"  # Load balanced Stratum
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - otedama-network
+    depends_on:
+      - otedama
+    profiles:
+      - ha
+
 networks:
-  otedama-net:
+  otedama-network:
     driver: bridge
     ipam:
       config:
@@ -182,11 +296,22 @@ networks:
 
 volumes:
   otedama-data:
+    driver: local
   otedama-logs:
+    driver: local
   otedama-backups:
+    driver: local
   redis-data:
+    driver: local
   postgres-data:
+    driver: local
   prometheus-data:
+    driver: local
   grafana-data:
+    driver: local
   nginx-cache:
+    driver: local
   letsencrypt:
+    driver: local
+  backup-logs:
+    driver: local
