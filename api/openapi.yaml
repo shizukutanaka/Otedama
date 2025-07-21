@@ -1,0 +1,1148 @@
+openapi: 3.0.3
+info:
+  title: Otedama Mining Pool API
+  description: |
+    Professional P2P Mining Pool & DEX Platform API with BTC-only payouts.
+    
+    ## Features
+    - RESTful API for pool statistics and management
+    - WebSocket API for real-time mining operations
+    - Comprehensive authentication and security
+    - Support for 13 cryptocurrencies and 10 mining algorithms
+    
+    ## Authentication
+    All authenticated endpoints require either:
+    - Bearer token (JWT) in Authorization header
+    - API key in X-API-Key header
+  version: 0.7.0
+  contact:
+    name: Otedama Support
+    email: support@otedama.io
+    url: https://otedama.io
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3333
+    description: Local development server
+  - url: https://api.otedama.io
+    description: Production server
+  - url: wss://ws.otedama.io
+    description: WebSocket server
+
+tags:
+  - name: Public
+    description: Public endpoints that don't require authentication
+  - name: Mining
+    description: Mining operations and statistics
+  - name: Wallet
+    description: Wallet and payout management
+  - name: DEX
+    description: Decentralized exchange operations
+  - name: Webhooks
+    description: Webhook management and notifications
+  - name: Admin
+    description: Administrative operations
+
+paths:
+  /health:
+    get:
+      tags:
+        - Public
+      summary: Health check
+      description: Check if the server is healthy and responsive
+      operationId: getHealth
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: healthy
+                version: 0.7.0
+                uptime: 86400
+                timestamp: 1642556400000
+        '503':
+          description: Server is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: unhealthy
+                version: 0.7.0
+                uptime: 86400
+                timestamp: 1642556400000
+                checks:
+                  database:
+                    status: fail
+                    message: "Database connection failed"
+
+  /ready:
+    get:
+      tags:
+        - Public
+      summary: Readiness check
+      description: Check if the server is ready to accept requests
+      operationId: getReady
+      responses:
+        '200':
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+              example:
+                ready: true
+                timestamp: "2023-01-01T00:00:00Z"
+                checks:
+                  database:
+                    status: pass
+                    message: "Database connection healthy"
+                  cache:
+                    status: pass
+                    message: "Cache operational"
+        '503':
+          description: Server is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+
+  /live:
+    get:
+      tags:
+        - Public
+      summary: Liveness check
+      description: Check if the server process is alive
+      operationId: getLive
+      responses:
+        '200':
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessStatus'
+              example:
+                alive: true
+                timestamp: "2023-01-01T00:00:00Z"
+                uptime: 86400
+                pid: 1234
+
+  /api/stats:
+    get:
+      tags:
+        - Public
+      summary: Get pool statistics
+      description: Retrieve current pool statistics including hashrate, miners, and currencies
+      operationId: getPoolStats
+      parameters:
+        - name: currency
+          in: query
+          description: Filter by specific currency
+          schema:
+            type: string
+            enum: [BTC, ETH, RVN, XMR, LTC, ETC, DOGE, ZEC, DASH, ERGO, FLUX, KAS, ALPH]
+        - name: timeRange
+          in: query
+          description: Time range for statistics (in milliseconds)
+          schema:
+            type: integer
+            default: 86400000
+      responses:
+        '200':
+          description: Pool statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoolStats'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/prices:
+    get:
+      tags:
+        - Public
+      summary: Get cryptocurrency prices
+      description: Get current cryptocurrency prices in BTC and USD
+      operationId: getPrices
+      responses:
+        '200':
+          description: Current prices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prices'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/miner/{minerId}:
+    get:
+      tags:
+        - Mining
+      summary: Get miner details
+      description: Retrieve detailed information about a specific miner
+      operationId: getMiner
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: minerId
+          in: path
+          required: true
+          description: Miner ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Miner details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Miner'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/miner/{minerId}/workers:
+    get:
+      tags:
+        - Mining
+      summary: Get miner's workers
+      description: List all workers associated with a miner
+      operationId: getMinerWorkers
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: minerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by worker status
+          schema:
+            type: string
+            enum: [online, offline, all]
+            default: all
+      responses:
+        '200':
+          description: List of workers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Worker'
+
+  /api/miner/{minerId}/earnings:
+    get:
+      tags:
+        - Mining
+      summary: Get miner earnings
+      description: Retrieve earning history for a miner
+      operationId: getMinerEarnings
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: minerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: Start date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: End date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Earnings history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Earnings'
+
+  /api/payout/request:
+    post:
+      tags:
+        - Wallet
+      summary: Request payout
+      description: Request a manual payout (automatic payouts occur hourly)
+      operationId: requestPayout
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - minerId
+              properties:
+                minerId:
+                  type: string
+                  description: Miner ID requesting payout
+                amount:
+                  type: number
+                  description: Amount to payout (optional, defaults to full balance)
+                  minimum: 0.001
+      responses:
+        '200':
+          description: Payout request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: Insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/dex/pools:
+    get:
+      tags:
+        - DEX
+      summary: List liquidity pools
+      description: Get all available liquidity pools
+      operationId: getLiquidityPools
+      parameters:
+        - name: token0
+          in: query
+          description: Filter by first token
+          schema:
+            type: string
+        - name: token1
+          in: query
+          description: Filter by second token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of liquidity pools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LiquidityPool'
+
+  /api/dex/swap:
+    post:
+      tags:
+        - DEX
+      summary: Execute swap
+      description: Swap tokens using the DEX
+      operationId: executeSwap
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwapRequest'
+      responses:
+        '200':
+          description: Swap executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwapResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/batch:
+    post:
+      tags:
+        - Public
+      summary: Batch operations
+      description: Execute multiple API operations in a single request
+      operationId: batchOperations
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchRequest'
+            example:
+              operations:
+                - id: "op1"
+                  method: "GET"
+                  path: "/api/prices"
+                - id: "op2"
+                  method: "GET"
+                  path: "/api/stats"
+                - id: "op3"
+                  method: "POST"
+                  path: "/api/order"
+                  body:
+                    pair: "BTC/USD"
+                    type: "limit"
+                    side: "buy"
+                    price: 50000
+                    amount: 0.1
+                  dependencies: ["op1"]
+      responses:
+        '200':
+          description: Batch operations completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/webhooks:
+    get:
+      tags:
+        - Webhooks
+      summary: List webhooks
+      description: Get all webhooks for the authenticated user
+      operationId: listWebhooks
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Webhook'
+    post:
+      tags:
+        - Webhooks
+      summary: Create webhook
+      description: Create a new webhook
+      operationId: createWebhook
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreate'
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhook:
+                    $ref: '#/components/schemas/Webhook'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/webhooks/{webhookId}:
+    get:
+      tags:
+        - Webhooks
+      summary: Get webhook
+      description: Get a specific webhook by ID
+      operationId: getWebhook
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Webhook details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhook:
+                    $ref: '#/components/schemas/Webhook'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+        - Webhooks
+      summary: Update webhook
+      description: Update an existing webhook
+      operationId: updateWebhook
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookUpdate'
+      responses:
+        '200':
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhook:
+                    $ref: '#/components/schemas/Webhook'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Webhooks
+      summary: Delete webhook
+      description: Delete a webhook
+      operationId: deleteWebhook
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Webhook deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/webhooks/{webhookId}/test:
+    post:
+      tags:
+        - Webhooks
+      summary: Test webhook
+      description: Send a test event to a webhook
+      operationId: testWebhook
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      statusCode:
+                        type: integer
+                      response:
+                        type: string
+                      error:
+                        type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from authentication
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for programmatic access
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: number
+          description: Uptime in seconds
+        memory:
+          type: object
+          properties:
+            rss:
+              type: integer
+            heapTotal:
+              type: integer
+            heapUsed:
+              type: integer
+            external:
+              type: integer
+        connections:
+          type: integer
+          description: Number of active WebSocket connections
+        database:
+          type: string
+          enum: [connected, disconnected, error]
+        timestamp:
+          type: integer
+          format: int64
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, warn, fail]
+              message:
+                type: string
+              latency:
+                type: number
+              details:
+                type: object
+
+    ReadinessStatus:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, warn, fail]
+              message:
+                type: string
+              latency:
+                type: number
+
+    LivenessStatus:
+      type: object
+      properties:
+        alive:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: number
+          description: Process uptime in seconds
+        pid:
+          type: integer
+          description: Process ID
+
+    PoolStats:
+      type: object
+      properties:
+        miners:
+          type: integer
+          description: Total registered miners
+        activeMiners:
+          type: integer
+          description: Currently active miners
+        totalHashrate:
+          type: number
+          description: Total pool hashrate
+        currencies:
+          type: array
+          items:
+            type: object
+            properties:
+              currency:
+                type: string
+              miners:
+                type: integer
+              hashrate:
+                type: number
+        poolStats:
+          type: object
+          properties:
+            version:
+              type: string
+            fee:
+              type: number
+              description: Pool fee rate (0.01 = 1%)
+            minPayout:
+              type: number
+              description: Minimum payout in BTC
+            connections:
+              type: integer
+
+    Prices:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          usd:
+            type: number
+            description: Price in USD
+          btc:
+            type: number
+            description: Price in BTC
+          change24h:
+            type: number
+            description: 24-hour change percentage
+
+    Miner:
+      type: object
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+          description: Wallet address
+        currency:
+          type: string
+        algorithm:
+          type: string
+        created:
+          type: integer
+          format: int64
+        lastSeen:
+          type: integer
+          format: int64
+        totalShares:
+          type: integer
+        validShares:
+          type: integer
+        balance:
+          type: number
+          description: Balance in mined currency
+        btcBalance:
+          type: number
+          description: Balance in BTC
+        paid:
+          type: number
+          description: Total paid amount in BTC
+        hashrate:
+          type: number
+        workers:
+          type: integer
+          description: Number of active workers
+
+    Worker:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        online:
+          type: boolean
+        hashrate:
+          type: number
+        shares:
+          type: integer
+        efficiency:
+          type: number
+          description: Efficiency percentage
+        lastShare:
+          type: integer
+          format: int64
+        connected:
+          type: integer
+          format: int64
+
+    Earnings:
+      type: object
+      properties:
+        total:
+          type: number
+          description: Total earnings in BTC
+        daily:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              amount:
+                type: number
+              btcAmount:
+                type: number
+              shares:
+                type: integer
+
+    PayoutResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        amount:
+          type: number
+          description: Payout amount in BTC
+        fee:
+          type: number
+          description: Network fee
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        estimatedTime:
+          type: string
+          description: Estimated completion time
+
+    LiquidityPool:
+      type: object
+      properties:
+        id:
+          type: string
+        token0:
+          type: string
+        token1:
+          type: string
+        reserve0:
+          type: number
+        reserve1:
+          type: number
+        totalShares:
+          type: number
+        fee:
+          type: number
+          description: Trading fee (0.003 = 0.3%)
+        volume24h:
+          type: number
+        tvl:
+          type: number
+          description: Total value locked in USD
+
+    SwapRequest:
+      type: object
+      required:
+        - tokenIn
+        - tokenOut
+        - amountIn
+      properties:
+        tokenIn:
+          type: string
+        tokenOut:
+          type: string
+        amountIn:
+          type: number
+        minAmountOut:
+          type: number
+          description: Minimum acceptable output amount
+        deadline:
+          type: integer
+          format: int64
+          description: Transaction deadline timestamp
+
+    SwapResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        amountIn:
+          type: number
+        amountOut:
+          type: number
+        fee:
+          type: number
+        executionPrice:
+          type: number
+        priceImpact:
+          type: number
+        status:
+          type: string
+          enum: [pending, completed, failed]
+
+    BatchRequest:
+      type: object
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchOperation'
+          minItems: 1
+          maxItems: 100
+      required:
+        - operations
+
+    BatchOperation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for this operation
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE]
+        path:
+          type: string
+          description: API endpoint path
+        params:
+          type: object
+          description: Query parameters
+        body:
+          type: object
+          description: Request body for POST/PUT operations
+        headers:
+          type: object
+          description: Additional headers for this operation
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: IDs of operations that must complete before this one
+      required:
+        - id
+        - method
+        - path
+
+    BatchResponse:
+      type: object
+      properties:
+        success:
+          type: integer
+          description: Number of successful operations
+        failed:
+          type: integer
+          description: Number of failed operations
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchOperationResult'
+
+    BatchOperationResult:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [success, error]
+        data:
+          type: object
+          description: Response data if successful
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        duration:
+          type: integer
+          description: Operation duration in milliseconds
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        active:
+          type: boolean
+        userId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastDelivery:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+            status:
+              type: string
+            statusCode:
+              type: integer
+
+    WebhookCreate:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        secret:
+          type: string
+          description: Secret for webhook signature verification
+        active:
+          type: boolean
+          default: true
+      required:
+        - url
+        - events
+
+    WebhookUpdate:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        active:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid request parameters
+            code: BAD_REQUEST
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Authentication required
+            code: UNAUTHORIZED
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Access denied
+            code: FORBIDDEN
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Resource not found
+            code: NOT_FOUND
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in window
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Time when the rate limit resets (Unix timestamp)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Rate limit exceeded
+            code: RATE_LIMIT_EXCEEDED
+
+    ServiceUnavailable:
+      description: Service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Service temporarily unavailable
+            code: SERVICE_UNAVAILABLE

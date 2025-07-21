@@ -1,0 +1,40 @@
+apiVersion: v2
+name: otedama
+description: Otedama P2P Mining Pool, DEX & DeFi Platform Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://otedama.io
+sources:
+  - https://github.com/otedama/otedama
+maintainers:
+  - name: Otedama Team
+    email: team@otedama.io
+keywords:
+  - p2p
+  - mining-pool
+  - dex
+  - defi
+  - blockchain
+  - cryptocurrency
+dependencies:
+  - name: postgresql
+    version: 12.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: 17.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: prometheus
+    version: 23.x.x
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: monitoring.prometheus.enabled
+annotations:
+  category: Application
+  artifacthub.io/changes: |
+    - Added comprehensive CI/CD support
+    - Enhanced monitoring and observability
+    - Improved security and performance
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/prerelease: "false"

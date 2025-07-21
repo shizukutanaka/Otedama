@@ -1,0 +1,220 @@
+{
+  "app": {
+    "name": "otedama",
+    "env": "production",
+    "port": 3000,
+    "host": "0.0.0.0",
+    "cluster": {
+      "enabled": true,
+      "workers": "auto"
+    }
+  },
+  "database": {
+    "host": "${RDS_HOSTNAME}",
+    "port": 5432,
+    "database": "otedama_prod",
+    "username": "${RDS_USERNAME}",
+    "password": "${RDS_PASSWORD}",
+    "ssl": {
+      "rejectUnauthorized": true,
+      "ca": "${RDS_CA_CERT}"
+    },
+    "pool": {
+      "min": 10,
+      "max": 100,
+      "idleTimeoutMillis": 30000,
+      "connectionTimeoutMillis": 2000,
+      "statementTimeout": 30000
+    },
+    "read_replicas": [
+      {
+        "host": "${RDS_READ_REPLICA_1}",
+        "port": 5432
+      },
+      {
+        "host": "${RDS_READ_REPLICA_2}",
+        "port": 5432
+      }
+    ]
+  },
+  "redis": {
+    "cluster": {
+      "nodes": [
+        {
+          "host": "${ELASTICACHE_NODE_1}",
+          "port": 6379
+        },
+        {
+          "host": "${ELASTICACHE_NODE_2}",
+          "port": 6379
+        },
+        {
+          "host": "${ELASTICACHE_NODE_3}",
+          "port": 6379
+        }
+      ],
+      "options": {
+        "enableReadyCheck": true,
+        "maxRetriesPerRequest": 3,
+        "retryDelayOnFailover": 100,
+        "retryDelayOnClusterDown": 300,
+        "slotsRefreshTimeout": 2000,
+        "clusterRetryStrategy": {
+          "delay": 100,
+          "retries": 3
+        }
+      }
+    },
+    "password": "${ELASTICACHE_AUTH_TOKEN}"
+  },
+  "security": {
+    "cors": {
+      "origin": ["https://app.otedama.com", "https://www.otedama.com"],
+      "credentials": true
+    },
+    "rateLimit": {
+      "windowMs": 60000,
+      "max": 1000,
+      "keyGenerator": "ip+user"
+    },
+    "helmet": {
+      "contentSecurityPolicy": {
+        "directives": {
+          "defaultSrc": ["'self'"],
+          "scriptSrc": ["'self'", "'unsafe-inline'", "https://cdn.otedama.com"],
+          "styleSrc": ["'self'", "'unsafe-inline'", "https://cdn.otedama.com"],
+          "imgSrc": ["'self'", "data:", "https:"],
+          "connectSrc": ["'self'", "wss://ws.otedama.com", "https://api.otedama.com"]
+        }
+      }
+    }
+  },
+  "aws": {
+    "region": "${AWS_REGION}",
+    "s3": {
+      "bucket": "otedama-prod-assets",
+      "cloudfront": {
+        "enabled": true,
+        "distributionId": "${CLOUDFRONT_DISTRIBUTION_ID}"
+      }
+    },
+    "sqs": {
+      "queues": {
+        "mining": "${SQS_MINING_QUEUE_URL}",
+        "trading": "${SQS_TRADING_QUEUE_URL}",
+        "notifications": "${SQS_NOTIFICATIONS_QUEUE_URL}"
+      }
+    },
+    "sns": {
+      "topics": {
+        "alerts": "${SNS_ALERTS_TOPIC_ARN}",
+        "events": "${SNS_EVENTS_TOPIC_ARN}"
+      }
+    },
+    "secretsManager": {
+      "enabled": true,
+      "secrets": {
+        "api": "otedama/prod/api-keys",
+        "db": "otedama/prod/database",
+        "jwt": "otedama/prod/jwt"
+      }
+    }
+  },
+  "monitoring": {
+    "cloudwatch": {
+      "enabled": true,
+      "namespace": "Otedama/Production",
+      "metricInterval": 60000,
+      "detailedMetrics": true
+    },
+    "xray": {
+      "enabled": true,
+      "traceIdInjection": true,
+      "contextMissingStrategy": "LOG_ERROR"
+    },
+    "prometheus": {
+      "enabled": true,
+      "port": 9090,
+      "path": "/metrics"
+    }
+  },
+  "loadBalancer": {
+    "type": "alb",
+    "healthCheck": {
+      "path": "/health",
+      "interval": 30,
+      "timeout": 5,
+      "healthyThreshold": 2,
+      "unhealthyThreshold": 3
+    },
+    "targetGroup": {
+      "deregistrationDelay": 30,
+      "stickySession": {
+        "enabled": true,
+        "duration": 86400
+      }
+    }
+  },
+  "autoScaling": {
+    "enabled": true,
+    "minInstances": 2,
+    "maxInstances": 20,
+    "targetCPU": 70,
+    "targetMemory": 80,
+    "scaleUpCooldown": 60,
+    "scaleDownCooldown": 300
+  },
+  "backup": {
+    "enabled": true,
+    "schedule": "0 2 * * *",
+    "retention": {
+      "daily": 7,
+      "weekly": 4,
+      "monthly": 6
+    },
+    "s3": {
+      "bucket": "otedama-prod-backups",
+      "encryption": "AES256",
+      "lifecycle": {
+        "transitionToIA": 30,
+        "transitionToGlacier": 90,
+        "expiration": 365
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "cloudwatchLogs": {
+      "enabled": true,
+      "logGroup": "/aws/ecs/otedama-prod",
+      "retention": 30
+    },
+    "format": "json",
+    "sensitiveFields": ["password", "apiKey", "secret", "token"]
+  },
+  "features": {
+    "mining": {
+      "enabled": true,
+      "algorithms": ["SHA256", "Scrypt", "Ethash", "RandomX", "KawPow"],
+      "stratumPorts": {
+        "SHA256": 3333,
+        "Scrypt": 3334,
+        "Ethash": 3335,
+        "RandomX": 3336,
+        "KawPow": 3337
+      }
+    },
+    "trading": {
+      "enabled": true,
+      "maintenanceMode": false,
+      "maxOrderSize": 1000000,
+      "minOrderSize": 0.00001
+    },
+    "defi": {
+      "enabled": true,
+      "stakingEnabled": true,
+      "lendingEnabled": true,
+      "liquidityEnabled": true
+    }
+  }
+}

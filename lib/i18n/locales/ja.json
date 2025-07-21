@@ -1,0 +1,246 @@
+{
+  "common": {
+    "appName": "Otedama",
+    "welcome": "ようこそ",
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "close": "閉じる",
+    "back": "戻る",
+    "next": "次へ",
+    "previous": "前へ",
+    "search": "検索",
+    "filter": "フィルター",
+    "sort": "並び替え",
+    "refresh": "更新",
+    "settings": "設定",
+    "logout": "ログアウト",
+    "login": "ログイン",
+    "register": "登録",
+    "submit": "送信",
+    "reset": "リセット",
+    "yes": "はい",
+    "no": "いいえ",
+    "all": "すべて",
+    "none": "なし",
+    "select": "選択",
+    "upload": "アップロード",
+    "download": "ダウンロード",
+    "copy": "コピー",
+    "paste": "貼り付け",
+    "share": "共有"
+  },
+  "navigation": {
+    "home": "ホーム",
+    "mining": "マイニング",
+    "dex": "取引所",
+    "wallet": "ウォレット",
+    "portfolio": "ポートフォリオ",
+    "settings": "設定",
+    "help": "ヘルプ",
+    "about": "概要"
+  },
+  "auth": {
+    "login": {
+      "title": "ログイン",
+      "username": "ユーザー名",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "rememberMe": "ログイン状態を保持",
+      "forgotPassword": "パスワードを忘れた場合",
+      "noAccount": "アカウントをお持ちでない方",
+      "loginButton": "ログイン",
+      "loginWithBiometric": "生体認証でログイン",
+      "errors": {
+        "invalidCredentials": "ユーザー名またはパスワードが正しくありません",
+        "accountLocked": "アカウントがロックされています",
+        "networkError": "ネットワークエラーが発生しました"
+      }
+    },
+    "register": {
+      "title": "アカウント作成",
+      "username": "ユーザー名",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "confirmPassword": "パスワード（確認）",
+      "termsAgreement": "利用規約に同意します",
+      "createAccount": "アカウントを作成",
+      "alreadyHaveAccount": "既にアカウントをお持ちの方",
+      "errors": {
+        "usernameTaken": "このユーザー名は既に使用されています",
+        "emailTaken": "このメールアドレスは既に登録されています",
+        "passwordMismatch": "パスワードが一致しません",
+        "weakPassword": "パスワードが弱すぎます"
+      }
+    }
+  },
+  "mining": {
+    "title": "マイニング",
+    "dashboard": "ダッシュボード",
+    "workers": "ワーカー",
+    "pools": "プール",
+    "earnings": "収益",
+    "status": {
+      "active": "稼働中",
+      "inactive": "停止中",
+      "error": "エラー"
+    },
+    "stats": {
+      "hashrate": "ハッシュレート",
+      "shares": "シェア",
+      "temperature": "温度",
+      "power": "消費電力",
+      "efficiency": "効率",
+      "uptime": "稼働時間"
+    },
+    "actions": {
+      "start": "開始",
+      "stop": "停止",
+      "restart": "再起動",
+      "addWorker": "ワーカーを追加",
+      "removeWorker": "ワーカーを削除",
+      "configurePool": "プール設定"
+    },
+    "messages": {
+      "workerAdded": "ワーカーが追加されました",
+      "workerRemoved": "ワーカーが削除されました",
+      "miningStarted": "マイニングを開始しました",
+      "miningStopped": "マイニングを停止しました"
+    }
+  },
+  "dex": {
+    "title": "分散型取引所",
+    "trading": "取引",
+    "orderBook": "注文板",
+    "liquidity": "流動性",
+    "portfolio": "ポートフォリオ",
+    "trade": {
+      "buy": "購入",
+      "sell": "売却",
+      "market": "成行",
+      "limit": "指値",
+      "stopLoss": "ストップロス",
+      "amount": "数量",
+      "price": "価格",
+      "total": "合計",
+      "fee": "手数料",
+      "placeOrder": "注文する",
+      "cancelOrder": "注文をキャンセル"
+    },
+    "liquidity": {
+      "addLiquidity": "流動性を追加",
+      "removeLiquidity": "流動性を削除",
+      "yourLiquidity": "あなたの流動性",
+      "poolShare": "プールシェア",
+      "apy": "年率",
+      "tvl": "総ロック価値",
+      "volume24h": "24時間取引高"
+    },
+    "messages": {
+      "orderPlaced": "注文が送信されました",
+      "orderCancelled": "注文がキャンセルされました",
+      "liquidityAdded": "流動性が追加されました",
+      "liquidityRemoved": "流動性が削除されました"
+    }
+  },
+  "wallet": {
+    "title": "ウォレット",
+    "balance": "残高",
+    "send": "送金",
+    "receive": "受取",
+    "transactions": "取引履歴",
+    "address": "アドレス",
+    "qrCode": "QRコード",
+    "privateKey": "秘密鍵",
+    "backup": "バックアップ",
+    "import": "インポート",
+    "export": "エクスポート",
+    "actions": {
+      "sendFunds": "送金する",
+      "generateAddress": "アドレスを生成",
+      "copyAddress": "アドレスをコピー",
+      "showQR": "QRコードを表示",
+      "backupWallet": "ウォレットをバックアップ"
+    },
+    "messages": {
+      "transactionSent": "送金が完了しました",
+      "addressCopied": "アドレスがコピーされました",
+      "backupCreated": "バックアップが作成されました",
+      "insufficientBalance": "残高が不足しています"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "general": "一般",
+    "security": "セキュリティ",
+    "notifications": "通知",
+    "language": "言語",
+    "theme": "テーマ",
+    "currency": "通貨",
+    "timezone": "タイムゾーン",
+    "privacy": "プライバシー",
+    "advanced": "詳細設定",
+    "options": {
+      "darkMode": "ダークモード",
+      "biometricAuth": "生体認証",
+      "twoFactor": "二要素認証",
+      "emailNotifications": "メール通知",
+      "pushNotifications": "プッシュ通知",
+      "soundAlerts": "音声アラート"
+    }
+  },
+  "errors": {
+    "general": "エラーが発生しました",
+    "network": "ネットワークエラー",
+    "unauthorized": "認証が必要です",
+    "forbidden": "アクセスが拒否されました",
+    "notFound": "見つかりません",
+    "serverError": "サーバーエラー",
+    "timeout": "タイムアウトしました",
+    "invalidInput": "入力が無効です",
+    "requiredField": "必須項目です",
+    "minLength": "最小{{min}}文字必要です",
+    "maxLength": "最大{{max}}文字までです",
+    "invalidEmail": "有効なメールアドレスを入力してください",
+    "invalidNumber": "有効な数値を入力してください"
+  },
+  "time": {
+    "second": "秒",
+    "minute": "分",
+    "hour": "時間",
+    "day": "日",
+    "week": "週",
+    "month": "月",
+    "year": "年",
+    "ago": "前",
+    "in": "後",
+    "just_now": "たった今",
+    "today": "今日",
+    "yesterday": "昨日",
+    "tomorrow": "明日"
+  },
+  "numbers": {
+    "decimal": ".",
+    "thousand": ",",
+    "million": "百万",
+    "billion": "十億",
+    "trillion": "兆"
+  },
+  "crypto": {
+    "bitcoin": "ビットコイン",
+    "ethereum": "イーサリアム",
+    "usdt": "テザー",
+    "usdc": "USDコイン",
+    "confirmations": "確認数",
+    "blockHeight": "ブロック高",
+    "txHash": "トランザクションハッシュ",
+    "gasPrice": "ガス価格",
+    "gasLimit": "ガスリミット",
+    "nonce": "ノンス"
+  }
+}

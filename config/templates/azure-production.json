@@ -1,0 +1,260 @@
+{
+  "app": {
+    "name": "otedama",
+    "env": "production",
+    "port": 8080,
+    "host": "0.0.0.0",
+    "cluster": {
+      "enabled": true,
+      "workers": "auto"
+    }
+  },
+  "database": {
+    "host": "${AZURE_SQL_SERVER}.database.windows.net",
+    "port": 5432,
+    "database": "otedama_prod",
+    "username": "${AZURE_SQL_USERNAME}",
+    "password": "${AZURE_SQL_PASSWORD}",
+    "ssl": {
+      "rejectUnauthorized": true,
+      "encrypt": true
+    },
+    "pool": {
+      "min": 10,
+      "max": 100,
+      "idleTimeoutMillis": 30000,
+      "connectionTimeoutMillis": 2000
+    },
+    "options": {
+      "encrypt": true,
+      "trustServerCertificate": false,
+      "enableArithAbort": true
+    },
+    "read_replicas": [
+      {
+        "host": "${AZURE_SQL_READ_REPLICA}.database.windows.net",
+        "port": 5432
+      }
+    ]
+  },
+  "redis": {
+    "host": "${AZURE_CACHE_HOSTNAME}.redis.cache.windows.net",
+    "port": 6380,
+    "password": "${AZURE_CACHE_KEY}",
+    "tls": {
+      "servername": "${AZURE_CACHE_HOSTNAME}.redis.cache.windows.net"
+    },
+    "retryStrategy": {
+      "retries": 5,
+      "delay": 100
+    }
+  },
+  "security": {
+    "cors": {
+      "origin": ["https://app.otedama.com", "https://www.otedama.com"],
+      "credentials": true
+    },
+    "rateLimit": {
+      "enabled": true,
+      "windowMs": 60000,
+      "max": 1000,
+      "skipSuccessfulRequests": false
+    },
+    "azureAD": {
+      "enabled": true,
+      "tenantId": "${AZURE_TENANT_ID}",
+      "clientId": "${AZURE_CLIENT_ID}",
+      "audience": "api://otedama-prod"
+    },
+    "waf": {
+      "enabled": true,
+      "mode": "Prevention",
+      "ruleSet": "OWASP_3.2"
+    }
+  },
+  "azure": {
+    "subscriptionId": "${AZURE_SUBSCRIPTION_ID}",
+    "resourceGroup": "otedama-prod-rg",
+    "region": "${AZURE_REGION}",
+    "storage": {
+      "accountName": "${AZURE_STORAGE_ACCOUNT}",
+      "containerName": "otedama-assets",
+      "cdn": {
+        "enabled": true,
+        "profileName": "otedama-cdn-profile",
+        "endpointName": "otedama-cdn-endpoint"
+      }
+    },
+    "serviceBus": {
+      "namespace": "${SERVICE_BUS_NAMESPACE}",
+      "queues": {
+        "mining": "mining-events",
+        "trading": "trading-events",
+        "notifications": "notifications"
+      },
+      "topics": {
+        "events": "otedama-events",
+        "alerts": "otedama-alerts"
+      }
+    },
+    "keyVault": {
+      "enabled": true,
+      "vaultName": "${KEY_VAULT_NAME}",
+      "secrets": {
+        "apiKeys": "otedama-api-keys",
+        "dbConnection": "otedama-db-connection",
+        "jwtSecret": "otedama-jwt-secret"
+      }
+    },
+    "cosmosDb": {
+      "enabled": true,
+      "endpoint": "${COSMOS_DB_ENDPOINT}",
+      "key": "${COSMOS_DB_KEY}",
+      "database": "otedama-cache",
+      "containers": {
+        "sessions": "sessions",
+        "cache": "cache"
+      }
+    }
+  },
+  "monitoring": {
+    "appInsights": {
+      "enabled": true,
+      "instrumentationKey": "${APP_INSIGHTS_KEY}",
+      "samplingPercentage": 100,
+      "enableAutoCollectConsole": true,
+      "enableAutoCollectDependencies": true,
+      "enableAutoCollectExceptions": true,
+      "enableAutoCollectPerformance": true,
+      "enableAutoCollectRequests": true
+    },
+    "prometheus": {
+      "enabled": true,
+      "port": 9090,
+      "path": "/metrics"
+    },
+    "azureMonitor": {
+      "enabled": true,
+      "workspace": "${LOG_ANALYTICS_WORKSPACE_ID}"
+    }
+  },
+  "loadBalancer": {
+    "type": "application-gateway",
+    "sku": "WAF_v2",
+    "capacity": {
+      "min": 2,
+      "max": 10
+    },
+    "healthProbe": {
+      "path": "/health",
+      "interval": 30,
+      "timeout": 30,
+      "unhealthyThreshold": 3
+    },
+    "backendSettings": {
+      "requestTimeout": 30,
+      "drainTimeout": 60,
+      "affinityCookie": {
+        "enabled": true,
+        "name": "ApplicationGatewayAffinity"
+      }
+    }
+  },
+  "containerInstances": {
+    "enabled": true,
+    "sku": "Standard",
+    "instances": {
+      "min": 2,
+      "max": 20
+    },
+    "resources": {
+      "cpu": 2,
+      "memoryInGB": 4
+    },
+    "scaling": {
+      "rules": [
+        {
+          "name": "cpu-scaling",
+          "metric": "CpuPercentage",
+          "threshold": 70,
+          "direction": "Increase",
+          "changeCount": 2
+        },
+        {
+          "name": "memory-scaling",
+          "metric": "MemoryPercentage",
+          "threshold": 80,
+          "direction": "Increase",
+          "changeCount": 1
+        }
+      ]
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "schedule": "0 2 * * *",
+    "retention": {
+      "daily": 7,
+      "weekly": 4,
+      "monthly": 6
+    },
+    "storage": {
+      "accountName": "${BACKUP_STORAGE_ACCOUNT}",
+      "containerName": "otedama-backups",
+      "accessTier": "Cool",
+      "lifecycle": {
+        "moveToArchive": 90,
+        "delete": 365
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "appInsights": {
+      "enabled": true,
+      "logLevel": "Information"
+    },
+    "storage": {
+      "enabled": true,
+      "retentionDays": 30
+    },
+    "format": "json",
+    "sensitiveFields": ["password", "apiKey", "secret", "token"]
+  },
+  "features": {
+    "mining": {
+      "enabled": true,
+      "algorithms": ["SHA256", "Scrypt", "Ethash", "RandomX", "KawPow"],
+      "endpoints": {
+        "SHA256": "stratum.otedama.com:3333",
+        "Scrypt": "stratum.otedama.com:3334",
+        "Ethash": "stratum.otedama.com:3335",
+        "RandomX": "stratum.otedama.com:3336",
+        "KawPow": "stratum.otedama.com:3337"
+      }
+    },
+    "trading": {
+      "enabled": true,
+      "maintenanceMode": false,
+      "limits": {
+        "maxOrderValue": 1000000,
+        "minOrderValue": 0.00001
+      }
+    },
+    "defi": {
+      "enabled": true,
+      "features": {
+        "staking": true,
+        "lending": true,
+        "liquidity": true,
+        "yield": true
+      }
+    },
+    "functionApp": {
+      "enabled": true,
+      "plan": "Premium",
+      "runtime": "node",
+      "version": "18"
+    }
+  }
+}
