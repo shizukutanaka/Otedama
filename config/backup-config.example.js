@@ -80,7 +80,11 @@ export const backupConfig = {
     incremental: {
         enabled: false,
         fullBackupInterval: 7,  // Days between full backups
-        maxIncrementals: 6      // Max incremental backups before full
+        maxIncrementals: 6,     // Max incremental backups before full
+        trackingInterval: 1000, // Check for changes every second (ms)
+        pageSize: 4096,         // Database page size for change tracking
+        compression: true,      // Compress incremental backup files
+        checksumAlgorithm: 'sha256' // Algorithm for page checksums
     },
     
     // Cloud backup configuration (optional)

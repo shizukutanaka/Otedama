@@ -208,7 +208,7 @@
       }
     },
     "authentication": {
-      "jwtSecret": "production-jwt-secret-change-this",
+      "jwtSecret": "${JWT_SECRET}",
       "jwtExpiration": "24h",
       "passwordPolicy": {
         "minLength": 12,
@@ -233,7 +233,7 @@
     },
     "csrf": {
       "enabled": true,
-      "secret": "csrf-secret-change-this",
+      "secret": "${CSRF_SECRET}",
       "cookieName": "csrf-token",
       "headerName": "x-csrf-token"
     },

@@ -8,7 +8,9 @@
 
 // ===== CORE APPLICATION METADATA =====
 export const VERSION = '1.0.0'; // Internal version, not for display
-export const OPERATOR_ADDRESS = '1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa';
+export const OPERATOR_ADDRESS = process.env.POOL_OPERATOR_ADDRESS || (() => {
+  throw new Error('POOL_OPERATOR_ADDRESS environment variable is required for production');
+})();
 
 // ===== FEE STRUCTURE =====
 export const POOL_FEE_RATE = 0.01; // 1% pool usage fee (fixed)

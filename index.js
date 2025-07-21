@@ -20,6 +20,7 @@ import Database from 'better-sqlite3';
 import dotenv from 'dotenv';
 import { lazyLoad, preloadCritical } from './lib/lazy-loader.js';
 import { initializeErrorHandler, getErrorHandler, OtedamaError, ErrorCategory, safeExecute } from './lib/error-handler.js';
+import { getErrorHandler as getStandardizedErrorHandler } from './lib/core/standardized-error-handler.js';
 import { getPerformanceMonitor } from './lib/performance/monitor.js';
 import { UnifiedSecurityMiddleware } from './lib/security/unified-security-middleware.js';
 import { DatabaseManager } from './lib/core/database-manager.js';
@@ -359,25 +360,33 @@ class OtedamaCore {
         
         console.log('✅ Database initialized successfully');
       
-      // Initialize authentication system
-      this.authManager = new AuthenticationManager(this.dbManager, {
-        jwtSecret: process.env.JWT_SECRET || 'otedama-secret-' + Date.now(),
-        twoFactorIssuer: 'Otedama'
-      });
-      await this.authManager.initializeDatabase();
-      this.services.set('auth', this.authManager);
-      console.log('✅ Authentication system initialized');
+      // Initialize authentication and monitoring systems in parallel for better performance
+      const [authManager, monitoringManager] = await Promise.all([
+        (async () => {
+          const auth = new AuthenticationManager(this.dbManager, {
+            jwtSecret: process.env.JWT_SECRET || 'otedama-secret-' + Date.now(),
+            twoFactorIssuer: 'Otedama'
+          });
+          await auth.initializeDatabase();
+          return auth;
+        })(),
+        (async () => {
+          const monitoring = getMonitoring({
+            systemInterval: 5000,
+            applicationInterval: 10000,
+            enableAlerts: true,
+            enableRealtime: true
+          });
+          await monitoring.initialize();
+          return monitoring;
+        })()
+      ]);
       
-      // Initialize consolidated monitoring system
-      this.monitoringManager = getMonitoring({
-        systemInterval: 5000,
-        applicationInterval: 10000,
-        enableAlerts: true,
-        enableRealtime: true
-      });
-      await this.monitoringManager.initialize();
+      this.authManager = authManager;
+      this.monitoringManager = monitoringManager;
+      this.services.set('auth', this.authManager);
       this.services.set('monitoring', this.monitoringManager);
-      console.log('✅ Consolidated monitoring system initialized');
+      console.log('✅ Authentication and monitoring systems initialized (parallel)');
       
       // Alert manager is now part of the consolidated monitoring
       this.alertManager = this.monitoringManager; // For backward compatibility
@@ -451,14 +460,13 @@ class OtedamaCore {
       // 2. Create HTTP server (critical)
       this.server = createServer((req, res) => this.handleRequest(req, res));
       
-      // 3. Initialize P2P Controller
-      await this.initializeP2P();
-      
-      // 4. Setup lazy-loaded services
-      await this.setupCoreServices();
-      
-      // 5. Setup performance features
-      await this.setupPerformanceFeatures();
+      // 3. Initialize independent services in parallel (Phase 2)
+      console.log('🔄 Initializing core services in parallel...');
+      await Promise.all([
+        this.initializeP2P(),
+        this.setupCoreServices(),
+        this.setupPerformanceFeatures()
+      ]);
       
       // 6. Initialize dashboard system (lazy)
       setTimeout(() => this.setupDashboard(), 2000);
@@ -796,6 +804,7 @@ class OtedamaCore {
       enableRateLimiting: false, // Using separate advanced rate limiter
       enableDDoSProtection: true,
       enableSecurityHeaders: true,
+      useEnhancedHeaders: true, // Use enhanced security headers instead of basic Helmet
       
       // Session configuration
       session: {
@@ -817,7 +826,27 @@ class OtedamaCore {
         excludePaths: ['/api/webhook', '/api/public', '/health', '/metrics']
       },
       
-      // Security headers (Helmet)
+      // Enhanced security headers configuration
+      enhancedHeaders: {
+        environment: config.environment,
+        apiVersion: '1.0',
+        allowedOrigins: [
+          'https://otedama.io',
+          'https://www.otedama.io',
+          process.env.ALLOWED_ORIGIN
+        ].filter(Boolean),
+        reportUri: '/api/security/csp-report',
+        domainName: process.env.DOMAIN_NAME || 'otedama.io',
+        features: {
+          cspNonce: true,
+          crossOriginIsolation: config.environment === 'production',
+          permissionsPolicy: true,
+          apiHeaders: true,
+          strictCsp: config.environment === 'production'
+        }
+      },
+      
+      // Fallback security headers (Helmet) - used when enhanced headers disabled
       helmet: {
         contentSecurityPolicy: {
           directives: {
@@ -854,7 +883,41 @@ class OtedamaCore {
     });
     this.services.set('securityMiddleware', this.securityMiddleware);
     
-    // Setup security event listeners
+    // Add CSP violation reporting endpoint
+    app.post('/api/security/csp-report', express.json({ type: 'application/csp-report' }), (req, res) => {
+      const report = req.body;
+      this.logger.warn('CSP Violation Report:', {
+        'blocked-uri': report['blocked-uri'],
+        'document-uri': report['document-uri'],
+        'violated-directive': report['violated-directive'],
+        'original-policy': report['original-policy'],
+        timestamp: new Date().toISOString()
+      });
+      
+      // Log to audit trail
+      try {
+        this.dbManager.db.prepare(`
+          INSERT INTO audit_log (
+            user_id, action, resource, resource_id, 
+            ip_address, user_agent, metadata, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `).run(
+          null, // user_id - CSP violations may not have authenticated user
+          'csp_violation',
+          'security_policy',
+          report['violated-directive'],
+          req.ip || req.connection.remoteAddress,
+          req.headers['user-agent'],
+          JSON.stringify(report)
+        );
+      } catch (error) {
+        this.logger.error('Failed to log CSP violation to audit trail:', error);
+      }
+      
+      res.status(204).send(); // No content response for CSP reports
+    });
+    
+    // Setup security event listeners  
     this.securityMiddleware.on('security:event', (event) => {
       this.logger.info('Security event:', event);
       
@@ -1207,9 +1270,24 @@ class OtedamaCore {
         });
       }
     } catch (error) {
-      this.logger?.error('Request error:', error);
-      res.statusCode = 500;
-      res.end(JSON.stringify({ error: 'Internal Server Error' }));
+      // Use standardized error handler
+      const standardErrorHandler = getStandardizedErrorHandler();
+      const processedError = await standardErrorHandler.handleError(error, {
+        context: {
+          method: req.method,
+          path,
+          userAgent: req.headers['user-agent'],
+          ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress
+        }
+      });
+      
+      const response = processedError.toHttpResponse();
+      
+      if (!res.headersSent) {
+        res.statusCode = response.statusCode;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(response.body));
+      }
       
       // End timing for failed request
       this.performanceMonitor?.endTiming(timingId, false);
@@ -1218,7 +1296,7 @@ class OtedamaCore {
       inc('http_requests_total', {
         method: req.method,
         route: path,
-        status: '500'
+        status: response.statusCode.toString()
       });
     }
   }
@@ -1341,14 +1419,18 @@ class OtedamaCore {
         res.end(JSON.stringify({ error: 'API endpoint not found', path }));
       }
     } catch (error) {
-      this.errorHandler.handleError(error, {
-        service: 'api',
-        context: { path, method }
+      // Use standardized error handler
+      const standardErrorHandler = getStandardizedErrorHandler();
+      const processedError = await standardErrorHandler.handleError(error, {
+        context: { path, method, service: 'api' }
       });
+
+      const response = processedError.toHttpResponse();
       
       if (!res.headersSent) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: 'Internal server error' }));
+        res.statusCode = response.statusCode;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(response.body));
       }
     }
   }
