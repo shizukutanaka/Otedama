@@ -1,14 +1,13 @@
 # Otedama Beta (Ver0.1.0)
 
 <div align="center">
-  <img src="https://otedama.io/logo.png" alt="Otedama Logo" width="200"/>
   
   # 🚀 エンタープライズグレード P2P マイニングプール & DEX & DeFi プラットフォーム
   
   [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
   [![Version](https://img.shields.io/badge/Version-0.1.0--beta-orange.svg)](CHANGELOG.md)
   [![Docker](https://img.shields.io/badge/Docker-Ready-brightgreen.svg)](docker-compose.yml)
-  [![Status](https://img.shields.io/badge/Status-Production--Ready-success.svg)](https://status.otedama.io)
+  [![Status](https://img.shields.io/badge/Status-Production--Ready-success.svg)]()
 </div>
 
 ## 📋 目次
@@ -67,8 +66,8 @@ Otedama Betaは、100,000人以上の同時接続ユーザーをサポートす�
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/otedama/otedama-beta.git
-cd otedama-beta
+git clone https://github.com/shizukutanaka/Otedama.git
+cd Otedama
 
 # 2. 環境設定
 cp .env.production.example .env.production
@@ -153,35 +152,19 @@ otedama-beta/
 - [CONFIGURATION.md](CONFIGURATION.md) - 詳細設定
 - [CHANGELOG.md](CHANGELOG.md) - 変更履歴
 
-### 🔗 外部リソース
-
-- [公式ドキュメント](https://docs.otedama.io)
-- [APIリファレンス](https://api.otedama.io/docs)
-- [ビデオチュートリアル](https://youtube.com/otedama)
-
 ## サポート
 
 ### 💬 コミュニティ
 
-- **Discord**: [discord.gg/otedama](https://discord.gg/otedama)
-- **Telegram**: [t.me/otedama](https://t.me/otedama)
-- **Forum**: [forum.otedama.io](https://forum.otedama.io)
-
-### 🏢 エンタープライズ
-
-- **Email**: enterprise@otedama.io
-- **電話**: +81-3-1234-5678
-- **SLA**: 24/7サポート、1時間応答
+GitHub Issue及びDiscussionsでのサポートを提供しています。
 
 ### 🐛 バグ報告
 
-- [GitHub Issues](https://github.com/otedama/otedama-beta/issues)
-- security@otedama.io (セキュリティ問題)
+GitHubのIssuesでバグ報告を受け付けています。
 
 ## ライセンス
 
-- **商用ライセンス**: 価格についてはsales@otedama.ioまで
-- **オープンソース**: AGPL-3.0（非商用利用）
+- **オープンソース**: MIT License（商用・非商用利用可）
 
 詳細は[LICENSE](LICENSE)を参照
 
