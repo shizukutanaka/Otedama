@@ -1,180 +1,200 @@
-# Otedama Beta (Ver0.1.0)
+# Otedama
 
-<div align="center">
-  
-  # 🚀 エンタープライズグレード P2P マイニングプール & DEX & DeFi プラットフォーム
-  
-  [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/Version-0.1.0--beta-orange.svg)](CHANGELOG.md)
-  [![Docker](https://img.shields.io/badge/Docker-Ready-brightgreen.svg)](docker-compose.yml)
-  [![Status](https://img.shields.io/badge/Status-Production--Ready-success.svg)]()
-</div>
+Enterprise-grade P2P mining pool platform with integrated DEX and DeFi capabilities.
 
-## 📋 目次
+## Overview
 
-- [概要](#概要)
-- [主要機能](#主要機能)
-- [クイックスタート](#クイックスタート)
-- [システム構成](#システム構成)
-- [パフォーマンス](#パフォーマンス)
-- [ドキュメント](#ドキュメント)
-- [サポート](#サポート)
+Otedama is a high-performance cryptocurrency platform designed for enterprise deployment. It combines mining pool operations, decentralized exchange functionality, and DeFi features in a single, optimized codebase.
 
-## 概要
+## Key Features
 
-Otedama Betaは、100,000人以上の同時接続ユーザーをサポートする、エンタープライズグレードの統合型ブロックチェーンプラットフォームです。
+### Mining Pool
+- Multi-algorithm support (SHA256, Scrypt, Ethash, RandomX, Equihash, X11, and more)
+- Hardware compatibility: CPU, GPU, ASIC, FPGA
+- P2P mesh network architecture
+- Automatic difficulty adjustment
+- Smart work distribution
+- Real-time performance monitoring
 
-### 🎯 設計理念
+### Decentralized Exchange
+- High-frequency order matching (<1ms latency)
+- Multiple order types (market, limit, stop-loss)
+- Liquidity aggregation
+- MEV protection
+- Cross-chain support
 
-- **John Carmack**: パフォーマンス最優先、低レベル最適化
-- **Robert C. Martin**: クリーンアーキテクチャ、SOLID原則
-- **Rob Pike**: シンプルさ、明確さ、最小限の複雑性
+### DeFi Platform
+- Automated market maker (AMM)
+- Yield farming and staking
+- Flash loans
+- Governance system
 
-## 主要機能
+## System Requirements
 
-### ⛏️ マイニングプール
-- **100,000+** 同時接続マイナー対応
-- **30+** マイニングアルゴリズム
-- **P2P** メッシュネットワーク
-- **AI駆動** 動的難易度調整
-- **自動収益最適化** プロフィットスイッチング
+- CPU: 8+ cores recommended
+- RAM: 16GB minimum, 64GB recommended
+- Storage: 500GB SSD minimum
+- Network: 1Gbps+ connection
+- OS: Linux (Ubuntu 20.04+), Windows Server 2019+
 
-### 💱 DEX（分散型取引所）
-- **100,000+** 注文/秒の処理能力
-- **<1ms** オーダーマッチング
-- **高度な注文タイプ** TWAP、Iceberg、OCO
-- **MEV保護** コミット・リビールスキーム
-- **クロスチェーン** 10+ブロックチェーン対応
+## Quick Start
 
-### 🏦 DeFiプラットフォーム
-- **AMM** 自動マーケットメイカー
-- **集中流動性** 資本効率の最大化
-- **レンディング** 動的金利
-- **フラッシュローン** アービトラージ対応
-- **自動複利** ガス最適化
-
-### 🔐 エンタープライズセキュリティ
-- **HSM統合** ハードウェアキー管理
-- **マルチシグ** M-of-N署名
-- **監査ログ** 暗号証明チェーン
-- **DDoS保護** 1Tbps対応
-- **ペネトレーションテスト済み**
-
-## クイックスタート
-
-### 📦 Dockerを使用（推奨）
-
+### Docker Installation (Recommended)
 ```bash
-# 1. リポジトリをクローン
-git clone https://github.com/shizukutanaka/Otedama.git
-cd Otedama
+docker-compose up -d
+```
 
-# 2. 環境設定
+### Manual Installation
+```bash
+# Install dependencies
+npm install
+
+# Configure environment
 cp .env.production.example .env.production
 
-# 3. 起動
-docker-compose up -d
-
-# 4. アクセス
-# Web UI: http://localhost:3000
-# API: http://localhost:8080
-```
-
-### 🛠️ マニュアルインストール
-
-```bash
-# 1. 依存関係インストール
-npm ci --production
-
-# 2. データベース設定
+# Run database migrations
 npm run migrate
 
-# 3. 起動
-NODE_ENV=production node index.js
+# Start the platform
+npm start
 ```
 
-詳細は[QUICK_START.md](QUICK_START.md)を参照
+## Configuration
 
-## システム構成
-
-### 📁 ディレクトリ構造
-
+### Mining Pool Setup
+```javascript
+{
+  "pool": {
+    "name": "Your Pool Name",
+    "fee": 0.01,  // 1% fee
+    "minPayout": 0.001,
+    "payoutInterval": 3600000  // 1 hour
+  },
+  "mining": {
+    "algorithms": ["sha256", "scrypt", "ethash"],
+    "ports": {
+      "sha256": 3333,
+      "scrypt": 3334,
+      "ethash": 3335
+    }
+  }
+}
 ```
-otedama-beta/
-├── index.js           # メインエントリーポイント
-├── lib/              # コアライブラリ
-│   ├── mining/       # マイニングエンジン
-│   ├── dex/          # DEXエンジン
-│   ├── defi/         # DeFi機能
-│   ├── security/     # セキュリティモジュール
-│   └── ...
-├── api/              # REST API定義
-├── config/           # 設定ファイル
-├── migrations/       # DBマイグレーション
-└── deploy/           # デプロイメントスクリプト
+
+### Connecting Miners
+
+#### ASIC Miners
+```
+stratum+tcp://your-pool-address:3333
+Username: YOUR_WALLET_ADDRESS
+Password: x
 ```
 
-### 🔧 技術スタック
+#### GPU Mining (Example with T-Rex Miner)
+```bash
+t-rex -a ethash -o stratum+tcp://your-pool-address:3335 -u YOUR_WALLET_ADDRESS -p x
+```
 
-- **バックエンド**: Node.js 18+, TypeScript
-- **データベース**: PostgreSQL 14+, Redis 6.2+
-- **メッセージング**: WebSocket, gRPC
-- **コンテナ**: Docker, Kubernetes
-- **監視**: Prometheus, Grafana
+#### CPU Mining
+```bash
+./otedama-miner --algo randomx --pool your-pool-address:3336 --wallet YOUR_WALLET_ADDRESS
+```
 
-## パフォーマンス
+## API Documentation
 
-### 📊 ベンチマーク結果
+### REST API
+Base URL: `http://localhost:8080/api`
 
-| メトリクス | 値 | 条件 |
-|-----------|-----|------|
-| 同時接続数 | 100,000+ | 64GB RAM |
-| 注文処理 | 100,000/秒 | 単一ノード |
-| マッチングレイテンシ | <1ms | p99 |
-| API応答時間 | <10ms | p99 |
-| シェア処理 | 500,000/秒 | 32コア |
+#### Get Pool Statistics
+```
+GET /api/stats
+```
 
-### ⚡ 最適化技術
+#### Get Miner Statistics
+```
+GET /api/miner/{address}
+```
 
-- ゼロコピー操作
-- SIMD命令活用
-- GPU計算（WebGPU）
-- ロックフリーアルゴリズム
-- メモリプール管理
+#### Submit Share
+```
+POST /api/submit
+Content-Type: application/json
 
-## ドキュメント
+{
+  "worker": "worker-name",
+  "jobId": "job-id",
+  "nonce": "nonce-value",
+  "hash": "hash-result"
+}
+```
 
-### 📚 利用可能なドキュメント
+### WebSocket API
+```javascript
+const ws = new WebSocket('ws://localhost:3334');
 
-- [QUICK_START.md](QUICK_START.md) - 5分で始める
-- [DEPLOYMENT.md](DEPLOYMENT.md) - 本番環境デプロイ
-- [API_REFERENCE.md](API_REFERENCE.md) - API仕様
-- [CONFIGURATION.md](CONFIGURATION.md) - 詳細設定
-- [CHANGELOG.md](CHANGELOG.md) - 変更履歴
+// Subscribe to real-time updates
+ws.send(JSON.stringify({
+  type: 'subscribe',
+  channels: ['hashrate', 'blocks', 'trades']
+}));
+```
 
-## サポート
+## Performance Optimization
 
-### 💬 コミュニティ
+### Recommended Settings
 
-GitHub Issue及びDiscussionsでのサポートを提供しています。
+#### For Mining Operations
+```
+NODE_OPTIONS="--max-old-space-size=8192"
+UV_THREADPOOL_SIZE=128
+```
 
-### 🐛 バグ報告
+#### For DEX Operations
+```
+ENABLE_BATCH_PROCESSING=true
+BATCH_SIZE=1000
+CACHE_SIZE=100000
+```
 
-GitHubのIssuesでバグ報告を受け付けています。
+## Monitoring
 
-## ライセンス
+### Prometheus Metrics
+Metrics are exposed at `http://localhost:9091/metrics`
 
-- **オープンソース**: MIT License（商用・非商用利用可）
+### Grafana Dashboard
+Pre-configured dashboards available at `http://localhost:3000`
 
-詳細は[LICENSE](LICENSE)を参照
+## Security
 
----
+- TLS 1.3 encryption for all connections
+- Rate limiting and DDoS protection
+- Multi-signature wallet support
+- Regular security audits
 
-<div align="center">
-  <p>
-    <strong>🚀 Otedama - 次世代ブロックチェーンインフラストラクチャ</strong>
-  </p>
-  <p>
-    本番環境対応 | 実戦テスト済み | スケール対応
-  </p>
-</div>
+## Troubleshooting
+
+### Common Issues
+
+#### High CPU Usage
+- Reduce worker thread count in configuration
+- Enable CPU affinity settings
+- Check for memory leaks with `npm run profile`
+
+#### Connection Issues
+- Verify firewall settings
+- Check port availability
+- Review connection pool limits
+
+#### Mining Issues
+- Ensure correct algorithm selection
+- Verify wallet address format
+- Check network difficulty settings
+
+## Support
+
+- GitHub Issues: https://github.com/shizukutanaka/Otedama/issues
+- Documentation: See `/docs` folder
+
+## License
+
+MIT License - see LICENSE file for details
