@@ -198,6 +198,6 @@ docker-compose logs -f
 
 ## サポート
 
-- 技術サポート: support@otedama.io
-- セキュリティ問題: security@otedama.io
-- ドキュメント: https://docs.otedama.io
+- 技術サポート: GitHub Issues
+- セキュリティ問題: GitHub Issues (Security標識付き)
+- ドキュメント: README.md及びGitHubリポジトリ

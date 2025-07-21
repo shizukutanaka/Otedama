@@ -133,6 +133,5 @@ docker-compose logs -f
 
 ### サポート
 
-- Discord: https://discord.gg/otedama
-- Email: support@otedama.io
-- ドキュメント: https://docs.otedama.io
+- GitHub Issues: https://github.com/shizukutanaka/Otedama/issues
+- GitHub Discussions: https://github.com/shizukutanaka/Otedama/discussions

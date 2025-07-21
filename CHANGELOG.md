@@ -129,4 +129,4 @@ pm2 restart otedama
 
 ---
 
-詳細な技術情報については、[ドキュメント](https://docs.otedama.io)をご参照ください。
+詳細な技術情報については、GitHubリポジトリのREADME.mdをご参照ください。

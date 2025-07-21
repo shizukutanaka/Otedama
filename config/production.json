@@ -6,8 +6,8 @@
     "name": "Otedama Mining Pool",
     "description": "Professional P2P Mining Pool with DeFi Integration",
     "operator": "Otedama Team",
-    "website": "https://otedama.io",
-    "contact": "support@otedama.io"
+    "website": "https://github.com/shizukutanaka/Otedama",
+    "contact": "https://github.com/shizukutanaka/Otedama/issues"
   },
   "pool": {
     "fee": 0.01,
