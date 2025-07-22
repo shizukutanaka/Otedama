@@ -1,0 +1,209 @@
+{
+  "algorithms": {
+    "sha256": {
+      "name": "SHA-256",
+      "description": "Secure Hash Algorithm 256-bit used by Bitcoin",
+      "difficulty": {
+        "initial": 256,
+        "target": "0000ffff00000000000000000000000000000000000000000000000000000000",
+        "retarget": 2016,
+        "targetBlockTime": 600
+      },
+      "optimization": {
+        "simdOptimized": true,
+        "memoryIntensive": false,
+        "recommendedBatchSize": 4000000,
+        "recommendedThreads": "auto"
+      },
+      "hardware": {
+        "cpuEfficiency": "high",
+        "gpuEfficiency": "very_high",
+        "asicSupport": true,
+        "memoryRequirement": "low"
+      },
+      "network": {
+        "shareSize": 80,
+        "workSize": 256,
+        "nonceRange": 4294967296
+      }
+    },
+    "scrypt": {
+      "name": "Scrypt",
+      "description": "Memory-hard function used by Litecoin and other cryptocurrencies",
+      "difficulty": {
+        "initial": 1024,
+        "target": "0000ffff00000000000000000000000000000000000000000000000000000000",
+        "retarget": 2016,
+        "targetBlockTime": 150
+      },
+      "optimization": {
+        "simdOptimized": false,
+        "memoryIntensive": true,
+        "recommendedBatchSize": 100000,
+        "recommendedThreads": 4
+      },
+      "hardware": {
+        "cpuEfficiency": "medium",
+        "gpuEfficiency": "high",
+        "asicSupport": true,
+        "memoryRequirement": "high"
+      },
+      "network": {
+        "shareSize": 80,
+        "workSize": 1024,
+        "nonceRange": 4294967296
+      },
+      "parameters": {
+        "N": 1024,
+        "r": 1,
+        "p": 1
+      }
+    },
+    "ethash": {
+      "name": "Ethash",
+      "description": "Ethereum's Proof-of-Work algorithm with DAG (Directed Acyclic Graph)",
+      "difficulty": {
+        "initial": 4000000000,
+        "target": "0x0000000000001000000000000000000000000000000000000000000000000000",
+        "retarget": 1,
+        "targetBlockTime": 15
+      },
+      "optimization": {
+        "simdOptimized": true,
+        "memoryIntensive": true,
+        "recommendedBatchSize": 500000,
+        "recommendedThreads": 2
+      },
+      "hardware": {
+        "cpuEfficiency": "low",
+        "gpuEfficiency": "very_high",
+        "asicSupport": false,
+        "memoryRequirement": "very_high"
+      },
+      "network": {
+        "shareSize": 32,
+        "workSize": 64,
+        "nonceRange": 18446744073709551616
+      },
+      "dag": {
+        "enabled": true,
+        "epochLength": 30000,
+        "mixBytes": 128,
+        "hashBytes": 64
+      }
+    },
+    "randomx": {
+      "name": "RandomX",
+      "description": "ASIC-resistant algorithm optimized for general-purpose CPUs",
+      "difficulty": {
+        "initial": 1000000,
+        "target": "0x00000fff00000000000000000000000000000000000000000000000000000000",
+        "retarget": 720,
+        "targetBlockTime": 120
+      },
+      "optimization": {
+        "simdOptimized": false,
+        "memoryIntensive": true,
+        "recommendedBatchSize": 50000,
+        "recommendedThreads": "auto"
+      },
+      "hardware": {
+        "cpuEfficiency": "very_high",
+        "gpuEfficiency": "low",
+        "asicSupport": false,
+        "memoryRequirement": "high"
+      },
+      "network": {
+        "shareSize": 32,
+        "workSize": 76,
+        "nonceRange": 4294967296
+      },
+      "vm": {
+        "enabled": true,
+        "scratchpadSize": 2097152,
+        "programSize": 256
+      }
+    },
+    "kawpow": {
+      "name": "KawPow",
+      "description": "Modified Ethash algorithm used by Ravencoin",
+      "difficulty": {
+        "initial": 1000000,
+        "target": "0x0000ffff00000000000000000000000000000000000000000000000000000000",
+        "retarget": 2016,
+        "targetBlockTime": 60
+      },
+      "optimization": {
+        "simdOptimized": true,
+        "memoryIntensive": false,
+        "recommendedBatchSize": 1000000,
+        "recommendedThreads": 4
+      },
+      "hardware": {
+        "cpuEfficiency": "medium",
+        "gpuEfficiency": "very_high",
+        "asicSupport": false,
+        "memoryRequirement": "medium"
+      },
+      "network": {
+        "shareSize": 32,
+        "workSize": 76,
+        "nonceRange": 18446744073709551616
+      },
+      "parameters": {
+        "epochs": true,
+        "mixBytes": 64,
+        "hashBytes": 32
+      }
+    }
+  },
+  "performance": {
+    "benchmarks": {
+      "sha256": {
+        "cpuHashrate": "50MH/s",
+        "gpuHashrate": "2000MH/s",
+        "powerConsumption": "100W"
+      },
+      "scrypt": {
+        "cpuHashrate": "5KH/s",
+        "gpuHashrate": "500KH/s",
+        "powerConsumption": "150W"
+      },
+      "ethash": {
+        "cpuHashrate": "1MH/s",
+        "gpuHashrate": "30MH/s",
+        "powerConsumption": "200W"
+      },
+      "randomx": {
+        "cpuHashrate": "10KH/s",
+        "gpuHashrate": "1KH/s",
+        "powerConsumption": "80W"
+      },
+      "kawpow": {
+        "cpuHashrate": "2MH/s",
+        "gpuHashrate": "25MH/s",
+        "powerConsumption": "180W"
+      }
+    },
+    "optimization": {
+      "cpuBound": ["randomx"],
+      "gpuBound": ["ethash", "kawpow", "sha256"],
+      "memoryIntensive": ["scrypt", "ethash", "randomx"],
+      "lowLatency": ["sha256", "kawpow"],
+      "highThroughput": ["ethash", "scrypt"]
+    }
+  },
+  "compatibility": {
+    "stratum": {
+      "v1": ["sha256", "scrypt", "kawpow"],
+      "v2": ["sha256"],
+      "ethProxy": ["ethash"],
+      "randomxProxy": ["randomx"]
+    },
+    "miners": {
+      "cpuMiners": ["cpuminer", "xmrig", "randomx-miner"],
+      "gpuMiners": ["ccminer", "cgminer", "t-rex", "gminer", "lolminer"],
+      "dual": ["claymore", "phoenixminer", "teamredminer"]
+    }
+  }
+}

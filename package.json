@@ -1,7 +1,7 @@
 {
   "name": "otedama",
-  "version": "0.1.1",
-  "description": "Enterprise-Grade P2P Mining Pool, DEX & DeFi Platform",
+  "version": "0.1.2",
+  "description": "High-Performance P2P Mining Pool Platform with Integrated Mining Software",
   "main": "index.js",
   "type": "module",
   "directories": {
@@ -20,6 +20,8 @@
     "express": "^4.18.2",
     "express-graphql": "^0.12.0",
     "express-rate-limit": "^7.1.5",
+    "firebase-admin": "^12.0.0",
+    "glob": "^11.0.3",
     "graphql": "^14.7.0",
     "graphql-iso-date": "^3.6.1",
     "helmet": "^7.1.0",
@@ -33,25 +35,23 @@
     "qrcode": "^1.5.3",
     "react-i18next": "^14.0.0",
     "speakeasy": "^2.0.0",
-    "ws": "^8.14.2",
-    "@tensorflow/tfjs-node": "^4.17.0",
     "web-push": "^3.6.6",
-    "firebase-admin": "^12.0.0"
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "autocannon": "^7.14.0",
+    "c8": "^8.0.1",
+    "chai": "^4.3.10",
     "eslint": "^8.55.0",
     "eslint-plugin-import": "^2.29.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^6.1.1",
     "husky": "^9.0.0",
     "lint-staged": "^15.2.0",
+    "mocha": "^10.2.0",
     "nodemon": "^3.0.2",
     "prettier": "^3.3.0",
     "rimraf": "^5.0.5",
-    "mocha": "^10.2.0",
-    "chai": "^4.3.10",
-    "c8": "^8.0.1",
     "sinon": "^17.0.1"
   },
   "scripts": {
@@ -141,12 +141,15 @@
     "otedama",
     "p2p",
     "mining-pool",
-    "dex",
-    "defi",
+    "mining-software",
+    "miner",
     "blockchain",
     "cryptocurrency",
     "bitcoin",
-    "stratum"
+    "ethereum",
+    "stratum",
+    "gpu-mining",
+    "cpu-mining"
   ],
   "author": "Otedama Team",
   "lint-staged": {

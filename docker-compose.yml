@@ -59,7 +59,7 @@ services:
       - ./otedama.json:/app/otedama.json:ro
       - ./ssl:/app/ssl:ro
     networks:
-      - otedama-networkwork
+      - otedama-network
     healthcheck:
       test: ["CMD-SHELL", "node /app/scripts/healthcheck.js"]
       interval: 30s
@@ -246,7 +246,7 @@ services:
       - otedama-backups:/backups
       - backup-logs:/logs
     networks:
-      - otedama-networkwork
+      - otedama-network
     depends_on:
       - otedama
     deploy:
@@ -278,7 +278,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
     networks:
-      - otedama-networkwork
+      - otedama-network
     labels:
       # - "traefik.enable=false"  # custom domain disabled
       - "traefik.http.routers.api.rule=Host(`traefik.${DOMAIN:-localhost}`)"
@@ -300,7 +300,7 @@ services:
       - WORKER_THREADS=${WORKER_THREADS:-4}
       - ALGORITHM=${MINING_ALGORITHM:-kawpow}
     networks:
-      - otedama-networkwork
+      - otedama-network
     depends_on:
       - otedama
     deploy:
@@ -327,7 +327,7 @@ services:
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     networks:
-      - otedama-networkwork
+      - otedama-network
     depends_on:
       - otedama
     profiles:

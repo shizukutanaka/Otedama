@@ -1,0 +1,156 @@
+{
+  "mining": {
+    "pool": {
+      "name": "Otedama Mining Pool",
+      "version": "1.0.0",
+      "description": "High-performance P2P mining pool with integrated mining software",
+      "host": "0.0.0.0",
+      "port": 4444,
+      "stratumPort": 3333,
+      "maxConnections": 10000,
+      "connectionTimeout": 30000,
+      "maxMinersPerIP": 100,
+      "vardiff": {
+        "enabled": true,
+        "minDifficulty": 1,
+        "maxDifficulty": 1000000,
+        "targetTime": 30,
+        "variancePercent": 30,
+        "retargetTime": 120
+      },
+      "algorithms": {
+        "default": "sha256",
+        "supported": ["sha256", "scrypt", "ethash", "randomx", "kawpow"]
+      }
+    },
+    "rewards": {
+      "system": "pplns",
+      "fee": 1.0,
+      "pplnsWindow": 10,
+      "minimumPayout": 0.01,
+      "payoutInterval": 3600,
+      "confirmationsRequired": 100
+    },
+    "database": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "otedama_mining",
+      "user": "otedama_user",
+      "password": "${DB_PASSWORD}",
+      "maxConnections": 20,
+      "idleTimeout": 30000
+    }
+  },
+  "optimization": {
+    "performance": {
+      "enableOptimization": true,
+      "enableMemoryOptimization": true,
+      "enableNetworkOptimization": true,
+      "enableCPUOptimization": true,
+      "threads": "auto",
+      "intensity": "medium",
+      "batchSize": 1000000
+    },
+    "hardware": {
+      "enableSIMD": true,
+      "enableAVX": true,
+      "enableSSE": true,
+      "threadAffinity": false,
+      "gpuAcceleration": false
+    },
+    "memory": {
+      "enablePooling": true,
+      "gcThreshold": 0.8,
+      "poolSize": 100,
+      "maxBufferSize": 16777216,
+      "monitorInterval": 10000
+    },
+    "network": {
+      "enableCompression": true,
+      "enableKeepAlive": true,
+      "enableBatching": true,
+      "maxConnections": 10000,
+      "connectionTimeout": 30000,
+      "batchSize": 100,
+      "batchTimeout": 10,
+      "bufferSize": 65536
+    }
+  },
+  "security": {
+    "protection": {
+      "enableRateLimiting": true,
+      "enableDDoSProtection": true,
+      "enableEncryption": true,
+      "enableIntrusionDetection": true,
+      "enableAuditLogging": true
+    },
+    "rateLimiting": {
+      "maxConnectionsPerIP": 100,
+      "rateLimitWindow": 60000,
+      "rateLimitMax": 1000,
+      "ddosThreshold": 10000
+    },
+    "encryption": {
+      "algorithm": "aes-256-gcm",
+      "keyRotationInterval": 3600000
+    },
+    "audit": {
+      "enableLogging": true,
+      "logLevel": "info",
+      "maxLogSize": 10000,
+      "retentionPeriod": 604800000
+    }
+  },
+  "monitoring": {
+    "system": {
+      "enableSystemMonitoring": true,
+      "enableApplicationMonitoring": true,
+      "enableMiningMonitoring": true,
+      "enableNetworkMonitoring": true,
+      "enableSecurityMonitoring": true
+    },
+    "alerts": {
+      "enableAlerts": true,
+      "enableDashboard": true,
+      "updateInterval": 30000,
+      "retentionPeriod": 604800000,
+      "thresholds": {
+        "cpuUsage": 80,
+        "memoryUsage": 85,
+        "diskUsage": 90,
+        "errorRate": 5,
+        "responseTime": 1000,
+        "hashrateDrop": 20
+      }
+    },
+    "exports": {
+      "enablePrometheus": true,
+      "enableJSON": true,
+      "enableCSV": true,
+      "prometheusPort": 9090
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "outputs": [
+      {
+        "type": "file",
+        "filename": "logs/mining-pool.log",
+        "maxSize": "100MB",
+        "maxFiles": 10
+      },
+      {
+        "type": "console",
+        "colorize": true
+      }
+    ],
+    "categories": {
+      "mining": "info",
+      "stratum": "info",
+      "security": "warn",
+      "performance": "debug",
+      "network": "info"
+    }
+  }
+}

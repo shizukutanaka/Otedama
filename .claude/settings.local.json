@@ -41,7 +41,12 @@
       "Bash(npm ls:*)",
       "Bash(grep:*)",
       "Bash(rg:*)",
-      "Bash(timeout 10s npm start)"
+      "Bash(timeout 10s npm start)",
+      "Bash(del \"C:\\Users\\irosa\\Desktop\\Otedama\\test-btc-fees.js\")",
+      "Bash(del \"C:\\Users\\irosa\\Desktop\\Otedama\\test-dynamic-fees.js\" /q)",
+      "Bash(timeout:*)",
+      "Bash(wc:*)",
+      "Bash(del /q \"C:\\Users\\irosa\\Desktop\\Otedama\\lib\\quantum\\quantum-computing-system.js\")"
     ],
     "deny": [
       "Bash(sudo:*)",

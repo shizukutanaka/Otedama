@@ -32,7 +32,7 @@ import { setupRealtimeServers } from './lib/websocket/index.js';
 import { AuthenticationManager } from './lib/auth/authentication-manager.js';
 import { createAuthRoutes } from './lib/auth/middleware.js';
 import { ConfigValidator } from './lib/config/config-validator.js';
-import { HealthCheck } from './lib/health/health-check.js';
+import { EnhancedHealthCheck as HealthCheck } from './lib/health/health-check.js';
 import { MultiLayerCache, CacheStrategy, cacheMiddleware } from './lib/cache/index.js';
 import { MemoryProfiler } from './lib/performance/memory-profiler.js';
 import { BufferPool, ObjectPool } from './lib/performance/object-pool.js';
@@ -363,9 +363,11 @@ class OtedamaCore {
       // Initialize authentication and monitoring systems in parallel for better performance
       const [authManager, monitoringManager] = await Promise.all([
         (async () => {
+          const jwtSecret = process.env.JWT_SECRET || 'otedama-secret-' + Date.now();
           const auth = new AuthenticationManager(this.dbManager, {
-            jwtSecret: process.env.JWT_SECRET || 'otedama-secret-' + Date.now(),
-            twoFactorIssuer: 'Otedama'
+            jwtSecret: jwtSecret,
+            twoFactorIssuer: 'Otedama',
+            encryptionKey: Buffer.from(jwtSecret).subarray(0, 32) // 32 bytes for AES-256
           });
           await auth.initializeDatabase();
           return auth;
@@ -1038,9 +1040,6 @@ class OtedamaCore {
       }
       
       res.setHeader('Content-Type', 'application/json');
-      
-      const url = new URL(req.url, `http://${req.headers.host}`);
-      const path = url.pathname;
       
       // Apply cache middleware for GET requests on API endpoints
       if (req.method === 'GET' && path.startsWith('/api/') && this.cacheStrategy) {

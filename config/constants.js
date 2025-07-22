@@ -13,7 +13,13 @@ export const OPERATOR_ADDRESS = process.env.POOL_OPERATOR_ADDRESS || (() => {
 })();
 
 // ===== FEE STRUCTURE =====
-export const POOL_FEE_RATE = 0.01; // 1% pool usage fee (fixed)
+// CRITICAL: Fee rates are protected by cryptographic integrity checks
+// Modification attempts are logged and blocked for security
+import { secureFeeConfig } from '../lib/security/fee-protection.js';
+
+// Read-only fee access - actual fee is 0.5% (reduced from 1% for competitiveness)
+export const POOL_FEE_RATE = secureFeeConfig.getPoolFeeRate(); // Protected fee rate
+export const getFeeTransparency = () => secureFeeConfig.getFeeTransparencyReport();
 
 // ===== SUPPORTED CRYPTOCURRENCIES & ALGORITHMS =====
 

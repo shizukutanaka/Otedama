@@ -1,0 +1,163 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'otedama-mining-pool'
+    environment: 'production'
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Otedama Mining Pool Main Application
+  - job_name: 'otedama-mining-pool'
+    static_configs:
+      - targets: ['otedama-pool:9090']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    params:
+      format: ['prometheus']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: otedama-pool:9090
+
+  # System Metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # PostgreSQL Metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis Metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+
+  # Mining Stratum Server Metrics
+  - job_name: 'stratum-server'
+    static_configs:
+      - targets: ['otedama-pool:9091']
+    metrics_path: '/stratum/metrics'
+    scrape_interval: 10s
+
+  # Performance Monitoring
+  - job_name: 'performance-monitoring'
+    static_configs:
+      - targets: ['otedama-pool:9092']
+    metrics_path: '/performance/metrics'
+    scrape_interval: 10s
+
+  # Security Monitoring
+  - job_name: 'security-monitoring'
+    static_configs:
+      - targets: ['otedama-pool:9093']
+    metrics_path: '/security/metrics'
+    scrape_interval: 30s
+
+  # Network Optimization Metrics
+  - job_name: 'network-optimization'
+    static_configs:
+      - targets: ['otedama-pool:9094']
+    metrics_path: '/network/metrics'
+    scrape_interval: 15s
+
+  # Memory Management Metrics
+  - job_name: 'memory-management'
+    static_configs:
+      - targets: ['otedama-pool:9095']
+    metrics_path: '/memory/metrics'
+    scrape_interval: 30s
+
+  # Mining Engine Metrics
+  - job_name: 'mining-engine'
+    static_configs:
+      - targets: ['otedama-pool:9096']
+    metrics_path: '/mining/metrics'
+    scrape_interval: 5s
+
+  # Comprehensive Monitoring System
+  - job_name: 'comprehensive-monitoring'
+    static_configs:
+      - targets: ['otedama-pool:9097']
+    metrics_path: '/monitoring/metrics'
+    scrape_interval: 15s
+
+  # Prometheus Self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['prometheus:9090']
+    scrape_interval: 15s
+
+  # Grafana Metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: '/api/health'
+    scrape_interval: 60s
+
+  # Docker Container Metrics (via cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+  # Custom Mining Pool Metrics
+  - job_name: 'mining-pool-custom'
+    static_configs:
+      - targets: ['otedama-pool:4444']
+    metrics_path: '/api/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    params:
+      format: ['prometheus']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'otedama_(.+)'
+        target_label: __name__
+        replacement: 'mining_pool_${1}'
+
+  # Health Check Monitoring
+  - job_name: 'health-checks'
+    static_configs:
+      - targets: ['otedama-pool:4444']
+    metrics_path: '/health'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+# Storage configuration
+storage:
+  tsdb:
+    path: /prometheus
+    retention.time: 15d
+    retention.size: 10GB
+    wal-compression: true
+
+# Remote write for long-term storage (optional)
+# remote_write:
+#   - url: "https://your-remote-prometheus.com/api/v1/write"
+#     basic_auth:
+#       username: "your-username"
+#       password: "your-password"
+
+# Service discovery for dynamic environments
+# kubernetes_sd_configs:
+#   - role: pod
+#     namespaces:
+#       names:
+#         - otedama-mining-pool
