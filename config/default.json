@@ -1,0 +1,29 @@
+{
+  "pool": {
+    "name": "Otedama Pool",
+    "port": 3333,
+    "difficulty": 16,
+    "payoutInterval": 3600000,
+    "minPayout": 0.001,
+    "fee": 0.01,
+    "maxConnections": 10000
+  },
+  "p2p": {
+    "port": 6633,
+    "maxPeers": 50,
+    "seedNodes": []
+  },
+  "api": {
+    "port": 8080,
+    "cors": true
+  },
+  "mining": {
+    "algorithms": ["sha256", "scrypt", "ethash", "randomx", "kawpow"],
+    "autoSwitch": true,
+    "profitCheckInterval": 600000
+  },
+  "logging": {
+    "level": "info",
+    "file": "otedama.log"
+  }
+}

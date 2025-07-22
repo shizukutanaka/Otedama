@@ -1,32 +1,34 @@
-# Otedama v0.1.1 - クイックスタートガイド
+# Otedama クイックスタートガイド
 
-## 5分で始めるOtedama - エンタープライズ強化版
+## 5分で始めるOtedama P2Pマイニングプール
 
 ### 前提条件
 
-- Docker & Docker Compose
-- 16GB以上の空きメモリ（GPU機能利用時は32GB推奨）
-- ポート3000, 3333, 8080が利用可能
-- CUDA対応GPU（オプション - マイニング性能向上）
+- Node.js 18以上
+- 4GB以上の空きメモリ
+- ポート3333（Stratum）, 6633（P2P）, 8080（API）が利用可能
 
-### 1. 簡単セットアップ（Docker）
+### 1. 簡単セットアップ
 
 ```bash
-# 1. 環境設定
-cp .env.production.example .env.production
+# 1. リポジトリをクローン
+git clone https://github.com/otedama/otedama.git
+cd otedama
 
-# 2. Dockerコンテナ起動
-docker-compose up -d
+# 2. 依存関係をインストール
+npm install
 
-# 3. 完了！
+# 3. スタンドアロンプールを起動
+npm run standalone -- \
+  --coinbase-address YOUR_WALLET_ADDRESS
 ```
 
 アクセスURL:
-- Web UI: http://localhost:3000
-- Admin: http://localhost:3001
+- Stratum接続: stratum+tcp://localhost:3333
 - API: http://localhost:8080
+- P2P: localhost:6633
 
-### 2. マイニング開始（GPU加速対応）
+### 2. マイニング開始
 
 #### マイナー設定
 
@@ -45,7 +47,7 @@ docker-compose up -d
 t-rex -a kawpow -o stratum+tcp://localhost:3333 -u 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.rig1 -p x --gpu-report-interval 30 --intensity 20
 ```
 
-**XMRig (CPU) - AI難易度調整対応**
+**XMRig (CPU)**
 ```bash
 xmrig -o localhost:3333 -u 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.cpu1 -p x -a rx/0 --threads=auto
 ```
@@ -55,46 +57,49 @@ xmrig -o localhost:3333 -u 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.cpu1 -p x -a rx/0 
 gminer -a kawpow -s localhost:3333 -u 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.farm1 -p x --cuda 1 --opencl 1
 ```
 
-#### GPU加速機能
+#### 接続確認
 
-v0.1.1の新機能：
-- **自動GPU検出**: CUDA、OpenCL、Metal、Vulkan対応
-- **動的負荷調整**: GPU温度・電力監視による自動最適化
-- **メモリプール最適化**: ゼロコピー操作で性能向上
-- **AI難易度予測**: 機械学習による収益最適化
+```bash
+# プール統計を確認
+curl http://localhost:8080/api/stats
 
-### 3. 取引開始
+# 接続中のマイナーを確認
+curl http://localhost:8080/api/miners
+```
 
-#### ログイン
+### 3. プール動作モード
 
-1. http://localhost:3000 にアクセス
-2. 「新規登録」をクリック
-3. メールアドレスとパスワードを入力
-4. ログイン
+#### ソロモード（デフォルト）
+- 1人で起動すると自動的にソロマイニングモード
+- ブロック発見時の報酬は全てcoinbase-addressへ
+- 他のOtedamaノードを自動検出
 
-#### 初回入金
+#### プールモード（自動切替）
+- 他のマイナーが接続すると自動的にプールモードへ
+- 公平な報酬分配（PPLNS）
+- P2Pネットワークで他のプールと接続
 
-1. 「ウォレット」タブを開く
-2. 入金アドレスを確認
-3. BTCまたはUSDTを送金
+### 4. 詳細設定
 
-#### 取引実行
+#### ブロックチェーン接続（Bitcoin等）
 
-1. 「取引」タブを開く
-2. 通貨ペアを選択（例：BTC/USDT）
-3. 注文タイプと数量を入力
-4. 「購入」または「売却」をクリック
+```bash
+npm run standalone -- \
+  --coinbase-address YOUR_WALLET_ADDRESS \
+  --blockchain-url http://localhost:8332 \
+  --blockchain-user bitcoinrpc \
+  --blockchain-pass yourpassword
+```
 
-### 4. 流動性提供
+#### 報酬設定
 
-#### プール追加
-
-1. 「DeFi」タブを開く
-2. 「流動性追加」をクリック
-3. 通貨ペアと数量を入力
-4. 「追加」をクリック
-
-報酬は自動的に蓄積されます。
+```bash
+npm run standalone -- \
+  --coinbase-address YOUR_WALLET_ADDRESS \
+  --fee 0.01 \
+  --min-payout 0.001 \
+  --payout-interval 3600000
+```
 
 ### トラブルシューティング
 
@@ -126,63 +131,61 @@ docker-compose ps
 docker-compose logs -f
 ```
 
-### v0.1.1 エンタープライズ機能
+### 監視とAPI
 
-#### 新しい監視ダッシュボード
+#### プール統計
 
 ```bash
-# システム監視
-curl http://localhost:8080/api/monitoring/metrics
-curl http://localhost:8080/api/monitoring/health
-curl http://localhost:8080/api/monitoring/performance
+# 全体統計
+curl http://localhost:8080/api/stats
+
+# マイナー詳細
+curl http://localhost:8080/api/miner/YOUR_WALLET_ADDRESS
+
+# 発見ブロック
+curl http://localhost:8080/api/blocks
+
+# P2Pピア情報
+curl http://localhost:8080/api/peers
 ```
 
-#### GPU最適化設定
+#### セキュリティ機能
 
 ```bash
-# GPU設定の確認
-curl http://localhost:8080/api/mining/gpu/status
-curl http://localhost:8080/api/mining/gpu/optimize
-```
+# 認証（JWT）
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "password"}'
 
-#### セキュリティ強化機能
-
-```bash
-# MFA設定
-curl -X POST http://localhost:8080/api/auth/mfa/enable
-# リスク評価
-curl http://localhost:8080/api/security/risk-assessment
+# 2FA有効化
+curl -X POST http://localhost:8080/api/auth/2fa/enable \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### 次のステップ
 
-1. **強化されたセキュリティ**
-   - 多要素認証（TOTP、WebAuthn）を有効化
-   - リスクベース認証を設定
-   - セキュリティスキャンを実行
-   - 監査ログを確認
+1. **パフォーマンス調整**
+   - ワーカースレッド数の最適化
+   - キャッシュサイズの調整
+   - ネットワーク設定の最適化
 
-2. **パフォーマンス最適化**
-   - GPU加速を有効化
-   - キャッシュ設定を調整
-   - オートスケーリングを設定
-   - データベースシャーディングを設定
+2. **セキュリティ強化**
+   - 2要素認証（TOTP）の有効化
+   - アクセス制御の設定
+   - DDoS保護の調整
 
 3. **エンタープライズ運用**
-   - 分散トレーシングを設定
-   - メトリクス収集を開始
-   - アラートルールを設定
-   - 自動バックアップを設定
+   - クラスタリングモードの有効化
+   - 監視ダッシュボードの設定
+   - 自動バックアップの設定
 
-4. **高可用性構成**
-   - サーキットブレーカーを設定
-   - ロードバランサーを設定
-   - フェイルオーバーを設定
-   - 災害復旧計画を実装
+4. **P2Pネットワーク拡張**
+   - 外部ピアの追加
+   - ネットワークトポロジーの最適化
+   - 帯域幅制限の設定
 
-詳細は[DEPLOYMENT.md](DEPLOYMENT.md)を参照してください。
-
-### サポート
-
-- GitHub Issues: https://github.com/shizukutanaka/Otedama/issues
-- GitHub Discussions: https://github.com/shizukutanaka/Otedama/discussions
+詳細は以下のドキュメントを参照してください：
+- [STANDALONE_POOL.md](STANDALONE_POOL.md) - スタンドアロンプールの詳細
+- [CONFIGURATION.md](CONFIGURATION.md) - 詳細な設定オプション
+- [DEPLOYMENT.md](DEPLOYMENT.md) - 本番環境へのデプロイ
+- [API_REFERENCE.md](API_REFERENCE.md) - API仕様

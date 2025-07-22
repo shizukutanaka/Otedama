@@ -120,7 +120,7 @@ module.exports = {
     },
     {
       name: 'otedama-monitoring',
-      script: 'lib/monitoring/comprehensive-monitoring-system.js',
+      script: 'lib/monitoring/index.js',
       instances: 1,
       autorestart: true,
       watch: false,

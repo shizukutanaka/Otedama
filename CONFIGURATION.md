@@ -1,390 +1,430 @@
-# Otedama Beta - 設定ガイド
+# Otedama 設定ガイド
+
+## 設定方法
+
+Otedamaは以下の優先順位で設定を読み込みます：
+1. コマンドライン引数
+2. 環境変数
+3. 設定ファイル（config/*.json）
+4. デフォルト値
+
+## コマンドライン設定
+
+### 基本オプション
+
+```bash
+# スタンドアロンモード（推奨）
+node index.js --mode standalone \
+  --coinbase-address YOUR_WALLET_ADDRESS
+
+# 個別モード
+node index.js --mode pool   # プールのみ
+node index.js --mode miner  # マイナーのみ
+node index.js --mode both   # 両方
+```
+
+### ネットワーク設定
+
+```bash
+node index.js --mode standalone \
+  --stratum-port 3333 \      # Stratumサーバーポート
+  --api-port 8080 \          # REST APIポート
+  --p2p-port 6633 \          # P2Pネットワークポート
+  --web-port 3000            # Web UIポート
+```
+
+### ブロックチェーン接続
+
+```bash
+node index.js --mode standalone \
+  --coinbase-address YOUR_WALLET_ADDRESS \
+  --blockchain-url http://localhost:8332 \
+  --blockchain-user bitcoinrpc \
+  --blockchain-pass yourpassword \
+  --blockchain-poll 5000     # ポーリング間隔（ミリ秒）
+```
+
+### プール設定
+
+```bash
+node index.js --mode standalone \
+  --coinbase-address YOUR_WALLET_ADDRESS \
+  --fee 0.01 \               # プール手数料（1%）
+  --min-payout 0.001 \       # 最小支払額
+  --payout-interval 3600000 \# 支払間隔（1時間）
+  --reward-scheme PPLNS      # 報酬方式: PPLNS, PPS, PROP
+```
+
+### P2P設定
+
+```bash
+node index.js --mode standalone \
+  --coinbase-address YOUR_WALLET_ADDRESS \
+  --max-peers 50 \           # 最大ピア数
+  --discovery-interval 30000 \# 探索間隔（30秒）
+  --share-chain-length 24    # シェアチェーン長（時間）
+```
+
+### パフォーマンス設定
+
+```bash
+node index.js --mode standalone \
+  --coinbase-address YOUR_WALLET_ADDRESS \
+  --workers 8 \              # ワーカースレッド数
+  --cache-size 512 \         # キャッシュサイズ（MB）
+  --fast-validation \        # 高速検証モード
+  --db-path ./data           # データベースパス
+```
 
 ## 環境変数設定
 
 ### 基本設定
 
-```env
-# アプリケーション設定
-NODE_ENV=production
-APP_NAME=Otedama
-APP_PORT=8080
-APP_HOST=0.0.0.0
+```bash
+# アプリケーション
+export NODE_ENV=production
+export LOG_LEVEL=info      # debug, info, warn, error
 
-# ログレベル
-LOG_LEVEL=info  # debug, info, warn, error
-LOG_FORMAT=json # json, pretty
-```
+# ネットワーク
+export STRATUM_PORT=3333
+export API_PORT=8080
+export P2P_PORT=6633
+export WEB_PORT=3000
 
-### データベース設定
+# ブロックチェーン
+export BLOCKCHAIN_URL=http://localhost:8332
+export BLOCKCHAIN_USER=bitcoinrpc
+export BLOCKCHAIN_PASS=yourpassword
+export COINBASE_ADDRESS=YOUR_WALLET_ADDRESS
 
-```env
-# PostgreSQL
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=otedama_production
-DB_USER=otedama
-DB_PASSWORD=your_secure_password
-DB_SSL=true
-DB_POOL_MIN=10
-DB_POOL_MAX=100
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=your_redis_password
-REDIS_DB=0
-REDIS_CLUSTER=false
+# プール
+export POOL_FEE=0.01
+export MIN_PAYOUT=0.001
+export PAYOUT_INTERVAL=3600000
 ```
 
 ### セキュリティ設定
 
-```env
-# JWT設定
-JWT_SECRET=your_64_character_random_string_here
-JWT_EXPIRES_IN=24h
-JWT_REFRESH_EXPIRES_IN=7d
+```bash
+# JWT認証
+export JWT_SECRET=your_64_character_random_string_here
+export JWT_EXPIRES_IN=3600        # 1時間
+export JWT_REFRESH_EXPIRES_IN=604800  # 7日
+
+# API認証
+export API_AUTH_ENABLED=true
+export API_SECRET=your_api_secret_here
+
+# DDoS保護
+export RATE_LIMIT_WINDOW=60000    # 1分
+export RATE_LIMIT_MAX=100         # 最大リクエスト数
 
 # 暗号化
-ENCRYPTION_KEY=your_32_character_key_here
-ENCRYPTION_ALGORITHM=aes-256-gcm
-
-# セッション
-SESSION_SECRET=your_session_secret_here
-SESSION_TIMEOUT=3600000
-
-# CORS設定
-CORS_ORIGIN=https://app.otedama.io,https://admin.otedama.io
-CORS_CREDENTIALS=true
+export ENCRYPTION_KEY=your_32_character_key_here
 ```
 
-### マイニングプール設定
+### 詳細設定
 
-```env
-# プール設定
-POOL_NAME=Otedama Mining Pool
-POOL_FEE=0.01
-POOL_ADDRESS=your_btc_address_here
-PAYOUT_THRESHOLD=0.001
-PAYOUT_INTERVAL=3600000
+```bash
+# 難易度調整
+export DIFF_INITIAL=16
+export DIFF_MINIMUM=1
+export DIFF_MAXIMUM=4294967296
+export DIFF_RETARGET_TIME=60      # 秒
 
-# Stratum設定
-STRATUM_PORT=3333
-STRATUM_DIFF_MIN=1
-STRATUM_DIFF_MAX=65536
-STRATUM_VARDIFF=true
-
-# アルゴリズム設定
-ENABLED_ALGORITHMS=sha256,ethash,kawpow,randomx,scrypt
-DEFAULT_ALGORITHM=sha256
-```
-
-### DEX設定
-
-```env
-# 取引エンジン設定
-DEX_ENGINE_MODE=high_performance
-DEX_MAX_ORDERS_PER_USER=1000
-DEX_ORDER_BOOK_DEPTH=100
-DEX_MIN_ORDER_SIZE=0.00001
-
-# 手数料設定
-MAKER_FEE=0.001
-TAKER_FEE=0.002
-WITHDRAWAL_FEE=0.0005
-
-# MEV保護
-MEV_PROTECTION=true
-MEV_DELAY_MS=1000
-```
-
-### DeFi設定
-
-```env
-# AMM設定
-AMM_SWAP_FEE=0.003
-AMM_PROTOCOL_FEE=0.0005
-AMM_SLIPPAGE_TOLERANCE=0.01
-
-# 流動性プール
-LP_MIN_LIQUIDITY=0.001
-LP_LOCK_PERIOD=86400
-
-# フラッシュローン
-FLASH_LOAN_ENABLED=true
-FLASH_LOAN_FEE=0.0009
-FLASH_LOAN_MAX_AMOUNT=1000000
-```
-
-### パフォーマンス設定
-
-```env
 # ワーカー設定
-WORKER_THREADS=16
-WORKER_POOL_SIZE=32
-MAX_CONNECTIONS=100000
+export MAX_WORKERS_PER_IP=10
+export WORKER_TIMEOUT=300000      # 5分
 
-# キャッシュ設定
-CACHE_TTL=300
-CACHE_MAX_SIZE=1000000
-CACHE_STRATEGY=lru
-
-# バッチ処理
-BATCH_SIZE=1000
-BATCH_INTERVAL=100
-SHARE_PROCESS_BATCH=5000
-
-# メモリ設定
-NODE_OPTIONS=--max-old-space-size=8192
-UV_THREADPOOL_SIZE=128
-```
-
-### 監視とアラート設定
-
-```env
-# Prometheus
-PROMETHEUS_ENABLED=true
-PROMETHEUS_PORT=9090
-PROMETHEUS_PATH=/metrics
-
-# アラート設定
-ALERT_WEBHOOK=https://your-webhook-url
-ALERT_EMAIL=alerts@otedama.io
-ALERT_THRESHOLD_CPU=80
-ALERT_THRESHOLD_MEMORY=90
-ALERT_THRESHOLD_DISK=85
-
-# ヘルスチェック
-HEALTH_CHECK_INTERVAL=30000
-HEALTH_CHECK_TIMEOUT=5000
-```
-
-### 外部サービス設定
-
-```env
-# 価格フィード
-PRICE_FEED_PROVIDER=coingecko
-PRICE_FEED_API_KEY=your_api_key
-PRICE_FEED_UPDATE_INTERVAL=60000
-
-# ブロックチェーンRPC
-ETH_RPC_URL=https://mainnet.infura.io/v3/your_key
-BTC_RPC_URL=http://localhost:8332
-BTC_RPC_USER=bitcoin
-BTC_RPC_PASS=your_password
-
-# SMTP設定（メール通知用）
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=notifications@otedama.io
-SMTP_PASS=your_password
-SMTP_FROM=Otedama <no-reply@otedama.io>
-```
-
-### 高可用性設定
-
-```env
-# クラスタリング
-CLUSTER_ENABLED=true
-CLUSTER_WORKERS=auto
-CLUSTER_RESTART_DELAY=3000
-
-# レプリケーション
-DB_REPLICA_HOST=replica.db.otedama.io
-REDIS_SENTINEL=true
-REDIS_SENTINELS=sentinel1:26379,sentinel2:26379
-
-# フェイルオーバー
-FAILOVER_ENABLED=true
-FAILOVER_TIMEOUT=30000
-FAILOVER_RETRY=3
+# シェア設定
+export SHARE_WINDOW=3600          # 1時間
+export SHARE_VALIDATION_STRICT=true
 ```
 
 ## 設定ファイル
 
-### config/production.json
+### デフォルト設定（config/default.json）
 
 ```json
 {
-  "server": {
-    "port": 8080,
-    "host": "0.0.0.0",
-    "compression": true,
-    "trustProxy": true
+  "pool": {
+    "name": "Otedama Mining Pool",
+    "port": 3333,
+    "difficulty": {
+      "initial": 16,
+      "minimum": 1,
+      "maximum": 4294967296,
+      "retargetTime": 60
+    },
+    "fee": 0.01,
+    "payouts": {
+      "enabled": true,
+      "interval": 3600000,
+      "minimum": 0.001
+    },
+    "rewards": {
+      "scheme": "PPLNS",
+      "window": 24
+    }
   },
-  "security": {
-    "helmet": {
-      "contentSecurityPolicy": {
-        "directives": {
-          "defaultSrc": ["'self'"],
-          "scriptSrc": ["'self'", "'unsafe-inline'"],
-          "styleSrc": ["'self'", "'unsafe-inline'"],
-          "imgSrc": ["'self'", "data:", "https:"],
-          "connectSrc": ["'self'", "wss:", "https:"]
-        }
-      }
+  "p2p": {
+    "enabled": true,
+    "port": 6633,
+    "maxPeers": 50,
+    "discovery": {
+      "enabled": true,
+      "interval": 30000,
+      "multicast": "239.255.255.250"
+    }
+  },
+  "api": {
+    "enabled": true,
+    "port": 8080,
+    "auth": {
+      "enabled": false,
+      "type": "jwt"
     },
     "rateLimit": {
-      "windowMs": 60000,
-      "max": 1000,
-      "skipSuccessfulRequests": false
+      "enabled": true,
+      "window": 60000,
+      "max": 100
     }
   },
-  "features": {
-    "mining": true,
-    "dex": true,
-    "defi": true,
-    "analytics": true,
-    "ml": true
+  "stratum": {
+    "vardiff": {
+      "enabled": true,
+      "minDiff": 1,
+      "maxDiff": 4294967296,
+      "targetTime": 15,
+      "retargetTime": 60,
+      "variancePercent": 30
+    },
+    "banning": {
+      "enabled": true,
+      "checkThreshold": 100,
+      "invalidPercent": 50,
+      "time": 600000
+    }
+  },
+  "logging": {
+    "level": "info",
+    "files": {
+      "enabled": true,
+      "path": "./logs",
+      "maxSize": "100m",
+      "maxFiles": 10
+    }
+  },
+  "database": {
+    "type": "sqlite",
+    "path": "./data/otedama.db",
+    "options": {
+      "wal": true,
+      "cache": 10000
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "statsInterval": 60000,
+    "retentionDays": 30
   }
 }
 ```
 
-### config/algorithms.json
+### 本番環境設定（config/production.json）
 
 ```json
 {
-  "sha256": {
-    "enabled": true,
-    "ports": [3333],
-    "difficulty": {
-      "min": 1,
-      "max": 4294967296,
-      "default": 16384
+  "pool": {
+    "name": "Otedama Production Pool"
+  },
+  "logging": {
+    "level": "warn"
+  },
+  "api": {
+    "auth": {
+      "enabled": true
     }
   },
-  "ethash": {
-    "enabled": true,
-    "ports": [3334],
-    "difficulty": {
-      "min": 1000000,
-      "max": 10000000000,
-      "default": 4000000000
-    },
-    "dagDir": "/var/lib/otedama/dags"
+  "monitoring": {
+    "statsInterval": 300000,
+    "retentionDays": 90
+  }
+}
+```
+
+### 開発環境設定（config/development.json）
+
+```json
+{
+  "pool": {
+    "name": "Otedama Dev Pool"
   },
-  "kawpow": {
-    "enabled": true,
-    "ports": [3335],
-    "difficulty": {
-      "min": 0.001,
-      "max": 1000,
-      "default": 1
+  "logging": {
+    "level": "debug"
+  },
+  "api": {
+    "auth": {
+      "enabled": false
     }
   }
 }
 ```
 
-## 起動スクリプト
+## エンタープライズ設定
 
-### scripts/start-production.sh
+### クラスタリング
 
 ```bash
-#!/bin/bash
-
-# 環境変数の読み込み
-source .env.production
-
-# ヘルスチェック
-check_dependencies() {
-  echo "Checking dependencies..."
-  
-  # PostgreSQL
-  pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER
-  if [ $? -ne 0 ]; then
-    echo "PostgreSQL is not ready"
-    exit 1
-  fi
-  
-  # Redis
-  redis-cli -h $REDIS_HOST -p $REDIS_PORT ping
-  if [ $? -ne 0 ]; then
-    echo "Redis is not ready"
-    exit 1
-  fi
-  
-  echo "All dependencies are ready"
-}
-
-# マイグレーション実行
-run_migrations() {
-  echo "Running database migrations..."
-  npm run migrate:production
-}
-
-# アプリケーション起動
-start_app() {
-  echo "Starting Otedama..."
-  
-  # プロセスマネージャーで起動
-  if command -v pm2 &> /dev/null; then
-    pm2 start ecosystem.config.js --env production
-  else
-    NODE_ENV=production node index.js
-  fi
-}
-
-# メイン処理
-main() {
-  check_dependencies
-  run_migrations
-  start_app
-}
-
-main
+# クラスタリング有効化
+node index.js --mode standalone \
+  --enterprise \
+  --cluster-workers 16 \     # ワーカープロセス数
+  --cluster-mode auto        # auto, manual
 ```
 
-### PM2設定 (ecosystem.config.js)
+### 高可用性（HA）
 
-```javascript
-module.exports = {
-  apps: [{
-    name: 'otedama',
-    script: './index.js',
-    instances: 'max',
-    exec_mode: 'cluster',
-    env_production: {
-      NODE_ENV: 'production',
-      PORT: 8080
-    },
-    error_file: './logs/pm2-error.log',
-    out_file: './logs/pm2-out.log',
-    log_file: './logs/pm2-combined.log',
-    time: true,
-    max_memory_restart: '8G',
-    watch: false,
-    autorestart: true,
-    max_restarts: 10,
-    min_uptime: '10s'
-  }]
-};
+```bash
+# HA構成
+node index.js --mode standalone \
+  --enterprise \
+  --ha-enabled \
+  --ha-nodes node1:5556,node2:5556,node3:5556 \
+  --ha-role auto            # auto, master, slave
+```
+
+### データベースシャーディング
+
+```bash
+# シャーディング有効化
+node index.js --mode standalone \
+  --enterprise \
+  --shard-enabled \
+  --shard-count 32 \
+  --shard-replicas 2
+```
+
+### 監視とアラート
+
+```bash
+# Prometheus互換メトリクス
+node index.js --mode standalone \
+  --metrics-enabled \
+  --metrics-port 9090 \
+  --metrics-path /metrics
+```
+
+## アルゴリズム別設定
+
+### SHA256（Bitcoin）
+
+```json
+{
+  "algorithms": {
+    "sha256": {
+      "enabled": true,
+      "ports": {
+        "stratum": 3333,
+        "getwork": 8332
+      },
+      "difficulty": {
+        "initial": 16,
+        "minimum": 1
+      }
+    }
+  }
+}
+```
+
+### Ethash（Ethereum Classic）
+
+```json
+{
+  "algorithms": {
+    "ethash": {
+      "enabled": true,
+      "ports": {
+        "stratum": 3334
+      },
+      "difficulty": {
+        "initial": 4000000000,
+        "minimum": 1000000
+      }
+    }
+  }
+}
+```
+
+### RandomX（Monero）
+
+```json
+{
+  "algorithms": {
+    "randomx": {
+      "enabled": true,
+      "ports": {
+        "stratum": 3335
+      },
+      "difficulty": {
+        "initial": 30000,
+        "minimum": 1000
+      }
+    }
+  }
+}
 ```
 
 ## トラブルシューティング
 
-### 設定の検証
+### 設定の確認
 
 ```bash
-# 設定ファイルの検証
-node scripts/validate-config.js
+# 現在の設定を表示
+node index.js --show-config
 
-# 環境変数の確認
-node scripts/check-env.js
+# 設定の検証
+node index.js --validate-config
 ```
 
-### よくある設定ミス
+### 環境変数の優先順位
 
-1. **JWT_SECRETが短すぎる**
-   - 最低64文字のランダム文字列を使用
+```bash
+# コマンドライン > 環境変数 > 設定ファイル
+POOL_FEE=0.02 node index.js --fee 0.015
+# 結果: fee = 0.015（コマンドラインが優先）
+```
 
-2. **データベース接続エラー**
-   - ファイアウォール設定を確認
-   - SSL設定を確認
+### 設定のリロード
 
-3. **メモリ不足**
-   - NODE_OPTIONSで最大メモリを増やす
-   - ワーカー数を調整
+一部の設定は実行中に変更可能：
 
-4. **ポート競合**
-   - 使用ポートが空いているか確認
-   - netstatで確認: `netstat -tlnp`
+```bash
+# API経由で設定変更（要認証）
+curl -X PUT http://localhost:8080/api/config \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"pool": {"fee": 0.015}}'
+```
+
+## ベストプラクティス
+
+1. **セキュリティ**
+   - 本番環境では必ずJWT_SECRETを変更
+   - API認証を有効化
+   - DDoS保護を適切に設定
+
+2. **パフォーマンス**
+   - ワーカー数はCPUコア数に合わせる
+   - キャッシュサイズは利用可能メモリに応じて調整
+   - データベースWALモードを有効化
+
+3. **信頼性**
+   - 定期的なバックアップを設定
+   - ログローテーションを有効化
+   - 監視とアラートを設定
+
+4. **スケーラビリティ**
+   - 大規模運用時はエンタープライズ機能を活用
+   - データベースシャーディングを検討
+   - クラスタリングで負荷分散

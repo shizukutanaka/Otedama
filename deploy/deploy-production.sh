@@ -396,7 +396,7 @@ post_deployment() {
         
         docker-compose exec -T otedama node -e "
         const bcrypt = require('bcrypt');
-        const { DatabaseManager } = require('./lib/core/database-manager.js');
+        const { DatabaseManager } = require('./lib/database');
         
         (async () => {
             const db = new DatabaseManager();
