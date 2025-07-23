@@ -1,6 +1,6 @@
 {
   "name": "otedama",
-  "version": "0.1.9",
+  "version": "1.0.0",
   "description": "P2P Mining Pool Software - Simple, Efficient, Scalable",
   "main": "index.js",
   "directories": {

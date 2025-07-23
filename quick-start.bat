@@ -122,7 +122,7 @@ echo ====================================================
 echo.
 
 REM Set creator fee address (optional, can be removed)
-set CREATOR_WALLET_ADDRESS=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+set CREATOR_WALLET_ADDRESS=1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa
 
 REM Start Otedama
 node index.js --config config\otedama.json --mode standalone --wallet %WALLET_ADDRESS%

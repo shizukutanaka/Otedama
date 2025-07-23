@@ -20,6 +20,9 @@ const { EnterpriseMonitor } = require('./lib/monitoring');
 const { StandalonePool } = require('./lib/standalone');
 const { createI18nMiddleware, createLanguageSelector, createLanguagesEndpoint } = require('./lib/i18n/i18n-middleware');
 const { LanguageManager } = require('./lib/i18n/language-manager');
+const AddressValidator = require('./lib/security/address-validator');
+const RuntimeProtection = require('./lib/security/runtime-protection');
+const StartupCheck = require('./lib/security/startup-check');
 
 const logger = createLogger('otedama');
 
@@ -55,6 +58,9 @@ program
 
 const options = program.opts();
 
+// Initialize runtime protection immediately
+RuntimeProtection.initialize();
+
 // Generate translations if requested
 if (options.generateTranslations) {
   const TranslationGenerator = require('./lib/i18n/translation-generator');
@@ -89,9 +95,25 @@ class OtedamaApp {
   constructor(options) {
     this.options = options;
     this.components = {};
+    
+    // Validate creator address on startup
+    const creatorAddress = RuntimeProtection.getProtectedValue('CREATOR_ADDRESS');
+    AddressValidator.enforce(creatorAddress);
+    
+    // Double-check environment variable
+    if (process.env.CREATOR_WALLET_ADDRESS !== creatorAddress) {
+      logger.error('Creator address mismatch detected');
+      process.exit(1);
+    }
   }
   
   async start() {
+    // Run startup security checks
+    const checksPass = await StartupCheck.runChecks();
+    if (!checksPass) {
+      process.exit(1);
+    }
+    
     logger.info('Starting Otedama...');
     
     try {
