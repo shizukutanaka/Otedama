@@ -46,7 +46,10 @@
       "Bash(del \"C:\\Users\\irosa\\Desktop\\Otedama\\test-dynamic-fees.js\" /q)",
       "Bash(timeout:*)",
       "Bash(wc:*)",
-      "Bash(del /q \"C:\\Users\\irosa\\Desktop\\Otedama\\lib\\quantum\\quantum-computing-system.js\")"
+      "Bash(del /q \"C:\\Users\\irosa\\Desktop\\Otedama\\lib\\quantum\\quantum-computing-system.js\")",
+      "Bash(git rm:*)",
+      "Bash(test:*)",
+      "Bash(unlink:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

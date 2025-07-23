@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "otedama.fullname" . }}-config
+  labels:
+    {{- include "otedama.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  ENABLE_CLUSTERING: {{ .Values.config.enableClustering | quote }}
+  CACHE_TYPE: {{ .Values.config.cacheType | quote }}
+  DATABASE_TYPE: {{ .Values.config.databaseType | quote }}
+  METRICS_ENABLED: {{ .Values.config.metricsEnabled | quote }}
+  STRATUM_DIFFICULTY: {{ .Values.config.stratumDifficulty | quote }}
+  PAYOUT_THRESHOLD: {{ .Values.config.payoutThreshold | quote }}
+  POOL_FEE: {{ .Values.config.poolFee | quote }}
+  CONFIRMATIONS: {{ .Values.config.confirmations | quote }}

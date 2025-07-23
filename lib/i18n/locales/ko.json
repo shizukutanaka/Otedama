@@ -1,0 +1,185 @@
+{
+  "app": {
+    "name": "Otedama",
+    "description": "P2P 마이닝 풀 및 DeFi 플랫폼",
+    "version": "버전 {{version}}"
+  },
+  "common": {
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공",
+    "warning": "경고",
+    "info": "정보",
+    "confirm": "확인",
+    "cancel": "취소",
+    "save": "저장",
+    "delete": "삭제",
+    "edit": "편집",
+    "close": "닫기",
+    "back": "뒤로",
+    "next": "다음",
+    "previous": "이전",
+    "submit": "제출",
+    "reset": "재설정",
+    "search": "검색",
+    "filter": "필터",
+    "sort": "정렬",
+    "refresh": "새로고침",
+    "download": "다운로드",
+    "upload": "업로드",
+    "export": "내보내기",
+    "import": "가져오기",
+    "print": "인쇄",
+    "share": "공유",
+    "copy": "복사",
+    "copied": "복사됨!",
+    "settings": "설정",
+    "help": "도움말",
+    "about": "정보",
+    "logout": "로그아웃",
+    "login": "로그인",
+    "register": "가입",
+    "profile": "프로필",
+    "dashboard": "대시보드",
+    "home": "홈"
+  },
+  "mining": {
+    "title": "마이닝",
+    "hashrate": "해시레이트",
+    "difficulty": "난이도",
+    "shares": "셰어",
+    "blocks": "블록",
+    "workers": "워커",
+    "earnings": "수익",
+    "pool_stats": "풀 통계",
+    "miner_stats": "마이너 통계",
+    "network_stats": "네트워크 통계",
+    "current_hashrate": "현재 해시레이트: {{hashrate}}",
+    "average_hashrate": "평균 해시레이트: {{hashrate}}",
+    "valid_shares": "유효 셰어: {{count}}",
+    "invalid_shares": "무효 셰어: {{count}}",
+    "blocks_found": "발견된 블록: {{count}}",
+    "total_miners": "전체 마이너: {{count}}",
+    "active_workers": "활성 워커: {{count}}",
+    "pool_fee": "풀 수수료: {{fee}}%",
+    "payout_threshold": "지급 임계값: {{amount}}",
+    "next_payout": "다음 지급: {{time}}",
+    "share_submitted": "셰어 제출 성공",
+    "share_rejected": "셰어 거부됨: {{reason}}",
+    "block_found": "블록 발견! 높이: {{height}}",
+    "worker_online": "워커 {{name}} 온라인",
+    "worker_offline": "워커 {{name}} 오프라인"
+  },
+  "setup": {
+    "title": "설정 마법사",
+    "welcome": "Otedama에 오신 것을 환영합니다!",
+    "subtitle": "몇 가지 간단한 단계로 마이닝을 시작해보세요",
+    "userLevel": {
+      "title": "경험 수준을 선택하세요",
+      "beginner": "초보자",
+      "beginnerDesc": "마이닝이 처음입니다. 모든 설정이 자동으로 구성됩니다.",
+      "intermediate": "중급자",
+      "intermediateDesc": "마이닝 경험이 있습니다. 기본 설정을 직접 구성합니다.",
+      "advanced": "고급자",
+      "advancedDesc": "전문가 사용자입니다. 모든 구성 옵션에 접근할 수 있습니다."
+    },
+    "mode": {
+      "title": "운영 모드 선택",
+      "standalone": "스탠드얼론 (솔로 마이닝)",
+      "standaloneDesc": "혼자 마이닝을 시작합니다. 더 많은 마이너가 참여하면 자동으로 풀 모드로 전환됩니다.",
+      "pool": "풀 운영자",
+      "poolDesc": "마이닝 풀을 운영하고 다른 마이너를 받습니다.",
+      "miner": "마이너",
+      "minerDesc": "기존 풀에 참여하여 마이닝합니다."
+    },
+    "wallet": {
+      "title": "지갑 설정",
+      "address": "비트코인 주소",
+      "addressPlaceholder": "bc1q...",
+      "addressHelp": "보상을 받을 비트코인 주소를 입력하세요",
+      "validate": "주소 검증",
+      "valid": "유효한 주소",
+      "invalid": "잘못된 주소"
+    },
+    "pool": {
+      "title": "풀 연결",
+      "address": "풀 주소",
+      "addressPlaceholder": "pool.example.com:3333",
+      "addressHelp": "연결할 풀 주소와 포트를 입력하세요"
+    },
+    "blockchain": {
+      "title": "블록체인 설정",
+      "nodeUrl": "노드 URL",
+      "nodeUrlPlaceholder": "http://localhost:8332",
+      "rpcUser": "RPC 사용자명",
+      "rpcPassword": "RPC 비밀번호",
+      "testConnection": "연결 테스트",
+      "connectionSuccess": "연결 성공",
+      "connectionFailed": "연결 실패"
+    },
+    "complete": {
+      "title": "설정 완료!",
+      "message": "모든 설정이 구성되었습니다. 마이닝을 시작할 준비가 되었습니다.",
+      "startMining": "마이닝 시작",
+      "viewDashboard": "대시보드 보기"
+    }
+  },
+  "fees": {
+    "title": "수수료",
+    "poolFee": "풀 수수료",
+    "creatorFee": "개발자 수수료",
+    "totalFee": "총 수수료",
+    "comparison": "다른 풀과의 비교",
+    "ourFee": "Otedama 수수료",
+    "competitorAverage": "경쟁사 평균",
+    "yourSavings": "절약 금액",
+    "dynamicFee": "동적 수수료",
+    "dynamicFeeDesc": "운영 비용에 따라 자동으로 조정됩니다",
+    "tiers": {
+      "micro": "마이크로 풀 (<10 마이너)",
+      "small": "소규모 풀 (10-100 마이너)",
+      "medium": "중규모 풀 (100-1000 마이너)",
+      "large": "대규모 풀 (1000+ 마이너)"
+    },
+    "breakdown": {
+      "operational": "운영 비용",
+      "development": "개발 비용",
+      "profit": "이익 마진"
+    }
+  },
+  "help": {
+    "title": "도움말",
+    "quickStart": "빠른 시작",
+    "faq": "자주 묻는 질문",
+    "troubleshooting": "문제 해결",
+    "contact": "문의하기",
+    "documentation": "문서",
+    "community": "커뮤니티",
+    "tutorials": {
+      "title": "튜토리얼",
+      "beginnerGuide": "초보자 가이드",
+      "poolSetup": "풀 설정 가이드",
+      "optimization": "최적화 가이드",
+      "troubleshooting": "문제 해결 가이드"
+    }
+  },
+  "dashboard": {
+    "overview": "개요",
+    "realtime": "실시간 통계",
+    "miners": "마이너",
+    "totalHashrate": "총 해시레이트",
+    "poolEfficiency": "풀 효율성",
+    "blocksFound": "발견된 블록",
+    "activeWorkers": "활성 워커",
+    "pendingPayouts": "대기 중인 지급",
+    "networkDifficulty": "네트워크 난이도",
+    "estimatedEarnings": "예상 수익",
+    "quickActions": {
+      "title": "빠른 작업",
+      "addWorker": "워커 추가",
+      "viewPayouts": "지급 내역 보기",
+      "changeSettings": "설정 변경",
+      "downloadReport": "보고서 다운로드"
+    }
+  }
+}

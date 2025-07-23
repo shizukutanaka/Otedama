@@ -242,5 +242,117 @@
     "gasPrice": "ガス価格",
     "gasLimit": "ガスリミット",
     "nonce": "ノンス"
+  },
+  "setup": {
+    "title": "セットアップウィザード",
+    "welcome": "Otedamaへようこそ！",
+    "subtitle": "簡単な設定でマイニングを開始しましょう",
+    "userLevel": {
+      "title": "ご利用レベルを選択してください",
+      "beginner": "初心者",
+      "beginnerDesc": "マイニングが初めての方向け。すべて自動設定されます。",
+      "intermediate": "中級者",
+      "intermediateDesc": "基本的な設定を自分で行いたい方向け。",
+      "advanced": "上級者",
+      "advancedDesc": "すべての詳細設定にアクセスできます。"
+    },
+    "mode": {
+      "title": "動作モードを選択",
+      "standalone": "スタンドアロン（ソロマイニング）",
+      "standaloneDesc": "一人でマイニングを開始。参加者が増えると自動的にプールモードへ移行します。",
+      "pool": "プールオペレーター",
+      "poolDesc": "マイニングプールを運営し、他のマイナーを受け入れます。",
+      "miner": "マイナー",
+      "minerDesc": "既存のプールに参加してマイニングします。"
+    },
+    "wallet": {
+      "title": "ウォレット設定",
+      "address": "ビットコインアドレス",
+      "addressPlaceholder": "bc1q...",
+      "addressHelp": "報酬を受け取るビットコインアドレスを入力してください",
+      "validate": "アドレスを検証",
+      "valid": "有効なアドレスです",
+      "invalid": "無効なアドレスです"
+    },
+    "pool": {
+      "title": "プール接続設定",
+      "address": "プールアドレス",
+      "addressPlaceholder": "pool.example.com:3333",
+      "addressHelp": "接続するプールのアドレスとポートを入力"
+    },
+    "blockchain": {
+      "title": "ブロックチェーン設定",
+      "nodeUrl": "ノードURL",
+      "nodeUrlPlaceholder": "http://localhost:8332",
+      "rpcUser": "RPCユーザー名",
+      "rpcPassword": "RPCパスワード",
+      "testConnection": "接続テスト",
+      "connectionSuccess": "接続成功",
+      "connectionFailed": "接続失敗"
+    },
+    "complete": {
+      "title": "設定完了！",
+      "message": "すべての設定が完了しました。マイニングを開始する準備ができています。",
+      "startMining": "マイニングを開始",
+      "viewDashboard": "ダッシュボードを表示"
+    }
+  },
+  "fees": {
+    "title": "手数料",
+    "poolFee": "プール手数料",
+    "creatorFee": "開発者手数料",
+    "totalFee": "合計手数料",
+    "comparison": "他プールとの比較",
+    "ourFee": "Otedama手数料",
+    "competitorAverage": "競合平均",
+    "yourSavings": "節約額",
+    "dynamicFee": "動的手数料",
+    "dynamicFeeDesc": "運営コストに基づいて自動調整されます",
+    "tiers": {
+      "micro": "マイクロプール（10人未満）",
+      "small": "小規模プール（10-100人）",
+      "medium": "中規模プール（100-1000人）",
+      "large": "大規模プール（1000人以上）"
+    },
+    "breakdown": {
+      "operational": "運営費",
+      "development": "開発費",
+      "profit": "利益"
+    }
+  },
+  "help": {
+    "title": "ヘルプ",
+    "quickStart": "クイックスタート",
+    "faq": "よくある質問",
+    "troubleshooting": "トラブルシューティング",
+    "contact": "お問い合わせ",
+    "documentation": "ドキュメント",
+    "community": "コミュニティ",
+    "tutorials": {
+      "title": "チュートリアル",
+      "beginnerGuide": "初心者ガイド",
+      "poolSetup": "プール設定ガイド",
+      "optimization": "最適化ガイド",
+      "troubleshooting": "問題解決ガイド"
+    }
+  },
+  "dashboard": {
+    "overview": "概要",
+    "realtime": "リアルタイム統計",
+    "miners": "マイナー数",
+    "totalHashrate": "総ハッシュレート",
+    "poolEfficiency": "プール効率",
+    "blocksFound": "発見ブロック数",
+    "activeWorkers": "アクティブワーカー",
+    "pendingPayouts": "保留中の支払い",
+    "networkDifficulty": "ネットワーク難易度",
+    "estimatedEarnings": "推定収益",
+    "quickActions": {
+      "title": "クイックアクション",
+      "addWorker": "ワーカー追加",
+      "viewPayouts": "支払い履歴",
+      "changeSettings": "設定変更",
+      "downloadReport": "レポートダウンロード"
+    }
   }
 }

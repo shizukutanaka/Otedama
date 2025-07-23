@@ -1,172 +1,111 @@
-# Otedama v0.1.5
+# Otedama
 
-高性能P2Pマイニングプール兼マイニングソフトウェア
+高性能P2Pマイニングプールソフトウェア
 
 ## 概要
 
-Otedamaは、CPU、GPU、ASICに対応した軽量で高速なマイニングプールソフトウェアです。P2P技術により分散型マイニングプールの構築が可能で、個人から企業まで幅広く利用できます。
+Otedamaは、シンプルで効率的なP2P型マイニングプールソフトウェアです。個人から企業まで幅広く利用でき、高いパフォーマンスと安定性を提供します。
 
 ## 主な特徴
 
-### P2P マイニングプール機能 (v0.1.5 新機能)
-- **P2P Mining Pool Core**: 完全分散型のP2Pマイニングプール実装
-- **Stratum V1/V2対応**: 業界標準のマイニングプロトコル完全サポート
-- **高度なシェア検証**: マルチアルゴリズム対応の不正検出システム
-- **自動支払いシステム**: PPLNS/PPS/PROP対応の公平な報酬分配
-- **統合マイナー管理**: リアルタイムパフォーマンス追跡と動的難易度調整
+### マイニングプール機能
+- **Stratum V1/V2対応** - 業界標準プロトコル完全サポート
+- **マルチアルゴリズム対応** - SHA256、Scrypt、Ethash、RandomX等
+- **自動難易度調整** - ワーカーごとの最適化
+- **公平な報酬分配** - PPLNS/PPSシステム
 
-### エンタープライズ機能
-- **スタンドアロン動作**: 一人でも完全なマイニングプールとして機能
-- **自動スケーリング**: ソロマイニングからP2Pプールへ自動移行
-- **マルチアルゴリズム対応**: SHA256、Scrypt、Ethash、RandomX、X11等
-- **ハードウェア最適化**: CPU、GPU、ASIC各種に最適化されたマイニング
-- **自動切り替え**: 収益性に基づく自動アルゴリズム切り替え
-- **リアルタイム監視**: WebUIによるリアルタイム統計とモニタリング
-- **高速処理**: ネイティブC++実装による高速シェア検証
-- **企業対応**: 国家レベルの大規模運用にも対応可能なスケーラビリティ
+### P2Pネットワーク
+- **分散型アーキテクチャ** - 中央集権的な依存を排除
+- **自動ピア発見** - 簡単なネットワーク参加
+- **高速メッセージング** - バイナリプロトコルによる低遅延通信
 
-### セキュリティとコンプライアンス
-- **二要素認証（2FA）**: エンタープライズグレードのセキュリティ
-- **ハードウェアウォレット統合**: Ledger/Trezor対応
-- **MEV保護**: フロントランニング対策機能
-- **量子耐性暗号**: 将来を見据えたセキュリティ実装
-- **リアルタイム異常検出**: AIベースの不正検出システム
+### 報酬管理
+- **カスタム支払いアドレス** - マイナーは任意のBTCアドレスで報酬受取可能
+- **アドレス集約** - 複数のワーカーの報酬を一つのアドレスに集約
+- **変更クールダウン** - セキュリティのため24時間の変更制限
 
-### DeFi・DEX統合
-- **スマートコントラクト統合**: マルチチェーン対応
-- **クロスチェーンブリッジ**: 異なるブロックチェーン間の資産移動
-- **高度なオーダーブック**: 高頻度取引対応のマッチングエンジン
-- **自動マーケットメーカー（AMM）**: 流動性提供と自動価格設定
-- **NFTマイニング報酬**: ゲーミフィケーション要素
+### ハードウェアサポート
+- **CPU最適化** - SIMD命令による高速化
+- **GPU対応** - CUDA/OpenCLサポート
+- **ASIC互換** - 標準プロトコル準拠
 
-### AI・機械学習機能
-- **予測分析**: TensorFlow.jsによる収益性予測
-- **マイニングアルゴリズム最適化**: リアルタイム最適化
-- **ソーシャルトレーディング**: コピートレード機能
+### スタンドアロンモード
+- **ソロマイニング対応** - 一人でも完全なプールとして機能
+- **自動スケーリング** - 参加者増加時にP2Pモードへ移行
+- **簡単セットアップ** - 最小限の設定で開始可能
 
 ## システム要件
 
 ### 最小要件
-- OS: Windows 10/11、Ubuntu 20.04+、macOS 10.15+
+- OS: Ubuntu 20.04+、Windows 10/11、macOS 10.15+
 - CPU: 2コア以上
 - RAM: 4GB以上
-- ストレージ: 10GB以上の空き容量
-- ネットワーク: 安定したインターネット接続
+- ストレージ: 10GB以上
+- Node.js: 18.0以上
 
 ### 推奨要件
 - CPU: 8コア以上
 - RAM: 16GB以上
 - ストレージ: SSD 100GB以上
-- ネットワーク: 1Gbps以上の回線
+- ネットワーク: 1Gbps以上
 
-## クイックスタート
-
-### 1. インストール
+## インストール
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/yourusername/otedama.git
+git clone https://github.com/otedama/otedama.git
 cd otedama
 
 # 依存関係のインストール
 npm install
 
-# ビルド（必要な場合）
+# ネイティブモジュールのビルド（オプション）
 npm run build:native
 ```
 
-### 2. P2P マイニングプールの起動
+## 使用方法
+
+### スタンドアロンプール起動
+
+最も簡単な起動方法：
 
 ```bash
-# P2P マイニングプールを起動
-node index.js --mode p2p-pool \
-  --stratum-port 3333 \
-  --p2p-port 6633 \
-  --wallet YOUR_WALLET_ADDRESS
-```
-
-## 詳細な使用方法
-
-### スタンドアロンモード（新機能）
-
-一人でも完全なマイニングプールとして機能し、他のノードが参加すると自動的にP2Pネットワークを形成します：
-
-```bash
-# スタンドアロンプールを起動（ソロマイニングから開始）
 node index.js --mode standalone \
   --coinbase-address YOUR_WALLET_ADDRESS \
   --blockchain-url http://localhost:8332 \
-  --blockchain-user your_rpc_user \
-  --blockchain-pass your_rpc_password
+  --blockchain-user rpcuser \
+  --blockchain-pass rpcpass
 ```
 
-詳細は [STANDALONE_POOL.md](STANDALONE_POOL.md) を参照してください。
-
-### 従来のマイニングプールとして起動
+### マイニングプール起動
 
 ```bash
-# デフォルト設定で起動
+# 基本的な起動
 npm start
 
-# カスタム設定で起動
-npm start -- --config ./config/custom-config.json
+# カスタムポートで起動
+node index.js --port 3333 --api-port 8080
 ```
 
 ### マイナーとして接続
 
 ```bash
 # ローカルプールに接続
-npm run miner -- --pool localhost:3333 --wallet YOUR_WALLET_ADDRESS
-
-# 外部プールに接続
-npm run miner -- --pool pool.example.com:3333 --wallet YOUR_WALLET_ADDRESS
+node index.js --mode miner \
+  --pool localhost:3333 \
+  --wallet YOUR_WALLET_ADDRESS
 ```
 
-### エンタープライズモードで起動
-
-大規模運用向けの高度な機能を有効にします：
+### 設定ファイル使用
 
 ```bash
-# クラスタリング対応
-npm start -- --enterprise --cluster-workers 8
-
-# 高可用性構成
-npm start -- --enterprise --ha-nodes node1.example.com:5556,node2.example.com:5556
-
-# フル機能有効化
-npm start -- --enterprise --cluster-workers 16 --shard-count 32 --ha-nodes node1:5556,node2:5556
+# カスタム設定で起動
+node index.js --config ./config/custom.json
 ```
-
-## エンタープライズ機能
-
-### クラスタリング
-- 複数のワーカープロセスによる負荷分散
-- 自動フェイルオーバー
-- リアルタイム負荷分散
-
-### データベースシャーディング
-- 数百万のシェアを効率的に処理
-- 水平スケーリング対応
-- 自動データ分散
-
-### 高可用性（HA）
-- Raftコンセンサスアルゴリズム
-- 自動マスター選出
-- データレプリケーション
-
-### エンタープライズモニタリング
-- リアルタイムメトリクス収集
-- アラート機能
-- パフォーマンスレポート生成
-
-### キャッシュレイヤー
-- 高速データアクセス
-- LRUキャッシュ管理
-- 分散キャッシュ対応
 
 ## 設定
 
-### 基本設定ファイル (config/default.json)
+### 基本設定例 (config/default.json)
 
 ```json
 {
@@ -182,104 +121,196 @@ npm start -- --enterprise --cluster-workers 16 --shard-count 32 --ha-nodes node1
     "maxPeers": 50
   },
   "mining": {
-    "algorithms": ["sha256", "scrypt", "ethash"],
+    "algorithms": ["sha256", "scrypt"],
     "autoSwitch": true
   }
 }
 ```
 
-詳細な設定については [CONFIGURATION.md](CONFIGURATION.md) を参照してください。
+### 環境変数
+
+```bash
+# .env ファイル例
+NODE_ENV=production
+POOL_PORT=3333
+API_PORT=8080
+P2P_PORT=6633
+WALLET_ADDRESS=your_wallet_address
+```
 
 ## API
 
-### RESTful API
+### REST API
 
 ```bash
-# プール統計の取得
-GET /api/v1/stats
+# プール統計
+GET http://localhost:8080/api/stats
 
-# マイナー情報の取得
-GET /api/v1/miners/:address
+# マイナー情報
+GET http://localhost:8080/api/miners
 
-# 支払い履歴の取得
-GET /api/v1/payments/:address
+# 個別マイナー情報
+GET http://localhost:8080/api/miner/:address
+
+# 支払いアドレス更新
+POST http://localhost:8080/api/miner/:address/payment-address
+Content-Type: application/json
+{
+  "paymentAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+}
+
+# 支払い履歴
+GET http://localhost:8080/api/payments/:address/history
+
+# アドレス検証
+POST http://localhost:8080/api/validate-address
+Content-Type: application/json
+{
+  "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+}
+
+# ヘルスチェック
+GET http://localhost:8080/api/health
 ```
 
 ### WebSocket API
 
+リアルタイム更新用：
+
 ```javascript
-// リアルタイム統計の購読
-ws://localhost:3334/stats
+// 接続
+const ws = new WebSocket('ws://localhost:8080/ws');
 
-// マイニングイベントの購読
-ws://localhost:3334/mining
+// 統計情報の購読
+ws.send(JSON.stringify({ type: 'subscribe', channel: 'stats' }));
 ```
 
-詳細なAPIドキュメントは [API_REFERENCE.md](API_REFERENCE.md) を参照してください。
+## マイナー設定
 
-## 監視とダッシュボード
+### 一般的なマイニングソフトウェア
 
-### Web UIアクセス
-
-ブラウザで以下のURLにアクセス:
-```
-http://localhost:8080
+#### CGMiner
+```bash
+cgminer -o stratum+tcp://pool.example.com:3333 -u YOUR_WALLET_ADDRESS -p x
 ```
 
-### コマンドラインモニタリング
+#### BFGMiner
+```bash
+bfgminer -o stratum+tcp://pool.example.com:3333 -u YOUR_WALLET_ADDRESS -p x
+```
+
+#### XMRig (RandomX)
+```bash
+xmrig -o pool.example.com:3333 -u YOUR_WALLET_ADDRESS -p x
+```
+
+### カスタム支払いアドレスの設定
+
+マイニングアドレスとは別のアドレスで報酬を受け取る場合：
 
 ```bash
-# リアルタイム統計表示
-npm run monitor
+# 1. マイニングアドレスで接続
+cgminer -o stratum+tcp://pool.example.com:3333 -u MINING_ADDRESS -p x
 
-# ログ表示
-npm run logs
+# 2. APIで支払いアドレスを設定
+curl -X POST http://pool.example.com:8080/api/miner/MINING_ADDRESS/payment-address \
+  -H "Content-Type: application/json" \
+  -d '{"paymentAddress": "YOUR_PAYMENT_ADDRESS"}'
 ```
+
+複数のワーカーで同じ支払いアドレスを使用する場合、報酬は自動的に集約されます。
 
 ## パフォーマンスチューニング
 
 ### CPU最適化
-
 ```bash
-# CPUアフィニティの設定
-npm start -- --cpu-affinity 0,1,2,3
+# スレッド数指定
+node index.js --threads 8
 
-# スレッド数の指定
-npm start -- --threads 8
+# CPUアフィニティ設定
+taskset -c 0-7 node index.js
 ```
 
 ### メモリ最適化
-
 ```bash
-# メモリプールサイズの設定
-npm start -- --memory-pool 2048
+# Node.jsヒープサイズ設定
+node --max-old-space-size=4096 index.js
+```
 
-# キャッシュサイズの設定
-npm start -- --cache-size 512
+### データベース最適化
+```bash
+# SQLite最適化実行
+npm run optimize-db
+```
+
+## 監視とメンテナンス
+
+### ヘルスチェック
+```bash
+npm run health-check
+```
+
+### ログ確認
+```bash
+# 標準出力ログ
+journalctl -u otedama -f
+
+# ファイルログ
+tail -f logs/otedama.log
+```
+
+### パフォーマンスベンチマーク
+```bash
+npm run benchmark
 ```
 
 ## トラブルシューティング
 
 ### 接続できない場合
+1. ファイアウォール設定確認
+2. ポート開放確認 (3333, 6633, 8080)
+3. ブロックチェーンノードの接続確認
 
-1. ファイアウォール設定を確認
-2. ポートが使用されていないか確認
-3. ネットワーク設定を確認
+### ハッシュレートが低い場合
+1. CPU/GPUドライバの更新
+2. 電源管理設定の確認
+3. 温度管理の確認
 
-### パフォーマンスが低い場合
-
-1. ハードウェアスペックを確認
-2. 他のプロセスがリソースを使用していないか確認
-3. 設定の最適化を実施
-
-詳細は [docs/SETUP.md](docs/SETUP.md) を参照してください。
+### シェアが拒否される場合
+1. 難易度設定の確認
+2. ネットワーク遅延の確認
+3. マイナーソフトウェアの設定確認
 
 ## セキュリティ
 
-- すべての通信はTLS/SSLで暗号化
-- DDoS攻撃対策機能搭載
-- 不正なシェア検出機能
+### 推奨設定
+- ファイアウォールで必要なポートのみ開放
+- 強力なRPCパスワードの使用
+- SSL/TLS証明書の設定（本番環境）
+- 定期的なセキュリティアップデート
+
+### DDoS対策
+- レート制限機能内蔵
 - 自動ブラックリスト機能
+- 異常検知システム
+
+## エンタープライズ機能
+
+### クラスタリング
+```bash
+node index.js --enterprise \
+  --cluster-workers 16 \
+  --ha-nodes node1:5556,node2:5556
+```
+
+### 高可用性
+- 自動フェイルオーバー
+- データレプリケーション
+- ロードバランシング
+
+## 貢献
+
+プルリクエストを歓迎します。大きな変更の場合は、まずissueを作成して議論してください。
 
 ## ライセンス
 
@@ -287,23 +318,14 @@ MIT License
 
 ## サポート
 
-### ドキュメント
+- GitHub Issues: バグ報告・機能要望
+- ドキュメント: [docs/](docs/)
+- コミュニティ: Discord/Forum
 
-- [セットアップガイド](docs/SETUP.md)
-- [設定ガイド](CONFIGURATION.md)
-- [APIリファレンス](API_REFERENCE.md)
-- [デプロイメントガイド](DEPLOYMENT.md)
+## 開発チーム
 
-### コミュニティ
+Otedama Team
 
-- GitHub Issues: バグ報告や機能要望
-- Discord: リアルタイムサポート
-- Forum: 技術的な議論
+---
 
-## 貢献
-
-プルリクエストを歓迎します。大きな変更の場合は、まずissueを作成して変更内容について議論してください。
-
-## 更新履歴
-
-最新の更新情報は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+詳細なドキュメントは [docs/](docs/) ディレクトリを参照してください。

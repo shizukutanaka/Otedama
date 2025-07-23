@@ -231,5 +231,117 @@
     "rewards_available": "You have {{amount}} {{symbol}} rewards to claim",
     "maintenance_scheduled": "Maintenance scheduled for {{time}}",
     "update_available": "New version available: {{version}}"
+  },
+  "setup": {
+    "title": "Setup Wizard",
+    "welcome": "Welcome to Otedama!",
+    "subtitle": "Let's get you started with mining in just a few simple steps",
+    "userLevel": {
+      "title": "Select your experience level",
+      "beginner": "Beginner",
+      "beginnerDesc": "New to mining. Everything will be configured automatically.",
+      "intermediate": "Intermediate",
+      "intermediateDesc": "Some mining experience. Configure basic settings yourself.",
+      "advanced": "Advanced",
+      "advancedDesc": "Expert user. Access to all configuration options."
+    },
+    "mode": {
+      "title": "Choose Operation Mode",
+      "standalone": "Standalone (Solo Mining)",
+      "standaloneDesc": "Start mining alone. Automatically switches to pool mode as more miners join.",
+      "pool": "Pool Operator",
+      "poolDesc": "Run a mining pool and accept other miners.",
+      "miner": "Miner",
+      "minerDesc": "Join an existing pool to mine."
+    },
+    "wallet": {
+      "title": "Wallet Configuration",
+      "address": "Bitcoin Address",
+      "addressPlaceholder": "bc1q...",
+      "addressHelp": "Enter your Bitcoin address to receive rewards",
+      "validate": "Validate Address",
+      "valid": "Valid address",
+      "invalid": "Invalid address"
+    },
+    "pool": {
+      "title": "Pool Connection",
+      "address": "Pool Address",
+      "addressPlaceholder": "pool.example.com:3333",
+      "addressHelp": "Enter the pool address and port to connect"
+    },
+    "blockchain": {
+      "title": "Blockchain Settings",
+      "nodeUrl": "Node URL",
+      "nodeUrlPlaceholder": "http://localhost:8332",
+      "rpcUser": "RPC Username",
+      "rpcPassword": "RPC Password",
+      "testConnection": "Test Connection",
+      "connectionSuccess": "Connection successful",
+      "connectionFailed": "Connection failed"
+    },
+    "complete": {
+      "title": "Setup Complete!",
+      "message": "All settings are configured. You're ready to start mining.",
+      "startMining": "Start Mining",
+      "viewDashboard": "View Dashboard"
+    }
+  },
+  "fees": {
+    "title": "Fees",
+    "poolFee": "Pool Fee",
+    "creatorFee": "Developer Fee",
+    "totalFee": "Total Fee",
+    "comparison": "Comparison with Other Pools",
+    "ourFee": "Otedama Fee",
+    "competitorAverage": "Competitor Average",
+    "yourSavings": "Your Savings",
+    "dynamicFee": "Dynamic Fee",
+    "dynamicFeeDesc": "Automatically adjusted based on operational costs",
+    "tiers": {
+      "micro": "Micro Pool (<10 miners)",
+      "small": "Small Pool (10-100 miners)",
+      "medium": "Medium Pool (100-1000 miners)",
+      "large": "Large Pool (1000+ miners)"
+    },
+    "breakdown": {
+      "operational": "Operational Costs",
+      "development": "Development Costs",
+      "profit": "Profit Margin"
+    }
+  },
+  "help": {
+    "title": "Help",
+    "quickStart": "Quick Start",
+    "faq": "FAQ",
+    "troubleshooting": "Troubleshooting",
+    "contact": "Contact Us",
+    "documentation": "Documentation",
+    "community": "Community",
+    "tutorials": {
+      "title": "Tutorials",
+      "beginnerGuide": "Beginner's Guide",
+      "poolSetup": "Pool Setup Guide",
+      "optimization": "Optimization Guide",
+      "troubleshooting": "Troubleshooting Guide"
+    }
+  },
+  "dashboard": {
+    "overview": "Overview",
+    "realtime": "Real-time Stats",
+    "miners": "Miners",
+    "totalHashrate": "Total Hashrate",
+    "poolEfficiency": "Pool Efficiency",
+    "blocksFound": "Blocks Found",
+    "activeWorkers": "Active Workers",
+    "pendingPayouts": "Pending Payouts",
+    "networkDifficulty": "Network Difficulty",
+    "estimatedEarnings": "Estimated Earnings",
+    "quickActions": {
+      "title": "Quick Actions",
+      "addWorker": "Add Worker",
+      "viewPayouts": "View Payouts",
+      "changeSettings": "Change Settings",
+      "downloadReport": "Download Report"
+    }
   }
 }

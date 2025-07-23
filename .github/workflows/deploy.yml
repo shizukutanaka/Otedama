@@ -1,0 +1,266 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests
+        run: npm test
+      
+      - name: Run linter
+        run: npm run lint
+      
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+      
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ steps.date.outputs.date }}
+
+  security-scan:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build.outputs.image-tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
+    needs: [build, security-scan]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+      
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > ~/.kube/config
+      
+      - name: Deploy to staging
+        run: |
+          helm upgrade --install otedama-staging ./kubernetes/helm/otedama \
+            --namespace otedama-staging \
+            --create-namespace \
+            --values ./kubernetes/helm/otedama/values.yaml \
+            --values ./kubernetes/helm/otedama/values-staging.yaml \
+            --set image.tag="${{ needs.build.outputs.image-tag }}" \
+            --set image.digest="${{ needs.build.outputs.image-digest }}" \
+            --wait \
+            --timeout 10m
+      
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=otedama -n otedama-staging --timeout=300s
+          kubectl run smoke-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+            curl -f http://otedama-staging-api:8080/health
+
+  deploy-production:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production'
+    needs: [build, security-scan, deploy-staging]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.12.0'
+      
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > ~/.kube/config
+      
+      - name: Create backup
+        run: |
+          kubectl create job backup-$(date +%Y%m%d-%H%M%S) \
+            --from=cronjob/otedama-backup \
+            -n otedama
+      
+      - name: Deploy to production
+        run: |
+          helm upgrade --install otedama ./kubernetes/helm/otedama \
+            --namespace otedama \
+            --create-namespace \
+            --values ./kubernetes/helm/otedama/values.yaml \
+            --values ./kubernetes/helm/otedama/values-production.yaml \
+            --set image.tag="${{ needs.build.outputs.image-tag }}" \
+            --set image.digest="${{ needs.build.outputs.image-digest }}" \
+            --set-string podAnnotations."kubernetes\.io/change-cause"="Deployment ${{ github.ref_name }} by ${{ github.actor }}" \
+            --atomic \
+            --timeout 15m
+      
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/otedama -n otedama
+          kubectl get pods -n otedama
+          kubectl run verify-test --image=curlimages/curl:latest --rm -i --restart=Never -- \
+            curl -f http://otedama-api:8080/health
+      
+      - name: Create release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Changes in ${{ github.ref_name }}
+            
+            ### Docker Image
+            - Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            - Tag: ${{ needs.build.outputs.image-tag }}
+            - Digest: ${{ needs.build.outputs.image-digest }}
+            
+            ### Deployment Info
+            - Environment: Production
+            - Namespace: otedama
+            - Chart Version: ${{ github.ref_name }}
+            
+            Full changelog: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+  rollback:
+    if: failure() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [deploy-production]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > ~/.kube/config
+      
+      - name: Rollback deployment
+        run: |
+          kubectl rollout undo deployment/otedama -n otedama
+          kubectl rollout status deployment/otedama -n otedama
+      
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              text: "Production deployment rolled back",
+              attachments: [{
+                color: "danger",
+                text: "Deployment of ${{ github.ref_name }} failed and was rolled back"
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

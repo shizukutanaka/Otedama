@@ -9,7 +9,7 @@ const { createServer } = require('http');
 const express = require('express');
 const { program } = require('commander');
 const { createLogger } = require('./lib/core/logger');
-const { SimpleMiningPool } = require('./lib/core/simple-mining-pool');
+const { UnifiedMiningPool } = require('./lib/mining/unified-mining-pool');
 const SimpleP2PNetwork = require('./lib/p2p/simple-p2p-network');
 const SimpleCPUMiner = require('./lib/mining/simple-cpu-miner');
 const ClusterManager = require('./lib/cluster/cluster-manager');
@@ -18,6 +18,8 @@ const { UnifiedCache: CacheManager } = require('./lib/cache');
 const HighAvailabilityManager = require('./lib/ha/high-availability');
 const { EnterpriseMonitor } = require('./lib/monitoring');
 const { StandalonePool } = require('./lib/standalone');
+const { createI18nMiddleware, createLanguageSelector, createLanguagesEndpoint } = require('./lib/i18n/i18n-middleware');
+const { LanguageManager } = require('./lib/i18n/language-manager');
 
 const logger = createLogger('otedama');
 
@@ -45,9 +47,42 @@ program
   .option('--coinbase-address <address>', 'Address for block rewards')
   .option('--pool-fee <percent>', 'Pool fee percentage', '1')
   .option('--auto-switch-threshold <number>', 'Number of miners to switch to pool mode', '3')
+  .option('--setup', 'Run interactive setup wizard')
+  .option('--wizard', 'Run interactive setup wizard (alias for --setup)')
+  .option('--language <lang>', 'Set interface language (100+ languages supported)')
+  .option('--generate-translations', 'Generate translation files for all 100 languages')
   .parse();
 
 const options = program.opts();
+
+// Generate translations if requested
+if (options.generateTranslations) {
+  const TranslationGenerator = require('./lib/i18n/translation-generator');
+  const generator = new TranslationGenerator();
+  generator.generateAllTranslations().then(() => {
+    console.log('Translation generation complete!');
+    process.exit(0);
+  }).catch(err => {
+    console.error('Translation generation failed:', err);
+    process.exit(1);
+  });
+  return;
+}
+
+// Run setup wizard if requested
+if (options.setup || options.wizard) {
+  const SetupWizard = require('./lib/setup/setup-wizard');
+  const wizard = new SetupWizard({
+    language: options.language
+  });
+  wizard.run().then(() => {
+    process.exit(0);
+  }).catch(err => {
+    console.error('Setup failed:', err);
+    process.exit(1);
+  });
+  return;
+}
 
 // Main application
 class OtedamaApp {
@@ -148,12 +183,14 @@ class OtedamaApp {
       // Cluster manager handles pool internally
     } else {
       // Standard single-instance pool
-      this.components.pool = new SimpleMiningPool({
+      this.components.pool = new UnifiedMiningPool({
         port: parseInt(this.options.port),
         difficulty: 16,
         payoutInterval: 3600000,
         minPayout: 0.001,
-        fee: 0.01
+        fee: parseFloat(this.options.poolFee) / 100,
+        creatorAddress: process.env.CREATOR_WALLET_ADDRESS,
+        dynamicFees: true
       });
       
       await this.components.pool.start();
@@ -210,6 +247,8 @@ class OtedamaApp {
       // Pool settings
       poolFee: parseFloat(this.options.poolFee) / 100,
       autoSwitchThreshold: parseInt(this.options.autoSwitchThreshold),
+      creatorAddress: process.env.CREATOR_WALLET_ADDRESS,
+      dynamicFees: true,
       
       // Enable solo mining by default
       soloMiningEnabled: true,
@@ -274,12 +313,35 @@ class OtedamaApp {
     
     // Middleware
     app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
+    
+    // i18n middleware - supports 100+ languages
+    app.use(createI18nMiddleware({
+      defaultLanguage: this.options.language || 'en',
+      autoDetect: true
+    }));
+    
+    // CORS middleware
     app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Accept-Language');
       next();
     });
+    
+    // Language endpoints
+    app.post('/api/language', createLanguageSelector());
+    app.get('/api/languages', createLanguagesEndpoint());
+    
+    // Mount miner API routes if pool is running
+    if (this.components.pool) {
+      const MinerAPI = require('./lib/api/miner-api');
+      const minerAPI = new MinerAPI(
+        this.components.pool.addressManager,
+        this.components.pool.paymentProcessor
+      );
+      app.use('/api', minerAPI.getRouter());
+    }
     
     // Routes
     app.get('/api/stats', (req, res) => {
@@ -382,12 +444,25 @@ class OtedamaApp {
     
     // Middleware
     app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
+    
+    // i18n middleware - supports 100+ languages
+    app.use(createI18nMiddleware({
+      defaultLanguage: this.options.language || 'en',
+      autoDetect: true
+    }));
+    
+    // CORS middleware
     app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Accept-Language');
       next();
     });
+    
+    // Language endpoints
+    app.post('/api/language', createLanguageSelector());
+    app.get('/api/languages', createLanguagesEndpoint());
     
     // Routes
     app.get('/api/stats', (req, res) => {

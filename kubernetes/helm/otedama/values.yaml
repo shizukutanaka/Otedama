@@ -1,0 +1,290 @@
+# Default values for otedama.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 3
+
+image:
+  repository: otedama/mining-pool
+  pullPolicy: IfNotPresent
+  tag: ""  # Overrides the image tag whose default is the chart appVersion.
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+
+service:
+  stratum:
+    type: LoadBalancer
+    port: 3333
+    annotations: {}
+  api:
+    type: ClusterIP
+    port: 8080
+    annotations: {}
+  websocket:
+    type: ClusterIP
+    port: 8081
+    annotations: {}
+  p2p:
+    type: NodePort
+    port: 6633
+    nodePort: 30633
+    annotations: {}
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/websocket-services: "otedama-websocket"
+  hosts:
+    - host: pool.otedama.io
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api
+        - path: /ws
+          pathType: Prefix
+          service: websocket
+  tls:
+    - secretName: otedama-tls
+      hosts:
+        - pool.otedama.io
+
+resources:
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: active_connections
+        target:
+          type: AverageValue
+          averageValue: "10000"
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - otedama
+        topologyKey: kubernetes.io/hostname
+
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessModes:
+    - ReadWriteOnce
+  size: 100Gi
+  annotations: {}
+
+config:
+  nodeEnv: production
+  logLevel: info
+  enableClustering: true
+  cacheType: redis
+  databaseType: postgresql
+  metricsEnabled: true
+  # Additional config values
+  stratumDifficulty: 16384
+  payoutThreshold: 0.001
+  poolFee: 1.0
+  confirmations: 100
+
+secrets:
+  create: true
+  # If not creating, specify existing secret name
+  existingSecret: ""
+  # Values only used if creating new secret
+  databaseUrl: "postgresql://otedama:password@otedama-postgresql:5432/otedama"
+  redisUrl: "redis://otedama-redis-master:6379"
+  jwtSecret: "your-jwt-secret-here"
+  encryptionKey: "your-encryption-key-here"
+
+# PostgreSQL subchart configuration
+postgresql:
+  enabled: true
+  auth:
+    username: otedama
+    password: password
+    database: otedama
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+
+# Redis subchart configuration
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+# Prometheus subchart configuration
+prometheus:
+  enabled: false
+  alertmanager:
+    enabled: true
+  nodeExporter:
+    enabled: true
+  kubeStateMetrics:
+    enabled: true
+  pushgateway:
+    enabled: false
+
+# Grafana subchart configuration
+grafana:
+  enabled: false
+  adminPassword: "admin"
+  ingress:
+    enabled: true
+    hosts:
+      - metrics.otedama.io
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://otedama-prometheus-server
+        access: proxy
+        isDefault: true
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: otedama
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: otedama
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: otedama
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 53
+      - protocol: UDP
+        port: 53
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Monitoring and alerts
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    path: /metrics
+  alerts:
+    enabled: true
+    rules:
+      - alert: HighErrorRate
+        expr: rate(otedama_errors_total[5m]) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: High error rate detected
+      - alert: LowHashrate
+        expr: otedama_pool_hashrate < 1000000000000
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: Pool hashrate below 1 TH/s
+
+# Backup configuration
+backup:
+  enabled: false
+  schedule: "0 3 * * *"
+  retention: 30
+  storageClass: "standard"
+  size: 200Gi

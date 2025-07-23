@@ -231,5 +231,117 @@
     "rewards_available": "您有{{amount}} {{symbol}}奖励可领取",
     "maintenance_scheduled": "计划于{{time}}进行维护",
     "update_available": "新版本可用：{{version}}"
+  },
+  "setup": {
+    "title": "设置向导",
+    "welcome": "欢迎使用Otedama！",
+    "subtitle": "让我们通过几个简单的步骤开始挖矿",
+    "userLevel": {
+      "title": "选择您的经验级别",
+      "beginner": "初学者",
+      "beginnerDesc": "挖矿新手。所有设置将自动配置。",
+      "intermediate": "中级用户",
+      "intermediateDesc": "有一定挖矿经验。可自行配置基本设置。",
+      "advanced": "高级用户",
+      "advancedDesc": "专家用户。可访问所有配置选项。"
+    },
+    "mode": {
+      "title": "选择运行模式",
+      "standalone": "独立模式（单人挖矿）",
+      "standaloneDesc": "独自开始挖矿。当更多矿工加入时自动切换到矿池模式。",
+      "pool": "矿池运营者",
+      "poolDesc": "运营矿池并接受其他矿工。",
+      "miner": "矿工",
+      "minerDesc": "加入现有矿池进行挖矿。"
+    },
+    "wallet": {
+      "title": "钱包配置",
+      "address": "比特币地址",
+      "addressPlaceholder": "bc1q...",
+      "addressHelp": "输入您的比特币地址以接收奖励",
+      "validate": "验证地址",
+      "valid": "有效地址",
+      "invalid": "无效地址"
+    },
+    "pool": {
+      "title": "矿池连接",
+      "address": "矿池地址",
+      "addressPlaceholder": "pool.example.com:3333",
+      "addressHelp": "输入要连接的矿池地址和端口"
+    },
+    "blockchain": {
+      "title": "区块链设置",
+      "nodeUrl": "节点URL",
+      "nodeUrlPlaceholder": "http://localhost:8332",
+      "rpcUser": "RPC用户名",
+      "rpcPassword": "RPC密码",
+      "testConnection": "测试连接",
+      "connectionSuccess": "连接成功",
+      "connectionFailed": "连接失败"
+    },
+    "complete": {
+      "title": "设置完成！",
+      "message": "所有设置已配置完成。您已准备好开始挖矿。",
+      "startMining": "开始挖矿",
+      "viewDashboard": "查看仪表板"
+    }
+  },
+  "fees": {
+    "title": "费用",
+    "poolFee": "矿池费用",
+    "creatorFee": "开发者费用",
+    "totalFee": "总费用",
+    "comparison": "与其他矿池比较",
+    "ourFee": "Otedama费率",
+    "competitorAverage": "竞争对手平均",
+    "yourSavings": "您的节省",
+    "dynamicFee": "动态费率",
+    "dynamicFeeDesc": "根据运营成本自动调整",
+    "tiers": {
+      "micro": "微型矿池（<10矿工）",
+      "small": "小型矿池（10-100矿工）",
+      "medium": "中型矿池（100-1000矿工）",
+      "large": "大型矿池（1000+矿工）"
+    },
+    "breakdown": {
+      "operational": "运营成本",
+      "development": "开发成本",
+      "profit": "利润率"
+    }
+  },
+  "help": {
+    "title": "帮助",
+    "quickStart": "快速开始",
+    "faq": "常见问题",
+    "troubleshooting": "故障排除",
+    "contact": "联系我们",
+    "documentation": "文档",
+    "community": "社区",
+    "tutorials": {
+      "title": "教程",
+      "beginnerGuide": "初学者指南",
+      "poolSetup": "矿池设置指南",
+      "optimization": "优化指南",
+      "troubleshooting": "故障排除指南"
+    }
+  },
+  "dashboard": {
+    "overview": "概览",
+    "realtime": "实时统计",
+    "miners": "矿工",
+    "totalHashrate": "总算力",
+    "poolEfficiency": "矿池效率",
+    "blocksFound": "发现区块",
+    "activeWorkers": "活跃矿工",
+    "pendingPayouts": "待支付",
+    "networkDifficulty": "网络难度",
+    "estimatedEarnings": "预估收益",
+    "quickActions": {
+      "title": "快速操作",
+      "addWorker": "添加矿工",
+      "viewPayouts": "查看支付",
+      "changeSettings": "更改设置",
+      "downloadReport": "下载报告"
+    }
   }
 }
