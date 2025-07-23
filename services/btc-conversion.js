@@ -5,7 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { getErrorHandler, OtedamaError, ErrorCategory, safeExecute } from '../lib/error-handler.js';
+import { getErrorHandler, OtedamaError, ErrorCategory, safeExecute } from '../lib/core/standardized-error-handler.js';
 import { CacheFactory } from '../lib/core/cache-manager.js';
 
 export class BTCConversionService extends EventEmitter {

@@ -1,10 +1,10 @@
-const { ErrorHandler, ValidationError, AuthenticationError } = require('../../lib/core/error-handler');
+const { StandardizedErrorHandler, ValidationError, AuthenticationError, getErrorHandler } = require('../../lib/core/standardized-error-handler');
 
 describe('ErrorHandler', () => {
     let errorHandler;
     
     beforeEach(() => {
-        errorHandler = new ErrorHandler({
+        errorHandler = new StandardizedErrorHandler({
             logPath: './test-logs',
             alertInterval: 1000,
             alertThreshold: 3

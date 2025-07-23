@@ -1,6 +1,6 @@
 
 import 'dotenv/config';
-import { getErrorHandler, OtedamaError, ErrorCategory, CircuitBreaker } from '../lib/error-handler.js';
+import { getErrorHandler, OtedamaError, ErrorCategory, CircuitBreaker } from '../lib/core/standardized-error-handler.js';
 import { RetryManager } from '../lib/retry-manager.js';
 
 const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3/simple/price';
