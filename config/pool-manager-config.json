@@ -1,0 +1,115 @@
+{
+  "pool": {
+    "name": "Otedama Mining Pool",
+    "url": "pool.otedama.io",
+    "description": "Secure and efficient P2P mining pool",
+    
+    "stratum": {
+      "port": 3333,
+      "host": "0.0.0.0",
+      "maxConnections": 10000,
+      "ssl": {
+        "enabled": false,
+        "cert": "./certs/server.crt",
+        "key": "./certs/server.key"
+      }
+    },
+    
+    "blockchain": {
+      "coin": "BTC",
+      "network": "mainnet",
+      "node": {
+        "host": "localhost",
+        "port": 8332,
+        "user": "rpcuser",
+        "password": "rpcpassword"
+      },
+      "confirmations": 100,
+      "pollInterval": 10000
+    },
+    
+    "payment": {
+      "scheme": "PPLNS",
+      "window": 100000,
+      "windowType": "shares",
+      "poolFee": 0.01,
+      "minimumPayout": 0.001,
+      "maximumPayout": 10,
+      "paymentInterval": 3600000,
+      "batchSize": 100
+    },
+    
+    "wallet": {
+      "encryptionKey": "CHANGE_THIS_TO_SECURE_KEY",
+      "path": "./data/pool-wallet.json",
+      "hotWalletMax": 100,
+      "hotWalletRefillThreshold": 10,
+      "coldWalletAddress": ""
+    },
+    
+    "database": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "otedama_pool",
+      "user": "otedama",
+      "password": "CHANGE_THIS_PASSWORD",
+      "max": 20
+    },
+    
+    "security": {
+      "ddosProtection": true,
+      "maxConnectionsPerIP": 10,
+      "banDuration": 3600000,
+      "shareTimeout": 180000,
+      "rateLimit": {
+        "connections": 10,
+        "shares": 100,
+        "duration": 60
+      }
+    },
+    
+    "performance": {
+      "shareValidationWorkers": 4,
+      "vardiff": {
+        "enabled": true,
+        "targetTime": 15,
+        "retargetTime": 120,
+        "minDiff": 1,
+        "maxDiff": 65536
+      },
+      "caching": {
+        "shareCache": 100000,
+        "jobCache": 100
+      }
+    },
+    
+    "monitoring": {
+      "statsInterval": 60000,
+      "healthCheckInterval": 30000,
+      "alerting": {
+        "enabled": true,
+        "webhookUrl": "",
+        "emailTo": "",
+        "thresholds": {
+          "hotWalletLow": 0.9,
+          "invalidShareRate": 0.5,
+          "poolEfficiency": 0.7
+        }
+      }
+    },
+    
+    "autoScaling": {
+      "enabled": true,
+      "scaleUpThreshold": 0.8,
+      "scaleDownThreshold": 0.3,
+      "maxInstances": 10,
+      "minInstances": 1
+    }
+  },
+  
+  "development": {
+    "testnet": false,
+    "mockBlockchain": false,
+    "verboseLogging": true
+  }
+}

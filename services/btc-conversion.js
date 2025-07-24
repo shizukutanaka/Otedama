@@ -5,8 +5,8 @@
  */
 
 import { EventEmitter } from 'events';
-import { getErrorHandler, OtedamaError, ErrorCategory, safeExecute } from '../lib/core/standardized-error-handler.js';
-import { CacheFactory } from '../lib/core/cache-manager.js';
+import { createLogger } from '../lib/core/logger.js';
+import axios from 'axios';
 
 export class BTCConversionService extends EventEmitter {
   constructor(options = {}) {
@@ -41,8 +41,9 @@ export class BTCConversionService extends EventEmitter {
       ...options
     };
     
-    this.errorHandler = getErrorHandler();
-    this.cache = CacheFactory.createApiCache();
+    this.logger = createLogger('btc-conversion');
+    this.cache = new Map();
+    this.cacheExpiry = new Map();
     
     // Exchange rates storage
     this.exchangeRates = new Map();
@@ -77,10 +78,7 @@ export class BTCConversionService extends EventEmitter {
     // Schedule periodic updates
     this.updateTimer = setInterval(() => {
       this.updateExchangeRates().catch(error => {
-        this.errorHandler.handleError(error, {
-          service: 'btc-conversion',
-          category: ErrorCategory.EXTERNAL_SERVICE
-        });
+        this.logger.error('Failed to update exchange rates:', error);
       });
     }, this.options.updateInterval);
     
@@ -135,11 +133,7 @@ export class BTCConversionService extends EventEmitter {
     
     // Validate rates
     if (finalRates.size === 0) {
-      throw new OtedamaError(
-        'Failed to fetch exchange rates from all sources',
-        ErrorCategory.EXTERNAL_SERVICE,
-        { errors }
-      );
+      throw new Error('Failed to fetch exchange rates from all sources: ' + JSON.stringify(errors));
     }
     
     // Update stored rates
@@ -147,9 +141,8 @@ export class BTCConversionService extends EventEmitter {
     this.lastUpdate = Date.now();
     
     // Cache rates
-    await this.cache.set('btc-rates', Object.fromEntries(finalRates), {
-      ttl: this.options.updateInterval
-    });
+    this.cache.set('btc-rates', Object.fromEntries(finalRates));
+    this.cacheExpiry.set('btc-rates', Date.now() + this.options.updateInterval);
     
     this.emit('rates-updated', {
       rates: Object.fromEntries(finalRates),
@@ -165,9 +158,10 @@ export class BTCConversionService extends EventEmitter {
    */
   async fetchExchangeRates(exchange) {
     const cacheKey = `rates-${exchange}`;
-    const cached = await this.cache.get(cacheKey);
+    const cached = this.cache.get(cacheKey);
+    const expiry = this.cacheExpiry.get(cacheKey);
     
-    if (cached) {
+    if (cached && expiry && expiry > Date.now()) {
       return new Map(Object.entries(cached));
     }
     
@@ -188,9 +182,8 @@ export class BTCConversionService extends EventEmitter {
     }
     
     // Cache exchange-specific rates
-    await this.cache.set(cacheKey, Object.fromEntries(rates), {
-      ttl: 300000 // 5 minutes
-    });
+    this.cache.set(cacheKey, Object.fromEntries(rates));
+    this.cacheExpiry.set(cacheKey, Date.now() + 300000); // 5 minutes
     
     return rates;
   }
@@ -254,10 +247,7 @@ export class BTCConversionService extends EventEmitter {
     
     const rate = this.exchangeRates.get(currency);
     if (!rate) {
-      throw new OtedamaError(
-        `No exchange rate available for ${currency}`,
-        ErrorCategory.VALIDATION
-      );
+      throw new Error(`No exchange rate available for ${currency}`);
     }
     
     return rate;
@@ -297,10 +287,7 @@ export class BTCConversionService extends EventEmitter {
     // Validate minimum amount
     const minAmount = this.options.minConversionAmount[currency];
     if (minAmount && amount < minAmount) {
-      throw new OtedamaError(
-        `Amount below minimum for ${currency}: ${amount} < ${minAmount}`,
-        ErrorCategory.VALIDATION
-      );
+      throw new Error(`Amount below minimum for ${currency}: ${amount} < ${minAmount}`);}
     }
     
     const conversion = {

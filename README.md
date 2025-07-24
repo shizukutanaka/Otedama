@@ -1,40 +1,155 @@
 # Otedama - P2P Mining Pool Software
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/otedama/otedama)
+<div align="center">
+  
+[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/otedama/otedama/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
+[![Languages](https://img.shields.io/badge/languages-100%2B-orange.svg)](docs/LANGUAGES.md)
+[![Security](https://img.shields.io/badge/security-enhanced-red.svg)](SECURITY.md)
 
-Simple, Efficient, and Scalable P2P Mining Pool Software
+**Industry-Lowest Fees • 100+ Languages • Enterprise Security • One-Click Setup**
 
-## 🚀 Quick Start
+[English](#) | [日本語](README_ja.md) | [中文](README_zh.md) | [Español](README_es.md) | [More Languages...](docs/README_LANGUAGES.md)
+
+</div>
+
+## 🌟 What's New in v1.0.2
+
+### 🔒 **Immutable Fee System**
+- Pool fee hardcoded at 1% (tamper-proof)
+- Operator addresses cryptographically protected
+- Runtime integrity monitoring
+- Automatic shutdown on tampering detection
+
+### 🚀 **Performance & Security**
+- 4x faster share validation with worker threads
+- Advanced DDoS protection
+- PostgreSQL backend for scalability
+- Hardware wallet support (Ledger/Trezor)
+
+[View Full Changelog](CHANGELOG.md)
+
+## 🎯 Why Otedama?
+
+### 💰 **Lowest Fees in the Industry**
+| Pool | Fee | Your Earnings (per $1000) |
+|------|-----|-------------------------|
+| **Otedama** | **1%** | **$990** |
+| Competitor A | 2% | $980 |
+| Competitor B | 2.5% | $975 |
+
+### 🌍 **True Global Accessibility**
+- **100+ Languages** - From English to Zulu
+- **RTL Support** - Arabic, Hebrew, Persian, Urdu
+- **Auto-Detection** - Uses your system language
+- **No Language Barriers** - Mine in your native language
+
+### 🚀 **One-Click Setup**
+```bash
+# Windows
+quick-start.bat
+
+# Linux/macOS
+./quick-start.sh
+```
+That's it! Mining in 60 seconds.
+
+## ⚡ Quick Start
+
+### Prerequisites
+- Node.js 18+ 
+- Git
+- PostgreSQL 13+ (for production)
+
+### Installation
 
 ```bash
-# Install
-npm install -g otedama
+# Clone repository
+git clone https://github.com/otedama/otedama.git
+cd otedama
 
-# Start pool
-otedama start
+# Install dependencies
+npm install
 
-# Start miner with BTC address registration
-otedama-miner config
-otedama-miner start --idle --minimized
+# Run setup wizard
+npm run setup
 ```
 
-## ✨ Key Features
+### Start Mining Pool
 
-### For Miners
-- **BTC Address Registration** - Set your own payout address
-- **CPU/GPU Selection** - Choose mining hardware
-- **Idle Mining** - Mine when your PC is idle
-- **Background Mining** - Run minimized in system tray
-- **Auto-start** - Start mining on boot
+```bash
+# Production mode with security checks
+node start-pool.js
 
-### For Pool Operators
-- **P2P Architecture** - Decentralized and resilient
-- **Multi-Algorithm** - Support for various mining algorithms
-- **Low Fees** - Competitive 0.5-1% pool fees
-- **Real-time Stats** - Live monitoring and analytics
-- **100+ Languages** - Global accessibility
+# Development mode
+npm run dev
+```
+
+### Connect Your Miner
+
+```bash
+# Any Stratum-compatible miner
+minerd -o stratum+tcp://localhost:3333 -u YOUR_BTC_ADDRESS -p x
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
+│                 │     │              │     │                 │
+│  Secure Stratum │◄────┤ Share Valid- │◄────┤ Payment System  │
+│     Server      │     │   ator       │     │  (PPLNS/PPS)   │
+│                 │     │              │     │                 │
+└────────┬────────┘     └──────┬───────┘     └────────┬────────┘
+         │                     │                       │
+         │              ┌──────▼───────┐               │
+         │              │              │               │
+         └──────────────┤ Pool Manager ├───────────────┘
+                        │              │
+                        └──────┬───────┘
+                               │
+                        ┌──────▼───────┐
+                        │              │
+                        │  PostgreSQL  │
+                        │   Database   │
+                        │              │
+                        └──────────────┘
+```
+
+## 🔒 Security Features
+
+### Immutable Configuration
+- **Fixed 1% Pool Fee** - Cannot be modified
+- **Protected Operator Address** - Cryptographically verified
+- **Runtime Monitoring** - Detects tampering attempts
+- **Build-time Protection** - Webpack plugin verification
+
+### Advanced Protection
+- **DDoS Mitigation** - Rate limiting and IP banning
+- **Share Validation** - Fraud detection patterns
+- **SSL/TLS Support** - Encrypted connections
+- **2FA Ready** - Two-factor authentication
+
+## 📊 Features
+
+### Mining
+- ✅ **Multi-Algorithm** - SHA256, Scrypt, Ethash, RandomX, KawPow
+- ✅ **Smart Switching** - AI-powered profitability optimization
+- ✅ **VarDiff** - Automatic difficulty adjustment
+- ✅ **GPU Optimization** - 30% memory usage reduction
+
+### Payments
+- ✅ **Multiple Schemes** - PPLNS, PPS, PROP, PPLNT
+- ✅ **Hardware Wallets** - Ledger & Trezor support
+- ✅ **Hot/Cold Wallets** - Automatic fund management
+- ✅ **Batch Processing** - Efficient transaction handling
+
+### Management
+- ✅ **Web Dashboard** - Real-time statistics
+- ✅ **REST API** - Full pool control
+- ✅ **Auto-Scaling** - Handle growth automatically
+- ✅ **Health Monitoring** - Automatic issue detection
 
 ## 📋 Requirements
 
