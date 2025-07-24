@@ -122,7 +122,7 @@ ETH_DAEMON_PORT=8545
 For joining an existing P2P network:
 
 ```env
-BOOTSTRAP_NODES=node1.otedama.network:3333,node2.otedama.network:3333
+BOOTSTRAP_NODES=[NODE1_ADDRESS]:3333,[NODE2_ADDRESS]:3333
 ```
 
 ## Running the Pool
@@ -486,10 +486,10 @@ pm2 restart otedama-pool
 
 ## Support and Community
 
-- **Documentation**: https://docs.otedama.network
-- **Discord**: https://discord.gg/otedama
-- **GitHub Issues**: https://github.com/your-org/otedama/issues
-- **Email**: support@otedama.network
+- **Documentation**: [Documentation]
+- **Discord**: [Discord Server]
+- **GitHub Issues**: https://github.com/otedama/otedama/issues
+- **Email**: [Contact Support]
 
 ## License
 

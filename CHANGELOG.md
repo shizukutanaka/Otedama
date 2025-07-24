@@ -5,6 +5,39 @@ All notable changes to Otedama will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-01-23
+
+### Added
+
+#### ⛏️ Enhanced Miner Features
+- **BTC Address Registration** - Miners can now register their own BTC payout address
+- **CPU/GPU Selection** - Choose between CPU, GPU, or both for mining
+- **Idle Mining** - Automatically start mining when system is idle (configurable idle time)
+- **Background Mining** - Run minimized to system tray with full control
+- **Auto-start Options** - Configure miner to start on system boot
+
+#### 🖥️ New Miner Client (`otedama-miner`)
+- Dedicated CLI for miner operations
+- Interactive configuration wizard
+- Real-time status monitoring
+- Hardware auto-detection
+- Temperature management and throttling
+
+#### 📝 Documentation Updates
+- Comprehensive Miner Guide
+- Updated Getting Started guide
+- Enhanced Pool Setup documentation
+- Improved contribution guidelines
+
+### Changed
+- Updated package.json with new CLI commands
+- Enhanced miner address management system
+- Improved hardware detection for GPUs
+
+### Fixed
+- Various documentation inconsistencies
+- Package dependency specifications
+
 ## [1.0.0] - 2025-01-23
 
 ### 🎉 First Production Release

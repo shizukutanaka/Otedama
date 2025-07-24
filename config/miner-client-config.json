@@ -1,0 +1,45 @@
+{
+  "miner": {
+    "btcAddress": "",
+    "workerName": "default",
+    "hardware": {
+      "useCPU": true,
+      "useGPU": true,
+      "cpuThreads": 0,
+      "gpuDevices": "all"
+    },
+    "startup": {
+      "minimized": false,
+      "runInBackground": false,
+      "startOnBoot": false,
+      "hideToTray": true
+    },
+    "idleMining": {
+      "enabled": false,
+      "idleTime": 300000,
+      "checkInterval": 30000,
+      "pauseOnActivity": true,
+      "resumeDelay": 5000
+    },
+    "performance": {
+      "priority": "normal",
+      "cpuIntensity": 50,
+      "gpuIntensity": 80,
+      "temperatureLimit": 80,
+      "pauseOnBattery": true
+    }
+  },
+  "pools": [
+    {
+      "name": "Otedama Pool",
+      "url": "stratum+tcp://localhost:3333",
+      "priority": 1
+    }
+  ],
+  "logging": {
+    "level": "info",
+    "file": "logs/miner.log",
+    "maxSize": "10MB",
+    "maxFiles": 5
+  }
+}

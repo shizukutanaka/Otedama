@@ -175,7 +175,7 @@ v1ToV2.addRequestTransformer('/api/users',
 class OtedamaClient {
   constructor(apiVersion = '2') {
     this.apiVersion = apiVersion;
-    this.baseURL = 'https://api.otedama.io';
+    this.baseURL = '[API_BASE_URL]';
   }
   
   async request(endpoint: string, options = {}) {
@@ -212,7 +212,7 @@ from datetime import datetime
 class OtedamaClient:
     def __init__(self, api_version='2'):
         self.api_version = api_version
-        self.base_url = 'https://api.otedama.io'
+        self.base_url = '[API_BASE_URL]'
         self.session = requests.Session()
     
     def request(self, method, endpoint, **kwargs):

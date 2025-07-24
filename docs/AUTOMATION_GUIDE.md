@@ -268,8 +268,8 @@ await automation.initialize();
 
 ## 🌐 サポート
 
-- ドキュメント: https://docs.otedama.io
-- Discord: https://discord.gg/otedama
+- ドキュメント: [Documentation]
+- Discord: [Discord Server]
 - GitHub Issues: https://github.com/otedama/issues
 
 ---

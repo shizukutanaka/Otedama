@@ -1,10 +1,14 @@
 {
   "name": "otedama",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "P2P Mining Pool Software - Simple, Efficient, Scalable",
   "main": "index.js",
   "directories": {
     "lib": "lib"
+  },
+  "bin": {
+    "otedama": "./bin/otedama.js",
+    "otedama-miner": "./bin/otedama-miner.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
@@ -23,7 +27,11 @@
     "libp2p-bootstrap": "^8.0.0",
     "node-forge": "^1.3.1",
     "bitcoinjs-lib": "^6.1.5",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "inquirer": "^8.2.6",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "cli-table3": "^0.6.3"
   },
   "optionalDependencies": {
     "compression": "^1.7.4",
@@ -71,7 +79,10 @@
     "quick-start": "node quick-start.js",
     "health-check": "node scripts/health-check.js",
     "optimize-db": "node scripts/optimize-db.js",
-    "benchmark": "node scripts/benchmark.js"
+    "benchmark": "node scripts/benchmark.js",
+    "prepublishOnly": "npm test && npm run lint",
+    "preversion": "npm test",
+    "postversion": "git push && git push --tags"
   },
   "keywords": [
     "otedama",
@@ -105,5 +116,5 @@
   "bugs": {
     "url": "https://github.com/otedama/otedama/issues"
   },
-  "homepage": "https://otedama.io"
+  "homepage": "https://github.com/otedama/otedama"
 }

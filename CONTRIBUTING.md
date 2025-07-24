@@ -16,7 +16,7 @@ First off, thank you for considering contributing to Otedama! It's people like y
 
 ## Code of Conduct
 
-This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to conduct@otedama.io.
+This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
 
 ### Our Standards
 
@@ -323,13 +323,13 @@ Brief description of what this PR does
 
 ### Communication Channels
 
-- **Discord**: [discord.gg/otedama](https://discord.gg/otedama)
+- **Discord**: [Discord Server]
 - **GitHub Discussions**: For feature requests and general discussions
 - **Stack Overflow**: Tag questions with `otedama`
 
 ### Getting Help
 
-- Check our [documentation](https://docs.otedama.io)
+- Check our documentation
 - Search existing issues and discussions
 - Ask in Discord #help channel
 - Create a detailed issue if needed
@@ -369,7 +369,7 @@ node --inspect index.js
 - Never commit sensitive data
 - Use environment variables for secrets
 - Run security audit: `npm audit`
-- Report security issues privately to security@otedama.io
+- Report security issues privately to the project maintainers
 
 ## Legal
 

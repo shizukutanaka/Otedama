@@ -49,7 +49,9 @@
       "Bash(del /q \"C:\\Users\\irosa\\Desktop\\Otedama\\lib\\quantum\\quantum-computing-system.js\")",
       "Bash(git rm:*)",
       "Bash(test:*)",
-      "Bash(unlink:*)"
+      "Bash(unlink:*)",
+      "Bash(del:*)",
+      "Bash(npm pack:*)"
     ],
     "deny": [
       "Bash(sudo:*)",
