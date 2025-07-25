@@ -1,317 +1,341 @@
 #!/usr/bin/env node
-
 /**
- * Otedama P2P Mining Pool - Integrated Startup Script
- * Launches the complete P2P mining pool with all advanced features
+ * Otedama Mining Pool - Production Startup
+ * High-performance P2P mining pool with advanced features
+ * 
+ * Design:
+ * - Carmack: Performance-first architecture
+ * - Martin: Clean separation of concerns
+ * - Pike: Simple but powerful implementation
  */
 
-import { IntegratedMiningPoolSystem } from './lib/mining/integrated-pool-system.js';
-import { MiningAnalyticsDashboard } from './lib/monitoring/mining-analytics-dashboard.js';
-import { FaultToleranceSystem } from './lib/mining/fault-tolerance-system.js';
-import { createLogger } from './lib/core/logger.js';
-import dotenv from 'dotenv';
-import { cpus } from 'os';
+import { createLogger, gracefulShutdown, getErrorHandler } from './lib/core/index.js';
+import { EnhancedP2PMiningPool } from './lib/mining/enhanced-p2p-mining-pool.js';
+import { configManager } from './lib/core/config-manager.js';
+import { healthCheckManager } from './lib/core/health-check.js';
+import { profiler } from './lib/core/profiler.js';
+import { EnhancedZKPSystem } from './lib/zkp/enhanced-zkp-system.js';
+import cluster from 'cluster';
+import os from 'os';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { Command } from 'commander';
 
-// Load environment variables
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const logger = createLogger('mining-pool-startup');
+// Initialize logger
+const logger = createLogger('OtedamaMain');
 
-// Configuration
-const config = {
-  // Pool identity
-  poolName: process.env.POOL_NAME || 'Otedama P2P Mining Pool',
-  nodeId: process.env.NODE_ID || generateNodeId(),
+// Initialize error handler globally
+const errorHandler = getErrorHandler({ global: true });
+
+// Parse command line arguments
+const program = new Command();
+
+program
+  .name('otedama-pool')
+  .description('Otedama - Professional P2P Mining Pool Platform')
+  .version('1.0.0')
+  .option('-c, --config <file>', 'Configuration file', './otedama.config.js')
+  .option('-m, --mode <mode>', 'Pool operating mode (standalone/cluster)', 'cluster')
+  .option('-p, --port <port>', 'Stratum port', parseInt, 3333)
+  .option('--stratum-v2-port <port>', 'Stratum V2 port', parseInt, 3336)
+  .option('--api-port <port>', 'API port', parseInt, 8080)
+  .option('--p2p-port <port>', 'P2P federation port', parseInt, 8333)
+  .option('-a, --algorithm <algo>', 'Mining algorithm', 'sha256')
+  .option('-s, --scheme <scheme>', 'Payment scheme (PPLNS/PPS/PROP/SOLO)', 'PPLNS')
+  .option('-f, --fee <fee>', 'Pool fee percentage', parseFloat, 1.0)
+  .option('--min-payment <amount>', 'Minimum payment threshold', parseFloat, 0.001)
+  .option('--no-p2p', 'Disable P2P federation')
+  .option('--no-stratum-v2', 'Disable Stratum V2')
+  .option('--no-asic', 'Disable ASIC support')
+  .option('--workers <n>', 'Number of worker processes', parseInt)
+  .option('--enable-profit-switching', 'Enable profit switching')
+  .option('--enable-zkp', 'Enable Zero-Knowledge Proof compliance')
+  .option('--zkp-only', 'Require ZKP for all miners')
+  .parse();
+
+const options = program.opts();
+
+/**
+ * Load and validate configuration
+ */
+async function loadConfiguration() {
+  try {
+    // Load config from multiple sources
+    await configManager.load({
+      files: [
+        path.join(__dirname, options.config || 'otedama.config.js'),
+        path.join(__dirname, '.env')
+      ],
+      validate: true
+    });
+    
+    const config = configManager.getAll();
+    
+    // Override with command line options
+    if (options.port) config.stratumPort = options.port;
+    if (options.stratumV2Port) config.stratumV2Port = options.stratumV2Port;
+    if (options.apiPort) config.apiPort = options.apiPort;
+    if (options.p2pPort) config.p2pPort = options.p2pPort;
+    if (options.algorithm) config.algorithm = options.algorithm;
+    if (options.scheme) config.paymentScheme = options.scheme;
+    if (options.fee) config.poolFee = options.fee / 100;
+    if (options.minPayment) config.minimumPayment = options.minPayment;
+    if (options.workers) config.workers = options.workers;
+    if (!options.p2p) config.p2pEnabled = false;
+    if (!options.stratumV2) config.stratumV2Enabled = false;
+    if (!options.asic) config.enableASICMining = false;
+    if (options.enableProfitSwitching) config.enableProfitSwitching = true;
+    if (options.enableZkp) config.enableZKP = true;
+    if (options.zkpOnly) {
+      config.enableZKP = true;
+      config.requireZKP = true;
+    }
+    
+    // Validate required fields
+    const required = ['poolAddress', 'poolName'];
+    for (const field of required) {
+      if (!config[field]) {
+        throw new Error(`Missing required configuration: ${field}`);
+      }
+    }
+    
+    logger.info('Configuration loaded successfully');
+    return config;
+    
+  } catch (error) {
+    logger.error('Failed to load configuration', error);
+    throw error;
+  }
+}
+
+/**
+ * Start worker process
+ */
+async function startWorker(config) {
+  const workerId = cluster.worker?.id || 0;
+  logger.info(`Starting worker ${workerId}`);
   
-  // Network configuration
-  p2pPort: parseInt(process.env.P2P_PORT) || 3333,
-  stratumPort: parseInt(process.env.STRATUM_PORT) || 3334,
-  apiPort: parseInt(process.env.API_PORT) || 8080,
-  dashboardPort: parseInt(process.env.DASHBOARD_PORT) || 8081,
-  
-  // Bootstrap nodes (comma-separated)
-  bootstrapNodes: process.env.BOOTSTRAP_NODES ? 
-    process.env.BOOTSTRAP_NODES.split(',').map(n => {
-      const [address, port] = n.trim().split(':');
+  try {
+    // Initialize ZKP system if enabled
+    let zkpSystem = null;
+    if (config.enableZKP) {
+      zkpSystem = new EnhancedZKPSystem({
+        dbFile: path.join(__dirname, 'data/zkp-enhanced.db'),
+        ...config.zkp
+      });
+      await zkpSystem.initialize();
+      logger.info('Zero-Knowledge Proof system initialized');
+    }
+    
+    // Create enhanced mining pool
+    const pool = new EnhancedP2PMiningPool({
+      ...config,
+      workerId,
+      mode: options.mode,
+      zkpSystem
+    });
+    
+    // Setup health checks
+    healthCheckManager.register('pool', async () => {
+      const info = pool.getPoolInfo();
       return {
-        address,
-        port: parseInt(port) || 3333,
-        id: generateNodeIdFromAddress(address)
+        healthy: pool.initialized,
+        details: info
       };
-    }) : [],
-  
-  // Consensus configuration
-  consensus: {
-    byzantineNodes: parseFloat(process.env.BYZANTINE_NODES) || 0.33,
-    checkpointInterval: parseInt(process.env.CHECKPOINT_INTERVAL) || 100,
-    requestTimeout: parseInt(process.env.REQUEST_TIMEOUT) || 5000
-  },
-  
-  // DHT configuration
-  dht: {
-    k: parseInt(process.env.DHT_K) || 20,
-    alpha: parseInt(process.env.DHT_ALPHA) || 3,
-    refreshInterval: parseInt(process.env.DHT_REFRESH) || 3600000
-  },
-  
-  // Mining configuration
-  mining: {
-    algorithm: process.env.MINING_ALGORITHM || 'auto',
-    coin: process.env.MINING_COIN || 'auto',
-    autoSelectAlgorithm: process.env.AUTO_SELECT_ALGORITHM !== 'false',
-    profitSwitching: process.env.PROFIT_SWITCHING !== 'false',
-    gpuMining: process.env.GPU_MINING !== 'false',
-    cpuMining: process.env.CPU_MINING !== 'false',
-    electricityCost: parseFloat(process.env.ELECTRICITY_COST) || 0.1 // $/kWh
-  },
-  
-  // Performance configuration
-  performance: {
-    workerThreads: parseInt(process.env.WORKER_THREADS) || cpus().length,
-    maxConnections: parseInt(process.env.MAX_CONNECTIONS) || 10000,
-    shareValidationBatchSize: parseInt(process.env.SHARE_BATCH_SIZE) || 100
-  },
-  
-  // Fault tolerance
-  faultTolerance: {
-    enabled: process.env.FAULT_TOLERANCE !== 'false',
-    minActiveNodes: parseInt(process.env.MIN_ACTIVE_NODES) || 3,
-    replicationFactor: parseInt(process.env.REPLICATION_FACTOR) || 3
-  },
-  
-  // Monitoring
-  monitoring: {
-    enabled: process.env.MONITORING !== 'false',
-    metricsRetention: parseInt(process.env.METRICS_RETENTION) || 86400000 // 24 hours
-  }
-};
-
-// System components
-let poolSystem = null;
-let dashboard = null;
-let faultTolerance = null;
-
-// Graceful shutdown handler
-let isShuttingDown = false;
-
-async function startMiningPool() {
-  try {
-    logger.info('===================================');
-    logger.info(`Starting ${config.poolName}`);
-    logger.info('===================================');
-    logger.info(`Node ID: ${config.nodeId}`);
-    logger.info(`P2P Port: ${config.p2pPort}`);
-    logger.info(`Stratum Port: ${config.stratumPort}`);
-    logger.info(`Dashboard: http://localhost:${config.dashboardPort}`);
-    logger.info('-----------------------------------');
+    });
     
-    // Initialize integrated pool system
-    logger.info('Initializing integrated mining pool system...');
-    poolSystem = new IntegratedMiningPoolSystem(config);
-    await poolSystem.initialize();
+    // Setup profiling
+    if (config.profiling) {
+      profiler.start();
+      pool.on('share:accepted', () => {
+        profiler.mark('share_accepted');
+      });
+    }
     
-    // Initialize fault tolerance if enabled
-    if (config.faultTolerance.enabled) {
-      logger.info('Initializing fault tolerance system...');
-      faultTolerance = new FaultToleranceSystem(config.faultTolerance);
-      await faultTolerance.initialize(poolSystem);
+    // Initialize pool
+    await pool.initialize();
+    
+    logger.info(`Worker ${workerId} started successfully`);
+    
+    // Setup graceful shutdown
+    gracefulShutdown(async () => {
+      logger.info(`Worker ${workerId} shutting down...`);
+      await pool.shutdown();
       
-      // Handle critical failures
-      faultTolerance.on('critical-failure', (data) => {
-        logger.error('CRITICAL FAILURE DETECTED:', data);
-        if (data.action === 'system-restart-required') {
-          gracefulShutdown('critical-failure');
-        }
-      });
-    }
+      if (zkpSystem) {
+        await zkpSystem.shutdown();
+      }
+      
+      if (config.profiling) {
+        const report = profiler.getReport();
+        logger.info('Performance report', report);
+      }
+    });
     
-    // Initialize monitoring dashboard if enabled
-    if (config.monitoring.enabled) {
-      logger.info('Initializing analytics dashboard...');
-      dashboard = new MiningAnalyticsDashboard({
-        httpPort: config.dashboardPort,
-        wsPort: config.dashboardPort + 1,
-        metricsRetention: config.monitoring.metricsRetention
-      });
-      await dashboard.initialize(poolSystem);
-    }
-    
-    // Set up event handlers
-    setupEventHandlers();
-    
-    // Log startup information
-    logStartupInfo();
-    
-    logger.info('===================================');
-    logger.info('Mining pool started successfully!');
-    logger.info('===================================');
-    
-    // Start accepting connections
-    logger.info('Ready to accept miner connections');
+    return pool;
     
   } catch (error) {
-    logger.error('Failed to start mining pool:', error);
-    process.exit(1);
+    logger.error(`Worker ${workerId} failed to start`, error);
+    throw error;
   }
 }
 
-function setupEventHandlers() {
-  // Pool system events
-  poolSystem.on('miner-connected', (data) => {
-    logger.info(`Miner connected: ${data.worker} (${data.minerId})`);
+/**
+ * Start master process
+ */
+async function startMaster(config) {
+  logger.info('Starting Otedama Mining Pool (Master)');
+  
+  const numWorkers = config.workers || os.cpus().length;
+  
+  // Fork workers
+  for (let i = 0; i < numWorkers; i++) {
+    cluster.fork();
+  }
+  
+  // Handle worker events
+  cluster.on('exit', (worker, code, signal) => {
+    logger.error(`Worker ${worker.process.pid} died (${signal || code})`);
+    
+    // Restart worker
+    if (config.autoRestart !== false) {
+      logger.info('Starting replacement worker...');
+      cluster.fork();
+    }
   });
   
-  poolSystem.on('miner-disconnected', (data) => {
-    logger.info(`Miner disconnected: ${data.worker} (${data.minerId})`);
+  cluster.on('online', (worker) => {
+    logger.info(`Worker ${worker.process.pid} is online`);
   });
   
-  poolSystem.on('block-found', (data) => {
-    logger.info('🎉 BLOCK FOUND! 🎉');
-    logger.info(`Height: ${data.height}`);
-    logger.info(`Hash: ${data.hash}`);
-    logger.info(`Finder: ${data.finder}`);
-    logger.info(`Coin: ${data.coin}`);
+  // Setup master health check
+  healthCheckManager.register('master', async () => {
+    const workers = Object.values(cluster.workers || {});
+    return {
+      healthy: workers.length > 0,
+      details: {
+        workers: workers.length,
+        targetWorkers: numWorkers
+      }
+    };
   });
   
-  poolSystem.on('algorithm-switch', (data) => {
-    logger.info(`Algorithm switched to ${data.algorithm} (${data.coin})`);
-  });
-  
-  // Fault tolerance events
-  if (faultTolerance) {
-    faultTolerance.on('failover-start', (data) => {
-      logger.warn(`Failover started for ${data.service}`);
+  // Start health check server
+  if (config.healthCheckPort) {
+    const { createServer } = await import('http');
+    const server = createServer(async (req, res) => {
+      if (req.url === '/health') {
+        const health = await healthCheckManager.check();
+        res.statusCode = health.healthy ? 200 : 503;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(health));
+      } else {
+        res.statusCode = 404;
+        res.end('Not Found');
+      }
     });
     
-    faultTolerance.on('service-recovered', (data) => {
-      logger.info(`Service recovered: ${data.service} (attempts: ${data.attempts})`);
-    });
-    
-    faultTolerance.on('node-failed', (data) => {
-      logger.warn(`Node failed: ${data.nodeId}`);
+    server.listen(config.healthCheckPort, () => {
+      logger.info(`Health check server listening on port ${config.healthCheckPort}`);
     });
   }
   
-  // Process events
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('uncaughtException', (error) => {
-    logger.error('Uncaught exception:', error);
-    gracefulShutdown('uncaught-exception');
+  // Setup graceful shutdown
+  gracefulShutdown(async () => {
+    logger.info('Master process shutting down...');
+    
+    // Disconnect workers
+    for (const worker of Object.values(cluster.workers || {})) {
+      worker.disconnect();
+    }
   });
-  process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled rejection at:', promise, 'reason:', reason);
-  });
 }
 
-function logStartupInfo() {
-  const stats = poolSystem.getPoolStatistics();
-  
-  logger.info('-----------------------------------');
-  logger.info('Pool Configuration:');
-  logger.info(`- Algorithm: ${stats.pool.algorithm || 'auto'}`);
-  logger.info(`- Coin: ${stats.pool.coin || 'auto'}`);
-  logger.info(`- Profit Switching: ${config.mining.profitSwitching ? 'enabled' : 'disabled'}`);
-  logger.info(`- GPU Mining: ${config.mining.gpuMining ? 'enabled' : 'disabled'}`);
-  logger.info(`- CPU Mining: ${config.mining.cpuMining ? 'enabled' : 'disabled'}`);
-  logger.info('-----------------------------------');
-  logger.info('Network Status:');
-  logger.info(`- P2P Nodes: ${stats.network.p2pNodes}`);
-  logger.info(`- Consensus View: ${stats.network.consensusView}`);
-  logger.info(`- Bootstrap Nodes: ${config.bootstrapNodes.length}`);
-  logger.info('-----------------------------------');
-  
-  if (config.mining.profitSwitching && poolSystem.profitSwitcher) {
-    const profitStats = poolSystem.profitSwitcher.getStatistics();
-    logger.info('Profit Switching Status:');
-    logger.info(`- Current Coin: ${profitStats.currentCoin || 'none'}`);
-    logger.info(`- Coins Registered: ${Object.keys(profitStats.coins).length}`);
-    logger.info(`- Switch Count: ${profitStats.switchCount}`);
-    logger.info('-----------------------------------');
-  }
-}
-
-async function gracefulShutdown(signal) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-  
-  logger.info(`\nReceived ${signal}, starting graceful shutdown...`);
-  
-  try {
-    // Log final statistics
-    if (poolSystem) {
-      const stats = poolSystem.getPoolStatistics();
-      logger.info('Final Pool Statistics:');
-      logger.info(`- Total Miners: ${stats.stats.totalMiners}`);
-      logger.info(`- Total Shares: ${stats.stats.totalShares}`);
-      logger.info(`- Total Blocks: ${stats.stats.totalBlocks}`);
-      logger.info(`- Total Hashrate: ${formatHashrate(stats.stats.totalHashrate)}`);
-    }
-    
-    // Shutdown components in order
-    if (dashboard) {
-      logger.info('Shutting down analytics dashboard...');
-      await dashboard.shutdown();
-    }
-    
-    if (faultTolerance) {
-      logger.info('Shutting down fault tolerance system...');
-      await faultTolerance.shutdown();
-    }
-    
-    if (poolSystem) {
-      logger.info('Shutting down pool system...');
-      await poolSystem.shutdown();
-    }
-    
-    logger.info('Graceful shutdown complete');
-    process.exit(0);
-    
-  } catch (error) {
-    logger.error('Error during shutdown:', error);
-    process.exit(1);
-  }
-}
-
-function generateNodeId() {
-  return require('crypto').randomBytes(32).toString('hex');
-}
-
-function generateNodeIdFromAddress(address) {
-  return require('crypto')
-    .createHash('sha256')
-    .update(address)
-    .digest();
-}
-
-function formatHashrate(hashrate) {
-  const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s'];
-  let unitIndex = 0;
-  
-  while (hashrate >= 1000 && unitIndex < units.length - 1) {
-    hashrate /= 1000;
-    unitIndex++;
-  }
-  
-  return `${hashrate.toFixed(2)} ${units[unitIndex]}`;
-}
-
-// Display startup banner
+/**
+ * Display startup banner
+ */
 function displayBanner() {
   console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║                   OTEDAMA P2P MINING POOL                 ║
-║                                                           ║
-║           Enterprise-Grade Distributed Mining             ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
-`);
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║                           OTEDAMA MINING POOL                             ║
+║                                                                           ║
+║                    Professional P2P Mining Platform                       ║
+║                     High Performance • Reliable • Secure                  ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+  `);
 }
 
-// Main execution
-displayBanner();
-startMiningPool().catch(error => {
-  logger.error('Fatal error:', error);
+/**
+ * Display help
+ */
+program.on('--help', () => {
+  console.log('');
+  console.log('Examples:');
+  console.log('  $ node start-mining-pool.js');
+  console.log('  $ node start-mining-pool.js --mode standalone');
+  console.log('  $ node start-mining-pool.js --mode cluster --workers 4');
+  console.log('  $ node start-mining-pool.js --algorithm scrypt --scheme PPS');
+  console.log('  $ node start-mining-pool.js --config ./custom-pool.json');
+  console.log('  $ node start-mining-pool.js --enable-profit-switching');
+  console.log('');
+  console.log('Environment Variables:');
+  console.log('  POOL_NAME               Pool name');
+  console.log('  POOL_ADDRESS            Pool wallet address');
+  console.log('  BITCOIN_RPC_URL         Bitcoin RPC URL');
+  console.log('  BITCOIN_RPC_USER        Bitcoin RPC username');
+  console.log('  BITCOIN_RPC_PASSWORD    Bitcoin RPC password');
+  console.log('');
+  console.log('ZKP Options:');
+  console.log('  --enable-zkp            Enable Zero-Knowledge Proof compliance');
+  console.log('  --zkp-only              Require ZKP verification for all miners');
+});
+
+/**
+ * Main entry point
+ */
+async function main() {
+  try {
+    displayBanner();
+    
+    // Load configuration
+    const config = await loadConfiguration();
+    
+    // Determine mode
+    const mode = options.mode || config.mode || 'cluster';
+    
+    if (mode === 'cluster' && cluster.isMaster) {
+      // Master process
+      await startMaster(config);
+    } else if (mode === 'standalone' || cluster.isWorker) {
+      // Worker process or standalone
+      await startWorker(config);
+    } else {
+      throw new Error(`Invalid mode: ${mode}`);
+    }
+    
+  } catch (error) {
+    logger.error('Fatal error during startup', error);
+    process.exit(1);
+  }
+}
+
+// Handle uncaught errors
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', { reason, promise });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', error);
+  process.exit(1);
+});
+
+// Start the application
+main().catch((error) => {
+  console.error('Failed to start Otedama:', error);
   process.exit(1);
 });

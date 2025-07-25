@@ -1,0 +1,11 @@
+[Unit]
+Description=Otedama Backup Service
+After=otedama.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /opt/otedama/scripts/backup-now.js --compress --encrypt
+User=otedama
+Group=otedama
+StandardOutput=journal
+StandardError=journal

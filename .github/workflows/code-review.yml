@@ -1,0 +1,241 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  # Automated code review
+  review:
+    name: Automated Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run ESLint with annotations
+        uses: reviewdog/action-eslint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          eslint_flags: '--ext .js,.jsx,.ts,.tsx .'
+          
+      - name: Check code complexity
+        run: |
+          npx complexity-report . --format json > complexity.json || true
+          
+      - name: Analyze bundle size
+        run: |
+          npm run build --if-present
+          npx size-limit --json > size-limit.json || true
+          
+      - name: Comment PR with analysis
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read analysis results
+            let complexity = {};
+            let sizeLimit = {};
+            
+            try {
+              complexity = JSON.parse(fs.readFileSync('complexity.json', 'utf8'));
+            } catch {}
+            
+            try {
+              sizeLimit = JSON.parse(fs.readFileSync('size-limit.json', 'utf8'));
+            } catch {}
+            
+            // Generate comment
+            let comment = '## 🤖 Automated Code Review\n\n';
+            
+            // Complexity analysis
+            if (complexity.reports) {
+              comment += '### 📊 Complexity Analysis\n\n';
+              comment += '| File | Complexity | Maintainability |\n';
+              comment += '|------|------------|----------------|\n';
+              
+              complexity.reports
+                .filter(r => r.complexity > 10)
+                .slice(0, 10)
+                .forEach(report => {
+                  const emoji = report.complexity > 20 ? '🔴' : report.complexity > 15 ? '🟡' : '🟢';
+                  comment += `| ${report.path} | ${emoji} ${report.complexity} | ${report.maintainability.toFixed(2)} |\n`;
+                });
+              
+              comment += '\n';
+            }
+            
+            // Bundle size
+            if (sizeLimit.length > 0) {
+              comment += '### 📦 Bundle Size\n\n';
+              comment += '| Name | Size | Limit | Status |\n';
+              comment += '|------|------|-------|--------|\n';
+              
+              sizeLimit.forEach(item => {
+                const status = item.passed ? '✅' : '❌';
+                comment += `| ${item.name} | ${item.size} | ${item.limit || 'N/A'} | ${status} |\n`;
+              });
+              
+              comment += '\n';
+            }
+            
+            // Add checklist
+            comment += '### ✅ Review Checklist\n\n';
+            comment += '- [ ] Code follows the project style guidelines\n';
+            comment += '- [ ] Self-review performed\n';
+            comment += '- [ ] Comments added for complex code\n';
+            comment += '- [ ] Documentation updated\n';
+            comment += '- [ ] Tests added/updated\n';
+            comment += '- [ ] No console.log or debug code\n';
+            comment += '- [ ] Security considerations addressed\n';
+            comment += '- [ ] Performance impact considered\n';
+            
+            // Post comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Check for common issues
+  common-issues:
+    name: Check Common Issues
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Check for secrets
+        run: |
+          # Check for hardcoded secrets
+          if grep -rE "(api_key|apikey|password|secret|token)\\s*[:=]\\s*['\"][^'\"]+['\"]" --include="*.js" --include="*.json" --exclude-dir=node_modules --exclude-dir=test .; then
+            echo "::error::Potential hardcoded secrets found"
+            exit 1
+          fi
+          
+      - name: Check for console.log
+        run: |
+          # Check for console.log statements
+          if grep -rE "console\\.(log|debug|info)" --include="*.js" --exclude-dir=node_modules --exclude-dir=test --exclude-dir=examples .; then
+            echo "::warning::console.log statements found"
+          fi
+          
+      - name: Check for TODO comments
+        run: |
+          # List TODO comments
+          echo "### TODO Comments" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          grep -rn "TODO\|FIXME\|HACK" --include="*.js" --exclude-dir=node_modules . >> $GITHUB_STEP_SUMMARY || echo "No TODO comments found" >> $GITHUB_STEP_SUMMARY
+
+  # Dependency review
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v3
+        with:
+          fail-on-severity: moderate
+          
+      - name: Check for outdated dependencies
+        run: |
+          npm outdated --json > outdated.json || true
+          
+      - name: Comment outdated dependencies
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const outdated = JSON.parse(fs.readFileSync('outdated.json', 'utf8'));
+              if (Object.keys(outdated).length > 0) {
+                let comment = '### 📦 Outdated Dependencies\n\n';
+                comment += '| Package | Current | Wanted | Latest |\n';
+                comment += '|---------|---------|---------|--------|\n';
+                
+                Object.entries(outdated).slice(0, 10).forEach(([name, info]) => {
+                  comment += `| ${name} | ${info.current} | ${info.wanted} | ${info.latest} |\n`;
+                });
+                
+                if (Object.keys(outdated).length > 10) {
+                  comment += `\n_And ${Object.keys(outdated).length - 10} more..._\n`;
+                }
+                
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: comment
+                });
+              }
+            } catch {}
+
+  # Performance impact check
+  performance-check:
+    name: Performance Impact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        
+      - name: Checkout base
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git checkout origin/${{ github.base_ref }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Measure base performance
+        run: |
+          npm ci
+          npm run test:performance -- --json > base-performance.json || echo '{}' > base-performance.json
+          
+      - name: Checkout PR again
+        run: |
+          git checkout ${{ github.sha }}
+          
+      - name: Measure PR performance
+        run: |
+          npm ci
+          npm run test:performance -- --json > pr-performance.json || echo '{}' > pr-performance.json
+          
+      - name: Compare performance
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const base = JSON.parse(fs.readFileSync('base-performance.json', 'utf8'));
+              const pr = JSON.parse(fs.readFileSync('pr-performance.json', 'utf8'));
+              
+              // Compare and comment if significant changes
+              // Implementation depends on performance test output format
+            } catch {}

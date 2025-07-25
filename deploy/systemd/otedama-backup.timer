@@ -1,0 +1,12 @@
+[Unit]
+Description=Otedama Daily Backup Timer
+Requires=otedama-backup.service
+
+[Timer]
+OnCalendar=daily
+OnCalendar=02:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,184 @@
+groups:
+  - name: mining_pool_alerts
+    interval: 30s
+    rules:
+      # Pool health alerts
+      - alert: PoolDown
+        expr: up{job="otedama"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: pool
+        annotations:
+          summary: "Mining pool is down"
+          description: "Otedama mining pool has been down for more than 2 minutes."
+
+      - alert: NoActiveMiners
+        expr: mining_active_miners == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: pool
+        annotations:
+          summary: "No active miners"
+          description: "No miners have been active for the last 10 minutes."
+
+      - alert: LowHashrate
+        expr: mining_pool_hashrate_hashes_per_second < 1000000
+        for: 15m
+        labels:
+          severity: warning
+          component: pool
+        annotations:
+          summary: "Pool hashrate is low"
+          description: "Pool hashrate is below 1 MH/s for 15 minutes. Current: {{ $value | humanize }}H/s"
+
+      # Share validation alerts
+      - alert: HighInvalidShareRate
+        expr: |
+          (
+            rate(mining_shares_total{status="invalid"}[5m]) / 
+            (rate(mining_shares_total{status="valid"}[5m]) + rate(mining_shares_total{status="invalid"}[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: shares
+        annotations:
+          summary: "High invalid share rate"
+          description: "Invalid share rate is above 10% for 5 minutes. Current: {{ $value | humanizePercentage }}"
+
+      # Performance alerts
+      - alert: HighCPUUsage
+        expr: process_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% for 5 minutes. Current: {{ $value | humanize }}%"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            process_memory_usage_bytes{type="heapUsed"} / 
+            process_memory_usage_bytes{type="heapTotal"}
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage"
+          description: "Heap memory usage is above 90% for 5 minutes."
+
+      - alert: EventLoopLag
+        expr: histogram_quantile(0.95, nodejs_eventloop_lag_seconds) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: nodejs
+        annotations:
+          summary: "High event loop lag"
+          description: "Node.js event loop lag is above 100ms at 95th percentile."
+
+      # API performance alerts
+      - alert: SlowAPIResponses
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Slow API responses"
+          description: "95th percentile API response time is above 1 second."
+
+      - alert: HighAPIErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m])) / 
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is above 5%. Current: {{ $value | humanizePercentage }}"
+
+      # Security alerts
+      - alert: HighAuthFailureRate
+        expr: rate(auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failures are occurring at {{ $value | humanize }} per second."
+
+      - alert: PossibleDDoSAttack
+        expr: sum(rate(http_requests_total[1m])) > 1000
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Possible DDoS attack"
+          description: "Request rate is abnormally high: {{ $value | humanize }} req/s"
+
+      # Database alerts
+      - alert: DatabaseConnectionFailure
+        expr: database_connections_active == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection failure"
+          description: "No active database connections available."
+
+      - alert: DatabaseResponseTime
+        expr: database_query_duration_seconds{quantile="0.95"} > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries"
+          description: "95th percentile database query time is above 1 second."
+
+      # Blockchain alerts
+      - alert: BlockchainSyncLag
+        expr: blockchain_sync_lag_blocks > 10
+        for: 15m
+        labels:
+          severity: warning
+          component: blockchain
+        annotations:
+          summary: "Blockchain sync lag"
+          description: "Blockchain is {{ $value }} blocks behind."
+
+      - alert: NoNewBlocks
+        expr: increase(mining_blocks_found_total[24h]) == 0
+        for: 24h
+        labels:
+          severity: info
+          component: mining
+        annotations:
+          summary: "No blocks found in 24 hours"
+          description: "The pool has not found any blocks in the last 24 hours."
+
+      # Disk space alerts
+      - alert: LowDiskSpace
+        expr: disk_free_bytes / disk_total_bytes < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Low disk space"
+          description: "Less than 10% disk space remaining. Free: {{ $value | humanize1024 }}B"

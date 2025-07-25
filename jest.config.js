@@ -7,8 +7,8 @@ module.exports = {
         '!lib/**/index.js'
     ],
     testMatch: [
-        '**/tests/**/*.test.js',
-        '**/tests/**/*.spec.js'
+        '**/test/**/*.test.js',
+        '**/test/**/*.spec.js'
     ],
     coverageThreshold: {
         global: {
@@ -18,7 +18,7 @@ module.exports = {
             statements: 70
         }
     },
-    setupFilesAfterEnv: ['./tests/setup.js'],
+    setupFilesAfterEnv: ['./test/jest-setup.js'],
     testTimeout: 10000,
     verbose: true
 };

@@ -1,7 +1,7 @@
 {
   "name": "otedama",
-  "version": "1.0.8",
-  "description": "High-Performance P2P Mining Pool Platform",
+  "version": "1.1.0",
+  "description": "Enterprise-Grade P2P Mining Pool Platform with Zero-Knowledge Proof Compliance",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -18,6 +18,7 @@
     "security:scan": "node scripts/security-scan.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
+    "test:system": "node test/system-test.js",
     "test:integration": "node scripts/test-integration.js",
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
@@ -25,15 +26,20 @@
     "db:setup": "node scripts/setup-database.js",
     "db:migrate": "node scripts/migrate-database.js",
     "docker:build": "docker build -t otedama .",
-    "docker:run": "docker-compose up -d"
+    "docker:run": "docker-compose up -d",
+    "cleanup": "node scripts/cleanup-duplicates.js",
+    "validate": "node scripts/verify-structure.js"
   },
   "keywords": [
     "mining",
-    "cryptocurrency",
+    "cryptocurrency", 
     "blockchain",
     "p2p",
     "stratum-v2",
-    "mining-pool"
+    "mining-pool",
+    "bitcoin",
+    "ethereum",
+    "enterprise"
   ],
   "author": "Otedama Team",
   "license": "MIT",
@@ -50,12 +56,15 @@
     "ethers": "^6.9.0",
     "axios": "^1.6.2",
     "jsonwebtoken": "^9.0.2",
+    "express-validator": "^7.0.1",
     "inquirer": "^9.2.12",
     "chalk": "^5.3.0",
     "ora": "^6.3.1",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
-    "cli-table3": "^0.6.3"
+    "cli-table3": "^0.6.3",
+    "ioredis": "^5.3.2",
+    "rate-limiter-flexible": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
@@ -78,5 +87,13 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/otedama/otedama.git"
+  },
+  "bugs": {
+    "url": "https://github.com/otedama/otedama/issues"
+  },
+  "homepage": "https://otedama.io"
 }

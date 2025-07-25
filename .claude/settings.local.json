@@ -51,7 +51,8 @@
       "Bash(test:*)",
       "Bash(unlink:*)",
       "Bash(del:*)",
-      "Bash(npm pack:*)"
+      "Bash(npm pack:*)",
+      "Bash(git config:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

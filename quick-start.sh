@@ -1,136 +1,81 @@
 #!/bin/bash
-# Otedama Quick Start - One-click mining for beginners
-# This script automatically sets up and starts mining with minimal configuration
+# Otedama Mining Pool - Quick Start Script
 
-clear
-echo ""
-echo "===================================================="
-echo "      Otedama Quick Start - Beginner Mining"
-echo "===================================================="
-echo ""
-echo "This will automatically set up mining with the"
-echo "following configuration:"
-echo ""
-echo "  - Mode: Standalone (Solo mining)"
-echo "  - Pool fee: 1% (Industry lowest!)"
-echo "  - Auto-switch to pool mode when others join"
-echo "  - All other settings: Automatic"
-echo ""
-echo "===================================================="
+echo "======================================"
+echo "    Otedama Mining Pool Quick Start   "
+echo "======================================"
 echo ""
 
-# Check Node.js
+# Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    echo "[ERROR] Node.js is not installed!"
-    echo ""
-    echo "Would you like to:"
-    echo "  1. See installation instructions"
-    echo "  2. Exit and install manually"
-    echo ""
-    read -p "Select option (1-2): " choice
-    
-    if [ "$choice" = "1" ]; then
-        echo ""
-        echo "To install Node.js:"
-        echo ""
-        echo "Ubuntu/Debian:"
-        echo "  sudo apt update && sudo apt install nodejs npm"
-        echo ""
-        echo "macOS:"
-        echo "  brew install node"
-        echo ""
-        echo "Or download from: https://nodejs.org/"
-        echo ""
-    fi
+    echo "Error: Node.js is not installed."
+    echo "Please install Node.js 18+ from https://nodejs.org/"
+    exit 1
+fi
+
+# Check Node.js version
+NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 18 ]; then
+    echo "Error: Node.js 18+ is required. Current version: $(node -v)"
+    exit 1
+fi
+
+# Check if npm is installed
+if ! command -v npm &> /dev/null; then
+    echo "Error: npm is not installed."
     exit 1
 fi
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
-    echo "Installing Otedama... This may take a few minutes."
-    echo ""
-    npm install --quiet
+    echo "Installing dependencies..."
+    npm install
     if [ $? -ne 0 ]; then
-        echo "[ERROR] Installation failed"
+        echo "Error: Failed to install dependencies"
         exit 1
     fi
 fi
 
-# Check if wallet address exists
-if [ ! -f "config/wallet.txt" ]; then
-    echo ""
-    echo "===================================================="
-    echo "        IMPORTANT: Bitcoin Address Required"
-    echo "===================================================="
-    echo ""
-    echo "Please enter your Bitcoin address to receive mining rewards."
-    echo ""
-    echo "Supported formats:"
-    echo "  - Legacy (1...): e.g., 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-    echo "  - SegWit (3...): e.g., 3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
-    echo "  - Native SegWit (bc1...): e.g., bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
-    echo ""
-    read -p "Your Bitcoin address: " WALLET_ADDRESS
-    
-    # Save wallet address
-    mkdir -p config
-    echo "$WALLET_ADDRESS" > config/wallet.txt
-    echo ""
-    echo "Wallet address saved!"
-else
-    # Read existing wallet address
-    WALLET_ADDRESS=$(cat config/wallet.txt)
-    echo "Using saved wallet address: $WALLET_ADDRESS"
+# Create required directories
+mkdir -p data logs
+
+# Copy configuration files if they don't exist
+if [ ! -f ".env" ]; then
+    if [ -f ".env.example" ]; then
+        echo "Creating .env from .env.example..."
+        cp .env.example .env
+        echo ""
+        echo "IMPORTANT: Please edit .env and set your pool configuration:"
+        echo "  - POOL_ADDRESS (your wallet address)"
+        echo "  - BITCOIN_RPC_PASSWORD (your Bitcoin node password)"
+        echo ""
+        read -p "Press Enter after editing .env to continue..."
+    else
+        echo "Error: .env.example not found"
+        exit 1
+    fi
 fi
 
-echo ""
-echo "Starting Otedama in beginner mode..."
-echo ""
-
-# Create simple config if it doesn't exist
-if [ ! -f "config/otedama.json" ]; then
-    echo "Creating configuration..."
-    mkdir -p config
-    cat > config/otedama.json << EOF
-{
-  "mode": "standalone",
-  "experienceLevel": "beginner",
-  "pool": {
-    "port": 3333,
-    "fee": 1.0,
-    "minPayout": 0.001
-  },
-  "wallet": {
-    "address": "$WALLET_ADDRESS"
-  },
-  "api": {
-    "port": 8080,
-    "enabled": true
-  }
-}
-EOF
+if [ ! -f "otedama.config.js" ]; then
+    if [ -f "otedama.config.example.js" ]; then
+        echo "Creating otedama.config.js from example..."
+        cp otedama.config.example.js otedama.config.js
+    fi
 fi
 
-# Make executable
-chmod +x quick-start.sh 2>/dev/null
+# Validate configuration
+echo "Validating configuration..."
+npm run config:validate
+if [ $? -ne 0 ]; then
+    echo "Error: Configuration validation failed"
+    exit 1
+fi
 
+# Start the pool
 echo ""
-echo "===================================================="
-echo "           Mining Started Successfully!"
-echo "===================================================="
-echo ""
-echo "  Dashboard: http://localhost:8080"
-echo "  Pool Port: 3333"
-echo "  Mode: Standalone (auto-scaling)"
-echo ""
-echo "  Your wallet: $WALLET_ADDRESS"
-echo ""
-echo "  Press Ctrl+C to stop mining"
-echo "===================================================="
+echo "Starting Otedama Mining Pool..."
+echo "======================================"
 echo ""
 
-# Set creator fee address (optional, can be removed)
-export CREATOR_WALLET_ADDRESS=1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa
-
-# Start Otedama
-node index.js --config config/otedama.json --mode standalone --wallet "$WALLET_ADDRESS"
+# Run with garbage collection exposed for better memory management
+exec node --expose-gc start-mining-pool.js "$@"
