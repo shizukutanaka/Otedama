@@ -1,0 +1,24 @@
+# Git Commands for Otedama v1.1.2
+
+# 1. Commit all changes
+git commit -m "Release v1.1.2 - Fixed Pool Operator BTC Address & Bilingual Documentation
+
+Major Changes:
+- Fixed pool operator BTC address: 1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa (immutable)
+- Clear separation between operator address (fixed) and miner addresses (flexible)
+- Added comprehensive bilingual documentation (English & Japanese)
+- Implemented multiple security layers for address protection"
+
+# 2. Push to remote
+git push origin master
+
+# 3. Create and push tag
+git tag -a v1.1.2 -m "Version 1.1.2 - Fixed Pool Operator BTC Address & Bilingual Documentation"
+git push origin v1.1.2
+
+# Alternative: If you need to force push
+git push --force-with-lease origin master
+
+# To verify before pushing:
+git log --oneline -5
+git status

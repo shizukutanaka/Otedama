@@ -77,8 +77,6 @@ Otedamaでマイニングすると：
 - ✅ テスト用にテストネットアドレスを使用
 
 ### できないこと：
-- ❌ プール運営者アドレス（`1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`）を使用
-- ❌ プール手数料の割合を変更（1%に固定）
 - ❌ 無効なアドレス形式を使用
 - ❌ 有効なアドレスなしでマイニング
 
@@ -115,9 +113,6 @@ curl -X POST http://pool.otedama.local:8081/api/v1/validate-address \
 - 別のアドレス形式で試してください
 - ネットワーク接続を確認
 
-### 「プール運営者アドレスは使用できません」
-- `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`へのマイニングはできません
-- 自分のBitcoinアドレスを使用してください
 
 ## 📊 マイニングの監視
 
@@ -136,12 +131,8 @@ curl http://pool.otedama.local:8081/api/v1/balance/YOUR_BITCOIN_ADDRESS
 curl http://pool.otedama.local:8081/api/v1/payouts/YOUR_BITCOIN_ADDRESS
 ```
 
-## 🤝 サポート
 
-マイナーアドレスに関する問題がある場合：
-- まずこのガイドを確認
-- アドレス形式を検証
-- アドレスを含めてサポートに連絡（秘密鍵は絶対に聞きません！）
+
 
 ---
 

@@ -76,8 +76,6 @@ When you mine on Otedama:
 - ✅ Use testnet addresses for testing
 
 ### What You CANNOT Do:
-- ❌ Use the pool operator address (`1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`)
-- ❌ Change pool fee percentage (fixed at 1%)
 - ❌ Use invalid address formats
 - ❌ Mine without a valid address
 
@@ -114,11 +112,7 @@ Response:
 - Try with a different address format
 - Check network connectivity
 
-### "Cannot use pool operator address"
-- You cannot mine to `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`
-- Use your own Bitcoin address
 
-## 📊 Monitoring Your Mining
 
 ### Check Your Stats
 ```bash
@@ -135,12 +129,7 @@ curl http://pool.otedama.local:8081/api/v1/balance/YOUR_BITCOIN_ADDRESS
 curl http://pool.otedama.local:8081/api/v1/payouts/YOUR_BITCOIN_ADDRESS
 ```
 
-## 🤝 Support
 
-If you have issues with your miner address:
-- Check this guide first
-- Verify address format
-- Contact support with your address (we'll never ask for private keys!)
 
 ---
 
