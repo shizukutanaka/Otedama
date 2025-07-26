@@ -52,7 +52,17 @@
       "Bash(unlink:*)",
       "Bash(del:*)",
       "Bash(npm pack:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(powershell:*)",
+      "Bash(dir:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(do if [ -f \"$file\" ])",
+      "Bash(then echo \"EXISTS: $file\")",
+      "Bash(else echo \"REMOVED: $file\")",
+      "Bash(if [ -f \"setup-unified.sh\" ])",
+      "Bash([ -f \"setup-unified.bat\" ])",
+      "Bash(then rm -f setup-unified.sh setup-unified.bat)",
+      "Bash(else echo \"Old unified setup files already removed\")"
     ],
     "deny": [
       "Bash(sudo:*)",

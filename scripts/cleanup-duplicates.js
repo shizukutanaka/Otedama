@@ -19,6 +19,12 @@ const projectRoot = path.join(__dirname, '..');
 
 // Files to remove
 const filesToRemove = [
+  // Duplicate backup implementations  
+  'lib/core/backup.js',
+  'lib/automation/auto-backup.js',
+  'lib/core/auto-backup.js',
+  'lib/core/automated-backup-system.js',
+  
   // Backup files
   'lib/api/batch-endpoints.js.bak',
   'lib/api/social-endpoints.js.bak',

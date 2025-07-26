@@ -1,57 +1,81 @@
-# Otedama Mining Pool - Production Dockerfile
-# Multi-stage build for optimal size and security
+# Otedama Mining Pool - Optimized Production Dockerfile
+# Multi-stage build with security hardening
 
 # Build stage
 FROM node:18-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++ git
+# Install only necessary build dependencies
+RUN apk add --no-cache --virtual .build-deps \
+    python3 make g++ git && \
+    apk add --no-cache --virtual .runtime-deps \
+    libstdc++
 
-# Set working directory
-WORKDIR /app
+WORKDIR /build
 
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies with exact versions
+RUN npm ci --production --no-audit --no-fund && \
+    npm cache clean --force
 
 # Copy source code
-COPY . .
+COPY --chown=node:node . .
+
+# Remove development files
+RUN rm -rf test/ tests/ examples/ docs/ scripts/test* *.md .git* .env.example
 
 # Production stage
-FROM node:18-alpine
+FROM node:18-alpine AS production
 
-# Install runtime dependencies
-RUN apk add --no-cache tini
+# Install runtime dependencies only
+RUN apk add --no-cache \
+    tini \
+    libstdc++ \
+    && rm -rf /var/cache/apk/*
 
-# Create non-root user
-RUN addgroup -g 1001 -S otedama && \
-    adduser -S -u 1001 -G otedama otedama
+# Security: Create non-root user with specific UID/GID
+RUN addgroup -g 10001 -S otedama && \
+    adduser -S -u 10001 -G otedama -h /app -s /bin/false otedama
 
-# Set working directory
 WORKDIR /app
 
-# Copy from builder
-COPY --from=builder --chown=otedama:otedama /app/node_modules ./node_modules
-COPY --chown=otedama:otedama . .
+# Copy built application
+COPY --from=builder --chown=otedama:otedama /build/node_modules ./node_modules
+COPY --from=builder --chown=otedama:otedama /build/lib ./lib
+COPY --from=builder --chown=otedama:otedama /build/config ./config
+COPY --from=builder --chown=otedama:otedama /build/scripts ./scripts
+COPY --from=builder --chown=otedama:otedama /build/*.js ./
+COPY --from=builder --chown=otedama:otedama /build/package*.json ./
 
-# Create required directories
-RUN mkdir -p data logs && \
-    chown -R otedama:otedama data logs
+# Create required directories with proper permissions
+RUN mkdir -p data logs ssl backups && \
+    chown -R otedama:otedama data logs ssl backups && \
+    chmod 700 data backups && \
+    chmod 755 logs
 
-# Switch to non-root user
+# Security hardening
+RUN chmod -R o-rwx /app && \
+    find /app -type d -exec chmod 750 {} \; && \
+    find /app -type f -exec chmod 640 {} \;
+
+# Drop all capabilities
 USER otedama
 
-# Expose ports
-EXPOSE 3333 3336 8080 9090 33333
+# Expose only necessary ports
+EXPOSE 3333 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Environment variables
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=4096 --expose-gc" \
+    LOG_LEVEL=info
+
+# Health check with timeout
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node scripts/health-check.js || exit 1
 
-# Use tini as entrypoint for proper signal handling
+# Use tini for proper PID 1 handling
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Start the pool
-CMD ["node", "--expose-gc", "start-mining-pool.js"]
+# Start with memory optimization flags
+CMD ["node", "index.js", "--mode", "pool"]

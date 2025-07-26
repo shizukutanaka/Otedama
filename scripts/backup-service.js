@@ -5,7 +5,7 @@
  * Automated backup service for production
  */
 
-import { BackupManager } from '../lib/core/backup.js';
+import { BackupRecovery } from '../lib/core/backup-recovery.js';
 import { createStructuredLogger } from '../lib/core/index.js';
 import { StorageManager } from '../lib/storage/index.js';
 import cron from 'node-cron';
@@ -23,7 +23,7 @@ class BackupService {
       ...config
     };
     
-    this.backupManager = new BackupManager({
+    this.backupManager = new BackupRecovery({
       backupDir: './backups',
       maxBackups: this.config.maxBackups,
       compress: this.config.compress,

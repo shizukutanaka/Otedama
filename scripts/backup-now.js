@@ -43,8 +43,8 @@ async function backup() {
     await poolManager.storage.initialize();
     poolManager.automation = {};
     
-    const { AutomatedBackupSystem } = await import('../lib/automation/auto-backup.js');
-    poolManager.automation.backup = new AutomatedBackupSystem({
+    const { BackupRecovery } = await import('../lib/core/backup-recovery.js');
+    poolManager.automation.backup = new BackupRecovery({
       compressionEnabled: options.compress,
       encryptionEnabled: options.encrypt,
       cloudStorage: options.cloud ? { provider: 's3' } : null

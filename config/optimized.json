@@ -1,0 +1,78 @@
+{
+  "version": "1.0.0",
+  "environment": "production",
+  "pool": {
+    "name": "Otedama Mining Pool",
+    "fee": 0.01,
+    "minimumPayout": {
+      "BTC": 0.001,
+      "default": 0.01
+    },
+    "payoutInterval": 3600000,
+    "maxMiners": 50000,
+    "maxConnectionsPerIP": 10,
+    "algorithms": ["sha256", "scrypt", "ethash", "randomx", "kawpow"],
+    "currencies": ["BTC", "ETH", "RVN", "XMR", "LTC"]
+  },
+  "network": {
+    "stratumPort": 3333,
+    "apiPort": 8080,
+    "p2pPort": 8333,
+    "sslEnabled": true,
+    "enableIPv6": true,
+    "bindAddress": "0.0.0.0",
+    "maxPeers": 100
+  },
+  "database": {
+    "type": "sqlite",
+    "path": "./data/production.db",
+    "enableWAL": true,
+    "journalMode": "WAL",
+    "synchronous": "NORMAL",
+    "cacheSize": 100000
+  },
+  "security": {
+    "rateLimiting": {
+      "enabled": true,
+      "windowMs": 60000,
+      "maxRequests": 1000,
+      "maxRequestsPerIP": 100
+    },
+    "ddosProtection": {
+      "enabled": true,
+      "maxConcurrentRequests": 1000,
+      "banDuration": 300000
+    },
+    "encryption": {
+      "algorithm": "aes-256-gcm"
+    }
+  },
+  "performance": {
+    "clustering": {
+      "enabled": true,
+      "workers": 0
+    },
+    "caching": {
+      "enabled": true,
+      "ttl": 300000
+    },
+    "compression": {
+      "enabled": true,
+      "algorithm": "gzip",
+      "level": 6
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "maxSize": "50m",
+    "maxFiles": 10
+  },
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "port": 9090,
+      "path": "/metrics"
+    }
+  }
+}

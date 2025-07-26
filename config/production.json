@@ -1,8 +1,7 @@
 {
   "version": "1.0.0",
   "environment": "production",
-  "
-  ": {
+  "info": {
     "name": "Otedama Mining Pool",
     "description": "Professional P2P Mining Pool with DeFi Integration",
     "operator": "Otedama Team",
@@ -59,11 +58,7 @@
     "bindAddress": "0.0.0.0",
     "maxPeers": 100,
     "peerDiscoveryInterval": 60000,
-    "nodeDiscoveryBootstrap": [
-      "seed1.otedama.io:8333",
-      "seed2.otedama.io:8333",
-      "seed3.otedama.io:8333"
-    ]
+    "nodeDiscoveryBootstrap": []
   },
   "database": {
     "type": "sqlite",
@@ -390,7 +385,7 @@
               "pass": ""
             }
           },
-          "to": ["admin@otedama.io"]
+          "to": ["admin@example.com"]
         }
       ]
     }

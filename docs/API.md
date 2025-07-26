@@ -1,458 +1,900 @@
 # Otedama API Documentation
 
-## Overview
+Complete API reference for the Otedama High-Performance P2P Mining Pool.
 
-Otedama provides comprehensive REST and WebSocket APIs for pool management, mining operations, and monitoring. All APIs support JSON format and include authentication for sensitive operations.
+## Table of Contents
 
-## Base URLs
+- [Authentication](#authentication)
+- [Mining Pool API](#mining-pool-api)
+- [Statistics API](#statistics-api)
+- [Monitoring API](#monitoring-api)
+- [Administration API](#administration-api)
+- [WebSocket API](#websocket-api)
+- [Error Handling](#error-handling)
+- [Rate Limiting](#rate-limiting)
+- [Examples](#examples)
 
-- REST API: `http://localhost:8080/api`
-- WebSocket: `ws://localhost:8081`
-- Stratum: `stratum+tcp://localhost:3333`
-- Stratum V2: `stratum2+tcp://localhost:3336`
+## Base URL
+
+```
+http://localhost:8081/api/v1
+```
 
 ## Authentication
 
-### API Key Authentication
+Otedama uses Zero-Knowledge Proof (ZKP) authentication for privacy-preserving access control.
 
-Include your API key in the request header:
+### Generate ZKP Token
 
-```
-X-API-Key: your-api-key-here
-```
+```http
+POST /auth/zkp/generate
+Content-Type: application/json
 
-### JWT Authentication
-
-For user-specific operations:
-
-```
-Authorization: Bearer your-jwt-token-here
-```
-
-## REST API Endpoints
-
-### Pool Information
-
-#### GET /api/stats
-Get current pool statistics.
-
-**Response:**
-```json
 {
-  "poolName": "Otedama Pool",
-  "hashrate": 1234567890,
-  "miners": 1523,
-  "workers": 3045,
-  "blocksFound": 142,
-  "totalPaid": 523.45678901,
-  "fee": 0.01,
-  "paymentScheme": "PPLNS",
-  "algorithms": ["sha256", "scrypt", "ethash"],
-  "uptime": 8640000
+  "minerAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  "attributes": {
+    "age": 25,
+    "balance": 1000,
+    "reputation": 95
+  }
 }
 ```
 
-#### GET /api/pool/info
-Get detailed pool information.
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "token": "zkp_eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+    "proof": {
+      "ageProof": "0x1a2b3c...",
+      "balanceProof": "0x4d5e6f...",
+      "reputationProof": "0x7g8h9i..."
+    },
+    "expiresAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Verify ZKP Token
+
+```http
+POST /auth/zkp/verify
+Content-Type: application/json
+Authorization: Bearer zkp_eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+
+{
+  "token": "zkp_eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "proof": {
+    "ageProof": "0x1a2b3c...",
+    "balanceProof": "0x4d5e6f...",
+    "reputationProof": "0x7g8h9i..."
+  }
+}
+```
 
 **Response:**
 ```json
 {
-  "version": "1.0.8",
-  "network": {
-    "p2pPeers": 45,
-    "stratumConnections": 1523,
-    "bandwidth": {
-      "in": "125.4 MB/s",
-      "out": "89.2 MB/s"
-    }
-  },
-  "performance": {
-    "sharesPerSecond": 10234,
-    "latency": {
-      "p50": 0.8,
-      "p95": 1.2,
-      "p99": 2.1
+  "success": true,
+  "data": {
+    "valid": true,
+    "attributes": {
+      "ageVerified": true,
+      "balanceVerified": true,
+      "reputationVerified": true
+    },
+    "sessionId": "sess_1234567890abcdef"
+  }
+}
+```
+
+## Mining Pool API
+
+### Get Pool Information
+
+```http
+GET /pool/info
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "name": "Otedama Mining Pool",
+    "algorithm": "sha256",
+    "coin": "BTC",
+    "fee": 0.01,
+    "minPayout": 0.001,
+    "blockHeight": 820156,
+    "difficulty": 73197634206448.1,
+    "networkHashrate": "550.5 EH/s",
+    "poolHashrate": "125.3 TH/s",
+    "activeMiners": 1247,
+    "blocksFound": 42,
+    "lastBlockTime": "2024-01-14T15:45:32Z",
+    "endpoints": {
+      "stratum": "stratum+tcp://localhost:3333",
+      "api": "http://localhost:8081/v1",
+      "websocket": "ws://localhost:8082/v1"
     }
   }
 }
 ```
 
-### Miner Operations
+### Submit Share
 
-#### GET /api/miner/:address
-Get miner statistics and information.
+```http
+POST /pool/submit
+Content-Type: application/json
+Authorization: Bearer zkp_token
+
+{
+  "minerId": "miner_abc123",
+  "jobId": "job_5f4e3d2c1b0a9988",
+  "nonce": 2048576543,
+  "result": "0000000000000000000123456789abcdef0000000000000000000000000000",
+  "algorithm": "sha256"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "accepted": true,
+    "shareId": "share_1705234567890",
+    "difficulty": 1024,
+    "target": "00000000ffff0000000000000000000000000000000000000000000000000000",
+    "blockFound": false,
+    "reward": 0.00001234,
+    "timestamp": "2024-01-14T15:45:33Z"
+  }
+}
+```
+
+### Get Mining Job
+
+```http
+GET /pool/job
+Authorization: Bearer zkp_token
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "job_5f4e3d2c1b0a9988",
+    "prevHash": "0000000000000000000456789abcdef1234567890000000000000000000000",
+    "coinbase1": "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff",
+    "coinbase2": "ffffffff0100f2052a01000000434104",
+    "merkleRoot": "7b2266696c6573223a5b5d2c22696e636c75646573223a5b5d7d0a",
+    "blockVersion": 536870912,
+    "nBits": "17038a6e",
+    "nTime": 1705234567,
+    "cleanJobs": true,
+    "target": "00000000ffff0000000000000000000000000000000000000000000000000000",
+    "difficulty": 1024,
+    "algorithm": "sha256"
+  }
+}
+```
+
+### Register Miner
+
+```http
+POST /pool/miners/register
+Content-Type: application/json
+Authorization: Bearer zkp_token
+
+{
+  "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  "workerName": "main-rig",
+  "userAgent": "CGMiner/4.12.0",
+  "hardware": {
+    "type": "ASIC",
+    "model": "Antminer S19 Pro",
+    "hashrate": "110 TH/s"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "minerId": "miner_abc123def456",
+    "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "workerName": "main-rig",
+    "difficulty": 1024,
+    "registeredAt": "2024-01-14T15:45:34Z",
+    "sessionTimeout": 3600
+  }
+}
+```
+
+## Statistics API
+
+### Pool Statistics
+
+```http
+GET /stats/pool
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "hashrate": {
+      "current": "125.3 TH/s",
+      "1hour": "123.7 TH/s",
+      "24hour": "119.8 TH/s",
+      "7days": "121.2 TH/s"
+    },
+    "miners": {
+      "active": 1247,
+      "total": 2156,
+      "online": 1189
+    },
+    "shares": {
+      "valid": 15234567,
+      "invalid": 12345,
+      "efficiency": 99.91
+    },
+    "blocks": {
+      "found": 42,
+      "pending": 1,
+      "confirmed": 41,
+      "orphaned": 0
+    },
+    "earnings": {
+      "total": "12.5678 BTC",
+      "pending": "0.0234 BTC",
+      "paid": "12.5444 BTC"
+    },
+    "network": {
+      "difficulty": 73197634206448.1,
+      "blockHeight": 820156,
+      "blockTime": 600,
+      "hashrate": "550.5 EH/s"
+    }
+  }
+}
+```
+
+### Miner Statistics
+
+```http
+GET /stats/miner/{address}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "workers": [
+      {
+        "name": "main-rig",
+        "hashrate": {
+          "current": "110 TH/s",
+          "1hour": "108.5 TH/s",
+          "24hour": "109.2 TH/s"
+        },
+        "shares": {
+          "valid": 12345,
+          "invalid": 23,
+          "efficiency": 99.81
+        },
+        "lastSeen": "2024-01-14T15:45:35Z",
+        "status": "online"
+      }
+    ],
+    "earnings": {
+      "unpaid": "0.00123456 BTC",
+      "paid": "0.98765432 BTC",
+      "total": "0.98888888 BTC"
+    },
+    "payments": [
+      {
+        "amount": "0.001 BTC",
+        "txid": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+        "timestamp": "2024-01-13T10:30:00Z",
+        "status": "confirmed"
+      }
+    ],
+    "performance": {
+      "avgHashrate": "109.5 TH/s",
+      "efficiency": 99.78,
+      "uptime": 98.5,
+      "ranking": 15
+    }
+  }
+}
+```
+
+### Historical Data
+
+```http
+GET /stats/hashrate?duration=3600&interval=60
+```
 
 **Parameters:**
-- `address` - Miner wallet address
+- `duration`: Time period in seconds (default: 3600)
+- `interval`: Data point interval in seconds (default: 60)
 
 **Response:**
 ```json
 {
-  "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-  "hashrate": 1234567,
-  "workers": 3,
-  "shares": {
-    "accepted": 15234,
-    "rejected": 23,
-    "stale": 5
-  },
-  "balance": 0.12345678,
-  "paid": 5.67890123,
-  "lastShare": "2024-01-20T15:30:00Z"
-}
-```
-
-#### GET /api/miner/:address/workers
-Get all workers for a miner.
-
-**Response:**
-```json
-{
-  "workers": [
-    {
-      "name": "rig1",
-      "hashrate": 456789,
-      "shares": {
-        "accepted": 5234,
-        "rejected": 8
+  "success": true,
+  "data": {
+    "duration": 3600,
+    "interval": 60,
+    "points": [
+      {
+        "timestamp": "2024-01-14T14:45:00Z",
+        "poolHashrate": "123.5 TH/s",
+        "networkHashrate": "549.2 EH/s",
+        "difficulty": 73197634206448.1,
+        "activeMiners": 1243
       },
-      "lastShare": "2024-01-20T15:28:00Z",
-      "difficulty": 65536
-    }
-  ]
+      {
+        "timestamp": "2024-01-14T14:46:00Z",
+        "poolHashrate": "124.1 TH/s",
+        "networkHashrate": "550.1 EH/s",
+        "difficulty": 73197634206448.1,
+        "activeMiners": 1245
+      }
+    ]
+  }
 }
 ```
 
-#### GET /api/miner/:address/payments
-Get payment history.
+## Monitoring API
 
-**Query Parameters:**
-- `limit` - Number of records (default: 100)
-- `offset` - Pagination offset (default: 0)
+### System Health
 
-**Response:**
-```json
-{
-  "payments": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "amount": 0.12345678,
-      "txid": "0x123...",
-      "timestamp": "2024-01-20T12:00:00Z",
-      "confirmations": 6
-    }
-  ],
-  "total": 142,
-  "hasMore": true
-}
-```
-
-### Mining Operations
-
-#### POST /api/share/submit
-Submit a share (usually handled by Stratum).
-
-**Request:**
-```json
-{
-  "jobId": "abc123",
-  "nonce": "0x12345678",
-  "hash": "0x000000000019d6689c085ae165831e93...",
-  "worker": "rig1",
-  "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-}
+```http
+GET /monitor/health
+Authorization: Bearer admin_token
 ```
 
 **Response:**
 ```json
 {
-  "accepted": true,
-  "difficulty": 65536,
-  "reward": 0.00001234
-}
-```
-
-### Administrative Operations
-
-#### POST /api/admin/pool/fee
-Update pool fee (requires admin authentication).
-
-**Request:**
-```json
-{
-  "fee": 0.015
-}
-```
-
-#### POST /api/admin/payout/trigger
-Manually trigger payouts.
-
-**Request:**
-```json
-{
-  "minAmount": 0.01,
-  "addresses": [] // Optional: specific addresses
-}
-```
-
-#### GET /api/admin/monitoring
-Get detailed monitoring data.
-
-**Response:**
-```json
-{
-  "system": {
-    "cpu": 45.2,
-    "memory": {
-      "used": 8192,
-      "total": 16384
+  "success": true,
+  "data": {
+    "status": "HEALTHY",
+    "uptime": 86400,
+    "version": "1.1.0",
+    "timestamp": "2024-01-14T15:45:36Z",
+    "components": {
+      "database": {
+        "status": "OK",
+        "latency": 2.3,
+        "connections": 15
+      },
+      "stratum": {
+        "status": "OK",
+        "connections": 1247,
+        "bandwidth": "125 MB/s"
+      },
+      "monitoring": {
+        "status": "OK",
+        "alerts": 0,
+        "metrics": 15234
+      },
+      "security": {
+        "status": "OK",
+        "threats": 0,
+        "zkpSessions": 1189
+      }
     },
-    "disk": {
-      "used": 102400,
-      "total": 512000
+    "resources": {
+      "cpu": {
+        "usage": 45.2,
+        "cores": 16,
+        "load": [1.2, 1.4, 1.1]
+      },
+      "memory": {
+        "used": "8.5 GB",
+        "total": "32 GB",
+        "usage": 26.5
+      },
+      "disk": {
+        "used": "125 GB",
+        "total": "1 TB",
+        "usage": 12.5
+      }
     }
-  },
-  "network": {
-    "connections": 1523,
-    "bandwidth": {
-      "in": 125.4,
-      "out": 89.2
+  }
+}
+```
+
+### Performance Metrics
+
+```http
+GET /monitor/metrics
+Authorization: Bearer admin_token
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "performance": {
+      "shareValidation": {
+        "avg": 1.2,
+        "p95": 2.8,
+        "p99": 5.1,
+        "throughput": 1250
+      },
+      "hashCalculation": {
+        "avg": 0.8,
+        "p95": 1.5,
+        "p99": 2.3,
+        "throughput": 2500
+      },
+      "networkIO": {
+        "bytesIn": "250 MB/s",
+        "bytesOut": "125 MB/s",
+        "connections": 1247,
+        "latency": 15.2
+      }
+    },
+    "objectPools": {
+      "shares": {
+        "hitRate": 98.5,
+        "size": 5000,
+        "utilization": 75.2
+      },
+      "blocks": {
+        "hitRate": 95.8,
+        "size": 100,
+        "utilization": 23.1
+      }
+    },
+    "cache": {
+      "hitRate": 92.3,
+      "size": "512 MB",
+      "evictions": 1234
     }
+  }
+}
+```
+
+### Alerts
+
+```http
+GET /monitor/alerts
+Authorization: Bearer admin_token
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "active": [
+      {
+        "id": "alert_1234567890",
+        "severity": "WARNING",
+        "title": "High CPU Usage",
+        "description": "CPU usage above 80% for 5 minutes",
+        "timestamp": "2024-01-14T15:40:00Z",
+        "acknowledged": false,
+        "escalated": false
+      }
+    ],
+    "recent": [
+      {
+        "id": "alert_0987654321",
+        "severity": "INFO",
+        "title": "New Block Found",
+        "description": "Block #820156 found by miner_xyz789",
+        "timestamp": "2024-01-14T15:35:12Z",
+        "resolved": true
+      }
+    ]
+  }
+}
+```
+
+## Administration API
+
+### Node Management
+
+```http
+GET /admin/nodes
+Authorization: Bearer admin_token
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "nodes": [
+      {
+        "id": "us-east-node-01",
+        "region": "us-east",
+        "status": "healthy",
+        "connections": 412,
+        "hashrate": "42.1 TH/s",
+        "load": 0.65,
+        "uptime": 172800,
+        "endpoints": {
+          "stratum": "stratum+tcp://us-east-01.pool.example.com:3333",
+          "api": "http://us-east-01.pool.example.com:8081/v1"
+        }
+      }
+    ],
+    "summary": {
+      "total": 12,
+      "healthy": 11,
+      "warning": 1,
+      "critical": 0
+    }
+  }
+}
+```
+
+### Configuration
+
+```http
+GET /admin/config
+Authorization: Bearer admin_token
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "pool": {
+      "name": "Otedama Mining Pool",
+      "algorithm": "sha256",
+      "fee": 0.01,
+      "minPayout": 0.001,
+      "payoutInterval": 86400
+    },
+    "security": {
+      "zkpEnabled": true,
+      "rateLimitEnabled": true,
+      "ddosProtection": true,
+      "maxConnections": 10000
+    },
+    "performance": {
+      "workerThreads": 16,
+      "shareBufferSize": 10000,
+      "objectPooling": true,
+      "compressionEnabled": true
+    }
+  }
+}
+```
+
+### Update Configuration
+
+```http
+PUT /admin/config
+Content-Type: application/json
+Authorization: Bearer admin_token
+
+{
+  "pool": {
+    "fee": 0.015,
+    "minPayout": 0.0005
   },
-  "security": {
-    "blockedIPs": 23,
-    "rateLimited": 145,
-    "threats": 5
+  "performance": {
+    "workerThreads": 20,
+    "shareBufferSize": 15000
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "updated": [
+      "pool.fee",
+      "pool.minPayout",
+      "performance.workerThreads",
+      "performance.shareBufferSize"
+    ],
+    "timestamp": "2024-01-14T15:45:37Z"
   }
 }
 ```
 
 ## WebSocket API
 
-### Connection
+Connect to real-time updates via WebSocket:
 
-```javascript
-const ws = new WebSocket('ws://localhost:8081');
-
-ws.on('open', () => {
-  // Authenticate
-  ws.send(JSON.stringify({
-    type: 'auth',
-    apiKey: 'your-api-key'
-  }));
-});
+```
+wss://ws.otedama.com/v1
 ```
 
-### Subscriptions
+### Authentication
 
-#### Subscribe to Pool Stats
 ```json
 {
-  "type": "subscribe",
-  "channel": "pool_stats"
+  "type": "auth",
+  "token": "zkp_eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
 }
 ```
 
-**Updates:**
+### Subscribe to Updates
+
 ```json
 {
-  "type": "pool_stats",
+  "type": "subscribe",
+  "channels": ["hashrate", "blocks", "alerts"]
+}
+```
+
+### Real-time Messages
+
+**Hashrate Update:**
+```json
+{
+  "type": "hashrate",
   "data": {
-    "hashrate": 1234567890,
-    "miners": 1523,
-    "difficulty": 123456789
+    "poolHashrate": "125.8 TH/s",
+    "networkHashrate": "551.2 EH/s",
+    "timestamp": "2024-01-14T15:45:38Z"
   }
 }
 ```
 
-#### Subscribe to Miner Updates
+**Block Found:**
 ```json
 {
-  "type": "subscribe",
-  "channel": "miner",
-  "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-}
-```
-
-**Updates:**
-```json
-{
-  "type": "miner_update",
+  "type": "block",
   "data": {
-    "hashrate": 1234567,
-    "shares": {
-      "accepted": 15235,
-      "rejected": 23
-    },
-    "balance": 0.12345679
-  }
-}
-```
-
-#### Subscribe to Blocks
-```json
-{
-  "type": "subscribe",
-  "channel": "blocks"
-}
-```
-
-**Updates:**
-```json
-{
-  "type": "new_block",
-  "data": {
-    "height": 815234,
-    "hash": "0x000000000019d6689c085ae165831e93...",
+    "height": 820157,
+    "hash": "00000000000000000001a2b3c4d5e6f7890abcdef1234567890abcdef123456",
     "reward": 6.25,
-    "finder": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-    "timestamp": "2024-01-20T15:30:00Z"
+    "finder": "miner_xyz789",
+    "timestamp": "2024-01-14T15:45:39Z"
   }
 }
 ```
 
-## Stratum Protocol
-
-### Stratum V1
-
-Standard JSON-RPC 2.0 over TCP.
-
-#### Mining.Subscribe
+**Alert:**
 ```json
 {
-  "id": 1,
-  "method": "mining.subscribe",
-  "params": ["OtedamaMiner/1.0"]
+  "type": "alert",
+  "data": {
+    "id": "alert_2345678901",
+    "severity": "HIGH",
+    "title": "Share Rate Drop",
+    "description": "Share submission rate dropped by 20%",
+    "timestamp": "2024-01-14T15:45:40Z"
+  }
 }
 ```
 
-#### Mining.Authorize
+## Error Handling
+
+All API responses follow this format:
+
+**Success Response:**
 ```json
 {
-  "id": 2,
-  "method": "mining.authorize",
-  "params": ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.worker1", "password"]
+  "success": true,
+  "data": { ... }
 }
 ```
 
-#### Mining.Submit
+**Error Response:**
 ```json
 {
-  "id": 3,
-  "method": "mining.submit",
-  "params": ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.worker1", "job123", "00000000", "65432100", "12345678"]
+  "success": false,
+  "error": {
+    "code": "INVALID_SHARE",
+    "message": "Share validation failed",
+    "details": {
+      "reason": "Hash does not meet target difficulty",
+      "expected": "0000ffff...",
+      "received": "0001abcd..."
+    },
+    "timestamp": "2024-01-14T15:45:41Z"
+  }
 }
 ```
 
-### Stratum V2
-
-Binary protocol with improved efficiency.
-
-```
-Message Format:
-[Message Type: 1 byte][Flags: 1 byte][Length: 2 bytes][Payload: variable]
-
-Message Types:
-0x01 - Setup Connection
-0x02 - Setup Success
-0x03 - Setup Error
-0x10 - New Mining Job
-0x11 - Submit Share
-0x12 - Share Accepted
-0x13 - Share Rejected
-```
-
-## Error Codes
+### Common Error Codes
 
 | Code | Description |
 |------|-------------|
-| 400 | Bad Request - Invalid parameters |
-| 401 | Unauthorized - Missing or invalid authentication |
-| 403 | Forbidden - Insufficient permissions |
-| 404 | Not Found - Resource not found |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error |
-| 503 | Service Unavailable - Pool maintenance |
+| `INVALID_TOKEN` | Authentication token is invalid or expired |
+| `INSUFFICIENT_PRIVILEGES` | User lacks required permissions |
+| `INVALID_SHARE` | Submitted share is invalid |
+| `MINER_NOT_FOUND` | Miner not registered |
+| `RATE_LIMITED` | Request rate limit exceeded |
+| `POOL_FULL` | Pool has reached maximum capacity |
+| `MAINTENANCE_MODE` | Pool is under maintenance |
+| `INVALID_ALGORITHM` | Unsupported mining algorithm |
+| `NETWORK_ERROR` | Network connectivity issue |
+| `INTERNAL_ERROR` | Internal server error |
 
 ## Rate Limiting
 
-- Default: 1000 requests per minute per IP
-- Authenticated: 5000 requests per minute
-- WebSocket: 100 messages per second
+API endpoints are rate limited to ensure fair usage:
 
-## Webhooks
+| Endpoint Category | Rate Limit |
+|-------------------|------------|
+| Authentication | 10 requests/minute |
+| Pool Operations | 100 requests/minute |
+| Statistics | 60 requests/minute |
+| Monitoring | 30 requests/minute |
+| Administration | 20 requests/minute |
 
-Configure webhooks for real-time notifications:
+Rate limit headers are included in responses:
 
-```json
-POST /api/admin/webhooks
-{
-  "url": "https://your-server.com/webhook",
-  "events": ["block_found", "large_payment", "worker_offline"],
-  "secret": "your-webhook-secret"
-}
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 85
+X-RateLimit-Reset: 1705234890
 ```
 
-## SDK Examples
+## Examples
 
-### JavaScript/Node.js
+### Complete Mining Session
+
+```bash
+# 1. Generate ZKP token
+curl -X POST http://localhost:8081/api/v1/auth/zkp/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "minerAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "attributes": {"age": 25, "balance": 1000, "reputation": 95}
+  }'
+
+# 2. Register miner
+curl -X POST http://localhost:8081/api/v1/pool/miners/register \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer zkp_token_here" \
+  -d '{
+    "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "workerName": "main-rig",
+    "userAgent": "CGMiner/4.12.0"
+  }'
+
+# 3. Get mining job
+curl -X GET http://localhost:8081/api/v1/pool/job \
+  -H "Authorization: Bearer zkp_token_here"
+
+# 4. Submit share
+curl -X POST http://localhost:8081/api/v1/pool/submit \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer zkp_token_here" \
+  -d '{
+    "minerId": "miner_abc123",
+    "jobId": "job_5f4e3d2c1b0a9988",
+    "nonce": 2048576543,
+    "result": "0000000000000000000123456789abcdef0000000000000000000000000000"
+  }'
+
+# 5. Check statistics
+curl -X GET http://localhost:8081/api/v1/stats/miner/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+```
+
+### WebSocket Connection (JavaScript)
 
 ```javascript
-import { OtedamaClient } from 'otedama-sdk';
+const ws = new WebSocket('wss://ws.otedama.com/v1');
 
-const client = new OtedamaClient({
-  apiKey: 'your-api-key',
-  baseUrl: 'http://localhost:8080'
-});
+ws.onopen = () => {
+  // Authenticate
+  ws.send(JSON.stringify({
+    type: 'auth',
+    token: 'zkp_eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
+  }));
+  
+  // Subscribe to updates
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    channels: ['hashrate', 'blocks', 'alerts']
+  }));
+};
 
-// Get pool stats
-const stats = await client.getPoolStats();
-
-// Monitor miner
-client.on('miner:update', (data) => {
-  console.log('Miner update:', data);
-});
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  
+  switch (message.type) {
+    case 'hashrate':
+      console.log('Pool hashrate:', message.data.poolHashrate);
+      break;
+    case 'block':
+      console.log('New block found:', message.data.height);
+      break;
+    case 'alert':
+      console.log('Alert:', message.data.title);
+      break;
+  }
+};
 ```
 
-### Python
+### Python Client Example
 
 ```python
-from otedama import OtedamaClient
+import requests
+import json
 
-client = OtedamaClient(
-    api_key='your-api-key',
-    base_url='http://localhost:8080'
-)
+class OtedamaClient:
+    def __init__(self, base_url="http://localhost:8081/api/v1"):
+        self.base_url = base_url
+        self.token = None
+    
+    def authenticate(self, miner_address, attributes):
+        response = requests.post(f"{self.base_url}/auth/zkp/generate", json={
+            "minerAddress": miner_address,
+            "attributes": attributes
+        })
+        
+        if response.json()["success"]:
+            self.token = response.json()["data"]["token"]
+            return True
+        return False
+    
+    def get_pool_info(self):
+        response = requests.get(f"{self.base_url}/pool/info")
+        return response.json()
+    
+    def get_miner_stats(self, address):
+        headers = {"Authorization": f"Bearer {self.token}"}
+        response = requests.get(f"{self.base_url}/stats/miner/{address}", headers=headers)
+        return response.json()
+    
+    def submit_share(self, miner_id, job_id, nonce, result):
+        headers = {"Authorization": f"Bearer {self.token}"}
+        data = {
+            "minerId": miner_id,
+            "jobId": job_id,
+            "nonce": nonce,
+            "result": result
+        }
+        response = requests.post(f"{self.base_url}/pool/submit", json=data, headers=headers)
+        return response.json()
 
-# Get miner info
-miner = client.get_miner('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')
+# Usage
+client = OtedamaClient()
+client.authenticate("bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", {
+    "age": 25,
+    "balance": 1000,
+    "reputation": 95
+})
 
-# Subscribe to updates
-@client.on('pool_stats')
-def on_stats(data):
-    print(f"Pool hashrate: {data['hashrate']}")
+pool_info = client.get_pool_info()
+print(f"Pool hashrate: {pool_info['data']['poolHashrate']}")
 ```
 
-## Best Practices
+## SDK Downloads
 
-1. **Authentication**: Always use HTTPS in production
-2. **Rate Limiting**: Implement exponential backoff
-3. **Error Handling**: Check response status codes
-4. **WebSocket**: Implement reconnection logic
-5. **Monitoring**: Subscribe only to needed channels
+Official SDKs are available for popular programming languages:
 
-## API Versioning
+- **JavaScript/Node.js**: `npm install otedama-api-client`
+- **Python**: `pip install otedama-client`
+- **Go**: `go get github.com/shizukutanaka/otedama-go-client`
+- **Rust**: `cargo add otedama-client`
+- **Java**: Available on Maven Central
 
-The API uses semantic versioning. Version is included in response headers:
+## Support
 
-```
-X-API-Version: 1.0.8
-```
+- **Documentation**: See this API document
+- **GitHub Issues**: https://github.com/shizukutanaka/Otedama/issues
 
-Deprecated endpoints include a deprecation notice:
+---
 
-```
-X-API-Deprecated: true
-X-API-Deprecation-Date: 2024-12-31
-```
+*This documentation covers Otedama API v1. For the latest updates, visit our [GitHub repository](https://github.com/shizukutanaka/Otedama).*
