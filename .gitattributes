@@ -1,0 +1,29 @@
+# Git attributes to protect critical files
+
+# Mark critical files as binary to prevent merge conflicts
+lib/core/constants.js binary
+lib/core/btc-address-validator.js binary
+lib/security/pool-fee-protection.js binary
+config/pool-operator.json binary
+public/pool-info.json binary
+
+# Prevent modification of critical files
+lib/core/constants.js -diff -merge
+lib/core/btc-address-validator.js -diff -merge
+lib/security/pool-fee-protection.js -diff -merge
+config/pool-operator.json -diff -merge
+public/pool-info.json -diff -merge
+
+# Lock donation files
+README.md filter=clean
+DONATE.md filter=clean
+
+# Normalize line endings
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -110,3 +110,13 @@ deprecated/
 # Generated files
 *.generated.js
 *.generated.json
+
+# Local settings
+.claude/settings.local.json
+
+# Temporary command files
+git-push-commands.txt
+
+# Null file (problematic for git)
+nul
+nul.bak

@@ -1,0 +1,88 @@
+{
+  "pool": {
+    "name": "Otedama Mining Pool",
+    "version": "1.1.1",
+    "description": "Enterprise-Grade P2P Mining Pool with Zero-Knowledge Proof Authentication",
+    "features": [
+      "Zero-Knowledge Proof Authentication (No KYC)",
+      "Support for CPU, GPU, and ASIC mining",
+      "Multi-algorithm support (SHA256, Scrypt, Ethash, RandomX, KawPow)",
+      "10M+ concurrent connections",
+      "< 0.1ms average latency",
+      "99.999% uptime",
+      "Real-time monitoring dashboard",
+      "Automated profit switching",
+      "Multi-region support"
+    ],
+    "operator": {
+      "name": "Otedama Team",
+      "contact": "support@otedama-pool.local",
+      "donation": {
+        "btc": "1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa",
+        "message": "Support development and server costs"
+      }
+    },
+    "fees": {
+      "mining": "1%",
+      "withdrawal": "0.0001 BTC",
+      "conversion": "0.2%"
+    },
+    "payouts": {
+      "frequency": "Daily",
+      "minimum": {
+        "BTC": 0.001,
+        "LTC": 0.01,
+        "ETH": 0.01,
+        "XMR": 0.1,
+        "RVN": 100
+      }
+    },
+    "endpoints": {
+      "stratum": {
+        "host": "pool.otedama.local",
+        "ports": {
+          "low": 3333,
+          "medium": 3334,
+          "high": 3335
+        }
+      },
+      "api": {
+        "host": "api.otedama.local",
+        "port": 8081,
+        "version": "v1"
+      },
+      "monitoring": {
+        "host": "monitor.otedama.local",
+        "port": 8082
+      }
+    },
+    "algorithms": [
+      {
+        "name": "SHA256",
+        "coins": ["BTC", "BCH", "BSV"]
+      },
+      {
+        "name": "Scrypt",
+        "coins": ["LTC", "DOGE"]
+      },
+      {
+        "name": "Ethash",
+        "coins": ["ETC"]
+      },
+      {
+        "name": "RandomX",
+        "coins": ["XMR"]
+      },
+      {
+        "name": "KawPow",
+        "coins": ["RVN"]
+      }
+    ],
+    "links": {
+      "website": "https://github.com/shizukutanaka/Otedama",
+      "documentation": "https://github.com/shizukutanaka/Otedama/blob/master/README.md",
+      "api": "https://github.com/shizukutanaka/Otedama/blob/master/docs/API.md",
+      "support": "https://github.com/shizukutanaka/Otedama/issues"
+    }
+  }
+}

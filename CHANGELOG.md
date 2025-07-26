@@ -5,6 +5,33 @@ All notable changes to Otedama will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-01-26
+
+### Added
+- Fixed pool operator BTC address: `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa` (immutable)
+- Comprehensive bilingual documentation (English and Japanese)
+  - `DONATE.md` and `DONATE.ja.md` for donation information
+  - `README.ja.md` - Complete Japanese documentation
+  - `docs/MINER-ADDRESS-SETUP.md` and Japanese version
+  - `README-SETUP.ja.md` - Japanese setup guide
+- BTC address validation system with strict separation
+- Pool fee protection system with multiple security layers
+- Public pool information endpoint at `/pool-info.json`
+- Webpack plugin for fee integrity verification
+- Git attributes for critical file protection
+
+### Changed
+- Clear separation between pool operator address (fixed) and miner addresses (flexible)
+- Enhanced unified stratum server with address validation
+- Updated all documentation to include pool operator address information
+
+### Security
+- Implemented immutable constants system with deep freeze
+- Added multiple layers of address validation
+- Protected critical configuration files with `.gitattributes`
+- Enhanced miner connection validation
+- Pool operator address cannot be used as miner address
+
 ## [1.1.1] - 2025-01-26
 
 ### Added

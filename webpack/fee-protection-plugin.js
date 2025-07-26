@@ -59,7 +59,7 @@ class FeeProtectionPlugin {
     const criticalPatterns = [
       /BASE_FEE:\s*0\.01/,
       /OPERATOR_ADDRESSES:/,
-      /bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh/
+      /1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa/
     ];
     
     for (const pattern of criticalPatterns) {

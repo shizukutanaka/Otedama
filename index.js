@@ -19,6 +19,7 @@
 
 import { createStructuredLogger } from './lib/core/structured-logger.js';
 import { configManager } from './lib/core/config-manager.js';
+import { validateConstants, POOL_OPERATOR } from './lib/core/constants.js';
 import { Command } from 'commander';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -86,7 +87,16 @@ async function main() {
     
     const config = configManager.getAll();
     
-    logger.info('Starting Otedama...', {
+    // Validate immutable constants
+    try {
+      validateConstants();
+      logger.info(`Pool operator BTC address: ${POOL_OPERATOR.BTC_ADDRESS}`);
+    } catch (error) {
+      logger.error('FATAL: Constants validation failed:', error);
+      process.exit(1);
+    }
+    
+    logger.info('Starting Otedama v1.1.1...', {
       mode: options.mode,
       algorithm: options.algorithm,
       coin: options.coin,

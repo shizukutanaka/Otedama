@@ -31,7 +31,7 @@ POST /auth/zkp/generate
 Content-Type: application/json
 
 {
-  "minerAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+  "minerAddress": "YOUR_BITCOIN_ADDRESS",
   "attributes": {
     "age": 25,
     "balance": 1000,
@@ -757,7 +757,7 @@ X-RateLimit-Reset: 1705234890
 curl -X POST http://localhost:8081/api/v1/auth/zkp/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "minerAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+    "minerAddress": "YOUR_BITCOIN_ADDRESS",
     "attributes": {"age": 25, "balance": 1000, "reputation": 95}
   }'
 

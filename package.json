@@ -1,6 +1,6 @@
 {
   "name": "otedama",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Otedama - Enterprise-Grade Professional Mining Platform with Zero-Knowledge Proof Authentication",
   "type": "module",
   "main": "index.js",
