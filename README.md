@@ -506,7 +506,7 @@ MIT License - Free for commercial use
 ## Project Information
 
 - **Repository**: https://github.com/shizukutanaka/Otedama
-- **Version**: 1.1.2
+- **Version**: 1.1.3
 - **Node.js**: >=18.0.0 required
 - **License**: MIT
 

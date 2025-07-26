@@ -96,7 +96,7 @@ async function main() {
       process.exit(1);
     }
     
-    logger.info('Starting Otedama v1.1.1...', {
+    logger.info('Starting Otedama v1.1.3...', {
       mode: options.mode,
       algorithm: options.algorithm,
       coin: options.coin,
