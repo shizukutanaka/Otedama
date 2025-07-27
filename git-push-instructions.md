@@ -2,7 +2,7 @@
 
 ## Prerequisites
 1. Git installed on your system
-2. GitHub account with access to https://github.com/shizukutanaka/Otedama
+2. GitHub account with access to your repository
 3. Git configured with your credentials
 
 ## Step 1: Initialize Git (if not already done)
@@ -13,7 +13,7 @@ git init
 
 ## Step 2: Add Remote Repository
 ```bash
-git remote add origin https://github.com/shizukutanaka/Otedama.git
+git remote add origin <your-github-repository-url>
 ```
 
 ## Step 3: Check Current Status
@@ -91,7 +91,7 @@ git config --global user.email "your.email@example.com"
 
 ### If remote already exists:
 ```bash
-git remote set-url origin https://github.com/shizukutanaka/Otedama.git
+git remote set-url origin <your-github-repository-url>
 ```
 
 ### To check remote URL:

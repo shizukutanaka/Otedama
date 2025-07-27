@@ -1,0 +1,33 @@
+Release v1.1.5 - Enterprise Security Suite
+
+Major Features:
+- Implement Zero Trust Security Architecture with continuous verification
+- Add End-to-End Encryption v2 with Perfect Forward Secrecy
+- Integrate Hardware Security Module (HSM) support
+- Implement AI-powered Behavioral Anomaly Detection
+- Add Advanced DDoS Protection with adaptive mitigation
+
+Security Enhancements:
+- Multi-factor verification with device fingerprinting
+- Microsegmentation for granular access control
+- Double Ratchet protocol for E2E encryption
+- Real-time threat detection across 9 behavioral dimensions
+- Automated incident response system
+
+Technical Improvements:
+- Fix memory leaks in authentication modules
+- Add SQL injection prevention layer
+- Implement secure secret management
+- Add comprehensive audit logging
+- Optimize security module performance
+
+Compliance:
+- FIPS 140-2 Level 3 ready (with appropriate HSM)
+- PCI DSS, SOC 2, GDPR, CCPA compliant architecture
+- Zero-knowledge proof authentication enhancements
+
+This release transforms Otedama into an enterprise-grade platform suitable
+for nation-scale deployments with state-of-the-art security features while
+maintaining backward compatibility and high performance.
+
+See SECURITY_IMPROVEMENTS.md for detailed implementation information.

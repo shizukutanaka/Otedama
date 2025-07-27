@@ -62,7 +62,8 @@
       "Bash(if [ -f \"setup-unified.sh\" ])",
       "Bash([ -f \"setup-unified.bat\" ])",
       "Bash(then rm -f setup-unified.sh setup-unified.bat)",
-      "Bash(else echo \"Old unified setup files already removed\")"
+      "Bash(else echo \"Old unified setup files already removed\")",
+      "Bash(npm outdated:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

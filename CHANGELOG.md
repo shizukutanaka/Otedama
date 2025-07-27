@@ -179,4 +179,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-For detailed information about each release, see the [GitHub Releases](https://github.com/shizukutanaka/Otedama/releases) page.
+For detailed information about each release, see the project's GitHub Releases page.

@@ -18,7 +18,7 @@
  */
 
 import { createStructuredLogger } from './lib/core/structured-logger.js';
-import { configManager } from './lib/core/config-manager.js';
+import { secureConfig } from './lib/core/secure-config.js';
 import { validateConstants, POOL_OPERATOR } from './lib/core/constants.js';
 import { Command } from 'commander';
 import { fileURLToPath } from 'url';
@@ -76,8 +76,8 @@ async function main() {
   try {
     displayBanner();
     
-    // Load configuration
-    await configManager.load({
+    // Load secure configuration
+    await secureConfig.initialize({
       files: [
         path.join(__dirname, options.config),
         path.join(__dirname, '.env')
@@ -85,7 +85,7 @@ async function main() {
       validate: true
     });
     
-    const config = configManager.getAll();
+    const config = secureConfig.getAll();
     
     // Validate immutable constants
     try {

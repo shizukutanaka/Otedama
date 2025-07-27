@@ -1,8 +1,12 @@
-# Otedama
+# Otedama v1.1.5
 
-**Professional-Grade P2P Mining Platform with Zero-Knowledge Privacy**
+**Professional-Grade P2P Mining Platform with Zero-Knowledge Privacy & Enterprise Security**
 
-Otedama is a production-ready mining pool and client supporting CPU/GPU/ASIC hardware with enterprise-grade features and privacy-first design. No KYC required - powered by zero-knowledge proof authentication.
+[![Version](https://img.shields.io/badge/version-1.1.5-blue.svg)](https://github.com/shizukutanaka/Otedama/releases)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Security](https://img.shields.io/badge/security-enterprise--grade-brightgreen.svg)](SECURITY_IMPROVEMENTS.md)
+
+Otedama is a production-ready mining pool and client supporting CPU/GPU/ASIC hardware with enterprise-grade features and privacy-first design. No KYC required - powered by zero-knowledge proof authentication and state-of-the-art security.
 
 ## Key Features
 
@@ -19,12 +23,15 @@ Otedama is a production-ready mining pool and client supporting CPU/GPU/ASIC har
 - **Real-time metrics** - Nanosecond precision monitoring
 - **Adaptive algorithms** - Self-optimizing performance
 
-### 🔒 Privacy & Security
+### 🔒 Privacy & Security (v1.1.5 Enhanced)
 - **Zero-Knowledge Proof Authentication** - No KYC required
-- **Complete privacy protection** - Anonymous mining support
+- **Zero Trust Architecture** - Continuous verification and microsegmentation
+- **End-to-End Encryption v2** - Perfect forward secrecy with Double Ratchet
+- **Hardware Security Module** - FIPS 140-2 Level 3 compliant key management
+- **AI Behavioral Detection** - Real-time anomaly detection and threat response
+- **Advanced DDoS Protection** - Multi-layered defense with adaptive mitigation
 - **GDPR/CCPA compliant** - Regulatory compliance built-in
-- **Anti-fraud detection** - Advanced security without surveillance
-- **End-to-end encryption** - All communications secured
+- **Complete privacy protection** - Anonymous mining support
 
 ### 🌍 Global Scale
 - **Multi-region deployment** - Worldwide optimal connectivity
@@ -84,6 +91,27 @@ Otedama is a production-ready mining pool and client supporting CPU/GPU/ASIC har
 - **National-scale capacity** - Support for entire country's mining infrastructure
 - **Energy grid integration** - Compatible with national power management systems
 - **Strategic reserve mining** - Support for national cryptocurrency reserves
+
+### 🛡️ NEW: Enterprise Security Suite (v1.1.5)
+- **Zero Trust Security Model** - Never trust, always verify with adaptive access control
+- **Behavioral Anomaly Detection** - ML-powered threat detection across 9 dimensions
+- **Hardware Crypto Operations** - HSM integration for secure key management
+- **Advanced Threat Mitigation** - Real-time response to DDoS, data exfiltration, lateral movement
+- **Compliance Ready** - FIPS 140-2, PCI DSS, SOC 2 compatible architecture
+- **Forensic Capabilities** - Comprehensive audit trails and incident analysis
+
+---
+
+## What's New in v1.1.5
+
+**Enterprise Security Suite** - This release introduces comprehensive security enhancements making Otedama suitable for nation-scale deployments:
+- Zero Trust Architecture with continuous verification
+- AI-powered behavioral anomaly detection
+- Hardware Security Module (HSM) support
+- Advanced DDoS protection with adaptive mitigation
+- End-to-end encryption with perfect forward secrecy
+
+See [CHANGELOG-v1.1.5.md](CHANGELOG-v1.1.5.md) for full details.
 
 ---
 

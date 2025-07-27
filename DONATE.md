@@ -31,7 +31,7 @@ Every contribution, no matter how small, helps keep Otedama free and open source
 
 ### Other Ways to Support
 
-- Star the project on [GitHub](https://github.com/shizukutanaka/Otedama)
+- Star the project on GitHub
 - Report bugs and suggest features
 - Contribute code or documentation
 - Share Otedama with others
@@ -65,7 +65,7 @@ Otedamaマイニングプールの継続的な開発と運営をご支援くだ�
 
 ### その他の支援方法
 
-- [GitHub](https://github.com/shizukutanaka/Otedama)でプロジェクトにスターを付ける
+- GitHubでプロジェクトにスターを付ける
 - バグを報告し、機能を提案する
 - コードやドキュメントに貢献する
 - Otedamaを他の人と共有する
