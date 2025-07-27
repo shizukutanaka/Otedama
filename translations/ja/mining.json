@@ -1,0 +1,22 @@
+{
+  "status": {
+    "active": "稼働中",
+    "inactive": "停止中",
+    "paused": "一時停止",
+    "error": "エラー"
+  },
+  "metrics": {
+    "hashrate": "ハッシュレート",
+    "shares": "シェア",
+    "difficulty": "難易度",
+    "efficiency": "効率",
+    "temperature": "温度",
+    "power": "消費電力"
+  },
+  "actions": {
+    "start": "マイニング開始",
+    "stop": "マイニング停止",
+    "pause": "マイニング一時停止",
+    "resume": "マイニング再開"
+  }
+}
