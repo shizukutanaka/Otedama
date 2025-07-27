@@ -37,6 +37,13 @@ Otedamaは、CPU/GPU/ASIC全対応の超高性能P2Pマイニングプールで�
 - **多通貨対応** - Bitcoin, Ethereum, Litecoin, Monero, Ravencoin等
 - **自動収益最適化** - リアルタイム収益性判断
 
+### ソロマイニング対応（新機能！）
+- **ハイブリッド運用** - プールと並行してソロマイニング可能
+- **リソース配分** - ソロ/プール間で柔軟に配分設定
+- **直接報酬** - ブロック発見時は全額自分のウォレットへ
+- **リスク分散** - 安定収入とジャックポットの両立
+- **自動切替** - 運に応じて最適な配分に自動調整
+
 ---
 
 ## 対象ユーザー
@@ -133,6 +140,23 @@ xmrig -o your-pool.com:3333 \
 
 ### マイニングソフト自動選択
 プールが最適なアルゴリズムを自動選択し、収益を最大化します。
+
+### ソロマイニング設定（新機能！）
+```bash
+# 環境変数で設定
+export ENABLE_SOLO_MINING=true
+export SOLO_COINBASE_ADDRESS=あなたのウォレットアドレス
+export SOLO_ALLOCATION_RATIO=0.3  # 30%ソロ、70%プール
+
+# プールとソロマイニングを同時に開始
+npm run start:pool
+
+# ソロマイニング統計を確認
+# Web UI: http://localhost:8081/solo
+# API: http://localhost:8080/api/solo/stats
+
+# ソロブロック発見時は全報酬が直接あなたのウォレットへ！
+```
 
 ---
 

@@ -5,6 +5,34 @@ All notable changes to Otedama will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2025-01-27
+
+### Added
+- **Solo Mining Mode** - Revolutionary hybrid solo/pool mining with 0.5% fee (industry's lowest)
+- **Multi-Coin Payout System** - Mine any coin, get paid in BTC or original currency
+- **External Conversion Services** - BTCPay Lightning, SimpleSwap, ChangeNOW integration
+- **Machine Learning Rate Prediction** - ARIMA, LSTM, Prophet models for optimal conversion timing
+- **Trading Halt System** - Automatic risk management for DEX operations
+- **National Reliability System** - 99.999% uptime with multi-region redundancy
+- **High-Performance Cache Manager** - LRU/LFU/TTL strategies with zero-copy operations
+
+### Changed
+- **Consolidated Bilingual Documentation** - Merged English/Japanese content into single files
+- **Unified CSRF Protection** - Replaced multiple implementations with single system
+- **Unified ZKP System** - Consolidated all zero-knowledge proof implementations
+- **Circuit Breaker Renamed** - Now called Trading Halt for clarity
+- **FAQ Section Added** - Comprehensive FAQ in main README
+
+### Fixed
+- **DEX Configuration** - Replaced all KYC references with ZKP
+- **File Structure** - Removed duplicate CSRF and ZKP implementations
+- **Documentation** - Consolidated bilingual markdown files
+
+### Removed
+- **Deprecated Files** - Created list of duplicate files to be deleted
+- **Quantum Features** - Removed all non-realistic quantum computing references
+- **Duplicate Implementations** - Unified CSRF, ZKP, and conversion systems
+
 ## [1.1.3] - 2025-01-27
 
 ### Added

@@ -102,6 +102,16 @@ export default {
     syncInterval: 60000 // 1 minute
   },
   
+  // Solo Mining Configuration
+  soloMining: {
+    enabled: process.env.ENABLE_SOLO_MINING === 'true',
+    coinbaseAddress: process.env.SOLO_COINBASE_ADDRESS || null, // Required if enabled
+    shareAllocationRatio: parseFloat(process.env.SOLO_ALLOCATION_RATIO) || 0.3, // 30% default
+    threads: parseInt(process.env.SOLO_THREADS) || 0, // 0 = auto
+    blockUpdateInterval: parseInt(process.env.SOLO_BLOCK_UPDATE_INTERVAL) || 15000, // 15 seconds
+    coinbaseMessage: process.env.SOLO_COINBASE_MESSAGE || 'Otedama Solo Mining'
+  },
+  
   // Advanced options
   advanced: {
     // Memory optimization
