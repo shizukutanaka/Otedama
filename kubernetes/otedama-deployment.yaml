@@ -7,10 +7,11 @@ metadata:
     app: mining-pool
 
 ---
+# Enhanced Configuration with additional enterprise features
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: otedama-config
+  name: otedama-enterprise-config
   namespace: otedama
 data:
   NODE_ENV: "production"
@@ -20,11 +21,125 @@ data:
   DATABASE_TYPE: "postgresql"
   METRICS_ENABLED: "true"
   
+  otedama.config.js: |
+    module.exports = {
+      // Mining configuration
+      mining: {
+        pools: [
+          {
+            name: 'otedama-pool-1',
+            url: 'stratum+tcp://pool1.otedama.io:4444',
+            algorithm: 'ethash',
+            fee: 0.01
+          },
+          {
+            name: 'otedama-pool-2',
+            url: 'stratum+tcp://pool2.otedama.io:4444',
+            algorithm: 'kawpow',
+            fee: 0.01
+          }
+        ],
+        
+        profitSwitching: {
+          enabled: true,
+          interval: 300000, // 5 minutes
+          minProfitIncrease: 0.02 // 2%
+        },
+        
+        hardware: {
+          autoDetect: true,
+          optimization: {
+            enabled: true,
+            profile: 'balanced',
+            aiOptimization: true
+          }
+        }
+      },
+      
+      // Enterprise monitoring configuration
+      monitoring: {
+        prometheus: {
+          enabled: true,
+          port: 9090
+        },
+        
+        elasticsearch: {
+          enabled: true,
+          url: process.env.ELASTICSEARCH_URL
+        },
+        
+        grafana: {
+          enabled: true,
+          url: process.env.GRAFANA_URL
+        }
+      },
+      
+      // Enhanced security configuration
+      security: {
+        jwt: {
+          secret: process.env.JWT_SECRET,
+          expiresIn: '24h'
+        },
+        
+        encryption: {
+          algorithm: 'aes-256-gcm',
+          keyDerivation: 'pbkdf2'
+        },
+        
+        zkp: {
+          enabled: true,
+          protocol: 'groth16'
+        }
+      },
+
+      // DeFi integration
+      defi: {
+        enabled: true,
+        autoCompound: true,
+        crossChainBridge: true
+      },
+
+      // Mobile API
+      mobile: {
+        enabled: true,
+        pushNotifications: true,
+        biometricAuth: true
+      }
+    };
+  
+  mining-algorithms.json: |
+    {
+      "ethash": {
+        "name": "Ethash",
+        "coins": ["ETC"],
+        "hardwareTypes": ["gpu"],
+        "memoryIntensive": true
+      },
+      "kawpow": {
+        "name": "KawPow",
+        "coins": ["RVN"],
+        "hardwareTypes": ["gpu"],
+        "memoryIntensive": false
+      },
+      "randomx": {
+        "name": "RandomX",
+        "coins": ["XMR"],
+        "hardwareTypes": ["cpu"],
+        "memoryIntensive": true
+      },
+      "sha256": {
+        "name": "SHA-256",
+        "coins": ["BTC"],
+        "hardwareTypes": ["asic"],
+        "memoryIntensive": false
+      }
+    }
+  
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: otedama-secrets
+  name: otedama-enterprise-secrets
   namespace: otedama
 type: Opaque
 stringData:
@@ -32,6 +147,10 @@ stringData:
   REDIS_URL: "redis://redis-service:6379"
   JWT_SECRET: "your-jwt-secret-here"
   ENCRYPTION_KEY: "your-encryption-key-here"
+  elasticsearch-password: "elastic-password"
+  grafana-admin-password: "grafana-admin-password"
+  pool-api-key: "your-pool-api-key"
+  webhook-secret: "your-webhook-secret"
 
 ---
 apiVersion: apps/v1
@@ -91,18 +210,24 @@ spec:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: otedama-secrets
+              name: otedama-enterprise-secrets
               key: DATABASE_URL
         - name: REDIS_URL
           valueFrom:
             secretKeyRef:
-              name: otedama-secrets
+              name: otedama-enterprise-secrets
               key: REDIS_URL
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: otedama-secrets
+              name: otedama-enterprise-secrets
               key: JWT_SECRET
+        - name: PROMETHEUS_ENABLED
+          value: "true"
+        - name: ELASTICSEARCH_URL
+          value: "http://elasticsearch:9200"
+        - name: GRAFANA_URL
+          value: "http://grafana:3000"
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -150,7 +275,7 @@ spec:
           claimName: otedama-data-pvc
       - name: config
         configMap:
-          name: otedama-config
+          name: otedama-enterprise-config
 
 ---
 apiVersion: v1

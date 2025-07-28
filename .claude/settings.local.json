@@ -15,7 +15,8 @@
       "Bash(grep:*)",
       "Bash(git rm:*)",
       "Bash(mkdir:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git tag:*)"
     ],
     "deny": []
   }
