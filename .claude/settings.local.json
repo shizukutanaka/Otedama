@@ -14,7 +14,8 @@
       "Bash(cp:*)",
       "Bash(grep:*)",
       "Bash(git rm:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(git restore:*)"
     ],
     "deny": []
   }
