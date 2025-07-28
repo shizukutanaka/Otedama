@@ -12,7 +12,9 @@
       "Bash(node:*)",
       "Bash(find:*)",
       "Bash(cp:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git rm:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }

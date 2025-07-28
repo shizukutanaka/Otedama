@@ -24,7 +24,7 @@ Otedamaは、インテリジェントなハードウェア最適化と自動利�
 
 1. **Otedamaをダウンロード**
 ```bash
-git clone https://github.com/your-repo/otedama.git
+git clone [repository-url]
 cd otedama
 ```
 
@@ -204,7 +204,7 @@ npm run diagnose:network
 - **クイックスタートガイド**: `npm run guide`
 - **ドキュメント**: `/docs`フォルダを参照
 - **コミュニティサポート**: GitHubでissueを開く
-- **メールサポート**: support@otedama.com
+- **サポート**: GitHubでissueを開く
 
 ### システムステータス
 - **ローカルダッシュボード**: http://localhost:8080
@@ -217,7 +217,7 @@ MITライセンス - 個人および商用利用無料
 
 ## セキュリティ
 
-セキュリティの問題を発見した場合は、security@otedama.com にメールしてください（PGPキー利用可能）
+セキュリティの問題を発見した場合は、GitHubのプライベートセキュリティレポートをご利用ください
 
 ---
 

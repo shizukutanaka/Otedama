@@ -20,16 +20,16 @@
 
 ## 🚀 Overview
 
-Otedama is a cutting-edge cryptocurrency mining platform that combines advanced algorithms, intelligent hardware optimization, and enterprise-grade reliability. Whether you're a solo miner or operating a national-scale mining facility, Otedama maximizes your profits while minimizing complexity.
+Otedama is a professional cryptocurrency mining platform built for reliability, scalability, and performance. Designed using industry best practices from Carmack, Martin, and Pike, it provides a robust foundation for both individual miners and national-scale mining operations.
 
 ### Key Highlights
 
-- **🧠 AI-Powered Optimization**: Machine learning algorithms continuously tune your hardware for maximum efficiency
-- **🔐 Quantum-Resistant Security**: Future-proof cryptography protecting against quantum computing threats
-- **🌐 Global P2P Network**: Advanced peer-to-peer architecture with gossip protocol for instant synchronization
+- **🌐 P2P Architecture**: Distributed peer-to-peer network with automatic failover and load balancing
+- **🔐 Zero-Knowledge Authentication**: Privacy-first authentication without KYC requirements
 - **⚡ Multi-Algorithm Support**: Mine Bitcoin, Ethereum Classic, Monero, Ravencoin, and more
-- **🔧 Zero-Configuration**: Automatic hardware detection and optimization
-- **📊 Real-Time Analytics**: Comprehensive monitoring with predictive insights
+- **🔧 Professional Mining**: Optimized for CPU, GPU, and ASIC mining at any scale
+- **📊 Real-Time Monitoring**: Comprehensive statistics and performance tracking
+- **💰 Multiple Payment Schemes**: PPLNS, PPS, Proportional, and Solo mining support
 
 ## ✨ Features
 
@@ -52,14 +52,13 @@ Otedama is a cutting-edge cryptocurrency mining platform that combines advanced 
 
 ### Advanced Features
 
-#### 🤖 AI & Machine Learning
-- **Predictive Profit Switching**: AI predicts most profitable coins before market shifts
-- **Adaptive Hardware Tuning**: ML algorithms learn optimal settings for your specific hardware
-- **Anomaly Detection**: Identifies and prevents potential issues before they occur
+#### 🔧 Advanced Optimization
+- **Smart Profit Switching**: Automatically switches to most profitable coins based on real-time data
+- **Hardware Auto-tuning**: Optimizes settings for your specific hardware configuration
+- **Health Monitoring**: Real-time monitoring to prevent potential issues
 
 #### 🔒 Security
 - **Zero-Knowledge Authentication**: No personal data required
-- **Quantum-Resistant Cryptography**: Post-quantum algorithms for future-proof security
 - **DDoS Protection**: National-scale protection against attacks
 - **End-to-End Encryption**: All communications encrypted with AES-256-GCM
 
@@ -97,7 +96,7 @@ Otedama is a cutting-edge cryptocurrency mining platform that combines advanced 
 
 #### 1. Clone the repository
 ```bash
-git clone https://github.com/otedama/otedama.git
+git clone [repository-url]
 cd otedama
 ```
 
@@ -248,10 +247,6 @@ module.exports = {
 {
   "authentication": {
     "type": "zkp",            // Zero-knowledge proof
-    "quantum": {
-      "enabled": true,
-      "algorithm": "kyber"
-    }
   },
   "encryption": {
     "algorithm": "aes-256-gcm",
@@ -347,10 +342,9 @@ npm run build
 
 ## 📞 Support
 
-- **Documentation**: [docs.otedama.io](https://docs.otedama.io)
-- **Discord**: [discord.gg/otedama](https://discord.gg/otedama)
-- **Telegram**: [@otedama_support](https://t.me/otedama_support)
-- **Email**: support@otedama.io
+- **Documentation**: See `docs/` folder
+- **Issues**: Submit via GitHub Issues
+- **Community**: Join our community forums
 
 ### Enterprise Support
 
@@ -360,7 +354,7 @@ For enterprise customers, we offer:
 - On-site deployment assistance
 - SLA guarantees
 
-Contact: enterprise@otedama.io
+Contact: See documentation for enterprise support options
 
 ## 📜 License
 
@@ -382,8 +376,3 @@ Special thanks to all contributors and the cryptocurrency mining community.
   Made with ❤️ by the Otedama Team
 </p>
 
-<p align="center">
-  <a href="https://otedama.io">Website</a> •
-  <a href="https://twitter.com/otedama">Twitter</a> •
-  <a href="https://github.com/otedama/otedama">GitHub</a>
-</p>

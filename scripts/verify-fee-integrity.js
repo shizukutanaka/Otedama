@@ -5,11 +5,9 @@
  * Verifies that fee configuration hasn't been tampered with
  */
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 import { POOL_OPERATOR, POOL_FEES, validateConstants } from '../config/constants.js';
 import { validatePoolOperatorAddress } from '../lib/core/btc-address-validator.js';
+import immutableFeeConfig from '../lib/core/immutable-fee-config.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -75,7 +73,7 @@ function verifyFeeIntegrity() {
     console.log('\n5. Testing fee calculations...');
     const testAmounts = [1, 10, 100, 0.001];
     for (const amount of testAmounts) {
-      const fee = amount * poolFee;
+      const fee = amount * POOL_FEES.MINING_FEE;
       const calculated = immutableFeeConfig.calculatePoolFee(amount);
       if (Math.abs(fee - calculated) < 0.00000001) {
         console.log(`   ✅ Calculation correct for ${amount} BTC: ${calculated} BTC fee`);
