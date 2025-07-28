@@ -19,7 +19,7 @@
 
 import { createStructuredLogger } from './lib/core/structured-logger.js';
 import { secureConfig } from './lib/core/secure-config.js';
-import { validateConstants, POOL_OPERATOR } from './lib/core/constants.js';
+import { validateConstants, POOL_OPERATOR } from './config/constants.js';
 import { Command } from 'commander';
 import { fileURLToPath } from 'url';
 import path from 'path';

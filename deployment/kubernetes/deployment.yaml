@@ -1,0 +1,197 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama-pool
+  namespace: otedama
+  labels:
+    app: otedama
+    component: pool
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: otedama
+      component: pool
+  template:
+    metadata:
+      labels:
+        app: otedama
+        component: pool
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - otedama
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: otedama
+        image: otedama:latest
+        imagePullPolicy: Always
+        ports:
+        - name: stratum
+          containerPort: 3333
+          protocol: TCP
+        - name: stratum-v2
+          containerPort: 3336
+          protocol: TCP
+        - name: api
+          containerPort: 8080
+          protocol: TCP
+        - name: dashboard
+          containerPort: 8084
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        - name: p2p
+          containerPort: 33333
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3333"
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: DB_HOST
+          value: "postgres-service"
+        envFrom:
+        - secretRef:
+            name: otedama-secrets
+        - configMapRef:
+            name: otedama-config
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: api
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: api
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: otedama-data-pvc
+      - name: logs
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: otedama-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-service
+  namespace: otedama
+spec:
+  selector:
+    app: otedama
+    component: pool
+  type: LoadBalancer
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: 3333
+    protocol: TCP
+  - name: api
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: dashboard
+    port: 8084
+    targetPort: 8084
+    protocol: TCP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data-pvc
+  namespace: otedama
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  namespace: otedama
+data:
+  NODE_OPTIONS: "--max-old-space-size=4096"
+  LOG_LEVEL: "info"
+  ENABLE_AGENT_SYSTEM: "true"
+  ENABLE_DeFi: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets
+  namespace: otedama
+type: Opaque
+stringData:
+  JWT_SECRET: "CHANGE_ME_TO_SECURE_VALUE"
+  SESSION_SECRET: "CHANGE_ME_TO_SECURE_VALUE"
+  CSRF_SECRET: "CHANGE_ME_TO_SECURE_VALUE"
+  ENCRYPTION_KEY: "CHANGE_ME_TO_SECURE_VALUE"
+  REDIS_PASSWORD: "CHANGE_ME_TO_SECURE_VALUE"
+  DB_PASSWORD: "CHANGE_ME_TO_SECURE_VALUE"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otedama-hpa
+  namespace: otedama
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama-pool
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

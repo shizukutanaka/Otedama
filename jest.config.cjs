@@ -1,18 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
-  preset: 'es6',
-  extensionsToTreatAsEsm: ['.js'],
-  globals: {
-    'ts-jest': {
-      useESM: true
-    }
-  },
-  moduleNameMapping: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
-  },
-  transform: {
-    '^.+\\.(js|jsx)$': 'babel-jest',
-  },
+  transform: {},
   collectCoverageFrom: [
     'lib/**/*.js',
     '!lib/**/node_modules/**',

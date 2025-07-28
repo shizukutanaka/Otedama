@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals
 import { ConnectionManager } from '../../lib/core/connection-manager.js';
 import { BufferPool } from '../../lib/core/buffer-pool.js';
 import { validateBTCAddress } from '../../lib/core/btc-address-validator.js';
-import { POOL_OPERATOR } from '../../lib/core/constants.js';
+import { POOL_OPERATOR } from '../../config/constants.js';
 
 describe('ConnectionManager', () => {
   let connectionManager;

@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-import { POOL_OPERATOR, POOL_FEES, validateConstants } from '../lib/core/constants.js';
+import { POOL_OPERATOR, POOL_FEES, validateConstants } from '../config/constants.js';
 import { validatePoolOperatorAddress } from '../lib/core/btc-address-validator.js';
 import crypto from 'crypto';
 import fs from 'fs';

@@ -12,7 +12,7 @@
       }
     },
     "session": {
-      "timeout": 86400000,
+      "timeout": 28800000,
       "renewBeforeExpiry": 3600000,
       "maxConcurrent": 5
     },
@@ -23,7 +23,7 @@
       "requireNumbers": true,
       "requireSpecial": true,
       "maxAttempts": 5,
-      "lockoutDuration": 900000
+      "lockoutDuration": 1800000
     },
     "twoFactor": {
       "enabled": true,
@@ -37,10 +37,10 @@
     },
     "cors": {
       "enabled": true,
-      "origins": ["*"],
-      "methods": ["GET", "POST", "OPTIONS"],
-      "headers": ["Content-Type", "Authorization"],
-      "credentials": false
+      "origins": ["http://localhost:3000", "http://localhost:8080", "http://localhost:8084"],
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "headers": ["Content-Type", "Authorization", "X-Requested-With"],
+      "credentials": true
     },
     "headers": {
       "hsts": {
@@ -53,8 +53,8 @@
         "enabled": true,
         "directives": {
           "defaultSrc": ["'self'"],
-          "scriptSrc": ["'self'", "'unsafe-inline'"],
-          "styleSrc": ["'self'", "'unsafe-inline'"],
+          "scriptSrc": ["'self'", "https://cdn.jsdelivr.net"],
+          "styleSrc": ["'self'", "https://fonts.googleapis.com"],
           "imgSrc": ["'self'", "data:", "https:"],
           "connectSrc": ["'self'", "wss:", "https:"],
           "fontSrc": ["'self'"],

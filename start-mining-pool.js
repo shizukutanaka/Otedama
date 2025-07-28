@@ -18,8 +18,9 @@ import { PerformanceOptimizer } from './lib/optimization/performance-optimizer.j
 import { UnifiedMonitoringSystem } from './lib/monitoring/unified-monitoring-system.js';
 import { FinancialIntegrationSystem } from './lib/financial/financial-integration-system.js';
 import { AlgorithmManager } from './lib/mining/algorithms/algorithm-manager-v2.js';
-import { POOL_OPERATOR, MINING_ALGORITHMS } from './lib/core/constants.js';
+import { POOL_OPERATOR, MINING_ALGORITHMS } from './config/constants.js';
 import { gracefulShutdown } from './lib/core/enhanced-error-recovery.js';
+import { EnhancedOtedamaApplication } from './lib/core/enhanced-application.js';
 
 const logger = createStructuredLogger('MiningPoolStarter');
 
@@ -33,8 +34,31 @@ export default async function startMiningPool(config = {}) {
     // Validate required configuration
     const poolConfig = validateAndMergeConfig(config);
     
-    // Initialize core components with proper error handling
+    // Initialize enhanced application with agent system
+    const app = new EnhancedOtedamaApplication({
+      port: poolConfig.pool.apiPort,
+      wsPort: poolConfig.pool.wsPort || 3334,
+      agentsEnabled: poolConfig.agents?.enabled !== false,
+      monitoringInterval: poolConfig.agents?.monitoring?.interval || 30000,
+      healthCheckInterval: poolConfig.agents?.health?.interval || 60000,
+      securityInterval: poolConfig.agents?.security?.interval || 45000,
+      optimizationInterval: poolConfig.agents?.optimization?.interval || 120000,
+      healingInterval: poolConfig.agents?.healing?.interval || 90000,
+      scalingInterval: poolConfig.agents?.scaling?.interval || 180000,
+      predictiveScaling: poolConfig.agents?.scaling?.predictive !== false,
+      cpuThreshold: poolConfig.agents?.monitoring?.cpuThreshold || 80,
+      memoryThreshold: poolConfig.agents?.monitoring?.memoryThreshold || 85
+    });
+
+    // Initialize and start the enhanced application
+    await app.initialize();
+    await app.start();
+    
+    // Initialize core mining components with proper error handling
     const components = await initializeComponents(poolConfig);
+    
+    // Add the enhanced application to components
+    components.app = app;
     
     // Start all services in the correct order
     await startServices(components, poolConfig);
@@ -48,6 +72,7 @@ export default async function startMiningPool(config = {}) {
       stratumPort: poolConfig.pool.stratumPort,
       apiPort: poolConfig.pool.apiPort,
       zkpEnabled: poolConfig.zkp.enabled,
+      agentsEnabled: poolConfig.agents?.enabled !== false,
       operatorAddress: POOL_OPERATOR.BTC_ADDRESS
     });
     
@@ -105,6 +130,31 @@ function validateAndMergeConfig(config) {
       metricsInterval: 5000,
       alerting: true,
       prometheus: true
+    },
+    
+    agents: {
+      enabled: true,
+      monitoring: {
+        interval: 30000,
+        cpuThreshold: 80,
+        memoryThreshold: 85
+      },
+      health: {
+        interval: 60000
+      },
+      security: {
+        interval: 45000
+      },
+      optimization: {
+        interval: 120000
+      },
+      healing: {
+        interval: 90000
+      },
+      scaling: {
+        interval: 180000,
+        predictive: true
+      }
     },
     
     financial: {
@@ -344,7 +394,7 @@ function setupShutdownHandlers(components) {
  * Stop all services in reverse order
  */
 async function stopServices(components) {
-  const stopOrder = ['apiServer', 'monitoring', 'miningPool', 'financial', 'algorithmManager', 'zkpAuth', 'security', 'performanceOptimizer'];
+  const stopOrder = ['apiServer', 'monitoring', 'miningPool', 'financial', 'algorithmManager', 'zkpAuth', 'security', 'performanceOptimizer', 'app'];
   
   for (const componentName of stopOrder) {
     if (components[componentName]?.stop) {

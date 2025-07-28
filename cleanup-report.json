@@ -1,0 +1,24 @@
+{
+  "timestamp": "2025-07-28T02:38:32.905Z",
+  "deletedDirectories": [
+    ".claude"
+  ],
+  "deletedFiles": [
+    "jest.config.js.bak",
+    "nul.bak",
+    "lib/security/manager.js",
+    "lib/security/core.js",
+    "lib/security/enhanced-ddos-protection.js",
+    "lib/security/advanced-rate-limiter.js",
+    "lib/security/audit.js",
+    "lib/security/multi-factor-auth.js",
+    "lib/security/ai-anomaly-detection.js",
+    "lib/security/advanced-attack-protection.js"
+  ],
+  "errors": [],
+  "summary": {
+    "directoriesDeleted": 1,
+    "filesDeleted": 10,
+    "errorsEncountered": 0
+  }
+}

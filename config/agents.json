@@ -1,0 +1,254 @@
+{
+  "agents": {
+    "enabled": true,
+    "globalSettings": {
+      "maxRetries": 3,
+      "retryDelay": 5000,
+      "healthCheckTimeout": 30000,
+      "gracefulShutdownTimeout": 10000
+    },
+    "monitoring": {
+      "name": "SystemMonitor",
+      "enabled": true,
+      "interval": 30000,
+      "priority": "high",
+      "thresholds": {
+        "cpu": 80,
+        "memory": 85,
+        "disk": 90,
+        "responseTime": 1000,
+        "errorRate": 5
+      },
+      "historyLimit": 100,
+      "alertCooldown": 300000
+    },
+    "health": {
+      "name": "HealthChecker",
+      "enabled": true,
+      "interval": 60000,
+      "priority": "high",
+      "checks": {
+        "system": ["cpu", "memory", "disk", "network"],
+        "application": ["process", "threads", "connections", "queues"],
+        "mining": ["pool", "miners", "hashrate", "shares"],
+        "dependencies": ["database", "redis", "external_apis"]
+      },
+      "thresholds": {
+        "cpuUsage": 80,
+        "memoryUsage": 85,
+        "diskUsage": 90,
+        "responseTime": 500,
+        "connectionUsage": 80,
+        "queueCapacity": 50
+      },
+      "criticalComponents": ["database", "mining_pool", "stratum_server"]
+    },
+    "security": {
+      "name": "SecurityGuard",
+      "enabled": true,
+      "interval": 45000,
+      "priority": "critical",
+      "threatPatterns": {
+        "ddos": ["highRequestRate", "sameSourceMultipleTargets", "malformedPackets"],
+        "bruteForce": ["failedAuthAttempts", "passwordPatterns", "timingAnalysis"],
+        "injection": ["sqlPatterns", "scriptPatterns", "commandPatterns"],
+        "mining": ["unauthorizedMiners", "hashrateStealing", "poolHopping"]
+      },
+      "thresholds": {
+        "maxFailedAttempts": 5,
+        "requestRateLimit": 100,
+        "suspiciousIPThreshold": 10,
+        "coordinatedAttackThreshold": 50
+      },
+      "responseActions": {
+        "blockIP": true,
+        "enableRateLimit": true,
+        "alertAdministrators": true,
+        "quarantineMiners": true
+      }
+    },
+    "optimization": {
+      "name": "PerformanceOptimizer",
+      "enabled": true,
+      "interval": 120000,
+      "priority": "medium",
+      "strategies": {
+        "cpu": ["threadPoolAdjustment", "taskPrioritization", "cacheOptimization"],
+        "memory": ["garbageCollection", "bufferPooling", "cacheEviction"],
+        "network": ["connectionPooling", "compressionToggle", "batchProcessing"],
+        "mining": ["difficultyAdjustment", "shareValidation", "nonceAllocation"]
+      },
+      "thresholds": {
+        "cpuOptimization": 70,
+        "memoryOptimization": 75,
+        "networkLatency": 100,
+        "miningEfficiency": 95
+      },
+      "cooldownPeriod": 300000
+    },
+    "healing": {
+      "name": "SelfHealer",
+      "enabled": true,
+      "interval": 90000,
+      "priority": "high",
+      "strategies": {
+        "memory": ["garbageCollection", "cacheClearing", "processRestart"],
+        "connection": ["connectionReset", "poolRecycling", "networkRestart"],
+        "process": ["threadRestart", "serviceRestart", "gracefulReload"],
+        "mining": ["minerReconnect", "poolReset", "stratumRestart"],
+        "performance": ["resourceReallocation", "loadBalancing", "throttling"]
+      },
+      "maxHealingAttempts": 3,
+      "escalationThreshold": 300000,
+      "criticalIssueTimeout": 600000
+    },
+    "scaling": {
+      "name": "AutoScaler",
+      "enabled": true,
+      "interval": 180000,
+      "priority": "medium",
+      "predictiveScaling": true,
+      "policies": {
+        "cpu": {
+          "scaleUpThreshold": 80,
+          "scaleDownThreshold": 20,
+          "cooldownPeriod": 300000
+        },
+        "memory": {
+          "scaleUpThreshold": 85,
+          "scaleDownThreshold": 30,
+          "cooldownPeriod": 300000
+        },
+        "connections": {
+          "scaleUpThreshold": 90,
+          "scaleDownThreshold": 40,
+          "cooldownPeriod": 180000
+        },
+        "miners": {
+          "minersPerWorker": 100,
+          "maxWorkersPerPool": 10,
+          "cooldownPeriod": 600000
+        }
+      },
+      "maxScaleActions": 10,
+      "scaleStepSize": 1
+    }
+  },
+  "coordination": {
+    "enabled": true,
+    "rules": [
+      {
+        "name": "HighCPUResponse",
+        "condition": "data.metrics?.cpu > 80",
+        "actions": [
+          {"agent": "AutoScaler", "action": "scaleUp"},
+          {"agent": "PerformanceOptimizer", "action": "optimizeCPU"}
+        ],
+        "priority": "high",
+        "cooldown": 300000
+      },
+      {
+        "name": "SecurityThreatResponse",
+        "condition": "data.threatLevel === 'high'",
+        "actions": [
+          {"agent": "SelfHealer", "action": "isolateThreat"},
+          {"agent": "SystemMonitor", "action": "increasedMonitoring"}
+        ],
+        "priority": "critical",
+        "cooldown": 0
+      },
+      {
+        "name": "HealthCheckFailure",
+        "condition": "data.healthStatus === 'unhealthy'",
+        "actions": [
+          {"agent": "SelfHealer", "action": "diagnoseAndFix"},
+          {"agent": "SystemMonitor", "action": "detailedMetrics"}
+        ],
+        "priority": "high",
+        "cooldown": 60000
+      },
+      {
+        "name": "MemoryPressure",
+        "condition": "data.metrics?.memory > 90",
+        "actions": [
+          {"agent": "SelfHealer", "action": "memoryCleanup"},
+          {"agent": "AutoScaler", "action": "scaleUp"}
+        ],
+        "priority": "high",
+        "cooldown": 120000
+      },
+      {
+        "name": "MiningEfficiencyDrop",
+        "condition": "data.metrics?.miningEfficiency < 80",
+        "actions": [
+          {"agent": "PerformanceOptimizer", "action": "optimizeMining"},
+          {"agent": "SelfHealer", "action": "restartMiningServices"}
+        ],
+        "priority": "medium",
+        "cooldown": 300000
+      }
+    ]
+  },
+  "alerts": {
+    "enabled": true,
+    "channels": {
+      "console": true,
+      "file": true,
+      "webhook": false,
+      "email": false
+    },
+    "severity": {
+      "critical": {
+        "immediate": true,
+        "escalation": true,
+        "channels": ["console", "file", "webhook", "email"]
+      },
+      "high": {
+        "immediate": true,
+        "escalation": false,
+        "channels": ["console", "file"]
+      },
+      "medium": {
+        "immediate": false,
+        "escalation": false,
+        "channels": ["file"]
+      },
+      "low": {
+        "immediate": false,
+        "escalation": false,
+        "channels": ["file"]
+      }
+    },
+    "rateLimiting": {
+      "enabled": true,
+      "maxAlertsPerMinute": 10,
+      "maxAlertsPerHour": 100
+    }
+  },
+  "metrics": {
+    "enabled": true,
+    "collectInterval": 5000,
+    "retentionPeriod": 86400000,
+    "exportFormats": ["prometheus", "json"],
+    "categories": {
+      "system": ["cpu", "memory", "disk", "network"],
+      "application": ["requests", "responses", "errors", "latency"],
+      "agents": ["executions", "successes", "failures", "timing"],
+      "mining": ["hashrate", "shares", "blocks", "efficiency"]
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "output": {
+      "console": true,
+      "file": true,
+      "filePath": "./logs/agents.log",
+      "maxFileSize": "10MB",
+      "maxFiles": 5
+    },
+    "includeStackTrace": true,
+    "logAgentActions": true,
+    "logCoordination": true
+  }
+}

@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama Agent Dashboard</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 300;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .indicator-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            height: calc(100vh - 80px);
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h3 {
+            margin-bottom: 1rem;
+            font-weight: 500;
+            color: #e3f2fd;
+        }
+
+        .system-overview {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .agents-list {
+            overflow-y: auto;
+            max-height: 100%;
+        }
+
+        .agent-item {
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 0.75rem;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .agent-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }
+
+        .agent-item.error {
+            border-left-color: #f44336;
+        }
+
+        .agent-item.warning {
+            border-left-color: #ff9800;
+        }
+
+        .agent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .agent-name {
+            font-weight: 600;
+        }
+
+        .agent-status {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .status-running {
+            background: #4CAF50;
+        }
+
+        .status-stopped {
+            background: #f44336;
+        }
+
+        .status-ready {
+            background: #2196F3;
+        }
+
+        .agent-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 1rem;
+        }
+
+        .event-log {
+            overflow-y: auto;
+            max-height: 100%;
+        }
+
+        .event-item {
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 0.5rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .event-time {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-bottom: 0.25rem;
+        }
+
+        .event-success {
+            border-left: 3px solid #4CAF50;
+        }
+
+        .event-error {
+            border-left: 3px solid #f44336;
+        }
+
+        .event-alert {
+            border-left: 3px solid #ff9800;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn.primary {
+            background: #2196F3;
+        }
+
+        .btn.danger {
+            background: #f44336;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 2rem;
+            border-radius: 12px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+
+        .close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .tab-container {
+            margin-top: 1rem;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 1rem;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+
+        .tab.active {
+            opacity: 1;
+            border-bottom: 2px solid #4CAF50;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            opacity: 0.7;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .json-viewer {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto 1fr 1fr;
+            }
+            
+            .system-overview {
+                grid-column: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 Otedama Agent Dashboard</h1>
+        <div class="status-indicator">
+            <div class="indicator-dot" id="connectionStatus"></div>
+            <span id="connectionText">Connected</span>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card system-overview">
+            <h3>System Overview</h3>
+            <div id="systemMetrics">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading system metrics...
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Agent Performance</h3>
+            <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+            </div>
+            <div class="controls">
+                <button class="btn" onclick="refreshAgents()">Refresh</button>
+                <button class="btn primary" onclick="startAllAgents()">Start All</button>
+                <button class="btn danger" onclick="stopAllAgents()">Stop All</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Recent Events</h3>
+            <div class="event-log" id="eventLog">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading events...
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Active Agents</h3>
+            <div class="agents-list" id="agentsList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading agents...
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Event Bus Statistics</h3>
+            <div class="chart-container">
+                <canvas id="eventBusChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent Details Modal -->
+    <div id="agentModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Agent Details</h2>
+            <div class="tab-container">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('overview')">Overview</div>
+                    <div class="tab" onclick="switchTab('metrics')">Metrics</div>
+                    <div class="tab" onclick="switchTab('history')">History</div>
+                    <div class="tab" onclick="switchTab('controls')">Controls</div>
+                </div>
+                <div id="tab-overview" class="tab-content active">
+                    <div id="agentOverview"></div>
+                </div>
+                <div id="tab-metrics" class="tab-content">
+                    <div id="agentMetrics"></div>
+                </div>
+                <div id="tab-history" class="tab-content">
+                    <div class="chart-container">
+                        <canvas id="agentHistoryChart"></canvas>
+                    </div>
+                </div>
+                <div id="tab-controls" class="tab-content">
+                    <div id="agentControls"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dashboard JavaScript implementation
+        class AgentDashboard {
+            constructor() {
+                this.socket = io();
+                this.agents = new Map();
+                this.events = [];
+                this.charts = new Map();
+                this.selectedAgent = null;
+                
+                this.setupSocketListeners();
+                this.initializeCharts();
+            }
+
+            setupSocketListeners() {
+                this.socket.on('connect', () => {
+                    this.updateConnectionStatus(true);
+                });
+
+                this.socket.on('disconnect', () => {
+                    this.updateConnectionStatus(false);
+                });
+
+                this.socket.on('initial-data', (data) => {
+                    this.updateAgents(data.agents);
+                    this.updateSystemMetrics(data.system);
+                    this.updateEventBusStats(data.eventBusStats);
+                });
+
+                this.socket.on('system-update', (data) => {
+                    this.updateAgents(data.agents);
+                    this.updateSystemMetrics(data.system);
+                    this.updateEventBusStats(data.eventBusStats);
+                });
+
+                this.socket.on('agent-event', (event) => {
+                    this.addEvent(event);
+                });
+
+                this.socket.on('agent-details', (data) => {
+                    this.showAgentDetails(data);
+                });
+            }
+
+            updateConnectionStatus(connected) {
+                const indicator = document.getElementById('connectionStatus');
+                const text = document.getElementById('connectionText');
+                
+                if (connected) {
+                    indicator.style.background = '#4CAF50';
+                    text.textContent = 'Connected';
+                } else {
+                    indicator.style.background = '#f44336';
+                    text.textContent = 'Disconnected';
+                }
+            }
+
+            updateAgents(agentsData) {
+                this.agents.clear();
+                agentsData.forEach(agent => {
+                    this.agents.set(agent.name, agent);
+                });
+                
+                this.renderAgentsList();
+                this.updatePerformanceChart();
+            }
+
+            updateSystemMetrics(systemData) {
+                const container = document.getElementById('systemMetrics');
+                const memUsedMB = Math.round(systemData.memory.used / 1024 / 1024);
+                const memTotalMB = Math.round(systemData.memory.total / 1024 / 1024);
+                const uptime = Math.round(systemData.uptime);
+                
+                container.innerHTML = `
+                    <div class="metric-card">
+                        <div class="metric-value">${this.agents.size}</div>
+                        <div class="metric-label">Active Agents</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${memUsedMB}MB</div>
+                        <div class="metric-label">Memory Used</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${uptime}s</div>
+                        <div class="metric-label">Uptime</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${systemData.platform}</div>
+                        <div class="metric-label">Platform</div>
+                    </div>
+                `;
+            }
+
+            updateEventBusStats(statsData) {
+                const chart = this.charts.get('eventBus');
+                if (chart) {
+                    chart.data.datasets[0].data = [
+                        statsData.messagesProcessed,
+                        statsData.queueLength,
+                        statsData.subscriptions
+                    ];
+                    chart.update();
+                }
+            }
+
+            renderAgentsList() {
+                const container = document.getElementById('agentsList');
+                const agentsArray = Array.from(this.agents.values());
+                
+                if (agentsArray.length === 0) {
+                    container.innerHTML = '<div class="loading">No agents available</div>';
+                    return;
+                }
+
+                container.innerHTML = agentsArray.map(agent => {
+                    const statusClass = agent.state === 'running' ? 'status-running' : 
+                                       agent.state === 'ready' ? 'status-ready' : 'status-stopped';
+                    const errorClass = agent.metrics.failureCount > 0 ? 'error' : '';
+                    
+                    return `
+                        <div class="agent-item ${errorClass}" onclick="showAgentModal('${agent.name}')">
+                            <div class="agent-header">
+                                <span class="agent-name">${agent.name}</span>
+                                <span class="agent-status ${statusClass}">${agent.state}</span>
+                            </div>
+                            <div class="agent-metrics">
+                                <div>Runs: ${agent.runCount}</div>
+                                <div>Success: ${agent.metrics.successCount}</div>
+                                <div>Errors: ${agent.metrics.failureCount}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            addEvent(event) {
+                this.events.unshift(event);
+                if (this.events.length > 100) {
+                    this.events.pop();
+                }
+                
+                this.renderEventLog();
+            }
+
+            renderEventLog() {
+                const container = document.getElementById('eventLog');
+                const recentEvents = this.events.slice(0, 20);
+                
+                container.innerHTML = recentEvents.map(event => {
+                    const time = new Date(event.timestamp).toLocaleTimeString();
+                    const eventClass = event.type.includes('error') ? 'event-error' : 
+                                      event.type.includes('alert') ? 'event-alert' : 'event-success';
+                    
+                    return `
+                        <div class="event-item ${eventClass}">
+                            <div class="event-time">${time}</div>
+                            <div>${event.type}: ${event.agent || 'System'}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            initializeCharts() {
+                // Performance Chart
+                const perfCtx = document.getElementById('performanceChart').getContext('2d');
+                this.charts.set('performance', new Chart(perfCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Success Rate',
+                            data: [],
+                            borderColor: '#4CAF50',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#fff' }
+                            }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#fff' } },
+                            y: { ticks: { color: '#fff' } }
+                        }
+                    }
+                }));
+
+                // Event Bus Chart
+                const eventCtx = document.getElementById('eventBusChart').getContext('2d');
+                this.charts.set('eventBus', new Chart(eventCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Messages Processed', 'Queue Length', 'Subscriptions'],
+                        datasets: [{
+                            data: [0, 0, 0],
+                            backgroundColor: ['#4CAF50', '#2196F3', '#FF9800']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#fff' }
+                            }
+                        }
+                    }
+                }));
+            }
+
+            updatePerformanceChart() {
+                const chart = this.charts.get('performance');
+                const agentsArray = Array.from(this.agents.values());
+                
+                chart.data.labels = agentsArray.map(a => a.name);
+                chart.data.datasets[0].data = agentsArray.map(a => {
+                    const total = a.metrics.successCount + a.metrics.failureCount;
+                    return total > 0 ? (a.metrics.successCount / total) * 100 : 0;
+                });
+                chart.update();
+            }
+
+            showAgentDetails(data) {
+                this.selectedAgent = data;
+                document.getElementById('modalTitle').textContent = `${data.agent.name} Details`;
+                
+                // Update overview tab
+                document.getElementById('agentOverview').innerHTML = `
+                    <div class="json-viewer">${JSON.stringify(data.agent, null, 2)}</div>
+                `;
+                
+                // Update metrics tab
+                document.getElementById('agentMetrics').innerHTML = `
+                    <div class="json-viewer">${JSON.stringify(data.metrics, null, 2)}</div>
+                `;
+                
+                // Update controls tab
+                document.getElementById('agentControls').innerHTML = `
+                    <div class="controls">
+                        <button class="btn primary" onclick="performAgentAction('${data.agent.name}', 'start')">Start</button>
+                        <button class="btn danger" onclick="performAgentAction('${data.agent.name}', 'stop')">Stop</button>
+                        <button class="btn" onclick="performAgentAction('${data.agent.name}', 'execute')">Execute</button>
+                    </div>
+                `;
+                
+                document.getElementById('agentModal').style.display = 'block';
+            }
+        }
+
+        // Global functions
+        function showAgentModal(agentName) {
+            dashboard.socket.emit('request-agent-details', agentName);
+        }
+
+        function closeModal() {
+            document.getElementById('agentModal').style.display = 'none';
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        async function performAgentAction(agentName, action) {
+            try {
+                const response = await fetch(`/api/agents/${agentName}/action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert(`Action ${action} completed successfully`);
+                } else {
+                    alert(`Action failed: ${result.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        function refreshAgents() {
+            location.reload();
+        }
+
+        async function startAllAgents() {
+            // Implementation would depend on API
+            alert('Start all agents functionality not implemented yet');
+        }
+
+        async function stopAllAgents() {
+            // Implementation would depend on API
+            alert('Stop all agents functionality not implemented yet');
+        }
+
+        // Initialize dashboard
+        const dashboard = new AgentDashboard();
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('agentModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

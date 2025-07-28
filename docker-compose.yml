@@ -2,13 +2,13 @@ version: '3.8'
 
 services:
   # Main mining pool service
-  pool:
+  otedama:
     build: .
     image: otedama:latest
     container_name: otedama-pool
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.production
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=4096
@@ -16,16 +16,20 @@ services:
       - "3333:3333"     # Stratum v1
       - "3336:3336"     # Stratum v2
       - "8080:8080"     # API
+      - "8084:8084"     # Agent Dashboard
       - "9090:9090"     # Metrics
       - "33333:33333"   # P2P
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./otedama.config.js:/app/otedama.config.js:ro
+      - ./backups:/app/backups
+      - ./reports:/app/reports
+      - ./config:/app/config:ro
     networks:
       - otedama-network
     depends_on:
-      - bitcoin
+      - redis
+      - postgres
     logging:
       driver: "json-file"
       options:
@@ -40,30 +44,44 @@ services:
           cpus: '2'
           memory: 4G
 
-  # Bitcoin Core node (optional - for testing)
-  bitcoin:
-    image: ruimarinho/bitcoin-core:latest
-    container_name: otedama-bitcoin
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: otedama-redis
     restart: unless-stopped
-    environment:
-      - BITCOIN_NETWORK=mainnet
-      - BITCOIN_RPC_USER=${BITCOIN_RPC_USER}
-      - BITCOIN_RPC_PASSWORD=${BITCOIN_RPC_PASSWORD}
-      - BITCOIN_RPC_ALLOWIP=0.0.0.0/0
-      - BITCOIN_TXINDEX=1
+    command: redis-server --requirepass ${REDIS_PASSWORD:-change_me_in_production}
     ports:
-      - "8332:8332"
-      - "8333:8333"
+      - "6379:6379"
     volumes:
-      - bitcoin-data:/home/bitcoin/.bitcoin
+      - redis-data:/data
     networks:
       - otedama-network
-    command: >
-      -printtoconsole
-      -rpcbind=0.0.0.0
-      -rpcallowip=0.0.0.0/0
-      -server=1
-      -txindex=1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL database (optional - for advanced features)
+  postgres:
+    image: postgres:15-alpine
+    container_name: otedama-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=otedama
+      - POSTGRES_USER=otedama
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-change_me_in_production}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - otedama-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U otedama"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Prometheus for monitoring
   prometheus:
@@ -73,6 +91,7 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9091:9090"
     networks:
@@ -89,7 +108,7 @@ services:
     container_name: otedama-grafana
     restart: unless-stopped
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-change_me_in_production}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-data:/var/lib/grafana
@@ -107,6 +126,7 @@ networks:
     driver: bridge
 
 volumes:
-  bitcoin-data:
+  redis-data:
+  postgres-data:
   prometheus-data:
   grafana-data:
