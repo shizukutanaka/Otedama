@@ -1,81 +1,64 @@
-# Otedama Mining Pool - Optimized Production Dockerfile
-# Multi-stage build with security hardening
+# Otedama v1.5.0 - Production Dockerfile
+# Multi-stage build for Go application
 
 # Build stage
-FROM node:18-alpine AS builder
+FROM golang:1.21-alpine AS builder
 
-# Install only necessary build dependencies
-RUN apk add --no-cache --virtual .build-deps \
-    python3 make g++ git && \
-    apk add --no-cache --virtual .runtime-deps \
-    libstdc++
+# Install build dependencies
+RUN apk add --no-cache git make gcc musl-dev
 
 WORKDIR /build
 
-# Copy package files first for better caching
-COPY package*.json ./
+# Copy go mod files
+COPY go.mod go.sum ./
 
-# Install dependencies with exact versions
-RUN npm ci --production --no-audit --no-fund && \
-    npm cache clean --force
+# Download dependencies
+RUN go mod download
 
 # Copy source code
-COPY --chown=node:node . .
+COPY . .
 
-# Remove development files
-RUN rm -rf test/ tests/ examples/ docs/ scripts/test* *.md .git* .env.example
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o otedama cmd/otedama/main.go
 
 # Production stage
-FROM node:18-alpine AS production
+FROM alpine:3.19
 
-# Install runtime dependencies only
-RUN apk add --no-cache \
-    tini \
-    libstdc++ \
-    && rm -rf /var/cache/apk/*
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata && \
+    rm -rf /var/cache/apk/*
 
-# Security: Create non-root user with specific UID/GID
+# Create non-root user
 RUN addgroup -g 10001 -S otedama && \
     adduser -S -u 10001 -G otedama -h /app -s /bin/false otedama
 
 WORKDIR /app
 
-# Copy built application
-COPY --from=builder --chown=otedama:otedama /build/node_modules ./node_modules
-COPY --from=builder --chown=otedama:otedama /build/lib ./lib
-COPY --from=builder --chown=otedama:otedama /build/config ./config
-COPY --from=builder --chown=otedama:otedama /build/scripts ./scripts
-COPY --from=builder --chown=otedama:otedama /build/*.js ./
-COPY --from=builder --chown=otedama:otedama /build/package*.json ./
+# Copy binary from builder
+COPY --from=builder --chown=otedama:otedama /build/otedama ./bin/otedama
 
-# Create required directories with proper permissions
-RUN mkdir -p data logs ssl backups && \
-    chown -R otedama:otedama data logs ssl backups && \
-    chmod 700 data backups && \
+# Copy configuration files
+COPY --chown=otedama:otedama config.yaml ./config.yaml.example
+
+# Create required directories
+RUN mkdir -p data logs && \
+    chown -R otedama:otedama data logs && \
+    chmod 700 data && \
     chmod 755 logs
 
-# Security hardening
-RUN chmod -R o-rwx /app && \
-    find /app -type d -exec chmod 750 {} \; && \
-    find /app -type f -exec chmod 640 {} \;
-
-# Drop all capabilities
+# Drop privileges
 USER otedama
 
-# Expose only necessary ports
-EXPOSE 3333 8080
+# Expose ports
+EXPOSE 8080 30303 3333 9090
 
 # Environment variables
-ENV NODE_ENV=production \
-    NODE_OPTIONS="--max-old-space-size=4096 --expose-gc" \
-    LOG_LEVEL=info
+ENV LOG_LEVEL=info
 
-# Health check with timeout
+# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD node scripts/health-check.js || exit 1
+  CMD ["/app/bin/otedama", "-health-check"]
 
-# Use tini for proper PID 1 handling
-ENTRYPOINT ["/sbin/tini", "--"]
-
-# Start with memory optimization flags
-CMD ["node", "index.js", "--mode", "pool"]
+# Run the application
+ENTRYPOINT ["/app/bin/otedama"]
+CMD ["-config", "/app/config.yaml"]

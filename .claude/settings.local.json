@@ -16,7 +16,11 @@
       "Bash(git rm:*)",
       "Bash(mkdir:*)",
       "Bash(git restore:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(go mod:*)",
+      "Bash(go build:*)",
+      "Bash(make:*)",
+      "Bash(./bin/otedama:*)"
     ],
     "deny": []
   }

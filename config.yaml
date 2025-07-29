@@ -1,0 +1,88 @@
+# Otedama Configuration
+
+# Operation mode: solo, pool, miner, auto
+mode: auto
+
+# Logging
+log_level: info
+
+# Network settings
+network:
+  listen_addr: ":30303"
+  max_peers: 50
+  dial_timeout: 30s
+  enable_p2p: true
+  bootstrap_peers:
+    - "node1.otedama.network:30303"
+    - "node2.otedama.network:30303"
+
+# Mining settings
+mining:
+  algorithm: sha256
+  threads: 0  # 0 = auto-detect
+  target_hash_rate: 0  # 0 = no limit
+  enable_cpu: true
+  enable_gpu: true
+  enable_asic: false
+  gpu_devices: []
+  initial_difficulty: 0x1d00ffff
+  
+  # Pool settings (for miner mode)
+  pools:
+    - url: "stratum+tcp://pool.example.com:3333"
+      user: "wallet_address"
+      pass: "x"
+      priority: 1
+
+# API settings
+api:
+  enabled: true
+  listen_addr: ":8080"
+  enable_tls: false
+  allow_origins:
+    - "*"
+  rate_limit: 100
+
+# Monitoring settings
+monitoring:
+  metrics_interval: 10s
+  enable_profiler: false
+  enable_tracing: false
+  prometheus_addr: ":9090"
+
+# Storage settings
+storage:
+  data_dir: "./data"
+  cache_size: 1000
+  compress_data: true
+  backup_interval: 24h
+
+# Security settings
+security:
+  enable_encryption: true
+  enable_auth: false
+  tls_min_version: "1.2"
+
+# P2P Pool settings
+p2p_pool:
+  share_difficulty: 1000.0
+  block_time: 10m
+  payout_threshold: 0.01
+  fee_percentage: 1.0
+
+# Stratum server settings
+stratum:
+  enabled: true
+  listen_addr: ":3333"
+  max_clients: 10000
+  var_diff: true
+  min_diff: 100.0
+  max_diff: 1000000.0
+  target_time: 10  # seconds per share
+
+# Performance optimization
+performance:
+  enable_optimization: true
+  cpu_affinity: []
+  huge_pages_enabled: false
+  gc_percent: 100
