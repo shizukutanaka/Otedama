@@ -5,5 +5,5 @@ const (
 	Version = "1.5.1"
 	
 	// BuildDate is set during build time
-	BuildDate = "2025-01-29"
+	BuildDate = "2025-07-29"
 )
