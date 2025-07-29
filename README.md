@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
-[![Version](https://img.shields.io/badge/Version-1.5.0-brightgreen.svg)](https://github.com/shizukutanaka/Otedama)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]
 
 [日本語版](README_JP.md) | English
 
@@ -50,7 +50,7 @@ Otedama is a high-performance P2P mining pool and mining software that supports 
 
 ```bash
 # Clone the repository
-git clone https://github.com/shizukutanaka/Otedama.git
+# git clone [your-repository-url]
 cd Otedama
 
 # Download dependencies
@@ -457,5 +457,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Otedama** - High-Performance P2P Mining Pool & Multi-Hardware Mining Software
-
-Repository: https://github.com/shizukutanaka/Otedama

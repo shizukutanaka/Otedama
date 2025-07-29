@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 // PoolConfig はP2Pプールの設定
 type PoolConfig struct {
 	ListenAddr      string
+	BootstrapNodes  []string
 	ShareDifficulty float64
 	BlockTime       time.Duration
 	PayoutThreshold float64
@@ -35,6 +37,7 @@ type Pool struct {
 	blockchain  *Blockchain
 	network     *NetworkManager
 	consensus   *ConsensusEngine
+	dht         *DHT
 	mu          sync.RWMutex
 	running     atomic.Bool
 	nodeID      string
@@ -161,10 +164,31 @@ func NewPool(cfg PoolConfig, logger *zap.Logger) (*Pool, error) {
 	}
 	nodeID := hex.EncodeToString(nodeIDBytes)
 
+	// Generate DHT node ID from address
+	dhtNodeIDBytes := sha256.Sum256([]byte(cfg.ListenAddr + nodeID))
+	dhtNodeID := NodeID(dhtNodeIDBytes)
+
+	// DHT設定
+	dhtConfig := DHTConfig{
+		NodeID:          dhtNodeID,
+		BootstrapNodes:  cfg.BootstrapNodes,
+		BucketSize:      20,
+		Alpha:           3,
+		RefreshInterval: 1 * time.Hour,
+		StoreInterval:   1 * time.Hour,
+		ExpireTime:      24 * time.Hour,
+	}
+
+	dht, err := NewDHT(dhtConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DHT: %w", err)
+	}
+
 	pool := &Pool{
 		config:     cfg,
 		logger:     logger,
 		nodeID:     nodeID,
+		dht:        dht,
 		shares:     NewShareManager(24 * time.Hour),
 		blockchain: NewBlockchain(),
 		consensus:  NewConsensusEngine(0.51), // 51%以上の同意が必要
@@ -211,6 +235,17 @@ func (p *Pool) Start(ctx context.Context) error {
 	// ピア同期
 	go p.syncPeers(ctx)
 
+	// DHT開始
+	if err := p.dht.Start(p.config.ListenAddr); err != nil {
+		return fmt.Errorf("failed to start DHT: %w", err)
+	}
+
+	// DHTピア検出開始
+	go p.discoverPeersViaDHT(ctx)
+
+	// プール情報の公開
+	go p.publishPoolInfoToDHT(ctx)
+
 	return nil
 }
 
@@ -235,6 +270,13 @@ func (p *Pool) Stop() error {
 		}
 		return true
 	})
+
+	// DHT停止
+	if p.dht != nil {
+		if err := p.dht.Stop(); err != nil {
+			p.logger.Error("Failed to stop DHT", zap.Error(err))
+		}
+	}
 
 	return nil
 }
@@ -836,4 +878,138 @@ func NewConsensusEngine(minShareRatio float64) *ConsensusEngine {
 	return &ConsensusEngine{
 		minShareRatio: minShareRatio,
 	}
+}
+
+// discoverPeersViaDHT discovers peers using DHT
+func (p *Pool) discoverPeersViaDHT(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Find nodes near our ID
+			nodes, err := p.dht.FindNode(p.dht.localNode.ID)
+			if err != nil {
+				p.logger.Debug("DHT peer discovery failed", zap.Error(err))
+				continue
+			}
+
+			// Connect to discovered nodes
+			for _, node := range nodes {
+				if node.Address != "" && node.Address != p.config.ListenAddr {
+					if !p.isConnected(node.ID.String()) {
+						go p.connectToPeer(node.Address, node.ID.String())
+					}
+				}
+			}
+
+			// Also try to find pool-specific peers
+			p.findPoolPeersInDHT()
+		}
+	}
+}
+
+// publishPoolInfoToDHT publishes pool information to DHT
+func (p *Pool) publishPoolInfoToDHT(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Create pool info
+			poolInfo := map[string]interface{}{
+				"node_id":          p.nodeID,
+				"address":          p.config.ListenAddr,
+				"share_difficulty": p.config.ShareDifficulty,
+				"block_time":       p.config.BlockTime.Seconds(),
+				"payout_threshold": p.config.PayoutThreshold,
+				"fee_percentage":   p.config.FeePercentage,
+				"total_shares":     p.totalShares.Load(),
+				"total_blocks":     p.blockHeight.Load(),
+				"peer_count":       p.GetPeerCount(),
+				"timestamp":        time.Now().Unix(),
+			}
+
+			// Serialize pool info
+			data, err := json.Marshal(poolInfo)
+			if err != nil {
+				p.logger.Error("Failed to marshal pool info", zap.Error(err))
+				continue
+			}
+
+			// Store in DHT with multiple keys for discoverability
+			keys := []string{
+				fmt.Sprintf("pool:%s", p.config.ListenAddr),
+				fmt.Sprintf("pool:node:%s", p.nodeID),
+				"pool:list", // General key for finding all pools
+			}
+
+			for _, key := range keys {
+				if err := p.dht.Store(key, data); err != nil {
+					p.logger.Debug("Failed to store pool info in DHT",
+						zap.String("key", key),
+						zap.Error(err))
+				}
+			}
+		}
+	}
+}
+
+// findPoolPeersInDHT finds other pools in the DHT
+func (p *Pool) findPoolPeersInDHT() {
+	// Try to get the general pool list
+	data, err := p.dht.Get("pool:list")
+	if err != nil {
+		// Try alternative discovery methods
+		p.discoverPoolsByPattern()
+		return
+	}
+
+	var poolInfo map[string]interface{}
+	if err := json.Unmarshal(data, &poolInfo); err == nil {
+		if address, ok := poolInfo["address"].(string); ok {
+			if address != p.config.ListenAddr {
+				if nodeID, ok := poolInfo["node_id"].(string); ok {
+					if !p.isConnected(nodeID) {
+						go p.connectToPeer(address, nodeID)
+					}
+				}
+			}
+		}
+	}
+}
+
+// discoverPoolsByPattern discovers pools by pattern matching
+func (p *Pool) discoverPoolsByPattern() {
+	// This is a simplified implementation
+	// In practice, you'd implement a more sophisticated discovery mechanism
+	
+	// Get stats from DHT to understand the network
+	stats := p.dht.GetStats()
+	p.logger.Debug("DHT network stats",
+		zap.Any("stats", stats))
+}
+
+// GetPoolStats returns pool statistics including DHT info
+func (p *Pool) GetPoolStats() map[string]interface{} {
+	stats := map[string]interface{}{
+		"node_id":      p.nodeID,
+		"total_shares": p.totalShares.Load(),
+		"block_height": p.blockHeight.Load(),
+		"peer_count":   p.GetPeerCount(),
+		"running":      p.running.Load(),
+	}
+
+	// Add DHT stats
+	if p.dht != nil {
+		stats["dht"] = p.dht.GetStats()
+	}
+
+	return stats
 }

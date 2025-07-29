@@ -12,9 +12,9 @@ network:
   max_peers: 50
   dial_timeout: 30s
   enable_p2p: true
-  bootstrap_peers:
-    - "node1.otedama.network:30303"
-    - "node2.otedama.network:30303"
+  bootstrap_peers: []
+    # Add your bootstrap peers here
+    # Example: - "192.168.1.100:30303"
 
 # Mining settings
 mining:

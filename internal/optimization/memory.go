@@ -2,6 +2,7 @@ package optimization
 
 import (
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -94,14 +95,15 @@ func NewMemoryOptimizer(logger *zap.Logger) *MemoryOptimizer {
 func (mo *MemoryOptimizer) createBufferPool(size int) *BufferPool {
 	bp := &BufferPool{
 		size: size,
-		pool: sync.Pool{
-			New: func() interface{} {
-				bp.allocated.Add(1)
-				return &Buffer{
-					data: make([]byte, size),
-					pool: bp,
-				}
-			},
+	}
+	
+	bp.pool = sync.Pool{
+		New: func() interface{} {
+			bp.allocated.Add(1)
+			return &Buffer{
+				data: make([]byte, size),
+				pool: bp,
+			}
 		},
 	}
 	
@@ -243,7 +245,7 @@ func NewGCController() *GCController {
 	}
 	
 	// GCターゲット設定
-	runtime.SetGCPercent(gc.targetPercent)
+	debug.SetGCPercent(gc.targetPercent)
 	
 	// 定期的なGC実行
 	go gc.periodicGC()
@@ -270,7 +272,7 @@ func (gc *GCController) periodicGC() {
 // SetGCPercent はGCパーセントを設定
 func (gc *GCController) SetGCPercent(percent int) {
 	gc.targetPercent = percent
-	runtime.SetGCPercent(percent)
+	debug.SetGCPercent(percent)
 }
 
 // NewHotPathPools はホットパス用プールを作成

@@ -20,7 +20,10 @@
       "Bash(go mod:*)",
       "Bash(go build:*)",
       "Bash(make:*)",
-      "Bash(./bin/otedama:*)"
+      "Bash(./bin/otedama:*)",
+      "Bash(timeout:*)",
+      "Bash(del Dockerfile.production)",
+      "Bash(go get:*)"
     ],
     "deny": []
   }

@@ -12,27 +12,34 @@ import (
 	"github.com/otedama/otedama/internal/mining"
 	"github.com/otedama/otedama/internal/monitoring"
 	"github.com/otedama/otedama/internal/network"
+	"github.com/otedama/otedama/internal/optimization"
 	"github.com/otedama/otedama/internal/p2p"
+	"github.com/otedama/otedama/internal/security"
 	"github.com/otedama/otedama/internal/stratum"
 	"go.uber.org/zap"
 )
 
 // System はアプリケーション全体を管理する
 type System struct {
-	config         *config.Config
-	logger         *zap.Logger
-	logManager     *logging.Manager
-	monitor        *monitoring.Monitor
-	network        *network.Manager
-	cpuMiner       *mining.Engine
-	gpuMiner       *mining.GPUMiner
-	asicMiner      *mining.ASICMiner
-	jobDistributor *mining.JobDistributor
-	pool           *p2p.Pool
-	stratumServer  *stratum.Server
-	api            *api.Server
-	mu             sync.RWMutex
-	running        bool
+	config          *config.Config
+	logger          *zap.Logger
+	logManager      *logging.Manager
+	monitor         *monitoring.Monitor
+	hardwareMonitor *monitoring.HardwareMonitor
+	anomalyDetector *monitoring.AnomalyDetector
+	memoryPool      *optimization.MemoryPool
+	ddosProtection  *security.DDoSProtection
+	network         *network.Manager
+	cpuMiner        *mining.Engine
+	gpuMiner        *mining.GPUMiner
+	asicMiner       *mining.ASICMiner
+	jobDistributor  *mining.JobDistributor
+	poolFailover    *mining.PoolFailoverManager
+	pool            *p2p.Pool
+	stratumServer   *stratum.Server
+	api             *api.Server
+	mu              sync.RWMutex
+	running         bool
 }
 
 // NewSystem は新しいシステムを作成
@@ -45,6 +52,32 @@ func NewSystem(cfg *config.Config, logger *zap.Logger, logManager *logging.Manag
 
 	// モニタリング初期化
 	s.monitor = monitoring.NewMonitor(logger)
+	
+	// ハードウェアモニタリング初期化
+	s.hardwareMonitor = monitoring.NewHardwareMonitor(logger)
+	
+	// 異常検出初期化
+	anomalyConfig := monitoring.AnomalyConfig{
+		EnableZScore:          true,
+		EnableIsolationForest: true,
+		EnableEWMA:           true,
+		ZScoreThreshold:      3.0,
+		DetectionInterval:    10 * time.Second,
+	}
+	s.anomalyDetector = monitoring.NewAnomalyDetector(anomalyConfig, logger)
+	
+	// メモリプール初期化
+	s.memoryPool = optimization.NewMemoryPool(logger)
+	
+	// DDoS保護初期化
+	ddosConfig := security.DDoSConfig{
+		RequestsPerSecond:      100,
+		BurstSize:             200,
+		ConnectionLimit:       1000,
+		EnableChallenge:       true,
+		EnablePatternDetection: true,
+	}
+	s.ddosProtection = security.NewDDoSProtection(ddosConfig, logger)
 
 	// ネットワークマネージャー初期化
 	netMgr, err := network.NewManager(cfg.Network, logger)
@@ -59,7 +92,7 @@ func NewSystem(cfg *config.Config, logger *zap.Logger, logManager *logging.Manag
 	}
 
 	// APIサーバー初期化（常に有効）
-	apiServer, err := api.NewServer(cfg.API, logger, logManager)
+	apiServer, err := api.NewServer(cfg.API, logger, logManager, s.hardwareMonitor, s.poolFailover, s.memoryPool)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API server: %w", err)
 	}
@@ -133,7 +166,7 @@ func (s *System) initializePoolMode() error {
 			TargetTime: s.config.Stratum.TargetTime,
 		}
 
-		s.stratumServer = stratum.NewServer(stratumCfg)
+		s.stratumServer = stratum.NewServer(stratumCfg, s.logger)
 	}
 
 	// ジョブディストリビューター初期化
@@ -153,6 +186,13 @@ func (s *System) initializeMinerMode() error {
 
 	// ジョブディストリビューター初期化
 	s.jobDistributor = mining.NewJobDistributor()
+
+	// プールフェイルオーバーマネージャー初期化
+	if len(s.config.Mining.Pools) > 0 {
+		s.poolFailover = mining.NewPoolFailoverManager(s.logger, s.config.Mining.Pools)
+		s.logger.Info("Pool failover manager initialized", 
+			zap.Int("pool_count", len(s.config.Mining.Pools)))
+	}
 
 	// マイニングエンジン初期化
 	if err := s.initializeMiners(); err != nil {
@@ -215,6 +255,18 @@ func (s *System) Start(ctx context.Context) error {
 	if err := s.monitor.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start monitor: %w", err)
 	}
+
+	// ハードウェアモニタリング開始
+	if err := s.hardwareMonitor.Start(); err != nil {
+		return fmt.Errorf("failed to start hardware monitor: %w", err)
+	}
+	s.logger.Info("Hardware monitoring started")
+	
+	// 異常検出開始
+	if err := s.anomalyDetector.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start anomaly detector: %w", err)
+	}
+	s.logger.Info("Anomaly detection started")
 
 	// ネットワーク開始
 	if err := s.network.Start(ctx); err != nil {
@@ -305,10 +357,21 @@ func (s *System) startPoolMode(ctx context.Context) error {
 
 // startMinerMode はマイナーモードを開始
 func (s *System) startMinerMode(ctx context.Context) error {
-	// プールに接続
-	for _, pool := range s.config.Mining.Pools {
-		s.logger.Info("Connecting to pool", zap.String("url", pool.URL))
-		// TODO: Stratumクライアント実装
+	// プールフェイルオーバーマネージャー開始
+	if s.poolFailover != nil {
+		if err := s.poolFailover.Start(); err != nil {
+			return fmt.Errorf("failed to start pool failover manager: %w", err)
+		}
+		s.logger.Info("Pool failover manager started")
+	}
+
+	// 初期プールに接続
+	if s.poolFailover != nil {
+		currentPool := s.poolFailover.GetCurrentPool()
+		s.logger.Info("Connecting to primary pool", 
+			zap.String("url", currentPool.URL),
+			zap.String("user", currentPool.User))
+		// TODO: Stratumクライアント実装でプールフェイルオーバーマネージャーを使用
 	}
 
 	// マイナー開始
@@ -359,6 +422,13 @@ func (s *System) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// プールフェイルオーバーマネージャー停止
+	if s.poolFailover != nil {
+		if err := s.poolFailover.Stop(); err != nil {
+			s.logger.Error("Failed to stop pool failover manager", zap.Error(err))
+		}
+	}
+
 	// P2Pプール停止
 	if s.pool != nil {
 		if err := s.pool.Stop(); err != nil {
@@ -380,6 +450,20 @@ func (s *System) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// ハードウェアモニタリング停止
+	if s.hardwareMonitor != nil {
+		if err := s.hardwareMonitor.Stop(); err != nil {
+			s.logger.Error("Failed to stop hardware monitor", zap.Error(err))
+		}
+	}
+	
+	// 異常検出停止
+	if s.anomalyDetector != nil {
+		if err := s.anomalyDetector.Stop(); err != nil {
+			s.logger.Error("Failed to stop anomaly detector", zap.Error(err))
+		}
+	}
+
 	s.running = false
 	return nil
 }
@@ -397,6 +481,38 @@ func (s *System) collectStats(ctx context.Context) {
 			stats := s.GetStats()
 			s.monitor.UpdateStats(stats)
 			s.api.UpdateStats(stats)
+			
+			// Record metrics for anomaly detection
+			s.recordMetricsForAnomalyDetection(stats)
+		}
+	}
+}
+
+// recordMetricsForAnomalyDetection records metrics for anomaly detection
+func (s *System) recordMetricsForAnomalyDetection(stats map[string]interface{}) {
+	if s.anomalyDetector == nil {
+		return
+	}
+	
+	// Record mining metrics
+	if hashRate, ok := stats["cpu_hashrate"].(uint64); ok {
+		s.anomalyDetector.RecordMetric("hash_rate", float64(hashRate), nil)
+	}
+	
+	// Record pool metrics
+	if s.pool != nil {
+		if shares, ok := stats["pool_shares"].(uint64); ok {
+			s.anomalyDetector.RecordMetric("share_rate", float64(shares), nil)
+		}
+		if peers, ok := stats["pool_peers"].(int); ok {
+			s.anomalyDetector.RecordMetric("peer_count", float64(peers), nil)
+		}
+	}
+	
+	// Record network metrics
+	if s.network != nil {
+		if peers, ok := stats["network_peers"].(int); ok {
+			s.anomalyDetector.RecordMetric("network_peers", float64(peers), nil)
 		}
 	}
 }
@@ -441,6 +557,16 @@ func (s *System) GetStats() map[string]interface{} {
 	if s.network != nil {
 		stats["network_peers"] = s.network.GetPeerCount()
 		stats["network_bandwidth"] = s.network.GetBandwidthStats()
+	}
+	
+	// DDoS保護統計
+	if s.ddosProtection != nil {
+		stats["ddos_protection"] = s.ddosProtection.GetStats()
+	}
+	
+	// 異常検出統計
+	if s.anomalyDetector != nil {
+		stats["anomaly_detection"] = s.anomalyDetector.GetStats()
 	}
 
 	return stats

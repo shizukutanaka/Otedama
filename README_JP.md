@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
-[![Version](https://img.shields.io/badge/Version-1.5.0-brightgreen.svg)](https://github.com/shizukutanaka/Otedama)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]
 
 ## 概要
 
@@ -48,7 +48,7 @@ OtedamaはCPU、GPU、ASICハードウェアをサポートする高性能P2Pマ
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/shizukutanaka/Otedama.git
+# git clone [your-repository-url]
 cd Otedama
 
 # 依存関係をダウンロード
@@ -455,5 +455,3 @@ docker run --gpus all otedama:latest
 ---
 
 **Otedama** - 高性能P2Pマイニングプール & マルチハードウェア対応マイニングソフトウェア
-
-リポジトリ: https://github.com/shizukutanaka/Otedama

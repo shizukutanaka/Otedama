@@ -19,6 +19,8 @@ import (
 
 	"github.com/otedama/otedama/internal/config"
 	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/zkp"
+	"go.uber.org/zap"
 )
 
 // Message Stratumプロトコルメッセージ
@@ -38,16 +40,24 @@ type Error struct {
 
 // Client Stratumクライアント
 type Client struct {
-	conn         net.Conn
-	reader       *bufio.Reader
-	writer       *bufio.Writer
-	mu           sync.Mutex
-	workerName   string
-	extraNonce1  string
-	difficulty   float64
-	authorized   bool
+	conn            net.Conn
+	reader          *bufio.Reader
+	writer          *bufio.Writer
+	mu              sync.Mutex
+	workerName      string
+	extraNonce1     string
+	difficulty      float64
+	authorized      bool
 	submittedShares atomic.Uint64
 	acceptedShares  atomic.Uint64
+	
+	// ゼロ知識証明関連
+	zkpProofID      string
+	zkpVerified     bool
+	kycCompliant    bool
+	reputationScore float64
+	lastZKPUpdate   time.Time
+	zkpRequired     bool
 	rejectedShares  atomic.Uint64
 	lastActivity time.Time
 }
@@ -58,6 +68,8 @@ type Server struct {
 	clients      sync.Map
 	jobManager   *JobManager
 	diffAdjuster *DifficultyAdjuster
+	zkpManager   *zkp.ZKPManager
+	logger       *zap.Logger
 	mu           sync.RWMutex
 	running      atomic.Bool
 	config       Config
@@ -104,7 +116,7 @@ type JobManager struct {
 }
 
 // NewServer 新しいStratumサーバーを作成
-func NewServer(config Config) *Server {
+func NewServer(config Config, logger *zap.Logger) *Server {
 	// 難易度調整設定
 	diffConfig := DefaultDifficultyConfig()
 	diffConfig.MinDiff = config.MinDiff
@@ -116,6 +128,8 @@ func NewServer(config Config) *Server {
 		config:       config,
 		jobManager:   NewJobManager(),
 		diffAdjuster: NewDifficultyAdjuster(diffConfig),
+		zkpManager:   zkp.NewZKPManager(logger),
+		logger:       logger,
 	}
 }
 
@@ -219,6 +233,10 @@ func (s *Server) handleMessage(client *Client, msg *Message) {
 		s.handleSubscribe(client, msg)
 	case "mining.authorize":
 		s.handleAuthorize(client, msg)
+	case "mining.zkp_auth":
+		s.handleZKPAuth(client, msg)
+	case "mining.kyc_proof":
+		s.handleKYCProof(client, msg)
 	case "mining.submit":
 		s.handleSubmit(client, msg)
 	case "mining.get_transactions":
@@ -293,28 +311,63 @@ func (s *Server) handleSubmit(client *Client, msg *Message) {
 		return
 	}
 	
+	// ZKP認証が必要な場合はチェック
+	if s.requireZKPAuth(client) {
+		s.sendError(client, msg.ID, -4, "ZKP authentication required")
+		s.logger.Warn("Share submission requires ZKP auth", 
+			zap.String("worker", client.workerName),
+			zap.Uint64("submitted_shares", client.submittedShares.Load()))
+		return
+	}
+	
+	// ZKP認証済みクライアントの検証
+	if client.zkpVerified && !s.validateZKPClient(client) {
+		s.sendError(client, msg.ID, -5, "ZKP validation failed")
+		s.logger.Warn("ZKP validation failed for share submission", 
+			zap.String("worker", client.workerName))
+		return
+	}
+	
 	if len(msg.Params) < 5 {
 		s.sendError(client, msg.ID, -1, "Invalid parameters")
 		return
 	}
 	
 	client.submittedShares.Add(1)
+	client.lastActivity = time.Now()
 	
 	// シェア検証
-	// TODO: 実際の検証ロジックを実装
 	valid := s.validateShare(client, msg.Params)
 	
 	if valid {
 		client.acceptedShares.Add(1)
 		s.sendResult(client, msg.ID, true)
 		
+		// 高品質なシェア提出でレピュテーション向上
+		if client.zkpVerified {
+			s.updateClientReputation(client, true)
+		}
+		
 		// 可変難易度調整
 		if s.config.VarDiff {
 			s.adjustDifficulty(client)
 		}
+		
+		s.logger.Debug("Share accepted", 
+			zap.String("worker", client.workerName),
+			zap.Bool("zkp_verified", client.zkpVerified))
 	} else {
 		client.rejectedShares.Add(1)
 		s.sendError(client, msg.ID, 23, "Low difficulty share")
+		
+		// 無効なシェア提出でレピュテーション低下
+		if client.zkpVerified {
+			s.updateClientReputation(client, false)
+		}
+		
+		s.logger.Debug("Share rejected", 
+			zap.String("worker", client.workerName),
+			zap.Bool("zkp_verified", client.zkpVerified))
 	}
 }
 
@@ -718,4 +771,239 @@ func (s *Server) GetClientCount() int32 {
 // GetJobsSent 送信ジョブ数を取得
 func (s *Server) GetJobsSent() uint64 {
 	return s.jobsSent.Load()
+}
+
+// handleZKPAuth ゼロ知識証明認証処理
+func (s *Server) handleZKPAuth(client *Client, msg *Message) {
+	if len(msg.Params) < 3 {
+		s.sendError(client, msg.ID, -1, "Invalid parameters")
+		return
+	}
+	
+	workerName, ok := msg.Params[0].(string)
+	if !ok {
+		s.sendError(client, msg.ID, -1, "Invalid worker name")
+		return
+	}
+	
+	proofID, ok := msg.Params[1].(string)
+	if !ok {
+		s.sendError(client, msg.ID, -1, "Invalid proof ID")
+		return
+	}
+	
+	verifierID, ok := msg.Params[2].(string)
+	if !ok {
+		s.sendError(client, msg.ID, -1, "Invalid verifier ID")
+		return
+	}
+	
+	s.logger.Info("ZKP authentication request", 
+		zap.String("worker", workerName),
+		zap.String("proof_id", proofID),
+		zap.String("verifier_id", verifierID))
+	
+	// ゼロ知識証明を検証
+	result, err := s.zkpManager.VerifyProof(proofID, verifierID)
+	if err != nil {
+		s.logger.Error("ZKP verification failed", 
+			zap.String("proof_id", proofID),
+			zap.Error(err))
+		s.sendError(client, msg.ID, -2, "ZKP verification failed")
+		return
+	}
+	
+	if !result.Valid {
+		s.logger.Warn("Invalid ZKP proof", 
+			zap.String("proof_id", proofID),
+			zap.String("worker", workerName))
+		s.sendError(client, msg.ID, -3, "Invalid proof")
+		return
+	}
+	
+	// クライアントにZKP情報を設定
+	client.mu.Lock()
+	client.workerName = workerName
+	client.zkpProofID = proofID
+	client.zkpVerified = true
+	client.reputationScore = result.Reputation
+	client.lastZKPUpdate = time.Now()
+	
+	// KYC準拠かチェック
+	if result.Statement.Type == zkp.StatementKYCProof {
+		client.kycCompliant = true
+	}
+	
+	// 高い信頼度スコアの場合は認証を許可
+	if result.Score >= 0.7 {
+		client.authorized = true
+	}
+	client.mu.Unlock()
+	
+	// 認証結果を送信
+	response := map[string]interface{}{
+		"authorized":       client.authorized,
+		"zkp_verified":     client.zkpVerified,
+		"kyc_compliant":    client.kycCompliant,
+		"reputation_score": client.reputationScore,
+		"score":           result.Score,
+	}
+	
+	s.sendResult(client, msg.ID, response)
+	
+	s.logger.Info("ZKP authentication completed", 
+		zap.String("worker", workerName),
+		zap.Bool("authorized", client.authorized),
+		zap.Float64("score", result.Score))
+}
+
+// handleKYCProof KYC証明処理
+func (s *Server) handleKYCProof(client *Client, msg *Message) {
+	if len(msg.Params) < 2 {
+		s.sendError(client, msg.ID, -1, "Invalid parameters")
+		return
+	}
+	
+	userID, ok := msg.Params[0].(string)
+	if !ok {
+		s.sendError(client, msg.ID, -1, "Invalid user ID")
+		return
+	}
+	
+	kycDataInterface, ok := msg.Params[1].(map[string]interface{})
+	if !ok {
+		s.sendError(client, msg.ID, -1, "Invalid KYC data")
+		return
+	}
+	
+	s.logger.Info("KYC proof request", zap.String("user_id", userID))
+	
+	// KYCプルーフを生成
+	proof, err := s.zkpManager.CreateKYCProof(userID, kycDataInterface)
+	if err != nil {
+		s.logger.Error("KYC proof generation failed", 
+			zap.String("user_id", userID),
+			zap.Error(err))
+		s.sendError(client, msg.ID, -2, "KYC proof generation failed")
+		return
+	}
+	
+	// レスポンス
+	response := map[string]interface{}{
+		"proof_id":   proof.ID,
+		"expires_at": proof.ExpiresAt.Unix(),
+		"statement":  proof.Statement,
+	}
+	
+	s.sendResult(client, msg.ID, response)
+	
+	s.logger.Info("KYC proof generated", 
+		zap.String("user_id", userID),
+		zap.String("proof_id", proof.ID))
+}
+
+// requireZKPAuth ZKP認証が必要かチェック
+func (s *Server) requireZKPAuth(client *Client) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	// 設定でZKP認証が必須の場合
+	if client.zkpRequired {
+		return !client.zkpVerified
+	}
+	
+	// 高リスク活動の場合はZKP認証が必要
+	if client.submittedShares.Load() > 1000 {
+		return !client.zkpVerified
+	}
+	
+	// ZKP証明の有効期限チェック
+	if client.zkpVerified && time.Since(client.lastZKPUpdate) > 24*time.Hour {
+		return true
+	}
+	
+	return false
+}
+
+// validateZKPClient ZKPクライアントの検証
+func (s *Server) validateZKPClient(client *Client) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	// ZKP認証済みかチェック
+	if !client.zkpVerified {
+		return false
+	}
+	
+	// 信頼度スコアのチェック
+	if client.reputationScore < 0.5 {
+		s.logger.Warn("Low reputation score", 
+			zap.String("worker", client.workerName),
+			zap.Float64("score", client.reputationScore))
+		return false
+	}
+	
+	// ZKP証明の有効期限チェック
+	if time.Since(client.lastZKPUpdate) > 24*time.Hour {
+		s.logger.Warn("ZKP proof expired", 
+			zap.String("worker", client.workerName),
+			zap.Time("last_update", client.lastZKPUpdate))
+		return false
+	}
+	
+	return true
+}
+
+// GetZKPStats ZKP統計を取得
+func (s *Server) GetZKPStats() map[string]interface{} {
+	zkpStats := s.zkpManager.GetProofStats()
+	
+	// クライアント統計も追加
+	zkpClients := 0
+	kycCompliantClients := 0
+	
+	s.clients.Range(func(key, value interface{}) bool {
+		client := value.(*Client)
+		client.mu.Lock()
+		if client.zkpVerified {
+			zkpClients++
+		}
+		if client.kycCompliant {
+			kycCompliantClients++
+		}
+		client.mu.Unlock()
+		return true
+	})
+	
+	zkpStats["zkp_clients"] = zkpClients
+	zkpStats["kyc_compliant_clients"] = kycCompliantClients
+	zkpStats["total_clients"] = s.GetClientCount()
+	
+	return zkpStats
+}
+
+// updateClientReputation クライアントのレピュテーションを更新
+func (s *Server) updateClientReputation(client *Client, success bool) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	// レピュテーションスコアの調整
+	if success {
+		// 成功時は小幅な増加
+		client.reputationScore += 0.001
+		if client.reputationScore > 1.0 {
+			client.reputationScore = 1.0
+		}
+	} else {
+		// 失敗時は大幅な減少
+		client.reputationScore -= 0.01
+		if client.reputationScore < 0.0 {
+			client.reputationScore = 0.0
+		}
+	}
+	
+	s.logger.Debug("Client reputation updated", 
+		zap.String("worker", client.workerName),
+		zap.Float64("new_score", client.reputationScore),
+		zap.Bool("success", success))
 }

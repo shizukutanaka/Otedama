@@ -14,21 +14,30 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/otedama/otedama/internal/config"
 	"github.com/otedama/otedama/internal/logging"
+	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/monitoring"
+	"github.com/otedama/otedama/internal/optimization"
+	"github.com/otedama/otedama/internal/zkp"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
 // Server はAPIサーバー
 type Server struct {
-	config     config.APIConfig
-	logger     *zap.Logger
-	logManager *logging.Manager
-	router     *mux.Router
-	server     *http.Server
-	upgrader   websocket.Upgrader
-	wsClients  sync.Map
-	stats      map[string]interface{}
-	statsMu    sync.RWMutex
+	config          config.APIConfig
+	logger          *zap.Logger
+	logManager      *logging.Manager
+	zkpManager      *zkp.ZKPManager
+	hardwareMonitor *monitoring.HardwareMonitor
+	poolFailover    *mining.PoolFailoverManager
+	memoryPool      *optimization.MemoryPool
+	wsAuth          *WebSocketAuth
+	router          *mux.Router
+	server          *http.Server
+	upgrader        websocket.Upgrader
+	wsClients       sync.Map
+	stats           map[string]interface{}
+	statsMu         sync.RWMutex
 	
 	// Rate limiting
 	rateLimiter sync.Map // IP -> *ClientLimiter
@@ -36,9 +45,11 @@ type Server struct {
 
 // WSClient はWebSocketクライアント
 type WSClient struct {
-	conn   *websocket.Conn
-	send   chan []byte
-	server *Server
+	conn      *websocket.Conn
+	send      chan []byte
+	server    *Server
+	sessionID string
+	authenticated bool
 }
 
 // Response はAPIレスポンス
@@ -64,13 +75,18 @@ type ClientLimiter struct {
 }
 
 // NewServer は新しいAPIサーバーを作成
-func NewServer(cfg config.APIConfig, logger *zap.Logger, logManager *logging.Manager) (*Server, error) {
+func NewServer(cfg config.APIConfig, logger *zap.Logger, logManager *logging.Manager, hardwareMonitor *monitoring.HardwareMonitor, poolFailover *mining.PoolFailoverManager, memoryPool *optimization.MemoryPool) (*Server, error) {
 	s := &Server{
-		config:     cfg,
-		logger:     logger,
-		logManager: logManager,
-		router:     mux.NewRouter(),
-		stats:      make(map[string]interface{}),
+		config:          cfg,
+		logger:          logger,
+		logManager:      logManager,
+		zkpManager:      zkp.NewZKPManager(logger),
+		hardwareMonitor: hardwareMonitor,
+		poolFailover:    poolFailover,
+		memoryPool:      memoryPool,
+		wsAuth:          NewWebSocketAuth(logger),
+		router:          mux.NewRouter(),
+		stats:           make(map[string]interface{}),
 	}
 	
 	// Initialize upgrader after server struct is created
@@ -124,9 +140,27 @@ func (s *Server) setupRoutes() {
 	// プール
 	v1.HandleFunc("/pool/stats", s.handlePoolStats).Methods("GET")
 	v1.HandleFunc("/pool/miners", s.handlePoolMiners).Methods("GET")
+	v1.HandleFunc("/pool/failover/status", s.handlePoolFailoverStatus).Methods("GET")
+	v1.HandleFunc("/pool/failover/trigger", s.handlePoolFailoverTrigger).Methods("POST")
 	
 	// Stratum
 	v1.HandleFunc("/stratum/stats", s.handleStratumStats).Methods("GET")
+	
+	// Zero-Knowledge Proof
+	v1.HandleFunc("/zkp/generate", s.handleZKPGenerate).Methods("POST")
+	v1.HandleFunc("/zkp/verify/{proofId}", s.handleZKPVerify).Methods("GET")
+	v1.HandleFunc("/zkp/stats", s.handleZKPStats).Methods("GET")
+	v1.HandleFunc("/kyc/proof", s.handleKYCGenerate).Methods("POST")
+	
+	// Hardware Monitoring
+	v1.HandleFunc("/hardware/metrics", s.handleHardwareMetrics).Methods("GET")
+	v1.HandleFunc("/hardware/recommendations", s.handleHardwareRecommendations).Methods("GET")
+	
+	// Memory Pool
+	v1.HandleFunc("/memory/stats", s.handleMemoryStats).Methods("GET")
+	
+	// WebSocket Authentication
+	v1.HandleFunc("/ws/token", s.handleGenerateWSToken).Methods("POST")
 	
 	// WebSocket
 	s.router.HandleFunc("/ws", s.handleWebSocket)
@@ -235,12 +269,17 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	mode, _ := s.stats["mode"].(string)
 	s.statsMu.RUnlock()
 
+	// ZKP統計を取得
+	zkpStats := s.zkpManager.GetProofStats()
+
 	s.sendJSON(w, http.StatusOK, Response{
 		Success: true,
 		Data: map[string]interface{}{
-			"running": true,
-			"mode":    mode,
-			"version": "1.0.0",
+			"running":     true,
+			"mode":        mode,
+			"version":     "1.0.0",
+			"zkp_enabled": true,
+			"zkp_stats":   zkpStats,
 		},
 	})
 }
@@ -305,6 +344,70 @@ func (s *Server) handlePoolMiners(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handlePoolFailoverStatus はプールフェイルオーバー状態を処理
+func (s *Server) handlePoolFailoverStatus(w http.ResponseWriter, r *http.Request) {
+	if s.poolFailover == nil {
+		s.sendJSON(w, http.StatusServiceUnavailable, Response{
+			Success: false,
+			Error:   "Pool failover not configured",
+		})
+		return
+	}
+
+	currentPool := s.poolFailover.GetCurrentPool()
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"current_pool": map[string]interface{}{
+				"url":      currentPool.URL,
+				"user":     currentPool.User,
+				"priority": currentPool.Priority,
+			},
+			"failover_enabled": true,
+		},
+	})
+}
+
+// handlePoolFailoverTrigger は手動プールフェイルオーバーを処理
+func (s *Server) handlePoolFailoverTrigger(w http.ResponseWriter, r *http.Request) {
+	if s.poolFailover == nil {
+		s.sendJSON(w, http.StatusServiceUnavailable, Response{
+			Success: false,
+			Error:   "Pool failover not configured",
+		})
+		return
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req.Reason = "Manual failover triggered via API"
+	}
+
+	if err := s.poolFailover.TriggerFailover(req.Reason); err != nil {
+		s.sendJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failover failed: %v", err),
+		})
+		return
+	}
+
+	newPool := s.poolFailover.GetCurrentPool()
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"message": "Failover triggered successfully",
+			"new_pool": map[string]interface{}{
+				"url":      newPool.URL,
+				"user":     newPool.User,
+				"priority": newPool.Priority,
+			},
+		},
+	})
+}
+
 // handleStratumStats はStratum統計を処理
 func (s *Server) handleStratumStats(w http.ResponseWriter, r *http.Request) {
 	s.statsMu.RLock()
@@ -329,10 +432,23 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Authenticate WebSocket connection
+	session, err := s.wsAuth.AuthenticateConnection(conn)
+	if err != nil {
+		s.logger.Error("WebSocket authentication failed", 
+			zap.Error(err),
+			zap.String("remote_addr", conn.RemoteAddr().String()))
+		conn.WriteJSON(map[string]string{"error": "Authentication failed"})
+		conn.Close()
+		return
+	}
+
 	client := &WSClient{
-		conn:   conn,
-		send:   make(chan []byte, 256),
-		server: s,
+		conn:          conn,
+		send:          make(chan []byte, 256),
+		server:        s,
+		sessionID:     session.ID,
+		authenticated: true,
 	}
 
 	clientID := fmt.Sprintf("%s-%d", conn.RemoteAddr().String(), time.Now().UnixNano())
@@ -633,7 +749,297 @@ func (s *Server) isOriginAllowed(origin string) bool {
 	return false
 }
 
+// ZKP Handlers
+
+// handleZKPGenerate はZKP証明生成を処理
+func (s *Server) handleZKPGenerate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProverID  string                 `json:"prover_id"`
+		Statement map[string]interface{} `json:"statement"`
+		Witness   []byte                 `json:"witness"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Invalid request body",
+		})
+		return
+	}
+	
+	// ステートメントをzkp.Statementに変換
+	statementType, ok := req.Statement["type"].(string)
+	if !ok {
+		s.sendJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Statement type is required and must be a string",
+		})
+		return
+	}
+	
+	statement := zkp.Statement{
+		Type:       zkp.StatementType(statementType),
+		Parameters: req.Statement,
+	}
+	
+	proof, err := s.zkpManager.GenerateProof(req.ProverID, statement, req.Witness)
+	if err != nil {
+		s.sendJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to generate proof: %v", err),
+		})
+		return
+	}
+	
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"proof_id":   proof.ID,
+			"prover_id":  proof.ProverID,
+			"statement":  proof.Statement,
+			"created_at": proof.CreatedAt,
+			"expires_at": proof.ExpiresAt,
+		},
+	})
+}
+
+// handleZKPVerify はZKP証明検証を処理
+func (s *Server) handleZKPVerify(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	proofID := vars["proofId"]
+	
+	if proofID == "" {
+		s.sendJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Proof ID is required",
+		})
+		return
+	}
+	
+	verifierID := r.Header.Get("X-Verifier-ID")
+	if verifierID == "" {
+		verifierID = "api_client"
+	}
+	
+	result, err := s.zkpManager.VerifyProof(proofID, verifierID)
+	if err != nil {
+		s.sendJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Verification failed: %v", err),
+		})
+		return
+	}
+	
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    result,
+	})
+}
+
+// handleZKPStats はZKP統計を処理
+func (s *Server) handleZKPStats(w http.ResponseWriter, r *http.Request) {
+	stats := s.zkpManager.GetProofStats()
+	
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    stats,
+	})
+}
+
+// handleKYCGenerate はKYC証明生成を処理
+func (s *Server) handleKYCGenerate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID  string                 `json:"user_id"`
+		KYCData map[string]interface{} `json:"kyc_data"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Invalid request body",
+		})
+		return
+	}
+	
+	proof, err := s.zkpManager.CreateKYCProof(req.UserID, req.KYCData)
+	if err != nil {
+		s.sendJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to create KYC proof: %v", err),
+		})
+		return
+	}
+	
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"proof_id":   proof.ID,
+			"user_id":    req.UserID,
+			"statement":  proof.Statement,
+			"created_at": proof.CreatedAt,
+			"expires_at": proof.ExpiresAt,
+		},
+	})
+}
+
 // Utility methods
+
+// Hardware Monitoring Handlers
+
+// handleHardwareMetrics はハードウェアメトリクスを処理
+func (s *Server) handleHardwareMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.hardwareMonitor == nil {
+		s.sendJSON(w, http.StatusServiceUnavailable, Response{
+			Success: false,
+			Error:   "Hardware monitoring not available",
+		})
+		return
+	}
+
+	metrics := s.hardwareMonitor.GetMetrics()
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    metrics,
+	})
+}
+
+// handleHardwareRecommendations はハードウェア最適化の推奨事項を処理
+func (s *Server) handleHardwareRecommendations(w http.ResponseWriter, r *http.Request) {
+	if s.hardwareMonitor == nil {
+		s.sendJSON(w, http.StatusServiceUnavailable, Response{
+			Success: false,
+			Error:   "Hardware monitoring not available",
+		})
+		return
+	}
+
+	// Get recommendations from the auto-tuner
+	// This would need to be exposed through the HardwareMonitor
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"recommendations": []interface{}{},
+			"message":         "Auto-tuning recommendations will be available when system load changes",
+		},
+	})
+}
+
+// Memory Pool Handlers
+
+// handleMemoryStats はメモリプール統計を処理
+func (s *Server) handleMemoryStats(w http.ResponseWriter, r *http.Request) {
+	if s.memoryPool == nil {
+		s.sendJSON(w, http.StatusServiceUnavailable, Response{
+			Success: false,
+			Error:   "Memory pool not available",
+		})
+		return
+	}
+
+	stats := s.memoryPool.GetStats()
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data:    stats,
+	})
+}
+
+// WebSocket Token Handler
+
+// handleGenerateWSToken はWebSocketトークンを生成
+func (s *Server) handleGenerateWSToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ClientID string `json:"client_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Invalid request body",
+		})
+		return
+	}
+
+	if req.ClientID == "" {
+		s.sendJSON(w, http.StatusBadRequest, Response{
+			Success: false,
+			Error:   "Client ID is required",
+		})
+		return
+	}
+
+	token, err := s.wsAuth.GenerateToken(req.ClientID)
+	if err != nil {
+		s.sendJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to generate token: %v", err),
+		})
+		return
+	}
+
+	s.sendJSON(w, http.StatusOK, Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"token": token,
+			"expires_in": 86400, // 24 hours in seconds
+		},
+	})
+}
+
+// handleMessage processes incoming WebSocket messages
+func (c *WSClient) handleMessage(data []byte) {
+	var msg map[string]interface{}
+	if err := json.Unmarshal(data, &msg); err != nil {
+		c.server.logger.Error("Failed to parse WebSocket message",
+			zap.Error(err),
+			zap.String("session_id", c.sessionID))
+		return
+	}
+
+	msgType, ok := msg["type"].(string)
+	if !ok {
+		return
+	}
+
+	switch msgType {
+	case "ping":
+		// Respond with pong
+		response := map[string]interface{}{
+			"type": "pong",
+			"timestamp": time.Now().Unix(),
+		}
+		data, _ := json.Marshal(response)
+		select {
+		case c.send <- data:
+		default:
+			// Client's send channel is full
+		}
+
+	case "subscribe":
+		// Handle subscription requests
+		topic, ok := msg["topic"].(string)
+		if ok {
+			c.server.logger.Debug("WebSocket subscription request",
+				zap.String("session_id", c.sessionID),
+				zap.String("topic", topic))
+			// TODO: Implement topic subscription
+		}
+
+	case "unsubscribe":
+		// Handle unsubscription requests
+		topic, ok := msg["topic"].(string)
+		if ok {
+			c.server.logger.Debug("WebSocket unsubscription request",
+				zap.String("session_id", c.sessionID),
+				zap.String("topic", topic))
+			// TODO: Implement topic unsubscription
+		}
+
+	default:
+		c.server.logger.Debug("Unknown WebSocket message type",
+			zap.String("session_id", c.sessionID),
+			zap.String("type", msgType))
+	}
+}
 
 // sendJSON はJSONレスポンスを送信
 func (s *Server) sendJSON(w http.ResponseWriter, status int, data interface{}) {
