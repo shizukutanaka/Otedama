@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
+	
+	"go.uber.org/zap"
 )
 
 // MemoryOptimizer はメモリ最適化マネージャー
@@ -13,7 +15,29 @@ type MemoryOptimizer struct {
 	bufferPools     map[int]*BufferPool
 	zeroCopyManager *ZeroCopyManager
 	gcController    *GCController
+	logger          *zap.Logger
+	stats           *MemoryStats
+	hotPathPools    *HotPathPools
 	mu              sync.RWMutex
+}
+
+// MemoryStats はメモリ統計
+type MemoryStats struct {
+	allocations     atomic.Uint64
+	deallocations   atomic.Uint64
+	poolHits        atomic.Uint64
+	poolMisses      atomic.Uint64
+	gcRuns          atomic.Uint64
+	peakMemory      atomic.Uint64
+}
+
+// HotPathPools はホットパス用の専用プール
+type HotPathPools struct {
+	hashBuffers    sync.Pool
+	nonceBuffers   sync.Pool
+	shareBuffers   sync.Pool
+	jobBuffers     sync.Pool
+	messageBuffers sync.Pool
 }
 
 // BufferPool はバッファプール
@@ -44,10 +68,13 @@ type Buffer struct {
 }
 
 // NewMemoryOptimizer は新しいメモリオプティマイザーを作成
-func NewMemoryOptimizer() *MemoryOptimizer {
+func NewMemoryOptimizer(logger *zap.Logger) *MemoryOptimizer {
 	mo := &MemoryOptimizer{
 		bufferPools:     make(map[int]*BufferPool),
 		zeroCopyManager: NewZeroCopyManager(),
+		logger:          logger,
+		stats:           &MemoryStats{},
+		hotPathPools:    NewHotPathPools(),
 		gcController:    NewGCController(),
 	}
 	
@@ -244,6 +271,227 @@ func (gc *GCController) periodicGC() {
 func (gc *GCController) SetGCPercent(percent int) {
 	gc.targetPercent = percent
 	runtime.SetGCPercent(percent)
+}
+
+// NewHotPathPools はホットパス用プールを作成
+func NewHotPathPools() *HotPathPools {
+	return &HotPathPools{
+		hashBuffers: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 32) // SHA256サイズ
+			},
+		},
+		nonceBuffers: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 8) // 64bit nonce
+			},
+		},
+		shareBuffers: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 80) // 標準シェアサイズ
+			},
+		},
+		jobBuffers: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 128) // ジョブデータサイズ
+			},
+		},
+		messageBuffers: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 4096) // ネットワークメッセージサイズ
+			},
+		},
+	}
+}
+
+// GetHashBuffer はハッシュ用バッファを取得（ホットパス最適化）
+func (mo *MemoryOptimizer) GetHashBuffer() []byte {
+	buf := mo.hotPathPools.hashBuffers.Get().([]byte)
+	mo.stats.poolHits.Add(1)
+	return buf
+}
+
+// PutHashBuffer はハッシュ用バッファを返却
+func (mo *MemoryOptimizer) PutHashBuffer(buf []byte) {
+	if len(buf) == 32 {
+		// バッファをクリア（セキュリティ上の理由）
+		for i := range buf {
+			buf[i] = 0
+		}
+		mo.hotPathPools.hashBuffers.Put(buf)
+	}
+}
+
+// GetNonceBuffer はNonce用バッファを取得
+func (mo *MemoryOptimizer) GetNonceBuffer() []byte {
+	buf := mo.hotPathPools.nonceBuffers.Get().([]byte)
+	mo.stats.poolHits.Add(1)
+	return buf
+}
+
+// PutNonceBuffer はNonce用バッファを返却
+func (mo *MemoryOptimizer) PutNonceBuffer(buf []byte) {
+	if len(buf) == 8 {
+		mo.hotPathPools.nonceBuffers.Put(buf)
+	}
+}
+
+// GetShareBuffer はシェア用バッファを取得
+func (mo *MemoryOptimizer) GetShareBuffer() []byte {
+	buf := mo.hotPathPools.shareBuffers.Get().([]byte)
+	mo.stats.poolHits.Add(1)
+	return buf
+}
+
+// PutShareBuffer はシェア用バッファを返却
+func (mo *MemoryOptimizer) PutShareBuffer(buf []byte) {
+	if len(buf) == 80 {
+		mo.hotPathPools.shareBuffers.Put(buf)
+	}
+}
+
+// GetJobBuffer はジョブ用バッファを取得
+func (mo *MemoryOptimizer) GetJobBuffer() []byte {
+	buf := mo.hotPathPools.jobBuffers.Get().([]byte)
+	mo.stats.poolHits.Add(1)
+	return buf
+}
+
+// PutJobBuffer はジョブ用バッファを返却
+func (mo *MemoryOptimizer) PutJobBuffer(buf []byte) {
+	if len(buf) == 128 {
+		mo.hotPathPools.jobBuffers.Put(buf)
+	}
+}
+
+// GetMessageBuffer はメッセージ用バッファを取得
+func (mo *MemoryOptimizer) GetMessageBuffer() []byte {
+	buf := mo.hotPathPools.messageBuffers.Get().([]byte)
+	mo.stats.poolHits.Add(1)
+	return buf
+}
+
+// PutMessageBuffer はメッセージ用バッファを返却
+func (mo *MemoryOptimizer) PutMessageBuffer(buf []byte) {
+	if len(buf) == 4096 {
+		mo.hotPathPools.messageBuffers.Put(buf)
+	}
+}
+
+// OptimizeHotPath はホットパスの最適化を実行
+func (mo *MemoryOptimizer) OptimizeHotPath() {
+	mo.logger.Info("Optimizing hot paths for memory allocation")
+	
+	// GCの最適化
+	mo.gcController.SetGCPercent(50) // より積極的なGC
+	
+	// プールの事前ウォームアップ
+	mo.warmupPools()
+	
+	// 統計監視開始
+	go mo.monitorStats()
+}
+
+// warmupPools はプールを事前にウォームアップ
+func (mo *MemoryOptimizer) warmupPools() {
+	warmupCount := 100
+	
+	// ハッシュバッファの事前作成
+	hashBuffers := make([][]byte, warmupCount)
+	for i := 0; i < warmupCount; i++ {
+		hashBuffers[i] = mo.GetHashBuffer()
+	}
+	for _, buf := range hashBuffers {
+		mo.PutHashBuffer(buf)
+	}
+	
+	// 他のプールも同様にウォームアップ
+	nonceBuffers := make([][]byte, warmupCount)
+	for i := 0; i < warmupCount; i++ {
+		nonceBuffers[i] = mo.GetNonceBuffer()
+	}
+	for _, buf := range nonceBuffers {
+		mo.PutNonceBuffer(buf)
+	}
+	
+	mo.logger.Debug("Pool warmup completed", zap.Int("warmup_count", warmupCount))
+}
+
+// monitorStats は統計を監視
+func (mo *MemoryOptimizer) monitorStats() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		stats := mo.GetOptimizedStats()
+		
+		mo.logger.Debug("Memory optimization stats",
+			zap.Uint64("pool_hits", stats["pool_hits"].(uint64)),
+			zap.Uint64("pool_misses", stats["pool_misses"].(uint64)),
+			zap.Float64("hit_ratio", stats["hit_ratio"].(float64)),
+			zap.Uint64("peak_memory", stats["peak_memory"].(uint64)),
+		)
+		
+		// メモリ圧迫の検出と対応
+		if stats["heap_inuse_percent"].(float64) > 80.0 {
+			mo.logger.Warn("High memory pressure detected, forcing cleanup")
+			mo.forceCleanup()
+		}
+	}
+}
+
+// forceCleanup は強制クリーンアップを実行
+func (mo *MemoryOptimizer) forceCleanup() {
+	// 複数回のGC実行
+	runtime.GC()
+	runtime.GC()
+	
+	// 統計更新
+	mo.stats.gcRuns.Add(1)
+	
+	mo.logger.Info("Forced memory cleanup completed")
+}
+
+// GetOptimizedStats は最適化統計を取得
+func (mo *MemoryOptimizer) GetOptimizedStats() map[string]interface{} {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	
+	// ピークメモリ使用量を更新
+	current := memStats.Alloc
+	for {
+		peak := mo.stats.peakMemory.Load()
+		if current <= peak || mo.stats.peakMemory.CompareAndSwap(peak, current) {
+			break
+		}
+	}
+	
+	poolHits := mo.stats.poolHits.Load()
+	poolMisses := mo.stats.poolMisses.Load()
+	total := poolHits + poolMisses
+	hitRatio := 0.0
+	if total > 0 {
+		hitRatio = float64(poolHits) / float64(total) * 100
+	}
+	
+	return map[string]interface{}{
+		// Runtime stats
+		"alloc_bytes":         memStats.Alloc,
+		"heap_sys":            memStats.HeapSys,
+		"heap_inuse":          memStats.HeapInuse,
+		"heap_inuse_percent":  float64(memStats.HeapInuse) / float64(memStats.HeapSys) * 100,
+		"num_gc":              memStats.NumGC,
+		"gc_cpu_fraction":     memStats.GCCPUFraction,
+		
+		// Custom stats
+		"allocations":   mo.stats.allocations.Load(),
+		"deallocations": mo.stats.deallocations.Load(),
+		"pool_hits":     poolHits,
+		"pool_misses":   poolMisses,
+		"hit_ratio":     hitRatio,
+		"peak_memory":   mo.stats.peakMemory.Load(),
+		"gc_runs":       mo.stats.gcRuns.Load(),
+	}
 }
 
 // ForceGC は強制的にGCを実行

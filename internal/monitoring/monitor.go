@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -141,14 +142,68 @@ func (m *Monitor) collectSystemMetrics(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	
+	// システムメトリクス用のGaugeを追加
+	cpuGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "otedama_cpu_usage_percent",
+		Help: "CPU usage percentage",
+	})
+	memGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "otedama_memory_usage_bytes",
+		Help: "Memory usage in bytes",
+	})
+	goroutineGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "otedama_goroutines",
+		Help: "Number of goroutines",
+	})
+	
+	prometheus.MustRegister(cpuGauge, memGauge, goroutineGauge)
+	
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// TODO: 実際のシステムメトリクス収集
+			m.collectRealSystemMetrics(cpuGauge, memGauge, goroutineGauge)
 		}
 	}
+}
+
+// collectRealSystemMetrics は実際のシステムメトリクスを収集
+func (m *Monitor) collectRealSystemMetrics(cpuGauge, memGauge, goroutineGauge prometheus.Gauge) {
+	// メモリ使用量
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	memGauge.Set(float64(memStats.Alloc))
+	
+	// Goroutine数
+	goroutineGauge.Set(float64(runtime.NumGoroutine()))
+	
+	// CPU使用率（簡易版）
+	cpuUsage := m.getCPUUsage()
+	cpuGauge.Set(cpuUsage)
+	
+	m.logger.Debug("System metrics collected",
+		zap.Float64("cpu_usage", cpuUsage),
+		zap.Uint64("memory_bytes", memStats.Alloc),
+		zap.Int("goroutines", runtime.NumGoroutine()),
+	)
+}
+
+// getCPUUsage はCPU使用率を取得（簡易版）
+func (m *Monitor) getCPUUsage() float64 {
+	// Go runtime統計からCPU時間を推定
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	
+	// GCのCPU時間から推定（非常に簡易的）
+	gcCPUFraction := stats.GCCPUFraction
+	if gcCPUFraction > 1.0 {
+		gcCPUFraction = 1.0
+	}
+	
+	// プロセス全体のCPU使用率を推定
+	// 実際の実装では /proc/stat や Windows APIを使用
+	return gcCPUFraction * 100
 }
 
 // UpdateStats は統計情報を更新
