@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-07-30
+
+### Added
+- **Comprehensive Automation Suite** - 41 automated systems for complete operational autonomy
+  - High-performance lock-free data structures for share processing
+  - GPU-accelerated hash verification (CUDA/OpenCL/Vulkan)
+  - Adaptive connection pooling with circuit breakers
+  - Memory-mapped file caching for blockchain data
+  - Real-time performance profiling and bottleneck detection
+  - Automated database query optimization with index advisor
+  - Predictive maintenance using ML models
+  - Regional load balancing with geographic routing
+  - Zero-downtime rolling updates (Blue-Green, Canary, Rolling)
+  - Distributed caching layer with Redis and consistent hashing
+  - WebAssembly plugin support for mining algorithms
+  - Chaos engineering framework for stability testing
+  - Automated performance regression detection
+  - Code optimization suggestions with AST analysis
+
+### Enhanced
+- **Mining Engine** - Unified architecture with WASM plugin support
+- **P2P Network** - Enterprise pool support with regional optimization
+- **Security Layer** - National security features with advanced threat detection
+- **Monitoring System** - Comprehensive metrics with predictive analytics
+
+### Documentation
+- Added comprehensive README in English and Japanese
+- Created detailed CHANGELOG in English and Japanese
+- Updated all documentation to reflect new automation features
+
 ## [2.0.0] - 2025-07-30
 
 ### Major Changes

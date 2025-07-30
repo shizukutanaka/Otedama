@@ -35,7 +35,9 @@
       "Bash(chmod:*)",
       "Bash(cmd.exe:*)",
       "Bash(./verify_fixes.sh)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(./cleanup_tests.sh:*)"
     ],
     "deny": []
   }

@@ -737,23 +737,7 @@ func (r *Registry) registerDefaultAlgorithms() {
 		},
 	})
 	
-	// Quantum-resistant placeholder (future-proofing)
-	r.Register(&Algorithm{
-		Name:        "post-quantum",
-		DisplayName: "Post-Quantum Hash",
-		Type:        TypeProofOfWork,
-		Config: AlgorithmConfig{
-			MemorySize:     4 * 1024 * 1024 * 1024, // 4 GB
-			MemoryHardness: true,
-			GPUOptimized:   false,
-			ASICResistant:  true,
-			CPUFriendly:    true,
-			Params: map[string]interface{}{
-				"lattice_dimension": 1024,
-				"security_level":    256,
-			},
-		},
-	})
+	// Post-quantum removed - not practical for current implementation
 	
 	// MTP (Merkle Tree Proof)
 	r.Register(&Algorithm{

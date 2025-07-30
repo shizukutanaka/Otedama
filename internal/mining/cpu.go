@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,263 +11,449 @@ import (
 	"go.uber.org/zap"
 )
 
-// CPUEngine handles CPU mining operations
-// Simple, efficient implementation following John Carmack's performance principles
-type CPUEngine struct {
-	logger      *zap.Logger
-	config      CPUConfig
-	running     int32
-	hashCount   uint64
-	validShares uint64
-	difficulty  uint32
-	work        Work
-	mu          sync.RWMutex
+// CPUMiner represents a CPU mining worker - optimized for performance
+type CPUMiner struct {
+	ID       int
+	logger   *zap.Logger
+	
+	// Hot data - frequently accessed, cache-aligned
+	hashRate    atomic.Uint64
+	validShares atomic.Uint64
+	running     atomic.Bool
+	paused      atomic.Bool
+	
+	// Cold data - less frequently accessed
+	ctx    context.Context
+	cancel context.CancelFunc
+	
+	// Work data
+	currentWork atomic.Value // stores *MiningJob
+	difficulty  atomic.Uint32
+	
+	// Thread management
+	wg sync.WaitGroup
 }
 
-// CPUConfig defines CPU mining engine configuration
+// CPUEngine provides CPU mining capability - simplified interface
+type CPUEngine struct {
+	logger   *zap.Logger
+	miners   []*CPUMiner
+	config   CPUConfig
+	running  atomic.Bool
+	
+	// Aggregated metrics
+	totalHashRate   atomic.Uint64
+	totalShares     atomic.Uint64
+}
+
+// CPUConfig defines CPU mining configuration
 type CPUConfig struct {
 	Algorithm   string `yaml:"algorithm"`
 	Threads     int    `yaml:"threads"`
 	CPUAffinity []int  `yaml:"cpu_affinity"`
 }
 
-// Work represents mining work unit
-type Work struct {
-	Data      []byte    `json:"data"`
-	Target    []byte    `json:"target"`
-	Height    uint64    `json:"height"`
-	Timestamp time.Time `json:"timestamp"`
+// MiningJob represents a unit of mining work
+type MiningJob struct {
+	ID        string
+	Algorithm Algorithm
+	Data      []byte
+	Target    []byte
+	Height    uint64
+	Timestamp time.Time
 }
 
 // Share represents a valid mining share
 type Share struct {
-	Data      []byte    `json:"data"`
-	Nonce     uint32    `json:"nonce"`
-	Hash      []byte    `json:"hash"`
-	Timestamp time.Time `json:"timestamp"`
+	JobID      string
+	Nonce      uint64
+	Hash       []byte
+	Difficulty uint64
+	Timestamp  int64
 }
 
-// NewCPUEngine creates a new CPU mining engine
-func NewCPUEngine(config CPUConfig, logger *zap.Logger) (*CPUEngine, error) {
-	if config.Threads <= 0 {
-		config.Threads = runtime.NumCPU()
+// NewCPUMiner creates a new CPU miner worker
+func NewCPUMiner(id int, logger *zap.Logger) *CPUMiner {
+	ctx, cancel := context.WithCancel(context.Background())
+	
+	return &CPUMiner{
+		ID:     id,
+		logger: logger,
+		ctx:    ctx,
+		cancel: cancel,
 	}
-
-	// Validate algorithm
-	if config.Algorithm != "sha256" && config.Algorithm != "sha256d" {
-		return nil, fmt.Errorf("unsupported algorithm: %s", config.Algorithm)
-	}
-
-	return &CPUEngine{
-		logger:     logger,
-		config:     config,
-		difficulty: 0x1d00ffff, // Default Bitcoin difficulty
-	}, nil
 }
 
-// Start begins mining operations
-func (e *CPUEngine) Start(ctx context.Context) error {
-	if !atomic.CompareAndSwapInt32(&e.running, 0, 1) {
-		return fmt.Errorf("engine already running")
+// Start begins CPU mining
+func (m *CPUMiner) Start() error {
+	if !m.running.CompareAndSwap(false, true) {
+		return nil // Already running
 	}
-
-	e.logger.Info("Starting CPU mining engine",
-		zap.String("algorithm", e.config.Algorithm),
-		zap.Int("threads", e.config.Threads),
-	)
-
-	// Start mining threads
-	for i := 0; i < e.config.Threads; i++ {
-		go e.miningWorker(ctx, i)
-	}
-
-	// Start stats reporter
-	go e.statsReporter(ctx)
-
+	
+	m.wg.Add(1)
+	go m.miningLoop()
+	
+	m.logger.Debug("CPU miner started", zap.Int("id", m.ID))
 	return nil
 }
 
-// Stop stops mining operations
-func (e *CPUEngine) Stop() error {
-	if !atomic.CompareAndSwapInt32(&e.running, 1, 0) {
-		return fmt.Errorf("engine not running")
+// Stop halts CPU mining
+func (m *CPUMiner) Stop() {
+	if !m.running.CompareAndSwap(true, false) {
+		return // Already stopped
 	}
-
-	e.logger.Info("Stopping CPU mining engine")
-	return nil
+	
+	m.cancel()
+	m.wg.Wait()
+	
+	m.logger.Debug("CPU miner stopped", zap.Int("id", m.ID))
 }
 
-// SetWork updates the current mining work
-func (e *CPUEngine) SetWork(work Work) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.work = work
-	e.logger.Debug("New work set",
-		zap.Uint64("height", work.Height),
-		zap.Int("data_size", len(work.Data)),
-	)
+// Pause temporarily pauses mining
+func (m *CPUMiner) Pause() {
+	m.paused.Store(true)
 }
 
-// SetDifficulty updates the mining difficulty
-func (e *CPUEngine) SetDifficulty(difficulty uint32) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+// Resume resumes mining
+func (m *CPUMiner) Resume() {
+	m.paused.Store(false)
+}
 
-	e.difficulty = difficulty
-	e.logger.Info("Difficulty updated", zap.Uint32("difficulty", difficulty))
+// SubmitJob submits new mining work
+func (m *CPUMiner) SubmitJob(job *MiningJob) {
+	m.currentWork.Store(job)
 }
 
 // GetHashRate returns current hash rate
-func (e *CPUEngine) GetHashRate() uint64 {
-	return atomic.LoadUint64(&e.hashCount)
+func (m *CPUMiner) GetHashRate() uint64 {
+	return m.hashRate.Load()
 }
 
-// GetValidShares returns number of valid shares found
-func (e *CPUEngine) GetValidShares() uint64 {
-	return atomic.LoadUint64(&e.validShares)
-}
-
-// GetStats returns mining statistics
-func (e *CPUEngine) GetStats() map[string]interface{} {
-	return map[string]interface{}{
-		"algorithm":     e.config.Algorithm,
-		"threads":       e.config.Threads,
-		"hash_rate":     atomic.LoadUint64(&e.hashCount),
-		"valid_shares":  atomic.LoadUint64(&e.validShares),
-		"difficulty":    e.difficulty,
-		"running":       atomic.LoadInt32(&e.running) == 1,
-	}
-}
-
-// miningWorker is the core mining loop for each thread
-func (e *CPUEngine) miningWorker(ctx context.Context, workerID int) {
-	var nonce uint32
+// miningLoop is the core mining loop - highly optimized
+func (m *CPUMiner) miningLoop() {
+	defer m.wg.Done()
+	
+	var nonce uint64
 	var hashes uint64
-	buffer := make([]byte, 80) // Standard Bitcoin block header size
-
-	// Performance: report hashes every 100k iterations
-	const reportInterval = 100000
-
-	for atomic.LoadInt32(&e.running) == 1 {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Get current work (lock-free read)
-		e.mu.RLock()
-		work := e.work
-		difficulty := e.difficulty
-		e.mu.RUnlock()
-
-		if len(work.Data) == 0 {
+	buffer := make([]byte, 80) // Standard block header size
+	
+	// Performance: batch hash reporting
+	const batchSize = 100000
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	
+	for m.running.Load() {
+		// Check for pause
+		if m.paused.Load() {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-
-		// Prepare mining data
-		copy(buffer, work.Data)
 		
-		// Mine block of nonces
-		for i := 0; i < reportInterval && atomic.LoadInt32(&e.running) == 1; i++ {
-			// Set nonce
-			binary.LittleEndian.PutUint32(buffer[76:80], nonce)
-
-			// Calculate hash
-			var hash []byte
-			switch e.config.Algorithm {
-			case "sha256":
-				h := sha256.Sum256(buffer)
-				hash = h[:]
-			case "sha256d":
-				h1 := sha256.Sum256(buffer)
-				h2 := sha256.Sum256(h1[:])
-				hash = h2[:]
-			}
-
-			hashes++
-			nonce++
-
-			// Check if hash meets difficulty target
-			if e.checkDifficulty(hash, difficulty) {
-				share := Share{
-					Data:      make([]byte, len(buffer)),
-					Nonce:     nonce - 1,
-					Hash:      hash,
-					Timestamp: time.Now(),
-				}
-				copy(share.Data, buffer)
-
-				atomic.AddUint64(&e.validShares, 1)
-				e.logger.Info("Valid share found",
-					zap.Int("worker_id", workerID),
-					zap.Uint32("nonce", share.Nonce),
-					zap.String("hash", fmt.Sprintf("%x", hash[:4])),
-				)
-
-				// In a real implementation, submit share to pool here
-			}
+		// Get current job
+		job := m.getCurrentJob()
+		if job == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
-
-		// Update hash counter
-		atomic.AddUint64(&e.hashCount, hashes)
-		hashes = 0
+		
+		// Prepare mining data
+		if len(job.Data) > len(buffer) {
+			buffer = make([]byte, len(job.Data))
+		}
+		copy(buffer, job.Data)
+		
+		// Mine batch of nonces
+		batchHashes := m.mineBatch(buffer, job, &nonce, batchSize)
+		hashes += batchHashes
+		
+		// Update metrics periodically
+		select {
+		case <-ticker.C:
+			m.hashRate.Store(hashes)
+			hashes = 0 // Reset counter
+		default:
+		}
+		
+		// Check for context cancellation
+		select {
+		case <-m.ctx.Done():
+			return
+		default:
+		}
 	}
-
-	e.logger.Debug("Mining worker stopped", zap.Int("worker_id", workerID))
 }
 
-// checkDifficulty checks if hash meets the difficulty target
-func (e *CPUEngine) checkDifficulty(hash []byte, difficulty uint32) bool {
-	// Simplified difficulty check: count leading zeros
-	if len(hash) < 4 {
+// mineBatch mines a batch of nonces efficiently
+func (m *CPUMiner) mineBatch(buffer []byte, job *MiningJob, nonce *uint64, batchSize uint64) uint64 {
+	algorithm := job.Algorithm
+	target := job.Target
+	
+	for i := uint64(0); i < batchSize && m.running.Load(); i++ {
+		// Set nonce in buffer
+		noncePos := len(buffer) - 8 // Assume nonce is at the end
+		if noncePos >= 0 {
+			binary.LittleEndian.PutUint64(buffer[noncePos:], *nonce)
+		}
+		
+		// Calculate hash based on algorithm
+		hash := m.calculateHash(buffer, algorithm)
+		
+		// Check if hash meets target
+		if m.meetsTarget(hash, target) {
+			share := &Share{
+				JobID:      job.ID,
+				Nonce:      *nonce,
+				Hash:       hash,
+				Difficulty: m.calculateDifficulty(hash),
+				Timestamp:  time.Now().Unix(),
+			}
+			
+			m.validShares.Add(1)
+			m.submitShare(share)
+		}
+		
+		*nonce++
+	}
+	
+	return batchSize
+}
+
+// calculateHash calculates hash based on algorithm - optimized
+func (m *CPUMiner) calculateHash(data []byte, algorithm Algorithm) []byte {
+	switch algorithm {
+	case AlgorithmSHA256d:
+		// Double SHA256
+		h1 := sha256.Sum256(data)
+		h2 := sha256.Sum256(h1[:])
+		return h2[:]
+	case AlgorithmSHA256:
+		// Single SHA256
+		h := sha256.Sum256(data)
+		return h[:]
+	default:
+		// Default to SHA256d
+		h1 := sha256.Sum256(data)
+		h2 := sha256.Sum256(h1[:])
+		return h2[:]
+	}
+}
+
+// meetsTarget checks if hash meets difficulty target
+func (m *CPUMiner) meetsTarget(hash, target []byte) bool {
+	if len(hash) != len(target) {
 		return false
 	}
-
-	// Check first 4 bytes for leading zeros (simplified)
-	target := uint32(0x0000ffff) // Simplified target
-	hashUint := binary.BigEndian.Uint32(hash[:4])
 	
-	return hashUint < target
+	// Compare hash with target (big-endian)
+	for i := 0; i < len(hash); i++ {
+		if hash[i] < target[i] {
+			return true
+		} else if hash[i] > target[i] {
+			return false
+		}
+	}
+	return true
 }
 
-// statsReporter reports mining statistics periodically
-func (e *CPUEngine) statsReporter(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+// calculateDifficulty calculates difficulty from hash
+func (m *CPUMiner) calculateDifficulty(hash []byte) uint64 {
+	if len(hash) < 8 {
+		return 0
+	}
+	
+	// Count leading zero bits (simplified)
+	leadingZeros := uint64(0)
+	for _, b := range hash {
+		if b == 0 {
+			leadingZeros += 8
+		} else {
+			for bit := 7; bit >= 0; bit-- {
+				if (b>>bit)&1 == 0 {
+					leadingZeros++
+				} else {
+					break
+				}
+			}
+			break
+		}
+	}
+	
+	return 1 << leadingZeros
+}
+
+// getCurrentJob gets current mining job
+func (m *CPUMiner) getCurrentJob() *MiningJob {
+	if job := m.currentWork.Load(); job != nil {
+		return job.(*MiningJob)
+	}
+	return nil
+}
+
+// submitShare submits found share
+func (m *CPUMiner) submitShare(share *Share) {
+	// In a real implementation, this would submit to a pool
+	m.logger.Debug("Share found",
+		zap.Int("miner_id", m.ID),
+		zap.String("job_id", share.JobID),
+		zap.Uint64("nonce", share.Nonce),
+		zap.String("hash", binary.BigEndian.AppendUint64(nil, binary.BigEndian.Uint64(share.Hash[:8]))[:4]),
+	)
+}
+
+// NewCPUEngine creates a new CPU mining engine
+func NewCPUEngine(logger *zap.Logger, config CPUConfig) *CPUEngine {
+	if config.Threads <= 0 {
+		config.Threads = 4 // Default to 4 threads
+	}
+	
+	engine := &CPUEngine{
+		logger: logger,
+		config: config,
+		miners: make([]*CPUMiner, config.Threads),
+	}
+	
+	// Create CPU miners
+	for i := 0; i < config.Threads; i++ {
+		engine.miners[i] = NewCPUMiner(i, logger)
+	}
+	
+	return engine
+}
+
+// Start starts all CPU miners
+func (e *CPUEngine) Start(ctx context.Context) error {
+	if !e.running.CompareAndSwap(false, true) {
+		return nil // Already running
+	}
+	
+	// Start all miners
+	for _, miner := range e.miners {
+		if err := miner.Start(); err != nil {
+			return err
+		}
+	}
+	
+	// Start metrics aggregation
+	go e.metricsLoop(ctx)
+	
+	e.logger.Info("CPU engine started",
+		zap.Int("threads", len(e.miners)),
+		zap.String("algorithm", e.config.Algorithm))
+	
+	return nil
+}
+
+// Stop stops all CPU miners
+func (e *CPUEngine) Stop() error {
+	if !e.running.CompareAndSwap(true, false) {
+		return nil // Already stopped
+	}
+	
+	// Stop all miners
+	for _, miner := range e.miners {
+		miner.Stop()
+	}
+	
+	e.logger.Info("CPU engine stopped")
+	return nil
+}
+
+// SubmitWork submits work to all miners
+func (e *CPUEngine) SubmitWork(work *Work) error {
+	if !e.running.Load() {
+		return nil
+	}
+	
+	// Convert Work to MiningJob
+	job := &MiningJob{
+		ID:        fmt.Sprintf("job_%d", time.Now().UnixNano()),
+		Algorithm: AlgorithmSHA256d, // Default
+		Data:      work.Data,
+		Target:    work.Target,
+		Height:    work.Height,
+		Timestamp: work.Timestamp,
+	}
+	
+	// Submit to all miners
+	for _, miner := range e.miners {
+		miner.SubmitJob(job)
+	}
+	
+	return nil
+}
+
+// GetHashRate returns total hash rate
+func (e *CPUEngine) GetHashRate() uint64 {
+	return e.totalHashRate.Load()
+}
+
+// GetTemperature returns CPU temperature (placeholder)
+func (e *CPUEngine) GetTemperature() float64 {
+	return 65.0 // CPU mining typically runs cooler
+}
+
+// GetPowerUsage returns power usage (placeholder) 
+func (e *CPUEngine) GetPowerUsage() float64 {
+	return float64(len(e.miners)) * 50.0 // ~50W per thread
+}
+
+// metricsLoop aggregates metrics from all miners
+func (e *CPUEngine) metricsLoop(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-
-	var lastHashCount uint64
-	var lastTime time.Time = time.Now()
-
+	
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if atomic.LoadInt32(&e.running) != 1 {
+			if !e.running.Load() {
 				return
 			}
-
-			currentHashCount := atomic.LoadUint64(&e.hashCount)
-			currentTime := time.Now()
 			
-			if !lastTime.IsZero() {
-				duration := currentTime.Sub(lastTime)
-				hashDiff := currentHashCount - lastHashCount
-				hashRate := float64(hashDiff) / duration.Seconds()
-
-				e.logger.Info("Mining stats",
-					zap.Float64("hash_rate_hs", hashRate),
-					zap.Uint64("total_hashes", currentHashCount),
-					zap.Uint64("valid_shares", atomic.LoadUint64(&e.validShares)),
-					zap.Int("threads", e.config.Threads),
-				)
+			totalHashRate := uint64(0)
+			totalShares := uint64(0)
+			
+			for _, miner := range e.miners {
+				totalHashRate += miner.GetHashRate()
+				totalShares += miner.validShares.Load()
 			}
-
-			lastHashCount = currentHashCount
-			lastTime = currentTime
+			
+			e.totalHashRate.Store(totalHashRate)
+			e.totalShares.Store(totalShares)
 		}
+	}
+}
+
+// GetStats returns detailed CPU mining statistics
+func (e *CPUEngine) GetStats() map[string]interface{} {
+	stats := map[string]interface{}{
+		"algorithm":      e.config.Algorithm,
+		"threads":        len(e.miners),
+		"total_hashrate": e.totalHashRate.Load(),
+		"total_shares":   e.totalShares.Load(),
+		"running":        e.running.Load(),
+	}
+	
+	// Per-miner stats
+	miners := make([]map[string]interface{}, len(e.miners))
+	for i, miner := range e.miners {
+		miners[i] = map[string]interface{}{
+			"id":           miner.ID,
+			"hashrate":     miner.GetHashRate(),
+			"valid_shares": miner.validShares.Load(),
+			"running":      miner.running.Load(),
+		}
+	}
+	stats["miners"] = miners
+	
+	return stats
+}
+
+// DefaultCPUConfig returns default CPU configuration
+func DefaultCPUConfig() CPUConfig {
+	return CPUConfig{
+		Algorithm: "sha256d",
+		Threads:   4,
 	}
 }

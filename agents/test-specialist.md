@@ -1,184 +1,318 @@
 # Test Specialist Agent
 
-自動テスト作成、実施、ソース修正を行うテストスペシャリストエージェントです。
+自動テスト作成・実施・ソース修正を行う実用的なテストエージェント。
 
-## 役割
-- 自動テストの作成と実行
-- テスト結果の分析
-- ソースコードの修正提案と実施
-- テストカバレッジの向上
+## Core Functions
 
-## 主な機能
+### 1. Test Generation
+```go
+// TestGenerator - 基本的なテスト生成
+type TestGenerator struct {
+    targetFile string
+    testType   string
+}
 
-### 1. テスト作成
-- ユニットテストの自動生成
-- 統合テストの設計と実装
-- エッジケースの特定とテスト作成
-- モックとスタブの適切な使用
+func (tg *TestGenerator) GenerateUnitTest(funcName string) string {
+    return fmt.Sprintf(`
+func Test%s(t *testing.T) {
+    // Arrange
+    
+    // Act
+    result := %s()
+    
+    // Assert
+    if result == nil {
+        t.Error("Expected non-nil result")
+    }
+}`, funcName, funcName)
+}
 
-### 2. テスト実行
-- テストスイートの実行
-- 並列テスト実行の最適化
-- CI/CD パイプラインとの統合
-- テスト結果のレポート生成
-
-### 3. ソース修正
-- テスト失敗の原因分析
-- バグの特定と修正
-- リファクタリング提案
-- パフォーマンス改善
-
-### 4. 品質保証
-- コードカバレッジの測定と改善
-- 静的解析ツールの活用
-- セキュリティテストの実施
-- 回帰テストの管理
-
-## 使用方法
-
-```bash
-/test-specialist [command] [options]
+func (tg *TestGenerator) GenerateTableTest(funcName string, cases []TestCase) string {
+    template := `
+func Test%s(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    interface{}
+        expected interface{}
+    }{
+%s
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result := %s(tt.input)
+            if result != tt.expected {
+                t.Errorf("got %%v, expected %%v", result, tt.expected)
+            }
+        })
+    }
+}`
+    return fmt.Sprintf(template, funcName, generateTestCases(cases), funcName)
+}
 ```
 
-### コマンド例
+### 2. Test Execution
+```go
+// TestRunner - テスト実行
+type TestRunner struct {
+    timeout time.Duration
+    parallel bool
+}
 
-#### テスト作成
-```bash
-/test-specialist create --file internal/mining/engine.go --type unit
-/test-specialist create --module mining --type integration
+func (tr *TestRunner) RunTests(pattern string) *TestResult {
+    cmd := exec.Command("go", "test", "-v", pattern)
+    if tr.parallel {
+        cmd.Args = append(cmd.Args, "-parallel", "4")
+    }
+    
+    output, err := cmd.CombinedOutput()
+    return &TestResult{
+        Output: string(output),
+        Error:  err,
+        Passed: err == nil,
+    }
+}
+
+func (tr *TestRunner) RunWithCoverage(pattern string) *CoverageResult {
+    cmd := exec.Command("go", "test", "-cover", "-coverprofile=coverage.out", pattern)
+    output, err := cmd.CombinedOutput()
+    
+    coverage := parseCoverage(string(output))
+    return &CoverageResult{
+        Percentage: coverage,
+        Output:     string(output),
+        Error:      err,
+    }
+}
 ```
 
-#### テスト実行
-```bash
-/test-specialist run --all
-/test-specialist run --file internal/mining/engine_test.go
-/test-specialist run --coverage
+### 3. Source Analysis & Fix
+```go
+// SourceAnalyzer - ソース分析と修正提案
+type SourceAnalyzer struct {
+    filePath string
+}
+
+func (sa *SourceAnalyzer) AnalyzeTestFailures(testOutput string) []Fix {
+    fixes := []Fix{}
+    
+    // パニック検出
+    if strings.Contains(testOutput, "panic:") {
+        fixes = append(fixes, Fix{
+            Type:        "panic",
+            Description: "Add nil check before operation",
+            Line:        extractPanicLine(testOutput),
+        })
+    }
+    
+    // タイムアウト検出
+    if strings.Contains(testOutput, "timeout") {
+        fixes = append(fixes, Fix{
+            Type:        "timeout",
+            Description: "Increase timeout or optimize operation",
+            Suggestion:  "context.WithTimeout(ctx, 10*time.Second)",
+        })
+    }
+    
+    return fixes
+}
+
+func (sa *SourceAnalyzer) ApplyFix(fix Fix) error {
+    content, err := ioutil.ReadFile(sa.filePath)
+    if err != nil {
+        return err
+    }
+    
+    lines := strings.Split(string(content), "\n")
+    if fix.Line > 0 && fix.Line <= len(lines) {
+        lines[fix.Line-1] = fix.Suggestion
+    }
+    
+    return ioutil.WriteFile(sa.filePath, []byte(strings.Join(lines, "\n")), 0644)
+}
 ```
 
-#### ソース修正
-```bash
-/test-specialist fix --test-failure internal/mining/engine_test.go
-/test-specialist analyze --file internal/mining/engine.go
+### 4. Coverage Analysis
+```go
+// CoverageAnalyzer - カバレッジ分析
+type CoverageAnalyzer struct{}
+
+func (ca *CoverageAnalyzer) AnalyzeCoverage(profilePath string) *CoverageReport {
+    profiles, err := cover.ParseProfiles(profilePath)
+    if err != nil {
+        return &CoverageReport{Error: err}
+    }
+    
+    report := &CoverageReport{
+        Files: make(map[string]*FileCoverage),
+    }
+    
+    for _, profile := range profiles {
+        total := 0
+        covered := 0
+        
+        for _, block := range profile.Blocks {
+            total += block.NumStmt
+            if block.Count > 0 {
+                covered += block.NumStmt
+            }
+        }
+        
+        report.Files[profile.FileName] = &FileCoverage{
+            Total:      total,
+            Covered:    covered,
+            Percentage: float64(covered) / float64(total) * 100,
+        }
+    }
+    
+    return report
+}
 ```
 
-## 対応言語とフレームワーク
+## Usage Examples
 
-### Go
-- testing パッケージ
-- testify
-- gomock
-- ginkgo/gomega
+### Basic Test Generation
+```bash
+# 単一ファイルのテスト生成
+go run test-specialist.go generate --file=internal/mining/engine.go
 
-### JavaScript/TypeScript
-- Jest
-- Mocha/Chai
-- Vitest
-- Cypress (E2E)
+# 複数ファイルのテスト生成
+go run test-specialist.go generate --dir=internal/mining/
+```
 
-### Python
-- pytest
-- unittest
-- nose2
-- tox
+### Test Execution
+```bash
+# 全テスト実行
+go run test-specialist.go run --all
 
-## ベストプラクティス
+# カバレッジ付き実行
+go run test-specialist.go run --coverage --threshold=80
 
-1. **テストピラミッド**
-   - ユニットテスト: 70%
-   - 統合テスト: 20%
-   - E2Eテスト: 10%
+# 特定パッケージ実行
+go run test-specialist.go run --package=./internal/mining/...
+```
 
-2. **テスト命名規則**
-   - 明確で説明的な名前
-   - Given-When-Then パターン
-   - テスト対象と期待結果を含む
+### Fix Application
+```bash
+# テスト失敗の自動修正
+go run test-specialist.go fix --test-output=test_result.txt
 
-3. **テストの独立性**
-   - 各テストは独立して実行可能
-   - 外部依存の最小化
-   - テストデータの初期化と後処理
+# カバレッジ改善提案
+go run test-specialist.go suggest --coverage=coverage.out
+```
 
-4. **継続的改善**
-   - 定期的なテストレビュー
-   - フレイキーテストの削減
-   - テスト実行時間の最適化
-
-## 設定
-
+## Configuration
 ```yaml
-test-specialist:
-  auto-generate: true
-  coverage-threshold: 80
-  parallel-execution: true
-  mock-generation: auto
-  test-frameworks:
-    go: [testing, testify]
-    js: [jest, vitest]
-    python: [pytest]
+# test-config.yaml
+generator:
+  template: "table"  # table, simple, benchmark
+  mock: true
+  timeout: "5s"
+
+runner:
+  parallel: true
+  workers: 4
+  timeout: "30s"
+
+coverage:
+  threshold: 80
+  exclude:
+    - "*.pb.go"
+    - "*_mock.go"
+
+fixer:
+  auto_apply: false  # 手動確認後に適用
+  backup: true
 ```
 
-## 出力例
+## Data Types
+```go
+type TestCase struct {
+    Name     string
+    Input    interface{}
+    Expected interface{}
+    Error    bool
+}
 
-### テストレポート
+type TestResult struct {
+    Output  string
+    Error   error
+    Passed  bool
+    Runtime time.Duration
+}
+
+type Fix struct {
+    Type        string // panic, timeout, race, logic
+    Description string
+    Line        int
+    Suggestion  string
+}
+
+type CoverageResult struct {
+    Percentage float64
+    Output     string
+    Error      error
+}
+
+type FileCoverage struct {
+    Total      int
+    Covered    int
+    Percentage float64
+    MissedLines []int
+}
 ```
-=== Test Results ===
-Total: 150
-Passed: 145
-Failed: 3
-Skipped: 2
-Coverage: 85.3%
 
-Failed Tests:
-1. TestMiningEngine_StartStop - timeout after 5s
-2. TestPoolFailover_AutoSwitch - assertion failed
-3. TestGPUMiner_Initialize - mock error
+## Integration Points
 
-Recommendations:
-- Increase timeout for TestMiningEngine_StartStop
-- Fix race condition in PoolFailover
-- Update GPU mock configuration
+### CI/CD Integration
+```yaml
+# .github/workflows/test.yml
+- name: Run Test Specialist
+  run: |
+    go run agents/test-specialist.go run --coverage --threshold=80
+    go run agents/test-specialist.go fix --auto-apply=false
 ```
 
-### カバレッジレポート
+### Git Hooks
+```bash
+#!/bin/sh
+# pre-commit hook
+go run agents/test-specialist.go run --quick
+if [ $? -ne 0 ]; then
+    echo "Tests failed. Commit aborted."
+    exit 1
+fi
 ```
-File                        | Coverage | Missing Lines
----------------------------|----------|---------------
-internal/mining/engine.go   | 92.3%    | 45, 67-69
-internal/mining/gpu.go      | 78.5%    | 123-130, 156
-internal/mining/pool.go     | 85.0%    | 89, 101-103
+
+## Performance Optimizations
+
+1. **Parallel Execution**: テストの並列実行
+2. **Smart Selection**: 変更されたファイルのみテスト
+3. **Cache Results**: テスト結果のキャッシュ
+4. **Incremental Coverage**: 差分カバレッジ計算
+
+## Error Handling
+```go
+func handleTestError(err error, output string) []Fix {
+    switch {
+    case strings.Contains(output, "race detected"):
+        return []Fix{{Type: "race", Description: "Add mutex protection"}}
+    case strings.Contains(output, "connection refused"):
+        return []Fix{{Type: "network", Description: "Add retry mechanism"}}
+    case strings.Contains(output, "nil pointer"):
+        return []Fix{{Type: "nil", Description: "Add nil check"}}
+    default:
+        return []Fix{{Type: "unknown", Description: "Manual investigation required"}}
+    }
+}
 ```
 
-## 統合ツール
+## Minimal Implementation Priority
 
-- GitHub Actions
-- GitLab CI
-- Jenkins
-- CircleCI
-- SonarQube
-- Codecov
+1. **Phase 1**: Basic test generation (unit tests)
+2. **Phase 2**: Test execution with simple reporting
+3. **Phase 3**: Coverage analysis
+4. **Phase 4**: Basic fix suggestions
+5. **Phase 5**: CI/CD integration
 
-## トラブルシューティング
-
-### よくある問題
-
-1. **テストがタイムアウトする**
-   - タイムアウト値の調整
-   - 非同期処理の適切な待機
-   - モックの使用を検討
-
-2. **フレイキーテスト**
-   - 状態の初期化を確認
-   - 並行実行時の競合状態をチェック
-   - ランダム性の固定化
-
-3. **低カバレッジ**
-   - エッジケースの追加
-   - エラーハンドリングのテスト
-   - 条件分岐の網羅
-
-## 更新履歴
-
-- v1.0.0: 初期リリース
-- v1.1.0: 並列実行サポート追加
-- v1.2.0: AI駆動のテスト生成機能
-- v1.3.0: セキュリティテスト統合
+Focus: 実用的な機能から段階的実装。複雑な機能は後回し。

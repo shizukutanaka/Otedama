@@ -185,3 +185,91 @@ quickstart: deps build
 	@echo ""
 	@echo "For anonymous mining:"
 	@echo "  ./$(BINARY_NAME) --zkp --no-kyc --anonymous"
+
+# Build all components
+build-all: build
+	@echo "Building all components..."
+	$(GOBUILD) -o otedama-cli ./cmd/cli
+	$(GOBUILD) -o otedama-dashboard ./cmd/dashboard
+	@echo "All components built successfully!"
+
+# Deploy to production
+deploy-prod:
+	@echo "Deploying to production..."
+	./scripts/deploy.sh production
+
+# Deploy to staging
+deploy-staging:
+	@echo "Deploying to staging..."
+	./scripts/deploy.sh staging
+
+# Run integration tests
+test-integration:
+	@echo "Running integration tests..."
+	$(GOTEST) -tags=integration -timeout=20m ./tests/...
+
+# Run all tests (unit + integration)
+test-all: test test-integration
+
+# Generate test reports
+test-report:
+	@echo "Generating test reports..."
+	$(GOTEST) -v -json ./... > test-report.json
+	@echo "Test report generated: test-report.json"
+
+# Performance profiling
+profile:
+	@echo "Running performance profiling..."
+	$(GOTEST) -cpuprofile=cpu.prof -memprofile=mem.prof -bench=. ./internal/mining/...
+	@echo "Profiling data generated: cpu.prof, mem.prof"
+
+# View CPU profile
+profile-cpu:
+	$(GOCMD) tool pprof -http=:8080 cpu.prof
+
+# View memory profile
+profile-mem:
+	$(GOCMD) tool pprof -http=:8080 mem.prof
+
+# Check for updates
+check-updates:
+	@echo "Checking for dependency updates..."
+	$(GOCMD) list -u -m all
+
+# Update dependencies
+update-deps:
+	@echo "Updating dependencies..."
+	$(GOCMD) get -u ./...
+	$(GOMOD) tidy
+
+# Generate mocks for testing
+mocks:
+	@echo "Generating mocks..."
+	@which mockgen > /dev/null || (echo "mockgen not installed. Run: go install github.com/golang/mock/mockgen@latest" && exit 1)
+	mockgen -source=internal/mining/engine.go -destination=internal/mining/mocks/engine_mock.go
+	mockgen -source=internal/zkp/protocols.go -destination=internal/zkp/mocks/protocols_mock.go
+
+# Static analysis
+analyze: lint vet security
+	@echo "Static analysis complete"
+
+# CI/CD pipeline
+ci: clean deps analyze test-all build
+	@echo "CI pipeline complete"
+
+# Full release process
+release-full: clean test-all release
+	@echo "Creating release archives..."
+	tar czf otedama-$(VERSION)-windows.tar.gz $(BINARY_NAME)-windows-*.exe
+	tar czf otedama-$(VERSION)-linux.tar.gz $(BINARY_NAME)-linux-*
+	tar czf otedama-$(VERSION)-darwin.tar.gz $(BINARY_NAME)-darwin-*
+	@echo "Release archives created"
+
+# Development setup
+dev-setup:
+	@echo "Setting up development environment..."
+	$(GOCMD) install github.com/air-verse/air@latest
+	$(GOCMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	$(GOCMD) install github.com/securego/gosec/v2/cmd/gosec@latest
+	$(GOCMD) install github.com/golang/mock/mockgen@latest
+	@echo "Development environment ready!"
