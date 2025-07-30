@@ -250,6 +250,10 @@ func displayStartupInfo(cfg *config.Config) {
 	fmt.Printf("║   P2P Port:         %-32s ║\n", cfg.Network.ListenAddr)
 	fmt.Printf("║   API Server:       %-32s ║\n", cfg.API.ListenAddr)
 	
+	if cfg.Dashboard.Enabled {
+		fmt.Printf("║   Dashboard:        %-32s ║\n", cfg.Dashboard.ListenAddr)
+	}
+	
 	if cfg.Stratum.Enabled {
 		fmt.Printf("║   Stratum Port:     %-32s ║\n", cfg.Stratum.ListenAddr)
 	}
@@ -277,110 +281,98 @@ func displayStartupInfo(cfg *config.Config) {
 }
 
 func runBenchmark() {
-	fmt.Println("Running Otedama performance benchmark...")
-	fmt.Println(strings.Repeat("=", 50))
+	fmt.Println("Running Otedama comprehensive performance benchmark...")
+	fmt.Println(strings.Repeat("=", 60))
 	
-	start := time.Now()
+	// Initialize logger
+	logger, err := initLogger("info")
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer logger.Sync()
 	
-	// CPU benchmark
-	fmt.Print("\nCPU Performance Test: ")
-	cpuScore := benchmarkCPU()
-	fmt.Printf("%.2f million ops/sec\n", cpuScore/1000000)
-	
-	// Memory benchmark
-	fmt.Print("Memory Bandwidth Test: ")
-	memScore := benchmarkMemory()
-	fmt.Printf("%.2f GB/s\n", memScore/1024)
-	
-	// Hash benchmark
-	fmt.Print("\nSHA256d Performance: ")
-	hashScore := benchmarkSHA256d()
-	fmt.Printf("%.2f MH/s\n", hashScore/1000000)
-	
-	// ZKP benchmark
-	fmt.Print("ZKP Proof Generation: ")
-	zkpScore := benchmarkZKP()
-	fmt.Printf("%.2f proofs/sec\n", zkpScore)
-	
-	duration := time.Since(start)
-	fmt.Printf("\nBenchmark completed in %v\n", duration)
-	
-	// Recommendations
-	fmt.Println("\nRecommendations based on your hardware:")
-	
-	threads := runtime.NumCPU()
-	if cpuScore > 100000000 {
-		fmt.Printf("- Your CPU is powerful. Use %d threads for optimal performance.\n", threads)
-	} else {
-		fmt.Printf("- Your CPU is moderate. Use %d threads to balance performance.\n", threads*3/4)
+	// Create a minimal config for benchmarking
+	cfg := &config.Config{
+		Mode:     "benchmark",
+		LogLevel: "info",
+		Mining: config.MiningConfig{
+			Algorithm:    "sha256d",
+			HardwareType: "auto",
+			AutoDetect:   true,
+		},
+		ZKP: config.ZKPConfig{
+			Enabled: true,
+		},
+		Profiling: config.ProfilingConfig{
+			Enabled:    true,
+			PProfAddr:  "localhost:6060",
+			ProfileDir: "./benchmark-profiles",
+		},
 	}
 	
-	if hashScore > 10000000 {
-		fmt.Println("- Excellent hash performance. You can mine SHA256d efficiently.")
+	// Create benchmarking context
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	
+	// Create system
+	system, err := core.NewOtedamaSystem(cfg, logger)
+	if err != nil {
+		logger.Fatal("Failed to create system for benchmarking", zap.Error(err))
 	}
 	
-	if zkpScore > 100 {
-		fmt.Println("- Good ZKP performance. Zero-knowledge proofs will not bottleneck mining.")
-	}
-}
-
-func benchmarkCPU() float64 {
-	start := time.Now()
-	operations := 10000000
-	sum := 0
-	
-	for i := 0; i < operations; i++ {
-		sum += i * i
+	// Run benchmarks
+	if err := system.RunBenchmarks(ctx); err != nil {
+		logger.Error("Benchmarks failed", zap.Error(err))
 	}
 	
-	duration := time.Since(start)
-	return float64(operations) / duration.Seconds()
-}
-
-func benchmarkMemory() float64 {
-	start := time.Now()
-	size := 100 * 1024 * 1024 // 100MB
-	iterations := 10
+	// Get and display results
+	results := system.GetBenchmarkResults()
 	
-	for i := 0; i < iterations; i++ {
-		data := make([]byte, size)
-		for j := range data {
-			data[j] = byte(j % 256)
-		}
-		_ = data // Prevent optimization
-	}
+	fmt.Println("\n" + strings.Repeat("=", 60))
+	fmt.Println("BENCHMARK SUMMARY")
+	fmt.Println(strings.Repeat("=", 60))
 	
-	duration := time.Since(start)
-	totalBytes := float64(size * iterations)
-	return totalBytes / duration.Seconds()
-}
-
-func benchmarkSHA256d() float64 {
-	start := time.Now()
-	hashes := 100000
-	data := make([]byte, 80) // Block header size
-	
-	for i := 0; i < hashes; i++ {
-		// Simulate SHA256d (double SHA256)
-		for j := range data {
-			data[j] = byte(i + j)
+	// Mining performance
+	if result, exists := results["mining_sha256d"]; exists {
+		if hashrate, ok := result.Metrics["hashrate_mhs"].(float64); ok {
+			fmt.Printf("SHA256d Performance:     %.2f MH/s\n", hashrate)
 		}
 	}
 	
-	duration := time.Since(start)
-	return float64(hashes) / duration.Seconds()
-}
-
-func benchmarkZKP() float64 {
-	// Simulate ZKP proof generation
-	start := time.Now()
-	proofs := 100
-	
-	for i := 0; i < proofs; i++ {
-		// Simulate proof generation work
-		time.Sleep(time.Microsecond * 100)
+	// ZKP performance
+	if result, exists := results["zkp_gen_groth16"]; exists {
+		fmt.Printf("Groth16 Proof Gen:       %.0f proofs/sec\n", result.OpsPerSecond)
 	}
 	
-	duration := time.Since(start)
-	return float64(proofs) / duration.Seconds()
+	if result, exists := results["zkp_verify_groth16"]; exists {
+		fmt.Printf("Groth16 Proof Verify:    %.0f verifications/sec\n", result.OpsPerSecond)
+	}
+	
+	// Memory performance
+	if result, exists := results["memory_allocation"]; exists {
+		fmt.Printf("Memory Allocation:       %.0f ops/sec\n", result.OpsPerSecond)
+	}
+	
+	// Network performance
+	if result, exists := results["network_serialization"]; exists {
+		fmt.Printf("Message Serialization:   %.0f msgs/sec\n", result.OpsPerSecond)
+	}
+	
+	// Profiler stats
+	profStats := system.GetProfilerStats()
+	if profStats != nil {
+		fmt.Println("\nSystem Resources:")
+		if mem, ok := profStats["memory"].(map[string]interface{}); ok {
+			fmt.Printf("Memory Used:             %v MB\n", mem["alloc_mb"])
+			fmt.Printf("Total Allocated:         %v MB\n", mem["total_alloc_mb"])
+		}
+		if runtime, ok := profStats["runtime"].(map[string]interface{}); ok {
+			fmt.Printf("Goroutines:              %v\n", runtime["goroutines"])
+			fmt.Printf("CPU Cores:               %v\n", runtime["cpus"])
+		}
+	}
+	
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("\nBenchmark complete. Detailed report saved to benchmark-report.txt")
 }
+

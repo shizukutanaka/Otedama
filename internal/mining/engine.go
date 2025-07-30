@@ -45,6 +45,7 @@ type Engine struct {
 	
 	// State management
 	running         atomic.Bool
+	paused          atomic.Bool
 	ctx             context.Context
 	cancel          context.CancelFunc
 	mu              sync.RWMutex
@@ -158,6 +159,25 @@ type HardwareStats struct {
 	ActiveThreads   int             `json:"active_threads"`
 	MemoryUsage     int64           `json:"memory_usage"`
 	Errors          uint64          `json:"errors"`
+}
+
+// WorkerInfo represents information about a mining worker
+type WorkerInfo struct {
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	Status          string          `json:"status"`
+	HashRate        float64         `json:"hashrate"`
+	SharesAccepted  int             `json:"shares_accepted"`
+	SharesTotal     int             `json:"shares_total"`
+	Efficiency      float64         `json:"efficiency"`
+}
+
+// ShareInfo represents information about a submitted share
+type ShareInfo struct {
+	Time            time.Time       `json:"time"`
+	WorkerID        string          `json:"worker_id"`
+	Difficulty      float64         `json:"difficulty"`
+	Status          string          `json:"status"`
 }
 
 // NewEngine creates a new unified mining engine
@@ -534,6 +554,204 @@ func (e *Engine) GetStats() MiningStats {
 // GetHashRate returns the current hash rate
 func (e *Engine) GetHashRate() float64 {
 	return float64(e.hashRate.Load())
+}
+
+// GetStats returns mining statistics (compatibility wrapper)
+func (e *Engine) GetStats() map[string]interface{} {
+	stats := e.GetMiningStats()
+	
+	// Convert to dashboard-compatible format
+	return map[string]interface{}{
+		"hashrate":         stats.HashRate,
+		"shares_accepted":  stats.Shares.Accepted,
+		"shares_rejected":  stats.Shares.Rejected,
+		"shares_stale":     stats.Shares.Stale,
+		"blocks_found":     uint64(0), // TODO: track blocks found
+		"workers":          e.getWorkerCount(),
+		"algorithm":        e.config.Algorithm,
+		"difficulty":       e.getCurrentDifficulty(),
+		"current_job":      e.getCurrentJobID(),
+		"uptime":           stats.Uptime.Seconds(),
+		"temperature":      stats.Temperature,
+		"power_usage":      stats.PowerUsage,
+		"efficiency":       stats.Efficiency,
+	}
+}
+
+// GetMiningStats returns detailed mining statistics
+func (e *Engine) GetMiningStats() MiningStats {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	
+	stats := MiningStats{
+		HashRate: float64(e.hashRate.Load()),
+		Shares: ShareStats{
+			Accepted: e.acceptedShares.Load(),
+			Rejected: e.rejectedShares.Load(),
+			Stale:    e.failedShares.Load(), // Using failedShares for stale count
+		},
+		Uptime: time.Duration(time.Now().Unix() - e.uptime.Load()) * time.Second,
+		Hardware: HardwareStats{
+			Type: e.hardwareType,
+		},
+	}
+	
+	// Get hardware-specific stats
+	switch e.hardwareType {
+	case HardwareCPU:
+		if e.cpuEngine != nil {
+			cpuStats := e.cpuEngine.GetStats()
+			stats.HashRate = float64(cpuStats["hash_rate"].(uint64))
+			stats.Hardware.ActiveThreads = cpuStats["threads"].(int)
+		}
+		
+	case HardwareGPU:
+		if e.gpuEngine != nil {
+			gpuStats := e.gpuEngine.GetStats()
+			if temp, ok := gpuStats["temperature"].(float64); ok {
+				stats.Temperature = temp
+			}
+			if power, ok := gpuStats["power_usage"].(float64); ok {
+				stats.PowerUsage = power
+			}
+			if devices, ok := gpuStats["device_count"].(int); ok {
+				stats.Hardware.Devices = devices
+			}
+		}
+		
+	case HardwareASIC:
+		if e.asicEngine != nil {
+			asicStats := e.asicEngine.GetStats()
+			if temp, ok := asicStats["average_temp"].(float64); ok {
+				stats.Temperature = temp
+			}
+			if power, ok := asicStats["total_power"].(float64); ok {
+				stats.PowerUsage = power
+			}
+			if eff, ok := asicStats["efficiency"].(float64); ok {
+				stats.Efficiency = eff
+			}
+			if devices, ok := asicStats["device_count"].(int); ok {
+				stats.Hardware.Devices = devices
+			}
+		}
+	}
+	
+	return stats
+}
+
+// GetWorkers returns information about active workers
+func (e *Engine) GetWorkers() []WorkerInfo {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	
+	var workers []WorkerInfo
+	
+	switch e.hardwareType {
+	case HardwareCPU:
+		for i := 0; i < e.config.Threads; i++ {
+			workers = append(workers, WorkerInfo{
+				ID:       fmt.Sprintf("cpu-%d", i),
+				Type:     "CPU",
+				Status:   "active",
+				HashRate: e.GetHashRate() / float64(e.config.Threads),
+			})
+		}
+	case HardwareGPU:
+		if e.gpuEngine != nil {
+			stats := e.gpuEngine.GetStats()
+			if devices, ok := stats["devices"].([]interface{}); ok {
+				for i, dev := range devices {
+					workers = append(workers, WorkerInfo{
+						ID:       fmt.Sprintf("gpu-%d", i),
+						Type:     "GPU",
+						Status:   "active",
+						HashRate: e.GetHashRate() / float64(len(devices)),
+					})
+				}
+			}
+		}
+	case HardwareASIC:
+		workers = append(workers, WorkerInfo{
+			ID:       "asic-0",
+			Type:     "ASIC",
+			Status:   "active",
+			HashRate: e.GetHashRate(),
+		})
+	}
+	
+	return workers
+}
+
+// GetRecentShares returns recent share submissions
+func (e *Engine) GetRecentShares(limit int) []ShareInfo {
+	// For now, return empty slice
+	// In production, maintain a circular buffer of recent shares
+	return []ShareInfo{}
+}
+
+// GetAlgorithm returns the current mining algorithm
+func (e *Engine) GetAlgorithm() string {
+	return string(e.config.Algorithm)
+}
+
+// GetThreadCount returns the number of mining threads
+func (e *Engine) GetThreadCount() int {
+	return e.config.Threads
+}
+
+// Pause temporarily pauses mining
+func (e *Engine) Pause() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.paused.Store(true)
+	e.logger.Info("Mining paused")
+}
+
+// Resume resumes mining after pause
+func (e *Engine) Resume() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.paused.Store(false)
+	e.logger.Info("Mining resumed")
+}
+
+// Helper methods for dashboard
+
+func (e *Engine) getWorkerCount() int {
+	switch e.hardwareType {
+	case HardwareCPU:
+		return e.config.Threads
+	case HardwareGPU:
+		if e.gpuEngine != nil {
+			stats := e.gpuEngine.GetStats()
+			if devices, ok := stats["device_count"].(int); ok {
+				return devices
+			}
+		}
+		return 1
+	case HardwareASIC:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (e *Engine) getCurrentDifficulty() float64 {
+	if e.difficultyMgr != nil {
+		return e.difficultyMgr.GetDifficulty()
+	}
+	return 0
+}
+
+func (e *Engine) getCurrentJobID() string {
+	if e.jobManager != nil {
+		job := e.jobManager.GetCurrentJob()
+		if job != nil {
+			return job.ID
+		}
+	}
+	return "none"
 }
 
 // monitorPerformance monitors and updates performance metrics

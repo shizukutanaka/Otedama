@@ -187,6 +187,66 @@ func (hm *HealthMonitor) GetHealthStatus() map[string]HealthStatus {
 	return status
 }
 
+// GetOverallStatus returns the overall health status
+func (hm *HealthMonitor) GetOverallStatus() map[string]interface{} {
+	statuses := hm.GetHealthStatus()
+	
+	overallHealthy := true
+	statusCount := map[string]int{
+		"healthy": 0,
+		"warning": 0,
+		"critical": 0,
+	}
+	
+	for _, status := range statuses {
+		if !status.Healthy {
+			overallHealthy = false
+		}
+		
+		switch status.Status {
+		case "healthy":
+			statusCount["healthy"]++
+		case "warning":
+			statusCount["warning"]++
+		case "critical":
+			statusCount["critical"]++
+		}
+	}
+	
+	overallStatus := "healthy"
+	if statusCount["critical"] > 0 {
+		overallStatus = "critical"
+	} else if statusCount["warning"] > 0 {
+		overallStatus = "warning"
+	}
+	
+	return map[string]interface{}{
+		"status": overallStatus,
+		"healthy": overallHealthy,
+		"checks": statusCount,
+		"timestamp": time.Now(),
+	}
+}
+
+// GetHealthChecks returns all health check results
+func (hm *HealthMonitor) GetHealthChecks() []map[string]interface{} {
+	statuses := hm.GetHealthStatus()
+	
+	checks := make([]map[string]interface{}, 0, len(statuses))
+	for name, status := range statuses {
+		checks = append(checks, map[string]interface{}{
+			"name": name,
+			"status": status.Status,
+			"healthy": status.Healthy,
+			"message": status.Message,
+			"metrics": status.Metrics,
+			"timestamp": status.Timestamp,
+		})
+	}
+	
+	return checks
+}
+
 // GetMetrics returns health metrics
 func (hm *HealthMonitor) GetMetrics() map[string]interface{} {
 	metrics := map[string]interface{}{

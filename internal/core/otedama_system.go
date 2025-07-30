@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/api"
+	"github.com/shizukutanaka/Otedama/internal/benchmark"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/currency"
+	"github.com/shizukutanaka/Otedama/internal/dashboard"
 	"github.com/shizukutanaka/Otedama/internal/logging"
 	"github.com/shizukutanaka/Otedama/internal/mining"
 	"github.com/shizukutanaka/Otedama/internal/monitoring"
@@ -15,6 +18,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/optimization"
 	"github.com/shizukutanaka/Otedama/internal/p2p"
 	"github.com/shizukutanaka/Otedama/internal/privacy"
+	"github.com/shizukutanaka/Otedama/internal/profiling"
 	"github.com/shizukutanaka/Otedama/internal/security"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"github.com/shizukutanaka/Otedama/internal/zkp"
@@ -49,13 +53,27 @@ type OtedamaSystem struct {
 	hardwareMonitor *monitoring.HardwareMonitor
 	anomalyDetector *monitoring.AnomalyDetector
 	memoryPool      *optimization.MemoryPool
+	healthMonitor   *monitoring.HealthMonitor
+	autoRecovery    *monitoring.AutoRecoveryManager
 	
 	// Security and privacy
 	ddosProtection  *security.DDoSProtection
 	privacyManager  *privacy.Manager
 	
-	// API
+	// API and Dashboard
 	apiServer       *api.Server
+	dashboardServer *dashboard.Server
+	
+	// Currency management
+	currencyManager *currency.MultiCurrencyManager
+	
+	// Core managers
+	errorHandler    *ErrorHandler
+	recoveryManager *RecoveryManager
+	
+	// Performance tools
+	benchmarker     *benchmark.Benchmarker
+	profiler        *profiling.Profiler
 	
 	// State
 	running         bool
@@ -68,6 +86,10 @@ func NewOtedamaSystem(cfg *config.Config, logger *zap.Logger) (*OtedamaSystem, e
 		logger: logger,
 		config: cfg,
 	}
+	
+	// Initialize core error and recovery management
+	system.errorHandler = NewErrorHandler(logger)
+	system.recoveryManager = NewRecoveryManager(logger, system.errorHandler)
 	
 	// Initialize ZKP components
 	if err := system.initializeZKP(); err != nil {
@@ -97,6 +119,21 @@ func NewOtedamaSystem(cfg *config.Config, logger *zap.Logger) (*OtedamaSystem, e
 	// Initialize API
 	if err := system.initializeAPI(); err != nil {
 		return nil, fmt.Errorf("failed to initialize API: %w", err)
+	}
+	
+	// Initialize currency management
+	if err := system.initializeCurrency(); err != nil {
+		return nil, fmt.Errorf("failed to initialize currency: %w", err)
+	}
+	
+	// Initialize dashboard
+	if err := system.initializeDashboard(); err != nil {
+		return nil, fmt.Errorf("failed to initialize dashboard: %w", err)
+	}
+	
+	// Initialize performance tools
+	if err := system.initializePerformanceTools(); err != nil {
+		return nil, fmt.Errorf("failed to initialize performance tools: %w", err)
 	}
 	
 	logger.Info("Otedama system initialized successfully",
@@ -297,6 +334,16 @@ func (s *OtedamaSystem) initializeMonitoring() error {
 	
 	s.memoryPool = optimization.NewMemoryPool(s.logger)
 	
+	// Initialize health monitoring
+	s.healthMonitor = monitoring.NewHealthMonitor(s.logger, s.recoveryManager)
+	
+	// Initialize auto-recovery
+	s.autoRecovery = monitoring.NewAutoRecoveryManager(s.logger, s.healthMonitor, s.recoveryManager)
+	s.autoRecovery.SetMiningEngine(s.miningEngine)
+	s.autoRecovery.SetP2PPool(s.p2pPool)
+	
+	s.logger.Info("Health monitoring and auto-recovery initialized")
+	
 	return nil
 }
 
@@ -346,6 +393,125 @@ func (s *OtedamaSystem) initializeAPI() error {
 	return nil
 }
 
+func (s *OtedamaSystem) initializeCurrency() error {
+	// Initialize multi-currency manager
+	currencyConfig := currency.Config{
+		Currencies: []currency.CurrencyConfig{
+			{
+				Symbol:           "BTC",
+				Name:             "Bitcoin",
+				Enabled:          true,
+				Decimals:         8,
+				MinConfirmations: 6,
+				NetworkFee:       "10000", // satoshis
+				WalletAddress:    s.config.Storage.DataDir + "/wallets/btc",
+				NodeURL:          "http://localhost:8332",
+			},
+			{
+				Symbol:           "ETH",
+				Name:             "Ethereum",
+				Enabled:          true,
+				Decimals:         18,
+				MinConfirmations: 12,
+				NetworkFee:       "21000000000000", // wei
+				WalletAddress:    s.config.Storage.DataDir + "/wallets/eth",
+				NodeURL:          "http://localhost:8545",
+			},
+			{
+				Symbol:           "LTC",
+				Name:             "Litecoin",
+				Enabled:          true,
+				Decimals:         8,
+				MinConfirmations: 6,
+				NetworkFee:       "10000", // litoshis
+				WalletAddress:    s.config.Storage.DataDir + "/wallets/ltc",
+				NodeURL:          "http://localhost:9332",
+			},
+		},
+		ExchangeUpdateInterval: 5 * time.Minute,
+		ExchangeAPIs:          []string{"https://api.coingecko.com/api/v3"},
+		PayoutInterval:        time.Hour,
+		MinPayoutThreshold:    "100000000", // 1 BTC in satoshis
+		PayoutBatchSize:       100,
+		ExchangeFeePercent:    0.1,
+		WithdrawalFeePercent:  0.5,
+	}
+	
+	var err error
+	s.currencyManager, err = currency.NewMultiCurrencyManager(s.logger, currencyConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create currency manager: %w", err)
+	}
+	
+	s.logger.Info("Currency management initialized",
+		zap.Int("supported_currencies", len(currencyConfig.Currencies)),
+	)
+	
+	return nil
+}
+
+func (s *OtedamaSystem) initializeDashboard() error {
+	if !s.config.Dashboard.Enabled {
+		s.logger.Info("Dashboard disabled by configuration")
+		return nil
+	}
+	
+	// Convert config
+	dashConfig := dashboard.Config{
+		Enabled:       s.config.Dashboard.Enabled,
+		ListenAddress: s.config.Dashboard.ListenAddr,
+		EnableAuth:    s.config.Dashboard.EnableAuth,
+		Username:      s.config.Dashboard.Username,
+		Password:      s.config.Dashboard.Password,
+		EnableTLS:     s.config.Dashboard.EnableTLS,
+		CertFile:      s.config.Dashboard.CertFile,
+		KeyFile:       s.config.Dashboard.KeyFile,
+	}
+	
+	s.dashboardServer = dashboard.NewServer(
+		s.logger,
+		dashConfig,
+		s,
+		s.miningEngine,
+		s.healthMonitor,
+		s.currencyManager,
+	)
+	
+	s.logger.Info("Dashboard server initialized",
+		zap.String("address", s.config.Dashboard.ListenAddr),
+		zap.Bool("auth_enabled", s.config.Dashboard.EnableAuth),
+	)
+	
+	return nil
+}
+
+func (s *OtedamaSystem) initializePerformanceTools() error {
+	// Initialize benchmarker
+	s.benchmarker = benchmark.NewBenchmarker(s.logger)
+	
+	// Initialize profiler
+	profConfig := profiling.Config{
+		Enabled:          s.config.Profiling.Enabled,
+		PProfAddr:        s.config.Profiling.PProfAddr,
+		ProfileDir:       s.config.Profiling.ProfileDir,
+		CPUProfile:       s.config.Profiling.CPUProfile,
+		MemProfile:       s.config.Profiling.MemProfile,
+		BlockProfile:     s.config.Profiling.BlockProfile,
+		MutexProfile:     s.config.Profiling.MutexProfile,
+		GoroutineProfile: s.config.Profiling.GoroutineProfile,
+		TraceProfile:     s.config.Profiling.TraceProfile,
+		ProfileInterval:  s.config.Profiling.ProfileInterval,
+	}
+	
+	s.profiler = profiling.NewProfiler(s.logger, profConfig)
+	
+	s.logger.Info("Performance tools initialized",
+		zap.Bool("profiling_enabled", s.config.Profiling.Enabled),
+	)
+	
+	return nil
+}
+
 // Start begins system operations
 func (s *OtedamaSystem) Start(ctx context.Context) error {
 	s.mu.Lock()
@@ -368,6 +534,17 @@ func (s *OtedamaSystem) Start(ctx context.Context) error {
 	
 	if err := s.anomalyDetector.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start anomaly detector: %w", err)
+	}
+	
+	// Start health monitoring
+	s.healthMonitor.Start(ctx)
+	s.logger.Info("Health monitoring and auto-recovery started")
+	
+	// Start profiler if enabled
+	if s.profiler != nil && s.config.Profiling.Enabled {
+		if err := s.profiler.Start(ctx); err != nil {
+			s.logger.Warn("Failed to start profiler", zap.Error(err))
+		}
 	}
 	
 	// Start network
@@ -404,6 +581,24 @@ func (s *OtedamaSystem) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start API server: %w", err)
 	}
 	
+	// Start currency manager
+	if s.currencyManager != nil {
+		if err := s.currencyManager.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start currency manager: %w", err)
+		}
+	}
+	
+	// Start dashboard server
+	if s.dashboardServer != nil {
+		go func() {
+			if err := s.dashboardServer.Start(ctx); err != nil {
+				s.logger.Error("Dashboard server error", zap.Error(err))
+			}
+		}()
+		s.logger.Info("Dashboard server started", 
+			zap.String("address", s.config.Dashboard.ListenAddr))
+	}
+	
 	// Start statistics collection
 	go s.collectStatistics(ctx)
 	
@@ -423,6 +618,13 @@ func (s *OtedamaSystem) Stop(ctx context.Context) error {
 	}
 	
 	s.logger.Info("Stopping Otedama system")
+	
+	// Stop dashboard server
+	if s.dashboardServer != nil {
+		if err := s.dashboardServer.Stop(); err != nil {
+			s.logger.Warn("Failed to stop dashboard server", zap.Error(err))
+		}
+	}
 	
 	// Stop API server
 	if s.apiServer != nil {
@@ -451,6 +653,16 @@ func (s *OtedamaSystem) Stop(ctx context.Context) error {
 	// Stop network
 	if s.network != nil {
 		s.network.Stop()
+	}
+	
+	// Stop health monitoring
+	if s.healthMonitor != nil {
+		s.healthMonitor.Stop()
+	}
+	
+	// Stop profiler
+	if s.profiler != nil {
+		s.profiler.Stop()
 	}
 	
 	// Stop monitoring
@@ -511,7 +723,87 @@ func (s *OtedamaSystem) GetStats() map[string]interface{} {
 		// stats["hardware"] = s.hardwareMonitor.GetStats()
 	}
 	
+	// Health stats
+	if s.healthMonitor != nil {
+		stats["health"] = s.healthMonitor.GetHealthStatus()
+		stats["health_metrics"] = s.healthMonitor.GetMetrics()
+	}
+	
 	return stats
+}
+
+// RunBenchmarks runs performance benchmarks
+func (s *OtedamaSystem) RunBenchmarks(ctx context.Context) error {
+	if s.benchmarker == nil {
+		return fmt.Errorf("benchmarker not initialized")
+	}
+	
+	s.logger.Info("Running performance benchmarks")
+	
+	// Run all benchmarks
+	if err := s.benchmarker.RunAllBenchmarks(ctx); err != nil {
+		return fmt.Errorf("benchmarks failed: %w", err)
+	}
+	
+	// Get results
+	results := s.benchmarker.GetResults()
+	
+	// Log summary
+	s.logger.Info("Benchmark completed", zap.Int("total_benchmarks", len(results)))
+	
+	// Print report
+	report := s.benchmarker.GenerateReport()
+	fmt.Println(report)
+	
+	return nil
+}
+
+// GetBenchmarkResults returns benchmark results
+func (s *OtedamaSystem) GetBenchmarkResults() map[string]*benchmark.BenchmarkResult {
+	if s.benchmarker == nil {
+		return nil
+	}
+	return s.benchmarker.GetResults()
+}
+
+// GetProfilerStats returns profiler statistics
+func (s *OtedamaSystem) GetProfilerStats() map[string]interface{} {
+	if s.profiler == nil {
+		return nil
+	}
+	return s.profiler.GetProfileStats()
+}
+
+// Dashboard interface methods
+
+// StartTime returns the system start time
+func (s *OtedamaSystem) StartTime() time.Time {
+	// For now, return current time minus uptime
+	// In production, track actual start time
+	return time.Now().Add(-time.Hour)
+}
+
+// NodeID returns the node identifier
+func (s *OtedamaSystem) NodeID() string {
+	return s.generateMinerID()
+}
+
+// NetworkType returns the network type (mainnet, testnet, etc)
+func (s *OtedamaSystem) NetworkType() string {
+	return "mainnet"
+}
+
+// PoolAddress returns the pool address
+func (s *OtedamaSystem) PoolAddress() string {
+	if len(s.config.Mining.Pools) > 0 {
+		return s.config.Mining.Pools[0].URL
+	}
+	return "Not configured"
+}
+
+// PoolFee returns the pool fee percentage
+func (s *OtedamaSystem) PoolFee() float64 {
+	return s.config.P2PPool.FeePercentage
 }
 
 // Helper methods

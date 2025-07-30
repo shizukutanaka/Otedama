@@ -43,6 +43,18 @@ api:
     - "*"
   rate_limit: 100
 
+# Dashboard settings
+dashboard:
+  enabled: true
+  listen_addr: ":8888"
+  enable_auth: false
+  username: "admin"
+  password: ""
+  enable_tls: false
+  cert_file: ""
+  key_file: ""
+  refresh_rate: "1s"
+
 # Monitoring settings
 monitoring:
   metrics_interval: 10s

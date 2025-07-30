@@ -3,10 +3,10 @@
 # Variables
 BINARY_NAME=otedama
 MAIN_PATH=./cmd/otedama
-VERSION=$(shell grep "AppVersion" cmd/otedama/main.go | cut -d'"' -f2)
+VERSION=$(shell grep "Version = " version.go | cut -d'"' -f2)
 BUILD_TIME=$(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X 'main.BuildTime=$(BUILD_TIME)' -X main.GitCommit=$(GIT_COMMIT)"
+LDFLAGS=-ldflags "-X github.com/shizukutanaka/Otedama.Version=$(VERSION) -X 'github.com/shizukutanaka/Otedama.BuildDate=$(BUILD_TIME)' -X github.com/shizukutanaka/Otedama.GitCommit=$(GIT_COMMIT)"
 
 # Go parameters
 GOCMD=go

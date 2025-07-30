@@ -18,6 +18,7 @@ type Config struct {
 	Network    NetworkConfig    `mapstructure:"network"`
 	Mining     MiningConfig     `mapstructure:"mining"`
 	API        APIConfig        `mapstructure:"api"`
+	Dashboard  DashboardConfig  `mapstructure:"dashboard"`
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
 	Storage    StorageConfig    `mapstructure:"storage"`
 	Security   SecurityConfig   `mapstructure:"security"`
@@ -26,6 +27,7 @@ type Config struct {
 	Performance PerformanceConfig `mapstructure:"performance"`
 	ZKP        ZKPConfig        `mapstructure:"zkp"`
 	Privacy    PrivacyConfig    `mapstructure:"privacy"`
+	Profiling  ProfilingConfig  `mapstructure:"profiling"`
 }
 
 // NetworkConfig はネットワーク設定
@@ -163,6 +165,20 @@ type PrivacyConfig struct {
 	HideIPAddresses  bool `mapstructure:"hide_ip_addresses"`
 }
 
+// ProfilingConfig はプロファイリング設定
+type ProfilingConfig struct {
+	Enabled          bool          `mapstructure:"enabled"`
+	PProfAddr        string        `mapstructure:"pprof_addr"`
+	ProfileDir       string        `mapstructure:"profile_dir"`
+	CPUProfile       bool          `mapstructure:"cpu_profile"`
+	MemProfile       bool          `mapstructure:"mem_profile"`
+	BlockProfile     bool          `mapstructure:"block_profile"`
+	MutexProfile     bool          `mapstructure:"mutex_profile"`
+	GoroutineProfile bool          `mapstructure:"goroutine_profile"`
+	TraceProfile     bool          `mapstructure:"trace_profile"`
+	ProfileInterval  time.Duration `mapstructure:"profile_interval"`
+}
+
 // Load は設定ファイルを読み込む
 func Load(configPath string) (*Config, error) {
 	viper.SetConfigFile(configPath)
@@ -199,6 +215,9 @@ func setDefaults() {
 	// 基本設定
 	viper.SetDefault("mode", "auto")
 	viper.SetDefault("log_level", "info")
+	
+	// Dashboard defaults
+	setDashboardDefaults()
 	
 	// ネットワーク設定
 	viper.SetDefault("network.listen_addr", ":30303")
@@ -283,6 +302,18 @@ func setDefaults() {
 	viper.SetDefault("privacy.enable_i2p", false)
 	viper.SetDefault("privacy.anonymous_mining", true)
 	viper.SetDefault("privacy.hide_ip_addresses", true)
+	
+	// プロファイリング設定
+	viper.SetDefault("profiling.enabled", false)
+	viper.SetDefault("profiling.pprof_addr", "localhost:6060")
+	viper.SetDefault("profiling.profile_dir", "./profiles")
+	viper.SetDefault("profiling.cpu_profile", false)
+	viper.SetDefault("profiling.mem_profile", false)
+	viper.SetDefault("profiling.block_profile", false)
+	viper.SetDefault("profiling.mutex_profile", false)
+	viper.SetDefault("profiling.goroutine_profile", false)
+	viper.SetDefault("profiling.trace_profile", false)
+	viper.SetDefault("profiling.profile_interval", "5m")
 }
 
 // validate は設定値を検証
@@ -368,6 +399,11 @@ func validate(cfg *Config) error {
 	
 	if cfg.API.EnableTLS && (cfg.API.CertFile == "" || cfg.API.KeyFile == "") {
 		return fmt.Errorf("cert_file and key_file are required when TLS is enabled")
+	}
+	
+	// Dashboard設定検証
+	if err := validateDashboard(&cfg.Dashboard); err != nil {
+		return err
 	}
 	
 	// P2Pプール設定検証
@@ -463,6 +499,13 @@ func GenerateSampleConfig(path string) error {
 			EnableTLS:    false,
 			AllowOrigins: []string{"*"},
 			RateLimit:    100,
+		},
+		
+		Dashboard: DashboardConfig{
+			Enabled:      true,
+			ListenAddr:   ":8888",
+			EnableAuth:   false,
+			RefreshRate:  1 * time.Second,
 		},
 		
 		P2PPool: P2PPoolConfig{

@@ -1,4 +1,4 @@
-# Otedama v1.5.0 - Production Dockerfile
+# Otedama v2.0.0 - Production Dockerfile
 # Multi-stage build for Go application
 
 # Build stage
@@ -18,8 +18,15 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Get version info
+RUN VERSION=$(grep "Version = " version.go | cut -d'"' -f2) && \
+    BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC") && \
+    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o otedama cmd/otedama/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-w -s -X github.com/shizukutanaka/Otedama.Version=$VERSION -X 'github.com/shizukutanaka/Otedama.BuildDate=$BUILD_TIME' -X github.com/shizukutanaka/Otedama.GitCommit=$GIT_COMMIT" \
+    -o otedama ./cmd/otedama
 
 # Production stage
 FROM alpine:3.19
