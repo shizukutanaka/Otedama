@@ -17,9 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otedama/otedama/internal/config"
-	"github.com/otedama/otedama/internal/mining"
-	"github.com/otedama/otedama/internal/zkp"
+	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/zkp"
 	"go.uber.org/zap"
 )
 
@@ -54,7 +54,7 @@ type Client struct {
 	// ゼロ知識証明関連
 	zkpProofID      string
 	zkpVerified     bool
-	kycCompliant    bool
+	zkpCompliant    bool
 	reputationScore float64
 	lastZKPUpdate   time.Time
 	zkpRequired     bool
@@ -235,8 +235,6 @@ func (s *Server) handleMessage(client *Client, msg *Message) {
 		s.handleAuthorize(client, msg)
 	case "mining.zkp_auth":
 		s.handleZKPAuth(client, msg)
-	case "mining.kyc_proof":
-		s.handleKYCProof(client, msg)
 	case "mining.submit":
 		s.handleSubmit(client, msg)
 	case "mining.get_transactions":
@@ -829,9 +827,9 @@ func (s *Server) handleZKPAuth(client *Client, msg *Message) {
 	client.reputationScore = result.Reputation
 	client.lastZKPUpdate = time.Now()
 	
-	// KYC準拠かチェック
-	if result.Statement.Type == zkp.StatementKYCProof {
-		client.kycCompliant = true
+	// コンプライアンスチェック
+	if result.Statement.Type == zkp.StatementComplianceProof {
+		client.zkpCompliant = true
 	}
 	
 	// 高い信頼度スコアの場合は認証を許可
@@ -844,7 +842,7 @@ func (s *Server) handleZKPAuth(client *Client, msg *Message) {
 	response := map[string]interface{}{
 		"authorized":       client.authorized,
 		"zkp_verified":     client.zkpVerified,
-		"kyc_compliant":    client.kycCompliant,
+		"zkp_compliant":    client.zkpCompliant,
 		"reputation_score": client.reputationScore,
 		"score":           result.Score,
 	}
@@ -857,50 +855,6 @@ func (s *Server) handleZKPAuth(client *Client, msg *Message) {
 		zap.Float64("score", result.Score))
 }
 
-// handleKYCProof KYC証明処理
-func (s *Server) handleKYCProof(client *Client, msg *Message) {
-	if len(msg.Params) < 2 {
-		s.sendError(client, msg.ID, -1, "Invalid parameters")
-		return
-	}
-	
-	userID, ok := msg.Params[0].(string)
-	if !ok {
-		s.sendError(client, msg.ID, -1, "Invalid user ID")
-		return
-	}
-	
-	kycDataInterface, ok := msg.Params[1].(map[string]interface{})
-	if !ok {
-		s.sendError(client, msg.ID, -1, "Invalid KYC data")
-		return
-	}
-	
-	s.logger.Info("KYC proof request", zap.String("user_id", userID))
-	
-	// KYCプルーフを生成
-	proof, err := s.zkpManager.CreateKYCProof(userID, kycDataInterface)
-	if err != nil {
-		s.logger.Error("KYC proof generation failed", 
-			zap.String("user_id", userID),
-			zap.Error(err))
-		s.sendError(client, msg.ID, -2, "KYC proof generation failed")
-		return
-	}
-	
-	// レスポンス
-	response := map[string]interface{}{
-		"proof_id":   proof.ID,
-		"expires_at": proof.ExpiresAt.Unix(),
-		"statement":  proof.Statement,
-	}
-	
-	s.sendResult(client, msg.ID, response)
-	
-	s.logger.Info("KYC proof generated", 
-		zap.String("user_id", userID),
-		zap.String("proof_id", proof.ID))
-}
 
 // requireZKPAuth ZKP認証が必要かチェック
 func (s *Server) requireZKPAuth(client *Client) bool {
@@ -960,7 +914,7 @@ func (s *Server) GetZKPStats() map[string]interface{} {
 	
 	// クライアント統計も追加
 	zkpClients := 0
-	kycCompliantClients := 0
+	zkpCompliantClients := 0
 	
 	s.clients.Range(func(key, value interface{}) bool {
 		client := value.(*Client)
@@ -968,15 +922,15 @@ func (s *Server) GetZKPStats() map[string]interface{} {
 		if client.zkpVerified {
 			zkpClients++
 		}
-		if client.kycCompliant {
-			kycCompliantClients++
+		if client.zkpCompliant {
+			zkpCompliantClients++
 		}
 		client.mu.Unlock()
 		return true
 	})
 	
 	zkpStats["zkp_clients"] = zkpClients
-	zkpStats["kyc_compliant_clients"] = kycCompliantClients
+	zkpStats["zkp_compliant_clients"] = zkpCompliantClients
 	zkpStats["total_clients"] = s.GetClientCount()
 	
 	return zkpStats

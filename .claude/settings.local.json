@@ -23,7 +23,19 @@
       "Bash(./bin/otedama:*)",
       "Bash(timeout:*)",
       "Bash(del Dockerfile.production)",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(touch:*)",
+      "Bash(go test:*)",
+      "Bash(/usr/local/go/bin/go test -v ./internal/mining/ -run TestMiningEngine)",
+      "Bash(docker run:*)",
+      "Bash(wsl.exe:*)",
+      "Bash(cmd.exe /c \"go test -v ./internal/mining/ -run TestMiningEngine\")",
+      "Bash(cmd.exe /c \"go mod tidy\")",
+      "Bash(cmd.exe /c \"go test -v ./internal/mining/ -run TestMiningEngine_Initialize\")",
+      "Bash(chmod:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(./verify_fixes.sh)",
+      "Bash(bash:*)"
     ],
     "deny": []
   }

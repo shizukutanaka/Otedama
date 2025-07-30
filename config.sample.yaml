@@ -1,0 +1,96 @@
+# Otedama Sample Configuration
+# Generated automatically - modify as needed
+
+# Operation mode: solo, pool, miner, auto
+mode: auto
+
+# Logging configuration
+log_level: info
+
+# Mining configuration
+mining:
+  algorithm: sha256d
+  threads: 0                    # 0 = auto-detect CPU cores
+  enable_cpu: true
+  enable_gpu: false             # GPU mining (requires drivers)
+  enable_asic: false            # ASIC mining support
+  initial_difficulty: 0x1d00ffff
+
+  # Pool configuration for miner mode
+  pools:
+    - url: "stratum+tcp://pool.example.com:3333"
+      user: "your_wallet_address"
+      pass: "x"
+      priority: 1
+
+# Network configuration
+network:
+  listen_addr: ":30303"
+  max_peers: 50
+  dial_timeout: 30s
+  enable_p2p: true
+
+# API configuration
+api:
+  enabled: true
+  listen_addr: ":8080"
+  enable_tls: false
+  rate_limit: 100
+
+# Monitoring configuration
+monitoring:
+  metrics_interval: 10s
+  enable_profiler: false
+
+# Storage configuration
+storage:
+  data_dir: "./data"
+  cache_size: 1000
+  compress_data: true
+  backup_interval: 24h
+
+# Security configuration
+security:
+  enable_encryption: true
+  enable_auth: false
+  tls_min_version: "1.2"
+
+# P2P Pool configuration
+p2p_pool:
+  share_difficulty: 1000.0
+  block_time: 10m
+  payout_threshold: 0.01
+  fee_percentage: 1.0
+
+# Stratum configuration
+stratum:
+  enabled: true
+  listen_addr: ":3333"
+  max_clients: 1000
+  var_diff: true
+  min_diff: 100.0
+  max_diff: 1000000.0
+  target_time: 10
+
+# Performance configuration
+performance:
+  enable_optimization: true
+  huge_pages_enabled: false
+  gc_percent: 100
+
+# Zero-Knowledge Proof configuration
+zkp:
+  enabled: false
+  proof_expiry: 24h
+  require_age_proof: false
+  min_age_requirement: 18
+  require_hashpower_proof: false
+  min_hashpower_requirement: 1000.0
+  audit_log_enabled: false
+
+# Privacy configuration
+privacy:
+  enable_tor: false
+  enable_i2p: false
+  anonymous_mining: false
+  hide_ip_addresses: false

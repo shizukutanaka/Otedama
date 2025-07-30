@@ -116,7 +116,7 @@ clone_repository() {
         cd $INSTALL_DIR
         sudo -u $USER git pull
     else
-        sudo -u $USER git clone https://github.com/otedama/otedama.git $INSTALL_DIR
+        sudo -u $USER git clone https://github.com/shizukutanaka/Otedama.git $INSTALL_DIR
     fi
     
     print_success "Repository cloned"

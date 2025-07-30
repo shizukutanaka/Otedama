@@ -1,9 +1,13 @@
 package logging
 
 import (
+	"context"
+	"crypto/rand"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -52,7 +56,13 @@ type Manager struct {
 	logger      *zap.Logger
 	auditLogger *AuditLogger
 	config      Config
+	atomicLevel zap.AtomicLevel
 	mu          sync.RWMutex
+	
+	// Metrics
+	logCounts   map[zapcore.Level]uint64
+	errorCounts map[string]uint64 // component -> count
+	metricsLock sync.RWMutex
 }
 
 // NewManager creates a new logging manager
@@ -66,7 +76,7 @@ func NewManager(config Config) (*Manager, error) {
 	}
 	
 	// Configure zap logger
-	logger, err := createZapLogger(config)
+	logger, atomicLevel, err := createZapLogger(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
@@ -77,10 +87,14 @@ func NewManager(config Config) (*Manager, error) {
 		return nil, fmt.Errorf("failed to create audit logger: %w", err)
 	}
 	
+	
 	manager := &Manager{
 		logger:      logger,
 		auditLogger: auditLogger,
 		config:      config,
+		atomicLevel: atomicLevel,
+		logCounts:   make(map[zapcore.Level]uint64),
+		errorCounts: make(map[string]uint64),
 	}
 	
 	return manager, nil
@@ -254,7 +268,7 @@ func (m *Manager) Close() error {
 }
 
 // createZapLogger creates a configured zap logger
-func createZapLogger(config Config) (*zap.Logger, error) {
+func createZapLogger(config Config) (*zap.Logger, zap.AtomicLevel, error) {
 	// Configure encoder
 	var encoderConfig zapcore.EncoderConfig
 	if config.Encoding == "json" {
@@ -279,7 +293,8 @@ func createZapLogger(config Config) (*zap.Logger, error) {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	}
 	
-	// Configure log level
+	// Configure log level with atomic level for runtime updates
+	atomicLevel := zap.NewAtomicLevel()
 	level := zapcore.InfoLevel
 	switch config.Level {
 	case LevelDebug:
@@ -295,6 +310,7 @@ func createZapLogger(config Config) (*zap.Logger, error) {
 	case LevelFatal:
 		level = zapcore.FatalLevel
 	}
+	atomicLevel.SetLevel(level)
 	
 	// Configure writers
 	var writers []zapcore.WriteSyncer
@@ -314,11 +330,11 @@ func createZapLogger(config Config) (*zap.Logger, error) {
 		writers = append(writers, zapcore.AddSync(fileWriter))
 	}
 	
-	// Create core
+	// Create core with atomic level
 	core := zapcore.NewCore(
 		encoder,
 		zapcore.NewMultiWriteSyncer(writers...),
-		level,
+		atomicLevel,
 	)
 	
 	// Enable sampling if configured
@@ -338,5 +354,260 @@ func createZapLogger(config Config) (*zap.Logger, error) {
 		zap.AddCallerSkip(1),
 	)
 	
-	return logger, nil
+	return logger, atomicLevel, nil
+}
+
+// HTTPMiddleware returns a middleware for logging HTTP requests
+func (m *Manager) HTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		
+		// Generate request ID
+		requestID := generateRequestID()
+		
+		// Add to context
+		ctx := context.WithValue(r.Context(), "request_id", requestID)
+		r = r.WithContext(ctx)
+		
+		// Wrap response writer to capture status code
+		wrapped := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+		
+		// Process request
+		next.ServeHTTP(wrapped, r)
+		
+		// Log request
+		duration := time.Since(start)
+		m.LogAPIAccess(
+			r.RemoteAddr,
+			r.Method,
+			r.URL.Path,
+			r.Header.Get("User-Agent"),
+			wrapped.statusCode,
+			duration,
+		)
+	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// generateRequestID generates a unique request ID
+func generateRequestID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
+
+// LogStructured logs with structured context
+type LogContext struct {
+	Component   string
+	Operation   string
+	UserID      string
+	RequestID   string
+	Duration    time.Duration
+	Fields      map[string]interface{}
+}
+
+// LogOperation logs an operation with full context
+func (m *Manager) LogOperation(ctx LogContext, err error) {
+	fields := []zap.Field{
+		zap.String("component", ctx.Component),
+		zap.String("operation", ctx.Operation),
+	}
+	
+	if ctx.UserID != "" {
+		fields = append(fields, zap.String("user_id", ctx.UserID))
+	}
+	
+	if ctx.RequestID != "" {
+		fields = append(fields, zap.String("request_id", ctx.RequestID))
+	}
+	
+	if ctx.Duration > 0 {
+		fields = append(fields, zap.Duration("duration", ctx.Duration))
+	}
+	
+	for k, v := range ctx.Fields {
+		fields = append(fields, zap.Any(k, v))
+	}
+	
+	if err != nil {
+		fields = append(fields, zap.Error(err))
+		m.logger.Error("Operation failed", fields...)
+		
+		// Update error metrics
+		m.metricsLock.Lock()
+		if m.errorCounts == nil {
+			m.errorCounts = make(map[string]uint64)
+		}
+		m.errorCounts[ctx.Component]++
+		m.metricsLock.Unlock()
+	} else {
+		m.logger.Info("Operation completed", fields...)
+	}
+}
+
+// LogBatch logs multiple entries efficiently
+func (m *Manager) LogBatch(entries []LogEntry) {
+	for _, entry := range entries {
+		m.LogWithFields(entry.Level, entry.Message, entry.Fields)
+	}
+}
+
+// LogEntry represents a batch log entry
+type LogEntry struct {
+	Level   LogLevel
+	Message string
+	Fields  map[string]interface{}
+}
+
+// SetLevel updates the log level at runtime
+func (m *Manager) SetLevel(level LogLevel) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	var zapLevel zapcore.Level
+	switch level {
+	case LevelDebug:
+		zapLevel = zapcore.DebugLevel
+	case LevelInfo:
+		zapLevel = zapcore.InfoLevel
+	case LevelWarn:
+		zapLevel = zapcore.WarnLevel
+	case LevelError:
+		zapLevel = zapcore.ErrorLevel
+	default:
+		return fmt.Errorf("invalid log level: %s", level)
+	}
+	
+	m.atomicLevel.SetLevel(zapLevel)
+	m.config.Level = level
+	
+	m.logger.Info("Log level updated", zap.String("new_level", string(level)))
+	return nil
+}
+
+// WithContext creates a logger with context fields
+func (m *Manager) WithContext(ctx context.Context) *zap.Logger {
+	logger := m.GetLogger()
+	
+	// Extract common context values
+	if correlationID := ctx.Value("correlation_id"); correlationID != nil {
+		logger = logger.With(zap.String("correlation_id", correlationID.(string)))
+	}
+	
+	if userID := ctx.Value("user_id"); userID != nil {
+		logger = logger.With(zap.String("user_id", userID.(string)))
+	}
+	
+	if requestID := ctx.Value("request_id"); requestID != nil {
+		logger = logger.With(zap.String("request_id", requestID.(string)))
+	}
+	
+	return logger
+}
+
+// LogWithFields logs a message with structured fields
+func (m *Manager) LogWithFields(level LogLevel, message string, fields map[string]interface{}) {
+	zapFields := make([]zap.Field, 0, len(fields))
+	for k, v := range fields {
+		zapFields = append(zapFields, zap.Any(k, v))
+	}
+	
+	logger := m.GetLogger()
+	switch level {
+	case LevelDebug:
+		logger.Debug(message, zapFields...)
+	case LevelInfo:
+		logger.Info(message, zapFields...)
+	case LevelWarn:
+		logger.Warn(message, zapFields...)
+	case LevelError:
+		logger.Error(message, zapFields...)
+	}
+	
+	// Update metrics
+	m.updateLogMetrics(level)
+}
+
+// updateLogMetrics updates internal log metrics
+func (m *Manager) updateLogMetrics(level LogLevel) {
+	m.metricsLock.Lock()
+	defer m.metricsLock.Unlock()
+	
+	var zapLevel zapcore.Level
+	switch level {
+	case LevelDebug:
+		zapLevel = zapcore.DebugLevel
+	case LevelInfo:
+		zapLevel = zapcore.InfoLevel
+	case LevelWarn:
+		zapLevel = zapcore.WarnLevel
+	case LevelError:
+		zapLevel = zapcore.ErrorLevel
+	default:
+		return
+	}
+	
+	if m.logCounts == nil {
+		m.logCounts = make(map[zapcore.Level]uint64)
+	}
+	m.logCounts[zapLevel]++
+}
+
+// GetMetrics returns logging metrics
+func (m *Manager) GetMetrics() map[string]interface{} {
+	m.metricsLock.RLock()
+	defer m.metricsLock.RUnlock()
+	
+	metrics := make(map[string]interface{})
+	
+	// Log counts by level
+	logCounts := make(map[string]uint64)
+	for level, count := range m.logCounts {
+		logCounts[level.String()] = count
+	}
+	metrics["log_counts"] = logCounts
+	
+	// Error counts by component
+	errorCounts := make(map[string]uint64)
+	for component, count := range m.errorCounts {
+		errorCounts[component] = count
+	}
+	metrics["error_counts"] = errorCounts
+	
+	return metrics
+}
+
+// LogErrorWithStack logs an error with full stack trace
+func (m *Manager) LogErrorWithStack(component, operation string, err error, fields map[string]interface{}) {
+	// Capture stack trace
+	stackTrace := make([]byte, 8192)
+	n := runtime.Stack(stackTrace, false)
+	
+	if fields == nil {
+		fields = make(map[string]interface{})
+	}
+	fields["stack_trace"] = string(stackTrace[:n])
+	
+	m.LogError(component, operation, err, fields)
+	
+	// Update error metrics
+	m.metricsLock.Lock()
+	if m.errorCounts == nil {
+		m.errorCounts = make(map[string]uint64)
+	}
+	m.errorCounts[component]++
+	m.metricsLock.Unlock()
 }

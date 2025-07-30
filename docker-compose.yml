@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   otedama:
-    image: otedama:1.5.0
+    image: shizukutanaka/otedama:2.0.0
     build:
       context: .
       dockerfile: Dockerfile

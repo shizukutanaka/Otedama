@@ -86,3 +86,23 @@ performance:
   cpu_affinity: []
   huge_pages_enabled: false
   gc_percent: 100
+
+# Zero Knowledge Proof settings (replaces KYC)
+zkp:
+  enabled: true
+  proof_expiry: 24h
+  require_age_proof: true
+  min_age_requirement: 18
+  require_hashpower_proof: true
+  min_hashpower_requirement: 1000  # H/s
+  require_reputation_proof: false
+  min_reputation_score: 0.5
+  audit_log_enabled: true
+  trusted_verifiers: []
+  
+# Privacy settings
+privacy:
+  enable_tor: false
+  enable_i2p: false
+  anonymous_mining: true
+  hide_ip_addresses: true

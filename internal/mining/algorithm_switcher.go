@@ -3,7 +3,6 @@ package mining
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -57,7 +56,7 @@ type AlgorithmInfo struct {
 	Temperature     float64
 	Supported       bool
 	BenchmarkTime   time.Time
-	Implementation  MiningAlgorithm
+	Implementation  SwitcherMiningAlgorithm
 	Config          map[string]interface{}
 }
 
@@ -75,9 +74,9 @@ const (
 	AlgorithmTypeCryptonight AlgorithmType = "cryptonight"
 )
 
-// MiningAlgorithm interface for mining implementations
-type MiningAlgorithm interface {
-	Mine(ctx context.Context, job *MiningJob) (*MiningResult, error)
+// SwitcherMiningAlgorithm interface for mining implementations
+type SwitcherMiningAlgorithm interface {
+	Mine(ctx context.Context, job *SwitcherMiningJob) (*SwitcherMiningResult, error)
 	GetHashRate() float64
 	GetName() string
 	Configure(params map[string]interface{}) error
@@ -108,7 +107,7 @@ type DifficultyInfo struct {
 // AlgorithmBenchmarker benchmarks mining algorithms
 type AlgorithmBenchmarker struct {
 	logger      *zap.Logger
-	hardware    HardwareInfo
+	hardware    SwitcherHardwareInfo
 	results     sync.Map // algorithm -> BenchmarkResult
 	mu          sync.RWMutex
 }
@@ -125,8 +124,8 @@ type BenchmarkResult struct {
 	Errors       int
 }
 
-// HardwareInfo contains hardware information
-type HardwareInfo struct {
+// SwitcherHardwareInfo contains hardware information for the algorithm switcher
+type SwitcherHardwareInfo struct {
 	Type         string // CPU, GPU, ASIC
 	Model        string
 	Cores        int
@@ -155,8 +154,8 @@ type SwitcherStats struct {
 	TimeByAlgorithm    sync.Map     // algorithm -> duration
 }
 
-// MiningJob represents a mining job
-type MiningJob struct {
+// SwitcherMiningJob represents a mining job for the algorithm switcher
+type SwitcherMiningJob struct {
 	ID         string
 	Algorithm  string
 	Target     []byte
@@ -165,8 +164,8 @@ type MiningJob struct {
 	Difficulty float64
 }
 
-// MiningResult represents mining result
-type MiningResult struct {
+// SwitcherMiningResult represents mining result for the algorithm switcher
+type SwitcherMiningResult struct {
 	JobID    string
 	Hash     []byte
 	Nonce    uint64
@@ -583,11 +582,11 @@ func NewAlgorithmBenchmarker(logger *zap.Logger) *AlgorithmBenchmarker {
 }
 
 // Benchmark benchmarks an algorithm
-func (ab *AlgorithmBenchmarker) Benchmark(ctx context.Context, algo MiningAlgorithm, duration time.Duration) (*BenchmarkResult, error) {
+func (ab *AlgorithmBenchmarker) Benchmark(ctx context.Context, algo SwitcherMiningAlgorithm, duration time.Duration) (*BenchmarkResult, error) {
 	startTime := time.Now()
 	
 	// Create benchmark job
-	job := &MiningJob{
+	job := &SwitcherMiningJob{
 		ID:         "benchmark",
 		Algorithm:  algo.GetName(),
 		Target:     make([]byte, 32),
@@ -652,9 +651,9 @@ func NewSHA256Algorithm() *SHA256Algorithm {
 	return &SHA256Algorithm{name: "sha256"}
 }
 
-func (a *SHA256Algorithm) Mine(ctx context.Context, job *MiningJob) (*MiningResult, error) {
+func (a *SHA256Algorithm) Mine(ctx context.Context, job *SwitcherMiningJob) (*SwitcherMiningResult, error) {
 	// Simplified implementation
-	return &MiningResult{
+	return &SwitcherMiningResult{
 		JobID:    job.ID,
 		HashRate: 1000000, // 1 MH/s placeholder
 	}, nil
@@ -674,8 +673,8 @@ func NewScryptAlgorithm() *ScryptAlgorithm {
 	return &ScryptAlgorithm{name: "scrypt"}
 }
 
-func (a *ScryptAlgorithm) Mine(ctx context.Context, job *MiningJob) (*MiningResult, error) {
-	return &MiningResult{
+func (a *ScryptAlgorithm) Mine(ctx context.Context, job *SwitcherMiningJob) (*SwitcherMiningResult, error) {
+	return &SwitcherMiningResult{
 		JobID:    job.ID,
 		HashRate: 500000, // 500 KH/s placeholder
 	}, nil
@@ -695,8 +694,8 @@ func NewEthashAlgorithm() *EthashAlgorithm {
 	return &EthashAlgorithm{name: "ethash"}
 }
 
-func (a *EthashAlgorithm) Mine(ctx context.Context, job *MiningJob) (*MiningResult, error) {
-	return &MiningResult{
+func (a *EthashAlgorithm) Mine(ctx context.Context, job *SwitcherMiningJob) (*SwitcherMiningResult, error) {
+	return &SwitcherMiningResult{
 		JobID:    job.ID,
 		HashRate: 30000000, // 30 MH/s placeholder
 	}, nil
@@ -716,8 +715,8 @@ func NewRandomXAlgorithm() *RandomXAlgorithm {
 	return &RandomXAlgorithm{name: "randomx"}
 }
 
-func (a *RandomXAlgorithm) Mine(ctx context.Context, job *MiningJob) (*MiningResult, error) {
-	return &MiningResult{
+func (a *RandomXAlgorithm) Mine(ctx context.Context, job *SwitcherMiningJob) (*SwitcherMiningResult, error) {
+	return &SwitcherMiningResult{
 		JobID:    job.ID,
 		HashRate: 5000, // 5 KH/s placeholder
 	}, nil

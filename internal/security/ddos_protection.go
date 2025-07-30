@@ -2,11 +2,14 @@ package security
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,50 +18,107 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// DDoSProtection implements comprehensive DDoS protection
+// DDoSProtection implements comprehensive DDoS protection with advanced features
+// Following security best practices from OWASP and enterprise-grade implementations
 type DDoSProtection struct {
 	logger             *zap.Logger
 	config             DDoSConfig
+	
+	// Rate limiting
 	ipLimiters         sync.Map // IP -> *IPLimiter
+	globalLimiter      *rate.Limiter
+	
+	// Connection tracking
 	connectionTracker  *ConnectionTracker
+	
+	// Detection systems
 	patternDetector    *PatternDetector
+	anomalyDetector    *NetworkAnomalyDetector
+	
+	// Protection systems
 	challengeManager   *ChallengeManager
-	blacklist          *Blacklist
+	mitigationEngine   *MitigationEngine
+	
+	// Intelligence
+	threatIntelligence *ThreatIntelligence
+	geoBlocker         *GeoBlocker
+	
+	// Lists
+	whitelist          *IPList
+	blacklist          *IPList
+	
+	// Metrics
 	stats              *DDoSStats
+	
+	// State
+	running            atomic.Bool
+	ctx                context.Context
+	cancel             context.CancelFunc
 	mu                 sync.RWMutex
 }
 
-// DDoSConfig contains DDoS protection configuration
+// DDoSConfig contains comprehensive DDoS protection configuration
 type DDoSConfig struct {
-	// Rate limiting
-	RequestsPerSecond    int
-	BurstSize           int
-	ConnectionLimit     int
-	ConnectionRateLimit int
-
+	// Basic rate limiting
+	RequestsPerSecond      int           `yaml:"requests_per_second"`
+	BurstSize             int           `yaml:"burst_size"`
+	ConnectionLimit       int           `yaml:"connection_limit"`
+	IPConnectionLimit     int           `yaml:"ip_connection_limit"`
+	
+	// Advanced rate limiting
+	RequestSizeLimit      int64         `yaml:"request_size_limit"`
+	HeaderSizeLimit       int           `yaml:"header_size_limit"`
+	RequestTimeout        time.Duration `yaml:"request_timeout"`
+	
 	// Thresholds
-	SuspiciousThreshold int
-	BanThreshold        int
-	BanDuration         time.Duration
-
+	SuspiciousThreshold   int           `yaml:"suspicious_threshold"`
+	BlockingThreshold     int           `yaml:"blocking_threshold"`
+	AnomalyThreshold      float64       `yaml:"anomaly_threshold"`
+	
+	// Durations
+	BlockDuration         time.Duration `yaml:"block_duration"`
+	ChallengeExpiry       time.Duration `yaml:"challenge_expiry"`
+	CleanupInterval       time.Duration `yaml:"cleanup_interval"`
+	
+	// Protection features
+	EnableChallenge       bool          `yaml:"enable_challenge"`
+	EnablePatternDetection bool         `yaml:"enable_pattern_detection"`
+	EnableMLDetection     bool          `yaml:"enable_ml_detection"`
+	EnableGeoBlocking     bool          `yaml:"enable_geo_blocking"`
+	
+	// Specific attack protection
+	EnableSYNFloodProtection      bool `yaml:"enable_syn_flood_protection"`
+	EnableSlowlorisProtection     bool `yaml:"enable_slowloris_protection"`
+	EnableAmplificationProtection bool `yaml:"enable_amplification_protection"`
+	EnableHTTPFloodProtection     bool `yaml:"enable_http_flood_protection"`
+	
 	// Challenge configuration
-	EnableChallenge     bool
-	ChallengeExpiry     time.Duration
-	MaxChallengeRetries int
-
-	// Pattern detection
-	EnablePatternDetection bool
-	PatternWindow         time.Duration
-	AnomalyThreshold      float64
+	ChallengeType         string        `yaml:"challenge_type"` // "proof_of_work", "captcha", "javascript"
+	ChallengeDifficulty   int           `yaml:"challenge_difficulty"`
+	MaxChallengeRetries   int           `yaml:"max_challenge_retries"`
+	
+	// Lists
+	WhitelistedIPs        []string      `yaml:"whitelisted_ips"`
+	WhitelistedCountries  []string      `yaml:"whitelisted_countries"`
+	BlacklistedIPs        []string      `yaml:"blacklisted_ips"`
+	BlacklistedCountries  []string      `yaml:"blacklisted_countries"`
+	BlockedUserAgents     []string      `yaml:"blocked_user_agents"`
+	BlockedASNs           []int         `yaml:"blocked_asns"`
 }
 
-// IPLimiter tracks rate limiting for an IP
+// IPLimiter tracks rate limiting and statistics for an IP
 type IPLimiter struct {
+	IP               string
 	limiter          *rate.Limiter
 	connections      atomic.Int32
 	suspiciousCount  atomic.Int32
+	totalRequests    atomic.Uint64
+	failedChallenges atomic.Int32
 	lastActivity     atomic.Int64
 	challengePassed  atomic.Bool
+	blocked          atomic.Bool
+	blockExpiry      atomic.Int64
+	reputation       atomic.Int32
 	mu               sync.Mutex
 }
 
@@ -66,6 +126,7 @@ type IPLimiter struct {
 type ConnectionTracker struct {
 	connections sync.Map // connID -> *TrackedConnection
 	ipCounts    sync.Map // IP -> count
+	totalActive atomic.Int64
 	mu          sync.RWMutex
 }
 
@@ -73,17 +134,22 @@ type ConnectionTracker struct {
 type TrackedConnection struct {
 	ID            string
 	IP            string
+	Port          int
+	Protocol      string
 	StartTime     time.Time
 	LastActivity  time.Time
 	RequestCount  atomic.Uint64
 	BytesReceived atomic.Uint64
 	BytesSent     atomic.Uint64
+	Flags         atomic.Uint32
+	Score         atomic.Int32
 	Suspicious    atomic.Bool
+	Challenged    atomic.Bool
 }
 
 // PatternDetector detects suspicious patterns
 type PatternDetector struct {
-	patterns      sync.Map // patternID -> *Pattern
+	patterns      map[string]*Pattern
 	ipHistory     sync.Map // IP -> *IPHistory
 	anomalyScores sync.Map // IP -> float64
 	mu            sync.RWMutex
@@ -96,354 +162,636 @@ type Pattern struct {
 	Description string
 	Detector    func(*IPHistory) bool
 	Score       float64
+	Action      string // "monitor", "challenge", "block"
 }
 
-// IPHistory tracks IP behavior history
+// IPHistory tracks request history for pattern detection
 type IPHistory struct {
-	IP               string
-	RequestTimes     []time.Time
-	RequestSizes     []int
-	RequestPaths     []string
-	UserAgents       []string
-	ResponseCodes    []int
-	mu               sync.RWMutex
+	IP              string
+	Requests        []RequestInfo
+	ConnectionTimes []time.Time
+	UserAgents      map[string]int
+	Endpoints       map[string]int
+	mu              sync.RWMutex
 }
 
-// ChallengeManager manages proof-of-work challenges
-type ChallengeManager struct {
-	challenges sync.Map // IP -> *Challenge
-	difficulty int
-	mu         sync.RWMutex
-}
-
-// Challenge represents a proof-of-work challenge
-type Challenge struct {
-	ID         string
-	Target     string
-	Difficulty int
-	IssuedAt   time.Time
-	ExpiresAt  time.Time
-	Attempts   int
-}
-
-// Blacklist manages IP blacklisting
-type Blacklist struct {
-	entries sync.Map // IP -> *BlacklistEntry
-	mu      sync.RWMutex
-}
-
-// BlacklistEntry represents a blacklisted IP
-type BlacklistEntry struct {
-	IP        string
-	Reason    string
-	AddedAt   time.Time
-	ExpiresAt time.Time
-	Permanent bool
+// RequestInfo stores information about a request
+type RequestInfo struct {
+	Timestamp time.Time
+	Method    string
+	Path      string
+	Size      int64
+	UserAgent string
+	Headers   map[string]string
 }
 
 // DDoSStats tracks DDoS protection statistics
 type DDoSStats struct {
 	TotalRequests       atomic.Uint64
 	BlockedRequests     atomic.Uint64
-	SuspiciousRequests  atomic.Uint64
-	ChallengesSent      atomic.Uint64
-	ChallengesPassed    atomic.Uint64
-	BlacklistedIPs      atomic.Uint64
-	ActiveConnections   atomic.Int32
-	AnomaliesDetected   atomic.Uint64
+	ChallengedRequests  atomic.Uint64
+	PassedChallenges    atomic.Uint64
+	FailedChallenges    atomic.Uint64
+	ActiveConnections   atomic.Int64
+	BlockedIPs          atomic.Int64
+	DetectedAttacks     atomic.Uint64
+	FalsePositives      atomic.Uint64
 }
 
 // NewDDoSProtection creates a new DDoS protection system
 func NewDDoSProtection(config DDoSConfig, logger *zap.Logger) *DDoSProtection {
-	if config.RequestsPerSecond == 0 {
+	// Set defaults
+	if config.RequestsPerSecond <= 0 {
 		config.RequestsPerSecond = 100
 	}
-	if config.BurstSize == 0 {
-		config.BurstSize = 200
+	if config.BurstSize <= 0 {
+		config.BurstSize = config.RequestsPerSecond * 2
 	}
-	if config.ConnectionLimit == 0 {
-		config.ConnectionLimit = 1000
+	if config.ConnectionLimit <= 0 {
+		config.ConnectionLimit = 10000
 	}
-	if config.BanDuration == 0 {
-		config.BanDuration = 24 * time.Hour
+	if config.IPConnectionLimit <= 0 {
+		config.IPConnectionLimit = 100
 	}
-	if config.ChallengeExpiry == 0 {
-		config.ChallengeExpiry = 5 * time.Minute
+	if config.BlockDuration <= 0 {
+		config.BlockDuration = 1 * time.Hour
 	}
-	if config.PatternWindow == 0 {
-		config.PatternWindow = 10 * time.Minute
+	if config.CleanupInterval <= 0 {
+		config.CleanupInterval = 5 * time.Minute
 	}
-
+	
 	ddos := &DDoSProtection{
-		logger:            logger,
-		config:            config,
-		connectionTracker: NewConnectionTracker(),
-		patternDetector:   NewPatternDetector(),
-		challengeManager:  NewChallengeManager(4), // Default difficulty 4
-		blacklist:         NewBlacklist(),
-		stats:             &DDoSStats{},
+		logger:             logger,
+		config:             config,
+		globalLimiter:      rate.NewLimiter(rate.Limit(config.RequestsPerSecond), config.BurstSize),
+		connectionTracker:  NewConnectionTracker(),
+		patternDetector:    NewPatternDetector(),
+		challengeManager:   NewChallengeManager(config),
+		whitelist:          NewIPList("whitelist"),
+		blacklist:          NewIPList("blacklist"),
+		stats:              &DDoSStats{},
 	}
-
-	// Start cleanup routines
-	go ddos.cleanupRoutine()
-	go ddos.patternAnalysisRoutine()
-
+	
+	// Initialize whitelists and blacklists
+	for _, ip := range config.WhitelistedIPs {
+		ddos.whitelist.Add(ip)
+	}
+	for _, ip := range config.BlacklistedIPs {
+		ddos.blacklist.Add(ip)
+	}
+	
+	// Initialize advanced features if enabled
+	if config.EnableMLDetection {
+		ddos.anomalyDetector = NewNetworkAnomalyDetector()
+	}
+	
+	if config.EnableGeoBlocking {
+		ddos.geoBlocker = NewGeoBlocker(config.WhitelistedCountries, config.BlacklistedCountries)
+	}
+	
+	ddos.threatIntelligence = NewThreatIntelligence()
+	ddos.mitigationEngine = NewMitigationEngine(logger)
+	
+	// Initialize patterns
+	ddos.initializePatterns()
+	
 	return ddos
 }
 
+// Start starts the DDoS protection system
+func (d *DDoSProtection) Start(ctx context.Context) error {
+	if d.running.Load() {
+		return fmt.Errorf("DDoS protection already running")
+	}
+	
+	d.ctx, d.cancel = context.WithCancel(ctx)
+	d.running.Store(true)
+	
+	// Start background workers
+	go d.cleanupWorker()
+	go d.statsWorker()
+	go d.threatIntelligenceWorker()
+	
+	if d.config.EnablePatternDetection {
+		go d.patternAnalysisWorker()
+	}
+	
+	if d.config.EnableMLDetection && d.anomalyDetector != nil {
+		go d.anomalyDetector.Start(d.ctx)
+	}
+	
+	d.logger.Info("DDoS protection started",
+		zap.Int("rps_limit", d.config.RequestsPerSecond),
+		zap.Bool("challenge_enabled", d.config.EnableChallenge),
+		zap.Bool("ml_detection", d.config.EnableMLDetection),
+		zap.Bool("geo_blocking", d.config.EnableGeoBlocking),
+	)
+	
+	return nil
+}
+
+// Stop stops the DDoS protection system
+func (d *DDoSProtection) Stop() error {
+	if !d.running.Load() {
+		return fmt.Errorf("DDoS protection not running")
+	}
+	
+	d.running.Store(false)
+	if d.cancel != nil {
+		d.cancel()
+	}
+	
+	d.logger.Info("DDoS protection stopped")
+	return nil
+}
+
 // CheckRequest checks if a request should be allowed
-func (ddos *DDoSProtection) CheckRequest(ip string, requestSize int) (bool, error) {
-	ddos.stats.TotalRequests.Add(1)
-
-	// Check blacklist first
-	if ddos.blacklist.IsBlacklisted(ip) {
-		ddos.stats.BlockedRequests.Add(1)
-		return false, fmt.Errorf("IP is blacklisted")
+func (d *DDoSProtection) CheckRequest(ip string, req RequestInfo) (allowed bool, challengeRequired bool, reason string) {
+	d.stats.TotalRequests.Add(1)
+	
+	// Check whitelist first
+	if d.whitelist.Contains(ip) {
+		return true, false, "whitelisted"
 	}
-
+	
+	// Check blacklist
+	if d.blacklist.Contains(ip) {
+		d.stats.BlockedRequests.Add(1)
+		return false, false, "blacklisted"
+	}
+	
 	// Get or create IP limiter
-	limiter := ddos.getOrCreateLimiter(ip)
-
-	// Check rate limit
+	limiter := d.getOrCreateIPLimiter(ip)
+	
+	// Check if IP is blocked
+	if limiter.blocked.Load() {
+		blockExpiry := time.Unix(limiter.blockExpiry.Load(), 0)
+		if time.Now().Before(blockExpiry) {
+			d.stats.BlockedRequests.Add(1)
+			return false, false, "temporarily blocked"
+		}
+		// Unblock if expired
+		limiter.blocked.Store(false)
+	}
+	
+	// Check global rate limit
+	if !d.globalLimiter.Allow() {
+		d.stats.BlockedRequests.Add(1)
+		return false, false, "global rate limit exceeded"
+	}
+	
+	// Check IP rate limit
 	if !limiter.limiter.Allow() {
-		ddos.handleRateLimitExceeded(ip, limiter)
-		ddos.stats.BlockedRequests.Add(1)
-		return false, fmt.Errorf("rate limit exceeded")
-	}
-
-	// Check connection limit
-	if int(limiter.connections.Load()) >= ddos.config.ConnectionLimit {
-		ddos.stats.BlockedRequests.Add(1)
-		return false, fmt.Errorf("connection limit exceeded")
-	}
-
-	// Pattern detection
-	if ddos.config.EnablePatternDetection {
-		ddos.patternDetector.RecordRequest(ip, requestSize, "")
+		limiter.suspiciousCount.Add(1)
 		
-		if ddos.patternDetector.IsSuspicious(ip) {
-			ddos.stats.SuspiciousRequests.Add(1)
+		if int(limiter.suspiciousCount.Load()) >= d.config.BlockingThreshold {
+			d.blockIP(ip, d.config.BlockDuration)
+			d.stats.BlockedRequests.Add(1)
+			return false, false, "rate limit exceeded - blocked"
+		}
+		
+		if d.config.EnableChallenge && int(limiter.suspiciousCount.Load()) >= d.config.SuspiciousThreshold {
+			if !limiter.challengePassed.Load() {
+				d.stats.ChallengedRequests.Add(1)
+				return false, true, "rate limit exceeded - challenge required"
+			}
+		}
+		
+		d.stats.BlockedRequests.Add(1)
+		return false, false, "rate limit exceeded"
+	}
+	
+	// Check connection limit
+	if count, ok := d.connectionTracker.ipCounts.Load(ip); ok {
+		if count.(int) > d.config.IPConnectionLimit {
+			d.stats.BlockedRequests.Add(1)
+			return false, false, "connection limit exceeded"
+		}
+	}
+	
+	// Geo-blocking check
+	if d.config.EnableGeoBlocking && d.geoBlocker != nil {
+		if blocked, country := d.geoBlocker.IsBlocked(ip); blocked {
+			d.stats.BlockedRequests.Add(1)
+			return false, false, fmt.Sprintf("geo-blocked: %s", country)
+		}
+	}
+	
+	// Pattern detection
+	if d.config.EnablePatternDetection {
+		d.recordRequest(ip, req)
+		
+		if suspicious, pattern := d.detectSuspiciousPattern(ip); suspicious {
 			limiter.suspiciousCount.Add(1)
 			
-			// Check if challenge is required
-			if ddos.config.EnableChallenge && !limiter.challengePassed.Load() {
-				return false, fmt.Errorf("challenge required")
+			if pattern.Action == "block" {
+				d.blockIP(ip, d.config.BlockDuration)
+				d.stats.BlockedRequests.Add(1)
+				return false, false, fmt.Sprintf("suspicious pattern detected: %s", pattern.Name)
+			}
+			
+			if pattern.Action == "challenge" && d.config.EnableChallenge {
+				if !limiter.challengePassed.Load() {
+					d.stats.ChallengedRequests.Add(1)
+					return false, true, fmt.Sprintf("suspicious pattern: %s", pattern.Name)
+				}
 			}
 		}
 	}
-
-	// Update last activity
+	
+	// ML-based anomaly detection
+	if d.config.EnableMLDetection && d.anomalyDetector != nil {
+		score := d.anomalyDetector.GetAnomalyScore(ip, req)
+		if score > d.config.AnomalyThreshold {
+			limiter.suspiciousCount.Add(1)
+			
+			if score > d.config.AnomalyThreshold*2 {
+				d.blockIP(ip, d.config.BlockDuration)
+				d.stats.BlockedRequests.Add(1)
+				return false, false, fmt.Sprintf("anomaly detected: score %.2f", score)
+			}
+			
+			if d.config.EnableChallenge && !limiter.challengePassed.Load() {
+				d.stats.ChallengedRequests.Add(1)
+				return false, true, fmt.Sprintf("anomaly detected: score %.2f", score)
+			}
+		}
+	}
+	
+	// Update stats
+	limiter.totalRequests.Add(1)
 	limiter.lastActivity.Store(time.Now().Unix())
-
-	return true, nil
+	
+	return true, false, "allowed"
 }
 
-// HandleConnection handles a new connection
-func (ddos *DDoSProtection) HandleConnection(conn net.Conn) (*TrackedConnection, error) {
-	ip, _, err := net.SplitHostPort(conn.RemoteAddr().String())
-	if err != nil {
-		return nil, err
+// TrackConnection tracks a new connection
+func (d *DDoSProtection) TrackConnection(connID, ip string, port int, protocol string) error {
+	// Check connection limits
+	if d.connectionTracker.totalActive.Load() >= int64(d.config.ConnectionLimit) {
+		return fmt.Errorf("global connection limit reached")
 	}
-
-	// Check if IP is blacklisted
-	if ddos.blacklist.IsBlacklisted(ip) {
-		conn.Close()
-		return nil, fmt.Errorf("IP is blacklisted")
+	
+	// Check IP connection limit
+	if count := d.connectionTracker.GetIPConnectionCount(ip); count >= d.config.IPConnectionLimit {
+		return fmt.Errorf("IP connection limit reached")
 	}
-
-	// Get IP limiter
-	limiter := ddos.getOrCreateLimiter(ip)
-
-	// Check connection limit
-	currentConns := limiter.connections.Add(1)
-	if int(currentConns) > ddos.config.ConnectionLimit {
-		limiter.connections.Add(-1)
-		conn.Close()
-		return nil, fmt.Errorf("connection limit exceeded")
-	}
-
-	// Create tracked connection
-	tracked := &TrackedConnection{
-		ID:           generateConnectionID(),
+	
+	conn := &TrackedConnection{
+		ID:           connID,
 		IP:           ip,
+		Port:         port,
+		Protocol:     protocol,
 		StartTime:    time.Now(),
 		LastActivity: time.Now(),
 	}
-
-	// Track connection
-	ddos.connectionTracker.AddConnection(tracked)
-	ddos.stats.ActiveConnections.Add(1)
-
-	return tracked, nil
-}
-
-// HandleDisconnection handles connection closure
-func (ddos *DDoSProtection) HandleDisconnection(tracked *TrackedConnection) {
-	if tracked == nil {
-		return
-	}
-
-	// Update connection count
-	limiter := ddos.getOrCreateLimiter(tracked.IP)
-	limiter.connections.Add(-1)
-
-	// Remove from tracker
-	ddos.connectionTracker.RemoveConnection(tracked.ID)
-	ddos.stats.ActiveConnections.Add(-1)
-
-	// Check if connection was suspicious
-	if tracked.Suspicious.Load() {
-		ddos.handleSuspiciousConnection(tracked)
-	}
-}
-
-// GetChallenge generates a proof-of-work challenge for an IP
-func (ddos *DDoSProtection) GetChallenge(ip string) (*Challenge, error) {
-	if !ddos.config.EnableChallenge {
-		return nil, fmt.Errorf("challenges are disabled")
-	}
-
-	challenge := ddos.challengeManager.GenerateChallenge(ip)
-	ddos.stats.ChallengesSent.Add(1)
-
-	return challenge, nil
-}
-
-// VerifyChallenge verifies a challenge solution
-func (ddos *DDoSProtection) VerifyChallenge(ip string, challengeID string, solution string) bool {
-	verified := ddos.challengeManager.VerifyChallenge(ip, challengeID, solution)
 	
-	if verified {
-		ddos.stats.ChallengesPassed.Add(1)
-		limiter := ddos.getOrCreateLimiter(ip)
-		limiter.challengePassed.Store(true)
-		
-		// Reset suspicious count on successful challenge
-		limiter.suspiciousCount.Store(0)
-	}
-
-	return verified
+	d.connectionTracker.AddConnection(connID, conn)
+	return nil
 }
 
-// getOrCreateLimiter gets or creates an IP limiter
-func (ddos *DDoSProtection) getOrCreateLimiter(ip string) *IPLimiter {
-	if val, ok := ddos.ipLimiters.Load(ip); ok {
+// UntrackConnection removes a connection from tracking
+func (d *DDoSProtection) UntrackConnection(connID string) {
+	d.connectionTracker.RemoveConnection(connID)
+}
+
+// VerifyChallenge verifies a challenge response
+func (d *DDoSProtection) VerifyChallenge(ip string, challenge, response string) bool {
+	if !d.config.EnableChallenge {
+		return true
+	}
+	
+	limiter := d.getOrCreateIPLimiter(ip)
+	
+	valid := d.challengeManager.Verify(challenge, response, ip)
+	
+	if valid {
+		limiter.challengePassed.Store(true)
+		limiter.suspiciousCount.Store(0)
+		d.stats.PassedChallenges.Add(1)
+		
+		// Improve reputation
+		limiter.reputation.Add(10)
+	} else {
+		limiter.failedChallenges.Add(1)
+		d.stats.FailedChallenges.Add(1)
+		
+		// Decrease reputation
+		limiter.reputation.Add(-5)
+		
+		// Block if too many failed attempts
+		if limiter.failedChallenges.Load() >= int32(d.config.MaxChallengeRetries) {
+			d.blockIP(ip, d.config.BlockDuration*2)
+		}
+	}
+	
+	return valid
+}
+
+// GenerateChallenge generates a new challenge
+func (d *DDoSProtection) GenerateChallenge(ip string) (challenge string, err error) {
+	if !d.config.EnableChallenge {
+		return "", fmt.Errorf("challenges not enabled")
+	}
+	
+	return d.challengeManager.Generate(ip)
+}
+
+// GetStats returns current statistics
+func (d *DDoSProtection) GetStats() map[string]interface{} {
+	return map[string]interface{}{
+		"total_requests":       d.stats.TotalRequests.Load(),
+		"blocked_requests":     d.stats.BlockedRequests.Load(),
+		"challenged_requests":  d.stats.ChallengedRequests.Load(),
+		"passed_challenges":    d.stats.PassedChallenges.Load(),
+		"failed_challenges":    d.stats.FailedChallenges.Load(),
+		"active_connections":   d.connectionTracker.totalActive.Load(),
+		"blocked_ips":          d.stats.BlockedIPs.Load(),
+		"detected_attacks":     d.stats.DetectedAttacks.Load(),
+		"false_positives":      d.stats.FalsePositives.Load(),
+		"blacklist_size":       d.blacklist.Size(),
+		"whitelist_size":       d.whitelist.Size(),
+	}
+}
+
+// Private methods
+
+func (d *DDoSProtection) getOrCreateIPLimiter(ip string) *IPLimiter {
+	if val, ok := d.ipLimiters.Load(ip); ok {
 		return val.(*IPLimiter)
 	}
-
+	
 	limiter := &IPLimiter{
-		limiter: rate.NewLimiter(
-			rate.Limit(ddos.config.RequestsPerSecond),
-			ddos.config.BurstSize,
-		),
+		IP:      ip,
+		limiter: rate.NewLimiter(rate.Limit(d.config.RequestsPerSecond/10), d.config.BurstSize/10),
 	}
-	limiter.lastActivity.Store(time.Now().Unix())
-
-	actual, _ := ddos.ipLimiters.LoadOrStore(ip, limiter)
+	
+	actual, _ := d.ipLimiters.LoadOrStore(ip, limiter)
 	return actual.(*IPLimiter)
 }
 
-// handleRateLimitExceeded handles rate limit violations
-func (ddos *DDoSProtection) handleRateLimitExceeded(ip string, limiter *IPLimiter) {
-	suspiciousCount := limiter.suspiciousCount.Add(1)
-
-	ddos.logger.Warn("Rate limit exceeded",
+func (d *DDoSProtection) blockIP(ip string, duration time.Duration) {
+	limiter := d.getOrCreateIPLimiter(ip)
+	limiter.blocked.Store(true)
+	limiter.blockExpiry.Store(time.Now().Add(duration).Unix())
+	
+	d.blacklist.AddTemporary(ip, duration)
+	d.stats.BlockedIPs.Add(1)
+	
+	d.logger.Warn("IP blocked",
 		zap.String("ip", ip),
-		zap.Int32("suspicious_count", suspiciousCount))
+		zap.Duration("duration", duration),
+		zap.Int32("reputation", limiter.reputation.Load()),
+	)
+}
 
-	// Check if should be banned
-	if int(suspiciousCount) >= ddos.config.BanThreshold {
-		ddos.blacklist.Add(ip, "Exceeded rate limit threshold", ddos.config.BanDuration)
-		ddos.stats.BlacklistedIPs.Add(1)
-		
-		ddos.logger.Info("IP blacklisted",
-			zap.String("ip", ip),
-			zap.String("reason", "rate limit violations"))
+func (d *DDoSProtection) recordRequest(ip string, req RequestInfo) {
+	historyVal, _ := d.patternDetector.ipHistory.LoadOrStore(ip, &IPHistory{
+		IP:         ip,
+		Requests:   make([]RequestInfo, 0, 100),
+		UserAgents: make(map[string]int),
+		Endpoints:  make(map[string]int),
+	})
+	
+	history := historyVal.(*IPHistory)
+	history.mu.Lock()
+	defer history.mu.Unlock()
+	
+	// Keep last 100 requests
+	if len(history.Requests) >= 100 {
+		history.Requests = history.Requests[1:]
+	}
+	history.Requests = append(history.Requests, req)
+	
+	// Update stats
+	history.UserAgents[req.UserAgent]++
+	history.Endpoints[req.Path]++
+}
+
+func (d *DDoSProtection) detectSuspiciousPattern(ip string) (bool, *Pattern) {
+	historyVal, ok := d.patternDetector.ipHistory.Load(ip)
+	if !ok {
+		return false, nil
+	}
+	
+	history := historyVal.(*IPHistory)
+	
+	d.patternDetector.mu.RLock()
+	defer d.patternDetector.mu.RUnlock()
+	
+	for _, pattern := range d.patternDetector.patterns {
+		if pattern.Detector(history) {
+			return true, pattern
+		}
+	}
+	
+	return false, nil
+}
+
+func (d *DDoSProtection) initializePatterns() {
+	d.patternDetector.patterns = map[string]*Pattern{
+		"rapid_fire": {
+			ID:          "rapid_fire",
+			Name:        "Rapid Fire Requests",
+			Description: "Too many requests in short time",
+			Score:       0.8,
+			Action:      "challenge",
+			Detector: func(h *IPHistory) bool {
+				h.mu.RLock()
+				defer h.mu.RUnlock()
+				
+				if len(h.Requests) < 10 {
+					return false
+				}
+				
+				// Check if 10 requests in 1 second
+				recent := h.Requests[len(h.Requests)-10:]
+				duration := recent[9].Timestamp.Sub(recent[0].Timestamp)
+				return duration < 1*time.Second
+			},
+		},
+		"scanner": {
+			ID:          "scanner",
+			Name:        "Security Scanner",
+			Description: "Scanning for vulnerabilities",
+			Score:       0.9,
+			Action:      "block",
+			Detector: func(h *IPHistory) bool {
+				h.mu.RLock()
+				defer h.mu.RUnlock()
+				
+				scanPaths := []string{
+					"/admin", "/wp-admin", "/phpmyadmin",
+					"/.git", "/.env", "/config",
+					"/api/v1/../", "/etc/passwd",
+				}
+				
+				scanCount := 0
+				for path := range h.Endpoints {
+					for _, scanPath := range scanPaths {
+						if strings.Contains(path, scanPath) {
+							scanCount++
+						}
+					}
+				}
+				
+				return scanCount >= 3
+			},
+		},
+		"bot_behavior": {
+			ID:          "bot_behavior",
+			Name:        "Bot Behavior",
+			Description: "Automated bot patterns",
+			Score:       0.7,
+			Action:      "challenge",
+			Detector: func(h *IPHistory) bool {
+				h.mu.RLock()
+				defer h.mu.RUnlock()
+				
+				// Multiple user agents from same IP
+				if len(h.UserAgents) > 5 {
+					return true
+				}
+				
+				// Suspicious user agents
+				for ua := range h.UserAgents {
+					ua = strings.ToLower(ua)
+					if strings.Contains(ua, "bot") || 
+					   strings.Contains(ua, "crawler") ||
+					   strings.Contains(ua, "spider") ||
+					   ua == "" {
+						return true
+					}
+				}
+				
+				return false
+			},
+		},
 	}
 }
 
-// handleSuspiciousConnection handles suspicious connections
-func (ddos *DDoSProtection) handleSuspiciousConnection(conn *TrackedConnection) {
-	limiter := ddos.getOrCreateLimiter(conn.IP)
-	suspiciousCount := limiter.suspiciousCount.Add(1)
-
-	if int(suspiciousCount) >= ddos.config.BanThreshold {
-		ddos.blacklist.Add(conn.IP, "Suspicious connection behavior", ddos.config.BanDuration)
-		ddos.stats.BlacklistedIPs.Add(1)
-	}
-}
-
-// cleanupRoutine periodically cleans up old data
-func (ddos *DDoSProtection) cleanupRoutine() {
-	ticker := time.NewTicker(5 * time.Minute)
+func (d *DDoSProtection) cleanupWorker() {
+	ticker := time.NewTicker(d.config.CleanupInterval)
 	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			d.cleanup()
+		case <-d.ctx.Done():
+			return
+		}
+	}
+}
 
-	for range ticker.C {
-		now := time.Now().Unix()
+func (d *DDoSProtection) cleanup() {
+	now := time.Now().Unix()
+	
+	// Cleanup IP limiters
+	d.ipLimiters.Range(func(key, value interface{}) bool {
+		limiter := value.(*IPLimiter)
+		lastActivity := limiter.lastActivity.Load()
 		
-		// Clean up inactive IP limiters
-		ddos.ipLimiters.Range(func(key, value interface{}) bool {
-			limiter := value.(*IPLimiter)
-			lastActivity := limiter.lastActivity.Load()
-			
-			// Remove if inactive for 30 minutes and no active connections
-			if now-lastActivity > 1800 && limiter.connections.Load() == 0 {
-				ddos.ipLimiters.Delete(key)
-			}
-			return true
-		})
-
-		// Clean up expired blacklist entries
-		ddos.blacklist.CleanupExpired()
-
-		// Clean up old pattern data
-		ddos.patternDetector.Cleanup()
-	}
-}
-
-// patternAnalysisRoutine analyzes patterns for anomalies
-func (ddos *DDoSProtection) patternAnalysisRoutine() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		ddos.patternDetector.AnalyzePatterns()
-	}
-}
-
-// GetStats returns DDoS protection statistics
-func (ddos *DDoSProtection) GetStats() map[string]interface{} {
-	// Count active IPs
-	activeIPs := 0
-	ddos.ipLimiters.Range(func(_, _ interface{}) bool {
-		activeIPs++
+		// Remove if inactive for 1 hour
+		if now-lastActivity > 3600 {
+			d.ipLimiters.Delete(key)
+		}
+		
 		return true
 	})
+	
+	// Cleanup expired blacklist entries
+	d.blacklist.CleanupExpired()
+	
+	// Cleanup old pattern history
+	d.patternDetector.ipHistory.Range(func(key, value interface{}) bool {
+		history := value.(*IPHistory)
+		history.mu.Lock()
+		
+		// Keep only recent requests
+		if len(history.Requests) > 0 {
+			cutoff := time.Now().Add(-1 * time.Hour)
+			i := 0
+			for i < len(history.Requests) && history.Requests[i].Timestamp.Before(cutoff) {
+				i++
+			}
+			history.Requests = history.Requests[i:]
+		}
+		
+		history.mu.Unlock()
+		
+		// Remove if no recent activity
+		if len(history.Requests) == 0 {
+			d.patternDetector.ipHistory.Delete(key)
+		}
+		
+		return true
+	})
+}
 
-	return map[string]interface{}{
-		"total_requests":      ddos.stats.TotalRequests.Load(),
-		"blocked_requests":    ddos.stats.BlockedRequests.Load(),
-		"suspicious_requests": ddos.stats.SuspiciousRequests.Load(),
-		"challenges_sent":     ddos.stats.ChallengesSent.Load(),
-		"challenges_passed":   ddos.stats.ChallengesPassed.Load(),
-		"blacklisted_ips":     ddos.stats.BlacklistedIPs.Load(),
-		"active_connections":  ddos.stats.ActiveConnections.Load(),
-		"anomalies_detected":  ddos.stats.AnomaliesDetected.Load(),
-		"active_ips":          activeIPs,
-		"blacklist_size":      ddos.blacklist.Size(),
+func (d *DDoSProtection) statsWorker() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			stats := d.GetStats()
+			d.logger.Info("DDoS protection stats",
+				zap.Any("stats", stats),
+			)
+		case <-d.ctx.Done():
+			return
+		}
 	}
 }
 
-// Helper implementations
+func (d *DDoSProtection) threatIntelligenceWorker() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			if d.threatIntelligence != nil {
+				d.threatIntelligence.UpdateFeeds()
+			}
+		case <-d.ctx.Done():
+			return
+		}
+	}
+}
 
-// NewConnectionTracker creates a new connection tracker
+func (d *DDoSProtection) patternAnalysisWorker() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			// Analyze patterns and update detection rules
+			d.analyzePatterns()
+		case <-d.ctx.Done():
+			return
+		}
+	}
+}
+
+func (d *DDoSProtection) analyzePatterns() {
+	// Analyze recent attack patterns and adjust thresholds
+	// This is where ML models could be integrated
+}
+
+// Supporting types
+
+// ConnectionTracker implementation
 func NewConnectionTracker() *ConnectionTracker {
 	return &ConnectionTracker{}
 }
 
-// AddConnection adds a connection to tracking
-func (ct *ConnectionTracker) AddConnection(conn *TrackedConnection) {
-	ct.connections.Store(conn.ID, conn)
+func (ct *ConnectionTracker) AddConnection(connID string, conn *TrackedConnection) {
+	ct.connections.Store(connID, conn)
+	ct.totalActive.Add(1)
 	
 	// Update IP count
 	if val, ok := ct.ipCounts.Load(conn.IP); ok {
@@ -453,11 +801,10 @@ func (ct *ConnectionTracker) AddConnection(conn *TrackedConnection) {
 	}
 }
 
-// RemoveConnection removes a connection from tracking
 func (ct *ConnectionTracker) RemoveConnection(connID string) {
-	if val, ok := ct.connections.Load(connID); ok {
+	if val, ok := ct.connections.LoadAndDelete(connID); ok {
 		conn := val.(*TrackedConnection)
-		ct.connections.Delete(connID)
+		ct.totalActive.Add(-1)
 		
 		// Update IP count
 		if val, ok := ct.ipCounts.Load(conn.IP); ok {
@@ -471,274 +818,278 @@ func (ct *ConnectionTracker) RemoveConnection(connID string) {
 	}
 }
 
-// NewPatternDetector creates a new pattern detector
+func (ct *ConnectionTracker) GetIPConnectionCount(ip string) int {
+	if val, ok := ct.ipCounts.Load(ip); ok {
+		return val.(int)
+	}
+	return 0
+}
+
+// PatternDetector implementation
 func NewPatternDetector() *PatternDetector {
-	pd := &PatternDetector{}
-	
-	// Register default patterns
-	pd.RegisterPattern(&Pattern{
-		ID:          "rapid_requests",
-		Name:        "Rapid Request Pattern",
-		Description: "Unusually rapid request rate",
-		Detector: func(history *IPHistory) bool {
-			history.mu.RLock()
-			defer history.mu.RUnlock()
-			
-			if len(history.RequestTimes) < 10 {
-				return false
-			}
-			
-			// Check if 10 requests in 1 second
-			recent := history.RequestTimes[len(history.RequestTimes)-10:]
-			return recent[9].Sub(recent[0]) < time.Second
-		},
-		Score: 5.0,
-	})
-
-	pd.RegisterPattern(&Pattern{
-		ID:          "large_requests",
-		Name:        "Large Request Pattern",
-		Description: "Unusually large request sizes",
-		Detector: func(history *IPHistory) bool {
-			history.mu.RLock()
-			defer history.mu.RUnlock()
-			
-			if len(history.RequestSizes) < 5 {
-				return false
-			}
-			
-			// Check if recent requests are unusually large
-			totalSize := 0
-			for i := len(history.RequestSizes) - 5; i < len(history.RequestSizes); i++ {
-				totalSize += history.RequestSizes[i]
-			}
-			
-			return totalSize > 10*1024*1024 // 10MB in 5 requests
-		},
-		Score: 3.0,
-	})
-
-	return pd
-}
-
-// RegisterPattern registers a new pattern
-func (pd *PatternDetector) RegisterPattern(pattern *Pattern) {
-	pd.patterns.Store(pattern.ID, pattern)
-}
-
-// RecordRequest records a request for pattern analysis
-func (pd *PatternDetector) RecordRequest(ip string, size int, path string) {
-	historyVal, _ := pd.ipHistory.LoadOrStore(ip, &IPHistory{IP: ip})
-	history := historyVal.(*IPHistory)
-	
-	history.mu.Lock()
-	defer history.mu.Unlock()
-	
-	now := time.Now()
-	history.RequestTimes = append(history.RequestTimes, now)
-	history.RequestSizes = append(history.RequestSizes, size)
-	history.RequestPaths = append(history.RequestPaths, path)
-	
-	// Keep only recent history (last 1000 requests)
-	if len(history.RequestTimes) > 1000 {
-		history.RequestTimes = history.RequestTimes[100:]
-		history.RequestSizes = history.RequestSizes[100:]
-		history.RequestPaths = history.RequestPaths[100:]
+	return &PatternDetector{
+		patterns: make(map[string]*Pattern),
 	}
 }
 
-// IsSuspicious checks if an IP is showing suspicious patterns
-func (pd *PatternDetector) IsSuspicious(ip string) bool {
-	if val, ok := pd.anomalyScores.Load(ip); ok {
-		return val.(float64) > 10.0 // Threshold
-	}
-	return false
+// ChallengeManager implementation
+type ChallengeManager struct {
+	config     DDoSConfig
+	challenges sync.Map // challenge -> *Challenge
+	mu         sync.RWMutex
 }
 
-// AnalyzePatterns analyzes all IP histories for patterns
-func (pd *PatternDetector) AnalyzePatterns() {
-	pd.ipHistory.Range(func(key, value interface{}) bool {
-		ip := key.(string)
-		history := value.(*IPHistory)
-		
-		totalScore := 0.0
-		pd.patterns.Range(func(_, patternVal interface{}) bool {
-			pattern := patternVal.(*Pattern)
-			if pattern.Detector(history) {
-				totalScore += pattern.Score
-			}
-			return true
-		})
-		
-		if totalScore > 0 {
-			pd.anomalyScores.Store(ip, totalScore)
-		} else {
-			pd.anomalyScores.Delete(ip)
-		}
-		
-		return true
-	})
+type Challenge struct {
+	ID       string
+	IP       string
+	Type     string
+	Data     string
+	Solution string
+	Created  time.Time
+	Attempts int
 }
 
-// Cleanup removes old pattern data
-func (pd *PatternDetector) Cleanup() {
-	cutoff := time.Now().Add(-30 * time.Minute)
-	
-	pd.ipHistory.Range(func(key, value interface{}) bool {
-		history := value.(*IPHistory)
-		history.mu.RLock()
-		
-		if len(history.RequestTimes) > 0 {
-			lastRequest := history.RequestTimes[len(history.RequestTimes)-1]
-			if lastRequest.Before(cutoff) {
-				history.mu.RUnlock()
-				pd.ipHistory.Delete(key)
-				pd.anomalyScores.Delete(key)
-				return true
-			}
-		}
-		
-		history.mu.RUnlock()
-		return true
-	})
-}
-
-// NewChallengeManager creates a new challenge manager
-func NewChallengeManager(difficulty int) *ChallengeManager {
+func NewChallengeManager(config DDoSConfig) *ChallengeManager {
 	return &ChallengeManager{
-		difficulty: difficulty,
+		config: config,
 	}
 }
 
-// GenerateChallenge generates a new challenge
-func (cm *ChallengeManager) GenerateChallenge(ip string) *Challenge {
+func (cm *ChallengeManager) Generate(ip string) (string, error) {
 	challenge := &Challenge{
-		ID:         generateChallengeID(),
-		Target:     generateTarget(cm.difficulty),
-		Difficulty: cm.difficulty,
-		IssuedAt:   time.Now(),
-		ExpiresAt:  time.Now().Add(5 * time.Minute),
-		Attempts:   0,
+		ID:      generateID(),
+		IP:      ip,
+		Type:    cm.config.ChallengeType,
+		Created: time.Now(),
 	}
 	
-	cm.challenges.Store(ip, challenge)
-	return challenge
+	switch cm.config.ChallengeType {
+	case "proof_of_work":
+		// Generate proof of work challenge
+		challenge.Data = generateRandomString(16)
+		challenge.Solution = cm.calculatePoWSolution(challenge.Data, cm.config.ChallengeDifficulty)
+		
+	case "javascript":
+		// Generate JavaScript challenge
+		challenge.Data = cm.generateJSChallenge()
+		challenge.Solution = cm.calculateJSSolution(challenge.Data)
+		
+	default:
+		return "", fmt.Errorf("unknown challenge type: %s", cm.config.ChallengeType)
+	}
+	
+	cm.challenges.Store(challenge.ID, challenge)
+	
+	// Cleanup old challenges
+	go cm.cleanupOldChallenges()
+	
+	return challenge.ID, nil
 }
 
-// VerifyChallenge verifies a challenge solution
-func (cm *ChallengeManager) VerifyChallenge(ip, challengeID, solution string) bool {
-	val, ok := cm.challenges.Load(ip)
+func (cm *ChallengeManager) Verify(challengeID, response, ip string) bool {
+	val, ok := cm.challenges.Load(challengeID)
 	if !ok {
 		return false
 	}
 	
 	challenge := val.(*Challenge)
-	if challenge.ID != challengeID {
+	
+	// Check expiry
+	if time.Since(challenge.Created) > cm.config.ChallengeExpiry {
+		cm.challenges.Delete(challengeID)
 		return false
 	}
 	
-	if time.Now().After(challenge.ExpiresAt) {
-		cm.challenges.Delete(ip)
+	// Check IP match
+	if challenge.IP != ip {
 		return false
 	}
 	
+	// Check attempts
 	challenge.Attempts++
+	if challenge.Attempts > cm.config.MaxChallengeRetries {
+		cm.challenges.Delete(challengeID)
+		return false
+	}
 	
-	// Verify the solution
-	hash := sha256.Sum256([]byte(challengeID + solution))
+	// Verify solution
+	valid := false
+	switch challenge.Type {
+	case "proof_of_work":
+		valid = cm.verifyPoWSolution(challenge.Data, response, cm.config.ChallengeDifficulty)
+	case "javascript":
+		valid = response == challenge.Solution
+	}
+	
+	if valid {
+		cm.challenges.Delete(challengeID)
+	}
+	
+	return valid
+}
+
+func (cm *ChallengeManager) calculatePoWSolution(data string, difficulty int) string {
+	nonce := 0
+	prefix := strings.Repeat("0", difficulty)
+	
+	for {
+		candidate := fmt.Sprintf("%s:%d", data, nonce)
+		hash := sha256.Sum256([]byte(candidate))
+		hashStr := hex.EncodeToString(hash[:])
+		
+		if strings.HasPrefix(hashStr, prefix) {
+			return fmt.Sprintf("%d", nonce)
+		}
+		
+		nonce++
+	}
+}
+
+func (cm *ChallengeManager) verifyPoWSolution(data, solution string, difficulty int) bool {
+	candidate := fmt.Sprintf("%s:%s", data, solution)
+	hash := sha256.Sum256([]byte(candidate))
 	hashStr := hex.EncodeToString(hash[:])
 	
-	if hashStr < challenge.Target {
-		cm.challenges.Delete(ip)
-		return true
-	}
-	
-	return false
+	prefix := strings.Repeat("0", difficulty)
+	return strings.HasPrefix(hashStr, prefix)
 }
 
-// NewBlacklist creates a new blacklist
-func NewBlacklist() *Blacklist {
-	return &Blacklist{}
+func (cm *ChallengeManager) generateJSChallenge() string {
+	// Generate a simple math challenge
+	a := randInt(100, 999)
+	b := randInt(100, 999)
+	return fmt.Sprintf("%d + %d", a, b)
 }
 
-// Add adds an IP to the blacklist
-func (bl *Blacklist) Add(ip, reason string, duration time.Duration) {
-	entry := &BlacklistEntry{
-		IP:        ip,
-		Reason:    reason,
-		AddedAt:   time.Now(),
-		ExpiresAt: time.Now().Add(duration),
-		Permanent: duration == 0,
-	}
-	
-	bl.entries.Store(ip, entry)
+func (cm *ChallengeManager) calculateJSSolution(challenge string) string {
+	// Parse and solve the math challenge
+	var a, b int
+	fmt.Sscanf(challenge, "%d + %d", &a, &b)
+	return fmt.Sprintf("%d", a+b)
 }
 
-// IsBlacklisted checks if an IP is blacklisted
-func (bl *Blacklist) IsBlacklisted(ip string) bool {
-	val, ok := bl.entries.Load(ip)
-	if !ok {
-		return false
-	}
-	
-	entry := val.(*BlacklistEntry)
-	if !entry.Permanent && time.Now().After(entry.ExpiresAt) {
-		bl.entries.Delete(ip)
-		return false
-	}
-	
-	return true
-}
-
-// CleanupExpired removes expired entries
-func (bl *Blacklist) CleanupExpired() {
-	now := time.Now()
-	bl.entries.Range(func(key, value interface{}) bool {
-		entry := value.(*BlacklistEntry)
-		if !entry.Permanent && now.After(entry.ExpiresAt) {
-			bl.entries.Delete(key)
+func (cm *ChallengeManager) cleanupOldChallenges() {
+	cm.challenges.Range(func(key, value interface{}) bool {
+		challenge := value.(*Challenge)
+		if time.Since(challenge.Created) > cm.config.ChallengeExpiry {
+			cm.challenges.Delete(key)
 		}
 		return true
 	})
 }
 
-// Size returns the number of blacklisted IPs
-func (bl *Blacklist) Size() int {
+// IPList implementation
+type IPList struct {
+	name       string
+	permanent  sync.Map // IP -> bool
+	temporary  sync.Map // IP -> expiry time
+	mu         sync.RWMutex
+}
+
+func NewIPList(name string) *IPList {
+	return &IPList{
+		name: name,
+	}
+}
+
+func (l *IPList) Add(ip string) {
+	l.permanent.Store(ip, true)
+}
+
+func (l *IPList) AddTemporary(ip string, duration time.Duration) {
+	l.temporary.Store(ip, time.Now().Add(duration))
+}
+
+func (l *IPList) Remove(ip string) {
+	l.permanent.Delete(ip)
+	l.temporary.Delete(ip)
+}
+
+func (l *IPList) Contains(ip string) bool {
+	// Check permanent list
+	if _, ok := l.permanent.Load(ip); ok {
+		return true
+	}
+	
+	// Check temporary list
+	if val, ok := l.temporary.Load(ip); ok {
+		expiry := val.(time.Time)
+		if time.Now().Before(expiry) {
+			return true
+		}
+		// Remove expired entry
+		l.temporary.Delete(ip)
+	}
+	
+	return false
+}
+
+func (l *IPList) Size() int {
 	count := 0
-	bl.entries.Range(func(_, _ interface{}) bool {
+	l.permanent.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	l.temporary.Range(func(_, _ interface{}) bool {
 		count++
 		return true
 	})
 	return count
 }
 
-// Helper functions
+func (l *IPList) CleanupExpired() {
+	now := time.Now()
+	l.temporary.Range(func(key, value interface{}) bool {
+		expiry := value.(time.Time)
+		if now.After(expiry) {
+			l.temporary.Delete(key)
+		}
+		return true
+	})
+}
 
-func generateConnectionID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("conn_%d", time.Now().UnixNano())
+// Stub implementations for advanced features
+
+type NetworkAnomalyDetector struct{}
+func NewNetworkAnomalyDetector() *NetworkAnomalyDetector { return &NetworkAnomalyDetector{} }
+func (n *NetworkAnomalyDetector) Start(ctx context.Context) {}
+func (n *NetworkAnomalyDetector) GetAnomalyScore(ip string, req RequestInfo) float64 { return 0.0 }
+
+type ThreatIntelligence struct{}
+func NewThreatIntelligence() *ThreatIntelligence { return &ThreatIntelligence{} }
+func (t *ThreatIntelligence) UpdateFeeds() {}
+
+type GeoBlocker struct {
+	whitelistedCountries []string
+	blacklistedCountries []string
+}
+func NewGeoBlocker(whitelist, blacklist []string) *GeoBlocker {
+	return &GeoBlocker{
+		whitelistedCountries: whitelist,
+		blacklistedCountries: blacklist,
 	}
+}
+func (g *GeoBlocker) IsBlocked(ip string) (bool, string) { return false, "" }
+
+type MitigationEngine struct{ logger *zap.Logger }
+func NewMitigationEngine(logger *zap.Logger) *MitigationEngine { 
+	return &MitigationEngine{logger: logger} 
+}
+
+// Utility functions
+
+func generateID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
-func generateChallengeID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("challenge_%d", time.Now().UnixNano())
-	}
+func generateRandomString(length int) string {
+	b := make([]byte, length)
+	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
-func generateTarget(difficulty int) string {
-	// Generate target with leading zeros based on difficulty
-	target := ""
-	for i := 0; i < difficulty; i++ {
-		target += "0"
-	}
-	for i := difficulty; i < 64; i++ {
-		target += "f"
-	}
-	return target
+func randInt(min, max int) int {
+	return min + int(rand.Int63n(int64(max-min+1)))
 }
-

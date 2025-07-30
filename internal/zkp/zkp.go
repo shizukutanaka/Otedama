@@ -1,511 +1,787 @@
 package zkp
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"hash"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// ZKPManager はゼロ知識証明システムのマネージャー
-type ZKPManager struct {
-	logger       *zap.Logger
-	proofs       sync.Map
-	verifiers    sync.Map
-	trustedSetup *TrustedSetup
-	mu           sync.RWMutex
+// Manager handles zero-knowledge proofs for mining pool authentication
+// Replaces traditional KYC with privacy-preserving proofs
+type Manager struct {
+	logger           *zap.Logger
+	config           Config
+	
+	// Proof storage
+	proofs           sync.Map // map[string]*Proof
+	proofHistory     sync.Map // map[string][]ProofRecord
+	
+	// Verification systems
+	verifiers        map[ProofProtocol]Verifier
+	proofGenerators  map[ProofProtocol]ProofGenerator
+	
+	// Specialized proof systems
+	ageProofSystem       *AgeProofSystem
+	identityProofSystem  *IdentityProofSystem
+	hashpowerProofSystem *HashpowerProofSystem
+	locationProofSystem  *LocationProofSystem
+	complianceProofSystem *ComplianceProofSystem
+	
+	// Security
+	trustedSetup     *TrustedSetup
+	blacklist        sync.Map // map[string]time.Time
+	
+	// Metrics
+	metrics          *ZKPMetrics
+	
+	// State
+	running          atomic.Bool
+	mu               sync.RWMutex
 }
 
-// TrustedSetup は信頼できるセットアップパラメータ
-type TrustedSetup struct {
-	Generator *big.Int
-	Prime     *big.Int
-	Order     *big.Int
-	CreatedAt time.Time
+// Config defines ZKP system configuration
+type Config struct {
+	// Basic settings
+	Enabled              bool          `yaml:"enabled"`
+	ProofExpiry          time.Duration `yaml:"proof_expiry"`
+	MaxProofSize         int           `yaml:"max_proof_size"`
+	SecurityLevel        int           `yaml:"security_level"` // 128 or 256 bits
+	
+	// Protocol settings
+	DefaultProtocol      ProofProtocol `yaml:"default_protocol"`
+	EnableBatchVerification bool       `yaml:"enable_batch_verification"`
+	ParallelProofGeneration bool       `yaml:"enable_parallel_proof_generation"`
+	
+	// Age verification (replaces KYC age check)
+	RequireAgeProof      bool `yaml:"require_age_proof"`
+	MinAge               int  `yaml:"min_age"`
+	
+	// Identity verification (optional, replaces KYC identity)
+	RequireIdentityProof bool   `yaml:"require_identity_proof"`
+	IdentityProtocol     string `yaml:"identity_protocol"`
+	
+	// Location verification (replaces KYC location check)
+	RequireLocationProof bool     `yaml:"require_location_proof"`
+	AllowedCountries     []string `yaml:"allowed_countries"`
+	BlockedCountries     []string `yaml:"blocked_countries"`
+	
+	// Hashpower verification
+	RequireHashpowerProof bool    `yaml:"require_hashpower_proof"`
+	MinHashpower          float64 `yaml:"min_hashpower"`
+	
+	// Sanctions compliance (replaces KYC sanctions check)
+	RequireSanctionsProof bool   `yaml:"require_sanctions_proof"`
+	SanctionsListHash     string `yaml:"sanctions_list_hash"`
+	
+	// Performance
+	MaxProofsPerUser     int           `yaml:"max_proofs_per_user"`
+	ProofCacheDuration   time.Duration `yaml:"proof_cache_duration"`
+	VerificationTimeout  time.Duration `yaml:"verification_timeout"`
+	
+	// Security
+	RequireSecureChannel bool `yaml:"require_secure_channel"`
+	ProofEncryption      bool `yaml:"proof_encryption"`
+	AuditLogging         bool `yaml:"audit_logging"`
 }
 
-// Proof はゼロ知識証明
-type Proof struct {
-	ID          string    `json:"id"`
-	ProverID    string    `json:"prover_id"`
-	Statement   Statement `json:"statement"`
-	Witness     []byte    `json:"witness,omitempty"` // 秘匿情報（検証時は含まない）
-	Commitment  []byte    `json:"commitment"`
-	Challenge   []byte    `json:"challenge"`
-	Response    []byte    `json:"response"`
-	CreatedAt   time.Time `json:"created_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	Verified    bool      `json:"verified"`
-}
-
-// Statement は証明したい文の記述
-type Statement struct {
-	Type       StatementType          `json:"type"`
-	Parameters map[string]interface{} `json:"parameters"`
-	MinValue   *big.Int               `json:"min_value,omitempty"`
-	MaxValue   *big.Int               `json:"max_value,omitempty"`
-	HashTarget []byte                 `json:"hash_target,omitempty"`
-}
-
-// StatementType は文の種類
-type StatementType string
+// ProofType defines the type of proof
+type ProofType string
 
 const (
-	// Identity proof types
-	StatementAgeProof      StatementType = "age_proof"      // 年齢証明（18歳以上など）
-	StatementResidencyProof StatementType = "residency_proof" // 居住地証明
-	StatementIncomeProof   StatementType = "income_proof"   // 収入証明
-	
-	// Mining-specific proof types  
-	StatementHashPowerProof StatementType = "hashpower_proof" // ハッシュパワー証明
-	StatementStakeProof    StatementType = "stake_proof"    // ステーク証明
-	StatementReputationProof StatementType = "reputation_proof" // 評判証明
-	
-	// Compliance proof types
-	StatementSanctionProof StatementType = "sanction_proof" // 制裁リスト非該当証明
-	StatementKYCProof      StatementType = "kyc_proof"      // KYC準拠証明
+	ProofTypeAge        ProofType = "age"
+	ProofTypeIdentity   ProofType = "identity"
+	ProofTypeHashpower  ProofType = "hashpower"
+	ProofTypeLocation   ProofType = "location"
+	ProofTypeSanctions  ProofType = "sanctions"
+	ProofTypeCompliance ProofType = "compliance"
+	ProofTypeReputation ProofType = "reputation"
 )
 
-// VerificationResult は検証結果
-type VerificationResult struct {
-	Valid       bool      `json:"valid"`
-	ProofID     string    `json:"proof_id"`
-	ProverID    string    `json:"prover_id"`
-	Statement   Statement `json:"statement"`
-	VerifiedAt  time.Time `json:"verified_at"`
-	VerifierID  string    `json:"verifier_id"`
-	Score       float64   `json:"score"`       // 信頼度スコア (0-1)
-	Reputation  float64   `json:"reputation"`  // 評判スコア (0-1)
+// ProofProtocol defines the ZKP protocol to use
+type ProofProtocol string
+
+const (
+	ProtocolGroth16      ProofProtocol = "groth16"      // Smallest proofs, fastest verification
+	ProtocolPLONK        ProofProtocol = "plonk"        // Universal trusted setup
+	ProtocolSTARK        ProofProtocol = "stark"        // No trusted setup, quantum-resistant
+	ProtocolBulletproofs ProofProtocol = "bulletproofs" // Range proofs
+	ProtocolSimple       ProofProtocol = "simple"       // Simple hash-based proofs
+)
+
+// Proof represents a zero-knowledge proof
+type Proof struct {
+	ID          string        `json:"id"`
+	Type        ProofType     `json:"type"`
+	Protocol    ProofProtocol `json:"protocol"`
+	UserID      string        `json:"user_id"`
+	Data        []byte        `json:"data"`
+	PublicInput []byte        `json:"public_input"`
+	Commitment  []byte        `json:"commitment,omitempty"`
+	CreatedAt   time.Time     `json:"created_at"`
+	ExpiresAt   time.Time     `json:"expires_at"`
+	Valid       bool          `json:"valid"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// NewZKPManager は新しいZKPマネージャーを作成
-func NewZKPManager(logger *zap.Logger) *ZKPManager {
-	manager := &ZKPManager{
-		logger: logger,
-		trustedSetup: generateTrustedSetup(),
+// ProofRecord tracks proof history
+type ProofRecord struct {
+	ProofID      string    `json:"proof_id"`
+	Type         ProofType `json:"type"`
+	CreatedAt    time.Time `json:"created_at"`
+	VerifiedAt   time.Time `json:"verified_at"`
+	Valid        bool      `json:"valid"`
+	VerifierInfo string    `json:"verifier_info"`
+}
+
+// ZKPMetrics tracks ZKP system metrics
+type ZKPMetrics struct {
+	TotalProofsGenerated   atomic.Uint64
+	TotalProofsVerified    atomic.Uint64
+	FailedVerifications    atomic.Uint64
+	AverageGenerationTime  atomic.Int64 // microseconds
+	AverageVerificationTime atomic.Int64 // microseconds
+	ActiveProofs           atomic.Int64
+}
+
+// NewManager creates a new ZKP manager
+func NewManager(logger *zap.Logger, config Config) (*Manager, error) {
+	// Set defaults
+	if config.ProofExpiry <= 0 {
+		config.ProofExpiry = 24 * time.Hour
+	}
+	if config.MaxProofSize <= 0 {
+		config.MaxProofSize = 10 * 1024 // 10KB
+	}
+	if config.SecurityLevel <= 0 {
+		config.SecurityLevel = 128
+	}
+	if config.DefaultProtocol == "" {
+		config.DefaultProtocol = ProtocolGroth16
 	}
 	
-	// 定期的なプルーフクリーンアップ
-	go manager.cleanupExpiredProofs()
-	
-	return manager
-}
-
-// generateTrustedSetup は信頼できるセットアップを生成
-func generateTrustedSetup() *TrustedSetup {
-	// 実用的な楕円曲線パラメータを使用（簡略化版）
-	prime, _ := new(big.Int).SetString("115792089237316195423570985008687907853269984665640564039457584007913129639747", 10)
-	order, _ := new(big.Int).SetString("115792089237316195423570985008687907852837564279074904382605163141518161494337", 10)
-	generator := big.NewInt(3)
-	
-	return &TrustedSetup{
-		Generator: generator,
-		Prime:     prime,
-		Order:     order,
-		CreatedAt: time.Now(),
+	m := &Manager{
+		logger:  logger,
+		config:  config,
+		verifiers: make(map[ProofProtocol]Verifier),
+		proofGenerators: make(map[ProofProtocol]ProofGenerator),
+		metrics: &ZKPMetrics{},
 	}
+	
+	// Initialize proof systems
+	if err := m.initializeProofSystems(); err != nil {
+		return nil, fmt.Errorf("failed to initialize proof systems: %w", err)
+	}
+	
+	// Initialize specialized systems
+	if config.RequireAgeProof {
+		m.ageProofSystem = NewAgeProofSystem(config.MinAge, config.SecurityLevel)
+	}
+	
+	if config.RequireIdentityProof {
+		m.identityProofSystem = NewIdentityProofSystem(config.IdentityProtocol)
+	}
+	
+	if config.RequireHashpowerProof {
+		m.hashpowerProofSystem = NewHashpowerProofSystem(config.MinHashpower)
+	}
+	
+	if config.RequireLocationProof {
+		m.locationProofSystem = NewLocationProofSystem(config.AllowedCountries, config.BlockedCountries)
+	}
+	
+	if config.RequireSanctionsProof {
+		m.complianceProofSystem = NewComplianceProofSystem(config.SanctionsListHash)
+	}
+	
+	logger.Info("ZKP manager initialized",
+		zap.Bool("enabled", config.Enabled),
+		zap.String("default_protocol", string(config.DefaultProtocol)),
+		zap.Int("security_level", config.SecurityLevel),
+		zap.Bool("age_proof", config.RequireAgeProof),
+		zap.Bool("identity_proof", config.RequireIdentityProof),
+		zap.Bool("hashpower_proof", config.RequireHashpowerProof),
+	)
+	
+	return m, nil
 }
 
-// GenerateProof はゼロ知識証明を生成
-func (zkp *ZKPManager) GenerateProof(proverID string, statement Statement, witness []byte) (*Proof, error) {
-	zkp.logger.Info("Generating ZK proof", 
-		zap.String("prover_id", proverID),
-		zap.String("statement_type", string(statement.Type)))
+// GenerateProof generates a zero-knowledge proof
+func (m *Manager) GenerateProof(userID string, proofType ProofType, privateInput interface{}) (*Proof, error) {
+	if !m.config.Enabled {
+		return nil, fmt.Errorf("ZKP system disabled")
+	}
 	
-	// プルーフIDを生成
-	proofID := zkp.generateProofID(proverID, statement)
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Microseconds()
+		m.metrics.AverageGenerationTime.Store(duration)
+		m.metrics.TotalProofsGenerated.Add(1)
+	}()
 	
-	// コミットフェーズ
-	commitment, randomness, err := zkp.generateCommitment(statement, witness)
+	// Check user proof limit
+	if err := m.checkUserProofLimit(userID); err != nil {
+		return nil, err
+	}
+	
+	var proof *Proof
+	var err error
+	
+	switch proofType {
+	case ProofTypeAge:
+		proof, err = m.generateAgeProof(userID, privateInput)
+		
+	case ProofTypeIdentity:
+		proof, err = m.generateIdentityProof(userID, privateInput)
+		
+	case ProofTypeHashpower:
+		proof, err = m.generateHashpowerProof(userID, privateInput)
+		
+	case ProofTypeLocation:
+		proof, err = m.generateLocationProof(userID, privateInput)
+		
+	case ProofTypeSanctions:
+		proof, err = m.generateSanctionsProof(userID, privateInput)
+		
+	default:
+		return nil, fmt.Errorf("unsupported proof type: %s", proofType)
+	}
+	
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate commitment: %w", err)
+		return nil, fmt.Errorf("failed to generate %s proof: %w", proofType, err)
 	}
 	
-	// チャレンジフェーズ
-	challenge := zkp.generateChallenge(commitment, statement)
+	// Store proof
+	m.proofs.Store(proof.ID, proof)
+	m.metrics.ActiveProofs.Add(1)
 	
-	// レスポンスフェーズ
-	response, err := zkp.generateResponse(challenge, witness, randomness, statement)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate response: %w", err)
+	// Record history
+	m.recordProofHistory(userID, proof)
+	
+	// Audit logging if enabled
+	if m.config.AuditLogging {
+		m.logger.Info("Proof generated",
+			zap.String("proof_id", proof.ID),
+			zap.String("user_id", userID),
+			zap.String("type", string(proofType)),
+			zap.String("protocol", string(proof.Protocol)),
+		)
 	}
-	
-	proof := &Proof{
-		ID:         proofID,
-		ProverID:   proverID,
-		Statement:  statement,
-		Witness:    witness, // 本来は秘匿すべき
-		Commitment: commitment,
-		Challenge:  challenge,
-		Response:   response,
-		CreatedAt:  time.Now(),
-		ExpiresAt:  time.Now().Add(24 * time.Hour), // 24時間有効
-		Verified:   false,
-	}
-	
-	// プルーフを保存
-	zkp.proofs.Store(proofID, proof)
-	
-	zkp.logger.Info("ZK proof generated successfully", zap.String("proof_id", proofID))
 	
 	return proof, nil
 }
 
-// VerifyProof はゼロ知識証明を検証
-func (zkp *ZKPManager) VerifyProof(proofID string, verifierID string) (*VerificationResult, error) {
-	zkp.logger.Info("Verifying ZK proof", 
-		zap.String("proof_id", proofID),
-		zap.String("verifier_id", verifierID))
-	
-	// プルーフを取得
-	proofInterface, exists := zkp.proofs.Load(proofID)
-	if !exists {
-		return nil, fmt.Errorf("proof not found: %s", proofID)
+// VerifyProof verifies a zero-knowledge proof
+func (m *Manager) VerifyProof(proofID string) (bool, error) {
+	if !m.config.Enabled {
+		return false, fmt.Errorf("ZKP system disabled")
 	}
 	
-	proof := proofInterface.(*Proof)
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Microseconds()
+		m.metrics.AverageVerificationTime.Store(duration)
+		m.metrics.TotalProofsVerified.Add(1)
+	}()
 	
-	// 有効期限チェック
+	// Retrieve proof
+	proofVal, ok := m.proofs.Load(proofID)
+	if !ok {
+		return false, fmt.Errorf("proof not found: %s", proofID)
+	}
+	
+	proof := proofVal.(*Proof)
+	
+	// Check expiry
 	if time.Now().After(proof.ExpiresAt) {
-		return &VerificationResult{
-			Valid:      false,
-			ProofID:    proofID,
-			ProverID:   proof.ProverID,
-			Statement:  proof.Statement,
-			VerifiedAt: time.Now(),
-			VerifierID: verifierID,
-		}, fmt.Errorf("proof expired")
+		m.metrics.FailedVerifications.Add(1)
+		return false, fmt.Errorf("proof expired")
 	}
 	
-	// ゼロ知識証明の検証
-	valid, err := zkp.verifyProofInternal(proof)
+	// Check blacklist
+	if m.isBlacklisted(proof.UserID) {
+		m.metrics.FailedVerifications.Add(1)
+		return false, fmt.Errorf("user blacklisted")
+	}
+	
+	// Verify based on type
+	var valid bool
+	var err error
+	
+	switch proof.Type {
+	case ProofTypeAge:
+		valid, err = m.verifyAgeProof(proof)
+		
+	case ProofTypeIdentity:
+		valid, err = m.verifyIdentityProof(proof)
+		
+	case ProofTypeHashpower:
+		valid, err = m.verifyHashpowerProof(proof)
+		
+	case ProofTypeLocation:
+		valid, err = m.verifyLocationProof(proof)
+		
+	case ProofTypeSanctions:
+		valid, err = m.verifySanctionsProof(proof)
+		
+	default:
+		return false, fmt.Errorf("unsupported proof type: %s", proof.Type)
+	}
+	
 	if err != nil {
-		return nil, fmt.Errorf("verification failed: %w", err)
+		m.metrics.FailedVerifications.Add(1)
+		return false, err
 	}
 	
-	// 信頼度スコアとレピュテーションを計算
-	score := zkp.calculateTrustScore(proof, verifierID)
-	reputation := zkp.calculateReputation(proof.ProverID)
-	
-	result := &VerificationResult{
-		Valid:      valid,
-		ProofID:    proofID,
-		ProverID:   proof.ProverID,
-		Statement:  proof.Statement,
-		VerifiedAt: time.Now(),
-		VerifierID: verifierID,
-		Score:      score,
-		Reputation: reputation,
+	if !valid {
+		m.metrics.FailedVerifications.Add(1)
 	}
 	
-	if valid {
-		proof.Verified = true
-		zkp.proofs.Store(proofID, proof)
-		zkp.logger.Info("ZK proof verification successful", zap.String("proof_id", proofID))
-	} else {
-		zkp.logger.Warn("ZK proof verification failed", zap.String("proof_id", proofID))
+	// Update proof validity
+	proof.Valid = valid
+	
+	// Audit logging if enabled
+	if m.config.AuditLogging {
+		m.logger.Info("Proof verified",
+			zap.String("proof_id", proofID),
+			zap.String("user_id", proof.UserID),
+			zap.String("type", string(proof.Type)),
+			zap.Bool("valid", valid),
+		)
 	}
 	
-	return result, nil
+	return valid, nil
 }
 
-// generateProofID はプルーフIDを生成
-func (zkp *ZKPManager) generateProofID(proverID string, statement Statement) string {
-	hash := sha256.New()
-	hash.Write([]byte(proverID))
-	hash.Write([]byte(string(statement.Type)))
-	hash.Write([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
-	return hex.EncodeToString(hash.Sum(nil))[:16]
-}
+// Private methods
 
-// generateCommitment はコミットメントを生成
-func (zkp *ZKPManager) generateCommitment(statement Statement, witness []byte) ([]byte, []byte, error) {
-	// ランダムネスを生成
-	randomness := make([]byte, 32)
-	if _, err := rand.Read(randomness); err != nil {
-		return nil, nil, err
-	}
+func (m *Manager) initializeProofSystems() error {
+	// Initialize Groth16 (simplified)
+	m.proofGenerators[ProtocolGroth16] = &Groth16ProofGenerator{}
+	m.verifiers[ProtocolGroth16] = &Groth16Verifier{}
 	
-	// コミットメント = Hash(witness || randomness)
-	hash := sha256.New()
-	hash.Write(witness)
-	hash.Write(randomness)
-	commitment := hash.Sum(nil)
+	// Initialize simple hash-based system
+	m.proofGenerators[ProtocolSimple] = &SimpleProofGenerator{}
+	m.verifiers[ProtocolSimple] = &SimpleVerifier{}
 	
-	return commitment, randomness, nil
-}
-
-// generateChallenge はチャレンジを生成
-func (zkp *ZKPManager) generateChallenge(commitment []byte, statement Statement) []byte {
-	hash := sha256.New()
-	hash.Write(commitment)
-	hash.Write([]byte(string(statement.Type)))
-	if statement.HashTarget != nil {
-		hash.Write(statement.HashTarget)
-	}
-	return hash.Sum(nil)
-}
-
-// generateResponse はレスポンスを生成
-func (zkp *ZKPManager) generateResponse(challenge, witness, randomness []byte, statement Statement) ([]byte, error) {
-	// 簡略化されたレスポンス生成
-	hash := sha256.New()
-	hash.Write(challenge)
-	hash.Write(witness)
-	hash.Write(randomness)
-	
-	switch statement.Type {
-	case StatementAgeProof:
-		// 年齢証明のレスポンス
-		return zkp.generateAgeProofResponse(hash, statement)
-	case StatementHashPowerProof:
-		// ハッシュパワー証明のレスポンス
-		return zkp.generateHashPowerResponse(hash, statement)
-	default:
-		return hash.Sum(nil), nil
-	}
-}
-
-// generateAgeProofResponse は年齢証明のレスポンスを生成
-func (zkp *ZKPManager) generateAgeProofResponse(hasher hash.Hash, statement Statement) ([]byte, error) {
-	// 年齢証明固有のロジック
-	minAge, ok := statement.Parameters["min_age"].(float64)
-	if !ok {
-		minAge = 18 // デフォルト
-	}
-	
-	hasher.Write([]byte(fmt.Sprintf("age_threshold_%.0f", minAge)))
-	return hasher.Sum(nil), nil
-}
-
-// generateHashPowerResponse はハッシュパワー証明のレスポンスを生成
-func (zkp *ZKPManager) generateHashPowerResponse(hasher hash.Hash, statement Statement) ([]byte, error) {
-	// ハッシュパワー証明固有のロジック
-	minHashPower, ok := statement.Parameters["min_hashpower"].(float64)
-	if !ok {
-		minHashPower = 1000 // デフォルト（H/s）
-	}
-	
-	hasher.Write([]byte(fmt.Sprintf("hashpower_threshold_%.0f", minHashPower)))
-	return hasher.Sum(nil), nil
-}
-
-// verifyProofInternal は内部的な証明検証
-func (zkp *ZKPManager) verifyProofInternal(proof *Proof) (bool, error) {
-	// 1. チャレンジの再生成と確認
-	expectedChallenge := zkp.generateChallenge(proof.Commitment, proof.Statement)
-	if !zkp.bytesEqual(expectedChallenge, proof.Challenge) {
-		return false, fmt.Errorf("challenge mismatch")
-	}
-	
-	// 2. レスポンスの検証（簡略化）
-	switch proof.Statement.Type {
-	case StatementAgeProof:
-		return zkp.verifyAgeProof(proof)
-	case StatementHashPowerProof:
-		return zkp.verifyHashPowerProof(proof)
-	case StatementKYCProof:
-		return zkp.verifyKYCProof(proof)
-	default:
-		return zkp.verifyGenericProof(proof)
-	}
-}
-
-// verifyAgeProof は年齢証明を検証
-func (zkp *ZKPManager) verifyAgeProof(proof *Proof) (bool, error) {
-	// 年齢証明の検証ロジック
-	// 実際の実装では、より複雑な暗号学的検証が必要
-	
-	minAge, ok := proof.Statement.Parameters["min_age"].(float64)
-	if !ok {
-		minAge = 18
-	}
-	
-	// 簡略化された検証：レスポンスのハッシュが期待値と一致するかチェック
-	hash := sha256.New()
-	hash.Write(proof.Challenge)
-	hash.Write([]byte(fmt.Sprintf("age_threshold_%.0f", minAge)))
-	
-	expectedResponse := hash.Sum(nil)
-	return zkp.bytesEqual(expectedResponse, proof.Response), nil
-}
-
-// verifyHashPowerProof はハッシュパワー証明を検証
-func (zkp *ZKPManager) verifyHashPowerProof(proof *Proof) (bool, error) {
-	// ハッシュパワー証明の検証
-	minHashPower, ok := proof.Statement.Parameters["min_hashpower"].(float64)
-	if !ok {
-		minHashPower = 1000
-	}
-	
-	hash := sha256.New()
-	hash.Write(proof.Challenge)
-	hash.Write([]byte(fmt.Sprintf("hashpower_threshold_%.0f", minHashPower)))
-	
-	expectedResponse := hash.Sum(nil)
-	return zkp.bytesEqual(expectedResponse, proof.Response), nil
-}
-
-// verifyKYCProof はKYC証明を検証
-func (zkp *ZKPManager) verifyKYCProof(proof *Proof) (bool, error) {
-	// KYC証明の検証
-	// 制裁リスト、PEPリストなどのチェック
-	
-	// 簡略化された実装
-	hash := sha256.New()
-	hash.Write(proof.Challenge)
-	hash.Write([]byte("kyc_compliant"))
-	
-	expectedResponse := hash.Sum(nil)
-	return zkp.bytesEqual(expectedResponse, proof.Response), nil
-}
-
-// verifyGenericProof は汎用証明を検証
-func (zkp *ZKPManager) verifyGenericProof(proof *Proof) (bool, error) {
-	// 汎用的な証明検証
-	hash := sha256.New()
-	hash.Write(proof.Challenge)
-	
-	expectedResponse := hash.Sum(nil)
-	return zkp.bytesEqual(expectedResponse, proof.Response), nil
-}
-
-// calculateTrustScore は信頼度スコアを計算
-func (zkp *ZKPManager) calculateTrustScore(proof *Proof, verifierID string) float64 {
-	baseScore := 0.5 // ベーススコア
-	
-	// プルーフタイプに応じたスコア調整
-	switch proof.Statement.Type {
-	case StatementKYCProof:
-		baseScore += 0.3
-	case StatementAgeProof:
-		baseScore += 0.2
-	case StatementHashPowerProof:
-		baseScore += 0.1
-	}
-	
-	// 検証者の信頼度による調整
-	verifierTrust := zkp.getVerifierTrust(verifierID)
-	baseScore += verifierTrust * 0.2
-	
-	// スコアを0-1の範囲に正規化
-	if baseScore > 1.0 {
-		baseScore = 1.0
-	}
-	if baseScore < 0.0 {
-		baseScore = 0.0
-	}
-	
-	return baseScore
-}
-
-// calculateReputation はレピュテーションを計算
-func (zkp *ZKPManager) calculateReputation(proverID string) float64 {
-	// プルーバーの過去の検証履歴から計算
-	reputation := 0.5 // デフォルト値
-	
-	// 簡略化された実装
-	// 実際の実装では、過去の検証成功率、頻度、多様性などを考慮
-	
-	return reputation
-}
-
-// getVerifierTrust は検証者の信頼度を取得
-func (zkp *ZKPManager) getVerifierTrust(verifierID string) float64 {
-	// 検証者の信頼度を取得（簡略化）
-	return 0.8 // デフォルト値
-}
-
-// bytesEqual はバイト配列の比較
-func (zkp *ZKPManager) bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+	// Initialize trusted setup if needed
+	if m.config.DefaultProtocol == ProtocolGroth16 {
+		m.trustedSetup = &TrustedSetup{
+			// Simplified trusted setup
+			G1: elliptic.P256().Params().Gx,
+			G2: elliptic.P256().Params().Gy,
 		}
 	}
-	return true
-}
-
-// cleanupExpiredProofs は期限切れプルーフをクリーンアップ
-func (zkp *ZKPManager) cleanupExpiredProofs() {
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
 	
-	for range ticker.C {
-		now := time.Now()
-		expiredCount := 0
-		
-		zkp.proofs.Range(func(key, value interface{}) bool {
-			proof := value.(*Proof)
-			if now.After(proof.ExpiresAt) {
-				zkp.proofs.Delete(key)
-				expiredCount++
-			}
-			return true
-		})
-		
-		if expiredCount > 0 {
-			zkp.logger.Info("Cleaned up expired proofs", zap.Int("count", expiredCount))
-		}
-	}
+	return nil
 }
 
-// GetProofStats はプルーフ統計を取得
-func (zkp *ZKPManager) GetProofStats() map[string]interface{} {
-	stats := map[string]interface{}{
-		"total_proofs":    0,
-		"verified_proofs": 0,
-		"expired_proofs":  0,
-		"proof_types":     make(map[string]int),
+func (m *Manager) generateAgeProof(userID string, privateInput interface{}) (*Proof, error) {
+	age, ok := privateInput.(int)
+	if !ok {
+		return nil, fmt.Errorf("invalid age input")
 	}
 	
-	now := time.Now()
-	zkp.proofs.Range(func(key, value interface{}) bool {
-		proof := value.(*Proof)
-		stats["total_proofs"] = stats["total_proofs"].(int) + 1
-		
-		if proof.Verified {
-			stats["verified_proofs"] = stats["verified_proofs"].(int) + 1
-		}
-		
-		if now.After(proof.ExpiresAt) {
-			stats["expired_proofs"] = stats["expired_proofs"].(int) + 1
-		}
-		
-		proofTypes := stats["proof_types"].(map[string]int)
-		proofTypes[string(proof.Statement.Type)]++
-		
-		return true
-	})
+	if m.ageProofSystem == nil {
+		return nil, fmt.Errorf("age proof system not initialized")
+	}
 	
-	return stats
-}
-
-// CreateKYCProof はKYC証明を作成
-func (zkp *ZKPManager) CreateKYCProof(userID string, kycData map[string]interface{}) (*Proof, error) {
-	statement := Statement{
-		Type: StatementKYCProof,
-		Parameters: map[string]interface{}{
-			"sanctions_clear": true,
-			"pep_clear":      true,
-			"verified":       true,
+	// Generate age proof using the configured protocol
+	proofData, publicInput, err := m.ageProofSystem.GenerateProof(age, m.config.DefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
+	
+	proof := &Proof{
+		ID:          m.generateProofID(userID, ProofTypeAge),
+		Type:        ProofTypeAge,
+		Protocol:    m.config.DefaultProtocol,
+		UserID:      userID,
+		Data:        proofData,
+		PublicInput: publicInput,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(m.config.ProofExpiry),
+		Valid:       true,
+		Metadata: map[string]interface{}{
+			"min_age": m.config.MinAge,
 		},
 	}
 	
-	// KYCデータをwitnessとして使用（実際の実装では暗号化が必要）
-	witnessData := make([]byte, 0)
-	for key, value := range kycData {
-		witnessData = append(witnessData, []byte(fmt.Sprintf("%s:%v", key, value))...)
+	return proof, nil
+}
+
+func (m *Manager) verifyAgeProof(proof *Proof) (bool, error) {
+	if m.ageProofSystem == nil {
+		return false, fmt.Errorf("age proof system not initialized")
 	}
 	
-	return zkp.GenerateProof(userID, statement, witnessData)
+	return m.ageProofSystem.VerifyProof(proof.Data, proof.PublicInput, proof.Protocol)
+}
+
+func (m *Manager) generateIdentityProof(userID string, privateInput interface{}) (*Proof, error) {
+	if m.identityProofSystem == nil {
+		return nil, fmt.Errorf("identity proof system not initialized")
+	}
+	
+	identity, ok := privateInput.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid identity input")
+	}
+	
+	proofData, publicInput, err := m.identityProofSystem.GenerateProof(identity, m.config.DefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
+	
+	proof := &Proof{
+		ID:          m.generateProofID(userID, ProofTypeIdentity),
+		Type:        ProofTypeIdentity,
+		Protocol:    m.config.DefaultProtocol,
+		UserID:      userID,
+		Data:        proofData,
+		PublicInput: publicInput,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(m.config.ProofExpiry),
+		Valid:       true,
+	}
+	
+	return proof, nil
+}
+
+func (m *Manager) verifyIdentityProof(proof *Proof) (bool, error) {
+	if m.identityProofSystem == nil {
+		return false, fmt.Errorf("identity proof system not initialized")
+	}
+	
+	return m.identityProofSystem.VerifyProof(proof.Data, proof.PublicInput, proof.Protocol)
+}
+
+func (m *Manager) generateHashpowerProof(userID string, privateInput interface{}) (*Proof, error) {
+	if m.hashpowerProofSystem == nil {
+		return nil, fmt.Errorf("hashpower proof system not initialized")
+	}
+	
+	hashpower, ok := privateInput.(float64)
+	if !ok {
+		return nil, fmt.Errorf("invalid hashpower input")
+	}
+	
+	proofData, publicInput, err := m.hashpowerProofSystem.GenerateProof(hashpower, m.config.DefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
+	
+	proof := &Proof{
+		ID:          m.generateProofID(userID, ProofTypeHashpower),
+		Type:        ProofTypeHashpower,
+		Protocol:    m.config.DefaultProtocol,
+		UserID:      userID,
+		Data:        proofData,
+		PublicInput: publicInput,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(m.config.ProofExpiry),
+		Valid:       true,
+		Metadata: map[string]interface{}{
+			"min_hashpower": m.config.MinHashpower,
+		},
+	}
+	
+	return proof, nil
+}
+
+func (m *Manager) verifyHashpowerProof(proof *Proof) (bool, error) {
+	if m.hashpowerProofSystem == nil {
+		return false, fmt.Errorf("hashpower proof system not initialized")
+	}
+	
+	return m.hashpowerProofSystem.VerifyProof(proof.Data, proof.PublicInput, proof.Protocol)
+}
+
+func (m *Manager) generateLocationProof(userID string, privateInput interface{}) (*Proof, error) {
+	if m.locationProofSystem == nil {
+		return nil, fmt.Errorf("location proof system not initialized")
+	}
+	
+	location, ok := privateInput.(string)
+	if !ok {
+		return nil, fmt.Errorf("invalid location input")
+	}
+	
+	proofData, publicInput, err := m.locationProofSystem.GenerateProof(location, m.config.DefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
+	
+	proof := &Proof{
+		ID:          m.generateProofID(userID, ProofTypeLocation),
+		Type:        ProofTypeLocation,
+		Protocol:    m.config.DefaultProtocol,
+		UserID:      userID,
+		Data:        proofData,
+		PublicInput: publicInput,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(m.config.ProofExpiry),
+		Valid:       true,
+	}
+	
+	return proof, nil
+}
+
+func (m *Manager) verifyLocationProof(proof *Proof) (bool, error) {
+	if m.locationProofSystem == nil {
+		return false, fmt.Errorf("location proof system not initialized")
+	}
+	
+	return m.locationProofSystem.VerifyProof(proof.Data, proof.PublicInput, proof.Protocol)
+}
+
+func (m *Manager) generateSanctionsProof(userID string, privateInput interface{}) (*Proof, error) {
+	if m.complianceProofSystem == nil {
+		return nil, fmt.Errorf("compliance proof system not initialized")
+	}
+	
+	// Generate proof of non-appearance on sanctions list
+	proofData, publicInput, err := m.complianceProofSystem.GenerateSanctionsProof(userID, m.config.DefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
+	
+	proof := &Proof{
+		ID:          m.generateProofID(userID, ProofTypeSanctions),
+		Type:        ProofTypeSanctions,
+		Protocol:    m.config.DefaultProtocol,
+		UserID:      userID,
+		Data:        proofData,
+		PublicInput: publicInput,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(m.config.ProofExpiry),
+		Valid:       true,
+		Metadata: map[string]interface{}{
+			"list_hash": m.config.SanctionsListHash,
+		},
+	}
+	
+	return proof, nil
+}
+
+func (m *Manager) verifySanctionsProof(proof *Proof) (bool, error) {
+	if m.complianceProofSystem == nil {
+		return false, fmt.Errorf("compliance proof system not initialized")
+	}
+	
+	return m.complianceProofSystem.VerifySanctionsProof(proof.Data, proof.PublicInput, proof.Protocol)
+}
+
+func (m *Manager) checkUserProofLimit(userID string) error {
+	count := 0
+	m.proofs.Range(func(key, value interface{}) bool {
+		proof := value.(*Proof)
+		if proof.UserID == userID && time.Now().Before(proof.ExpiresAt) {
+			count++
+		}
+		return count < m.config.MaxProofsPerUser
+	})
+	
+	if count >= m.config.MaxProofsPerUser {
+		return fmt.Errorf("user proof limit exceeded")
+	}
+	
+	return nil
+}
+
+func (m *Manager) recordProofHistory(userID string, proof *Proof) {
+	record := ProofRecord{
+		ProofID:   proof.ID,
+		Type:      proof.Type,
+		CreatedAt: proof.CreatedAt,
+		Valid:     proof.Valid,
+	}
+	
+	historyVal, _ := m.proofHistory.LoadOrStore(userID, []ProofRecord{})
+	history := historyVal.([]ProofRecord)
+	history = append(history, record)
+	
+	// Keep only recent history
+	if len(history) > 100 {
+		history = history[len(history)-100:]
+	}
+	
+	m.proofHistory.Store(userID, history)
+}
+
+func (m *Manager) isBlacklisted(userID string) bool {
+	if val, ok := m.blacklist.Load(userID); ok {
+		expiry := val.(time.Time)
+		return time.Now().Before(expiry)
+	}
+	return false
+}
+
+func (m *Manager) generateProofID(userID string, proofType ProofType) string {
+	data := fmt.Sprintf("%s-%s-%d", userID, proofType, time.Now().UnixNano())
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:16])
+}
+
+// GetProof retrieves a proof by ID
+func (m *Manager) GetProof(proofID string) (*Proof, error) {
+	proofVal, ok := m.proofs.Load(proofID)
+	if !ok {
+		return nil, fmt.Errorf("proof not found: %s", proofID)
+	}
+	
+	return proofVal.(*Proof), nil
+}
+
+// RevokeProof revokes a proof
+func (m *Manager) RevokeProof(proofID string) error {
+	proofVal, ok := m.proofs.Load(proofID)
+	if !ok {
+		return fmt.Errorf("proof not found: %s", proofID)
+	}
+	
+	proof := proofVal.(*Proof)
+	proof.Valid = false
+	proof.ExpiresAt = time.Now()
+	
+	m.logger.Info("Proof revoked",
+		zap.String("proof_id", proofID),
+		zap.String("user_id", proof.UserID),
+		zap.String("type", string(proof.Type)),
+	)
+	
+	return nil
+}
+
+// BlacklistUser adds a user to the blacklist
+func (m *Manager) BlacklistUser(userID string, duration time.Duration) {
+	m.blacklist.Store(userID, time.Now().Add(duration))
+	
+	// Revoke all user's proofs
+	m.proofs.Range(func(key, value interface{}) bool {
+		proof := value.(*Proof)
+		if proof.UserID == userID {
+			m.RevokeProof(proof.ID)
+		}
+		return true
+	})
+	
+	m.logger.Warn("User blacklisted",
+		zap.String("user_id", userID),
+		zap.Duration("duration", duration),
+	)
+}
+
+// Cleanup removes expired proofs
+func (m *Manager) Cleanup() {
+	now := time.Now()
+	count := 0
+	
+	m.proofs.Range(func(key, value interface{}) bool {
+		proof := value.(*Proof)
+		if now.After(proof.ExpiresAt) {
+			m.proofs.Delete(key)
+			m.metrics.ActiveProofs.Add(-1)
+			count++
+		}
+		return true
+	})
+	
+	if count > 0 {
+		m.logger.Info("Cleaned up expired proofs", zap.Int("count", count))
+	}
+}
+
+// GetMetrics returns ZKP system metrics
+func (m *Manager) GetMetrics() map[string]interface{} {
+	return map[string]interface{}{
+		"total_proofs_generated":    m.metrics.TotalProofsGenerated.Load(),
+		"total_proofs_verified":     m.metrics.TotalProofsVerified.Load(),
+		"failed_verifications":      m.metrics.FailedVerifications.Load(),
+		"average_generation_time_us": m.metrics.AverageGenerationTime.Load(),
+		"average_verification_time_us": m.metrics.AverageVerificationTime.Load(),
+		"active_proofs":             m.metrics.ActiveProofs.Load(),
+	}
+}
+
+// Supporting interfaces and types
+
+// Verifier interface for proof verification
+type Verifier interface {
+	Verify(proof []byte, publicInput []byte) (bool, error)
+}
+
+// ProofGenerator interface for proof generation
+type ProofGenerator interface {
+	Generate(witness interface{}, publicInput []byte) ([]byte, error)
+}
+
+// TrustedSetup holds trusted setup parameters
+type TrustedSetup struct {
+	G1 *big.Int
+	G2 *big.Int
+}
+
+// Stub implementations for proof systems
+
+// SimpleProofGenerator implements simple hash-based proofs
+type SimpleProofGenerator struct{}
+
+func (g *SimpleProofGenerator) Generate(witness interface{}, publicInput []byte) ([]byte, error) {
+	// Simple implementation using hash commitments
+	data, err := json.Marshal(witness)
+	if err != nil {
+		return nil, err
+	}
+	
+	hash := sha256.Sum256(append(data, publicInput...))
+	return hash[:], nil
+}
+
+// SimpleVerifier verifies simple hash-based proofs
+type SimpleVerifier struct{}
+
+func (v *SimpleVerifier) Verify(proof []byte, publicInput []byte) (bool, error) {
+	// In real implementation, would verify against commitment
+	return len(proof) == 32 && len(publicInput) > 0, nil
+}
+
+// Groth16ProofGenerator stub
+type Groth16ProofGenerator struct{}
+
+func (g *Groth16ProofGenerator) Generate(witness interface{}, publicInput []byte) ([]byte, error) {
+	// Stub implementation
+	return g.generateDummyProof(witness, publicInput)
+}
+
+func (g *Groth16ProofGenerator) generateDummyProof(witness interface{}, publicInput []byte) ([]byte, error) {
+	// In real implementation, would use actual Groth16 proving
+	data, _ := json.Marshal(witness)
+	hash := sha256.Sum256(append(data, publicInput...))
+	return hash[:], nil
+}
+
+// Groth16Verifier stub
+type Groth16Verifier struct{}
+
+func (v *Groth16Verifier) Verify(proof []byte, publicInput []byte) (bool, error) {
+	// Stub implementation
+	return len(proof) == 32, nil
+}
+
+// EnhancedZKPManager is an alias for backward compatibility
+type EnhancedZKPManager = Manager
+
+// NewEnhancedZKPManager creates a new enhanced ZKP manager (backward compatibility)
+func NewEnhancedZKPManager(logger *zap.Logger, config Config) (*EnhancedZKPManager, error) {
+	return NewManager(logger, config)
 }

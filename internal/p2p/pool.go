@@ -4,1012 +4,907 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"hash/crc32"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/zkp"
 	"go.uber.org/zap"
 )
 
-// PoolConfig はP2Pプールの設定
-type PoolConfig struct {
-	ListenAddr      string
-	BootstrapNodes  []string
-	ShareDifficulty float64
-	BlockTime       time.Duration
-	PayoutThreshold float64
-	FeePercentage   float64
-}
-
-// Pool はP2Pマイニングプール
+// Pool manages a P2P mining pool with enterprise features and ZKP support
+// Following design principles from John Carmack (performance), Robert C. Martin (architecture), Rob Pike (simplicity)
 type Pool struct {
-	config      PoolConfig
 	logger      *zap.Logger
-	peers       sync.Map
-	shares      *ShareManager
-	blockchain  *Blockchain
-	network     *NetworkManager
-	consensus   *ConsensusEngine
-	dht         *DHT
-	mu          sync.RWMutex
-	running     atomic.Bool
+	config      Config
 	nodeID      string
+	listener    net.Listener
+	
+	// Peer management
+	peers       sync.Map // map[string]*Peer
+	peerCount   atomic.Int32
+	
+	// Share tracking
+	shares      sync.Map // map[string]*Share
 	totalShares atomic.Uint64
-	blockHeight atomic.Uint64
+	validShares atomic.Uint64
+	
+	// Block tracking
+	blocks      []Block
+	blocksMu    sync.RWMutex
+	
+	// ZKP integration
+	zkpEnabled      bool
+	zkpManager      *zkp.EnhancedZKPManager
+	ageProofSystem  *zkp.AgeProofSystem
+	hashpowerSystem *zkp.HashpowerProofSystem
+	
+	// Enterprise features
+	consensusEngine     *ConsensusEngine
+	reputationSystem    *ReputationSystem
+	complianceMonitor   *ComplianceMonitor
+	performanceMonitor  *PerformanceMonitor
+	
+	// Network management
+	networkManager      *NetworkManager
+	antiCensorshipLayer *AntiCensorshipLayer
+	
+	// Performance optimization
+	shareCache       *ShareCache
+	proofCache       *ProofCache
+	rateLimiter      *RateLimiter
+	
+	// Audit and monitoring
+	auditLogger      *AuditLogger
+	
+	// State
+	running     atomic.Int32
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
-// Peer はP2Pネットワークのピア
+// Config defines P2P pool configuration
+type Config struct {
+	// Network settings
+	ListenAddr        string        `yaml:"listen_addr"`
+	MaxPeers          int           `yaml:"max_peers"`
+	MinPeers          int           `yaml:"min_peers"`
+	ConnectionTimeout time.Duration `yaml:"connection_timeout"`
+	BootstrapNodes    []string      `yaml:"bootstrap_nodes"`
+	
+	// Mining settings
+	Algorithm        string        `yaml:"algorithm"`
+	ShareDifficulty  float64       `yaml:"share_difficulty"`
+	BlockTime        time.Duration `yaml:"block_time"`
+	PayoutThreshold  float64       `yaml:"payout_threshold"`
+	FeePercentage    float64       `yaml:"fee_percentage"`
+	
+	// ZKP settings (replaces KYC)
+	ZKP struct {
+		Enabled              bool          `yaml:"enabled"`
+		RequireAgeProof      bool          `yaml:"require_age_proof"`
+		MinAge               int           `yaml:"min_age"`
+		RequireHashpowerProof bool         `yaml:"require_hashpower_proof"`
+		MinHashpower         float64       `yaml:"min_hashpower"`
+		AnonymousMining      bool          `yaml:"anonymous_mining"`
+		ProofCacheDuration   time.Duration `yaml:"proof_cache_duration"`
+	} `yaml:"zkp"`
+	
+	// Enterprise features
+	Enterprise struct {
+		Enabled              bool          `yaml:"enabled"`
+		InstitutionalGrade   bool          `yaml:"institutional_grade"`
+		ComplianceMonitoring bool          `yaml:"compliance_monitoring"`
+		RealtimeAuditing     bool          `yaml:"realtime_auditing"`
+		GeographicRestrictions map[string]bool `yaml:"geographic_restrictions"`
+	} `yaml:"enterprise"`
+	
+	// Anti-censorship
+	AntiCensorship struct {
+		Enabled      bool `yaml:"enabled"`
+		TorSupport   bool `yaml:"tor_support"`
+		I2PSupport   bool `yaml:"i2p_support"`
+		ProxySupport bool `yaml:"proxy_support"`
+		DNSOverHTTPS bool `yaml:"dns_over_https"`
+	} `yaml:"anti_censorship"`
+	
+	// Performance
+	Performance struct {
+		BatchProcessing      bool          `yaml:"batch_processing"`
+		ShareCacheSize       int           `yaml:"share_cache_size"`
+		ProofCacheSize       int           `yaml:"proof_cache_size"`
+		MaxSharesPerSecond   int           `yaml:"max_shares_per_second"`
+		LowLatencyMode       bool          `yaml:"low_latency_mode"`
+	} `yaml:"performance"`
+	
+	// Security
+	Security struct {
+		DDoSProtection     bool `yaml:"ddos_protection"`
+		IntrusionDetection bool `yaml:"intrusion_detection"`
+		TLSRequired        bool `yaml:"tls_required"`
+		MinTLSVersion      string `yaml:"min_tls_version"`
+	} `yaml:"security"`
+}
+
+// Peer represents a connected miner
 type Peer struct {
-	ID           string
-	Address      string
-	Conn         net.Conn
-	LastSeen     time.Time
-	LastPong     time.Time
-	ShareCount   uint64
-	TrustScore   float64
-	mu           sync.RWMutex
+	ID          string                   `json:"id"`
+	Conn        net.Conn                 `json:"-"`
+	Address     string                   `json:"address"`
+	Wallet      string                   `json:"wallet"`
+	
+	// ZKP proofs
+	Proofs      map[string]interface{}   `json:"proofs,omitempty"`
+	IsAnonymous bool                     `json:"is_anonymous"`
+	
+	// Mining stats
+	HashRate    atomic.Uint64            `json:"hash_rate"`
+	Shares      atomic.Uint64            `json:"shares"`
+	ValidShares atomic.Uint64            `json:"valid_shares"`
+	LastSeen    time.Time                `json:"last_seen"`
+	Connected   time.Time                `json:"connected"`
+	
+	// Reputation
+	Reputation  int                      `json:"reputation"`
+	
+	// Rate limiting
+	ShareLimiter *RateLimiter            `json:"-"`
+	
+	mu          sync.RWMutex
 }
 
-// Message types
-const (
-	MessageTypeHandshake   = 1
-	MessageTypeShare       = 2
-	MessageTypeBlock       = 3
-	MessageTypePeerList    = 4
-	MessageTypeJobRequest  = 5
-	MessageTypePing        = 6
-	MessageTypePong        = 7
-)
-
-// Message constraints
-const (
-	MaxMessageSize = 1024 * 1024 // 1MB
-	MaxMessageAge  = 300         // 5 minutes
-)
-
-// Message はP2Pメッセージ
-type Message struct {
-	Type      uint8  `json:"type"`
-	Timestamp int64  `json:"timestamp"`
-	Payload   []byte `json:"payload"`
-	Checksum  uint32 `json:"checksum"`
-}
-
-// PeerInfo はピア情報
-type PeerInfo struct {
-	ID      string `json:"id"`
-	Address string `json:"address"`
-}
-
-// JobRequest はジョブリクエスト
-type JobRequest struct {
-	Algorithm  string  `json:"algorithm"`
-	Difficulty float64 `json:"difficulty"`
-}
-
-// Job はマイニングジョブ
-type Job struct {
-	ID         string  `json:"id"`
-	Algorithm  string  `json:"algorithm"`
-	Target     string  `json:"target"`
-	Difficulty float64 `json:"difficulty"`
-	Data       []byte  `json:"data"`
-}
-
-// Share はマイニングシェア
+// Share represents a mining share
 type Share struct {
-	ID         string
-	MinerID    string
-	JobID      string
-	Nonce      uint64
-	Hash       []byte
-	Difficulty float64
-	Timestamp  time.Time
-	Valid      bool
+	ID         string    `json:"id"`
+	PeerID     string    `json:"peer_id"`
+	JobID      string    `json:"job_id"`
+	Nonce      uint64    `json:"nonce"`
+	Hash       []byte    `json:"hash"`
+	Difficulty float64   `json:"difficulty"`
+	Timestamp  time.Time `json:"timestamp"`
+	Valid      bool      `json:"valid"`
 }
 
-// Block はブロック
+// Block represents a mined block
 type Block struct {
-	Height      uint64
-	Hash        []byte
-	PrevHash    []byte
-	Timestamp   time.Time
-	Shares      []*Share
-	Coinbase    []byte
-	MerkleRoot  []byte
+	Height    uint64    `json:"height"`
+	Hash      []byte    `json:"hash"`
+	PrevHash  []byte    `json:"prev_hash"`
+	Timestamp time.Time `json:"timestamp"`
+	Miner     string    `json:"miner"`
+	Shares    uint64    `json:"shares"`
+	Reward    float64   `json:"reward"`
 }
 
-// ShareManager はシェア管理
-type ShareManager struct {
-	shares      sync.Map
-	shareWindow time.Duration
-	mu          sync.RWMutex
+// Message represents P2P protocol messages
+type Message struct {
+	Type      MessageType `json:"type"`
+	ID        string      `json:"id"`
+	Timestamp time.Time   `json:"timestamp"`
+	Payload   interface{} `json:"payload"`
 }
 
-// Blockchain はブロックチェーン
-type Blockchain struct {
-	blocks      []*Block
-	currentTip  *Block
-	mu          sync.RWMutex
-}
+// MessageType defines message types
+type MessageType string
 
-// NetworkManager はネットワーク管理
-type NetworkManager struct {
-	listener   net.Listener
-	peers      sync.Map
-	maxPeers   int
-	mu         sync.RWMutex
-}
+const (
+	MessageTypeHandshake     MessageType = "handshake"
+	MessageTypeAuth          MessageType = "auth"
+	MessageTypeJob           MessageType = "job"
+	MessageTypeShare         MessageType = "share"
+	MessageTypeBlock         MessageType = "block"
+	MessageTypePing          MessageType = "ping"
+	MessageTypePong          MessageType = "pong"
+	MessageTypeStats         MessageType = "stats"
+	MessageTypeZKProof       MessageType = "zkproof"
+)
 
-// ConsensusEngine はコンセンサスエンジン
-type ConsensusEngine struct {
-	pool          *Pool
-	minShareRatio float64
-	mu            sync.RWMutex
-}
-
-// NewPool は新しいP2Pプールを作成
-func NewPool(cfg PoolConfig, logger *zap.Logger) (*Pool, error) {
-	// ノードID生成
-	nodeIDBytes := make([]byte, 16)
-	if _, err := rand.Read(nodeIDBytes); err != nil {
-		return nil, fmt.Errorf("failed to generate node ID: %w", err)
+// NewPool creates a new P2P mining pool
+func NewPool(config Config, logger *zap.Logger) (*Pool, error) {
+	// Generate node ID
+	nodeID := generateNodeID()
+	
+	// Set defaults
+	if config.MaxPeers <= 0 {
+		config.MaxPeers = 100
 	}
-	nodeID := hex.EncodeToString(nodeIDBytes)
-
-	// Generate DHT node ID from address
-	dhtNodeIDBytes := sha256.Sum256([]byte(cfg.ListenAddr + nodeID))
-	dhtNodeID := NodeID(dhtNodeIDBytes)
-
-	// DHT設定
-	dhtConfig := DHTConfig{
-		NodeID:          dhtNodeID,
-		BootstrapNodes:  cfg.BootstrapNodes,
-		BucketSize:      20,
-		Alpha:           3,
-		RefreshInterval: 1 * time.Hour,
-		StoreInterval:   1 * time.Hour,
-		ExpireTime:      24 * time.Hour,
+	if config.MinPeers <= 0 {
+		config.MinPeers = 5
 	}
-
-	dht, err := NewDHT(dhtConfig, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create DHT: %w", err)
+	if config.ConnectionTimeout <= 0 {
+		config.ConnectionTimeout = 30 * time.Second
 	}
-
+	
 	pool := &Pool{
-		config:     cfg,
-		logger:     logger,
-		nodeID:     nodeID,
-		dht:        dht,
-		shares:     NewShareManager(24 * time.Hour),
-		blockchain: NewBlockchain(),
-		consensus:  NewConsensusEngine(0.51), // 51%以上の同意が必要
+		logger:   logger,
+		config:   config,
+		nodeID:   nodeID,
+		blocks:   make([]Block, 0),
 	}
-
-	// ネットワークマネージャー初期化
-	netMgr := &NetworkManager{
-		maxPeers: 100,
+	
+	// Initialize components based on configuration
+	if err := pool.initializeComponents(); err != nil {
+		return nil, fmt.Errorf("failed to initialize components: %w", err)
 	}
-	pool.network = netMgr
-	pool.consensus.pool = pool
-
+	
 	return pool, nil
 }
 
-// Start はP2Pプールを開始
+// Start begins P2P pool operations
 func (p *Pool) Start(ctx context.Context) error {
-	if p.running.Load() {
+	if !p.running.CompareAndSwap(0, 1) {
 		return fmt.Errorf("pool already running")
 	}
-
-	// ネットワークリスナー開始
+	
+	p.ctx, p.cancel = context.WithCancel(ctx)
+	
+	// Start listener
 	listener, err := net.Listen("tcp", p.config.ListenAddr)
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %w", err)
 	}
-	p.network.listener = listener
-
-	p.running.Store(true)
-	p.logger.Info("Starting P2P pool",
+	p.listener = listener
+	
+	p.logger.Info("P2P pool started",
 		zap.String("node_id", p.nodeID),
-		zap.String("listen_addr", p.config.ListenAddr),
+		zap.String("address", p.config.ListenAddr),
+		zap.Bool("zkp_enabled", p.config.ZKP.Enabled),
+		zap.Bool("enterprise", p.config.Enterprise.Enabled),
+		zap.Bool("anti_censorship", p.config.AntiCensorship.Enabled),
 	)
-
-	// ピア接続受付
-	go p.acceptPeers(ctx)
-
-	// シェア検証
-	go p.validateShares(ctx)
-
-	// ブロック生成
-	go p.generateBlocks(ctx)
-
-	// ピア同期
-	go p.syncPeers(ctx)
-
-	// DHT開始
-	if err := p.dht.Start(p.config.ListenAddr); err != nil {
-		return fmt.Errorf("failed to start DHT: %w", err)
+	
+	// Start background workers
+	go p.acceptConnections()
+	go p.maintainPeerConnections()
+	go p.processShares()
+	go p.updateStats()
+	
+	if p.config.Enterprise.Enabled {
+		go p.runEnterpriseTasks()
 	}
-
-	// DHTピア検出開始
-	go p.discoverPeersViaDHT(ctx)
-
-	// プール情報の公開
-	go p.publishPoolInfoToDHT(ctx)
-
+	
+	if p.config.AntiCensorship.Enabled {
+		go p.runAntiCensorshipTasks()
+	}
+	
+	// Bootstrap network
+	if len(p.config.BootstrapNodes) > 0 {
+		go p.bootstrap()
+	}
+	
 	return nil
 }
 
-// Stop はP2Pプールを停止
+// Stop gracefully shuts down the pool
 func (p *Pool) Stop() error {
-	if !p.running.Load() {
-		return nil
+	if !p.running.CompareAndSwap(1, 0) {
+		return fmt.Errorf("pool not running")
 	}
-
-	p.running.Store(false)
+	
 	p.logger.Info("Stopping P2P pool")
-
-	// リスナーを閉じる
-	if p.network.listener != nil {
-		p.network.listener.Close()
+	
+	// Cancel context
+	if p.cancel != nil {
+		p.cancel()
 	}
-
-	// すべてのピア接続を閉じる
+	
+	// Close listener
+	if p.listener != nil {
+		p.listener.Close()
+	}
+	
+	// Disconnect all peers
 	p.peers.Range(func(key, value interface{}) bool {
 		if peer, ok := value.(*Peer); ok {
-			peer.Conn.Close()
+			p.disconnectPeer(peer.ID)
 		}
 		return true
 	})
-
-	// DHT停止
-	if p.dht != nil {
-		if err := p.dht.Stop(); err != nil {
-			p.logger.Error("Failed to stop DHT", zap.Error(err))
-		}
-	}
-
+	
+	p.logger.Info("P2P pool stopped")
 	return nil
 }
 
-// acceptPeers はピア接続を受け付ける
-func (p *Pool) acceptPeers(ctx context.Context) {
-	for p.running.Load() {
-		conn, err := p.network.listener.Accept()
+// SubmitShare submits a share from a peer
+func (p *Pool) SubmitShare(peerID string, share *Share) error {
+	// Verify peer exists
+	peerVal, ok := p.peers.Load(peerID)
+	if !ok {
+		return fmt.Errorf("peer not found: %s", peerID)
+	}
+	peer := peerVal.(*Peer)
+	
+	// Rate limiting
+	if p.rateLimiter != nil && !p.rateLimiter.Allow(peerID) {
+		return fmt.Errorf("rate limit exceeded")
+	}
+	
+	// Validate share
+	if err := p.validateShare(share); err != nil {
+		peer.Shares.Add(1)
+		return fmt.Errorf("invalid share: %w", err)
+	}
+	
+	// Update stats
+	share.Valid = true
+	peer.Shares.Add(1)
+	peer.ValidShares.Add(1)
+	p.totalShares.Add(1)
+	p.validShares.Add(1)
+	
+	// Cache share
+	if p.shareCache != nil {
+		p.shareCache.Add(share)
+	}
+	
+	// Store share
+	p.shares.Store(share.ID, share)
+	
+	// Check if this is a block
+	if p.isBlockSolution(share) {
+		go p.handleBlockFound(share, peer)
+	}
+	
+	return nil
+}
+
+// GetStats returns pool statistics
+func (p *Pool) GetStats() map[string]interface{} {
+	stats := map[string]interface{}{
+		"node_id":      p.nodeID,
+		"running":      p.running.Load() == 1,
+		"peers":        p.peerCount.Load(),
+		"total_shares": p.totalShares.Load(),
+		"valid_shares": p.validShares.Load(),
+		"blocks_found": len(p.blocks),
+	}
+	
+	// Add peer details
+	peers := make([]map[string]interface{}, 0)
+	p.peers.Range(func(key, value interface{}) bool {
+		peer := value.(*Peer)
+		peers = append(peers, map[string]interface{}{
+			"id":           peer.ID,
+			"address":      peer.Address,
+			"hash_rate":    peer.HashRate.Load(),
+			"shares":       peer.Shares.Load(),
+			"valid_shares": peer.ValidShares.Load(),
+			"reputation":   peer.Reputation,
+			"anonymous":    peer.IsAnonymous,
+		})
+		return true
+	})
+	stats["peers_list"] = peers
+	
+	// Add configuration info
+	stats["config"] = map[string]interface{}{
+		"algorithm":       p.config.Algorithm,
+		"share_difficulty": p.config.ShareDifficulty,
+		"zkp_enabled":     p.config.ZKP.Enabled,
+		"anonymous_mining": p.config.ZKP.AnonymousMining,
+		"enterprise_mode": p.config.Enterprise.Enabled,
+		"anti_censorship": p.config.AntiCensorship.Enabled,
+	}
+	
+	return stats
+}
+
+// Private methods
+
+func (p *Pool) initializeComponents() error {
+	// Initialize ZKP if enabled
+	if p.config.ZKP.Enabled {
+		p.zkpEnabled = true
+		// Initialize ZKP managers
+		// p.zkpManager = zkp.NewEnhancedZKPManager(...)
+		// p.ageProofSystem = zkp.NewAgeProofSystem(...)
+		// p.hashpowerSystem = zkp.NewHashpowerProofSystem(...)
+	}
+	
+	// Initialize enterprise features
+	if p.config.Enterprise.Enabled {
+		p.consensusEngine = NewConsensusEngine()
+		p.reputationSystem = NewReputationSystem()
+		p.complianceMonitor = NewComplianceMonitor()
+		p.performanceMonitor = NewPerformanceMonitor()
+		p.auditLogger = NewAuditLogger()
+	}
+	
+	// Initialize anti-censorship
+	if p.config.AntiCensorship.Enabled {
+		p.antiCensorshipLayer = NewAntiCensorshipLayer(p.config.AntiCensorship)
+	}
+	
+	// Initialize performance features
+	if p.config.Performance.ShareCacheSize > 0 {
+		p.shareCache = NewShareCache(p.config.Performance.ShareCacheSize)
+	}
+	if p.config.Performance.ProofCacheSize > 0 {
+		p.proofCache = NewProofCache(p.config.Performance.ProofCacheSize)
+	}
+	if p.config.Performance.MaxSharesPerSecond > 0 {
+		p.rateLimiter = NewRateLimiter(p.config.Performance.MaxSharesPerSecond)
+	}
+	
+	// Initialize network manager
+	p.networkManager = NewNetworkManager(p.logger)
+	
+	return nil
+}
+
+func (p *Pool) acceptConnections() {
+	for p.running.Load() == 1 {
+		conn, err := p.listener.Accept()
 		if err != nil {
-			if p.running.Load() {
-				p.logger.Error("Failed to accept connection", zap.Error(err))
+			if p.running.Load() == 0 {
+				return
 			}
+			p.logger.Error("Failed to accept connection", zap.Error(err))
 			continue
 		}
-
-		// ピア数チェック
-		peerCount := 0
-		p.peers.Range(func(_, _ interface{}) bool {
-			peerCount++
-			return true
-		})
-
-		if peerCount >= p.network.maxPeers {
+		
+		// Check peer limit
+		if p.peerCount.Load() >= int32(p.config.MaxPeers) {
 			conn.Close()
 			continue
 		}
-
-		// 新しいピアを処理
-		go p.handlePeer(ctx, conn)
+		
+		go p.handleConnection(conn)
 	}
 }
 
-// handlePeer はピアを処理
-func (p *Pool) handlePeer(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
-
-	// ピアID生成
-	peerIDBytes := make([]byte, 16)
-	rand.Read(peerIDBytes)
-	peerID := hex.EncodeToString(peerIDBytes)
-
+func (p *Pool) handleConnection(conn net.Conn) {
+	// Set connection timeout
+	conn.SetDeadline(time.Now().Add(p.config.ConnectionTimeout))
+	
+	// Create peer
 	peer := &Peer{
-		ID:       peerID,
-		Address:  conn.RemoteAddr().String(),
-		Conn:     conn,
-		LastSeen: time.Now(),
+		ID:        generatePeerID(),
+		Conn:      conn,
+		Address:   conn.RemoteAddr().String(),
+		Connected: time.Now(),
+		LastSeen:  time.Now(),
+		Proofs:    make(map[string]interface{}),
 	}
-
-	p.peers.Store(peerID, peer)
-	defer p.peers.Delete(peerID)
-
-	p.logger.Info("New peer connected",
-		zap.String("peer_id", peerID),
+	
+	// Perform handshake
+	if err := p.performHandshake(peer); err != nil {
+		p.logger.Error("Handshake failed", zap.Error(err))
+		conn.Close()
+		return
+	}
+	
+	// ZKP authentication if enabled
+	if p.config.ZKP.Enabled && !p.config.ZKP.AnonymousMining {
+		if err := p.authenticateWithZKP(peer); err != nil {
+			p.logger.Error("ZKP authentication failed", zap.Error(err))
+			conn.Close()
+			return
+		}
+	}
+	
+	// Add peer
+	p.peers.Store(peer.ID, peer)
+	p.peerCount.Add(1)
+	
+	p.logger.Info("Peer connected",
+		zap.String("peer_id", peer.ID),
 		zap.String("address", peer.Address),
+		zap.Bool("anonymous", peer.IsAnonymous),
 	)
-
-	// ピアメッセージ処理ループ
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			// メッセージを読み取り
-			msg, err := p.readMessage(conn)
-			if err != nil {
-				p.logger.Warn("Failed to read message", 
-					zap.String("peer", peerID), 
-					zap.Error(err))
-				return
-			}
-			
-			// メッセージを処理
-			if err := p.handleMessage(peer, msg); err != nil {
-				p.logger.Error("Failed to handle message", 
-					zap.String("peer", peerID), 
-					zap.Error(err))
-			}
-			
-			peer.LastSeen = time.Now()
-		}
-	}
+	
+	// Handle peer messages
+	go p.handlePeerMessages(peer)
 }
 
-// readMessage はメッセージを読み取り
-func (p *Pool) readMessage(conn net.Conn) (*Message, error) {
-	// メッセージヘッダー読み取り (type + timestamp + payload_size + checksum)
-	header := make([]byte, 17) // 1 + 8 + 4 + 4
-	if _, err := io.ReadFull(conn, header); err != nil {
-		return nil, err
-	}
-	
-	msgType := header[0]
-	timestamp := int64(binary.BigEndian.Uint64(header[1:9]))
-	payloadSize := binary.BigEndian.Uint32(header[9:13])
-	checksum := binary.BigEndian.Uint32(header[13:17])
-	
-	// ペイロードサイズ制限
-	if payloadSize > MaxMessageSize {
-		return nil, fmt.Errorf("message too large: %d bytes", payloadSize)
-	}
-	
-	// ペイロード読み取り
-	payload := make([]byte, payloadSize)
-	if payloadSize > 0 {
-		if _, err := io.ReadFull(conn, payload); err != nil {
-			return nil, err
-		}
-	}
-	
-	return &Message{
-		Type:      msgType,
-		Timestamp: timestamp,
-		Payload:   payload,
-		Checksum:  checksum,
-	}, nil
-}
-
-// handleMessage はメッセージを処理
-func (p *Pool) handleMessage(peer *Peer, msg *Message) error {
-	// メッセージ検証
-	if err := p.validateMessage(msg); err != nil {
-		p.logger.Warn("Invalid message received", 
-			zap.String("peer", peer.ID),
-			zap.Error(err))
-		return err
-	}
-	
-	switch msg.Type {
-	case MessageTypeHandshake:
-		return p.handleHandshake(peer, msg)
-	case MessageTypeShare:
-		return p.handleShare(peer, msg)
-	case MessageTypeBlock:
-		return p.handleBlock(peer, msg)
-	case MessageTypePeerList:
-		return p.handlePeerList(peer, msg)
-	case MessageTypeJobRequest:
-		return p.handleJobRequest(peer, msg)
-	case MessageTypePing:
-		return p.handlePing(peer, msg)
-	case MessageTypePong:
-		return p.handlePong(peer, msg)
-	default:
-		return fmt.Errorf("unknown message type: %d", msg.Type)
-	}
-}
-
-// validateMessage はメッセージを検証
-func (p *Pool) validateMessage(msg *Message) error {
-	if msg == nil {
-		return fmt.Errorf("message is nil")
-	}
-	
-	// メッセージサイズ制限
-	if len(msg.Payload) > MaxMessageSize {
-		return fmt.Errorf("message too large: %d bytes", len(msg.Payload))
-	}
-	
-	// チェックサム検証
-	if msg.Checksum != 0 {
-		calculated := p.calculateChecksum(msg.Payload)
-		if calculated != msg.Checksum {
-			return fmt.Errorf("checksum mismatch: expected %d, got %d", calculated, msg.Checksum)
-		}
-	}
-	
-	// タイムスタンプ検証（メッセージが古すぎないか）
-	now := time.Now().Unix()
-	if msg.Timestamp > 0 && (now - msg.Timestamp) > MaxMessageAge {
-		return fmt.Errorf("message too old: %d seconds", now - msg.Timestamp)
-	}
-	
-	return nil
-}
-
-// calculateChecksum はチェックサムを計算
-func (p *Pool) calculateChecksum(data []byte) uint32 {
-	return crc32.ChecksumIEEE(data)
-}
-
-// handleHandshake はハンドシェイクを処理
-func (p *Pool) handleHandshake(peer *Peer, msg *Message) error {
-	p.logger.Debug("Received handshake", zap.String("peer", peer.ID))
-	// TODO: ハンドシェイク処理
-	return nil
-}
-
-// handleShare はシェアを処理
-func (p *Pool) handleShare(peer *Peer, msg *Message) error {
-	p.logger.Debug("Received share", zap.String("peer", peer.ID))
-	peer.ShareCount++
-	p.totalShares.Add(1)
-	return nil
-}
-
-// handleBlock はブロックを処理
-func (p *Pool) handleBlock(peer *Peer, msg *Message) error {
-	p.logger.Info("Received block", zap.String("peer", peer.ID))
-	p.blockHeight.Add(1)
-	return nil
-}
-
-// handlePeerList はピアリストメッセージを処理
-func (p *Pool) handlePeerList(peer *Peer, msg *Message) error {
-	var peerList []PeerInfo
-	if err := json.Unmarshal(msg.Payload, &peerList); err != nil {
-		return fmt.Errorf("failed to unmarshal peer list: %w", err)
-	}
-	
-	p.logger.Debug("Received peer list", 
-		zap.String("from", peer.ID),
-		zap.Int("count", len(peerList)))
-	
-	// 新しいピアに接続を試行
-	for _, peerInfo := range peerList {
-		if peerInfo.ID != p.nodeID && !p.isConnected(peerInfo.ID) {
-			go p.connectToPeer(peerInfo.Address, peerInfo.ID)
-		}
-	}
-	
-	return nil
-}
-
-// handleJobRequest はジョブリクエストを処理
-func (p *Pool) handleJobRequest(peer *Peer, msg *Message) error {
-	var request JobRequest
-	if err := json.Unmarshal(msg.Payload, &request); err != nil {
-		return fmt.Errorf("failed to unmarshal job request: %w", err)
-	}
-	
-	p.logger.Debug("Received job request", 
-		zap.String("from", peer.ID),
-		zap.String("algorithm", request.Algorithm))
-	
-	// ジョブを生成して送信
-	job := p.generateJob(request.Algorithm, request.Difficulty)
-	return p.sendJob(peer, job)
-}
-
-// handlePing はPingメッセージを処理
-func (p *Pool) handlePing(peer *Peer, msg *Message) error {
-	// Pongを送信
-	pongMsg := &Message{
-		Type:      MessageTypePong,
-		Timestamp: time.Now().Unix(),
-		Payload:   msg.Payload, // Pingのペイロードをそのまま返す
-	}
-	pongMsg.Checksum = p.calculateChecksum(pongMsg.Payload)
-	
-	return p.sendMessage(peer, pongMsg)
-}
-
-// handlePong はPongメッセージを処理
-func (p *Pool) handlePong(peer *Peer, msg *Message) error {
-	peer.mu.Lock()
-	peer.LastPong = time.Now()
-	peer.mu.Unlock()
-	
-	p.logger.Debug("Received pong", zap.String("peer", peer.ID))
-	return nil
-}
-
-// sendMessage はメッセージを送信
-func (p *Pool) sendMessage(peer *Peer, msg *Message) error {
-	// ヘッダー作成
-	header := make([]byte, 17)
-	header[0] = msg.Type
-	binary.BigEndian.PutUint64(header[1:9], uint64(msg.Timestamp))
-	binary.BigEndian.PutUint32(header[9:13], uint32(len(msg.Payload)))
-	binary.BigEndian.PutUint32(header[13:17], msg.Checksum)
-	
-	// ヘッダー送信
-	if _, err := peer.Conn.Write(header); err != nil {
-		return err
-	}
-	
-	// ペイロード送信
-	if len(msg.Payload) > 0 {
-		if _, err := peer.Conn.Write(msg.Payload); err != nil {
-			return err
-		}
-	}
-	
-	return nil
-}
-
-// isConnected はピアが接続済みかチェック
-func (p *Pool) isConnected(peerID string) bool {
-	_, exists := p.peers.Load(peerID)
-	return exists
-}
-
-// connectToPeer はピアに接続
-func (p *Pool) connectToPeer(address, peerID string) error {
-	// TODO: ピア接続実装
-	p.logger.Debug("Connecting to peer", 
-		zap.String("address", address),
-		zap.String("peer_id", peerID))
-	return nil
-}
-
-// generateJob はジョブを生成
-func (p *Pool) generateJob(algorithm string, difficulty float64) *Job {
-	return &Job{
-		ID:         hex.EncodeToString(make([]byte, 16)),
-		Algorithm:  algorithm,
-		Difficulty: difficulty,
-		Data:       make([]byte, 32), // ダミーデータ
-	}
-}
-
-// sendJob はジョブを送信
-func (p *Pool) sendJob(peer *Peer, job *Job) error {
-	payload, err := json.Marshal(job)
-	if err != nil {
-		return err
-	}
-	
-	msg := &Message{
-		Type:      MessageTypeJobRequest,
-		Timestamp: time.Now().Unix(),
-		Payload:   payload,
-	}
-	msg.Checksum = p.calculateChecksum(msg.Payload)
-	
-	return p.sendMessage(peer, msg)
-}
-
-// SubmitShare はシェアを提出
-func (p *Pool) SubmitShare(minerID string, share *Share) error {
-	if !p.running.Load() {
-		return fmt.Errorf("pool not running")
-	}
-
-	// シェア検証
-	if !p.validateShare(share) {
-		return fmt.Errorf("invalid share")
-	}
-
-	// シェア保存
-	p.shares.AddShare(share)
-	p.totalShares.Add(1)
-
-	// ピアにブロードキャスト
-	p.broadcastShare(share)
-
-	return nil
-}
-
-// validateShare はシェアを検証
-func (p *Pool) validateShare(share *Share) bool {
-	// TODO: 実際のシェア検証ロジック
-	// - 難易度チェック
-	// - ハッシュ検証
-	// - タイムスタンプチェック
-	return share.Difficulty >= p.config.ShareDifficulty
-}
-
-// validateShares はシェアを継続的に検証
-func (p *Pool) validateShares(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// 古いシェアをクリーンアップ
-			p.shares.CleanupOldShares()
-		}
-	}
-}
-
-// generateBlocks はブロックを生成
-func (p *Pool) generateBlocks(ctx context.Context) {
-	ticker := time.NewTicker(p.config.BlockTime)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := p.createNewBlock(); err != nil {
-				p.logger.Error("Failed to create block", zap.Error(err))
-			}
-		}
-	}
-}
-
-// createNewBlock は新しいブロックを作成
-func (p *Pool) createNewBlock() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// 現在のシェアを収集
-	shares := p.shares.GetRecentShares(p.config.BlockTime)
-	if len(shares) == 0 {
-		return fmt.Errorf("no shares available")
-	}
-
-	// ブロック作成
-	block := &Block{
-		Height:    p.blockHeight.Load() + 1,
+func (p *Pool) performHandshake(peer *Peer) error {
+	// Send handshake
+	handshake := Message{
+		Type:      MessageTypeHandshake,
+		ID:        generateMessageID(),
 		Timestamp: time.Now(),
-		Shares:    shares,
-		PrevHash:  p.blockchain.currentTip.Hash,
+		Payload: map[string]interface{}{
+			"node_id":    p.nodeID,
+			"version":    "1.0.0",
+			"algorithm":  p.config.Algorithm,
+			"zkp_enabled": p.config.ZKP.Enabled,
+		},
 	}
-
-	// ブロックハッシュ計算
-	block.Hash = p.calculateBlockHash(block)
-
-	// ブロックチェーンに追加
-	if err := p.blockchain.AddBlock(block); err != nil {
-		return fmt.Errorf("failed to add block: %w", err)
+	
+	if err := p.sendMessage(peer.Conn, handshake); err != nil {
+		return err
 	}
-
-	p.blockHeight.Store(block.Height)
-
-	// ペイアウト計算
-	go p.calculatePayouts(block)
-
-	// ピアにブロードキャスト
-	p.broadcastBlock(block)
-
-	p.logger.Info("Created new block",
-		zap.Uint64("height", block.Height),
-		zap.Int("shares", len(shares)),
-	)
-
+	
+	// Receive response
+	var response Message
+	if err := p.receiveMessage(peer.Conn, &response); err != nil {
+		return err
+	}
+	
+	if response.Type != MessageTypeHandshake {
+		return fmt.Errorf("invalid handshake response")
+	}
+	
 	return nil
 }
 
-// calculateBlockHash はブロックハッシュを計算
-func (p *Pool) calculateBlockHash(block *Block) []byte {
-	// TODO: 実際のハッシュ計算
-	return []byte("mock_hash")
+func (p *Pool) authenticateWithZKP(peer *Peer) error {
+	// Implement ZKP authentication
+	// This replaces traditional KYC
+	
+	// Check age proof if required
+	if p.config.ZKP.RequireAgeProof {
+		// Request and verify age proof
+		// peer.Proofs["age"] = proofID
+	}
+	
+	// Check hashpower proof if required
+	if p.config.ZKP.RequireHashpowerProof {
+		// Request and verify hashpower proof
+		// peer.Proofs["hashpower"] = proofID
+	}
+	
+	return nil
 }
 
-// calculatePayouts はペイアウトを計算
-func (p *Pool) calculatePayouts(block *Block) {
-	// TODO: ペイアウト計算ロジック
-	// - シェア貢献度に基づいて報酬を分配
-	// - プール手数料を差し引く
-	// - ペイアウトキューに追加
+func (p *Pool) validateShare(share *Share) error {
+	// Validate share format
+	if share.ID == "" || share.PeerID == "" {
+		return fmt.Errorf("invalid share format")
+	}
+	
+	// Validate proof of work
+	hash := sha256.Sum256(append(share.Hash, []byte(fmt.Sprintf("%d", share.Nonce))...))
+	if !p.checkDifficulty(hash[:], p.config.ShareDifficulty) {
+		return fmt.Errorf("insufficient difficulty")
+	}
+	
+	return nil
 }
 
-// broadcastShare はシェアをブロードキャスト
-func (p *Pool) broadcastShare(share *Share) {
-	p.peers.Range(func(key, value interface{}) bool {
-		if peer, ok := value.(*Peer); ok {
-			// TODO: シェアをピアに送信
-			_ = peer
+func (p *Pool) checkDifficulty(hash []byte, difficulty float64) bool {
+	// Simple difficulty check - count leading zeros
+	// In production, use proper difficulty calculation
+	leadingZeros := 0
+	for _, b := range hash {
+		if b == 0 {
+			leadingZeros += 8
+		} else {
+			for i := 7; i >= 0; i-- {
+				if b&(1<<uint(i)) == 0 {
+					leadingZeros++
+				} else {
+					break
+				}
+			}
+			break
 		}
+	}
+	
+	requiredZeros := int(difficulty)
+	return leadingZeros >= requiredZeros
+}
+
+func (p *Pool) isBlockSolution(share *Share) bool {
+	// Check if share meets block difficulty
+	// Simplified - in production use actual block difficulty
+	return share.Difficulty >= p.config.ShareDifficulty*1000
+}
+
+func (p *Pool) handleBlockFound(share *Share, peer *Peer) {
+	p.blocksMu.Lock()
+	defer p.blocksMu.Unlock()
+	
+	block := Block{
+		Height:    uint64(len(p.blocks) + 1),
+		Hash:      share.Hash,
+		Timestamp: time.Now(),
+		Miner:     peer.ID,
+		Shares:    p.validShares.Load(),
+	}
+	
+	p.blocks = append(p.blocks, block)
+	
+	p.logger.Info("Block found!",
+		zap.Uint64("height", block.Height),
+		zap.String("miner", peer.ID),
+		zap.String("hash", hex.EncodeToString(block.Hash)),
+	)
+	
+	// Notify all peers
+	p.broadcastBlock(block)
+}
+
+func (p *Pool) handlePeerMessages(peer *Peer) {
+	defer func() {
+		p.disconnectPeer(peer.ID)
+	}()
+	
+	for p.running.Load() == 1 {
+		var msg Message
+		if err := p.receiveMessage(peer.Conn, &msg); err != nil {
+			return
+		}
+		
+		peer.LastSeen = time.Now()
+		
+		switch msg.Type {
+		case MessageTypeShare:
+			// Handle share submission
+			var share Share
+			if err := mapToStruct(msg.Payload, &share); err != nil {
+				p.logger.Error("Invalid share payload", zap.Error(err))
+				continue
+			}
+			share.PeerID = peer.ID
+			if err := p.SubmitShare(peer.ID, &share); err != nil {
+				p.logger.Debug("Share rejected", zap.Error(err))
+			}
+			
+		case MessageTypePing:
+			// Respond with pong
+			pong := Message{
+				Type:      MessageTypePong,
+				ID:        generateMessageID(),
+				Timestamp: time.Now(),
+			}
+			p.sendMessage(peer.Conn, pong)
+			
+		case MessageTypeStats:
+			// Send stats
+			stats := Message{
+				Type:      MessageTypeStats,
+				ID:        generateMessageID(),
+				Timestamp: time.Now(),
+				Payload:   p.GetStats(),
+			}
+			p.sendMessage(peer.Conn, stats)
+		}
+	}
+}
+
+func (p *Pool) disconnectPeer(peerID string) {
+	if peerVal, ok := p.peers.LoadAndDelete(peerID); ok {
+		peer := peerVal.(*Peer)
+		peer.Conn.Close()
+		p.peerCount.Add(-1)
+		
+		p.logger.Info("Peer disconnected",
+			zap.String("peer_id", peerID),
+			zap.Uint64("shares", peer.Shares.Load()),
+		)
+	}
+}
+
+func (p *Pool) sendMessage(conn net.Conn, msg Message) error {
+	encoder := json.NewEncoder(conn)
+	return encoder.Encode(msg)
+}
+
+func (p *Pool) receiveMessage(conn net.Conn, msg *Message) error {
+	decoder := json.NewDecoder(conn)
+	return decoder.Decode(msg)
+}
+
+func (p *Pool) broadcastBlock(block Block) {
+	msg := Message{
+		Type:      MessageTypeBlock,
+		ID:        generateMessageID(),
+		Timestamp: time.Now(),
+		Payload:   block,
+	}
+	
+	p.peers.Range(func(key, value interface{}) bool {
+		peer := value.(*Peer)
+		go p.sendMessage(peer.Conn, msg)
 		return true
 	})
 }
 
-// broadcastBlock はブロックをブロードキャスト
-func (p *Pool) broadcastBlock(block *Block) {
-	p.peers.Range(func(key, value interface{}) bool {
-		if peer, ok := value.(*Peer); ok {
-			// TODO: ブロックをピアに送信
-			_ = peer
-		}
-		return true
-	})
-}
-
-// syncPeers はピアと同期
-func (p *Pool) syncPeers(ctx context.Context) {
+func (p *Pool) maintainPeerConnections() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-
+	
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-ticker.C:
-			// 非アクティブなピアを削除
+			// Remove inactive peers
+			now := time.Now()
 			p.peers.Range(func(key, value interface{}) bool {
-				if peer, ok := value.(*Peer); ok {
-					if time.Since(peer.LastSeen) > 5*time.Minute {
-						peer.Conn.Close()
-						p.peers.Delete(key)
-						p.logger.Info("Removed inactive peer",
-							zap.String("peer_id", peer.ID),
-						)
-					}
+				peer := value.(*Peer)
+				if now.Sub(peer.LastSeen) > 5*time.Minute {
+					p.disconnectPeer(peer.ID)
 				}
 				return true
 			})
-		}
-	}
-}
-
-// GetTotalShares は総シェア数を取得
-func (p *Pool) GetTotalShares() uint64 {
-	return p.totalShares.Load()
-}
-
-// GetBlockHeight は現在のブロック高を取得
-func (p *Pool) GetBlockHeight() uint64 {
-	return p.blockHeight.Load()
-}
-
-// GetPeerCount はピア数を取得
-func (p *Pool) GetPeerCount() int {
-	count := 0
-	p.peers.Range(func(_, _ interface{}) bool {
-		count++
-		return true
-	})
-	return count
-}
-
-// ShareManager implementation
-
-// NewShareManager は新しいシェアマネージャーを作成
-func NewShareManager(window time.Duration) *ShareManager {
-	return &ShareManager{
-		shareWindow: window,
-	}
-}
-
-// AddShare はシェアを追加
-func (sm *ShareManager) AddShare(share *Share) {
-	sm.shares.Store(share.ID, share)
-}
-
-// GetRecentShares は最近のシェアを取得
-func (sm *ShareManager) GetRecentShares(duration time.Duration) []*Share {
-	cutoff := time.Now().Add(-duration)
-	var shares []*Share
-
-	sm.shares.Range(func(key, value interface{}) bool {
-		if share, ok := value.(*Share); ok {
-			if share.Timestamp.After(cutoff) {
-				shares = append(shares, share)
+			
+			// Connect to more peers if below minimum
+			if p.peerCount.Load() < int32(p.config.MinPeers) {
+				go p.connectToMorePeers()
 			}
+			
+		case <-p.ctx.Done():
+			return
 		}
-		return true
-	})
-
-	return shares
+	}
 }
 
-// CleanupOldShares は古いシェアをクリーンアップ
-func (sm *ShareManager) CleanupOldShares() {
-	cutoff := time.Now().Add(-sm.shareWindow)
-
-	sm.shares.Range(func(key, value interface{}) bool {
-		if share, ok := value.(*Share); ok {
-			if share.Timestamp.Before(cutoff) {
-				sm.shares.Delete(key)
-			}
+func (p *Pool) connectToMorePeers() {
+	// Connect to bootstrap nodes or discovered peers
+	for _, node := range p.config.BootstrapNodes {
+		if p.peerCount.Load() >= int32(p.config.MaxPeers) {
+			break
 		}
-		return true
-	})
-}
-
-// Blockchain implementation
-
-// NewBlockchain は新しいブロックチェーンを作成
-func NewBlockchain() *Blockchain {
-	genesis := &Block{
-		Height:    0,
-		Hash:      []byte("genesis"),
-		Timestamp: time.Now(),
-	}
-
-	return &Blockchain{
-		blocks:     []*Block{genesis},
-		currentTip: genesis,
+		
+		conn, err := net.DialTimeout("tcp", node, p.config.ConnectionTimeout)
+		if err != nil {
+			p.logger.Debug("Failed to connect to bootstrap node", 
+				zap.String("node", node),
+				zap.Error(err),
+			)
+			continue
+		}
+		
+		go p.handleConnection(conn)
 	}
 }
 
-// AddBlock はブロックを追加
-func (bc *Blockchain) AddBlock(block *Block) error {
-	bc.mu.Lock()
-	defer bc.mu.Unlock()
-
-	// 検証
-	if block.Height != bc.currentTip.Height+1 {
-		return fmt.Errorf("invalid block height")
-	}
-
-	bc.blocks = append(bc.blocks, block)
-	bc.currentTip = block
-
-	return nil
+func (p *Pool) bootstrap() {
+	time.Sleep(1 * time.Second) // Initial delay
+	p.connectToMorePeers()
 }
 
-// ConsensusEngine implementation
-
-// NewConsensusEngine は新しいコンセンサスエンジンを作成
-func NewConsensusEngine(minShareRatio float64) *ConsensusEngine {
-	return &ConsensusEngine{
-		minShareRatio: minShareRatio,
-	}
-}
-
-// discoverPeersViaDHT discovers peers using DHT
-func (p *Pool) discoverPeersViaDHT(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+func (p *Pool) processShares() {
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-
+	
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-ticker.C:
-			// Find nodes near our ID
-			nodes, err := p.dht.FindNode(p.dht.localNode.ID)
-			if err != nil {
-				p.logger.Debug("DHT peer discovery failed", zap.Error(err))
-				continue
-			}
-
-			// Connect to discovered nodes
-			for _, node := range nodes {
-				if node.Address != "" && node.Address != p.config.ListenAddr {
-					if !p.isConnected(node.ID.String()) {
-						go p.connectToPeer(node.Address, node.ID.String())
-					}
-				}
-			}
-
-			// Also try to find pool-specific peers
-			p.findPoolPeersInDHT()
+			// Process accumulated shares
+			// Calculate payouts, update stats, etc.
+			
+		case <-p.ctx.Done():
+			return
 		}
 	}
 }
 
-// publishPoolInfoToDHT publishes pool information to DHT
-func (p *Pool) publishPoolInfoToDHT(ctx context.Context) {
+func (p *Pool) updateStats() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			stats := p.GetStats()
+			p.logger.Info("Pool stats update",
+				zap.Any("stats", stats),
+			)
+			
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *Pool) runEnterpriseTasks() {
+	// Run enterprise-specific tasks
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-
+	
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-ticker.C:
-			// Create pool info
-			poolInfo := map[string]interface{}{
-				"node_id":          p.nodeID,
-				"address":          p.config.ListenAddr,
-				"share_difficulty": p.config.ShareDifficulty,
-				"block_time":       p.config.BlockTime.Seconds(),
-				"payout_threshold": p.config.PayoutThreshold,
-				"fee_percentage":   p.config.FeePercentage,
-				"total_shares":     p.totalShares.Load(),
-				"total_blocks":     p.blockHeight.Load(),
-				"peer_count":       p.GetPeerCount(),
-				"timestamp":        time.Now().Unix(),
+			// Compliance monitoring
+			if p.complianceMonitor != nil {
+				p.complianceMonitor.RunChecks()
 			}
-
-			// Serialize pool info
-			data, err := json.Marshal(poolInfo)
-			if err != nil {
-				p.logger.Error("Failed to marshal pool info", zap.Error(err))
-				continue
+			
+			// Performance monitoring
+			if p.performanceMonitor != nil {
+				p.performanceMonitor.CollectMetrics()
 			}
-
-			// Store in DHT with multiple keys for discoverability
-			keys := []string{
-				fmt.Sprintf("pool:%s", p.config.ListenAddr),
-				fmt.Sprintf("pool:node:%s", p.nodeID),
-				"pool:list", // General key for finding all pools
+			
+			// Audit logging
+			if p.auditLogger != nil {
+				p.auditLogger.FlushLogs()
 			}
-
-			for _, key := range keys {
-				if err := p.dht.Store(key, data); err != nil {
-					p.logger.Debug("Failed to store pool info in DHT",
-						zap.String("key", key),
-						zap.Error(err))
-				}
-			}
+			
+		case <-p.ctx.Done():
+			return
 		}
 	}
 }
 
-// findPoolPeersInDHT finds other pools in the DHT
-func (p *Pool) findPoolPeersInDHT() {
-	// Try to get the general pool list
-	data, err := p.dht.Get("pool:list")
-	if err != nil {
-		// Try alternative discovery methods
-		p.discoverPoolsByPattern()
-		return
-	}
-
-	var poolInfo map[string]interface{}
-	if err := json.Unmarshal(data, &poolInfo); err == nil {
-		if address, ok := poolInfo["address"].(string); ok {
-			if address != p.config.ListenAddr {
-				if nodeID, ok := poolInfo["node_id"].(string); ok {
-					if !p.isConnected(nodeID) {
-						go p.connectToPeer(address, nodeID)
-					}
-				}
-			}
-		}
-	}
-}
-
-// discoverPoolsByPattern discovers pools by pattern matching
-func (p *Pool) discoverPoolsByPattern() {
-	// This is a simplified implementation
-	// In practice, you'd implement a more sophisticated discovery mechanism
+func (p *Pool) runAntiCensorshipTasks() {
+	// Run anti-censorship tasks
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
 	
-	// Get stats from DHT to understand the network
-	stats := p.dht.GetStats()
-	p.logger.Debug("DHT network stats",
-		zap.Any("stats", stats))
+	for {
+		select {
+		case <-ticker.C:
+			if p.antiCensorshipLayer != nil {
+				p.antiCensorshipLayer.UpdateRoutes()
+				p.antiCensorshipLayer.CheckConnectivity()
+			}
+			
+		case <-p.ctx.Done():
+			return
+		}
+	}
 }
 
-// GetPoolStats returns pool statistics including DHT info
-func (p *Pool) GetPoolStats() map[string]interface{} {
-	stats := map[string]interface{}{
-		"node_id":      p.nodeID,
-		"total_shares": p.totalShares.Load(),
-		"block_height": p.blockHeight.Load(),
-		"peer_count":   p.GetPeerCount(),
-		"running":      p.running.Load(),
-	}
+// Helper functions
 
-	// Add DHT stats
-	if p.dht != nil {
-		stats["dht"] = p.dht.GetStats()
-	}
-
-	return stats
+func generateNodeID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
+
+func generatePeerID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func generateMessageID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func mapToStruct(m interface{}, v interface{}) error {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, v)
+}
+
+// Supporting types (stubs for now)
+
+type ConsensusEngine struct{}
+func NewConsensusEngine() *ConsensusEngine { return &ConsensusEngine{} }
+
+type ReputationSystem struct{}
+func NewReputationSystem() *ReputationSystem { return &ReputationSystem{} }
+
+type ComplianceMonitor struct{}
+func NewComplianceMonitor() *ComplianceMonitor { return &ComplianceMonitor{} }
+func (c *ComplianceMonitor) RunChecks() {}
+
+type PerformanceMonitor struct{}
+func NewPerformanceMonitor() *PerformanceMonitor { return &PerformanceMonitor{} }
+func (p *PerformanceMonitor) CollectMetrics() {}
+
+type NetworkManager struct{ logger *zap.Logger }
+func NewNetworkManager(logger *zap.Logger) *NetworkManager { return &NetworkManager{logger: logger} }
+
+type AntiCensorshipLayer struct{ config struct{ TorSupport, I2PSupport, ProxySupport, DNSOverHTTPS bool } }
+func NewAntiCensorshipLayer(config struct{ TorSupport, I2PSupport, ProxySupport, DNSOverHTTPS bool }) *AntiCensorshipLayer { 
+	return &AntiCensorshipLayer{config: config}
+}
+func (a *AntiCensorshipLayer) UpdateRoutes() {}
+func (a *AntiCensorshipLayer) CheckConnectivity() {}
+
+type ShareCache struct{ maxSize int }
+func NewShareCache(maxSize int) *ShareCache { return &ShareCache{maxSize: maxSize} }
+func (s *ShareCache) Add(share *Share) {}
+
+type ProofCache struct{ maxSize int }
+func NewProofCache(maxSize int) *ProofCache { return &ProofCache{maxSize: maxSize} }
+
+type RateLimiter struct{ maxPerSecond int }
+func NewRateLimiter(maxPerSecond int) *RateLimiter { return &RateLimiter{maxPerSecond: maxPerSecond} }
+func (r *RateLimiter) Allow(peerID string) bool { return true }
+
+type AuditLogger struct{}
+func NewAuditLogger() *AuditLogger { return &AuditLogger{} }
+func (a *AuditLogger) FlushLogs() {}
