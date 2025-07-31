@@ -37,7 +37,8 @@
       "Bash(./verify_fixes.sh)",
       "Bash(bash:*)",
       "Bash(git remote set-url:*)",
-      "Bash(./cleanup_tests.sh:*)"
+      "Bash(./cleanup_tests.sh:*)",
+      "Bash(gh auth:*)"
     ],
     "deny": []
   }
