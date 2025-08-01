@@ -1,344 +1,532 @@
-# Otedama - High-Performance P2P Mining Pool System
-
-[![Go Version](https://img.shields.io/badge/go-1.21+-blue.svg)](https://golang.org/dl/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+# Otedama - High-Performance P2P Mining Pool Software
 
 ## Overview
 
-Otedama is a next-generation P2P mining pool system designed for maximum performance, reliability, and automation. Built with principles from John Carmack (performance optimization), Robert C. Martin (clean architecture), and Rob Pike (simplicity), it provides enterprise-grade mining infrastructure with zero-knowledge proof authentication.
+Otedama is a professional-grade cryptocurrency mining software designed for reliable operations with support for CPU, GPU, and ASIC mining. Built with advanced authentication mechanisms including Zero-Knowledge Proof (ZKP), it provides secure and efficient mining capabilities suitable for enterprise deployments.
 
 ## Key Features
 
 ### Core Mining Capabilities
-- **Multi-Algorithm Support**: GPU (CUDA/OpenCL/Vulkan), CPU, and ASIC mining
-- **Advanced Algorithms**: KawPow, VerusHash, Flux, and custom WASM plugins
-- **High-Performance Engine**: Lock-free data structures, GPU acceleration
-- **Smart Job Distribution**: Efficient work allocation with share validation
-
-### P2P Network
-- **Distributed Architecture**: True peer-to-peer mining without central points of failure
-- **DHT-Based Discovery**: Automatic peer discovery and network formation
-- **Regional Load Balancing**: Intelligent routing based on geographic location
-- **Enterprise Pool Support**: Large-scale mining operation management
-
-### Security & Privacy
-- **ZKP Authentication**: Zero-knowledge proof system replacing traditional KYC
-- **FIPS 140-2 Compliance**: Enterprise-grade security standards
-- **National Security Features**: Advanced threat detection and mitigation
-- **End-to-End Encryption**: Secure communication between all nodes
-
-### Automation & Intelligence
-- **Self-Healing Systems**: Automatic issue detection and resolution
-- **Auto-Scaling**: Dynamic resource allocation based on load
-- **Predictive Maintenance**: ML-based failure prediction
-- **Performance Optimization**: Real-time profiling and bottleneck detection
+- **Multi-Hardware Support**: Optimized algorithms for CPU (x86, ARM), GPU (NVIDIA, AMD), and ASIC hardware
+- **P2P Mining Pool**: Decentralized architecture with automatic failover and load balancing
+- **Algorithm Auto-Switching**: Automatic profitability-based algorithm switching
+- **Zero-Knowledge Proof**: Privacy-preserving authentication without KYC requirements
 
 ### Advanced Features
-- **WebAssembly Plugins**: Custom algorithm support via WASM
-- **Chaos Engineering**: Built-in stability testing framework
-- **Distributed Caching**: Redis-based caching layer
-- **Zero-Downtime Updates**: Blue-green, canary, and rolling deployments
+- **Hardware Acceleration**: AES-NI, SHA extensions, and GPU-accelerated cryptography
+- **Container Support**: Docker deployment for scalable operations
+- **Real-Time Analytics**: Comprehensive dashboard with performance metrics
+- **Advanced Difficulty Adjustment**: PID-controlled difficulty with outlier removal
+- **Multi-Mode Authentication**: Static, Dynamic, Database, Wallet, and ZKP authentication
+
+### Enterprise Features
+- **Multi-User Management**: Role-based access control with audit logging
+- **High-Performance Networking**: Optimized protocol implementation
+- **Comprehensive Monitoring**: Health checks, metrics, and alerting
+- **Automatic Failover**: P2P pool with automatic node discovery
+- **Security Hardening**: DDoS protection, rate limiting, and access control
+
+## System Requirements
+
+### Minimum Requirements
+- CPU: 4 cores (x86_64 or ARM64)
+- RAM: 8GB
+- Storage: 50GB SSD
+- Network: 100Mbps
+- OS: Linux, Windows 10+, macOS 11+
+
+### Recommended Requirements
+- CPU: 16+ cores with AES-NI support
+- RAM: 32GB+ ECC memory
+- Storage: 500GB NVMe SSD
+- Network: 1Gbps+ with low latency
+- GPU: NVIDIA RTX 3060+ or AMD RX 6600+
 
 ## Installation
 
-### Prerequisites
-- Go 1.21 or higher
-- CUDA Toolkit (for NVIDIA GPU support)
-- OpenCL drivers (for AMD GPU support)
-- Redis (for distributed caching)
+### Binary Installation (Recommended)
 
-### Quick Start
+Download the latest release for your platform:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/otedama.git
-cd otedama
+# Linux
+wget https://github.com/shizukutanaka/Otedama/releases/latest/download/otedama-linux-amd64
+chmod +x otedama-linux-amd64
+sudo mv otedama-linux-amd64 /usr/local/bin/otedama
+
+# Windows
+# Download otedama-windows-amd64.exe from releases page
+
+# macOS
+wget https://github.com/shizukutanaka/Otedama/releases/latest/download/otedama-darwin-amd64
+chmod +x otedama-darwin-amd64
+sudo mv otedama-darwin-amd64 /usr/local/bin/otedama
+```
+
+### Build from Source
+
+Prerequisites:
+- Go 1.21+
+- GCC/Clang with C++17 support
+- CUDA Toolkit 12.0+ (for GPU mining)
+- Git
+
+```bash
+# Clone repository
+git clone https://github.com/shizukutanaka/Otedama.git
+cd Otedama
 
 # Install dependencies
 go mod download
 
-# Build the project
-go build -o otedama cmd/otedama/main.go
+# Build with all features
+make build-full
 
-# Run with default configuration
-./otedama
-
-# Run with custom config
-./otedama -config config.yaml
+# Or build with specific features
+make build-cpu      # CPU mining only
+make build-gpu      # GPU mining support
+make build-enterprise # All enterprise features
 ```
 
-## Configuration
+## Quick Start Guide
 
-### Basic Configuration
+### 1. Initial Setup
+
+```bash
+# Generate configuration
+otedama init
+
+# This creates:
+# - config.yaml (main configuration)
+# - wallet.key (ZKP wallet key)
+# - peers.json (P2P bootstrap nodes)
+```
+
+### 2. Configure Mining
+
+Edit `config.yaml`:
 
 ```yaml
-# config.yaml
+# Basic mining configuration
 mining:
+  mode: "auto"              # auto, manual, profit-switching
   algorithms:
+    - name: "ethash"
+      enabled: true
+      intensity: 80         # 1-100
+    - name: "randomx"
+      enabled: true
+      threads: 8
     - name: "kawpow"
       enabled: true
-    - name: "verthash"
+      gpu_only: true
+
+# Hardware configuration
+hardware:
+  cpu:
+    threads: 0              # 0 = auto-detect
+    affinity: true          # Pin threads to cores
+    huge_pages: true        # Enable huge pages
+  gpu:
+    - index: 0
       enabled: true
-  
-  workers:
-    gpu_threads: 2
-    cpu_threads: 4
+      memory_clock: 2100
+      core_clock: 1800
+      power_limit: 220
+      fan_speed: "auto"     # auto, 0-100
+  asic:
+    enabled: false
+    devices: []
 
+# P2P pool settings
 p2p:
-  port: 30303
-  max_peers: 50
+  enabled: true
+  mode: "hybrid"            # pure-p2p, hybrid, federated
+  listen: "0.0.0.0:3333"
+  max_peers: 100
   bootstrap_nodes:
-    - "enode://..."
+    - "seed1.otedama.network:3333"
+    - "seed2.otedama.network:3333"
+  
+# ZKP authentication
+zkp:
+  enabled: true
+  identity_proof: true      # Prove miner identity
+  compliance_proof: false   # Optional compliance proofs
+  reputation_threshold: 0.8 # Minimum reputation score
 
-security:
-  zkp_enabled: true
-  encryption: "aes-256-gcm"
+# Performance optimization
+optimization:
+  auto_tuning: true         # AI-powered auto-tuning
+  profit_switching: true    # Switch algorithms by profit
+  power_efficiency: "balanced" # performance, balanced, efficiency
+  
+# Advanced features
+features:
+  blockchain_integration: true
+  smart_payouts: true
+  renewable_energy: false
+  container_mode: false
+  hardware_monitoring: true
+  predictive_maintenance: true
 ```
 
-### Environment Variables
+### 3. Start Mining
 
 ```bash
-OTEDAMA_LOG_LEVEL=info
-OTEDAMA_DATA_DIR=/var/lib/otedama
-OTEDAMA_METRICS_PORT=9090
+# Start with default config
+otedama start
+
+# Start with specific config
+otedama start --config custom-config.yaml
+
+# Start in daemon mode
+otedama start --daemon --log-file otedama.log
+
+# Start with performance profiling
+otedama start --profile --profile-port 6060
 ```
 
-## Usage
+## Operating Modes
 
-### Starting a Mining Node
+### Solo Mining
+Mine directly to your wallet without a pool:
 
 ```bash
-# Start as a mining node
-./otedama mine --wallet YOUR_WALLET_ADDRESS
-
-# Start with specific algorithm
-./otedama mine --algo kawpow --wallet YOUR_WALLET_ADDRESS
-
-# Start with GPU selection
-./otedama mine --gpu 0,1 --wallet YOUR_WALLET_ADDRESS
+otedama solo --wallet YOUR_WALLET --algorithm ethash --rpc http://node.example.com:8545
 ```
 
-### Managing the Pool
+### Pool Mining
+Connect to traditional mining pools:
 
 ```bash
-# Start as pool operator
-./otedama pool --fee 1.0 --min-payout 0.1
-
-# View pool statistics
-./otedama stats
-
-# Monitor performance
-./otedama monitor
+otedama pool --url stratum+tcp://pool.example.com:3333 --wallet YOUR_WALLET --worker worker1
 ```
 
-### CLI Commands
+### P2P Pool Mining
+Join or create a P2P mining pool:
 
 ```bash
-# Node management
-otedama node status        # View node status
-otedama node peers         # List connected peers
-otedama node sync          # Force synchronization
+# Join existing P2P pool
+otedama p2p join --bootstrap peer1.example.com:3333,peer2.example.com:3333
 
-# Mining control
-otedama mining start       # Start mining
-otedama mining stop        # Stop mining
-otedama mining benchmark   # Run performance benchmark
-
-# Pool operations
-otedama pool stats         # View pool statistics
-otedama pool miners        # List active miners
-otedama pool payouts       # View payout history
+# Create new P2P pool
+otedama p2p create --name "MyPool" --fee 1.0 --min-payout 0.1
 ```
 
-## Architecture
-
-### System Components
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Otedama System                       │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
-│  │   Mining    │  │     P2P     │  │  Security   │   │
-│  │   Engine    │  │   Network   │  │   Layer     │   │
-│  └─────────────┘  └─────────────┘  └─────────────┘   │
-│                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
-│  │ Automation  │  │ Performance │  │ Monitoring  │   │
-│  │   Suite     │  │ Optimizer   │  │   System    │   │
-│  └─────────────┘  └─────────────┘  └─────────────┘   │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Design Principles
-
-1. **Performance First** (John Carmack)
-   - Lock-free data structures
-   - GPU acceleration
-   - Memory-mapped files
-   - Zero-copy operations
-
-2. **Clean Architecture** (Robert C. Martin)
-   - Dependency inversion
-   - Interface segregation
-   - Single responsibility
-   - Modular design
-
-3. **Simplicity** (Rob Pike)
-   - Clear, readable code
-   - Minimal dependencies
-   - Straightforward APIs
-   - No premature optimization
-
-## Performance
-
-### Benchmarks
-
-| Component | Operation | Performance |
-|-----------|-----------|-------------|
-| Hash Verification | GPU (RTX 3090) | 10M hashes/sec |
-| Share Processing | Lock-free Queue | 1M shares/sec |
-| Network Throughput | P2P Transfer | 10 Gbps |
-| Cache Hit Rate | Distributed Cache | 99.5% |
-
-### Optimization Tips
-
-1. **GPU Mining**
-   - Use dedicated GPUs for mining
-   - Ensure proper cooling
-   - Update drivers regularly
-
-2. **Network**
-   - Open required ports in firewall
-   - Use wired connection for stability
-   - Configure QoS for mining traffic
-
-3. **System**
-   - Disable CPU power saving
-   - Use performance governor
-   - Allocate sufficient RAM
-
-## Development
-
-### Building from Source
+### Enterprise Deployment
+Deploy at scale with orchestration:
 
 ```bash
-# Development build
-make dev
+# Generate Kubernetes manifests
+otedama deploy k8s --replicas 100 --namespace mining
 
-# Production build
-make build
+# Deploy with Docker Compose
+otedama deploy compose --scale 50
 
-# Run tests
-make test
-
-# Run benchmarks
-make bench
+# Deploy with auto-scaling
+otedama deploy k8s --autoscale --min 10 --max 1000 --target-cpu 80
 ```
 
-### Contributing
+## Management Interface
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+### Web Dashboard
+Access the web dashboard at `http://localhost:8080`
 
-### Code Style
+Features:
+- Real-time hashrate charts
+- Worker management
+- Temperature monitoring
+- Profit calculator
+- Alert configuration
 
-- Follow Go standard formatting
-- Use meaningful variable names
-- Write comprehensive tests
-- Document public APIs
-
-## Monitoring
-
-### Metrics
-
-The system exposes Prometheus metrics on port 9090:
-
-- `otedama_hashrate_total` - Total hashrate
-- `otedama_shares_accepted` - Accepted shares
-- `otedama_peers_connected` - Connected peers
-- `otedama_mining_efficiency` - Mining efficiency
-
-### Logging
-
-Structured logging with multiple levels:
+### REST API
 
 ```bash
-# Set log level
-export OTEDAMA_LOG_LEVEL=debug
+# Get mining statistics
+curl http://localhost:8080/api/v1/stats
 
-# Log format options
-export OTEDAMA_LOG_FORMAT=json  # or text
+# Manage workers
+curl http://localhost:8080/api/v1/workers
+curl -X POST http://localhost:8080/api/v1/workers/pause/gpu-0
+
+# Configure algorithms
+curl -X PUT http://localhost:8080/api/v1/algorithms/ethash \
+  -d '{"enabled": true, "intensity": 90}'
+
+# User management
+curl -X POST http://localhost:8080/api/v1/users \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"username": "operator1", "role": "operator"}'
+```
+
+### Command Line Interface
+
+```bash
+# Show status
+otedama status
+
+# List workers
+otedama workers list
+
+# Pause/resume mining
+otedama pause
+otedama resume
+
+# Switch algorithm
+otedama algo switch randomx
+
+# Check profits
+otedama profit --period 24h
+
+# Export statistics
+otedama stats export --format csv --output stats.csv
+```
+
+## Performance Optimization
+
+### CPU Optimization
+```bash
+# Enable huge pages (Linux)
+sudo sysctl -w vm.nr_hugepages=1280
+
+# Set CPU governor
+sudo cpupower frequency-set -g performance
+
+# Configure NUMA affinity
+otedama tune cpu --numa-node 0 --threads 32
+```
+
+### GPU Optimization
+```bash
+# Auto-tune GPU settings
+otedama tune gpu auto
+
+# Manual GPU tuning
+otedama tune gpu --device 0 --mem-clock 2150 --core-clock 1850 --power 230
+
+# Enable GPU monitoring
+otedama monitor gpu --interval 1s --alert-temp 85
+```
+
+### Network Optimization
+```bash
+# Configure protocol optimization
+otedama tune network --tcp-nodelay --quick-ack --buffer-size 4MB
+
+# Optimize connection pooling
+otedama tune network --pool-size 100 --keepalive 30s
+```
+
+## Advanced Features
+
+### Profit Switching
+```bash
+# Enable automatic profit switching
+otedama profit enable --interval 5m --threshold 10
+
+# Configure supported coins
+otedama profit add-coin --symbol BTC --algo sha256 --pool pool.example.com
+
+# View profitability analysis
+otedama profit analyze --period 24h
+```
+
+### Zero-Knowledge Proof Authentication
+```bash
+# Generate ZKP credentials
+otedama zkp generate --identity worker1
+
+# Enable ZKP authentication
+otedama config set auth.mode zkp
+
+# Verify ZKP status
+otedama zkp status
+```
+
+### Performance Monitoring
+```bash
+# Enable comprehensive monitoring
+otedama monitor enable --interval 1s
+
+# Configure alerting
+otedama monitor alert --cpu 90 --gpu-temp 85 --memory 95
+
+# Export metrics
+otedama monitor export --prometheus --port 9090
+```
+
+## Security
+
+### ZKP Authentication
+```bash
+# Generate ZKP identity
+otedama zkp generate-identity
+
+# Prove identity without revealing
+otedama zkp prove --identity wallet.key
+
+# Verify reputation
+otedama zkp verify-reputation --min-score 0.9
+```
+
+### Access Control
+```bash
+# Create roles
+otedama rbac create-role operator --permissions "mining.*,monitoring.view"
+otedama rbac create-role admin --permissions "*"
+
+# Assign users
+otedama rbac assign user1 operator
+otedama rbac assign admin1 admin
+
+# Enable MFA
+otedama security mfa enable --type totp
+```
+
+## Monitoring and Alerts
+
+### Prometheus Metrics
+Metrics available at `http://localhost:9090/metrics`:
+- `otedama_hashrate_total`
+- `otedama_shares_accepted`
+- `otedama_temperature_celsius`
+- `otedama_power_watts`
+- `otedama_earnings_total`
+
+### Alert Configuration
+```yaml
+alerts:
+  - name: "High Temperature"
+    condition: "temperature > 85"
+    action: "throttle"
+    notify: ["email", "webhook"]
+  
+  - name: "Low Hashrate"
+    condition: "hashrate < expected * 0.9"
+    action: "restart"
+    cooldown: 5m
+  
+  - name: "Hardware Failure"
+    condition: "device.status == 'error'"
+    action: "failover"
+    notify: ["sms", "email"]
 ```
 
 ## Troubleshooting
 
+### Diagnostic Commands
+```bash
+# Run diagnostics
+otedama diagnose
+
+# Check hardware
+otedama hardware test
+
+# Verify configuration
+otedama config validate
+
+# Analyze logs
+otedama logs analyze --errors --warnings
+
+# Generate debug report
+otedama debug report --output debug-report.zip
+```
+
 ### Common Issues
 
-1. **GPU Not Detected**
-   ```bash
-   # Check GPU status
-   ./otedama gpu list
-   
-   # Verify drivers
-   nvidia-smi  # For NVIDIA
-   clinfo      # For OpenCL
-   ```
+1. **Low Hashrate**
+```bash
+# Check for throttling
+otedama diagnose throttle
+
+# Reset to defaults
+otedama reset gpu --device 0
+
+# Run benchmark
+otedama benchmark --algorithm all
+```
 
 2. **Connection Issues**
-   ```bash
-   # Test connectivity
-   ./otedama net test
-   
-   # Check firewall
-   sudo ufw status
-   ```
+```bash
+# Test connectivity
+otedama network test
 
-3. **Performance Problems**
-   ```bash
-   # Run diagnostics
-   ./otedama diag
-   
-   # Profile performance
-   ./otedama profile --duration 60s
-   ```
+# Reset P2P connections
+otedama p2p reset
 
-## Security
+# Use fallback nodes
+otedama p2p fallback
+```
 
-### Security Features
+3. **Memory Errors**
+```bash
+# Check memory usage
+otedama memory check
 
-- Zero-knowledge proof authentication
-- End-to-end encryption
-- DDoS protection
-- Rate limiting
-- Anomaly detection
+# Enable swap (Linux)
+sudo fallocate -l 32G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
 
-### Reporting Security Issues
+## Best Practices
 
-Please report security vulnerabilities to: security@otedama.example.com
+### Production Deployment
+1. Use redundant power supplies
+2. Implement proper cooling (ambient < 25°C)
+3. Monitor 24/7 with alerts
+4. Regular maintenance schedule
+5. Automated failover configuration
+6. Backup configuration and wallets
 
-## License
+### Security Hardening
+1. Enable firewall rules
+2. Use strong authentication
+3. Regular security updates
+4. Audit logs monitoring
+5. Network isolation
+6. Encrypted communications
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Bitcoin Core developers
-- Ethereum community
-- Go programming language team
-- Open source mining software contributors
+### Performance Tuning
+1. Profile before optimizing
+2. Monitor thermals constantly
+3. Use quality PSUs (80+ Gold)
+4. Regular driver updates
+5. Clean hardware monthly
+6. Document all changes
 
 ## Support
 
-- Documentation: https://docs.otedama.example.com
-- Discord: https://discord.gg/otedama
-- Email: support@otedama.example.com
+### Documentation
+- User Guide: https://github.com/shizukutanaka/Otedama/wiki/User-Guide
+- API Reference: https://github.com/shizukutanaka/Otedama/wiki/API-Reference
+- Architecture: https://github.com/shizukutanaka/Otedama/wiki/Architecture
 
----
+### Community
+- GitHub Issues: https://github.com/shizukutanaka/Otedama/issues
+- GitHub Discussions: https://github.com/shizukutanaka/Otedama/discussions
 
-Built with ❤️ by the Otedama Team
+### Enterprise Support
+- Contact via GitHub Issues with [enterprise] tag
+- SLA: 24/7 support with 1-hour response
+- Training: Available on request
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+Licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+## Disclaimer
+
+Cryptocurrency mining involves financial risk. Users are responsible for:
+- Electricity costs and profitability calculations
+- Legal compliance in their jurisdiction  
+- Hardware warranty implications
+- Tax obligations on mining rewards
+
+Always conduct thorough research before mining.

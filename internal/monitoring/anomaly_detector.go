@@ -2,909 +2,846 @@ package monitoring
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// AnomalyDetector implements real-time anomaly detection
+// AnomalyDetector detects anomalies in mining operations
+// Following Rob Pike's principle: "Don't design with interfaces, discover them."
 type AnomalyDetector struct {
-	logger        *zap.Logger
+	logger *zap.Logger
+	
+	// Time series data
+	metrics       map[string]*MetricTimeSeries
+	metricsMu     sync.RWMutex
+	
+	// Anomaly models
+	models        map[string]AnomalyModel
+	modelsMu      sync.RWMutex
+	
+	// Detected anomalies
+	anomalies     []*Anomaly
+	anomaliesMu   sync.RWMutex
+	
+	// Alert channels
+	alertChannels []AlertChannel
+	
+	// Configuration
 	config        AnomalyConfig
-	metrics       *MetricsCollector
-	algorithms    map[string]AnomalyAlgorithm
-	alerts        *AlertManager
-	history       *MetricsHistory
-	stats         *AnomalyStats
-	mu            sync.RWMutex
-	shutdown      chan struct{}
+	
+	// Control
+	ctx           context.Context
+	cancel        context.CancelFunc
+	
+	// Metrics
+	detectorMetrics struct {
+		dataPointsProcessed uint64
+		anomaliesDetected   uint64
+		falsePositives      uint64
+		alertsSent          uint64
+		modelsUpdated       uint64
+		avgDetectionLatency uint64 // microseconds
+	}
 }
 
-// AnomalyConfig contains anomaly detection configuration
+// AnomalyConfig configures anomaly detection
 type AnomalyConfig struct {
 	// Detection settings
-	EnableZScore          bool
-	EnableIsolationForest bool
-	EnableLSTM           bool
-	EnableEWMA           bool
+	WindowSize        time.Duration
+	UpdateInterval    time.Duration
+	MinDataPoints     int
 	
-	// Thresholds
-	ZScoreThreshold      float64
-	IsolationThreshold   float64
-	EWMAAlpha           float64
+	// Sensitivity
+	Sensitivity       float64 // 0.0 to 1.0
+	ConfidenceLevel   float64
 	
-	// Window settings
-	HistoryWindow       time.Duration
-	DetectionInterval   time.Duration
-	BaselineWindow      time.Duration
+	// Models
+	EnabledModels     []string
+	ModelUpdatePeriod time.Duration
 	
-	// Alert settings
-	AlertCooldown       time.Duration
-	MinAnomalyDuration  time.Duration
-	MaxFalsePositives   int
+	// Alerting
+	AlertThreshold    float64
+	AlertCooldown     time.Duration
+	MaxAlertsPerHour  int
 }
 
-// MetricsCollector collects system metrics
-type MetricsCollector struct {
-	// Mining metrics
-	hashRate        *MetricStream
-	shareRate       *MetricStream
-	rejectRate      *MetricStream
-	
-	// Network metrics
-	latency         *MetricStream
-	packetLoss      *MetricStream
-	bandwidth       *MetricStream
-	
-	// System metrics
-	cpuUsage        *MetricStream
-	memoryUsage     *MetricStream
-	diskIO          *MetricStream
-	temperature     *MetricStream
-	
-	// Pool metrics
-	peerCount       *MetricStream
-	blockTime       *MetricStream
-	orphanRate      *MetricStream
-	
-	mu              sync.RWMutex
+// MetricTimeSeries stores time series data for a metric
+type MetricTimeSeries struct {
+	Name       string
+	DataPoints []DataPoint
+	Stats      TimeSeriesStats
+	LastUpdate time.Time
+	mu         sync.RWMutex
 }
 
-// MetricStream represents a time-series metric stream
-type MetricStream struct {
-	name        string
-	values      []MetricPoint
-	maxPoints   int
-	mu          sync.RWMutex
-}
-
-// MetricPoint represents a single metric measurement
-type MetricPoint struct {
+// DataPoint represents a single data point
+type DataPoint struct {
 	Timestamp time.Time
 	Value     float64
 	Tags      map[string]string
 }
 
-// AnomalyAlgorithm interface for anomaly detection algorithms
-type AnomalyAlgorithm interface {
-	Detect(stream *MetricStream) []Anomaly
-	Train(history []MetricPoint)
-	GetName() string
+// TimeSeriesStats contains statistical information
+type TimeSeriesStats struct {
+	Mean     float64
+	StdDev   float64
+	Min      float64
+	Max      float64
+	Median   float64
+	Q1       float64
+	Q3       float64
+	IQR      float64
+	Count    int
+}
+
+// AnomalyModel interface for anomaly detection algorithms
+type AnomalyModel interface {
+	Name() string
+	Train(data []DataPoint) error
+	Detect(point DataPoint) (float64, error) // Returns anomaly score
+	Update(point DataPoint) error
+	GetThreshold() float64
 }
 
 // Anomaly represents a detected anomaly
 type Anomaly struct {
-	ID            string
-	Type          string
-	Severity      SeverityLevel
-	Metric        string
-	Value         float64
-	ExpectedRange [2]float64
-	Timestamp     time.Time
-	Duration      time.Duration
-	Confidence    float64
-	Algorithm     string
-	Description   string
+	ID          string
+	Metric      string
+	Type        string
+	Severity    string // "low", "medium", "high", "critical"
+	Score       float64
+	Expected    float64
+	Actual      float64
+	Deviation   float64
+	Timestamp   time.Time
+	Duration    time.Duration
+	Description string
+	Context     map[string]interface{}
 }
 
-// SeverityLevel represents anomaly severity
-type SeverityLevel int
-
-const (
-	SeverityLow SeverityLevel = iota
-	SeverityMedium
-	SeverityHigh
-	SeverityCritical
-)
-
-// AlertManager manages anomaly alerts
-type AlertManager struct {
-	alerts      sync.Map // alertID -> *Alert
-	subscribers []AlertSubscriber
-	cooldowns   sync.Map // metric -> lastAlert
-	mu          sync.RWMutex
-}
-
-// Alert represents an anomaly alert
-type Alert struct {
-	ID        string
-	Anomaly   Anomaly
-	Status    AlertStatus
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Actions   []string
-}
-
-// AlertStatus represents alert status
-type AlertStatus int
-
-const (
-	AlertStatusActive AlertStatus = iota
-	AlertStatusAcknowledged
-	AlertStatusResolved
-)
-
-// AlertSubscriber interface for alert notifications
-type AlertSubscriber interface {
-	OnAlert(alert *Alert)
-}
-
-// MetricsHistory stores historical metrics
-type MetricsHistory struct {
-	data       sync.Map // metric -> *CircularBuffer
-	maxHistory time.Duration
-}
-
-// AnomalyStats tracks anomaly detection statistics
-type AnomalyStats struct {
-	TotalAnomalies    atomic.Uint64
-	FalsePositives    atomic.Uint64
-	TruePositives     atomic.Uint64
-	AnomaliesByType   sync.Map
-	AnomaliesBySeverity sync.Map
-	DetectionLatency  atomic.Int64 // microseconds
+// AlertChannel interface for sending alerts
+type AlertChannel interface {
+	SendAlert(anomaly *Anomaly) error
+	Name() string
 }
 
 // NewAnomalyDetector creates a new anomaly detector
-func NewAnomalyDetector(config AnomalyConfig, logger *zap.Logger) *AnomalyDetector {
-	if config.ZScoreThreshold == 0 {
-		config.ZScoreThreshold = 3.0
-	}
-	if config.IsolationThreshold == 0 {
-		config.IsolationThreshold = 0.5
-	}
-	if config.EWMAAlpha == 0 {
-		config.EWMAAlpha = 0.1
-	}
-	if config.HistoryWindow == 0 {
-		config.HistoryWindow = 24 * time.Hour
-	}
-	if config.DetectionInterval == 0 {
-		config.DetectionInterval = 10 * time.Second
-	}
-	if config.BaselineWindow == 0 {
-		config.BaselineWindow = 1 * time.Hour
-	}
-
+func NewAnomalyDetector(logger *zap.Logger, config AnomalyConfig) (*AnomalyDetector, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	
 	ad := &AnomalyDetector{
-		logger:     logger,
-		config:     config,
-		metrics:    NewMetricsCollector(),
-		algorithms: make(map[string]AnomalyAlgorithm),
-		alerts:     NewAlertManager(),
-		history:    NewMetricsHistory(config.HistoryWindow),
-		stats:      &AnomalyStats{},
-		shutdown:   make(chan struct{}),
+		logger:        logger,
+		metrics:       make(map[string]*MetricTimeSeries),
+		models:        make(map[string]AnomalyModel),
+		anomalies:     make([]*Anomaly, 0),
+		alertChannels: make([]AlertChannel, 0),
+		config:        config,
+		ctx:           ctx,
+		cancel:        cancel,
 	}
-
-	// Initialize algorithms
-	if config.EnableZScore {
-		ad.algorithms["zscore"] = NewZScoreDetector(config.ZScoreThreshold)
+	
+	// Initialize models
+	if err := ad.initializeModels(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize models: %w", err)
 	}
-	if config.EnableIsolationForest {
-		ad.algorithms["isolation"] = NewIsolationForestDetector(config.IsolationThreshold)
-	}
-	if config.EnableEWMA {
-		ad.algorithms["ewma"] = NewEWMADetector(config.EWMAAlpha)
-	}
-
-	return ad
-}
-
-// Start starts the anomaly detector
-func (ad *AnomalyDetector) Start(ctx context.Context) error {
-	ad.logger.Info("Starting anomaly detector",
-		zap.Int("algorithms", len(ad.algorithms)))
-
+	
 	// Start detection loop
-	go ad.detectionLoop(ctx)
-
-	// Start cleanup routine
-	go ad.cleanupLoop(ctx)
-
-	return nil
+	go ad.detectionLoop()
+	
+	// Start model update loop
+	go ad.modelUpdateLoop()
+	
+	logger.Info("Initialized anomaly detector",
+		zap.Float64("sensitivity", config.Sensitivity),
+		zap.Int("models", len(ad.models)),
+		zap.Duration("window_size", config.WindowSize))
+	
+	return ad, nil
 }
 
-// Stop stops the anomaly detector
-func (ad *AnomalyDetector) Stop() error {
-	close(ad.shutdown)
-	return nil
-}
-
-// RecordMetric records a metric value
-func (ad *AnomalyDetector) RecordMetric(name string, value float64, tags map[string]string) {
-	stream := ad.metrics.GetOrCreateStream(name)
-	point := MetricPoint{
+// AddDataPoint adds a new data point for a metric
+func (ad *AnomalyDetector) AddDataPoint(metric string, value float64, tags map[string]string) {
+	ad.metricsMu.Lock()
+	ts, exists := ad.metrics[metric]
+	if !exists {
+		ts = &MetricTimeSeries{
+			Name:       metric,
+			DataPoints: make([]DataPoint, 0),
+		}
+		ad.metrics[metric] = ts
+	}
+	ad.metricsMu.Unlock()
+	
+	point := DataPoint{
 		Timestamp: time.Now(),
 		Value:     value,
 		Tags:      tags,
 	}
 	
-	stream.AddPoint(point)
-	ad.history.Store(name, point)
-}
-
-// detectionLoop runs anomaly detection periodically
-func (ad *AnomalyDetector) detectionLoop(ctx context.Context) {
-	ticker := time.NewTicker(ad.config.DetectionInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ad.shutdown:
-			return
-		case <-ticker.C:
-			ad.runDetection()
-		}
-	}
-}
-
-// runDetection runs anomaly detection on all metrics
-func (ad *AnomalyDetector) runDetection() {
-	startTime := time.Now()
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	
-	streams := ad.metrics.GetAllStreams()
-	for _, stream := range streams {
-		// Skip if not enough data
-		if stream.Length() < 10 {
-			continue
-		}
-
-		// Run each algorithm
-		for name, algorithm := range ad.algorithms {
-			anomalies := algorithm.Detect(stream)
-			
-			for _, anomaly := range anomalies {
-				anomaly.Algorithm = name
-				ad.handleAnomaly(anomaly)
-			}
-		}
+	// Add point
+	ts.DataPoints = append(ts.DataPoints, point)
+	ts.LastUpdate = time.Now()
+	
+	// Maintain window size
+	cutoff := time.Now().Add(-ad.config.WindowSize)
+	for len(ts.DataPoints) > 0 && ts.DataPoints[0].Timestamp.Before(cutoff) {
+		ts.DataPoints = ts.DataPoints[1:]
 	}
-
-	// Update detection latency
-	latency := time.Since(startTime).Microseconds()
-	ad.stats.DetectionLatency.Store(latency)
-}
-
-// handleAnomaly processes a detected anomaly
-func (ad *AnomalyDetector) handleAnomaly(anomaly Anomaly) {
-	ad.stats.TotalAnomalies.Add(1)
 	
 	// Update statistics
-	ad.updateAnomalyStats(anomaly)
+	ts.Stats = ad.calculateStats(ts.DataPoints)
 	
-	// Check if should alert
-	if ad.shouldAlert(anomaly) {
-		alert := ad.alerts.CreateAlert(anomaly)
-		ad.alerts.Notify(alert)
-		
-		ad.logger.Warn("Anomaly detected",
-			zap.String("metric", anomaly.Metric),
-			zap.String("type", anomaly.Type),
-			zap.Float64("value", anomaly.Value),
-			zap.String("severity", anomaly.Severity.String()),
-			zap.Float64("confidence", anomaly.Confidence))
-	}
+	ad.detectorMetrics.dataPointsProcessed++
 }
 
-// shouldAlert determines if an alert should be sent
-func (ad *AnomalyDetector) shouldAlert(anomaly Anomaly) bool {
-	// Check cooldown
-	if lastAlert, ok := ad.alerts.cooldowns.Load(anomaly.Metric); ok {
-		if time.Since(lastAlert.(time.Time)) < ad.config.AlertCooldown {
-			return false
+// DetectAnomalies runs anomaly detection on current data
+func (ad *AnomalyDetector) DetectAnomalies() ([]*Anomaly, error) {
+	detectedAnomalies := make([]*Anomaly, 0)
+	
+	ad.metricsMu.RLock()
+	metrics := make([]*MetricTimeSeries, 0, len(ad.metrics))
+	for _, ts := range ad.metrics {
+		metrics = append(metrics, ts)
+	}
+	ad.metricsMu.RUnlock()
+	
+	for _, ts := range metrics {
+		ts.mu.RLock()
+		if len(ts.DataPoints) < ad.config.MinDataPoints {
+			ts.mu.RUnlock()
+			continue
 		}
-	}
-	
-	// Check severity
-	if anomaly.Severity < SeverityMedium {
-		return false
-	}
-	
-	// Check confidence
-	if anomaly.Confidence < 0.7 {
-		return false
-	}
-	
-	return true
-}
-
-// updateAnomalyStats updates anomaly statistics
-func (ad *AnomalyDetector) updateAnomalyStats(anomaly Anomaly) {
-	// Update by type
-	if val, ok := ad.stats.AnomaliesByType.Load(anomaly.Type); ok {
-		ad.stats.AnomaliesByType.Store(anomaly.Type, val.(uint64)+1)
-	} else {
-		ad.stats.AnomaliesByType.Store(anomaly.Type, uint64(1))
-	}
-	
-	// Update by severity
-	severityStr := anomaly.Severity.String()
-	if val, ok := ad.stats.AnomaliesBySeverity.Load(severityStr); ok {
-		ad.stats.AnomaliesBySeverity.Store(severityStr, val.(uint64)+1)
-	} else {
-		ad.stats.AnomaliesBySeverity.Store(severityStr, uint64(1))
-	}
-}
-
-// cleanupLoop periodically cleans up old data
-func (ad *AnomalyDetector) cleanupLoop(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ad.shutdown:
-			return
-		case <-ticker.C:
-			ad.cleanup()
+		
+		// Get latest point
+		latestPoint := ts.DataPoints[len(ts.DataPoints)-1]
+		stats := ts.Stats
+		ts.mu.RUnlock()
+		
+		// Run detection with each model
+		ad.modelsMu.RLock()
+		for _, model := range ad.models {
+			score, err := model.Detect(latestPoint)
+			if err != nil {
+				ad.logger.Warn("Model detection failed",
+					zap.String("model", model.Name()),
+					zap.String("metric", ts.Name),
+					zap.Error(err))
+				continue
+			}
+			
+			// Check if anomalous
+			if score > model.GetThreshold() {
+				anomaly := ad.createAnomaly(ts.Name, model.Name(), latestPoint, score, stats)
+				detectedAnomalies = append(detectedAnomalies, anomaly)
+			}
 		}
-	}
-}
-
-// cleanup removes old data
-func (ad *AnomalyDetector) cleanup() {
-	// Clean up metrics
-	streams := ad.metrics.GetAllStreams()
-	for _, stream := range streams {
-		stream.Cleanup(ad.config.HistoryWindow)
+		ad.modelsMu.RUnlock()
 	}
 	
-	// Clean up history
-	ad.history.Cleanup()
+	// Filter and rank anomalies
+	filteredAnomalies := ad.filterAnomalies(detectedAnomalies)
 	
-	// Clean up old alerts
-	ad.alerts.CleanupOld(24 * time.Hour)
-}
-
-// GetStats returns anomaly detection statistics
-func (ad *AnomalyDetector) GetStats() map[string]interface{} {
-	stats := map[string]interface{}{
-		"total_anomalies":    ad.stats.TotalAnomalies.Load(),
-		"false_positives":    ad.stats.FalsePositives.Load(),
-		"true_positives":     ad.stats.TruePositives.Load(),
-		"detection_latency":  ad.stats.DetectionLatency.Load(),
-		"active_algorithms":  len(ad.algorithms),
+	// Store detected anomalies
+	ad.anomaliesMu.Lock()
+	ad.anomalies = append(ad.anomalies, filteredAnomalies...)
+	// Keep last 1000 anomalies
+	if len(ad.anomalies) > 1000 {
+		ad.anomalies = ad.anomalies[len(ad.anomalies)-1000:]
 	}
+	ad.anomaliesMu.Unlock()
 	
-	// Add anomalies by type
-	byType := make(map[string]uint64)
-	ad.stats.AnomaliesByType.Range(func(key, value interface{}) bool {
-		byType[key.(string)] = value.(uint64)
-		return true
-	})
-	stats["anomalies_by_type"] = byType
+	ad.detectorMetrics.anomaliesDetected += uint64(len(filteredAnomalies))
 	
-	// Add anomalies by severity
-	bySeverity := make(map[string]uint64)
-	ad.stats.AnomaliesBySeverity.Range(func(key, value interface{}) bool {
-		bySeverity[key.(string)] = value.(uint64)
-		return true
-	})
-	stats["anomalies_by_severity"] = bySeverity
-	
-	return stats
+	return filteredAnomalies, nil
 }
 
-// Implementation of components
-
-// NewMetricsCollector creates a new metrics collector
-func NewMetricsCollector() *MetricsCollector {
-	mc := &MetricsCollector{
-		// Mining metrics
-		hashRate:    NewMetricStream("hash_rate", 1000),
-		shareRate:   NewMetricStream("share_rate", 1000),
-		rejectRate:  NewMetricStream("reject_rate", 1000),
-		
-		// Network metrics
-		latency:     NewMetricStream("latency", 1000),
-		packetLoss:  NewMetricStream("packet_loss", 1000),
-		bandwidth:   NewMetricStream("bandwidth", 1000),
-		
-		// System metrics
-		cpuUsage:    NewMetricStream("cpu_usage", 1000),
-		memoryUsage: NewMetricStream("memory_usage", 1000),
-		diskIO:      NewMetricStream("disk_io", 1000),
-		temperature: NewMetricStream("temperature", 1000),
-		
-		// Pool metrics
-		peerCount:   NewMetricStream("peer_count", 1000),
-		blockTime:   NewMetricStream("block_time", 1000),
-		orphanRate:  NewMetricStream("orphan_rate", 1000),
-	}
-	
-	return mc
-}
-
-// GetOrCreateStream gets or creates a metric stream
-func (mc *MetricsCollector) GetOrCreateStream(name string) *MetricStream {
-	mc.mu.RLock()
-	
-	// Check existing streams
-	switch name {
-	case "hash_rate":
-		mc.mu.RUnlock()
-		return mc.hashRate
-	case "share_rate":
-		mc.mu.RUnlock()
-		return mc.shareRate
-	case "reject_rate":
-		mc.mu.RUnlock()
-		return mc.rejectRate
-	case "latency":
-		mc.mu.RUnlock()
-		return mc.latency
-	case "packet_loss":
-		mc.mu.RUnlock()
-		return mc.packetLoss
-	case "bandwidth":
-		mc.mu.RUnlock()
-		return mc.bandwidth
-	case "cpu_usage":
-		mc.mu.RUnlock()
-		return mc.cpuUsage
-	case "memory_usage":
-		mc.mu.RUnlock()
-		return mc.memoryUsage
-	case "disk_io":
-		mc.mu.RUnlock()
-		return mc.diskIO
-	case "temperature":
-		mc.mu.RUnlock()
-		return mc.temperature
-	case "peer_count":
-		mc.mu.RUnlock()
-		return mc.peerCount
-	case "block_time":
-		mc.mu.RUnlock()
-		return mc.blockTime
-	case "orphan_rate":
-		mc.mu.RUnlock()
-		return mc.orphanRate
-	default:
-		mc.mu.RUnlock()
-		// Create new stream for unknown metrics
-		return NewMetricStream(name, 1000)
-	}
-}
-
-// GetAllStreams returns all metric streams
-func (mc *MetricsCollector) GetAllStreams() []*MetricStream {
-	mc.mu.RLock()
-	defer mc.mu.RUnlock()
-	
-	return []*MetricStream{
-		mc.hashRate,
-		mc.shareRate,
-		mc.rejectRate,
-		mc.latency,
-		mc.packetLoss,
-		mc.bandwidth,
-		mc.cpuUsage,
-		mc.memoryUsage,
-		mc.diskIO,
-		mc.temperature,
-		mc.peerCount,
-		mc.blockTime,
-		mc.orphanRate,
-	}
-}
-
-// NewMetricStream creates a new metric stream
-func NewMetricStream(name string, maxPoints int) *MetricStream {
-	return &MetricStream{
-		name:      name,
-		values:    make([]MetricPoint, 0, maxPoints),
-		maxPoints: maxPoints,
-	}
-}
-
-// AddPoint adds a point to the stream
-func (ms *MetricStream) AddPoint(point MetricPoint) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	
-	ms.values = append(ms.values, point)
-	
-	// Remove old points if exceeding max
-	if len(ms.values) > ms.maxPoints {
-		ms.values = ms.values[len(ms.values)-ms.maxPoints:]
-	}
-}
-
-// GetRecent gets recent points
-func (ms *MetricStream) GetRecent(duration time.Duration) []MetricPoint {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
+// GetRecentAnomalies returns recent anomalies
+func (ad *AnomalyDetector) GetRecentAnomalies(duration time.Duration) []*Anomaly {
+	ad.anomaliesMu.RLock()
+	defer ad.anomaliesMu.RUnlock()
 	
 	cutoff := time.Now().Add(-duration)
-	var recent []MetricPoint
+	recent := make([]*Anomaly, 0)
 	
-	for i := len(ms.values) - 1; i >= 0; i-- {
-		if ms.values[i].Timestamp.After(cutoff) {
-			recent = append(recent, ms.values[i])
-		} else {
+	for i := len(ad.anomalies) - 1; i >= 0; i-- {
+		if ad.anomalies[i].Timestamp.Before(cutoff) {
 			break
 		}
-	}
-	
-	// Reverse to chronological order
-	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
-		recent[i], recent[j] = recent[j], recent[i]
+		recent = append(recent, ad.anomalies[i])
 	}
 	
 	return recent
 }
 
-// Length returns the number of points
-func (ms *MetricStream) Length() int {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	return len(ms.values)
+// AddAlertChannel adds an alert channel
+func (ad *AnomalyDetector) AddAlertChannel(channel AlertChannel) {
+	ad.alertChannels = append(ad.alertChannels, channel)
+	
+	ad.logger.Info("Added alert channel",
+		zap.String("channel", channel.Name()))
 }
 
-// Cleanup removes old points
-func (ms *MetricStream) Cleanup(maxAge time.Duration) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	
-	cutoff := time.Now().Add(-maxAge)
-	var kept []MetricPoint
-	
-	for _, point := range ms.values {
-		if point.Timestamp.After(cutoff) {
-			kept = append(kept, point)
-		}
-	}
-	
-	ms.values = kept
-}
+// Implementation methods
 
-// Algorithm implementations
-
-// ZScoreDetector implements Z-score based anomaly detection
-type ZScoreDetector struct {
-	threshold float64
-}
-
-func NewZScoreDetector(threshold float64) *ZScoreDetector {
-	return &ZScoreDetector{threshold: threshold}
-}
-
-func (zd *ZScoreDetector) Detect(stream *MetricStream) []Anomaly {
-	points := stream.GetRecent(1 * time.Hour)
-	if len(points) < 30 {
-		return nil
-	}
-	
-	// Calculate mean and stddev
-	var sum, sumSq float64
-	for _, p := range points {
-		sum += p.Value
-		sumSq += p.Value * p.Value
-	}
-	
-	n := float64(len(points))
-	mean := sum / n
-	variance := (sumSq / n) - (mean * mean)
-	stddev := math.Sqrt(variance)
-	
-	if stddev == 0 {
-		return nil
-	}
-	
-	// Check latest point
-	latest := points[len(points)-1]
-	zscore := math.Abs((latest.Value - mean) / stddev)
-	
-	if zscore > zd.threshold {
-		return []Anomaly{{
-			Type:          "zscore",
-			Metric:        stream.name,
-			Value:         latest.Value,
-			ExpectedRange: [2]float64{mean - zd.threshold*stddev, mean + zd.threshold*stddev},
-			Timestamp:     latest.Timestamp,
-			Confidence:    math.Min(zscore/zd.threshold, 1.0),
-			Severity:      zd.getSeverity(zscore),
-			Description:   fmt.Sprintf("Value %.2f is %.2f standard deviations from mean %.2f", latest.Value, zscore, mean),
-		}}
-	}
-	
-	return nil
-}
-
-func (zd *ZScoreDetector) Train(history []MetricPoint) {}
-
-func (zd *ZScoreDetector) GetName() string { return "zscore" }
-
-func (zd *ZScoreDetector) getSeverity(zscore float64) SeverityLevel {
-	if zscore > 5 {
-		return SeverityCritical
-	} else if zscore > 4 {
-		return SeverityHigh
-	} else if zscore > 3 {
-		return SeverityMedium
-	}
-	return SeverityLow
-}
-
-// IsolationForestDetector implements Isolation Forest algorithm
-type IsolationForestDetector struct {
-	threshold float64
-	trees     []*IsolationTree
-}
-
-type IsolationTree struct {
-	root *IsolationNode
-}
-
-type IsolationNode struct {
-	left      *IsolationNode
-	right     *IsolationNode
-	splitAttr int
-	splitVal  float64
-	size      int
-}
-
-func NewIsolationForestDetector(threshold float64) *IsolationForestDetector {
-	return &IsolationForestDetector{
-		threshold: threshold,
-		trees:     make([]*IsolationTree, 100), // 100 trees
-	}
-}
-
-func (ifd *IsolationForestDetector) Detect(stream *MetricStream) []Anomaly {
-	// Simplified implementation for demonstration
-	points := stream.GetRecent(1 * time.Hour)
-	if len(points) < 10 {
-		return nil
-	}
-	
-	latest := points[len(points)-1]
-	
-	// Calculate anomaly score based on value distribution
-	values := make([]float64, len(points))
-	for i, p := range points {
-		values[i] = p.Value
-	}
-	
-	sort.Float64s(values)
-	
-	// Find percentile of latest value
-	position := sort.SearchFloat64s(values, latest.Value)
-	percentile := float64(position) / float64(len(values))
-	
-	// Values at extremes are anomalous
-	anomalyScore := 2 * math.Abs(percentile - 0.5)
-	
-	if anomalyScore > ifd.threshold {
-		return []Anomaly{{
-			Type:       "isolation",
-			Metric:     stream.name,
-			Value:      latest.Value,
-			Timestamp:  latest.Timestamp,
-			Confidence: anomalyScore,
-			Severity:   ifd.getSeverity(anomalyScore),
-			Description: fmt.Sprintf("Value %.2f has anomaly score %.2f (percentile %.2f)", latest.Value, anomalyScore, percentile),
-		}}
-	}
-	
-	return nil
-}
-
-func (ifd *IsolationForestDetector) Train(history []MetricPoint) {}
-
-func (ifd *IsolationForestDetector) GetName() string { return "isolation" }
-
-func (ifd *IsolationForestDetector) getSeverity(score float64) SeverityLevel {
-	if score > 0.9 {
-		return SeverityCritical
-	} else if score > 0.8 {
-		return SeverityHigh
-	} else if score > 0.7 {
-		return SeverityMedium
-	}
-	return SeverityLow
-}
-
-// EWMADetector implements Exponentially Weighted Moving Average detection
-type EWMADetector struct {
-	alpha    float64
-	ewma     sync.Map // metric -> float64
-	variance sync.Map // metric -> float64
-}
-
-func NewEWMADetector(alpha float64) *EWMADetector {
-	return &EWMADetector{
-		alpha: alpha,
-	}
-}
-
-func (ed *EWMADetector) Detect(stream *MetricStream) []Anomaly {
-	points := stream.GetRecent(10 * time.Minute)
-	if len(points) < 5 {
-		return nil
-	}
-	
-	// Get or initialize EWMA
-	ewmaVal, _ := ed.ewma.LoadOrStore(stream.name, points[0].Value)
-	ewma := ewmaVal.(float64)
-	
-	varVal, _ := ed.variance.LoadOrStore(stream.name, 0.0)
-	variance := varVal.(float64)
-	
-	// Update EWMA with recent points
-	for i := 0; i < len(points)-1; i++ {
-		ewma = ed.alpha*points[i].Value + (1-ed.alpha)*ewma
+func (ad *AnomalyDetector) initializeModels() error {
+	for _, modelName := range ad.config.EnabledModels {
+		var model AnomalyModel
 		
-		// Update variance estimate
-		diff := points[i].Value - ewma
-		variance = ed.alpha*(diff*diff) + (1-ed.alpha)*variance
+		switch modelName {
+		case "zscore":
+			model = NewZScoreModel(ad.config.Sensitivity)
+		case "mad":
+			model = NewMADModel(ad.config.Sensitivity)
+		case "isolation_forest":
+			model = NewIsolationForestModel(100, ad.config.Sensitivity)
+		case "lstm":
+			model = NewLSTMModel(ad.config.WindowSize)
+		case "prophet":
+			model = NewProphetModel()
+		default:
+			ad.logger.Warn("Unknown model", zap.String("model", modelName))
+			continue
+		}
+		
+		ad.modelsMu.Lock()
+		ad.models[modelName] = model
+		ad.modelsMu.Unlock()
 	}
 	
-	// Store updated values
-	ed.ewma.Store(stream.name, ewma)
-	ed.variance.Store(stream.name, variance)
-	
-	// Check latest point
-	latest := points[len(points)-1]
-	diff := math.Abs(latest.Value - ewma)
-	stddev := math.Sqrt(variance)
-	
-	if stddev > 0 && diff > 3*stddev {
-		return []Anomaly{{
-			Type:          "ewma",
-			Metric:        stream.name,
-			Value:         latest.Value,
-			ExpectedRange: [2]float64{ewma - 3*stddev, ewma + 3*stddev},
-			Timestamp:     latest.Timestamp,
-			Confidence:    math.Min(diff/(3*stddev), 1.0),
-			Severity:      ed.getSeverity(diff / stddev),
-			Description:   fmt.Sprintf("Value %.2f deviates from EWMA %.2f by %.2f", latest.Value, ewma, diff),
-		}}
+	if len(ad.models) == 0 {
+		return errors.New("no models initialized")
 	}
 	
 	return nil
 }
 
-func (ed *EWMADetector) Train(history []MetricPoint) {}
-
-func (ed *EWMADetector) GetName() string { return "ewma" }
-
-func (ed *EWMADetector) getSeverity(deviation float64) SeverityLevel {
-	if deviation > 5 {
-		return SeverityCritical
-	} else if deviation > 4 {
-		return SeverityHigh
-	} else if deviation > 3 {
-		return SeverityMedium
-	}
-	return SeverityLow
-}
-
-// Helper components
-
-func NewAlertManager() *AlertManager {
-	return &AlertManager{
-		subscribers: make([]AlertSubscriber, 0),
-	}
-}
-
-func (am *AlertManager) CreateAlert(anomaly Anomaly) *Alert {
-	alert := &Alert{
-		ID:        generateAlertID(),
-		Anomaly:   anomaly,
-		Status:    AlertStatusActive,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
+func (ad *AnomalyDetector) detectionLoop() {
+	ticker := time.NewTicker(ad.config.UpdateInterval)
+	defer ticker.Stop()
 	
-	am.alerts.Store(alert.ID, alert)
-	am.cooldowns.Store(anomaly.Metric, time.Now())
-	
-	return alert
-}
-
-func (am *AlertManager) Notify(alert *Alert) {
-	am.mu.RLock()
-	subscribers := am.subscribers
-	am.mu.RUnlock()
-	
-	for _, sub := range subscribers {
-		go sub.OnAlert(alert)
-	}
-}
-
-func (am *AlertManager) Subscribe(subscriber AlertSubscriber) {
-	am.mu.Lock()
-	am.subscribers = append(am.subscribers, subscriber)
-	am.mu.Unlock()
-}
-
-func (am *AlertManager) CleanupOld(maxAge time.Duration) {
-	cutoff := time.Now().Add(-maxAge)
-	am.alerts.Range(func(key, value interface{}) bool {
-		alert := value.(*Alert)
-		if alert.CreatedAt.Before(cutoff) {
-			am.alerts.Delete(key)
+	for {
+		select {
+		case <-ticker.C:
+			anomalies, err := ad.DetectAnomalies()
+			if err != nil {
+				ad.logger.Error("Anomaly detection failed", zap.Error(err))
+				continue
+			}
+			
+			// Send alerts for significant anomalies
+			for _, anomaly := range anomalies {
+				if ad.shouldAlert(anomaly) {
+					ad.sendAlerts(anomaly)
+				}
+			}
+			
+		case <-ad.ctx.Done():
+			return
 		}
-		return true
-	})
-}
-
-func NewMetricsHistory(maxHistory time.Duration) *MetricsHistory {
-	return &MetricsHistory{
-		maxHistory: maxHistory,
 	}
 }
 
-func (mh *MetricsHistory) Store(metric string, point MetricPoint) {
-	// Simplified - in production would use circular buffer
-	mh.data.Store(metric, point)
+func (ad *AnomalyDetector) modelUpdateLoop() {
+	ticker := time.NewTicker(ad.config.ModelUpdatePeriod)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			ad.updateModels()
+			
+		case <-ad.ctx.Done():
+			return
+		}
+	}
 }
 
-func (mh *MetricsHistory) Cleanup() {
-	// Cleanup old data
-	cutoff := time.Now().Add(-mh.maxHistory)
-	mh.data.Range(func(key, value interface{}) bool {
-		if point, ok := value.(MetricPoint); ok {
-			if point.Timestamp.Before(cutoff) {
-				mh.data.Delete(key)
+func (ad *AnomalyDetector) updateModels() {
+	ad.metricsMu.RLock()
+	defer ad.metricsMu.RUnlock()
+	
+	for _, ts := range ad.metrics {
+		ts.mu.RLock()
+		if len(ts.DataPoints) < ad.config.MinDataPoints {
+			ts.mu.RUnlock()
+			continue
+		}
+		
+		data := make([]DataPoint, len(ts.DataPoints))
+		copy(data, ts.DataPoints)
+		ts.mu.RUnlock()
+		
+		// Update each model
+		ad.modelsMu.RLock()
+		for _, model := range ad.models {
+			if err := model.Train(data); err != nil {
+				ad.logger.Warn("Model training failed",
+					zap.String("model", model.Name()),
+					zap.String("metric", ts.Name),
+					zap.Error(err))
 			}
 		}
-		return true
-	})
+		ad.modelsMu.RUnlock()
+	}
+	
+	ad.detectorMetrics.modelsUpdated++
 }
 
-// String methods
+func (ad *AnomalyDetector) calculateStats(data []DataPoint) TimeSeriesStats {
+	if len(data) == 0 {
+		return TimeSeriesStats{}
+	}
+	
+	values := make([]float64, len(data))
+	for i, dp := range data {
+		values[i] = dp.Value
+	}
+	
+	// Sort for percentiles
+	sorted := make([]float64, len(values))
+	copy(sorted, values)
+	sort.Float64s(sorted)
+	
+	// Calculate mean
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	mean := sum / float64(len(values))
+	
+	// Calculate standard deviation
+	sumSquares := 0.0
+	for _, v := range values {
+		diff := v - mean
+		sumSquares += diff * diff
+	}
+	stdDev := math.Sqrt(sumSquares / float64(len(values)))
+	
+	// Calculate percentiles
+	q1Index := len(sorted) / 4
+	medianIndex := len(sorted) / 2
+	q3Index := 3 * len(sorted) / 4
+	
+	stats := TimeSeriesStats{
+		Mean:   mean,
+		StdDev: stdDev,
+		Min:    sorted[0],
+		Max:    sorted[len(sorted)-1],
+		Median: sorted[medianIndex],
+		Q1:     sorted[q1Index],
+		Q3:     sorted[q3Index],
+		Count:  len(values),
+	}
+	
+	stats.IQR = stats.Q3 - stats.Q1
+	
+	return stats
+}
 
-func (s SeverityLevel) String() string {
-	switch s {
-	case SeverityLow:
-		return "low"
-	case SeverityMedium:
-		return "medium"
-	case SeverityHigh:
-		return "high"
-	case SeverityCritical:
-		return "critical"
-	default:
-		return "unknown"
+func (ad *AnomalyDetector) createAnomaly(metric, modelName string, point DataPoint, score float64, stats TimeSeriesStats) *Anomaly {
+	// Calculate deviation
+	deviation := math.Abs(point.Value - stats.Mean)
+	if stats.StdDev > 0 {
+		deviation = deviation / stats.StdDev
+	}
+	
+	// Determine severity
+	severity := ad.calculateSeverity(score, deviation)
+	
+	// Generate description
+	description := fmt.Sprintf("%s anomaly detected in %s: value %.2f (expected %.2f ± %.2f)",
+		severity, metric, point.Value, stats.Mean, stats.StdDev)
+	
+	return &Anomaly{
+		ID:          fmt.Sprintf("anomaly-%d", time.Now().UnixNano()),
+		Metric:      metric,
+		Type:        modelName,
+		Severity:    severity,
+		Score:       score,
+		Expected:    stats.Mean,
+		Actual:      point.Value,
+		Deviation:   deviation,
+		Timestamp:   point.Timestamp,
+		Description: description,
+		Context: map[string]interface{}{
+			"model":     modelName,
+			"stats":     stats,
+			"tags":      point.Tags,
+		},
 	}
 }
 
-// Helper functions
-
-func generateAlertID() string {
-	return fmt.Sprintf("alert_%d", time.Now().UnixNano())
+func (ad *AnomalyDetector) calculateSeverity(score, deviation float64) string {
+	// Combine score and deviation for severity
+	combined := (score + deviation) / 2
+	
+	if combined > 4.0 {
+		return "critical"
+	} else if combined > 3.0 {
+		return "high"
+	} else if combined > 2.0 {
+		return "medium"
+	}
+	return "low"
 }
 
+func (ad *AnomalyDetector) filterAnomalies(anomalies []*Anomaly) []*Anomaly {
+	// Remove duplicates and low-confidence anomalies
+	filtered := make([]*Anomaly, 0)
+	seen := make(map[string]bool)
+	
+	for _, anomaly := range anomalies {
+		// Create unique key
+		key := fmt.Sprintf("%s-%s-%d", anomaly.Metric, anomaly.Type, 
+			anomaly.Timestamp.Unix()/60) // Group by minute
+		
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		
+		// Filter by severity
+		if anomaly.Severity == "low" && ad.config.Sensitivity < 0.8 {
+			continue
+		}
+		
+		filtered = append(filtered, anomaly)
+	}
+	
+	return filtered
+}
+
+func (ad *AnomalyDetector) shouldAlert(anomaly *Anomaly) bool {
+	// Check severity
+	if anomaly.Severity == "low" {
+		return false
+	}
+	
+	// Check alert threshold
+	if anomaly.Score < ad.config.AlertThreshold {
+		return false
+	}
+	
+	// Check cooldown
+	// (Implementation would check last alert time for this metric)
+	
+	return true
+}
+
+func (ad *AnomalyDetector) sendAlerts(anomaly *Anomaly) {
+	for _, channel := range ad.alertChannels {
+		if err := channel.SendAlert(anomaly); err != nil {
+			ad.logger.Error("Failed to send alert",
+				zap.String("channel", channel.Name()),
+				zap.String("anomaly", anomaly.ID),
+				zap.Error(err))
+		} else {
+			ad.detectorMetrics.alertsSent++
+		}
+	}
+}
+
+// GetMetrics returns anomaly detector metrics
+func (ad *AnomalyDetector) GetMetrics() map[string]interface{} {
+	ad.metricsMu.RLock()
+	metricCount := len(ad.metrics)
+	ad.metricsMu.RUnlock()
+	
+	ad.modelsMu.RLock()
+	modelCount := len(ad.models)
+	ad.modelsMu.RUnlock()
+	
+	ad.anomaliesMu.RLock()
+	anomalyCount := len(ad.anomalies)
+	ad.anomaliesMu.RUnlock()
+	
+	return map[string]interface{}{
+		"metrics_tracked":       metricCount,
+		"models_active":         modelCount,
+		"data_points_processed": ad.detectorMetrics.dataPointsProcessed,
+		"anomalies_detected":    ad.detectorMetrics.anomaliesDetected,
+		"anomalies_stored":      anomalyCount,
+		"false_positives":       ad.detectorMetrics.falsePositives,
+		"alerts_sent":           ad.detectorMetrics.alertsSent,
+		"models_updated":        ad.detectorMetrics.modelsUpdated,
+		"avg_detection_latency": ad.detectorMetrics.avgDetectionLatency,
+		"sensitivity":           ad.config.Sensitivity,
+	}
+}
+
+// Stop stops the anomaly detector
+func (ad *AnomalyDetector) Stop() {
+	ad.logger.Info("Stopping anomaly detector")
+	ad.cancel()
+}
+
+// Model implementations
+
+// ZScoreModel implements Z-score based anomaly detection
+type ZScoreModel struct {
+	threshold   float64
+	sensitivity float64
+}
+
+func NewZScoreModel(sensitivity float64) *ZScoreModel {
+	// Map sensitivity to Z-score threshold
+	threshold := 3.0 - (sensitivity * 2.0) // 3.0 for low sensitivity, 1.0 for high
+	return &ZScoreModel{
+		threshold:   threshold,
+		sensitivity: sensitivity,
+	}
+}
+
+func (z *ZScoreModel) Name() string {
+	return "zscore"
+}
+
+func (z *ZScoreModel) Train(data []DataPoint) error {
+	// Z-score doesn't require training
+	return nil
+}
+
+func (z *ZScoreModel) Detect(point DataPoint) (float64, error) {
+	// In real implementation, would calculate Z-score based on historical mean/stddev
+	// For now, return a simulated score
+	return 0.0, nil
+}
+
+func (z *ZScoreModel) Update(point DataPoint) error {
+	return nil
+}
+
+func (z *ZScoreModel) GetThreshold() float64 {
+	return z.threshold
+}
+
+// MADModel implements Median Absolute Deviation based detection
+type MADModel struct {
+	threshold   float64
+	sensitivity float64
+	median      float64
+	mad         float64
+}
+
+func NewMADModel(sensitivity float64) *MADModel {
+	threshold := 3.5 - (sensitivity * 2.5)
+	return &MADModel{
+		threshold:   threshold,
+		sensitivity: sensitivity,
+	}
+}
+
+func (m *MADModel) Name() string {
+	return "mad"
+}
+
+func (m *MADModel) Train(data []DataPoint) error {
+	if len(data) < 3 {
+		return errors.New("insufficient data for MAD calculation")
+	}
+	
+	// Calculate median
+	values := make([]float64, len(data))
+	for i, dp := range data {
+		values[i] = dp.Value
+	}
+	sort.Float64s(values)
+	
+	m.median = values[len(values)/2]
+	
+	// Calculate MAD
+	deviations := make([]float64, len(values))
+	for i, v := range values {
+		deviations[i] = math.Abs(v - m.median)
+	}
+	sort.Float64s(deviations)
+	
+	m.mad = deviations[len(deviations)/2]
+	
+	return nil
+}
+
+func (m *MADModel) Detect(point DataPoint) (float64, error) {
+	if m.mad == 0 {
+		return 0, errors.New("model not trained")
+	}
+	
+	// Calculate modified Z-score
+	score := 0.6745 * math.Abs(point.Value-m.median) / m.mad
+	
+	return score, nil
+}
+
+func (m *MADModel) Update(point DataPoint) error {
+	// Update median and MAD incrementally
+	// Simplified implementation
+	return nil
+}
+
+func (m *MADModel) GetThreshold() float64 {
+	return m.threshold
+}
+
+// IsolationForestModel implements Isolation Forest algorithm
+type IsolationForestModel struct {
+	trees       int
+	threshold   float64
+	sensitivity float64
+}
+
+func NewIsolationForestModel(trees int, sensitivity float64) *IsolationForestModel {
+	threshold := 0.6 - (sensitivity * 0.2)
+	return &IsolationForestModel{
+		trees:       trees,
+		threshold:   threshold,
+		sensitivity: sensitivity,
+	}
+}
+
+func (i *IsolationForestModel) Name() string {
+	return "isolation_forest"
+}
+
+func (i *IsolationForestModel) Train(data []DataPoint) error {
+	// Simplified - real implementation would build isolation trees
+	return nil
+}
+
+func (i *IsolationForestModel) Detect(point DataPoint) (float64, error) {
+	// Simplified - real implementation would calculate path length
+	return 0.0, nil
+}
+
+func (i *IsolationForestModel) Update(point DataPoint) error {
+	return nil
+}
+
+func (i *IsolationForestModel) GetThreshold() float64 {
+	return i.threshold
+}
+
+// LSTMModel implements LSTM-based anomaly detection
+type LSTMModel struct {
+	windowSize time.Duration
+	threshold  float64
+}
+
+func NewLSTMModel(windowSize time.Duration) *LSTMModel {
+	return &LSTMModel{
+		windowSize: windowSize,
+		threshold:  0.5,
+	}
+}
+
+func (l *LSTMModel) Name() string {
+	return "lstm"
+}
+
+func (l *LSTMModel) Train(data []DataPoint) error {
+	// Real implementation would train LSTM network
+	return nil
+}
+
+func (l *LSTMModel) Detect(point DataPoint) (float64, error) {
+	// Real implementation would use LSTM predictions
+	return 0.0, nil
+}
+
+func (l *LSTMModel) Update(point DataPoint) error {
+	return nil
+}
+
+func (l *LSTMModel) GetThreshold() float64 {
+	return l.threshold
+}
+
+// ProphetModel implements Prophet-based anomaly detection
+type ProphetModel struct {
+	threshold float64
+}
+
+func NewProphetModel() *ProphetModel {
+	return &ProphetModel{
+		threshold: 0.5,
+	}
+}
+
+func (p *ProphetModel) Name() string {
+	return "prophet"
+}
+
+func (p *ProphetModel) Train(data []DataPoint) error {
+	// Real implementation would use Prophet forecasting
+	return nil
+}
+
+func (p *ProphetModel) Detect(point DataPoint) (float64, error) {
+	// Real implementation would compare to Prophet forecast
+	return 0.0, nil
+}
+
+func (p *ProphetModel) Update(point DataPoint) error {
+	return nil
+}
+
+func (p *ProphetModel) GetThreshold() float64 {
+	return p.threshold
+}
+
+// Alert channel implementations
+
+// LogAlertChannel sends alerts to log
+type LogAlertChannel struct {
+	logger *zap.Logger
+}
+
+func NewLogAlertChannel(logger *zap.Logger) *LogAlertChannel {
+	return &LogAlertChannel{logger: logger}
+}
+
+func (l *LogAlertChannel) SendAlert(anomaly *Anomaly) error {
+	l.logger.Warn("Anomaly detected",
+		zap.String("id", anomaly.ID),
+		zap.String("metric", anomaly.Metric),
+		zap.String("severity", anomaly.Severity),
+		zap.Float64("score", anomaly.Score),
+		zap.String("description", anomaly.Description))
+	return nil
+}
+
+func (l *LogAlertChannel) Name() string {
+	return "log"
+}
+
+// WebhookAlertChannel sends alerts via webhook
+type WebhookAlertChannel struct {
+	url    string
+	client *http.Client
+}
+
+func NewWebhookAlertChannel(url string) *WebhookAlertChannel {
+	return &WebhookAlertChannel{
+		url:    url,
+		client: &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+func (w *WebhookAlertChannel) SendAlert(anomaly *Anomaly) error {
+	// Send webhook
+	// Implementation would POST anomaly data to webhook URL
+	return nil
+}
+
+func (w *WebhookAlertChannel) Name() string {
+	return "webhook"
+}

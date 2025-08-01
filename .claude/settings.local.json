@@ -38,7 +38,11 @@
       "Bash(bash:*)",
       "Bash(git remote set-url:*)",
       "Bash(./cleanup_tests.sh:*)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(git config:*)",
+      "Bash(tree:*)",
+      "Bash(./scripts/optimize_code.sh:*)",
+      "Bash(dos2unix:*)"
     ],
     "deny": []
   }

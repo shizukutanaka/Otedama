@@ -3,14 +3,19 @@ package stratum
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/zkp"
 	"go.uber.org/zap"
 )
 
@@ -50,6 +55,12 @@ type Config struct {
 	// Security settings
 	RateLimit      int           `validate:"min=1,max=10000"`
 	MaxMessageSize int           `validate:"min=1024,max=1048576"`
+	
+	// Authentication settings
+	AuthMode       AuthenticationMode
+	Username       string
+	Password       string
+	Secret         string // For dynamic token generation
 }
 
 // Callbacks contains callback functions for Stratum events
@@ -58,6 +69,18 @@ type Callbacks struct {
 	OnGetJob func() *Job
 	OnAuth   func(string, string) error
 }
+
+// AuthenticationMode represents different authentication modes
+type AuthenticationMode string
+
+const (
+	AuthModeNone     AuthenticationMode = "none"
+	AuthModeStatic   AuthenticationMode = "static"
+	AuthModeDynamic  AuthenticationMode = "dynamic"
+	AuthModeDatabase AuthenticationMode = "database"
+	AuthModeWallet   AuthenticationMode = "wallet"
+	AuthModeZKP      AuthenticationMode = "zkp"
+)
 
 // Message represents a Stratum message - optimized for JSON-RPC
 type Message struct {
@@ -195,6 +218,15 @@ type StratumServer struct {
 	// Rate limiting
 	rateLimiter *StratumRateLimiter
 	
+	// Advanced difficulty adjustment
+	difficultyAdjuster *DifficultyAdjuster
+	
+	// Reputation manager
+	reputationManager *ReputationManager
+	
+	// Compliance checker
+	complianceChecker *ComplianceChecker
+	
 	// Lifecycle
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -240,6 +272,22 @@ func NewServer(logger *zap.Logger, config *Config) (Server, error) {
 		maxRate: config.RateLimit,
 		logger:  logger.With(zap.String("component", "rate_limiter")),
 	}
+	
+	// Initialize advanced difficulty adjuster if VarDiff is enabled
+	if config.VarDiff {
+		diffConfig := DefaultDifficultyConfig()
+		diffConfig.InitialDiff = config.Difficulty
+		diffConfig.MinDiff = config.MinDifficulty
+		diffConfig.MaxDiff = config.MaxDifficulty
+		diffConfig.TargetTime = config.TargetTime.Seconds()
+		server.difficultyAdjuster = NewDifficultyAdjuster(diffConfig)
+	}
+	
+	// Initialize reputation manager
+	server.reputationManager = NewReputationManager()
+	
+	// Initialize compliance checker
+	server.complianceChecker = NewComplianceChecker()
 	
 	// Initialize default job
 	server.currentJob.Store(&Job{
@@ -560,6 +608,8 @@ func (s *StratumServer) processMessage(client *Client, message *Message) *Messag
 		return s.handleSubmit(client, message)
 	case "mining.suggest_difficulty":
 		return s.handleSuggestDifficulty(client, message)
+	case "mining.zkp_auth":
+		return s.handleZKPAuthMessage(client, message)
 	default:
 		return &Message{
 			ID:    message.ID,
@@ -599,6 +649,58 @@ func (s *StratumServer) handleSubscribe(client *Client, message *Message) *Messa
 	}
 }
 
+func (s *StratumServer) handleZKPAuthMessage(client *Client, message *Message) *Message {
+	params, ok := message.Params.([]interface{})
+	if !ok || len(params) < 2 {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: "Invalid parameters"},
+		}
+	}
+	
+	workerName, ok := params[0].(string)
+	if !ok {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: "Invalid worker name"},
+		}
+	}
+	
+	proofData, ok := params[1].(map[string]interface{})
+	if !ok {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: "Invalid proof data"},
+		}
+	}
+	
+	// Verify ZKP proof
+	verified, err := s.verifyZKPProof(workerName, proofData)
+	if err != nil {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: fmt.Sprintf("ZKP verification failed: %v", err)},
+		}
+	}
+	
+	if !verified {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: "Invalid ZKP proof"},
+		}
+	}
+	
+	// ZKP authentication successful
+	client.WorkerName = workerName
+	client.Authorized.Store(true)
+	s.stats.AuthorizedClients.Add(1)
+	
+	return &Message{
+		ID:     message.ID,
+		Result: true,
+	}
+}
+
 func (s *StratumServer) handleAuthorize(client *Client, message *Message) *Message {
 	params, ok := message.Params.([]interface{})
 	if !ok || len(params) < 2 {
@@ -618,9 +720,25 @@ func (s *StratumServer) handleAuthorize(client *Client, message *Message) *Messa
 		}
 	}
 	
-	// Authenticate via callback
+	// Authenticate based on configured mode
 	var authError error
-	if s.callbacks != nil && s.callbacks.OnAuth != nil {
+	
+	if s.config.AuthMode == AuthModeZKP {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: "Use ZKP authentication method"},
+		}
+	}
+	
+	authorized, err := s.authenticateWorker(username, password, s.config.AuthMode)
+	if err != nil {
+		authError = err
+	} else if !authorized {
+		authError = fmt.Errorf("authentication failed")
+	}
+	
+	// Fallback to callback if available
+	if authError != nil && s.callbacks != nil && s.callbacks.OnAuth != nil {
 		authError = s.callbacks.OnAuth(username, password)
 	}
 	
@@ -640,6 +758,9 @@ func (s *StratumServer) handleAuthorize(client *Client, message *Message) *Messa
 	// Authorization successful
 	client.WorkerName = username
 	client.Authorized.Store(true)
+	
+	// Update reputation score for successful auth
+	s.reputationManager.UpdateScore(username, 1.0)
 	
 	s.logger.Debug("Client authorized", 
 		zap.String("client_id", client.ID),
@@ -923,6 +1044,55 @@ func (s *StratumServer) difficultyAdjuster() {
 }
 
 func (s *StratumServer) adjustDifficulties() {
+	if s.difficultyAdjuster == nil {
+		// Fallback to simple adjustment
+		s.simpleAdjustDifficulties()
+		return
+	}
+	
+	now := time.Now()
+	
+	s.clients.Range(func(key, value interface{}) bool {
+		client := value.(*Client)
+		
+		if !client.Authorized.Load() {
+			return true
+		}
+		
+		// Build worker stats
+		stats := &WorkerStats{
+			LastShareTime:   now,
+			ShareCount:      client.SharesSubmitted.Load(),
+			CurrentDiff:     client.Difficulty.Load().(float64),
+			AverageHashRate: float64(client.CurrentHashRate.Load()),
+			ShareTimes:      s.getClientShareTimes(client),
+		}
+		
+		// Use advanced difficulty adjustment
+		newDiff := s.difficultyAdjuster.AdjustDifficulty(stats)
+		
+		// Apply if different
+		currentDiff := client.Difficulty.Load().(float64)
+		if newDiff != currentDiff {
+			client.Difficulty.Store(newDiff)
+			client.LastDiffAdjust.Store(now.Unix())
+			s.sendDifficulty(client, newDiff)
+			
+			// Record share for history
+			s.difficultyAdjuster.RecordShare(now, newDiff, true)
+			
+			s.logger.Debug("Adjusted difficulty (advanced)", 
+				zap.String("client_id", client.ID),
+				zap.Float64("old_diff", currentDiff),
+				zap.Float64("new_diff", newDiff),
+			)
+		}
+		
+		return true
+	})
+}
+
+func (s *StratumServer) simpleAdjustDifficulties() {
 	now := time.Now().Unix()
 	
 	s.clients.Range(func(key, value interface{}) bool {
@@ -935,7 +1105,7 @@ func (s *StratumServer) adjustDifficulties() {
 		// Check if adjustment is needed
 		lastAdjust := client.LastDiffAdjust.Load()
 		if now-lastAdjust < int64(s.config.TargetTime.Seconds()*2) {
-			return true // Too soon for adjustment
+			return true
 		}
 		
 		// Calculate new difficulty based on share rate
@@ -953,12 +1123,12 @@ func (s *StratumServer) adjustDifficulties() {
 		}
 		
 		// Apply if significantly different
-		if abs(newDiff-currentDiff)/currentDiff > 0.1 { // 10% threshold
+		if abs(newDiff-currentDiff)/currentDiff > 0.1 {
 			client.Difficulty.Store(newDiff)
 			client.LastDiffAdjust.Store(now)
 			s.sendDifficulty(client, newDiff)
 			
-			s.logger.Debug("Adjusted difficulty", 
+			s.logger.Debug("Adjusted difficulty (simple)", 
 				zap.String("client_id", client.ID),
 				zap.Float64("old_diff", currentDiff),
 				zap.Float64("new_diff", newDiff),
@@ -967,6 +1137,17 @@ func (s *StratumServer) adjustDifficulties() {
 		
 		return true
 	})
+}
+
+func (s *StratumServer) getClientShareTimes(client *Client) []time.Duration {
+	// TODO: Implement actual share time tracking
+	// For now, return estimated times based on share rate
+	shareRate := calculateShareRate(client)
+	if shareRate > 0 {
+		avgTime := time.Duration(1.0/shareRate) * time.Second
+		return []time.Duration{avgTime, avgTime, avgTime}
+	}
+	return []time.Duration{}
 }
 
 func (s *StratumServer) closeAllClients() {
@@ -1075,4 +1256,424 @@ func abs(x float64) float64 {
 		return -x
 	}
 	return x
+}
+
+// verifyZKPProof verifies Zero Knowledge Proof
+func (s *StratumServer) verifyZKPProof(workerName string, proofData map[string]interface{}) (bool, error) {
+	proof, ok := proofData["proof"].(string)
+	if !ok {
+		return false, fmt.Errorf("missing proof")
+	}
+	
+	challenge, ok := proofData["challenge"].(string)
+	if !ok {
+		return false, fmt.Errorf("missing challenge")
+	}
+	
+	// Verify using the unified ZKP system
+	zkpSystem, err := zkp.NewUnifiedZKPKYC(s.logger, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create ZKP system: %w", err)
+	}
+	
+	verificationData := map[string]interface{}{
+		"proof": proof,
+		"challenge": challenge,
+		"worker": workerName,
+	}
+	
+	return zkpSystem.VerifyIdentity(workerName, verificationData)
+}
+
+// authenticateWorker performs authentication based on configured mode
+func (s *StratumServer) authenticateWorker(workerName, password string, authMode AuthenticationMode) (bool, error) {
+	switch authMode {
+	case AuthModeNone:
+		return true, nil
+		
+	case AuthModeStatic:
+		return s.authenticateStatic(workerName, password)
+		
+	case AuthModeDynamic:
+		return s.authenticateDynamic(workerName, password)
+		
+	case AuthModeDatabase:
+		return s.authenticateDatabase(workerName, password)
+		
+	case AuthModeWallet:
+		return s.authenticateWallet(workerName, password)
+		
+	case AuthModeZKP:
+		return false, fmt.Errorf("use ZKP auth method")
+		
+	default:
+		return false, fmt.Errorf("unknown authentication mode: %s", authMode)
+	}
+}
+
+// authenticateStatic performs static username/password authentication
+func (s *StratumServer) authenticateStatic(workerName, password string) (bool, error) {
+	if s.config.Username == "" {
+		return true, nil
+	}
+	
+	expectedHash := sha256.Sum256([]byte(s.config.Password))
+	providedHash := sha256.Sum256([]byte(password))
+	
+	if subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) == 1 {
+		return true, nil
+	}
+	
+	return false, fmt.Errorf("invalid credentials")
+}
+
+// authenticateDynamic performs dynamic token-based authentication
+func (s *StratumServer) authenticateDynamic(workerName, token string) (bool, error) {
+	now := time.Now().Unix()
+	window := int64(300) // 5 minute window
+	
+	for i := int64(-1); i <= 1; i++ {
+		timestamp := now + (i * window)
+		expectedToken := s.generateDynamicToken(workerName, timestamp)
+		
+		if subtle.ConstantTimeCompare([]byte(expectedToken), []byte(token)) == 1 {
+			return true, nil
+		}
+	}
+	
+	return false, fmt.Errorf("invalid or expired token")
+}
+
+// generateDynamicToken generates a time-based token
+func (s *StratumServer) generateDynamicToken(workerName string, timestamp int64) string {
+	data := fmt.Sprintf("%s:%d:%s", workerName, timestamp, s.config.Secret)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
+}
+
+// authenticateDatabase performs database-backed authentication
+func (s *StratumServer) authenticateDatabase(workerName, password string) (bool, error) {
+	// TODO: Implement database authentication
+	return false, fmt.Errorf("database authentication not implemented")
+}
+
+// authenticateWallet performs wallet signature-based authentication
+func (s *StratumServer) authenticateWallet(workerName, signature string) (bool, error) {
+	// TODO: Implement wallet signature verification
+	return false, fmt.Errorf("wallet authentication not implemented")
+}
+
+// ReputationManager manages worker reputation scores
+type ReputationManager struct {
+	scores map[string]float64
+	mu     sync.RWMutex
+}
+
+// NewReputationManager creates a new reputation manager
+func NewReputationManager() *ReputationManager {
+	return &ReputationManager{
+		scores: make(map[string]float64),
+	}
+}
+
+// UpdateScore updates a worker's reputation score
+func (rm *ReputationManager) UpdateScore(workerID string, delta float64) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	
+	current := rm.scores[workerID]
+	newScore := current + delta
+	
+	// Clamp between 0 and 100
+	if newScore < 0 {
+		newScore = 0
+	} else if newScore > 100 {
+		newScore = 100
+	}
+	
+	rm.scores[workerID] = newScore
+}
+
+// GetScore returns a worker's reputation score
+func (rm *ReputationManager) GetScore(workerID string) float64 {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	
+	score, exists := rm.scores[workerID]
+	if !exists {
+		return 50.0 // Default neutral score
+	}
+	
+	return score
+}
+
+// ComplianceChecker checks if operations comply with regulations
+type ComplianceChecker struct {
+	rules []ComplianceRule
+}
+
+// ComplianceRule represents a compliance rule
+type ComplianceRule interface {
+	Check(workerID string, operation string) (bool, string)
+}
+
+// NewComplianceChecker creates a new compliance checker
+func NewComplianceChecker() *ComplianceChecker {
+	return &ComplianceChecker{
+		rules: []ComplianceRule{},
+	}
+}
+
+// CheckCompliance verifies if an operation is compliant
+func (cc *ComplianceChecker) CheckCompliance(workerID string, operation string) (bool, []string) {
+	var violations []string
+	
+	for _, rule := range cc.rules {
+		compliant, reason := rule.Check(workerID, operation)
+		if !compliant {
+			violations = append(violations, reason)
+		}
+	}
+	
+	return len(violations) == 0, violations
+}
+
+// DifficultyAdjuster manages advanced difficulty adjustment
+type DifficultyAdjuster struct {
+	config       DifficultyConfig
+	shareHistory *ShareHistory
+	mu           sync.RWMutex
+}
+
+// DifficultyConfig contains difficulty adjustment settings
+type DifficultyConfig struct {
+	InitialDiff     float64
+	MinDiff         float64
+	MaxDiff         float64
+	TargetTime      float64
+	RetargetTime    float64
+	VariancePercent float64
+	EnableVarDiff   bool
+	EnableJumpDiff  bool
+	MaxJumpFactor   float64
+	SmoothingFactor float64
+	ShareBufferSize int
+	WindowSize      time.Duration
+}
+
+// ShareHistory tracks share submission history
+type ShareHistory struct {
+	shares     []ShareRecord
+	maxSize    int
+	currentIdx int
+	mu         sync.RWMutex
+}
+
+// ShareRecord represents a share submission record
+type ShareRecord struct {
+	Timestamp  time.Time
+	Difficulty float64
+	Valid      bool
+}
+
+// WorkerStats tracks worker performance statistics
+type WorkerStats struct {
+	LastShareTime   time.Time
+	ShareCount      uint64
+	CurrentDiff     float64
+	AverageHashRate float64
+	ShareTimes      []time.Duration
+}
+
+// NewDifficultyAdjuster creates a new difficulty adjuster
+func NewDifficultyAdjuster(config DifficultyConfig) *DifficultyAdjuster {
+	return &DifficultyAdjuster{
+		config: config,
+		shareHistory: &ShareHistory{
+			shares:  make([]ShareRecord, config.ShareBufferSize),
+			maxSize: config.ShareBufferSize,
+		},
+	}
+}
+
+// DefaultDifficultyConfig returns default difficulty configuration
+func DefaultDifficultyConfig() DifficultyConfig {
+	return DifficultyConfig{
+		InitialDiff:     1000.0,
+		MinDiff:         100.0,
+		MaxDiff:         1000000.0,
+		TargetTime:      10.0,
+		RetargetTime:    60.0,
+		VariancePercent: 30.0,
+		EnableVarDiff:   true,
+		EnableJumpDiff:  true,
+		MaxJumpFactor:   4.0,
+		SmoothingFactor: 0.3,
+		ShareBufferSize: 1000,
+		WindowSize:      10 * time.Minute,
+	}
+}
+
+// AdjustDifficulty adjusts worker difficulty using advanced algorithms
+func (da *DifficultyAdjuster) AdjustDifficulty(worker *WorkerStats) float64 {
+	da.mu.Lock()
+	defer da.mu.Unlock()
+	
+	// Initial or insufficient history
+	if len(worker.ShareTimes) < 3 {
+		return worker.CurrentDiff
+	}
+	
+	newDiff := worker.CurrentDiff
+	
+	if da.config.EnableVarDiff {
+		// Variable difficulty algorithm
+		newDiff = da.calculateVarDiff(worker)
+	}
+	
+	if da.config.EnableJumpDiff {
+		// Jump difficulty algorithm
+		jumpDiff := da.calculateJumpDiff(worker)
+		if math.Abs(jumpDiff-newDiff)/newDiff > 0.5 {
+			newDiff = jumpDiff
+		}
+	}
+	
+	// Apply smoothing
+	if da.config.SmoothingFactor > 0 {
+		newDiff = da.smoothDifficulty(worker.CurrentDiff, newDiff)
+	}
+	
+	// Apply limits
+	newDiff = da.applyLimits(newDiff)
+	
+	return newDiff
+}
+
+// calculateVarDiff calculates variable difficulty
+func (da *DifficultyAdjuster) calculateVarDiff(worker *WorkerStats) float64 {
+	avgShareTime := da.calculateAverageShareTime(worker.ShareTimes)
+	
+	deviation := avgShareTime - da.config.TargetTime
+	deviationPercent := deviation / da.config.TargetTime * 100
+	
+	adjustmentFactor := 1.0
+	
+	if math.Abs(deviationPercent) > da.config.VariancePercent {
+		// PID-like control algorithm
+		proportional := deviation / da.config.TargetTime
+		integral := da.calculateIntegral(worker)
+		derivative := da.calculateDerivative(worker)
+		
+		// PID coefficients
+		kp := 0.5
+		ki := 0.1
+		kd := 0.05
+		
+		adjustment := kp*proportional + ki*integral + kd*derivative
+		adjustmentFactor = 1.0 + adjustment
+	}
+	
+	return worker.CurrentDiff * adjustmentFactor
+}
+
+// calculateJumpDiff calculates jump difficulty
+func (da *DifficultyAdjuster) calculateJumpDiff(worker *WorkerStats) float64 {
+	if worker.AverageHashRate > 0 {
+		// Theoretical difficulty for target share time
+		targetDiff := worker.AverageHashRate * da.config.TargetTime / math.Pow(2, 32)
+		
+		// Check for large deviation
+		currentToTarget := targetDiff / worker.CurrentDiff
+		if currentToTarget > da.config.MaxJumpFactor {
+			return worker.CurrentDiff * da.config.MaxJumpFactor
+		} else if currentToTarget < 1.0/da.config.MaxJumpFactor {
+			return worker.CurrentDiff / da.config.MaxJumpFactor
+		}
+		
+		return targetDiff
+	}
+	
+	return worker.CurrentDiff
+}
+
+// smoothDifficulty applies exponential moving average
+func (da *DifficultyAdjuster) smoothDifficulty(current, target float64) float64 {
+	alpha := da.config.SmoothingFactor
+	return alpha*target + (1-alpha)*current
+}
+
+// applyLimits clamps difficulty to configured limits
+func (da *DifficultyAdjuster) applyLimits(diff float64) float64 {
+	if diff < da.config.MinDiff {
+		return da.config.MinDiff
+	}
+	if diff > da.config.MaxDiff {
+		return da.config.MaxDiff
+	}
+	return diff
+}
+
+// calculateAverageShareTime calculates average share time with outlier removal
+func (da *DifficultyAdjuster) calculateAverageShareTime(shareTimes []time.Duration) float64 {
+	if len(shareTimes) == 0 {
+		return da.config.TargetTime
+	}
+	
+	// Copy and remove outliers
+	sorted := make([]time.Duration, len(shareTimes))
+	copy(sorted, shareTimes)
+	
+	// Remove top/bottom 10%
+	trimCount := len(sorted) / 10
+	if trimCount > 0 && len(sorted) > 2*trimCount {
+		sorted = sorted[trimCount : len(sorted)-trimCount]
+	}
+	
+	var sum time.Duration
+	for _, t := range sorted {
+		sum += t
+	}
+	
+	return sum.Seconds() / float64(len(sorted))
+}
+
+// calculateIntegral calculates integral term for PID control
+func (da *DifficultyAdjuster) calculateIntegral(worker *WorkerStats) float64 {
+	integral := 0.0
+	for i, shareTime := range worker.ShareTimes {
+		if i > 0 {
+			deviation := shareTime.Seconds() - da.config.TargetTime
+			integral += deviation
+		}
+	}
+	return integral / float64(len(worker.ShareTimes))
+}
+
+// calculateDerivative calculates derivative term for PID control
+func (da *DifficultyAdjuster) calculateDerivative(worker *WorkerStats) float64 {
+	if len(worker.ShareTimes) < 2 {
+		return 0.0
+	}
+	
+	lastIdx := len(worker.ShareTimes) - 1
+	lastDeviation := worker.ShareTimes[lastIdx].Seconds() - da.config.TargetTime
+	prevDeviation := worker.ShareTimes[lastIdx-1].Seconds() - da.config.TargetTime
+	
+	return lastDeviation - prevDeviation
+}
+
+// RecordShare records a share for statistical analysis
+func (da *DifficultyAdjuster) RecordShare(timestamp time.Time, difficulty float64, valid bool) {
+	da.shareHistory.mu.Lock()
+	defer da.shareHistory.mu.Unlock()
+	
+	record := ShareRecord{
+		Timestamp:  timestamp,
+		Difficulty: difficulty,
+		Valid:      valid,
+	}
+	
+	da.shareHistory.shares[da.shareHistory.currentIdx] = record
+	da.shareHistory.currentIdx = (da.shareHistory.currentIdx + 1) % da.shareHistory.maxSize
 }

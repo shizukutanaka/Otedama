@@ -43,15 +43,9 @@ type Pool struct {
 	ageProofSystem  *zkp.AgeProofSystem
 	hashpowerSystem *zkp.HashpowerProofSystem
 	
-	// Enterprise features
+	// Performance optimization
 	consensusEngine     *ConsensusEngine
 	reputationSystem    *ReputationSystem
-	complianceMonitor   *ComplianceMonitor
-	performanceMonitor  *PerformanceMonitor
-	
-	// Network management
-	networkManager      *NetworkManager
-	antiCensorshipLayer *AntiCensorshipLayer
 	
 	// Performance optimization
 	shareCache       *ShareCache
@@ -94,23 +88,6 @@ type Config struct {
 		ProofCacheDuration   time.Duration `yaml:"proof_cache_duration"`
 	} `yaml:"zkp"`
 	
-	// Enterprise features
-	Enterprise struct {
-		Enabled              bool          `yaml:"enabled"`
-		InstitutionalGrade   bool          `yaml:"institutional_grade"`
-		ComplianceMonitoring bool          `yaml:"compliance_monitoring"`
-		RealtimeAuditing     bool          `yaml:"realtime_auditing"`
-		GeographicRestrictions map[string]bool `yaml:"geographic_restrictions"`
-	} `yaml:"enterprise"`
-	
-	// Anti-censorship
-	AntiCensorship struct {
-		Enabled      bool `yaml:"enabled"`
-		TorSupport   bool `yaml:"tor_support"`
-		I2PSupport   bool `yaml:"i2p_support"`
-		ProxySupport bool `yaml:"proxy_support"`
-		DNSOverHTTPS bool `yaml:"dns_over_https"`
-	} `yaml:"anti_censorship"`
 	
 	// Performance
 	Performance struct {
@@ -253,8 +230,6 @@ func (p *Pool) Start(ctx context.Context) error {
 		zap.String("node_id", p.nodeID),
 		zap.String("address", p.config.ListenAddr),
 		zap.Bool("zkp_enabled", p.config.ZKP.Enabled),
-		zap.Bool("enterprise", p.config.Enterprise.Enabled),
-		zap.Bool("anti_censorship", p.config.AntiCensorship.Enabled),
 	)
 	
 	// Start background workers
@@ -263,13 +238,6 @@ func (p *Pool) Start(ctx context.Context) error {
 	go p.processShares()
 	go p.updateStats()
 	
-	if p.config.Enterprise.Enabled {
-		go p.runEnterpriseTasks()
-	}
-	
-	if p.config.AntiCensorship.Enabled {
-		go p.runAntiCensorshipTasks()
-	}
 	
 	// Bootstrap network
 	if len(p.config.BootstrapNodes) > 0 {
@@ -405,19 +373,9 @@ func (p *Pool) initializeComponents() error {
 		// p.hashpowerSystem = zkp.NewHashpowerProofSystem(...)
 	}
 	
-	// Initialize enterprise features
-	if p.config.Enterprise.Enabled {
-		p.consensusEngine = NewConsensusEngine()
-		p.reputationSystem = NewReputationSystem()
-		p.complianceMonitor = NewComplianceMonitor()
-		p.performanceMonitor = NewPerformanceMonitor()
-		p.auditLogger = NewAuditLogger()
-	}
-	
-	// Initialize anti-censorship
-	if p.config.AntiCensorship.Enabled {
-		p.antiCensorshipLayer = NewAntiCensorshipLayer(p.config.AntiCensorship)
-	}
+	// Initialize core components
+	p.consensusEngine = NewConsensusEngine()
+	p.reputationSystem = NewReputationSystem()
 	
 	// Initialize performance features
 	if p.config.Performance.ShareCacheSize > 0 {
@@ -792,53 +750,6 @@ func (p *Pool) updateStats() {
 	}
 }
 
-func (p *Pool) runEnterpriseTasks() {
-	// Run enterprise-specific tasks
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-ticker.C:
-			// Compliance monitoring
-			if p.complianceMonitor != nil {
-				p.complianceMonitor.RunChecks()
-			}
-			
-			// Performance monitoring
-			if p.performanceMonitor != nil {
-				p.performanceMonitor.CollectMetrics()
-			}
-			
-			// Audit logging
-			if p.auditLogger != nil {
-				p.auditLogger.FlushLogs()
-			}
-			
-		case <-p.ctx.Done():
-			return
-		}
-	}
-}
-
-func (p *Pool) runAntiCensorshipTasks() {
-	// Run anti-censorship tasks
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-ticker.C:
-			if p.antiCensorshipLayer != nil {
-				p.antiCensorshipLayer.UpdateRoutes()
-				p.antiCensorshipLayer.CheckConnectivity()
-			}
-			
-		case <-p.ctx.Done():
-			return
-		}
-	}
-}
 
 // Helper functions
 

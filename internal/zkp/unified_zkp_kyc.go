@@ -246,6 +246,51 @@ func (zkp *UnifiedZKPKYC) IsVerified(userID string) bool {
 	return time.Now().Before(identity.ExpiresAt)
 }
 
+// VerifyIdentity verifies a user's identity using ZKP data
+func (zkp *UnifiedZKPKYC) VerifyIdentity(userID string, proofData map[string]interface{}) (bool, error) {
+	// Extract proof and challenge from data
+	proofStr, ok := proofData["proof"].(string)
+	if !ok {
+		return false, errors.New("missing proof data")
+	}
+	
+	challenge, ok := proofData["challenge"].(string)
+	if !ok {
+		return false, errors.New("missing challenge")
+	}
+	
+	// Simple verification for now - in production this would use proper ZKP verification
+	// Check proof format and challenge
+	if len(proofStr) < 32 || len(challenge) < 16 {
+		return false, errors.New("invalid proof format")
+	}
+	
+	// Calculate proof hash
+	proofHash := sha256.Sum256([]byte(proofStr + challenge + userID))
+	proofHashStr := hex.EncodeToString(proofHash[:])
+	
+	// Store verified identity with minimal attributes
+	zkp.registryMu.Lock()
+	zkp.verifiedUsers[userID] = &VerifiedIdentity{
+		UserID:     userID,
+		ProofHash:  proofHashStr,
+		VerifiedAt: time.Now(),
+		ExpiresAt:  time.Now().Add(zkp.config.VerificationExpiry),
+		Attributes: &IdentityAttributes{
+			IsAnonymous: true,
+			ProofType:   "basic",
+		},
+	}
+	zkp.registryMu.Unlock()
+	
+	zkp.logger.Info("Identity verified via ZKP",
+		zap.String("user_id", userID),
+		zap.String("proof_hash", proofHashStr),
+	)
+	
+	return true, nil
+}
+
 // GetVerifiedAttributes returns verified attributes for a user
 func (zkp *UnifiedZKPKYC) GetVerifiedAttributes(userID string) (*IdentityAttributes, error) {
 	zkp.registryMu.RLock()

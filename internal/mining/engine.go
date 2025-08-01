@@ -19,9 +19,27 @@ type Engine interface {
 	Start() error
 	Stop() error
 	GetStats() *Stats
+	GetStatus() *EngineStatus
+	GetStartTime() time.Time
+	GetAlgorithm() Algorithm
+	GetCPUThreads() int
+	GetConfig() map[string]interface{}
+	GetHardwareInfo() *HardwareInfo
+	GetStatsHistory(duration time.Duration) []StatsSnapshot
+	GetAutoTuner() *AutoTuner
+	GetProfitSwitcher() *ProfitSwitcher
+	ResetStats()
 	SubmitShare(*Share) error
 	SwitchAlgorithm(Algorithm) error
+	SetAlgorithm(Algorithm) error
+	SetPool(url, wallet string) error
+	SetConfig(key string, value interface{}) error
+	SetGPUSettings(coreClock, memoryClock, powerLimit int) error
+	SetCPUThreads(threads int) error
 	GetCurrentJob() *Job
+	HasGPU() bool
+	HasCPU() bool
+	HasASIC() bool
 }
 
 // System represents a complete mining system - clean architecture
@@ -43,11 +61,24 @@ type UnifiedEngine struct {
 	sharesSubmitted  atomic.Uint64
 	sharesAccepted   atomic.Uint64
 	running          atomic.Bool
+	currentHashRate  atomic.Uint64
 	
 	// Hardware management - lock-free where possible
 	workers      []Worker
 	workerCount  int32
 	workersMu    sync.RWMutex
+	
+	// Additional components
+	autoTuner      *AutoTuner
+	profitSwitcher *ProfitSwitcher
+	
+	// Pool info
+	poolURL    string
+	walletAddr string
+	
+	// Stats history
+	statsHistory []StatsSnapshot
+	historyMu    sync.RWMutex
 	
 	// Hardware miners (from unified_engine.go)
 	cpuMiners    []*CPUMiner
@@ -136,6 +167,8 @@ type Stats struct {
 	MemoryUsageMB   uint64    `json:"memory_usage_mb"`
 	ActiveWorkers   int32     `json:"active_workers"`
 	Uptime          time.Duration `json:"uptime"`
+	CurrentHashRate uint64    `json:"current_hash_rate"`
+	Errors          uint64    `json:"errors"`
 }
 
 // Job represents a mining job - memory layout optimized
@@ -170,12 +203,75 @@ type Share struct {
 type Algorithm string
 
 const (
+	AlgorithmUnknown Algorithm = "unknown"
+	AlgorithmSHA256  Algorithm = "sha256"
 	AlgorithmSHA256d Algorithm = "sha256d"
 	AlgorithmScrypt  Algorithm = "scrypt"
 	AlgorithmEthash  Algorithm = "ethash"
 	AlgorithmRandomX Algorithm = "randomx"
 	AlgorithmKawPow  Algorithm = "kawpow"
 )
+
+// ParseAlgorithm parses algorithm from string
+func ParseAlgorithm(s string) Algorithm {
+	switch s {
+	case "sha256", "SHA256":
+		return AlgorithmSHA256
+	case "sha256d", "SHA256D":
+		return AlgorithmSHA256d
+	case "scrypt", "Scrypt":
+		return AlgorithmScrypt
+	case "ethash", "Ethash":
+		return AlgorithmEthash
+	case "randomx", "RandomX":
+		return AlgorithmRandomX
+	case "kawpow", "KawPow":
+		return AlgorithmKawPow
+	default:
+		return AlgorithmUnknown
+	}
+}
+
+// EngineStatus represents engine status
+type EngineStatus struct {
+	Running   bool          `json:"running"`
+	Algorithm Algorithm     `json:"algorithm"`
+	Pool      string        `json:"pool"`
+	Wallet    string        `json:"wallet"`
+	Uptime    time.Duration `json:"uptime"`
+}
+
+// HardwareInfo represents hardware information
+type HardwareInfo struct {
+	CPUThreads   int                    `json:"cpu_threads"`
+	GPUDevices   []GPUInfo              `json:"gpu_devices"`
+	ASICDevices  []ASICInfo             `json:"asic_devices"`
+	TotalMemory  uint64                 `json:"total_memory"`
+	AvailMemory  uint64                 `json:"avail_memory"`
+}
+
+// GPUInfo represents GPU device information
+type GPUInfo struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Memory   uint64 `json:"memory"`
+	Temp     int    `json:"temp"`
+	FanSpeed int    `json:"fan_speed"`
+}
+
+// ASICInfo represents ASIC device information
+type ASICInfo struct {
+	ID     string `json:"id"`
+	Model  string `json:"model"`
+	Status string `json:"status"`
+	Temp   int    `json:"temp"`
+}
+
+// StatsSnapshot represents a point-in-time stats snapshot
+type StatsSnapshot struct {
+	Timestamp time.Time `json:"timestamp"`
+	Stats     Stats     `json:"stats"`
+}
 
 // NewEngine creates optimized mining engine - Rob Pike's clear construction
 func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
