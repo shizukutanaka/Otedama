@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2025-08-02
+
+### Added
+- **Lightweight Profiling System**
+  - Minimal overhead performance monitoring
+  - Lock-free circular buffer for metrics collection
+  - Real-time hash rate and temperature tracking
+  - Memory and GC pause time monitoring
+- **Comprehensive Test Suite**
+  - Unit tests for core algorithms and components
+  - Integration tests for mining engine and P2P
+  - Load tests for performance validation
+  - Benchmark tests for optimization
+- **Quick Start Guide**
+  - Simple 5-minute setup instructions
+  - Basic mining commands for all modes
+  - Troubleshooting tips for common issues
+  - Easy migration path to advanced features
+
+### Changed
+- **Code Organization**
+  - Removed duplicate pool implementations (optimized_pool.go)
+  - Consolidated Stratum server implementations
+  - Moved network recovery to P2P module
+  - Cleaned up deleted network module files
+- **URL and References**
+  - Fixed all placeholder URLs to actual repository links
+  - Removed invalid domain references
+  - Updated documentation links
+- **Build System**
+  - Enhanced Makefile with more build targets
+  - Added security scanning target
+  - Improved cross-platform build support
+
+### Removed
+- SuperClaude directory (unrelated project)
+- Duplicate simple_server.go implementation
+- Invalid security.txt with fake domains
+- Redundant network module files
+- Placeholder URLs throughout documentation
+
+### Security
+- Rate limiting already implemented for all API endpoints
+- ZKP authentication fully replaces KYC requirements
+- No quantum or unrealistic features found in codebase
+
 ## [2.1.1] - 2025-08-02
 
 ### Added
