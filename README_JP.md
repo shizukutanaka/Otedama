@@ -1,9 +1,9 @@
 # Otedama - 高性能P2Pマイニングプールソフトウェア
 
-[![バージョン](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/yourusername/otedama/releases)
+[![バージョン](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/shizukutanaka/Otedama/releases)
 [![ライセンス](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go バージョン](https://img.shields.io/badge/go-1.21+-blue.svg)](https://golang.org)
-[![ビルドステータス](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/otedama/actions)
+[![ビルドステータス](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/shizukutanaka/Otedama/actions)
 
 ## 概要
 
@@ -62,7 +62,7 @@ Otedamaは、CPU、GPU、ASICマイニングをサポートし、信頼性の高
 ```bash
 # Linux
 # リリースページからダウンロード（利用可能になり次第）
-# wget https://github.com/yourusername/otedama/releases/latest/download/otedama-linux-amd64
+# wget https://github.com/shizukutanaka/Otedama/releases/latest/download/otedama-linux-amd64
 # chmod +x otedama-linux-amd64
 # sudo mv otedama-linux-amd64 /usr/local/bin/otedama
 
@@ -70,7 +70,7 @@ Otedamaは、CPU、GPU、ASICマイニングをサポートし、信頼性の高
 # リリースページからotedama-windows-amd64.exeをダウンロード
 
 # macOS
-# wget https://github.com/yourusername/otedama/releases/latest/download/otedama-darwin-amd64
+# wget https://github.com/shizukutanaka/Otedama/releases/latest/download/otedama-darwin-amd64
 # chmod +x otedama-darwin-amd64
 # sudo mv otedama-darwin-amd64 /usr/local/bin/otedama
 ```
@@ -85,7 +85,7 @@ Otedamaは、CPU、GPU、ASICマイニングをサポートし、信頼性の高
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/yourusername/otedama.git
+git clone https://github.com/shizukutanaka/Otedama.git
 cd Otedama
 
 # 依存関係をインストール
@@ -533,7 +533,7 @@ sudo swapon /swapfile
 - アーキテクチャ: `/docs/architecture.md`を参照（利用可能になり次第）
 
 ### コミュニティ
-- GitHub Issues: https://github.com/yourusername/otedama/issues
+- GitHub Issues: https://github.com/shizukutanaka/Otedama/issues
 - コミュニティサポート: サポートについてはGitHubでIssueを作成してください
 
 ### エンタープライズサポート

@@ -1,808 +1,223 @@
-# Otedama v3.0.0 Configuration - 2025 Enterprise & National-Grade P2P Mining Pool
-# Zero-Knowledge Proof Mining Pool with Advanced AI, Security & Compliance
+# Otedama Mining Software Configuration
+# Professional P2P Mining Pool - Production Ready
 
-# Core Settings - Updated for 2025
-name: "Otedama Enterprise Mining Pool v3.0"
+# Core Settings
+name: "Otedama P2P Mining Pool"
 version: "3.0.0"
-mode: auto  # auto, solo, pool, miner, enterprise, government, institutional
+mode: "auto"  # auto, solo, pool, p2p
 
-# Advanced Logging Configuration - FIPS 140-2 Compliant
-log_level: info  # debug, info, warn, error, critical
+# Logging Configuration
+log_level: "info"  # debug, info, warn, error
 logging:
   structured: true
-  enable_audit: true
-  retention_days: 2555  # 7 years for regulatory compliance
-  encryption: true
-  tamper_proof: true
-  blockchain_logging: true  # Immutable log storage
-  syslog_enabled: true
-  remote_logging:
-    enabled: true
-    endpoint: ""
-    secure: true
-    authentication: "mutual_tls"
-  compliance_logging:
-    soc2: true
-    iso27001: true
-    fips140_2: true
-    common_criteria: true
+  file: "logs/otedama.log"
+  max_size: 100  # MB
+  max_age: 30    # days
+  max_backups: 10
+  compress: true
 
-# Enhanced Network Configuration - IPv6 & 6G Ready
+# Network Configuration  
 network:
   listen_addr: ":30303"
-  max_peers: 100000  # Enterprise scale
-  dial_timeout: 15s
-  enable_p2p: true
-  enable_mdns: true
-  nat_traversal: true
-  bootstrap_peers: []
+  external_addr: ""  # Auto-detect if empty
+  max_peers: 100
+  max_connections: 1000
+  dial_timeout: "15s"
   enable_ipv6: true
-  enable_6g: true  # 6G network support
-  bandwidth_limit: 0  # 0 = unlimited, in GB/s
-  connection_pooling: true
-  compression: true
-  qos_enabled: true  # Quality of Service
+  enable_upnp: true
+  # Real-world bootstrap peers (examples - replace with actual operational nodes)
+  bootstrap_peers: []  # Will be populated during deployment
   
-  # Advanced networking - 2025 protocols
-  libp2p:
-    enabled: true
-    node_key_file: "data/libp2p.key"
-    announce_addrs: []
-    no_announce_addrs: []
-    swarm_key: ""  # Private swarm support
-    relay_enabled: true
-    hole_punching: true
-  
-  # AI-Enhanced DDoS Protection
+  # DDoS Protection
   ddos_protection:
     enabled: true
-    max_connections_per_ip: 1000
-    rate_limit_per_ip: 10000  # requests per minute
-    ml_anomaly_detection: true
-    behavioral_analysis: true
-    geo_blocking: false
-    country_blacklist: []
-    country_whitelist: []
-    threat_intelligence: true
-    response_time: "100ms"
-    auto_mitigation: true
+    max_connections_per_ip: 10
+    rate_limit_per_minute: 1000
+    ban_duration: "1h"
 
-# Advanced Mining Configuration - 2025 Algorithms
+# Mining Configuration
 mining:
-  # Latest 2025 mining algorithms
-  algorithm: randomx  # sha256d, randomx, kheavyhash, autolykos, kawpow, ethash, etchash, blake3, x16r, equihash, progpow, scrypt, cryptonight
+  algorithm: "sha256d"  # sha256d (Bitcoin), randomx (Monero), ethash, kawpow, scrypt
+  hardware_type: "auto"  # auto, cpu, gpu, asic
+  threads: 0  # 0 = auto-detect
+  intensity: 80  # 1-100
   
-  # AI-Enhanced Hardware Management
-  hardware_type: auto  # auto, cpu, gpu, asic
-  auto_detect: true
-  threads: 0  # 0 = auto-detect optimal
-  intensity: 100  # Mining intensity (1-100)
-  
-  # 2025 Advanced mining features
-  ai_optimization: true
-  edge_computing: true
-  distributed_computing: true
-  auto_tuning: true
-  profit_switching: true
-  merged_mining: true
-  difficulty_retargeting: true
-  carbon_neutral_mining: true
-  
-  # Hardware-specific optimizations
+  # CPU Mining
   cpu:
-    enable: true
+    enabled: true
+    threads: 0  # 0 = auto-detect
     affinity: []  # CPU core affinity
-    hugepages: true
-    numa_optimization: true
-    thermal_throttling: 85  # °C
-    avx512: true  # AVX-512 support
-    power_management: "performance"
-  
+    huge_pages: true
+    
+  # GPU Mining  
   gpu:
-    enable: true
+    enabled: true
     devices: []  # empty = auto-detect all
-    memory_tweak: true
-    power_limit: 300  # Watts
-    fan_curve: auto
-    ray_tracing_mining: true  # RTX mining
-    tensor_core_mining: true  # AI accelerated mining
-    overclock:
-      enabled: true
-      core_offset: 150
-      memory_offset: 1000
-      voltage_offset: 50
-      power_limit: 120  # percentage
-  
+    memory_tweak: false
+    power_limit: 0  # 0 = no limit (watts)
+    
+  # ASIC Mining
   asic:
-    enable: true
+    enabled: true
     devices: []
-    frequency_optimization: true
-    voltage_optimization: true
-    cooling_optimization: true
-    immersion_cooling: false
-    liquid_cooling: false
-    
-  fpga:
-    enable: false
-    devices: []
-    bitstream_optimization: true
-    reconfigurable_mining: true
-  
-  # Pool configuration for miner mode
-  pools:
-    - url: "stratum+tcp://pool.example.com:3333"
-      user: "wallet_address"
-      pass: "x"
-      priority: 1
-      backup: false
-      zkp_auth: true
-    
-  # 2025 Performance targets
-  target_hash_rate: 0  # 0 = no limit (H/s)
-  min_hash_rate: 10000  # Minimum required H/s
-  max_temperature: 85  # Auto-throttle temperature (°C)
-  power_limit: 2000  # Maximum power consumption (W)
-  efficiency_target: 50  # J/TH target
-  carbon_footprint_limit: 1000  # kg CO2/year
 
-# Revolutionary Zero-Knowledge Proof System (2025 Latest)
+# Zero-Knowledge Proof Authentication (Practical Implementation)
 zkp:
+  enabled: false  # Disabled by default for production stability
+  protocol: "groth16"  # groth16, plonk
+  curve: "bn254"  # bn254, bls12-381
+  
+  # Proof Requirements
+  require_identity_proof: false
+  require_reputation_proof: false
+  min_reputation: 0.0
+  
+  # Privacy Features
+  anonymous_mining: false
+  hide_worker_identity: false
+
+# P2P Pool Configuration
+p2p_pool:
   enabled: true
+  share_difficulty: 1000.0
+  min_payout: 0.001
+  fee_percentage: 1.0
+  payout_model: "FPPS"  # FPPS (Full Pay Per Share) - Industry standard 2025
   
-  # Latest 2025 ZKP Protocols
-  protocol: nova  # groth16, plonk, stark, bulletproofs, nova, plonky2, halo2
-  curve: bn254  # bn254, bls12-381, bw6-761, pasta
-  
-  # Advanced Proof Requirements
-  require_age_proof: true
-  min_age_requirement: 18
-  require_hashpower_proof: true
-  min_hashpower_requirement: 10000000  # 10 MH/s minimum
-  require_location_proof: true
-  require_reputation_proof: true
-  require_sanctions_check: true
-  require_kyc_replacement: true  # ZKP replaces traditional KYC
-  require_carbon_offset_proof: true
-  
-  # 2025 Advanced ZKP Features  
-  recursive_proofs: true
-  proof_aggregation: true
-  batch_verification: true
-  universal_setup: true
-  homomorphic_encryption: true
-  multi_party_computation: true
-  federated_learning_proofs: true
-  
-  # Enterprise & Government Features
-  institutional_grade: true
-  government_compliance: true
-  national_security_approved: true
-  export_control_compliant: true
-  
-  # Compliance & Audit
-  audit_log_enabled: true
-  proof_retention_days: 2555  # 7 years
-  compliance_mode: "government"  # standard, enhanced, government
-  real_time_verification: true
-  
-  # Trusted Setup & Verifiers
-  trusted_setup_file: "data/zkp/nova_setup.params"
-  trusted_verifiers: []
-  verification_timeout: 10s
-  
-  # Performance Settings - 2025 Optimized
-  proof_cache_size: 1000000
-  parallel_verification: true
-  hardware_acceleration: true
-  gpu_acceleration: true
-  asic_acceleration: false
-  # quantum_acceleration removed  # Future-ready
+  # Sharechain Configuration
+  sharechain:
+    enabled: true
+    block_time: "30s"
+    difficulty_algorithm: "LWMA"  # Linear Weighted Moving Average
+    max_shares: 10000
+    
+  # Automatic Payouts
+  payouts:
+    enabled: true
+    interval: "6h"
+    min_confirmations: 10
+    batch_size: 100
 
-# Enhanced Privacy & Anonymity Configuration
-privacy:
-  anonymous_mining: true
-  hide_ip_addresses: true
-  enable_mixers: true
-  onion_routing: true
+# Stratum Server Configuration
+stratum:
+  enabled: true
+  listen_addr: ":3333"
+  protocol_version: 2  # Stratum V2 - 2025 standard
   
-  # Advanced Anonymity Networks
-  enable_tor: true
-  tor_socks_proxy: "127.0.0.1:9050"
-  tor_control_port: 9051
-  tor_bridges: true
+  # Connection Management
+  max_clients: 10000
+  connection_timeout: "300s"
+  keepalive_interval: "30s"
   
-  enable_i2p: true
-  i2p_sam_addr: "127.0.0.1:7656"
-  i2p_tunnels: 3
+  # Difficulty Management
+  var_diff: true
+  min_difficulty: 1.0
+  max_difficulty: 1000000.0
+  target_time: 10  # seconds per share
+  retarget_time: "60s"
   
-  # 2025 Privacy Enhancements
-  enable_nostr: true  # Nostr protocol integration
-  enable_ipfs: true   # IPFS for decentralized storage
-  traffic_obfuscation: true
-  timing_randomization: true
-  decoy_traffic: true
-  steganography: false
-  mesh_networking: true
-  satellite_communication: false
+  # Authentication
+  enable_worker_auth: true
+  enable_zkp_auth: false
 
-# API Configuration - Enterprise Grade with AI
+# API Configuration
 api:
   enabled: true
   listen_addr: ":8080"
-  enable_tls: true
-  tls_version: "1.3"
-  cert_file: "certs/api.crt"
-  key_file: "certs/api.key"
+  enable_auth: false
+  enable_tls: false
   
-  # Advanced Authentication & Authorization
-  enable_auth: true
-  auth_method: "zero_knowledge"  # jwt, oauth2, api_key, mtls, zero_knowledge
-  jwt_secret: ""  # Auto-generated if empty
-  session_timeout: 14400  # 4 hours
-  zkp_auth: true
-  biometric_auth: false
-  
-  # AI-Enhanced Rate Limiting
-  rate_limit: 10000  # requests per minute
-  burst_limit: 1000
-  ai_rate_limiting: true
-  adaptive_limits: true
-  
-  # CORS Configuration
+  # CORS
   cors:
     enabled: true
     allowed_origins: ["*"]
-    allowed_methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
-    allowed_headers: ["*"]
-    max_age: 86400
+    allowed_methods: ["GET", "POST"]
+    
+  # Rate Limiting
+  rate_limit: 1000  # requests per minute
   
-  # Advanced API Features
-  enable_swagger: true
-  enable_metrics: true
-  enable_health_checks: true
-  enable_debug_endpoints: false
-  graphql_enabled: true
-  rest_enabled: true
-  grpc_enabled: true
-  websocket_enabled: true
-
-# Next-Gen Dashboard Configuration
+# Dashboard Configuration
 dashboard:
   enabled: true
   listen_addr: ":8888"
-  enable_auth: true
-  username: "admin"
-  password: ""  # Auto-generated if empty
-  enable_tls: true
-  cert_file: "certs/dashboard.crt"
-  key_file: "certs/dashboard.key"
-  
-  # Advanced Dashboard Features
-  real_time_updates: true
-  refresh_rate: "500ms"
-  enable_charts: true
-  enable_alerts: true
-  theme: "dark"  # dark, light, auto, cyberpunk
-  
-  # AI-Powered Dashboard
-  ai_insights: true
-  predictive_analytics: true
-  anomaly_visualization: true
-  performance_optimization_suggestions: true
-  
-  # Enterprise Dashboard
-  multi_language: true
-  default_language: "en"
-  enable_mobile: true
-  enable_notifications: true
-  enable_voice_commands: false
-  enable_ar_visualization: false
-  enable_vr_interface: false
+  enable_auth: false
+  theme: "dark"
+  update_interval: "1s"
 
-# Advanced Monitoring & Observability - 2025
+# Monitoring Configuration
 monitoring:
   enabled: true
-  metrics_interval: 1s
+  metrics_interval: "10s"
   
-  # AI-Enhanced Monitoring
-  ai_monitoring: true
-  predictive_monitoring: true
-  anomaly_detection: true
-  behavioral_analysis: true
-  
-  # Prometheus Integration
+  # Prometheus Metrics
   prometheus:
     enabled: true
     listen_addr: ":9090"
     metrics_path: "/metrics"
-    enable_custom_metrics: true
-    enable_histograms: true
-    enable_summaries: true
-    retention: "15d"
-  
-  # Health Monitoring
+    
+  # Health Checks
   health_checks:
     enabled: true
-    interval: 10s
-    timeout: 5s
-    endpoints:
-      - name: "mining_engine"
-        critical: true
-      - name: "zkp_system"
-        critical: true
-      - name: "p2p_network"
-        critical: false
-      - name: "ai_optimizer"
-        critical: false
-      - name: "security_system"
-        critical: true
-  
-  # Performance Profiling
-  profiling:
-    enabled: true
-    pprof_addr: ":6060"
-    profile_dir: "profiles"
-    cpu_profile: true
-    memory_profile: true
-    mutex_profile: true
-    block_profile: true
-    
-  # Advanced Alerting
-  alerts:
-    enabled: true
-    webhook_url: ""
-    ai_alert_filtering: true
-    smart_escalation: true
-    email_config:
-      enabled: true
-      smtp_server: ""
-      smtp_port: 587
-      username: ""
-      password: ""
-      recipients: []
-    slack_config:
-      enabled: false
-      webhook_url: ""
-      channel: "#alerts"
-    
-  # External Integrations
-  grafana:
-    enabled: true
-    url: "http://localhost:3000"
-    api_key: ""
-    dashboard_provisioning: true
-  
-  influxdb:
-    enabled: true
-    url: "http://localhost:8086"
-    database: "otedama"
-    username: ""
-    password: ""
-    retention_policy: "30d"
-  
-  elasticsearch:
-    enabled: true
-    urls: ["http://localhost:9200"]
-    index: "otedama"
-    template_enabled: true
-  
-  # Modern Observability Stack
-  jaeger:
-    enabled: true
-    endpoint: "http://localhost:14268/api/traces"
-    service_name: "otedama"
-  
-  opentelemetry:
-    enabled: true
-    grpc_endpoint: "localhost:4317"
-    http_endpoint: "localhost:4318"
+    interval: "30s"
+    timeout: "5s"
 
-# Advanced Storage Configuration - 2025
+# Security Configuration
+security:
+  enable_tls: false
+  tls_min_version: "1.3"  # TLS 1.3 minimum for 2025
+  
+  # Access Control
+  enable_rbac: false
+  max_login_attempts: 5
+  login_lockout_duration: "15m"
+  
+  # Encryption
+  encrypt_connections: false
+  encrypt_storage: false
+
+# Storage Configuration
 storage:
   data_dir: "./data"
-  cache_size: 1000000
-  compress_data: true
-  encryption_enabled: true
-  backup_enabled: true
-  backup_interval: 12h
-  backup_retention: 365
-  
-  # Advanced Storage Features
-  distributed_storage: true
-  blockchain_storage: false
-  ipfs_storage: true
-  cloud_storage: false
-  
-  # Database Configuration
-  database:
-    type: "postgresql"  # sqlite, mysql, postgresql, cockroachdb
-    connection_string: "postgres://otedama:password@localhost/otedama?sslmode=require"
-    max_connections: 1000
-    connection_timeout: 30s
-    read_replicas: 2
-    
-  # Advanced Storage
-  enable_clustering: true
-  replication_factor: 3
-  consistency_level: "strong"  # eventual, strong, bounded
-  sharding_enabled: true
-  auto_scaling: true
-
-# Enterprise Security Configuration - FIPS 140-2 Level 4
-security:
-  # Encryption - Quantum Resistant
-  enable_encryption: true
-  encryption_algorithm: "ChaCha20-Poly1305"  # AES-256-GCM, ChaCha20-Poly1305, Kyber-1024
-  key_rotation_interval: 24h
-  
-  # Advanced TLS Configuration
-  tls_min_version: "1.3"
-  cipher_suites: []  # empty = secure defaults
-  cert_renewal_days: 30
-  hsts_enabled: true
-  cert_transparency: true
-  
-  # Zero-Trust Security Model
-  zero_trust_enabled: true
-  continuous_verification: true
-  micro_segmentation: true
-  
-  # Access Control - 2025 Standards
-  rbac_enabled: true
-  abac_enabled: true  # Attribute-Based Access Control
-  permission_model: "strict"
-  default_role: "user"
-  admin_users: []
-  mfa_required: true
-  biometric_auth: false
-  behavioral_auth: true
-  
-  # Advanced Security Monitoring
-  intrusion_detection: true
-  behavioral_analysis: true
-  ai_threat_detection: true
-  vulnerability_scanning: true
-  penetration_testing: false
-  red_team_exercises: false
-  
-  # Compliance - 2025 Standards
-  compliance_frameworks: ["SOC2", "ISO27001", "FIPS140-2", "Common Criteria", "NIST", "GDPR", "CCPA", "PIPEDA"]
-  audit_logging: true
-  data_classification: true
-  privacy_by_design: true
-  
-  # Advanced Security Features
-  hardware_security_module: true
-  secure_boot: true
-  code_signing: true
-  runtime_protection: true
-  memory_protection: true
-  control_flow_integrity: true
-
-# Enhanced P2P Pool Configuration - 2025
-p2p_pool:
-  enabled: true
-  share_difficulty: 10000.0
-  block_time: 10m
-  payout_threshold: 0.001
-  fee_percentage: 0.5  # Reduced fees with efficiency
-  
-  # Advanced Pool Features
-  prop_fee_model: "PPLNS"  # PPS, PPLNS, PROP, SOLO, FPPS, PPS+
-  difficulty_adjustment: "advanced"  # simple, PID, advanced, AI
-  share_validation: "zkp"  # basic, full, zkp
-  ai_optimization: true
-  
-  # Pool Security - 2025
-  share_encryption: true
-  zero_knowledge_shares: true
-  anti_ddos: true
-  pool_hopping_protection: true
-  sybil_resistance: true
-  eclipse_attack_protection: true
-  
-  # Advanced Payout Configuration
-  payout_methods: ["direct", "lightning", "multisig", "zkp_private", "atomic_swap"]
-  min_payout: 0.0001
-  max_payout_delay: 6h
-  instant_payouts: true
-  
-  # Pool Analytics - AI Enhanced
-  enable_statistics: true
-  statistics_retention: 365  # days
-  enable_leaderboard: true
-  ai_analytics: true
-  predictive_analytics: true
-  performance_optimization: true
-
-# Latest Stratum Server Configuration - V3
-stratum:
-  enabled: true
-  listen_addr: ":3333"
-  protocol_version: 3  # Latest 2025 version
-  
-  # Connection Management - Scaled for Enterprise
-  max_clients: 1000000
-  connection_timeout: 300s
-  keepalive_interval: 30s
-  load_balancing: true
-  
-  # AI-Enhanced Difficulty Management
-  var_diff: true
-  min_diff: 1000.0
-  max_diff: 100000000.0
-  target_time: 10  # seconds per share
-  difficulty_algorithm: "ai_optimized"
-  ai_difficulty_tuning: true
-  
-  # Stratum V3 Features (2025)
-  enable_encryption: true
-  enable_authentication: true
-  enable_job_declaration: true
-  enable_custom_jobs: true
-  enable_zkp_auth: true
-  enable_anonymous_mining: true
-  
-  # Performance - 2025 Optimized
+  cache_size_mb: 100
   enable_compression: true
-  message_batching: true
-  async_processing: true
-  zero_copy_networking: true
-  kernel_bypass: false
+  
+  # Database
+  database:
+    type: "sqlite"  # sqlite, postgresql
+    path: "./data/otedama.db"
+    max_connections: 10
 
-# Cutting-Edge Performance Optimization - 2025
+# Performance Configuration
 performance:
-  enable_optimization: true
+  # Memory Management
+  gc_percent: 100
+  max_memory_mb: 0  # 0 = no limit
   
-  # AI-Powered Optimization
-  ai_optimization: true
-  machine_learning_tuning: true
-  predictive_scaling: true
-  adaptive_algorithms: true
+  # CPU Optimization
+  gomaxprocs: 0  # 0 = use all cores
   
-  # CPU Optimization - 2025
-  cpu:
-    affinity: []
-    scaling_governor: "performance"
-    disable_smt: false
-    numa_balancing: true
-    cpu_isolation: false
-    real_time_priority: false
-    
-  # Memory Optimization - Latest 2025
-  memory:
-    huge_pages_enabled: true
-    huge_pages_size: "1GB"  # 2MB, 1GB
-    memory_pool_size: 10000000
-    numa_aware_allocation: true
-    memory_compression: true
-    gc_percent: 25
-    gc_target: 2  # ms
-    
-  # Network Optimization - 6G Ready
-  network:
-    tcp_no_delay: true
-    tcp_window_scaling: true
-    tcp_congestion_control: "bbr2"
-    socket_buffer_size: 16777216  # 16MB
-    connection_pooling: true
-    zero_copy_networking: true
-    kernel_bypass: false
-    rdma_enabled: false
-    
-  # Disk I/O Optimization
-  disk:
-    async_io: true
-    io_scheduler: "mq-deadline"
-    read_ahead: 8192
-    write_cache: true
-    ssd_optimization: true
-    nvme_optimization: true
-    
-  # Advanced Performance - 2025
-  lock_free_structures: true
-  wait_free_algorithms: true
-  simd_optimization: true
-  vector_processing: true
-  gpu_acceleration: true
-  tpu_acceleration: false
+  # Network Optimization
+  tcp_nodelay: true
+  tcp_keepalive: true
+  socket_buffer_size: 65536
 
-# AI & Machine Learning Features - 2025 Advanced
-ai:
-  enabled: true
-  
-  # Advanced AI Features
-  deep_learning: true
-  reinforcement_learning: true
-  federated_learning: true
-  transfer_learning: true
-  continual_learning: true
-  
-  # Mining Optimization AI
-  profit_prediction: true
-  hardware_optimization: true
-  anomaly_detection: true
-  predictive_maintenance: true
-  energy_optimization: true
-  thermal_management: true
-  
-  # AI Models - 2025 State-of-the-Art
-  models_dir: "data/models"
-  model_update_interval: 6h
-  training_enabled: true
-  auto_model_selection: true
-  ensemble_methods: true
-  
-  # Performance Tuning AI
-  neural_architecture_search: true
-  auto_hyperparameter_tuning: true
-  model_compression: true
-  quantization: true
-  pruning: true
-  knowledge_distillation: true
-  
-  # AI Hardware Acceleration
-  gpu_acceleration: true
-  tpu_acceleration: false
-  neuromorphic_computing: false
-  
-  # Ethics & Safety
-  ai_ethics_enabled: true
-  bias_detection: true
-  fairness_constraints: true
-  explainable_ai: true
-  privacy_preserving_ml: true
-
-# Enterprise Features - Fortune 500 Ready
-enterprise:
-  enabled: true
-  
-  # Multi-tenancy - Enterprise Scale
-  multi_tenant: true
-  tenant_isolation: "strong"  # namespace, strong
-  tenant_management: true
-  resource_quotas: true
-  
-  # High Availability - 99.99% Uptime
-  cluster_mode: true
-  load_balancing: true
-  auto_failover: true
-  disaster_recovery: true
-  geo_replication: true
-  
-  # Backup & Recovery - Enterprise Grade
-  backup_encryption: true
-  cross_region_backup: true
-  point_in_time_recovery: true
-  automated_recovery: true
-  recovery_testing: true
-  
-  # Enterprise Integration
-  ldap_integration: true
-  active_directory: true
-  sso_enabled: true
-  saml_support: true
-  oauth2_support: true
-  api_gateway: true
-  service_mesh: true
-  
-  # Enterprise Management
-  policy_management: true
-  configuration_management: true
-  change_management: true
-  incident_management: true
-  capacity_planning: true
-  cost_optimization: true
-
-# Government & National-Level Features - Classified Ready
-government:
+# Backup Configuration
+backup:
   enabled: false
-  
-  # National Security Compliance
-  classified_operations: false
-  security_clearance_required: false
-  compartmentalized_access: false
-  need_to_know_basis: false
-  
-  # Regulatory Compliance - Government Grade
-  kyc_integration: false  # Use ZKP instead
-  aml_monitoring: true
-  sanctions_screening: true
-  transaction_monitoring: true
-  suspicious_activity_reporting: true
-  
-  # National Security Features
-  secure_communications: true
-  encrypted_channels: true
-  covert_channels: false
-  steganographic_communications: false
-  
-  # Advanced Audit & Reporting
-  regulatory_reporting: true
-  real_time_monitoring: true
-  forensic_capabilities: true
-  chain_of_custody: true
-  tamper_evident_logging: true
-  
-  # Data Sovereignty
-  data_residency: ""  # country code
-  data_localization: true
-  sovereign_infrastructure: true
-  national_cloud: false
-  air_gapped_operations: false
-  
-  # Export Control & Trade Compliance
-  export_control_screening: true
-  trade_sanctions_compliance: true
-  dual_use_technology_controls: true
-  technology_transfer_controls: true
+  interval: "24h"
+  retention_days: 30
+  backup_dir: "./backups"
+  encrypt_backups: false
 
-# Development & Testing - 2025 DevOps
-development:
+# Solo Mining Configuration (for single miners)
+solo:
   enabled: false
-  
-  # Development Features
-  mock_mining: false
-  test_mode: false
-  debug_logging: false
-  performance_profiling: true
-  memory_profiling: true
-  
-  # Testing Features - Comprehensive 2025 Suite
-  unit_tests: true
-  integration_tests: true
-  end_to_end_tests: true
-  load_testing: true
-  stress_testing: true
-  chaos_engineering: true
-  security_testing: true
-  penetration_testing: false
-  fuzzing: true
-  mutation_testing: false
-  
-  # Development Tools - Modern 2025 Stack
-  hot_reload: false
-  code_coverage: true
-  benchmarking: true
-  profiling: true
-  static_analysis: true
-  linting: true
-  formatting: true
-  dependency_analysis: true
-  
-  # CI/CD Integration
-  continuous_integration: true
-  continuous_deployment: false
-  automated_testing: true
-  automated_security_scanning: true
-  infrastructure_as_code: true
-  gitops_enabled: false
+  wallet_address: ""
+  node_url: ""
+  node_user: ""
+  node_password: ""
 
-# Sustainability & ESG - 2025 Green Mining
-sustainability:
-  enabled: true
-  
-  # Carbon Neutrality
-  carbon_neutral_mining: true
-  renewable_energy_only: false
-  carbon_offset_required: true
-  carbon_footprint_tracking: true
-  
-  # Energy Optimization
-  energy_efficiency_optimization: true
-  waste_heat_recovery: false
-  green_energy_integration: true
-  demand_response_participation: false
-  
-  # ESG Reporting
-  esg_reporting: true
-  sustainability_metrics: true
-  environmental_impact_tracking: true
-  social_impact_reporting: true
-  governance_reporting: true
-  
-  # Circular Economy
-  hardware_recycling: true
-  lifecycle_assessment: true
-  sustainable_procurement: false
-  waste_reduction: true
+# Pool Mining Configuration (connect to external pools)
+pool:
+  enabled: false
+  pools: []  # Will be configured by users with actual pool addresses

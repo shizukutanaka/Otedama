@@ -1,0 +1,192 @@
+# Default values for otedama.
+# This is a YAML-formatted file.
+
+replicaCount: 3
+
+image:
+  repository: otedama
+  pullPolicy: IfNotPresent
+  tag: "2.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  dashboard:
+    type: LoadBalancer
+    port: 80
+    targetPort: 8080
+  api:
+    type: ClusterIP
+    port: 8081
+    targetPort: 8081
+  stratum:
+    type: LoadBalancer
+    port: 3333
+    targetPort: 3333
+  p2p:
+    type: NodePort
+    port: 30303
+    targetPort: 30303
+    nodePort: 30303
+  metrics:
+    type: ClusterIP
+    port: 9090
+    targetPort: 9090
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: pool.otedama.io
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dashboard
+    - host: api.otedama.io
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api
+  tls:
+    - secretName: otedama-tls
+      hosts:
+        - pool.otedama.io
+        - api.otedama.io
+
+resources:
+  limits:
+    cpu: 4
+    memory: 8Gi
+  requests:
+    cpu: 2
+    memory: 4Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessMode: ReadWriteOnce
+  size: 100Gi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - otedama
+        topologyKey: kubernetes.io/hostname
+
+# Otedama configuration
+config:
+  app:
+    name: "Otedama"
+    version: "2.1.0"
+    environment: "production"
+    logLevel: "info"
+  
+  pool:
+    enabled: true
+    fee: 1.0
+    minPayout: 0.001
+    payoutInterval: "24h"
+    paymentType: "PPLNS"
+  
+  p2p:
+    enabled: true
+    maxPeers: 50
+    networkId: 1337
+    discovery: true
+    bootstrapNodes: []
+  
+  stratum:
+    enabled: true
+    maxConnections: 10000
+    difficulty: 16384
+    varDiff:
+      enabled: true
+      minDiff: 1024
+      maxDiff: 65536
+      targetTime: 15
+      retargetTime: 120
+      variancePercent: 30
+  
+  mining:
+    algorithms:
+      - SHA256d
+      - Ethash
+      - KawPow
+      - RandomX
+      - Scrypt
+    profitSwitching:
+      enabled: true
+      checkInterval: "5m"
+      switchThreshold: 5.0
+      minRunTime: "30m"
+  
+  api:
+    enabled: true
+    enableAuth: true
+    enableRateLimit: true
+    rateLimit: 100
+    enableCors: true
+    allowedOrigins: ["*"]
+  
+  dashboard:
+    enabled: true
+    enableAuth: false
+  
+  monitoring:
+    prometheus:
+      enabled: true
+    hardware:
+      enabled: true
+      updateInterval: "10s"
+      tempThreshold: 85
+      powerThreshold: 300
+      memoryThreshold: 90
+
+# Secrets - should be overridden
+secrets:
+  apiKey: "change-me-in-production"
+  dashboardUsername: "admin"
+  dashboardPassword: "changeme"
+  walletSeed: "your-wallet-seed-phrase-here"

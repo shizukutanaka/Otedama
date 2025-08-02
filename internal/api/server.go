@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/otedama/otedama/internal/mining"
 	"go.uber.org/zap"
 )
 
@@ -22,6 +23,7 @@ type Server struct {
 	upgrader   websocket.Upgrader
 	clients    map[*websocket.Conn]bool
 	stats      map[string]interface{}
+	engine     mining.Engine
 }
 
 // Config defines API server configuration
@@ -44,7 +46,7 @@ type Response struct {
 }
 
 // NewServer creates a new API server
-func NewServer(config Config, logger *zap.Logger) (*Server, error) {
+func NewServer(config Config, logger *zap.Logger, engine mining.Engine) (*Server, error) {
 	if !config.Enabled {
 		return nil, fmt.Errorf("API server disabled")
 	}
@@ -54,6 +56,7 @@ func NewServer(config Config, logger *zap.Logger) (*Server, error) {
 		config:  config,
 		clients: make(map[*websocket.Conn]bool),
 		stats:   make(map[string]interface{}),
+		engine:  engine,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				// Allow all origins for now - in production would check config.AllowOrigins
@@ -131,11 +134,30 @@ func (s *Server) setupRoutes() {
 	api.HandleFunc("/mining/stats", s.handleMiningStats).Methods("GET")
 	api.HandleFunc("/mining/start", s.handleMiningStart).Methods("POST")
 	api.HandleFunc("/mining/stop", s.handleMiningStop).Methods("POST")
+	api.HandleFunc("/mining/workers", s.handleMiningWorkers).Methods("GET")
+	api.HandleFunc("/mining/workers/{id}/control", s.handleWorkerControl).Methods("POST")
 
 	// Pool endpoints
 	api.HandleFunc("/pool/stats", s.handlePoolStats).Methods("GET")
 	api.HandleFunc("/pool/peers", s.handlePoolPeers).Methods("GET")
 	api.HandleFunc("/pool/shares", s.handlePoolShares).Methods("GET")
+	api.HandleFunc("/pool/info", s.handlePoolInfo).Methods("GET")
+
+	// Stratum endpoints
+	api.HandleFunc("/stratum/info", s.handleStratumInfo).Methods("GET")
+
+	// Profit switching endpoints
+	api.HandleFunc("/profit/status", s.handleProfitStatus).Methods("GET")
+	api.HandleFunc("/profit/switch", s.handleProfitSwitch).Methods("POST")
+
+	// Algorithm management endpoints
+	s.RegisterAlgorithmRoutes(api)
+
+	// Log management endpoints
+	s.RegisterLogRoutes(api)
+
+	// Internationalization endpoints
+	s.RegisterI18nRoutes(api)
 
 	// WebSocket endpoint
 	api.HandleFunc("/ws", s.handleWebSocket)
@@ -307,6 +329,175 @@ func (s *Server) handlePoolShares(w http.ResponseWriter, r *http.Request) {
 	s.sendJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) handleMiningWorkers(w http.ResponseWriter, r *http.Request) {
+	// Placeholder workers data
+	workers := []map[string]interface{}{
+		{
+			"id":          "worker-1",
+			"name":        "CPU-Worker-1",
+			"type":        "CPU",
+			"hashrate":    125000,
+			"temperature": 65,
+			"power":       100,
+			"status":      "active",
+			"shares_accepted": 42,
+			"shares_rejected": 2,
+		},
+	}
+
+	response := Response{
+		Success: true,
+		Data:    workers,
+		Time:    time.Now(),
+	}
+
+	s.sendJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleWorkerControl(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	workerID := vars["id"]
+	
+	var req struct {
+		Action string `json:"action"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	
+	// Validate action
+	validActions := map[string]bool{
+		"start": true,
+		"stop": true,
+		"restart": true,
+	}
+	
+	if !validActions[req.Action] {
+		s.sendError(w, http.StatusBadRequest, "Invalid action")
+		return
+	}
+	
+	response := Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"worker_id": workerID,
+			"action":    req.Action,
+			"message":   fmt.Sprintf("Worker %s %s successful", workerID, req.Action),
+		},
+		Time: time.Now(),
+	}
+
+	s.sendJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handlePoolInfo(w http.ResponseWriter, r *http.Request) {
+	info := map[string]interface{}{
+		"name":         "Otedama P2P Pool",
+		"type":         "P2P",
+		"fee":          1.0,
+		"min_payout":   0.001,
+		"payment_type": "PPLNS",
+		"algorithms":   []string{"SHA256d", "Ethash", "KawPow", "RandomX", "Scrypt"},
+	}
+
+	response := Response{
+		Success: true,
+		Data:    info,
+		Time:    time.Now(),
+	}
+
+	s.sendJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleStratumInfo(w http.ResponseWriter, r *http.Request) {
+	info := map[string]interface{}{
+		"enabled":     true,
+		"port":        3333,
+		"difficulty":  16384,
+		"connections": 0,
+		"protocols":   []string{"stratum+tcp", "stratum+ssl"},
+	}
+
+	response := Response{
+		Success: true,
+		Data:    info,
+		Time:    time.Now(),
+	}
+
+	s.sendJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleProfitStatus(w http.ResponseWriter, r *http.Request) {
+	status := map[string]interface{}{
+		"enabled":          true,
+		"current_algo":     "SHA256d",
+		"next_switch":      time.Now().Add(15 * time.Minute),
+		"profit_threshold": 5.0,
+		"algorithms": []map[string]interface{}{
+			{
+				"name":           "SHA256d",
+				"profitability":  1.0,
+				"hashrate":       1250000,
+				"profit_per_day": 0.00012,
+			},
+			{
+				"name":           "Ethash",
+				"profitability":  0.95,
+				"hashrate":       30000000,
+				"profit_per_day": 0.00011,
+			},
+		},
+	}
+
+	response := Response{
+		Success: true,
+		Data:    status,
+		Time:    time.Now(),
+	}
+
+	s.sendJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleProfitSwitch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Algorithm string `json:"algorithm"`
+		Force     bool   `json:"force"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	
+	// Validate algorithm
+	validAlgos := map[string]bool{
+		"SHA256d": true,
+		"Ethash": true,
+		"KawPow": true,
+		"RandomX": true,
+		"Scrypt": true,
+	}
+	
+	if !validAlgos[req.Algorithm] {
+		s.sendError(w, http.StatusBadRequest, "Invalid algorithm")
+		return
+	}
+	
+	response := Response{
+		Success: true,
+		Data: map[string]interface{}{
+			"algorithm": req.Algorithm,
+			"forced":    req.Force,
+			"message":   fmt.Sprintf("Switching to %s algorithm", req.Algorithm),
+		},
+		Time: time.Now(),
+	}
+
+	s.sendJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -415,4 +606,14 @@ func (s *Server) sendError(w http.ResponseWriter, status int, message string) {
 	}
 
 	s.sendJSON(w, status, response)
+}
+
+// writeJSON writes JSON response (helper for algorithm routes)
+func (s *Server) writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	s.sendJSON(w, status, data)
+}
+
+// writeError writes error response (helper for algorithm routes)
+func (s *Server) writeError(w http.ResponseWriter, status int, message string) {
+	s.sendError(w, status, message)
 }

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: otedama
+description: A Helm chart for Otedama P2P Mining Pool
+type: application
+version: 2.1.0
+appVersion: "2.1.0"
+keywords:
+  - mining
+  - pool
+  - p2p
+  - cryptocurrency
+home: https://github.com/shizukutanaka/Otedama
+sources:
+  - https://github.com/shizukutanaka/Otedama
+maintainers:
+  - name: Otedama Team
+    email: support@otedama.io
+icon: https://otedama.io/logo.png

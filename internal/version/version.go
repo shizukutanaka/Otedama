@@ -4,16 +4,16 @@ package version
 // Version information - these can be overridden during build
 var (
 	// Version is the current version of Otedama
-	Version = "2.1.0"
+	Version = "2.1.1"
 	
 	// BuildDate is set during build time
-	BuildDate = "2025-07-31"
+	BuildDate = "2025-08-02"
 	
 	// GitCommit can be set via ldflags during build
 	GitCommit = "unknown"
 	
 	// GoVersion is the Go version used to build
-	GoVersion = "unknown"
+	GoVersion = "1.21"
 )
 
 // Info returns a struct with all version information

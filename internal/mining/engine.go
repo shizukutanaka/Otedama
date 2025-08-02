@@ -71,6 +71,8 @@ type UnifiedEngine struct {
 	// Additional components
 	autoTuner      *AutoTuner
 	profitSwitcher *ProfitSwitcher
+	algManager     *AlgorithmManager
+	profitCalc     *ProfitCalculator
 	
 	// Pool info
 	poolURL    string
@@ -338,6 +340,12 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 	}
 	engine.algHandler = algHandler
 	
+	// Initialize algorithm manager for multi-algorithm support
+	engine.algManager = NewAlgorithmManager()
+	
+	// Initialize profit calculator with default power cost
+	engine.profitCalc = NewProfitCalculator(0.10) // $0.10 per kWh default
+	
 	// Detect and initialize workers
 	if err := engine.initializeWorkers(); err != nil {
 		cancel()
@@ -383,6 +391,12 @@ func (e *UnifiedEngine) Start() error {
 		go e.optimizer()
 	}
 	
+	// Start algorithm manager for profit-based switching
+	if e.algManager != nil {
+		e.algManager.Start()
+		e.logger.Info("Algorithm manager started for profit-based switching")
+	}
+	
 	e.logger.Info("Mining engine started successfully")
 	return nil
 }
@@ -409,6 +423,11 @@ func (e *UnifiedEngine) Stop() error {
 	
 	// Close remaining channels
 	close(e.shareChan)
+	
+	// Stop algorithm manager
+	if e.algManager != nil {
+		e.algManager.Stop()
+	}
 	
 	e.logger.Info("Mining engine stopped")
 	return nil
@@ -964,4 +983,69 @@ func (wp *WorkerPool) Stop() {
 func (wp *WorkerPool) Submit(task func()) {
 	// Implementation would submit task to workers
 	go task()
+}
+
+// GetAlgorithmManager returns the algorithm manager
+func (e *UnifiedEngine) GetAlgorithmManager() *AlgorithmManager {
+	return e.algManager
+}
+
+// GetProfitCalculator returns the profit calculator
+func (e *UnifiedEngine) GetProfitCalculator() *ProfitCalculator {
+	return e.profitCalc
+}
+
+// SetPowerCost updates the electricity cost for profit calculations
+func (e *UnifiedEngine) SetPowerCost(costPerKWh float64) {
+	if e.profitCalc != nil {
+		e.profitCalc.UpdatePowerCost(costPerKWh)
+	}
+}
+
+// GetProfitabilityData returns current profitability data for all algorithms
+func (e *UnifiedEngine) GetProfitabilityData() []ProfitabilityData {
+	if e.algManager != nil {
+		return e.algManager.GetProfitabilityData()
+	}
+	return nil
+}
+
+// GetAlgorithmComparison compares profitability across algorithms
+func (e *UnifiedEngine) GetAlgorithmComparison() []AlgorithmComparison {
+	if e.profitCalc == nil {
+		return nil
+	}
+	
+	// Create hardware profile based on current configuration
+	hardware := &MiningHardware{
+		Name:      "Otedama Miner",
+		PowerDraw: 1000, // Default 1000W
+		Hashrate:  make(map[AlgorithmType]float64),
+	}
+	
+	// Set hashrates based on hardware type
+	if e.config.CPUThreads > 0 {
+		hardware.Hashrate[RandomX] = 10000 // 10 KH/s for RandomX on CPU
+		hardware.Hashrate[SHA256D] = 100000000 // 100 MH/s
+	}
+	
+	if len(e.config.GPUDevices) > 0 {
+		hardware.Hashrate[Ethash] = 30000000 // 30 MH/s
+		hardware.Hashrate[KawPow] = 20000000 // 20 MH/s
+	}
+	
+	if len(e.config.ASICDevices) > 0 {
+		hardware.Hashrate[SHA256D] = 100000000000000 // 100 TH/s
+	}
+	
+	return e.profitCalc.CompareAlgorithms(hardware)
+}
+
+// EnableProfitSwitching enables automatic profit-based algorithm switching
+func (e *UnifiedEngine) EnableProfitSwitching(threshold float64) {
+	if e.algManager != nil {
+		e.algManager.SetProfitThreshold(threshold)
+		e.logger.Info("Profit-based algorithm switching enabled",
+			zap.Float64("threshold", threshold))
+	}
 }

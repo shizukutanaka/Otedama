@@ -8,12 +8,6 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/cli"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/core"
-	"github.com/shizukutanaka/Otedama/internal/mining"
-	"github.com/shizukutanaka/Otedama/internal/monitoring"
-	"github.com/shizukutanaka/Otedama/internal/p2p"
-	"github.com/shizukutanaka/Otedama/internal/security"
-	"github.com/shizukutanaka/Otedama/internal/stratum"
-	"github.com/shizukutanaka/Otedama/internal/zkp"
 	"go.uber.org/zap"
 )
 
@@ -25,29 +19,25 @@ const (
 
 // Application represents the unified Otedama system - Robert C. Martin's single responsibility
 type Application struct {
-	ctx     context.Context
-	logger  *zap.Logger
-	config  *config.Config
-	
-	// Core components - dependency injection pattern
-	engine     mining.Engine
-	zkpSystem  zkp.System
-	p2pNetwork p2p.Network
-	stratum    stratum.Server
-	monitor    monitoring.Monitor
-	security   security.Manager
+	ctx    context.Context
+	logger *zap.Logger
+	config *config.Config
+	system *core.OtedamaSystem
 }
 
 // New creates a new application instance - Rob Pike's clear constructor
 func New(ctx context.Context, logger *zap.Logger, cfg *config.Config) (*Application, error) {
+	// Create the unified Otedama system
+	system, err := core.NewOtedamaSystem(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Otedama system: %w", err)
+	}
+	
 	app := &Application{
 		ctx:    ctx,
 		logger: logger,
 		config: cfg,
-	}
-	
-	if err := app.initializeComponents(); err != nil {
-		return nil, fmt.Errorf("failed to initialize components: %w", err)
+		system: system,
 	}
 	
 	return app, nil
@@ -56,218 +46,61 @@ func New(ctx context.Context, logger *zap.Logger, cfg *config.Config) (*Applicat
 // Start starts all application components - John Carmack's error handling
 func (a *Application) Start() error {
 	a.logger.Info("Starting Otedama application",
+		zap.String("version", a.config.Version),
 		zap.String("mode", a.config.Mode),
 		zap.String("algorithm", a.config.Mining.Algorithm),
 		zap.Bool("zkp_enabled", a.config.ZKP.Enabled),
+		zap.Bool("national_security", a.config.Government.Enabled),
 	)
 	
-	// Start components in dependency order
-	components := []struct {
-		name string
-		fn   func() error
-	}{
-		{"security", a.security.Start},
-		{"monitoring", a.monitor.Start},
-		{"zkp_system", a.zkpSystem.Start},
-		{"p2p_network", a.p2pNetwork.Start},
-		{"stratum_server", a.startStratum},
-		{"mining_engine", a.engine.Start},
+	// Start the unified system
+	if err := a.system.Start(); err != nil {
+		return fmt.Errorf("failed to start system: %w", err)
 	}
 	
-	for _, comp := range components {
-		if err := comp.fn(); err != nil {
-			return fmt.Errorf("failed to start %s: %w", comp.name, err)
-		}
-		a.logger.Debug("Component started", zap.String("component", comp.name))
-	}
+	a.logger.Info("Otedama application started successfully",
+		zap.String("state", a.system.GetState().String()),
+	)
 	
-	a.logger.Info("All components started successfully")
 	return nil
 }
 
 // Shutdown gracefully shuts down all components - circuit breaker pattern
 func (a *Application) Shutdown(ctx context.Context) error {
-	a.logger.Info("Shutting down application")
+	a.logger.Info("Shutting down Otedama application")
 	
-	// Shutdown in reverse order
-	shutdownFns := []func() error{
-		a.engine.Stop,
-		a.stopStratum,
-		a.p2pNetwork.Stop,
-		a.zkpSystem.Stop,
-		a.monitor.Stop,
-		a.security.Stop,
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(ctx, ShutdownTimeout)
+	defer cancel()
+	
+	// Stop the system
+	if err := a.system.Stop(); err != nil {
+		a.logger.Error("System shutdown error", zap.Error(err))
+		return err
 	}
 	
-	for i, fn := range shutdownFns {
-		if err := fn(); err != nil {
-			a.logger.Error("Shutdown error", 
-				zap.Int("component", i), 
-				zap.Error(err),
-			)
+	// Ensure shutdown completes within timeout
+	done := make(chan struct{})
+	go func() {
+		// Wait for system to fully stop
+		for a.system.GetState() != core.StateStopped {
+			time.Sleep(100 * time.Millisecond)
 		}
-	}
+		close(done)
+	}()
 	
-	return nil
-}
-
-// initializeComponents sets up all system components - dependency inversion
-func (a *Application) initializeComponents() error {
-	var err error
-	
-	// Initialize security manager first - security first principle
-	a.security, err = security.NewManager(a.logger, &a.config.Security)
-	if err != nil {
-		return fmt.Errorf("failed to create security manager: %w", err)
-	}
-	
-	// Initialize monitoring - observability
-	a.monitor, err = monitoring.NewMonitor(a.logger, &a.config.Monitoring)
-	if err != nil {
-		return fmt.Errorf("failed to create monitor: %w", err)
-	}
-	
-	// Initialize ZKP KYC system - privacy first
-	if a.config.ZKP.Enabled {
-		a.zkpSystem, err = zkp.NewSystem(a.logger, &a.config.ZKP)
-		if err != nil {
-			return fmt.Errorf("failed to create ZKP system: %w", err)
-		}
-	} else {
-		a.zkpSystem = zkp.NewNoOpSystem()
-	}
-	
-	// Initialize P2P network - decentralization
-	a.p2pNetwork, err = p2p.NewNetwork(a.logger, &a.config.P2P)
-	if err != nil {
-		return fmt.Errorf("failed to create P2P network: %w", err)
-	}
-	
-	// Initialize Stratum server for pool mode
-	if a.config.Mode == "pool" || a.config.Mode == "auto" {
-		a.stratum, err = stratum.NewServer(a.logger, &a.config.Stratum)
-		if err != nil {
-			return fmt.Errorf("failed to create Stratum server: %w", err)
-		}
-	}
-	
-	// Initialize mining engine - core functionality
-	a.engine, err = mining.NewEngine(a.logger, &a.config.Mining)
-	if err != nil {
-		return fmt.Errorf("failed to create mining engine: %w", err)
-	}
-	
-	a.logger.Debug("All components initialized")
-	return nil
-}
-
-// startStratum starts Stratum server if configured
-func (a *Application) startStratum() error {
-	if a.stratum == nil {
-		return nil // Not configured
-	}
-	
-	// Set up callbacks - dependency inversion
-	callbacks := &stratum.Callbacks{
-		OnShare:  a.handleShare,
-		OnGetJob: a.getNewJob,
-		OnAuth:   a.authenticateWorker,
-	}
-	
-	a.stratum.SetCallbacks(callbacks)
-	return a.stratum.Start()
-}
-
-// stopStratum stops Stratum server
-func (a *Application) stopStratum() error {
-	if a.stratum == nil {
+	select {
+	case <-done:
+		a.logger.Info("Application shutdown complete")
 		return nil
+	case <-shutdownCtx.Done():
+		return fmt.Errorf("shutdown timeout exceeded")
 	}
-	return a.stratum.Stop()
-}
-
-// handleShare processes submitted shares - business logic separation
-func (a *Application) handleShare(share *stratum.Share) error {
-	// Authenticate with ZKP if enabled
-	if a.config.ZKP.Enabled {
-		if !a.zkpSystem.IsVerified(share.WorkerName) {
-			return fmt.Errorf("worker not ZKP verified: %s", share.WorkerName)
-		}
-	}
-	
-	// Convert to mining share
-	miningShare := &mining.Share{
-		JobID:      share.JobID,
-		WorkerID:   share.WorkerName,
-		Nonce:      share.Nonce,
-		Timestamp:  share.Timestamp,
-		Difficulty: share.Difficulty,
-		Hash:       share.Hash,
-	}
-	
-	// Submit to mining engine
-	return a.engine.SubmitShare(miningShare)
-}
-
-// getNewJob generates new mining job
-func (a *Application) getNewJob() *stratum.Job {
-	// Get job from mining engine
-	miningJob := a.engine.GetCurrentJob()
-	if miningJob == nil {
-		return nil
-	}
-	
-	// Convert to Stratum job
-	return &stratum.Job{
-		ID:           miningJob.ID,
-		PrevHash:     miningJob.PrevHash,
-		CoinbaseA:    miningJob.CoinbaseA,
-		CoinbaseB:    miningJob.CoinbaseB,
-		MerkleBranch: miningJob.MerkleBranch,
-		Version:      miningJob.Version,
-		NBits:        miningJob.NBits,
-		NTime:        miningJob.NTime,
-		CleanJobs:    miningJob.CleanJobs,
-	}
-}
-
-// authenticateWorker authenticates worker with ZKP
-func (a *Application) authenticateWorker(workerName, password string) error {
-	if !a.config.ZKP.Enabled {
-		return nil // No authentication required
-	}
-	
-	// Verify ZKP proof in password field
-	proof, err := zkp.ParseProof(password)
-	if err != nil {
-		return fmt.Errorf("invalid ZKP proof: %w", err)
-	}
-	
-	// Verify the proof
-	if err := a.zkpSystem.VerifyProof(workerName, proof); err != nil {
-		return fmt.Errorf("ZKP verification failed: %w", err)
-	}
-	
-	a.logger.Debug("Worker authenticated via ZKP", zap.String("worker", workerName))
-	return nil
 }
 
 // GetStats returns application statistics - monitoring interface
-func (a *Application) GetStats() *Stats {
-	return &Stats{
-		Engine:  a.engine.GetStats(),
-		ZKP:     a.zkpSystem.GetStats(),
-		P2P:     a.p2pNetwork.GetStats(),
-		Monitor: a.monitor.GetStats(),
-	}
-}
-
-// Stats aggregates system statistics
-type Stats struct {
-	Engine  *mining.Stats
-	ZKP     *zkp.Stats
-	P2P     *p2p.Stats
-	Monitor *monitoring.Stats
+func (a *Application) GetStats() map[string]interface{} {
+	return a.system.GetStats()
 }
 
 // LoadConfig loads and validates configuration - Rob Pike's error handling
@@ -282,6 +115,10 @@ func LoadConfig(configFile string, flags *cli.Flags) (*config.Config, error) {
 	if err := applyFlagOverrides(cfg, flags); err != nil {
 		return nil, fmt.Errorf("failed to apply flag overrides: %w", err)
 	}
+	
+	// Set version information
+	cfg.Version = "3.0.0"
+	cfg.Name = "Otedama Enterprise Mining Pool"
 	
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
@@ -304,21 +141,21 @@ func applyFlagOverrides(cfg *config.Config, flags *cli.Flags) error {
 	}
 	
 	if flags.Threads > 0 {
-		cfg.Mining.CPUThreads = flags.Threads
+		cfg.Mining.Threads = flags.Threads
 	}
 	
 	// Hardware selection
 	if flags.CPUOnly {
-		cfg.Mining.GPUEnabled = false
-		cfg.Mining.ASICEnabled = false
+		cfg.Mining.GPU.Enable = false
+		cfg.Mining.ASIC.Enable = false
 	}
 	if flags.GPUOnly {
-		cfg.Mining.CPUEnabled = false
-		cfg.Mining.ASICEnabled = false
+		cfg.Mining.CPU.Enable = false
+		cfg.Mining.ASIC.Enable = false
 	}
 	if flags.ASICOnly {
-		cfg.Mining.CPUEnabled = false
-		cfg.Mining.GPUEnabled = false
+		cfg.Mining.CPU.Enable = false
+		cfg.Mining.GPU.Enable = false
 	}
 	
 	// ZKP settings
@@ -329,23 +166,52 @@ func applyFlagOverrides(cfg *config.Config, flags *cli.Flags) error {
 	
 	// Network settings
 	if flags.Port > 0 {
-		cfg.P2P.Port = flags.Port
+		cfg.Network.ListenAddr = fmt.Sprintf(":%d", flags.Port)
 	}
 	if flags.APIPort > 0 {
-		cfg.API.Port = flags.APIPort
+		cfg.API.ListenAddr = fmt.Sprintf(":%d", flags.APIPort)
 	}
 	if flags.StratumPort > 0 {
-		cfg.Stratum.Port = flags.StratumPort
+		cfg.Stratum.ListenAddr = fmt.Sprintf(":%d", flags.StratumPort)
 	}
 	
 	// Performance settings
-	cfg.Mining.AutoTune = flags.AutoTune
-	cfg.Performance.HugePagesEnabled = flags.HugePages
-	cfg.Performance.NUMAEnabled = flags.NUMA
+	cfg.Mining.AutoTuning = flags.AutoTune
+	cfg.Performance.Memory.HugePagesEnabled = flags.HugePages
+	cfg.Performance.Memory.NUMABalancing = flags.NUMA
 	
 	if flags.CPUAffinity != "" {
-		cfg.Performance.CPUAffinity = flags.CPUAffinity
+		// Parse CPU affinity string
+		cfg.Performance.CPU.Affinity = parseCPUAffinity(flags.CPUAffinity)
+	}
+	
+	// Security settings
+	if flags.NationalSecurity {
+		cfg.Government.Enabled = true
+		cfg.Security.HardwareSecurityModule = true
+		cfg.Security.ZeroTrustEnabled = true
+	}
+	
+	// Privacy settings
+	if flags.Anonymous {
+		cfg.Privacy.AnonymousMining = true
+		cfg.Privacy.EnableTor = true
+		cfg.Privacy.EnableI2P = true
+	}
+	
+	// Development settings
+	if flags.Debug {
+		cfg.LogLevel = "debug"
+		cfg.Development.Enabled = true
+		cfg.Development.DebugLogging = true
 	}
 	
 	return nil
+}
+
+// parseCPUAffinity parses CPU affinity string into integer array
+func parseCPUAffinity(affinity string) []int {
+	// Simple implementation - in production, parse comma-separated values
+	// e.g., "0,1,2,3" -> [0,1,2,3]
+	return []int{}
 }

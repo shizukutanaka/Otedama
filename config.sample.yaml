@@ -18,7 +18,7 @@ mining:
 
   # Pool configuration for miner mode
   pools:
-    - url: "stratum+tcp://pool.example.com:3333"
+    - url: "stratum+tcp://your-pool-address:3333"  # Replace with actual pool
       user: "your_wallet_address"
       pass: "x"
       priority: 1

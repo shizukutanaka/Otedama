@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2025-08-02
+
+### Added
+- **Sharechain Implementation** (spec2.md FR103)
+  - Complete P2P sharechain with Byzantine fault tolerance
+  - Automatic synchronization between peer nodes
+  - Fork detection and resolution mechanisms
+  - Block validation with proof-of-work verification
+  - Share deduplication and TTL management
+- **Block Template Management** (spec2.md FR201)
+  - RPC-based block template retrieval from cryptocurrency nodes
+  - Long polling support for real-time template updates
+  - Template processing for mining work generation
+  - Support for multiple cryptocurrencies (Bitcoin, Litecoin, etc.)
+- **Automatic Payout System** (spec2.md FR203)
+  - Batch transaction creation for efficient payouts
+  - Configurable minimum payout thresholds
+  - Transaction confirmation tracking
+  - Multi-signature wallet support
+  - Failed payout retry mechanism
+- **Auto-Profiling Tool Integration**
+  - Automatic CPU, memory, and goroutine profiling with pprof
+  - Performance bottleneck detection and analysis
+  - Real-time optimization suggestions
+  - Memory leak detection
+  - GC pressure analysis and tuning
+
+### Enhanced
+- **P2P Communication Protocol** (SPEC.md Section 9)
+  - Complete protocol implementation with all message types
+  - Message handlers for shares, jobs, blocks, ledgers, and transactions
+  - Peer management with trust scoring
+  - Anti-spam measures and rate limiting
+  - Message deduplication and validation
+- **Reward Ledger System** (SPEC.md Section 6)
+  - Consensus-based ledger synchronization
+  - Multiple distribution methods (PPS, PPLNS, PROP, FPPS)
+  - Trust score management for nodes
+  - Automatic cleanup of old ledgers
+  - Conflict resolution for competing ledgers
+
+### Fixed
+- Missing imports in various modules
+- Configuration structure compatibility issues
+- File path handling in wallet and backup systems
+- Race conditions in concurrent operations
+
+### Technical Details
+- Implemented comprehensive sharechain with ~500 lines of core logic
+- Added industrial-grade RPC client for node integration
+- Created modular payout system with cryptocurrency abstraction
+- Integrated advanced profiling with automatic performance optimization
+- Enhanced P2P protocol with complete message handling pipeline
+
 ## [2.1.0] - 2025-07-31
 
 ### Changed

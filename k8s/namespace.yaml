@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otedama
+  labels:
+    app: otedama
+    version: v2.1.0

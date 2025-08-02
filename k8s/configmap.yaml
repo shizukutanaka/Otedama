@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  namespace: otedama
+  labels:
+    app: otedama
+data:
+  config.yaml: |
+    app:
+      name: "Otedama"
+      version: "2.1.0"
+      environment: "production"
+      log_level: "info"
+    
+    pool:
+      enabled: true
+      fee: 1.0
+      min_payout: 0.001
+      payout_interval: 24h
+      payment_type: "PPLNS"
+    
+    p2p:
+      enabled: true
+      port: 30303
+      max_peers: 50
+      network_id: 1337
+      discovery: true
+      bootstrap_nodes: []
+    
+    stratum:
+      enabled: true
+      port: 3333
+      max_connections: 10000
+      difficulty: 16384
+      var_diff:
+        enabled: true
+        min_diff: 1024
+        max_diff: 65536
+        target_time: 15
+        retarget_time: 120
+        variance_percent: 30
+    
+    mining:
+      algorithms:
+        - SHA256d
+        - Ethash
+        - KawPow
+        - RandomX
+        - Scrypt
+      cpu:
+        enabled: true
+        threads: 0
+        affinity: false
+        priority: 0
+      gpu:
+        enabled: true
+        cuda: true
+        opencl: true
+      profit_switching:
+        enabled: true
+        check_interval: 5m
+        switch_threshold: 5.0
+        min_run_time: 30m
+    
+    api:
+      enabled: true
+      listen_addr: ":8081"
+      enable_auth: true
+      enable_rate_limit: true
+      rate_limit: 100
+      enable_cors: true
+      allowed_origins: ["*"]
+    
+    dashboard:
+      enabled: true
+      listen_address: ":8080"
+      enable_auth: false
+    
+    monitoring:
+      prometheus:
+        enabled: true
+        listen_addr: ":9090"
+      hardware:
+        enabled: true
+        update_interval: 10s
+        temp_threshold: 85
+        power_threshold: 300
+        memory_threshold: 90

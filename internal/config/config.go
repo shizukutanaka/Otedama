@@ -11,45 +11,70 @@ import (
 
 // Config represents the complete Otedama configuration - Rob Pike's clear data structures
 type Config struct {
-	Mode string `mapstructure:"mode" validate:"required,oneof=auto solo pool miner"`
-
+	// Basic fields
+	Name        string `mapstructure:"name"`
+	Version     string `mapstructure:"version"`
+	Mode        string `mapstructure:"mode" validate:"required,oneof=auto solo pool miner enterprise government institutional"`
+	LogLevel    string `mapstructure:"log_level"`
+	ConfigFile  string // Path to the config file itself
+	
+	// All sub-configurations
 	Mining      MiningConfig      `mapstructure:"mining"`
 	ZKP         ZKPConfig         `mapstructure:"zkp"`
 	P2P         P2PConfig         `mapstructure:"p2p"`
+	P2PPool     P2PPoolConfig     `mapstructure:"p2p_pool"`
+	Network     NetworkConfig     `mapstructure:"network"`
 	Stratum     StratumConfig     `mapstructure:"stratum"`
 	API         APIConfig         `mapstructure:"api"`
+	Dashboard   DashboardConfig   `mapstructure:"dashboard"`
 	Security    SecurityConfig    `mapstructure:"security"`
 	Monitoring  MonitoringConfig  `mapstructure:"monitoring"`
 	Performance PerformanceConfig `mapstructure:"performance"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
+	Storage     StorageConfig     `mapstructure:"storage"`
+	Backup      BackupConfig      `mapstructure:"backup"`
+	Enterprise  EnterpriseConfig  `mapstructure:"enterprise"`
+	Government  GovernmentConfig  `mapstructure:"government"`
+	AI          AIConfig          `mapstructure:"ai"`
+	Privacy     PrivacyConfig     `mapstructure:"privacy"`
 }
 
 // MiningConfig contains mining-specific settings
 type MiningConfig struct {
-	Algorithm    string   `mapstructure:"algorithm" validate:"required"`
-	CPUEnabled   bool     `mapstructure:"cpu_enabled"`
-	GPUEnabled   bool     `mapstructure:"gpu_enabled"`
-	ASICEnabled  bool     `mapstructure:"asic_enabled"`
-	CPUThreads   int      `mapstructure:"cpu_threads"`
-	GPUDevices   []int    `mapstructure:"gpu_devices"`
-	ASICDevices  []string `mapstructure:"asic_devices"`
-	AutoTune     bool     `mapstructure:"auto_tune"`
-	Intensity    int      `mapstructure:"intensity" validate:"min=1,max=100"`
-	MaxTemp      int      `mapstructure:"max_temperature" validate:"min=60,max=95"`
-	PowerLimit   int      `mapstructure:"power_limit" validate:"min=50,max=400"`
+	Algorithm      string       `mapstructure:"algorithm" validate:"required"`
+	CPUEnabled     bool         `mapstructure:"cpu_enabled"`
+	GPUEnabled     bool         `mapstructure:"gpu_enabled"`
+	ASICEnabled    bool         `mapstructure:"asic_enabled"`
+	CPUThreads     int          `mapstructure:"cpu_threads"`
+	GPUDevices     []int        `mapstructure:"gpu_devices"`
+	ASICDevices    []string     `mapstructure:"asic_devices"`
+	AutoTune       bool         `mapstructure:"auto_tune"`
+	Intensity      int          `mapstructure:"intensity" validate:"min=1,max=100"`
+	MaxTemp        int          `mapstructure:"max_temperature" validate:"min=60,max=95"`
+	PowerLimit     int          `mapstructure:"power_limit" validate:"min=50,max=400"`
+	HardwareType   string       `mapstructure:"hardware_type"`
+	AutoDetect     bool         `mapstructure:"auto_detect"`
+	Threads        int          `mapstructure:"threads"`
+	TargetHashRate uint64       `mapstructure:"target_hash_rate"`
+	Pools          []PoolConfig `mapstructure:"pools"`
 }
 
 // ZKPConfig contains Zero-Knowledge Proof settings
 type ZKPConfig struct {
-	Enabled            bool     `mapstructure:"enabled"`
-	Protocol           string   `mapstructure:"protocol" validate:"oneof=groth16 bulletproof plonk stark"`
-	SecurityLevel      int      `mapstructure:"security_level" validate:"min=128,max=256"`
-	MinAge             int      `mapstructure:"min_age" validate:"min=18,max=100"`
-	RequiredHashRate   uint64   `mapstructure:"required_hashrate"`
-	AllowedCountries   []string `mapstructure:"allowed_countries"`
-	ProofTimeout       int      `mapstructure:"proof_timeout" validate:"min=10,max=300"`
-	AnonymousMining    bool     `mapstructure:"anonymous_mining"`
-	InstitutionalGrade bool     `mapstructure:"institutional_grade"`
+	Enabled               bool     `mapstructure:"enabled"`
+	Protocol              string   `mapstructure:"protocol" validate:"oneof=groth16 bulletproof plonk stark"`
+	SecurityLevel         int      `mapstructure:"security_level" validate:"min=128,max=256"`
+	MinAge                int      `mapstructure:"min_age" validate:"min=18,max=100"`
+	RequiredHashRate      uint64   `mapstructure:"required_hashrate"`
+	AllowedCountries      []string `mapstructure:"allowed_countries"`
+	ProofTimeout          int      `mapstructure:"proof_timeout" validate:"min=10,max=300"`
+	AnonymousMining       bool     `mapstructure:"anonymous_mining"`
+	InstitutionalGrade    bool     `mapstructure:"institutional_grade"`
+	RequireAgeProof       bool     `mapstructure:"require_age_proof"`
+	MinAgeRequirement     int      `mapstructure:"min_age_requirement"`
+	RequireHashpowerProof bool     `mapstructure:"require_hashpower_proof"`
+	MinHashpowerRequirement float64 `mapstructure:"min_hashpower_requirement"`
+	Curve                 string   `mapstructure:"curve"`
 }
 
 // P2PConfig contains peer-to-peer network settings
@@ -65,9 +90,13 @@ type P2PConfig struct {
 
 // StratumConfig contains Stratum server settings
 type StratumConfig struct {
+	Enabled        bool    `mapstructure:"enabled"`
 	Port           int     `mapstructure:"port" validate:"min=1024,max=65535"`
 	Difficulty     float64 `mapstructure:"difficulty" validate:"min=0.001"`
 	VarDiff        bool    `mapstructure:"vardiff"`
+	MinDiff        float64 `mapstructure:"min_diff"`
+	MaxDiff        float64 `mapstructure:"max_diff"`
+	TargetTime     int     `mapstructure:"target_time"`
 	BlockTime      int     `mapstructure:"block_time" validate:"min=30,max=3600"`
 	PayoutThreshold float64 `mapstructure:"payout_threshold" validate:"min=0.001"`
 	FeePercentage  float64 `mapstructure:"fee_percentage" validate:"min=0,max=10"`
@@ -75,11 +104,15 @@ type StratumConfig struct {
 
 // APIConfig contains API server settings
 type APIConfig struct {
-	Port     int    `mapstructure:"port" validate:"min=1024,max=65535"`
-	Host     string `mapstructure:"host"`
-	TLS      bool   `mapstructure:"tls"`
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
+	Enabled    bool   `mapstructure:"enabled"`
+	Port       int    `mapstructure:"port" validate:"min=1024,max=65535"`
+	Host       string `mapstructure:"host"`
+	ListenAddr string `mapstructure:"listen_addr"`
+	EnableAuth bool   `mapstructure:"enable_auth"`
+	EnableTLS  bool   `mapstructure:"enable_tls"`
+	TLS        bool   `mapstructure:"tls"`
+	CertFile   string `mapstructure:"cert_file"`
+	KeyFile    string `mapstructure:"key_file"`
 }
 
 // SecurityConfig contains security settings
@@ -100,17 +133,25 @@ type MonitoringConfig struct {
 	PrometheusPort    int    `mapstructure:"prometheus_port" validate:"min=1024,max=65535"`
 	GrafanaEnabled    bool   `mapstructure:"grafana_enabled"`
 	InfluxDBURL       string `mapstructure:"influxdb_url"`
-	MetricsInterval   int    `mapstructure:"metrics_interval" validate:"min=1,max=300"`
+	MetricsInterval   time.Duration `mapstructure:"metrics_interval" validate:"min=1s,max=5m"`
+	Prometheus        PrometheusConfig `mapstructure:"prometheus"`
+}
+
+// PrometheusConfig contains Prometheus monitoring settings
+type PrometheusConfig struct {
+	Enabled    bool   `mapstructure:"enabled"`
+	ListenAddr string `mapstructure:"listen_addr"`
 }
 
 // PerformanceConfig contains performance optimization settings
 type PerformanceConfig struct {
-	HugePagesEnabled bool   `mapstructure:"huge_pages_enabled"`
-	NUMAEnabled      bool   `mapstructure:"numa_enabled"`
-	CPUAffinity      string `mapstructure:"cpu_affinity"`
-	MemoryLimit      int    `mapstructure:"memory_limit" validate:"min=512,max=32768"`
-	GCTarget         int    `mapstructure:"gc_target" validate:"min=50,max=500"`
-	MaxGoroutines    int    `mapstructure:"max_goroutines" validate:"min=100,max=100000"`
+	HugePagesEnabled   bool   `mapstructure:"huge_pages_enabled"`
+	NUMAEnabled        bool   `mapstructure:"numa_enabled"`
+	CPUAffinity        string `mapstructure:"cpu_affinity"`
+	MemoryLimit        int    `mapstructure:"memory_limit" validate:"min=512,max=32768"`
+	GCTarget           int    `mapstructure:"gc_target" validate:"min=50,max=500"`
+	MaxGoroutines      int    `mapstructure:"max_goroutines" validate:"min=100,max=100000"`
+	EnableOptimization bool   `mapstructure:"enable_optimization"`
 }
 
 // LoggingConfig contains logging settings
@@ -121,6 +162,136 @@ type LoggingConfig struct {
 	MaxBackups int    `mapstructure:"max_backups" validate:"min=1,max=100"`
 	MaxAge     int    `mapstructure:"max_age" validate:"min=1,max=365"`
 	Compress   bool   `mapstructure:"compress"`
+}
+
+// NetworkConfig contains network-specific settings
+type NetworkConfig struct {
+	ListenAddr     string        `mapstructure:"listen_addr"`
+	MaxPeers       int           `mapstructure:"max_peers" validate:"min=1,max=100000"`
+	DialTimeout    time.Duration `mapstructure:"dial_timeout"`
+	EnableP2P      bool          `mapstructure:"enable_p2p"`
+	EnableMDNS     bool          `mapstructure:"enable_mdns"`
+	NATTraversal   bool          `mapstructure:"nat_traversal"`
+	BootstrapPeers []string      `mapstructure:"bootstrap_peers"`
+	EnableIPv6     bool          `mapstructure:"enable_ipv6"`
+	Enable6G       bool          `mapstructure:"enable_6g"`
+	BandwidthLimit int           `mapstructure:"bandwidth_limit"`
+}
+
+// P2PPoolConfig contains P2P pool settings
+type P2PPoolConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	ListenAddr      string        `mapstructure:"listen_addr"`
+	MaxPeers        int           `mapstructure:"max_peers"`
+	ShareDifficulty float64       `mapstructure:"share_difficulty" validate:"min=0.001"`
+	BlockTime       time.Duration `mapstructure:"block_time"`
+	PayoutThreshold float64       `mapstructure:"payout_threshold"`
+	FeePercentage   float64       `mapstructure:"fee_percentage" validate:"min=0,max=100"`
+}
+
+// DashboardConfig contains dashboard settings
+type DashboardConfig struct {
+	Enabled    bool   `mapstructure:"enabled"`
+	ListenAddr string `mapstructure:"listen_addr"`
+	EnableAuth bool   `mapstructure:"enable_auth"`
+	Username   string `mapstructure:"username"`
+	Password   string `mapstructure:"password"`
+	EnableTLS  bool   `mapstructure:"enable_tls"`
+}
+
+// StorageConfig contains storage settings
+type StorageConfig struct {
+	DataDir        string `mapstructure:"data_dir"`
+	CacheSize      int    `mapstructure:"cache_size"`
+	CompressData   bool   `mapstructure:"compress_data"`
+	EncryptionEnabled bool `mapstructure:"encryption_enabled"`
+	BackupEnabled  bool   `mapstructure:"backup_enabled"`
+	BackupInterval time.Duration `mapstructure:"backup_interval"`
+	BackupRetention int   `mapstructure:"backup_retention"`
+}
+
+// BackupConfig contains backup settings
+type BackupConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Interval        time.Duration `mapstructure:"interval"`
+	RetentionDays   int           `mapstructure:"retention_days"`
+	MaxBackups      int           `mapstructure:"max_backups"`
+	BackupDir       string        `mapstructure:"backup_dir"`
+	WalletPaths     []string      `mapstructure:"wallet_paths"`
+	DataPaths       []string      `mapstructure:"data_paths"`
+	EncryptBackups  bool          `mapstructure:"encrypt_backups"`
+	PasswordFile    string        `mapstructure:"password_file"`
+	CompressionLevel int          `mapstructure:"compression_level"`
+	RemoteEnabled   bool          `mapstructure:"remote_enabled"`
+	RemoteType      string        `mapstructure:"remote_type"`
+	NotifyOnSuccess bool          `mapstructure:"notify_on_success"`
+	NotifyOnFailure bool          `mapstructure:"notify_on_failure"`
+	
+	// Remote storage settings
+	S3Endpoint      string `mapstructure:"s3_endpoint"`
+	S3Bucket        string `mapstructure:"s3_bucket"`
+	S3Prefix        string `mapstructure:"s3_prefix"`
+	S3AccessKey     string `mapstructure:"s3_access_key"`
+	S3SecretKey     string `mapstructure:"s3_secret_key"`
+	
+	SFTPHost        string `mapstructure:"sftp_host"`
+	SFTPPort        int    `mapstructure:"sftp_port"`
+	SFTPUser        string `mapstructure:"sftp_user"`
+	SFTPPassword    string `mapstructure:"sftp_password"`
+	SFTPKeyFile     string `mapstructure:"sftp_key_file"`
+	SFTPPath        string `mapstructure:"sftp_path"`
+	
+	WebDAVURL       string `mapstructure:"webdav_url"`
+	WebDAVUser      string `mapstructure:"webdav_user"`
+	WebDAVPassword  string `mapstructure:"webdav_password"`
+}
+
+// EnterpriseConfig contains enterprise features
+type EnterpriseConfig struct {
+	Enabled       bool `mapstructure:"enabled"`
+	MultiTenant   bool `mapstructure:"multi_tenant"`
+	ClusterMode   bool `mapstructure:"cluster_mode"`
+	LoadBalancing bool `mapstructure:"load_balancing"`
+	AutoFailover  bool `mapstructure:"auto_failover"`
+	DisasterRecovery bool `mapstructure:"disaster_recovery"`
+	GeoReplication bool `mapstructure:"geo_replication"`
+}
+
+// GovernmentConfig contains government-grade features
+type GovernmentConfig struct {
+	Enabled             bool `mapstructure:"enabled"`
+	KYCIntegration      bool `mapstructure:"kyc_integration"`
+	AMLMonitoring       bool `mapstructure:"aml_monitoring"`
+	SanctionsScreening  bool `mapstructure:"sanctions_screening"`
+	RegulatoryReporting bool `mapstructure:"regulatory_reporting"`
+	ComplianceMode      bool `mapstructure:"compliance_mode"`
+}
+
+// AIConfig contains AI optimization settings
+type AIConfig struct {
+	Enabled           bool    `mapstructure:"enabled"`
+	ModelType         string  `mapstructure:"model_type"`
+	UpdateInterval    time.Duration `mapstructure:"update_interval"`
+	LearningRate      float64 `mapstructure:"learning_rate"`
+	AccuracyThreshold float64 `mapstructure:"accuracy_threshold"`
+}
+
+// PrivacyConfig contains privacy settings
+type PrivacyConfig struct {
+	AnonymousMining   bool `mapstructure:"anonymous_mining"`
+	TorEnabled        bool `mapstructure:"tor_enabled"`
+	I2PEnabled        bool `mapstructure:"i2p_enabled"`
+	ZeroKnowledgeAuth bool `mapstructure:"zero_knowledge_auth"`
+}
+
+// PoolConfig represents a mining pool configuration
+type PoolConfig struct {
+	URL      string `mapstructure:"url"`
+	User     string `mapstructure:"user"`
+	Pass     string `mapstructure:"pass"`
+	Priority int    `mapstructure:"priority"`
+	Backup   bool   `mapstructure:"backup"`
+	ZKPAuth  bool   `mapstructure:"zkp_auth"`
 }
 
 // Load loads configuration from file - John Carmack's error handling

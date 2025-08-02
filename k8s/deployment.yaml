@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama
+  namespace: otedama
+  labels:
+    app: otedama
+    version: v2.1.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: otedama
+  template:
+    metadata:
+      labels:
+        app: otedama
+        version: v2.1.0
+    spec:
+      serviceAccountName: otedama
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+      - name: otedama
+        image: otedama:v2.1.0
+        imagePullPolicy: IfNotPresent
+        command: ["/usr/local/bin/otedama"]
+        args: ["start", "--config", "/etc/otedama/config.yaml"]
+        ports:
+        - name: dashboard
+          containerPort: 8080
+          protocol: TCP
+        - name: api
+          containerPort: 8081
+          protocol: TCP
+        - name: stratum
+          containerPort: 3333
+          protocol: TCP
+        - name: p2p
+          containerPort: 30303
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secret
+              key: api-key
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otedama
+          readOnly: true
+        - name: data
+          mountPath: /var/lib/otedama
+        - name: logs
+          mountPath: /var/log/otedama
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: api
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: api
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config
+        configMap:
+          name: otedama-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: otedama-data
+      - name: logs
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - otedama
+              topologyKey: kubernetes.io/hostname
