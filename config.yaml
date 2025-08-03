@@ -3,7 +3,7 @@
 
 # Core Settings
 name: "Otedama P2P Mining Pool"
-version: "2.1.2"
+version: "2.1.4"
 mode: "auto"  # auto, solo, pool, p2p
 
 # Logging Configuration
@@ -237,7 +237,7 @@ p2p_pool:
   # Pool economics
   share_difficulty: 1000.0
   min_payout: 0.001
-  fee_percentage: 1.0
+  fee_percentage: 0.5  # Minimum sustainable fee (0.5%)
   payout_model: "FPPS"  # FPPS, PPS+, PPLNS, PROP
   
   # Consensus mechanism

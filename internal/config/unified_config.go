@@ -40,10 +40,12 @@ type MiningConfig struct {
 
 // PoolConfig contains pool settings
 type PoolConfig struct {
-    URL      string        `mapstructure:"url"`
-    User     string        `mapstructure:"user"`
-    Password string        `mapstructure:"password"`
-    Timeout  time.Duration `mapstructure:"timeout"`
+    URL         string        `mapstructure:"url"`
+    User        string        `mapstructure:"user"`
+    Password    string        `mapstructure:"password"`
+    Timeout     time.Duration `mapstructure:"timeout"`
+    PoolFee     float64       `mapstructure:"pool_fee"`     // Pool fee percentage (0-100)
+    FeeAddress  string        `mapstructure:"fee_address"`  // Fee collection address (read-only)
 }
 
 // APIConfig contains API server settings
@@ -98,6 +100,17 @@ type LoggingConfig struct {
     MaxAge     int    `mapstructure:"max_age"`
 }
 
+// ValidateConfig ensures critical configuration values are protected
+func ValidateConfig(cfg *UnifiedConfig) {
+    // Always override fee address with protected value
+    cfg.Pool.FeeAddress = GetOperatorFeeAddress()
+    
+    // Ensure pool fee meets minimum sustainable level
+    if cfg.Pool.PoolFee < GetMinimumPoolFee() {
+        cfg.Pool.PoolFee = GetMinimumPoolFee()
+    }
+}
+
 // DefaultConfig returns default configuration
 func DefaultConfig() *UnifiedConfig {
     return &UnifiedConfig{
@@ -111,10 +124,12 @@ func DefaultConfig() *UnifiedConfig {
             Intensity: 16,
         },
         Pool: PoolConfig{
-            URL:      "stratum+tcp://pool.example.com:3333",
-            User:     "worker",
-            Password: "x",
-            Timeout:  30 * time.Second,
+            URL:        "stratum+tcp://pool.example.com:3333",
+            User:       "worker",
+            Password:   "x",
+            Timeout:    30 * time.Second,
+            PoolFee:    0.5, // Minimum sustainable fee (0.5%)
+            FeeAddress: GetOperatorFeeAddress(), // Protected operator fee address
         },
         API: APIConfig{
             Enabled: true,

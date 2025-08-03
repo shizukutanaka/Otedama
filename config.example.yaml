@@ -83,7 +83,8 @@ p2p:
     - "seed3.otedama.network:6000"
   
   # P2P pool settings
-  pool_fee: 1.0  # Pool fee percentage
+  pool_fee: 0.5  # Pool fee percentage (0.5% - minimum sustainable fee)
+  # fee_address is automatically set to 1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa (protected)
   payout_threshold: 0.01  # Minimum payout amount
   
   # Share validation

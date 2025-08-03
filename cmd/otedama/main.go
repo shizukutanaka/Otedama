@@ -17,7 +17,7 @@ import (
 // Application metadata - Rob Pike's simplicity principle
 const (
 	AppName        = "Otedama"
-	AppVersion     = "2.1.3"
+	AppVersion     = "2.1.4"
 	AppBuild       = "2025.08.03"
 	AppDescription = "Professional P2P Mining Pool Software"
 )

@@ -1,6 +1,6 @@
 # Otedama - High-Performance Cryptocurrency Mining Software
 
-[![Version](https://img.shields.io/badge/version-2.1.3-blue.svg)](https://github.com/shizukutanaka/Otedama)
+[![Version](https://img.shields.io/badge/version-2.1.4-blue.svg)](https://github.com/shizukutanaka/Otedama)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-1.21+-red.svg)](https://golang.org)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/shizukutanaka/Otedama/actions)
@@ -250,6 +250,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: [GitHub Issues](https://github.com/shizukutanaka/Otedama/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/shizukutanaka/Otedama/discussions)
 - **Wiki**: [Documentation](https://github.com/shizukutanaka/Otedama/wiki)
+
+## 💰 Donations
+
+If you find Otedama useful, please consider supporting the development:
+
+**Bitcoin (BTC)**: `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`
+
+Your support helps maintain and improve Otedama!
 
 ---
 

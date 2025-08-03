@@ -1,6 +1,6 @@
 # Otedama - 高性能暗号通貨マイニングソフトウェア
 
-[![バージョン](https://img.shields.io/badge/version-2.1.3-blue.svg)](https://github.com/shizukutanaka/Otedama)
+[![バージョン](https://img.shields.io/badge/version-2.1.4-blue.svg)](https://github.com/shizukutanaka/Otedama)
 [![ライセンス](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go バージョン](https://img.shields.io/badge/go-1.21+-red.svg)](https://golang.org)
 [![ビルド状態](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/shizukutanaka/Otedama/actions)
@@ -250,6 +250,14 @@ sudo systemctl start otedama
 - **問題**: [GitHub Issues](https://github.com/shizukutanaka/Otedama/issues)
 - **ディスカッション**: [GitHub Discussions](https://github.com/shizukutanaka/Otedama/discussions)
 - **Wiki**: [ドキュメント](https://github.com/shizukutanaka/Otedama/wiki)
+
+## 💰 寄付
+
+Otedamaが役立つと思われる場合は、開発のサポートをご検討ください：
+
+**ビットコイン (BTC)**: `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`
+
+皆様のサポートがOtedamaの維持と改善に役立ちます！
 
 ---
 
