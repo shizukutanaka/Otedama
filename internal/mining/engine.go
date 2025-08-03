@@ -21,7 +21,7 @@ type Engine interface {
 	GetStats() *Stats
 	GetStatus() *EngineStatus
 	GetStartTime() time.Time
-	GetAlgorithm() Algorithm
+	GetAlgorithm() AlgorithmType
 	GetCPUThreads() int
 	GetConfig() map[string]interface{}
 	GetHardwareInfo() *HardwareInfo
@@ -30,8 +30,8 @@ type Engine interface {
 	GetProfitSwitcher() *ProfitSwitcher
 	ResetStats()
 	SubmitShare(*Share) error
-	SwitchAlgorithm(Algorithm) error
-	SetAlgorithm(Algorithm) error
+	SwitchAlgorithm(AlgorithmType) error
+	SetAlgorithm(AlgorithmType) error
 	SetPool(url, wallet string) error
 	SetConfig(key string, value interface{}) error
 	SetGPUSettings(coreClock, memoryClock, powerLimit int) error
@@ -89,6 +89,7 @@ type UnifiedEngine struct {
 	
 	// Job management - optimized for throughput
 	jobQueue     *EfficientJobQueue
+	jobChan      chan *Job
 	shareChan    chan *Share
 	shareValidator *ShareValidator
 	
@@ -100,7 +101,7 @@ type UnifiedEngine struct {
 	workerPool   *WorkerPool
 	
 	// Algorithm management
-	algorithm    atomic.Value // stores Algorithm
+	algorithm    atomic.Value // stores AlgorithmType
 	algSwitch    *SimpleAlgorithmSwitcher
 	algHandler   *AlgorithmHandler
 	
@@ -156,6 +157,15 @@ const (
 	WorkerASIC
 )
 
+// HardwareType represents the type of mining hardware
+type HardwareType string
+
+const (
+	HardwareCPU  HardwareType = "cpu"
+	HardwareGPU  HardwareType = "gpu"
+	HardwareASIC HardwareType = "asic"
+)
+
 // Stats contains mining statistics - atomic for lock-free access
 type Stats struct {
 	TotalHashRate   uint64    `json:"total_hash_rate"`
@@ -182,7 +192,7 @@ type Job struct {
 	Timestamp    uint32    `json:"timestamp"`
 	Bits         uint32    `json:"bits"`
 	Nonce        uint32    `json:"nonce"`
-	Algorithm    Algorithm `json:"algorithm"`
+	Algorithm    AlgorithmType `json:"algorithm"`
 	Difficulty   uint64    `json:"difficulty"`
 	CleanJobs    bool      `json:"clean_jobs"`
 	// Additional fields aligned to cache line
@@ -197,47 +207,35 @@ type Share struct {
 	Hash         [32]byte  `json:"hash"`
 	Difficulty   uint64    `json:"difficulty"`
 	Timestamp    int64     `json:"timestamp"`
-	Algorithm    Algorithm `json:"algorithm"`
+	Algorithm    AlgorithmType `json:"algorithm"`
 	Valid        bool      `json:"valid"`
 }
 
-// Algorithm represents mining algorithm
-type Algorithm string
-
-const (
-	AlgorithmUnknown Algorithm = "unknown"
-	AlgorithmSHA256  Algorithm = "sha256"
-	AlgorithmSHA256d Algorithm = "sha256d"
-	AlgorithmScrypt  Algorithm = "scrypt"
-	AlgorithmEthash  Algorithm = "ethash"
-	AlgorithmRandomX Algorithm = "randomx"
-	AlgorithmKawPow  Algorithm = "kawpow"
-)
-
+// Use AlgorithmType from algorithm_handler.go to avoid duplication
 // ParseAlgorithm parses algorithm from string
-func ParseAlgorithm(s string) Algorithm {
+func ParseAlgorithm(s string) AlgorithmType {
 	switch s {
 	case "sha256", "SHA256":
-		return AlgorithmSHA256
+		return SHA256
 	case "sha256d", "SHA256D":
-		return AlgorithmSHA256d
+		return SHA256D
 	case "scrypt", "Scrypt":
-		return AlgorithmScrypt
+		return Scrypt
 	case "ethash", "Ethash":
-		return AlgorithmEthash
+		return Ethash
 	case "randomx", "RandomX":
-		return AlgorithmRandomX
+		return RandomX
 	case "kawpow", "KawPow":
-		return AlgorithmKawPow
+		return KawPow
 	default:
-		return AlgorithmUnknown
+		return "unknown"
 	}
 }
 
 // EngineStatus represents engine status
 type EngineStatus struct {
 	Running   bool          `json:"running"`
-	Algorithm Algorithm     `json:"algorithm"`
+	Algorithm AlgorithmType `json:"algorithm"`
 	Pool      string        `json:"pool"`
 	Wallet    string        `json:"wallet"`
 	Uptime    time.Duration `json:"uptime"`
@@ -297,6 +295,7 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 		
 		// Initialize job queue and channels
 		jobQueue:  NewEfficientJobQueue(logger),
+		jobChan:   make(chan *Job, config.JobQueueSize),
 		shareChan: make(chan *Share, config.JobQueueSize),
 		
 		// Object pools - reduce GC pressure
@@ -306,7 +305,7 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 	}
 	
 	// Initialize algorithm
-	engine.algorithm.Store(Algorithm(config.Algorithm))
+	engine.algorithm.Store(AlgorithmType(config.Algorithm))
 	engine.algSwitch = NewSimpleAlgorithmSwitcher(logger)
 	
 	// Initialize share validator
@@ -496,8 +495,8 @@ func (e *UnifiedEngine) SubmitShare(share *Share) error {
 }
 
 // SwitchAlgorithm switches mining algorithm - atomic operation
-func (e *UnifiedEngine) SwitchAlgorithm(algo Algorithm) error {
-	current := e.algorithm.Load().(Algorithm)
+func (e *UnifiedEngine) SwitchAlgorithm(algo AlgorithmType) error {
+	current := e.algorithm.Load().(AlgorithmType)
 	if current == algo {
 		return nil // Already using this algorithm
 	}
@@ -514,6 +513,171 @@ func (e *UnifiedEngine) SwitchAlgorithm(algo Algorithm) error {
 	return e.algSwitch.Switch(algo)
 }
 
+// GetAlgorithm returns the current algorithm
+func (e *UnifiedEngine) GetAlgorithm() AlgorithmType {
+	return e.algorithm.Load().(AlgorithmType)
+}
+
+// SetAlgorithm sets the mining algorithm
+func (e *UnifiedEngine) SetAlgorithm(algo AlgorithmType) error {
+	return e.SwitchAlgorithm(algo)
+}
+
+// GetStatus returns the current engine status
+func (e *UnifiedEngine) GetStatus() *EngineStatus {
+	return &EngineStatus{
+		Running:   e.running.Load(),
+		Algorithm: e.GetAlgorithm(),
+		Pool:      e.poolURL,
+		Wallet:    e.walletAddr,
+		Uptime:    time.Since(e.startTime),
+	}
+}
+
+// GetStartTime returns when the engine was started
+func (e *UnifiedEngine) GetStartTime() time.Time {
+	return e.startTime
+}
+
+// GetCPUThreads returns the number of CPU threads
+func (e *UnifiedEngine) GetCPUThreads() int {
+	return e.config.CPUThreads
+}
+
+// GetConfig returns the engine configuration
+func (e *UnifiedEngine) GetConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"cpu_threads":    e.config.CPUThreads,
+		"gpu_devices":    e.config.GPUDevices,
+		"asic_devices":   e.config.ASICDevices,
+		"algorithm":      e.config.Algorithm,
+		"intensity":      e.config.Intensity,
+		"max_memory_mb":  e.config.MaxMemoryMB,
+		"job_queue_size": e.config.JobQueueSize,
+		"auto_optimize":  e.config.AutoOptimize,
+	}
+}
+
+// GetHardwareInfo returns hardware information
+func (e *UnifiedEngine) GetHardwareInfo() *HardwareInfo {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	
+	return &HardwareInfo{
+		CPUThreads:  e.config.CPUThreads,
+		GPUDevices:  []GPUInfo{}, // TODO: Implement GPU detection
+		ASICDevices: []ASICInfo{}, // TODO: Implement ASIC detection
+		TotalMemory: m.Sys,
+		AvailMemory: m.Sys - m.Alloc,
+	}
+}
+
+// GetStatsHistory returns historical statistics
+func (e *UnifiedEngine) GetStatsHistory(duration time.Duration) []StatsSnapshot {
+	e.historyMu.RLock()
+	defer e.historyMu.RUnlock()
+	
+	cutoff := time.Now().Add(-duration)
+	var result []StatsSnapshot
+	
+	for _, snapshot := range e.statsHistory {
+		if snapshot.Timestamp.After(cutoff) {
+			result = append(result, snapshot)
+		}
+	}
+	
+	return result
+}
+
+// GetAutoTuner returns the auto tuner (placeholder)
+func (e *UnifiedEngine) GetAutoTuner() *AutoTuner {
+	return e.autoTuner
+}
+
+// GetProfitSwitcher returns the profit switcher (placeholder)
+func (e *UnifiedEngine) GetProfitSwitcher() *ProfitSwitcher {
+	return e.profitSwitcher
+}
+
+// ResetStats resets all statistics
+func (e *UnifiedEngine) ResetStats() {
+	e.totalHashRate.Store(0)
+	e.sharesSubmitted.Store(0)
+	e.sharesAccepted.Store(0)
+	e.startTime = time.Now()
+	
+	e.historyMu.Lock()
+	e.statsHistory = e.statsHistory[:0]
+	e.historyMu.Unlock()
+	
+	e.logger.Info("Statistics reset")
+}
+
+// SetPool sets the mining pool URL and wallet
+func (e *UnifiedEngine) SetPool(url, wallet string) error {
+	e.poolURL = url
+	e.walletAddr = wallet
+	e.logger.Info("Pool configuration updated",
+		zap.String("url", url),
+		zap.String("wallet", wallet),
+	)
+	return nil
+}
+
+// SetConfig sets a configuration value
+func (e *UnifiedEngine) SetConfig(key string, value interface{}) error {
+	switch key {
+	case "cpu_threads":
+		if threads, ok := value.(int); ok {
+			return e.SetCPUThreads(threads)
+		}
+		return errors.New("invalid cpu_threads value")
+	case "algorithm":
+		if algo, ok := value.(string); ok {
+			return e.SetAlgorithm(AlgorithmType(algo))
+		}
+		return errors.New("invalid algorithm value")
+	default:
+		return fmt.Errorf("unknown config key: %s", key)
+	}
+}
+
+// SetGPUSettings sets GPU configuration (placeholder)
+func (e *UnifiedEngine) SetGPUSettings(coreClock, memoryClock, powerLimit int) error {
+	e.logger.Info("GPU settings updated",
+		zap.Int("core_clock", coreClock),
+		zap.Int("memory_clock", memoryClock),
+		zap.Int("power_limit", powerLimit),
+	)
+	return nil
+}
+
+// SetCPUThreads sets the number of CPU threads
+func (e *UnifiedEngine) SetCPUThreads(threads int) error {
+	if threads < 0 || threads > 256 {
+		return errors.New("invalid thread count")
+	}
+	
+	e.config.CPUThreads = threads
+	e.logger.Info("CPU threads updated", zap.Int("threads", threads))
+	return nil
+}
+
+// HasGPU returns true if GPU mining is enabled
+func (e *UnifiedEngine) HasGPU() bool {
+	return len(e.config.GPUDevices) > 0
+}
+
+// HasCPU returns true if CPU mining is enabled
+func (e *UnifiedEngine) HasCPU() bool {
+	return e.config.CPUThreads > 0
+}
+
+// HasASIC returns true if ASIC mining is enabled
+func (e *UnifiedEngine) HasASIC() bool {
+	return len(e.config.ASICDevices) > 0
+}
+
 // GetCurrentJob returns the current mining job
 func (e *UnifiedEngine) GetCurrentJob() *Job {
 	// Get job from pool
@@ -523,7 +687,7 @@ func (e *UnifiedEngine) GetCurrentJob() *Job {
 	*job = Job{
 		ID:        fmt.Sprintf("job_%d", time.Now().UnixNano()),
 		Height:    uint64(time.Now().Unix()),
-		Algorithm: e.algorithm.Load().(Algorithm),
+		Algorithm: e.algorithm.Load().(AlgorithmType),
 		Timestamp: uint32(time.Now().Unix()),
 		Bits:      0x1d00ffff,
 		CleanJobs: false,
@@ -847,7 +1011,7 @@ func prefetchMemory(data unsafe.Pointer) {
 // dispatchJob dispatches a job to appropriate hardware
 func (e *UnifiedEngine) dispatchJob(job interface{}) {
 	// Type assertion to handle both Job and MiningJob types
-	var algo Algorithm
+	var algo AlgorithmType
 	var height uint64
 	
 	switch j := job.(type) {
@@ -864,13 +1028,13 @@ func (e *UnifiedEngine) dispatchJob(job interface{}) {
 	
 	// Dispatch based on algorithm and hardware availability
 	switch {
-	case algo == AlgorithmRandomX && len(e.cpuMiners) > 0:
+	case algo == RandomX && len(e.cpuMiners) > 0:
 		// Dispatch to CPU
 		e.dispatchToCPU(job, height)
-	case (algo == AlgorithmEthash || algo == AlgorithmKawPow) && len(e.gpuMiners) > 0:
+	case (algo == Ethash || algo == KawPow) && len(e.gpuMiners) > 0:
 		// Dispatch to GPU
 		e.dispatchToGPU(job, height)
-	case algo == AlgorithmSHA256d && len(e.asicMiners) > 0:
+	case algo == SHA256D && len(e.asicMiners) > 0:
 		// Dispatch to ASIC
 		e.dispatchToASIC(job, height)
 	default:
@@ -938,7 +1102,7 @@ type MiningJob struct {
 	Timestamp    uint32
 	Bits         uint32
 	Nonce        uint32
-	Algorithm    Algorithm
+	Algorithm    AlgorithmType
 	Difficulty   uint64
 	CleanJobs    bool
 }

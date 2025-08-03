@@ -1,305 +1,139 @@
 #!/bin/bash
-# Otedama Code Optimization and Organization Script
-# Improves code readability and structure
 
-set -e
+# Code Optimization Script
+# Optimizes Go code for performance and maintainability
 
-echo "🔧 Otedama Code Optimization Tool"
-echo "================================="
+set -euo pipefail
 
-# Color codes for output
+# Colors
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Function to format Go code
-format_go_code() {
-    echo -e "${BLUE}📝 Formatting Go code...${NC}"
-    
-    # Run gofmt on all Go files
-    find . -name "*.go" -type f -not -path "./vendor/*" -not -path "./_deleted_backup/*" | while read -r file; do
-        echo -n "  Formatting: $file ... "
-        gofmt -w -s "$file"
-        echo -e "${GREEN}✓${NC}"
-    done
-    
-    # Run goimports to organize imports
-    if command -v goimports &> /dev/null; then
-        echo -e "${BLUE}📦 Organizing imports...${NC}"
-        find . -name "*.go" -type f -not -path "./vendor/*" -not -path "./_deleted_backup/*" | while read -r file; do
-            echo -n "  Organizing: $file ... "
-            goimports -w "$file"
-            echo -e "${GREEN}✓${NC}"
-        done
-    else
-        echo -e "${YELLOW}⚠️  goimports not found. Install with: go install golang.org/x/tools/cmd/goimports@latest${NC}"
-    fi
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-# Function to add package documentation
-add_package_docs() {
-    echo -e "${BLUE}📚 Adding package documentation...${NC}"
-    
-    # Find packages without doc.go
-    find ./internal -type d -not -path "*/\.*" | while read -r dir; do
-        if [ ! -f "$dir/doc.go" ] && ls "$dir"/*.go &> /dev/null 2>&1; then
-            pkg_name=$(basename "$dir")
-            echo -n "  Creating doc.go for package $pkg_name ... "
-            
-            cat > "$dir/doc.go" << EOF
-// Package $pkg_name provides functionality for $(echo $pkg_name | sed 's/_/ /g').
-//
-// This package is part of the Otedama mining pool system.
-package $pkg_name
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Change to project root
+cd "$(dirname "$0")/.."
+
+# Step 1: Format all Go code
+log_info "Formatting Go code..."
+gofmt -w -s . || log_error "gofmt failed"
+
+# Step 2: Run goimports to fix imports
+log_info "Organizing imports..."
+if command -v goimports &> /dev/null; then
+    goimports -w . || log_error "goimports failed"
+else
+    log_warning "goimports not installed, skipping import organization"
+fi
+
+# Step 3: Run go vet to find issues
+log_info "Running go vet..."
+go vet ./... 2>&1 | tee vet_results.txt || log_warning "go vet found issues"
+
+# Step 4: Run staticcheck for advanced analysis
+log_info "Running static analysis..."
+if command -v staticcheck &> /dev/null; then
+    staticcheck ./... 2>&1 | tee staticcheck_results.txt || log_warning "staticcheck found issues"
+else
+    log_warning "staticcheck not installed, skipping advanced analysis"
+fi
+
+# Step 5: Check for common performance issues
+log_info "Checking for performance issues..."
+
+# Find inefficient string concatenation in loops
+echo "=== Checking for string concatenation in loops ==="
+grep -rn "for.*{" --include="*.go" . | while read -r line; do
+    file=$(echo "$line" | cut -d: -f1)
+    if grep -A 10 "$line" "$file" | grep -q "+=.*string\|= .* +"; then
+        echo "Potential inefficient string concatenation in: $file"
+    fi
+done
+
+# Find unclosed resources
+echo "=== Checking for unclosed resources ==="
+grep -rn "Open\|Create\|Dial" --include="*.go" . | while read -r line; do
+    file=$(echo "$line" | cut -d: -f1)
+    linenum=$(echo "$line" | cut -d: -f2)
+    # Check if there's a defer close nearby
+    if ! sed -n "${linenum},$((linenum+5))p" "$file" | grep -q "defer.*Close"; then
+        echo "Potential unclosed resource at $file:$linenum"
+    fi
+done
+
+# Step 6: Remove unused code
+log_info "Checking for unused code..."
+if command -v unused &> /dev/null; then
+    unused ./... 2>&1 | tee unused_results.txt || log_warning "Found unused code"
+else
+    log_warning "unused tool not installed, skipping unused code check"
+fi
+
+# Step 7: Generate optimization report
+log_info "Generating optimization report..."
+cat > optimization_report.md << EOF
+# Code Optimization Report
+
+Generated: $(date)
+
+## Summary
+
+### Formatting
+- Go code formatted with gofmt
+- Imports organized with goimports
+
+### Static Analysis
 EOF
-            echo -e "${GREEN}✓${NC}"
-        fi
-    done
-}
 
-# Function to organize test files
-organize_tests() {
-    echo -e "${BLUE}🧪 Organizing test files...${NC}"
-    
-    # Create test directories if they don't exist
-    mkdir -p tests/unit
-    mkdir -p tests/integration
-    mkdir -p tests/benchmark
-    
-    echo -e "${GREEN}✓ Test directories ready${NC}"
-}
+if [ -f vet_results.txt ] && [ -s vet_results.txt ]; then
+    echo "### Go Vet Issues" >> optimization_report.md
+    echo '```' >> optimization_report.md
+    head -20 vet_results.txt >> optimization_report.md
+    echo '```' >> optimization_report.md
+fi
 
-# Function to create code style guide
-create_style_guide() {
-    echo -e "${BLUE}📋 Creating code style guide...${NC}"
-    
-    cat > STYLE_GUIDE.md << 'EOF'
-# Otedama Code Style Guide
+if [ -f staticcheck_results.txt ] && [ -s staticcheck_results.txt ]; then
+    echo "### Staticcheck Issues" >> optimization_report.md
+    echo '```' >> optimization_report.md
+    head -20 staticcheck_results.txt >> optimization_report.md
+    echo '```' >> optimization_report.md
+fi
 
-## Go Code Standards
+cat >> optimization_report.md << EOF
 
-### 1. File Organization
-- Package declaration
-- Import statements (grouped: standard library, external, internal)
-- Constants
-- Types
-- Global variables (avoid when possible)
-- Functions (exported first, then internal)
+## Recommendations
 
-### 2. Naming Conventions
-- **Packages**: lowercase, single word (e.g., `mining`, `security`)
-- **Files**: snake_case (e.g., `mining_engine.go`, `zkp_verifier.go`)
-- **Types**: PascalCase (e.g., `MiningEngine`, `SecurityManager`)
-- **Functions**: PascalCase for exported, camelCase for internal
-- **Variables**: camelCase
-- **Constants**: PascalCase or UPPER_SNAKE_CASE for groups
+1. **String Operations**: Use strings.Builder for concatenation in loops
+2. **Resource Management**: Always use defer for cleanup
+3. **Error Handling**: Wrap errors with context
+4. **Concurrency**: Use sync.Pool for frequently allocated objects
+5. **Memory**: Pre-allocate slices when size is known
 
-### 3. Comments
-- Package documentation in doc.go files
-- Exported functions must have comments starting with the function name
-- Complex logic should have inline comments
-- Use TODO/FIXME/NOTE markers consistently
+## Next Steps
 
-### 4. Error Handling
-```go
-// Good
-if err != nil {
-    return fmt.Errorf("failed to process: %w", err)
-}
-
-// Bad
-if err != nil {
-    return err
-}
-```
-
-### 5. Interface Design
-- Keep interfaces small and focused
-- Define interfaces where they are used, not where implemented
-- Use interface{} sparingly, prefer specific types
-
-### 6. Testing
-- Test files should be in the same package
-- Use table-driven tests for multiple scenarios
-- Benchmark critical paths
-- Mock external dependencies
-
-### 7. Performance Guidelines
-- Pre-allocate slices when size is known
-- Use sync.Pool for frequently allocated objects
-- Profile before optimizing
-- Document performance-critical sections
-
-### 8. Security Practices
-- Never log sensitive information
-- Always validate input
-- Use constant-time comparisons for secrets
-- Implement proper timeout handling
-
-## Directory Structure
-
-```
-internal/
-├── core/           # Core system logic
-├── mining/         # Mining implementation
-├── security/       # Security layers
-├── api/           # REST API
-├── monitoring/    # System monitoring
-└── [module]/      # Other modules
-    ├── doc.go     # Package documentation
-    ├── types.go   # Type definitions
-    ├── [module].go # Main implementation
-    └── [module]_test.go # Tests
-```
-
-## Git Commit Messages
-
-Format: `<type>(<scope>): <subject>`
-
-Types:
-- feat: New feature
-- fix: Bug fix
-- docs: Documentation
-- style: Code style changes
-- refactor: Code refactoring
-- perf: Performance improvements
-- test: Test changes
-- chore: Build/maintenance tasks
-
-Example: `feat(mining): add RandomX algorithm support`
+1. Review and fix issues in *_results.txt files
+2. Run benchmarks to verify improvements
+3. Profile critical paths for further optimization
 EOF
-    
-    echo -e "${GREEN}✓ Style guide created${NC}"
-}
 
-# Function to check code quality
-check_code_quality() {
-    echo -e "${BLUE}🔍 Checking code quality...${NC}"
-    
-    # Run go vet
-    echo -n "  Running go vet ... "
-    if go vet ./... 2>&1 | grep -q .; then
-        echo -e "${YELLOW}⚠️  Issues found${NC}"
-    else
-        echo -e "${GREEN}✓${NC}"
-    fi
-    
-    # Check for inefficient code patterns
-    if command -v ineffassign &> /dev/null; then
-        echo -n "  Running ineffassign ... "
-        if ineffassign ./... 2>&1 | grep -q .; then
-            echo -e "${YELLOW}⚠️  Inefficient assignments found${NC}"
-        else
-            echo -e "${GREEN}✓${NC}"
-        fi
-    fi
-    
-    # Check for misspellings
-    if command -v misspell &> /dev/null; then
-        echo -n "  Running misspell ... "
-        if misspell -w ./... 2>&1 | grep -q .; then
-            echo -e "${YELLOW}⚠️  Misspellings corrected${NC}"
-        else
-            echo -e "${GREEN}✓${NC}"
-        fi
-    fi
-}
+log_success "Optimization complete! Check optimization_report.md for details."
 
-# Function to generate module documentation
-generate_module_docs() {
-    echo -e "${BLUE}📖 Generating module documentation...${NC}"
-    
-    cat > docs/MODULES.md << 'EOF'
-# Otedama Module Documentation
-
-## Core Modules
-
-### 🔧 Core (`/internal/core`)
-Central system orchestration and lifecycle management.
-
-### ⛏️ Mining (`/internal/mining`)
-Mining engine with support for 16 different algorithms.
-
-### 🔒 Security (`/internal/security`)
-Multi-layered security implementation including encryption, firewall, and IDS.
-
-### 🔐 ZKP (`/internal/zkp`)
-Zero-knowledge proof systems for privacy-preserving authentication.
-
-### 📊 Monitoring (`/internal/monitoring`)
-Comprehensive system monitoring with Prometheus integration.
-
-### 🌐 API (`/internal/api`)
-RESTful API for external integrations.
-
-### 💻 Dashboard (`/internal/dashboard`)
-Web-based management interface.
-
-### 🤖 Automation (`/internal/automation`)
-Self-healing and auto-scaling capabilities.
-
-## Module Dependencies
-
-```mermaid
-graph TD
-    A[Core] --> B[Mining]
-    A --> C[Security]
-    A --> D[Monitoring]
-    B --> E[Stratum]
-    B --> F[P2P]
-    C --> G[ZKP]
-    D --> H[API]
-    D --> I[Dashboard]
-```
-
-## Best Practices
-
-1. **Loose Coupling**: Modules communicate through interfaces
-2. **Single Responsibility**: Each module has a clear, focused purpose
-3. **Dependency Injection**: Dependencies are injected, not created
-4. **Error Propagation**: Errors are wrapped with context
-5. **Resource Management**: Proper cleanup in shutdown methods
-EOF
-    
-    echo -e "${GREEN}✓ Module documentation generated${NC}"
-}
-
-# Main execution
-main() {
-    echo "Starting code optimization..."
-    echo
-    
-    # Run all optimization steps
-    format_go_code
-    echo
-    
-    add_package_docs
-    echo
-    
-    organize_tests
-    echo
-    
-    create_style_guide
-    echo
-    
-    check_code_quality
-    echo
-    
-    generate_module_docs
-    echo
-    
-    echo -e "${GREEN}✅ Code optimization complete!${NC}"
-    echo
-    echo "Next steps:"
-    echo "  1. Review STYLE_GUIDE.md for coding standards"
-    echo "  2. Check docs/MODULES.md for module documentation"
-    echo "  3. Run 'go test ./...' to ensure tests pass"
-    echo "  4. Consider installing additional tools:"
-    echo "     - goimports: go install golang.org/x/tools/cmd/goimports@latest"
-    echo "     - ineffassign: go install github.com/gordonklaus/ineffassign@latest"
-    echo "     - misspell: go install github.com/client9/misspell/cmd/misspell@latest"
-}
-
-# Run main function
-main
+# Cleanup temporary files
+rm -f vet_results.txt staticcheck_results.txt unused_results.txt 2>/dev/null || true

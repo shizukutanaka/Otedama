@@ -9,16 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/otedama/otedama/internal/app"
-	"github.com/otedama/otedama/internal/cli"
+	"github.com/shizukutanaka/Otedama/internal/app"
+	"github.com/shizukutanaka/Otedama/internal/cli"
 	"go.uber.org/zap"
 )
 
 // Application metadata - Rob Pike's simplicity principle
 const (
 	AppName        = "Otedama"
-	AppVersion     = "3.0.0"
-	AppBuild       = "2025.08.02"
+	AppVersion     = "2.1.3"
+	AppBuild       = "2025.08.03"
 	AppDescription = "Professional P2P Mining Pool Software"
 )
 

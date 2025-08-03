@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/otedama/otedama/internal/logging"
+	"github.com/shizukutanaka/Otedama/internal/logging"
 	"go.uber.org/zap"
 )
 

@@ -284,6 +284,17 @@ func (c *MMapCache) loadRegion(name, path string) error {
 		return err
 	}
 	
+	// Validate file size before mapping
+	if info.Size() < 0 {
+		file.Close()
+		return fmt.Errorf("invalid file size: %d", info.Size())
+	}
+	
+	if info.Size() > c.config.MaxFileSize {
+		file.Close()
+		return fmt.Errorf("file size %d exceeds maximum allowed size %d", info.Size(), c.config.MaxFileSize)
+	}
+	
 	// Memory map the file
 	data, err := syscall.Mmap(int(file.Fd()), 0, int(info.Size()),
 		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
@@ -392,6 +403,13 @@ func (c *MMapCache) getOrCreateRegion(name string) *MMapRegion {
 		return nil
 	}
 	
+	// Validate max region size
+	if c.config.MaxRegionSize <= 0 || c.config.MaxRegionSize > 1<<30 { // Max 1GB
+		file.Close()
+		c.logger.Error("Invalid max region size", zap.Int64("size", c.config.MaxRegionSize))
+		return nil
+	}
+	
 	// Pre-allocate space
 	if err := file.Truncate(c.config.MaxRegionSize); err != nil {
 		file.Close()
@@ -424,8 +442,14 @@ func (c *MMapCache) readFromRegion(region *MMapRegion, offset, size int64) ([]by
 	region.mu.RLock()
 	defer region.mu.RUnlock()
 	
-	if offset+size > region.size {
-		return nil, fmt.Errorf("read beyond region bounds")
+	// Validate offset and size
+	if offset < 0 || size < 0 {
+		return nil, fmt.Errorf("invalid offset or size: offset=%d, size=%d", offset, size)
+	}
+	
+	// Check for integer overflow
+	if offset > region.size || size > region.size || offset+size > region.size {
+		return nil, fmt.Errorf("read beyond region bounds: offset=%d, size=%d, region_size=%d", offset, size, region.size)
 	}
 	
 	data := make([]byte, size)

@@ -3,27 +3,27 @@ package app
 import (
 	"context"
 
-	"github.com/otedama/otedama/internal/i18n"
+	"github.com/shizukutanaka/Otedama/internal/utils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 // InitializeI18n initializes the internationalization system
 func (app *Application) InitializeI18n() error {
-	config := i18n.Config{
+	config := utils.Config{
 		DefaultLanguage:    "en",
 		FallbackLanguage:   "en",
 		SupportedLanguages: []string{"en", "ja", "zh", "ko", "es", "fr", "de", "ru", "ar", "pt"},
 		TranslationsPath:   "translations",
 	}
 
-	manager, err := i18n.NewManager(config, app.logger)
+	manager, err := utils.NewManager(config, app.logger)
 	if err != nil {
 		return err
 	}
 
 	// Set global manager for easy access
-	i18n.SetGlobalManager(manager)
+	utils.SetGlobalManager(manager)
 
 	app.logger.Info("I18n system initialized",
 		zap.String("default_language", config.DefaultLanguage),
@@ -35,7 +35,7 @@ func (app *Application) InitializeI18n() error {
 
 // LogWithI18n logs a message with internationalization
 func (app *Application) LogWithI18n(ctx context.Context, level zapcore.Level, key string, fields ...zap.Field) {
-	msg := i18n.TContext(ctx, key)
+	msg := utils.TContext(ctx, key)
 	
 	switch level {
 	case zapcore.DebugLevel:
@@ -54,31 +54,31 @@ func (app *Application) LogWithI18n(ctx context.Context, level zapcore.Level, ke
 // Example usage in application code
 func (app *Application) exampleI18nUsage() {
 	// Simple translation
-	welcomeMsg := i18n.T("message.welcome")
+	welcomeMsg := utils.T("message.welcome")
 	app.logger.Info(welcomeMsg)
 
 	// Translation with arguments
-	versionMsg := i18n.T("app.version", "2.1.1")
+	versionMsg := utils.T("app.version", "2.1.1")
 	app.logger.Info(versionMsg)
 
 	// Format hashrate with localization
-	hashrate := i18n.FormatHashrate(1234567890)
-	hashrateMsg := i18n.T("mining.hashrate", hashrate)
+	hashrate := utils.FormatHashrate(1234567890)
+	hashrateMsg := utils.T("mining.hashrate", hashrate)
 	app.logger.Info(hashrateMsg)
 
 	// Format duration
-	uptime := i18n.FormatDuration(3661) // 1 hour, 1 minute, 1 second
-	uptimeMsg := i18n.T("mining.uptime", uptime)
+	uptime := utils.FormatDuration(3661) // 1 hour, 1 minute, 1 second
+	uptimeMsg := utils.T("mining.uptime", uptime)
 	app.logger.Info(uptimeMsg)
 
 	// Use context for language-specific translation
-	ctx := i18n.WithLanguage(context.Background(), "ja")
-	japaneseMsg := i18n.TContext(ctx, "message.welcome")
+	ctx := utils.WithLanguage(context.Background(), "ja")
+	japaneseMsg := utils.TContext(ctx, "message.welcome")
 	app.logger.Info("Japanese welcome", zap.String("message", japaneseMsg))
 
 	// Pluralization
 	shares := 5
-	sharesMsg := i18n.T("mining.shares.accepted", shares)
+	sharesMsg := utils.T("mining.shares.accepted", shares)
 	app.logger.Info(sharesMsg)
 }
 
@@ -91,7 +91,7 @@ type LocalizedError struct {
 
 // Error implements the error interface
 func (e LocalizedError) Error() string {
-	return i18n.T(e.Key, e.Args...)
+	return utils.T(e.Key, e.Args...)
 }
 
 // Unwrap returns the underlying error
@@ -127,15 +127,15 @@ var (
 
 // LocalizeStatus returns localized status string
 func LocalizeStatus(status string) string {
-	return i18n.T("status." + status)
+	return utils.T("status." + status)
 }
 
 // LocalizeAlgorithm returns localized algorithm name
 func LocalizeAlgorithm(algo string) string {
-	return i18n.T("algorithm." + algo)
+	return utils.T("algorithm." + algo)
 }
 
 // LocalizeAction returns localized action string
 func LocalizeAction(action string) string {
-	return i18n.T("action." + action)
+	return utils.T("action." + action)
 }

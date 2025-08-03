@@ -19,16 +19,16 @@ type SecureConfig struct {
 }
 
 // NewSecureConfig creates a new secure configuration manager
-func NewSecureConfig() *SecureConfig {
+func NewSecureConfig() (*SecureConfig, error) {
 	salt := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		// Use a static salt as fallback (not ideal, but better than panic)
-		salt = []byte("otedama-default-salt-change-this")
+		// Return error instead of using static salt
+		return nil, fmt.Errorf("failed to generate secure salt: %w", err)
 	}
 	
 	return &SecureConfig{
 		salt: salt,
-	}
+	}, nil
 }
 
 // EncryptValue encrypts a configuration value

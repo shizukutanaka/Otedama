@@ -2,15 +2,51 @@ package mining
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/crypto/blake2b"
+	"golang.org/x/crypto/sha3"
 	"github.com/otedama/internal/mining/algorithms"
 )
+
+// AlgorithmType represents supported mining algorithms
+type AlgorithmType string
+
+const (
+	SHA256     AlgorithmType = "sha256"
+	SHA256D    AlgorithmType = "sha256d"
+	Scrypt     AlgorithmType = "scrypt"
+	Blake2b256 AlgorithmType = "blake2b256"
+	Blake3     AlgorithmType = "blake3"
+	SHA3_256   AlgorithmType = "sha3_256"
+	RandomX    AlgorithmType = "randomx"
+	Ethash     AlgorithmType = "ethash"
+	Equihash   AlgorithmType = "equihash"
+	X16R       AlgorithmType = "x16r"
+	KHeavyHash AlgorithmType = "kheavyhash"
+	Autolykos  AlgorithmType = "autolykos"
+	KawPow     AlgorithmType = "kawpow"
+	ProgPow    AlgorithmType = "progpow"
+	CryptoNight AlgorithmType = "cryptonight"
+)
+
+// Algorithm represents a mining algorithm with profitability data
+type Algorithm struct {
+	Name        string
+	HashFunc    func([]byte) []byte
+	Difficulty  float64
+	BlockReward float64
+	Profitable  bool
+	LastUpdate  time.Time
+}
 
 // AlgorithmHandler provides unified algorithm support for CPU/GPU/ASIC
 // Following John Carmack's principle: "Optimize for the common case"
@@ -19,6 +55,7 @@ type AlgorithmHandler struct {
 	
 	// Algorithm registry
 	registry *algorithms.Registry
+	algorithms map[AlgorithmType]*Algorithm
 	
 	// Current algorithm
 	currentAlgorithm atomic.Value // stores *algorithms.Algorithm
@@ -118,9 +155,13 @@ func NewAlgorithmHandler(logger *zap.Logger, config *AlgorithmConfig) (*Algorith
 	handler := &AlgorithmHandler{
 		logger:     logger,
 		registry:   algorithms.NewRegistry(),
+		algorithms: make(map[AlgorithmType]*Algorithm),
 		benchmarks: make(map[string]*AlgorithmBenchmark),
 		config:     config,
 	}
+	
+	// Initialize algorithms
+	handler.initializeAlgorithms()
 	
 	// Initialize hardware handlers
 	handler.cpuHandler = &CPUAlgorithmHandler{logger: logger}
@@ -365,6 +406,74 @@ func (h *AlgorithmHandler) storeBenchmark(algoName string, hardwareType Hardware
 	)
 }
 
+// initializeAlgorithms sets up supported algorithms
+func (h *AlgorithmHandler) initializeAlgorithms() {
+	// SHA256
+	h.algorithms[SHA256] = &Algorithm{
+		Name:     "SHA256",
+		HashFunc: sha256Hash,
+	}
+	
+	// SHA256D (double SHA256)
+	h.algorithms[SHA256D] = &Algorithm{
+		Name:     "SHA256D",
+		HashFunc: sha256dHash,
+	}
+	
+	// Blake2b256
+	h.algorithms[Blake2b256] = &Algorithm{
+		Name:     "Blake2b256",
+		HashFunc: blake2b256Hash,
+	}
+	
+	// SHA3-256
+	h.algorithms[SHA3_256] = &Algorithm{
+		Name:     "SHA3-256",
+		HashFunc: sha3_256Hash,
+	}
+}
+
+// GetProfitabilityData returns current profitability data
+func (h *AlgorithmHandler) GetProfitabilityData() []ProfitabilityData {
+	var data []ProfitabilityData
+	for algoType, algo := range h.algorithms {
+		data = append(data, ProfitabilityData{
+			Algorithm:     algoType,
+			Difficulty:    algo.Difficulty,
+			BlockReward:   algo.BlockReward,
+			Profitability: h.calculateProfitability(algoType),
+			LastUpdate:    algo.LastUpdate,
+		})
+	}
+	return data
+}
+
+// calculateProfitability calculates the profitability of an algorithm
+func (h *AlgorithmHandler) calculateProfitability(algo AlgorithmType) float64 {
+	// Simplified calculation - in production, fetch real-time data
+	switch algo {
+	case SHA256D:
+		return 1.0 // Bitcoin baseline
+	case SHA256:
+		return 0.8
+	case Blake2b256:
+		return 1.2
+	case SHA3_256:
+		return 0.9
+	default:
+		return 0.5
+	}
+}
+
+// Hash performs hashing with the specified algorithm
+func (h *AlgorithmHandler) Hash(data []byte, algoType AlgorithmType) []byte {
+	if algo, exists := h.algorithms[algoType]; exists && algo.HashFunc != nil {
+		return algo.HashFunc(data)
+	}
+	// Fallback to SHA256D
+	return sha256dHash(data)
+}
+
 func (h *AlgorithmHandler) getASICCompatibleAlgorithms() []*algorithms.Algorithm {
 	// ASIC typically supports these algorithms
 	asicAlgos := []string{"sha256d", "scrypt", "blake2s", "x11", "eaglesong"}
@@ -604,4 +713,45 @@ type ASICDevice struct {
 	Algorithm    string
 	HashRate     uint64
 	PowerUsage   float64
+}
+
+// Hash functions for different algorithms
+
+// sha256Hash performs single SHA256 hashing
+func sha256Hash(data []byte) []byte {
+	hash := sha256.Sum256(data)
+	return hash[:]
+}
+
+// sha256dHash performs double SHA256 hashing (Bitcoin-style)
+func sha256dHash(data []byte) []byte {
+	hash1 := sha256.Sum256(data)
+	hash2 := sha256.Sum256(hash1[:])
+	return hash2[:]
+}
+
+// blake2b256Hash performs Blake2b-256 hashing
+func blake2b256Hash(data []byte) []byte {
+	hash, _ := blake2b.New256(nil)
+	hash.Write(data)
+	return hash.Sum(nil)
+}
+
+// sha3_256Hash performs SHA3-256 hashing
+func sha3_256Hash(data []byte) []byte {
+	hash := sha3.New256()
+	hash.Write(data)
+	return hash.Sum(nil)
+}
+
+// ProfitabilityData represents profitability information
+type ProfitabilityData struct {
+	Algorithm    AlgorithmType
+	Hashrate     float64
+	Difficulty   float64
+	BlockReward  float64
+	PowerCost    float64
+	CoinPrice    float64
+	Profitability float64
+	LastUpdate   time.Time
 }

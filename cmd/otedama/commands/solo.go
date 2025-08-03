@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/solo"
+	"github.com/shizukutanaka/Otedama/internal/mining"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -70,7 +70,7 @@ func runSolo(cmd *cobra.Command, args []string) error {
 	defer logger.Sync()
 	
 	// Load or create configuration
-	var config solo.Config
+	var config mining.Config
 	
 	if soloConfigFile != "" {
 		// Load from file
@@ -83,7 +83,7 @@ func runSolo(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		// Use command line flags
-		config = solo.Config{
+		config = mining.Config{
 			Wallet:      soloWallet,
 			Algorithm:   soloAlgorithm,
 			Threads:     soloThreads,
@@ -111,7 +111,7 @@ func runSolo(cmd *cobra.Command, args []string) error {
 	)
 	
 	// Create miner
-	miner, err := solo.NewSoloP2PMiner(logger, config)
+	miner, err := mining.NewSoloHybridMiner(logger, config)
 	if err != nil {
 		return fmt.Errorf("failed to create miner: %w", err)
 	}
@@ -148,7 +148,7 @@ func runSolo(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func printSoloStats(miner *solo.SoloP2PMiner) {
+func printSoloStats(miner *mining.SoloHybridMiner) {
 	stats := miner.GetStats()
 	
 	fmt.Println("\n=== Otedama Solo Mining Statistics ===")

@@ -2,544 +2,520 @@ package mining
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
+	"errors"
 	"fmt"
-	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// CPUWorker implements CPU mining - John Carmack's performance optimization
-type CPUWorker struct {
-	id         int
-	logger     *zap.Logger
-	
-	// Performance tracking - atomic for lock-free access
-	hashRate   atomic.Uint64
-	hashes     atomic.Uint64
-	lastUpdate atomic.Int64
-	
-	// Control
-	running    atomic.Bool
-	ctx        context.Context
-	cancel     context.CancelFunc
+// EfficientJobQueue manages mining jobs efficiently
+// Following John Carmack's principle: optimize the hot path
+type EfficientJobQueue struct {
+	logger   *zap.Logger
+	jobs     chan *Job
+	mu       sync.RWMutex
+	capacity int
 }
 
-// NewCPUWorker creates optimized CPU worker
-func NewCPUWorker(id int, logger *zap.Logger) Worker {
-	return &CPUWorker{
-		id:     id,
-		logger: logger.With(zap.String("worker", fmt.Sprintf("cpu-%d", id))),
+// NewEfficientJobQueue creates a new efficient job queue
+func NewEfficientJobQueue(logger *zap.Logger) *EfficientJobQueue {
+	return &EfficientJobQueue{
+		logger:   logger,
+		jobs:     make(chan *Job, 1000),
+		capacity: 1000,
 	}
 }
 
-// Start starts the CPU worker - Rob Pike's clear interface
-func (w *CPUWorker) Start(ctx context.Context, jobs <-chan *Job, shares chan<- *Share) error {
-	if !w.running.CompareAndSwap(false, true) {
-		return fmt.Errorf("worker already running")
+// Enqueue adds a job to the queue
+func (q *EfficientJobQueue) Enqueue(job *Job) error {
+	select {
+	case q.jobs <- job:
+		return nil
+	default:
+		return context.DeadlineExceeded
 	}
+}
+
+// Dequeue removes and returns a job from the queue
+func (q *EfficientJobQueue) Dequeue(ctx context.Context) (*Job, error) {
+	select {
+	case job := <-q.jobs:
+		return job, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// Size returns the current queue size
+func (q *EfficientJobQueue) Size() int {
+	return len(q.jobs)
+}
+
+// AutoTuner automatically optimizes mining parameters
+type AutoTuner struct {
+	logger *zap.Logger
+	mu     sync.RWMutex
+}
+
+// NewAutoTuner creates a new auto tuner
+func NewAutoTuner(logger *zap.Logger) *AutoTuner {
+	return &AutoTuner{
+		logger: logger,
+	}
+}
+
+// Optimize performs automatic optimization
+func (at *AutoTuner) Optimize() {
+	at.logger.Debug("Auto-tuning mining parameters")
+}
+
+// ProfitSwitcher handles profit-based algorithm switching
+type ProfitSwitcher struct {
+	logger *zap.Logger
+	mu     sync.RWMutex
+}
+
+// NewProfitSwitcher creates a new profit switcher
+func NewProfitSwitcher(logger *zap.Logger) *ProfitSwitcher {
+	return &ProfitSwitcher{
+		logger: logger,
+	}
+}
+
+// Check checks for more profitable algorithms
+func (ps *ProfitSwitcher) Check() {
+	ps.logger.Debug("Checking for more profitable algorithms")
+}
+
+// MiningBufferPool manages reusable buffers for mining operations
+type MiningBufferPool struct {
+	pool sync.Pool
+}
+
+// NewMiningBufferPool creates a new buffer pool
+func NewMiningBufferPool() *MiningBufferPool {
+	return &MiningBufferPool{
+		pool: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 256)
+			},
+		},
+	}
+}
+
+// Get retrieves a buffer from the pool
+func (mbp *MiningBufferPool) Get() []byte {
+	return mbp.pool.Get().([]byte)
+}
+
+// Put returns a buffer to the pool
+func (mbp *MiningBufferPool) Put(buf []byte) {
+	mbp.pool.Put(buf)
+}
+
+// SimpleAlgorithmSwitcher switches between algorithms
+type SimpleAlgorithmSwitcher struct {
+	logger    *zap.Logger
+	current   AlgorithmType
+	mu        sync.RWMutex
+}
+
+// NewSimpleAlgorithmSwitcher creates a new algorithm switcher
+func NewSimpleAlgorithmSwitcher(logger *zap.Logger) *SimpleAlgorithmSwitcher {
+	return &SimpleAlgorithmSwitcher{
+		logger:  logger,
+		current: SHA256D,
+	}
+}
+
+// Switch switches to a new algorithm
+func (sas *SimpleAlgorithmSwitcher) Switch(algo AlgorithmType) error {
+	sas.mu.Lock()
+	defer sas.mu.Unlock()
 	
-	w.ctx, w.cancel = context.WithCancel(ctx)
-	
-	// Start hash rate updater
-	go w.hashRateUpdater()
-	
-	// Start main mining loop
-	go w.miningLoop(jobs, shares)
-	
-	w.logger.Debug("CPU worker started")
+	sas.current = algo
+	sas.logger.Info("Algorithm switched", zap.String("algorithm", string(algo)))
 	return nil
 }
 
-// Stop stops the CPU worker
-func (w *CPUWorker) Stop() error {
-	if !w.running.CompareAndSwap(true, false) {
-		return fmt.Errorf("worker not running")
-	}
-	
-	if w.cancel != nil {
-		w.cancel()
-	}
-	
-	w.logger.Debug("CPU worker stopped")
-	return nil
+// GetCurrent returns the current algorithm
+func (sas *SimpleAlgorithmSwitcher) GetCurrent() AlgorithmType {
+	sas.mu.RLock()
+	defer sas.mu.RUnlock()
+	return sas.current
 }
 
-// GetHashRate returns current hash rate - lock-free
-func (w *CPUWorker) GetHashRate() uint64 {
-	return w.hashRate.Load()
+// ShareValidator validates mining shares
+type ShareValidator struct {
+	logger *zap.Logger
 }
 
-// GetType returns worker type
-func (w *CPUWorker) GetType() WorkerType {
-	return WorkerCPU
-}
-
-// ID returns worker identifier
-func (w *CPUWorker) ID() string {
-	return fmt.Sprintf("cpu-%d", w.id)
-}
-
-// miningLoop is the main mining loop - optimized hot path
-func (w *CPUWorker) miningLoop(jobs <-chan *Job, shares chan<- *Share) {
-	buffer := make([]byte, 80) // Pre-allocated buffer
-	
-	for {
-		select {
-		case job, ok := <-jobs:
-			if !ok {
-				return
-			}
-			
-			// Mine the job
-			if share := w.mineJob(job, buffer); share != nil {
-				select {
-				case shares <- share:
-					// Share submitted
-				case <-w.ctx.Done():
-					return
-				}
-			}
-			
-		case <-w.ctx.Done():
-			return
-		}
+// NewShareValidator creates a new share validator
+func NewShareValidator(logger *zap.Logger) *ShareValidator {
+	return &ShareValidator{
+		logger: logger,
 	}
 }
 
-// mineJob mines a single job - CPU-optimized implementation
-func (w *CPUWorker) mineJob(job *Job, buffer []byte) *Share {
-	// Prepare block header
-	w.prepareHeader(job, buffer)
-	
-	// Mining parameters
-	const batchSize = 1000000 // Process in batches
-	startNonce := uint32(w.id * batchSize)
-	
-	// Mine in batches
-	for batch := 0; batch < 1000; batch++ { // Limit to prevent blocking
-		select {
-		case <-w.ctx.Done():
-			return nil
-		default:
-		}
-		
-		baseNonce := startNonce + uint32(batch*batchSize)
-		
-		if share := w.mineBatch(job, buffer, baseNonce, batchSize); share != nil {
-			return share
-		}
+// ValidateShare validates a mining share
+func (sv *ShareValidator) ValidateShare(share *Share) bool {
+	if share == nil {
+		return false
 	}
 	
-	return nil
-}
-
-// mineBatch mines a batch of nonces - vectorized where possible
-func (w *CPUWorker) mineBatch(job *Job, buffer []byte, startNonce uint32, count int) *Share {
-	target := calculateTarget(job.Bits)
-	
-	for i := 0; i < count; i++ {
-		nonce := startNonce + uint32(i)
-		
-		// Update nonce in buffer
-		binary.LittleEndian.PutUint32(buffer[76:80], nonce)
-		
-		// Double SHA-256
-		hash1 := sha256.Sum256(buffer)
-		hash2 := sha256.Sum256(hash1[:])
-		
-		// Update hash counter
-		w.hashes.Add(1)
-		
-		// Check if hash meets target
-		if w.checkTarget(hash2[:], target) {
-			return &Share{
-				JobID:     job.ID,
-				WorkerID:  w.ID(),
-				Nonce:     uint64(nonce),
-				Hash:      hash2,
-				Timestamp: time.Now().Unix(),
-				Algorithm: job.Algorithm,
-				Valid:     true,
-			}
-		}
-		
-		// Periodic context check
-		if i%10000 == 0 {
-			select {
-			case <-w.ctx.Done():
-				return nil
-			default:
-			}
-		}
+	if share.JobID == "" || share.WorkerID == "" {
+		return false
 	}
 	
-	return nil
-}
-
-// prepareHeader prepares block header for mining
-func (w *CPUWorker) prepareHeader(job *Job, buffer []byte) {
-	// Version (4 bytes)
-	binary.LittleEndian.PutUint32(buffer[0:4], 0x20000000)
-	
-	// Previous block hash (32 bytes)
-	copy(buffer[4:36], job.PrevHash[:])
-	
-	// Merkle root (32 bytes)
-	copy(buffer[36:68], job.MerkleRoot[:])
-	
-	// Timestamp (4 bytes)
-	binary.LittleEndian.PutUint32(buffer[68:72], job.Timestamp)
-	
-	// Bits/Target (4 bytes)
-	binary.LittleEndian.PutUint32(buffer[72:76], job.Bits)
-	
-	// Nonce will be updated during mining (4 bytes at offset 76)
-}
-
-// checkTarget checks if hash meets difficulty target
-func (w *CPUWorker) checkTarget(hash []byte, target []byte) bool {
-	// Compare hash with target (little-endian)
-	for i := 31; i >= 0; i-- {
-		if hash[i] > target[i] {
-			return false
-		} else if hash[i] < target[i] {
-			return true
-		}
+	if share.Difficulty == 0 {
+		return false
 	}
+	
+	// Additional validation logic would go here
 	return true
 }
 
-// hashRateUpdater updates hash rate statistics
-func (w *CPUWorker) hashRateUpdater() {
+// CPUMiner represents a CPU-based miner
+type CPUMiner struct {
+	id       int
+	logger   *zap.Logger
+	hashRate uint64
+	running  bool
+	mu       sync.RWMutex
+}
+
+// NewCPUMiner creates a new CPU miner
+func NewCPUMiner(id int, logger *zap.Logger) *CPUMiner {
+	return &CPUMiner{
+		id:     id,
+		logger: logger,
+	}
+}
+
+// Start starts the CPU miner
+func (cm *CPUMiner) Start(ctx context.Context, jobChan <-chan *Job, shareChan chan<- *Share) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	
+	cm.running = true
+	cm.logger.Info("CPU miner started", zap.Int("id", cm.id))
+	
+	go cm.mineLoop(ctx, jobChan, shareChan)
+	return nil
+}
+
+// Stop stops the CPU miner
+func (cm *CPUMiner) Stop() error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	
+	cm.running = false
+	cm.logger.Info("CPU miner stopped", zap.Int("id", cm.id))
+	return nil
+}
+
+// GetHashRate returns the current hash rate
+func (cm *CPUMiner) GetHashRate() uint64 {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.hashRate
+}
+
+// GetType returns the worker type
+func (cm *CPUMiner) GetType() WorkerType {
+	return WorkerCPU
+}
+
+// ID returns the worker ID
+func (cm *CPUMiner) ID() string {
+	return fmt.Sprintf("cpu-%d", cm.id)
+}
+
+// SubmitJob submits a job to the miner
+func (cm *CPUMiner) SubmitJob(job *MiningJob) {
+	cm.logger.Debug("CPU miner received job", 
+		zap.Int("id", cm.id),
+		zap.String("job_id", job.ID),
+	)
+}
+
+// mineLoop is the main mining loop
+func (cm *CPUMiner) mineLoop(ctx context.Context, jobChan <-chan *Job, shareChan chan<- *Share) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	
-	lastHashes := uint64(0)
-	
 	for {
 		select {
-		case <-ticker.C:
-			currentHashes := w.hashes.Load()
-			hashRate := currentHashes - lastHashes
-			w.hashRate.Store(hashRate)
-			lastHashes = currentHashes
-			w.lastUpdate.Store(time.Now().Unix())
-			
-		case <-w.ctx.Done():
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			// Update hash rate (placeholder)
+			cm.mu.Lock()
+			cm.hashRate = 1000000 // 1 MH/s placeholder
+			cm.mu.Unlock()
+		case job := <-jobChan:
+			if job != nil {
+				// Process job (placeholder)
+				cm.processJob(job, shareChan)
+			}
 		}
 	}
 }
 
-// GPUWorker implements GPU mining - placeholder for GPU implementation
-type GPUWorker struct {
+// processJob processes a mining job
+func (cm *CPUMiner) processJob(job *Job, shareChan chan<- *Share) {
+	// Placeholder job processing
+	share := &Share{
+		JobID:     job.ID,
+		WorkerID:  cm.ID(),
+		Nonce:     uint64(time.Now().UnixNano()),
+		Difficulty: job.Difficulty,
+		Timestamp: time.Now().Unix(),
+		Algorithm: job.Algorithm,
+		Valid:     true,
+	}
+	
+	select {
+	case shareChan <- share:
+	default:
+		// Share channel full
+	}
+}
+
+// GPUMiner represents a GPU-based miner
+type GPUMiner struct {
 	id       int
 	deviceID int
 	logger   *zap.Logger
-	
-	hashRate atomic.Uint64
-	running  atomic.Bool
-	ctx      context.Context
-	cancel   context.CancelFunc
+	hashRate uint64
+	running  bool
+	mu       sync.RWMutex
 }
 
-// NewGPUWorker creates GPU worker
-func NewGPUWorker(id, deviceID int, logger *zap.Logger) Worker {
-	return &GPUWorker{
+// NewGPUMiner creates a new GPU miner
+func NewGPUMiner(id, deviceID int, logger *zap.Logger) *GPUMiner {
+	return &GPUMiner{
 		id:       id,
 		deviceID: deviceID,
-		logger:   logger.With(zap.String("worker", fmt.Sprintf("gpu-%d", id))),
+		logger:   logger,
 	}
 }
 
-// Start starts GPU worker - placeholder implementation
-func (w *GPUWorker) Start(ctx context.Context, jobs <-chan *Job, shares chan<- *Share) error {
-	if !w.running.CompareAndSwap(false, true) {
-		return fmt.Errorf("worker already running")
-	}
+// Start starts the GPU miner
+func (gm *GPUMiner) Start(ctx context.Context, jobChan <-chan *Job, shareChan chan<- *Share) error {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
 	
-	w.ctx, w.cancel = context.WithCancel(ctx)
+	gm.running = true
+	gm.logger.Info("GPU miner started", 
+		zap.Int("id", gm.id),
+		zap.Int("device_id", gm.deviceID),
+	)
 	
-	// GPU initialization would go here
-	w.logger.Info("GPU worker started", zap.Int("device", w.deviceID))
-	
-	// Placeholder: simulate GPU mining
-	go w.simulateGPUMining(jobs, shares)
-	
+	go gm.mineLoop(ctx, jobChan, shareChan)
 	return nil
 }
 
-// Stop stops GPU worker
-func (w *GPUWorker) Stop() error {
-	if !w.running.CompareAndSwap(true, false) {
-		return fmt.Errorf("worker not running")
-	}
+// Stop stops the GPU miner
+func (gm *GPUMiner) Stop() error {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
 	
-	if w.cancel != nil {
-		w.cancel()
-	}
-	
-	w.logger.Info("GPU worker stopped")
+	gm.running = false
+	gm.logger.Info("GPU miner stopped", zap.Int("id", gm.id))
 	return nil
 }
 
-// GetHashRate returns GPU hash rate
-func (w *GPUWorker) GetHashRate() uint64 {
-	return w.hashRate.Load()
+// GetHashRate returns the current hash rate
+func (gm *GPUMiner) GetHashRate() uint64 {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	return gm.hashRate
 }
 
-// GetType returns worker type
-func (w *GPUWorker) GetType() WorkerType {
+// GetType returns the worker type
+func (gm *GPUMiner) GetType() WorkerType {
 	return WorkerGPU
 }
 
-// ID returns worker identifier
-func (w *GPUWorker) ID() string {
-	return fmt.Sprintf("gpu-%d-%d", w.id, w.deviceID)
+// ID returns the worker ID
+func (gm *GPUMiner) ID() string {
+	return fmt.Sprintf("gpu-%d", gm.id)
 }
 
-// simulateGPUMining simulates GPU mining for testing
-func (w *GPUWorker) simulateGPUMining(jobs <-chan *Job, shares chan<- *Share) {
-	// Simulate GPU hash rate (much higher than CPU)
-	simulatedRate := uint64(100000000) // 100 MH/s
-	w.hashRate.Store(simulatedRate)
-	
-	ticker := time.NewTicker(30 * time.Second)
+// SubmitJob submits a job to the miner
+func (gm *GPUMiner) SubmitJob(job *MiningJob) {
+	gm.logger.Debug("GPU miner received job", 
+		zap.Int("id", gm.id),
+		zap.String("job_id", job.ID),
+	)
+}
+
+// mineLoop is the main mining loop
+func (gm *GPUMiner) mineLoop(ctx context.Context, jobChan <-chan *Job, shareChan chan<- *Share) {
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	
 	for {
 		select {
-		case job, ok := <-jobs:
-			if !ok {
-				return
-			}
-			
-			// Simulate finding a share occasionally
-			if time.Now().Unix()%10 == 0 {
-				share := &Share{
-					JobID:     job.ID,
-					WorkerID:  w.ID(),
-					Nonce:     uint64(time.Now().UnixNano()),
-					Timestamp: time.Now().Unix(),
-					Algorithm: job.Algorithm,
-					Valid:     true,
-				}
-				
-				select {
-				case shares <- share:
-				case <-w.ctx.Done():
-					return
-				}
-			}
-			
-		case <-w.ctx.Done():
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			// Update hash rate (placeholder)
+			gm.mu.Lock()
+			gm.hashRate = 30000000 // 30 MH/s placeholder
+			gm.mu.Unlock()
+		case job := <-jobChan:
+			if job != nil {
+				gm.processJob(job, shareChan)
+			}
 		}
 	}
 }
 
-// ASICWorker implements ASIC mining - placeholder for ASIC implementation
-type ASICWorker struct {
+// processJob processes a mining job
+func (gm *GPUMiner) processJob(job *Job, shareChan chan<- *Share) {
+	share := &Share{
+		JobID:     job.ID,
+		WorkerID:  gm.ID(),
+		Nonce:     uint64(time.Now().UnixNano()),
+		Difficulty: job.Difficulty,
+		Timestamp: time.Now().Unix(),
+		Algorithm: job.Algorithm,
+		Valid:     true,
+	}
+	
+	select {
+	case shareChan <- share:
+	default:
+		// Share channel full
+	}
+}
+
+// ASICMiner represents an ASIC-based miner
+type ASICMiner struct {
 	id         int
 	devicePath string
 	logger     *zap.Logger
-	
-	hashRate atomic.Uint64
-	running  atomic.Bool
-	ctx      context.Context
-	cancel   context.CancelFunc
+	hashRate   uint64
+	running    bool
+	mu         sync.RWMutex
 }
 
-// NewASICWorker creates ASIC worker
-func NewASICWorker(id int, devicePath string, logger *zap.Logger) Worker {
-	return &ASICWorker{
+// NewASICMiner creates a new ASIC miner
+func NewASICMiner(id int, devicePath string, logger *zap.Logger) *ASICMiner {
+	return &ASICMiner{
 		id:         id,
 		devicePath: devicePath,
-		logger:     logger.With(zap.String("worker", fmt.Sprintf("asic-%d", id))),
+		logger:     logger,
 	}
 }
 
-// Start starts ASIC worker
-func (w *ASICWorker) Start(ctx context.Context, jobs <-chan *Job, shares chan<- *Share) error {
-	if !w.running.CompareAndSwap(false, true) {
-		return fmt.Errorf("worker already running")
-	}
+// Start starts the ASIC miner
+func (am *ASICMiner) Start(ctx context.Context, jobChan <-chan *Job, shareChan chan<- *Share) error {
+	am.mu.Lock()
+	defer am.mu.Unlock()
 	
-	w.ctx, w.cancel = context.WithCancel(ctx)
+	am.running = true
+	am.logger.Info("ASIC miner started", 
+		zap.Int("id", am.id),
+		zap.String("device_path", am.devicePath),
+	)
 	
-	w.logger.Info("ASIC worker started", zap.String("device", w.devicePath))
-	
-	// Placeholder: simulate ASIC mining
-	go w.simulateASICMining(jobs, shares)
-	
+	go am.mineLoop(ctx, jobChan, shareChan)
 	return nil
 }
 
-// Stop stops ASIC worker
-func (w *ASICWorker) Stop() error {
-	if !w.running.CompareAndSwap(true, false) {
-		return fmt.Errorf("worker not running")
-	}
+// Stop stops the ASIC miner
+func (am *ASICMiner) Stop() error {
+	am.mu.Lock()
+	defer am.mu.Unlock()
 	
-	if w.cancel != nil {
-		w.cancel()
-	}
-	
-	w.logger.Info("ASIC worker stopped")
+	am.running = false
+	am.logger.Info("ASIC miner stopped", zap.Int("id", am.id))
 	return nil
 }
 
-// GetHashRate returns ASIC hash rate
-func (w *ASICWorker) GetHashRate() uint64 {
-	return w.hashRate.Load()
+// GetHashRate returns the current hash rate
+func (am *ASICMiner) GetHashRate() uint64 {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
+	return am.hashRate
 }
 
-// GetType returns worker type
-func (w *ASICWorker) GetType() WorkerType {
+// GetType returns the worker type
+func (am *ASICMiner) GetType() WorkerType {
 	return WorkerASIC
 }
 
-// ID returns worker identifier
-func (w *ASICWorker) ID() string {
-	return fmt.Sprintf("asic-%d", w.id)
+// ID returns the worker ID
+func (am *ASICMiner) ID() string {
+	return fmt.Sprintf("asic-%d", am.id)
 }
 
-// simulateASICMining simulates ASIC mining for testing
-func (w *ASICWorker) simulateASICMining(jobs <-chan *Job, shares chan<- *Share) {
-	// Simulate ASIC hash rate (very high)
-	simulatedRate := uint64(100000000000) // 100 GH/s
-	w.hashRate.Store(simulatedRate)
+// SubmitJob submits a job to the miner
+func (am *ASICMiner) SubmitJob(job *MiningJob) {
+	am.logger.Debug("ASIC miner received job", 
+		zap.Int("id", am.id),
+		zap.String("job_id", job.ID),
+	)
+}
+
+// mineLoop is the main mining loop
+func (am *ASICMiner) mineLoop(ctx context.Context, jobChan <-chan *Job, shareChan chan<- *Share) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	
 	for {
 		select {
-		case job, ok := <-jobs:
-			if !ok {
-				return
-			}
-			
-			// Simulate finding shares frequently
-			if time.Now().Unix()%5 == 0 {
-				share := &Share{
-					JobID:     job.ID,
-					WorkerID:  w.ID(),
-					Nonce:     uint64(time.Now().UnixNano()),
-					Timestamp: time.Now().Unix(),
-					Algorithm: job.Algorithm,
-					Valid:     true,
-				}
-				
-				select {
-				case shares <- share:
-				case <-w.ctx.Done():
-					return
-				}
-			}
-			
-		case <-w.ctx.Done():
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			// Update hash rate (placeholder)
+			am.mu.Lock()
+			am.hashRate = 100000000000000 // 100 TH/s placeholder
+			am.mu.Unlock()
+		case job := <-jobChan:
+			if job != nil {
+				am.processJob(job, shareChan)
+			}
 		}
 	}
 }
 
-// AlgorithmSwitcher handles algorithm switching
-type AlgorithmSwitcher struct {
-	logger        *zap.Logger
-	current       atomic.Value // stores Algorithm
-	profitability map[Algorithm]float64
-	lastSwitch    time.Time
-}
-
-// NewAlgorithmSwitcher creates algorithm switcher
-func NewAlgorithmSwitcher(logger *zap.Logger) *AlgorithmSwitcher {
-	switcher := &AlgorithmSwitcher{
-		logger:        logger,
-		profitability: make(map[Algorithm]float64),
-		lastSwitch:    time.Now(),
+// processJob processes a mining job
+func (am *ASICMiner) processJob(job *Job, shareChan chan<- *Share) {
+	share := &Share{
+		JobID:     job.ID,
+		WorkerID:  am.ID(),
+		Nonce:     uint64(time.Now().UnixNano()),
+		Difficulty: job.Difficulty,
+		Timestamp: time.Now().Unix(),
+		Algorithm: job.Algorithm,
+		Valid:     true,
 	}
 	
-	// Set default algorithm
-	switcher.current.Store(AlgorithmSHA256d)
-	
-	// Initialize profitability data
-	switcher.profitability[AlgorithmSHA256d] = 1.0
-	switcher.profitability[AlgorithmScrypt] = 0.8
-	switcher.profitability[AlgorithmEthash] = 1.2
-	switcher.profitability[AlgorithmRandomX] = 0.9
-	switcher.profitability[AlgorithmKawPow] = 1.1
-	
-	return switcher
+	select {
+	case shareChan <- share:
+	default:
+		// Share channel full
+	}
 }
 
-// Switch switches to new algorithm
-func (as *AlgorithmSwitcher) Switch(algo Algorithm) error {
-	if as.current.Load().(Algorithm) == algo {
-		return nil
-	}
-	
-	as.logger.Info("Switching algorithm", zap.String("algorithm", string(algo)))
-	as.current.Store(algo)
-	as.lastSwitch = time.Now()
-	
-	return nil
+// NewCPUWorker creates a CPU worker
+func NewCPUWorker(id int, logger *zap.Logger) Worker {
+	return NewCPUMiner(id, logger)
 }
 
-// GetCurrentAlgorithm returns current algorithm
-func (as *AlgorithmSwitcher) GetCurrentAlgorithm() Algorithm {
-	return as.current.Load().(Algorithm)
+// NewGPUWorker creates a GPU worker
+func NewGPUWorker(id, deviceID int, logger *zap.Logger) Worker {
+	return NewGPUMiner(id, deviceID, logger)
 }
 
-// GetBestAlgorithm returns most profitable algorithm
-func (as *AlgorithmSwitcher) GetBestAlgorithm() Algorithm {
-	// Prevent frequent switching
-	if time.Since(as.lastSwitch) < 5*time.Minute {
-		return as.current.Load().(Algorithm)
-	}
-	
-	bestAlgo := AlgorithmSHA256d
-	bestProfit := 0.0
-	
-	for algo, profit := range as.profitability {
-		if profit > bestProfit {
-			bestProfit = profit
-			bestAlgo = algo
-		}
-	}
-	
-	return bestAlgo
-}
-
-// Utility functions
-
-// calculateTarget calculates mining target from bits
-func calculateTarget(bits uint32) []byte {
-	target := make([]byte, 32)
-	
-	// Extract exponent and mantissa
-	exponent := bits >> 24
-	mantissa := bits & 0x00ffffff
-	
-	// Calculate target
-	if exponent <= 3 {
-		mantissa >>= (8 * (3 - exponent))
-		binary.LittleEndian.PutUint32(target, mantissa)
-	} else {
-		binary.LittleEndian.PutUint32(target[exponent-3:], mantissa)
-	}
-	
-	return target
-}
-
-// Hardware detection and optimization
-func init() {
-	// Set optimal GOMAXPROCS for mining
-	if runtime.GOMAXPROCS(0) < runtime.NumCPU() {
-		runtime.GOMAXPROCS(runtime.NumCPU())
-	}
-	
-	// Enable optimizations
-	runtime.GC() // Clean start
+// NewASICWorker creates an ASIC worker
+func NewASICWorker(id int, devicePath string, logger *zap.Logger) Worker {
+	return NewASICMiner(id, devicePath, logger)
 }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/otedama/otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/mining"
 	"go.uber.org/zap"
 )
 
@@ -24,6 +24,7 @@ type Server struct {
 	clients    map[*websocket.Conn]bool
 	stats      map[string]interface{}
 	engine     mining.Engine
+	validator  *InputValidator
 }
 
 // Config defines API server configuration
@@ -52,15 +53,34 @@ func NewServer(config Config, logger *zap.Logger, engine mining.Engine) (*Server
 	}
 
 	server := &Server{
-		logger:  logger,
-		config:  config,
-		clients: make(map[*websocket.Conn]bool),
-		stats:   make(map[string]interface{}),
-		engine:  engine,
+		logger:    logger,
+		config:    config,
+		clients:   make(map[*websocket.Conn]bool),
+		stats:     make(map[string]interface{}),
+		engine:    engine,
+		validator: NewInputValidator(),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				// Allow all origins for now - in production would check config.AllowOrigins
-				return true
+				// Check against allowed origins
+				if len(config.AllowOrigins) == 0 {
+					// No origins configured, deny all
+					return false
+				}
+				
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					// No origin header, deny
+					return false
+				}
+				
+				// Check if origin is in allowed list
+				for _, allowed := range config.AllowOrigins {
+					if allowed == "*" || allowed == origin {
+						return true
+					}
+				}
+				
+				return false
 			},
 		},
 	}
@@ -170,9 +190,26 @@ func (s *Server) setupRoutes() {
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		
+		// Check if origin is allowed
+		if origin != "" && len(s.config.AllowOrigins) > 0 {
+			for _, allowed := range s.config.AllowOrigins {
+				if allowed == "*" {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					break
+				} else if allowed == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					break
+				}
+			}
+		}
+		
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "3600")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -204,7 +241,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 		Data: map[string]interface{}{
 			"service": "Otedama Mining Pool",
-			"version": "3.0.0",
+			"version": "2.1.3",
 			"uptime":  time.Since(time.Now()).Seconds(), // Placeholder
 			"status":  "running",
 		},
@@ -358,6 +395,12 @@ func (s *Server) handleWorkerControl(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	workerID := vars["id"]
 	
+	// Validate worker ID
+	if err := s.validator.ValidateWorkerID(workerID); err != nil {
+		s.sendError(w, http.StatusBadRequest, fmt.Sprintf("Invalid worker ID: %v", err))
+		return
+	}
+	
 	var req struct {
 		Action string `json:"action"`
 	}
@@ -368,14 +411,8 @@ func (s *Server) handleWorkerControl(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Validate action
-	validActions := map[string]bool{
-		"start": true,
-		"stop": true,
-		"restart": true,
-	}
-	
-	if !validActions[req.Action] {
-		s.sendError(w, http.StatusBadRequest, "Invalid action")
+	if err := s.validator.ValidateAction(req.Action); err != nil {
+		s.sendError(w, http.StatusBadRequest, fmt.Sprintf("Invalid action: %v", err))
 		return
 	}
 	
@@ -472,16 +509,8 @@ func (s *Server) handleProfitSwitch(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Validate algorithm
-	validAlgos := map[string]bool{
-		"SHA256d": true,
-		"Ethash": true,
-		"KawPow": true,
-		"RandomX": true,
-		"Scrypt": true,
-	}
-	
-	if !validAlgos[req.Algorithm] {
-		s.sendError(w, http.StatusBadRequest, "Invalid algorithm")
+	if err := s.validator.ValidateAlgorithm(req.Algorithm); err != nil {
+		s.sendError(w, http.StatusBadRequest, fmt.Sprintf("Invalid algorithm: %v", err))
 		return
 	}
 	

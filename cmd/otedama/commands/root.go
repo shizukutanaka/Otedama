@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const Version = "3.0.0"
+const Version = "2.1.3"
 
 var (
 	cfgFile string
@@ -39,6 +39,15 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+
+	// Add commands
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(soloCmd)
+	rootCmd.AddCommand(poolCmd)
+	rootCmd.AddCommand(p2pCmd)
+	rootCmd.AddCommand(benchmarkCmd)
 
 	// Version template
 	rootCmd.SetVersionTemplate(`Otedama {{.Version}}

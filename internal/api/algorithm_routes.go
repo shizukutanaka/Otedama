@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/otedama/otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/mining"
 	"go.uber.org/zap"
 )
 

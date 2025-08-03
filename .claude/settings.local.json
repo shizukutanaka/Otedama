@@ -45,7 +45,8 @@
       "Bash(./scripts/optimize_code.sh:*)",
       "Bash(dos2unix:*)",
       "Bash(cat:*)",
-      "Bash(./cleanup_optimization.sh)"
+      "Bash(./cleanup_optimization.sh)",
+      "Bash(./scripts/enterprise_code_checker.sh:*)"
     ],
     "deny": []
   }

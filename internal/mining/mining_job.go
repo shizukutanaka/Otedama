@@ -416,6 +416,26 @@ func (jm *JobManager) calculateNextDifficulty(latestBlock Block) float64 {
 	return currentDiff
 }
 
+// JobDistributor manages job distribution to workers
+type JobDistributor struct {
+	currentJob   atomic.Value // *MiningJob
+	jobQueue     chan *MiningJob
+	workers      sync.Map
+	mu           sync.RWMutex
+	jobCounter   atomic.Uint64
+	targetTime   time.Duration
+	lastJobTime  time.Time
+}
+
+// WorkerStats represents worker statistics
+type WorkerStats struct {
+	ID            string
+	HashRate      uint64
+	SharesSubmitted uint64
+	SharesAccepted  uint64
+	LastShare       time.Time
+}
+
 // JobQueue manages a queue of mining jobs
 type JobQueue struct {
 	jobs     []*MiningJob
@@ -464,4 +484,101 @@ func (jq *JobQueue) Size() int {
 	jq.mu.Lock()
 	defer jq.mu.Unlock()
 	return len(jq.jobs)
+}
+
+// NewJobDistributor creates a new job distributor
+func NewJobDistributor() *JobDistributor {
+	jd := &JobDistributor{
+		jobQueue:    make(chan *MiningJob, 100),
+		targetTime:  30 * time.Second,
+		lastJobTime: time.Now(),
+	}
+	
+	// Set initial job
+	initialJob := &MiningJob{
+		JobID:       "initial",
+		BlockHeader: BlockHeader{Height: 1000000},
+		Target:      make([]byte, 32),
+		Creator:     "system",
+		Timestamp:   time.Now(),
+		ExpiresAt:   time.Now().Add(30 * time.Second),
+		Height:      1000000,
+		Difficulty:  1000000,
+	}
+	jd.currentJob.Store(initialJob)
+	
+	return jd
+}
+
+// SubmitJobToDistributor submits a job to the distributor
+func (jd *JobDistributor) SubmitJobToDistributor(job *MiningJob) {
+	jd.currentJob.Store(job)
+	jd.lastJobTime = time.Now()
+	jd.jobCounter.Add(1)
+	
+	// Add to queue (non-blocking)
+	select {
+	case jd.jobQueue <- job:
+	default:
+		// Queue full, ignore
+	}
+}
+
+// GetCurrentJobFromDistributor returns the current job
+func (jd *JobDistributor) GetCurrentJobFromDistributor() *MiningJob {
+	if job := jd.currentJob.Load(); job != nil {
+		return job.(*MiningJob)
+	}
+	return nil
+}
+
+// RegisterWorker registers a worker with the distributor
+func (jd *JobDistributor) RegisterWorker(workerID string) {
+	stats := &WorkerStats{
+		ID:          workerID,
+		LastShare:   time.Now(),
+	}
+	jd.workers.Store(workerID, stats)
+}
+
+// UnregisterWorker unregisters a worker
+func (jd *JobDistributor) UnregisterWorker(workerID string) {
+	jd.workers.Delete(workerID)
+}
+
+// UpdateWorkerStats updates worker statistics
+func (jd *JobDistributor) UpdateWorkerStats(workerID string, hashRate uint64, shareAccepted bool) {
+	if value, ok := jd.workers.Load(workerID); ok {
+		stats := value.(*WorkerStats)
+		stats.HashRate = hashRate
+		stats.SharesSubmitted++
+		if shareAccepted {
+			stats.SharesAccepted++
+		}
+		stats.LastShare = time.Now()
+	}
+}
+
+// GetAllWorkerStats returns all worker statistics
+func (jd *JobDistributor) GetAllWorkerStats() []WorkerStats {
+	var stats []WorkerStats
+	
+	jd.workers.Range(func(key, value interface{}) bool {
+		if workerStat, ok := value.(*WorkerStats); ok {
+			stats = append(stats, *workerStat)
+		}
+		return true
+	})
+	
+	return stats
+}
+
+// ShouldCreateNewJob determines if a new job should be created
+func (jd *JobDistributor) ShouldCreateNewJob() bool {
+	return time.Since(jd.lastJobTime) > jd.targetTime
+}
+
+// GetJobCount returns the total number of jobs processed
+func (jd *JobDistributor) GetJobCount() uint64 {
+	return jd.jobCounter.Load()
 }

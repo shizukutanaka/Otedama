@@ -60,6 +60,11 @@ func (m *NvidiaGPUMonitor) GetGPUMetrics(index int) (*GPUMetrics, error) {
 		return nil, fmt.Errorf("NVIDIA GPU monitoring not available")
 	}
 
+	// Validate GPU index to prevent command injection
+	if index < 0 || index > 255 {
+		return nil, fmt.Errorf("invalid GPU index: %d", index)
+	}
+
 	// Query multiple metrics at once
 	query := "name,temperature.gpu,power.draw,fan.speed,memory.total,memory.used,memory.free,utilization.gpu,clocks.gr,clocks.mem"
 	cmd := exec.Command("nvidia-smi", "--query-gpu="+query, "--format=csv,noheader,nounits", "-i", strconv.Itoa(index))
@@ -213,6 +218,11 @@ func (m *AMDGPUMonitor) GetGPUCount() int {
 func (m *AMDGPUMonitor) GetGPUMetrics(index int) (*GPUMetrics, error) {
 	if !m.available {
 		return nil, fmt.Errorf("AMD GPU monitoring not available")
+	}
+
+	// Validate GPU index to prevent command injection
+	if index < 0 || index > 255 {
+		return nil, fmt.Errorf("invalid GPU index: %d", index)
 	}
 
 	metrics := &GPUMetrics{
