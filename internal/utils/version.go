@@ -1,13 +1,13 @@
 // Package version provides version information for the Otedama system.
-package version
+package utils
 
 // Version information - these can be overridden during build
 var (
 	// Version is the current version of Otedama
-	Version = "2.1.2"
+	Version = "2.1.5"
 	
 	// BuildDate is set during build time
-	BuildDate = "2025-08-02"
+	BuildDate = "2025-08-05"
 	
 	// GitCommit can be set via ldflags during build
 	GitCommit = "unknown"
