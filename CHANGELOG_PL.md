@@ -5,7 +5,7 @@ Wszystkie znaczące zmiany w Otedama będą dokumentowane w tym pliku.
 Format jest oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.0.0/),
 a ten projekt przestrzega [Wersjonowania Semantycznego](https://semver.org/lang/pl/).
 
-## [2.1.4] - 2024-01-20
+## [2.1.4] - 2025-08-20
 
 ### Dodano
 - Funkcjonalność puli wydobywczej P2P klasy korporacyjnej
@@ -40,7 +40,7 @@ a ten projekt przestrzega [Wersjonowania Semantycznego](https://semver.org/lang/
 - Ulepszona walidacja i sanityzacja danych wejściowych
 - Dodano rejestrowanie audytu bezpieczeństwa
 
-## [2.1.3] - 2024-01-15
+## [2.1.3] - 2025-08-15
 
 ### Dodano
 - Główna optymalizacja i czyszczenie kodu
@@ -55,7 +55,7 @@ a ten projekt przestrzega [Wersjonowania Semantycznego](https://semver.org/lang/
 ### Naprawiono
 - Różne drobne błędy i problemy
 
-## [2.1.2] - 2024-01-10
+## [2.1.2] - 2025-08-10
 
 ### Dodano
 - Początkowy zestaw testów porównawczych
@@ -68,7 +68,7 @@ a ten projekt przestrzega [Wersjonowania Semantycznego](https://semver.org/lang/
 ### Naprawiono
 - Problemy z ładowaniem konfiguracji
 
-## [2.1.1] - 2024-01-05
+## [2.1.1] - 2025-08-05
 
 ### Dodano
 - Podstawowa funkcjonalność wydobywcza
@@ -80,7 +80,7 @@ a ten projekt przestrzega [Wersjonowania Semantycznego](https://semver.org/lang/
 ### Naprawiono
 - Problemy z systemem budowania
 
-## [2.1.0] - 2024-01-01
+## [2.1.0] - 2025-08-01
 
 ### Dodano
 - Początkowe wydanie Otedama

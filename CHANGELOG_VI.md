@@ -20,7 +20,7 @@ và dự án này tuân thủ [Semantic Versioning](https://semver.org/spec/v2.0
 - Tất cả các lỗi biên dịch còn lại
 - Vấn đề chu kỳ nhập đã được giải quyết hoàn toàn
 
-## [2.1.4] - 2024-01-20
+## [2.1.4] - 2025-08-20
 
 ### Đã thêm
 - Chức năng pool khai thác P2P cấp doanh nghiệp

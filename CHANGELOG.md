@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All remaining compilation errors
 - Import cycle issues completely resolved
 
-## [2.1.4] - 2024-01-20
+## [2.1.4] - 2025-08-20
 
 ### Added
 - Enterprise-grade P2P mining pool functionality
@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced input validation and sanitization
 - Added security audit logging
 
-## [2.1.3] - 2024-01-15
+## [2.1.3] - 2025-08-15
 
 ### Added
 - Major code optimization and cleanup
@@ -70,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Various minor bugs and issues
 
-## [2.1.2] - 2024-01-10
+## [2.1.2] - 2025-08-10
 
 ### Added
 - Initial benchmark suite
@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Configuration loading issues
 
-## [2.1.1] - 2024-01-05
+## [2.1.1] - 2025-08-05
 
 ### Added
 - Basic mining functionality
@@ -95,7 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Build system issues
 
-## [2.1.0] - 2024-01-01
+## [2.1.0] - 2025-08-01
 
 ### Added
 - Initial release of Otedama

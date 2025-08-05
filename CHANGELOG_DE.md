@@ -5,7 +5,7 @@ Alle bemerkenswerten Änderungen an Otedama werden in dieser Datei dokumentiert.
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/de/).
 
-## [2.1.4] - 2024-01-20
+## [2.1.4] - 2025-08-20
 
 ### Hinzugefügt
 - Enterprise-Grade P2P Mining-Pool-Funktionalität
@@ -40,7 +40,7 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 - Eingabevalidierung und -bereinigung verbessert
 - Sicherheitsaudit-Protokollierung hinzugefügt
 
-## [2.1.3] - 2024-01-15
+## [2.1.3] - 2025-08-15
 
 ### Hinzugefügt
 - Große Code-Optimierung und -Bereinigung
@@ -55,7 +55,7 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 ### Behoben
 - Verschiedene kleinere Fehler und Probleme
 
-## [2.1.2] - 2024-01-10
+## [2.1.2] - 2025-08-10
 
 ### Hinzugefügt
 - Initiale Benchmark-Suite
@@ -68,7 +68,7 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 ### Behoben
 - Probleme beim Laden der Konfiguration
 
-## [2.1.1] - 2024-01-05
+## [2.1.1] - 2025-08-05
 
 ### Hinzugefügt
 - Grundlegende Mining-Funktionalität
@@ -80,7 +80,7 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 ### Behoben
 - Build-System-Probleme
 
-## [2.1.0] - 2024-01-01
+## [2.1.0] - 2025-08-01
 
 ### Hinzugefügt
 - Erstveröffentlichung von Otedama

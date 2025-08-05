@@ -5,7 +5,7 @@ Otedama'nın tüm önemli değişiklikleri bu dosyada belgelenecektir.
 Format [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) temel alınmaktadır,
 ve bu proje [Anlamsal Sürümleme](https://semver.org/lang/tr/) kurallarına uymaktadır.
 
-## [2.1.4] - 2024-01-20
+## [2.1.4] - 2025-08-20
 
 ### Eklendi
 - Kurumsal düzeyde P2P madencilik havuzu işlevselliği
@@ -40,7 +40,7 @@ ve bu proje [Anlamsal Sürümleme](https://semver.org/lang/tr/) kurallarına uym
 - Geliştirilmiş girdi doğrulama ve temizleme
 - Güvenlik denetim günlüğü eklendi
 
-## [2.1.3] - 2024-01-15
+## [2.1.3] - 2025-08-15
 
 ### Eklendi
 - Büyük kod optimizasyonu ve temizleme
@@ -55,7 +55,7 @@ ve bu proje [Anlamsal Sürümleme](https://semver.org/lang/tr/) kurallarına uym
 ### Düzeltildi
 - Çeşitli küçük hatalar ve sorunlar
 
-## [2.1.2] - 2024-01-10
+## [2.1.2] - 2025-08-10
 
 ### Eklendi
 - İlk kıyaslama paketi
@@ -68,7 +68,7 @@ ve bu proje [Anlamsal Sürümleme](https://semver.org/lang/tr/) kurallarına uym
 ### Düzeltildi
 - Konfigürasyon yükleme sorunları
 
-## [2.1.1] - 2024-01-05
+## [2.1.1] - 2025-08-05
 
 ### Eklendi
 - Temel madencilik işlevselliği
@@ -80,7 +80,7 @@ ve bu proje [Anlamsal Sürümleme](https://semver.org/lang/tr/) kurallarına uym
 ### Düzeltildi
 - Derleme sistemi sorunları
 
-## [2.1.0] - 2024-01-01
+## [2.1.0] - 2025-08-01
 
 ### Eklendi
 - Otedama'nın ilk sürümü

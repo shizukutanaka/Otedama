@@ -5,7 +5,7 @@ Alle noemenswaardige wijzigingen aan Otedama worden in dit bestand gedocumenteer
 Het formaat is gebaseerd op [Keep a Changelog](https://keepachangelog.com/nl/1.0.0/),
 en dit project houdt zich aan [Semantisch Versioneren](https://semver.org/lang/nl/).
 
-## [2.1.4] - 2024-01-20
+## [2.1.4] - 2025-08-20
 
 ### Toegevoegd
 - Enterprise-grade P2P mining pool functionaliteit
@@ -40,7 +40,7 @@ en dit project houdt zich aan [Semantisch Versioneren](https://semver.org/lang/n
 - Verbeterde inputvalidatie en -sanitatie
 - Beveiligingsauditlogging toegevoegd
 
-## [2.1.3] - 2024-01-15
+## [2.1.3] - 2025-08-15
 
 ### Toegevoegd
 - Grote code-optimalisatie en opschoning
@@ -55,7 +55,7 @@ en dit project houdt zich aan [Semantisch Versioneren](https://semver.org/lang/n
 ### Opgelost
 - Verschillende kleine bugs en problemen
 
-## [2.1.2] - 2024-01-10
+## [2.1.2] - 2025-08-10
 
 ### Toegevoegd
 - Initiële benchmark suite
@@ -68,7 +68,7 @@ en dit project houdt zich aan [Semantisch Versioneren](https://semver.org/lang/n
 ### Opgelost
 - Configuratielaadproblemen
 
-## [2.1.1] - 2024-01-05
+## [2.1.1] - 2025-08-05
 
 ### Toegevoegd
 - Basis mining functionaliteit
@@ -80,7 +80,7 @@ en dit project houdt zich aan [Semantisch Versioneren](https://semver.org/lang/n
 ### Opgelost
 - Buildsysteemproblemen
 
-## [2.1.0] - 2024-01-01
+## [2.1.0] - 2025-08-01
 
 ### Toegevoegd
 - Eerste release van Otedama
