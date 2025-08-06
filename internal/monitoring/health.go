@@ -11,14 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/core"
+	"github.com/shizukutanaka/Otedama/internal/common"
 	"go.uber.org/zap"
 )
 
 // HealthMonitor monitors system and component health
 type HealthMonitor struct {
 	logger         *zap.Logger
-	recoveryMgr    *core.RecoveryManager
+	recoveryMgr    common.RecoveryManager
 	checks         map[string]HealthChecker
 	thresholds     HealthThresholds
 	metrics        *HealthMetrics
@@ -97,7 +97,7 @@ const (
 )
 
 // NewHealthMonitor creates a new health monitor
-func NewHealthMonitor(logger *zap.Logger, recoveryMgr *core.RecoveryManager) *HealthMonitor {
+func NewHealthMonitor(logger *zap.Logger, recoveryMgr common.RecoveryManager) *HealthMonitor {
 	hm := &HealthMonitor{
 		logger:        logger,
 		recoveryMgr:   recoveryMgr,

@@ -1,310 +1,99 @@
-# Otedama Configuration Example
-# Copy this file to config.yaml and customize for your setup
+# Otedama Example Configuration
+# Copy this file to config.yaml and modify as needed
 
-# General settings
-general:
-  # Logging level: debug, info, warn, error
-  log_level: info
-  
-  # Data directory for persistent storage
-  data_dir: ./data
-  
-  # API server settings
-  api:
-    enabled: true
-    listen: "0.0.0.0:8080"
-    # Generate with: openssl rand -hex 32
-    api_key: "your-secure-api-key-here"
-    enable_cors: true
-    allowed_origins:
-      - "http://localhost:3000"
-      - "http://localhost:8080"
+# Basic Settings
+app:
+  name: "Otedama"
+  mode: "development"  # development, staging, production
+  log_level: "info"
 
-# Mining configuration
+# Mining Configuration
 mining:
-  # Mining algorithm: SHA256d, Scrypt, Ethash, KawPow, RandomX
-  algorithm: SHA256d
+  algorithm: "sha256d"
+  enable_cpu: true
+  enable_gpu: false
+  enable_asic: false
   
-  # Number of mining threads (0 = auto-detect)
-  threads: 0
-  
-  # Enable GPU mining
-  gpu_enabled: false
-  gpu_devices: []  # [0, 1] for specific GPUs, [] for all
-  
-  # Mining intensity (1-20, higher = more resources)
-  intensity: 16
-  
-  # Auto-switching based on profitability
-  auto_switch:
-    enabled: false
-    check_interval: 5m
-    switch_threshold: 5  # Switch if 5% more profitable
+  cpu:
+    threads: 4  # Set to 0 for auto-detect
+    priority: "normal"
+    
+  gpu:
+    devices: []  # Empty for auto-detect
+    intensity: 20
+    temperature_limit: 85
 
-# Pool configuration (for pool mining mode)
+# Pool Settings
 pool:
-  # Stratum URL
-  url: "stratum+tcp://pool.example.com:3333"
+  enable: true
+  address: "0.0.0.0:3333"
+  max_connections: 1000
+  fee_percentage: 1.0
   
-  # Worker credentials
-  user: "YourWorkerName.rigname"
-  password: "x"
-  
-  # Connection settings
-  timeout: 30s
-  keepalive: 60s
-  retries: 3
-  
-  # Backup pools
+  rewards:
+    system: "PPLNS"
+    window: 2h
+    minimum_payout: 0.001
+    
   backup_pools:
-    - url: "stratum+tcp://backup1.example.com:3333"
-      user: "YourWorkerName.rigname"
-      password: "x"
-    - url: "stratum+tcp://backup2.example.com:3333"
-      user: "YourWorkerName.rigname"
+    - url: "stratum+tcp://pool.example.com:3333"
+      user: "your_wallet.worker"
       password: "x"
 
-# P2P configuration (for P2P pool mode)
-p2p:
-  # Enable P2P mode
-  enabled: false
-  
-  # P2P listening address
-  listen: "0.0.0.0:6000"
-  
-  # Maximum number of peers
-  max_peers: 50
-  min_peers: 5
-  
-  # Bootstrap nodes
-  bootstrap_nodes:
-    - "seed1.otedama.network:6000"
-    - "seed2.otedama.network:6000"
-    - "seed3.otedama.network:6000"
-  
-  # P2P pool settings
-  pool_fee: 0.5  # Pool fee percentage (0.5% - minimum sustainable fee)
-  # fee_address is automatically set to 1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa (protected)
-  payout_threshold: 0.01  # Minimum payout amount
-  
-  # Share validation
-  share_difficulty: 1024
-  share_target_time: 10s
-
-# Stratum server (when running as a pool)
+# Stratum Settings
 stratum:
-  # Enable Stratum server
-  enabled: false
-  
-  # Stratum versions to support
-  v1:
-    enabled: true
-    listen: "0.0.0.0:3333"
-  
-  v2:
-    enabled: false
-    listen: "0.0.0.0:3334"
-  
-  # Difficulty settings
-  initial_difficulty: 1024
-  min_difficulty: 64
-  max_difficulty: 65536
-  retarget_interval: 30s
-  variance_percent: 30
-  
-  # Worker settings
+  enable: true
+  address: "0.0.0.0:3333"
   max_workers: 1000
-  worker_timeout: 300s
+  difficulty:
+    initial: 8192
+    retarget_interval: 60s
 
-# Monitoring and metrics
+# P2P Network
+p2p:
+  enable: false
+  port: 9333
+  max_peers: 50
+  bootstrap_nodes: []
+
+# API Settings
+api:
+  enable: true
+  address: "0.0.0.0:8080"
+  cors:
+    enabled: true
+    origins: ["*"]
+  auth:
+    enabled: false
+    jwt_secret: "change-this-secret"
+
+# Monitoring
 monitoring:
-  # Enable monitoring
-  enabled: true
-  
-  # Metrics collection
   metrics:
     enabled: true
-    interval: 10s
-    retention: 7d
-  
-  # Prometheus exporter
-  prometheus:
+    address: "0.0.0.0:9090"
+  health:
     enabled: true
-    listen: "0.0.0.0:9090"
-    path: "/metrics"
-  
-  # Web dashboard
-  dashboard:
-    enabled: true
-    listen: "0.0.0.0:3000"
-    username: "admin"
-    # Generate with: htpasswd -bnBC 10 "" password | tr -d ':'
-    password_hash: "$2y$10$YourHashedPasswordHere"
-  
-  # Alerting
-  alerts:
-    enabled: true
-    rules:
-      - name: high_temperature
-        condition: "temperature > 85"
-        severity: critical
-        actions: ["email", "shutdown"]
-      
-      - name: low_hashrate
-        condition: "hashrate < expected * 0.9"
-        severity: warning
-        actions: ["log", "email"]
-      
-      - name: high_reject_rate
-        condition: "reject_rate > 0.05"
-        severity: error
-        actions: ["email", "restart"]
+    address: "0.0.0.0:8081"
 
-# Notification settings
-notifications:
-  # Email notifications
-  email:
-    enabled: false
-    smtp_host: "smtp.gmail.com"
-    smtp_port: 587
-    username: "your-email@gmail.com"
-    password: "your-app-password"
-    from: "otedama@example.com"
-    to:
-      - "admin@example.com"
-  
-  # Discord webhook
-  discord:
-    enabled: false
-    webhook_url: "https://discord.com/api/webhooks/YOUR/WEBHOOK"
-  
-  # Slack webhook
-  slack:
-    enabled: false
-    webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-
-# Security settings
-security:
-  # Enable ZKP authentication
-  enable_zkp: true
-  min_hashpower_proof: 1000000  # Minimum hashpower for ZKP
-  
-  # TLS/SSL settings
-  tls:
-    enabled: false
-    cert_file: "./certs/server.crt"
-    key_file: "./certs/server.key"
-    min_version: "1.2"
-  
-  # API security
-  api_auth:
-    enabled: true
-    token_expiry: 24h
-    max_requests_per_minute: 100
-  
-  # IP filtering
-  ip_whitelist: []  # ["192.168.1.0/24", "10.0.0.0/8"]
-  ip_blacklist: []  # ["1.2.3.4", "5.6.7.8"]
-
-# Hardware settings
-hardware:
-  # Temperature limits (Celsius)
-  temperature:
-    warning: 80
-    critical: 85
-    shutdown: 90
-  
-  # Power limits (Watts)
-  power:
-    cpu_limit: 150
-    gpu_limit: 250
-    total_limit: 1000
-  
-  # Fan control
-  fan_control:
-    enabled: true
-    target_temp: 70
-    min_speed: 30
-    max_speed: 100
-
-# Database settings (optional)
+# Database
 database:
-  # Database type: sqlite, postgres, mysql
-  type: sqlite
-  
-  # SQLite settings
-  sqlite:
-    path: "./data/otedama.db"
-  
-  # PostgreSQL settings
-  postgres:
-    host: "localhost"
-    port: 5432
-    user: "otedama"
-    password: "your-password"
-    database: "otedama"
-    sslmode: "require"
-  
-  # Connection pool
-  max_connections: 50
-  max_idle_connections: 10
-  connection_max_lifetime: 30m
+  driver: "sqlite"
+  connection_string: "./data/otedama.db"
 
-# Advanced settings
-advanced:
-  # Memory settings
-  memory:
-    # Maximum memory usage (0 = unlimited)
-    max_usage: 0
-    
-    # Enable huge pages
-    huge_pages: true
-    
-    # Memory pool size
-    pool_size: 1073741824  # 1GB
-  
-  # Network settings
-  network:
-    # DNS servers
-    dns_servers:
-      - "8.8.8.8"
-      - "8.8.4.4"
-    
-    # Proxy settings
-    proxy:
-      enabled: false
-      http: "http://proxy.example.com:8080"
-      https: "https://proxy.example.com:8080"
-      no_proxy:
-        - "localhost"
-        - "127.0.0.1"
-        - ".local"
-  
-  # Performance tuning
-  performance:
-    # CPU affinity (comma-separated CPU IDs)
-    cpu_affinity: ""
-    
-    # NUMA node binding
-    numa_node: -1  # -1 = auto
-    
-    # Priority (0-20, lower = higher priority)
-    nice_level: 10
-    
-    # I/O priority (0-7, lower = higher priority)
-    io_priority: 4
+# Storage
+storage:
+  data_dir: "./data"
+  cache:
+    enabled: true
+    size: 100MB
 
-# Development settings (disable in production)
-development:
-  # Enable debug mode
-  debug: false
-  
-  # Enable profiling endpoints
-  profiling: false
-  
-  # Mock mining (for testing)
-  mock_mining: false
-  mock_hashrate: 1000000
-  
-  # Verbose logging
-  verbose: false
+# Logging
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+  file:
+    path: "./logs/otedama.log"
+    max_size: 100MB
+    max_backups: 3

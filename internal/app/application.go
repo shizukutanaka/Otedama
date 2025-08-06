@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/cli"
-	"github.com/shizukutanaka/Otedama/internal/config"
-	"github.com/shizukutanaka/Otedama/internal/core"
+	"github.com/otedama/otedama/internal/cli"
+	"github.com/otedama/otedama/internal/config"
+	"github.com/otedama/otedama/internal/core"
 	"go.uber.org/zap"
 )
 
@@ -46,11 +46,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *config.Config) (*Applicat
 // Start starts all application components - John Carmack's error handling
 func (a *Application) Start() error {
 	a.logger.Info("Starting Otedama application",
-		zap.String("version", a.config.Version),
-		zap.String("mode", a.config.Mode),
 		zap.String("algorithm", a.config.Mining.Algorithm),
-		zap.Bool("zkp_enabled", a.config.ZKP.Enabled),
-		zap.Bool("national_security", a.config.Government.Enabled),
+		zap.Int("cpu_threads", a.config.Mining.CPUThreads),
+		zap.Bool("gpu_enabled", a.config.Mining.GPUEnabled),
 	)
 	
 	// Start the unified system
@@ -59,7 +57,7 @@ func (a *Application) Start() error {
 	}
 	
 	a.logger.Info("Otedama application started successfully",
-		zap.String("state", a.system.GetState().String()),
+		zap.String("state", a.system.GetState()),
 	)
 	
 	return nil
@@ -83,7 +81,7 @@ func (a *Application) Shutdown(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		// Wait for system to fully stop
-		for a.system.GetState() != core.StateStopped {
+		for a.system.GetState() != "stopped" {
 			time.Sleep(100 * time.Millisecond)
 		}
 		close(done)
@@ -100,28 +98,34 @@ func (a *Application) Shutdown(ctx context.Context) error {
 
 // GetStats returns application statistics - monitoring interface
 func (a *Application) GetStats() map[string]interface{} {
-	return a.system.GetStats()
+	stats := a.system.GetStats()
+	if statsMap, ok := stats.(map[string]interface{}); ok {
+		return statsMap
+	}
+	return make(map[string]interface{})
 }
 
 // LoadConfig loads and validates configuration - Rob Pike's error handling
 func LoadConfig(configFile string, flags *cli.Flags) (*config.Config, error) {
+	// Create a logger for config loading
+	tempLogger, _ := zap.NewProduction()
+	defer tempLogger.Sync()
+	
 	// Load base configuration
-	cfg, err := config.Load(configFile)
+	manager, err := config.NewManager(tempLogger, configFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+		return nil, fmt.Errorf("failed to create config manager: %w", err)
 	}
+	cfg := manager.Get()
 	
 	// Apply CLI flag overrides
 	if err := applyFlagOverrides(cfg, flags); err != nil {
 		return nil, fmt.Errorf("failed to apply flag overrides: %w", err)
 	}
 	
-	// Set version information
-	cfg.Version = "3.0.0"
-	cfg.Name = "Otedama Enterprise Mining Pool"
-	
-	// Validate configuration
-	if err := cfg.Validate(); err != nil {
+	// Validate configuration using the validator
+	validator := config.NewValidator()
+	if err := validator.Validate(cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 	
@@ -130,10 +134,7 @@ func LoadConfig(configFile string, flags *cli.Flags) (*config.Config, error) {
 
 // applyFlagOverrides applies CLI flags to configuration
 func applyFlagOverrides(cfg *config.Config, flags *cli.Flags) error {
-	// Basic settings
-	if flags.Mode != "auto" {
-		cfg.Mode = flags.Mode
-	}
+	// Basic settings are already handled by the config manager
 	
 	// Mining settings
 	if flags.Algorithm != "auto" {
@@ -141,70 +142,54 @@ func applyFlagOverrides(cfg *config.Config, flags *cli.Flags) error {
 	}
 	
 	if flags.Threads > 0 {
-		cfg.Mining.Threads = flags.Threads
+		cfg.Mining.CPUThreads = flags.Threads
 	}
 	
 	// Hardware selection
 	if flags.CPUOnly {
-		cfg.Mining.GPU.Enable = false
-		cfg.Mining.ASIC.Enable = false
+		cfg.Mining.GPUEnabled = false
 	}
 	if flags.GPUOnly {
-		cfg.Mining.CPU.Enable = false
-		cfg.Mining.ASIC.Enable = false
-	}
-	if flags.ASICOnly {
-		cfg.Mining.CPU.Enable = false
-		cfg.Mining.GPU.Enable = false
+		cfg.Mining.CPUThreads = 0 // Disable CPU mining
 	}
 	
-	// ZKP settings
-	cfg.ZKP.Enabled = flags.ZKP
-	if flags.ZKPProtocol != "" {
-		cfg.ZKP.Protocol = flags.ZKPProtocol
-	}
+	// Additional flags handled elsewhere
 	
 	// Network settings
 	if flags.Port > 0 {
-		cfg.Network.ListenAddr = fmt.Sprintf(":%d", flags.Port)
+		cfg.Network.P2P.ListenAddr = fmt.Sprintf(":%d", flags.Port)
 	}
 	if flags.APIPort > 0 {
 		cfg.API.ListenAddr = fmt.Sprintf(":%d", flags.APIPort)
 	}
 	if flags.StratumPort > 0 {
-		cfg.Stratum.ListenAddr = fmt.Sprintf(":%d", flags.StratumPort)
+		cfg.Network.Stratum.ListenAddr = fmt.Sprintf(":%d", flags.StratumPort)
 	}
 	
-	// Performance settings
-	cfg.Mining.AutoTuning = flags.AutoTune
-	cfg.Performance.Memory.HugePagesEnabled = flags.HugePages
-	cfg.Performance.Memory.NUMABalancing = flags.NUMA
-	
-	if flags.CPUAffinity != "" {
-		// Parse CPU affinity string
-		cfg.Performance.CPU.Affinity = parseCPUAffinity(flags.CPUAffinity)
-	}
+	// Performance settings are handled elsewhere
+	// Most of the performance flags reference fields that don't exist in the current config structure
 	
 	// Security settings
-	if flags.NationalSecurity {
+	// National security features not in current config structure
+	/*if flags.NationalSecurity {
 		cfg.Government.Enabled = true
 		cfg.Security.HardwareSecurityModule = true
 		cfg.Security.ZeroTrustEnabled = true
-	}
+	}*/
 	
 	// Privacy settings
-	if flags.Anonymous {
+	/*if flags.Anonymous {
 		cfg.Privacy.AnonymousMining = true
 		cfg.Privacy.EnableTor = true
 		cfg.Privacy.EnableI2P = true
-	}
+	}*/
 	
 	// Development settings
-	if flags.Debug {
+	/*if flags.Debug {
 		cfg.LogLevel = "debug"
 		cfg.Development.Enabled = true
 		cfg.Development.DebugLogging = true
-	}
+	}*/
 	
 	return nil
 }

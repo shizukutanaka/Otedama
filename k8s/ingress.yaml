@@ -5,38 +5,139 @@ metadata:
   namespace: otedama
   labels:
     app: otedama
+    component: ingress
   annotations:
+    # Ingress class
     kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ingress.class: nginx
+    
+    # SSL/TLS configuration
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/websocket-services: otedama-dashboard
-    nginx.ingress.kubernetes.io/proxy-body-size: "0"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: otedama-service
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    
+    # Body size and buffering
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit-rps: "100"
+    nginx.ingress.kubernetes.io/rate-limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/server-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss:; worker-src 'self' blob:;" always;
+    
+    # Custom configuration
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Server: Otedama Mining Pool";
+      
+    # Enable sticky sessions for mining connections
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "otedama-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "86400"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "86400"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
 spec:
+  ingressClassName: nginx
   tls:
   - hosts:
-    - pool.otedama.io
-    - api.otedama.io
-    secretName: otedama-tls
+    - pool.example.com
+    - api.pool.example.com
+    - monitoring.pool.example.com
+    secretName: otedama-tls-cert
   rules:
-  - host: pool.otedama.io
+  - host: pool.example.com
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: otedama-dashboard
-            port:
-              number: 80
-  - host: api.otedama.io
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: otedama-api
+            name: otedama-service
             port:
               number: 8081
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-service
+            port:
+              number: 8080
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-service
+            port:
+              number: 8080
+  - host: api.pool.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otedama-service
+            port:
+              number: 8080
+  - host: monitoring.pool.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+
+---
+# TCP Ingress for Stratum protocols (requires nginx-ingress with stream module)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-services
+  namespace: ingress-nginx
+  labels:
+    app: ingress-nginx
+data:
+  3333: "otedama/otedama-stratum:3333"  # SHA256
+  3334: "otedama/otedama-stratum:3334"  # Ethash
+  3335: "otedama/otedama-stratum:3335"  # RandomX
+  3336: "otedama/otedama-stratum:3336"  # Scrypt
+  3337: "otedama/otedama-stratum:3337"  # KawPow
+  9333: "otedama/otedama-p2p:9333"      # P2P
+  4444: "otedama/otedama-p2p:4444"      # Federation
+
+---
+# UDP Ingress for P2P discovery (if needed)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udp-services
+  namespace: ingress-nginx
+  labels:
+    app: ingress-nginx
+data:
+  9333: "otedama/otedama-p2p:9333"      # P2P Discovery

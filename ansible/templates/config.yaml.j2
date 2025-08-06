@@ -1,0 +1,165 @@
+# Otedama Configuration - {{ inventory_hostname }}
+app:
+  name: "Otedama"
+  mode: "production"
+  node_id: "{{ node_id }}"
+  region: "{{ region | default('default') }}"
+
+# Database Configuration
+database:
+  url: "postgres://otedama:{{ postgres_password }}@localhost:5432/otedama?sslmode=require"
+  max_connections: 100
+  connection_timeout: 30s
+  
+# Redis Configuration
+redis:
+  url: "redis://:{{ redis_password | default('') }}@localhost:6379"
+  max_connections: 50
+  
+# Mining Configuration
+mining:
+  algorithm: "sha256d"
+  enable_cpu: true
+  enable_gpu: true
+  enable_asic: true
+  
+  cpu:
+    threads: {{ ansible_processor_vcpus | default(4) }}
+    priority: "normal"
+    affinity: true
+    
+  gpu:
+    devices: []  # Auto-detect
+    intensity: 20
+    temperature_limit: 85
+    
+  asic:
+    devices: []  # Auto-discover
+    poll_interval: 5s
+
+# P2P Network Configuration
+p2p:
+  enabled: true
+  port: {{ p2p_port | default(4001) }}
+  bootstrap_nodes:
+{% for host in groups['otedama_nodes'] %}
+{% if host != inventory_hostname %}
+    - "/ip4/{{ hostvars[host]['ansible_host'] }}/tcp/{{ hostvars[host]['p2p_port'] }}/p2p/{{ hostvars[host]['node_id'] }}"
+{% endif %}
+{% endfor %}
+  
+  max_peers: 100
+  connection_timeout: 30s
+  
+  # DHT Configuration
+  dht:
+    enabled: true
+    bootstrap_period: 30s
+    routing_table_refresh: 10m
+    
+  # Network Security
+  security:
+    enable_tls: {{ enable_tls | default(true) }}
+    tls_cert_path: "{{ tls_cert_path | default('/etc/otedama/certs/cert.pem') }}"
+    tls_key_path: "{{ tls_key_path | default('/etc/otedama/certs/key.pem') }}"
+
+# Stratum Server Configuration
+stratum:
+  enabled: true
+  address: "0.0.0.0:{{ stratum_port | default(3333) }}"
+  max_workers: {{ max_connections | default(10000) }}
+  difficulty:
+    default: 16384
+    min: 16
+    max: 4294967296
+    retarget_interval: 30s
+    variance_percent: 30
+
+# API Configuration
+api:
+  enabled: true
+  address: "0.0.0.0:{{ api_port | default(8080) }}"
+  
+  auth:
+    enabled: true
+    secret_key: "{{ api_secret_key }}"
+    token_expiry: 24h
+    
+  rate_limit:
+    enabled: true
+    requests_per_minute: 100
+    burst: 200
+    
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "https://otedama.io"
+
+# Pool Configuration
+pool:
+  enabled: true
+  fee_percentage: 1.0
+  payout_threshold: 0.001
+  payout_interval: 24h
+  
+  rewards:
+    system: "PPLNS"  # PPS, PPLNS, PROP
+    window: 2h
+    
+  difficulty_adjustment:
+    enabled: true
+    interval: 60s
+    factor: 4
+
+# Monitoring Configuration
+monitoring:
+  metrics:
+    enabled: {{ enable_prometheus | default(true) }}
+    address: "0.0.0.0:9090"
+    path: "/metrics"
+    
+  health:
+    enabled: true
+    address: "0.0.0.0:8081"
+    path: "/health"
+    
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+    file:
+      enabled: true
+      path: "{{ otedama_log_dir }}/otedama.log"
+      max_size: 100  # MB
+      max_backups: 10
+      max_age: 30    # days
+
+# Security Configuration
+security:
+  enable_firewall: true
+  allowed_ips: []  # Empty means allow all
+  
+  ddos_protection:
+    enabled: true
+    max_connections_per_ip: 10
+    rate_limit_per_ip: 1000  # requests per minute
+    
+  ssl:
+    enabled: {{ enable_tls | default(true) }}
+    cert_file: "{{ tls_cert_path | default('/etc/otedama/certs/cert.pem') }}"
+    key_file: "{{ tls_key_path | default('/etc/otedama/certs/key.pem') }}"
+    min_version: "TLS1.2"
+
+# Performance Tuning
+performance:
+  worker_threads: {{ worker_threads | default(16) }}
+  cache_size: {{ cache_size | default(4096) }}  # MB
+  
+  database:
+    connection_pool_size: 50
+    query_timeout: 30s
+    
+  memory:
+    max_heap: 8192  # MB
+    gc_interval: 60s

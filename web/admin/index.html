@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otedama Pool - Admin Dashboard</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1>Otedama Pool Admin</h1>
+            <div class="header-info">
+                <span id="server-time">--:--:--</span>
+                <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="admin-nav">
+            <ul>
+                <li><a href="#dashboard" class="nav-link active">Dashboard</a></li>
+                <li><a href="#workers" class="nav-link">Workers</a></li>
+                <li><a href="#blocks" class="nav-link">Blocks</a></li>
+                <li><a href="#payouts" class="nav-link">Payouts</a></li>
+                <li><a href="#settings" class="nav-link">Settings</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="admin-main">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="admin-section active">
+                <h2>Dashboard Overview</h2>
+                
+                <!-- Key Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <h3>Total Workers</h3>
+                        <p class="metric-value" id="total-workers">--</p>
+                        <span class="metric-change positive">+5%</span>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Pool Hashrate</h3>
+                        <p class="metric-value" id="pool-hashrate">-- MH/s</p>
+                        <span class="metric-change">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Blocks (24h)</h3>
+                        <p class="metric-value" id="blocks-24h">--</p>
+                        <span class="metric-change">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Total Paid (24h)</h3>
+                        <p class="metric-value" id="total-paid">-- BTC</p>
+                        <span class="metric-change">--</span>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <h3>Hashrate History</h3>
+                        <canvas id="hashrate-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Shares Distribution</h3>
+                        <canvas id="shares-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="activity-section">
+                    <h3>Recent Activity</h3>
+                    <div id="recent-activity" class="activity-list">
+                        <!-- Activity items will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Workers Section -->
+            <section id="workers" class="admin-section">
+                <h2>Workers Management</h2>
+                
+                <div class="section-header">
+                    <div class="search-box">
+                        <input type="text" id="worker-search" placeholder="Search workers...">
+                    </div>
+                    <div class="filter-controls">
+                        <select id="worker-filter">
+                            <option value="all">All Workers</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="banned">Banned</option>
+                        </select>
+                    </div>
+                </div>
+
+                <table class="data-table" id="workers-table">
+                    <thead>
+                        <tr>
+                            <th>Worker ID</th>
+                            <th>Username</th>
+                            <th>Hashrate</th>
+                            <th>Valid Shares</th>
+                            <th>Invalid Shares</th>
+                            <th>Last Seen</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Worker rows will be loaded here -->
+                    </tbody>
+                </table>
+
+                <div class="pagination">
+                    <button id="workers-prev" class="btn">Previous</button>
+                    <span id="workers-page">Page 1</span>
+                    <button id="workers-next" class="btn">Next</button>
+                </div>
+            </section>
+
+            <!-- Blocks Section -->
+            <section id="blocks" class="admin-section">
+                <h2>Blocks History</h2>
+                
+                <div class="section-header">
+                    <div class="stats-summary">
+                        <div class="stat-item">
+                            <span class="stat-label">Confirmed:</span>
+                            <span class="stat-value" id="confirmed-blocks">--</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Pending:</span>
+                            <span class="stat-value" id="pending-blocks">--</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Orphaned:</span>
+                            <span class="stat-value" id="orphaned-blocks">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <table class="data-table" id="blocks-table">
+                    <thead>
+                        <tr>
+                            <th>Height</th>
+                            <th>Hash</th>
+                            <th>Reward</th>
+                            <th>Status</th>
+                            <th>Confirmations</th>
+                            <th>Found At</th>
+                            <th>Miner</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Block rows will be loaded here -->
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Payouts Section -->
+            <section id="payouts" class="admin-section">
+                <h2>Payouts Management</h2>
+                
+                <div class="section-header">
+                    <div class="action-buttons">
+                        <button id="process-payouts" class="btn btn-primary">Process Payouts</button>
+                        <button id="export-payouts" class="btn">Export CSV</button>
+                    </div>
+                </div>
+
+                <div class="payout-summary">
+                    <div class="summary-item">
+                        <h4>Pending Payouts</h4>
+                        <p id="pending-amount">-- BTC</p>
+                        <span id="pending-count">-- workers</span>
+                    </div>
+                    <div class="summary-item">
+                        <h4>Processing</h4>
+                        <p id="processing-amount">-- BTC</p>
+                        <span id="processing-count">-- transactions</span>
+                    </div>
+                    <div class="summary-item">
+                        <h4>Completed (24h)</h4>
+                        <p id="completed-amount">-- BTC</p>
+                        <span id="completed-count">-- transactions</span>
+                    </div>
+                </div>
+
+                <table class="data-table" id="payouts-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Worker</th>
+                            <th>Amount</th>
+                            <th>Address</th>
+                            <th>TX ID</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Payout rows will be loaded here -->
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings" class="admin-section">
+                <h2>Pool Settings</h2>
+                
+                <div class="settings-grid">
+                    <div class="settings-group">
+                        <h3>Pool Configuration</h3>
+                        <form id="pool-settings-form">
+                            <div class="form-group">
+                                <label for="pool-fee">Pool Fee (%)</label>
+                                <input type="number" id="pool-fee" step="0.1" min="0" max="10">
+                            </div>
+                            <div class="form-group">
+                                <label for="min-payout">Minimum Payout</label>
+                                <input type="number" id="min-payout" step="0.00001" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="payout-fee">Payout Fee</label>
+                                <input type="number" id="payout-fee" step="0.00001" min="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="confirmations">Required Confirmations</label>
+                                <input type="number" id="confirmations" min="1" max="100">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Save Settings</button>
+                        </form>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Maintenance</h3>
+                        <div class="maintenance-actions">
+                            <button id="cleanup-btn" class="btn">Run Cleanup</button>
+                            <button id="backup-btn" class="btn">Create Backup</button>
+                            <button id="restart-btn" class="btn btn-danger">Restart Pool</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Worker Detail Modal -->
+    <div id="worker-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Worker Details</h2>
+            <div id="worker-details">
+                <!-- Worker details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

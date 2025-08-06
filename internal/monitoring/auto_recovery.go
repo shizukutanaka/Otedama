@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/core"
+	"github.com/shizukutanaka/Otedama/internal/common"
 	"github.com/shizukutanaka/Otedama/internal/mining"
 	"github.com/shizukutanaka/Otedama/internal/p2p"
 	"go.uber.org/zap"
@@ -16,7 +16,7 @@ import (
 type AutoRecoveryManager struct {
 	logger       *zap.Logger
 	healthMon    *HealthMonitor
-	recoveryMgr  *core.RecoveryManager
+	recoveryMgr  common.RecoveryManager
 	miningEngine *mining.Engine
 	p2pPool      *p2p.Pool
 	
@@ -46,7 +46,7 @@ type RecoveryResult struct {
 }
 
 // NewAutoRecoveryManager creates a new auto-recovery manager
-func NewAutoRecoveryManager(logger *zap.Logger, healthMon *HealthMonitor, recoveryMgr *core.RecoveryManager) *AutoRecoveryManager {
+func NewAutoRecoveryManager(logger *zap.Logger, healthMon *HealthMonitor, recoveryMgr common.RecoveryManager) *AutoRecoveryManager {
 	arm := &AutoRecoveryManager{
 		logger:             logger,
 		healthMon:          healthMon,

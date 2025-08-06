@@ -1,5 +1,5 @@
 // Package i18n provides internationalization support for the Otedama system.
-package i18n
+package utils
 
 import (
 	"embed"

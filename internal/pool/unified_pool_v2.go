@@ -6,7 +6,7 @@ import (
     "sync"
     "time"
     
-    "github.com/shizukutanaka/Otedama/internal/common"
+    "github.com/otedama/otedama/internal/common"
     "go.uber.org/zap"
 )
 

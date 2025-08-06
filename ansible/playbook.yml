@@ -1,0 +1,192 @@
+---
+- name: Deploy Otedama P2P Mining Pool
+  hosts: otedama_nodes
+  become: yes
+  vars:
+    otedama_version: "{{ lookup('env', 'OTEDAMA_VERSION') | default('latest', true) }}"
+    otedama_user: otedama
+    otedama_group: otedama
+    otedama_home: /opt/otedama
+    otedama_config_dir: "{{ otedama_home }}/config"
+    otedama_data_dir: "{{ otedama_home }}/data"
+    otedama_log_dir: "{{ otedama_home }}/logs"
+    
+  tasks:
+    - name: Install system dependencies
+      package:
+        name:
+          - docker.io
+          - docker-compose
+          - python3-pip
+          - git
+          - curl
+          - jq
+          - htop
+          - iotop
+          - sysstat
+        state: present
+        update_cache: yes
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
+        state: present
+
+    - name: Create otedama user
+      user:
+        name: "{{ otedama_user }}"
+        group: "{{ otedama_group }}"
+        system: yes
+        shell: /bin/bash
+        home: "{{ otedama_home }}"
+        createhome: yes
+
+    - name: Add otedama user to docker group
+      user:
+        name: "{{ otedama_user }}"
+        groups: docker
+        append: yes
+
+    - name: Create directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ otedama_user }}"
+        group: "{{ otedama_group }}"
+        mode: '0755'
+      loop:
+        - "{{ otedama_home }}"
+        - "{{ otedama_config_dir }}"
+        - "{{ otedama_data_dir }}"
+        - "{{ otedama_log_dir }}"
+        - "{{ otedama_home }}/scripts"
+
+    - name: Clone Otedama repository
+      git:
+        repo: https://github.com/otedama/otedama.git
+        dest: "{{ otedama_home }}/src"
+        version: "{{ otedama_version }}"
+        force: yes
+      become_user: "{{ otedama_user }}"
+
+    - name: Copy configuration files
+      template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ otedama_user }}"
+        group: "{{ otedama_group }}"
+        mode: "{{ item.mode | default('0644') }}"
+      loop:
+        - { src: config.yaml.j2, dest: "{{ otedama_config_dir }}/config.yaml" }
+        - { src: .env.j2, dest: "{{ otedama_home }}/.env" }
+        - { src: docker-compose.override.yml.j2, dest: "{{ otedama_home }}/docker-compose.override.yml" }
+
+    - name: Copy docker-compose files
+      copy:
+        src: "{{ otedama_home }}/src/{{ item }}"
+        dest: "{{ otedama_home }}/{{ item }}"
+        owner: "{{ otedama_user }}"
+        group: "{{ otedama_group }}"
+        remote_src: yes
+      loop:
+        - docker-compose.yml
+        - docker-compose.production.yml
+        - Dockerfile.production
+
+    - name: Set up systemd service
+      template:
+        src: otedama.service.j2
+        dest: /etc/systemd/system/otedama.service
+        mode: '0644'
+
+    - name: Configure firewall rules
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "3333"  # Stratum
+        - "8080"  # API
+        - "9090"  # Metrics
+        - "4001"  # P2P
+        - "22"    # SSH
+
+    - name: Enable firewall
+      ufw:
+        state: enabled
+
+    - name: Configure sysctl for performance
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.core.somaxconn', value: '65535' }
+        - { name: 'net.ipv4.tcp_max_syn_backlog', value: '65535' }
+        - { name: 'net.ipv4.ip_local_port_range', value: '1024 65535' }
+        - { name: 'net.ipv4.tcp_tw_reuse', value: '1' }
+        - { name: 'net.ipv4.tcp_fin_timeout', value: '15' }
+        - { name: 'net.core.netdev_max_backlog', value: '65535' }
+        - { name: 'net.ipv4.tcp_keepalive_time', value: '300' }
+        - { name: 'net.ipv4.tcp_keepalive_probes', value: '5' }
+        - { name: 'net.ipv4.tcp_keepalive_intvl', value: '15' }
+
+    - name: Set up log rotation
+      template:
+        src: logrotate.j2
+        dest: /etc/logrotate.d/otedama
+        mode: '0644'
+
+    - name: Pull Docker images
+      docker_image:
+        name: "{{ item }}"
+        source: pull
+      loop:
+        - postgres:15-alpine
+        - redis:7-alpine
+        - prom/prometheus:latest
+        - grafana/grafana:latest
+        - prom/node-exporter:latest
+
+    - name: Build Otedama image
+      docker_image:
+        name: otedama:production
+        build:
+          path: "{{ otedama_home }}"
+          dockerfile: Dockerfile.production
+        source: build
+      become_user: "{{ otedama_user }}"
+
+    - name: Start and enable Otedama service
+      systemd:
+        name: otedama
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Wait for service to be ready
+      uri:
+        url: "http://localhost:8080/health"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 30
+      delay: 10
+
+    - name: Configure monitoring alerts
+      uri:
+        url: "http://localhost:9091/api/v1/admin/tsdb/snapshot"
+        method: POST
+      when: prometheus_alerts is defined
+
+  handlers:
+    - name: restart otedama
+      systemd:
+        name: otedama
+        state: restarted
+
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes

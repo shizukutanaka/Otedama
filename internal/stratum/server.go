@@ -9,24 +9,31 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/zkp"
+	// "github.com/shizukutanaka/Otedama/internal/zkp" // Not used
 	"go.uber.org/zap"
 )
 
-// Server defines the Stratum server interface - Robert C. Martin's interface segregation
+// Server defines the Stratum server interface following interface segregation principle.
+// It provides the core functionality needed for Stratum protocol communication.
 type Server interface {
+	// Lifecycle management
 	Start() error
 	Stop() error
+	
+	// Configuration
 	SetCallbacks(*Callbacks) error
-	GetStats() *Stats
+	
+	// Monitoring
+	GetStats() *StratumStats
 }
 
-// Config contains Stratum server configuration
+// Config contains comprehensive Stratum server configuration.
+// All fields are validated to ensure proper server operation.
 type Config struct {
 	// Network settings
-	Port           int           `validate:"min=1024,max=65535"`
-	Host           string        `validate:"required"`
-	MaxClients     int           `validate:"min=1,max=100000"`
+	Port       int    `validate:"min=1024,max=65535"` // Server listening port
+	Host       string `validate:"required"`           // Server listening host
+	MaxClients int    `validate:"min=1,max=100000"`   // Maximum concurrent clients
 	
 	// Protocol settings
 	StratumVersion string        `validate:"required"`
@@ -57,21 +64,26 @@ type Config struct {
 	Secret         string // For dynamic token generation
 }
 
-// Callbacks contains callback functions for Stratum events
+// Callbacks contains callback functions for Stratum protocol events.
+// These allow the server to integrate with pool management logic.
 type Callbacks struct {
-	OnShare  func(*Share) error
-	OnGetJob func() *Job
-	OnAuth   func(string, string) error
+	OnShare  func(*Share) error         // Called when a share is submitted
+	OnGetJob func() *Job                // Called when a client requests work
+	OnAuth   func(string, string) error // Called for client authentication
 }
 
-// StratumServer implements high-performance Stratum server - John Carmack's optimization
+// StratumServer implements a high-performance Stratum mining protocol server.
+// It focuses on:
+// - Lock-free operations for hot paths
+// - Efficient client management
+// - Robust error handling
 type StratumServer struct {
 	logger *zap.Logger
 	config *Config
 	
-	// Core state - hot path optimization
-	stats      *Stats
-	running    atomic.Bool
+	// Core state (optimized for concurrent access)
+	stats   *StratumStats      // Server statistics
+	running atomic.Bool // Running state flag
 	
 	// Callbacks
 	callbacks  *Callbacks
@@ -109,12 +121,13 @@ type StratumServer struct {
 	wg         sync.WaitGroup
 }
 
-// Stats contains Stratum server statistics - atomic for lock-free access
-type Stats struct {
+// StratumStats contains comprehensive Stratum server statistics.
+// All fields use atomic types for lock-free concurrent access.
+type StratumStats struct {
 	// Connection statistics
-	TotalConnections   atomic.Uint64 `json:"total_connections"`
-	ActiveConnections  atomic.Int32  `json:"active_connections"`
-	AuthorizedClients  atomic.Int32  `json:"authorized_clients"`
+	TotalConnections  atomic.Uint64 `json:"total_connections"`  // Total connections received
+	ActiveConnections atomic.Int32  `json:"active_connections"` // Currently active connections
+	AuthorizedClients atomic.Int32  `json:"authorized_clients"` // Currently authorized clients
 	
 	// Share statistics
 	TotalShares        atomic.Uint64 `json:"total_shares"`
@@ -149,7 +162,7 @@ func NewServer(logger *zap.Logger, config *Config) (Server, error) {
 	server := &StratumServer{
 		logger:    logger,
 		config:    config,
-		stats:     &Stats{StartTime: time.Now()},
+		stats:     &StratumStats{StartTime: time.Now()},
 		ctx:       ctx,
 		cancel:    cancel,
 	}
@@ -267,8 +280,8 @@ func (s *StratumServer) SetCallbacks(callbacks *Callbacks) error {
 }
 
 // GetStats returns server statistics
-func (s *StratumServer) GetStats() *Stats {
-	stats := &Stats{
+func (s *StratumServer) GetStats() *StratumStats {
+	stats := &StratumStats{
 		StartTime: s.stats.StartTime,
 	}
 	

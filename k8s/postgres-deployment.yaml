@@ -1,0 +1,279 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: otedama
+  labels:
+    app: postgres
+    component: database
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+      component: database
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+          subPath: pgdata
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          fsGroup: 999
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      - name: postgres-exporter
+        image: prometheuscommunity/postgres-exporter:latest
+        ports:
+        - containerPort: 9187
+          name: metrics
+        env:
+        - name: DATA_SOURCE_NAME
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?sslmode=disable"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_DB
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        securityContext:
+          runAsUser: 65534
+          runAsGroup: 65534
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-data-pvc
+      - name: init-scripts
+        configMap:
+          name: postgres-init-scripts
+          defaultMode: 0755
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - postgres
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+      - key: "database"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: otedama
+  labels:
+    app: postgres
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  - port: 9187
+    targetPort: 9187
+    protocol: TCP
+    name: metrics
+  selector:
+    app: postgres
+    component: database
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: otedama
+  labels:
+    app: postgres
+    component: config
+data:
+  init.sql: |
+    -- Create extensions
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    
+    -- Create database user with limited privileges
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'otedama_app') THEN
+            CREATE ROLE otedama_app WITH LOGIN PASSWORD 'otedama_app_password';
+        END IF;
+    END
+    $$;
+    
+    -- Grant necessary permissions
+    GRANT CONNECT ON DATABASE otedama TO otedama_app;
+    GRANT USAGE ON SCHEMA public TO otedama_app;
+    GRANT CREATE ON SCHEMA public TO otedama_app;
+    
+    -- Create initial tables if they don't exist
+    CREATE TABLE IF NOT EXISTS miners (
+        id SERIAL PRIMARY KEY,
+        worker_name VARCHAR(255) NOT NULL,
+        ip_address INET NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        shares_accepted BIGINT DEFAULT 0,
+        shares_rejected BIGINT DEFAULT 0,
+        hashrate BIGINT DEFAULT 0,
+        difficulty DOUBLE PRECISION DEFAULT 1.0,
+        status VARCHAR(50) DEFAULT 'active'
+    );
+    
+    CREATE TABLE IF NOT EXISTS shares (
+        id SERIAL PRIMARY KEY,
+        miner_id INTEGER REFERENCES miners(id),
+        block_height BIGINT,
+        difficulty DOUBLE PRECISION NOT NULL,
+        share_difficulty DOUBLE PRECISION NOT NULL,
+        is_valid BOOLEAN DEFAULT true,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        nonce VARCHAR(64),
+        job_id VARCHAR(64)
+    );
+    
+    CREATE TABLE IF NOT EXISTS blocks (
+        id SERIAL PRIMARY KEY,
+        height BIGINT NOT NULL UNIQUE,
+        hash VARCHAR(64) NOT NULL UNIQUE,
+        previous_hash VARCHAR(64),
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        difficulty DOUBLE PRECISION NOT NULL,
+        miner_id INTEGER REFERENCES miners(id),
+        reward DECIMAL(20,8) DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'pending'
+    );
+    
+    CREATE TABLE IF NOT EXISTS payouts (
+        id SERIAL PRIMARY KEY,
+        miner_id INTEGER REFERENCES miners(id),
+        amount DECIMAL(20,8) NOT NULL,
+        currency VARCHAR(10) DEFAULT 'BTC',
+        address VARCHAR(255) NOT NULL,
+        transaction_id VARCHAR(64),
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP
+    );
+    
+    -- Create indexes for better performance
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_miners_worker_name ON miners(worker_name);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_miners_last_activity ON miners(last_activity);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_shares_miner_id ON shares(miner_id);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_shares_timestamp ON shares(timestamp);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blocks_height ON blocks(height);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blocks_timestamp ON blocks(timestamp);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payouts_miner_id ON payouts(miner_id);
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payouts_status ON payouts(status);
+    
+    -- Grant permissions on tables
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO otedama_app;
+    GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO otedama_app;

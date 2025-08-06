@@ -2,7 +2,6 @@ package stratum
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -49,42 +48,92 @@ type Client struct {
 	lastReset    atomic.Int64  `json:"last_reset"`
 }
 
-// handleClient handles a new client connection
+// handleClient handles a new client connection.
+// It initializes the client, manages its lifecycle, and cleans up on disconnect.
 func (s *StratumServer) handleClient(conn net.Conn) {
 	defer conn.Close()
 	
-	// Set timeouts
-	conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout))
-	conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout))
-	
-	// Create client
-	client := &Client{
-		ID:         generateClientID(),
-		RemoteAddr: conn.RemoteAddr().String(),
-		ConnectedAt: time.Now(),
-		conn:       conn,
-		reader:     bufio.NewReaderSize(conn, s.config.BufferSize),
-		writer:     bufio.NewWriterSize(conn, s.config.BufferSize),
+	// Initialize client connection
+	client, err := s.initializeClient(conn)
+	if err != nil {
+		s.logger.Error("Failed to initialize client", zap.Error(err))
+		return
 	}
 	
-	client.Connected.Store(true)
-	client.LastActivity.Store(time.Now().Unix())
-	client.Difficulty.Store(s.config.Difficulty)
-	
-	// Add to clients map
-	s.clients.Store(client.ID, client)
-	s.clientCount.Add(1)
-	s.stats.TotalConnections.Add(1)
-	
-	s.logger.Debug("New client connected", 
-		zap.String("client_id", client.ID),
-		zap.String("remote_addr", client.RemoteAddr),
-	)
+	// Register client
+	s.registerClient(client)
 	
 	// Handle client messages
 	s.clientMessageLoop(client)
 	
 	// Cleanup on disconnect
+	s.unregisterClient(client)
+}
+
+// initializeClient creates and configures a new client.
+// Extracted for better testability and separation of concerns.
+func (s *StratumServer) initializeClient(conn net.Conn) (*Client, error) {
+	// Set connection timeouts
+	if err := s.configureConnection(conn); err != nil {
+		return nil, fmt.Errorf("failed to configure connection: %w", err)
+	}
+	
+	// Create client instance
+	client := s.createClient(conn)
+	
+	return client, nil
+}
+
+// configureConnection sets timeouts and other connection parameters.
+// Extracted for clarity and reusability.
+func (s *StratumServer) configureConnection(conn net.Conn) error {
+	if err := conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout)); err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+	
+	if err := conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout)); err != nil {
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
+	
+	return nil
+}
+
+// createClient creates a new client instance with default values.
+// Extracted to centralize client creation logic.
+func (s *StratumServer) createClient(conn net.Conn) *Client {
+	client := &Client{
+		ID:          generateClientID(),
+		RemoteAddr:  conn.RemoteAddr().String(),
+		ConnectedAt: time.Now(),
+		conn:        conn,
+		reader:      bufio.NewReaderSize(conn, s.config.BufferSize),
+		writer:      bufio.NewWriterSize(conn, s.config.BufferSize),
+	}
+	
+	// Initialize atomic values
+	client.Connected.Store(true)
+	client.LastActivity.Store(time.Now().Unix())
+	client.Difficulty.Store(s.config.Difficulty)
+	
+	return client
+}
+
+// registerClient adds a client to the server's client registry.
+// Extracted to isolate registration logic.
+func (s *StratumServer) registerClient(client *Client) {
+	s.clients.Store(client.ID, client)
+	s.clientCount.Add(1)
+	s.stats.TotalConnections.Add(1)
+	
+	s.logger.Debug("New client connected",
+		zap.String("client_id", client.ID),
+		zap.String("remote_addr", client.RemoteAddr),
+	)
+}
+
+// unregisterClient removes a client from the server's client registry.
+// Extracted to centralize cleanup logic.
+func (s *StratumServer) unregisterClient(client *Client) {
 	s.clients.Delete(client.ID)
 	s.clientCount.Add(-1)
 	client.Connected.Store(false)

@@ -53,6 +53,16 @@ type AuthMessage struct {
 }
 
 // WSAuthStats tracks authentication statistics
+// TokenClaims returned after token validation
+// Extend with additional fields as needed.
+type TokenClaims struct {
+    UserID      string   `json:"user_id"`
+    ClientID    string   `json:"client_id"`
+    IssuedAt    int64    `json:"issued_at"`
+    ExpiresAt   int64    `json:"expires_at"`
+    Permissions []string `json:"permissions,omitempty"`
+}
+
 type WSAuthStats struct {
 	TotalSessions      atomic.Uint64
 	ActiveSessions     atomic.Uint64
@@ -118,8 +128,8 @@ func (wa *WebSocketAuth) GenerateToken(clientID string) (string, error) {
 	return token, nil
 }
 
-// ValidateToken validates an authentication token
-func (wa *WebSocketAuth) ValidateToken(token string) (map[string]interface{}, error) {
+// ValidateToken validates an authentication token and returns claims
+func (wa *WebSocketAuth) ValidateToken(token string) (*TokenClaims, error) {
 	// Split token into data and signature
 	parts := splitToken(token)
 	if len(parts) != 2 {
@@ -159,7 +169,22 @@ func (wa *WebSocketAuth) ValidateToken(token string) (map[string]interface{}, er
 		return nil, fmt.Errorf("token expired")
 	}
 
-	return tokenData, nil
+	// Convert to typed claims
+	claims := &TokenClaims{
+		UserID:    tokenData["user_id"].(string),
+		ClientID:  tokenData["client_id"].(string),
+		IssuedAt:  int64(tokenData["issued_at"].(float64)),
+		ExpiresAt: int64(tokenData["expires_at"].(float64)),
+	}
+	
+	// Add permissions based on user type
+	if claims.UserID == "admin" {
+		claims.Permissions = []string{"admin", "read", "write"}
+	} else {
+		claims.Permissions = []string{"read"}
+	}
+	
+	return claims, nil
 }
 
 // AuthenticateConnection authenticates a WebSocket connection
@@ -185,10 +210,7 @@ func (wa *WebSocketAuth) AuthenticateConnection(conn *websocket.Conn) (*WSSessio
 	}
 
 	// Extract client ID
-	clientID, ok := tokenData["client_id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid client ID in token")
-	}
+	clientID := tokenData.ClientID
 
 	// Verify client ID matches
 	if clientID != authMsg.ClientID {
@@ -219,9 +241,8 @@ func (wa *WebSocketAuth) AuthenticateConnection(conn *websocket.Conn) (*WSSessio
 	}
 
 	// Extract ZKP proof ID if present
-	if zkpProofID, ok := tokenData["zkp_proof_id"].(string); ok {
-		session.ZKPProofID = zkpProofID
-	}
+	// Note: ZKP proof ID is not currently included in TokenClaims
+	// If needed, it should be added to the TokenClaims struct and populated during token generation
 
 	// Store session
 	wa.sessions.Store(session.ID, session)

@@ -1,3 +1,4 @@
+# Horizontal Pod Autoscaler for Otedama mining pool
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -5,51 +6,165 @@ metadata:
   namespace: otedama
   labels:
     app: otedama
+    component: autoscaling
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
     name: otedama
-  minReplicas: 3
-  maxReplicas: 10
+  minReplicas: 2
+  maxReplicas: 20
   metrics:
+  # CPU utilization target
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
         averageUtilization: 70
+  # Memory utilization target
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 80
+        averageUtilization: 75
+  # Custom metrics for mining-specific scaling
   - type: Pods
     pods:
       metric:
-        name: otedama_active_connections
+        name: otedama_active_miners
+        selector:
+          matchLabels:
+            app: otedama
+      target:
+        type: AverageValue
+        averageValue: "500"
+  - type: Pods
+    pods:
+      metric:
+        name: otedama_stratum_connections
+        selector:
+          matchLabels:
+            app: otedama
       target:
         type: AverageValue
         averageValue: "1000"
+  - type: Pods
+    pods:
+      metric:
+        name: otedama_shares_per_second
+        selector:
+          matchLabels:
+            app: otedama
+      target:
+        type: AverageValue
+        averageValue: "100"
+  # External metrics (if available)
+  - type: External
+    external:
+      metric:
+        name: otedama_network_hashrate
+        selector:
+          matchLabels:
+            pool: otedama
+      target:
+        type: AverageValue
+        averageValue: "1000000000"  # 1 GH/s per pod
+  behavior:
+    scaleDown:
+      # Conservative scale down to maintain mining stability
+      stabilizationWindowSeconds: 600  # 10 minutes
+      policies:
+      - type: Percent
+        value: 25  # Scale down by max 25% at a time
+        periodSeconds: 120
+      - type: Pods
+        value: 1   # Scale down by max 1 pod at a time
+        periodSeconds: 120
+      selectPolicy: Min
+    scaleUp:
+      # Aggressive scale up to handle mining load spikes
+      stabilizationWindowSeconds: 60   # 1 minute
+      policies:
+      - type: Percent
+        value: 100  # Double pods if needed
+        periodSeconds: 60
+      - type: Pods
+        value: 4    # Add up to 4 pods at once
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+# HPA for PostgreSQL read replicas (if implemented)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: postgres-replica-hpa
+  namespace: otedama
+  labels:
+    app: postgres
+    component: replica-autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: postgres-replica
+  minReplicas: 0
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Pods
+    pods:
+      metric:
+        name: postgres_connections
+      target:
+        type: AverageValue
+        averageValue: "80"
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
-      - type: Percent
-        value: 50
+      - type: Pods
+        value: 1
         periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
       - type: Pods
         value: 2
         periodSeconds: 60
-      selectPolicy: Min
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 60
-      - type: Pods
-        value: 3
-        periodSeconds: 60
-      selectPolicy: Max
+
+---
+# Vertical Pod Autoscaler for fine-tuning resource requests
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: otedama-vpa
+  namespace: otedama
+  labels:
+    app: otedama
+    component: vertical-autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama
+  updatePolicy:
+    updateMode: "Auto"  # Can be "Off", "Initial", or "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: otedama
+      maxAllowed:
+        cpu: "8"
+        memory: "16Gi"
+      minAllowed:
+        cpu: "500m"
+        memory: "1Gi"
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits

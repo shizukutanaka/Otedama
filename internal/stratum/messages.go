@@ -1,7 +1,6 @@
 package stratum
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -116,72 +115,40 @@ func (s *StratumServer) handleSubscribe(client *Client, message *Message) *Messa
 	}
 }
 
-// handleAuthorize handles mining.authorize request
+// handleAuthorize handles mining.authorize request.
+// It validates credentials and updates client authorization status.
 func (s *StratumServer) handleAuthorize(client *Client, message *Message) *Message {
-	params, ok := message.Params.([]interface{})
-	if !ok || len(params) < 2 {
-		return &Message{
-			ID:    message.ID,
-			Error: &Error{Code: -1, Message: "Invalid parameters"},
-		}
-	}
-	
-	username, ok1 := params[0].(string)
-	password, ok2 := params[1].(string)
-	
-	if !ok1 || !ok2 {
-		return &Message{
-			ID:    message.ID,
-			Error: &Error{Code: -1, Message: "Invalid parameters"},
-		}
-	}
-	
-	// Authenticate based on configured mode
-	var authError error
-	
-	if s.config.AuthMode == AuthModeZKP {
-		return &Message{
-			ID:    message.ID,
-			Error: &Error{Code: -1, Message: "Use ZKP authentication method"},
-		}
-	}
-	
-	authorized, err := s.authenticateWorker(username, password, s.config.AuthMode)
+	// Parse authorization parameters
+	authParams, err := s.parseAuthParameters(message.Params)
 	if err != nil {
-		authError = err
-	} else if !authorized {
-		authError = fmt.Errorf("authentication failed")
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: err.Error()},
+		}
 	}
 	
-	// Fallback to callback if available
-	if authError != nil && s.callbacks != nil && s.callbacks.OnAuth != nil {
-		authError = s.callbacks.OnAuth(username, password)
+	// Check authentication mode
+	if err := s.validateAuthMode(); err != nil {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: err.Error()},
+		}
 	}
 	
-	if authError != nil {
-		s.logger.Debug("Authorization failed", 
-			zap.String("client_id", client.ID),
-			zap.String("username", username),
-			zap.Error(authError),
-		)
-		
+	// Perform authentication
+	authResult := s.performAuthentication(authParams)
+	
+	// Handle authentication result
+	if authResult.Error != nil {
+		s.handleAuthFailure(client, authParams.username, authResult.Error)
 		return &Message{
 			ID:    message.ID,
 			Error: &Error{Code: -1, Message: "Authorization failed"},
 		}
 	}
 	
-	// Authorization successful
-	client.WorkerName = username
-	client.Authorized.Store(true)
-	
-	// Update reputation score for successful auth
-	s.reputationManager.UpdateScore(username, 1.0)
-	
-	s.logger.Debug("Client authorized", 
-		zap.String("client_id", client.ID),
-		zap.String("worker_name", username),
-	)
+	// Handle successful authentication
+	s.handleAuthSuccess(client, authParams.username)
 	
 	return &Message{
 		ID:     message.ID,
@@ -189,77 +156,243 @@ func (s *StratumServer) handleAuthorize(client *Client, message *Message) *Messa
 	}
 }
 
-// handleSubmit handles mining.submit request
+// authParameters holds authentication credentials.
+type authParameters struct {
+	username string
+	password string
+}
+
+// parseAuthParameters extracts authentication parameters from the message.
+// Extracted to isolate parameter parsing logic.
+func (s *StratumServer) parseAuthParameters(params interface{}) (*authParameters, error) {
+	paramSlice, ok := params.([]interface{})
+	if !ok || len(paramSlice) < 2 {
+		return nil, fmt.Errorf("invalid parameters")
+	}
+	
+	username, ok1 := paramSlice[0].(string)
+	password, ok2 := paramSlice[1].(string)
+	
+	if !ok1 || !ok2 {
+		return nil, fmt.Errorf("invalid parameter types")
+	}
+	
+	return &authParameters{
+		username: username,
+		password: password,
+	}, nil
+}
+
+// validateAuthMode checks if the current authentication mode is valid.
+// Extracted for clarity.
+func (s *StratumServer) validateAuthMode() error {
+	if s.config.AuthMode == AuthModeZKP {
+		return fmt.Errorf("use ZKP authentication method")
+	}
+	return nil
+}
+
+// authenticationResult holds the result of authentication attempts.
+type authenticationResult struct {
+	Authorized bool
+	Error      error
+}
+
+// performAuthentication attempts to authenticate using configured methods.
+// Extracted to centralize authentication logic.
+func (s *StratumServer) performAuthentication(params *authParameters) *authenticationResult {
+	// Try primary authentication
+	authorized, err := s.authenticateWorker(params.username, params.password, s.config.AuthMode)
+	
+	if err != nil || !authorized {
+		// Try callback authentication as fallback
+		if s.callbacks != nil && s.callbacks.OnAuth != nil {
+			err = s.callbacks.OnAuth(params.username, params.password)
+			authorized = (err == nil)
+		} else if err == nil && !authorized {
+			err = fmt.Errorf("authentication failed")
+		}
+	}
+	
+	return &authenticationResult{
+		Authorized: authorized,
+		Error:      err,
+	}
+}
+
+// handleAuthFailure logs authentication failures.
+// Extracted to centralize failure handling.
+func (s *StratumServer) handleAuthFailure(client *Client, username string, err error) {
+	s.logger.Debug("Authorization failed",
+		zap.String("client_id", client.ID),
+		zap.String("username", username),
+		zap.Error(err),
+	)
+}
+
+// handleAuthSuccess updates client state for successful authentication.
+// Extracted to centralize success handling.
+func (s *StratumServer) handleAuthSuccess(client *Client, username string) {
+	client.WorkerName = username
+	client.Authorized.Store(true)
+	
+	// Update reputation score for successful auth
+	s.reputationManager.UpdateScore(username, 1.0)
+	
+	s.logger.Debug("Client authorized",
+		zap.String("client_id", client.ID),
+		zap.String("worker_name", username),
+	)
+
+// handleSubmit handles mining.submit request.
+// It validates authorization, parses parameters, and processes the share submission.
 func (s *StratumServer) handleSubmit(client *Client, message *Message) *Message {
+	// Validate client authorization
+	if err := s.validateClientAuthorization(client); err != nil {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: err.Error()},
+		}
+	}
+	
+	// Parse share parameters
+	shareParams, err := s.parseShareParameters(message.Params)
+	if err != nil {
+		return &Message{
+			ID:    message.ID,
+			Error: &Error{Code: -1, Message: err.Error()},
+		}
+	}
+	
+	// Create and process share
+	share := s.createShare(shareParams, client)
+	result := s.processShareSubmission(client, share)
+	
+	return &Message{
+		ID:     message.ID,
+		Result: result.Success,
+		Error:  result.Error,
+	}
+}
+
+// validateClientAuthorization checks if the client is authorized.
+// Extracted for clarity and reusability.
+func (s *StratumServer) validateClientAuthorization(client *Client) error {
 	if !client.Authorized.Load() {
-		return &Message{
-			ID:    message.ID,
-			Error: &Error{Code: -1, Message: "Not authorized"},
-		}
+		return fmt.Errorf("not authorized")
+	}
+	return nil
+}
+
+// shareParameters holds extracted share submission parameters.
+type shareParameters struct {
+	workerName string
+	jobID      string
+	nonce      string
+}
+
+// parseShareParameters extracts and validates share parameters from the message.
+// Extracted to separate parsing logic from business logic.
+func (s *StratumServer) parseShareParameters(params interface{}) (*shareParameters, error) {
+	paramSlice, ok := params.([]interface{})
+	if !ok || len(paramSlice) < 5 {
+		return nil, fmt.Errorf("invalid parameters")
 	}
 	
-	params, ok := message.Params.([]interface{})
-	if !ok || len(params) < 5 {
-		return &Message{
-			ID:    message.ID,
-			Error: &Error{Code: -1, Message: "Invalid parameters"},
-		}
-	}
+	workerName, _ := paramSlice[0].(string)
+	jobID, _ := paramSlice[1].(string)
+	nonce, _ := paramSlice[4].(string)
 	
-	// Extract share parameters
-	workerName, _ := params[0].(string)
-	jobID, _ := params[1].(string)
-	nonce, _ := params[4].(string)
-	
-	// Create share
-	share := &Share{
-		JobID:      jobID,
-		WorkerName: workerName,
-		Nonce:      nonce,
+	return &shareParameters{
+		workerName: workerName,
+		jobID:      jobID,
+		nonce:      nonce,
+	}, nil
+}
+
+// createShare creates a share object from parameters and client data.
+// Extracted to centralize share creation logic.
+func (s *StratumServer) createShare(params *shareParameters, client *Client) *Share {
+	return &Share{
+		JobID:      params.jobID,
+		WorkerName: params.workerName,
+		Nonce:      params.nonce,
 		Difficulty: client.Difficulty.Load().(float64),
 		Timestamp:  time.Now().Unix(),
 	}
-	
-	// Submit share via callback
-	var shareError error
-	if s.callbacks != nil && s.callbacks.OnShare != nil {
-		shareError = s.callbacks.OnShare(share)
-	}
-	
+}
+
+// shareSubmissionResult holds the result of share processing.
+type shareSubmissionResult struct {
+	Success bool
+	Error   *Error
+}
+
+// processShareSubmission handles the share submission logic.
+// Extracted to isolate share processing and statistics updates.
+func (s *StratumServer) processShareSubmission(client *Client, share *Share) *shareSubmissionResult {
+	// Update submission statistics
 	client.SharesSubmitted.Add(1)
 	s.stats.TotalShares.Add(1)
 	
-	if shareError != nil {
-		client.SharesRejected.Add(1)
-		s.stats.RejectedShares.Add(1)
-		
-		s.logger.Debug("Share rejected", 
-			zap.String("client_id", client.ID),
-			zap.String("reason", shareError.Error()),
-		)
-		
-		return &Message{
-			ID:    message.ID,
-			Error: &Error{Code: -1, Message: shareError.Error()},
+	// Submit share via callback
+	if err := s.submitShareCallback(share); err != nil {
+		s.handleRejectedShare(client, err)
+		return &shareSubmissionResult{
+			Success: false,
+			Error:   &Error{Code: -1, Message: err.Error()},
 		}
 	}
 	
+	// Handle accepted share
+	s.handleAcceptedShare(client, share)
+	
+	return &shareSubmissionResult{
+		Success: true,
+		Error:   nil,
+	}
+}
+
+// submitShareCallback invokes the share callback if available.
+// Extracted to isolate callback handling.
+func (s *StratumServer) submitShareCallback(share *Share) error {
+	if s.callbacks != nil && s.callbacks.OnShare != nil {
+		return s.callbacks.OnShare(share)
+	}
+	return nil
+}
+
+// handleRejectedShare updates statistics and logs rejected shares.
+// Extracted to centralize rejection handling.
+func (s *StratumServer) handleRejectedShare(client *Client, err error) {
+	client.SharesRejected.Add(1)
+	s.stats.RejectedShares.Add(1)
+	
+	s.logger.Debug("Share rejected",
+		zap.String("client_id", client.ID),
+		zap.String("reason", err.Error()),
+	)
+}
+
+// handleAcceptedShare updates statistics and handles block discoveries.
+// Extracted to centralize acceptance handling.
+func (s *StratumServer) handleAcceptedShare(client *Client, share *Share) {
 	client.SharesAccepted.Add(1)
 	s.stats.AcceptedShares.Add(1)
 	
 	if share.IsBlock {
-		s.stats.BlocksFound.Add(1)
-		s.logger.Info("Block found!", 
-			zap.String("client_id", client.ID),
-			zap.String("worker", workerName),
-		)
-	}
-	
-	return &Message{
-		ID:     message.ID,
-		Result: true,
+		s.handleBlockFound(client, share)
 	}
 }
+
+// handleBlockFound processes block discoveries.
+// Extracted for clarity and potential future expansion.
+func (s *StratumServer) handleBlockFound(client *Client, share *Share) {
+	s.stats.BlocksFound.Add(1)
+	s.logger.Info("Block found!",
+		zap.String("client_id", client.ID),
+		zap.String("worker", share.WorkerName),
+	)
 
 // handleSuggestDifficulty handles mining.suggest_difficulty request
 func (s *StratumServer) handleSuggestDifficulty(client *Client, message *Message) *Message {

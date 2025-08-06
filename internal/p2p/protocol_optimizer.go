@@ -11,7 +11,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/shizukutanaka/Otedama/internal/optimization"
+	// "github.com/shizukutanaka/Otedama/internal/optimization" // Temporarily disabled
 	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
 )
@@ -22,7 +22,7 @@ type ProtocolOptimizer struct {
 	logger *zap.Logger
 	
 	// Zero-copy memory pool
-	memPool *optimization.ZeroCopyPool
+	// memPool *optimization.ZeroCopyPool // Temporarily disabled
 	
 	// Connection management
 	connections sync.Map // map[connID]*OptimizedConn
@@ -91,7 +91,7 @@ type OptimizedConn struct {
 	writer   *bufio.Writer
 	
 	// Packet batching
-	batchBuffer *optimization.Buffer
+	batchBuffer []byte // *optimization.Buffer
 	batchCount  int
 	batchTimer  *time.Timer
 	batchMu     sync.Mutex
@@ -128,7 +128,7 @@ type Packet struct {
 	Timestamp int64
 	
 	// Payload
-	Data      *optimization.Buffer
+	Data      []byte // *optimization.Buffer
 	
 	// For packet pool recycling
 	pool      *sync.Pool
@@ -157,7 +157,7 @@ func NewProtocolOptimizer(logger *zap.Logger, config ProtocolConfig) *ProtocolOp
 	
 	po := &ProtocolOptimizer{
 		logger:     logger,
-		memPool:    optimization.NewZeroCopyPool(),
+		// memPool:    optimization.NewZeroCopyPool(), // Temporarily disabled
 		config:     config,
 		tcpNoDelay: config.EnableTCPNoDelay,
 		tcpQuickAck: config.EnableQuickAck,
@@ -546,19 +546,19 @@ func (po *ProtocolOptimizer) processPacket(oc *OptimizedConn, pkt *Packet) {
 	}
 }
 
-func (po *ProtocolOptimizer) compress(data *optimization.Buffer) *optimization.Buffer {
+func (po *ProtocolOptimizer) compress(data []byte) []byte {
 	// Simple compression implementation
 	// In production, use lz4 or similar
 	return data.Clone()
 }
 
-func (po *ProtocolOptimizer) decompress(data *optimization.Buffer) *optimization.Buffer {
+func (po *ProtocolOptimizer) decompress(data []byte) []byte {
 	// Simple decompression implementation
 	// In production, use lz4 or similar
 	return data.Clone()
 }
 
-func (po *ProtocolOptimizer) zeroCopyRead(oc *OptimizedConn, buf *optimization.Buffer) error {
+func (po *ProtocolOptimizer) zeroCopyRead(oc *OptimizedConn, buf []byte) error {
 	// Zero-copy read using splice or similar
 	// This is a simplified version
 	_, err := oc.reader.Read(buf.Data())

@@ -1,248 +1,124 @@
 package logging
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-// AuditEvent represents a security or operational audit event
-type AuditEvent struct {
-	ID          string                 `json:"id"`
-	Timestamp   time.Time             `json:"timestamp"`
-	EventType   string                `json:"event_type"`
-	Severity    string                `json:"severity"`
-	Source      string                `json:"source"`
-	UserID      string                `json:"user_id,omitempty"`
-	ClientIP    string                `json:"client_ip,omitempty"`
-	Action      string                `json:"action"`
-	Resource    string                `json:"resource,omitempty"`
-	Result      string                `json:"result"`
-	Details     map[string]interface{} `json:"details,omitempty"`
-	MessageHash string                `json:"message_hash"`
-}
-
-// AuditLogger handles security and operational audit logging
+// AuditLogger is responsible for logging security-sensitive audit trails.
+// It writes to a separate, dedicated log file to ensure audit events are isolated.
 type AuditLogger struct {
-	logger    *zap.Logger
-	events    []AuditEvent
-	mu        sync.RWMutex
-	config    AuditConfig
-	eventChan chan AuditEvent
+	logger *zap.Logger
 }
 
-// AuditConfig configuration for audit logging
-type AuditConfig struct {
-	Enabled         bool   `mapstructure:"enabled"`
-	LogFile         string `mapstructure:"log_file"`
-	MaxFileSize     int    `mapstructure:"max_file_size_mb"`
-	MaxBackups      int    `mapstructure:"max_backups"`
-	MaxAge          int    `mapstructure:"max_age_days"`
-	BufferSize      int    `mapstructure:"buffer_size"`
-	FlushInterval   int    `mapstructure:"flush_interval_seconds"`
-	IncludeDebug    bool   `mapstructure:"include_debug"`
-	EncryptLogs     bool   `mapstructure:"encrypt_logs"`
-	RemoteEndpoint  string `mapstructure:"remote_endpoint"`
-}
+// NewAuditLogger creates a new logger specifically for audit trails.
+// It uses a separate logger instance to ensure audit logs are not mixed with general application logs.
+func NewAuditLogger(config *Config) (*AuditLogger, error) {
+	// Create a dedicated configuration for the audit logger.
+	// This ensures audit logs are always written to a specific file in JSON format.
+	auditConfig := *config // Copy the base config
+	auditConfig.OutputPath = "logs/audit.log"
+	auditConfig.Format = "json"
+	auditConfig.EnableCaller = false      // Caller is not relevant for audit logs
+	auditConfig.EnableStacktrace = false // Stacktraces are not relevant
+	auditConfig.Sampling = nil            // Do not sample audit logs
 
-// NewAuditLogger creates a new audit logger
-func NewAuditLogger(config AuditConfig, baseLogger *zap.Logger) (*AuditLogger, error) {
-	auditLogger := &AuditLogger{
-		logger:    baseLogger.Named("audit"),
-		config:    config,
-		eventChan: make(chan AuditEvent, config.BufferSize),
+	// Create the logger instance using the main logger creation logic.
+	logger, err := createLogger(&auditConfig, "info") // Audit logs are always at INFO level
+	if err != nil {
+		return nil, fmt.Errorf("failed to create audit logger: %w", err)
 	}
-	
-	// Start background processor
-	go auditLogger.processEvents()
-	
-	return auditLogger, nil
+
+	return &AuditLogger{
+		logger: logger.Named("audit"),
+	}, nil
 }
 
-// LogEvent logs an audit event
-func (al *AuditLogger) LogEvent(eventType, severity, source, action, result string, details map[string]interface{}) {
-	if !al.config.Enabled {
+// LogEvent records a structured audit event.
+// It includes essential information like who did what, from where, and when.
+func (al *AuditLogger) LogEvent(ctx context.Context, eventType, action, result string, details map[string]interface{}) {
+	if al.logger == nil {
 		return
 	}
-	
-	event := AuditEvent{
-		ID:        al.generateEventID(),
-		Timestamp: time.Now().UTC(),
-		EventType: eventType,
-		Severity:  severity,
-		Source:    source,
-		Action:    action,
-		Result:    result,
-		Details:   details,
+
+	// Enrich details with context information (e.g., user ID, request ID).
+	enrichedDetails := enrichDetailsFromContext(ctx, details)
+
+	// Generate a unique ID for the event for traceability.
+	eventID, _ := uuid.NewRandom()
+
+	// Create the log fields.
+	fields := []zap.Field{
+		zap.String("event_id", eventID.String()),
+		zap.String("event_type", eventType),
+		zap.String("action", action),
+		zap.String("result", result),
+		zap.Any("details", enrichedDetails),
 	}
-	
-	// Add message hash for integrity verification
-	event.MessageHash = al.generateMessageHash(event)
-	
-	select {
-	case al.eventChan <- event:
-		// Event queued successfully
-	default:
-		// Buffer full, log directly
-		al.writeEvent(event)
-	}
+
+	al.logger.Info("AuditEvent", fields...)
 }
 
-// LogAuthEvent logs authentication-related events
-func (al *AuditLogger) LogAuthEvent(userID, clientIP, action, result string, details map[string]interface{}) {
+// enrichDetailsFromContext extracts relevant information from the context
+// and adds it to the details map for a more comprehensive audit log.
+func enrichDetailsFromContext(ctx context.Context, details map[string]interface{}) map[string]interface{} {
 	if details == nil {
 		details = make(map[string]interface{})
 	}
-	details["user_id"] = userID
-	details["client_ip"] = clientIP
-	
-	al.LogEvent("AUTHENTICATION", "INFO", "stratum", action, result, details)
+
+	// Example of extracting values from context. The actual keys would depend on
+	// how they are set elsewhere in the application.
+	if userID := ctx.Value("user_id"); userID != nil {
+		details["user_id"] = userID
+	}
+	if clientIP := ctx.Value("client_ip"); clientIP != nil {
+		details["client_ip"] = clientIP
+	}
+	if requestID := ctx.Value("request_id"); requestID != nil {
+		details["request_id"] = requestID
+	}
+
+	return details
 }
 
-// LogMiningEvent logs mining-related events
-func (al *AuditLogger) LogMiningEvent(workerName, clientIP, action, result string, details map[string]interface{}) {
-	if details == nil {
-		details = make(map[string]interface{})
+// Sync flushes any buffered audit log entries.
+func (al *AuditLogger) Sync() error {
+	if al.logger == nil {
+		return nil
 	}
-	details["worker_name"] = workerName
-	details["client_ip"] = clientIP
-	
-	al.LogEvent("MINING", "INFO", "pool", action, result, details)
+	return al.logger.Sync()
 }
 
-// LogSecurityEvent logs security-related events
-func (al *AuditLogger) LogSecurityEvent(clientIP, action, result string, details map[string]interface{}) {
-	if details == nil {
-		details = make(map[string]interface{})
+// AuthEvent represents a detailed authentication event.
+func (al *AuditLogger) AuthEvent(ctx context.Context, userID, method, result string, extraDetails map[string]interface{}) {
+	details := map[string]interface{}{
+		"user_id": userID,
+		"method":  method,
 	}
-	details["client_ip"] = clientIP
-	
-	al.LogEvent("SECURITY", "WARNING", "system", action, result, details)
+	for k, v := range extraDetails {
+		details[k] = v
+	}
+	al.LogEvent(ctx, "AUTHENTICATION", "user_login", result, details)
 }
 
-// LogSystemEvent logs system operational events
-func (al *AuditLogger) LogSystemEvent(action, result string, details map[string]interface{}) {
-	al.LogEvent("SYSTEM", "INFO", "core", action, result, details)
+// SystemEvent logs a significant system-level event.
+func (al *AuditLogger) SystemEvent(ctx context.Context, action, result string, extraDetails map[string]interface{}) {
+	al.LogEvent(ctx, "SYSTEM", action, result, extraDetails)
 }
 
-// processEvents processes audit events in background
-func (al *AuditLogger) processEvents() {
-	ticker := time.NewTicker(time.Duration(al.config.FlushInterval) * time.Second)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case event := <-al.eventChan:
-			al.writeEvent(event)
-		case <-ticker.C:
-			al.flushBuffer()
-		}
+// ConfigChangeEvent logs when a configuration change occurs.
+func (al *AuditLogger) ConfigChangeEvent(ctx context.Context, changedBy, setting string, oldValue, newValue interface{}) {
+	details := map[string]interface{}{
+		"changed_by": changedBy,
+		"setting":    setting,
+		"old_value":  oldValue,
+		"new_value":  newValue,
 	}
-}
-
-// writeEvent writes an event to the audit log
-func (al *AuditLogger) writeEvent(event AuditEvent) {
-	al.mu.Lock()
-	defer al.mu.Unlock()
-	
-	// Add to memory buffer
-	al.events = append(al.events, event)
-	
-	// Log to zap logger
-	fields := []zapcore.Field{
-		zap.String("event_id", event.ID),
-		zap.String("event_type", event.EventType),
-		zap.String("severity", event.Severity),
-		zap.String("source", event.Source),
-		zap.String("action", event.Action),
-		zap.String("result", event.Result),
-		zap.String("message_hash", event.MessageHash),
-	}
-	
-	if event.UserID != "" {
-		fields = append(fields, zap.String("user_id", event.UserID))
-	}
-	
-	if event.ClientIP != "" {
-		fields = append(fields, zap.String("client_ip", event.ClientIP))
-	}
-	
-	if event.Resource != "" {
-		fields = append(fields, zap.String("resource", event.Resource))
-	}
-	
-	if event.Details != nil {
-		detailsJSON, _ := json.Marshal(event.Details)
-		fields = append(fields, zap.String("details", string(detailsJSON)))
-	}
-	
-	switch event.Severity {
-	case "ERROR":
-		al.logger.Error("Audit Event", fields...)
-	case "WARNING":
-		al.logger.Warn("Audit Event", fields...)
-	case "INFO":
-		al.logger.Info("Audit Event", fields...)
-	default:
-		al.logger.Info("Audit Event", fields...)
-	}
-}
-
-// flushBuffer flushes the in-memory event buffer
-func (al *AuditLogger) flushBuffer() {
-	al.mu.Lock()
-	defer al.mu.Unlock()
-	
-	// Keep only recent events in memory (last 1000)
-	if len(al.events) > 1000 {
-		al.events = al.events[len(al.events)-1000:]
-	}
-}
-
-// generateEventID generates a unique event ID
-func (al *AuditLogger) generateEventID() string {
-	return fmt.Sprintf("audit_%d_%d", time.Now().Unix(), time.Now().Nanosecond())
-}
-
-// generateMessageHash generates integrity hash for the event
-func (al *AuditLogger) generateMessageHash(event AuditEvent) string {
-	data := fmt.Sprintf("%s%s%s%s%s%s", 
-		event.Timestamp.Format(time.RFC3339Nano),
-		event.EventType,
-		event.Source,
-		event.Action,
-		event.Result,
-		event.UserID,
-	)
-	
-	// Simple hash for now - in production use proper cryptographic hash
-	return fmt.Sprintf("%x", []byte(data))
-}
-
-// GetRecentEvents returns recent audit events
-func (al *AuditLogger) GetRecentEvents(limit int) []AuditEvent {
-	al.mu.RLock()
-	defer al.mu.RUnlock()
-	
-	if limit <= 0 || limit > len(al.events) {
-		limit = len(al.events)
-	}
-	
-	start := len(al.events) - limit
-	if start < 0 {
-		start = 0
-	}
-	
-	return al.events[start:]
-}
-
-// Close gracefully closes the audit logger
-func (al *AuditLogger) Close() error {
-	close(al.eventChan)
-	al.flushBuffer()
-	return nil
+	al.LogEvent(ctx, "CONFIGURATION", "config_update", "success", details)
 }

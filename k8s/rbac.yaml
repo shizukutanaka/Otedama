@@ -1,3 +1,4 @@
+# Service Account for Otedama application
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -5,37 +6,297 @@ metadata:
   namespace: otedama
   labels:
     app: otedama
+    component: service-account
+  annotations:
+    description: "Service account for Otedama mining pool application"
+automountServiceAccountToken: true
+
 ---
+# Service Account for Prometheus monitoring
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: otedama
+  labels:
+    app: prometheus
+    component: monitoring
+  annotations:
+    description: "Service account for Prometheus monitoring"
+automountServiceAccountToken: true
+
+---
+# Role for Otedama application - namespace-scoped permissions
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: otedama
+  name: otedama-role
   namespace: otedama
   labels:
     app: otedama
+    component: rbac
 rules:
+# Core resources for service discovery and configuration
 - apiGroups: [""]
   resources: ["pods", "services", "endpoints"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+# Events for debugging and monitoring
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+# Pod logs for centralized logging
+- apiGroups: [""]
+  resources: ["pods/log"]
   verbs: ["get", "list"]
+# Persistent volumes for data management
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+
 ---
+# Role for Prometheus monitoring - broader permissions for metrics collection
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-role
+  namespace: otedama
+  labels:
+    app: prometheus
+    component: monitoring
+rules:
+# Core resources for monitoring
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints", "nodes", "nodes/proxy"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+# Metrics and monitoring specific
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: ["extensions", "apps"]
+  resources: ["deployments", "replicasets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+# Custom resource definitions for ServiceMonitor
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["servicemonitors", "podmonitors", "prometheusrules"]
+  verbs: ["get", "list", "watch"]
+
+---
+# ClusterRole for Prometheus to access cluster-wide metrics
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-cluster-role
+  labels:
+    app: prometheus
+    component: monitoring
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions", "apps"]
+  resources: ["deployments", "replicasets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+  verbs: ["get"]
+
+---
+# RoleBinding for Otedama application
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: otedama
+  name: otedama-rolebinding
   namespace: otedama
   labels:
     app: otedama
+    component: rbac
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: otedama
+  name: otedama-role
 subjects:
 - kind: ServiceAccount
   name: otedama
   namespace: otedama
+
+---
+# RoleBinding for Prometheus monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-rolebinding
+  namespace: otedama
+  labels:
+    app: prometheus
+    component: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus-role
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: otedama
+
+---
+# ClusterRoleBinding for Prometheus cluster-wide access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-cluster-rolebinding
+  labels:
+    app: prometheus
+    component: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: otedama
+
+---
+# NetworkPolicy for secure inter-pod communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otedama-network-policy
+  namespace: otedama
+  labels:
+    app: otedama
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: otedama
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+  # Allow traffic from other Otedama pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: otedama
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+    - protocol: TCP
+      port: 9090
+  # Allow Stratum mining traffic from anywhere
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3333
+    - protocol: TCP
+      port: 3334
+    - protocol: TCP
+      port: 3335
+    - protocol: TCP
+      port: 3336
+    - protocol: TCP
+      port: 3337
+  # Allow P2P traffic
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 9333
+    - protocol: TCP
+      port: 4444
+  # Allow monitoring traffic
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow database connections
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow Redis connections
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow outbound internet for blockchain connections
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 8333  # Bitcoin
+    - protocol: TCP
+      port: 30303 # Ethereum
+    - protocol: TCP
+      port: 18080 # Monero
+
+---
+# PodSecurityPolicy for enhanced security (if PSP is enabled)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: otedama-psp
+  labels:
+    app: otedama
+    component: security
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'

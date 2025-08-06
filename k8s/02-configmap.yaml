@@ -1,0 +1,56 @@
+---
+# ConfigMap for Otedama configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  namespace: otedama
+data:
+  config.yaml: |
+    app:
+      name: "Otedama"
+      mode: "production"
+      log_level: "info"
+    
+    mining:
+      algorithm: "sha256d"
+      enable_cpu: true
+      enable_gpu: true
+      enable_asic: true
+      
+    pool:
+      enable: true
+      address: "0.0.0.0:3333"
+      max_connections: 10000
+      fee_percentage: 1.0
+      
+    stratum:
+      enable: true
+      address: "0.0.0.0:3333"
+      max_workers: 10000
+      
+    api:
+      enable: true
+      address: "0.0.0.0:8080"
+      
+    monitoring:
+      metrics:
+        enabled: true
+        address: "0.0.0.0:9090"
+        
+    database:
+      driver: "postgresql"
+      connection_string: "postgresql://otedama:password@postgres:5432/otedama?sslmode=require"
+
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets
+  namespace: otedama
+type: Opaque
+stringData:
+  database-password: "changeme"
+  jwt-secret: "changeme-jwt-secret"
+  api-key: "changeme-api-key"

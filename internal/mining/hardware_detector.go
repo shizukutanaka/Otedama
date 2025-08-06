@@ -21,7 +21,7 @@ const (
 )
 
 // HardwareInfo contains information about available mining hardware
-type HardwareInfo struct {
+type HardwareDevice struct {
 	Type         HardwareType
 	Name         string
 	Vendor       string
@@ -36,9 +36,9 @@ type HardwareInfo struct {
 // HardwareDetector detects and manages mining hardware
 type HardwareDetector struct {
 	logger    *zap.Logger
-	cpuInfo   []HardwareInfo
-	gpuInfo   []HardwareInfo
-	asicInfo  []HardwareInfo
+	cpuInfo   []HardwareDevice
+	gpuInfo   []HardwareDevice
+	asicInfo  []HardwareDevice
 }
 
 // NewHardwareDetector creates a new hardware detector
@@ -88,7 +88,7 @@ func (d *HardwareDetector) detectCPU() error {
 	}
 
 	for _, info := range cpuInfo {
-		hw := HardwareInfo{
+		hw := HardwareDevice{
 			Type:         HardwareCPU,
 			Name:         info.ModelName,
 			Vendor:       info.VendorID,
@@ -117,7 +117,7 @@ func (d *HardwareDetector) detectGPU() error {
 	}
 
 	for _, card := range gpu.GraphicsCards {
-		hw := HardwareInfo{
+		hw := HardwareDevice{
 			Type:        HardwareGPU,
 			Name:        card.DeviceInfo.Product.Name,
 			Vendor:      card.DeviceInfo.Vendor.Name,
@@ -240,8 +240,8 @@ func (d *HardwareDetector) getAMDComputeUnits(model string) int {
 }
 
 // GetAvailableHardware returns all available hardware for mining
-func (d *HardwareDetector) GetAvailableHardware() []HardwareInfo {
-	var hardware []HardwareInfo
+func (d *HardwareDetector) GetAvailableHardware() []HardwareDevice {
+	var hardware []HardwareDevice
 	hardware = append(hardware, d.cpuInfo...)
 	hardware = append(hardware, d.gpuInfo...)
 	hardware = append(hardware, d.asicInfo...)
@@ -249,7 +249,7 @@ func (d *HardwareDetector) GetAvailableHardware() []HardwareInfo {
 }
 
 // GetHardwareByType returns hardware of a specific type
-func (d *HardwareDetector) GetHardwareByType(hwType HardwareType) []HardwareInfo {
+func (d *HardwareDetector) GetHardwareByType(hwType HardwareType) []HardwareDevice {
 	switch hwType {
 	case HardwareCPU:
 		return d.cpuInfo
@@ -263,7 +263,7 @@ func (d *HardwareDetector) GetHardwareByType(hwType HardwareType) []HardwareInfo
 }
 
 // GetBestHardwareForAlgorithm returns the best hardware for a specific algorithm
-func (d *HardwareDetector) GetBestHardwareForAlgorithm(algoName string) (HardwareInfo, error) {
+func (d *HardwareDetector) GetBestHardwareForAlgorithm(algoName string) (HardwareDevice, error) {
 	// This would use the algorithm registry to determine the best hardware
 	// For now, return a simple implementation
 	
@@ -294,11 +294,11 @@ func (d *HardwareDetector) GetBestHardwareForAlgorithm(algoName string) (Hardwar
 		return d.cpuInfo[0], nil
 	}
 	
-	return HardwareInfo{}, fmt.Errorf("no suitable hardware found for algorithm %s", algoName)
+	return HardwareDevice{}, fmt.Errorf("no suitable hardware found for algorithm %s", algoName)
 }
 
 // EstimateHashrate estimates the hashrate for given hardware and algorithm
-func (d *HardwareDetector) EstimateHashrate(hw HardwareInfo, algoName string) uint64 {
+func (d *HardwareDetector) EstimateHashrate(hw HardwareDevice, algoName string) uint64 {
 	// This is a simplified estimation - real values would come from benchmarking
 	baseRate := uint64(1000) // 1 KH/s base
 	

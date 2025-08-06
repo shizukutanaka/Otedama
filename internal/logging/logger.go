@@ -12,369 +12,236 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// LoggerFactory provides centralized logger creation
-// Following Robert C. Martin's single responsibility principle
-type LoggerFactory struct {
-	config      *LogConfig
-	rootLogger  *zap.Logger
-	loggers     map[string]*zap.Logger
-	loggersMu   sync.RWMutex
+// global state
+var (
+	globalFactory *Factory
+	once          sync.Once
+)
+
+// Factory is responsible for creating and managing loggers.
+// It ensures that loggers are configured consistently according to the provided settings.
+// This follows the Factory pattern and Single Responsibility Principle.	ype Factory struct {
+	config    *Config
+	rootLogger *zap.Logger
+	loggers    map[string]*zap.Logger
+	mu         sync.RWMutex
 }
 
-// LogConfig contains logging configuration
-type LogConfig struct {
-	// Output settings
-	OutputPath      string `json:"output_path"`
-	ErrorOutputPath string `json:"error_output_path"`
-	
-	// Log levels
-	Level      string            `json:"level"`
-	ModuleLevels map[string]string `json:"module_levels"`
-	
-	// Format settings
-	Encoding    string `json:"encoding"` // json or console
-	Development bool   `json:"development"`
-	
-	// Rotation settings
-	MaxSizeMB    int  `json:"max_size_mb"`
-	MaxBackups   int  `json:"max_backups"`
-	MaxAgeDays   int  `json:"max_age_days"`
-	Compress     bool `json:"compress"`
-	
-	// Performance settings
-	DisableCaller     bool `json:"disable_caller"`
-	DisableStacktrace bool `json:"disable_stacktrace"`
-	Sampling          bool `json:"sampling"`
-	
-	// Fields to include
-	IncludeHost    bool `json:"include_host"`
-	IncludeVersion bool `json:"include_version"`
-}
-
-// NewLoggerFactory creates a new logger factory
-func NewLoggerFactory(config *LogConfig) (*LoggerFactory, error) {
-	if config == nil {
-		config = DefaultLogConfig()
-	}
-	
-	// Create log directory if needed
-	logDir := filepath.Dir(config.OutputPath)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create log directory: %w", err)
-	}
-	
-	// Build encoder config
-	encoderConfig := buildEncoderConfig(config)
-	
-	// Build core
-	core, err := buildCore(config, encoderConfig)
+// InitGlobalFactory initializes the global logger factory with the given configuration.
+// This function should be called once at the application's startup.
+func InitGlobalFactory(config *Config) (*Factory, error) {
+	var err error
+	once.Do(func() {
+		globalFactory, err = newFactory(config)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to build logger core: %w", err)
+		return nil, err
 	}
-	
-	// Create root logger
-	rootLogger := zap.New(
-		core,
-		buildOptions(config)...,
-	)
-	
-	factory := &LoggerFactory{
-		config:     config,
+	return globalFactory, nil
+}
+
+// GetLogger returns a logger for a specific module/component.
+// If a logger for the module doesn't exist, it creates one.
+// This allows for different log levels and settings per module.
+func GetLogger(module string) *zap.Logger {
+	if globalFactory == nil {
+		// Fallback to a default logger if the factory is not initialized.
+		// This is not ideal but prevents panics.
+		fallback, _ := zap.NewProduction()
+		return fallback.Named(module)
+	}
+	return globalFactory.GetLogger(module)
+}
+
+// Sync flushes any buffered log entries in all created loggers.
+// It's crucial to call this before the application exits.
+func Sync() error {
+	if globalFactory == nil {
+		return nil
+	}
+	return globalFactory.Sync()
+}
+
+// newFactory creates a new logger factory instance.
+func newFactory(config *Config) (*Factory, error) {
+	if config == nil {
+		config = DefaultConfig()
+	}
+
+	// Create the root logger based on the configuration.
+	rootLogger, err := createLogger(config, config.Level)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create root logger: %w", err)
+	}
+
+	factory := &Factory{
+		config:    config,
 		rootLogger: rootLogger,
 		loggers:    make(map[string]*zap.Logger),
 	}
-	
-	// Set global logger
+
+	// Replace the global zap logger with our root logger.
 	zap.ReplaceGlobals(rootLogger)
-	
+
 	return factory, nil
 }
 
-// GetLogger returns a logger for the specified module
-func (f *LoggerFactory) GetLogger(module string) *zap.Logger {
-	f.loggersMu.RLock()
+// GetLogger retrieves a logger for a given module from the factory.
+func (f *Factory) GetLogger(module string) *zap.Logger {
+	f.mu.RLock()
 	if logger, exists := f.loggers[module]; exists {
-		f.loggersMu.RUnlock()
+		f.mu.RUnlock()
 		return logger
 	}
-	f.loggersMu.RUnlock()
-	
-	// Create new logger for module
-	f.loggersMu.Lock()
-	defer f.loggersMu.Unlock()
-	
-	// Double-check after acquiring write lock
+	f.mu.RUnlock()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Double-check after acquiring the write lock.
 	if logger, exists := f.loggers[module]; exists {
 		return logger
 	}
-	
-	// Create module logger with custom level if configured
-	logger := f.rootLogger.Named(module)
-	
-	if levelStr, hasLevel := f.config.ModuleLevels[module]; hasLevel {
-		level, err := zapcore.ParseLevel(levelStr)
-		if err == nil {
-			// Create new core with module-specific level
-			core, _ := buildCoreWithLevel(f.config, level)
-			logger = logger.WithOptions(zap.WrapCore(func(zapcore.Core) zapcore.Core {
-				return core
-			}))
-		}
+
+	// Determine the log level for this specific module.
+	levelStr, ok := f.config.ModuleLevels[module]
+	if !ok {
+		// If no specific level is set, use the root logger's level.
+		logger := f.rootLogger.Named(module)
+		f.loggers[module] = logger
+		return logger
 	}
-	
+
+	// Create a new logger with the module-specific level.
+	logger, err := createLogger(f.config, levelStr)
+	if err != nil {
+		// If creation fails, fall back to the root logger.
+		zap.L().Error("failed to create module logger", zap.String("module", module), zap.Error(err))
+		logger = f.rootLogger.Named(module)
+	}
+
 	f.loggers[module] = logger
 	return logger
 }
 
-// Sync flushes all loggers
-func (f *LoggerFactory) Sync() error {
+// Sync flushes all managed loggers.
+func (f *Factory) Sync() error {
 	var firstErr error
-	
-	// Sync root logger
-	if err := f.rootLogger.Sync(); err != nil && firstErr == nil {
+
+	if err := f.rootLogger.Sync(); err != nil {
 		firstErr = err
 	}
-	
-	// Sync all module loggers
-	f.loggersMu.RLock()
-	defer f.loggersMu.RUnlock()
-	
+
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	for _, logger := range f.loggers {
 		if err := logger.Sync(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
-	
 	return firstErr
 }
 
-// buildEncoderConfig builds the encoder configuration
-func buildEncoderConfig(config *LogConfig) zapcore.EncoderConfig {
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "timestamp",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-	
-	if config.Development {
-		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		encoderConfig.EncodeCaller = zapcore.FullCallerEncoder
-	}
-	
-	if config.DisableCaller {
-		encoderConfig.CallerKey = zapcore.OmitKey
-	}
-	
-	if config.DisableStacktrace {
-		encoderConfig.StacktraceKey = zapcore.OmitKey
-	}
-	
-	return encoderConfig
-}
-
-// buildCore builds the logger core
-func buildCore(config *LogConfig, encoderConfig zapcore.EncoderConfig) (zapcore.Core, error) {
-	level, err := zapcore.ParseLevel(config.Level)
+// createLogger builds a zap.Logger instance based on the provided configuration and level.
+func createLogger(config *Config, levelStr string) (*zap.Logger, error) {
+	// Parse the log level string.
+	level, err := zapcore.ParseLevel(levelStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid log level: %w", err)
+		return nil, fmt.Errorf("invalid log level '%s': %w", levelStr, err)
 	}
-	
-	return buildCoreWithLevel(config, level)
-}
 
-// buildCoreWithLevel builds a core with specific level
-func buildCoreWithLevel(config *LogConfig, level zapcore.Level) (zapcore.Core, error) {
-	encoderConfig := buildEncoderConfig(config)
-	
-	// Create encoder
-	var encoder zapcore.Encoder
-	if config.Encoding == "json" {
-		encoder = zapcore.NewJSONEncoder(encoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+	// Create the encoder.
+	encoder := createEncoder(config)
+
+	// Create the write syncer (destination for logs).
+	writer, err := createWriteSyncer(config)
+	if err != nil {
+		return nil, err
 	}
-	
-	// Create output writers
-	writers := []zapcore.WriteSyncer{}
-	
-	// File output with rotation
-	if config.OutputPath != "" && config.OutputPath != "stdout" {
-		fileWriter := &lumberjack.Logger{
-			Filename:   config.OutputPath,
-			MaxSize:    config.MaxSizeMB,
-			MaxBackups: config.MaxBackups,
-			MaxAge:     config.MaxAgeDays,
-			Compress:   config.Compress,
-		}
-		writers = append(writers, zapcore.AddSync(fileWriter))
-	}
-	
-	// Console output
-	if config.OutputPath == "stdout" || config.Development {
-		writers = append(writers, zapcore.AddSync(os.Stdout))
-	}
-	
-	// Combine writers
-	writer := zapcore.NewMultiWriteSyncer(writers...)
-	
-	// Create core
+
+	// Build the zap core.
 	core := zapcore.NewCore(encoder, writer, level)
-	
-	// Add sampling if enabled
-	if config.Sampling {
+
+	// Apply sampling if it's enabled.
+	if config.Sampling != nil && config.Sampling.Enabled {
 		core = zapcore.NewSamplerWithOptions(
 			core,
 			time.Second,
-			100, // first 100 messages per second
-			10,  // thereafter 10 messages per second
+			config.Sampling.Initial,
+			config.Sampling.Thereafter,
 		)
 	}
-	
-	return core, nil
+
+	// Assemble the logger options.
+	opts := buildOptions(config)
+
+	// Create the final logger.
+	logger := zap.New(core, opts...)
+
+	return logger, nil
 }
 
-// buildOptions builds logger options
-func buildOptions(config *LogConfig) []zap.Option {
-	options := []zap.Option{}
-	
-	if !config.DisableCaller {
-		options = append(options, zap.AddCaller())
+// createEncoder selects and configures the log encoder.
+func createEncoder(config *Config) zapcore.Encoder {
+	encoderConfig := config.buildEncoderConfig()
+	if config.Format == "console" {
+		return zapcore.NewConsoleEncoder(encoderConfig)
 	}
-	
-	if !config.DisableStacktrace {
-		options = append(options, zap.AddStacktrace(zapcore.ErrorLevel))
-	}
-	
-	if config.Development {
-		options = append(options, zap.Development())
-	}
-	
-	// Add default fields
-	fields := []zap.Field{}
-	
-	if config.IncludeHost {
-		if hostname, err := os.Hostname(); err == nil {
-			fields = append(fields, zap.String("host", hostname))
+	return zapcore.NewJSONEncoder(encoderConfig)
+}
+
+// createWriteSyncer sets up the destination for log output (file, stdout, etc.).
+func createWriteSyncer(config *Config) (zapcore.WriteSyncer, error) {
+	// Ensure the log directory exists.
+	if config.OutputPath != "stdout" && config.OutputPath != "stderr" {
+		dir := filepath.Dir(config.OutputPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create log directory: %w", err)
 		}
 	}
-	
-	if config.IncludeVersion {
-		fields = append(fields, zap.String("version", "1.0.0")) // Would get from build info
+
+	// Set up file-based logging with rotation.
+	lumberjackLogger := &lumberjack.Logger{
+		Filename:   config.OutputPath,
+		MaxSize:    config.Rotation.MaxSize,
+		MaxAge:     config.Rotation.MaxAge,
+		MaxBackups: config.Rotation.MaxBackups,
+		LocalTime:  config.Rotation.LocalTime,
+		Compress:   config.Rotation.Compress,
 	}
-	
-	if len(fields) > 0 {
-		options = append(options, zap.Fields(fields...))
+
+	// Combine outputs if necessary (e.g., file and stdout).
+	syncers := []zapcore.WriteSyncer{zapcore.AddSync(lumberjackLogger)}
+	if config.Development {
+		syncers = append(syncers, zapcore.AddSync(os.Stdout))
 	}
-	
-	return options
+
+	return zapcore.NewMultiWriteSyncer(syncers...), nil
 }
 
-// DefaultLogConfig returns default logging configuration
-func DefaultLogConfig() *LogConfig {
-	return &LogConfig{
-		OutputPath:      "logs/otedama.log",
-		ErrorOutputPath: "logs/otedama_error.log",
-		Level:           "info",
-		ModuleLevels:    make(map[string]string),
-		Encoding:        "json",
-		Development:     false,
-		MaxSizeMB:       100,
-		MaxBackups:      7,
-		MaxAgeDays:      30,
-		Compress:        true,
-		DisableCaller:   false,
-		DisableStacktrace: false,
-		Sampling:        true,
-		IncludeHost:     true,
-		IncludeVersion:  true,
+// buildOptions constructs the zap.Option slice from the configuration.
+func buildOptions(config *Config) []zap.Option {
+	var opts []zap.Option
+
+	if config.EnableCaller {
+		opts = append(opts, zap.AddCaller())
 	}
-}
 
-// Helper functions for common logging patterns
-
-// WithMining adds mining-related fields
-func WithMining(logger *zap.Logger, algorithm string, hashRate float64) *zap.Logger {
-	return logger.With(
-		zap.String("algorithm", algorithm),
-		zap.Float64("hash_rate", hashRate),
-	)
-}
-
-// WithNetwork adds network-related fields
-func WithNetwork(logger *zap.Logger, peerID string, address string) *zap.Logger {
-	return logger.With(
-		zap.String("peer_id", peerID),
-		zap.String("address", address),
-	)
-}
-
-// WithComponent adds component context
-func WithComponent(logger *zap.Logger, component string) *zap.Logger {
-	return logger.With(zap.String("component", component))
-}
-
-// WithRequestID adds request tracking
-func WithRequestID(logger *zap.Logger, requestID string) *zap.Logger {
-	return logger.With(zap.String("request_id", requestID))
-}
-
-// Performance-optimized logging helpers
-
-// LogIf logs only if error is not nil
-func LogIf(logger *zap.Logger, err error, msg string, fields ...zap.Field) {
-	if err != nil {
-		logger.Error(msg, append(fields, zap.Error(err))...)
+	if config.EnableStacktrace {
+		opts = append(opts, zap.AddStacktrace(zapcore.ErrorLevel))
 	}
-}
 
-// DebugSampled logs debug messages with sampling
-var debugSampler = &Sampler{
-	interval: time.Second,
-	first:    10,
-	thereafter: 1,
-}
-
-func DebugSampled(logger *zap.Logger, msg string, fields ...zap.Field) {
-	if debugSampler.Check() {
-		logger.Debug(msg, fields...)
+	if config.Development {
+		opts = append(opts, zap.Development())
 	}
-}
 
-// Sampler implements simple sampling logic
-type Sampler struct {
-	interval   time.Duration
-	first      int
-	thereafter int
-	
-	mu         sync.Mutex
-	lastTick   time.Time
-	count      int
-}
+	if len(config.InitialFields) > 0 {
+		fields := make([]zap.Field, 0, len(config.InitialFields))
+		for k, v := range config.InitialFields {
+			fields = append(fields, zap.Any(k, v))
+		}
+		opts = append(opts, zap.Fields(fields...))
+	}
 
-func (s *Sampler) Check() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	
-	now := time.Now()
-	if now.Sub(s.lastTick) > s.interval {
-		s.lastTick = now
-		s.count = 0
-	}
-	
-	s.count++
-	
-	if s.count <= s.first {
-		return true
-	}
-	
-	return (s.count-s.first)%s.thereafter == 0
+	return opts
 }

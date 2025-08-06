@@ -420,16 +420,14 @@ func exportJSON(data interface{}, outputPath string) error {
 func exportSARIF(issues []security.SecurityIssue, outputPath string) error {
 	// Convert to SARIF format
 	sarif := map[string]interface{}{
-		"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
 		"version": "2.1.0",
 		"runs": []map[string]interface{}{
 			{
 				"tool": map[string]interface{}{
 					"driver": map[string]interface{}{
-						"name":           "Otedama Security Scanner",
-						"version":        "1.0.0",
-						"informationUri": "https://github.com/shizukutanaka/Otedama",
-						"rules":          []map[string]interface{}{},
+						"name":    "Otedama Security Scanner",
+						"version": "1.0.0",
+						"rules":   []map[string]interface{}{},
 					},
 				},
 				"results": []map[string]interface{}{},

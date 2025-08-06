@@ -1,0 +1,53 @@
+[Unit]
+Description=Otedama P2P Mining Pool
+Documentation=https://github.com/otedama/otedama
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User={{ otedama_user }}
+Group={{ otedama_group }}
+WorkingDirectory={{ otedama_home }}
+
+# Environment
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=-{{ otedama_home }}/.env
+
+# Pre-start checks
+ExecStartPre=/usr/bin/docker-compose -f docker-compose.production.yml pull
+ExecStartPre=/usr/bin/docker-compose -f docker-compose.production.yml build
+
+# Start command
+ExecStart=/usr/bin/docker-compose -f docker-compose.production.yml up
+
+# Stop command
+ExecStop=/usr/bin/docker-compose -f docker-compose.production.yml down
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=600
+StartLimitBurst=5
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ otedama_data_dir }} {{ otedama_log_dir }}
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+MemoryLimit=16G
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=otedama
+
+[Install]
+WantedBy=multi-user.target

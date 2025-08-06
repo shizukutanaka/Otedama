@@ -63,15 +63,6 @@ type MiningJob struct {
 	Timestamp time.Time
 }
 
-// Share represents a valid mining share
-type Share struct {
-	JobID      string
-	Nonce      uint64
-	Hash       []byte
-	Difficulty uint64
-	Timestamp  int64
-}
-
 // NewCPUMiner creates a new CPU miner worker
 func NewCPUMiner(id int, logger *zap.Logger) *CPUMiner {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -203,11 +194,11 @@ func (m *CPUMiner) mineBatch(buffer []byte, job *MiningJob, nonce *uint64, batch
 			share := &Share{
 				JobID:      job.ID,
 				Nonce:      *nonce,
-				Hash:       hash,
+				Hash:       [32]byte{}, // Placeholder, will be set after copy
 				Difficulty: m.calculateDifficulty(hash),
 				Timestamp:  time.Now().Unix(),
 			}
-			
+			copy(share.Hash[:], hash)
 			m.validShares.Add(1)
 			m.submitShare(share)
 		}
@@ -371,7 +362,7 @@ func (e *CPUEngine) SubmitWork(work *Work) error {
 		Data:      work.Data,
 		Target:    work.Target,
 		Height:    work.Height,
-		Timestamp: work.Timestamp,
+		Timestamp: time.Unix(int64(work.Timestamp), 0),
 	}
 	
 	// Submit to all miners

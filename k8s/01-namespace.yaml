@@ -1,0 +1,8 @@
+# Otedama Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otedama
+  labels:
+    app: otedama
+    environment: production

@@ -23,8 +23,10 @@ type Server struct {
 	upgrader   websocket.Upgrader
 	clients    map[*websocket.Conn]bool
 	stats      map[string]interface{}
+	limiter    *IPRateLimiter
 	engine     mining.Engine
 	validator  *InputValidator
+	auth       *WebSocketAuth
 }
 
 // Config defines API server configuration
@@ -52,13 +54,24 @@ func NewServer(config Config, logger *zap.Logger, engine mining.Engine) (*Server
 		return nil, fmt.Errorf("API server disabled")
 	}
 
+	// Create auth system
+	authConfig := AuthConfig{
+		JWTSecret:     "default-secret", // Should be overridden by config
+		TokenTTL:      24 * time.Hour,
+		RefreshTTL:    7 * 24 * time.Hour,
+		EnableRefresh: true,
+	}
+	auth := NewWebSocketAuth(logger, authConfig)
+
 	server := &Server{
 		logger:    logger,
 		config:    config,
 		clients:   make(map[*websocket.Conn]bool),
 		stats:     make(map[string]interface{}),
+		limiter:   NewIPRateLimiter(config.RateLimit, time.Minute, config.RateLimit*2),
 		engine:    engine,
 		validator: NewInputValidator(),
+		auth:      auth,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				// Check against allowed origins
@@ -140,22 +153,41 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) setupRoutes() {
 	s.router = mux.NewRouter()
 
+	// Create auth middleware
+	auth := AuthMiddleware(s.logger, s.auth)
+	
+	// Create middleware chain for protected routes
+	protected := Chain(
+		s.corsMiddleware,
+		s.loggingMiddleware,
+		RateLimitMiddleware(s.limiter, s.logger),
+		SecurityHeadersMiddleware(),
+		auth,
+	)
+	
+	// Create middleware chain for public routes
+	public := Chain(
+		s.corsMiddleware,
+		s.loggingMiddleware,
+		RateLimitMiddleware(s.limiter, s.logger),
+		SecurityHeadersMiddleware(),
+	)
+
 	// API routes
 	api := s.router.PathPrefix("/api/v1").Subrouter()
-	api.Use(s.corsMiddleware)
-	api.Use(s.loggingMiddleware)
 
-	// System endpoints
-	api.HandleFunc("/status", s.handleStatus).Methods("GET")
-	api.HandleFunc("/stats", s.handleStats).Methods("GET")
-	api.HandleFunc("/health", s.handleHealth).Methods("GET")
+	// Public endpoints (no auth required)
+	api.Handle("/status", public(http.HandlerFunc(s.handleStatus))).Methods("GET")
+	api.Handle("/stats", public(http.HandlerFunc(s.handleStats))).Methods("GET")
+	api.Handle("/health", public(http.HandlerFunc(s.handleHealth))).Methods("GET")
 
-	// Mining endpoints
-	api.HandleFunc("/mining/stats", s.handleMiningStats).Methods("GET")
-	api.HandleFunc("/mining/start", s.handleMiningStart).Methods("POST")
-	api.HandleFunc("/mining/stop", s.handleMiningStop).Methods("POST")
-	api.HandleFunc("/mining/workers", s.handleMiningWorkers).Methods("GET")
-	api.HandleFunc("/mining/workers/{id}/control", s.handleWorkerControl).Methods("POST")
+	// Protected mining endpoints (require auth)
+	mining := api.PathPrefix("/mining").Subrouter()
+	mining.Handle("/stats", public(http.HandlerFunc(s.handleMiningStats))).Methods("GET")
+	mining.Handle("/start", protected(RequirePermission("mining:start")(http.HandlerFunc(s.handleMiningStart)))).Methods("POST")
+	mining.Handle("/stop", protected(RequirePermission("mining:stop")(http.HandlerFunc(s.handleMiningStop)))).Methods("POST")
+	mining.Handle("/workers", protected(http.HandlerFunc(s.handleMiningWorkers))).Methods("GET")
+	mining.Handle("/workers/{id}/control", protected(RequirePermission("mining:control")(http.HandlerFunc(s.handleWorkerControl)))).Methods("POST")
 
 	// Pool endpoints
 	api.HandleFunc("/pool/stats", s.handlePoolStats).Methods("GET")
@@ -196,8 +228,10 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		if origin != "" && len(s.config.AllowOrigins) > 0 {
 			for _, allowed := range s.config.AllowOrigins {
 				if allowed == "*" {
+					// SECURITY: Don't allow credentials with wildcard origin
 					w.Header().Set("Access-Control-Allow-Origin", origin)
-					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					// Explicitly disable credentials when using wildcard
+					w.Header().Set("Access-Control-Allow-Credentials", "false")
 					break
 				} else if allowed == origin {
 					w.Header().Set("Access-Control-Allow-Origin", origin)

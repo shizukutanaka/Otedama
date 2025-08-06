@@ -1,0 +1,406 @@
+# ServiceMonitor for Prometheus to scrape Otedama metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otedama-servicemonitor
+  namespace: otedama
+  labels:
+    app: otedama
+    component: monitoring
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: otedama
+      component: mining-pool
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+    honorLabels: true
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'go_.*'
+      action: drop
+    - sourceLabels: [__name__]
+      regex: 'prometheus_.*'
+      action: drop
+  namespaceSelector:
+    matchNames:
+    - otedama
+
+---
+# ServiceMonitor for PostgreSQL metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-servicemonitor
+  namespace: otedama
+  labels:
+    app: postgres
+    component: monitoring
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+      component: database
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - otedama
+
+---
+# ServiceMonitor for Redis metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-servicemonitor
+  namespace: otedama
+  labels:
+    app: redis
+    component: monitoring
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      component: cache
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - otedama
+
+---
+# Prometheus instance for Otedama monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: otedama-prometheus
+  namespace: otedama
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  replicas: 1
+  retention: 30d
+  retentionSize: 50GB
+  storage:
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+        storageClassName: standard
+  serviceAccountName: prometheus
+  serviceMonitorSelector:
+    matchLabels:
+      release: prometheus
+  ruleSelector:
+    matchLabels:
+      release: prometheus
+  alerting:
+    alertmanagers:
+    - namespace: otedama
+      name: alertmanager-main
+      port: web
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  securityContext:
+    runAsUser: 65534
+    runAsGroup: 65534
+    runAsNonRoot: true
+    fsGroup: 65534
+
+---
+# Grafana deployment for visualization
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: otedama
+  labels:
+    app: grafana
+    component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+      component: monitoring
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: monitoring
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+          name: grafana
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-secrets
+              key: GRAFANA_ADMIN_PASSWORD
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel"
+        - name: GF_SERVER_ROOT_URL
+          value: "https://monitoring.pool.example.com"
+        - name: GF_ANALYTICS_REPORTING_ENABLED
+          value: "false"
+        - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+          value: "false"
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: grafana-config
+          mountPath: /etc/grafana/provisioning
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        securityContext:
+          runAsUser: 472
+          runAsGroup: 472
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-data-pvc
+      - name: grafana-config
+        configMap:
+          name: grafana-config
+
+---
+# ConfigMap for Grafana provisioning
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: otedama
+  labels:
+    app: grafana
+    component: config
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus-service:9090
+      isDefault: true
+      editable: true
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /etc/grafana/provisioning/dashboards
+  otedama-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Otedama Mining Pool Dashboard",
+        "tags": ["otedama", "mining", "pool"],
+        "timezone": "UTC",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Active Miners",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "otedama_active_miners",
+                "refId": "A"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Total Hashrate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(otedama_hashrate)",
+                "refId": "A"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Shares per Second",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(otedama_shares_total[5m])",
+                "refId": "A"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          }
+        ]
+      }
+    }
+
+---
+# PrometheusRule for Otedama-specific alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otedama-rules
+  namespace: otedama
+  labels:
+    app: otedama
+    component: monitoring
+    release: prometheus
+spec:
+  groups:
+  - name: otedama.mining
+    interval: 30s
+    rules:
+    - alert: OtedamaDown
+      expr: up{job="otedama"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: mining-pool
+      annotations:
+        summary: "Otedama mining pool instance down"
+        description: "Otedama instance {{ $labels.instance }} has been down for more than 1 minute"
+        
+    - alert: HighCPUUsage
+      expr: rate(process_cpu_seconds_total{job="otedama"}[5m]) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: mining-pool
+      annotations:
+        summary: "High CPU usage detected"
+        description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+        
+    - alert: HighMemoryUsage
+      expr: process_resident_memory_bytes{job="otedama"} / 1024 / 1024 > 2000
+      for: 5m
+      labels:
+        severity: warning
+        component: mining-pool
+      annotations:
+        summary: "High memory usage detected"  
+        description: "Memory usage is above 2GB for more than 5 minutes on {{ $labels.instance }}"
+        
+    - alert: LowMinerCount
+      expr: otedama_active_miners < 10
+      for: 10m
+      labels:
+        severity: warning
+        component: mining-pool
+      annotations:
+        summary: "Low miner count"
+        description: "Active miner count has been below 10 for more than 10 minutes"
+        
+    - alert: HighStratumConnections
+      expr: otedama_stratum_connections > 5000
+      for: 5m
+      labels:
+        severity: warning
+        component: stratum
+      annotations:
+        summary: "High Stratum connection count"
+        description: "Stratum connections exceed 5000 on {{ $labels.instance }}"
+        
+    - alert: DatabaseConnectionsHigh
+      expr: postgres_stat_activity_count{job="postgres"} > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "High database connection count"
+        description: "PostgreSQL connection count is above 80"
+        
+    - alert: RedisMemoryUsageHigh
+      expr: redis_memory_used_bytes{job="redis"} / redis_memory_max_bytes{job="redis"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "High Redis memory usage"
+        description: "Redis memory usage is above 90%"
+
+---
+# PodMonitor for additional pod-level monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: otedama-podmonitor
+  namespace: otedama
+  labels:
+    app: otedama
+    component: monitoring
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: otedama
+  podMetricsEndpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+  namespaceSelector:
+    matchNames:
+    - otedama

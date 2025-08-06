@@ -5,7 +5,7 @@ Otedama के सभी महत्वपूर्ण परिवर्तन
 प्रारूप [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) पर आधारित है,
 और यह परियोजना [Semantic Versioning](https://semver.org/spec/v2.0.0.html) का पालन करती है।
 
-## [2.1.5] - 2025-08-05
+## [2.1.5] - 2025-08-06
 
 ### जोड़ा गया
 - 30 भाषाओं में README फाइलों के साथ व्यापक बहुभाषी समर्थन

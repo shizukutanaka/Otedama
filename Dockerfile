@@ -1,71 +1,47 @@
-# Otedama v2.0.0 - Production Dockerfile
-# Multi-stage build for Go application
+# Otedama Dockerfile for development and standard deployment
+# Optimized for quick builds and debugging
 
-# Build stage
 FROM golang:1.21-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git make gcc musl-dev
+RUN apk add --no-cache git gcc musl-dev make
 
 WORKDIR /build
 
-# Copy go mod files
+# Copy go mod files for better caching
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
 # Copy source code
 COPY . .
 
-# Get version info
-RUN VERSION=$(grep "Version = " version.go | cut -d'"' -f2) && \
-    BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC") && \
-    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# Build the binary
+RUN go build -o otedama cmd/otedama/main.go
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
-    -ldflags="-w -s -X github.com/shizukutanaka/Otedama.Version=$VERSION -X 'github.com/shizukutanaka/Otedama.BuildDate=$BUILD_TIME' -X github.com/shizukutanaka/Otedama.GitCommit=$GIT_COMMIT" \
-    -o otedama ./cmd/otedama
-
-# Production stage
+# Runtime stage
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata && \
-    rm -rf /var/cache/apk/*
+RUN apk add --no-cache ca-certificates curl
 
-# Create non-root user
-RUN addgroup -g 10001 -S otedama && \
-    adduser -S -u 10001 -G otedama -h /app -s /bin/false otedama
-
+# Create app directory
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder --chown=otedama:otedama /build/otedama ./bin/otedama
+COPY --from=builder /build/otedama /app/
 
-# Copy configuration files
-COPY --chown=otedama:otedama config.yaml ./config.yaml.example
-
-# Create required directories
-RUN mkdir -p data logs && \
-    chown -R otedama:otedama data logs && \
-    chmod 700 data && \
-    chmod 755 logs
-
-# Drop privileges
-USER otedama
+# Copy config if exists
+COPY --from=builder /build/config.yaml* /app/
 
 # Expose ports
-EXPOSE 8080 30303 3333 9090
-
-# Environment variables
-ENV LOG_LEVEL=info
+EXPOSE 3333 8080 9090
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD ["/app/bin/otedama", "-health-check"]
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
-# Run the application
-ENTRYPOINT ["/app/bin/otedama"]
-CMD ["-config", "/app/config.yaml"]
+# Volume for persistent data
+VOLUME ["/app/data"]
+
+# Run the binary
+CMD ["./otedama", "start"]

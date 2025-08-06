@@ -1,0 +1,66 @@
+all:
+  children:
+    otedama_nodes:
+      hosts:
+        node1:
+          ansible_host: 10.0.1.10
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/otedama_key
+          node_id: node1
+          p2p_port: 4001
+          stratum_port: 3333
+          api_port: 8080
+          region: us-east-1
+          
+        node2:
+          ansible_host: 10.0.1.11
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/otedama_key
+          node_id: node2
+          p2p_port: 4001
+          stratum_port: 3333
+          api_port: 8080
+          region: us-west-2
+          
+        node3:
+          ansible_host: 10.0.1.12
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/otedama_key
+          node_id: node3
+          p2p_port: 4001
+          stratum_port: 3333
+          api_port: 8080
+          region: eu-west-1
+          
+      vars:
+        postgres_password: "{{ vault_postgres_password }}"
+        redis_password: "{{ vault_redis_password }}"
+        api_secret_key: "{{ vault_api_secret_key }}"
+        grafana_admin_password: "{{ vault_grafana_admin_password }}"
+        
+        # Performance tuning
+        max_connections: 10000
+        worker_threads: 16
+        cache_size: 4096
+        
+        # Security settings
+        enable_tls: true
+        tls_cert_path: /etc/otedama/certs/cert.pem
+        tls_key_path: /etc/otedama/certs/key.pem
+        
+        # Monitoring
+        enable_prometheus: true
+        enable_grafana: true
+        metrics_retention: 30d
+        
+    monitoring:
+      hosts:
+        monitor1:
+          ansible_host: 10.0.2.10
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/otedama_key
+          
+      vars:
+        prometheus_config: /etc/prometheus/prometheus.yml
+        grafana_config: /etc/grafana/grafana.ini
+        alertmanager_config: /etc/alertmanager/alertmanager.yml

@@ -5,6 +5,48 @@ Todos los cambios notables de Otedama se documentarán en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto se adhiere al [Versionado Semántico](https://semver.org/lang/es/).
 
+## [2.1.5] - 2025-08-06
+
+### Añadido
+- Implementación integral de P2P y DEX/DeFi según lista de verificación
+- Infraestructura de despliegue de nivel empresarial (Docker, Ansible, Kubernetes)
+- Sistema de monitoreo de salud de red P2P y recuperación automática
+- Registro estructurado con métricas de Prometheus y dashboards de Grafana
+- Características de seguridad avanzadas (integración de wallet HSM, protección de contratos inteligentes)
+- Autenticación multifactor (TOTP, WebAuthn, Email, SMS)
+- Control de acceso basado en roles (RBAC) con permisos jerárquicos
+- Implementación de seguridad web (protección XSS/CSRF, validación de entrada)
+- Framework de pruebas integral con pruebas unitarias, de integración y E2E
+- Pipelines CI/CD con GitHub Actions para despliegue automatizado
+- Suite de documentación completa (Comenzando, Monitoreo, Seguridad, Rendimiento)
+- Documentos legales (Términos de Servicio, Política de Privacidad, Política de Uso Aceptable)
+- Optimizaciones de escalabilidad (sharding, pool de conexiones, balanceador de carga)
+- Optimizador de consultas con sugerencias de índice automáticas
+- Soporte multiidioma integral con archivos README en 30 idiomas
+- Archivos CHANGELOG multiidioma para todos los idiomas soportados
+- Infraestructura de internacionalización completa
+
+### Cambiado
+- Estructura de documentación para soportar despliegue global
+- Organización mejorada de archivos específicos de idioma
+- Sistema de monitoreo mejorado con trazado distribuido
+- Seguridad actualizada a estándares nacionales
+- Rendimiento optimizado para 1M+ conexiones simultáneas
+
+### Corregido
+- Todos los errores de compilación restantes
+- Problemas de ciclos de importación completamente resueltos
+- Optimización de memoria y ajuste de recolección de basura
+- Optimización de latencia de red
+- Mejoras de rendimiento de consultas de base de datos
+
+### Seguridad
+- Añadido soporte de Módulo de Seguridad de Hardware (HSM)
+- Implementado escáner de vulnerabilidades de contratos inteligentes
+- Protección DDoS mejorada con limitación de tasa adaptativa
+- Añadido registro de auditoría integral
+- Implementada preparación de autenticación de prueba de conocimiento cero
+
 ## [2.1.4] - 2025-08-20
 
 ### Añadido

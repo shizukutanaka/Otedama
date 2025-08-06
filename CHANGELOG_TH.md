@@ -5,7 +5,7 @@
 รูปแบบนี้อิงตาม [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 และโครงการนี้ปฏิบัติตาม [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
-## [2.1.5] - 2025-08-05
+## [2.1.5] - 2025-08-06
 
 ### เพิ่มเติม
 - การสนับสนุนหลายภาษาอย่างครอบคลุมด้วยไฟล์ README ใน 30 ภาษา

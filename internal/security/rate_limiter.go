@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,8 @@ type RateLimitConfig struct {
 	EnableUserLimit bool
 	// Custom limits per endpoint
 	EndpointLimits map[string]EndpointLimit
+	// Trust X-Forwarded-For headers (only enable behind trusted proxy)
+	TrustXForwardedFor bool
 }
 
 // EndpointLimit defines limits for specific endpoints
@@ -243,13 +246,23 @@ func (rl *RateLimiter) extractKey(r *http.Request) string {
 			ip = r.RemoteAddr
 		}
 		
-		// Check for X-Forwarded-For header
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			// Take the first IP in the chain
-			if idx := len(xff) - 1; idx >= 0 {
-				if comma := len(xff) - 1 - idx; comma >= 0 {
-					ip = xff[:comma]
+		// Check for X-Forwarded-For header (with validation)
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" && rl.config.TrustXForwardedFor {
+			// Parse the header properly
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				// Take the first IP and trim whitespace
+				firstIP := strings.TrimSpace(ips[0])
+				// Validate IP format
+				if net.ParseIP(firstIP) != nil {
+					ip = firstIP
 				}
+				// If invalid, fall back to RemoteAddr
+			}
+		} else if realIP := r.Header.Get("X-Real-IP"); realIP != "" && rl.config.TrustXForwardedFor {
+			// Also check X-Real-IP header
+			if net.ParseIP(realIP) != nil {
+				ip = realIP
 			}
 		}
 		

@@ -1,0 +1,60 @@
+[Unit]
+Description=Otedama P2P Mining Pool
+Documentation=https://github.com/otedama/otedama
+After=network-online.target postgresql.service redis.service
+Wants=network-online.target
+Requires=postgresql.service redis.service
+
+[Service]
+Type=notify
+ExecStartPre=/usr/bin/test -f /etc/otedama/config.yaml
+ExecStart=/usr/local/bin/otedama start --config /etc/otedama/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+
+# User and group
+User=otedama
+Group=otedama
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/otedama /var/log/otedama /var/cache/otedama
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryLimit=4G
+CPUQuota=400%
+
+# Environment
+Environment="OTEDAMA_ENV=production"
+Environment="OTEDAMA_LOG_LEVEL=info"
+EnvironmentFile=-/etc/otedama/otedama.env
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitInterval=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=otedama
+
+# Watchdog
+WatchdogSec=30
+
+[Install]
+WantedBy=multi-user.target

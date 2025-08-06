@@ -1,0 +1,163 @@
+---
+# Otedama Main Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otedama
+  namespace: otedama
+  labels:
+    app: otedama
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: otedama
+  template:
+    metadata:
+      labels:
+        app: otedama
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done']
+      - name: wait-for-redis
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done']
+      containers:
+      - name: otedama
+        image: otedama:production
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3333
+          name: stratum
+          protocol: TCP
+        - containerPort: 8080
+          name: api
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        - containerPort: 4444
+          name: federation
+          protocol: TCP
+        env:
+        - name: OTEDAMA_ENV
+          value: "production"
+        - name: DATABASE_URL
+          value: "postgresql://otedama:$(DATABASE_PASSWORD)@postgres:5432/otedama?sslmode=require"
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: database-password
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: jwt-secret
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: api-key
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "4000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: otedama-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: otedama-data-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: otedama-logs-pvc
+
+---
+# Otedama Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama
+  namespace: otedama
+  labels:
+    app: otedama
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama
+  ports:
+  - name: stratum
+    port: 3333
+    targetPort: 3333
+    protocol: TCP
+  - name: api
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  - name: federation
+    port: 4444
+    targetPort: 4444
+    protocol: TCP
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otedama-hpa
+  namespace: otedama
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otedama
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

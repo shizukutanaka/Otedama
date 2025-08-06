@@ -87,24 +87,7 @@ const (
 	SeverityCritical
 )
 
-// CircuitBreaker implements circuit breaker pattern
-type CircuitBreaker struct {
-	state           CircuitState
-	failures        int
-	successes       int
-	lastStateChange time.Time
-	lastFailure     time.Time
-	mu              sync.RWMutex
-}
-
-// CircuitState represents circuit breaker state
-type CircuitState int
-
-const (
-	CircuitClosed CircuitState = iota
-	CircuitOpen
-	CircuitHalfOpen
-)
+// CircuitBreaker and CircuitState are now provided by the network package
 
 // RetryStrategy defines how to retry connections
 type RetryStrategy interface {

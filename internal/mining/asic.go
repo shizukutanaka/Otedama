@@ -17,7 +17,7 @@ import (
 // ASICHardware manages ASIC mining devices with high performance
 type ASICHardware struct {
 	logger   *zap.Logger
-	devices  []*ASICDevice
+	devices  []*ManagedASICDevice
 	workChan chan *Work
 	running  atomic.Bool
 	mu       sync.RWMutex
@@ -28,19 +28,22 @@ type ASICHardware struct {
 	deviceCount   atomic.Int32
 }
 
-// ASICDevice represents a single ASIC mining device - optimized for memory layout
-type ASICDevice struct {
+
+
+
+// ManagedASICDevice represents a single ASIC mining device - optimized for memory layout
+type ManagedASICDevice struct {
 	// Hot data - frequently accessed, cache-aligned
 	ID           int32
 	HashRate     atomic.Uint64
 	Temperature  atomic.Int32  // Celsius * 100 for precision
 	PowerUsage   atomic.Uint32 // Watts * 100 for precision
-	Status       atomic.Int32  // ASICStatus as int32
+	Status       atomic.Int32  // ManagedASICStatus as int32
 	LastSeen     atomic.Int64  // Unix timestamp
 	
 	// Cold data - less frequently accessed
 	Name         string
-	Manufacturer ASICManufacturer
+	Manufacturer ManagedASICManufacturer
 	Model        string
 	IPAddress    string
 	Port         int
@@ -55,26 +58,26 @@ type ASICDevice struct {
 	mu sync.RWMutex
 }
 
-// ASICManufacturer represents ASIC manufacturers
-type ASICManufacturer uint8
+// ManagedASICManufacturer represents ASIC manufacturers
+type ManagedASICManufacturer uint8
 
 const (
-	ASICManufacturerUnknown ASICManufacturer = iota
-	ASICManufacturerBitmain
-	ASICManufacturerMicroBT
-	ASICManufacturerCanaan
-	ASICManufacturerGoldshell
+	ManagedASICManufacturerUnknown ManagedASICManufacturer = iota
+	ManagedASICManufacturerBitmain
+	ManagedASICManufacturerMicroBT
+	ManagedASICManufacturerCanaan
+	ManagedASICManufacturerGoldshell
 )
 
-// ASICStatus represents device status
-type ASICStatus int32
+// ManagedASICStatus represents device status
+type ManagedASICStatus int32
 
 const (
-	ASICStatusOffline ASICStatus = iota
-	ASICStatusOnline
-	ASICStatusMining
-	ASICStatusError
-	ASICStatusOverheat
+	ManagedASICStatusOffline ManagedASICStatus = iota
+	ManagedASICStatusOnline
+	ManagedASICStatusMining
+	ManagedASICStatusError
+	ManagedASICStatusOverheat
 )
 
 // DeviceSpecs contains device specifications - read-only after initialization
@@ -90,7 +93,7 @@ func NewASICHardware(logger *zap.Logger) *ASICHardware {
 	return &ASICHardware{
 		logger:   logger,
 		workChan: make(chan *Work, 1000), // Buffered for performance
-		devices:  make([]*ASICDevice, 0, 16), // Pre-allocate for common case
+		devices:  make([]*ManagedASICDevice, 0, 16), // Pre-allocate for common case
 	}
 }
 
@@ -117,7 +120,7 @@ func (h *ASICHardware) Initialize(config *OptimizedConfig) error {
 	var wg sync.WaitGroup
 	for _, device := range devices {
 		wg.Add(1)
-		go func(d *ASICDevice) {
+		go func(d *ManagedASICDevice) {
 			defer wg.Done()
 			if err := h.initDevice(d); err != nil {
 				h.logger.Warn("Device init failed",
@@ -197,7 +200,7 @@ func (h *ASICHardware) GetTemperature() float64 {
 	
 	h.mu.RLock()
 	for _, device := range h.devices {
-		if device.Status.Load() == int32(ASICStatusMining) {
+		if device.Status.Load() == int32(ManagedASICStatusMining) {
 			total += device.Temperature.Load()
 			count++
 		}
@@ -216,7 +219,7 @@ func (h *ASICHardware) GetPowerUsage() float64 {
 }
 
 // discoverDevices performs fast network scan for ASIC devices
-func (h *ASICHardware) discoverDevices() ([]*ASICDevice, error) {
+func (h *ASICHardware) discoverDevices() ([]*ManagedASICDevice, error) {
 	// Common ASIC IP patterns and ports - optimized scan
 	scanTargets := []struct {
 		network string
@@ -227,7 +230,7 @@ func (h *ASICHardware) discoverDevices() ([]*ASICDevice, error) {
 		{"10.0.0.0/24", []int{4028, 80}},
 	}
 	
-	var devices []*ASICDevice
+	var devices []*ManagedASICDevice
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	
@@ -248,13 +251,13 @@ func (h *ASICHardware) discoverDevices() ([]*ASICDevice, error) {
 }
 
 // scanNetwork scans network range for ASIC devices
-func (h *ASICHardware) scanNetwork(network string, ports []int) []*ASICDevice {
+func (h *ASICHardware) scanNetwork(network string, ports []int) []*ManagedASICDevice {
 	_, ipnet, err := net.ParseCIDR(network)
 	if err != nil {
 		return nil
 	}
 	
-	var devices []*ASICDevice
+	var devices []*ManagedASICDevice
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	
@@ -294,7 +297,7 @@ func (h *ASICHardware) incIP(ip net.IP) {
 }
 
 // probeDevice probes for ASIC at IP:port
-func (h *ASICHardware) probeDevice(ip string, port int) *ASICDevice {
+func (h *ASICHardware) probeDevice(ip string, port int) *ManagedASICDevice {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 2*time.Second)
 	if err != nil {
 		return nil
@@ -303,11 +306,11 @@ func (h *ASICHardware) probeDevice(ip string, port int) *ASICDevice {
 	
 	// Try to identify ASIC type
 	manufacturer, model := h.identifyASIC(conn, port)
-	if manufacturer == ASICManufacturerUnknown {
+	if manufacturer == ManagedASICManufacturerUnknown {
 		return nil
 	}
 	
-	device := &ASICDevice{
+	device := &ManagedASICDevice{
 		Name:          fmt.Sprintf("%s %s", h.manufacturerName(manufacturer), model),
 		Manufacturer:  manufacturer,
 		Model:         model,
@@ -315,7 +318,7 @@ func (h *ASICHardware) probeDevice(ip string, port int) *ASICDevice {
 		Port:          port,
 		Algorithm:     h.getAlgorithm(manufacturer, model),
 	}
-	device.Status.Store(int32(ASICStatusOffline))
+	device.Status.Store(int32(ManagedASICStatusOffline))
 	device.LastSeen.Store(time.Now().Unix())
 	
 	h.logger.Info("ASIC discovered",
@@ -326,51 +329,51 @@ func (h *ASICHardware) probeDevice(ip string, port int) *ASICDevice {
 }
 
 // identifyASIC identifies ASIC manufacturer and model
-func (h *ASICHardware) identifyASIC(conn net.Conn, port int) (ASICManufacturer, string) {
+func (h *ASICHardware) identifyASIC(conn net.Conn, port int) (ManagedASICManufacturer, string) {
 	if port == 4028 {
 		return h.identifyByCGMiner(conn)
 	} else if port == 80 {
 		return h.identifyByHTTP(conn)
 	}
-	return ASICManufacturerUnknown, ""
+	return ManagedASICManufacturerUnknown, ""
 }
 
 // identifyByCGMiner identifies ASIC using CGMiner API
-func (h *ASICHardware) identifyByCGMiner(conn net.Conn) (ASICManufacturer, string) {
+func (h *ASICHardware) identifyByCGMiner(conn net.Conn) (ManagedASICManufacturer, string) {
 	cmd := `{"command":"version"}`
 	
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	if _, err := conn.Write([]byte(cmd)); err != nil {
-		return ASICManufacturerUnknown, ""
+		return ManagedASICManufacturerUnknown, ""
 	}
 	
 	buf := make([]byte, 2048)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return ASICManufacturerUnknown, ""
+		return ManagedASICManufacturerUnknown, ""
 	}
 	
 	var response map[string]interface{}
 	if err := json.Unmarshal(buf[:n], &response); err != nil {
-		return ASICManufacturerUnknown, ""
+		return ManagedASICManufacturerUnknown, ""
 	}
 	
 	return h.parseVersionResponse(response)
 }
 
 // identifyByHTTP identifies ASIC using HTTP
-func (h *ASICHardware) identifyByHTTP(conn net.Conn) (ASICManufacturer, string) {
+func (h *ASICHardware) identifyByHTTP(conn net.Conn) (ManagedASICManufacturer, string) {
 	req := "GET / HTTP/1.1\r\nHost: " + conn.RemoteAddr().String() + "\r\n\r\n"
 	
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	if _, err := conn.Write([]byte(req)); err != nil {
-		return ASICManufacturerUnknown, ""
+		return ManagedASICManufacturerUnknown, ""
 	}
 	
 	buf := make([]byte, 2048)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return ASICManufacturerUnknown, ""
+		return ManagedASICManufacturerUnknown, ""
 	}
 	
 	response := string(buf[:n])
@@ -378,7 +381,7 @@ func (h *ASICHardware) identifyByHTTP(conn net.Conn) (ASICManufacturer, string) 
 }
 
 // parseVersionResponse parses CGMiner version response
-func (h *ASICHardware) parseVersionResponse(response map[string]interface{}) (ASICManufacturer, string) {
+func (h *ASICHardware) parseVersionResponse(response map[string]interface{}) (ManagedASICManufacturer, string) {
 	if version, ok := response["VERSION"]; ok {
 		if versionArray, ok := version.([]interface{}); ok && len(versionArray) > 0 {
 			if versionInfo, ok := versionArray[0].(map[string]interface{}); ok {
@@ -388,57 +391,57 @@ func (h *ASICHardware) parseVersionResponse(response map[string]interface{}) (AS
 			}
 		}
 	}
-	return ASICManufacturerUnknown, ""
+	return ManagedASICManufacturerUnknown, ""
 }
 
 // parseHTTPResponse parses HTTP response for ASIC identification
-func (h *ASICHardware) parseHTTPResponse(response string) (ASICManufacturer, string) {
+func (h *ASICHardware) parseHTTPResponse(response string) (ManagedASICManufacturer, string) {
 	lower := strings.ToLower(response)
 	
 	if strings.Contains(lower, "whatsminer") {
 		models := []string{"M60", "M56", "M53", "M50", "M32", "M31", "M30"}
 		for _, model := range models {
 			if strings.Contains(lower, strings.ToLower(model)) {
-				return ASICManufacturerMicroBT, "WhatsMiner " + model
+				return ManagedASICManufacturerMicroBT, "WhatsMiner " + model
 			}
 		}
-		return ASICManufacturerMicroBT, "WhatsMiner"
+		return ManagedASICManufacturerMicroBT, "WhatsMiner"
 	}
 	
-	return ASICManufacturerUnknown, ""
+	return ManagedASICManufacturerUnknown, ""
 }
 
 // parseDescription parses version description for model
-func (h *ASICHardware) parseDescription(desc string) (ASICManufacturer, string) {
+func (h *ASICHardware) parseDescription(desc string) (ManagedASICManufacturer, string) {
 	lower := strings.ToLower(desc)
 	
 	if strings.Contains(lower, "antminer") {
 		models := []string{"S21", "S19", "S17", "S15", "S9", "L7", "L3", "T19", "T17"}
 		for _, model := range models {
 			if strings.Contains(lower, strings.ToLower(model)) {
-				return ASICManufacturerBitmain, "Antminer " + model
+				return ManagedASICManufacturerBitmain, "Antminer " + model
 			}
 		}
-		return ASICManufacturerBitmain, "Antminer"
+		return ManagedASICManufacturerBitmain, "Antminer"
 	}
 	
 	if strings.Contains(lower, "avalon") {
-		return ASICManufacturerCanaan, "Avalon"
+		return ManagedASICManufacturerCanaan, "Avalon"
 	}
 	
-	return ASICManufacturerUnknown, ""
+	return ManagedASICManufacturerUnknown, ""
 }
 
 // manufacturerName returns manufacturer name
-func (h *ASICHardware) manufacturerName(manufacturer ASICManufacturer) string {
+func (h *ASICHardware) manufacturerName(manufacturer ManagedASICManufacturer) string {
 	switch manufacturer {
-	case ASICManufacturerBitmain:
+	case ManagedASICManufacturerBitmain:
 		return "Bitmain"
-	case ASICManufacturerMicroBT:
+	case ManagedASICManufacturerMicroBT:
 		return "MicroBT"
-	case ASICManufacturerCanaan:
+	case ManagedASICManufacturerCanaan:
 		return "Canaan"
-	case ASICManufacturerGoldshell:
+	case ManagedASICManufacturerGoldshell:
 		return "Goldshell"
 	default:
 		return "Unknown"
@@ -446,17 +449,17 @@ func (h *ASICHardware) manufacturerName(manufacturer ASICManufacturer) string {
 }
 
 // getAlgorithm returns algorithm for manufacturer/model
-func (h *ASICHardware) getAlgorithm(manufacturer ASICManufacturer, model string) string {
+func (h *ASICHardware) getAlgorithm(manufacturer ManagedASICManufacturer, model string) string {
 	switch manufacturer {
-	case ASICManufacturerBitmain:
+	case ManagedASICManufacturerBitmain:
 		if strings.Contains(model, "S") {
 			return "sha256d"
 		} else if strings.Contains(model, "L") {
 			return "scrypt"
 		}
-	case ASICManufacturerMicroBT:
+	case ManagedASICManufacturerMicroBT:
 		return "sha256d"
-	case ASICManufacturerGoldshell:
+	case ManagedASICManufacturerGoldshell:
 		if strings.Contains(model, "LT") {
 			return "scrypt"
 		}
@@ -465,7 +468,7 @@ func (h *ASICHardware) getAlgorithm(manufacturer ASICManufacturer, model string)
 }
 
 // initDevice initializes a device for mining
-func (h *ASICHardware) initDevice(device *ASICDevice) error {
+func (h *ASICHardware) initDevice(device *ManagedASICDevice) error {
 	conn, err := net.DialTimeout("tcp", 
 		fmt.Sprintf("%s:%d", device.IPAddress, device.Port), 
 		5*time.Second)
@@ -475,7 +478,7 @@ func (h *ASICHardware) initDevice(device *ASICDevice) error {
 	
 	device.mu.Lock()
 	device.Connection = conn
-	device.Status.Store(int32(ASICStatusOnline))
+	device.Status.Store(int32(ManagedASICStatusOnline))
 	device.LastSeen.Store(time.Now().Unix())
 	device.mu.Unlock()
 	
@@ -525,7 +528,7 @@ func (h *ASICHardware) getDeviceSpecs(model string) *DeviceSpecs {
 }
 
 // runDevice runs mining for a single device
-func (h *ASICHardware) runDevice(ctx context.Context, device *ASICDevice) {
+func (h *ASICHardware) runDevice(ctx context.Context, device *ManagedASICDevice) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	
@@ -542,20 +545,20 @@ func (h *ASICHardware) runDevice(ctx context.Context, device *ASICDevice) {
 }
 
 // submitWorkToDevice submits work to specific device
-func (h *ASICHardware) submitWorkToDevice(device *ASICDevice, work *Work) {
+func (h *ASICHardware) submitWorkToDevice(device *ManagedASICDevice, work *Work) {
 	device.SubmittedWork.Add(1)
 	
 	// Send work based on manufacturer
 	switch device.Manufacturer {
-	case ASICManufacturerBitmain:
+	case ManagedASICManufacturerBitmain:
 		h.submitBitmainWork(device, work)
-	case ASICManufacturerMicroBT:
+	case ManagedASICManufacturerMicroBT:
 		h.submitMicroBTWork(device, work)
 	}
 }
 
 // submitBitmainWork submits work to Bitmain ASIC
-func (h *ASICHardware) submitBitmainWork(device *ASICDevice, work *Work) {
+func (h *ASICHardware) submitBitmainWork(device *ManagedASICDevice, work *Work) {
 	if device.Connection == nil {
 		return
 	}
@@ -573,12 +576,12 @@ func (h *ASICHardware) submitBitmainWork(device *ASICDevice, work *Work) {
 }
 
 // submitMicroBTWork submits work to MicroBT ASIC
-func (h *ASICHardware) submitMicroBTWork(device *ASICDevice, work *Work) {
+func (h *ASICHardware) submitMicroBTWork(device *ManagedASICDevice, work *Work) {
 	// MicroBT implementation would use HTTP API
 }
 
 // updateDeviceStats updates device statistics
-func (h *ASICHardware) updateDeviceStats(device *ASICDevice) {
+func (h *ASICHardware) updateDeviceStats(device *ManagedASICDevice) {
 	if device.Connection == nil {
 		return
 	}
@@ -608,11 +611,11 @@ func (h *ASICHardware) updateDeviceStats(device *ASICDevice) {
 	
 	h.parseStatsResponse(device, response)
 	device.LastSeen.Store(time.Now().Unix())
-	device.Status.Store(int32(ASICStatusMining))
+	device.Status.Store(int32(ManagedASICStatusMining))
 }
 
 // parseStatsResponse parses stats response and updates device
-func (h *ASICHardware) parseStatsResponse(device *ASICDevice, response map[string]interface{}) {
+func (h *ASICHardware) parseStatsResponse(device *ManagedASICDevice, response map[string]interface{}) {
 	// For simulation, use model-based values
 	specs := h.getDeviceSpecs(device.Model)
 	
@@ -650,7 +653,7 @@ func (h *ASICHardware) updateMetrics() {
 	
 	h.mu.RLock()
 	for _, device := range h.devices {
-		if device.Status.Load() == int32(ASICStatusMining) {
+		if device.Status.Load() == int32(ManagedASICStatusMining) {
 			totalHashRate += device.HashRate.Load()
 			totalPower += uint64(device.PowerUsage.Load())
 			activeDevices++
@@ -664,7 +667,7 @@ func (h *ASICHardware) updateMetrics() {
 }
 
 // stopDevice stops a specific device
-func (h *ASICHardware) stopDevice(device *ASICDevice) {
+func (h *ASICHardware) stopDevice(device *ManagedASICDevice) {
 	device.mu.Lock()
 	defer device.mu.Unlock()
 	
@@ -672,7 +675,7 @@ func (h *ASICHardware) stopDevice(device *ASICDevice) {
 		device.Connection.Close()
 		device.Connection = nil
 	}
-	device.Status.Store(int32(ASICStatusOffline))
+	device.Status.Store(int32(ManagedASICStatusOffline))
 }
 
 // GetStats returns optimized statistics

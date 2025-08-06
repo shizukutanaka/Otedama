@@ -200,15 +200,15 @@ type DDoSStats struct {
 
 // NewDDoSProtection creates a new DDoS protection system
 func NewDDoSProtection(config DDoSConfig, logger *zap.Logger) *DDoSProtection {
-	// Set defaults
+	// Set conservative defaults for production
 	if config.RequestsPerSecond <= 0 {
-		config.RequestsPerSecond = 100
+		config.RequestsPerSecond = 10 // More conservative for mining operations
 	}
 	if config.BurstSize <= 0 {
 		config.BurstSize = config.RequestsPerSecond * 2
 	}
 	if config.ConnectionLimit <= 0 {
-		config.ConnectionLimit = 10000
+		config.ConnectionLimit = 1000 // Reduced from 10000
 	}
 	if config.IPConnectionLimit <= 0 {
 		config.IPConnectionLimit = 100

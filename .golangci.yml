@@ -1,0 +1,136 @@
+# GolangCI-Lint configuration for Otedama
+# This configuration enforces code quality and readability standards
+
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    # Default linters
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Go vet
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Static analysis
+    - typecheck     # Type checking
+    - unused        # Find unused code
+    
+    # Additional linters for code quality
+    - bodyclose     # Check HTTP response body is closed
+    - dupl          # Code duplication
+    - exportloopref # Check loop variable export
+    - gocognit      # Cognitive complexity
+    - goconst       # Find repeated strings
+    - gocyclo       # Cyclomatic complexity
+    - gofmt         # Go formatting
+    - goimports     # Import formatting
+    - gosec         # Security checks
+    - lll           # Line length limit
+    - misspell      # Spell checking
+    - nakedret      # Naked returns
+    - prealloc      # Preallocate slices
+    - revive        # Comprehensive linter
+    - unconvert     # Unnecessary type conversions
+    - unparam       # Unused parameters
+    
+  disable:
+    - gochecknoglobals  # We use some globals for performance
+    - gomnd             # Magic numbers are sometimes OK with good names
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    
+  govet:
+    check-shadowing: true
+    enable-all: true
+    
+  gocognit:
+    min-complexity: 30
+    
+  gocyclo:
+    min-complexity: 15
+    
+  dupl:
+    threshold: 100
+    
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+    
+  lll:
+    line-length: 120
+    tab-width: 4
+    
+  misspell:
+    locale: US
+    
+  nakedret:
+    max-func-lines: 30
+    
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+    
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+      
+  gosec:
+    excludes:
+      - G204 # Allow exec with variable input in specific cases
+    confidence: medium
+    severity: medium
+    
+issues:
+  exclude-rules:
+    # Exclude test files from some linters
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - lll
+        
+    # Exclude generated files
+    - path: \.pb\.go
+      linters:
+        - all
+        
+    # Allow longer lines in struct tags
+    - source: "^//go:generate "
+      linters:
+        - lll
+        
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  
+  # Don't hide multiple issues from the same file
+  exclude-use-default: false

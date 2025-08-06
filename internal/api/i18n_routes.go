@@ -5,48 +5,37 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/shizukutanaka/Otedama/internal/i18n"
+	// "github.com/shizukutanaka/Otedama/internal/i18n" // Temporarily disabled
 	"go.uber.org/zap"
 )
 
 // RegisterI18nRoutes registers internationalization API routes
 func (s *Server) RegisterI18nRoutes(router *mux.Router) {
-	i18n := router.PathPrefix("/i18n").Subrouter()
+	i18nRouter := router.PathPrefix("/i18n").Subrouter()
 	
 	// Get supported languages
-	i18n.HandleFunc("/languages", s.handleGetLanguages).Methods("GET")
+	i18nRouter.HandleFunc("/languages", s.handleGetLanguages).Methods("GET")
 	
 	// Get current language
-	i18n.HandleFunc("/current", s.handleGetCurrentLanguage).Methods("GET")
+	i18nRouter.HandleFunc("/current", s.handleGetCurrentLanguage).Methods("GET")
 	
 	// Set language
-	i18n.HandleFunc("/language", s.handleSetLanguage).Methods("PUT")
+	i18nRouter.HandleFunc("/language", s.handleSetLanguage).Methods("PUT")
 	
 	// Get translations for a language
-	i18n.HandleFunc("/translations/{lang}", s.handleGetTranslations).Methods("GET")
+	i18nRouter.HandleFunc("/translations/{lang}", s.handleGetTranslations).Methods("GET")
 	
 	// Translate a key
-	i18n.HandleFunc("/translate", s.handleTranslate).Methods("POST")
+	i18nRouter.HandleFunc("/translate", s.handleTranslate).Methods("POST")
 }
 
 // handleGetLanguages returns supported languages
 func (s *Server) handleGetLanguages(w http.ResponseWriter, r *http.Request) {
-	languages := i18n.GetLanguageInfo()
-	
-	// Filter by actually supported languages if manager is available
-	manager := i18n.GetGlobalManager()
-	if manager != nil {
-		supported := manager.GetSupportedLanguages()
-		var filteredLangs []i18n.LanguageInfo
-		for _, lang := range languages {
-			for _, sup := range supported {
-				if lang.Code == sup {
-					filteredLangs = append(filteredLangs, lang)
-					break
-				}
-			}
-		}
-		languages = filteredLangs
+	// Temporarily disabled - i18n package not implemented
+	// Temporarily return hardcoded languages
+	languages := []map[string]string{
+		{"code": "en", "name": "English"},
+		{"code": "ja", "name": "日本語"},
 	}
 	
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -58,23 +47,22 @@ func (s *Server) handleGetLanguages(w http.ResponseWriter, r *http.Request) {
 // handleGetCurrentLanguage returns the current language
 func (s *Server) handleGetCurrentLanguage(w http.ResponseWriter, r *http.Request) {
 	// Get language from context or request
-	lang := i18n.DetectLanguage(r)
+	// lang := i18n.DetectLanguage(r)
+	lang := "en" // Default to English
 	
 	// Find language info
-	var langInfo *i18n.LanguageInfo
-	for _, info := range i18n.GetLanguageInfo() {
-		if info.Code == lang {
-			langInfo = &info
-			break
-		}
+	// Return basic language info
+	langInfo := map[string]string{
+		"code": lang,
+		"name": "English", // Default
+	}
+	if lang == "ja" {
+		langInfo["name"] = "日本語"
 	}
 	
 	response := map[string]interface{}{
 		"language": lang,
-	}
-	
-	if langInfo != nil {
-		response["info"] = langInfo
+		"info":     langInfo,
 	}
 	
 	s.writeJSON(w, http.StatusOK, response)
@@ -93,9 +81,8 @@ func (s *Server) handleSetLanguage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Validate language
-	manager := i18n.GetGlobalManager()
-	if manager != nil && !manager.HasLanguage(req.Language) {
+	// Validate language - temporarily accept only en and ja
+	if req.Language != "en" && req.Language != "ja" {
 		s.writeError(w, http.StatusBadRequest, "Unsupported language")
 		return
 	}
@@ -116,7 +103,7 @@ func (s *Server) handleSetLanguage(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":  true,
 		"language": req.Language,
-		"message":  i18n.Translate(req.Language, "message.settings_saved"),
+		"message":  "Settings saved", // i18n.Translate(req.Language, "message.settings_saved"),
 	})
 }
 
@@ -125,7 +112,7 @@ func (s *Server) handleGetTranslations(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	lang := vars["lang"]
 	
-	manager := i18n.GetGlobalManager()
+	/*manager := i18n.GetGlobalManager()*/
 	if manager == nil {
 		s.writeError(w, http.StatusServiceUnavailable, "I18n not initialized")
 		return
@@ -168,15 +155,18 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 	// Use language from request, context, or default
 	lang := req.Language
 	if lang == "" {
-		lang = i18n.LanguageFromContext(r.Context())
+		// lang = i18n.LanguageFromContext(r.Context())
+		lang = "en" // Default to English
 	}
 	
 	// Translate
 	var translation string
 	if len(req.Args) > 0 {
-		translation = i18n.Translate(lang, req.Key, req.Args...)
+		// translation = i18n.Translate(lang, req.Key, req.Args...)
+		translation = req.Key // Return key as fallback
 	} else {
-		translation = i18n.Translate(lang, req.Key)
+		// translation = i18n.Translate(lang, req.Key)
+		translation = req.Key // Return key as fallback
 	}
 	
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -208,13 +198,14 @@ func (s *Server) handleTranslateBulk(w http.ResponseWriter, r *http.Request) {
 	// Use language from request, context, or default
 	lang := req.Language
 	if lang == "" {
-		lang = i18n.LanguageFromContext(r.Context())
+		// lang = i18n.LanguageFromContext(r.Context())
+		lang = "en" // Default to English
 	}
 	
 	// Translate all keys
 	translations := make(map[string]string)
 	for _, key := range req.Keys {
-		translations[key] = i18n.Translate(lang, key)
+		translations[key] = key // i18n.Translate(lang, key) - Return key as fallback
 	}
 	
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{

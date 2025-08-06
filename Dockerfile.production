@@ -1,0 +1,98 @@
+# Multi-stage production Dockerfile for Otedama P2P Mining Pool
+# Optimized for performance and minimal image size
+
+# Stage 1: Build stage
+FROM golang:1.21-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    git \
+    gcc \
+    musl-dev \
+    make \
+    ca-certificates \
+    tzdata
+
+# Create non-root user for runtime
+RUN adduser -D -g '' otedama
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build with optimizations
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-w -s -X main.version=$(git describe --tags --always)" \
+    -a -installsuffix cgo \
+    -o otedama cmd/otedama/main.go
+
+# Stage 2: Runtime stage
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    postgresql-client \
+    curl \
+    jq
+
+# Copy timezone data
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Copy user from builder
+COPY --from=builder /etc/passwd /etc/passwd
+
+# Create necessary directories
+RUN mkdir -p /app/config /app/data /app/logs && \
+    chown -R otedama:otedama /app
+
+# Copy binary from builder
+COPY --from=builder /build/otedama /app/otedama
+
+# Copy default config
+COPY --from=builder /build/config.example.yaml /app/config/config.example.yaml
+
+# Copy web assets if any
+COPY --from=builder /build/web /app/web
+
+# Switch to non-root user
+USER otedama
+WORKDIR /app
+
+# Expose ports
+# Stratum ports
+EXPOSE 3333 3334 3335 3336 3337
+# API/Web port
+EXPOSE 8080
+# Federation port
+EXPOSE 4444
+# Monitoring port
+EXPOSE 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/api/v1/health || exit 1
+
+# Volume for persistent data
+VOLUME ["/app/data", "/app/logs"]
+
+# Default environment variables
+ENV OTEDAMA_CONFIG_PATH=/app/config/config.yaml \
+    OTEDAMA_DATA_PATH=/app/data \
+    OTEDAMA_LOG_PATH=/app/logs \
+    OTEDAMA_LOG_LEVEL=info \
+    OTEDAMA_ENV=production
+
+# Entrypoint script for flexible configuration
+COPY --from=builder /build/scripts/docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["start"]

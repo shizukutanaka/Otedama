@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/zkp"
+	// "github.com/shizukutanaka/Otedama/internal/zkp" // Temporarily disabled
 	"go.uber.org/zap"
 )
 
@@ -57,12 +57,12 @@ type ComplianceRule interface {
 
 // verifyZKPProof verifies Zero Knowledge Proof
 func (s *StratumServer) verifyZKPProof(workerName string, proofData map[string]interface{}) (bool, error) {
-	proof, ok := proofData["proof"].(string)
+	_, ok := proofData["proof"].(string) // proof variable commented out for ZKP
 	if !ok {
 		return false, fmt.Errorf("missing proof")
 	}
 	
-	challenge, ok := proofData["challenge"].(string)
+	_, ok = proofData["challenge"].(string) // challenge variable commented out for ZKP
 	if !ok {
 		return false, fmt.Errorf("missing challenge")
 	}

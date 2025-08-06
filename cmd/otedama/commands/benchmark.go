@@ -141,7 +141,7 @@ func runValidationBenchmark(ctx context.Context, logger *zap.Logger) {
 		share := &mining.Share{
 			JobID:     job.JobID,
 			Nonce:     uint64(validations),
-			Timestamp: uint32(time.Now().Unix()),
+			Timestamp: time.Now().Unix(),
 		}
 
 		result, _ := validator.ValidateShare(share, job)

@@ -27,6 +27,11 @@ const (
 	PingMessage     MessageType = "ping"
 	TxMessage       MessageType = "tx"
 	PeerListMessage MessageType = "peerlist"
+
+	// DEX/DeFi messages
+	SwapMessage         MessageType = "swap"
+	AddLiquidityMessage MessageType = "add_liquidity"
+	BorrowMessage       MessageType = "borrow"
 	
 	// Additional protocol messages
 	HandshakeMessage MessageType = "handshake"

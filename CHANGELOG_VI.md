@@ -5,7 +5,7 @@ Tất cả các thay đổi đáng chú ý của Otedama sẽ được ghi lại
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 và dự án này tuân thủ [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.5] - 2025-08-05
+## [2.1.5] - 2025-08-06
 
 ### Đã thêm
 - Hỗ trợ đa ngôn ngữ toàn diện với tệp README bằng 30 ngôn ngữ

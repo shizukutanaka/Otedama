@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/shizukutanaka/Otedama/internal/utils"
+	"github.com/otedama/otedama/internal/utils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

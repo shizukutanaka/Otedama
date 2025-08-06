@@ -427,15 +427,6 @@ type JobDistributor struct {
 	lastJobTime  time.Time
 }
 
-// WorkerStats represents worker statistics
-type WorkerStats struct {
-	ID            string
-	HashRate      uint64
-	SharesSubmitted uint64
-	SharesAccepted  uint64
-	LastShare       time.Time
-}
-
 // JobQueue manages a queue of mining jobs
 type JobQueue struct {
 	jobs     []*MiningJob

@@ -60,7 +60,6 @@ Build Info:
   Platform:   {{.Platform}}
 
 License: MIT
-Website: https://github.com/shizukutanaka/Otedama
 `)
 }
 

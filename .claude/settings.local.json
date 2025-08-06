@@ -46,7 +46,25 @@
       "Bash(dos2unix:*)",
       "Bash(cat:*)",
       "Bash(./cleanup_optimization.sh)",
-      "Bash(./scripts/enterprise_code_checker.sh:*)"
+      "Bash(./scripts/enterprise_code_checker.sh:*)",
+      "Bash(test:*)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" version)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build ./internal/mining/)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build ./internal/crypto/)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build ./cmd/otedama/ \")",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build ./cmd/otedama)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build ./cmd/test-runner)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" mod download)",
+      "Bash(/usr/local/go/bin/go build ./cmd/otedama/)",
+      "Bash(mv:*)",
+      "Bash(./update_changelogs.sh)",
+      "Bash(/bin/rm -f internal/database/repositories_clean.go)",
+      "Bash(del ARCHITECTURE.md)",
+      "Bash(/usr/local/go/bin/go build ./cmd/otedama)",
+      "Bash(./fix_imports.sh)",
+      "Bash(for:*)",
+      "Bash(do echo:*)",
+      "Bash(done)"
     ],
     "deny": []
   }

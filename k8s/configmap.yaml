@@ -5,85 +5,237 @@ metadata:
   namespace: otedama
   labels:
     app: otedama
+    component: config
 data:
   config.yaml: |
-    app:
-      name: "Otedama"
-      version: "2.1.0"
-      environment: "production"
-      log_level: "info"
-    
-    pool:
-      enabled: true
-      fee: 1.0
-      min_payout: 0.001
-      payout_interval: 24h
-      payment_type: "PPLNS"
-    
-    p2p:
-      enabled: true
-      port: 30303
-      max_peers: 50
-      network_id: 1337
-      discovery: true
-      bootstrap_nodes: []
-    
-    stratum:
-      enabled: true
-      port: 3333
-      max_connections: 10000
-      difficulty: 16384
-      var_diff:
-        enabled: true
-        min_diff: 1024
-        max_diff: 65536
-        target_time: 15
-        retarget_time: 120
-        variance_percent: 30
-    
+    system:
+      node_id: "otedama-k8s-node"
+      data_dir: "/app/data"
+      max_cpu: 0
+      max_memory_mb: 0
+      graceful_timeout: 30s
+      startup_timeout: 60s
+
     mining:
-      algorithms:
-        - SHA256d
-        - Ethash
-        - KawPow
-        - RandomX
-        - Scrypt
-      cpu:
+      algorithm: "sha256d"
+      workers: 2
+      cpu_threads: 0
+      gpu_enabled: false
+      gpu_devices: []
+      intensity: 10
+      share_timeout: 5s
+      pools:
+        - name: "Primary Pool"
+          url: "stratum+tcp://pool.example.com:3333"
+          user: "your_wallet_address.worker1"
+          password: "x"
+          priority: 1
+          enabled: true
+
+    network:
+      max_connections: 1000
+      connect_timeout: 10s
+      keep_alive: 30s
+      p2p:
         enabled: true
-        threads: 0
-        affinity: false
-        priority: 0
-      gpu:
+        listen_addr: ":9333"
+        bootstrap_peers:
+          - "seed1.otedama.network:9333"
+          - "seed2.otedama.network:9333"
+        max_peers: 100
+      stratum:
         enabled: true
-        cuda: true
-        opencl: true
-      profit_switching:
-        enabled: true
-        check_interval: 5m
-        switch_threshold: 5.0
-        min_run_time: 30m
-    
+        listen_addr: ":3333"
+        max_clients: 1000
+        difficulty: 1.0
+
     api:
       enabled: true
-      listen_addr: ":8081"
-      enable_auth: true
-      enable_rate_limit: true
+      listen_addr: ":8080"
+      tls_enabled: false
+      tls_cert: ""
+      tls_key: ""
+      allow_origins:
+        - "http://localhost:*"
+        - "http://127.0.0.1:*"
       rate_limit: 100
-      enable_cors: true
-      allowed_origins: ["*"]
-    
-    dashboard:
-      enabled: true
-      listen_address: ":8080"
-      enable_auth: false
-    
+      ws_enabled: true
+      ws_max_clients: 100
+
+    security:
+      auth_enabled: true
+      auth_mode: "jwt"
+      jwt_secret: ""
+      ddos_protection:
+        enabled: true
+        requests_per_second: 10
+        burst_size: 20
+        block_duration: 1h
+        whitelisted_ips: []
+      rate_limiting:
+        enabled: true
+        requests_per_second: 10
+        burst_size: 20
+        enable_ip_limit: true
+        enable_user_limit: true
+      audit_enabled: true
+      audit_retention: 720h
+
     monitoring:
-      prometheus:
-        enabled: true
-        listen_addr: ":9090"
-      hardware:
-        enabled: true
-        update_interval: 10s
-        temp_threshold: 85
-        power_threshold: 300
-        memory_threshold: 90
+      metrics_enabled: true
+      metrics_interval: 10s
+      prometheus_enabled: true
+      prometheus_addr: ":9090"
+      dashboard_enabled: true
+      dashboard_addr: ":8081"
+
+    database:
+      type: "postgres"
+      dsn: "postgresql://otedama:$(DB_PASSWORD)@postgres-service:5432/otedama?sslmode=require"
+      max_connections: 20
+      connection_lifetime: 30m
+
+    logging:
+      level: "info"
+      format: "json"
+      output_paths:
+        - "stdout"
+      error_output_paths:
+        - "stderr"
+      rotation_enabled: false
+      max_size_mb: 100
+      max_backups: 10
+      max_age_days: 30
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: otedama
+  labels:
+    app: prometheus
+    component: config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - "alert.rules"
+
+    scrape_configs:
+      - job_name: 'otedama'
+        static_configs:
+          - targets: ['otedama-service:9090']
+        metrics_path: /metrics
+        scrape_interval: 10s
+
+      - job_name: 'postgres'
+        static_configs:
+          - targets: ['postgres-service:9187']
+        scrape_interval: 30s
+
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis-service:9121']
+        scrape_interval: 30s
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - otedama
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+  alert.rules: |
+    groups:
+      - name: otedama.rules
+        rules:
+          - alert: OtedamaDown
+            expr: up{job="otedama"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Otedama instance down"
+              description: "Otedama instance has been down for more than 1 minute"
+
+          - alert: HighCPUUsage
+            expr: rate(process_cpu_seconds_total{job="otedama"}[5m]) * 100 > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage detected"
+              description: "CPU usage is above 80% for more than 5 minutes"
+
+          - alert: HighMemoryUsage
+            expr: process_resident_memory_bytes{job="otedama"} / 1024 / 1024 > 1000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage detected"
+              description: "Memory usage is above 1GB for more than 5 minutes"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: otedama
+  labels:
+    app: nginx
+    component: config
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        upstream otedama {
+            server otedama-service:8080;
+        }
+
+        server {
+            listen 80;
+            server_name _;
+
+            location / {
+                proxy_pass http://otedama;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+            }
+        }
+    }

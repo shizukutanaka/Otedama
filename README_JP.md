@@ -1,46 +1,46 @@
-# Otedama - 高性能暗号通貨マイニングソフトウェア
+# Otedama - エンタープライズグレード P2Pマイニングプール＆マイニングソフトウェア
 
-[![バージョン](https://img.shields.io/badge/version-2.1.4-blue.svg)](https://github.com/shizukutanaka/Otedama)
-[![ライセンス](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Go バージョン](https://img.shields.io/badge/go-1.21+-red.svg)](https://golang.org)
-[![ビルド状態](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/shizukutanaka/Otedama/actions)
+**バージョン**: 2.1.5  
+**ライセンス**: MIT  
+**Go バージョン**: 1.21以上  
+**アーキテクチャ**: P2Pプール対応マイクロサービス  
+**リリース日**: 2025年8月6日
 
-Otedamaは、効率的で信頼性の高いマイニング運用のために設計されたプロフェッショナルグレードの暗号通貨マイニングソフトウェアです。最高のパフォーマンスを実現するためにGoで構築され、シンプルさ、効率性、保守性に重点を置いてCPU、GPU、ASICマイニングをサポートしています。
+Otedamaは、最高の効率性と信頼性を実現するために設計されたエンタープライズグレードのP2Pマイニングプールおよびマイニングソフトウェアです。John Carmack（パフォーマンス）、Robert C. Martin（クリーンアーキテクチャ）、Rob Pike（シンプリシティ）の設計原則に従い、国家レベルのスケーラビリティを備えた包括的なCPU/GPU/ASICマイニングをサポートしています。
 
-## 🚀 機能
+## アーキテクチャ概要
 
-### コアマイニング機能
-- **アルゴリズムサポート**: SHA256d（ビットコイン）、追加アルゴリズム用のモジュラーアーキテクチャ
-- **ハードウェアサポート**: CPU、GPU（NVIDIA/AMD）、ASICマイナー向けに最適化
-- **Stratumプロトコル**: 暗号化付きの完全なStratum v1およびv2サポート
-- **P2Pマイニング**: 分散型マイニングプール機能
+### P2Pマイニングプール
+- **分散型プール管理**: 自動フェイルオーバー機能を備えた分散マイニングプール
+- **報酬分配システム**: マルチ通貨対応の高度なPPS/PPLNSアルゴリズム
+- **フェデレーションプロトコル**: 耐障害性向上のためのプール間通信
+- **国家レベル監視**: 政府機関での運用に適したエンタープライズ監視
 
-### パフォーマンスと効率性
-- **軽量設計**: 最適化されたメモリ管理による最小限のリソース使用
-- **高速起動**: 効率的な初期化によるサブ秒起動時間
-- **リアルタイムモニタリング**: オーバーヘッドなしの組み込みパフォーマンスメトリクス
-- **自動最適化**: 自動ハードウェア検出と最適化
+### マイニング機能
+- **マルチアルゴリズム**: SHA256d、Ethash、RandomX、Scrypt、KawPow
+- **汎用ハードウェア対応**: 最適化されたCPU、GPU（CUDA/OpenCL）、ASICサポート
+- **高度なStratum**: 高性能マイナー向け拡張機能を備えたv1/v2完全対応
+- **ゼロコピー最適化**: キャッシュアウェアなデータ構造とNUMAアウェアメモリ
 
-### エンタープライズ対応
-- **高可用性**: 組み込みフェイルオーバーと接続回復
-- **セキュリティファースト**: TLS暗号化、API認証、レート制限
-- **本番環境モニタリング**: Prometheusメトリクス、ヘルスチェック、ロギング
-- **簡単な設定**: シンプルなYAMLベースの設定
+### エンタープライズ機能
+- **本番環境対応**: オートスケーリング対応のDocker/Kubernetesデプロイメント
+- **エンタープライズセキュリティ**: DDoS防御、レート制限、包括的な監査機能
+- **高可用性**: 自動フェイルオーバーを備えたマルチノード構成
+- **リアルタイム分析**: ライブダッシュボード統合のWebSocket API
 
-## 📋 要件
+## システム要件
 
 - Go 1.21以上
 - Linux、macOS、またはWindows
 - マイニングハードウェア（CPU/GPU/ASIC）
 - マイニングプールへのネットワーク接続
 
-## 🛠️ インストール
+## インストール
 
-### ソースから
+### ソースからのビルド
 
 ```bash
-# リポジトリをクローン
-git clone https://github.com/shizukutanaka/Otedama.git
+# ソースディレクトリからビルド
 cd Otedama
 
 # バイナリをビルド
@@ -50,66 +50,107 @@ make build
 make install
 ```
 
-### Go Installを使用
+### Go Buildを使用
 
 ```bash
-go install github.com/shizukutanaka/Otedama/cmd/otedama@latest
+go build ./cmd/otedama
 ```
 
-### Docker
+### Docker本番環境
 
 ```bash
-docker pull ghcr.io/shizukutanaka/otedama:latest
-docker run -d --name otedama -v ./config.yaml:/config.yaml ghcr.io/shizukutanaka/otedama:latest
+# 本番環境デプロイメント
+docker build -f Dockerfile.production -t otedama:production .
+docker run -d --name otedama \
+  -v ./config.yaml:/app/config/config.yaml:ro \
+  -v otedama_data:/app/data \
+  -p 3333:3333 -p 8080:8080 \
+  otedama:production
 ```
 
-## ⚡ クイックスタート
-
-### 1. 設定を作成
+### Kubernetes
 
 ```bash
-cp config.example.yaml config.yaml
+# 完全なスタックをデプロイ
+kubectl apply -f k8s/
 ```
 
-`config.yaml`を編集:
+## クイックスタートガイド
+
+### 1. 設定
 
 ```yaml
-# 基本設定
+# P2Pプール対応の本番環境設定
+app:
+  name: "Otedama"
+  mode: "production"
+
 mining:
-  algorithm: SHA256d
-  threads: 0  # 0 = 自動検出
+  algorithm: "sha256d"
+  enable_cpu: true
+  enable_gpu: true
+  enable_asic: true
+  
+  cpu:
+    threads: 0 # 自動検出
+    priority: "normal"
+  
+  gpu:
+    devices: [] # 全デバイスを自動検出
+    intensity: 20
+    temperature_limit: 85
+  
+  asic:
+    devices: [] # 自動探索
+    poll_interval: 5s
 
 pool:
-  url: "stratum+tcp://pool.example.com:3333"
-  user: "your_wallet_address.worker_name"
-  password: "x"
+  enable: true
+  address: "0.0.0.0:3333"
+  max_connections: 10000
+  fee_percentage: 1.0
+  rewards:
+    system: "PPLNS"
+    window: 2h
 
+stratum:
+  enable: true
+  address: "0.0.0.0:3333"
+  max_workers: 10000
+  
 api:
-  enabled: true
-  listen: "0.0.0.0:8080"
+  enable: true
+  address: "0.0.0.0:8080"
+  auth:
+    enabled: true
+    token_expiry: 24h
 
 monitoring:
-  enabled: true
-  prometheus: true
+  metrics:
+    enabled: true
+    address: "0.0.0.0:9090"
+  health:
+    enabled: true
+    address: "0.0.0.0:8081"
 ```
 
-### 2. マイニング開始
+### 2. デプロイメントオプション
 
 ```bash
-# プールマイニング（推奨）
-./otedama start
+# 開発環境
+./otedama serve --config config.yaml
 
-# ソロマイニング
-./otedama solo
+# 本番環境Docker
+docker-compose -f docker-compose.production.yml up -d
 
-# P2Pプールモード
-./otedama p2p
+# エンタープライズKubernetes
+kubectl apply -f k8s/
 
-# カスタム設定を使用
-./otedama start --config /path/to/config.yaml
+# 手動本番環境デプロイメント
+sudo ./scripts/production-deploy.sh
 ```
 
-### 3. パフォーマンスの監視
+### 3. パフォーマンス監視
 
 ```bash
 # ステータス確認
@@ -122,16 +163,16 @@ tail -f logs/otedama.log
 curl http://localhost:8080/api/status
 ```
 
-## 📊 パフォーマンス
+## パフォーマンスメトリクス
 
-Otedama v2.1.3は最大効率のために最適化されています：
+Otedamaは最高の効率性を実現するよう最適化されています：
 
-- **メモリ使用量**: v2.1.2より60%削減
-- **バイナリサイズ**: 50%小型化（約15MB）
+- **メモリ使用量**: 最小限のメモリフットプリントに最適化
+- **バイナリサイズ**: コンパクトなサイズ（約15MB）
 - **起動時間**: <500ms
-- **CPUオーバーヘッド**: モニタリングで<1%
+- **CPUオーバーヘッド**: 監視時<1%
 
-## 🏗️ アーキテクチャ
+## プロジェクト構造
 
 ```
 otedama/
@@ -145,15 +186,15 @@ otedama/
 └── config/        # 設定
 ```
 
-## 🔧 高度な設定
+## 高度な設定
 
 ### GPUマイニング
 
 ```yaml
 mining:
   gpu_enabled: true
-  gpu_devices: [0, 1]  # 特定のGPUまたは[]ですべて
-  intensity: 20        # 1-25、高いほどリソース使用増
+  gpu_devices: [0, 1]  # 特定のGPUまたは[]で全て
+  intensity: 20        # 1-25、高いほどリソース使用量増
 ```
 
 ### 複数プール
@@ -180,21 +221,21 @@ api:
   rate_limit: 100  # 分あたりのリクエスト数
 ```
 
-## 📡 APIリファレンス
+## APIリファレンス
 
 ### RESTエンドポイント
 
 - `GET /api/status` - マイニングステータス
-- `GET /api/stats` - 詳細な統計
+- `GET /api/stats` - 詳細統計情報
 - `GET /api/workers` - ワーカー情報
 - `POST /api/mining/start` - マイニング開始
 - `POST /api/mining/stop` - マイニング停止
 
 ### WebSocket
 
-リアルタイム更新のために`ws://localhost:8080/api/ws`に接続。
+リアルタイム更新は `ws://localhost:8080/api/ws` に接続してください。
 
-## 🐳 デプロイメント
+## デプロイメント
 
 ### Docker Compose
 
@@ -202,7 +243,7 @@ api:
 version: '3.8'
 services:
   otedama:
-    image: ghcr.io/shizukutanaka/otedama:latest
+    build: .
     volumes:
       - ./config.yaml:/config.yaml
     ports:
@@ -225,40 +266,39 @@ sudo systemctl enable otedama
 sudo systemctl start otedama
 ```
 
-## 🤝 貢献
+## 貢献について
 
-貢献を歓迎します！詳細は[貢献ガイド](CONTRIBUTING.md)をご覧ください。
+貢献を歓迎いたします。標準的な開発プラクティスに従ってください：
 
-1. リポジトリをフォーク
-2. フィーチャーブランチを作成（`git checkout -b feature/amazing-feature`）
-3. 変更をコミット（`git commit -m 'Add amazing feature'`）
-4. ブランチにプッシュ（`git push origin feature/amazing-feature`）
-5. プルリクエストを開く
+1. フィーチャーブランチを作成
+2. 変更を実装
+3. 徹底的にテスト
+4. レビューのため提出
 
-## 📄 ライセンス
+## ライセンス
 
-このプロジェクトはMITライセンスの下でライセンスされています - 詳細は[LICENSE](LICENSE)ファイルをご覧ください。
+本プロジェクトはMITライセンスの下でライセンスされています。詳細は[LICENSE](LICENSE)ファイルをご覧ください。
 
-## 🙏 謝辞
+## 謝辞
 
-- マイニングプロトコルのBitcoin Core開発者
-- 優れたライブラリのGoコミュニティ
-- Otedamaのすべての貢献者とユーザー
+- マイニングプロトコルに関するBitcoin Core開発者の皆様
+- 優れたライブラリを提供するGoコミュニティ
+- Otedamaの全ての貢献者およびユーザーの皆様
 
-## 📞 サポート
+## サポート
 
-- **問題**: [GitHub Issues](https://github.com/shizukutanaka/Otedama/issues)
-- **ディスカッション**: [GitHub Discussions](https://github.com/shizukutanaka/Otedama/discussions)
-- **Wiki**: [ドキュメント](https://github.com/shizukutanaka/Otedama/wiki)
+- `docs/`ディレクトリのドキュメントをご確認ください
+- `config.example.yaml`の設定例をご参照ください
+- 実行時は`/api/docs`でAPIドキュメントをご覧いただけます
 
-## 💰 寄付
+## 寄付
 
-Otedamaが役立つと思われる場合は、開発のサポートをご検討ください：
+Otedamaが有用であると感じていただけた場合、開発支援をご検討ください：
 
-**ビットコイン (BTC)**: `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`
+**Bitcoin (BTC)**: `1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa`
 
-皆様のサポートがOtedamaの維持と改善に役立ちます！
+皆様のご支援がOtedamaの維持と改善に役立ちます。
 
 ---
 
-**⚠️ 重要**: 暗号通貨マイニングは大量の計算リソースと電力を消費します。マイニングを開始する前に、コストと環境への影響を理解してください。
+**重要**: 暗号通貨マイニングは大量の計算リソースと電力を消費します。マイニングを開始する前に、コストと環境への影響を十分にご理解ください。

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document details the comprehensive mining enhancements implemented in Otedama v2.1.3, incorporating the latest 2025 mining optimization techniques, hardware support, and protocol improvements.
+This document details the comprehensive mining enhancements implemented in Otedama v2.1.5, incorporating the latest 2025 mining optimization techniques, hardware support, and protocol improvements.
 
 ## 1. Advanced Algorithm Optimizations
 

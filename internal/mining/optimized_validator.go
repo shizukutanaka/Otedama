@@ -31,10 +31,16 @@ type OptimizedShareValidator struct {
 	// Pre-computed difficulty targets
 	targetCache sync.Map // map[float64]*big.Int
 	
+	// Bloom filter for efficient duplicate detection
+	bloomFilter  []uint64
+	bloomSize    int
+	bloomMutex   sync.RWMutex
+	
 	// Performance stats
 	stats struct {
 		validated     atomic.Uint64
 		rejected      atomic.Uint64
+		duplicates    atomic.Uint64
 		avgTimeNs     atomic.Int64
 		peakTimeNs    atomic.Int64
 	}
@@ -51,14 +57,7 @@ type ValidationRequest struct {
 	Response chan<- *ValidationResult
 }
 
-// ValidationResult contains validation outcome
-type ValidationResult struct {
-	Valid       bool
-	Reason      string
-	Difficulty  float64
-	Hash        []byte
-	ProcessTime time.Duration
-}
+
 
 // ValidationCache provides fast lookups for recent validations
 type ValidationCache struct {
@@ -80,17 +79,22 @@ func NewOptimizedShareValidator(logger *zap.Logger, workers int) *OptimizedShare
 	}
 	
 	v := &OptimizedShareValidator{
-		logger:      logger,
-		workers:     workers,
-		workQueue:   make(chan *ValidationRequest, workers*100),
-		resultChan:  make(chan *ValidationResult, workers*10),
-		cache:       NewValidationCache(10000),
-		useAVX2:     hasAVX2Support(),
-		useAVX512:   hasAVX512Support(),
+		logger:       logger,
+		workers:      workers,
+		workQueue:    make(chan *ValidationRequest, workers*100),
+		resultChan:   make(chan *ValidationResult, workers*10),
+		cache:        NewValidationCache(10000),
+		bloomSize:    1 << 20, // 1M bits
+		bloomFilter:  make([]uint64, 1<<14), // 16K uint64s = 1M bits
+		useAVX2:      hasAVX2Support(),
+		useAVX512:    hasAVX512Support(),
 	}
 	
 	// Pre-compute common difficulty targets
 	v.precomputeTargets()
+	
+	// Start bloom filter cleaner
+	go v.bloomFilterCleaner()
 	
 	return v
 }
@@ -156,11 +160,12 @@ func (v *OptimizedShareValidator) ValidateShare(share *Share, job *Job) (*Valida
 // GetStats returns validation statistics
 func (v *OptimizedShareValidator) GetStats() ValidatorStats {
 	return ValidatorStats{
-		TotalValidated: v.stats.validated.Load(),
-		TotalRejected:  v.stats.rejected.Load(),
-		CacheHitRate:   v.calculateCacheHitRate(),
-		AvgTimeMs:      float64(v.stats.avgTimeNs.Load()) / 1e6,
-		PeakTimeMs:     float64(v.stats.peakTimeNs.Load()) / 1e6,
+		TotalValidated:  v.stats.validated.Load(),
+		TotalRejected:   v.stats.rejected.Load(),
+		TotalDuplicates: v.stats.duplicates.Load(),
+		CacheHitRate:    v.calculateCacheHitRate(),
+		AvgTimeMs:       float64(v.stats.avgTimeNs.Load()) / 1e6,
+		PeakTimeMs:      float64(v.stats.peakTimeNs.Load()) / 1e6,
 	}
 }
 
@@ -169,18 +174,18 @@ func (v *OptimizedShareValidator) GetStats() ValidatorStats {
 func (v *OptimizedShareValidator) validationWorker(id int) {
 	for req := range v.workQueue {
 		start := time.Now()
-		result := v.performValidation(req.Share, req.Job)
+		result := v.validateShare(req.Share, req.Job)
 		result.ProcessTime = time.Since(start)
-		
+
 		// Update stats
 		v.updateStats(result)
-		
+
 		// Send result
 		req.Response <- result
 	}
 }
 
-func (v *OptimizedShareValidator) performValidation(share *Share, job *Job) *ValidationResult {
+func (v *OptimizedShareValidator) validateShare(share *Share, job *Job) *ValidationResult {
 	// Validate nonce range
 	if share.Nonce < job.NonceStart || share.Nonce > job.NonceEnd {
 		return &ValidationResult{
@@ -188,15 +193,24 @@ func (v *OptimizedShareValidator) performValidation(share *Share, job *Job) *Val
 			Reason: "nonce out of range",
 		}
 	}
-	
+
 	// Validate timestamp
-	if abs(int64(share.Timestamp)-time.Now().Unix()) > 600 {
+	if abs(share.Timestamp-time.Now().Unix()) > 600 {
 		return &ValidationResult{
 			Valid:  false,
 			Reason: "timestamp out of range",
 		}
 	}
-	
+
+	// Quick duplicate check using bloom filter (before expensive hash computation)
+	if v.checkDuplicateBloom(share.Hash[:], share.Nonce) {
+		v.stats.duplicates.Add(1)
+		return &ValidationResult{
+			Valid:  false,
+			Reason: "duplicate share",
+		}
+	}
+
 	// Compute hash based on algorithm
 	var hash []byte
 	switch job.Algorithm {
@@ -210,20 +224,23 @@ func (v *OptimizedShareValidator) performValidation(share *Share, job *Job) *Val
 			Reason: "unsupported algorithm",
 		}
 	}
-	
+
 	// Check difficulty
 	hashInt := new(big.Int).SetBytes(hash)
-	target := v.getTarget(job.Difficulty)
-	
+	target := v.getTarget(float64(job.Difficulty))
+
 	if hashInt.Cmp(target) > 0 {
 		return &ValidationResult{
 			Valid:      false,
 			Reason:     "insufficient difficulty",
-			Difficulty: v.calculateDifficulty(hashInt),
+			Difficulty: uint64(v.calculateDifficulty(hashInt)),
 			Hash:       hash,
 		}
 	}
-	
+
+	// Mark share as seen in bloom filter
+	v.markSeenBloom(hash, share.Nonce)
+
 	return &ValidationResult{
 		Valid:      true,
 		Difficulty: job.Difficulty,
@@ -237,24 +254,24 @@ func (v *OptimizedShareValidator) computeSHA256D(share *Share, job *Job) []byte 
 	binary.LittleEndian.PutUint32(header[0:4], job.Version)
 	copy(header[4:36], job.PrevHash)
 	copy(header[36:68], job.MerkleRoot)
-	binary.LittleEndian.PutUint32(header[68:72], share.Timestamp)
+	binary.LittleEndian.PutUint32(header[68:72], uint32(share.Timestamp))
 	binary.LittleEndian.PutUint32(header[72:76], job.Bits)
 	binary.LittleEndian.PutUint32(header[76:80], uint32(share.Nonce))
-	
+
 	// Double SHA256
 	if v.useAVX2 {
 		return v.sha256dAVX2(header)
 	}
-	
+
 	hash1 := sha256.Sum256(header)
 	hash2 := sha256.Sum256(hash1[:])
-	
+
 	// Reverse for little-endian
 	reversed := make([]byte, 32)
 	for i := 0; i < 32; i++ {
 		reversed[i] = hash2[31-i]
 	}
-	
+
 	return reversed
 }
 
@@ -444,7 +461,190 @@ func hasAVX512Support() bool {
 type ValidatorStats struct {
 	TotalValidated uint64
 	TotalRejected  uint64
+	TotalDuplicates uint64
 	CacheHitRate   float64
 	AvgTimeMs      float64
 	PeakTimeMs     float64
+}
+
+// Bloom filter methods for duplicate detection
+
+func (v *OptimizedShareValidator) checkDuplicateBloom(hash []byte, nonce uint64) bool {
+	// Use multiple hash functions for bloom filter
+	h1, h2 := v.bloomHash(hash, nonce)
+	
+	v.bloomMutex.RLock()
+	defer v.bloomMutex.RUnlock()
+	
+	// Check if both bits are set
+	idx1 := h1 % uint64(v.bloomSize)
+	idx2 := h2 % uint64(v.bloomSize)
+	
+	word1 := idx1 / 64
+	bit1 := idx1 % 64
+	word2 := idx2 / 64
+	bit2 := idx2 % 64
+	
+	return (v.bloomFilter[word1]&(1<<bit1) != 0) &&
+		(v.bloomFilter[word2]&(1<<bit2) != 0)
+}
+
+func (v *OptimizedShareValidator) markSeenBloom(hash []byte, nonce uint64) {
+	h1, h2 := v.bloomHash(hash, nonce)
+	
+	v.bloomMutex.Lock()
+	defer v.bloomMutex.Unlock()
+	
+	// Set both bits
+	idx1 := h1 % uint64(v.bloomSize)
+	idx2 := h2 % uint64(v.bloomSize)
+	
+	word1 := idx1 / 64
+	bit1 := idx1 % 64
+	word2 := idx2 / 64
+	bit2 := idx2 % 64
+	
+	v.bloomFilter[word1] |= (1 << bit1)
+	v.bloomFilter[word2] |= (1 << bit2)
+}
+
+func (v *OptimizedShareValidator) bloomHash(hash []byte, nonce uint64) (uint64, uint64) {
+	// Simple but effective hash functions for bloom filter
+	if len(hash) < 32 {
+		// Handle short hash
+		h1 := uint64(0)
+		h2 := uint64(0)
+		for i, b := range hash {
+			h1 = h1*31 + uint64(b)
+			h2 = h2*37 + uint64(b)<<uint(i%8)
+		}
+		return h1 ^ nonce, h2 ^ (nonce << 32)
+	}
+	h1 := binary.BigEndian.Uint64(hash[:8]) ^ nonce
+	h2 := binary.BigEndian.Uint64(hash[24:]) ^ (nonce << 32)
+	return h1, h2
+}
+
+// ClearBloomFilter clears the bloom filter
+func (v *OptimizedShareValidator) ClearBloomFilter() {
+	v.bloomMutex.Lock()
+	defer v.bloomMutex.Unlock()
+	
+	for i := range v.bloomFilter {
+		v.bloomFilter[i] = 0
+	}
+	
+	v.logger.Info("Bloom filter cleared")
+}
+
+// bloomFilterCleaner periodically clears the bloom filter
+func (v *OptimizedShareValidator) bloomFilterCleaner() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		v.ClearBloomFilter()
+	}
+}
+
+// BatchValidator provides batch validation functionality
+
+// BatchValidator validates shares in batches for better performance
+type BatchValidator struct {
+	validator *OptimizedShareValidator
+	logger    *zap.Logger
+	
+	batchSize int
+	batch     []Share
+	results   chan []ValidationResult
+	mu        sync.Mutex
+}
+
+// NewBatchValidator creates a batch validator
+func NewBatchValidator(validator *OptimizedShareValidator, logger *zap.Logger) *BatchValidator {
+	return &BatchValidator{
+		validator: validator,
+		logger:    logger,
+		batchSize: 100,
+		batch:     make([]Share, 0, 100),
+		results:   make(chan []ValidationResult, 10),
+	}
+}
+
+// AddShare adds a share to the batch
+func (bv *BatchValidator) AddShare(share Share) {
+	bv.mu.Lock()
+	defer bv.mu.Unlock()
+	
+	bv.batch = append(bv.batch, share)
+	
+	if len(bv.batch) >= bv.batchSize {
+		// Process batch
+		go bv.processBatch(bv.batch)
+		bv.batch = make([]Share, 0, bv.batchSize)
+	}
+}
+
+// Flush processes any remaining shares
+func (bv *BatchValidator) Flush() {
+	bv.mu.Lock()
+	defer bv.mu.Unlock()
+	
+	if len(bv.batch) > 0 {
+		go bv.processBatch(bv.batch)
+		bv.batch = make([]Share, 0, bv.batchSize)
+	}
+}
+
+func (bv *BatchValidator) processBatch(shares []Share) {
+	results := make([]ValidationResult, len(shares))
+	
+	// Validate shares in parallel
+	var wg sync.WaitGroup
+	for i := range shares {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			// Create validation request and send to validator
+			req := &ValidationRequest{
+				Share: &shares[idx],
+				Response: make(chan *ValidationResult, 1),
+			}
+			bv.validator.workQueue <- req
+			result := <-req.Response
+			results[idx] = *result
+		}(i)
+	}
+	
+	wg.Wait()
+	bv.results <- results
+}
+
+// GetResults returns the results channel
+func (bv *BatchValidator) GetResults() <-chan []ValidationResult {
+	return bv.results
+}
+
+// ValidateBatch validates a batch of shares synchronously
+func (v *OptimizedShareValidator) ValidateBatch(shares []Share) []ValidationResult {
+	results := make([]ValidationResult, len(shares))
+	
+	// Process in parallel using available workers
+	var wg sync.WaitGroup
+	for i := range shares {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			req := &ValidationRequest{
+				Share: &shares[idx],
+				Response: make(chan *ValidationResult, 1),
+			}
+			v.workQueue <- req
+			result := <-req.Response
+			results[idx] = *result
+		}(i)
+	}
+	
+	wg.Wait()
+	return results
 }

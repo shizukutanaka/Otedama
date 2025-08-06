@@ -71,7 +71,12 @@ type FailoverConfig struct {
 
 // FailoverPool represents a pool with failover capabilities
 type FailoverPool struct {
-	*MiningPool
+	// Remove embedding of undefined MiningPool
+	// Basic pool information
+	ID              string
+	URL             string
+	Connected       atomic.Bool
+	WorkerCount     atomic.Int32
 	
 	// Failover metadata
 	Priority        int

@@ -5,6 +5,48 @@ Otedama'nın tüm önemli değişiklikleri bu dosyada belgelenecektir.
 Format [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) temel alınmaktadır,
 ve bu proje [Anlamsal Sürümleme](https://semver.org/lang/tr/) kurallarına uymaktadır.
 
+## [2.1.5] - 2025-08-06
+
+### Eklendi
+- Kontrol listesine göre kapsamlı P2P ve DEX/DeFi implementasyonu
+- Kurumsal düzeyde dağıtım altyapısı (Docker, Ansible, Kubernetes)
+- P2P ağ sağlığı izleme ve otomatik kurtarma sistemi
+- Prometheus metrikleri ve Grafana panolarıyla yapılandırılmış günlükleme
+- Gelişmiş güvenlik özellikleri (HSM cüzdan entegrasyonu, akıllı sözleşme koruması)
+- Çok faktörlü kimlik doğrulama (TOTP, WebAuthn, Email, SMS)
+- Hiyerarşik izinlere sahip rol tabanlı erişim kontrolü (RBAC)
+- Web güvenlik implementasyonu (XSS/CSRF koruması, girdi validasyonu)
+- Birim, entegrasyon ve E2E testleriyle kapsamlı test framework'ü
+- Otomatik dağıtım için GitHub Actions ile CI/CD pipeline'ları
+- Komple dokümantasyon paketi (Başlangıç, İzleme, Güvenlik, Performans)
+- Yasal belgeler (Hizmet Şartları, Gizlilik Politikası, Kabul Edilebilir Kullanım Politikası)
+- Ölçeklenebilirlik optimizasyonları (sharding, bağlantı havuzu, yük dengeleme)
+- Otomatik indeks önerileriyle sorgu optimize edici
+- 30 dilde README dosyalarıyla kapsamlı çok dilli destek
+- Desteklenen tüm diller için çok dilli CHANGELOG dosyaları
+- Tam uluslararasılaştırma altyapısı
+
+### Değiştirildi
+- Global dağıtımı destekleyecek dokümantasyon yapısı
+- Dile özel dosyaların geliştirilmiş organizasyonu
+- Dağıtılmış izleme ile geliştirilmiş izleme sistemi
+- Güvenlik ulusal standartlara yükseltildi
+- 1M+ eşzamanlı bağlantı için optimized performans
+
+### Düzeltildi
+- Kalan tüm derleme hataları
+- İçe aktarma döngüsü sorunları tamamen çözüldü
+- Bellek optimizasyonu ve çöp toplama ayarlaması
+- Ağ gecikmesi optimizasyonu
+- Veritabanı sorgu performans iyileştirmeleri
+
+### Güvenlik
+- Donanım Güvenlik Modülü (HSM) desteği eklendi
+- Akıllı sözleşme güvenlik açığı tarayıcısı implement edildi
+- Adaptif hız sınırlama ile geliştirilmiş DDoS koruması
+- Kapsamlı denetim günlükleme eklendi
+- Zero-knowledge proof kimlik doğrulama hazırlığı implement edildi
+
 ## [2.1.4] - 2025-08-20
 
 ### Eklendi

@@ -14,50 +14,77 @@ import (
 	"go.uber.org/zap"
 )
 
-// Engine defines the core mining engine interface - Robert C. Martin's interface segregation
+// Engine defines the core mining engine interface following interface segregation principle.
+// The interface is divided into logical groups for better organization and understanding.
 type Engine interface {
+	// Lifecycle management
 	Start() error
 	Stop() error
+	
+	// Statistics and monitoring
 	GetStats() *Stats
 	GetStatus() *EngineStatus
 	GetStartTime() time.Time
-	GetAlgorithm() AlgorithmType
-	GetCPUThreads() int
-	GetConfig() map[string]interface{}
-	GetHardwareInfo() *HardwareInfo
 	GetStatsHistory(duration time.Duration) []StatsSnapshot
-	GetAutoTuner() *AutoTuner
-	GetProfitSwitcher() *ProfitSwitcher
 	ResetStats()
-	SubmitShare(*Share) error
-	SwitchAlgorithm(AlgorithmType) error
+	
+	// Algorithm management
+	GetAlgorithm() AlgorithmType
 	SetAlgorithm(AlgorithmType) error
-	SetPool(url, wallet string) error
-	SetConfig(key string, value interface{}) error
-	SetGPUSettings(coreClock, memoryClock, powerLimit int) error
+	SwitchAlgorithm(AlgorithmType) error
+	GetSupportedAlgorithms() []string
+	ValidateAlgorithm(algorithm string) bool
+	
+	// Currency support
+	SetActiveCurrency(symbol string) error
+	GetActiveCurrency() string
+	
+	// Hardware configuration
+	GetCPUThreads() int
 	SetCPUThreads(threads int) error
-	GetCurrentJob() *Job
+	SetGPUSettings(coreClock, memoryClock, powerLimit int) error
+	GetHardwareInfo() *HardwareInfo
 	HasGPU() bool
 	HasCPU() bool
 	HasASIC() bool
+	
+	// Pool management
+	SetPool(url, wallet string) error
+	SubmitShare(*Share) error
+	GetCurrentJob() *Job
+	
+	// Configuration and optimization
+	GetConfig() map[string]interface{}
+	SetConfig(key string, value interface{}) error
+	GetAutoTuner() *AutoTuner
+	GetProfitSwitcher() *ProfitSwitcher
 }
 
-// System represents a complete mining system - clean architecture
+// System represents a complete mining system following clean architecture principles.
+// It provides high-level operations for the entire mining system.
 type System interface {
+	// Lifecycle management
 	Start() error
 	Stop() error
+	
+	// System statistics
 	GetStats() *Stats
-	IsVerified(string) bool
-	VerifyProof(string, interface{}) error
+	
+	// Proof verification
+	IsVerified(proofID string) bool
+	VerifyProof(proofID string, data interface{}) error
 }
 
-// UnifiedEngine implements high-performance mining engine - John Carmack's performance focus
+// UnifiedEngine implements a high-performance mining engine with focus on:
+// - Cache alignment for hot path optimization
+// - Lock-free operations where possible
+// - Clear separation of concerns
 type UnifiedEngine struct {
 	logger *zap.Logger
 	config *Config
 	
-	// Hot path optimization - cache-aligned fields first
-	totalHashRate    atomic.Uint64 // Most frequently accessed
+	// Performance-critical fields (cache-aligned, most frequently accessed)
+	totalHashRate    atomic.Uint64
 	sharesSubmitted  atomic.Uint64
 	sharesAccepted   atomic.Uint64
 	running          atomic.Bool
@@ -73,6 +100,14 @@ type UnifiedEngine struct {
 	profitSwitcher *ProfitSwitcher
 	algManager     *AlgorithmManager
 	profitCalc     *ProfitCalculator
+	memoryOptimizer *MemoryOptimizer
+	cpuOptimizer    *CPUOptimizer
+	jobDispatcher   *FastJobDispatcher
+	
+	// Multi-currency support
+	activeCurrency  string
+	algorithmEngines map[string]AlgorithmEngine
+	currencyMu      sync.RWMutex
 	
 	// Pool info
 	poolURL    string
@@ -91,7 +126,7 @@ type UnifiedEngine struct {
 	jobQueue     *EfficientJobQueue
 	jobChan      chan *Job
 	shareChan    chan *Share
-	shareValidator *ShareValidator
+	shareValidator *OptimizedShareValidator
 	
 	// Memory management - pre-allocated pools
 	jobPool      sync.Pool
@@ -130,8 +165,9 @@ type Config struct {
 	Intensity    int      `validate:"min=1,max=100"`
 	
 	// Limits - John Carmack's explicit resource management
-	MaxMemoryMB  int      `validate:"min=512,max=32768"`
-	JobQueueSize int      `validate:"min=10,max=10000"`
+	MaxMemoryMB        int      `validate:"min=512,max=32768"`
+	JobQueueSize       int      `validate:"min=10,max=10000"`
+	MinShareDifficulty uint64   `validate:"min=1"`
 	
 	// Features
 	AutoOptimize bool
@@ -166,112 +202,9 @@ const (
 	HardwareASIC HardwareType = "asic"
 )
 
-// Stats contains mining statistics - atomic for lock-free access
-type Stats struct {
-	TotalHashRate   uint64    `json:"total_hash_rate"`
-	CPUHashRate     uint64    `json:"cpu_hash_rate"`
-	GPUHashRate     uint64    `json:"gpu_hash_rate"`
-	ASICHashRate    uint64    `json:"asic_hash_rate"`
-	SharesSubmitted uint64    `json:"shares_submitted"`
-	SharesAccepted  uint64    `json:"shares_accepted"`
-	SharesRejected  uint64    `json:"shares_rejected"`
-	BlocksFound     uint64    `json:"blocks_found"`
-	MemoryUsageMB   uint64    `json:"memory_usage_mb"`
-	ActiveWorkers   int32     `json:"active_workers"`
-	Uptime          time.Duration `json:"uptime"`
-	CurrentHashRate uint64    `json:"current_hash_rate"`
-	Errors          uint64    `json:"errors"`
-}
 
-// Job represents a mining job - memory layout optimized
-type Job struct {
-	ID           string    `json:"id"`
-	Height       uint64    `json:"height"`
-	PrevHash     [32]byte  `json:"prev_hash"`
-	MerkleRoot   [32]byte  `json:"merkle_root"`
-	Timestamp    uint32    `json:"timestamp"`
-	Bits         uint32    `json:"bits"`
-	Nonce        uint32    `json:"nonce"`
-	Algorithm    AlgorithmType `json:"algorithm"`
-	Difficulty   uint64    `json:"difficulty"`
-	CleanJobs    bool      `json:"clean_jobs"`
-	// Additional fields aligned to cache line
-	_ [16]byte // padding to 128 bytes
-}
 
-// Share represents a mining share - optimized for validation
-type Share struct {
-	JobID        string    `json:"job_id"`
-	WorkerID     string    `json:"worker_id"`
-	Nonce        uint64    `json:"nonce"`
-	Hash         [32]byte  `json:"hash"`
-	Difficulty   uint64    `json:"difficulty"`
-	Timestamp    int64     `json:"timestamp"`
-	Algorithm    AlgorithmType `json:"algorithm"`
-	Valid        bool      `json:"valid"`
-}
 
-// Use AlgorithmType from algorithm_handler.go to avoid duplication
-// ParseAlgorithm parses algorithm from string
-func ParseAlgorithm(s string) AlgorithmType {
-	switch s {
-	case "sha256", "SHA256":
-		return SHA256
-	case "sha256d", "SHA256D":
-		return SHA256D
-	case "scrypt", "Scrypt":
-		return Scrypt
-	case "ethash", "Ethash":
-		return Ethash
-	case "randomx", "RandomX":
-		return RandomX
-	case "kawpow", "KawPow":
-		return KawPow
-	default:
-		return "unknown"
-	}
-}
-
-// EngineStatus represents engine status
-type EngineStatus struct {
-	Running   bool          `json:"running"`
-	Algorithm AlgorithmType `json:"algorithm"`
-	Pool      string        `json:"pool"`
-	Wallet    string        `json:"wallet"`
-	Uptime    time.Duration `json:"uptime"`
-}
-
-// HardwareInfo represents hardware information
-type HardwareInfo struct {
-	CPUThreads   int                    `json:"cpu_threads"`
-	GPUDevices   []GPUInfo              `json:"gpu_devices"`
-	ASICDevices  []ASICInfo             `json:"asic_devices"`
-	TotalMemory  uint64                 `json:"total_memory"`
-	AvailMemory  uint64                 `json:"avail_memory"`
-}
-
-// GPUInfo represents GPU device information
-type GPUInfo struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Memory   uint64 `json:"memory"`
-	Temp     int    `json:"temp"`
-	FanSpeed int    `json:"fan_speed"`
-}
-
-// ASICInfo represents ASIC device information
-type ASICInfo struct {
-	ID     string `json:"id"`
-	Model  string `json:"model"`
-	Status string `json:"status"`
-	Temp   int    `json:"temp"`
-}
-
-// StatsSnapshot represents a point-in-time stats snapshot
-type StatsSnapshot struct {
-	Timestamp time.Time `json:"timestamp"`
-	Stats     Stats     `json:"stats"`
-}
 
 // NewEngine creates optimized mining engine - Rob Pike's clear construction
 func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
@@ -291,7 +224,7 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 		ctx:       ctx,
 		cancel:    cancel,
 		startTime: time.Now(),
-		stats:     &Stats{},
+		stats:     &OptimizedStats{}, // Use optimized stats from engine_optimizations.go
 		
 		// Initialize job queue and channels
 		jobQueue:  NewEfficientJobQueue(logger),
@@ -309,7 +242,7 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 	engine.algSwitch = NewSimpleAlgorithmSwitcher(logger)
 	
 	// Initialize share validator
-	engine.shareValidator = NewShareValidator(logger)
+	engine.shareValidator = NewOptimizedShareValidator(logger, runtime.NumCPU())
 	
 	// Initialize memory pool
 	engine.memoryPool = NewMiningBufferPool()
@@ -344,6 +277,16 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 	
 	// Initialize profit calculator with default power cost
 	engine.profitCalc = NewProfitCalculator(0.10) // $0.10 per kWh default
+	
+	// Initialize optimization components from engine_optimizations.go
+	engine.memoryOptimizer = NewMemoryOptimizer(config.MaxMemoryMB)
+	engine.cpuOptimizer = NewCPUOptimizer()
+	
+	// Initialize fast job dispatcher based on worker counts
+	cpuWorkers := config.CPUThreads
+	gpuWorkers := len(config.GPUDevices)
+	asicWorkers := len(config.ASICDevices)
+	engine.jobDispatcher = NewFastJobDispatcher(cpuWorkers, gpuWorkers, asicWorkers)
 	
 	// Detect and initialize workers
 	if err := engine.initializeWorkers(); err != nil {
@@ -761,7 +704,9 @@ func (e *UnifiedEngine) stopWorkers() {
 	}
 }
 
-// jobProcessor handles job distribution - optimized hot loop
+// jobProcessor handles job distribution to mining workers.
+// It runs in a tight loop for optimal performance, dequeueing jobs
+// and dispatching them to appropriate hardware.
 func (e *UnifiedEngine) jobProcessor() {
 	defer e.wg.Done()
 	
@@ -770,19 +715,27 @@ func (e *UnifiedEngine) jobProcessor() {
 		case <-e.ctx.Done():
 			return
 		default:
-			// Get next job from queue
-			job, err := e.jobQueue.Dequeue(e.ctx)
-			if err != nil {
+			// Process next job from the queue
+			if err := e.processNextJob(); err != nil {
+				// Only log non-cancellation errors
 				if err != context.Canceled {
-					e.logger.Error("Failed to dequeue job", zap.Error(err))
+					e.logger.Error("Failed to process job", zap.Error(err))
 				}
-				continue
 			}
-			
-			// Dispatch job to appropriate hardware
-			e.dispatchJob(job)
 		}
 	}
+}
+
+// processNextJob dequeues and dispatches a single job.
+// Extracted for better testability and clarity.
+func (e *UnifiedEngine) processNextJob() error {
+	job, err := e.jobQueue.Dequeue(e.ctx)
+	if err != nil {
+		return err
+	}
+	
+	e.dispatchJob(job)
+	return nil
 }
 
 // shareProcessor handles share validation - parallel processing
@@ -797,7 +750,16 @@ func (e *UnifiedEngine) shareProcessor() {
 			}
 			
 			// Process share
-			if e.validateShare(share) {
+			accepted := e.validateShare(share)
+			
+			// Update OptimizedStats if available
+			if e.stats != nil {
+				e.stats.IncrementShares(true, accepted)
+			}
+			
+			// Also update legacy fields
+			e.sharesSubmitted.Add(1)
+			if accepted {
 				e.sharesAccepted.Add(1)
 			}
 			
@@ -810,23 +772,42 @@ func (e *UnifiedEngine) shareProcessor() {
 	}
 }
 
-// validateShare validates a mining share - optimized validation
+// validateShare performs fast validation of mining shares.
+// Returns true if the share meets all validation criteria.
 func (e *UnifiedEngine) validateShare(share *Share) bool {
-	// Fast validation checks
+	// Nil check
 	if share == nil {
 		return false
 	}
 	
-	if share.JobID == "" || share.WorkerID == "" {
+	// Required field validation
+	if !e.validateShareFields(share) {
 		return false
 	}
 	
-	if share.Difficulty == 0 {
+	// Difficulty validation
+	if !e.validateShareDifficulty(share) {
 		return false
 	}
 	
-	// Algorithm-specific validation would go here
-	// For now, simplified validation
+	// Algorithm-specific validation
+	return e.validateShareAlgorithm(share)
+}
+
+// validateShareFields checks required share fields.
+func (e *UnifiedEngine) validateShareFields(share *Share) bool {
+	return share.JobID != "" && share.WorkerID != ""
+}
+
+// validateShareDifficulty checks share difficulty requirements.
+func (e *UnifiedEngine) validateShareDifficulty(share *Share) bool {
+	return share.Difficulty > 0 && share.Difficulty >= e.config.MinShareDifficulty
+}
+
+// validateShareAlgorithm performs algorithm-specific validation.
+func (e *UnifiedEngine) validateShareAlgorithm(share *Share) bool {
+	// TODO: Implement algorithm-specific validation
+	// For now, return true for all valid shares
 	return true
 }
 
@@ -847,17 +828,57 @@ func (e *UnifiedEngine) statsUpdater() {
 	}
 }
 
-// updateHashRate calculates total hash rate
+// updateHashRate calculates and updates the total hash rate across all workers.
+// It categorizes rates by hardware type for detailed monitoring.
 func (e *UnifiedEngine) updateHashRate() {
-	var totalRate uint64
+	rates := e.calculateHashRates()
+	
+	// Update statistics
+	e.updateHashRateStats(rates)
+}
+
+// hashRates holds categorized hash rate data
+type hashRates struct {
+	total uint64
+	cpu   uint64
+	gpu   uint64
+	asic  uint64
+}
+
+// calculateHashRates aggregates hash rates from all workers.
+func (e *UnifiedEngine) calculateHashRates() hashRates {
+	var rates hashRates
 	
 	e.workersMu.RLock()
-	for _, worker := range e.workers {
-		totalRate += worker.GetHashRate()
-	}
-	e.workersMu.RUnlock()
+	defer e.workersMu.RUnlock()
 	
-	e.totalHashRate.Store(totalRate)
+	for _, worker := range e.workers {
+		rate := worker.GetHashRate()
+		rates.total += rate
+		
+		// Categorize by hardware type
+		switch worker.GetType() {
+		case WorkerCPU:
+			rates.cpu += rate
+		case WorkerGPU:
+			rates.gpu += rate
+		case WorkerASIC:
+			rates.asic += rate
+		}
+	}
+	
+	return rates
+}
+
+// updateHashRateStats updates both new and legacy statistics.
+func (e *UnifiedEngine) updateHashRateStats(rates hashRates) {
+	// Update OptimizedStats if available
+	if e.stats != nil {
+		e.stats.UpdateHashRate(rates.total, rates.cpu, rates.gpu, rates.asic)
+	}
+	
+	// Update legacy atomic field for compatibility
+	e.totalHashRate.Store(rates.total)
 }
 
 // optimizer performs automatic optimization
@@ -877,16 +898,41 @@ func (e *UnifiedEngine) optimizer() {
 	}
 }
 
+// runMemoryOptimizer runs the memory optimizer
+func (e *UnifiedEngine) runMemoryOptimizer() {
+	defer e.wg.Done()
+	
+	if e.memoryOptimizer == nil {
+		return
+	}
+	
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			e.memoryOptimizer.OptimizeMemory()
+		case <-e.ctx.Done():
+			return
+		}
+	}
+}
+
 // performOptimization optimizes performance
 func (e *UnifiedEngine) performOptimization() {
-	// Memory optimization
-	if e.config.MaxMemoryMB > 0 {
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
-		
-		currentMB := m.Alloc / 1024 / 1024
-		if currentMB > uint64(e.config.MaxMemoryMB*90/100) {
-			runtime.GC()
+	// Use memory optimizer if available
+	if e.memoryOptimizer != nil {
+		e.memoryOptimizer.OptimizeMemory()
+	} else {
+		// Fallback to basic memory optimization
+		if e.config.MaxMemoryMB > 0 {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			
+			currentMB := m.Alloc / 1024 / 1024
+			if currentMB > uint64(e.config.MaxMemoryMB*90/100) {
+				runtime.GC()
 			e.logger.Debug("Triggered GC for memory optimization",
 				zap.Uint64("before_mb", currentMB),
 			)
@@ -962,14 +1008,15 @@ func validateConfig(config *Config) error {
 // DefaultConfig returns optimized default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		CPUThreads:   runtime.NumCPU(),
-		Algorithm:    "sha256d",
-		Intensity:    80,
-		MaxMemoryMB:  4096,
-		JobQueueSize: 1000,
-		AutoOptimize: true,
-		HugePages:    false,
-		NUMA:         false,
+		CPUThreads:         runtime.NumCPU(),
+		Algorithm:          "sha256d",
+		Intensity:          80,
+		MaxMemoryMB:        4096,
+		JobQueueSize:       1000,
+		MinShareDifficulty: 1000,
+		AutoOptimize:       true,
+		HugePages:          false,
+		NUMA:               false,
 	}
 }
 
@@ -1116,38 +1163,7 @@ type PerformanceMonitor struct {
 	historyMu    sync.Mutex
 }
 
-// WorkerPool manages a pool of workers
-type WorkerPool struct {
-	logger   *zap.Logger
-	jobQueue *EfficientJobQueue
-	size     int
-}
-
-// NewWorkerPool creates a new worker pool
-func NewWorkerPool(logger *zap.Logger, jobQueue *EfficientJobQueue, size int) *WorkerPool {
-	return &WorkerPool{
-		logger:   logger,
-		jobQueue: jobQueue,
-		size:     size,
-	}
-}
-
-// Start starts the worker pool
-func (wp *WorkerPool) Start() error {
-	// Implementation would start worker goroutines
-	return nil
-}
-
-// Stop stops the worker pool
-func (wp *WorkerPool) Stop() {
-	// Implementation would stop worker goroutines
-}
-
-// Submit submits a task to the worker pool
-func (wp *WorkerPool) Submit(task func()) {
-	// Implementation would submit task to workers
-	go task()
-}
+// WorkerPool is now defined in efficient_job_queue.go to avoid duplication
 
 // GetAlgorithmManager returns the algorithm manager
 func (e *UnifiedEngine) GetAlgorithmManager() *AlgorithmManager {

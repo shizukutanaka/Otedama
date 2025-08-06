@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/zkp"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -38,11 +37,8 @@ type Pool struct {
 	blocks      []Block
 	blocksMu    sync.RWMutex
 	
-	// ZKP integration
+	// ZKP integration (placeholder for future implementation)
 	zkpEnabled      bool
-	zkpManager      *zkp.EnhancedZKPManager
-	ageProofSystem  *zkp.AgeProofSystem
-	hashpowerSystem *zkp.HashpowerProofSystem
 	
 	// Performance optimization
 	consensusEngine     *ConsensusEngine
@@ -62,6 +58,10 @@ type Pool struct {
 	
 	// Audit and monitoring
 	auditLogger      *AuditLogger
+
+	// DEX/DeFi integration
+	dex              *DEX
+	lending          *LendingProtocol
 	
 	// State
 	running     atomic.Int32
@@ -896,65 +896,7 @@ func (cp *ConnectionPool) Put(conn net.Conn) {
 	}
 }
 
-// CircuitBreaker implements circuit breaker pattern
-type CircuitBreaker struct {
-	mu           sync.RWMutex
-	state        CircuitState
-	failures     int
-	lastFailTime time.Time
-	successCount int
-}
-
-type CircuitState int
-
-const (
-	CircuitClosed CircuitState = iota
-	CircuitOpen
-	CircuitHalfOpen
-)
-
-// Allow checks if request should be allowed
-func (cb *CircuitBreaker) Allow() bool {
-	cb.mu.RLock()
-	defer cb.mu.RUnlock()
-	
-	switch cb.state {
-	case CircuitOpen:
-		// Check if we should try half-open
-		if time.Since(cb.lastFailTime) > 30*time.Second {
-			return true
-		}
-		return false
-	default:
-		return true
-	}
-}
-
-// RecordSuccess records a successful request
-func (cb *CircuitBreaker) RecordSuccess() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	
-	cb.failures = 0
-	cb.successCount++
-	if cb.state == CircuitHalfOpen && cb.successCount > 5 {
-		cb.state = CircuitClosed
-	}
-}
-
-// RecordFailure records a failed request
-func (cb *CircuitBreaker) RecordFailure() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	
-	cb.failures++
-	cb.lastFailTime = time.Now()
-	cb.successCount = 0
-	
-	if cb.failures > 5 {
-		cb.state = CircuitOpen
-	}
-}
+// CircuitBreaker is now provided by the network package for consistency
 
 // LoadBalancer implements load balancing
 type LoadBalancer struct {

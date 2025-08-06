@@ -1,7 +1,6 @@
-package cache
+package memory
 
 import (
-	"hash"
 	"hash/fnv"
 	"sync"
 )

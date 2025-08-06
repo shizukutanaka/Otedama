@@ -3,6 +3,7 @@ package p2p
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -15,8 +16,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/datastructures"
-	"github.com/shizukutanaka/Otedama/internal/optimization"
+	// "github.com/shizukutanaka/Otedama/internal/datastructures" // Not used
+	// "github.com/shizukutanaka/Otedama/internal/optimization" // Temporarily disabled
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +33,37 @@ const (
 	DHTMaxStoreKeys    = 65536
 	DHTKeyExpiration   = 24 * time.Hour
 )
+
+// DHTConfig defines DHT configuration
+type DHTConfig struct {
+	// Node settings
+	NodeID          string        `yaml:"node_id"`      // Optional, auto-generated if empty
+	BootstrapNodes  []string      `yaml:"bootstrap_nodes"`
+	
+	// Network settings
+	ListenAddr      string        `yaml:"listen_addr"`
+	MaxPeers        int           `yaml:"max_peers"`
+	
+	// Protocol settings
+	BucketSize      int           `yaml:"bucket_size"`  // K in Kademlia
+	Alpha           int           `yaml:"alpha"`        // Parallelism factor
+	RefreshInterval time.Duration `yaml:"refresh_interval"`
+	
+	// Storage settings
+	MaxStorageItems int           `yaml:"item_expiry"`
+	ItemExpiry      time.Duration `yaml:"item_expiry"`
+	
+	// Timeouts
+	RequestTimeout  time.Duration `yaml:"request_timeout"`
+	DialTimeout     time.Duration `yaml:"dial_timeout"`
+}
+
+// DHTTransport handles network communication
+type DHTTransport interface {
+	Listen(addr string) error
+	SendMessage(addr string, msg interface{}) error
+	Close() error
+}
 
 // DHTNode represents a node in the DHT
 type DHTNode struct {
@@ -78,24 +111,34 @@ func (id NodeID) CommonPrefixLen(other NodeID) int {
 	return 256
 }
 
+// DHT is an alias for DistributedHashTable for compatibility
+type DHT = DistributedHashTable
+
 // DistributedHashTable implements Kademlia-style DHT
 type DistributedHashTable struct {
 	logger       *zap.Logger
+	config       DHTConfig
 	nodeID       NodeID
 	routingTable *RoutingTable
 	storage      *DHTStorage
+	transport    DHTTransport
 	rpc          *DHTRPC
-	memPool      *optimization.MemoryPool
+	// memPool      *optimization.MemoryPool // Temporarily disabled
 	
+	ctx          context.Context
+	cancel       context.CancelFunc
 	refreshTicker *time.Ticker
 	closeCh      chan struct{}
 	wg           sync.WaitGroup
 	
 	// Metrics
-	lookupCount    atomic.Uint64
-	storeCount     atomic.Uint64
-	retrieveCount  atomic.Uint64
-	avgLookupTime  atomic.Int64 // microseconds
+	lookupCount      atomic.Uint64
+	storeCount       atomic.Uint64
+	retrieveCount    atomic.Uint64
+	avgLookupTime    atomic.Int64 // microseconds
+	messagesReceived atomic.Uint64
+	messagesSent     atomic.Uint64
+	nodesDiscovered  atomic.Uint64
 }
 
 // RoutingTable manages k-buckets
@@ -118,7 +161,7 @@ type DHTStorage struct {
 	data       sync.Map // key -> *StoredValue
 	keyCount   atomic.Int32
 	totalSize  atomic.Int64
-	memPool    *optimization.MemoryPool
+	// memPool    *optimization.MemoryPool // Temporarily disabled
 	expiryChan chan string
 }
 
@@ -137,7 +180,7 @@ type DHTRPC struct {
 	dht      *DistributedHashTable
 	listener net.Listener
 	handlers map[MessageType]MessageHandler
-	memPool  *optimization.MemoryPool
+	// memPool  *optimization.MemoryPool // Temporarily disabled
 }
 
 // MessageType represents DHT message types
@@ -167,12 +210,79 @@ type DHTMessage struct {
 }
 
 // NewDistributedHashTable creates a new DHT instance
+// NewDHT creates a new DHT with configuration
+func NewDHT(logger *zap.Logger, config DHTConfig) (*DHT, error) {
+	// Set defaults
+	if config.BucketSize <= 0 {
+		config.BucketSize = DHTBucketSize
+	}
+	if config.Alpha <= 0 {
+		config.Alpha = DHTAlpha
+	}
+	if config.RefreshInterval <= 0 {
+		config.RefreshInterval = DHTRefreshInterval
+	}
+	if config.RequestTimeout <= 0 {
+		config.RequestTimeout = DHTTimeout
+	}
+	if config.MaxStorageItems <= 0 {
+		config.MaxStorageItems = DHTMaxStoreKeys
+	}
+	if config.ItemExpiry <= 0 {
+		config.ItemExpiry = DHTKeyExpiration
+	}
+	
+	// Generate or parse node ID
+	var nodeID NodeID
+	if config.NodeID != "" {
+		bytes, err := hex.DecodeString(config.NodeID)
+		if err != nil || len(bytes) != 32 {
+			return nil, fmt.Errorf("invalid node ID: %s", config.NodeID)
+		}
+		copy(nodeID[:], bytes)
+	} else {
+		// Generate random node ID
+		nodeID = GenerateNodeID()
+	}
+	
+	dht := &DistributedHashTable{
+		logger:       logger,
+		config:       config,
+		nodeID:       nodeID,
+		routingTable: NewRoutingTable(nodeID),
+		// memPool:      optimization.NewMemoryPool(), // Temporarily disabled
+		closeCh:      make(chan struct{}),
+	}
+	
+	// Initialize storage with config
+	dht.storage = &DHTStorage{
+		maxKeys:   config.MaxStorageItems,
+		keyExpiry: config.ItemExpiry,
+	}
+	
+	// Initialize transport if provided
+	if dht.transport == nil {
+		// Use default UDP transport
+		dht.transport = &UDPTransport{logger: logger}
+	}
+	
+	dht.rpc = &DHTRPC{
+		dht:      dht,
+		handlers: make(map[DHTMessageType]MessageHandler),
+		timeout:  config.RequestTimeout,
+	}
+	
+	dht.registerHandlers()
+	
+	return dht, nil
+}
+
 func NewDistributedHashTable(nodeID NodeID, logger *zap.Logger) *DistributedHashTable {
 	dht := &DistributedHashTable{
 		logger:       logger,
 		nodeID:       nodeID,
 		routingTable: NewRoutingTable(nodeID),
-		memPool:      optimization.NewMemoryPool(),
+		// memPool:      optimization.NewMemoryPool(), // Temporarily disabled
 		closeCh:      make(chan struct{}),
 	}
 	
@@ -437,14 +547,17 @@ func (dht *DistributedHashTable) GetStats() map[string]interface{} {
 	}
 	
 	return map[string]interface{}{
-		"node_id":         hex.EncodeToString(dht.nodeID[:]),
-		"routing_nodes":   nodeCount,
-		"stored_keys":     dht.storage.keyCount.Load(),
-		"storage_size":    dht.storage.totalSize.Load(),
-		"lookup_count":    dht.lookupCount.Load(),
-		"store_count":     dht.storeCount.Load(),
-		"retrieve_count":  dht.retrieveCount.Load(),
-		"avg_lookup_time": dht.avgLookupTime.Load(),
+		"node_id":           hex.EncodeToString(dht.nodeID[:]),
+		"routing_nodes":     nodeCount,
+		"stored_keys":       dht.storage.keyCount.Load(),
+		"storage_size":      dht.storage.totalSize.Load(),
+		"lookup_count":      dht.lookupCount.Load(),
+		"store_count":       dht.storeCount.Load(),
+		"retrieve_count":    dht.retrieveCount.Load(),
+		"avg_lookup_time":   dht.avgLookupTime.Load(),
+		"messages_received": dht.messagesReceived.Load(),
+		"messages_sent":     dht.messagesSent.Load(),
+		"nodes_discovered":  dht.nodesDiscovered.Load(),
 	}
 }
 
@@ -1018,4 +1131,55 @@ func insertClosest(nodes []*DHTNode, newNode *DHTNode, target NodeID, k int) []*
 	}
 	
 	return nodes
+}
+
+// GenerateNodeID generates a random node ID
+func GenerateNodeID() NodeID {
+	var id NodeID
+	rand.Read(id[:])
+	return id
+}
+
+// UDPTransport implements DHTTransport using UDP
+type UDPTransport struct {
+	logger *zap.Logger
+	conn   *net.UDPConn
+}
+
+func (t *UDPTransport) Listen(addr string) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return err
+	}
+	
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+	
+	t.conn = conn
+	return nil
+}
+
+func (t *UDPTransport) SendMessage(addr string, msg interface{}) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return err
+	}
+	
+	// Serialize message
+	data, err := msgpack.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	
+	_, err = t.conn.WriteToUDP(data, udpAddr)
+	return err
+}
+
+func (t *UDPTransport) Close() error {
+	if t.conn != nil {
+		return t.conn.Close()
+	}
+	return nil
 }

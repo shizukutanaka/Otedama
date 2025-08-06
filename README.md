@@ -1,46 +1,46 @@
-# Otedama - High-Performance Cryptocurrency Mining Software
+# Otedama - Enterprise P2P Mining Pool & Mining Software
 
-[![Version](https://img.shields.io/badge/version-2.1.4-blue.svg)](https://github.com/shizukutanaka/Otedama)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.21+-red.svg)](https://golang.org)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/shizukutanaka/Otedama/actions)
+**Version**: 2.1.5  
+**License**: MIT  
+**Go Version**: 1.21+  
+**Architecture**: Microservices-ready with P2P Pool  
+**Release Date**: August 6, 2025
 
-Otedama is a professional-grade cryptocurrency mining software designed for efficient and reliable mining operations. Built with Go for maximum performance, it supports CPU, GPU, and ASIC mining with a focus on simplicity, efficiency, and maintainability.
+Otedama is an enterprise-grade P2P mining pool and mining software engineered for maximum efficiency and reliability. Built following principles from John Carmack (performance), Robert C. Martin (clean architecture), and Rob Pike (simplicity), it supports comprehensive CPU/GPU/ASIC mining with national-level scalability.
 
-## 🚀 Features
+## Architecture Overview
 
-### Core Mining Capabilities
-- **Algorithm Support**: SHA256d (Bitcoin) with modular architecture for additional algorithms
-- **Hardware Support**: Optimized for CPU, GPU (NVIDIA/AMD), and ASIC miners
-- **Stratum Protocol**: Full Stratum v1 and v2 support with encryption
-- **P2P Mining**: Decentralized mining pool functionality
+### P2P Mining Pool
+- **Decentralized Pool Management**: Distributed mining pool with automatic failover
+- **Reward Distribution**: Advanced PPS/PPLNS algorithms with multi-currency support
+- **Federation Protocol**: Inter-pool communication for enhanced resilience
+- **National-Level Monitoring**: Enterprise monitoring suitable for government deployment
 
-### Performance & Efficiency
-- **Lightweight Design**: Minimal resource usage with optimized memory management
-- **Fast Startup**: Sub-second startup time with efficient initialization
-- **Real-time Monitoring**: Built-in performance metrics without overhead
-- **Auto-optimization**: Automatic hardware detection and optimization
+### Mining Capabilities
+- **Multi-Algorithm**: SHA256d, Ethash, RandomX, Scrypt, KawPow
+- **Universal Hardware**: Optimized CPU, GPU (CUDA/OpenCL), and ASIC support
+- **Advanced Stratum**: Full v1/v2 with extensions for high-performance miners
+- **Zero-Copy Optimizations**: Cache-aware data structures and NUMA-aware memory
 
-### Enterprise Ready
-- **High Availability**: Built-in failover and connection recovery
-- **Security First**: TLS encryption, API authentication, rate limiting
-- **Production Monitoring**: Prometheus metrics, health checks, logging
-- **Easy Configuration**: Simple YAML-based configuration
+### Enterprise Features
+- **Production Ready**: Docker/Kubernetes deployment with auto-scaling
+- **Enterprise Security**: DDoS protection, rate limiting, comprehensive audit
+- **High Availability**: Multi-node setup with automatic failover
+- **Real-time Analytics**: WebSocket API with live dashboard integration
 
-## 📋 Requirements
+## System Requirements
 
 - Go 1.21 or higher
 - Linux, macOS, or Windows
 - Mining hardware (CPU/GPU/ASIC)
 - Network connection to mining pool
 
-## 🛠️ Installation
+## Installation
 
 ### From Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/shizukutanaka/Otedama.git
+# Build from source directory
 cd Otedama
 
 # Build the binary
@@ -50,63 +50,104 @@ make build
 make install
 ```
 
-### Using Go Install
+### Using Go Build
 
 ```bash
-go install github.com/shizukutanaka/Otedama/cmd/otedama@latest
+go build ./cmd/otedama
 ```
 
-### Docker
+### Docker Production
 
 ```bash
-docker pull ghcr.io/shizukutanaka/otedama:latest
-docker run -d --name otedama -v ./config.yaml:/config.yaml ghcr.io/shizukutanaka/otedama:latest
+# Production deployment
+docker build -f Dockerfile.production -t otedama:production .
+docker run -d --name otedama \
+  -v ./config.yaml:/app/config/config.yaml:ro \
+  -v otedama_data:/app/data \
+  -p 3333:3333 -p 8080:8080 \
+  otedama:production
 ```
 
-## ⚡ Quick Start
-
-### 1. Create Configuration
+### Kubernetes
 
 ```bash
-cp config.example.yaml config.yaml
+# Deploy complete stack
+kubectl apply -f k8s/
 ```
 
-Edit `config.yaml`:
+## Quick Start Guide
+
+### 1. Configuration
 
 ```yaml
-# Basic configuration
+# Production configuration with P2P pool
+app:
+  name: "Otedama"
+  mode: "production"
+
 mining:
-  algorithm: SHA256d
-  threads: 0  # 0 = auto-detect
+  algorithm: "sha256d"
+  enable_cpu: true
+  enable_gpu: true
+  enable_asic: true
+  
+  cpu:
+    threads: 0 # Auto-detect
+    priority: "normal"
+  
+  gpu:
+    devices: [] # Auto-detect all
+    intensity: 20
+    temperature_limit: 85
+  
+  asic:
+    devices: [] # Auto-discover
+    poll_interval: 5s
 
 pool:
-  url: "stratum+tcp://pool.example.com:3333"
-  user: "your_wallet_address.worker_name"
-  password: "x"
+  enable: true
+  address: "0.0.0.0:3333"
+  max_connections: 10000
+  fee_percentage: 1.0
+  rewards:
+    system: "PPLNS"
+    window: 2h
 
+stratum:
+  enable: true
+  address: "0.0.0.0:3333"
+  max_workers: 10000
+  
 api:
-  enabled: true
-  listen: "0.0.0.0:8080"
+  enable: true
+  address: "0.0.0.0:8080"
+  auth:
+    enabled: true
+    token_expiry: 24h
 
 monitoring:
-  enabled: true
-  prometheus: true
+  metrics:
+    enabled: true
+    address: "0.0.0.0:9090"
+  health:
+    enabled: true
+    address: "0.0.0.0:8081"
 ```
 
-### 2. Start Mining
+### 2. Deployment Options
 
 ```bash
-# Pool mining (recommended)
-./otedama start
+# Development
+./otedama serve --config config.yaml
 
-# Solo mining
-./otedama solo
+# Production Docker
+docker-compose -f docker-compose.production.yml up -d
 
-# P2P pool mode
-./otedama p2p
+# Enterprise Kubernetes
+kubectl apply -f k8s/
 
-# With custom config
-./otedama start --config /path/to/config.yaml
+# Manual production deployment
+sudo ./scripts/production-deploy.sh
 ```
 
 ### 3. Monitor Performance
@@ -122,16 +163,16 @@ tail -f logs/otedama.log
 curl http://localhost:8080/api/status
 ```
 
-## 📊 Performance
+## Performance Metrics
 
-Otedama v2.1.3 has been optimized for maximum efficiency:
+Otedama has been optimized for maximum efficiency:
 
-- **Memory Usage**: 60% less than v2.1.2
-- **Binary Size**: 50% smaller (~15MB)
+- **Memory Usage**: Optimized for minimal memory footprint
+- **Binary Size**: Compact size (~15MB)
 - **Startup Time**: <500ms
 - **CPU Overhead**: <1% for monitoring
 
-## 🏗️ Architecture
+## Project Structure
 
 ```
 otedama/
@@ -145,7 +186,7 @@ otedama/
 └── config/        # Configuration
 ```
 
-## 🔧 Advanced Configuration
+## Advanced Configuration
 
 ### GPU Mining
 
@@ -180,7 +221,7 @@ api:
   rate_limit: 100  # requests per minute
 ```
 
-## 📡 API Reference
+## API Reference
 
 ### REST Endpoints
 
@@ -194,7 +235,7 @@ api:
 
 Connect to `ws://localhost:8080/api/ws` for real-time updates.
 
-## 🐳 Deployment
+## Deployment
 
 ### Docker Compose
 
@@ -202,7 +243,7 @@ Connect to `ws://localhost:8080/api/ws` for real-time updates.
 version: '3.8'
 services:
   otedama:
-    image: ghcr.io/shizukutanaka/otedama:latest
+    build: .
     volumes:
       - ./config.yaml:/config.yaml
     ports:
@@ -225,33 +266,32 @@ sudo systemctl enable otedama
 sudo systemctl start otedama
 ```
 
-## 🤝 Contributing
+## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome! Please follow standard development practices:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Create your feature branch
+2. Make your changes
+3. Test thoroughly
+4. Submit for review
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Bitcoin Core developers for mining protocols
 - Go community for excellent libraries
 - All contributors and users of Otedama
 
-## 📞 Support
+## Support
 
-- **Issues**: [GitHub Issues](https://github.com/shizukutanaka/Otedama/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/shizukutanaka/Otedama/discussions)
-- **Wiki**: [Documentation](https://github.com/shizukutanaka/Otedama/wiki)
+- Check the documentation in the `docs/` directory
+- Review configuration examples in `config.example.yaml`
+- Consult the API documentation at `/api/docs` when running
 
-## 💰 Donations
+## Donations
 
 If you find Otedama useful, please consider supporting the development:
 
@@ -261,4 +301,4 @@ Your support helps maintain and improve Otedama!
 
 ---
 
-**⚠️ Important**: Cryptocurrency mining consumes significant computational resources and electricity. Please ensure you understand the costs and environmental impact before mining.
+**Important**: Cryptocurrency mining consumes significant computational resources and electricity. Please ensure you understand the costs and environmental impact before mining.

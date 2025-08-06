@@ -12,18 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Share represents a mining share submitted by a miner
-type Share struct {
-	MinerID    string    `json:"miner_id"`
-	JobID      string    `json:"job_id"`
-	Nonce      uint64    `json:"nonce"`
-	Timestamp  time.Time `json:"timestamp"`
-	Difficulty float64   `json:"difficulty"`
-	Valid      bool      `json:"valid"`
-	Hash       string    `json:"hash"`
-	Height     uint64    `json:"height"`
-}
-
 // ShareManager manages mining shares with TTL and deduplication
 type ShareManager struct {
 	logger       *zap.Logger
@@ -80,25 +68,25 @@ func NewShareManager(logger *zap.Logger, config ShareConfig) *ShareManager {
 // SubmitShare submits a new share for validation and storage
 func (sm *ShareManager) SubmitShare(share *Share) error {
 	// Calculate share hash for deduplication
-	shareHash := sm.calculateShareHash(share)
-	share.Hash = shareHash
-	
+	share.Hash = sm.calculateShareHash(share)
+	shareHashStr := hex.EncodeToString(share.Hash[:])
+
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	// Check for duplicate
-	if existingShare, exists := sm.shares[shareHash]; exists {
+	if existingShare, exists := sm.shares[shareHashStr]; exists {
 		sm.duplicates.Add(1)
-		return fmt.Errorf("duplicate share: %s (original timestamp: %v)", 
-			shareHash, existingShare.Timestamp)
+		return fmt.Errorf("duplicate share: %s (original timestamp: %v)",
+			shareHashStr, time.Unix(existingShare.Timestamp, 0))
 	}
-	
+
 	// Validate share
 	if err := sm.validateShare(share); err != nil {
 		share.Valid = false
 		sm.invalidShares.Add(1)
 		sm.logger.Warn("Invalid share submitted",
-			zap.String("miner_id", share.MinerID),
+			zap.String("worker_id", share.WorkerID),
 			zap.String("job_id", share.JobID),
 			zap.Error(err),
 		)
@@ -107,25 +95,25 @@ func (sm *ShareManager) SubmitShare(share *Share) error {
 		share.Valid = true
 		sm.validShares.Add(1)
 	}
-	
+
 	// Store share
-	sm.shares[shareHash] = share
+	sm.shares[shareHashStr] = share
 	sm.totalShares.Add(1)
-	
+
 	// Index by miner
-	sm.minerShares[share.MinerID] = append(sm.minerShares[share.MinerID], share)
-	
+	sm.minerShares[share.WorkerID] = append(sm.minerShares[share.WorkerID], share)
+
 	// Index by job
 	sm.sharesByJob[share.JobID] = append(sm.sharesByJob[share.JobID], share)
-	
+
 	sm.logger.Debug("Share submitted",
-		zap.String("miner_id", share.MinerID),
+		zap.String("worker_id", share.WorkerID),
 		zap.String("job_id", share.JobID),
 		zap.Uint64("nonce", share.Nonce),
-		zap.Float64("difficulty", share.Difficulty),
+		zap.Uint64("difficulty", share.Difficulty),
 		zap.Bool("valid", share.Valid),
 	)
-	
+
 	return nil
 }
 
@@ -146,20 +134,21 @@ func (sm *ShareManager) GetShare(hash string) (*Share, error) {
 func (sm *ShareManager) GetMinerShares(minerID string, since time.Time) []*Share {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	
+
 	allShares := sm.minerShares[minerID]
 	if len(allShares) == 0 {
 		return nil
 	}
-	
+
 	// Filter by time
+	sinceUnix := since.Unix()
 	var filteredShares []*Share
 	for _, share := range allShares {
-		if share.Timestamp.After(since) {
+		if share.Timestamp > sinceUnix {
 			filteredShares = append(filteredShares, share)
 		}
 	}
-	
+
 	return filteredShares
 }
 
@@ -217,61 +206,63 @@ func (sm *ShareManager) Stop() {
 // Private methods
 
 // calculateShareHash calculates a unique hash for a share
-func (sm *ShareManager) calculateShareHash(share *Share) string {
+func (sm *ShareManager) calculateShareHash(share *Share) [32]byte {
 	data := struct {
-		MinerID    string
+		WorkerID   string
 		JobID      string
 		Nonce      uint64
-		Timestamp  time.Time
-		Difficulty float64
+		Timestamp  int64
+		Difficulty uint64
 	}{
-		MinerID:    share.MinerID,
+		WorkerID:   share.WorkerID,
 		JobID:      share.JobID,
 		Nonce:      share.Nonce,
 		Timestamp:  share.Timestamp,
 		Difficulty: share.Difficulty,
 	}
-	
+
 	serialized, _ := json.Marshal(data)
-	hash := sha256.Sum256(serialized)
-	return hex.EncodeToString(hash[:])
+	return sha256.Sum256(serialized)
 }
 
 // validateShare validates share difficulty and other parameters
 func (sm *ShareManager) validateShare(share *Share) error {
 	// Check timestamp
-	if share.Timestamp.IsZero() {
+	if share.Timestamp == 0 {
 		return fmt.Errorf("share has no timestamp")
 	}
-	
+
+	now := time.Now()
+	shareTime := time.Unix(share.Timestamp, 0)
+
 	// Check if timestamp is not in the future
-	if share.Timestamp.After(time.Now().Add(5 * time.Minute)) {
+	if shareTime.After(now.Add(5 * time.Minute)) {
 		return fmt.Errorf("share timestamp is in the future")
 	}
-	
+
 	// Check if timestamp is not too old
-	if time.Since(share.Timestamp) > sm.ttl {
-		return fmt.Errorf("share is too old: %v", share.Timestamp)
+	if now.Sub(shareTime) > sm.ttl {
+		return fmt.Errorf("share is too old: %v", shareTime)
 	}
-	
+
 	// Check difficulty
-	if share.Difficulty <= 0 {
-		return fmt.Errorf("invalid difficulty: %f", share.Difficulty)
+	if share.Difficulty == 0 {
+		return fmt.Errorf("invalid difficulty: %d", share.Difficulty)
 	}
-	
-	// Check miner ID
-	if share.MinerID == "" {
-		return fmt.Errorf("share has no miner ID")
+
+	// Check worker ID
+	if share.WorkerID == "" {
+		return fmt.Errorf("share has no worker ID")
 	}
-	
+
 	// Check job ID
 	if share.JobID == "" {
 		return fmt.Errorf("share has no job ID")
 	}
-	
+
 	// TODO: Add actual proof-of-work validation here
 	// This would involve checking if the share meets the difficulty target
-	
+
 	return nil
 }
 
@@ -294,49 +285,50 @@ func (sm *ShareManager) cleanupLoop() {
 func (sm *ShareManager) cleanupExpiredShares() {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	now := time.Now()
 	expiredCount := 0
-	
+
 	// Find expired shares
 	for hash, share := range sm.shares {
-		if now.Sub(share.Timestamp) > sm.ttl {
+		shareTime := time.Unix(share.Timestamp, 0)
+		if now.Sub(shareTime) > sm.ttl {
 			delete(sm.shares, hash)
 			expiredCount++
-			
+
 			// Remove from miner index
-			minerShares := sm.minerShares[share.MinerID]
+			minerShares := sm.minerShares[share.WorkerID]
 			for i, s := range minerShares {
-				if s.Hash == hash {
-					sm.minerShares[share.MinerID] = append(minerShares[:i], minerShares[i+1:]...)
+				if hex.EncodeToString(s.Hash[:]) == hash {
+					sm.minerShares[share.WorkerID] = append(minerShares[:i], minerShares[i+1:]...)
 					break
 				}
 			}
-			
+
 			// Remove from job index
 			jobShares := sm.sharesByJob[share.JobID]
 			for i, s := range jobShares {
-				if s.Hash == hash {
+				if hex.EncodeToString(s.Hash[:]) == hash {
 					sm.sharesByJob[share.JobID] = append(jobShares[:i], jobShares[i+1:]...)
 					break
 				}
 			}
 		}
 	}
-	
+
 	// Clean up empty entries
 	for minerID, shares := range sm.minerShares {
 		if len(shares) == 0 {
 			delete(sm.minerShares, minerID)
 		}
 	}
-	
+
 	for jobID, shares := range sm.sharesByJob {
 		if len(shares) == 0 {
 			delete(sm.sharesByJob, jobID)
 		}
 	}
-	
+
 	if expiredCount > 0 {
 		sm.logger.Info("Cleaned up expired shares",
 			zap.Int("expired_count", expiredCount),

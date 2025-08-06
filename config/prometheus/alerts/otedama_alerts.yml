@@ -1,0 +1,230 @@
+# Alert rules for Otedama P2P Mining Pool
+
+groups:
+  - name: otedama_availability
+    interval: 30s
+    rules:
+      - alert: OtedamaDown
+        expr: up{job="otedama"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: otedama
+        annotations:
+          summary: "Otedama service is down"
+          description: "Otedama has been down for more than 2 minutes on {{ $labels.instance }}"
+
+      - alert: HighErrorRate
+        expr: rate(otedama_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: otedama
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors/sec (threshold: 10/sec)"
+
+      - alert: APILatencyHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "API latency is high"
+          description: "95th percentile latency is {{ $value }}s (threshold: 1s)"
+
+  - name: otedama_mining
+    interval: 30s
+    rules:
+      - alert: NoActiveMiners
+        expr: otedama_active_miners == 0
+        for: 15m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "No active miners"
+          description: "No miners have been active for 15 minutes"
+
+      - alert: HashrateDrop
+        expr: (otedama_pool_hashrate - otedama_pool_hashrate offset 1h) / otedama_pool_hashrate offset 1h < -0.3
+        for: 10m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "Significant hashrate drop"
+          description: "Pool hashrate has dropped by {{ $value | humanizePercentage }} in the last hour"
+
+      - alert: HighShareRejectionRate
+        expr: rate(otedama_rejected_shares_total[5m]) / rate(otedama_submitted_shares_total[5m]) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: mining
+        annotations:
+          summary: "High share rejection rate"
+          description: "Share rejection rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      - alert: NoBlocksFound
+        expr: increase(otedama_blocks_found_total[24h]) == 0
+        for: 1h
+        labels:
+          severity: info
+          service: mining
+        annotations:
+          summary: "No blocks found in 24 hours"
+          description: "The pool hasn't found any blocks in the last 24 hours"
+
+  - name: otedama_infrastructure
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }} (threshold: 85%)"
+
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 85%)"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Low disk space"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+
+      - alert: DatabaseConnectionPoolExhausted
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "{{ $value | humanizePercentage }} of connections are in use"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis is using {{ $value | humanizePercentage }} of max memory"
+
+  - name: otedama_security
+    interval: 30s
+    rules:
+      - alert: DDoSAttackSuspected
+        expr: rate(otedama_rate_limit_exceeded_total[1m]) > 100
+        for: 2m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "Possible DDoS attack"
+          description: "Rate limit exceeded {{ $value }} times/minute"
+
+      - alert: UnauthorizedAccessAttempts
+        expr: rate(otedama_auth_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High number of authentication failures"
+          description: "{{ $value }} auth failures per second"
+
+      - alert: SuspiciousMiningActivity
+        expr: otedama_suspicious_workers > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Suspicious mining activity detected"
+          description: "{{ $value }} workers flagged as suspicious"
+
+  - name: otedama_payments
+    interval: 30s
+    rules:
+      - alert: PaymentQueueBacklog
+        expr: otedama_payment_queue_size > 1000
+        for: 30m
+        labels:
+          severity: warning
+          service: payments
+        annotations:
+          summary: "Large payment queue backlog"
+          description: "{{ $value }} payments pending in queue"
+
+      - alert: PaymentProcessingFailed
+        expr: increase(otedama_payment_failures_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: payments
+        annotations:
+          summary: "Payment processing failures"
+          description: "{{ $value }} payment failures in the last hour"
+
+      - alert: WalletBalanceLow
+        expr: otedama_wallet_balance < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: payments
+        annotations:
+          summary: "Wallet balance critically low"
+          description: "Wallet balance is {{ $value }} (threshold: 0.1)"
+
+  - name: otedama_federation
+    interval: 30s
+    rules:
+      - alert: FederationPeerDown
+        expr: otedama_federation_peer_status == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: federation
+        annotations:
+          summary: "Federation peer is down"
+          description: "Peer {{ $labels.peer_id }} has been down for 5 minutes"
+
+      - alert: FederationNetworkSplit
+        expr: otedama_federation_active_peers < 3
+        for: 10m
+        labels:
+          severity: critical
+          service: federation
+        annotations:
+          summary: "Federation network split detected"
+          description: "Only {{ $value }} active peers (minimum: 3)"
+
+      - alert: FederationSyncLag
+        expr: otedama_federation_sync_lag_seconds > 300
+        for: 10m
+        labels:
+          severity: warning
+          service: federation
+        annotations:
+          summary: "Federation sync lag high"
+          description: "Sync lag is {{ $value }}s (threshold: 300s)"

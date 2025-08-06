@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/app"
-	"github.com/shizukutanaka/Otedama/internal/cli"
+	"github.com/otedama/otedama/internal/app"
+	"github.com/otedama/otedama/internal/cli"
 	"go.uber.org/zap"
 )
 
@@ -83,19 +83,21 @@ func handleUtilityCommands(flags *cli.Flags, logger *zap.Logger) bool {
 		handler.ShowVersion()
 		return true
 	case flags.Init:
-		return handler.GenerateConfig(flags.ConfigFile)
+		handler.GenerateConfig(flags.ConfigFile)
+		return true
 	case flags.GenKeys:
-		return handler.GenerateKeys()
+		handler.GenerateKeys()
+		return true
 	case flags.Health:
 		return handler.HealthCheck(flags)
 	case flags.Stats:
 		return handler.ShowStats(flags)
 	case flags.Benchmark:
 		return handler.RunBenchmark(flags)
-	case flags.Diagnose:
-		return handler.RunDiagnostics(flags)
-	case flags.Validate:
-		return handler.ValidateConfig(flags.ConfigFile)
+	// case flags.Diagnose: // Field doesn't exist in Flags
+	// 	return handler.RunDiagnostics(flags)
+	// case flags.Validate: // Field doesn't exist in Flags  
+	// 	return handler.ValidateConfig(flags.ConfigFile)
 	}
 	
 	return false

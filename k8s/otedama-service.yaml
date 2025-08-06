@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-service
+  namespace: otedama
+  labels:
+    app: otedama
+    component: mining-pool
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama
+    component: mining-pool
+  ports:
+  - name: api
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: dashboard
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-stratum
+  namespace: otedama
+  labels:
+    app: otedama
+    component: stratum
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    metallb.universe.tf/allow-shared-ip: "stratum-pool"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama
+    component: mining-pool
+  ports:
+  - name: stratum-sha256
+    port: 3333
+    targetPort: 3333
+    protocol: TCP
+  - name: stratum-ethash
+    port: 3334
+    targetPort: 3334
+    protocol: TCP
+  - name: stratum-randomx
+    port: 3335
+    targetPort: 3335
+    protocol: TCP
+  - name: stratum-scrypt
+    port: 3336
+    targetPort: 3336
+    protocol: TCP
+  - name: stratum-kawpow
+    port: 3337
+    targetPort: 3337
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-p2p
+  namespace: otedama
+  labels:
+    app: otedama
+    component: p2p
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otedama
+    component: mining-pool
+  ports:
+  - name: p2p
+    port: 9333
+    targetPort: 9333
+    protocol: TCP
+  - name: federation
+    port: 4444
+    targetPort: 4444
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-headless
+  namespace: otedama
+  labels:
+    app: otedama
+    component: mining-pool
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: otedama
+    component: mining-pool
+  ports:
+  - name: api
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: dashboard
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: otedama
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+    component: monitoring
+  ports:
+  - name: prometheus
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: otedama
+  labels:
+    app: grafana
+    component: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+    component: monitoring
+  ports:
+  - name: grafana
+    port: 3000
+    targetPort: 3000
+    protocol: TCP

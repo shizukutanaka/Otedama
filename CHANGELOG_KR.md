@@ -5,7 +5,7 @@ Otedama의 모든 주목할 만한 변경 사항이 이 파일에 문서화됩�
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 준수합니다.
 
-## [2.1.5] - 2025-08-05
+## [2.1.5] - 2025-08-06
 
 ### 추가됨
 - 30개 언어의 README 파일을 통한 포괄적인 다국어 지원

@@ -1,63 +1,67 @@
 package mining
 
-// Unified type definitions to eliminate duplication across the codebase
-// Following Rob Pike's principle: "A little copying is better than a little dependency"
-// Following Robert C. Martin's DRY principle: Don't Repeat Yourself
-
 import (
+	"sync/atomic"
 	"time"
 )
-
-// Core Algorithm Types - Single source of truth
 
 // AlgorithmType represents supported mining algorithms
 type AlgorithmType string
 
 const (
-	SHA256     AlgorithmType = "sha256"
-	SHA256D    AlgorithmType = "sha256d"
-	Scrypt     AlgorithmType = "scrypt"
-	Blake2b256 AlgorithmType = "blake2b256"
-	Blake3     AlgorithmType = "blake3"
-	SHA3_256   AlgorithmType = "sha3_256"
-	RandomX    AlgorithmType = "randomx"
-	Ethash     AlgorithmType = "ethash"
-	Equihash   AlgorithmType = "equihash"
-	X16R       AlgorithmType = "x16r"
-	KHeavyHash AlgorithmType = "kheavyhash"
-	Autolykos  AlgorithmType = "autolykos"
-	KawPow     AlgorithmType = "kawpow"
-	ProgPow    AlgorithmType = "progpow"
+	SHA256      AlgorithmType = "sha256"
+	SHA256D     AlgorithmType = "sha256d"
+	Scrypt      AlgorithmType = "scrypt"
+	Blake2b256  AlgorithmType = "blake2b256"
+	Blake3      AlgorithmType = "blake3"
+	SHA3_256    AlgorithmType = "sha3_256"
+	RandomX     AlgorithmType = "randomx"
+	Ethash      AlgorithmType = "ethash"
+	Equihash    AlgorithmType = "equihash"
+	X16R        AlgorithmType = "x16r"
+	KHeavyHash  AlgorithmType = "kheavyhash"
+	Autolykos   AlgorithmType = "autolykos"
+	KawPow      AlgorithmType = "kawpow"
+	ProgPow     AlgorithmType = "progpow"
 	CryptoNight AlgorithmType = "cryptonight"
 )
 
-// Legacy alias for compatibility
-type Algorithm = AlgorithmType
-
-// Hardware Types - Single source of truth
-
-// HardwareType represents the type of mining hardware
-type HardwareType string
+// JobPriority defines job priority levels
+type JobPriority int32
 
 const (
-	HardwareCPU  HardwareType = "cpu"
-	HardwareGPU  HardwareType = "gpu"
-	HardwareASIC HardwareType = "asic"
+	PriorityLow JobPriority = iota
+	PriorityNormal
+	PriorityHigh
 )
 
-// WorkerType defines worker hardware type
-type WorkerType int8
+// JobLike defines the interface for any job type in the queue.
+type JobLike interface {
+	GetID() string
+	GetPriority() JobPriority
+	GetCreationTime() time.Time
+}
 
-const (
-	WorkerCPU WorkerType = iota
-	WorkerGPU
-	WorkerASIC
-)
-
-// Job Types - Single source of truth
-
-// Job represents a mining job - memory layout optimized
+// Job represents a legacy mining job for backward compatibility.
 type Job struct {
+	ID         string        `json:"id"`
+	Height     uint64        `json:"height"`
+	PrevHash   [32]byte      `json:"prev_hash"`
+	MerkleRoot [32]byte      `json:"merkle_root"`
+	Timestamp  uint32        `json:"timestamp"`
+	Bits       uint32        `json:"bits"`
+	Nonce      uint32        `json:"nonce"`
+	Algorithm  AlgorithmType `json:"algorithm"`
+	Difficulty uint64        `json:"difficulty"`
+	CleanJobs  bool          `json:"clean_jobs"`
+}
+
+func (j *Job) GetID() string                { return j.ID }
+func (j *Job) GetPriority() JobPriority       { return PriorityNormal } // Legacy jobs are always normal priority
+func (j *Job) GetCreationTime() time.Time { return time.Time{} }      // Legacy jobs don't have creation time
+
+// MiningJob represents a detailed mining job with extended features.
+type MiningJob struct {
 	ID           string        `json:"id"`
 	Height       uint64        `json:"height"`
 	PrevHash     [32]byte      `json:"prev_hash"`
@@ -68,44 +72,36 @@ type Job struct {
 	Algorithm    AlgorithmType `json:"algorithm"`
 	Difficulty   uint64        `json:"difficulty"`
 	CleanJobs    bool          `json:"clean_jobs"`
-	// Additional fields aligned to cache line
-	_ [16]byte // padding to 128 bytes
+	Target       []byte        `json:"target"`
+	BlockData    []byte        `json:"block_data"`
+	ExtraNonce   uint32        `json:"extra_nonce"`
+	Priority     JobPriority   `json:"priority"`
+	RetryCount   int64         `json:"retry_count"`
+	CreatedAt    time.Time     `json:"created_at"`
+	ExpiresAt    time.Time     `json:"expires_at"`
+	Creator      string        `json:"creator"`
+	OnComplete   func(*JobResult) `json:"-"`
 }
 
-// MiningJob represents a detailed mining job with extended features
-type MiningJob struct {
-	ID         string        `json:"id"`
-	Algorithm  AlgorithmType `json:"algorithm"`
-	Target     []byte        `json:"target"`
-	BlockData  []byte        `json:"block_data"`
-	ExtraNonce uint32        `json:"extra_nonce"`
-	Height     uint64        `json:"height"`
-	Difficulty uint64        `json:"difficulty"`
-	Priority   JobPriority   `json:"priority"`
-	CreatedAt  time.Time     `json:"created_at"`
-	ExpiresAt  time.Time     `json:"expires_at"`
-	
-	// Block header fields
-	PrevHash   [32]byte `json:"prev_hash"`
-	MerkleRoot [32]byte `json:"merkle_root"`
-	Timestamp  uint32   `json:"timestamp"`
-	Bits       uint32   `json:"bits"`
-	Nonce      uint32   `json:"nonce"`
-	CleanJobs  bool     `json:"clean_jobs"`
-	
-	// Creator and callback
-	Creator    string               `json:"creator"`
-	OnComplete func(*JobResult)     `json:"-"`
+func (j *MiningJob) GetID() string {
+	return j.ID
 }
 
-// JobPriority defines job priority levels
-type JobPriority int
+func (j *MiningJob) GetPriority() JobPriority {
+	return JobPriority(atomic.LoadInt32((*int32)(&j.Priority)))
+}
 
-const (
-	PriorityLow JobPriority = iota
-	PriorityNormal
-	PriorityHigh
-)
+func (j *MiningJob) GetCreationTime() time.Time {
+	return j.CreatedAt
+}
+
+func (j *MiningJob) SetPriority(p JobPriority) {
+	atomic.StoreInt32((*int32)(&j.Priority), int32(p))
+}
+
+func (j *MiningJob) IncRetryCount() {
+	atomic.AddInt64(&j.RetryCount, 1)
+}
 
 // JobResult contains the result of a mining job
 type JobResult struct {
@@ -115,8 +111,6 @@ type JobResult struct {
 	Hash      []byte    `json:"hash"`
 	Timestamp time.Time `json:"timestamp"`
 }
-
-// Share Types - Single source of truth
 
 // Share represents a mining share - optimized for validation
 type Share struct {
@@ -132,15 +126,15 @@ type Share struct {
 
 // ValidationResult contains the result of share validation
 type ValidationResult struct {
-	Valid      bool   `json:"valid"`
-	IsBlock    bool   `json:"is_block"`
-	Reason     string `json:"reason"`
-	Difficulty uint64 `json:"difficulty"`
+	Valid       bool          `json:"valid"`
+	IsBlock     bool          `json:"is_block"`
+	Reason      string        `json:"reason"`
+	Difficulty  uint64        `json:"difficulty"`
+	Hash        []byte        `json:"hash,omitempty"`
+	ProcessTime time.Duration `json:"process_time,omitempty"`
 }
 
-// Algorithm Configuration Types
-
-// Algorithm represents a mining algorithm with profitability data
+// AlgorithmConfig represents a mining algorithm with profitability data
 type AlgorithmConfig struct {
 	Name        string                 `json:"name"`
 	HashFunc    func([]byte) []byte    `json:"-"`
@@ -152,6 +146,20 @@ type AlgorithmConfig struct {
 	WorkSize    int                    `json:"work_size"`
 	CacheSize   int                    `json:"cache_size"`
 	GPUEnabled  bool                   `json:"gpu_enabled"`
+
+	// Auto-switching configuration
+	AutoSwitch      bool          `json:"auto_switch"`
+	SwitchInterval  time.Duration `json:"switch_interval"`
+	ProfitThreshold float64       `json:"profit_threshold"`
+
+	// Hardware preferences
+	PreferCPU bool `json:"prefer_cpu"`
+	PreferGPU bool `json:"prefer_gpu"`
+	PreferASIC bool `json:"prefer_asic"`
+
+	// Performance tuning
+	BenchmarkOnStart bool `json:"benchmark_on_start"`
+	OptimizeMemory   bool `json:"optimize_memory"`
 }
 
 // ProfitabilityData represents profitability information
@@ -166,8 +174,6 @@ type ProfitabilityData struct {
 	LastUpdate    time.Time     `json:"last_update"`
 }
 
-// Worker and Pool Types
-
 // WorkerStats represents worker statistics
 type WorkerStats struct {
 	ID              string    `json:"id"`
@@ -178,8 +184,6 @@ type WorkerStats struct {
 	JobsCompleted   uint64    `json:"jobs_completed"`
 	HashesComputed  uint64    `json:"hashes_computed"`
 }
-
-// Statistics Types
 
 // Stats contains mining statistics - atomic for lock-free access
 type Stats struct {
@@ -204,9 +208,13 @@ type QueueStats struct {
 	Dequeued   uint64         `json:"dequeued"`
 	Completed  uint64         `json:"completed"`
 	Expired    uint64         `json:"expired"`
+	Rejected   uint64         `json:"rejected"`
 	InProgress int32          `json:"in_progress"`
 	Active     int            `json:"active"`
-	QueueSizes map[string]int `json:"queue_sizes"`
+	QueueSizes    map[string]int `json:"queue_sizes"`
+	Pending       uint64         `json:"pending"`
+	AvgWaitTime   time.Duration  `json:"avg_wait_time"`
+	MaxQueueDepth uint64         `json:"max_queue_depth"`
 }
 
 // AlgoStats tracks algorithm performance
@@ -217,8 +225,6 @@ type AlgoStats struct {
 	LastHashRate  uint64        `json:"last_hash_rate"`
 	Profitability float64       `json:"profitability"`
 }
-
-// Hardware Information Types
 
 // HardwareInfo represents hardware information
 type HardwareInfo struct {
@@ -246,7 +252,21 @@ type ASICInfo struct {
 	Temp   int    `json:"temp"`
 }
 
-// Engine Status Types
+// Work represents a mining job for hardware
+type Work struct {
+	JobID       string
+	Data        []byte
+	Target      []byte
+	Algorithm   AlgorithmType
+	Height      uint64
+	Timestamp   uint32
+	BlockHeader []byte
+}
+
+// OptimizedConfig holds hardware-specific optimization settings
+type OptimizedConfig struct {
+	// Future settings for performance tuning
+}
 
 // EngineStatus represents engine status
 type EngineStatus struct {
@@ -257,13 +277,14 @@ type EngineStatus struct {
 	Uptime    time.Duration `json:"uptime"`
 }
 
+// MinShareDifficulty represents minimum share difficulty
+const MinShareDifficulty = 1000
+
 // StatsSnapshot represents a point-in-time stats snapshot
 type StatsSnapshot struct {
 	Timestamp time.Time `json:"timestamp"`
 	Stats     Stats     `json:"stats"`
 }
-
-// ASIC Device Types
 
 // ASICDevice represents an ASIC mining device
 type ASICDevice struct {
@@ -273,8 +294,6 @@ type ASICDevice struct {
 	HashRate     uint64  `json:"hash_rate"`
 	PowerUsage   float64 `json:"power_usage"`
 }
-
-// Utility Functions
 
 // String returns string representation of priority
 func (p JobPriority) String() string {
@@ -322,21 +341,3 @@ func (a AlgorithmType) IsValid() bool {
 	}
 }
 
-// String returns the string representation of HardwareType
-func (h HardwareType) String() string {
-	return string(h)
-}
-
-// String returns the string representation of WorkerType
-func (w WorkerType) String() string {
-	switch w {
-	case WorkerCPU:
-		return "cpu"
-	case WorkerGPU:
-		return "gpu"
-	case WorkerASIC:
-		return "asic"
-	default:
-		return "unknown"
-	}
-}

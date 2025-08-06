@@ -5,7 +5,7 @@ Otedama的所有重要更改都将记录在此文件中。
 格式基于[Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [2.1.5] - 2025-08-05
+## [2.1.5] - 2025-08-06
 
 ### 新增
 - 通过30种语言的README文件提供全面的多语言支持
