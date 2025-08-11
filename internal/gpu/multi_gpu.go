@@ -305,7 +305,7 @@ func (m *MultiGPUManager) createDeviceWork(baseWork *MiningWork, deviceID int) *
 	
 	// Adjust nonce range for device
 	// This ensures each GPU works on different nonces
-	nonceOffset := uint32(deviceID) << 24 // Device-specific offset
+	_ = uint32(deviceID) << 24 // nonceOffset for future use
 	work.ExtraNonce2 = append([]byte{byte(deviceID)}, work.ExtraNonce2...)
 	
 	return &work

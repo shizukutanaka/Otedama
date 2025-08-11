@@ -175,7 +175,7 @@ func (iv *InputValidator) initializeCommandPatterns() {
 		`\|`,
 		`&`,
 		`\$\(`,
-		`\``,
+		"\\`",
 		`>`,
 		`<`,
 		`\${`,

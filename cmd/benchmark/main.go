@@ -12,10 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otedama/otedama/internal/crypto"
-	"github.com/otedama/otedama/internal/mining"
-	"github.com/otedama/otedama/internal/optimization"
-	"github.com/otedama/otedama/internal/stratum"
+	"github.com/shizukutanaka/Otedama/internal/crypto"
+	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"go.uber.org/zap"
 )
 
@@ -369,38 +368,13 @@ func benchmarkStratumCodec() BenchmarkResult {
 }
 
 func benchmarkZeroCopyBuffer() BenchmarkResult {
-	pool := optimization.NewZeroCopyPool(4096)
-	data := make([]byte, 1024)
-	rand.Read(data)
-	
-	start := time.Now()
-	ops := int64(0)
-	
-	for time.Since(start) < time.Second {
-		// Get buffer
-		buf := pool.Get()
-		
-		// Write data (using buffer's underlying slice)
-		copy(buf.Bytes(), data)
-		
-		// Read data
-		result := buf.Bytes()
-		_ = result
-		
-		// Return to pool
-		pool.Put(buf)
-		
-		ops++
-	}
-	
-	duration := time.Since(start)
-	
+	// Temporarily disabled - optimization package removed
 	return BenchmarkResult{
 		Name:       "Zero-Copy Buffer",
-		Operations: ops,
-		Duration:   duration,
-		OpsPerSec:  float64(ops) / duration.Seconds(),
-		BytesPerOp: 1024,
+		Operations: 0,
+		Duration:   0,
+		OpsPerSec:  0,
+		BytesPerOp: 0,
 	}
 }
 
@@ -551,6 +525,7 @@ func benchmarkNUMAMemory() BenchmarkResult {
 		OpsPerSec:  throughput, // MB/s instead of ops/s
 		BytesPerOp: int64(size),
 	}
+	*/
 }
 
 // Helper functions

@@ -386,7 +386,7 @@ func ValidatePassword(password string) error {
 	}
 	
 	// Check for required character types
-	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	var hasUpper, hasLower, hasDigit bool
 	for _, r := range password {
 		switch {
 		case 'A' <= r && r <= 'Z':
@@ -396,7 +396,7 @@ func ValidatePassword(password string) error {
 		case '0' <= r && r <= '9':
 			hasDigit = true
 		case strings.ContainsRune("!@#$%^&*()_+-=[]{}|;:,.<>?", r):
-			hasSpecial = true
+			// hasSpecial = true // Reserved for future use
 		}
 	}
 	

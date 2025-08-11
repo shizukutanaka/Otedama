@@ -1,272 +1,368 @@
 # Otedama Makefile
-#
-# This Makefile provides a comprehensive set of commands for building, testing,
-# and managing the Otedama project. It is designed to be efficient and easy to use
-# for both development and production workflows.
+# High-performance P2P mining pool and mining software
 
-# ==============================================================================
-# Go Configuration
-# ==============================================================================
-GOCMD   := go
+# Application metadata
+APP_NAME := otedama
+VERSION := 2.1.5
+BUILD_DATE := $(shell date -u +"%Y-%m-%d %H:%M:%S")
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+# Go parameters
+GOCMD := go
 GOBUILD := $(GOCMD) build
 GOCLEAN := $(GOCMD) clean
-GOTEST  := $(GOCMD) test
-GOMOD   := $(GOCMD) mod
-GOFMT   := $(GOCMD) fmt
-GOVET   := $(GOCMD) vet
-GOGET   := $(GOCMD) get
+GOTEST := $(GOCMD) test
+GOGET := $(GOCMD) get
+GOMOD := $(GOCMD) mod
+GOFMT := gofmt
+GOLINT := golangci-lint
+GOVET := $(GOCMD) vet
 
-# ==============================================================================
-# Project Configuration
-# ==============================================================================
-# Binary names
-BINARY_NAME        := otedama
-BENCHMARK_BINARY   := benchmark
-SECURITY_BINARY    := security-audit
-BINARY_WINDOWS     := $(BINARY_NAME).exe
+# Build directories
+BUILD_DIR := build
+BIN_DIR := $(BUILD_DIR)/bin
+DIST_DIR := $(BUILD_DIR)/dist
 
-# Directories
-BIN_DIR      := bin
-BUILD_DIR    := build
-DIST_DIR     := dist
-PROFILE_DIR  := $(BUILD_DIR)/profiles
+# Source directories
+CMD_DIR := cmd
+INTERNAL_DIR := internal
+PKG_DIR := pkg
 
-# ==============================================================================
-# Build Configuration
-# ==============================================================================
-# Version info (dynamically sourced from Git)
-VERSION      ?= $(shell git describe --tags --always --dirty)
-BUILD_TIME   := $(shell date -u +%Y-%m-%d_%H:%M:%S)
-GIT_COMMIT   := $(shell git rev-parse --short HEAD)
+# Main package
+MAIN_PACKAGE := ./$(CMD_DIR)/otedama
 
-# Go build flags
-# -s: Omit the symbol table and debug information.
-# -w: Omit the DWARF symbol table.
-# -trimpath: Remove all file system paths from the resulting executable.
-# -X: Set string value at import path.
-BUILDFLAGS      := -trimpath
-LDFLAGS         := -ldflags="-s -w"
-LDFLAGS_VERSION := -ldflags="-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
+# Binary name
+BINARY_NAME := $(APP_NAME)
+BINARY_UNIX := $(BINARY_NAME)
+BINARY_WINDOWS := $(BINARY_NAME).exe
 
-# ==============================================================================
-# Tooling Configuration
-# ==============================================================================
-GOLINT      := golangci-lint
-AIR         := air
-GORELEASER  := goreleaser
+# Build flags
+LDFLAGS := -ldflags "\
+	-X 'main.AppVersion=$(VERSION)' \
+	-X 'main.AppBuild=$(BUILD_DATE)' \
+	-X 'main.GitCommit=$(GIT_COMMIT)' \
+	-s -w"
 
-.PHONY: all build build-all build-race build-cross clean test coverage bench lint fmt vet install uninstall deps tidy verify run docker help
+# Build tags
+BUILD_TAGS := 
 
-# ==============================================================================
-# Default Target
-# ==============================================================================
-all: build
+# CGO settings
+CGO_ENABLED := 1
 
-# ==============================================================================
-# Help Target
-# ==============================================================================
-help:
+# Platform-specific settings
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+ifeq ($(UNAME_S),Linux)
+	PLATFORM := linux
+endif
+ifeq ($(UNAME_S),Darwin)
+	PLATFORM := darwin
+endif
+ifeq ($(OS),Windows_NT)
+	PLATFORM := windows
+	BINARY_NAME := $(BINARY_WINDOWS)
+endif
+
+ifeq ($(UNAME_M),x86_64)
+	ARCH := amd64
+endif
+ifeq ($(UNAME_M),aarch64)
+	ARCH := arm64
+endif
+ifeq ($(UNAME_M),arm64)
+	ARCH := arm64
+endif
+
+# Feature flags
+ENABLE_GPU ?= 1
+ENABLE_CUDA ?= 1
+ENABLE_OPENCL ?= 1
+
+# GPU build tags
+ifeq ($(ENABLE_GPU),1)
+	BUILD_TAGS := $(BUILD_TAGS),gpu
+	ifeq ($(ENABLE_CUDA),1)
+		BUILD_TAGS := $(BUILD_TAGS),cuda
+	endif
+	ifeq ($(ENABLE_OPENCL),1)
+		BUILD_TAGS := $(BUILD_TAGS),opencl
+	endif
+endif
+
+# Default target
+.DEFAULT_GOAL := build
+
+# Phony targets
+.PHONY: all build build-all clean test bench coverage lint fmt vet \
+	deps deps-update install uninstall run debug release \
+	docker docker-push proto docs help \
+	build-linux build-darwin build-windows cross-compile
+
+# Help target
+help: ## Show this help message
 	@echo "Otedama Build System"
-	@echo "--------------------"
+	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
-	@echo "Main Targets:"
-	@echo "  all                - Build the main Otedama binary (default)."
-	@echo "  build              - Build the main Otedama binary."
-	@echo "  build-all          - Build all project binaries (main, benchmark, security)."
-	@echo "  run                - Build and run the main application."
-	@echo "  install            - Build and install the main binary to $$GOPATH/bin."
-	@echo "  uninstall          - Remove the binary from $$GOPATH/bin."
-	@echo "  clean              - Remove all build artifacts and binaries."
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Development & QA:"
-	@echo "  test               - Run all tests with the race detector."
-	@echo "  coverage           - Run tests and generate an HTML coverage report."
-	@echo "  bench              - Run all benchmarks."
-	@echo "  lint               - Run the linter."
-	@echo "  fmt                - Format all Go source code."
-	@echo "  vet                - Run 'go vet' to check for suspicious constructs."
-	@echo "  check              - Run fmt, vet, lint, and test targets."
-	@echo "  deps               - Download Go module dependencies."
-	@echo "  tidy               - Tidy Go module dependencies."
-	@echo "  watch              - Watch for file changes and automatically rebuild."
-	@echo ""
-	@echo "Cross-Compilation:"
-	@echo "  build-cross        - Build for Linux, Windows, and macOS."
-	@echo "  build-linux        - Build for Linux (amd64)."
-	@echo "  build-windows      - Build for Windows (amd64)."
-	@echo "  build-darwin       - Build for macOS (amd64)."
-	@echo ""
-	@echo "Docker:"
-	@echo "  docker             - Build the Docker image."
-	@echo "  docker-run         - Run the application in a Docker container."
-	@echo ""
-	@echo "Release:"
-	@echo "  release            - Create a new release snapshot using GoReleaser."
-	@echo "  version            - Display the current version information."
+	@echo "Variables:"
+	@echo "  ENABLE_GPU=$(ENABLE_GPU)     Enable GPU support"
+	@echo "  ENABLE_CUDA=$(ENABLE_CUDA)    Enable CUDA support"
+	@echo "  ENABLE_OPENCL=$(ENABLE_OPENCL)  Enable OpenCL support"
 
+# Build targets
+all: clean deps lint test build ## Clean, install deps, lint, test, and build
 
-# ==============================================================================
-# Build Targets
-# ==============================================================================
-build: deps
-	@echo "Building Otedama..."
+build: ## Build the binary for current platform
+	@echo "Building $(APP_NAME) v$(VERSION) for $(PLATFORM)/$(ARCH)..."
 	@mkdir -p $(BIN_DIR)
-	$(GOBUILD) $(BUILDFLAGS) $(LDFLAGS_VERSION) -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/otedama
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) $(LDFLAGS) -tags "$(BUILD_TAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "Build complete: $(BIN_DIR)/$(BINARY_NAME)"
 
-build-all: build build-benchmark build-security
+build-all: build-linux build-darwin build-windows ## Build for all platforms
 
-build-benchmark:
-	@echo "Building benchmark tool..."
+build-linux: ## Build for Linux
+	@echo "Building for Linux..."
+	@mkdir -p $(BIN_DIR)/linux
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/linux/$(BINARY_UNIX)-amd64 $(MAIN_PACKAGE)
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/linux/$(BINARY_UNIX)-arm64 $(MAIN_PACKAGE)
+
+build-darwin: ## Build for macOS
+	@echo "Building for macOS..."
+	@mkdir -p $(BIN_DIR)/darwin
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/darwin/$(BINARY_UNIX)-amd64 $(MAIN_PACKAGE)
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/darwin/$(BINARY_UNIX)-arm64 $(MAIN_PACKAGE)
+
+build-windows: ## Build for Windows
+	@echo "Building for Windows..."
+	@mkdir -p $(BIN_DIR)/windows
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/windows/$(BINARY_WINDOWS)-amd64.exe $(MAIN_PACKAGE)
+
+cross-compile: build-all ## Cross-compile for all platforms
+
+# Build with specific features
+build-cpu: ## Build CPU-only version
+	@echo "Building CPU-only version..."
 	@mkdir -p $(BIN_DIR)
-	$(GOBUILD) $(BUILDFLAGS) $(LDFLAGS) -o $(BIN_DIR)/$(BENCHMARK_BINARY) ./cmd/benchmark
+	CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -tags "cpu" -o $(BIN_DIR)/$(BINARY_NAME)-cpu $(MAIN_PACKAGE)
 
-build-security:
-	@echo "Building security audit tool..."
+build-gpu: ## Build GPU-enabled version
+	@echo "Building GPU-enabled version..."
 	@mkdir -p $(BIN_DIR)
-	$(GOBUILD) $(BUILDFLAGS) $(LDFLAGS) -o $(BIN_DIR)/$(SECURITY_BINARY) ./cmd/security-audit
+	CGO_ENABLED=1 $(GOBUILD) $(LDFLAGS) -tags "gpu,cuda,opencl" -o $(BIN_DIR)/$(BINARY_NAME)-gpu $(MAIN_PACKAGE)
 
-build-race: deps
-	@echo "Building with race detector..."
+build-asic: ## Build ASIC-enabled version
+	@echo "Building ASIC-enabled version..."
 	@mkdir -p $(BIN_DIR)
-	$(GOBUILD) -race $(LDFLAGS_VERSION) -o $(BIN_DIR)/$(BINARY_NAME)-race ./cmd/otedama
+	CGO_ENABLED=0 $(GOBUILD) $(LDFLAGS) -tags "asic" -o $(BIN_DIR)/$(BINARY_NAME)-asic $(MAIN_PACKAGE)
 
-# ==============================================================================
-# Cross-Platform Build Targets
-# ==============================================================================
-build-cross: build-linux build-windows build-darwin
+# Debug and release builds
+debug: ## Build debug version with symbols
+	@echo "Building debug version..."
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -gcflags="all=-N -l" -tags "$(BUILD_TAGS),debug" -o $(BIN_DIR)/$(BINARY_NAME)-debug $(MAIN_PACKAGE)
 
-build-linux:
-	@echo "Building for Linux (amd64)..."
-	@mkdir -p $(DIST_DIR)/linux
-	GOOS=linux GOARCH=amd64 $(GOBUILD) $(BUILDFLAGS) $(LDFLAGS_VERSION) -o $(DIST_DIR)/linux/$(BINARY_NAME) ./cmd/otedama
+release: ## Build optimized release version
+	@echo "Building release version..."
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) $(LDFLAGS) -tags "$(BUILD_TAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "Stripping binary..."
+	@strip $(BIN_DIR)/$(BINARY_NAME) 2>/dev/null || true
 
-build-windows:
-	@echo "Building for Windows (amd64)..."
-	@mkdir -p $(DIST_DIR)/windows
-	GOOS=windows GOARCH=amd64 $(GOBUILD) $(BUILDFLAGS) $(LDFLAGS_VERSION) -o $(DIST_DIR)/windows/$(BINARY_WINDOWS) ./cmd/otedama
+# Installation targets
+install: build ## Install binary to system
+	@echo "Installing $(APP_NAME)..."
+	@install -d /usr/local/bin
+	@install -m 755 $(BIN_DIR)/$(BINARY_NAME) /usr/local/bin/$(APP_NAME)
+	@echo "Installed to /usr/local/bin/$(APP_NAME)"
 
-build-darwin:
-	@echo "Building for macOS (amd64)..."
-	@mkdir -p $(DIST_DIR)/darwin
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(BUILDFLAGS) $(LDFLAGS_VERSION) -o $(DIST_DIR)/darwin/$(BINARY_NAME) ./cmd/otedama
+uninstall: ## Uninstall binary from system
+	@echo "Uninstalling $(APP_NAME)..."
+	@rm -f /usr/local/bin/$(APP_NAME)
+	@echo "Uninstalled from /usr/local/bin/$(APP_NAME)"
 
-# ==============================================================================
-# Testing & Quality Assurance
-# ==============================================================================
-test:
-	@echo "Running tests..."
-	$(GOTEST) -v -race ./...
-
-coverage:
-	@echo "Running tests with coverage..."
-	$(GOTEST) -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-	@echo "Generating HTML coverage report..."
-	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
-	@echo "Coverage report generated: coverage.html"
-
-bench:
-	@echo "Running benchmarks..."
-	$(GOTEST) -bench=. -benchmem ./internal/benchmark/...
-
-lint: | tools
-	@echo "Running linter..."
-	$(GOLINT) run ./...
-
-fmt:
-	@echo "Formatting code..."
-	$(GOFMT) -w ./...
-
-vet:
-	@echo "Running go vet..."
-	$(GOVET) ./...
-
-check: fmt vet lint test
-
-# ==============================================================================
-# Dependency & Installation
-# ==============================================================================
-deps:
-	@echo "Downloading dependencies..."
-	$(GOMOD) download
-
-tidy:
-	@echo "Tidying go modules..."
-	$(GOMOD) tidy
-
-verify:
-	@echo "Verifying dependencies..."
-	$(GOMOD) verify
-
-install: build
-	@echo "Installing to $(GOPATH)/bin..."
-	@cp $(BIN_DIR)/$(BINARY_NAME) $(GOPATH)/bin/
-
-uninstall:
-	@echo "Uninstalling from $(GOPATH)/bin..."
-	@rm -f $(GOPATH)/bin/$(BINARY_NAME)
-
-# ==============================================================================
-# Development & Execution
-# ==============================================================================
-run: build
-	@echo "Running Otedama..."
+# Run targets
+run: build ## Build and run the application
+	@echo "Running $(APP_NAME)..."
 	@$(BIN_DIR)/$(BINARY_NAME)
 
-run-config: build
-	@echo "Running Otedama with config: $(CONFIG)"
-	@$(BIN_DIR)/$(BINARY_NAME) --config $(CONFIG)
+run-debug: debug ## Build and run debug version
+	@echo "Running $(APP_NAME) in debug mode..."
+	@$(BIN_DIR)/$(BINARY_NAME)-debug --debug --verbose
 
-watch: | tools
-	@echo "Watching for changes..."
-	$(AIR)
+# Testing targets
+test: ## Run unit tests
+	@echo "Running tests..."
+	@$(GOTEST) -v -race -coverprofile=coverage.out ./...
 
-# ==============================================================================
-# Docker Targets
-# ==============================================================================
-docker:
-	@echo "Building Docker image (otedama:$(VERSION), otedama:latest)..."
-	docker build -t otedama:$(VERSION) -t otedama:latest .
+test-short: ## Run short tests
+	@echo "Running short tests..."
+	@$(GOTEST) -v -short ./...
 
-docker-run:
-	@echo "Running Docker container..."
-	docker run -it --rm -p 3333:3333 -p 8080:8080 otedama:latest
+test-integration: ## Run integration tests
+	@echo "Running integration tests..."
+	@$(GOTEST) -v -tags=integration ./test/integration/...
 
-# ==============================================================================
-# Release Targets
-# ==============================================================================
-release: | tools
-	@echo "Creating release snapshot..."
-	$(GORELEASER) release --snapshot --rm-dist
+test-e2e: ## Run end-to-end tests
+	@echo "Running e2e tests..."
+	@$(GOTEST) -v -tags=e2e ./test/e2e/...
 
-version:
-	@echo "Version:    $(VERSION)"
-	@echo "Build Time: $(BUILD_TIME)"
-	@echo "Git Commit: $(GIT_COMMIT)"
+bench: ## Run benchmarks
+	@echo "Running benchmarks..."
+	@$(GOTEST) -bench=. -benchmem ./...
 
-# ==============================================================================
-# Cleaning
-# ==============================================================================
-clean:
+coverage: test ## Generate test coverage report
+	@echo "Generating coverage report..."
+	@$(GOCMD) tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# Code quality targets
+lint: ## Run linter
+	@echo "Running linter..."
+	@which $(GOLINT) > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+	@$(GOLINT) run ./...
+
+fmt: ## Format code
+	@echo "Formatting code..."
+	@$(GOFMT) -s -w .
+	@$(GOCMD) fmt ./...
+
+vet: ## Run go vet
+	@echo "Running go vet..."
+	@$(GOVET) ./...
+
+check: lint vet ## Run all code checks
+
+# Dependency management
+deps: ## Download dependencies
+	@echo "Downloading dependencies..."
+	@$(GOMOD) download
+	@$(GOMOD) tidy
+
+deps-update: ## Update dependencies
+	@echo "Updating dependencies..."
+	@$(GOGET) -u ./...
+	@$(GOMOD) tidy
+
+deps-vendor: ## Vendor dependencies
+	@echo "Vendoring dependencies..."
+	@$(GOMOD) vendor
+
+# Clean targets
+clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."
-	$(GOCLEAN) -cache
-	@rm -rf $(BIN_DIR) $(BUILD_DIR) $(DIST_DIR)
-	@rm -f coverage.txt coverage.html
+	@$(GOCLEAN)
+	@rm -rf $(BUILD_DIR)
+	@rm -f coverage.out coverage.html
+	@echo "Clean complete"
 
-# ==============================================================================
-# Tool Installation (Internal)
-# ==============================================================================
-tools:
-	@echo "Checking for development tools..."
-	@if ! which $(GOLINT) > /dev/null; then \
-		echo "Installing golangci-lint..."; \
-		$(GOGET) github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-	fi
-	@if ! which $(AIR) > /dev/null; then \
-		echo "Installing air..."; \
-		$(GOGET) github.com/cosmtrek/air@latest; \
-	fi
-	@if ! which $(GORELEASER) > /dev/null; then \
-		echo "Installing goreleaser..."; \
-		$(GOGET) github.com/goreleaser/goreleaser@latest; \
-	fi
+clean-all: clean ## Clean everything including dependencies
+	@echo "Cleaning everything..."
+	@rm -rf vendor/
+	@$(GOMOD) clean -cache
+
+# Docker targets
+docker: ## Build Docker image
+	@echo "Building Docker image..."
+	@docker build -t $(APP_NAME):$(VERSION) .
+	@docker tag $(APP_NAME):$(VERSION) $(APP_NAME):latest
+
+docker-push: docker ## Push Docker image to registry
+	@echo "Pushing Docker image..."
+	@docker push $(APP_NAME):$(VERSION)
+	@docker push $(APP_NAME):latest
+
+docker-run: docker ## Run in Docker container
+	@echo "Running in Docker..."
+	@docker run -it --rm -p 8333:8333 -p 9090:9090 $(APP_NAME):latest
+
+# Distribution targets
+dist: release ## Create distribution packages
+	@echo "Creating distribution packages..."
+	@mkdir -p $(DIST_DIR)
+	@tar -czf $(DIST_DIR)/$(APP_NAME)-$(VERSION)-$(PLATFORM)-$(ARCH).tar.gz -C $(BIN_DIR) $(BINARY_NAME)
+	@zip -j $(DIST_DIR)/$(APP_NAME)-$(VERSION)-$(PLATFORM)-$(ARCH).zip $(BIN_DIR)/$(BINARY_NAME)
+	@echo "Distribution packages created in $(DIST_DIR)"
+
+dist-all: build-all ## Create distribution packages for all platforms
+	@echo "Creating distribution packages for all platforms..."
+	@mkdir -p $(DIST_DIR)
+	@for os in linux darwin windows; do \
+		for arch in amd64 arm64; do \
+			if [ -f $(BIN_DIR)/$$os/$(BINARY_UNIX)-$$arch ]; then \
+				tar -czf $(DIST_DIR)/$(APP_NAME)-$(VERSION)-$$os-$$arch.tar.gz -C $(BIN_DIR)/$$os $(BINARY_UNIX)-$$arch; \
+			fi; \
+		done; \
+	done
+	@echo "All distribution packages created in $(DIST_DIR)"
+
+# Documentation targets
+docs: ## Generate documentation
+	@echo "Generating documentation..."
+	@$(GOCMD) doc -all ./... > docs/api.txt
+	@godoc -http=:6060 &
+	@echo "Documentation server started at http://localhost:6060"
+
+# Development targets
+dev: ## Run in development mode with hot reload
+	@echo "Starting development mode..."
+	@which air > /dev/null || (echo "Installing air..." && go install github.com/cosmtrek/air@latest)
+	@air
+
+generate: ## Run go generate
+	@echo "Running go generate..."
+	@$(GOCMD) generate ./...
+
+proto: ## Generate protobuf code
+	@echo "Generating protobuf code..."
+	@protoc --go_out=. --go-grpc_out=. proto/*.proto
+
+# Utility targets
+version: ## Display version information
+	@echo "$(APP_NAME) version $(VERSION)"
+	@echo "Build date: $(BUILD_DATE)"
+	@echo "Git commit: $(GIT_COMMIT)"
+	@echo "Platform: $(PLATFORM)/$(ARCH)"
+
+info: ## Display build information
+	@echo "Application: $(APP_NAME)"
+	@echo "Version: $(VERSION)"
+	@echo "Build Date: $(BUILD_DATE)"
+	@echo "Git Commit: $(GIT_COMMIT)"
+	@echo "Platform: $(PLATFORM)"
+	@echo "Architecture: $(ARCH)"
+	@echo "Go Version: $(shell $(GOCMD) version)"
+	@echo "Build Tags: $(BUILD_TAGS)"
+	@echo "CGO Enabled: $(CGO_ENABLED)"
+
+# CI/CD targets
+ci: clean deps lint test build ## Run CI pipeline
+	@echo "CI pipeline complete"
+
+cd: ci dist docker-push ## Run CD pipeline
+	@echo "CD pipeline complete"
+
+# Performance profiling
+profile-cpu: ## Run CPU profiling
+	@echo "Running CPU profiling..."
+	@$(GOTEST) -cpuprofile=cpu.prof -bench=.
+	@$(GOCMD) tool pprof cpu.prof
+
+profile-mem: ## Run memory profiling
+	@echo "Running memory profiling..."
+	@$(GOTEST) -memprofile=mem.prof -bench=.
+	@$(GOCMD) tool pprof mem.prof
+
+# Security scanning
+security: ## Run security scan
+	@echo "Running security scan..."
+	@which gosec > /dev/null || (echo "Installing gosec..." && go install github.com/securego/gosec/v2/cmd/gosec@latest)
+	@gosec ./...
+
+# Default config generation
+config: ## Generate default configuration file
+	@echo "Generating default configuration..."
+	@$(BIN_DIR)/$(BINARY_NAME) --generate-config

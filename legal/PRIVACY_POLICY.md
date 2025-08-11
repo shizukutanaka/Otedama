@@ -1,292 +1,161 @@
-# Privacy Policy
-
-**Effective Date:** January 1, 2025  
-**Last Updated:** January 1, 2025
+# プライバシーポリシー / Privacy Policy
 
-## 1. Introduction
+**Otedama P2P Mining Pool Software**  
+**Version 1.0**  
+**Effective Date: 2025-08-07**
 
-Otedama ("we," "our," or "us") respects your privacy and is committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mining pool service and software.
+## 1. はじめに / Introduction
 
-## 2. Information We Collect
-
-### 2.1 Information You Provide
+Otedama（以下「当社」「私たち」）は、利用者のプライバシーを尊重し、個人情報の保護に努めています。本プライバシーポリシーは、当社がどのような情報を収集し、どのように使用・保護するかを説明します。
 
-#### Account Information
-- Username
-- Email address
-- Wallet addresses
-- Password (stored in encrypted form)
+This Privacy Policy describes how Otedama ("we", "us", "our") collects, uses, and protects your information when you use our P2P mining pool software and related services.
 
-#### Mining Configuration
-- Worker names
-- Mining hardware information
-- Pool settings and preferences
+## 2. 収集する情報 / Information We Collect
 
-#### Communication Data
-- Support tickets
-- Email correspondence
-- Feedback and surveys
+### 2.1 自動的に収集される情報 / Automatically Collected Information
 
-### 2.2 Information Collected Automatically
-
-#### Technical Data
-- IP addresses
-- Device information (OS, browser type)
-- Mining software version
-- Hardware specifications
+- **ウォレットアドレス**: マイニング報酬の支払いおよびトランザクション処理
+- **IPアドレス**: P2P接続の確立とネットワークセキュリティ
+- **マイニング統計**: ハッシュレート、シェア、稼働時間
+- **システム情報**: OS、ハードウェア仕様（診断目的）
+- **ログデータ**: エラー、アクセス時間、使用パターン
 
-#### Usage Data
-- Mining statistics (hashrate, shares submitted)
-- Connection timestamps
-- Pool interaction logs
-- Error and diagnostic logs
-
-#### Performance Data
-- Share validation times
-- Network latency
-- System performance metrics
-
-### 2.3 Blockchain Data
-- Transaction hashes
-- Block discoveries
-- Payout records
+### 2.2 任意提供情報 / Voluntarily Provided Information
 
-## 3. How We Use Your Information
+- **メールアドレス**: 通知設定を有効にした場合
+- **ユーザー名/エイリアス**: コミュニティ機能利用時
+- **フィードバック**: サポートリクエストや改善提案
 
-We use collected information for:
+## 3. 情報の使用目的 / How We Use Information
 
-### 3.1 Service Operation
-- Providing mining pool services
-- Processing mining rewards and payouts
-- Authenticating users and preventing fraud
-- Maintaining and improving service performance
+### 3.1 サービス提供 / Service Provision
+- マイニングプールの運営と最適化
+- 報酬の計算と分配
+- P2Pネットワークの維持
 
-### 3.2 Communication
-- Sending service-related notifications
-- Responding to inquiries and support requests
-- Providing updates about service changes
-- Sending security alerts
+### 3.2 改善とサポート / Improvement and Support
+- パフォーマンスの監視と最適化
+- バグの特定と修正
+- ユーザーサポートの提供
 
-### 3.3 Analytics and Improvement
-- Analyzing service usage patterns
-- Identifying and fixing technical issues
-- Developing new features
-- Optimizing mining algorithms
+### 3.3 セキュリティ / Security
+- 不正アクセスの検出と防止
+- DDoS攻撃の緩和
+- ネットワークの整合性維持
 
-### 3.4 Legal and Safety
-- Complying with legal obligations
-- Enforcing our Terms of Service
-- Protecting against malicious activities
-- Resolving disputes
+### 3.4 コンプライアンス / Compliance
+- 法的要求への対応
+- AML/KYC要件の遵守（該当する場合）
 
-## 4. Legal Basis for Processing
+## 4. データの共有と開示 / Data Sharing and Disclosure
 
-We process your personal data based on:
+### 4.1 第三者との共有 / Third-Party Sharing
 
-- **Contract Performance**: To provide services you've requested
-- **Legitimate Interests**: To improve our services and ensure security
-- **Legal Obligations**: To comply with applicable laws
-- **Consent**: Where explicitly provided by you
+以下の場合を除き、個人情報を第三者と共有しません：
 
-## 5. Data Sharing and Disclosure
+- **法的要求**: 法執行機関からの正当な要求
+- **セキュリティ**: 詐欺やセキュリティ脅威の防止
+- **同意**: 利用者の明示的な同意がある場合
+- **集計データ**: 個人を特定できない統計情報
 
-### 5.1 We Do Not Sell Your Data
-We do not sell, trade, or rent your personal information to third parties.
+### 4.2 ブロックチェーンの透明性 / Blockchain Transparency
 
-### 5.2 Service Providers
-We may share data with trusted service providers who assist us in:
-- Infrastructure and hosting
-- Payment processing
-- Security services
-- Analytics
+ブロックチェーン上のトランザクションは公開されており、ウォレットアドレスと関連するトランザクションは誰でも閲覧可能です。
 
-All service providers are bound by confidentiality agreements.
+## 5. データの保管と保護 / Data Storage and Security
 
-### 5.3 Legal Requirements
-We may disclose information when required by:
-- Court orders or legal processes
-- Government authorities
-- Law enforcement agencies
-- To protect our rights or safety
+### 5.1 セキュリティ対策 / Security Measures
 
-### 5.4 Business Transfers
-In case of merger, acquisition, or asset sale, your information may be transferred to the successor entity.
+- **暗号化**: 転送中および保管中のデータの暗号化
+- **アクセス制御**: 役割ベースのアクセス制限
+- **監査ログ**: すべてのアクセスと変更の記録
+- **定期的な評価**: セキュリティ脆弱性の定期的な評価
 
-### 5.5 Aggregated Data
-We may share anonymized, aggregated data that cannot identify you personally.
+### 5.2 データ保持期間 / Data Retention
 
-## 6. Data Security
+- **トランザクションデータ**: 7年間（法的要件）
+- **ログデータ**: 90日間
+- **マイニング統計**: 1年間
+- **非アクティブアカウント**: 2年後に削除
 
-### 6.1 Security Measures
-We implement industry-standard security measures including:
-- Encryption of data in transit (TLS/SSL)
-- Encryption of sensitive data at rest
-- Access controls and authentication
-- Regular security audits
-- Intrusion detection systems
+## 6. 利用者の権利 / Your Rights
 
-### 6.2 Data Breach Response
-In case of a data breach that may affect your personal data:
-- We will notify affected users within 72 hours
-- We will provide information about the breach and mitigation steps
-- We will work with authorities as required
+### 6.1 アクセス権 / Right to Access
+保有する個人情報へのアクセスを要求できます。
 
-## 7. Data Retention
+### 6.2 訂正権 / Right to Correction
+不正確な情報の訂正を要求できます。
 
-We retain your data for as long as necessary to:
-- Provide our services
-- Comply with legal obligations
-- Resolve disputes
-- Enforce agreements
+### 6.3 削除権 / Right to Deletion
+特定の条件下で、個人情報の削除を要求できます。
 
-Typical retention periods:
-- Account data: Duration of account + 1 year
-- Transaction records: 7 years
-- Technical logs: 90 days
-- Mining statistics: 2 years
+### 6.4 ポータビリティ / Data Portability
+構造化された形式でデータのコピーを要求できます。
 
-## 8. Your Rights
+### 6.5 オプトアウト / Opt-Out
+マーケティング通信からのオプトアウトが可能です。
 
-Depending on your location, you may have the right to:
+## 7. Cookie とトラッキング / Cookies and Tracking
 
-### 8.1 Access
-Request a copy of your personal data
+### 7.1 使用するCookie
+- **必須Cookie**: サービスの基本機能
+- **分析Cookie**: 使用パターンの理解（オプトアウト可能）
+- **設定Cookie**: ユーザー設定の保存
 
-### 8.2 Correction
-Request correction of inaccurate data
+### 7.2 Do Not Track
+ブラウザのDNT設定を尊重します。
 
-### 8.3 Deletion
-Request deletion of your data (subject to legal requirements)
+## 8. 国際データ転送 / International Data Transfers
 
-### 8.4 Portability
-Receive your data in a structured, machine-readable format
+P2Pネットワークの性質上、データは国境を越えて転送される可能性があります。サービスを利用することで、この転送に同意したものとみなされます。
 
-### 8.5 Objection
-Object to certain types of processing
+## 9. 児童のプライバシー / Children's Privacy
 
-### 8.6 Restriction
-Request limitation of processing
+本サービスは18歳未満の方を対象としていません。18歳未満の方から故意に情報を収集することはありません。
 
-To exercise these rights, contact us at privacy@otedama.io
+## 10. 変更通知 / Changes to This Policy
 
-## 9. International Data Transfers
+### 10.1 更新
+本ポリシーは定期的に更新される場合があります。重要な変更については、GitHubリポジトリまたはその他の適切な方法で通知します。
 
-Your data may be transferred to and processed in countries other than your own. We ensure appropriate safeguards are in place for such transfers, including:
-- Standard contractual clauses
-- Adequacy decisions
-- Privacy Shield frameworks (where applicable)
+### 10.2 発効日
+変更は、改訂版の公開時点で有効となります。
 
-## 10. Cookies and Tracking
+## 11. 連絡先 / Contact Information
 
-### 10.1 Essential Cookies
-We use essential cookies for:
-- Session management
-- Security features
-- User preferences
+プライバシーに関する質問や懸念事項：
 
-### 10.2 Analytics
-We may use analytics tools to understand service usage. You can opt-out of analytics tracking in your account settings.
+- **GitHub Issues**: https://github.com/shizukutanaka/Otedama/issues
+- **Email**: privacy@otedama.network (準備中)
+- **PGP Key**: [公開鍵は後日公開]
 
-### 10.3 Do Not Track
-We respect Do Not Track browser settings.
+## 12. 地域別条項 / Regional Provisions
 
-## 11. Children's Privacy
+### 12.1 EU/EEA居住者 (GDPR)
+- **法的根拠**: 契約履行、正当な利益、法的義務
+- **データ保護責任者**: 未設置（必要に応じて設置予定）
+- **監督当局**: 居住国のデータ保護当局に苦情を申し立てる権利
 
-Our Service is not intended for users under 18 years of age. We do not knowingly collect personal information from children.
+### 12.2 カリフォルニア州居住者 (CCPA)
+- カリフォルニア州消費者プライバシー法に基づく追加の権利
+- 個人情報の販売は行いません
 
-## 12. Third-Party Links
+### 12.3 日本居住者
+- 個人情報保護法に基づく権利
+- 開示、訂正、利用停止等の請求権
 
-Our Service may contain links to third-party websites. We are not responsible for their privacy practices. Please review their privacy policies.
+## 13. セキュリティインシデント / Security Incidents
 
-## 13. Changes to Privacy Policy
+### 13.1 通知
+データ侵害が発生した場合、適用法に従い、影響を受ける利用者に72時間以内に通知します。
 
-We may update this Privacy Policy periodically. We will notify you of material changes via:
-- Email notification
-- Service announcement
-- Website notice
-
-## 14. Regional Provisions
-
-### 14.1 European Union (GDPR)
-EU residents have additional rights under GDPR:
-- Right to be informed
-- Right to lodge complaints with supervisory authorities
-- Right to withdraw consent
-
-Data Controller: Otedama Project  
-Legal Basis: As specified in Section 4
-
-### 14.2 California (CCPA)
-California residents have additional rights under CCPA:
-- Right to know what information is collected
-- Right to delete personal information
-- Right to opt-out of sale (we do not sell data)
-- Right to non-discrimination
-
-### 14.3 Japan (APPI)
-Japanese residents have rights under the Act on Protection of Personal Information:
-- Right to disclosure
-- Right to correction, addition, or deletion
-- Right to discontinuation of use
-
-## 15. Data Protection Officer
-
-For privacy-related inquiries, contact our Data Protection Officer:
-
-Email: dpo@otedama.io  
-Address: [To be provided]
-
-## 16. Contact Information
-
-For questions about this Privacy Policy or our privacy practices:
-
-**Otedama Project**  
-Email: privacy@otedama.io  
-Website: https://otedama.io
-
-## 17. Specific Data Processing Activities
-
-### 17.1 Mining Pool Operations
-- **Data Collected**: Worker ID, hashrate, shares, wallet address
-- **Purpose**: Pool operation and reward distribution
-- **Retention**: Active period + 2 years
-
-### 17.2 Security Monitoring
-- **Data Collected**: IP addresses, access patterns
-- **Purpose**: Fraud prevention and security
-- **Retention**: 90 days
-
-### 17.3 Customer Support
-- **Data Collected**: Communication content, user ID
-- **Purpose**: Providing support services
-- **Retention**: Resolution + 1 year
-
-## 18. Your Choices
-
-### 18.1 Account Settings
-You can manage your privacy preferences in your account settings:
-- Communication preferences
-- Data sharing options
-- Analytics opt-out
-
-### 18.2 Browser Settings
-You can control cookies and tracking through your browser settings.
-
-### 18.3 Mining Software
-You can configure data collection in the mining software settings.
-
-## 19. Data Minimization
-
-We follow the principle of data minimization:
-- Collect only necessary data
-- Limit access on need-to-know basis
-- Delete data when no longer needed
-- Anonymize data where possible
-
-## 20. Accountability
-
-We maintain records of our data processing activities and conduct regular privacy impact assessments to ensure compliance with this policy and applicable laws.
+### 13.2 対応
+- 侵害の範囲と影響の評価
+- 是正措置の実施
+- 再発防止策の導入
 
 ---
 
-By using the Otedama Service, you acknowledge that you have read and understood this Privacy Policy.
+**発効日 / Effective Date**: 2025-08-07  
+**最終更新日 / Last Updated**: 2025-08-07  
+**バージョン / Version**: 1.0

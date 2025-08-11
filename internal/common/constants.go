@@ -7,6 +7,9 @@ const (
 	AlgorithmSHA256d = "sha256d"
 	AlgorithmScrypt  = "scrypt"
 	AlgorithmEthash  = "ethash"
+	AlgorithmKawPow  = "kawpow"
+	AlgorithmRandomX = "randomx"
+	AlgorithmAutolykos2 = "autolykos2"
 )
 
 // Network Constants
@@ -16,7 +19,7 @@ const (
 	DefaultP2PPort         = 9333
 	DefaultRPCPort         = 8332
 	
-	MaxMessageSize         = 10 * 1024 * 1024 // 10MB
+	MaxMessageSize         = 16 * 1024 * 1024 // 16MB
 	ConnectionTimeout      = 30 * time.Second
 	HandshakeTimeout       = 10 * time.Second
 	PingInterval           = 30 * time.Second
@@ -42,6 +45,7 @@ const (
 	DefaultCPUThreads      = -1 // Auto-detect
 	CPUCacheLineSize       = 64
 	CPUBatchSize           = 1024
+	CPUCacheL3DivFactor    = 80 // For batch size calculation
 	
 	// GPU Mining
 	DefaultGPUIntensity    = 20
@@ -79,6 +83,11 @@ const (
 	
 	TokenLength            = 32
 	NonceLength            = 16
+	
+	// Circuit breaker
+	CircuitBreakerThreshold = 5
+	CircuitBreakerTimeout   = 30 * time.Second
+	CircuitBreakerResetTime = 60 * time.Second
 )
 
 // Performance Constants
@@ -91,6 +100,12 @@ const (
 	
 	CacheSize              = 1000
 	CacheTTL               = 5 * time.Minute
+	
+	// Buffer pool sizes
+	SmallBufferSize        = 64
+	MediumBufferSize       = 1024
+	LargeBufferSize        = 65536
+	MaxBufferPoolSize      = 1000
 )
 
 // Database Constants
@@ -114,17 +129,7 @@ const (
 	MetricsFlushInterval   = 10 * time.Second
 )
 
-// Error Messages
-const (
-	ErrInvalidConfiguration = "invalid configuration"
-	ErrDeviceNotFound       = "device not found"
-	ErrConnectionFailed     = "connection failed"
-	ErrAuthenticationFailed = "authentication failed"
-	ErrInsufficientBalance  = "insufficient balance"
-	ErrInvalidShare         = "invalid share"
-	ErrStaleShare           = "stale share"
-	ErrDuplicateShare       = "duplicate share"
-)
+// Error Messages (moved to errors.go to avoid duplication)
 
 // Log Messages
 const (
@@ -181,4 +186,13 @@ const (
 	RegexIPAddress          = `^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`
 	RegexEmail              = `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 	RegexWalletAddress      = `^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$` // Bitcoin address
+)
+
+// Recovery Constants
+const (
+	MaxRetryAttempts        = 3
+	RetryBackoffBase        = 1 * time.Second
+	RetryBackoffMax         = 30 * time.Second
+	RecoveryCheckInterval   = 10 * time.Second
+	ComponentRestartDelay   = 5 * time.Second
 )

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otedama/otedama/internal/crypto"
+	"github.com/shizukutanaka/Otedama/internal/crypto"
 	"go.uber.org/zap"
 )
 

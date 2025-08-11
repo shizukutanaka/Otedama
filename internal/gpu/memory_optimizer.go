@@ -3,7 +3,6 @@ package gpu
 import (
 	"fmt"
 	"math"
-	"runtime"
 	"sync"
 )
 

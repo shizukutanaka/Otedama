@@ -159,7 +159,6 @@ This AUP should be read in conjunction with:
 For questions about this policy:
 
 **Otedama Project**  
-Email: support@otedama.io  
 Website: https://otedama.io
 
 ---

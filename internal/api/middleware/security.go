@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/otedama/otedama/internal/security"
+	"github.com/shizukutanaka/Otedama/internal/security"
 	"go.uber.org/zap"
 )
 

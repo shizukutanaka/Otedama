@@ -64,7 +64,15 @@
       "Bash(./fix_imports.sh)",
       "Bash(for:*)",
       "Bash(do echo:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(/mnt/c/Users/irosa/Desktop/Otedama/scripts/performance_test.sh:*)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" get github.com/ethereum/go-ethereum/accounts github.com/ethereum/go-ethereum/crypto github.com/libp2p/go-libp2p github.com/libp2p/go-libp2p/core/crypto github.com/libp2p/go-libp2p/core/host github.com/libp2p/go-libp2p/core/network github.com/libp2p/go-libp2p/core/peer github.com/libp2p/go-libp2p/core/protocol github.com/libp2p/go-libp2p/p2p/security/noise github.com/libp2p/go-libp2p/p2p/security/tls github.com/miekg/pkcs11 github.com/lib/pq github.com/mattn/go-sqlite3)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" mod tidy)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build -o otedama.exe ./cmd/otedama)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build ./internal/security)",
+      "Bash(\"/mnt/c/Program Files/Go/bin/go.exe\" build -o otedama.exe ./cmd/otedama/main.go)",
+      "Bash(/mnt/c/Program Files/Go/bin/go.exe build -o otedama.exe ./cmd/otedama)",
+      "Bash(/usr/local/go/bin/go test ./internal/mining/engine_test.go)"
     ],
     "deny": []
   }

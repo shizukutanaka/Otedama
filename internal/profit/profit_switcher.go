@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otedama/otedama/internal/currency"
-	"github.com/otedama/otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/currency"
+	"github.com/shizukutanaka/Otedama/internal/mining"
 	"go.uber.org/zap"
 )
 

@@ -599,7 +599,7 @@ func (w *GPUWorker) mineBatch(work *MiningWork) {
 	// 3. Check results
 	// 4. Submit shares
 	
-	startNonce := uint64(time.Now().UnixNano())
+	_ = uint64(time.Now().UnixNano()) // startNonce for future use
 	batchSize := w.buffers.batchSize
 	
 	// Simulate mining

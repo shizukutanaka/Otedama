@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otedama/otedama/internal/mining"
-	"github.com/otedama/otedama/internal/p2p"
-	"github.com/otedama/otedama/internal/stratum"
+	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/p2p"
+	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"go.uber.org/zap"
 )
 

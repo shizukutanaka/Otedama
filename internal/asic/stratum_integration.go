@@ -207,17 +207,20 @@ func (b *ASICStratumBridge) convertJobToWork(job *stratum.Job, device *ASICDevic
 	// Generate unique extra nonce for this device
 	extraNonce1 := b.generateExtraNonce1(device.ID)
 	
+	// Create extended job for ASIC support
+	extJob := stratum.CreateExtendedJob(job)
+	
 	return &MiningWork{
 		JobID:        job.ID,
 		PrevHash:     job.PrevHash,
-		CoinbaseA:    job.CoinbaseA,
-		CoinbaseB:    job.CoinbaseB,
+		CoinbaseA:    extJob.CoinbaseA,
+		CoinbaseB:    extJob.CoinbaseB,
 		MerkleBranch: job.MerkleBranch,
 		Version:      parseHexUint32(job.Version),
 		NBits:        parseHexUint32(job.NBits),
 		NTime:        parseHexUint32(job.NTime),
 		CleanJobs:    job.CleanJobs,
-		Target:       job.Target,
+		Target:       stratum.BigIntToTargetString(job.Target),
 	}
 }
 
@@ -255,7 +258,7 @@ func (b *ASICStratumBridge) processDeviceShares() {
 	b.deviceWorkMu.RLock()
 	defer b.deviceWorkMu.RUnlock()
 	
-	for deviceID, work := range b.deviceWork {
+	for _, work := range b.deviceWork {
 		device := work.Device
 		
 		// Get work status from device

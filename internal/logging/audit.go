@@ -2,10 +2,7 @@ package logging
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"

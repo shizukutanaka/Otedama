@@ -249,7 +249,7 @@ func NewDDoSProtection(config DDoSConfig, logger *zap.Logger) *DDoSProtection {
 		ddos.geoBlocker = NewGeoBlocker(config.WhitelistedCountries, config.BlacklistedCountries)
 	}
 	
-	ddos.threatIntelligence = NewThreatIntelligence()
+	ddos.threatIntelligence = NewThreatIntelligence(logger, []string{})
 	ddos.mitigationEngine = NewMitigationEngine(logger)
 	
 	// Initialize patterns
@@ -1055,9 +1055,7 @@ func NewNetworkAnomalyDetector() *NetworkAnomalyDetector { return &NetworkAnomal
 func (n *NetworkAnomalyDetector) Start(ctx context.Context) {}
 func (n *NetworkAnomalyDetector) GetAnomalyScore(ip string, req RequestInfo) float64 { return 0.0 }
 
-type ThreatIntelligence struct{}
-func NewThreatIntelligence() *ThreatIntelligence { return &ThreatIntelligence{} }
-func (t *ThreatIntelligence) UpdateFeeds() {}
+// ThreatIntelligence is defined in threat_detector.go
 
 type GeoBlocker struct {
 	whitelistedCountries []string
@@ -1091,5 +1089,14 @@ func generateRandomString(length int) string {
 }
 
 func randInt(min, max int) int {
-	return min + int(rand.Int63n(int64(max-min+1)))
+	b := make([]byte, 8)
+	rand.Read(b)
+	val := int64(0)
+	for i := 0; i < 8; i++ {
+		val = (val << 8) | int64(b[i])
+	}
+	if val < 0 {
+		val = -val
+	}
+	return min + int(val%int64(max-min+1))
 }

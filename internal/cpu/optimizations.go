@@ -2,6 +2,7 @@ package cpu
 
 import (
 	"crypto/sha256"
+	"hash"
 	"runtime"
 	"unsafe"
 )
@@ -47,7 +48,7 @@ type OptimizedHasher interface {
 
 // StandardHasher uses Go's standard crypto/sha256
 type StandardHasher struct {
-	h sha256.Hash
+	h hash.Hash
 }
 
 // NewStandardHasher creates a new standard hasher
@@ -66,7 +67,8 @@ func (s *StandardHasher) ComputeDoubleHash(data []byte) []byte {
 
 // ComputeHash computes SHA256(data)
 func (s *StandardHasher) ComputeHash(data []byte) []byte {
-	return sha256.Sum256(data)[:]
+	sum := sha256.Sum256(data)
+	return sum[:]
 }
 
 // Reset resets the hasher state

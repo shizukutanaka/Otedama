@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otedama/otedama/internal/database"
+	"github.com/shizukutanaka/Otedama/internal/database"
 	"go.uber.org/zap"
 )
 

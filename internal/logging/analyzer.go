@@ -5,20 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
-	"sort"
 	"strings"
 	"time"
 )
 
 // LogAnalyzer provides capabilities to parse and analyze log files.
-// It is designed to work with the JSON output from the logger.	ype LogAnalyzer struct {
+// It is designed to work with the JSON output from the logger.
+type LogAnalyzer struct {
 	entries []LogEntry
 	filters []Filter
 }
 
 // LogEntry represents a single, parsed log entry.
-// The JSON tags correspond to the output format defined in the logger's encoder configuration.	ype LogEntry struct {
+// The JSON tags correspond to the output format defined in the logger's encoder configuration.
+type LogEntry struct {
 	Timestamp   time.Time              `json:"ts"`
 	Level       string                 `json:"level"`
 	Logger      string                 `json:"logger"`
@@ -31,7 +33,8 @@ import (
 	Raw         string                 `json:"-"`
 }
 
-// Filter is a function that returns true if a log entry should be included in an analysis.	ype Filter func(entry LogEntry) bool
+// Filter is a function that returns true if a log entry should be included in an analysis.
+type Filter func(entry LogEntry) bool
 
 // NewLogAnalyzer creates a new, empty log analyzer.
 func NewLogAnalyzer() *LogAnalyzer {
@@ -128,7 +131,7 @@ func parseLogLine(line string) (LogEntry, error) {
 			entry.Timestamp = t
 		} else if f, ok := ts.(float64); ok {
 			// Handle Unix timestamp format.
-			sec, dec :=- math.Modf(f)
+			sec, dec := math.Modf(f)
 			entry.Timestamp = time.Unix(int64(sec), int64(dec*(1e9)))
 		}
 	}

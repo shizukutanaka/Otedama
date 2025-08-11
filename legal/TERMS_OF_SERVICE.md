@@ -1,199 +1,123 @@
-# Terms of Service
+# 利用規約 / Terms of Service
 
-**Effective Date:** January 1, 2025  
-**Last Updated:** January 1, 2025
+**Otedama P2P Mining Pool Software**  
+**Version 1.0**  
+**Effective Date: 2025-08-07**
 
-## 1. Acceptance of Terms
+## 1. サービスの提供 / Service Provision
 
-By accessing or using the Otedama mining pool and software ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the Service.
+### 1.1 サービス内容
+Otedama（以下「本サービス」）は、分散型P2Pマイニングプール、DEX（分散型取引所）、およびDeFi（分散型金融）機能を提供するオープンソースソフトウェアです。
 
-## 2. Description of Service
+### 1.2 Service Description
+Otedama ("the Service") is an open-source software providing distributed P2P mining pool, DEX (Decentralized Exchange), and DeFi (Decentralized Finance) functionalities.
 
-Otedama provides:
-- Peer-to-peer (P2P) mining pool services
-- Mining software supporting CPU, GPU, and ASIC hardware
-- Cryptocurrency mining coordination and reward distribution
-- Related tools and services
+## 2. 利用条件 / Terms of Use
 
-## 3. Eligibility
+### 2.1 利用資格
+- 18歳以上であること
+- 居住国の法律に従って本サービスを利用できること
+- 制裁対象国・地域に居住していないこと
 
-You must be at least 18 years old and legally capable of entering into contracts in your jurisdiction to use the Service. By using the Service, you represent and warrant that you meet these eligibility requirements.
+### 2.2 Eligibility
+- Must be 18 years or older
+- Must be legally permitted to use the Service in your jurisdiction
+- Must not reside in sanctioned countries or regions
 
-## 4. User Accounts
+## 3. 禁止事項 / Prohibited Activities
 
-### 4.1 Account Creation
-- You must provide accurate, complete, and current information
-- You are responsible for maintaining the confidentiality of your account credentials
-- You are responsible for all activities that occur under your account
+以下の行為を禁止します：
+- マネーロンダリング、テロ資金供与
+- 不正アクセス、システムへの攻撃
+- 虚偽情報の提供
+- 知的財産権の侵害
+- 市場操作、価格操作
 
-### 4.2 Account Security
-- Use strong, unique passwords
-- Enable two-factor authentication when available
-- Immediately notify us of any unauthorized use of your account
+## 4. リスクの開示 / Risk Disclosure
 
-## 5. Mining Operations
+### 4.1 投資リスク
+暗号資産への投資は高リスクであり、投資額の全額を失う可能性があります。
 
-### 5.1 Mining Software
-- You may use our mining software solely for legitimate cryptocurrency mining
-- You must not modify, reverse engineer, or redistribute the software without permission
-- You must comply with all applicable laws regarding cryptocurrency mining
+### 4.2 技術的リスク
+- スマートコントラクトのバグ
+- ネットワーク障害
+- ハッキングリスク
+- プロトコルの脆弱性
 
-### 5.2 Pool Participation
-- Mining rewards are distributed according to the pool's reward system
-- Pool fees are deducted automatically from mining rewards
-- We reserve the right to adjust pool parameters with reasonable notice
+## 5. 免責事項 / Disclaimers
 
-### 5.3 Hardware Requirements
-- You are responsible for providing compatible mining hardware
-- You must ensure your hardware operates within manufacturer specifications
-- We are not liable for hardware damage resulting from mining activities
+### 5.1 無保証
+本サービスは「現状有姿」で提供され、明示的または黙示的な保証は一切ありません。
 
-## 6. Fees and Payments
+### 5.2 責任制限
+いかなる場合においても、開発者およびコントリビューターは、直接的、間接的、偶発的、特別、懲罰的、または結果的損害について責任を負いません。
 
-### 6.1 Pool Fees
-- Current pool fee: 1% of mining rewards
-- Fees may be adjusted with 30 days' notice
+## 6. 知的財産権 / Intellectual Property
 
-### 6.2 Minimum Payout
-- Minimum payout threshold: 0.001 cryptocurrency units
-- Payouts are processed automatically when threshold is reached
-- Transaction fees may apply to payouts
+### 6.1 オープンソースライセンス
+本ソフトウェアはMITライセンスの下で提供されます。
 
-### 6.3 Payment Methods
-- Payouts are made in the mined cryptocurrency
-- You must provide a valid wallet address
-- We are not responsible for payments sent to incorrect addresses
+### 6.2 商標
+"Otedama"および関連ロゴは開発チームの商標です。
 
-## 7. Prohibited Activities
+## 7. プライバシー / Privacy
 
-You agree not to:
-- Use the Service for any illegal purposes
-- Attempt to manipulate or attack the pool
-- Submit false or invalid shares
-- Use modified mining software to gain unfair advantages
-- Engage in any activity that disrupts the Service
-- Mine on the pool using stolen electricity or resources
-- Violate any applicable laws or regulations
+### 7.1 データ収集
+本サービスは以下のデータを収集する場合があります：
+- ウォレットアドレス
+- トランザクション履歴
+- マイニング統計
+- IPアドレス（P2P接続用）
 
-## 8. Intellectual Property
+### 7.2 データ利用
+収集したデータは以下の目的で使用されます：
+- サービスの提供と改善
+- セキュリティとコンプライアンス
+- 統計分析（匿名化後）
 
-### 8.1 Our Property
-All Service content, features, and functionality are owned by Otedama and are protected by international copyright, trademark, and other intellectual property laws.
+## 8. コンプライアンス / Compliance
 
-### 8.2 Limited License
-We grant you a limited, non-exclusive, non-transferable license to use the Service for legitimate mining purposes.
+### 8.1 KYC/AML
+大口取引や特定の機能については、KYC（本人確認）およびAML（マネーロンダリング防止）手続きが必要な場合があります。
 
-## 9. Privacy
+### 8.2 規制遵守
+利用者は自身の管轄区域の法律および規制を遵守する責任があります。
 
-Your use of the Service is subject to our Privacy Policy, which is incorporated by reference into these Terms.
+## 9. 紛争解決 / Dispute Resolution
 
-## 10. Disclaimers
+### 9.1 準拠法
+本規約は日本法に準拠し、日本法に従って解釈されます。
 
-### 10.1 Service Availability
-THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED.
+### 9.2 仲裁
+紛争は東京における仲裁により最終的に解決されるものとします。
 
-### 10.2 Mining Risks
-- Cryptocurrency mining involves financial risk
-- Mining profitability depends on various factors beyond our control
-- Past performance does not guarantee future results
+## 10. 変更と更新 / Amendments
 
-### 10.3 No Investment Advice
-We do not provide investment, financial, or legal advice. Mining decisions are your sole responsibility.
+### 10.1 規約の変更
+本規約は予告なく変更される場合があります。重要な変更については、ウェブサイトまたはGitHubリポジトリで通知します。
 
-## 11. Limitation of Liability
+### 10.2 継続利用
+変更後の継続利用は、新しい規約への同意とみなされます。
 
-TO THE MAXIMUM EXTENT PERMITTED BY LAW:
-- We are not liable for any indirect, incidental, special, or consequential damages
-- Our total liability shall not exceed the fees paid by you in the past 12 months
-- We are not liable for lost profits, data loss, or hardware damage
+## 11. 連絡先 / Contact Information
 
-## 12. Indemnification
+- **GitHub**: https://github.com/shizukutanaka/Otedama
+- **Email**: support@otedama.network (準備中)
+- **Discord**: https://discord.gg/otedama (準備中)
 
-You agree to indemnify and hold harmless Otedama, its affiliates, and their respective officers, directors, employees, and agents from any claims, damages, losses, and expenses arising from your use of the Service or violation of these Terms.
+## 12. 定義 / Definitions
 
-## 13. Termination
+- **「本サービス」**: Otedamaソフトウェアおよび関連サービス
+- **「利用者」**: 本サービスを利用する個人または法人
+- **「開発者」**: Otedamaの開発に携わる個人および組織
+- **「暗号資産」**: ビットコイン、イーサリアムなどのデジタル資産
 
-### 13.1 By You
-You may terminate your account at any time by discontinuing use of the Service.
+## 13. 完全合意 / Entire Agreement
 
-### 13.2 By Us
-We may terminate or suspend your access immediately, without prior notice, for:
-- Violation of these Terms
-- Fraudulent or illegal activities
-- Extended periods of inactivity
-- Any reason at our sole discretion
-
-### 13.3 Effect of Termination
-Upon termination:
-- Your access to the Service will cease
-- Pending payouts above minimum threshold will be processed
-- These Terms will survive termination to the extent applicable
-
-## 14. Modifications
-
-We reserve the right to modify these Terms at any time. We will notify users of material changes via:
-- Email notification
-- Service announcement
-- Website notice
-
-Continued use of the Service after modifications constitutes acceptance of the updated Terms.
-
-## 15. Governing Law
-
-These Terms are governed by the laws of Japan, without regard to conflict of law principles. Any disputes shall be resolved in the courts of Japan.
-
-## 16. Dispute Resolution
-
-### 16.1 Informal Resolution
-We encourage you to contact us first to resolve disputes informally.
-
-### 16.2 Arbitration
-If informal resolution fails, disputes shall be resolved through binding arbitration under the rules of the Japan Commercial Arbitration Association.
-
-### 16.3 Class Action Waiver
-You waive any right to participate in class action lawsuits against us.
-
-## 17. General Provisions
-
-### 17.1 Entire Agreement
-These Terms constitute the entire agreement between you and Otedama regarding the Service.
-
-### 17.2 Severability
-If any provision is found unenforceable, the remaining provisions will continue in effect.
-
-### 17.3 Waiver
-Our failure to enforce any right or provision is not a waiver of such right or provision.
-
-### 17.4 Assignment
-You may not assign or transfer these Terms. We may assign our rights to any successor or acquirer.
-
-## 18. Contact Information
-
-For questions about these Terms, contact us at:
-
-**Otedama Project**  
-Email: legal@otedama.io  
-Website: https://otedama.io
-
-## 19. Special Provisions
-
-### 19.1 Regulatory Compliance
-You are responsible for complying with all applicable laws and regulations in your jurisdiction, including but not limited to:
-- Tax obligations
-- Cryptocurrency regulations
-- Energy consumption restrictions
-- Export controls
-
-### 19.2 Force Majeure
-We are not liable for failures or delays due to circumstances beyond our reasonable control, including but not limited to:
-- Natural disasters
-- Government actions
-- Network attacks
-- Blockchain protocol changes
-
-### 19.3 Beta Features
-Features marked as "beta" are provided without warranties and may be discontinued at any time.
+本規約は、本サービスの利用に関する当事者間の完全な合意を構成し、口頭または書面による以前のすべての合意に優先します。
 
 ---
 
-By using the Otedama Service, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.
+**発効日 / Effective Date**: 2025-08-07  
+**最終更新日 / Last Updated**: 2025-08-07  
+**バージョン / Version**: 1.0

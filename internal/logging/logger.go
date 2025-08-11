@@ -20,7 +20,8 @@ var (
 
 // Factory is responsible for creating and managing loggers.
 // It ensures that loggers are configured consistently according to the provided settings.
-// This follows the Factory pattern and Single Responsibility Principle.	ype Factory struct {
+// This follows the Factory pattern and Single Responsibility Principle.
+type Factory struct {
 	config    *Config
 	rootLogger *zap.Logger
 	loggers    map[string]*zap.Logger

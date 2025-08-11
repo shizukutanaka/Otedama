@@ -2,7 +2,6 @@ package currency
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"

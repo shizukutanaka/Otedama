@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"go.uber.org/zap"
 )
 

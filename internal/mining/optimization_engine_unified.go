@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/otedama/otedama/internal/memory"
+	"github.com/shizukutanaka/Otedama/internal/memory"
 	"go.uber.org/zap"
 )
 

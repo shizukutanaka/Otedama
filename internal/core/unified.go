@@ -7,12 +7,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otedama/otedama/internal/api"
-	"github.com/otedama/otedama/internal/config"
-	"github.com/otedama/otedama/internal/mining"
-	"github.com/otedama/otedama/internal/p2p"
-	"github.com/otedama/otedama/internal/pool"
-	"github.com/otedama/otedama/internal/stratum"
+	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/p2p"
+	"github.com/shizukutanaka/Otedama/internal/pool"
+	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"go.uber.org/zap"
 )
 
@@ -29,7 +28,6 @@ type OtedamaSystem struct {
 	poolManager   *pool.Manager
 	stratumServer *stratum.Server
 	p2pNetwork    *p2p.Network
-	apiServer     *api.Server
 	
 	// State management
 	state     atomic.Value // stores SystemState
@@ -117,12 +115,6 @@ func (s *OtedamaSystem) initializeComponents() error {
 		}
 	}
 	
-	// 5. Initialize API server if enabled
-	if s.config.API.Enabled {
-		if err := s.initializeAPIServer(); err != nil {
-			return fmt.Errorf("API server initialization failed: %w", err)
-		}
-	}
 	
 	s.logger.Info("All components initialized successfully")
 	return nil
@@ -210,25 +202,6 @@ func (s *OtedamaSystem) initializeP2PNetwork() error {
 	return nil
 }
 
-// initializeAPIServer creates the API server
-func (s *OtedamaSystem) initializeAPIServer() error {
-	apiConfig := &api.Config{
-		ListenAddr:  s.config.API.ListenAddr,
-		EnableAuth:  s.config.API.EnableAuth,
-		EnableCORS:  s.config.API.EnableCORS,
-		EnableDocs:  s.config.API.EnableDocs,
-		RateLimit:   s.config.API.RateLimit,
-		MetricsPath: "/metrics",
-	}
-	
-	server, err := api.NewServer(s.logger, apiConfig, s.miningEngine)
-	if err != nil {
-		return err
-	}
-	
-	s.apiServer = server
-	return nil
-}
 
 // Start starts all system components
 func (s *OtedamaSystem) Start() error {
@@ -251,7 +224,6 @@ func (s *OtedamaSystem) Start() error {
 		{"Pool Manager", s.startPoolManager, s.config.Pool.Enable},
 		{"Stratum Server", s.startStratumServer, s.config.Network.Stratum.Enable},
 		{"P2P Network", s.startP2PNetwork, s.config.Network.P2P.Enable},
-		{"API Server", s.startAPIServer, s.config.API.Enabled},
 	}
 	
 	for _, component := range startOrder {
@@ -297,7 +269,6 @@ func (s *OtedamaSystem) Stop() error {
 		stopper func() error
 		enabled bool
 	}{
-		{"API Server", s.stopAPIServer, s.apiServer != nil},
 		{"P2P Network", s.stopP2PNetwork, s.p2pNetwork != nil},
 		{"Stratum Server", s.stopStratumServer, s.stratumServer != nil},
 		{"Pool Manager", s.stopPoolManager, s.poolManager != nil},
@@ -369,19 +340,6 @@ func (s *OtedamaSystem) startP2PNetwork() error {
 	return s.p2pNetwork.Start()
 }
 
-func (s *OtedamaSystem) startAPIServer() error {
-	if s.apiServer == nil {
-		return nil
-	}
-	s.shutdownWg.Add(1)
-	go func() {
-		defer s.shutdownWg.Done()
-		if err := s.apiServer.Start(); err != nil {
-			s.logger.Error("API server error", zap.Error(err))
-		}
-	}()
-	return nil
-}
 
 // Component stop methods
 func (s *OtedamaSystem) stopMiningEngine() error {
@@ -416,14 +374,6 @@ func (s *OtedamaSystem) stopP2PNetwork() error {
 	return s.p2pNetwork.Stop()
 }
 
-func (s *OtedamaSystem) stopAPIServer() error {
-	if s.apiServer == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return s.apiServer.Shutdown(ctx)
-}
 
 // GetState returns the current system state
 func (s *OtedamaSystem) GetState() string {
@@ -508,9 +458,6 @@ func (s *OtedamaSystem) cleanup() {
 	s.logger.Info("Cleaning up components")
 	
 	// Stop any started components
-	if s.apiServer != nil {
-		_ = s.stopAPIServer()
-	}
 	if s.p2pNetwork != nil {
 		_ = s.stopP2PNetwork()
 	}

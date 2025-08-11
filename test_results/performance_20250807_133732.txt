@@ -1,0 +1,65 @@
+Starting performance tests at Thu Aug  7 13:37:32 JST 2025
+
+1. Build Performance Test
+-------------------------
+
+2. Unit Test Performance
+------------------------
+
+3. Benchmark Tests
+------------------
+
+4. Memory Usage Analysis
+------------------------
+
+5. Code Complexity Analysis
+---------------------------
+Lines of code:
+  90018 total
+Go files: 187
+Packages: 0
+
+6. Concurrent Connection Simulation
+-----------------------------------
+Simulating concurrent connections...
+Max theoretical connections: 10,000
+Connection pool size: 100
+Rate limit: 1000 req/s
+
+7. Database Configuration Check
+-------------------------------
+Database pool configuration:
+	MaxConnections      int           `yaml:"max_connections"`
+	MaxIdleConnections  int           `yaml:"max_idle_connections"`
+	ConnectionTimeout   time.Duration `yaml:"connection_timeout"`
+		MaxConnections:      100,
+		MaxIdleConnections:  50,
+
+8. Network Latency Simulation
+-----------------------------
+P2P network latency targets:
+  - Local: < 1ms
+  - Regional: < 50ms
+  - Global: < 200ms
+  - Circuit breaker threshold: 5 failures
+
+9. Mining Performance Estimation
+--------------------------------
+Theoretical mining performance:
+  - SHA256: ~40% improvement (SIMD optimized)
+  - Scrypt: ~35% faster operations
+  - Memory usage: 25% reduction
+  - Cache optimization: L3 cache aware
+
+10. Overall System Health
+-------------------------
+Missing: internal/dex/dex.go
+Missing 1 core files
+
+=========================================
+Performance Test Summary
+=========================================
+Test completed at Thu Aug  7 13:37:39 JST 2025
+Results saved to: /mnt/c/Users/irosa/Desktop/Otedama/test_results/performance_20250807_133732.txt
+
+Overall System Score: 60/100

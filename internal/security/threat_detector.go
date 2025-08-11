@@ -110,22 +110,8 @@ const (
 	SeverityLow ThreatSeverity = iota
 	SeverityMedium
 	SeverityHigh
-	SeverityCritical
+	// SeverityCritical is already defined in security_audit.go
 )
-
-// SecurityAlert represents a security alert
-type SecurityAlert struct {
-	ID            string                 `json:"id"`
-	Type          ThreatType             `json:"type"`
-	Severity      ThreatSeverity         `json:"severity"`
-	Source        string                 `json:"source"`
-	Target        string                 `json:"target"`
-	Description   string                 `json:"description"`
-	Evidence      map[string]interface{} `json:"evidence"`
-	Timestamp     time.Time              `json:"timestamp"`
-	Status        AlertStatus            `json:"status"`
-	ResponseTaken []string               `json:"response_taken"`
-}
 
 // AlertStatus represents the status of an alert
 type AlertStatus string
@@ -859,9 +845,7 @@ type MiningStats struct {
 
 // Helper functions
 
-func generateAlertID() string {
-	return fmt.Sprintf("alert-%d-%d", time.Now().Unix(), time.Now().Nanosecond())
-}
+// generateAlertID is defined in security_audit.go
 
 // Component implementations (simplified)
 
@@ -1121,6 +1105,10 @@ func NewThreatIntelligence(logger *zap.Logger, feedURLs []string) *ThreatIntelli
 func (ti *ThreatIntelligence) FetchLatestThreats() ([]*ThreatSignature, error) {
 	// Fetch threats from feeds
 	return nil, nil
+}
+
+func (ti *ThreatIntelligence) UpdateFeeds(feeds []string) {
+	ti.feedURLs = feeds
 }
 
 type ResponseEngine struct {

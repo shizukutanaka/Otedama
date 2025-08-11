@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/otedama/otedama/internal/cli"
-	"github.com/otedama/otedama/internal/config"
-	"github.com/otedama/otedama/internal/core"
+	"github.com/shizukutanaka/Otedama/internal/cli"
+	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/core"
 	"go.uber.org/zap"
 )
 

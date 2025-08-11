@@ -1,19 +1,15 @@
 package mining
 
 import (
-	"runtime"
-	"sync"
 	"sync/atomic"
+	
+	"github.com/shizukutanaka/Otedama/internal/memory"
 )
 
 // MiningBufferPool provides optimized memory management for mining operations
-// Following John Carmack's principle of minimizing allocations in hot paths
+// Now uses the unified memory manager for consistent memory management
 type MiningBufferPool struct {
-	// Different sized buffer pools for various operations
-	small  sync.Pool // 256 bytes - nonce operations
-	medium sync.Pool // 4KB - hash operations  
-	large  sync.Pool // 64KB - batch operations
-	huge   sync.Pool // 1MB - dataset operations
+	manager *memory.UnifiedMemoryManager
 	
 	// Statistics
 	allocations atomic.Int64
@@ -29,62 +25,39 @@ const (
 	HugeBufferSize   = 1024 * 1024
 )
 
-// NewMiningBufferPool creates an optimized buffer pool
+// NewMiningBufferPool creates an optimized buffer pool using unified memory
 func NewMiningBufferPool() *MiningBufferPool {
 	return &MiningBufferPool{
-		small: sync.Pool{
-			New: func() interface{} {
-				buf := make([]byte, SmallBufferSize)
-				return &buf
-			},
-		},
-		medium: sync.Pool{
-			New: func() interface{} {
-				buf := make([]byte, MediumBufferSize)
-				return &buf
-			},
-		},
-		large: sync.Pool{
-			New: func() interface{} {
-				buf := make([]byte, LargeBufferSize)
-				return &buf
-			},
-		},
-		huge: sync.Pool{
-			New: func() interface{} {
-				buf := make([]byte, HugeBufferSize)
-				return &buf
-			},
-		},
+		manager: memory.Global(),
 	}
 }
 
 // GetSmall returns a small buffer from the pool
 func (p *MiningBufferPool) GetSmall() []byte {
-	buf := p.small.Get().(*[]byte)
+	buf := p.manager.AllocateForMining(SmallBufferSize)
 	p.reuses.Add(1)
-	return *buf
+	return buf
 }
 
 // GetMedium returns a medium buffer from the pool
 func (p *MiningBufferPool) GetMedium() []byte {
-	buf := p.medium.Get().(*[]byte)
+	buf := p.manager.AllocateForMining(MediumBufferSize)
 	p.reuses.Add(1)
-	return *buf
+	return buf
 }
 
 // GetLarge returns a large buffer from the pool
 func (p *MiningBufferPool) GetLarge() []byte {
-	buf := p.large.Get().(*[]byte)
+	buf := p.manager.AllocateForMining(LargeBufferSize)
 	p.reuses.Add(1)
-	return *buf
+	return buf
 }
 
 // GetHuge returns a huge buffer from the pool
 func (p *MiningBufferPool) GetHuge() []byte {
-	buf := p.huge.Get().(*[]byte)
+	buf := p.manager.AllocateForMining(HugeBufferSize)
 	p.reuses.Add(1)
-	return *buf
+	return buf
 }
 
 // Get returns a buffer of the requested size
@@ -99,77 +72,83 @@ func (p *MiningBufferPool) Get(size int) []byte {
 	case size <= HugeBufferSize:
 		return p.GetHuge()[:size]
 	default:
-		// For very large buffers, allocate directly
+		// For sizes larger than huge, allocate directly
 		p.allocations.Add(1)
 		p.totalSize.Add(int64(size))
-		return make([]byte, size)
+		return p.manager.AllocateForMining(size)
 	}
 }
 
 // Put returns a buffer to the pool
 func (p *MiningBufferPool) Put(buf []byte) {
-	// Clear sensitive data before returning to pool
-	clear(buf)
-	
-	size := cap(buf)
-	switch size {
-	case SmallBufferSize:
-		p.small.Put(&buf)
-	case MediumBufferSize:
-		p.medium.Put(&buf)
-	case LargeBufferSize:
-		p.large.Put(&buf)
-	case HugeBufferSize:
-		p.huge.Put(&buf)
-	default:
-		// Don't pool non-standard sizes
-		// Let GC handle them
-	}
-}
-
-// GetStats returns pool statistics
-func (p *MiningBufferPool) GetStats() (allocations, reuses, totalSize int64) {
-	return p.allocations.Load(), p.reuses.Load(), p.totalSize.Load()
-}
-
-// Preload pre-allocates buffers to reduce initial allocation overhead
-func (p *MiningBufferPool) Preload() {
-	// Pre-allocate buffers based on CPU count
-	numCPU := runtime.NumCPU()
-	
-	// Pre-allocate small buffers (most common)
-	for i := 0; i < numCPU*4; i++ {
-		buf := make([]byte, SmallBufferSize)
-		p.small.Put(&buf)
-	}
-	
-	// Pre-allocate medium buffers
-	for i := 0; i < numCPU*2; i++ {
-		buf := make([]byte, MediumBufferSize)
-		p.medium.Put(&buf)
-	}
-	
-	// Pre-allocate large buffers
-	for i := 0; i < numCPU; i++ {
-		buf := make([]byte, LargeBufferSize)
-		p.large.Put(&buf)
-	}
-	
-	// Pre-allocate a few huge buffers
-	for i := 0; i < 2; i++ {
-		buf := make([]byte, HugeBufferSize)
-		p.huge.Put(&buf)
-	}
-}
-
-// clear efficiently zeros a byte slice
-func clear(b []byte) {
-	if len(b) == 0 {
+	if buf == nil {
 		return
 	}
-	// Use optimized clear for Go 1.21+
-	// Fallback to manual clear for older versions
-	for i := range b {
-		b[i] = 0
+	p.manager.Free(buf)
+}
+
+// PutSmall returns a small buffer to the pool
+func (p *MiningBufferPool) PutSmall(buf []byte) {
+	p.Put(buf)
+}
+
+// PutMedium returns a medium buffer to the pool
+func (p *MiningBufferPool) PutMedium(buf []byte) {
+	p.Put(buf)
+}
+
+// PutLarge returns a large buffer to the pool
+func (p *MiningBufferPool) PutLarge(buf []byte) {
+	p.Put(buf)
+}
+
+// PutHuge returns a huge buffer to the pool
+func (p *MiningBufferPool) PutHuge(buf []byte) {
+	p.Put(buf)
+}
+
+// GetAligned returns a cache-aligned buffer
+func (p *MiningBufferPool) GetAligned(size int, alignment int) []byte {
+	return p.manager.Allocate(size, 
+		memory.WithSubsystem("mining"),
+		memory.WithAlignment(alignment))
+}
+
+// GetZeroed returns a zeroed buffer
+func (p *MiningBufferPool) GetZeroed(size int) []byte {
+	return p.manager.Allocate(size,
+		memory.WithSubsystem("mining"),
+		memory.WithZeroed())
+}
+
+// Stats returns pool statistics
+func (p *MiningBufferPool) Stats() BufferPoolStats {
+	globalStats := p.manager.GetStats()
+	miningStats := globalStats["mining_pool"].(map[string]interface{})
+	
+	return BufferPoolStats{
+		Allocations: p.allocations.Load(),
+		Reuses:      p.reuses.Load(),
+		TotalSize:   p.totalSize.Load(),
+		Allocated:   miningStats["allocated"].(int64),
+		Current:     miningStats["current"].(int64),
 	}
+}
+
+// BufferPoolStats contains buffer pool statistics
+type BufferPoolStats struct {
+	Allocations int64
+	Reuses      int64
+	TotalSize   int64
+	Allocated   int64
+	Current     int64
+}
+
+// Reset clears all buffers and resets statistics
+func (p *MiningBufferPool) Reset() {
+	// Statistics are managed by the unified memory manager
+	// Just reset local counters
+	p.allocations.Store(0)
+	p.reuses.Store(0)
+	p.totalSize.Store(0)
 }

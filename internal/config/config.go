@@ -85,10 +85,13 @@ type StratumConfig struct {
 	MaxConnections int           `yaml:"max_connections"`
 	MaxClients     int           `yaml:"max_clients"`
 	Difficulty     float64       `yaml:"difficulty"`
+	MinDifficulty  float64       `yaml:"min_difficulty"`
+	MaxDifficulty  float64       `yaml:"max_difficulty"`
 	ExtraNonceSize int           `yaml:"extra_nonce_size"`
 	TargetTime     time.Duration `yaml:"target_time"`
 	RetargetTime   time.Duration `yaml:"retarget_time"`
 	VariancePercent float64      `yaml:"variance_percent"`
+	VarDiffWindow  int           `yaml:"vardiff_window"`
 }
 
 // APIConfig contains settings for the HTTP API.
@@ -137,6 +140,10 @@ type PoolConfig struct {
 	Enable           bool    `yaml:"enable"`
 	Enabled          bool    `yaml:"enabled"`
 	Address          string  `yaml:"address"`
+	URL              string  `yaml:"url"`
+	WalletAddress    string  `yaml:"wallet_address"`
+	WorkerName       string  `yaml:"worker_name"`
+	Password         string  `yaml:"password"`
 	MaxConnections   int     `yaml:"max_connections"`
 	FeePercentage    float64 `yaml:"fee_percentage"`
 	PayoutScheme     string  `yaml:"payout_scheme"`
@@ -149,15 +156,21 @@ type PoolConfig struct {
 
 // MonitoringConfig contains settings for metrics and monitoring.
 type MonitoringConfig struct {
-	PrometheusEnabled bool   `yaml:"prometheus_enabled"`
-	PrometheusAddr    string `yaml:"prometheus_addr"`
+	PrometheusEnabled bool          `yaml:"prometheus_enabled"`
+	PrometheusAddr    string        `yaml:"prometheus_addr"`
+	Prometheus        bool          `yaml:"prometheus"`
+	EnableDashboard   bool          `yaml:"enable_dashboard"`
+	ListenAddr        string        `yaml:"listen_addr"`
+	MetricsInterval   time.Duration `yaml:"metrics_interval"`
 }
 
 // DatabaseConfig contains settings for the database connection.
 type DatabaseConfig struct {
-	Type           string `yaml:"type"`
-	DSN            string `yaml:"dsn"`
-	MaxConnections int    `yaml:"max_connections"`
+	Type             string        `yaml:"type"`
+	DSN              string        `yaml:"dsn"`
+	MaxConnections   int           `yaml:"max_connections"`
+	MaxIdleConns     int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime  time.Duration `yaml:"conn_max_lifetime"`
 }
 
 // PerformanceConfig contains performance optimization settings.
