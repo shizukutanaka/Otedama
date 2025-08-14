@@ -2,7 +2,7 @@
 
 This changelog omits version numbers and groups notable changes by date.
 
-## 2025-08-10
+## 2025-08-14
 
 ### Added
 - National-Scale Production Ready: Enterprise-grade mining infrastructure
