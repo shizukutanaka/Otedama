@@ -122,7 +122,7 @@ Violations of this AUP may result in:
 ## 8. Reporting Violations
 
 To report AUP violations:
-- Email: abuse@otedama.io
+- Submit a private report via GitHub Security Advisories: https://github.com/shizukutanaka/Otedama/security/advisories/new
 - Include relevant evidence and details
 - We investigate all reports confidentially
 
@@ -138,7 +138,7 @@ We reserve the right to:
 ## 10. Appeal Process
 
 If you believe your account was suspended in error:
-1. Submit an appeal to appeals@otedama.io
+1. Open an issue on GitHub with the "appeal" label: https://github.com/shizukutanaka/Otedama/issues
 2. Include your account information and explanation
 3. We will review within 5 business days
 4. Our decision on appeals is final
@@ -152,14 +152,12 @@ We may update this AUP at any time. Continued use after changes constitutes acce
 This AUP should be read in conjunction with:
 - Terms of Service
 - Privacy Policy
-- Security Policy
+- Security Guidelines
 
 ## 13. Contact Information
 
 For questions about this policy:
-
-**Otedama Project**  
-Website: https://otedama.io
+- Open an issue on GitHub: https://github.com/shizukutanaka/Otedama/issues
 
 ---
 

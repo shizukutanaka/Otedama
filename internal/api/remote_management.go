@@ -266,10 +266,8 @@ func (rms *RemoteManagementServer) handleHealth(w http.ResponseWriter, r *http.R
 }
 
 func (rms *RemoteManagementServer) handleVersion(w http.ResponseWriter, r *http.Request) {
-	rms.writeJSON(w, map[string]interface{}{
-		"version": "2.1.0",
-		"api_version": "v1",
-	})
+    // No user-facing version info per project policy
+    rms.writeJSON(w, map[string]interface{}{})
 }
 
 func (rms *RemoteManagementServer) handleMiningStatus(w http.ResponseWriter, r *http.Request) {
@@ -367,7 +365,7 @@ func (rms *RemoteManagementServer) handleSetAlgorithm(w http.ResponseWriter, r *
 	}
 	
 	algo := mining.ParseAlgorithm(req.Algorithm)
-	if algo == mining.AlgorithmUnknown {
+	if !algo.IsValid() {
 		rms.writeError(w, http.StatusBadRequest, "Unknown algorithm")
 		return
 	}

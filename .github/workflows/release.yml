@@ -40,15 +40,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
-        release_name: Release ${{ steps.get_version.outputs.version }}
+        release_name: Release
         body: |
           ## What's Changed
           ${{ steps.changelog.outputs.changelog }}
-          
-          ## Docker Images
-          ```bash
-          docker pull ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.version }}
-          ```
           
           ## Installation
           See the [deployment guide](https://github.com/${{ github.repository }}/blob/master/docs/DEPLOYMENT_GUIDE.md) for installation instructions.
@@ -93,9 +88,8 @@ jobs:
         GOARCH: ${{ matrix.arch }}
         CGO_ENABLED: 0
       run: |
-        VERSION=${{ needs.create-release.outputs.version }}
         BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-        LDFLAGS="-s -w -X main.version=$VERSION -X main.buildTime=$BUILD_TIME -X main.gitCommit=$GITHUB_SHA"
+        LDFLAGS="-s -w -X main.gitCommit=$GITHUB_SHA"
         go build -ldflags "$LDFLAGS" -o otedama-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }} ./cmd/otedama
         tar czf otedama-${{ matrix.os }}-${{ matrix.arch }}.tar.gz otedama-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.suffix }} README.md LICENSE
 
@@ -134,7 +128,7 @@ jobs:
         CGO_ENABLED: 0
       run: |
         VERSION=${{ needs.create-release.outputs.version }}
-        go build -ldflags "-s -w -X main.version=$VERSION" -o otedama ./cmd/otedama
+        go build -ldflags "-s -w" -o otedama ./cmd/otedama
 
     - name: Create DEB package
       run: |
@@ -143,8 +137,8 @@ jobs:
           -n otedama \
           -v $VERSION \
           --description "Otedama - P2P Mining Pool Software" \
-          --url "https://otedama.io" \
-          --maintainer "Otedama Team <support@otedama.io>" \
+          --url "https://github.com/shizukutanaka/Otedama" \
+          --maintainer "Otedama Project" \
           --license "MIT" \
           --vendor "Otedama Project" \
           --after-install scripts/post-install.sh \
@@ -160,8 +154,8 @@ jobs:
           -n otedama \
           -v $VERSION \
           --description "Otedama - P2P Mining Pool Software" \
-          --url "https://otedama.io" \
-          --maintainer "Otedama Team <support@otedama.io>" \
+          --url "https://github.com/shizukutanaka/Otedama" \
+          --maintainer "Otedama Project" \
           --license "MIT" \
           --vendor "Otedama Project" \
           --after-install scripts/post-install.sh \
@@ -195,11 +189,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: [create-release, build-binaries]
     steps:
+    - name: Checkout Homebrew tap
+      uses: actions/checkout@v4
+      with:
+        repository: otedama/homebrew-tap
+        token: ${{ secrets.GITHUB_TOKEN }}
     - name: Update Homebrew formula
       uses: peter-evans/create-pull-request@v5
       with:
-        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        repository: otedama/homebrew-tap
+        token: ${{ secrets.GITHUB_TOKEN }}
+        path: .
         commit-message: Update Otedama to ${{ needs.create-release.outputs.version }}
         title: Update Otedama to ${{ needs.create-release.outputs.version }}
         body: |

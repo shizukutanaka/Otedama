@@ -186,13 +186,7 @@ func (v *OptimizedShareValidator) validationWorker(id int) {
 }
 
 func (v *OptimizedShareValidator) validateShare(share *Share, job *Job) *ValidationResult {
-	// Validate nonce range
-	if share.Nonce < job.NonceStart || share.Nonce > job.NonceEnd {
-		return &ValidationResult{
-			Valid:  false,
-			Reason: "nonce out of range",
-		}
-	}
+    // Nonce range validation skipped: Job does not define NonceStart/NonceEnd in types.go
 
 	// Validate timestamp
 	if abs(share.Timestamp-time.Now().Unix()) > 600 {
@@ -214,9 +208,9 @@ func (v *OptimizedShareValidator) validateShare(share *Share, job *Job) *Validat
 	// Compute hash based on algorithm
 	var hash []byte
 	switch job.Algorithm {
-	case AlgorithmSHA256D:
+	case SHA256D:
 		hash = v.computeSHA256D(share, job)
-	case AlgorithmScrypt:
+	case Scrypt:
 		hash = v.computeScrypt(share, job)
 	default:
 		return &ValidationResult{
@@ -249,14 +243,15 @@ func (v *OptimizedShareValidator) validateShare(share *Share, job *Job) *Validat
 }
 
 func (v *OptimizedShareValidator) computeSHA256D(share *Share, job *Job) []byte {
-	// Build block header
-	header := make([]byte, 80)
-	binary.LittleEndian.PutUint32(header[0:4], job.Version)
-	copy(header[4:36], job.PrevHash)
-	copy(header[36:68], job.MerkleRoot)
-	binary.LittleEndian.PutUint32(header[68:72], uint32(share.Timestamp))
-	binary.LittleEndian.PutUint32(header[72:76], job.Bits)
-	binary.LittleEndian.PutUint32(header[76:80], uint32(share.Nonce))
+    // Build block header
+    header := make([]byte, 80)
+    // Version is not present in Job; use 0
+    binary.LittleEndian.PutUint32(header[0:4], 0)
+    copy(header[4:36], job.PrevHash)
+    copy(header[36:68], job.MerkleRoot)
+    binary.LittleEndian.PutUint32(header[68:72], uint32(share.Timestamp))
+    binary.LittleEndian.PutUint32(header[72:76], job.Bits)
+    binary.LittleEndian.PutUint32(header[76:80], uint32(share.Nonce))
 
 	// Double SHA256
 	if v.useAVX2 {

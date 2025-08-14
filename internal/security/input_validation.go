@@ -193,6 +193,12 @@ func (iv *InputValidator) initializeCommandPatterns() {
 
 // registerDefaultRules registers default validation rules
 func (iv *InputValidator) registerDefaultRules() {
+	// General text validation used for query params and form fields
+	iv.RegisterRule("text", ValidationRule{
+		Type:      "string",
+		MaxLength: iv.config.MaxStringLength,
+	})
+
 	// Email validation
 	iv.RegisterRule("email", ValidationRule{
 		Type:      "string",

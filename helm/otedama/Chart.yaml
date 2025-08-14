@@ -14,5 +14,5 @@ sources:
   - https://github.com/shizukutanaka/Otedama
 maintainers:
   - name: Otedama Team
-    email: support@otedama.io
-icon: https://otedama.io/logo.png
+    url: https://github.com/shizukutanaka/Otedama/issues
+# icon removed (no local logo available)

@@ -25,7 +25,7 @@ type ProfitSwitcher struct {
 	
 	// Dependencies
 	currencyManager  *currency.CurrencyManager
-	miningEngine     *mining.Engine
+	miningEngine     mining.Engine
 	blockchainMgr    *currency.ClientManager
 	
 	// Profitability tracking
@@ -188,7 +188,7 @@ func NewProfitSwitcher(logger *zap.Logger, config ProfitSwitcherConfig, deps Pro
 // ProfitSwitcherDeps contains dependencies for the profit switcher
 type ProfitSwitcherDeps struct {
 	CurrencyManager   *currency.CurrencyManager
-	MiningEngine      *mining.Engine
+	MiningEngine      mining.Engine
 	BlockchainManager *currency.ClientManager
 }
 

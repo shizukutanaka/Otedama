@@ -18,6 +18,21 @@ GOFMT := gofmt
 GOLINT := golangci-lint
 GOVET := $(GOCMD) vet
 
+# Windows-specific toolchain handling
+ifeq ($(OS),Windows_NT)
+	SHELL := cmd
+	GOCMD := go.exe
+	DETECTED_OS := Windows
+else
+	DETECTED_OS := $(shell uname -s)
+endif
+
+# Ensure Go is available
+GO_CHECK := $(shell which $(GOCMD) 2>/dev/null || echo "NOT_FOUND")
+ifeq ($(GO_CHECK),NOT_FOUND)
+	$(error Go toolchain not found. Please install Go from https://golang.org/dl/)
+endif
+
 # Build directories
 BUILD_DIR := build
 BIN_DIR := $(BUILD_DIR)/bin
@@ -94,9 +109,9 @@ endif
 .DEFAULT_GOAL := build
 
 # Phony targets
-.PHONY: all build build-all clean test bench coverage lint fmt vet \
+.PHONY: all build build-all clean test bench coverage lint fmt vet release help version deps deps-clean deps-verify deps-update deps-check fmt vet \
 	deps deps-update install uninstall run debug release \
-	docker docker-push proto docs help \
+	docker docker-push proto docs docs-clean url-guard help \
 	build-linux build-darwin build-windows cross-compile
 
 # Help target
@@ -222,34 +237,57 @@ coverage: test ## Generate test coverage report
 # Code quality targets
 lint: ## Run linter
 	@echo "Running linter..."
-	@which $(GOLINT) > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
-	@$(GOLINT) run ./...
+	$(GOLINT) run ./...
 
 fmt: ## Format code
 	@echo "Formatting code..."
-	@$(GOFMT) -s -w .
-	@$(GOCMD) fmt ./...
+	$(GOFMT) -w .
 
 vet: ## Run go vet
 	@echo "Running go vet..."
-	@$(GOVET) ./...
+	$(GOVET) ./...
 
-check: lint vet ## Run all code checks
+check: docs-clean url-guard lint vet ## Run all code and URL checks
 
 # Dependency management
-deps: ## Download dependencies
-	@echo "Downloading dependencies..."
-	@$(GOMOD) download
-	@$(GOMOD) tidy
+deps: ## Install dependencies
+	@echo "Installing dependencies..."
+	$(GOMOD) tidy
+	$(GOMOD) verify
 
-deps-update: ## Update dependencies
+deps-clean: ## Clean module cache and dependencies
+	@echo "Cleaning dependencies..."
+	$(GOMOD) tidy -compat=1.23
+	$(GOMOD) verify
+
+deps-verify: ## Verify module integrity
+	@echo "Verifying dependencies..."
+	$(GOMOD) verify
+
+deps-update: ## Update all dependencies
 	@echo "Updating dependencies..."
-	@$(GOGET) -u ./...
-	@$(GOMOD) tidy
+	$(GOMOD) tidy -compat=1.23
+	$(GOMOD) download
 
-deps-vendor: ## Vendor dependencies
-	@echo "Vendoring dependencies..."
-	@$(GOMOD) vendor
+deps-check: ## Check for dependency issues
+	@echo "Checking for dependency issues..."
+	$(GOCMD) mod verify
+	$(GOCMD) list -m -u all
+
+# Windows-specific targets
+ifeq ($(DETECTED_OS),Windows)
+fix-deps:
+	@echo "Fixing Windows Go module issues..."
+	powershell -Command "go mod tidy -compat=1.23"
+	powershell -Command "go mod verify"
+	powershell -Command "go build -v ./..."
+else
+fix-deps:
+	@echo "Fixing Unix Go module issues..."
+	$(GOMOD) tidy -compat=1.23
+	$(GOMOD) verify
+	$(GOCMD) build -v ./...
+endif
 
 # Clean targets
 clean: ## Clean build artifacts
@@ -306,6 +344,25 @@ docs: ## Generate documentation
 	@godoc -http=:6060 &
 	@echo "Documentation server started at http://localhost:6060"
 
+# Documentation cleanup and URL guard
+ifeq ($(DETECTED_OS),Windows)
+docs-clean: ## Normalize documentation URLs (Windows)
+	@echo "Cleaning documentation URLs..."
+	powershell -ExecutionPolicy Bypass -File scripts/cleanup-doc-urls.ps1
+
+url-guard: ## Validate repository URLs against allow-list (Windows)
+	@echo "Running URL guard..."
+	bash scripts/url_guard.sh
+else
+docs-clean: ## Normalize documentation URLs (Unix)
+	@echo "Cleaning documentation URLs..."
+	bash scripts/cleanup-doc-urls.sh
+
+url-guard: ## Validate repository URLs against allow-list (Unix)
+	@echo "Running URL guard..."
+	bash scripts/url_guard.sh
+endif
+
 # Development targets
 dev: ## Run in development mode with hot reload
 	@echo "Starting development mode..."
@@ -321,25 +378,17 @@ proto: ## Generate protobuf code
 	@protoc --go_out=. --go-grpc_out=. proto/*.proto
 
 # Utility targets
-version: ## Display version information
-	@echo "$(APP_NAME) version $(VERSION)"
-	@echo "Build date: $(BUILD_DATE)"
-	@echo "Git commit: $(GIT_COMMIT)"
-	@echo "Platform: $(PLATFORM)/$(ARCH)"
-
 info: ## Display build information
 	@echo "Application: $(APP_NAME)"
-	@echo "Version: $(VERSION)"
 	@echo "Build Date: $(BUILD_DATE)"
 	@echo "Git Commit: $(GIT_COMMIT)"
 	@echo "Platform: $(PLATFORM)"
 	@echo "Architecture: $(ARCH)"
-	@echo "Go Version: $(shell $(GOCMD) version)"
 	@echo "Build Tags: $(BUILD_TAGS)"
 	@echo "CGO Enabled: $(CGO_ENABLED)"
 
 # CI/CD targets
-ci: clean deps lint test build ## Run CI pipeline
+ci: clean deps docs-clean url-guard lint test build ## Run CI pipeline with URL guard
 	@echo "CI pipeline complete"
 
 cd: ci dist docker-push ## Run CD pipeline

@@ -195,7 +195,7 @@ func (bs *BlockSubmitter) SubmitBlock(ctx context.Context, share *Share, job *Mi
 		Status:       "pending",
 	}
 	
-	err = bs.blockRepo.Create(ctx, block)
+	err = bs.blockRepo.Create(block)
 	if err != nil {
 		bs.logger.Error("Failed to save block record",
 			zap.Int64("height", job.Height),

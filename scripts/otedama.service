@@ -1,6 +1,6 @@
 [Unit]
 Description=Otedama P2P Mining Pool
-Documentation=https://github.com/otedama/otedama
+Documentation=https://github.com/shizukutanaka/Otedama
 After=network-online.target postgresql.service redis.service
 Wants=network-online.target
 Requires=postgresql.service redis.service

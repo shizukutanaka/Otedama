@@ -26,6 +26,15 @@ const (
 	CryptoNight AlgorithmType = "cryptonight"
 )
 
+// HardwareType represents the type of mining hardware (canonical)
+type HardwareType string
+
+const (
+	HardwareCPU  HardwareType = "cpu"
+	HardwareGPU  HardwareType = "gpu"
+	HardwareASIC HardwareType = "asic"
+)
+
 // JobPriority defines job priority levels
 type JobPriority int32
 

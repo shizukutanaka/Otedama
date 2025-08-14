@@ -7,17 +7,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/common"
 	"github.com/shizukutanaka/Otedama/internal/security"
 	"go.uber.org/zap"
 )
+
+// TokenValidatorFunc validates an auth token and returns user claims/context
+type TokenValidatorFunc func(string) (interface{}, error)
+
+// SessionValidatorFunc validates a session ID and returns the session/context
+type SessionValidatorFunc func(string) (interface{}, error)
 
 // SecurityMiddleware provides comprehensive security middleware
 type SecurityMiddleware struct {
 	logger       *zap.Logger
 	webSecurity  *security.WebSecurityManager
 	validator    *security.InputValidator
-	rateLimiter  *security.RateLimiter
+	rateLimiter  common.RateLimiter
 	config       SecurityConfig
+	tokenValidator   TokenValidatorFunc
+	sessionValidator SessionValidatorFunc
 }
 
 // SecurityConfig defines security middleware configuration
@@ -56,8 +65,10 @@ func NewSecurityMiddleware(
 	logger *zap.Logger,
 	webSecurity *security.WebSecurityManager,
 	validator *security.InputValidator,
-	rateLimiter *security.RateLimiter,
+	rateLimiter common.RateLimiter,
 	config SecurityConfig,
+	tokenValidator TokenValidatorFunc,
+	sessionValidator SessionValidatorFunc,
 ) *SecurityMiddleware {
 	// Set defaults
 	if config.AuthHeader == "" {
@@ -83,11 +94,13 @@ func NewSecurityMiddleware(
 	}
 	
 	return &SecurityMiddleware{
-		logger:      logger,
-		webSecurity: webSecurity,
-		validator:   validator,
-		rateLimiter: rateLimiter,
-		config:      config,
+		logger:           logger,
+		webSecurity:      webSecurity,
+		validator:        validator,
+		rateLimiter:      rateLimiter,
+		config:           config,
+		tokenValidator:   tokenValidator,
+		sessionValidator: sessionValidator,
 	}
 }
 
@@ -273,7 +286,7 @@ func (sm *SecurityMiddleware) authenticate(r *http.Request) (interface{}, error)
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
 			token := parts[1]
-			// Validate token (implementation depends on auth system)
+			// Validate token
 			return sm.validateToken(token)
 		}
 	}
@@ -363,16 +376,28 @@ func (sm *SecurityMiddleware) validateRequest(r *http.Request) error {
 
 // validateToken validates authentication token
 func (sm *SecurityMiddleware) validateToken(token string) (interface{}, error) {
-	// Token validation implementation
-	// This would integrate with your authentication system
-	return nil, fmt.Errorf("token validation not implemented")
+	if sm.tokenValidator == nil {
+		return nil, fmt.Errorf("token validator not configured")
+	}
+	claims, err := sm.tokenValidator(token)
+	if err != nil {
+		sm.logger.Debug("token validation failed", zap.Error(err))
+		return nil, err
+	}
+	return claims, nil
 }
 
 // validateSession validates session token
 func (sm *SecurityMiddleware) validateSession(sessionID string) (interface{}, error) {
-	// Session validation implementation
-	// This would integrate with your session management system
-	return nil, fmt.Errorf("session validation not implemented")
+	if sm.sessionValidator == nil {
+		return nil, fmt.Errorf("session validator not configured")
+	}
+	session, err := sm.sessionValidator(sessionID)
+	if err != nil {
+		sm.logger.Debug("session validation failed", zap.Error(err))
+		return nil, err
+	}
+	return session, nil
 }
 
 // validateAPIKey validates API key

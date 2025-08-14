@@ -13,10 +13,13 @@ import (
 
 func TestNewEngine(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   4,
-		Intensity: 20,
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   4,
+		Intensity:    20,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 100,
+		AutoOptimize: true,
 	}
 
 	engine, err := NewEngine(logger, cfg)
@@ -26,10 +29,13 @@ func TestNewEngine(t *testing.T) {
 
 func TestEngine_Start(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   2,
-		Intensity: 10,
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   2,
+		Intensity:    10,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 100,
+		AutoOptimize: false,
 	}
 
 	engine, err := NewEngine(logger, cfg)
@@ -45,12 +51,17 @@ func TestEngine_Start(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestEngine_Mine(t *testing.T) {
+func TestEngine_MultiDevice(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   1,
-		Intensity: 5,
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   2,
+		GPUDevices:   []int{0, 1},
+		ASICDevices:  []string{"asic0", "asic1"},
+		Intensity:    15,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 100,
+		AutoOptimize: false,
 	}
 
 	engine, err := NewEngine(logger, cfg)
@@ -60,27 +71,167 @@ func TestEngine_Mine(t *testing.T) {
 	require.NoError(t, err)
 	defer engine.Stop()
 
-	// Create a test job
+	// Test multi-device support
+	assert.True(t, engine.HasCPU())
+	assert.True(t, engine.HasGPU())
+	assert.True(t, engine.HasASIC())
+
+	// Get hardware info
+	info := engine.GetHardwareInfo()
+	assert.Greater(t, info.CPUThreads, 0)
+	assert.Len(t, info.GPUDevices, 2)
+	assert.Len(t, info.ASICDevices, 2)
+}
+
+func TestEngine_GetHashRate(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   2,
+		Intensity:    10,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 100,
+		AutoOptimize: false,
+	}
+
+	engine, err := NewEngine(logger, cfg)
+	require.NoError(t, err)
+
+	err = engine.Start()
+	require.NoError(t, err)
+	defer engine.Stop()
+
+	// Let it run briefly
+	time.Sleep(100 * time.Millisecond)
+
+	stats := engine.GetStats()
+	assert.NotNil(t, stats)
+	assert.GreaterOrEqual(t, stats.TotalHashRate, uint64(0))
+}
+
+func TestEngine_AlgorithmManagement(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   1,
+		Intensity:    5,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 50,
+		AutoOptimize: false,
+	}
+
+	engine, err := NewEngine(logger, cfg)
+	require.NoError(t, err)
+
+	// Test algorithm switching
+	assert.Equal(t, SHA256D, engine.GetAlgorithm())
+
+	// Test algorithm validation
+	assert.True(t, engine.ValidateAlgorithm("sha256d"))
+	assert.True(t, engine.ValidateAlgorithm("scrypt"))
+	assert.False(t, engine.ValidateAlgorithm("invalid"))
+}
+
+func TestEngine_PoolManagement(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   1,
+		Intensity:    5,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 50,
+		AutoOptimize: false,
+	}
+
+	engine, err := NewEngine(logger, cfg)
+	require.NoError(t, err)
+
+	// Test pool configuration
+	err = engine.SetPool("stratum+tcp://127.0.0.1:3333", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+	assert.NoError(t, err)
+}
+
+func TestEngine_ConfigManagement(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   2,
+		Intensity:    10,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 100,
+		AutoOptimize: false,
+	}
+
+	engine, err := NewEngine(logger, cfg)
+	require.NoError(t, err)
+
+	// Test configuration
+	config := engine.GetConfig()
+	assert.NotNil(t, config)
+	assert.Equal(t, 2, engine.GetCPUThreads())
+
+	// Test CPU thread adjustment
+	err = engine.SetCPUThreads(4)
+	assert.NoError(t, err)
+	assert.Equal(t, 4, engine.GetCPUThreads())
+}
+
+func TestEngine_HealthCheck(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   1,
+		Intensity:    5,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 50,
+		AutoOptimize: false,
+	}
+
+	engine, err := NewEngine(logger, cfg)
+	require.NoError(t, err)
+
+	// Test health check
+	err = engine.Start()
+	require.NoError(t, err)
+	defer engine.Stop()
+
+	// Engine should be healthy after starting
+	assert.True(t, engine.GetStatus().Running)
+}
+
+func TestEngine_JobProcessing(t *testing.T) {
+	logger := zap.NewNop()
+	cfg := &Config{
+		Algorithm:    SHA256D,
+		CPUThreads:   1,
+		Intensity:    5,
+		MaxMemoryMB:  1024,
+		JobQueueSize: 50,
+		AutoOptimize: false,
+	}
+
+	engine, err := NewEngine(logger, cfg)
+	require.NoError(t, err)
+
+	err = engine.Start()
+	require.NoError(t, err)
+	defer engine.Stop()
+
+	// Test job processing
 	job := &Job{
-		ID:         "test-job-1",
-		Target:     "0000ffff00000000000000000000000000000000000000000000000000000000",
-		Data:       make([]byte, 80),
-		NonceStart: 0,
-		NonceEnd:   1000,
+		ID:        "test-job-1",
+		Algorithm: SHA256D,
+		Target:    "0000ffff00000000000000000000000000000000000000000000000000000000",
+		Data:      make([]byte, 80),
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
+	// Submit job
+	err = engine.SubmitJob(job)
+	assert.NoError(t, err)
 
-	nonceChan := make(chan uint64, 1)
-	go engine.Mine(ctx, job, nonceChan)
-
-	select {
-	case <-nonceChan:
-		// Found a nonce (unlikely with high target)
-	case <-ctx.Done():
-		// Timeout expected for difficult target
-	}
+	// Get current job
+	currentJob := engine.GetCurrentJob()
+	assert.NotNil(t, currentJob)
 }
 
 func TestEngine_GetHashRate(t *testing.T) {

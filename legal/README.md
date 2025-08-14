@@ -1,6 +1,6 @@
 # Legal Documentation / 法的文書
 
-## 📄 Available Documents / 利用可能な文書
+## Available Documents / 利用可能な文書
 
 ### English / 英語
 - [Terms of Service](./TERMS_OF_SERVICE.md) - Service terms and conditions
@@ -14,7 +14,7 @@
 - [免責事項](./DISCLAIMER.md) - 重要な法的免責事項
 - [リスク開示](./RISK_DISCLOSURE.md) - 包括的なリスク警告
 
-## ⚠️ Important Notice / 重要なお知らせ
+## Important Notice / 重要なお知らせ
 
 **PLEASE READ ALL LEGAL DOCUMENTS CAREFULLY BEFORE USING THIS SOFTWARE**
 
@@ -24,7 +24,7 @@ By using the Otedama software, you acknowledge that you have read, understood, a
 
 Otedamaソフトウェアを使用することにより、これらの法的文書に記載されているすべての条件を読み、理解し、拘束されることに同意したものとみなされます。
 
-## 📊 Document Summary / 文書概要
+## Document Summary / 文書概要
 
 ### Terms of Service / 利用規約
 - Service provision terms / サービス提供条件
@@ -50,40 +50,24 @@ Otedamaソフトウェアを使用することにより、これらの法的文�
 - Regulatory risks / 規制リスク
 - Investment warnings / 投資警告
 
-## 🌐 Jurisdiction / 管轄
+## Jurisdiction / 管轄
 
 - **Governing Law**: Japanese Law / 準拠法：日本法
 - **Dispute Resolution**: Tokyo, Japan / 紛争解決：東京、日本
 - **Language**: In case of discrepancy, English version prevails / 言語：相違がある場合は英語版が優先
 
-## 📅 Version History / バージョン履歴
+## Updates and Amendments / 更新と修正
 
-| Document | Version | Last Updated | Status |
-|----------|---------|--------------|---------|
-| Terms of Service | 1.0 | 2025-08-07 | Active |
-| Privacy Policy | 1.0 | 2025-08-07 | Active |
-| Legal Disclaimer | 1.0 | 2025-08-07 | Active |
-| Risk Disclosure | 1.0 | 2025-08-07 | Active |
+Legal documents may be updated periodically. Major changes will be announced through GitHub repository notifications.
 
-## 🔄 Updates and Amendments / 更新と修正
+法的文書は定期的に更新される場合があります。重要な変更はGitHubリポジトリ通知を通じて行われます。
 
-Legal documents may be updated periodically. Major changes will be announced through:
-- GitHub repository notifications
-- Discord community (when available)
-- Email notifications (for registered users)
+## Legal Contact / 法的連絡先
 
-法的文書は定期的に更新される場合があります。重要な変更は以下を通じて通知されます：
-- GitHubリポジトリ通知
-- Discordコミュニティ（利用可能時）
-- メール通知（登録ユーザー向け）
+For legal inquiries and security reports:
+- Use GitHub Security Advisories to submit a private report: https://github.com/shizukutanaka/Otedama/security/advisories/new
 
-## 📮 Legal Contact / 法的連絡先
-
-For legal inquiries:
-- **GitHub Issues**: [https://github.com/shizukutanaka/Otedama/issues](https://github.com/shizukutanaka/Otedama/issues)
-- **Email**: legal@otedama.network (Coming Soon / 準備中)
-
-## 🔒 Compliance / コンプライアンス
+## Compliance / コンプライアンス
 
 The Otedama project strives to comply with:
 - GDPR (European Union)

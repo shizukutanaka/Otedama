@@ -3,7 +3,7 @@
 ## Current Status: v2.1.5 (Production-Ready Core)
 *Last Updated: 2025-08-07*
 
-### ✅ Completed (75%)
+### Completed (75%)
 - Core mining engine with multi-algorithm support
 - P2P network layer with DHT and Gossip protocol
 - DEX with AMM and order book functionality

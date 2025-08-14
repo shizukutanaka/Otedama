@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -23,20 +24,16 @@ import (
 type MobileAPI struct {
 	logger         *zap.Logger
 	config         MobileAPIConfig
-	
 	// Dependencies
-	poolManager    *pool.Manager
-	miningEngine   *mining.Engine
+	poolManager    *pool.PoolManager
+	miningEngine   mining.Engine
 	analytics      *analytics.AnalyticsEngine
 	profitSwitcher *profit.ProfitSwitcher
-	
 	// WebSocket
 	upgrader       websocket.Upgrader
 	wsConnections  map[string]*WSConnection
-	
 	// Rate limiting
-	rateLimiter    *RateLimiter
-	
+	rateLimiter    *MobileRateLimiter
 	// Authentication
 	authManager    *AuthManager
 }
@@ -48,15 +45,12 @@ type MobileAPIConfig struct {
 	EnableTLS         bool
 	TLSCertFile       string
 	TLSKeyFile        string
-	
 	// Authentication
 	JWTSecret         string
 	TokenExpiry       time.Duration
-	
 	// Rate limiting
 	RateLimit         int           // Requests per minute
 	BurstLimit        int           // Burst capacity
-	
 	// WebSocket
 	WSReadTimeout     time.Duration
 	WSWriteTimeout    time.Duration
@@ -78,21 +72,25 @@ type AuthManager struct {
 	expiry    time.Duration
 }
 
-// RateLimiter implements rate limiting
-type RateLimiter struct {
+// MobileRateLimiter implements rate limiting for the mobile API
+type MobileRateLimiter struct {
 	requests map[string]*UserRateLimit
+	mu       sync.Mutex
+	rpm      int // requests per minute
+	burst    int // additional burst capacity
 }
 
 // UserRateLimit tracks rate limit for a user
 type UserRateLimit struct {
 	Tokens    int
+	MaxTokens int
 	LastReset time.Time
 }
 
 // MobileAPIDeps contains dependencies for mobile API
 type MobileAPIDeps struct {
-	PoolManager    *pool.Manager
-	MiningEngine   *mining.Engine
+	PoolManager    *pool.PoolManager
+	MiningEngine   mining.Engine
 	Analytics      *analytics.AnalyticsEngine
 	ProfitSwitcher *profit.ProfitSwitcher
 }
@@ -197,8 +195,10 @@ func NewMobileAPI(logger *zap.Logger, config MobileAPIConfig, deps MobileAPIDeps
 				return true
 			},
 		},
-		rateLimiter: &RateLimiter{
+		rateLimiter: &MobileRateLimiter{
 			requests: make(map[string]*UserRateLimit),
+			rpm:      func() int { if config.RateLimit > 0 { return config.RateLimit }; return 60 }(),
+			burst:    func() int { if config.BurstLimit > 0 { return config.BurstLimit }; return 10 }(),
 		},
 		authManager: &AuthManager{
 			jwtSecret: []byte(config.JWTSecret),
@@ -376,7 +376,7 @@ func (api *MobileAPI) handleGetDashboard(w http.ResponseWriter, r *http.Request)
 	userID := api.getUserID(r)
 	
 	// Get dashboard data
-	dashboard, err := api.getDashboardData(userID)
+	dashboard, err := api.getDashboardData(r.Context(), userID)
 	if err != nil {
 		api.sendError(w, http.StatusInternalServerError, "Failed to get dashboard data")
 		return
@@ -389,7 +389,7 @@ func (api *MobileAPI) handleRefreshDashboard(w http.ResponseWriter, r *http.Requ
 	userID := api.getUserID(r)
 	
 	// Force refresh of dashboard data
-	dashboard, err := api.getDashboardData(userID)
+	dashboard, err := api.getDashboardData(r.Context(), userID)
 	if err != nil {
 		api.sendError(w, http.StatusInternalServerError, "Failed to refresh dashboard")
 		return
@@ -565,7 +565,11 @@ func (api *MobileAPI) handleUpdatePayoutSettings(w http.ResponseWriter, r *http.
 // Statistics handlers
 
 func (api *MobileAPI) handleGetPoolStats(w http.ResponseWriter, r *http.Request) {
-	stats := api.poolManager.GetStats()
+	stats, err := api.poolManager.GetPoolStats(r.Context())
+	if err != nil {
+		api.sendError(w, http.StatusInternalServerError, "Failed to get pool stats")
+		return
+	}
 	api.sendSuccess(w, stats)
 }
 
@@ -677,8 +681,12 @@ func (api *MobileAPI) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go wsConn.writePump(api)
 	
 	// Send initial data
-	dashboard, _ := api.getDashboardData(userID)
-	api.sendWSMessage(wsConn, "connected", dashboard)
+	dashboard, err := api.getDashboardData(r.Context(), userID)
+	if err != nil {
+		api.sendWSMessage(wsConn, "error", map[string]string{"message": "Failed to load dashboard"})
+	} else {
+		api.sendWSMessage(wsConn, "connected", dashboard)
+	}
 }
 
 // Health check
@@ -749,330 +757,382 @@ func (api *MobileAPI) authMiddleware(next http.Handler) http.Handler {
 }
 
 func (api *MobileAPI) rateLimitMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := api.getUserID(r)
-		
-		if !api.rateLimiter.Allow(userID) {
-			api.sendError(w, http.StatusTooManyRequests, "Rate limit exceeded")
-			return
-		}
-		
-		next.ServeHTTP(w, r)
-	})
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        userID := api.getUserID(r)
+        
+        if !api.rateLimiter.Allow(userID) {
+            api.sendError(w, http.StatusTooManyRequests, "Rate limit exceeded")
+            return
+        }
+        
+        next.ServeHTTP(w, r)
+    })
 }
 
-// Data retrieval methods (simplified implementations)
-
-func (api *MobileAPI) getDashboardData(userID string) (*DashboardData, error) {
-	// Get user data from various sources
-	workers, _ := api.getWorkers(userID, "", "")
-	earnings, _ := api.getEarnings(userID, "today")
-	poolStats := api.poolManager.GetStats()
-	
-	// Calculate totals
-	totalHashrate := 0.0
-	activeWorkers := 0
-	for _, w := range workers {
-		totalHashrate += w.Hashrate
-		if w.Status == "active" {
-			activeWorkers++
-		}
-	}
-	
-	dashboard := &DashboardData{
-		Overview: OverviewData{
-			TotalHashrate:    totalHashrate,
-			ActiveWorkers:    activeWorkers,
-			UnpaidBalance:    100.5, // Example
-			EstimatedEarning: 25.3,  // Example
-			Currency:         api.profitSwitcher.GetCurrentCurrency(),
-		},
-		Workers: workers[:5], // Top 5 workers
-		Earnings: *earnings,
-		PoolStats: PoolStatistics{
-			TotalHashrate:  poolStats["total_hashrate"].(float64),
-			ActiveMiners:   poolStats["active_miners"].(int),
-			BlocksFound24h: poolStats["blocks_found_24h"].(int),
-			PoolFee:        2.0,
-			MinPayout:      0.01,
-		},
-		Notifications: []Notification{}, // Recent notifications
-	}
-	
-	return dashboard, nil
+func (api *MobileAPI) getDashboardData(ctx context.Context, userID string) (*DashboardData, error) {
+    // Get user data from various sources
+    workers, _ := api.getWorkers(userID, "", "")
+    earnings, _ := api.getEarnings(userID, "today")
+    poolStats, err := api.poolManager.GetPoolStats(ctx)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Calculate totals
+    totalHashrate := 0.0
+    activeWorkers := 0
+    for _, w := range workers {
+        totalHashrate += w.Hashrate
+        if w.Status == "active" {
+            activeWorkers++
+        }
+    }
+    
+    // Safely read pool stats
+    toFloat64 := func(v interface{}) float64 {
+        switch t := v.(type) {
+        case float64:
+            return t
+        case float32:
+            return float64(t)
+        case int:
+            return float64(t)
+        case int64:
+            return float64(t)
+        case uint64:
+            return float64(t)
+        default:
+            return 0
+        }
+    }
+    toInt := func(v interface{}) int {
+        switch t := v.(type) {
+        case int:
+            return t
+        case int64:
+            return int(t)
+        case uint64:
+            return int(t)
+        case float64:
+            return int(t)
+        case float32:
+            return int(t)
+        default:
+            return 0
+        }
+    }
+    
+    totalPoolHashrate := toFloat64(poolStats["total_hashrate"])
+    activeMiners := toInt(poolStats["active_miners"])
+    blocksFound24h := toInt(poolStats["blocks_found_24h"])
+    
+    // Cap workers slice to available length
+    topN := 5
+    if len(workers) < topN {
+        topN = len(workers)
+    }
+    topWorkers := workers[:topN]
+    
+    dashboard := &DashboardData{
+        Overview: OverviewData{
+            TotalHashrate:    totalHashrate,
+            ActiveWorkers:    activeWorkers,
+            UnpaidBalance:    100.5, // Example
+            EstimatedEarning: 25.3,  // Example
+            Currency:         api.profitSwitcher.GetCurrentCurrency(),
+        },
+        Workers: topWorkers, // Top workers
+        Earnings: *earnings,
+        PoolStats: PoolStatistics{
+            TotalHashrate:  totalPoolHashrate,
+            ActiveMiners:   activeMiners,
+            BlocksFound24h: blocksFound24h,
+            PoolFee:        2.0,
+            MinPayout:      0.01,
+        },
+        Notifications: []Notification{}, // Recent notifications
+    }
+    
+    return dashboard, nil
 }
 
 func (api *MobileAPI) getWorkers(userID, status, sortBy string) ([]WorkerSummary, error) {
-	// Example implementation
-	return []WorkerSummary{
-		{
-			ID:       "worker-1",
-			Name:     "RIG-01",
-			Hashrate: 125.5,
-			Status:   "active",
-			LastSeen: time.Now(),
-			Shares: ShareInfo{
-				Valid:   1250,
-				Invalid: 12,
-				Stale:   5,
-				Ratio:   99.1,
-			},
-			Efficiency: 98.5,
-		},
-	}, nil
+    // Example implementation
+    return []WorkerSummary{
+        {
+            ID:       "worker-1",
+            Name:     "RIG-01",
+            Hashrate: 125.5,
+            Status:   "active",
+            LastSeen: time.Now(),
+            Shares: ShareInfo{
+                Valid:   1250,
+                Invalid: 12,
+                Stale:   5,
+                Ratio:   99.1,
+            },
+            Efficiency: 98.5,
+        },
+    }, nil
 }
 
 func (api *MobileAPI) getEarnings(userID, period string) (*EarningsData, error) {
-	// Example implementation
-	return &EarningsData{
-		Today:     25.3,
-		Yesterday: 24.8,
-		ThisWeek:  175.2,
-		ThisMonth: 750.5,
-		History:   []EarningHistoryPoint{},
-	}, nil
+    // Example implementation
+    return &EarningsData{
+        Today:     25.3,
+        Yesterday: 24.8,
+        ThisWeek:  175.2,
+        ThisMonth: 750.5,
+        History:   []EarningHistoryPoint{},
+    }, nil
 }
 
 // Stub implementations for other methods
 func (api *MobileAPI) authenticateUser(username, password string) (*User, error) {
-	// Implementation needed
-	return &User{ID: "user123"}, nil
+    // Implementation needed
+    return &User{ID: "user123"}, nil
 }
 
 func (api *MobileAPI) createUser(username, email, password, wallet string) (*User, error) {
-	// Implementation needed
-	return &User{ID: "user456"}, nil
+    // Implementation needed
+    return &User{ID: "user456"}, nil
 }
 
 func (api *MobileAPI) getWorkerDetails(userID, workerID string) (interface{}, error) {
-	// Implementation needed
-	return nil, nil
+    // Implementation needed
+    return nil, nil
 }
 
 func (api *MobileAPI) restartWorker(userID, workerID string) error {
-	// Implementation needed
-	return nil
+    // Implementation needed
+    return nil
 }
 
 func (api *MobileAPI) getEarningHistory(userID string, limit, offset int) (interface{}, error) {
-	// Implementation needed
-	return nil, nil
+    // Implementation needed
+    return nil, nil
 }
 
 func (api *MobileAPI) getPayouts(userID string) (interface{}, error) {
-	// Implementation needed
-	return nil, nil
+    // Implementation needed
+    return nil, nil
 }
 
 func (api *MobileAPI) getUserSettings(userID string) (interface{}, error) {
-	// Implementation needed
-	return nil, nil
+    // Implementation needed
+    return nil, nil
 }
 
 func (api *MobileAPI) updateUserSettings(userID string, settings map[string]interface{}) error {
-	// Implementation needed
-	return nil
+    // Implementation needed
+    return nil
 }
 
 func (api *MobileAPI) updatePayoutSettings(userID, wallet string, minPayout float64, currency string) error {
-	// Implementation needed
-	return nil
+    // Implementation needed
+    return nil
 }
 
 func (api *MobileAPI) getPerformanceStats(userID, period string) (interface{}, error) {
-	// Implementation needed
-	return nil, nil
+    // Implementation needed
+    return nil, nil
 }
 
 func (api *MobileAPI) getNotifications(userID string, unreadOnly bool) ([]Notification, error) {
-	// Implementation needed
-	return []Notification{}, nil
+    // Implementation needed
+    return []Notification{}, nil
 }
 
 func (api *MobileAPI) markNotificationRead(userID, notificationID string) error {
-	// Implementation needed
-	return nil
+    // Implementation needed
+    return nil
 }
 
 func (api *MobileAPI) updateNotificationSettings(userID string, settings interface{}) error {
-	// Implementation needed
-	return nil
-}
-
-// User struct
-type User struct {
-	ID string
+    // Implementation needed
+    return nil
 }
 
 // WebSocket methods
 
 func (api *MobileAPI) handleWebSocketMessages() {
-	// Handle incoming WebSocket messages
+    // Handle incoming WebSocket messages
 }
 
 func (api *MobileAPI) broadcastToUser(userID string, event string, data interface{}) {
-	message, _ := json.Marshal(map[string]interface{}{
-		"event": event,
-		"data":  data,
-		"timestamp": time.Now(),
-	})
-	
-	for _, conn := range api.wsConnections {
-		if conn.UserID == userID {
-			select {
-			case conn.Send <- message:
-			default:
-				close(conn.Send)
-				delete(api.wsConnections, conn.ID)
-			}
-		}
-	}
+    message, _ := json.Marshal(map[string]interface{}{
+        "event": event,
+        "data":  data,
+        "timestamp": time.Now(),
+    })
+    
+    for _, conn := range api.wsConnections {
+        if conn.UserID == userID {
+            select {
+            case conn.Send <- message:
+            default:
+                close(conn.Send)
+                delete(api.wsConnections, conn.ID)
+            }
+        }
+    }
 }
 
 func (api *MobileAPI) sendWSMessage(conn *WSConnection, event string, data interface{}) {
-	message, _ := json.Marshal(map[string]interface{}{
-		"event": event,
-		"data":  data,
-		"timestamp": time.Now(),
-	})
-	
-	select {
-	case conn.Send <- message:
-	default:
-		close(conn.Send)
-		delete(api.wsConnections, conn.ID)
-	}
+    message, _ := json.Marshal(map[string]interface{}{
+        "event": event,
+        "data":  data,
+        "timestamp": time.Now(),
+    })
+    
+    select {
+    case conn.Send <- message:
+    default:
+        close(conn.Send)
+        delete(api.wsConnections, conn.ID)
+    }
 }
 
 // WebSocket connection methods
 
 func (conn *WSConnection) readPump(api *MobileAPI) {
-	defer func() {
-		conn.Conn.Close()
-		delete(api.wsConnections, conn.ID)
-	}()
-	
-	conn.Conn.SetReadLimit(api.config.WSMaxMessageSize)
-	conn.Conn.SetReadDeadline(time.Now().Add(api.config.WSReadTimeout))
-	conn.Conn.SetPongHandler(func(string) error {
-		conn.Conn.SetReadDeadline(time.Now().Add(api.config.WSReadTimeout))
-		return nil
-	})
-	
-	for {
-		var message map[string]interface{}
-		err := conn.Conn.ReadJSON(&message)
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				api.logger.Error("WebSocket error", zap.Error(err))
-			}
-			break
-		}
-		
-		conn.LastActive = time.Now()
-		
-		// Handle message
-		if event, ok := message["event"].(string); ok {
-			api.handleWSEvent(conn, event, message["data"])
-		}
-	}
+    defer func() {
+        conn.Conn.Close()
+        delete(api.wsConnections, conn.ID)
+    }()
+    
+    conn.Conn.SetReadLimit(api.config.WSMaxMessageSize)
+    conn.Conn.SetReadDeadline(time.Now().Add(api.config.WSReadTimeout))
+    conn.Conn.SetPongHandler(func(string) error {
+        conn.Conn.SetReadDeadline(time.Now().Add(api.config.WSReadTimeout))
+        return nil
+    })
+    
+    for {
+        var message map[string]interface{}
+        err := conn.Conn.ReadJSON(&message)
+        if err != nil {
+            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+                api.logger.Error("WebSocket error", zap.Error(err))
+            }
+            break
+        }
+        
+        conn.LastActive = time.Now()
+        
+        // Handle message
+        if event, ok := message["event"].(string); ok {
+            api.handleWSEvent(conn, event, message["data"])
+        }
+    }
 }
 
 func (conn *WSConnection) writePump(api *MobileAPI) {
-	ticker := time.NewTicker(54 * time.Second)
-	defer func() {
-		ticker.Stop()
-		conn.Conn.Close()
-	}()
-	
-	for {
-		select {
-		case message, ok := <-conn.Send:
-			conn.Conn.SetWriteDeadline(time.Now().Add(api.config.WSWriteTimeout))
-			if !ok {
-				conn.Conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-			
-			conn.Conn.WriteMessage(websocket.TextMessage, message)
-			
-		case <-ticker.C:
-			conn.Conn.SetWriteDeadline(time.Now().Add(api.config.WSWriteTimeout))
-			if err := conn.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
+    ticker := time.NewTicker(54 * time.Second)
+    defer func() {
+        ticker.Stop()
+        conn.Conn.Close()
+    }()
+    
+    for {
+        select {
+        case message, ok := <-conn.Send:
+            conn.Conn.SetWriteDeadline(time.Now().Add(api.config.WSWriteTimeout))
+            if !ok {
+                conn.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+                return
+            }
+            
+            conn.Conn.WriteMessage(websocket.TextMessage, message)
+            
+        case <-ticker.C:
+            conn.Conn.SetWriteDeadline(time.Now().Add(api.config.WSWriteTimeout))
+            if err := conn.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+                return
+            }
+        }
+    }
 }
 
 func (api *MobileAPI) handleWSEvent(conn *WSConnection, event string, data interface{}) {
-	switch event {
-	case "subscribe":
-		// Handle subscription to real-time updates
-		if channel, ok := data.(string); ok {
-			api.subscribeToChannel(conn, channel)
-		}
-		
-	case "unsubscribe":
-		// Handle unsubscription
-		if channel, ok := data.(string); ok {
-			api.unsubscribeFromChannel(conn, channel)
-		}
-		
-	case "ping":
-		// Respond with pong
-		api.sendWSMessage(conn, "pong", nil)
-		
-	default:
-		api.logger.Warn("Unknown WebSocket event",
-			zap.String("event", event),
-			zap.String("user_id", conn.UserID),
-		)
-	}
+    switch event {
+    case "subscribe":
+        // Handle subscription to real-time updates
+        if channel, ok := data.(string); ok {
+            api.subscribeToChannel(conn, channel)
+        }
+        
+    case "unsubscribe":
+        // Handle unsubscription
+        if channel, ok := data.(string); ok {
+            api.unsubscribeFromChannel(conn, channel)
+        }
+        
+    case "ping":
+        // Respond with pong
+        api.sendWSMessage(conn, "pong", nil)
+        
+    default:
+        api.logger.Warn("Unknown WebSocket event",
+            zap.String("event", event),
+            zap.String("user_id", conn.UserID),
+        )
+    }
 }
 
 func (api *MobileAPI) subscribeToChannel(conn *WSConnection, channel string) {
-	// Implementation for channel subscription
+    // Implementation for channel subscription
 }
 
 func (api *MobileAPI) unsubscribeFromChannel(conn *WSConnection, channel string) {
-	// Implementation for channel unsubscription
+    // Implementation for channel unsubscription
 }
 
 // Rate limiter methods
 
-func (rl *RateLimiter) Allow(userID string) bool {
-	now := time.Now()
-	
-	limit, exists := rl.requests[userID]
-	if !exists {
-		rl.requests[userID] = &UserRateLimit{
-			Tokens:    60, // 60 requests per minute
-			LastReset: now,
-		}
-		return true
-	}
-	
-	// Reset if minute has passed
-	if now.Sub(limit.LastReset) > time.Minute {
-		limit.Tokens = 60
-		limit.LastReset = now
-	}
-	
-	if limit.Tokens > 0 {
-		limit.Tokens--
-		return true
-	}
-	
-	return false
+func (rl *MobileRateLimiter) Allow(userID string) bool {
+    rl.mu.Lock()
+    defer rl.mu.Unlock()
+
+    now := time.Now()
+
+    limit, exists := rl.requests[userID]
+    if !exists {
+        max := rl.rpm + rl.burst
+        if max < 1 {
+            max = 1
+        }
+        rl.requests[userID] = &UserRateLimit{
+            Tokens:    max,
+            MaxTokens: max,
+            LastReset: now,
+        }
+        return true
+    }
+
+    // Reset window every minute
+    if now.Sub(limit.LastReset) >= time.Minute {
+        limit.MaxTokens = rl.rpm + rl.burst
+        if limit.MaxTokens < 1 {
+            limit.MaxTokens = 1
+        }
+        limit.Tokens = limit.MaxTokens
+        limit.LastReset = now
+    }
+
+    if limit.Tokens > 0 {
+        limit.Tokens--
+        return true
+    }
+    return false
 }
 
 // Auth manager methods
 
 func (am *AuthManager) GenerateToken(userID, deviceID string) (string, error) {
-	// Simple token generation (use JWT in production)
-	token := fmt.Sprintf("%s:%s:%d", userID, deviceID, time.Now().Unix())
-	return token, nil
+    // Simple token generation (use JWT in production)
+    token := fmt.Sprintf("%s:%s:%d", userID, deviceID, time.Now().Unix())
+    return token, nil
 }
 
 func (am *AuthManager) ValidateToken(token string) (string, error) {

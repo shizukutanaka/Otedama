@@ -520,7 +520,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := map[string]interface{}{
 		"status":  "healthy",
 		"uptime":  s.stats.Uptime.String(),
-		"version": "2.1.5",
 	}
 	
 	w.Header().Set("Content-Type", "application/json")

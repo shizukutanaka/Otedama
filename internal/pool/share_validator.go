@@ -232,7 +232,7 @@ func (sv *ShareValidator) ValidateShare(ctx context.Context, share *Share) (*Val
 		Reward:      result.Reward,
 	}
 
-	if err := sv.shareRepo.Create(ctx, dbShare); err != nil {
+	if err := sv.shareRepo.Create(dbShare); err != nil {
 		sv.logger.Error("Failed to save share", zap.Error(err))
 	}
 

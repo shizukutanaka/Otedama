@@ -103,7 +103,7 @@ Otedama ("the Service") is an open-source software providing distributed P2P min
 
 - **GitHub**: https://github.com/shizukutanaka/Otedama
 - **Email**: support@otedama.network (準備中)
-- **Discord**: https://discord.gg/otedama (準備中)
+- **Community**: Coming soon
 
 ## 12. 定義 / Definitions
 

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/api"
 	"github.com/shizukutanaka/Otedama/internal/cli"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/core"
+	"github.com/shizukutanaka/Otedama/internal/database"
 	"go.uber.org/zap"
 )
 
@@ -23,12 +25,24 @@ type Application struct {
 	logger *zap.Logger
 	config *config.Config
 	system *core.OtedamaSystem
+	apiServer *api.Server
 }
 
 // New creates a new application instance - Rob Pike's clear constructor
 func New(ctx context.Context, logger *zap.Logger, cfg *config.Config) (*Application, error) {
+	// Initialize database if pool is enabled
+	var db *database.DB
+	var err error
+	
+	if cfg.Pool.Enabled {
+		db, err = InitializeDatabase(cfg, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize database: %w", err)
+		}
+	}
+	
 	// Create the unified Otedama system
-	system, err := core.NewOtedamaSystem(cfg, logger)
+	system, err := core.NewOtedamaSystem(cfg, logger, db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Otedama system: %w", err)
 	}
@@ -55,6 +69,23 @@ func (a *Application) Start() error {
 	if err := a.system.Start(); err != nil {
 		return fmt.Errorf("failed to start system: %w", err)
 	}
+
+	// Start API server with injected engine and pool manager
+	if a.config.API.Enabled {
+		srv, err := api.NewServer(
+			convertAPIConfig(a.config.API),
+			a.logger,
+			a.system.GetMiningEngine(),
+			a.system.GetPoolManager(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create API server: %w", err)
+		}
+		if err := srv.Start(a.ctx); err != nil {
+			return fmt.Errorf("failed to start API server: %w", err)
+		}
+		a.apiServer = srv
+	}
 	
 	a.logger.Info("Otedama application started successfully",
 		zap.String("state", a.system.GetState()),
@@ -71,6 +102,13 @@ func (a *Application) Shutdown(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, ShutdownTimeout)
 	defer cancel()
 	
+	// Stop API server first to stop accepting new requests
+	if a.apiServer != nil {
+		if err := a.apiServer.Shutdown(shutdownCtx); err != nil {
+			a.logger.Warn("API server shutdown error", zap.Error(err))
+		}
+	}
+
 	// Stop the system
 	if err := a.system.Stop(); err != nil {
 		a.logger.Error("System shutdown error", zap.Error(err))
@@ -199,4 +237,18 @@ func parseCPUAffinity(affinity string) []int {
 	// Simple implementation - in production, parse comma-separated values
 	// e.g., "0,1,2,3" -> [0,1,2,3]
 	return []int{}
+}
+
+// convertAPIConfig maps top-level config.APIConfig into api.Config expected by the API server
+func convertAPIConfig(src config.APIConfig) api.Config {
+    return api.Config{
+        Enabled:      src.Enabled,
+        ListenAddr:   src.ListenAddr,
+        EnableTLS:    src.TLSEnabled,
+        CertFile:     src.TLSCert,
+        KeyFile:      src.TLSKey,
+        RateLimit:    src.RateLimit,
+        AllowOrigins: src.AllowOrigins,
+        // Auth and TOTP-related fields will use env/default fallbacks in api.NewServer
+    }
 }

@@ -16,12 +16,12 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - pool.example.com
-    - api.example.com
-    - metrics.example.com
+    - otedama.local
+    - api.otedama.local
+    - monitoring.otedama.local
     secretName: otedama-tls
   rules:
-  - host: pool.example.com
+  - host: otedama.local
     http:
       paths:
       - path: /
@@ -31,7 +31,7 @@ spec:
             name: otedama
             port:
               number: 8080
-  - host: api.example.com
+  - host: api.otedama.local
     http:
       paths:
       - path: /
@@ -41,7 +41,7 @@ spec:
             name: otedama
             port:
               number: 8080
-  - host: metrics.example.com
+  - host: monitoring.otedama.local
     http:
       paths:
       - path: /

@@ -13,7 +13,7 @@ import (
 func TestNewClient(t *testing.T) {
 	logger := zap.NewNop()
 	cfg := config.PoolConfig{
-		URL:           "stratum+tcp://pool.example.com:3333",
+		URL:           "stratum+tcp://127.0.0.1:3333",
 		WalletAddress: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
 		WorkerName:    "test-worker",
 		Password:      "x",
@@ -22,7 +22,7 @@ func TestNewClient(t *testing.T) {
 	client, err := NewClient(logger, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	assert.Equal(t, "pool.example.com:3333", client.url)
+	assert.Equal(t, "127.0.0.1:3333", client.url)
 	assert.Equal(t, "test-worker", client.workerName)
 }
 
@@ -287,7 +287,7 @@ func TestStratumV2Support(t *testing.T) {
 
 	// Test V2 client
 	v2Config := config.PoolConfig{
-		URL:           "stratum2+tcp://pool.example.com:3334",
+		URL:           "stratum2+tcp://127.0.0.1:3334",
 		WalletAddress: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
 		WorkerName:    "test-worker",
 		Password:      "x",

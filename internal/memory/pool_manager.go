@@ -8,6 +8,27 @@ import (
 	"unsafe"
 )
 
+// safeSubUint64 atomically subtracts delta from u without underflow.
+// If delta > current value, it sets the value to 0.
+func safeSubUint64(u *atomic.Uint64, delta uint64) {
+	for {
+		old := u.Load()
+		if delta >= old {
+			// Avoid underflow: clamp to zero
+			if old == 0 {
+				return
+			}
+			if u.CompareAndSwap(old, 0) {
+				return
+			}
+			continue
+		}
+		if u.CompareAndSwap(old, old-delta) {
+			return
+		}
+	}
+}
+
 // PoolManager provides centralized memory pool management for zero-allocation operations.
 // Follows John Carmack's principle of minimizing allocations in hot paths.
 type PoolManager struct {
@@ -160,8 +181,8 @@ func (pm *PoolManager) Put(buf *Buffer) {
 	
 	// Update statistics
 	pm.stats.deallocations.Add(1)
-	pm.stats.inUse.Add(^uint64(0)) // Decrement
-	pm.stats.totalSize.Add(^uint64(buf.Size - 1)) // Subtract size
+	safeSubUint64(&pm.stats.inUse, 1)
+	safeSubUint64(&pm.stats.totalSize, uint64(buf.Size))
 }
 
 // GetMulti retrieves multiple buffers at once

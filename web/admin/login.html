@@ -115,6 +115,7 @@
             font-weight: bold;
         }
     </style>
+    <script src="/static/js/zkp.js" defer></script>
 </head>
 <body>
     <div class="login-container">
@@ -151,29 +152,56 @@
             const password = document.getElementById('password').value;
             
             loginBtn.disabled = true;
-            loginBtn.textContent = 'Logging in...';
+            loginBtn.textContent = 'Generating proof...';
             errorMessage.style.display = 'none';
             
             try {
-                const response = await fetch('/admin/login', {
+                // --- ZKP Login Flow ---
+
+                // 1. Derive a private key from the password.
+                // IMPORTANT: In a production system, use a strong Key Derivation Function (KDF)
+                // like Argon2 or PBKDF2 instead of a simple hash.
+                const privateKey = await sha256(password);
+
+                // 2. Request a challenge from the server.
+                loginBtn.textContent = 'Requesting challenge...';
+                const challengeRes = await fetch('/api/v1/auth/zkp-challenge', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username, password })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
                 });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    // Store token
+
+                if (!challengeRes.ok) {
+                    throw new Error('Failed to get ZKP challenge from server.');
+                }
+                const { challenge } = await challengeRes.json();
+
+                // 3. Generate the ZKP proof.
+                loginBtn.textContent = 'Proving identity...';
+                const { commitment, proof } = await generateProof(challenge, privateKey);
+
+                // 4. Send the proof to the server for verification.
+                const loginRes = await fetch('/api/v1/auth/zkp-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username,
+                        commitment: commitment.toString(),
+                        proof: proof.toString()
+                    })
+                });
+
+                if (loginRes.ok) {
+                    const data = await loginRes.json();
+                    // Store token and redirect
                     localStorage.setItem('auth_token', data.token);
-                    // Set cookie
-                    document.cookie = `auth_token=${data.token}; path=/`;
-                    // Redirect to dashboard
+                    document.cookie = `auth_token=${data.token}; path=/; secure; samesite=strict`;
                     window.location.href = '/admin/';
                 } else {
-                    throw new Error('Invalid credentials');
+                    const errorData = await loginRes.json();
+                    throw new Error(errorData.error || 'ZKP authentication failed.');
                 }
+
             } catch (error) {
                 errorMessage.textContent = error.message;
                 errorMessage.style.display = 'block';
@@ -182,14 +210,11 @@
             }
         });
 
-        // Check if already logged in
+        // Check if already logged in (no changes needed here)
         const token = localStorage.getItem('auth_token');
         if (token) {
-            // Verify token and redirect if valid
             fetch('/admin/dashboard', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: { 'Authorization': `Bearer ${token}` }
             }).then(response => {
                 if (response.ok) {
                     window.location.href = '/admin/';

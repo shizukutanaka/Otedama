@@ -395,9 +395,7 @@ func (fd *FeeDistributor) getTransactionFees(ctx context.Context, currency strin
 
 // GetDistributionHistory returns fee distribution history
 func (fd *FeeDistributor) GetDistributionHistory(currency string, limit int) ([]*FeeDistribution, error) {
-	ctx, cancel := context.WithTimeout(fd.ctx, 30*time.Second)
-	defer cancel()
-	
+    
 	query := `
 		SELECT id, currency, block_height, total_fees, operator_fee,
 		       development_fee, reserve_fee, tx_id, status,
@@ -408,7 +406,7 @@ func (fd *FeeDistributor) GetDistributionHistory(currency string, limit int) ([]
 		LIMIT $2
 	`
 	
-	rows, err := fd.db.Query(ctx, query, currency, limit)
+	rows, err := fd.db.Query(query, currency, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -443,9 +441,7 @@ func (fd *FeeDistributor) GetDistributionHistory(currency string, limit int) ([]
 
 // GetPendingDistributions returns pending fee distributions
 func (fd *FeeDistributor) GetPendingDistributions() ([]*FeeDistribution, error) {
-	ctx, cancel := context.WithTimeout(fd.ctx, 30*time.Second)
-	defer cancel()
-	
+    
 	query := `
 		SELECT id, currency, block_height, total_fees, operator_fee,
 		       development_fee, reserve_fee, tx_id, status,
@@ -455,7 +451,7 @@ func (fd *FeeDistributor) GetPendingDistributions() ([]*FeeDistribution, error) 
 		ORDER BY created_at ASC
 	`
 	
-	rows, err := fd.db.Query(ctx, query)
+	rows, err := fd.db.Query(query)
 	if err != nil {
 		return nil, err
 	}

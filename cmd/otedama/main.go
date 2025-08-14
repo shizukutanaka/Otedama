@@ -1,166 +1,17 @@
+//go:build legacy_main
+// +build legacy_main
+
 package main
 
+// Legacy-only entrypoint: excluded from production builds.
+// See internal/legacy/README.md for details.
 import (
-	"context"
-	"flag"
-	"fmt"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"runtime"
-	"runtime/debug"
-	"strings"
-	"sync"
-	"syscall"
-	"time"
-
-	"github.com/shizukutanaka/Otedama/internal/api"
-	"github.com/shizukutanaka/Otedama/internal/config"
-	"github.com/shizukutanaka/Otedama/internal/core"
-	"github.com/shizukutanaka/Otedama/internal/database"
-	"github.com/shizukutanaka/Otedama/internal/memory"
-	"github.com/shizukutanaka/Otedama/internal/mining"
-	"github.com/shizukutanaka/Otedama/internal/monitoring"
-	"github.com/shizukutanaka/Otedama/internal/p2p"
-	"github.com/shizukutanaka/Otedama/internal/pool"
-	"github.com/shizukutanaka/Otedama/internal/stratum"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+    "github.com/shizukutanaka/Otedama/cmd/otedama/commands"
 )
 
-const (
-	AppName    = "Otedama"
-	AppVersion = "2.1.5"
-	AppBuild   = "2025.08.06"
-)
-
-// Command-line flags
-var (
-	configPath       = flag.String("config", "config.yaml", "Path to configuration file")
-	generateConfig   = flag.Bool("generate-config", false, "Generate default configuration file")
-	version          = flag.Bool("version", false, "Show version information")
-	help             = flag.Bool("help", false, "Show help information")
-	daemon           = flag.Bool("daemon", false, "Run as daemon")
-	logLevel         = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
-	logFile          = flag.String("log-file", "", "Log file path (empty for stdout)")
-	dataDir          = flag.String("data-dir", "./data", "Data directory")
-	
-	// Mining flags
-	algorithm        = flag.String("algo", "", "Mining algorithm")
-	poolURL          = flag.String("pool", "", "Pool URL")
-	walletAddress    = flag.String("wallet", "", "Wallet address")
-	workerName       = flag.String("worker", "", "Worker name")
-	threads          = flag.Int("threads", 0, "Number of threads (0 = auto)")
-	intensity        = flag.Int("intensity", 20, "Mining intensity")
-	
-	// P2P flags
-	p2pEnabled       = flag.Bool("p2p", false, "Enable P2P mode")
-	p2pListen        = flag.String("listen", "0.0.0.0:8333", "P2P listen address")
-	p2pBootstrap     = flag.String("bootstrap", "", "Bootstrap nodes (comma-separated)")
-	
-	// Hardware flags
-	cpuEnabled       = flag.Bool("cpu", true, "Enable CPU mining")
-	gpuEnabled       = flag.Bool("gpu", false, "Enable GPU mining")
-	asicEnabled      = flag.Bool("asic", false, "Enable ASIC mining")
-	gpuDevices       = flag.String("gpu-devices", "", "GPU devices (comma-separated)")
-	
-	// Monitoring flags
-	monitoringEnabled = flag.Bool("monitoring", true, "Enable monitoring")
-	monitoringAddr   = flag.String("monitoring-addr", "0.0.0.0:9090", "Monitoring address")
-	
-	// Debug flags
-	debug            = flag.Bool("debug", false, "Enable debug mode")
-	verbose          = flag.Bool("verbose", false, "Enable verbose logging")
-	diagnose         = flag.Bool("diagnose", false, "Run diagnostics")
-	testPool         = flag.String("test-pool", "", "Test pool connection")
-	scanHardware     = flag.Bool("scan-hardware", false, "Scan for hardware")
-)
-
-// Application represents the main application
-type Application struct {
-	logger         *zap.Logger
-	config         *config.Config
-	configManager  *config.ConfigManager
-	
-	// Core components
-	recoveryManager *core.RecoveryManager
-	poolManager     *memory.PoolManager
-	
-	// Mining components
-	miningEngine    mining.Engine
-	stratumClient   *stratum.Client
-	stratumServer   *stratum.Server
-	poolManager     *pool.Manager
-	
-	// Network components
-	p2pNetwork      *p2p.Network
-	
-	// API and monitoring
-	apiServer       *api.Server
-	monitoringServer *monitoring.Server
-	
-	// Database
-	database        *database.DB
-	
-	// Lifecycle
-	ctx             context.Context
-	cancel          context.CancelFunc
-	wg              sync.WaitGroup
-	shutdownChan    chan struct{}
-}
-
+// Minimal entrypoint that delegates to the Cobra CLI defined in cmd/otedama/commands.
 func main() {
-	// Parse flags
-	flag.Parse()
-	
-	// Handle utility commands
-	if *version {
-		printVersion()
-		return
-	}
-	
-	if *help {
-		printHelp()
-		return
-	}
-	
-	if *generateConfig {
-		if err := generateDefaultConfig(*configPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to generate config: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Configuration file generated: %s\n", *configPath)
-		return
-	}
-	
-	if *diagnose {
-		runDiagnostics()
-		return
-	}
-	
-	if *scanHardware {
-		scanForHardware()
-		return
-	}
-	
-	if *testPool != "" {
-		testPoolConnection(*testPool)
-		return
-	}
-	
-	// Initialize logger
-	logger := initLogger(*logLevel, *logFile)
-	defer logger.Sync()
-	
-	// Log startup information
-	logger.Info("Starting Otedama",
-		zap.String("version", AppVersion),
-		zap.String("build", AppBuild),
-		zap.Int("cpus", runtime.NumCPU()),
-		zap.String("go_version", runtime.Version()),
-	)
-	
-	// Create application
+    commands.Execute()
 	app, err := NewApplication(logger)
 	if err != nil {
 		logger.Fatal("Failed to create application", zap.Error(err))
@@ -651,22 +502,6 @@ func initLogger(level, logFile string) *zap.Logger {
 	return logger
 }
 
-// printVersion prints version information
-func printVersion() {
-	fmt.Printf("%s v%s (build %s)\n", AppName, AppVersion, AppBuild)
-	fmt.Printf("Go version: %s\n", runtime.Version())
-	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("CPUs: %d\n", runtime.NumCPU())
-	
-	// Print build info
-	if info, ok := debug.ReadBuildInfo(); ok {
-		fmt.Println("\nBuild dependencies:")
-		for _, dep := range info.Deps {
-			fmt.Printf("  %s %s\n", dep.Path, dep.Version)
-		}
-	}
-}
-
 // printHelp prints help information
 func printHelp() {
 	fmt.Printf("%s - %s\n\n", AppName, "High-performance P2P mining pool and mining software")
@@ -678,8 +513,8 @@ func printHelp() {
 	fmt.Println("  # Start with configuration file")
 	fmt.Println("  otedama -config config.yaml")
 	fmt.Println()
-	fmt.Println("  # Pool mining")
-	fmt.Println("  otedama -pool stratum+tcp://pool.example.com:3333 -wallet ADDRESS -worker rig1")
+	fmt.Println("  # Pool mining (replace HOST:PORT and ADDRESS)")
+	fmt.Println("  otedama -pool stratum+tcp://HOST:PORT -wallet ADDRESS -worker rig1")
 	fmt.Println()
 	fmt.Println("  # P2P pool mode")
 	fmt.Println("  otedama -p2p -listen 0.0.0.0:8333 -bootstrap node1:8333,node2:8333")
@@ -720,7 +555,6 @@ func runDiagnostics() {
 	fmt.Printf("  OS: %s\n", runtime.GOOS)
 	fmt.Printf("  Architecture: %s\n", runtime.GOARCH)
 	fmt.Printf("  CPUs: %d\n", runtime.NumCPU())
-	fmt.Printf("  Go version: %s\n", runtime.Version())
 	
 	// Memory info
 	var m runtime.MemStats

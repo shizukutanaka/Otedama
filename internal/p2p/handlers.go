@@ -325,7 +325,6 @@ func (mh *MessageHandlers) handleHandshake(msg *P2PMessage, peerID string) error
 	mh.logger.Info("Received handshake",
 		zap.String("peer_id", peerID),
 		zap.String("node_id", handshakePayload.NodeID),
-		zap.String("version", handshakePayload.Version),
 		zap.Uint64("height", handshakePayload.Height),
 		zap.Strings("capabilities", handshakePayload.Capabilities),
 	)
@@ -333,7 +332,6 @@ func (mh *MessageHandlers) handleHandshake(msg *P2PMessage, peerID string) error
 	// Update peer information
 	mh.protocol.mu.Lock()
 	if peer, exists := mh.protocol.peers[peerID]; exists {
-		peer.Version = handshakePayload.Version
 		peer.LastSeen = time.Now()
 	}
 	mh.protocol.mu.Unlock()
@@ -345,7 +343,6 @@ func (mh *MessageHandlers) handleHandshake(msg *P2PMessage, peerID string) error
 		peerInfos = append(peerInfos, PeerInfo{
 			ID:         peer.ID,
 			Address:    peer.Address,
-			Version:    peer.Version,
 			LastSeen:   peer.LastSeen,
 			TrustLevel: peer.TrustLevel,
 		})

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"runtime"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/app"
@@ -57,11 +58,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 	profilePort, _ := cmd.Flags().GetInt("profile-port")
 	pidFile, _ := cmd.Flags().GetString("pid-file")
 	
-	// Load configuration
-	cfg, err := config.Load(configPath)
+	// Load configuration via manager using a temporary no-op logger
+	tempLogger := zap.NewNop()
+	cfgManager, err := config.NewManager(tempLogger, configPath)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
+		return fmt.Errorf("failed to create config manager: %w", err)
 	}
+	cfg := cfgManager.Get()
 	
 	// Initialize logger
 	logger, err := initializeLogger(cfg, isDaemon, logFile)
@@ -69,7 +72,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 	defer logger.Sync()
-	
+
 	// Daemonize if requested
 	if isDaemon {
 		if err := daemonize(); err != nil {
@@ -98,7 +101,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 	
 	// Create and start application
 	logger.Info("Starting Otedama",
-		zap.String("version", Version),
 		zap.String("config", configPath),
 		zap.Bool("daemon", isDaemon),
 	)
@@ -178,25 +180,27 @@ func daemonize() error {
 	// Note: This is a simplified version. Full daemonization would require
 	// proper fork/exec handling which is complex in Go.
 	// For production use, consider using a service manager like systemd.
-	
+
 	// Redirect stdin/stdout/stderr to /dev/null
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
 		return err
 	}
-	
+
 	os.Stdin = devNull
 	os.Stdout = devNull
 	os.Stderr = devNull
-	
+
 	// Change working directory to root
 	if err := os.Chdir("/"); err != nil {
 		return err
 	}
-	
-	// Clear umask
-	syscall.Umask(0)
-	
+
+	// Clear umask (no-op on Windows, implemented in OS-specific file)
+	if runtime.GOOS != "windows" {
+		clearUmask()
+	}
+
 	return nil
 }
 
@@ -229,12 +233,12 @@ func startProfiling(port int, logger *zap.Logger) {
 
 func printStartupInfo(cfg *config.Config) {
 	fmt.Println("\n=== Otedama Mining Software ===")
-	fmt.Printf("Version: %s\n", Version)
-	fmt.Printf("Mode: %s\n", cfg.Mode)
-	fmt.Printf("P2P: %v (Port: %s)\n", cfg.P2P.Enabled, cfg.Network.ListenAddr)
-	fmt.Printf("ZKP Auth: %v\n", cfg.ZKP.Enabled)
-	fmt.Printf("Dashboard: http://localhost:%d\n", cfg.Monitoring.DashboardPort)
-	fmt.Printf("API: http://localhost:%d\n", cfg.Monitoring.APIPort)
+	fmt.Printf("Algorithm: %s\n", cfg.Mining.Algorithm)
+	fmt.Printf("CPU Threads: %d\n", cfg.Mining.CPUThreads)
+	fmt.Printf("P2P Enabled: %v (Listen: %s)\n", cfg.Network.P2P.Enabled || cfg.Network.P2P.Enable, cfg.Network.P2P.ListenAddr)
+	fmt.Printf("Stratum Enabled: %v (Listen: %s)\n", cfg.Network.Stratum.Enabled || cfg.Network.Stratum.Enable, cfg.Network.Stratum.ListenAddr)
+	fmt.Printf("API Enabled: %v (Listen: %s)\n", cfg.API.Enabled, cfg.API.ListenAddr)
+	fmt.Printf("Prometheus: %v (Listen: %s)\n", cfg.Monitoring.PrometheusEnabled || cfg.Monitoring.Prometheus, cfg.Monitoring.PrometheusAddr)
 	fmt.Println("\nPress Ctrl+C to stop mining")
 	fmt.Println("===============================\n")
 }

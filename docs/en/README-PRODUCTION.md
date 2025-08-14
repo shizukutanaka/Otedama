@@ -214,7 +214,7 @@ docker exec -it otedama_redis redis-cli info
 
 - Documentation: `/docs` directory
 - Issues: GitHub Issues
-- Security: security@otedama.io
+- Security: https://github.com/shizukutanaka/Otedama/security/advisories
 
 ## License
 

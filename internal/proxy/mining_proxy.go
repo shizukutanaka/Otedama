@@ -1,3 +1,6 @@
+//go:build ignore
+// Legacy/ignored: excluded from production builds.
+// See internal/legacy/README.md for details.
 package proxy
 
 import (

@@ -94,7 +94,6 @@ type BackupMetadata struct {
 	Timestamp     time.Time             `json:"timestamp"`
 	Size          int64                 `json:"size"`
 	Checksum      string                `json:"checksum"`
-	Version       string                `json:"version"`
 	Description   string                `json:"description"`
 	Files         []BackupFile          `json:"files"`
 	DatabaseInfo  *DatabaseBackupInfo   `json:"database_info,omitempty"`
@@ -123,7 +122,6 @@ type BackupFile struct {
 // DatabaseBackupInfo contains database backup information
 type DatabaseBackupInfo struct {
 	Engine       string    `json:"engine"`
-	Version      string    `json:"version"`
 	Tables       []string  `json:"tables"`
 	RowCount     int64     `json:"row_count"`
 	LastSequence int64     `json:"last_sequence"`
@@ -226,7 +224,6 @@ func (bm *BackupManager) CreateBackup(backupType BackupType, description string)
 		ID:          generateBackupID(),
 		Type:        backupType,
 		Timestamp:   startTime,
-		Version:     "2.1.4",
 		Description: description,
 		Encrypted:   bm.config.EncryptionEnabled,
 	}
@@ -716,7 +713,6 @@ func (bm *BackupManager) backupDatabase(tempDir string) (*DatabaseBackupInfo, er
 	
 	info := &DatabaseBackupInfo{
 		Engine:  "sqlite",
-		Version: "3.0",
 		Tables:  []string{"miners", "shares", "blocks", "payouts"},
 	}
 	

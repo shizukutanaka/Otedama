@@ -870,35 +870,35 @@ type AlgorithmMemoryProfile struct {
 // GetAlgorithmProfile - アルゴリズムのメモリプロファイルを取得
 func GetAlgorithmProfile(algo AlgorithmType) AlgorithmMemoryProfile {
 	profiles := map[AlgorithmType]AlgorithmMemoryProfile{
-		AlgorithmSHA256d: {
+		SHA256D: {
 			HeaderSize:       80,
 			IntermediateSize: 64,
 			OutputSize:       32,
 			ScratchSize:      256,
 			Parallelism:      runtime.NumCPU(),
 		},
-		AlgorithmScrypt: {
+		Scrypt: {
 			HeaderSize:       80,
 			IntermediateSize: 128 * 1024,
 			OutputSize:       32,
 			ScratchSize:      128 * 1024,
 			Parallelism:      1,
 		},
-		AlgorithmEthash: {
+		Ethash: {
 			HeaderSize:       32,
 			IntermediateSize: 64,
 			OutputSize:       32,
 			ScratchSize:      1024,
 			Parallelism:      runtime.NumCPU() / 2,
 		},
-		AlgorithmRandomX: {
+		RandomX: {
 			HeaderSize:       80,
 			IntermediateSize: 2 * 1024 * 1024,
 			OutputSize:       32,
 			ScratchSize:      256 * 1024,
 			Parallelism:      runtime.NumCPU(),
 		},
-		AlgorithmKawPow: {
+		KawPow: {
 			HeaderSize:       32,
 			IntermediateSize: 128,
 			OutputSize:       32,

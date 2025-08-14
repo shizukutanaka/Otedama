@@ -27,7 +27,7 @@ log_error() {
 cd "$(dirname "$0")/.."
 
 OLD_MODULE="github.com/otedama/otedama"
-NEW_MODULE="github.com/shizukachan/otedama"
+NEW_MODULE="github.com/shizukutanaka/Otedama"
 
 log_info "Fixing import paths from $OLD_MODULE to $NEW_MODULE..."
 

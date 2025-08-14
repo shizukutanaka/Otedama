@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/database"
 	"github.com/shizukutanaka/Otedama/internal/mining"
 	"github.com/shizukutanaka/Otedama/internal/p2p"
 	"github.com/shizukutanaka/Otedama/internal/pool"
@@ -22,12 +23,12 @@ type OtedamaSystem struct {
 	cancel    context.CancelFunc
 	logger    *zap.Logger
 	config    *config.Config
+	db        *database.DB
 	
 	// Core components
 	miningEngine  mining.Engine
-	poolManager   *pool.Manager
+	poolManager   *pool.PoolManager
 	stratumServer *stratum.Server
-	p2pNetwork    *p2p.Network
 	
 	// State management
 	state     atomic.Value // stores SystemState
@@ -40,20 +41,20 @@ type OtedamaSystem struct {
 	shutdownWg sync.WaitGroup
 }
 
-// SystemState represents the system state
+// SystemState represents the OtedamaSystem state (distinct from LifecycleManager state)
 type SystemState string
 
 const (
-	StateInitializing SystemState = "initializing"
-	StateStarting     SystemState = "starting"
-	StateRunning      SystemState = "running"
-	StateStopping     SystemState = "stopping"
-	StateStopped      SystemState = "stopped"
-	StateError        SystemState = "error"
+	SystemStateInitializing SystemState = "initializing"
+	SystemStateStarting     SystemState = "starting"
+	SystemStateRunning      SystemState = "running"
+	SystemStateStopping     SystemState = "stopping"
+	SystemStateStopped      SystemState = "stopped"
+	SystemStateError        SystemState = "error"
 )
 
 // NewOtedamaSystem creates a new mining system with dependency injection
-func NewOtedamaSystem(cfg *config.Config, logger *zap.Logger) (*OtedamaSystem, error) {
+func NewOtedamaSystem(cfg *config.Config, logger *zap.Logger, db *database.DB) (*OtedamaSystem, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
@@ -68,12 +69,13 @@ func NewOtedamaSystem(cfg *config.Config, logger *zap.Logger) (*OtedamaSystem, e
 		cancel:     cancel,
 		logger:     logger,
 		config:     cfg,
+		db:         db,
 		startTime:  time.Now(),
 		shutdownCh: make(chan struct{}),
 	}
 	
 	// Set initial state
-	system.state.Store(StateInitializing)
+	system.state.Store(SystemStateInitializing)
 	
 	// Initialize components with error handling
 	if err := system.initializeComponents(); err != nil {
@@ -81,7 +83,7 @@ func NewOtedamaSystem(cfg *config.Config, logger *zap.Logger) (*OtedamaSystem, e
 		return nil, fmt.Errorf("failed to initialize components: %w", err)
 	}
 	
-	system.state.Store(StateStopped)
+	system.state.Store(SystemStateStopped)
 	return system, nil
 }
 
@@ -95,26 +97,18 @@ func (s *OtedamaSystem) initializeComponents() error {
 	}
 	
 	// 2. Initialize pool manager if enabled
-	if s.config.Pool.Enable {
+	if s.config.Pool.Enabled {
 		if err := s.initializePoolManager(); err != nil {
 			return fmt.Errorf("pool manager initialization failed: %w", err)
 		}
 	}
 	
 	// 3. Initialize Stratum server if enabled
-	if s.config.Network.Stratum.Enable {
+	if s.config.Network.Stratum.Enabled {
 		if err := s.initializeStratumServer(); err != nil {
 			return fmt.Errorf("stratum server initialization failed: %w", err)
 		}
 	}
-	
-	// 4. Initialize P2P network if enabled
-	if s.config.Network.P2P.Enable {
-		if err := s.initializeP2PNetwork(); err != nil {
-			return fmt.Errorf("P2P network initialization failed: %w", err)
-		}
-	}
-	
 	
 	s.logger.Info("All components initialized successfully")
 	return nil
@@ -136,81 +130,85 @@ func (s *OtedamaSystem) initializeMiningEngine() error {
 		NUMA:               s.config.Performance.NUMA,
 	}
 	
+	// If P2P mode is enabled, instantiate the P2PMiningEngine which manages its own P2P network
+	if s.config.Network.P2P.Enabled {
+		p2pConfig := &p2p.NetworkConfig{
+			ListenAddr:        s.config.Network.P2P.ListenAddr,
+			MaxPeers:          s.config.Network.P2P.MaxPeers,
+			BootstrapNodes:    s.config.Network.P2P.BootstrapNodes,
+			ProtocolVersion:   0,
+			NetworkMagic:      0,
+			ReadTimeout:       0,
+			WriteTimeout:      0,
+			KeepAliveInterval: 0,
+		}
+		p2pEngine, err := mining.NewP2PMiningEngine(s.logger, engineConfig, p2pConfig)
+		if err != nil {
+			return err
+		}
+		s.miningEngine = p2pEngine
+		return nil
+	}
+	
+	// Default to base engine
 	engine, err := mining.NewEngine(s.logger, engineConfig)
 	if err != nil {
 		return err
 	}
-	
 	s.miningEngine = engine
 	return nil
 }
 
 // initializePoolManager creates the pool manager
 func (s *OtedamaSystem) initializePoolManager() error {
-	poolConfig := &pool.Config{
-		Address:        s.config.Pool.Address,
-		MaxConnections: s.config.Pool.MaxConnections,
-		FeePercentage:  s.config.Pool.FeePercentage,
-		PayoutInterval: s.config.Pool.PayoutInterval,
-		MinimumPayout:  s.config.Pool.MinimumPayout,
+	// Only initialize pool manager if pool is enabled and database is available
+	if !s.config.Pool.Enabled || s.db == nil {
+		s.logger.Info("Pool manager not enabled or database not available")
+		return nil
 	}
 	
-	manager, err := pool.NewManager(s.logger, poolConfig, s.miningEngine)
+	// Create pool manager configuration
+	config := &config.PoolConfig{
+		Enable: true,
+		Enabled: true,
+		MaxConnections: 1000,
+		FeePercentage: 1.0,
+		PayoutScheme: "PPLNS",
+		MinimumPayout: 0.001,
+		PayoutInterval: time.Hour,
+		PoolFeePercent: 1.0,
+	}
+	
+	// Initialize pool manager with database dependencies
+	pm, err := pool.NewPoolManager(s.logger, config, s.db)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create pool manager: %w", err)
 	}
 	
-	s.poolManager = manager
+	s.poolManager = pm
+	s.logger.Info("Pool manager initialized successfully")
 	return nil
 }
 
 // initializeStratumServer creates the Stratum server
 func (s *OtedamaSystem) initializeStratumServer() error {
-	stratumConfig := &stratum.Config{
-		Address:         s.config.Network.Stratum.ListenAddr,
-		MaxConnections:  s.config.Network.Stratum.MaxConnections,
-		ExtraNonceSize:  s.config.Network.Stratum.ExtraNonceSize,
-		TargetTime:      s.config.Network.Stratum.TargetTime,
-		RetargetTime:    s.config.Network.Stratum.RetargetTime,
-		VariancePercent: s.config.Network.Stratum.VariancePercent,
-	}
-	
-	server, err := stratum.NewServer(s.logger, stratumConfig, s.miningEngine)
+	// The stratum package exposes NewServer(logger, config.StratumConfig) and Start/Stop methods.
+	server, err := stratum.NewServer(s.logger, s.config.Network.Stratum)
 	if err != nil {
 		return err
 	}
-	
+
 	s.stratumServer = server
 	return nil
 }
 
-// initializeP2PNetwork creates the P2P network
-func (s *OtedamaSystem) initializeP2PNetwork() error {
-	p2pConfig := &p2p.Config{
-		ListenAddr:      s.config.Network.P2P.ListenAddr,
-		MaxPeers:        s.config.Network.P2P.MaxPeers,
-		BootstrapNodes:  s.config.Network.P2P.BootstrapNodes,
-		EnableDiscovery: s.config.Network.P2P.EnableDiscovery,
-	}
-	
-	network, err := p2p.NewNetwork(s.logger, p2pConfig)
-	if err != nil {
-		return err
-	}
-	
-	s.p2pNetwork = network
-	return nil
-}
-
-
 // Start starts all system components
 func (s *OtedamaSystem) Start() error {
-	if !s.setState(StateStopped, StateStarting) {
+	if !s.setState(SystemStateStopped, SystemStateStarting) {
 		return fmt.Errorf("system not in stopped state")
 	}
 	
 	s.logger.Info("Starting Otedama system",
-		zap.String("version", "2.1.4"),
 		zap.String("algorithm", s.config.Mining.Algorithm),
 	)
 	
@@ -221,9 +219,8 @@ func (s *OtedamaSystem) Start() error {
 		enabled bool
 	}{
 		{"Mining Engine", s.startMiningEngine, true},
-		{"Pool Manager", s.startPoolManager, s.config.Pool.Enable},
-		{"Stratum Server", s.startStratumServer, s.config.Network.Stratum.Enable},
-		{"P2P Network", s.startP2PNetwork, s.config.Network.P2P.Enable},
+		{"Pool Manager", s.startPoolManager, s.poolManager != nil},
+		{"Stratum Server", s.startStratumServer, s.config.Network.Stratum.Enabled},
 	}
 	
 	for _, component := range startOrder {
@@ -233,7 +230,7 @@ func (s *OtedamaSystem) Start() error {
 		
 		s.logger.Info("Starting component", zap.String("component", component.name))
 		if err := component.starter(); err != nil {
-			s.setState(StateStarting, StateError)
+			s.setState(SystemStateStarting, SystemStateError)
 			// Cleanup started components
 			s.cleanup()
 			return fmt.Errorf("failed to start %s: %w", component.name, err)
@@ -244,14 +241,14 @@ func (s *OtedamaSystem) Start() error {
 	s.wg.Add(1)
 	go s.monitorSystem()
 	
-	s.setState(StateStarting, StateRunning)
+	s.setState(SystemStateStarting, SystemStateRunning)
 	s.logger.Info("Otedama system started successfully")
 	return nil
 }
 
 // Stop gracefully stops all system components
 func (s *OtedamaSystem) Stop() error {
-	if !s.setState(StateRunning, StateStopping) {
+	if !s.setState(SystemStateRunning, SystemStateStopping) {
 		return fmt.Errorf("system not running")
 	}
 	
@@ -269,7 +266,6 @@ func (s *OtedamaSystem) Stop() error {
 		stopper func() error
 		enabled bool
 	}{
-		{"P2P Network", s.stopP2PNetwork, s.p2pNetwork != nil},
 		{"Stratum Server", s.stopStratumServer, s.stratumServer != nil},
 		{"Pool Manager", s.stopPoolManager, s.poolManager != nil},
 		{"Mining Engine", s.stopMiningEngine, s.miningEngine != nil},
@@ -294,7 +290,7 @@ func (s *OtedamaSystem) Stop() error {
 	// Wait for all goroutines
 	s.wg.Wait()
 	
-	s.setState(StateStopping, StateStopped)
+	s.setState(SystemStateStopping, SystemStateStopped)
 	s.logger.Info("Otedama system stopped")
 	
 	if len(stopErrors) > 0 {
@@ -323,23 +319,12 @@ func (s *OtedamaSystem) startStratumServer() error {
 	if s.stratumServer == nil {
 		return nil
 	}
-	s.shutdownWg.Add(1)
-	go func() {
-		defer s.shutdownWg.Done()
-		if err := s.stratumServer.ListenAndServe(); err != nil {
-			s.logger.Error("Stratum server error", zap.Error(err))
-		}
-	}()
+	// Start the stratum server in background
+	if err := s.stratumServer.Start(); err != nil {
+		return err
+	}
 	return nil
 }
-
-func (s *OtedamaSystem) startP2PNetwork() error {
-	if s.p2pNetwork == nil {
-		return nil
-	}
-	return s.p2pNetwork.Start()
-}
-
 
 // Component stop methods
 func (s *OtedamaSystem) stopMiningEngine() error {
@@ -350,30 +335,18 @@ func (s *OtedamaSystem) stopMiningEngine() error {
 }
 
 func (s *OtedamaSystem) stopPoolManager() error {
-	if s.poolManager == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return s.poolManager.Shutdown(ctx)
+    if s.poolManager == nil {
+        return nil
+    }
+    return s.poolManager.Stop()
 }
 
 func (s *OtedamaSystem) stopStratumServer() error {
 	if s.stratumServer == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return s.stratumServer.Shutdown(ctx)
+	return s.stratumServer.Stop()
 }
-
-func (s *OtedamaSystem) stopP2PNetwork() error {
-	if s.p2pNetwork == nil {
-		return nil
-	}
-	return s.p2pNetwork.Stop()
-}
-
 
 // GetState returns the current system state
 func (s *OtedamaSystem) GetState() string {
@@ -387,24 +360,28 @@ func (s *OtedamaSystem) setState(expected, new SystemState) bool {
 
 // GetStats returns system statistics
 func (s *OtedamaSystem) GetStats() interface{} {
-	stats := make(map[string]interface{})
+    stats := make(map[string]interface{})
+    
+    // Get mining stats
+    if s.miningEngine != nil {
+        miningStats := s.miningEngine.GetStats()
+        stats["mining"] = miningStats
+    }
+    
+    // Get pool stats
+    if s.poolManager != nil {
+        ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+        defer cancel()
+        if poolStats, err := s.poolManager.GetPoolStats(ctx); err == nil {
+            stats["pool"] = poolStats
+        } else {
+            stats["pool_error"] = err.Error()
+        }
+    }
 	
-	// Get mining stats
-	if s.miningEngine != nil {
-		miningStats := s.miningEngine.GetStats()
-		stats["mining"] = miningStats
-	}
-	
-	// Get pool stats
-	if s.poolManager != nil {
-		poolStats := s.poolManager.GetStats()
-		stats["pool"] = poolStats
-	}
-	
-	// Get P2P stats
-	if s.p2pNetwork != nil {
-		p2pStats := s.p2pNetwork.GetStats()
-		stats["p2p"] = p2pStats
+	 // Get P2P stats
+	if mpe, ok := s.miningEngine.(*mining.P2PMiningEngine); ok {
+		stats["p2p"] = mpe.GetP2PStats()
 	}
 	
 	// System stats
@@ -412,7 +389,6 @@ func (s *OtedamaSystem) GetStats() interface{} {
 		"state":      s.GetState(),
 		"uptime":     time.Since(s.startTime).Seconds(),
 		"start_time": s.startTime,
-		"version":    "2.1.4",
 	}
 	
 	return stats
@@ -442,7 +418,7 @@ func (s *OtedamaSystem) performHealthCheck() {
 	// Check mining engine
 	if s.miningEngine != nil {
 		status := s.miningEngine.GetStatus()
-		if !status.Running && s.GetState() == string(StateRunning) {
+		if !status.Running && s.GetState() == string(SystemStateRunning) {
 			s.logger.Warn("Mining engine not running, attempting restart")
 			if err := s.miningEngine.Start(); err != nil {
 				s.logger.Error("Failed to restart mining engine", zap.Error(err))
@@ -457,10 +433,7 @@ func (s *OtedamaSystem) performHealthCheck() {
 func (s *OtedamaSystem) cleanup() {
 	s.logger.Info("Cleaning up components")
 	
-	// Stop any started components
-	if s.p2pNetwork != nil {
-		_ = s.stopP2PNetwork()
-	}
+	 // Stop any started components
 	if s.stratumServer != nil {
 		_ = s.stopStratumServer()
 	}
@@ -494,13 +467,13 @@ func (s *OtedamaSystem) Restart() error {
 
 // GetVersion returns the system version
 func (s *OtedamaSystem) GetVersion() string {
-	return "2.1.4"
+	return ""
 }
 
 // IsHealthy returns true if the system is healthy
 func (s *OtedamaSystem) IsHealthy() bool {
 	state := s.GetState()
-	return state == string(StateRunning)
+	return state == string(SystemStateRunning)
 }
 
 // GetConfig returns the current configuration
@@ -508,6 +481,16 @@ func (s *OtedamaSystem) GetConfig() *config.Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.config
+}
+
+// GetMiningEngine returns the current mining engine
+func (s *OtedamaSystem) GetMiningEngine() mining.Engine {
+	return s.miningEngine
+}
+
+// GetPoolManager returns the current pool manager (may be nil if disabled)
+func (s *OtedamaSystem) GetPoolManager() *pool.PoolManager {
+	return s.poolManager
 }
 
 // UpdateConfig updates the configuration (requires restart)

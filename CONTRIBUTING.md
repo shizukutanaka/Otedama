@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to Otedama! This document provides guidelines and instructions for contributing to the project.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Otedama! This document provides g
 - [Pull Request Process](#pull-request-process)
 - [Community](#community)
 
-## 📜 Code of Conduct
+## Code of Conduct
 
 ### Our Pledge
 
@@ -35,7 +35,7 @@ We are committed to providing a friendly, safe, and welcoming environment for al
 - Publishing private information without consent
 - Any conduct that could reasonably be considered inappropriate
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -59,7 +59,7 @@ cd Otedama
 git remote add upstream https://github.com/shizukutanaka/Otedama.git
 ```
 
-## 💻 Development Setup
+## Development Setup
 
 ### 1. Install Dependencies
 
@@ -112,7 +112,7 @@ go test -cover ./...
 go test ./internal/mining/...
 ```
 
-## 🤝 How to Contribute
+## How to Contribute
 
 ### Types of Contributions
 
@@ -129,7 +129,7 @@ go test ./internal/mining/...
 - Look for `help-wanted` labels for priority items
 - Review the [ROADMAP.md](./docs/en/ROADMAP.md) for planned features
 
-## 📝 Coding Standards
+## Coding Standards
 
 ### Go Code Style
 
@@ -178,7 +178,7 @@ func CalculateHashrate(shares int64, duration time.Duration) float64 {
 }
 ```
 
-## 🧪 Testing Guidelines
+## Testing Guidelines
 
 ### Test Structure
 
@@ -216,7 +216,7 @@ func TestCalculateReward(t *testing.T) {
 - Test edge cases and error conditions
 - Include benchmarks for performance-critical code
 
-## 📚 Documentation
+## Documentation
 
 ### Code Documentation
 
@@ -238,7 +238,7 @@ When contributing translations:
 2. Maintain consistent terminology
 3. Update the language index file
 
-## 🔄 Pull Request Process
+## Pull Request Process
 
 ### 1. Before Starting
 
@@ -302,13 +302,13 @@ Brief description of changes
 4. Squash commits if requested
 5. Wait for approval from maintainers
 
-## 🌐 Community
+## Community
 
 ### Communication Channels
 
 - **GitHub Issues**: Bug reports and feature requests
 - **GitHub Discussions**: General discussions and questions
-- **Discord**: Real-time chat (Coming Soon)
+<!-- Discord channel removed until available -->
 
 ### Getting Help
 
@@ -317,14 +317,14 @@ Brief description of changes
 - Ask clear, specific questions
 - Provide context and examples
 
-## 🏆 Recognition
+## Recognition
 
 Contributors are recognized in:
 - [CONTRIBUTORS.md](./CONTRIBUTORS.md) file
 - Release notes
 - Project documentation
 
-## 📋 Checklist for Contributors
+## Checklist for Contributors
 
 Before submitting a PR, ensure:
 
@@ -337,18 +337,17 @@ Before submitting a PR, ensure:
 - [ ] No merge conflicts
 - [ ] Sensitive data is not exposed
 
-## 🔐 Security
+## Security
 
 ### Reporting Security Issues
 
-**DO NOT** open public issues for security vulnerabilities. Instead:
+Do not open public issues for security vulnerabilities. Instead, please use GitHub Security Advisories:
 
-1. Email security@otedama.network (Coming Soon)
-2. Include detailed description
-3. Provide steps to reproduce
-4. Allow time for fix before disclosure
+- Submit a private report: https://github.com/shizukutanaka/Otedama/security/advisories/new
+- Include a detailed description and reproduction steps
+- Allow maintainers time to investigate and release a fix before public disclosure
 
-## 📄 License
+## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
 

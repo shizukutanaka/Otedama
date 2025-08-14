@@ -229,9 +229,7 @@ jobs:
 ### Security Contacts
 ```yaml
 security:
-  contact: security@otedama.io
-  pgp_key: https://otedama.io/security.asc
-  bug_bounty: https://otedama.io/bug-bounty
+  contact: https://github.com/shizukutanaka/Otedama/security/advisories
 ```
 
 ## Security Best Practices
@@ -368,32 +366,31 @@ security:
 ## Future Security Enhancements
 
 ### Planned Improvements
-1. **Quantum-Resistant Cryptography**
-   - Post-quantum algorithms
-   - Hybrid cryptographic schemes
-   - Key exchange protocols
+1. **Enhanced Threat Detection**
+   - Behavioral analytics
+   - SIEM correlation rules
+   - Automated response playbooks
 
-2. **Advanced Threat Detection**
-   - Machine learning models
-   - Behavioral analysis
-   - Threat intelligence feeds
+2. **Secret Management Hardening**
+   - Rotation policies
+   - Scope-limited tokens
+   - Audit of secret usage
 
-3. **Zero Trust Architecture**
-   - Micro-segmentation
-   - Continuous verification
-   - Least privilege enforcement
+3. **Supply Chain Security**
+   - SBOM generation
+   - Dependency pinning and verification
+   - Reproducible builds and signed artifacts
 
-4. **Blockchain Security**
-   - Smart contract auditing
-   - Cross-chain security
-   - Consensus mechanism hardening
+4. **Hardening and Observability**
+   - mTLS between services
+   - Expanded metrics for auth/security events
+   - Continuous configuration validation
 
 ## Security Resources
 
-### Documentation
-- [Security Policy](./docs/SECURITY_POLICY.md)
-- [Incident Response](./docs/INCIDENT_RESPONSE.md)
-- [Security Checklist](./docs/SECURITY_CHECKLIST.md)
+### Reporting Security Issues
+- Please submit a private report via GitHub Security Advisories:
+  https://github.com/shizukutanaka/Otedama/security/advisories/new
 
 ### Training
 - Security awareness training

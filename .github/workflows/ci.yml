@@ -14,22 +14,44 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  lint:
-    name: Lint
+  url-guard:
+    name: URL Guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Run docs cleanup
+        run: bash scripts/cleanup-doc-urls.sh
+
+      - name: Verify no changes after cleanup
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::Documentation URLs are not normalized. Run 'make docs-clean' and commit changes." >&2
+            git --no-pager diff
+            exit 1
+          fi
+
+      - name: Run URL guard
+        run: bash scripts/url_guard.sh
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: [url-guard]
+
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      
+
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
-      
+
       - name: Run golangci-lint
         run: golangci-lint run --timeout=5m ./...
 
@@ -40,20 +62,21 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         go: ['1.21', '1.22']
-    
+    needs: [url-guard]
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
           cache: true
-      
+
       - name: Run tests
         run: |
           go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-      
+
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.go == env.GO_VERSION
         uses: codecov/codecov-action@v3
@@ -65,9 +88,11 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: [url-guard]
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -75,17 +100,17 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-      
+
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
-      
+
       - name: Run gosec security scanner
         uses: securego/gosec@master
         with:
           args: '-fmt sarif -out gosec-results.sarif ./...'
-      
+
       - name: Upload gosec results
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -94,17 +119,17 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
-    
+    needs: [url-guard, lint, test]
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      
+
       - name: Build binaries
         run: |
           # Build for multiple platforms
@@ -113,7 +138,7 @@ jobs:
           GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/otedama-darwin-amd64 cmd/otedama/main.go
           GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/otedama-darwin-arm64 cmd/otedama/main.go
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/otedama-windows-amd64.exe cmd/otedama/main.go
-      
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -123,27 +148,27 @@ jobs:
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [url-guard, lint, test]
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -152,25 +177,27 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=sha
-      
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
 
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [docker]
+    needs: [url-guard, docker]
+
     services:
       postgres:
         image: postgres:16
@@ -181,16 +208,16 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      
+
       - name: Run integration tests
         run: |
           go test -v -tags=integration ./tests/integration/...
@@ -200,21 +227,21 @@ jobs:
   benchmark:
     name: Performance Benchmark
     runs-on: ubuntu-latest
-    needs: [build]
-    
+    needs: [url-guard, build]
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      
+
       - name: Run benchmarks
         run: |
           go test -bench=. -benchmem -run=^# ./... | tee benchmark.txt
-      
+
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
@@ -226,23 +253,24 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [build, docker, integration-test]
+    needs: [url-guard, build, docker, integration-test]
+
     if: github.event_name == 'release'
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: binaries
           path: dist/
-      
+
       - name: Create checksums
         run: |
           cd dist
           sha256sum * > checksums.txt
-      
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v1
         with:
@@ -253,13 +281,14 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: [release]
+    needs: [url-guard, release]
+
     if: github.event_name == 'release'
     environment: production
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Deploy to production
         run: |
           echo "Deploying version ${{ github.event.release.tag_name }} to production"

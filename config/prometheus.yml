@@ -63,8 +63,8 @@ scrape_configs:
       module: [http_2xx]
     static_configs:
       - targets:
-          - https://api.otedama.io/health
-          - https://api.otedama.io/api/v1/stats
+          - https://otedama.local/health
+          - https://otedama.local/api/v1/stats
         labels:
           service: 'endpoints'
     relabel_configs:

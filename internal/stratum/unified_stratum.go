@@ -242,7 +242,7 @@ func (c *Client) Connect() error {
 	
 	c.logger.Info("Connected to stratum server",
 		zap.String("url", c.config.URL),
-		zap.String("version", c.version))
+	)
 	
 	return nil
 }
@@ -537,7 +537,7 @@ func NewServer(logger *zap.Logger, config config.StratumConfig) (*Server, error)
 		baseDiff:     config.Difficulty,
 		minDiff:      config.MinDifficulty,
 		maxDiff:      config.MaxDifficulty,
-		targetTime:   time.Duration(config.TargetTime) * time.Second,
+		targetTime:   func() time.Duration { if config.TargetTime == 0 { return 15 * time.Second }; return config.TargetTime }(),
 		adjustWindow: config.VarDiffWindow,
 		shareHistory: make(map[string][]time.Time),
 		logger:       logger,
@@ -564,7 +564,7 @@ func (s *Server) Start() error {
 	
 	s.logger.Info("Stratum server started",
 		zap.String("addr", s.config.ListenAddr),
-		zap.String("version", s.version))
+	)
 	
 	return nil
 }

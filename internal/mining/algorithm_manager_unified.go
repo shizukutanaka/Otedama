@@ -8,8 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/shizukutanaka/Otedama/internal/crypto"
 	"go.uber.org/zap"
 )
 
@@ -363,7 +361,7 @@ func (m *UnifiedAlgorithmManager) RegisterAlgorithm(name string, factory Algorit
 	
 	m.logger.Info("Algorithm registered",
 		zap.String("algorithm", name),
-		zap.String("version", info.Version))
+	)
 }
 
 // プライベートメソッド
@@ -876,14 +874,5 @@ type BlockTemplate struct {
 	ExtraNonce2 uint32
 }
 
-// ProfitabilityData - 利益性データ
-type ProfitabilityData struct {
-	Algorithm     AlgorithmType
-	Hashrate      float64
-	Difficulty    float64
-	BlockReward   float64
-	CoinPrice     float64
-	PowerCost     float64
-	Profitability float64
-	LastUpdate    time.Time
-}
+// ProfitabilityData は `internal/mining/types.go` で定義されています。
+// ここでの重複定義は削除しました。（重複による再宣言エラー回避のため）

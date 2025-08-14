@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -91,97 +90,72 @@ func fetchStatus(apiURL string) (*MiningStatus, error) {
 
 func displayTable(status *MiningStatus) error {
 	fmt.Printf("Otedama Mining Status - %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
-	
-	// Overview table
-	overviewTable := tablewriter.NewWriter(os.Stdout)
-	overviewTable.SetHeader([]string{"Metric", "Value"})
-	overviewTable.SetBorder(false)
-	
-	overviewData := [][]string{
-		{"Status", getStatusEmoji(status.Status) + " " + status.Status},
-		{"Uptime", humanize.Time(status.StartTime)},
-		{"Total Hashrate", humanize.SI(status.TotalHashrate, "H/s")},
-		{"Shares Accepted", fmt.Sprintf("%d (%.1f%%)", status.SharesAccepted, status.SharesAcceptedRate*100)},
-		{"Shares Rejected", fmt.Sprintf("%d (%.1f%%)", status.SharesRejected, status.SharesRejectedRate*100)},
-		{"Total Earnings", fmt.Sprintf("%.8f %s", status.TotalEarnings, status.Currency)},
-		{"Active Workers", fmt.Sprintf("%d", status.ActiveWorkers)},
-		{"Connected Peers", fmt.Sprintf("%d", status.ConnectedPeers)},
-	}
-	
-	for _, v := range overviewData {
-		overviewTable.Append(v)
-	}
-	overviewTable.Render()
-	
-	// Workers table
-	if len(status.Workers) > 0 {
-		fmt.Println("\nWorkers:")
-		workersTable := tablewriter.NewWriter(os.Stdout)
-		workersTable.SetHeader([]string{"Name", "Type", "Hashrate", "Temp", "Power", "Efficiency", "Status"})
-		
-		for _, worker := range status.Workers {
-			efficiency := float64(worker.Hashrate) / float64(worker.Power)
-			workersTable.Append([]string{
-				worker.Name,
-				worker.Type,
-				humanize.SI(worker.Hashrate, "H/s"),
-				fmt.Sprintf("%d°C", worker.Temperature),
-				fmt.Sprintf("%dW", worker.Power),
-				fmt.Sprintf("%.2f MH/W", efficiency/1e6),
-				getWorkerStatusEmoji(worker.Status) + " " + worker.Status,
-			})
-		}
-		workersTable.Render()
-	}
-	
-	// Algorithms table
-	if len(status.Algorithms) > 0 {
-		fmt.Println("\nAlgorithms:")
-		algoTable := tablewriter.NewWriter(os.Stdout)
-		algoTable.SetHeader([]string{"Algorithm", "Hashrate", "Shares", "Profit/Day"})
-		
-		for _, algo := range status.Algorithms {
-			algoTable.Append([]string{
-				algo.Name,
-				humanize.SI(algo.Hashrate, "H/s"),
-				fmt.Sprintf("%d", algo.Shares),
-				fmt.Sprintf("%.4f %s", algo.ProfitPerDay, status.Currency),
-			})
-		}
-		algoTable.Render()
-	}
-	
-	// Pool information
-	if status.Pool != nil {
-		fmt.Println("\nPool Information:")
-		poolTable := tablewriter.NewWriter(os.Stdout)
-		poolTable.SetHeader([]string{"Metric", "Value"})
-		poolTable.SetBorder(false)
-		
-		poolData := [][]string{
-			{"Pool", status.Pool.Name},
-			{"Difficulty", humanize.SI(status.Pool.Difficulty, "")},
-			{"Round Shares", fmt.Sprintf("%d", status.Pool.RoundShares)},
-			{"Last Block", humanize.Time(status.Pool.LastBlockTime)},
-			{"Pool Fee", fmt.Sprintf("%.1f%%", status.Pool.Fee*100)},
-		}
-		
-		for _, v := range poolData {
-			poolTable.Append(v)
-		}
-		poolTable.Render()
-	}
-	
-	// Alerts
-	if len(status.Alerts) > 0 {
-		fmt.Println("\nAlerts:")
-		for _, alert := range status.Alerts {
-			emoji := getAlertEmoji(alert.Severity)
-			fmt.Printf("%s [%s] %s - %s\n", emoji, alert.Severity, alert.Message, humanize.Time(alert.Time))
-		}
-	}
-	
-	return nil
+    
+    // Overview
+    fmt.Println("Overview:")
+    fmt.Printf("  Status           : %s %s\n", getStatusEmoji(status.Status), status.Status)
+    fmt.Printf("  Uptime           : %s\n", humanize.Time(status.StartTime))
+    fmt.Printf("  Total Hashrate   : %s\n", humanize.SI(status.TotalHashrate, "H/s"))
+    fmt.Printf("  Shares Accepted  : %d (%.1f%%)\n", status.SharesAccepted, status.SharesAcceptedRate*100)
+    fmt.Printf("  Shares Rejected  : %d (%.1f%%)\n", status.SharesRejected, status.SharesRejectedRate*100)
+    fmt.Printf("  Total Earnings   : %.8f %s\n", status.TotalEarnings, status.Currency)
+    fmt.Printf("  Active Workers   : %d\n", status.ActiveWorkers)
+    fmt.Printf("  Connected Peers  : %d\n", status.ConnectedPeers)
+    
+    // Workers
+    if len(status.Workers) > 0 {
+        fmt.Println("\nWorkers:")
+        for _, worker := range status.Workers {
+            efficiency := float64(worker.Hashrate)
+            if worker.Power > 0 {
+                efficiency = efficiency / float64(worker.Power)
+            }
+            fmt.Printf("  - %s [%s] rate=%s temp=%d°C power=%dW eff=%.2f MH/W status=%s %s\n",
+                worker.Name,
+                worker.Type,
+                humanize.SI(worker.Hashrate, "H/s"),
+                worker.Temperature,
+                worker.Power,
+                efficiency/1e6,
+                getWorkerStatusEmoji(worker.Status),
+                worker.Status,
+            )
+        }
+    }
+    
+    // Algorithms
+    if len(status.Algorithms) > 0 {
+        fmt.Println("\nAlgorithms:")
+        for _, algo := range status.Algorithms {
+            fmt.Printf("  - %-10s rate=%s shares=%d profit/day=%.4f %s\n",
+                algo.Name,
+                humanize.SI(algo.Hashrate, "H/s"),
+                algo.Shares,
+                algo.ProfitPerDay,
+                status.Currency,
+            )
+        }
+    }
+    
+    // Pool
+    if status.Pool != nil {
+        fmt.Println("\nPool:")
+        fmt.Printf("  Name       : %s\n", status.Pool.Name)
+        fmt.Printf("  Difficulty : %s\n", humanize.SI(status.Pool.Difficulty, ""))
+        fmt.Printf("  RoundShare : %d\n", status.Pool.RoundShares)
+        fmt.Printf("  Last Block : %s\n", humanize.Time(status.Pool.LastBlockTime))
+        fmt.Printf("  Fee        : %.1f%%\n", status.Pool.Fee*100)
+    }
+    
+    // Alerts
+    if len(status.Alerts) > 0 {
+        fmt.Println("\nAlerts:")
+        for _, alert := range status.Alerts {
+            marker := getAlertEmoji(alert.Severity)
+            fmt.Printf("  %s [%s] %s - %s\n", marker, alert.Severity, alert.Message, humanize.Time(alert.Time))
+        }
+    }
+    return nil
 }
 
 func displayJSON(status *MiningStatus) error {
@@ -202,43 +176,43 @@ func displayYAML(status *MiningStatus) error {
 func getStatusEmoji(status string) string {
 	switch status {
 	case "running":
-		return "🟢"
+		return "[RUN]"
 	case "stopped":
-		return "🔴"
+		return "[STOP]"
 	case "paused":
-		return "⏸️"
+		return "[PAUSE]"
 	case "error":
-		return "❌"
+		return "[ERROR]"
 	default:
-		return "❓"
+		return "[N/A]"
 	}
 }
 
 func getWorkerStatusEmoji(status string) string {
 	switch status {
 	case "active":
-		return "✅"
+		return "[OK]"
 	case "idle":
-		return "💤"
+		return "[IDLE]"
 	case "error":
-		return "❌"
+		return "[ERROR]"
 	case "overheating":
-		return "🔥"
+		return "[HOT]"
 	default:
-		return "❓"
+		return "[N/A]"
 	}
 }
 
 func getAlertEmoji(severity string) string {
 	switch severity {
 	case "critical":
-		return "🚨"
+		return "[CRIT]"
 	case "warning":
-		return "⚠️"
+		return "[WARN]"
 	case "info":
-		return "ℹ️"
+		return "[INFO]"
 	default:
-		return "📌"
+		return "[NOTE]"
 	}
 }
 

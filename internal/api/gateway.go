@@ -1,3 +1,6 @@
+//go:build ignore
+// Legacy/ignored: excluded from production builds.
+// See internal/legacy/README.md for details.
 package api
 
 import (
@@ -82,7 +85,7 @@ type Route struct {
 	
 	// Route configuration
 	RateLimit      *RateLimitConfig
-	Auth           *AuthConfig
+	Auth           *GatewayAuthConfig
 	Cache          *CacheConfig
 	CircuitBreaker *CircuitBreakerConfig
 	
@@ -105,8 +108,8 @@ type RateLimitConfig struct {
 	ByAPIKey          bool
 }
 
-// AuthConfig defines authentication configuration
-type AuthConfig struct {
+// GatewayAuthConfig defines authentication configuration for the API gateway
+type GatewayAuthConfig struct {
 	Required       bool
 	Methods        []string // "jwt", "api_key", "oauth2", "basic"
 	Roles          []string
@@ -202,10 +205,10 @@ type LoadBalancerAlgorithm interface {
 // RateLimiterManager manages rate limiting
 type RateLimiterManager struct {
 	// Per-route limiters
-	routeLimiters  map[string]*RateLimiter
+	routeLimiters  map[string]*GatewayRateLimiter
 	
 	// Global limiter
-	globalLimiter  *RateLimiter
+	globalLimiter  *GatewayRateLimiter
 	
 	// User/IP limiters
 	userLimiters   sync.Map
@@ -215,8 +218,8 @@ type RateLimiterManager struct {
 	config         *RateLimiterConfig
 }
 
-// RateLimiter implements token bucket rate limiting
-type RateLimiter struct {
+// GatewayRateLimiter implements token bucket rate limiting for the gateway
+type GatewayRateLimiter struct {
 	limiter        *rate.Limiter
 	requests       atomic.Uint64
 	rejected       atomic.Uint64
@@ -556,7 +559,7 @@ type SwaggerSpec struct {
 type SwaggerInfo struct {
 	Title          string `json:"title"`
 	Description    string `json:"description"`
-	Version        string `json:"version"`
+	Version        string `json:"version,omitempty"`
 	Contact        SwaggerContact `json:"contact"`
 	License        SwaggerLicense `json:"license"`
 }
@@ -989,7 +992,7 @@ func NewSwaggerGenerator() *SwaggerGenerator {
 			Info: SwaggerInfo{
 				Title:       "Otedama API",
 				Description: "Cryptocurrency Mining Pool API",
-				Version:     "1.0.0",
+				Version:     "",
 			},
 			Paths:      make(map[string]SwaggerPath),
 			Components: SwaggerComponents{

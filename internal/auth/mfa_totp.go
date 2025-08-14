@@ -4,7 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,6 +26,11 @@ type TOTPProvider struct {
 	
 	// Configuration
 	config  TOTPConfig
+
+	// Optional persistence
+	storagePath   string
+	autosaveTicker *time.Ticker
+	autosaveStop   chan struct{}
 }
 
 // TOTPConfig defines TOTP configuration
@@ -151,8 +159,13 @@ func (tp *TOTPProvider) VerifyResponse(userID, challenge, response string) (bool
 		return true, nil
 	}
 	
-	// Verify TOTP code
-	valid := totp.Validate(response, secret.Secret)
+	// Verify TOTP code using configured options
+	valid, _ := totp.ValidateCustom(response, secret.Secret, time.Now(), totp.ValidateOpts{
+		Period:    tp.config.Period,
+		Skew:      tp.config.Skew,
+		Digits:    mapDigits(tp.config.Digits),
+		Algorithm: otp.AlgorithmSHA1,
+	})
 	
 	if valid {
 		// Update usage stats
@@ -167,6 +180,18 @@ func (tp *TOTPProvider) VerifyResponse(userID, challenge, response string) (bool
 	}
 	
 	return valid, nil
+}
+
+// mapDigits maps integer digits to pquerna totp.Digits type
+func mapDigits(n int) otp.Digits {
+	switch n {
+	case 8:
+		return otp.DigitsEight
+	case 6:
+		fallthrough
+	default:
+		return otp.DigitsSix
+	}
 }
 
 // IsEnrolled checks if a user is enrolled for TOTP
@@ -247,6 +272,130 @@ func (tp *TOTPProvider) RegenerateBackupCodes(userID string) ([]string, error) {
 }
 
 // Helper methods
+
+// SetStoragePath sets the file path used for persistence.
+func (tp *TOTPProvider) SetStoragePath(path string) {
+    tp.mu.Lock()
+    defer tp.mu.Unlock()
+    tp.storagePath = path
+}
+
+type totpStore struct {
+    Secrets map[string]*TOTPSecret `json:"secrets"`
+}
+
+// LoadFromFile loads TOTP secrets from a JSON file.
+func (tp *TOTPProvider) LoadFromFile(path string) error {
+    data, err := os.ReadFile(path)
+    if err != nil {
+        if os.IsNotExist(err) {
+            // Nothing to load yet
+            tp.SetStoragePath(path)
+            return nil
+        }
+        return fmt.Errorf("load totp store: %w", err)
+    }
+    var store totpStore
+    if err := json.Unmarshal(data, &store); err != nil {
+        return fmt.Errorf("parse totp store: %w", err)
+    }
+    tp.mu.Lock()
+    tp.secrets = make(map[string]*TOTPSecret)
+    for k, v := range store.Secrets {
+        tp.secrets[k] = v
+    }
+    tp.storagePath = path
+    tp.mu.Unlock()
+    tp.logger.Info("Loaded TOTP store", zap.String("path", path), zap.Int("users", len(store.Secrets)))
+    return nil
+}
+
+// Save writes TOTP secrets to the configured storage path, if set.
+func (tp *TOTPProvider) Save() error {
+    tp.mu.RLock()
+    path := tp.storagePath
+    if path == "" {
+        tp.mu.RUnlock()
+        return nil
+    }
+    // Snapshot secrets to avoid holding lock during I/O (deep copy)
+    snapshot := make(map[string]*TOTPSecret, len(tp.secrets))
+    for k, v := range tp.secrets {
+        cp := *v
+        if v.BackupCodes != nil {
+            cp.BackupCodes = append([]string(nil), v.BackupCodes...)
+        }
+        snapshot[k] = &cp
+    }
+    tp.mu.RUnlock()
+
+    dir := filepath.Dir(path)
+    if err := os.MkdirAll(dir, 0o700); err != nil {
+        return fmt.Errorf("mkdir totp dir: %w", err)
+    }
+    payload, err := json.MarshalIndent(totpStore{Secrets: snapshot}, "", "  ")
+    if err != nil {
+        return fmt.Errorf("marshal totp store: %w", err)
+    }
+    tmp := path + ".tmp"
+    if err := os.WriteFile(tmp, payload, 0o600); err != nil {
+        return fmt.Errorf("write totp tmp: %w", err)
+    }
+    // Remove destination first to support Windows rename semantics
+    if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+        return fmt.Errorf("remove old totp store: %w", err)
+    }
+    if err := os.Rename(tmp, path); err != nil {
+        return fmt.Errorf("rename totp store: %w", err)
+    }
+    return nil
+}
+
+// StartAutoSave starts periodic persistence if a storagePath is configured.
+func (tp *TOTPProvider) StartAutoSave(interval time.Duration) {
+    tp.mu.Lock()
+    defer tp.mu.Unlock()
+    if tp.storagePath == "" || interval <= 0 {
+        return
+    }
+    if tp.autosaveTicker != nil {
+        return
+    }
+    tp.autosaveTicker = time.NewTicker(interval)
+    tp.autosaveStop = make(chan struct{})
+    go func(t *time.Ticker, stop <-chan struct{}) {
+        for {
+            select {
+            case <-t.C:
+                if err := tp.Save(); err != nil {
+                    tp.logger.Warn("TOTP autosave failed", zap.Error(err))
+                }
+            case <-stop:
+                return
+            }
+        }
+    }(tp.autosaveTicker, tp.autosaveStop)
+}
+
+// StopAutoSave stops periodic persistence.
+func (tp *TOTPProvider) StopAutoSave() {
+    tp.mu.Lock()
+    defer tp.mu.Unlock()
+    if tp.autosaveTicker != nil {
+        tp.autosaveTicker.Stop()
+        tp.autosaveTicker = nil
+    }
+    if tp.autosaveStop != nil {
+        close(tp.autosaveStop)
+        tp.autosaveStop = nil
+    }
+}
+
+// Close stops autosave and performs a final Save.
+func (tp *TOTPProvider) Close() error {
+    tp.StopAutoSave()
+    return tp.Save()
+}
 
 // generateBackupCodes generates backup codes
 func (tp *TOTPProvider) generateBackupCodes(count int) []string {

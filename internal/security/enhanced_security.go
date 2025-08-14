@@ -1,3 +1,8 @@
+//go:build ignore
+// +build ignore
+
+// Legacy/ignored: excluded from production builds.
+// See internal/legacy/README.md for details.
 package security
 
 import (
@@ -11,7 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 	
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
+	common "github.com/shizukutanaka/Otedama/internal/common"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/time/rate"
@@ -419,6 +425,7 @@ func NewInputValidator(logger *zap.Logger) *InputValidator {
 	validator.RegisterRule("username", &UsernameRule{})
 	validator.RegisterRule("wallet", &WalletAddressRule{})
 	validator.RegisterRule("nonce", &NonceRule{})
+	validator.RegisterRule("worker_id", &WorkerIDRule{})
 	
 	// Register default sanitizers
 	validator.RegisterSanitizer("html", &HTMLSanitizer{})
@@ -466,7 +473,32 @@ func (iv *InputValidator) Sanitize(sanitizerName string, input string) string {
 	return sanitizer.Sanitize(input)
 }
 
+// Convenience helpers
+// ValidateWorkerID validates a worker identifier using the registered rule.
+func (iv *InputValidator) ValidateWorkerID(id string) error {
+	return iv.Validate("worker_id", id)
+}
+
 // Validation rules implementations
+
+// WorkerIDRule validates worker identifiers (3-64, alnum, '-', '_')
+type WorkerIDRule struct{}
+
+func (r *WorkerIDRule) Validate(input interface{}) error {
+	id, ok := input.(string)
+	if !ok {
+		return fmt.Errorf("input must be a string")
+	}
+	if len(id) < 3 || len(id) > 64 {
+		return fmt.Errorf("worker id must be 3-64 characters")
+	}
+	for _, ch := range id {
+		if !(isAlphanumeric(ch) || ch == '-' || ch == '_') {
+			return fmt.Errorf("worker id contains invalid characters")
+		}
+	}
+	return nil
+}
 
 // EmailRule validates email addresses
 type EmailRule struct{}
@@ -522,18 +554,11 @@ func (r *WalletAddressRule) Validate(input interface{}) error {
 		return fmt.Errorf("input must be a string")
 	}
 	
-	// Basic validation (length and character set)
-	if len(address) < 26 || len(address) > 90 {
-		return fmt.Errorf("invalid wallet address length")
+	// Use canonical wallet validation. Default to BTC unless caller provides context.
+	// If currency context is needed in the future, extend InputValidator to support it.
+	if err := common.ValidateWalletAddress(address, "btc"); err != nil {
+		return err
 	}
-	
-	// Check for valid base58 characters (simplified)
-	for _, ch := range address {
-		if !isBase58Char(ch) {
-			return fmt.Errorf("wallet address contains invalid characters")
-		}
-	}
-	
 	return nil
 }
 

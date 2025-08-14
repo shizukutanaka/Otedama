@@ -2,8 +2,8 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -645,9 +645,11 @@ func (r *RBAC) evaluateCondition(cond Condition, context map[string]interface{})
 		
 	case "time_range":
 		// Check if current time is within range
-		if params, ok := cond.Parameters.(map[string]interface{}); ok {
-			start, _ := time.Parse(time.RFC3339, params["start"].(string))
-			end, _ := time.Parse(time.RFC3339, params["end"].(string))
+		if cond.Parameters != nil {
+			startStr, _ := cond.Parameters["start"].(string)
+			endStr, _ := cond.Parameters["end"].(string)
+			start, _ := time.Parse(time.RFC3339, startStr)
+			end, _ := time.Parse(time.RFC3339, endStr)
 			now := time.Now()
 			return now.After(start) && now.Before(end)
 		}

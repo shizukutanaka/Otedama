@@ -17,14 +17,23 @@ import (
 	"go.uber.org/zap"
 )
 
+// WSAuthConfig configures WebSocketAuth behavior
+type WSAuthConfig struct {
+	JWTSecret     string
+	TokenTTL      time.Duration
+	RefreshTTL    time.Duration
+	EnableRefresh bool
+}
+
 // WebSocketAuth manages WebSocket authentication and encryption
 type WebSocketAuth struct {
 	logger       *zap.Logger
 	sessions     sync.Map // sessionID -> *WSSession
 	secretKey    []byte
 	tokenExpiry  time.Duration
-	rateLimiter  sync.Map // clientID -> *RateLimiter
+	rateLimiter  sync.Map // clientID -> *WSAuthRateLimiter
 	stats        *WSAuthStats
+	config       WSAuthConfig
 }
 
 // WSSession represents an authenticated WebSocket session
@@ -56,11 +65,11 @@ type AuthMessage struct {
 // TokenClaims returned after token validation
 // Extend with additional fields as needed.
 type TokenClaims struct {
-    UserID      string   `json:"user_id"`
-    ClientID    string   `json:"client_id"`
-    IssuedAt    int64    `json:"issued_at"`
-    ExpiresAt   int64    `json:"expires_at"`
-    Permissions []string `json:"permissions,omitempty"`
+	UserID      string   `json:"user_id"`
+	ClientID    string   `json:"client_id"`
+	IssuedAt    int64    `json:"issued_at"`
+	ExpiresAt   int64    `json:"expires_at"`
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 type WSAuthStats struct {
@@ -71,8 +80,26 @@ type WSAuthStats struct {
 	DecryptedMessages  atomic.Uint64
 }
 
-// RateLimiter implements token bucket algorithm
-type RateLimiter struct {
+// incActiveSessions safely increments ActiveSessions
+func (wa *WebSocketAuth) incActiveSessions() {
+	wa.stats.ActiveSessions.Add(1)
+}
+
+// decActiveSessions safely decrements ActiveSessions without underflow
+func (wa *WebSocketAuth) decActiveSessions() {
+	for {
+		current := wa.stats.ActiveSessions.Load()
+		if current == 0 {
+			return
+		}
+		if wa.stats.ActiveSessions.CompareAndSwap(current, current-1) {
+			return
+		}
+	}
+}
+
+// WSAuthRateLimiter implements token bucket algorithm
+type WSAuthRateLimiter struct {
 	tokens    atomic.Int32
 	lastReset atomic.Int64
 	maxTokens int32
@@ -80,18 +107,32 @@ type RateLimiter struct {
 }
 
 // NewWebSocketAuth creates a new WebSocket authentication manager
-func NewWebSocketAuth(logger *zap.Logger) *WebSocketAuth {
-	// Generate secret key for HMAC
-	secretKey := make([]byte, 32)
-	if _, err := rand.Read(secretKey); err != nil {
-		logger.Error("Failed to generate secret key", zap.Error(err))
+func NewWebSocketAuth(logger *zap.Logger, cfg WSAuthConfig) *WebSocketAuth {
+	var secretKey []byte
+	if cfg.JWTSecret != "" {
+		// Derive key from configured secret (use SHA-256)
+		sum := sha256.Sum256([]byte(cfg.JWTSecret))
+		secretKey = sum[:]
+	} else {
+		// Generate random secret key for HMAC
+		secretKey = make([]byte, 32)
+		if _, err := rand.Read(secretKey); err != nil {
+			logger.Error("Failed to generate secret key", zap.Error(err))
+		}
+	}
+
+	// Default token TTL if not provided
+	tokenTTL := cfg.TokenTTL
+	if tokenTTL == 0 {
+		tokenTTL = 24 * time.Hour
 	}
 
 	wa := &WebSocketAuth{
 		logger:      logger,
 		secretKey:   secretKey,
-		tokenExpiry: 24 * time.Hour,
+		tokenExpiry: tokenTTL,
 		stats:       &WSAuthStats{},
+		config:      cfg,
 	}
 
 	// Start cleanup goroutine
@@ -108,6 +149,8 @@ func (wa *WebSocketAuth) GenerateToken(clientID string) (string, error) {
 		"issued_at": time.Now().Unix(),
 		"expires_at": time.Now().Add(wa.tokenExpiry).Unix(),
 		"nonce": wa.generateNonce(),
+		// Optional user identifier; default to clientID if not otherwise managed by caller
+		"user_id": clientID,
 	}
 
 	// Serialize token data
@@ -164,17 +207,32 @@ func (wa *WebSocketAuth) ValidateToken(token string) (*TokenClaims, error) {
 	}
 
 	// Check expiration
-	expiresAt, ok := tokenData["expires_at"].(float64)
-	if !ok || time.Now().Unix() > int64(expiresAt) {
+	expiresAtFloat, ok := tokenData["expires_at"].(float64)
+	if !ok || time.Now().Unix() > int64(expiresAtFloat) {
 		return nil, fmt.Errorf("token expired")
 	}
 
 	// Convert to typed claims
+	var userID, clientID string
+	if v, ok := tokenData["client_id"].(string); ok {
+		clientID = v
+	}
+	if v, ok := tokenData["user_id"].(string); ok && v != "" {
+		userID = v
+	} else {
+		userID = clientID
+	}
+
+	issuedAt := time.Now().Unix()
+	if v, ok := tokenData["issued_at"].(float64); ok {
+		issuedAt = int64(v)
+	}
+
 	claims := &TokenClaims{
-		UserID:    tokenData["user_id"].(string),
-		ClientID:  tokenData["client_id"].(string),
-		IssuedAt:  int64(tokenData["issued_at"].(float64)),
-		ExpiresAt: int64(tokenData["expires_at"].(float64)),
+		UserID:    userID,
+		ClientID:  clientID,
+		IssuedAt:  issuedAt,
+		ExpiresAt: int64(expiresAtFloat),
 	}
 	
 	// Add permissions based on user type
@@ -247,7 +305,7 @@ func (wa *WebSocketAuth) AuthenticateConnection(conn *websocket.Conn) (*WSSessio
 	// Store session
 	wa.sessions.Store(session.ID, session)
 	wa.stats.TotalSessions.Add(1)
-	wa.stats.ActiveSessions.Add(1)
+	wa.incActiveSessions()
 
 	// Reset read deadline
 	conn.SetReadDeadline(time.Time{})
@@ -262,7 +320,7 @@ func (wa *WebSocketAuth) AuthenticateConnection(conn *websocket.Conn) (*WSSessio
 
 	if err := conn.WriteJSON(response); err != nil {
 		wa.sessions.Delete(session.ID)
-		wa.stats.ActiveSessions.Add(-1)
+		wa.decActiveSessions()
 		return nil, fmt.Errorf("failed to send auth response: %w", err)
 	}
 
@@ -350,7 +408,7 @@ func (wa *WebSocketAuth) DecryptMessage(session *WSSession, ciphertext []byte) (
 // RevokeSession revokes a session
 func (wa *WebSocketAuth) RevokeSession(sessionID string) {
 	if _, loaded := wa.sessions.LoadAndDelete(sessionID); loaded {
-		wa.stats.ActiveSessions.Add(-1)
+		wa.decActiveSessions()
 		wa.logger.Info("Session revoked", zap.String("session_id", sessionID))
 	}
 }
@@ -363,7 +421,7 @@ func (wa *WebSocketAuth) CleanupExpiredSessions() {
 		if time.Since(session.LastActivity) > 30*time.Minute {
 			if wa.sessions.CompareAndDelete(key, value) {
 				expiredCount++
-				wa.stats.ActiveSessions.Add(-1)
+				wa.decActiveSessions()
 				wa.logger.Debug("Cleaned up expired session", zap.String("session_id", session.ID))
 			}
 		}
@@ -390,7 +448,7 @@ func (wa *WebSocketAuth) cleanupRoutine() {
 func (wa *WebSocketAuth) cleanupRateLimiters() {
 	now := time.Now().Unix()
 	wa.rateLimiter.Range(func(key, value interface{}) bool {
-		limiter := value.(*RateLimiter)
+		limiter := value.(*WSAuthRateLimiter)
 		lastReset := limiter.lastReset.Load()
 		
 		// Remove rate limiters not used for 1 hour
@@ -506,10 +564,10 @@ func (wa *WebSocketAuth) checkRateLimit(clientID string) bool {
 	maxTokens := int32(10) // 10 auth attempts per minute
 
 	// Get or create rate limiter
-	limiterInterface, _ := wa.rateLimiter.LoadOrStore(clientID, &RateLimiter{
+	limiterInterface, _ := wa.rateLimiter.LoadOrStore(clientID, &WSAuthRateLimiter{
 		maxTokens: maxTokens,
 	})
-	limiter := limiterInterface.(*RateLimiter)
+	limiter := limiterInterface.(*WSAuthRateLimiter)
 
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()

@@ -63,7 +63,7 @@
 
     - name: Clone Otedama repository
       git:
-        repo: https://github.com/otedama/otedama.git
+        repo: https://github.com/shizukutanaka/Otedama.git
         dest: "{{ otedama_home }}/src"
         version: "{{ otedama_version }}"
         force: yes

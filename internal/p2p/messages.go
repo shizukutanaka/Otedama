@@ -73,7 +73,6 @@ type PeerListPayload struct {
 type PeerInfo struct {
 	ID         string    `json:"id"`
 	Address    string    `json:"address"`
-	Version    string    `json:"version"`
 	LastSeen   time.Time `json:"last_seen"`
 	TrustLevel float64   `json:"trust_level"`
 }
@@ -81,7 +80,6 @@ type PeerInfo struct {
 // HandshakePayload represents initial handshake data
 type HandshakePayload struct {
 	NodeID      string    `json:"node_id"`
-	Version     string    `json:"version"`
 	Height      uint64    `json:"height"`
 	Timestamp   time.Time `json:"timestamp"`
 	Capabilities []string  `json:"capabilities"`
@@ -154,10 +152,9 @@ func (mb *MessageBuilder) BuildBlockMessage(block Block) (*BlockPayload, error) 
 }
 
 // BuildHandshakeMessage builds a handshake message
-func (mb *MessageBuilder) BuildHandshakeMessage(nodeID, version string, height uint64) (*HandshakePayload, error) {
+func (mb *MessageBuilder) BuildHandshakeMessage(nodeID string, height uint64) (*HandshakePayload, error) {
 	return &HandshakePayload{
 		NodeID:    nodeID,
-		Version:   version,
 		Height:    height,
 		Timestamp: time.Now(),
 		Capabilities: []string{

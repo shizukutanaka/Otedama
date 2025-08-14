@@ -188,7 +188,6 @@ func (p *BitmainProtocol) Connect(address string, port int) error {
 	p.logger.Info("Connected to ASIC firmware",
 		zap.String("address", address),
 		zap.Int("port", port),
-		zap.String("version", version),
 	)
 	
 	return nil

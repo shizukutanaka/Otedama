@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const Version = "2.1.3"
+
 
 var (
 	cfgFile string
@@ -22,7 +22,6 @@ var rootCmd = &cobra.Command{
 reliable operations with support for CPU, GPU, and ASIC mining. Built with 
 advanced authentication mechanisms including Zero-Knowledge Proof (ZKP), it 
 provides secure and efficient mining capabilities suitable for enterprise deployments.`,
-	Version: Version,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -49,18 +48,7 @@ func init() {
 	rootCmd.AddCommand(p2pCmd)
 	rootCmd.AddCommand(benchmarkCmd)
 
-	// Version template
-	rootCmd.SetVersionTemplate(`Otedama {{.Version}}
-High-Performance P2P Mining Pool Software
-
-Build Info:
-  Go Version: {{.GoVersion}}
-  Git Commit: {{.GitCommit}}
-  Build Date: {{.BuildDate}}
-  Platform:   {{.Platform}}
-
-License: MIT
-`)
+	// Version output disabled per project guidelines (no version notation).
 }
 
 func initConfig() {

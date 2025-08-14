@@ -59,13 +59,13 @@ go build -o otedama cmd/otedama/main.go
 #### Pool Mining
 ```bash
 # Connect to mining pool
-./otedama --pool stratum+tcp://pool.example.com:3333 --wallet YOUR_ADDRESS --worker WORKER_NAME
+./otedama --pool stratum+tcp://127.0.0.1:3333 --wallet YOUR_ADDRESS --worker WORKER_NAME
 ```
 
 #### P2P Pool Mode
 ```bash
 # Start as P2P pool node
-./otedama --p2p --listen 0.0.0.0:8333 --bootstrap node1.example.com:8333,node2.example.com:8333
+./otedama --p2p --listen 0.0.0.0:8333 --bootstrap 127.0.0.1:8333,127.0.0.1:8334
 ```
 
 ## Configuration
@@ -82,7 +82,7 @@ mining:
   
 # Pool configuration  
 pool:
-  url: stratum+tcp://pool.example.com:3333
+  url: stratum+tcp://127.0.0.1:3333
   wallet: YOUR_WALLET_ADDRESS
   worker: worker1
   password: x
@@ -93,8 +93,8 @@ p2p:
   listen: 0.0.0.0:8333
   max_peers: 50
   bootstrap_nodes:
-    - seed1.example.com:8333
-    - seed2.example.com:8333
+    - 127.0.0.1:8333
+    - 127.0.0.1:8334
     
 # Hardware configuration
 hardware:
@@ -325,17 +325,19 @@ MIT License - See LICENSE file for details
 ## Support
 
 ### Documentation
-- [User Guide](docs/user-guide.md)
-- [API Documentation](docs/api.md)
-- [Hardware Guide](docs/hardware.md)
+- [Documentation Index](en/INDEX.md)
+- [Development Guide](en/DEVELOPMENT.md)
+- [Production Deployment](en/PRODUCTION_DEPLOYMENT.md)
+- [Security Guide](en/SECURITY.md)
+- [Architecture](en/ARCHITECTURE.md)
+- [Features](en/FEATURES.md)
+- [Roadmap](en/ROADMAP.md)
+- [National Operations Manual](en/NATIONAL_OPERATIONS_MANUAL.md)
 
 ### Community
 - GitHub Issues: Report bugs and request features
-- Discord: Join our community server
-- Forum: Technical discussions
 
-### Commercial Support
-Enterprise support available for large-scale deployments.
+ 
 
 ## Disclaimer
 

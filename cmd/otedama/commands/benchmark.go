@@ -82,7 +82,10 @@ func runAllBenchmarks(ctx context.Context, logger *zap.Logger) {
 func runMemoryBenchmark(ctx context.Context, logger *zap.Logger) {
 	fmt.Println("Testing optimized memory manager...")
 
-	manager := memory.NewOptimizedManager(logger)
+	// Initialize unified memory manager and get global instance
+	memory.Initialize(memory.DefaultMemoryConfig())
+	manager := memory.Global()
+	defer manager.Shutdown()
 
 	// Test allocation performance
 	sizes := []int{16, 64, 256, 1024, 4096, 16384}
@@ -104,12 +107,16 @@ func runMemoryBenchmark(ctx context.Context, logger *zap.Logger) {
 		fmt.Printf("Size %d bytes: %.2f million ops/sec\n", size, opsPerSec/1e6)
 	}
 
-	// Print memory stats
+	// Print memory stats (map[string]interface{})
 	stats := manager.GetStats()
 	fmt.Printf("\nMemory Statistics:\n")
-	fmt.Printf("  Total Allocations: %d\n", stats.Allocations)
-	fmt.Printf("  Total Deallocations: %d\n", stats.Deallocations)
-	fmt.Printf("  Peak Usage: %.2f MB\n", float64(stats.PeakUsage)/1024/1024)
+	fmt.Printf("  Total Allocations: %v\n", stats["allocations"]) 
+	fmt.Printf("  Total Deallocations: %v\n", stats["deallocations"]) 
+	if peak, ok := stats["peak_usage"].(int64); ok {
+		fmt.Printf("  Peak Usage: %.2f MB\n", float64(peak)/1024/1024)
+	} else {
+		fmt.Printf("  Peak Usage: %v bytes\n", stats["peak_usage"]) 
+	}
 }
 
 func runValidationBenchmark(ctx context.Context, logger *zap.Logger) {
@@ -118,17 +125,17 @@ func runValidationBenchmark(ctx context.Context, logger *zap.Logger) {
 	validator := mining.NewOptimizedShareValidator(logger, benchWorkers)
 	validator.Start()
 
-	// Create test job
+	// Create test job (use correct fields and types)
+	var prev [32]byte
+	var root [32]byte
 	job := &mining.Job{
-		JobID:      "test-job",
-		Algorithm:  mining.AlgorithmSHA256D,
-		Difficulty: 1.0,
-		Version:    1,
-		PrevHash:   make([]byte, 32),
-		MerkleRoot: make([]byte, 32),
+		ID:         "test-job",
+		Algorithm:  mining.SHA256D,
+		Difficulty: 1,
+		PrevHash:   prev,
+		MerkleRoot: root,
 		Bits:       0x1d00ffff,
-		NonceStart: 0,
-		NonceEnd:   0xffffffff,
+		Timestamp:  uint32(time.Now().Unix()),
 	}
 
 	// Benchmark validation
@@ -139,7 +146,7 @@ func runValidationBenchmark(ctx context.Context, logger *zap.Logger) {
 	deadline := time.Now().Add(benchDuration)
 	for time.Now().Before(deadline) {
 		share := &mining.Share{
-			JobID:     job.JobID,
+			JobID:     job.ID,
 			Nonce:     uint64(validations),
 			Timestamp: time.Now().Unix(),
 		}
@@ -169,9 +176,8 @@ func runMiningBenchmark(ctx context.Context, logger *zap.Logger) {
 	fmt.Println("Testing mining engine performance...")
 
 	config := &mining.Config{
-		Algorithm:  mining.AlgorithmSHA256D,
+		Algorithm:  "sha256d",
 		CPUThreads: benchWorkers,
-		TestMode:   true,
 	}
 
 	engine, err := mining.NewEngine(logger, config)

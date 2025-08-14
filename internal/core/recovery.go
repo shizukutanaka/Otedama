@@ -54,7 +54,7 @@ type HealthCheck struct {
 // RecoveryManager provides production-grade error recovery and resilience
 type RecoveryManager struct {
 	logger          *zap.Logger
-	recoveryManager *common.RecoveryManager
+	recoveryManager *common.RecoveryManagerImpl
 	components      map[string]*ComponentState
 	compMu          sync.RWMutex
 	strategies      map[string]RecoveryStrategy

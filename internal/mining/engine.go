@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// Engine defines the core mining engine interface following interface segregation principle.
+// P2PEngine defines the core P2P mining engine interface following interface segregation principle.
 // The interface is divided into logical groups for better organization and understanding.
-type Engine interface {
+type P2PEngine interface {
 	// Lifecycle management
 	Start() error
 	Stop() error
@@ -60,6 +60,10 @@ type Engine interface {
 	GetProfitSwitcher() *ProfitSwitcher
 }
 
+// Engine is an alias maintained for backward compatibility across packages.
+// It maps to the primary mining engine interface.
+type Engine = P2PEngine
+
 // System represents a complete mining system following clean architecture principles.
 // It provides high-level operations for the entire mining system.
 type System interface {
@@ -75,11 +79,11 @@ type System interface {
 	VerifyProof(proofID string, data interface{}) error
 }
 
-// UnifiedEngine implements a high-performance mining engine with focus on:
+// UnifiedP2PEngine implements a high-performance P2P mining engine with focus on:
 // - Cache alignment for hot path optimization
 // - Lock-free operations where possible
 // - Clear separation of concerns
-type UnifiedEngine struct {
+type UnifiedP2PEngine struct {
 	logger *zap.Logger
 	config *Config
 	
@@ -117,7 +121,12 @@ type UnifiedEngine struct {
 	statsHistory []StatsSnapshot
 	historyMu    sync.RWMutex
 	
-	// Hardware miners (from unified_engine.go)
+	// Hardware managers
+	cpuManager   *CPUManager
+	gpuManager   *GPUManager
+	asicManager  *ASICManager
+	
+	// Legacy miners (for backward compatibility)
 	cpuMiners    []*CPUMiner
 	gpuMiners    []*GPUMiner
 	asicMiners   []*ASICMiner
@@ -193,21 +202,8 @@ const (
 	WorkerASIC
 )
 
-// HardwareType represents the type of mining hardware
-type HardwareType string
-
-const (
-	HardwareCPU  HardwareType = "cpu"
-	HardwareGPU  HardwareType = "gpu"
-	HardwareASIC HardwareType = "asic"
-)
-
-
-
-
-
 // NewEngine creates optimized mining engine - Rob Pike's clear construction
-func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
+func NewEngine(logger *zap.Logger, config *Config) (P2PEngine, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
@@ -218,7 +214,7 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	engine := &UnifiedEngine{
+	engine := &UnifiedP2PEngine{
 		logger:    logger,
 		config:    config,
 		ctx:       ctx,
@@ -282,6 +278,11 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 	engine.memoryOptimizer = NewMemoryOptimizer(config.MaxMemoryMB)
 	engine.cpuOptimizer = NewCPUOptimizer()
 	
+	// Initialize hardware managers
+	engine.cpuManager = NewCPUManager()
+	engine.gpuManager = NewGPUManager()
+	engine.asicManager = NewASICManager()
+	
 	// Initialize fast job dispatcher based on worker counts
 	cpuWorkers := config.CPUThreads
 	gpuWorkers := len(config.GPUDevices)
@@ -294,11 +295,17 @@ func NewEngine(logger *zap.Logger, config *Config) (Engine, error) {
 		return nil, fmt.Errorf("worker initialization failed: %w", err)
 	}
 	
+	// Initialize hardware managers
+	if err := engine.initializeHardwareManagers(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("hardware manager initialization failed: %w", err)
+	}
+	
 	return engine, nil
 }
 
 // Start starts the mining engine - optimized startup sequence
-func (e *UnifiedEngine) Start() error {
+func (e *UnifiedP2PEngine) Start() error {
 	if !e.running.CompareAndSwap(false, true) {
 		return errors.New("engine already running")
 	}
@@ -344,7 +351,7 @@ func (e *UnifiedEngine) Start() error {
 }
 
 // Stop stops the mining engine - graceful shutdown
-func (e *UnifiedEngine) Stop() error {
+func (e *UnifiedP2PEngine) Stop() error {
 	if !e.running.CompareAndSwap(true, false) {
 		return errors.New("engine not running")
 	}
@@ -376,7 +383,7 @@ func (e *UnifiedEngine) Stop() error {
 }
 
 // GetStats returns current statistics - lock-free implementation
-func (e *UnifiedEngine) GetStats() *Stats {
+func (e *UnifiedP2PEngine) GetStats() *Stats {
 	stats := &Stats{
 		TotalHashRate:   e.totalHashRate.Load(),
 		SharesSubmitted: e.sharesSubmitted.Load(),
@@ -415,7 +422,7 @@ func (e *UnifiedEngine) GetStats() *Stats {
 }
 
 // SubmitShare processes a share submission - optimized hot path  
-func (e *UnifiedEngine) SubmitShare(share *Share) error {
+func (e *UnifiedP2PEngine) SubmitShare(share *Share) error {
 	if !e.running.Load() {
 		return errors.New("engine not running")
 	}
@@ -438,7 +445,7 @@ func (e *UnifiedEngine) SubmitShare(share *Share) error {
 }
 
 // SwitchAlgorithm switches mining algorithm - atomic operation
-func (e *UnifiedEngine) SwitchAlgorithm(algo AlgorithmType) error {
+func (e *UnifiedP2PEngine) SwitchAlgorithm(algo AlgorithmType) error {
 	current := e.algorithm.Load().(AlgorithmType)
 	if current == algo {
 		return nil // Already using this algorithm
@@ -457,17 +464,17 @@ func (e *UnifiedEngine) SwitchAlgorithm(algo AlgorithmType) error {
 }
 
 // GetAlgorithm returns the current algorithm
-func (e *UnifiedEngine) GetAlgorithm() AlgorithmType {
+func (e *UnifiedP2PEngine) GetAlgorithm() AlgorithmType {
 	return e.algorithm.Load().(AlgorithmType)
 }
 
 // SetAlgorithm sets the mining algorithm
-func (e *UnifiedEngine) SetAlgorithm(algo AlgorithmType) error {
+func (e *UnifiedP2PEngine) SetAlgorithm(algo AlgorithmType) error {
 	return e.SwitchAlgorithm(algo)
 }
 
 // GetStatus returns the current engine status
-func (e *UnifiedEngine) GetStatus() *EngineStatus {
+func (e *UnifiedP2PEngine) GetStatus() *EngineStatus {
 	return &EngineStatus{
 		Running:   e.running.Load(),
 		Algorithm: e.GetAlgorithm(),
@@ -478,158 +485,37 @@ func (e *UnifiedEngine) GetStatus() *EngineStatus {
 }
 
 // GetStartTime returns when the engine was started
-func (e *UnifiedEngine) GetStartTime() time.Time {
+func (e *UnifiedP2PEngine) GetStartTime() time.Time {
 	return e.startTime
 }
 
-// GetCPUThreads returns the number of CPU threads
-func (e *UnifiedEngine) GetCPUThreads() int {
-	return e.config.CPUThreads
-}
-
-// GetConfig returns the engine configuration
-func (e *UnifiedEngine) GetConfig() map[string]interface{} {
-	return map[string]interface{}{
-		"cpu_threads":    e.config.CPUThreads,
-		"gpu_devices":    e.config.GPUDevices,
-		"asic_devices":   e.config.ASICDevices,
-		"algorithm":      e.config.Algorithm,
-		"intensity":      e.config.Intensity,
-		"max_memory_mb":  e.config.MaxMemoryMB,
-		"job_queue_size": e.config.JobQueueSize,
-		"auto_optimize":  e.config.AutoOptimize,
-	}
-}
-
 // GetHardwareInfo returns hardware information
-func (e *UnifiedEngine) GetHardwareInfo() *HardwareInfo {
+func (e *UnifiedP2PEngine) GetHardwareInfo() *HardwareInfo {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
+	asicDevices := []ASICInfo{}
+	if e.asicManager != nil {
+		asicDevices = e.asicManager.GetDevices()
+	}
+
 	return &HardwareInfo{
 		CPUThreads:  e.config.CPUThreads,
 		GPUDevices:  []GPUInfo{}, // TODO: Implement GPU detection
-		ASICDevices: []ASICInfo{}, // TODO: Implement ASIC detection
+		ASICDevices: asicDevices,
 		TotalMemory: m.Sys,
 		AvailMemory: m.Sys - m.Alloc,
 	}
 }
 
-// GetStatsHistory returns historical statistics
-func (e *UnifiedEngine) GetStatsHistory(duration time.Duration) []StatsSnapshot {
-	e.historyMu.RLock()
-	defer e.historyMu.RUnlock()
-	
-	cutoff := time.Now().Add(-duration)
-	var result []StatsSnapshot
-	
-	for _, snapshot := range e.statsHistory {
-		if snapshot.Timestamp.After(cutoff) {
-			result = append(result, snapshot)
-		}
-	}
-	
-	return result
-}
-
-// GetAutoTuner returns the auto tuner (placeholder)
-func (e *UnifiedEngine) GetAutoTuner() *AutoTuner {
-	return e.autoTuner
-}
-
-// GetProfitSwitcher returns the profit switcher (placeholder)
-func (e *UnifiedEngine) GetProfitSwitcher() *ProfitSwitcher {
-	return e.profitSwitcher
-}
-
-// ResetStats resets all statistics
-func (e *UnifiedEngine) ResetStats() {
-	e.totalHashRate.Store(0)
-	e.sharesSubmitted.Store(0)
-	e.sharesAccepted.Store(0)
-	e.startTime = time.Now()
-	
-	e.historyMu.Lock()
-	e.statsHistory = e.statsHistory[:0]
-	e.historyMu.Unlock()
-	
-	e.logger.Info("Statistics reset")
-}
-
-// SetPool sets the mining pool URL and wallet
-func (e *UnifiedEngine) SetPool(url, wallet string) error {
-	e.poolURL = url
-	e.walletAddr = wallet
-	e.logger.Info("Pool configuration updated",
-		zap.String("url", url),
-		zap.String("wallet", wallet),
-	)
-	return nil
-}
-
-// SetConfig sets a configuration value
-func (e *UnifiedEngine) SetConfig(key string, value interface{}) error {
-	switch key {
-	case "cpu_threads":
-		if threads, ok := value.(int); ok {
-			return e.SetCPUThreads(threads)
-		}
-		return errors.New("invalid cpu_threads value")
-	case "algorithm":
-		if algo, ok := value.(string); ok {
-			return e.SetAlgorithm(AlgorithmType(algo))
-		}
-		return errors.New("invalid algorithm value")
-	default:
-		return fmt.Errorf("unknown config key: %s", key)
-	}
-}
-
-// SetGPUSettings sets GPU configuration (placeholder)
-func (e *UnifiedEngine) SetGPUSettings(coreClock, memoryClock, powerLimit int) error {
-	e.logger.Info("GPU settings updated",
-		zap.Int("core_clock", coreClock),
-		zap.Int("memory_clock", memoryClock),
-		zap.Int("power_limit", powerLimit),
-	)
-	return nil
-}
-
-// SetCPUThreads sets the number of CPU threads
-func (e *UnifiedEngine) SetCPUThreads(threads int) error {
-	if threads < 0 || threads > 256 {
-		return errors.New("invalid thread count")
-	}
-	
-	e.config.CPUThreads = threads
-	e.logger.Info("CPU threads updated", zap.Int("threads", threads))
-	return nil
-}
-
-// HasGPU returns true if GPU mining is enabled
-func (e *UnifiedEngine) HasGPU() bool {
-	return len(e.config.GPUDevices) > 0
-}
-
-// HasCPU returns true if CPU mining is enabled
-func (e *UnifiedEngine) HasCPU() bool {
-	return e.config.CPUThreads > 0
-}
-
 // HasASIC returns true if ASIC mining is enabled
-func (e *UnifiedEngine) HasASIC() bool {
-	return len(e.config.ASICDevices) > 0
+func (e *UnifiedP2PEngine) HasASIC() bool {
+	return len(e.config.ASICDevices) > 0 || e.asicManager != nil
 }
 
 // GetCurrentJob returns the current mining job
-func (e *UnifiedEngine) GetCurrentJob() *Job {
-	// Get job from pool
-	job := e.jobPool.Get().(*Job)
-	
-	// Reset job fields
-	*job = Job{
-		ID:        fmt.Sprintf("job_%d", time.Now().UnixNano()),
-		Height:    uint64(time.Now().Unix()),
+func (e *UnifiedP2PEngine) GetCurrentJob() *Job {
+	return e.jobQueue.Peek()
 		Algorithm: e.algorithm.Load().(AlgorithmType),
 		Timestamp: uint32(time.Now().Unix()),
 		Bits:      0x1d00ffff,
@@ -1046,7 +932,6 @@ func alignMemory(size uintptr) uintptr {
 // Cache-friendly memory allocation
 func allocateAligned(size int) []byte {
 	alignedSize := alignMemory(uintptr(size))
-	return make([]byte, alignedSize)
 }
 
 // Prefetch memory for better cache utilization

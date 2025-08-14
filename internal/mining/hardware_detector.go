@@ -11,15 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// HardwareType represents the type of mining hardware
-type HardwareType string
-
-const (
-	HardwareCPU  HardwareType = "CPU"
-	HardwareGPU  HardwareType = "GPU"
-	HardwareASIC HardwareType = "ASIC"
-)
-
 // HardwareInfo contains information about available mining hardware
 type HardwareDevice struct {
 	Type         HardwareType

@@ -61,12 +61,12 @@ ingress:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
   hosts:
-    - host: pool.otedama.io
+    - host: otedama.local
       paths:
         - path: /
           pathType: Prefix
           service: dashboard
-    - host: api.otedama.io
+    - host: api.otedama.local
       paths:
         - path: /
           pathType: Prefix
@@ -74,8 +74,8 @@ ingress:
   tls:
     - secretName: otedama-tls
       hosts:
-        - pool.otedama.io
-        - api.otedama.io
+        - otedama.local
+        - api.otedama.local
 
 resources:
   limits:
@@ -168,7 +168,7 @@ config:
     enableRateLimit: true
     rateLimit: 100
     enableCors: true
-    allowedOrigins: ["*"]
+    allowedOrigins: ["https://otedama.local", "https://api.otedama.local"]
   
   dashboard:
     enabled: true

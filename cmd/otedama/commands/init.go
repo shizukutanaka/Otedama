@@ -196,7 +196,6 @@ func generatePeersFile(path string, force bool) error {
 	}
 	
 	peers := map[string]interface{}{
-		"version": "1.0",
 		"updated": time.Now().Format(time.RFC3339),
 		"bootstrap_nodes": []map[string]interface{}{
 			{

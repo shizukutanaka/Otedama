@@ -1,5 +1,9 @@
+//go:build ignore
+
 package api
 
+// Legacy/ignored: excluded from production builds.
+// See internal/legacy/README.md for details.
 import (
 	"context"
 	"net/http"
@@ -8,7 +12,20 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/common"
 	"go.uber.org/zap"
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+var rateLimitBlocked = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "otedama_http_rate_limit_total",
+		Help: "Total number of HTTP requests blocked by rate limiting",
+	},
+	[]string{"result"}, // blocked
+)
+
+func init() {
+	prometheus.MustRegister(rateLimitBlocked)
+}
 
 // Middleware represents a middleware function
 type Middleware func(http.Handler) http.Handler
@@ -102,6 +119,7 @@ func RateLimitMiddleware(rl *IPRateLimiter, logger *zap.Logger) Middleware {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             // Use remote address directly; RateLimiter handles parsing.
             if !rl.Allow(r.RemoteAddr) {
+                rateLimitBlocked.WithLabelValues("blocked").Inc()
                 sendJSONError(w, http.StatusTooManyRequests, "too many requests")
                 return
             }

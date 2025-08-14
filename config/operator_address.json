@@ -1,0 +1,8 @@
+{
+  "operator_btc_address": "1GzHriuokSrZYAZEEWoL7eeCCXsX3WyLHa",
+  "description": "運営者手数料受取BTCアドレス - 改変不可能",
+  "created_at": "2025-08-10T03:11:00+09:00",
+  "immutable": true,
+  "network": "mainnet",
+  "type": "operator_fee_wallet"
+}

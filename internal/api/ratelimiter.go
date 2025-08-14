@@ -1,6 +1,7 @@
 package api
 
 import (
+    "context"
     "net"
     "sync"
     "time"
@@ -72,6 +73,59 @@ func (rl *IPRateLimiter) Allow(remoteAddr string) bool {
     return v.limiter.Allow()
 }
 
+// AllowN reports whether n events are allowed for the given remoteAddr at once.
+// This aligns with internal/common.RateLimiter.
+func (rl *IPRateLimiter) AllowN(remoteAddr string, n int) bool {
+    ip, _, err := net.SplitHostPort(remoteAddr)
+    if err != nil {
+        ip = remoteAddr
+    }
+
+    rl.mu.Lock()
+    v, ok := rl.visitors[ip]
+    if !ok {
+        v = &visitor{
+            limiter: rate.NewLimiter(rl.r, rl.b),
+        }
+        rl.visitors[ip] = v
+    }
+    v.lastSeen = time.Now()
+
+    // snapshot limiter, then release lock before calling into rate.Limiter
+    lim := v.limiter
+
+    // purge idle visitors occasionally
+    if len(rl.visitors) > 1000 {
+        rl.purge()
+    }
+    rl.mu.Unlock()
+
+    return lim.AllowN(time.Now(), n)
+}
+
+// Wait blocks until a single event is available for the given remoteAddr or the context is done.
+// This aligns with internal/common.RateLimiter.
+func (rl *IPRateLimiter) Wait(ctx context.Context, remoteAddr string) error {
+    ip, _, err := net.SplitHostPort(remoteAddr)
+    if err != nil {
+        ip = remoteAddr
+    }
+
+    rl.mu.Lock()
+    v, ok := rl.visitors[ip]
+    if !ok {
+        v = &visitor{
+            limiter: rate.NewLimiter(rl.r, rl.b),
+        }
+        rl.visitors[ip] = v
+    }
+    v.lastSeen = time.Now()
+    lim := v.limiter
+    rl.mu.Unlock()
+
+    return lim.WaitN(ctx, 1)
+}
+
 func (rl *IPRateLimiter) purge() {
     cutoff := time.Now().Add(-rl.idleTTL)
     for k, v := range rl.visitors {
@@ -80,3 +134,4 @@ func (rl *IPRateLimiter) purge() {
         }
     }
 }
+

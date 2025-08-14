@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/shizukutanaka/Otedama/internal/mining"
@@ -90,15 +89,9 @@ func (s *Server) handleGetCurrentAlgorithm(w http.ResponseWriter, r *http.Reques
 	}
 	
 	algo := s.engine.GetAlgorithm()
-	algManager := s.engine.GetAlgorithmManager()
 	
 	response := map[string]interface{}{
 		"algorithm": string(algo),
-	}
-	
-	if algManager != nil {
-		response["profit_threshold"] = 1.05 // Default 5% threshold
-		response["auto_switch_enabled"] = true
 	}
 	
 	s.writeJSON(w, http.StatusOK, response)
@@ -122,7 +115,7 @@ func (s *Server) handleSwitchAlgorithm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	if err := s.engine.SetAlgorithm(mining.Algorithm(req.Algorithm)); err != nil {
+	if err := s.engine.SetAlgorithm(mining.AlgorithmType(req.Algorithm)); err != nil {
 		s.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -142,13 +135,8 @@ func (s *Server) handleGetProfitability(w http.ResponseWriter, r *http.Request) 
 		s.writeError(w, http.StatusServiceUnavailable, "Mining engine not available")
 		return
 	}
-	
-	data := s.engine.GetProfitabilityData()
-	
-	s.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"profitability": data,
-		"timestamp":     time.Now().Unix(),
-	})
+	// Not implemented with current engine API
+	s.writeError(w, http.StatusNotImplemented, "Profitability data endpoint is not implemented")
 }
 
 // handleCompareAlgorithms compares algorithm profitability
@@ -157,25 +145,8 @@ func (s *Server) handleCompareAlgorithms(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, http.StatusServiceUnavailable, "Mining engine not available")
 		return
 	}
-	
-	comparison := s.engine.GetAlgorithmComparison()
-	
-	// Find best algorithm
-	var bestAlgo string
-	var bestProfit float64
-	for _, comp := range comparison {
-		if comp.DailyProfit > bestProfit {
-			bestProfit = comp.DailyProfit
-			bestAlgo = string(comp.Algorithm)
-		}
-	}
-	
-	s.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"comparison":      comparison,
-		"best_algorithm":  bestAlgo,
-		"best_daily_profit": bestProfit,
-		"timestamp":       time.Now().Unix(),
-	})
+	// Not implemented with current engine API
+	s.writeError(w, http.StatusNotImplemented, "Algorithm comparison endpoint is not implemented")
 }
 
 // UpdatePowerCostRequest represents power cost update request
@@ -200,16 +171,8 @@ func (s *Server) handleUpdatePowerCost(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "Invalid power cost (must be between 0 and 1)")
 		return
 	}
-	
-	s.engine.SetPowerCost(req.CostPerKWh)
-	
-	s.logger.Info("Power cost updated",
-		zap.Float64("cost_per_kwh", req.CostPerKWh))
-	
-	s.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":     true,
-		"cost_per_kwh": req.CostPerKWh,
-	})
+	// Not implemented with current engine API
+	s.writeError(w, http.StatusNotImplemented, "Power cost configuration is not implemented")
 }
 
 // ProfitSwitchingRequest represents profit switching configuration
@@ -235,21 +198,6 @@ func (s *Server) handleProfitSwitching(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "Invalid threshold (must be between 0 and 100)")
 		return
 	}
-	
-	if req.Enabled {
-		s.engine.EnableProfitSwitching(req.Threshold)
-	} else {
-		// Disable by setting very high threshold
-		s.engine.EnableProfitSwitching(999999)
-	}
-	
-	s.logger.Info("Profit switching configuration updated",
-		zap.Bool("enabled", req.Enabled),
-		zap.Float64("threshold", req.Threshold))
-	
-	s.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":   true,
-		"enabled":   req.Enabled,
-		"threshold": req.Threshold,
-	})
+	// Not implemented with current engine API
+	s.writeError(w, http.StatusNotImplemented, "Profit switching is not implemented")
 }

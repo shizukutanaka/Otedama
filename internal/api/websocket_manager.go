@@ -1,5 +1,8 @@
+//go:build ignore
 package api
 
+// Legacy/ignored: excluded from production builds.
+// See internal/legacy/README.md for details.
 import (
 	"context"
 	"encoding/json"

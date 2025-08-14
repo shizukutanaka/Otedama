@@ -2,10 +2,10 @@
 
 All notable changes to Otedama will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is inspired by [Keep a Changelog](https://keepachangelog.com/).
+This project uses date-based changelog entries without version numbers per policy.
 
-## [2.1.6] - 2025-08-07
+## 2025-08-07
 
 ### Added
 - Advanced AI/ML optimization engine with neural networks and genetic algorithms
@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized memory pools with automatic GC pressure management
 - Enhanced mining algorithms with ML-based parameter tuning
 
-## [2.1.6] - 2025-08-06
+## 2025-08-06
 
 ### Added
 - Comprehensive P2P and DEX/DeFi implementation from checklist
@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added comprehensive audit logging
 - Implemented zero-knowledge proof authentication preparation
 
-## [2.1.4] - 2025-08-20
+## 2025-08-20
 
 ### Added
 - Enterprise-grade P2P mining pool functionality
@@ -115,7 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced input validation and sanitization
 - Added security audit logging
 
-## [2.1.3] - 2025-08-15
+## 2025-08-15
 
 ### Added
 - Major code optimization and cleanup
@@ -130,7 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Various minor bugs and issues
 
-## [2.1.2] - 2025-08-10
+## 2025-08-10
 
 ### Added
 - Initial benchmark suite
@@ -143,7 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Configuration loading issues
 
-## [2.1.1] - 2025-08-05
+## 2025-08-05
 
 ### Added
 - Basic mining functionality
@@ -155,7 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Build system issues
 
-## [2.1.0] - 2025-08-01
+## 2025-08-01
 
 ### Added
 - Initial release of Otedama

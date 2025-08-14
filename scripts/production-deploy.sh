@@ -8,6 +8,8 @@ set -e  # Exit on error
 set -u  # Exit on undefined variable
 set -o pipefail  # Exit on pipe failure
 
+umask 027
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -69,11 +71,24 @@ check_dependencies() {
 create_user() {
     log_info "Creating service user..."
     
+    if ! getent group "$SERVICE_GROUP" >/dev/null; then
+        groupadd -r "$SERVICE_GROUP"
+        log_info "Created group $SERVICE_GROUP"
+    fi
+
     if id "$SERVICE_USER" &>/dev/null; then
         log_warn "User $SERVICE_USER already exists"
     else
-        useradd -r -s /bin/false -d "$DATA_DIR" -c "Otedama Mining Service" "$SERVICE_USER"
+        useradd -r -g "$SERVICE_GROUP" -s /bin/false -d "$DATA_DIR" -c "Otedama Mining Service" "$SERVICE_USER"
         log_info "Created user $SERVICE_USER"
+    fi
+
+    # Add GPU-related groups if they exist
+    if getent group video >/dev/null; then
+        usermod -aG video "$SERVICE_USER" || true
+    fi
+    if getent group render >/dev/null; then
+        usermod -aG render "$SERVICE_USER" || true
     fi
 }
 
@@ -146,7 +161,7 @@ install_systemd_service() {
     cat > "$SYSTEMD_SERVICE" <<EOF
 [Unit]
 Description=Otedama P2P Mining Pool
-Documentation=https://github.com/otedama/otedama
+Documentation=https://github.com/shizukutanaka/Otedama
 After=network-online.target
 Wants=network-online.target
 
@@ -155,13 +170,33 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_GROUP
 WorkingDirectory=$DATA_DIR
+UMask=0027
+StateDirectory=otedama
+LogsDirectory=otedama
 
 # Security settings
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+AmbientCapabilities=
 ReadWritePaths=$DATA_DIR $LOG_DIR
+SupplementaryGroups=video render
+DevicePolicy=closed
+DeviceAllow=/dev/dri/renderD* rwm
+DeviceAllow=/dev/dri/card* rwm
+DeviceAllow=/dev/kfd rwm
+DeviceAllow=/dev/nvidiactl rwm
+DeviceAllow=/dev/nvidia-uvm rwm
+DeviceAllow=/dev/nvidia* rwm
 
 # Resource limits
 LimitNOFILE=65536
@@ -180,6 +215,7 @@ ExecStop=/bin/kill -TERM \$MAINPID
 # Restart policy
 Restart=always
 RestartSec=10
+TimeoutStopSec=30
 
 # Logging
 StandardOutput=append:$LOG_DIR/otedama.log
@@ -205,6 +241,7 @@ configure_firewall() {
             ufw allow 3333/tcp comment 'Otedama Stratum'
             ufw allow 8080/tcp comment 'Otedama API'
             ufw allow 9090/tcp comment 'Otedama Metrics'
+            ufw allow 30303/tcp comment 'Otedama P2P'
             ufw allow 4444/tcp comment 'Otedama Federation'
         fi
     elif command -v firewall-cmd &> /dev/null; then
@@ -213,6 +250,7 @@ configure_firewall() {
             firewall-cmd --permanent --add-port=3333/tcp
             firewall-cmd --permanent --add-port=8080/tcp
             firewall-cmd --permanent --add-port=9090/tcp
+            firewall-cmd --permanent --add-port=30303/tcp
             firewall-cmd --permanent --add-port=4444/tcp
             firewall-cmd --reload
         fi
@@ -232,10 +270,11 @@ $LOG_DIR/*.log {
     delaycompress
     missingok
     notifempty
+    copytruncate
     create 640 $SERVICE_USER $SERVICE_GROUP
     sharedscripts
     postrotate
-        systemctl reload otedama 2>/dev/null || true
+        # No reload required when using copytruncate
     endscript
 }
 EOF

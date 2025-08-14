@@ -143,15 +143,14 @@ func NewUtilityHandler(logger *zap.Logger, name, version, build, desc string) *U
 
 // ShowVersion displays version information - Rob Pike's clear output
 func (h *UtilityHandler) ShowVersion() {
-	fmt.Printf("%s v%s\n", h.appName, h.appVersion)
-	fmt.Printf("Build: %s\n", h.appBuild)
+	// User-facing version information is intentionally not displayed.
+	// Provide only generic identification and environment info.
+	fmt.Printf("%s\n", h.appName)
 	fmt.Printf("Description: %s\n\n", h.appDesc)
 
 	fmt.Printf("System Information:\n")
 	fmt.Printf("  OS/Arch:     %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Printf("  CPU Cores:   %d\n", runtime.NumCPU())
-	fmt.Printf("  Go Version:  %s\n", runtime.Version())
-	fmt.Printf("  Built:       %s\n", h.appBuild)
 }
 
 // GenerateConfig creates initial configuration

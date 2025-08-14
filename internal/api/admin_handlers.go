@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/shizukutanaka/Otedama/internal/auth"
 	"github.com/shizukutanaka/Otedama/internal/pool"
 	"go.uber.org/zap"
 )
@@ -16,36 +17,39 @@ import (
 type AdminHandlers struct {
 	logger      *zap.Logger
 	poolManager *pool.PoolManager
+	totp        *auth.TOTPProvider
 }
 
 // NewAdminHandlers creates new admin handlers
-func NewAdminHandlers(logger *zap.Logger, poolManager *pool.PoolManager) *AdminHandlers {
+func NewAdminHandlers(logger *zap.Logger, poolManager *pool.PoolManager, totp *auth.TOTPProvider) *AdminHandlers {
 	return &AdminHandlers{
 		logger:      logger,
 		poolManager: poolManager,
+		totp:        totp,
 	}
 }
 
 // RegisterRoutes registers admin routes
 func (h *AdminHandlers) RegisterRoutes(router *mux.Router) {
-	admin := router.PathPrefix("/admin").Subrouter()
+	// The provided router is already mounted under /admin by the caller.
+	// Register endpoints directly on it to avoid double-prefixing.
 	
 	// Dashboard data
-	admin.HandleFunc("/dashboard", h.GetDashboard).Methods("GET")
-	admin.HandleFunc("/stats", h.GetPoolStats).Methods("GET")
-	admin.HandleFunc("/workers", h.GetWorkers).Methods("GET")
-	admin.HandleFunc("/workers/{id}", h.GetWorker).Methods("GET")
-	admin.HandleFunc("/blocks", h.GetBlocks).Methods("GET")
-	admin.HandleFunc("/payouts", h.GetPayouts).Methods("GET")
-	admin.HandleFunc("/charts/hashrate", h.GetHashrateChart).Methods("GET")
-	admin.HandleFunc("/charts/shares", h.GetSharesChart).Methods("GET")
-	admin.HandleFunc("/charts/earnings", h.GetEarningsChart).Methods("GET")
+	router.HandleFunc("/dashboard", h.GetDashboard).Methods("GET")
+	router.HandleFunc("/stats", h.GetPoolStats).Methods("GET")
+	router.HandleFunc("/workers", h.GetWorkers).Methods("GET")
+	router.HandleFunc("/workers/{id}", h.GetWorker).Methods("GET")
+	router.HandleFunc("/blocks", h.GetBlocks).Methods("GET")
+	router.HandleFunc("/payouts", h.GetPayouts).Methods("GET")
+	router.HandleFunc("/charts/hashrate", h.GetHashrateChart).Methods("GET")
+	router.HandleFunc("/charts/shares", h.GetSharesChart).Methods("GET")
+	router.HandleFunc("/charts/earnings", h.GetEarningsChart).Methods("GET")
 	
 	// Management actions
-	admin.HandleFunc("/workers/{id}/ban", h.BanWorker).Methods("POST")
-	admin.HandleFunc("/workers/{id}/unban", h.UnbanWorker).Methods("POST")
-	admin.HandleFunc("/payouts/process", h.ProcessPayouts).Methods("POST")
-	admin.HandleFunc("/maintenance/cleanup", h.RunCleanup).Methods("POST")
+	router.HandleFunc("/workers/{id}/ban", h.BanWorker).Methods("POST")
+	router.HandleFunc("/workers/{id}/unban", h.UnbanWorker).Methods("POST")
+	router.HandleFunc("/payouts/process", h.ProcessPayouts).Methods("POST")
+	router.HandleFunc("/maintenance/cleanup", h.RunCleanup).Methods("POST")
 }
 
 // GetDashboard returns dashboard summary data
@@ -66,7 +70,7 @@ func (h *AdminHandlers) GetDashboard(w http.ResponseWriter, r *http.Request) {
 			"total_hashrate":    calculatePoolHashrate(stats),
 			"blocks_found_24h":  getNestedValue(stats, "blocks.total_blocks", 0),
 			"total_paid_24h":    getNestedValue(stats, "payouts.total_paid", 0.0),
-			"pending_payouts":   getNestedValue(stats, "payout_processor.total_payouts", 0) - getNestedValue(stats, "payout_processor.completed_payouts", 0),
+			"pending_payouts":   toInt(getNestedValue(stats, "payout_processor.total_payouts", 0)) - toInt(getNestedValue(stats, "payout_processor.completed_payouts", 0)),
 			"pool_efficiency":   calculateEfficiency(stats),
 		},
 		"shares": map[string]interface{}{
@@ -324,6 +328,105 @@ func (h *AdminHandlers) RunCleanup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "cleanup started"})
 }
 
+// MFA management endpoints (admin-authenticated; enrollment flows should be accessible without 2FA)
+
+// EnrollMFA enrolls the current admin for TOTP-based 2FA and returns enrollment info
+func (h *AdminHandlers) EnrollMFA(w http.ResponseWriter, r *http.Request) {
+	if h.totp == nil {
+		http.Error(w, "2FA provider unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	user, _ := r.Context().Value("user").(string)
+	if user == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// If already enrolled, just return info
+	if h.totp.IsEnrolled(user) {
+		info, err := h.totp.GetEnrollmentInfo(user)
+		if err != nil {
+			h.logger.Error("GetEnrollmentInfo failed", zap.Error(err))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(info)
+		return
+	}
+	if err := h.totp.EnrollUser(user, nil); err != nil {
+		h.logger.Warn("EnrollUser failed", zap.Error(err))
+		http.Error(w, "Unable to enroll", http.StatusBadRequest)
+		return
+	}
+	info, err := h.totp.GetEnrollmentInfo(user)
+	if err != nil {
+		h.logger.Error("GetEnrollmentInfo after enroll failed", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+// GetMFAInfo returns current TOTP enrollment info for the admin
+func (h *AdminHandlers) GetMFAInfo(w http.ResponseWriter, r *http.Request) {
+	if h.totp == nil {
+		http.Error(w, "2FA provider unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	user, _ := r.Context().Value("user").(string)
+	if user == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	info, err := h.totp.GetEnrollmentInfo(user)
+	if err != nil {
+		http.Error(w, "Not enrolled", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(info)
+}
+
+// DisableMFA disables TOTP for the current admin
+func (h *AdminHandlers) DisableMFA(w http.ResponseWriter, r *http.Request) {
+	if h.totp == nil {
+		http.Error(w, "2FA provider unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	user, _ := r.Context().Value("user").(string)
+	if user == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := h.totp.DisableUser(user); err != nil {
+		http.Error(w, "Not enrolled", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "disabled"})
+}
+
+// RegenerateBackupCodes regenerates backup codes for the current admin
+func (h *AdminHandlers) RegenerateBackupCodes(w http.ResponseWriter, r *http.Request) {
+	if h.totp == nil {
+		http.Error(w, "2FA provider unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	user, _ := r.Context().Value("user").(string)
+	if user == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	codes, err := h.totp.RegenerateBackupCodes(user)
+	if err != nil {
+		http.Error(w, "Not enrolled", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"backup_codes": codes})
+}
+
 // Helper functions
 
 func getNestedValue(data map[string]interface{}, path string, defaultValue interface{}) interface{} {
@@ -369,4 +472,32 @@ func calculateEfficiency(stats map[string]interface{}) float64 {
 func calculateSharesPerMinute(stats map[string]interface{}) float64 {
 	// Calculate from share submission rate
 	return 13.5 // Placeholder
+}
+
+func toInt(v interface{}) int {
+	switch t := v.(type) {
+	case int:
+		return t
+	case int32:
+		return int(t)
+	case int64:
+		return int(t)
+	case uint:
+		return int(t)
+	case uint32:
+		return int(t)
+	case uint64:
+		return int(t)
+	case float32:
+		return int(t)
+	case float64:
+		return int(t)
+	case string:
+		if i, err := strconv.Atoi(t); err == nil {
+			return i
+		}
+		return 0
+	default:
+		return 0
+	}
 }

@@ -112,19 +112,8 @@ func (s *Server) handleGetTranslations(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	lang := vars["lang"]
 	
-	/*manager := i18n.GetGlobalManager()*/
-	if manager == nil {
-		s.writeError(w, http.StatusServiceUnavailable, "I18n not initialized")
-		return
-	}
-	
-	if !manager.HasLanguage(lang) {
-		s.writeError(w, http.StatusNotFound, "Language not found")
-		return
-	}
-	
-	translations := manager.GetTranslations(lang)
-	
+	// Placeholder until i18n package is wired
+	translations := map[string]string{}
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"language":     lang,
 		"translations": translations,

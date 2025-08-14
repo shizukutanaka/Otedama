@@ -239,7 +239,6 @@ func GetSystemInfo() map[string]interface{} {
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,
 		"cpu_count":    runtime.NumCPU(),
-		"go_version":   runtime.Version(),
 		"goroutines":   runtime.NumGoroutine(),
 	}
 }

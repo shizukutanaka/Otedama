@@ -26,7 +26,7 @@ data:
       share_timeout: 5s
       pools:
         - name: "Primary Pool"
-          url: "stratum+tcp://pool.example.com:3333"
+          url: "stratum+tcp://127.0.0.1:3333"
           user: "your_wallet_address.worker1"
           password: "x"
           priority: 1
@@ -39,9 +39,7 @@ data:
       p2p:
         enabled: true
         listen_addr: ":9333"
-        bootstrap_peers:
-          - "seed1.otedama.network:9333"
-          - "seed2.otedama.network:9333"
+        bootstrap_peers: []
         max_peers: 100
       stratum:
         enabled: true

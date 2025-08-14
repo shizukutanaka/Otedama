@@ -45,11 +45,11 @@ type PoolManager struct {
 // It initializes repositories, validators, and processors with appropriate configurations.
 func NewPoolManager(logger *zap.Logger, config *config.PoolConfig, db *database.DB) (*PoolManager, error) {
 	// Initialize database repositories
-	workerRepo := database.NewWorkerRepository(db, logger)
-	shareRepo := database.NewShareRepository(db, logger)
-	blockRepo := database.NewBlockRepository(db, logger)
-	payoutRepo := database.NewPayoutRepository(db, logger)
-	statsRepo := database.NewStatisticsRepository(db, logger)
+	workerRepo := &database.WorkerRepository{db: db}
+	shareRepo := &database.ShareRepository{db: db}
+	blockRepo := &database.BlockRepository{db: db}
+	payoutRepo := &database.PayoutRepository{db: db}
+	statsRepo := &database.StatisticsRepository{db: db}
 	
 	// Create job manager
 	jobManager := NewJobManager(logger, 2*time.Minute)
@@ -96,26 +96,14 @@ func NewPoolManager(logger *zap.Logger, config *config.PoolConfig, db *database.
 	
 	blockSubmitter := NewBlockSubmitter(logger, blockRepo, shareRepo, submitterConfig)
 	
-	// Create payout calculator
-	payoutConfig := PayoutConfig{
-		Scheme:              PayoutScheme(config.PayoutScheme),
-		PPLNSWindow:         config.PPLNSWindow,
-		MinimumPayout:       config.MinimumPayout,
-		PayoutFee:           config.PayoutFee,
-		PoolFeePercent:      config.PoolFeePercent,
-		Currency:            config.Currency,
-		CoinbaseMaturity:    config.CoinbaseMaturity,
-		PayoutInterval:      time.Duration(config.PayoutInterval) * time.Second,
-		CalculationInterval: 5 * time.Minute,
-	}
-	
+	// Create payout calculator (uses currency manager for per-currency configs)
 	payoutCalculator := NewPayoutCalculator(
 		logger,
 		shareRepo,
 		workerRepo,
 		payoutRepo,
 		blockRepo,
-		payoutConfig,
+		currencyManager,
 	)
 	
 	// Create payout processor

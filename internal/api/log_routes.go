@@ -3,10 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/shizukutanaka/Otedama/internal/logging"
 	"go.uber.org/zap"
 )
 

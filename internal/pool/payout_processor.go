@@ -236,8 +236,7 @@ func (pp *PayoutProcessor) processBatch(ctx context.Context, wallet WalletInterf
 	for _, payout := range payouts {
 		// Validate address
 		if !wallet.ValidateAddress(payout.Address) {
-			errorMsg := "invalid address"
-			err := pp.payoutRepo.UpdateStatus(ctx, payout.ID, "failed", nil, &errorMsg)
+			err := pp.payoutRepo.UpdateStatus(payout.ID, "failed", "")
 			if err != nil {
 				pp.logger.Error("Failed to update payout status", zap.Error(err))
 			}
@@ -248,8 +247,7 @@ func (pp *PayoutProcessor) processBatch(ctx context.Context, wallet WalletInterf
 		// Send payment
 		txID, err := wallet.SendPayment(payout.Address, payout.Amount)
 		if err != nil {
-			errorMsg := err.Error()
-			err := pp.payoutRepo.UpdateStatus(ctx, payout.ID, "failed", nil, &errorMsg)
+			err := pp.payoutRepo.UpdateStatus(payout.ID, "failed", "")
 			if err != nil {
 				pp.logger.Error("Failed to update payout status", zap.Error(err))
 			}
@@ -258,7 +256,7 @@ func (pp *PayoutProcessor) processBatch(ctx context.Context, wallet WalletInterf
 		}
 		
 		// Update payout status
-		err = pp.payoutRepo.UpdateStatus(ctx, payout.ID, "completed", &txID, nil)
+		err = pp.payoutRepo.UpdateStatus(payout.ID, "completed", txID)
 		if err != nil {
 			pp.logger.Error("Failed to update payout status", zap.Error(err))
 		}

@@ -36,7 +36,7 @@ pool:
     minimum_payout: 0.001
     
   backup_pools:
-    - url: "stratum+tcp://pool.example.com:3333"
+    - url: "stratum+tcp://127.0.0.1:3333"
       user: "your_wallet.worker"
       password: "x"
 

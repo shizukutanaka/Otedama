@@ -2,15 +2,30 @@ package api
 
 import (
 	"context"
+	"compress/gzip"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"time"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/shizukutanaka/Otedama/internal/auth"
+	"github.com/shizukutanaka/Otedama/internal/api/middleware"
+	"crypto/sha256"
 	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/shizukutanaka/Otedama/internal/pool"
+	"github.com/shizukutanaka/Otedama/internal/security"
 	"go.uber.org/zap"
+	"math/big"
+	"sync"
 )
 
 // Server provides HTTP API and WebSocket interfaces
@@ -22,11 +37,17 @@ type Server struct {
 	server     *http.Server
 	upgrader   websocket.Upgrader
 	clients    map[*websocket.Conn]bool
+	wsMu       map[*websocket.Conn]*sync.Mutex
 	stats      map[string]interface{}
 	limiter    *IPRateLimiter
 	engine     mining.Engine
 	validator  *InputValidator
-	auth       *WebSocketAuth
+	wsAuth     *WebSocketAuth
+	totp       *auth.TOTPProvider
+	poolManager *pool.PoolManager
+	authMiddleware *middleware.AuthMiddleware
+	securityMiddleware *middleware.SecurityMiddleware
+	authHandler    *AuthHandler
 }
 
 // Config defines API server configuration
@@ -38,6 +59,16 @@ type Config struct {
 	KeyFile    string   `yaml:"key_file"`
 	RateLimit  int      `yaml:"rate_limit"`
 	AllowOrigins []string `yaml:"allow_origins"`
+	// Security/auth settings (optional; can be set via env or upper-level config)
+	JWTSecret       string `yaml:"jwt_secret"`
+	AdminUser       string `yaml:"admin_user"`
+	AdminPassHash   string `yaml:"admin_pass_hash"`
+	// TOTP (2FA) settings for admin
+	TOTPIssuer       string `yaml:"totp_issuer"`
+	TOTPPeriod       uint   `yaml:"totp_period"`
+	TOTPDigits       int    `yaml:"totp_digits"`
+	TOTPSkew         uint   `yaml:"totp_skew"`
+	TOTPSecretLength int    `yaml:"totp_secret_length"`
 }
 
 // Response represents API response format
@@ -49,30 +80,171 @@ type Response struct {
 }
 
 // NewServer creates a new API server
-func NewServer(config Config, logger *zap.Logger, engine mining.Engine) (*Server, error) {
+func NewServer(config Config, logger *zap.Logger, engine mining.Engine, poolManager *pool.PoolManager) (*Server, error) {
 	if !config.Enabled {
 		return nil, fmt.Errorf("API server disabled")
 	}
 
-	// Create auth system
-	authConfig := AuthConfig{
-		JWTSecret:     "default-secret", // Should be overridden by config
-		TokenTTL:      24 * time.Hour,
-		RefreshTTL:    7 * 24 * time.Hour,
-		EnableRefresh: true,
+	// Resolve JWT secret from config/env; generate secure random fallback for dev
+	jwtSecret := config.JWTSecret
+	if jwtSecret == "" {
+		if v := os.Getenv("OTEDAMA_JWT_SECRET"); v != "" {
+			jwtSecret = v
+		} else {
+			// Generate 32-byte random secret and base64-encode
+			b := make([]byte, 32)
+			if _, err := rand.Read(b); err == nil {
+				jwtSecret = base64.StdEncoding.EncodeToString(b)
+				logger.Warn("JWT secret not provided; using ephemeral random secret (dev only)")
+			} else {
+				// Last resort fallback (not recommended)
+				jwtSecret = "default-secret"
+				logger.Warn("Failed to generate random JWT secret; using default (insecure)")
+			}
+		}
 	}
-	auth := NewWebSocketAuth(logger, authConfig)
+
+	// Build TOTP config from server config with env fallbacks; provider applies sane defaults for zero-values
+	issuer := config.TOTPIssuer
+	if issuer == "" {
+		if v := os.Getenv("OTEDAMA_TOTP_ISSUER"); v != "" {
+			issuer = v
+		}
+	}
+	var (
+		period = config.TOTPPeriod
+		digits = config.TOTPDigits
+		skew   = config.TOTPSkew
+		slen   = config.TOTPSecretLength
+	)
+	if period == 0 {
+		if v := os.Getenv("OTEDAMA_TOTP_PERIOD"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				period = uint(n)
+			}
+		}
+	}
+	if digits == 0 {
+		if v := os.Getenv("OTEDAMA_TOTP_DIGITS"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				digits = n
+			}
+		}
+	}
+	if skew == 0 {
+		if v := os.Getenv("OTEDAMA_TOTP_SKEW"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				skew = uint(n)
+			}
+		}
+	}
+	if slen == 0 {
+		if v := os.Getenv("OTEDAMA_TOTP_SECRET_LENGTH"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				slen = n
+			}
+		}
+	}
+	totpCfg := auth.TOTPConfig{
+		Issuer:       issuer,
+		Period:       period,
+		Digits:       digits,
+		Skew:         skew,
+		SecretLength: slen,
+	}
+	totp := auth.NewTOTPProvider(logger, totpCfg)
+
+	// Optional: load and persist TOTP secrets
+	storePath := os.Getenv("OTEDAMA_TOTP_STORE")
+	if storePath == "" {
+		storePath = "./data/security/totp_store.json"
+	}
+	if abs, err := filepath.Abs(storePath); err == nil {
+		if err := totp.LoadFromFile(abs); err != nil {
+			logger.Warn("Failed to load TOTP store", zap.Error(err), zap.String("path", abs))
+		}
+		totp.SetStoragePath(abs)
+		// Autosave every minute
+		totp.StartAutoSave(1 * time.Minute)
+	} else {
+		logger.Warn("Invalid TOTP store path", zap.Error(err), zap.String("path", storePath))
+	}
+
+    // Create WebSocket auth system (API-local WS auth config)
+    wsAuthCfg := WSAuthConfig{
+        JWTSecret:     jwtSecret,
+        TokenTTL:      24 * time.Hour,
+        RefreshTTL:    7 * 24 * time.Hour,
+        EnableRefresh: true,
+    }
+    wsAuth := NewWebSocketAuth(logger, wsAuthCfg)
+
+	// Create new, modular middleware
+	authMiddleware := middleware.NewAuthMiddleware(logger, []byte(jwtSecret), config.AdminUser, config.AdminPassHash)
+
+	// Create a WebSecurityManager
+	webSecurityConfig := security.WebSecurityConfig{
+		EnableCSRF:          true,
+		EnableXSSProtection: true,
+	}
+	webSecurity, err := security.NewWebSecurityManager(logger, webSecurityConfig)
+	if err != nil {
+		logger.Fatal("failed to create web security manager", zap.Error(err))
+	}
+
+	// Instantiate comprehensive validator and IP rate limiter
+	secValidator := security.NewInputValidator(logger, security.ValidationConfig{})
+	rl := NewIPRateLimiter(config.RateLimit, time.Minute, config.RateLimit*2)
+
+	// Wire SecurityMiddleware with delegations
+	securityMiddleware := middleware.NewSecurityMiddleware(
+		logger,
+		webSecurity,
+		secValidator,
+		rl,
+		middleware.SecurityConfig{},
+		authMiddleware.ValidateToken,
+		func(sessionID string) (interface{}, error) { return wsAuth.ValidateSession(sessionID) },
+	)
+
+	// ZKP and Auth Handler Setup
+	zkpManager := auth.NewZKPManager(logger)
+	authHandler := NewAuthHandler(logger, zkpManager, wsAuth)
+
+	// Register a default ZKP public key for the admin user for demonstration.
+	// In a real system, this would be part of a dedicated user registration flow.
+	if config.AdminUser != "" && config.AdminPassHash != "" {
+		// Derive demo private key deterministically from the stored hash (demo only)
+		passHash := sha256.Sum256([]byte(config.AdminPassHash))
+		privateKey := new(big.Int).SetBytes(passHash[:])
+
+		// Derive public key: y = g^v mod p
+		p, _ := new(big.Int).SetString("23992346986434786549598124020385574583538633535221234567890123456789012345678901234567890123456789", 10)
+		g := big.NewInt(5)
+		publicKey := new(big.Int).Exp(g, privateKey, p)
+
+		zkpManager.RegisterPublicKey(config.AdminUser, publicKey)
+	}
 
 	server := &Server{
 		logger:    logger,
 		config:    config,
 		clients:   make(map[*websocket.Conn]bool),
+		wsMu:      make(map[*websocket.Conn]*sync.Mutex),
 		stats:     make(map[string]interface{}),
-		limiter:   NewIPRateLimiter(config.RateLimit, time.Minute, config.RateLimit*2),
+		limiter:   rl,
 		engine:    engine,
 		validator: NewInputValidator(),
-		auth:      auth,
+		wsAuth:    wsAuth,
+		totp:      totp,
+		poolManager:        poolManager,
+		authMiddleware:     authMiddleware,
+		securityMiddleware: securityMiddleware,
+		authHandler:        authHandler,
 		upgrader: websocket.Upgrader{
+			ReadBufferSize:  4096,
+			WriteBufferSize: 4096,
+			EnableCompression: true,
 			CheckOrigin: func(r *http.Request) bool {
 				// Check against allowed origins
 				if len(config.AllowOrigins) == 0 {
@@ -105,11 +277,13 @@ func NewServer(config Config, logger *zap.Logger, engine mining.Engine) (*Server
 // Start begins API server operations
 func (s *Server) Start(ctx context.Context) error {
 	s.server = &http.Server{
-		Addr:         s.config.ListenAddr,
-		Handler:      s.router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              s.config.ListenAddr,
+		Handler:           s.router,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1MB
 	}
 
 	s.logger.Info("Starting API server",
@@ -142,6 +316,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		client.Close()
 	}
 
+	// Persist and stop TOTP provider if configured
+	if s.totp != nil {
+		if err := s.totp.Close(); err != nil {
+			s.logger.Warn("Failed to persist TOTP store on shutdown", zap.Error(err))
+		}
+	}
+
 	if s.server != nil {
 		return s.server.Shutdown(ctx)
 	}
@@ -153,28 +334,31 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) setupRoutes() {
 	s.router = mux.NewRouter()
 
-	// Create auth middleware
-	auth := AuthMiddleware(s.logger, s.auth)
-	
+	// Prometheus metrics endpoint
+	s.router.Handle("/metrics", promhttp.Handler()).Methods("GET")
+
 	// Create middleware chain for protected routes
-	protected := Chain(
+	protected := s.chainMiddleware(
 		s.corsMiddleware,
 		s.loggingMiddleware,
-		RateLimitMiddleware(s.limiter, s.logger),
-		SecurityHeadersMiddleware(),
-		auth,
+		s.securityMiddleware.Middleware,
+		s.gzipMiddleware,
+		s.authMiddleware.RequireAdmin,
 	)
-	
+
 	// Create middleware chain for public routes
-	public := Chain(
+	public := s.chainMiddleware(
 		s.corsMiddleware,
 		s.loggingMiddleware,
-		RateLimitMiddleware(s.limiter, s.logger),
-		SecurityHeadersMiddleware(),
+		s.securityMiddleware.Middleware,
+		s.gzipMiddleware,
 	)
 
 	// API routes
 	api := s.router.PathPrefix("/api/v1").Subrouter()
+
+	// Register auth routes
+	s.authHandler.RegisterRoutes(api)
 
 	// Public endpoints (no auth required)
 	api.Handle("/status", public(http.HandlerFunc(s.handleStatus))).Methods("GET")
@@ -184,10 +368,10 @@ func (s *Server) setupRoutes() {
 	// Protected mining endpoints (require auth)
 	mining := api.PathPrefix("/mining").Subrouter()
 	mining.Handle("/stats", public(http.HandlerFunc(s.handleMiningStats))).Methods("GET")
-	mining.Handle("/start", protected(RequirePermission("mining:start")(http.HandlerFunc(s.handleMiningStart)))).Methods("POST")
-	mining.Handle("/stop", protected(RequirePermission("mining:stop")(http.HandlerFunc(s.handleMiningStop)))).Methods("POST")
+	mining.Handle("/start", protected(http.HandlerFunc(s.handleStartMining))).Methods("POST")
+	mining.Handle("/stop", protected(http.HandlerFunc(s.handleStopMining))).Methods("POST")
 	mining.Handle("/workers", protected(http.HandlerFunc(s.handleMiningWorkers))).Methods("GET")
-	mining.Handle("/workers/{id}/control", protected(RequirePermission("mining:control")(http.HandlerFunc(s.handleWorkerControl)))).Methods("POST")
+	mining.Handle("/workers/{id}/control", protected(http.HandlerFunc(s.handleWorkerControl))).Methods("POST")
 
 	// Pool endpoints
 	api.HandleFunc("/pool/stats", s.handlePoolStats).Methods("GET")
@@ -211,11 +395,14 @@ func (s *Server) setupRoutes() {
 	// Internationalization endpoints
 	s.RegisterI18nRoutes(api)
 
-	// WebSocket endpoint
-	api.HandleFunc("/ws", s.handleWebSocket)
+ 	// WebSocket endpoint
+ 	api.HandleFunc("/ws", s.handleWebSocket)
 
-	// Static dashboard (if needed)
-	s.router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/static/")))
+ 	// Admin dashboard routes (login + admin endpoints with 2FA)
+ 	s.setupAdminRoutes()
+
+ 	// Static dashboard (if needed)
+ 	s.router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/static/")))
 }
 
 // Middleware
@@ -242,7 +429,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		}
 		
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-TOTP-Code, X-OTP-Code")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 
 		if r.Method == "OPTIONS" {
@@ -252,6 +439,16 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// chainMiddleware provides a helper for chaining middleware
+func (s *Server) chainMiddleware(middlewares ...func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return func(final http.Handler) http.Handler {
+		for i := len(middlewares) - 1; i >= 0; i-- {
+			final = middlewares[i](final)
+		}
+		return final
+	}
 }
 
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
@@ -268,21 +465,60 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip compression for WebSocket upgrades and if client doesn't accept gzip
+		if strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") ||
+			strings.ToLower(r.Header.Get("Upgrade")) == "websocket" ||
+			!strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		w.Header().Add("Vary", "Accept-Encoding")
+
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+
+		// Wrap ResponseWriter
+		grw := &gzipResponseWriter{ResponseWriter: w, Writer: gz}
+		w.Header().Set("Content-Encoding", "gzip")
+		// Content-Length unknown after compression
+		w.Header().Del("Content-Length")
+
+		next.ServeHTTP(grw, r)
+	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	*gzip.Writer
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func (w *gzipResponseWriter) Flush() {
+	_ = w.Writer.Flush()
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Handlers
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	response := Response{
-		Success: true,
-		Data: map[string]interface{}{
-			"service": "Otedama Mining Pool",
-			"version": "2.1.3",
-			"uptime":  time.Since(time.Now()).Seconds(), // Placeholder
-			"status":  "running",
-		},
-		Time: time.Now(),
-	}
+    response := Response{
+        Success: true,
+        Data: map[string]interface{}{
+            "service": "Otedama Mining Pool",
+            "status":  "running",
+        },
+        Time: time.Now(),
+    }
 
-	s.sendJSON(w, http.StatusOK, response)
+    s.sendJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
@@ -312,47 +548,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.sendJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) handleMiningStats(w http.ResponseWriter, r *http.Request) {
-	// Placeholder mining stats
-	stats := map[string]interface{}{
-		"hash_rate":     0,
-		"valid_shares":  0,
-		"difficulty":    0x1d00ffff,
-		"algorithm":     "sha256d",
-		"threads":       0,
-		"running":       false,
-	}
-
-	response := Response{
-		Success: true,
-		Data:    stats,
-		Time:    time.Now(),
-	}
-
-	s.sendJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) handleMiningStart(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement mining start logic
-	response := Response{
-		Success: true,
-		Data:    map[string]interface{}{"message": "Mining started"},
-		Time:    time.Now(),
-	}
-
-	s.sendJSON(w, http.StatusOK, response)
-}
-
-func (s *Server) handleMiningStop(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement mining stop logic
-	response := Response{
-		Success: true,
-		Data:    map[string]interface{}{"message": "Mining stopped"},
-		Time:    time.Now(),
-	}
-
-	s.sendJSON(w, http.StatusOK, response)
-}
+// Mining handlers are implemented in handlers_mining.go
 
 func (s *Server) handlePoolStats(w http.ResponseWriter, r *http.Request) {
 	// Placeholder pool stats
@@ -562,37 +758,90 @@ func (s *Server) handleProfitSwitch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := s.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		s.logger.Error("WebSocket upgrade failed", zap.Error(err))
-		return
-	}
-	defer conn.Close()
+    conn, err := s.upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        s.logger.Error("WebSocket upgrade failed", zap.Error(err))
+        return
+    }
+    defer conn.Close()
 
-	// Add client
-	s.clients[conn] = true
-	s.logger.Info("WebSocket client connected",
-		zap.String("remote_addr", conn.RemoteAddr().String()),
-	)
+    // Connection settings
+    const (
+        writeWait  = 10 * time.Second
+        pongWait   = 60 * time.Second
+        pingPeriod = 50 * time.Second // < pongWait
+    )
 
-	// Send initial stats
-	s.sendStatsToClient(conn)
+    conn.SetReadLimit(1 << 20) // 1MB
+    _ = conn.SetReadDeadline(time.Now().Add(pongWait))
+    conn.SetPongHandler(func(string) error {
+        return conn.SetReadDeadline(time.Now().Add(pongWait))
+    })
 
-	// Handle messages
-	for {
-		var msg map[string]interface{}
-		err := conn.ReadJSON(&msg)
-		if err != nil {
-			s.logger.Debug("WebSocket client disconnected", zap.Error(err))
-			break
-		}
+    // Track client
+    s.clients[conn] = true
+    s.wsMu[conn] = &sync.Mutex{}
+    remote := conn.RemoteAddr().String()
+    s.logger.Info("WebSocket client connected", zap.String("remote_addr", remote))
 
-		// Handle client message
-		s.handleWebSocketMessage(conn, msg)
-	}
+    // Ping loop
+    done := make(chan struct{})
+    ticker := time.NewTicker(pingPeriod)
+    defer ticker.Stop()
+    go func() {
+        for {
+            select {
+            case <-ticker.C:
+                // Serialize control frame write
+                if mu, ok := s.wsMu[conn]; ok {
+                    mu.Lock()
+                    _ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+                    err = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
+                    mu.Unlock()
+                } else {
+                    _ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+                    err = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
+                }
+                if err != nil {
+                    s.logger.Debug("WebSocket ping failed", zap.Error(err))
+                    _ = conn.Close()
+                    close(done)
+                    return
+                }
+            case <-done:
+                return
+            }
+        }
+    }()
 
-	// Remove client
-	delete(s.clients, conn)
+    // Send initial stats
+    s.sendStatsToClient(conn)
+
+    // Handle messages
+    for {
+        // Simple per-connection rate limit using IP limiter
+        if s.limiter != nil {
+            ip := r.RemoteAddr
+            if !s.limiter.Allow(ip) {
+                s.logger.Debug("WS rate limited", zap.String("ip", ip))
+                // small backoff instead of drop to reduce churn
+                time.Sleep(100 * time.Millisecond)
+            }
+        }
+
+        var msg map[string]interface{}
+        if err := conn.ReadJSON(&msg); err != nil {
+            s.logger.Debug("WebSocket client disconnected", zap.Error(err))
+            break
+        }
+
+        s.handleWebSocketMessage(conn, msg)
+    }
+
+    // Cleanup
+    close(done)
+    delete(s.clients, conn)
+    delete(s.wsMu, conn)
 }
 
 func (s *Server) handleWebSocketMessage(conn *websocket.Conn, msg map[string]interface{}) {
@@ -609,20 +858,22 @@ func (s *Server) handleWebSocketMessage(conn *websocket.Conn, msg map[string]int
 			"type": "pong",
 			"time": time.Now(),
 		}
-		conn.WriteJSON(response)
+		if err := s.safeWriteJSON(conn, response); err != nil {
+			s.logger.Error("Failed to send WebSocket message", zap.Error(err))
+		}
 	}
 }
 
 func (s *Server) sendStatsToClient(conn *websocket.Conn) {
-	message := map[string]interface{}{
-		"type": "stats_update",
-		"data": s.stats,
-		"time": time.Now(),
-	}
+    message := map[string]interface{}{
+        "type": "stats_update",
+        "data": s.stats,
+        "time": time.Now(),
+    }
 
-	if err := conn.WriteJSON(message); err != nil {
-		s.logger.Error("Failed to send WebSocket message", zap.Error(err))
-	}
+    if err := s.safeWriteJSON(conn, message); err != nil {
+        s.logger.Error("Failed to send WebSocket message", zap.Error(err))
+    }
 }
 
 // UpdateStats updates the cached statistics
@@ -635,19 +886,30 @@ func (s *Server) UpdateStats(stats map[string]interface{}) {
 
 // broadcastStats sends stats to all connected WebSocket clients
 func (s *Server) broadcastStats() {
-	message := map[string]interface{}{
-		"type": "stats_update",
-		"data": s.stats,
-		"time": time.Now(),
-	}
+    message := map[string]interface{}{
+        "type": "stats_update",
+        "data": s.stats,
+        "time": time.Now(),
+    }
 
-	for client := range s.clients {
-		if err := client.WriteJSON(message); err != nil {
-			s.logger.Error("Failed to broadcast stats", zap.Error(err))
-			client.Close()
-			delete(s.clients, client)
-		}
-	}
+    for client := range s.clients {
+        if err := s.safeWriteJSON(client, message); err != nil {
+            s.logger.Error("Failed to broadcast stats", zap.Error(err))
+            client.Close()
+            delete(s.clients, client)
+            delete(s.wsMu, client)
+        }
+    }
+}
+
+// safeWriteJSON serializes writes per-connection to avoid concurrent writer races
+func (s *Server) safeWriteJSON(conn *websocket.Conn, v interface{}) error {
+    if mu, ok := s.wsMu[conn]; ok {
+        mu.Lock()
+        defer mu.Unlock()
+    }
+    _ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+    return conn.WriteJSON(v)
 }
 
 // sendJSON sends JSON response

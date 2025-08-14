@@ -539,15 +539,15 @@ func (q *OptimizedJobQueue) Close() error {
 // Job priority helpers
 
 func (j *Job) Priority() int {
-	// Map algorithm priorities
-	switch j.Algorithm {
-	case AlgorithmSHA256d:
-		return 0 // High priority
-	case AlgorithmScrypt:
-		return 1 // Normal priority
-	default:
-		return 2 // Low priority
-	}
+    // Map algorithm priorities
+    switch j.Algorithm {
+    case SHA256D:
+        return 0 // High priority
+    case Scrypt:
+        return 1 // Normal priority
+    default:
+        return 2 // Low priority
+    }
 }
 
 func (j *Job) ComparePriority(other *Job) int {

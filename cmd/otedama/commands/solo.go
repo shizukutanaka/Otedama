@@ -30,11 +30,8 @@ This mode is optimized for single miners who want:
 }
 
 var (
-	soloWallet     string
 	soloAlgorithm  string
 	soloThreads    int
-	soloEnableP2P  bool
-	soloP2PPort    int
 	soloConfigFile string
 )
 
@@ -42,19 +39,11 @@ func init() {
 	rootCmd.AddCommand(soloCmd)
 	
 	// Mining flags
-	soloCmd.Flags().StringVarP(&soloWallet, "wallet", "w", "", "Wallet address for mining rewards (required)")
 	soloCmd.Flags().StringVarP(&soloAlgorithm, "algorithm", "a", "sha256d", "Mining algorithm")
 	soloCmd.Flags().IntVarP(&soloThreads, "threads", "t", 0, "Number of mining threads (0=auto)")
 	
-	// P2P flags
-	soloCmd.Flags().BoolVar(&soloEnableP2P, "p2p", false, "Enable P2P networking")
-	soloCmd.Flags().IntVar(&soloP2PPort, "p2p-port", 18080, "P2P listening port")
-	
 	// Config flag
 	soloCmd.Flags().StringVarP(&soloConfigFile, "config", "c", "", "Configuration file")
-	
-	// Mark wallet as required
-	soloCmd.MarkFlagRequired("wallet")
 }
 
 func runSolo(cmd *cobra.Command, args []string) error {
@@ -69,7 +58,7 @@ func runSolo(cmd *cobra.Command, args []string) error {
 	}
 	defer logger.Sync()
 	
-	// Load or create configuration
+	// Load or create configuration (only supported fields)
 	var config mining.Config
 	
 	if soloConfigFile != "" {
@@ -84,41 +73,31 @@ func runSolo(cmd *cobra.Command, args []string) error {
 	} else {
 		// Use command line flags
 		config = mining.Config{
-			Wallet:      soloWallet,
-			Algorithm:   soloAlgorithm,
-			Threads:     soloThreads,
-			EnableP2P:   soloEnableP2P,
-			P2PPort:     soloP2PPort,
-			LocalShares: true,
+			Algorithm:  soloAlgorithm,
+			CPUThreads: soloThreads,
 		}
-		
 		// Set defaults
-		if config.Threads == 0 {
-			config.Threads = runtime.NumCPU()
+		if config.CPUThreads == 0 {
+			config.CPUThreads = runtime.NumCPU()
 		}
 	}
 	
-	// Validate configuration
-	if config.Wallet == "" {
-		return fmt.Errorf("wallet address is required")
-	}
+	// Note: wallet is not part of mining.Config; solo mode runs local engine only.
 	
 	logger.Info("Starting Otedama solo miner",
-		zap.String("wallet", config.Wallet),
 		zap.String("algorithm", config.Algorithm),
-		zap.Int("threads", config.Threads),
-		zap.Bool("p2p", config.EnableP2P),
+		zap.Int("threads", config.CPUThreads),
 	)
 	
-	// Create miner
-	miner, err := mining.NewSoloHybridMiner(logger, config)
+	// Create engine
+	engine, err := mining.NewEngine(logger, &config)
 	if err != nil {
-		return fmt.Errorf("failed to create miner: %w", err)
+		return fmt.Errorf("failed to create engine: %w", err)
 	}
 	
 	// Start mining
-	if err := miner.Start(); err != nil {
-		return fmt.Errorf("failed to start miner: %w", err)
+	if err := engine.Start(); err != nil {
+		return fmt.Errorf("failed to start engine: %w", err)
 	}
 	
 	// Setup signal handling
@@ -126,7 +105,7 @@ func runSolo(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	
 	// Print initial stats
-	printSoloStats(miner)
+	printSoloStats(engine)
 	
 	// Start stats ticker
 	statsTicker := time.NewTicker(30 * time.Second)
@@ -137,36 +116,26 @@ func runSolo(cmd *cobra.Command, args []string) error {
 		select {
 		case <-sigChan:
 			logger.Info("Shutdown signal received")
-			if err := miner.Stop(); err != nil {
+			if err := engine.Stop(); err != nil {
 				logger.Error("Failed to stop miner", zap.Error(err))
 			}
 			return nil
 			
 		case <-statsTicker.C:
-			printSoloStats(miner)
+			printSoloStats(engine)
 		}
 	}
 }
 
-func printSoloStats(miner *mining.SoloHybridMiner) {
-	stats := miner.GetStats()
-	
+func printSoloStats(engine mining.Engine) {
+	stats := engine.GetStats()
 	fmt.Println("\n=== Otedama Solo Mining Statistics ===")
-	fmt.Printf("Miner ID:    %s\n", stats["miner_id"])
-	fmt.Printf("Algorithm:   %s\n", stats["algorithm"])
-	fmt.Printf("Threads:     %d\n", stats["threads"])
-	fmt.Printf("Hashrate:    %d H/s\n", stats["hashrate"])
-	fmt.Printf("Difficulty:  %.2f\n", stats["difficulty"])
-	fmt.Printf("Shares:      %d\n", stats["shares"])
-	fmt.Printf("Blocks:      %d\n", stats["blocks"])
-	fmt.Printf("Earnings:    %.8f\n", stats["earnings"])
-	
-	if p2pEnabled, ok := stats["p2p_enabled"].(bool); ok && p2pEnabled {
-		fmt.Printf("\nP2P Status:  Enabled\n")
-		fmt.Printf("Peers:       %d\n", stats["peer_count"])
-	} else {
-		fmt.Printf("\nP2P Status:  Disabled (Solo Mode)\n")
-	}
-	
+	fmt.Printf("Algorithm:     %s\n", engine.GetAlgorithm())
+	fmt.Printf("CPU Threads:   %d\n", engine.GetCPUThreads())
+	fmt.Printf("Total Rate:    %d H/s\n", stats.TotalHashRate)
+	fmt.Printf("Current Rate:  %d H/s\n", stats.CurrentHashRate)
+	fmt.Printf("Shares:        submitted=%d accepted=%d rejected=%d\n", stats.SharesSubmitted, stats.SharesAccepted, stats.SharesRejected)
+	fmt.Printf("Blocks Found:  %d\n", stats.BlocksFound)
+	fmt.Printf("Uptime:        %s\n", stats.Uptime.String())
 	fmt.Println("=====================================")
 }

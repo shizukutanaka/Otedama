@@ -6,7 +6,7 @@ set -e
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <base_url>"
-    echo "Example: $0 https://staging.otedama.io"
+    echo "Example: $0 https://otedama.local"
     exit 1
 fi
 

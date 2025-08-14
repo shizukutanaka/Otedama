@@ -2,7 +2,6 @@ package security
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"html"

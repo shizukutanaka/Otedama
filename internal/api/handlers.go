@@ -54,7 +54,6 @@ type PoolStats struct {
 type PeerInfo struct {
 	ID          string    `json:"id"`
 	Address     string    `json:"address"`
-	Version     string    `json:"version"`
 	Hashrate    float64   `json:"hashrate"`
 	Workers     int       `json:"workers"`
 	ConnectedAt time.Time `json:"connected_at"`

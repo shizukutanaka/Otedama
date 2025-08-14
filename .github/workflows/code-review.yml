@@ -4,6 +4,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: code-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 permissions:
   contents: read
   pull-requests: write
@@ -14,19 +22,27 @@ jobs:
   review:
     name: Automated Code Review
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      
+      - name: Detect Node project
+        id: detect
+        run: |
+          if [ -f package.json ]; then echo "has_node=true" >> $GITHUB_OUTPUT; else echo "has_node=false" >> $GITHUB_OUTPUT; fi
           
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
           
       - name: Install dependencies
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: npm ci
         
       - name: Run ESLint with annotations
@@ -35,94 +51,65 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
           eslint_flags: '--ext .js,.jsx,.ts,.tsx .'
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
           
       - name: Check code complexity
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: |
           npx complexity-report . --format json > complexity.json || true
           
       - name: Analyze bundle size
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: |
           npm run build --if-present
           npx size-limit --json > size-limit.json || true
           
-      - name: Comment PR with analysis
-        uses: actions/github-script@v6
+      - name: Generate code review comment
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
+        run: |
+          node scripts/code-review/generate-comment.js \
+            --complexity complexity.json \
+            --size size-limit.json \
+            --out artifact/code-review.md
+
+      - name: Fallback comment when no Node project
+        if: ${{ steps.detect.outputs.has_node != 'true' }}
+        run: |
+          mkdir -p artifact
+          printf "## Automated Code Review\n\nNo Node.js project detected.\n" > artifact/code-review.md
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            
-            // Read analysis results
-            let complexity = {};
-            let sizeLimit = {};
-            
-            try {
-              complexity = JSON.parse(fs.readFileSync('complexity.json', 'utf8'));
-            } catch {}
-            
-            try {
-              sizeLimit = JSON.parse(fs.readFileSync('size-limit.json', 'utf8'));
-            } catch {}
-            
-            // Generate comment
-            let comment = '## 🤖 Automated Code Review\n\n';
-            
-            // Complexity analysis
-            if (complexity.reports) {
-              comment += '### 📊 Complexity Analysis\n\n';
-              comment += '| File | Complexity | Maintainability |\n';
-              comment += '|------|------------|----------------|\n';
-              
-              complexity.reports
-                .filter(r => r.complexity > 10)
-                .slice(0, 10)
-                .forEach(report => {
-                  const emoji = report.complexity > 20 ? '🔴' : report.complexity > 15 ? '🟡' : '🟢';
-                  comment += `| ${report.path} | ${emoji} ${report.complexity} | ${report.maintainability.toFixed(2)} |\n`;
-                });
-              
-              comment += '\n';
-            }
-            
-            // Bundle size
-            if (sizeLimit.length > 0) {
-              comment += '### 📦 Bundle Size\n\n';
-              comment += '| Name | Size | Limit | Status |\n';
-              comment += '|------|------|-------|--------|\n';
-              
-              sizeLimit.forEach(item => {
-                const status = item.passed ? '✅' : '❌';
-                comment += `| ${item.name} | ${item.size} | ${item.limit || 'N/A'} | ${status} |\n`;
-              });
-              
-              comment += '\n';
-            }
-            
-            // Add checklist
-            comment += '### ✅ Review Checklist\n\n';
-            comment += '- [ ] Code follows the project style guidelines\n';
-            comment += '- [ ] Self-review performed\n';
-            comment += '- [ ] Comments added for complex code\n';
-            comment += '- [ ] Documentation updated\n';
-            comment += '- [ ] Tests added/updated\n';
-            comment += '- [ ] No console.log or debug code\n';
-            comment += '- [ ] Security considerations addressed\n';
-            comment += '- [ ] Performance impact considered\n';
-            
-            // Post comment
+            const body = fs.readFileSync('artifact/code-review.md', 'utf8');
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
+              body
             });
+
+      - name: Upload analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-review-artifacts
+          path: |
+            complexity.json
+            size-limit.json
+            artifact/code-review.md
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Check for common issues
   common-issues:
     name: Check Common Issues
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         
       - name: Check for secrets
         run: |
@@ -150,21 +137,28 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         
+      - name: Detect Node project
+        id: detect_deps
+        run: |
+          if [ -f package.json ]; then echo "has_node=true" >> $GITHUB_OUTPUT; else echo "has_node=false" >> $GITHUB_OUTPUT; fi
+
       - name: Dependency Review
-        uses: actions/dependency-review-action@v3
+        uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: moderate
           
       - name: Check for outdated dependencies
+        if: ${{ steps.detect_deps.outputs.has_node == 'true' }}
         run: |
           npm outdated --json > outdated.json || true
           
       - name: Comment outdated dependencies
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
@@ -172,7 +166,7 @@ jobs:
             try {
               const outdated = JSON.parse(fs.readFileSync('outdated.json', 'utf8'));
               if (Object.keys(outdated).length > 0) {
-                let comment = '### 📦 Outdated Dependencies\n\n';
+                let comment = '### Outdated Dependencies\n\n';
                 comment += '| Package | Current | Wanted | Latest |\n';
                 comment += '|---------|---------|---------|--------|\n';
                 
@@ -197,37 +191,48 @@ jobs:
   performance-check:
     name: Performance Impact
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         
+      - name: Detect Node project
+        id: detect
+        run: |
+          if [ -f package.json ]; then echo "has_node=true" >> $GITHUB_OUTPUT; else echo "has_node=false" >> $GITHUB_OUTPUT; fi
+
       - name: Checkout base
         run: |
           git fetch origin ${{ github.base_ref }}
           git checkout origin/${{ github.base_ref }}
           
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
           
       - name: Measure base performance
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: |
           npm ci
           npm run test:performance -- --json > base-performance.json || echo '{}' > base-performance.json
           
       - name: Checkout PR again
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: |
           git checkout ${{ github.sha }}
           
       - name: Measure PR performance
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
         run: |
           npm ci
           npm run test:performance -- --json > pr-performance.json || echo '{}' > pr-performance.json
           
       - name: Compare performance
-        uses: actions/github-script@v6
+        if: ${{ steps.detect.outputs.has_node == 'true' }}
+        uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');

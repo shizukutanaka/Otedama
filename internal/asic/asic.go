@@ -2,7 +2,6 @@ package asic
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"

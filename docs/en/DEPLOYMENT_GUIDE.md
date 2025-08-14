@@ -480,7 +480,7 @@ JWT_SECRET=your-jwt-secret
 # nginx.conf
 server {
     listen 443 ssl http2;
-    server_name otedama.example.com;
+    server_name otedama.local;
 
     ssl_certificate /etc/ssl/certs/otedama.crt;
     ssl_certificate_key /etc/ssl/private/otedama.key;
@@ -637,8 +637,7 @@ docker logs otedama | grep mining
 ### Support
 
 - **GitHub Issues**: https://github.com/shizukutanaka/Otedama/issues
-- **Documentation**: https://docs.otedama.network
-- **Community Discord**: https://discord.gg/otedama
+- **Documentation**: ./README.md
 
 ---
 
