@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/otedama/otedama/internal/mining"
 	"go.uber.org/zap"
 )
 

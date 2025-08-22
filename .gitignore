@@ -1,11 +1,11 @@
+# Otedama P2P Mining Pool v2.1.9
 # Binaries for programs and plugins
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-bin/
-dist/
+otedama
 build/
 
 # Test binary, built with `go test -c`
@@ -13,23 +13,86 @@ build/
 
 # Output of the go coverage tool
 *.out
-coverage.txt
 coverage.html
-
-# Dependency directories
-vendor/
+coverage.out
 
 # Go workspace file
 go.work
 
-# IDE directories
+# Dependency directories
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Configuration files (keep examples)
+config.yaml
+config.yml
+config.json
+!config.yaml.example
+
+# Data directories
+data/
+logs/
+temp/
+tmp/
+cache/
+
+# IDE specific files
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
 
-# OS generated files
+# Debug files
+debug
+debug.test
+*.pprof
+*.prof
+*.log
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Prometheus/Grafana data
+prometheus-data/
+grafana-data/
+postgres-data/
+redis-data/
+
+# Build artifacts
+dist/
+*.tar.gz
+*.zip
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# PID files
+*.pid
+
+# TLS certificates (except examples)
+*.pem
+*.key
+*.crt
+*.csr
+!*.example.pem
+!*.example.key
+
+# Mining specific
+*.dat
+shares.db
+blocks.db
+
+# OS specific
 .DS_Store
 .DS_Store?
 ._*
@@ -37,81 +100,33 @@ go.work
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Environment variables
-.env
-.env.local
-.env.*.local
+# Python (for any scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
 
-# Configuration files with sensitive data
-config.local.yaml
-config.production.yaml
-secrets.yaml
+# Node.js (if web UI is added)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Log files
-*.log
-logs/
-
-# Data directories
-data/
-otedama_data/
-otedama_logs/
-
-# Backup files
-*.backup
-*.bak
-*.tmp
-
-# Docker volumes
-postgres_data/
-redis_data/
-prometheus_data/
-grafana_data/
-nginx_logs/
-backup_data/
-
-# Terraform
-*.tfstate
-*.tfstate.*
-.terraform/
-terraform.tfvars
-
-# Certificates and keys
-*.pem
-*.key
-*.crt
-*.csr
-ssl/
-
-# Profile data
-*.pprof
-profiles/
-
-# Binary outputs
-otedama
-otedama-*
-benchmark
-security-audit
-
-# Generated files
-*.generated.go
-*_gen.go
-
-# Archives
-*.tar
-*.tar.gz
-*.zip
-*.7z
-
-# Mining data
-shares.db
-blocks.db
-*.dat
+# Documentation build
+docs/_build/
+docs/_site/
+site/
 
 # Temporary files
-tmp/
-temp/
-.tmp/
+*.tmp
+*.temp
+.*.swp
+.*.swo
 
-# Claude editor settings
-.claude/
+# Cleanup scripts output
+cleanup_duplicates*.bat
+deprecated_*.go.bak

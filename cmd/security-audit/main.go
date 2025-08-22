@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/security"
+	"github.com/otedama/otedama/internal/security"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

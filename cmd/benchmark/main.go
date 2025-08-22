@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/crypto"
-	"github.com/shizukutanaka/Otedama/internal/mining"
-	"github.com/shizukutanaka/Otedama/internal/stratum"
+	"github.com/otedama/otedama/internal/crypto"
+	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/stratum"
 	"go.uber.org/zap"
 )
 
@@ -363,180 +363,155 @@ func benchmarkStratumCodec() BenchmarkResult {
 		Name:       "Stratum Message Codec",
 		Operations: ops,
 		Duration:   duration,
-		OpsPerSec:  float64(ops) / duration.Seconds(),
-	}
-}
-
-func benchmarkZeroCopyBuffer() BenchmarkResult {
-	// Temporarily disabled - optimization package removed
-	return BenchmarkResult{
-		Name:       "Zero-Copy Buffer",
-		Operations: 0,
-		Duration:   0,
-		OpsPerSec:  0,
-		BytesPerOp: 0,
-	}
 }
 
 func benchmarkCacheAlignedCounter() BenchmarkResult {
-	counter := &optimization.CacheAlignedInt64{}
-	numWorkers := runtime.NumCPU()
-	
-	var wg sync.WaitGroup
-	start := time.Now()
-	
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for time.Since(start) < time.Second {
-				counter.Add(1)
-			}
-		}()
-	}
-	
-	wg.Wait()
-	duration := time.Since(start)
-	ops := counter.Load()
-	
-	return BenchmarkResult{
-		Name:       "Cache-Aligned Counter",
-		Operations: ops,
-		Duration:   duration,
-		OpsPerSec:  float64(ops) / duration.Seconds(),
-	}
+    var ops atomic.Int64
+    numWorkers := runtime.NumCPU()
+    
+    var wg sync.WaitGroup
+    start := time.Now()
+    
+    for i := 0; i < numWorkers; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for time.Since(start) < time.Second {
+                ops.Add(1)
+            }
+        }()
+    }
+    
+    wg.Wait()
+    duration := time.Since(start)
+    total := ops.Load()
+    
+    return BenchmarkResult{
+        Name:       "Cache-Aligned Counter",
+        Operations: total,
+        Duration:   duration,
+        OpsPerSec:  float64(total) / duration.Seconds(),
+    }
 }
 
 func benchmarkRingBuffer() BenchmarkResult {
-	// Ring buffer implementation not found, using standard slice
-	data := make([]interface{}, 100)
-	for i := range data {
-		data[i] = i
-	}
-	
-	// Using a simple slice as a queue for benchmarking
-	queue := make([]interface{}, 0, 100)
-	
-	start := time.Now()
-	ops := int64(0)
-	
-	for time.Since(start) < time.Second {
-		// Push
-		if len(queue) < 100 {
-			queue = append(queue, data[ops%100])
-		}
-		
-		// Pop
-		if len(queue) > 0 {
-			val := queue[0]
-			queue = queue[1:]
-			if val != nil {
-				ops++
-			}
-		}
-	}
-	
-	duration := time.Since(start)
-	
-	return BenchmarkResult{
-		Name:       "Lock-Free Ring Buffer",
-		Operations: ops,
-		Duration:   duration,
-		OpsPerSec:  float64(ops) / duration.Seconds(),
-	}
+    // Ring buffer implementation not found, using standard slice
+    data := make([]interface{}, 100)
+    for i := range data {
+        data[i] = i
+    }
+    
+    // Using a simple slice as a queue for benchmarking
+    queue := make([]interface{}, 0, 100)
+    
+    start := time.Now()
+    ops := int64(0)
+    
+    for time.Since(start) < time.Second {
+        // Push
+        if len(queue) < 100 {
+            queue = append(queue, data[ops%100])
+        }
+        
+        // Pop
+        if len(queue) > 0 {
+            val := queue[0]
+            queue = queue[1:]
+            if val != nil {
+                ops++
+            }
+        }
+    }
+    
+    duration := time.Since(start)
+    
+    return BenchmarkResult{
+        Name:       "Lock-Free Ring Buffer",
+        Operations: ops,
+        Duration:   duration,
+        OpsPerSec:  float64(ops) / duration.Seconds(),
+    }
 }
 
 func benchmarkMemoryPool() BenchmarkResult {
-	pool := sync.Pool{
-		New: func() interface{} {
-			return make([]byte, 4096)
-		},
-	}
-	
-	start := time.Now()
-	ops := int64(0)
-	
-	for time.Since(start) < time.Second {
-		// Get from pool
-		buf := pool.Get().([]byte)
-		
-		// Use buffer
-		copy(buf, "test data")
-		
-		// Return to pool
-		pool.Put(buf)
-		
-		ops++
-	}
-	
-	duration := time.Since(start)
-	
-	return BenchmarkResult{
-		Name:       "Memory Pool Allocation",
-		Operations: ops,
-		Duration:   duration,
-		OpsPerSec:  float64(ops) / duration.Seconds(),
-		BytesPerOp: 4096,
-	}
+    pool := sync.Pool{
+        New: func() interface{} {
+            return make([]byte, 4096)
+        },
+    }
+    
+    start := time.Now()
+    ops := int64(0)
+    
+    for time.Since(start) < time.Second {
+        // Get from pool
+        buf := pool.Get().([]byte)
+        
+        // Use buffer
+        copy(buf, "test data")
+        
+        // Return to pool
+        pool.Put(buf)
+        
+        ops++
+    }
+    
+    duration := time.Since(start)
+    
+    return BenchmarkResult{
+        Name:       "Memory Pool Allocation",
+        Operations: ops,
+        Duration:   duration,
+        OpsPerSec:  float64(ops) / duration.Seconds(),
+        BytesPerOp: 4096,
+    }
 }
 
 func benchmarkNUMAMemory() BenchmarkResult {
-	allocator, err := optimization.NewMemoryAllocator()
-	if err != nil {
-		return BenchmarkResult{
-			Name: "NUMA Memory Access",
-			Operations: 0,
-			Duration: 0,
-			OpsPerSec: 0,
-		}
-	}
-	
-	// Allocate 1MB on NUMA node 0
-	size := 1024 * 1024
-	mem, _ := allocator.AllocateOnNode(size, 0)
-	
-	start := time.Now()
-	ops := int64(0)
-	
-	// Sequential memory access pattern
-	for time.Since(start) < time.Second {
-		// Write pattern
-		for i := 0; i < size; i += 64 { // Cache line size
-			mem[i] = byte(i)
-		}
-		
-		// Read pattern
-		sum := 0
-		for i := 0; i < size; i += 64 {
-			sum += int(mem[i])
-		}
-		_ = sum
-		
-		ops++
-	}
-	
-	duration := time.Since(start)
-	throughput := float64(ops*int64(size)) / duration.Seconds() / (1024 * 1024) // MB/s
-	
-	return BenchmarkResult{
-		Name:       "NUMA Memory Access",
-		Operations: ops,
-		Duration:   duration,
-		OpsPerSec:  throughput, // MB/s instead of ops/s
-		BytesPerOp: int64(size),
-	}
-	*/
+    // Fallback implementation: simulate memory throughput on 1MB slice
+    size := 1024 * 1024
+    mem := make([]byte, size)
+    
+    start := time.Now()
+    ops := int64(0)
+    
+    for time.Since(start) < time.Second {
+        // Write pattern (approx cache line stride)
+        for i := 0; i < size; i += 64 {
+            mem[i] = byte(i)
+        }
+        
+        // Read pattern
+        sum := 0
+        for i := 0; i < size; i += 64 {
+            sum += int(mem[i])
+        }
+        _ = sum
+        
+        ops++
+    }
+    
+    duration := time.Since(start)
+    throughput := float64(ops*int64(size)) / duration.Seconds() / (1024 * 1024) // MB/s
+    
+    return BenchmarkResult{
+        Name:       "NUMA Memory Access",
+        Operations: ops,
+        Duration:   duration,
+        OpsPerSec:  throughput,
+        BytesPerOp: int64(size),
+    }
 }
 
 // Helper functions
 
 func buildBlockHeader(job *mining.Job, nonce uint32) []byte {
-	// Simplified block header construction
-	header := make([]byte, 80)
-	// In real implementation, this would properly construct the header
-	// with version, previous hash, merkle root, timestamp, bits, and nonce
-	copy(header[76:], []byte{byte(nonce), byte(nonce >> 8), byte(nonce >> 16), byte(nonce >> 24)})
-	return header
+    // Simplified block header construction
+    header := make([]byte, 80)
+    // In real implementation, this would properly construct the header
+    // with version, previous hash, merkle root, timestamp, bits, and nonce
+    copy(header[76:], []byte{byte(nonce), byte(nonce >> 8), byte(nonce >> 16), byte(nonce >> 24)})
+    return header
 }
 
 func printResult(result BenchmarkResult) {

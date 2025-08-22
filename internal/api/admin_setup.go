@@ -6,18 +6,19 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/shizukutanaka/Otedama/internal/api/middleware"
+	"github.com/otedama/otedama/internal/api/middleware"
 	"os"
 	"golang.org/x/crypto/bcrypt"
+	"go.uber.org/zap"
 )
 
 // setupAdminRoutes configures admin dashboard routes
 func (s *Server) setupAdminRoutes() {
 	// Create admin handlers
-	adminHandlers := NewAdminHandlers(s.logger, s.poolManager, s.totp)
-	
+	adminHandlers := NewAdminHandlers(s.logger, s.poolManager, s.totp, s)
+
 	// Resolve admin credentials and JWT secret from config/env
-	adminUser := s.config.AdminUser
+	adminUser := s.config.Auth.AdminUser
 	if adminUser == "" {
 		if v := os.Getenv("OTEDAMA_ADMIN_USER"); v != "" {
 			adminUser = v
@@ -25,7 +26,7 @@ func (s *Server) setupAdminRoutes() {
 			adminUser = "admin"
 		}
 	}
-	adminPassHash := s.config.AdminPassHash
+	adminPassHash := s.config.Auth.AdminPassHash
 	if adminPassHash == "" {
 		// Prefer explicitly provided bcrypt hash
 		if ph := os.Getenv("OTEDAMA_ADMIN_PASS_BCRYPT"); ph != "" {
@@ -44,25 +45,44 @@ func (s *Server) setupAdminRoutes() {
 			}
 		}
 	}
-	jwtSecret := s.config.JWTSecret
+	jwtSecret := s.config.Auth.JWTSecret
 	if jwtSecret == "" {
 		jwtSecret = os.Getenv("OTEDAMA_JWT_SECRET")
+		if jwtSecret == "" {
+			// Fallback to generic JWT_SECRET for compatibility with existing setups
+			jwtSecret = os.Getenv("JWT_SECRET")
+		}
 	}
 
-	// Create auth middleware
+	// If KeyVault is enabled, store the JWT secret securely.
+	// The middleware will fetch it from the vault.
+	if s.keyVault != nil {
+		if jwtSecret != "" {
+			if err := s.keyVault.Set("jwt_secret", []byte(jwtSecret)); err != nil {
+				s.logger.Fatal("Failed to store JWT secret in KeyVault", zap.Error(err))
+			}
+		} else {
+			// If no secret is configured, we cannot proceed with auth.
+			s.logger.Warn("JWT secret is not configured, but KeyVault is enabled. Admin auth will fail.")
+		}
+	} else if jwtSecret == "" {
+		s.logger.Warn("JWT secret is not configured and KeyVault is disabled. Admin auth will be insecure or fail.")
+	}
+
+	// Create auth middleware, passing KeyVault if available.
 	authMiddleware := middleware.NewAuthMiddleware(
 		s.logger,
-		[]byte(jwtSecret),
+		s.keyVault,
 		adminUser,
 		adminPassHash,
 	)
-	
+
 	// Admin routes
 	admin := s.router.PathPrefix("/admin").Subrouter()
 	// Apply generic protections to all admin endpoints (including login)
 	admin.Use(mux.MiddlewareFunc(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if s.limiter != nil && !s.limiter.Allow(r.RemoteAddr) {
+			if s.rateLimiter != nil && !s.rateLimiter.Allow(r) {
 				http.Error(w, "too many requests", http.StatusTooManyRequests)
 				return
 			}
@@ -81,10 +101,10 @@ func (s *Server) setupAdminRoutes() {
 			next.ServeHTTP(w, r)
 		})
 	}))
-	
+
 	// Login endpoint (public)
 	admin.HandleFunc("/login", authMiddleware.Login).Methods("POST")
-	
+
 	// Serve admin login page
 	admin.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/admin/login.html")
@@ -97,24 +117,24 @@ func (s *Server) setupAdminRoutes() {
 	adminAuthOnly.HandleFunc("/info", adminHandlers.GetMFAInfo).Methods("GET")
 	adminAuthOnly.HandleFunc("/disable", adminHandlers.DisableMFA).Methods("POST")
 	adminAuthOnly.HandleFunc("/regenerate", adminHandlers.RegenerateBackupCodes).Methods("POST")
-	
+
 	// Protected admin routes
 	adminProtected := admin.PathPrefix("").Subrouter()
 	// Require admin auth + 2FA (TOTP)
 	adminProtected.Use(mux.MiddlewareFunc(authMiddleware.RequireAdminWith2FA(s.totp)))
-	
+
 	// Register admin routes
 	adminHandlers.RegisterRoutes(adminProtected)
-	
+
 	// Serve admin dashboard
 	adminProtected.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/admin/index.html")
 	}).Methods("GET")
-	
+
 	// Static files for admin dashboard
 	admin.PathPrefix("/static/").Handler(
 		http.StripPrefix("/admin/static/", http.FileServer(http.Dir("./web/static/"))),
 	)
-	
+
 	s.logger.Info("Admin dashboard routes configured")
 }

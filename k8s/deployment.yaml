@@ -1,0 +1,310 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otedama
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otedama-config
+  namespace: otedama
+data:
+  config.yaml: |
+    mining:
+      algorithm: sha256d
+      auto_start: true
+      cpu:
+        enabled: true
+        threads: 0
+      gpu:
+        enabled: false
+        intensity: 20
+      optimization:
+        power_mode: balanced
+        auto_tuning: true
+    
+    stratum:
+      enabled: true
+      pools:
+        - url: stratum+tcp://pool.example.com:3333
+          user: YOUR_WALLET.k8s-worker
+          password: x
+          priority: 1
+    
+    p2p:
+      enable: true
+      port: 18555
+      max_peers: 100
+    
+    api:
+      enable: true
+      address: :8080
+    
+    monitoring:
+      enable: true
+      metrics_port: 9090
+      health_port: 8081
+    
+    logging:
+      level: info
+      output: stdout
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: otedama-secrets
+  namespace: otedama
+type: Opaque
+stringData:
+  jwt-secret: "your-super-secret-jwt-key-change-in-production"
+  encryption-key: "your-base64-encoded-32-byte-key"
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: otedama
+  namespace: otedama
+  labels:
+    app: otedama
+spec:
+  serviceName: otedama
+  replicas: 3
+  selector:
+    matchLabels:
+      app: otedama
+  template:
+    metadata:
+      labels:
+        app: otedama
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      containers:
+      - name: otedama
+        image: otedama:latest
+        imagePullPolicy: Always
+        
+        ports:
+        - containerPort: 8080
+          name: api
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        - containerPort: 18555
+          name: p2p
+          protocol: TCP
+        
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: jwt-secret
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: encryption-key
+        
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "2"
+          limits:
+            memory: "4Gi"
+            cpu: "4"
+        
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+      
+      volumes:
+      - name: config
+        configMap:
+          name: otedama-config
+      - name: logs
+        emptyDir: {}
+  
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-api
+  namespace: otedama
+  labels:
+    app: otedama
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: api
+  selector:
+    app: otedama
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-metrics
+  namespace: otedama
+  labels:
+    app: otedama
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: metrics
+  selector:
+    app: otedama
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-p2p
+  namespace: otedama
+  labels:
+    app: otedama
+spec:
+  type: NodePort
+  ports:
+  - port: 18555
+    targetPort: 18555
+    nodePort: 31855
+    name: p2p
+  selector:
+    app: otedama
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otedama-hpa
+  namespace: otedama
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: otedama
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otedama-pdb
+  namespace: otedama
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: otedama
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otedama-network-policy
+  namespace: otedama
+spec:
+  podSelector:
+    matchLabels:
+      app: otedama
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 8081
+    - protocol: TCP
+      port: 18555
+  egress:
+  - to:
+    - podSelector: {}
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 169.254.169.254/32
+    ports:
+    - protocol: TCP
+      port: 3333  # Stratum port
+    - protocol: TCP
+      port: 443   # HTTPS
+    - protocol: TCP
+      port: 18555 # P2P

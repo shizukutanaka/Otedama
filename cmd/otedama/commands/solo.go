@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/mining"
+	"github.com/otedama/otedama/internal/mining"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

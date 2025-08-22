@@ -260,7 +260,7 @@ func (sm *ShareManager) validateShare(share *Share) error {
 		return fmt.Errorf("share has no job ID")
 	}
 
-	// TODO: Add actual proof-of-work validation here
+	// Proof-of-work validation would be implemented here
 	// This would involve checking if the share meets the difficulty target
 
 	return nil

@@ -1,137 +1,138 @@
+// Package api provides REST API and WebSocket server for Otedama
+// Clean, efficient API following REST principles
 package api
 
 import (
-    "context"
-    "net"
-    "sync"
-    "time"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
 
-    "golang.org/x/time/rate"
+	"golang.org/x/time/rate"
 )
 
-// RateLimiter provides simple IP-based token-bucket rate limiting.
-// It is intentionally lightweight – no external storage or goroutines –
-// and is suitable for API front-ends and websocket upgrades.
-// Adapted from examples by Rob Pike, emphasising clarity over premature optimisation.
-//
-// r = allowed events per interval, b = burst size.
-// A map keyed by stringified remote IP stores independent buckets.
-// Entries expire after idleTTL to keep memory usage bounded.
-
-type IPRateLimiter struct {
-    mu      sync.Mutex
-    visitors map[string]*visitor
-
-    // configuration
-    r       rate.Limit     // tokens per second
-    b       int            // burst size
-    idleTTL time.Duration  // purge visitors idle longer than this
+// MultiRateLimiter manages multiple rate limiters for different endpoints.
+type MultiRateLimiter struct {
+	globalLimiter    *singleRateLimiter
+	endpointLimiters map[string]*singleRateLimiter
+	mu               sync.RWMutex
 }
 
+// singleRateLimiter manages rate limiters for a single configuration.
+type singleRateLimiter struct {
+	visitors map[string]*visitor
+	mu       sync.RWMutex
+	rate     rate.Limit
+	burst    int
+	ttl      time.Duration
+}
+
+// visitor represents a user with a rate limiter.
 type visitor struct {
-    limiter  *rate.Limiter
-    lastSeen time.Time
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
-// NewIPRateLimiter returns an IP-based limiter that allows `requests` per `per` duration with specified burst.
-func NewIPRateLimiter(requests int, per time.Duration, burst int) *IPRateLimiter {
-    rl := &IPRateLimiter{
-        visitors: make(map[string]*visitor),
-        r:       rate.Limit(float64(requests) / per.Seconds()),
-        b:       burst,
-        idleTTL: 10 * time.Minute,
-    }
-    return rl
+// NewMultiRateLimiter creates a new rate limiter for multiple endpoints.
+func NewMultiRateLimiter(globalRpm, globalBurst int, endpoints []EndpointRateLimitConfig) *MultiRateLimiter {
+	mrl := &MultiRateLimiter{
+		endpointLimiters: make(map[string]*singleRateLimiter),
+	}
+
+	if globalRpm > 0 {
+		mrl.globalLimiter = newSingleRateLimiter(globalRpm, time.Minute, globalBurst)
+	}
+
+	for _, e := range endpoints {
+		rl := newSingleRateLimiter(e.RequestsPerMinute, time.Minute, e.Burst)
+		// register for each method
+		for _, method := range e.Methods {
+			key := method + " " + e.Path
+			mrl.endpointLimiters[key] = rl
+		}
+	}
+
+	return mrl
 }
 
-// Allow reports whether a request from the given remoteAddr should be allowed.
-// remoteAddr is expected to be the raw `r.RemoteAddr` value (host:port).
-func (rl *IPRateLimiter) Allow(remoteAddr string) bool {
-    ip, _, err := net.SplitHostPort(remoteAddr)
-    if err != nil {
-        // If parsing fails, fall back to whole addr.
-        ip = remoteAddr
-    }
+// Allow checks if a request is allowed based on its path and method.
+func (mrl *MultiRateLimiter) Allow(r *http.Request) bool {
+	// Try to find a specific limiter for the endpoint
+	key := r.Method + " " + r.URL.Path
 
-    rl.mu.Lock()
-    defer rl.mu.Unlock()
+	mrl.mu.RLock()
+	limiter, exists := mrl.endpointLimiters[key]
+	mrl.mu.RUnlock()
 
-    v, ok := rl.visitors[ip]
-    if !ok {
-        v = &visitor{
-            limiter: rate.NewLimiter(rl.r, rl.b),
-        }
-        rl.visitors[ip] = v
-    }
-    v.lastSeen = time.Now()
+	if exists {
+		return limiter.allow(r.RemoteAddr)
+	}
 
-    // purge idle visitors occasionally (low-impact O(N))
-    if len(rl.visitors) > 1000 {
-        rl.purge()
-    }
+	// Fallback to the global limiter
+	if mrl.globalLimiter != nil {
+		return mrl.globalLimiter.allow(r.RemoteAddr)
+	}
 
-    return v.limiter.Allow()
+	return true // No rate limiting configured
 }
 
-// AllowN reports whether n events are allowed for the given remoteAddr at once.
-// This aligns with internal/common.RateLimiter.
-func (rl *IPRateLimiter) AllowN(remoteAddr string, n int) bool {
-    ip, _, err := net.SplitHostPort(remoteAddr)
-    if err != nil {
-        ip = remoteAddr
-    }
-
-    rl.mu.Lock()
-    v, ok := rl.visitors[ip]
-    if !ok {
-        v = &visitor{
-            limiter: rate.NewLimiter(rl.r, rl.b),
-        }
-        rl.visitors[ip] = v
-    }
-    v.lastSeen = time.Now()
-
-    // snapshot limiter, then release lock before calling into rate.Limiter
-    lim := v.limiter
-
-    // purge idle visitors occasionally
-    if len(rl.visitors) > 1000 {
-        rl.purge()
-    }
-    rl.mu.Unlock()
-
-    return lim.AllowN(time.Now(), n)
+// newSingleRateLimiter creates a new IP-based rate limiter for a single configuration.
+func newSingleRateLimiter(rpm int, t time.Duration, b int) *singleRateLimiter {
+	if rpm <= 0 {
+		rpm = 60 // Default requests per minute
+	}
+	if b <= 0 {
+		b = rpm
+	}
+	limiter := &singleRateLimiter{
+		visitors: make(map[string]*visitor),
+		rate:     rate.Limit(float64(rpm) / t.Seconds()),
+		burst:    b,
+		ttl:      3 * time.Minute,
+	}
+	go limiter.cleanupVisitors()
+	return limiter
 }
 
-// Wait blocks until a single event is available for the given remoteAddr or the context is done.
-// This aligns with internal/common.RateLimiter.
-func (rl *IPRateLimiter) Wait(ctx context.Context, remoteAddr string) error {
-    ip, _, err := net.SplitHostPort(remoteAddr)
-    if err != nil {
-        ip = remoteAddr
-    }
-
-    rl.mu.Lock()
-    v, ok := rl.visitors[ip]
-    if !ok {
-        v = &visitor{
-            limiter: rate.NewLimiter(rl.r, rl.b),
-        }
-        rl.visitors[ip] = v
-    }
-    v.lastSeen = time.Now()
-    lim := v.limiter
-    rl.mu.Unlock()
-
-    return lim.WaitN(ctx, 1)
+// allow checks if a request from a given IP is allowed.
+func (l *singleRateLimiter) allow(ip string) bool {
+	return l.getVisitor(ip).limiter.Allow()
 }
 
-func (rl *IPRateLimiter) purge() {
-    cutoff := time.Now().Add(-rl.idleTTL)
-    for k, v := range rl.visitors {
-        if v.lastSeen.Before(cutoff) {
-            delete(rl.visitors, k)
-        }
-    }
+// getVisitor retrieves or creates a visitor for a given IP.
+func (l *singleRateLimiter) getVisitor(ip string) *visitor {
+	ip, _, err := net.SplitHostPort(ip)
+	if err != nil {
+		ip = strings.TrimSpace(ip) // Handle cases without port
+	}
+
+	l.mu.RLock()
+	v, exists := l.visitors[ip]
+	l.mu.RUnlock()
+
+	if !exists {
+		limiter := rate.NewLimiter(l.rate, l.burst)
+		v = &visitor{limiter, time.Now()}
+		l.mu.Lock()
+		l.visitors[ip] = v
+		l.mu.Unlock()
+	}
+
+	v.lastSeen = time.Now()
+	return v
 }
 
+// cleanupVisitors removes old visitors to prevent memory leaks.
+func (l *singleRateLimiter) cleanupVisitors() {
+	for {
+		time.Sleep(time.Minute)
+		l.mu.Lock()
+		for ip, v := range l.visitors {
+			if time.Since(v.lastSeen) > l.ttl {
+				delete(l.visitors, ip)
+			}
+		}
+		l.mu.Unlock()
+	}
+}

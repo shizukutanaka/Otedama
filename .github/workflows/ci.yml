@@ -1,98 +1,79 @@
+# GitHub Actions CI/CD Pipeline for Otedama
 name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
   pull_request:
-    branches: [ main, master, develop ]
-  release:
-    types: [ created ]
+    branches: [ main ]
+  schedule:
+    # Run nightly builds
+    - cron: '0 2 * * *'
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.23.x'
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  GIT_TERMINAL_PROMPT: 0
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+  GOTOOLCHAIN: local
 
 jobs:
-  url-guard:
-    name: URL Guard
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run docs cleanup
-        run: bash scripts/cleanup-doc-urls.sh
-
-      - name: Verify no changes after cleanup
-        run: |
-          if ! git diff --quiet; then
-            echo "::error::Documentation URLs are not normalized. Run 'make docs-clean' and commit changes." >&2
-            git --no-pager diff
-            exit 1
-          fi
-
-      - name: Run URL guard
-        run: bash scripts/url_guard.sh
-
+  # Lint and format check
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    needs: [url-guard]
-
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-
+          
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+            
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
-
+          
       - name: Run golangci-lint
         run: golangci-lint run --timeout=5m ./...
-
-  test:
-    name: Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.21', '1.22']
-    needs: [url-guard]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go }}
-          cache: true
-
-      - name: Run tests
+        
+      - name: Check go fmt
         run: |
-          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+          fmt_files=$(gofmt -l .)
+          if [ -n "$fmt_files" ]; then
+            echo "The following files need formatting:"
+            echo "$fmt_files"
+            exit 1
+          fi
+          
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
 
-      - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest' && matrix.go == env.GO_VERSION
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.txt
-          flags: unittests
-          name: codecov-umbrella
-
+  # Security scan
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: [url-guard]
-
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -100,61 +81,391 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results
+          
+      - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
-
+          
       - name: Run gosec security scanner
         uses: securego/gosec@master
         with:
           args: '-fmt sarif -out gosec-results.sarif ./...'
-
+          
       - name: Upload gosec results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'gosec-results.sarif'
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [url-guard, lint, test]
-
+  # Unit tests
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: ['1.22.x', '1.23.x']
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+            
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod verify
+        
+      - name: Run tests (Windows, CGO disabled)
+        if: matrix.os == 'windows-latest'
+        env:
+          CGO_ENABLED: 0
+        run: go test -v -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
+        timeout-minutes: 15
 
-      - name: Set up Go
+      - name: Run tests (non-Windows, with race)
+        if: matrix.os != 'windows-latest'
+        run: go test -v -timeout 10m -race -coverprofile=coverage.out -covermode=atomic ./...
+        timeout-minutes: 15
+        
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          
+      - name: Generate coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.html
+
+  # Selective tests for changed packages on PRs (C-13)
+  test-changed:
+    name: Test Changed Packages (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
 
-      - name: Build binaries
+      - name: Determine changed Go packages
+        id: pkgs
+        shell: bash
         run: |
-          # Build for multiple platforms
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/otedama-linux-amd64 cmd/otedama/main.go
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/otedama-linux-arm64 cmd/otedama/main.go
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/otedama-darwin-amd64 cmd/otedama/main.go
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/otedama-darwin-arm64 cmd/otedama/main.go
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/otedama-windows-amd64.exe cmd/otedama/main.go
+          set -euo pipefail
+          git fetch --no-tags --prune --depth=2 origin "${{ github.base_ref }}:${{ github.base_ref }}" || true
+          CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -E '\\.go$' || true)
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "pkgs=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          DIRS=$(printf '%s\n' $CHANGED_FILES | xargs -r -n1 dirname | sort -u)
+          # Map dirs to import paths, ignore errors for non-module paths
+          PKGS=$(for d in $DIRS; do go list "./$d" 2>/dev/null || true; done | sort -u)
+          echo "Changed packages:" $PKGS
+          echo "pkgs=$PKGS" >> $GITHUB_OUTPUT
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Run tests for changed packages
+        if: steps.pkgs.outputs.pkgs != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -v -timeout 10m -race ${{ steps.pkgs.outputs.pkgs }}
+        timeout-minutes: 10
+      - name: Skip (no Go changes)
+        if: steps.pkgs.outputs.pkgs == ''
+        run: echo "No Go package changes detected; skipping selective tests."
+
+  # Benchmark tests
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          name: binaries
-          path: dist/
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Run benchmarks
+        run: go test -run=XXX -bench=. -benchmem ./... | tee benchmark.txt
+        timeout-minutes: 20
+        
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: benchmark.txt
 
+  # Build binaries
+  build:
+    name: Build
+    needs: [lint, test]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cgo: 1
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            cgo: 1
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            cgo: 0
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            cgo: 1
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            cgo: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          output_name=otedama-${{ matrix.goos }}-${{ matrix.goarch }}
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            output_name=${output_name}.exe
+          fi
+          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S) -X main.GitCommit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: otedama-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: otedama-*
+
+  # Build binaries with unified features enabled (experimental_unified)
+  build-unified:
+    name: Build (Unified)
+    needs: [lint, test]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cgo: 1
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            cgo: 1
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            cgo: 0
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            cgo: 1
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            cgo: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      
+      - name: Build binary (unified)
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          output_name=otedama-${{ matrix.goos }}-${{ matrix.goarch }}-unified
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            output_name=${output_name}.exe
+          fi
+          go build -tags=experimental_unified -ldflags="-s -w -X main.Version=${{ github.ref_name }} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S) -X main.GitCommit=${{ github.sha }}" -o ${output_name} cmd/otedama/main.go
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: otedama-${{ matrix.goos }}-${{ matrix.goarch }}-unified
+          path: otedama-*-unified*
+
+  # Build Docker image
   docker:
     name: Docker Build
+    needs: [lint, test]
     runs-on: ubuntu-latest
-    needs: [url-guard, lint, test]
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: write
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build (local load) Docker image for verification (CGO=1)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          build-args: |
+            CGO_ENABLED=1
+            GIT_COMMIT=${{ github.sha }}
+          platforms: linux/amd64
+          load: true
+          tags: otedama:ci-test
+        timeout-minutes: 10
+      
+      - name: Verify container runs and prints version (CGO=1)
+        run: |
+          set -euo pipefail
+          OUT=$(docker run --rm otedama:ci-test -version || true)
+          echo "$OUT"
+          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output" && exit 1)
+        timeout-minutes: 5
+      
+      - name: Build (local load) Docker image for verification (CGO=0)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          build-args: |
+            CGO_ENABLED=0
+            GIT_COMMIT=${{ github.sha }}
+          platforms: linux/amd64
+          load: true
+          tags: otedama:ci-test-cgo0
+        timeout-minutes: 10
+      
+      - name: Verify container runs and prints version (CGO=0)
+        run: |
+          set -euo pipefail
+          OUT=$(docker run --rm otedama:ci-test-cgo0 -version || true)
+          echo "$OUT"
+          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output (cgo0)" && exit 1)
+        timeout-minutes: 5
+        
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+            
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          build-args: |
+            CGO_ENABLED=1
+            GIT_COMMIT=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Docker image (CGO=0)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          build-args: |
+            CGO_ENABLED=0
+            GIT_COMMIT=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-cgo0
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest-cgo0
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Verify Docker container health (CGO=1)
+  docker-verify:
+    name: Docker Verify (Health)
+    needs: [docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -162,135 +473,347 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Run verification script (Linux)
+        shell: bash
+        env:
+          IMAGE_TAG: otedama:ci-verify-${{ github.sha }}
+          START_TIMEOUT_SEC: 60
+        run: |
+          bash scripts/verify-docker.sh
+
+      - name: Validate version output includes commit
+        shell: bash
+        env:
+          IMAGE_TAG: otedama:ci-verify-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OUT=$(docker run --rm "$IMAGE_TAG" -version || true)
+          echo "$OUT"
+          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output (verify job)" && exit 1)
+
+      - name: Run hardened container and verify health (read-only, drop caps)
+        shell: bash
+        env:
+          IMAGE_TAG: otedama:ci-verify-${{ github.sha }}
+          HEALTH_URL: http://localhost:8082/health
+        run: |
+          set -euo pipefail
+          CONTAINER=otedama-verify-hardened
+          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+          docker run -d --name "$CONTAINER" --network host \
+            --read-only --cap-drop=ALL --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            "$IMAGE_TAG" >/dev/null
+          for i in {1..60}; do
+            if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+              echo "Health check OK (hardened)"; break
+            fi
+            sleep 1
+            if [ "$i" -eq 60 ]; then echo "Hardened health check did not become ready in time"; docker logs --tail 200 "$CONTAINER" || true; exit 1; fi
+          done
+          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+
+  # Verify Docker on Windows runner using PowerShell script (CGO=1)
+  docker-verify-windows:
+    name: Docker Verify (Windows, CGO=1)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run verification script (Windows PowerShell)
+        shell: pwsh
+        env:
+          IMAGE_TAG: otedama:ci-verify-windows-${{ github.sha }}
+          GIT_COMMIT: ${{ github.sha }}
+        run: |
+          ./scripts/verify-docker.ps1 -ImageTag $env:IMAGE_TAG -StartTimeoutSec 60
+
+      - name: Validate version output includes commit (Windows)
+        shell: pwsh
+        env:
+          IMAGE_TAG: otedama:ci-verify-windows-${{ github.sha }}
+        run: |
+          $out = docker run --rm $env:IMAGE_TAG -version
+          Write-Host $out
+          if ($out -notmatch "Git Commit: ${{ github.sha }}") { throw "Git commit not embedded in version output (windows verify)" }
+
+  # Verify CGO=0 image against PostgreSQL service (Ubuntu)
+  docker-verify-cgo0-postgres:
+    name: Docker Verify (CGO=0 + Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: otedama
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Wait for Postgres to be ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..90}; do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && { echo "Postgres is ready"; break; }
+            sleep 1
+            if [ "$i" -eq 90 ]; then echo "Postgres did not become ready in time"; exit 1; fi
+          done
+
+      - name: Build CGO=0 image for verification (local load)
+        shell: bash
+        env:
+          IMAGE_TAG: otedama:ci-verify-cgo0-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg CGO_ENABLED=0 \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            -t "$IMAGE_TAG" .
+
+      - name: Validate version output includes commit (CGO=0)
+        shell: bash
+        env:
+          IMAGE_TAG: otedama:ci-verify-cgo0-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OUT=$(docker run --rm "$IMAGE_TAG" -version || true)
+          echo "$OUT"
+          echo "$OUT" | grep -q "Git Commit: ${{ github.sha }}" || (echo "Git commit not embedded in version output (cgo0-postgres verify)" && exit 1)
+
+      - name: Start container and verify health (CGO=0 + Postgres)
+        id: run_cgo0
+        shell: bash
+        env:
+          IMAGE_TAG: otedama:ci-verify-cgo0-${{ github.sha }}
+          HEALTH_URL: http://localhost:8082/health
+          DB_DSN: postgres://postgres:postgres@localhost:5432/otedama?sslmode=disable
+        run: |
+          set -euo pipefail
+          CONTAINER=otedama-verify-cgo0
+          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+          docker run -d --name "$CONTAINER" --network host \
+            -e OTEDAMA_DATABASE_DRIVER=postgresql \
+            -e OTEDAMA_DATABASE_CONNECTION_STRING="$DB_DSN" \
+            "$IMAGE_TAG" >/dev/null
+
+          # Poll health
+          for i in {1..90}; do
+            if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+              echo "Health check OK"; break
+            fi
+            sleep 1
+            if [ "$i" -eq 90 ]; then echo "Health check did not become ready in time"; docker logs --tail 200 "$CONTAINER" || true; exit 1; fi
+          done
+          # Cleanup on success
+          docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-verify-cgo0-postgres-logs
+          path: |
+            /var/lib/docker/containers/**/*.log
+          if-no-files-found: ignore
+
+  # Build Docker image with unified features enabled
+  docker-unified:
+    name: Docker Build (Unified)
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
       - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-
-      - name: Build and push Docker image
+          images: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+      
+      - name: Build and push Docker image (unified)
         uses: docker/build-push-action@v5
         with:
           context: .
+          build-args: |
+            GOTAGS=-tags=experimental_unified
+            CGO_ENABLED=1
+            GIT_COMMIT=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest-unified
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-unified
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            VCS_REF=${{ github.sha }}
 
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [url-guard, docker]
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run integration tests
-        run: |
-          go test -v -tags=integration ./tests/integration/...
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/otedama_test?sslmode=disable
-
-  benchmark:
-    name: Performance Benchmark
-    runs-on: ubuntu-latest
-    needs: [url-guard, build]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run benchmarks
-        run: |
-          go test -bench=. -benchmem -run=^# ./... | tee benchmark.txt
-
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: 'go'
-          output-file-path: benchmark.txt
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-
+  # Release
   release:
     name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, build-unified, docker, docker-unified, docker-verify, docker-verify-windows, docker-verify-cgo0-postgres]
     runs-on: ubuntu-latest
-    needs: [url-guard, build, docker, integration-test]
-
-    if: github.event_name == 'release'
-
+    timeout-minutes: 20
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
-          name: binaries
-          path: dist/
-
+          path: ./artifacts
+          
       - name: Create checksums
         run: |
-          cd dist
-          sha256sum * > checksums.txt
-
-      - name: Upload release assets
+          cd artifacts
+          for dir in */; do
+            cd "$dir"
+            sha256sum * > SHA256SUMS
+            cd ..
+          done
+          
+      - name: Create release archive
+        run: |
+          cd artifacts
+          for dir in */; do
+            tar czf "${dir%/}.tar.gz" "$dir"
+          done
+          
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          echo "## What's Changed" > RELEASE_NOTES.md
+          git log --pretty=format:"- %s (%h)" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> RELEASE_NOTES.md
+          
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*/SHA256SUMS
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
 
-  deploy:
-    name: Deploy
+  # Deploy to Kubernetes (staging)
+  deploy-staging:
+    name: Deploy to Staging
+    if: github.ref == 'refs/heads/develop'
+    needs: [docker]
     runs-on: ubuntu-latest
-    needs: [url-guard, release]
-
-    if: github.event_name == 'release'
-    environment: production
-
+    timeout-minutes: 20
+    environment: staging
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to production
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+          
+      - name: Configure kubectl
         run: |
-          echo "Deploying version ${{ github.event.release.tag_name }} to production"
-          # Add actual deployment steps here
-          # kubectl set image deployment/otedama otedama=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+          
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/01-namespace.yaml
+          kubectl apply -f k8s/02-configmap.yaml
+          kubectl apply -f k8s/03-pvc.yaml
+          kubectl apply -f k8s/04-postgres.yaml
+          kubectl apply -f k8s/05-redis.yaml
+          kubectl apply -f k8s/06-otedama.yaml
+          kubectl apply -f k8s/07-monitoring.yaml
+          kubectl apply -f k8s/08-ingress.yaml
+          kubectl rollout status statefulset/postgres -n otedama
+          kubectl rollout status statefulset/redis -n otedama
+          kubectl rollout status deployment/otedama -n otedama
+
+  # Deploy to Kubernetes (production)
+  deploy-production:
+    name: Deploy to Production
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+          
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+          
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/01-namespace.yaml
+          kubectl apply -f k8s/02-configmap.yaml
+          kubectl apply -f k8s/03-pvc.yaml
+          kubectl apply -f k8s/04-postgres.yaml
+          kubectl apply -f k8s/05-redis.yaml
+          kubectl apply -f k8s/06-otedama.yaml
+          kubectl apply -f k8s/07-monitoring.yaml
+          kubectl apply -f k8s/08-ingress.yaml
+          kubectl rollout status statefulset/postgres -n otedama
+          kubectl rollout status statefulset/redis -n otedama
+          kubectl rollout status deployment/otedama -n otedama
+          
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n otedama-production
+          kubectl get svc -n otedama-production

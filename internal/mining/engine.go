@@ -1,1116 +1,1172 @@
+// Package mining provides the unified mining engine for Otedama
+// Design philosophy: Simple, efficient, maintainable (Carmack/Pike/Martin)
 package mining
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
-	"github.com/klauspost/cpuid/v2"
-	"go.uber.org/zap"
+	"golang.org/x/crypto/scrypt"
+	"lukechampine.com/blake3"
 )
 
-// P2PEngine defines the core P2P mining engine interface following interface segregation principle.
-// The interface is divided into logical groups for better organization and understanding.
-type P2PEngine interface {
-	// Lifecycle management
-	Start() error
-	Stop() error
-	
-	// Statistics and monitoring
-	GetStats() *Stats
-	GetStatus() *EngineStatus
-	GetStartTime() time.Time
-	GetStatsHistory(duration time.Duration) []StatsSnapshot
-	ResetStats()
-	
-	// Algorithm management
-	GetAlgorithm() AlgorithmType
-	SetAlgorithm(AlgorithmType) error
-	SwitchAlgorithm(AlgorithmType) error
-	GetSupportedAlgorithms() []string
-	ValidateAlgorithm(algorithm string) bool
-	
-	// Currency support
-	SetActiveCurrency(symbol string) error
-	GetActiveCurrency() string
-	
-	// Hardware configuration
-	GetCPUThreads() int
-	SetCPUThreads(threads int) error
-	SetGPUSettings(coreClock, memoryClock, powerLimit int) error
-	GetHardwareInfo() *HardwareInfo
-	HasGPU() bool
-	HasCPU() bool
-	HasASIC() bool
-	
-	// Pool management
-	SetPool(url, wallet string) error
-	SubmitShare(*Share) error
-	GetCurrentJob() *Job
-	
-	// Configuration and optimization
-	GetConfig() map[string]interface{}
-	SetConfig(key string, value interface{}) error
-	GetAutoTuner() *AutoTuner
-	GetProfitSwitcher() *ProfitSwitcher
-}
+// Constants for mining operations
+const (
+	MaxWorkers        = 256
+	DefaultBatchSize  = 1000000
+	ShareQueueSize    = 10000
+	StatsInterval     = 5 * time.Second
+	OptimizeInterval  = 30 * time.Second
+	MaxTemperature    = 95.0
+	MinHashrate       = 1000000 // 1 MH/s
+)
 
-// Engine is an alias maintained for backward compatibility across packages.
-// It maps to the primary mining engine interface.
-type Engine = P2PEngine
-
-// System represents a complete mining system following clean architecture principles.
-// It provides high-level operations for the entire mining system.
-type System interface {
-	// Lifecycle management
-	Start() error
-	Stop() error
+// Engine represents the unified mining engine
+type Engine struct {
+	// Core components
+	config    *Config
+	state     atomic.Int32 // EngineState
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 	
-	// System statistics
-	GetStats() *Stats
-	
-	// Proof verification
-	IsVerified(proofID string) bool
-	VerifyProof(proofID string, data interface{}) error
-}
-
-// UnifiedP2PEngine implements a high-performance P2P mining engine with focus on:
-// - Cache alignment for hot path optimization
-// - Lock-free operations where possible
-// - Clear separation of concerns
-type UnifiedP2PEngine struct {
-	logger *zap.Logger
-	config *Config
-	
-	// Performance-critical fields (cache-aligned, most frequently accessed)
-	totalHashRate    atomic.Uint64
-	sharesSubmitted  atomic.Uint64
-	sharesAccepted   atomic.Uint64
-	running          atomic.Bool
-	currentHashRate  atomic.Uint64
-	
-	// Hardware management - lock-free where possible
-	workers      []Worker
-	workerCount  int32
-	workersMu    sync.RWMutex
-	
-	// Additional components
-	autoTuner      *AutoTuner
-	profitSwitcher *ProfitSwitcher
-	algManager     *AlgorithmManager
-	profitCalc     *ProfitCalculator
-	memoryOptimizer *MemoryOptimizer
-	cpuOptimizer    *CPUOptimizer
-	jobDispatcher   *FastJobDispatcher
-	
-	// Multi-currency support
-	activeCurrency  string
-	algorithmEngines map[string]AlgorithmEngine
-	currencyMu      sync.RWMutex
-	
-	// Pool info
-	poolURL    string
-	walletAddr string
-	
-	// Stats history
-	statsHistory []StatsSnapshot
-	historyMu    sync.RWMutex
-	
-	// Hardware managers
-	cpuManager   *CPUManager
-	gpuManager   *GPUManager
-	asicManager  *ASICManager
-	
-	// Legacy miners (for backward compatibility)
-	cpuMiners    []*CPUMiner
-	gpuMiners    []*GPUMiner
-	asicMiners   []*ASICMiner
-	
-	// Job management - optimized for throughput
-	jobQueue     *EfficientJobQueue
-	jobChan      chan *Job
-	shareChan    chan *Share
-	shareValidator *OptimizedShareValidator
-	
-	// Memory management - pre-allocated pools
-	jobPool      sync.Pool
-	sharePool    sync.Pool
-	bufferPool   sync.Pool
-	memoryPool   *MiningBufferPool
-	workerPool   *WorkerPool
-	
-	// Algorithm management
-	algorithm    atomic.Value // stores AlgorithmType
-	algSwitch    *SimpleAlgorithmSwitcher
-	algHandler   *AlgorithmHandler
-	
-	// Performance monitoring
-	monitor      *PerformanceMonitor
-	
-	// Lifecycle
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
+	// Mining components
+	algorithm Algorithm
+	workers   []*Worker
+	jobQueue  chan *Job
+	shares    chan *Share
 	
 	// Statistics
-	stats        *Stats
-	startTime    time.Time
+	stats     *Statistics
+	metrics   *Metrics
+	
+	// Hardware management
+	hardware  *HardwareManager
+	
+	// Optimization
+	optimizer *Optimizer
+	
+	// Memory pools for zero-allocation
+	bufferPool sync.Pool
+	noncePool  sync.Pool
 }
 
-// Config contains engine configuration - validation included
+// Config holds engine configuration
 type Config struct {
-	// Hardware settings
-	CPUThreads   int      `validate:"min=0,max=256"`
-	GPUDevices   []int    `validate:"max=16"`
-	ASICDevices  []string `validate:"max=64"`
+	// Algorithm selection
+	Algorithm     string
+	AutoSwitch    bool
 	
-	// Performance
-	Algorithm    string   `validate:"required,oneof=sha256d scrypt ethash randomx kawpow"`
-	Intensity    int      `validate:"min=1,max=100"`
+	// Hardware configuration
+	CPU           CPUConfig
+	GPU           GPUConfig
+	ASIC          ASICConfig
 	
-	// Limits - John Carmack's explicit resource management
-	MaxMemoryMB        int      `validate:"min=512,max=32768"`
-	JobQueueSize       int      `validate:"min=10,max=10000"`
-	MinShareDifficulty uint64   `validate:"min=1"`
+	// Pool configuration
+	Pools         []PoolConfig
 	
-	// Features
-	AutoOptimize bool
-	HugePages    bool
-	NUMA         bool
+	// P2P configuration
+	P2PEnabled    bool
+	P2PPort       int
+	
+	// Optimization
+	AutoOptimize  bool
+	PowerMode     PowerMode
+	TargetTemp    float64
+	MaxPower      float64
+	
+	// Security
+	SecurityLevel SecurityLevel
 }
 
-// Worker represents a mining worker - single responsibility
-type Worker interface {
-	Start(context.Context, <-chan *Job, chan<- *Share) error
-	Stop() error
-	GetHashRate() uint64
-	GetType() WorkerType
-	ID() string
+// CPUConfig for CPU mining
+type CPUConfig struct {
+	Enabled   bool
+	Threads   int
+	Affinity  []int
+	Priority  int // -20 to 19 (Unix nice values)
+	HugePages bool
 }
 
-// WorkerType defines worker hardware type
-type WorkerType int8
+// GPUConfig for GPU mining
+type GPUConfig struct {
+	Enabled    bool
+	Devices    []int
+	Intensity  int // 1-30
+	TempLimit  float64
+	PowerLimit int
+	MemClock   int
+	CoreClock  int
+}
+
+// ASICConfig for ASIC mining
+type ASICConfig struct {
+	Enabled   bool
+	Devices   []string
+	Frequency int
+	Voltage   float64
+}
+
+// PoolConfig represents mining pool configuration
+type PoolConfig struct {
+	URL      string
+	User     string
+	Password string
+	Priority int
+}
+
+// EngineState represents engine states
+type EngineState int32
 
 const (
-	WorkerCPU WorkerType = iota
-	WorkerGPU
-	WorkerASIC
+	StateIdle EngineState = iota
+	StateInitializing
+	StateRunning
+	StateStopping
+	StateStopped
+	StateError
 )
 
-// NewEngine creates optimized mining engine - Rob Pike's clear construction
-func NewEngine(logger *zap.Logger, config *Config) (P2PEngine, error) {
+// PowerMode represents power consumption modes
+type PowerMode int
+
+const (
+	PowerEfficiency PowerMode = iota
+	PowerBalanced
+	PowerPerformance
+	PowerTurbo
+	PowerInsane // Maximum performance, no limits
+)
+
+// SecurityLevel represents security configuration
+type SecurityLevel int
+
+const (
+	SecurityStandard SecurityLevel = iota
+	SecurityEnhanced
+	SecurityMaximum
+	SecurityParanoid // Military-grade security
+)
+
+// Job represents a mining job
+type Job struct {
+	ID         string
+	Algorithm  string
+	Target     []byte
+	Header     []byte
+	Nonce      uint64
+	ExtraNonce []byte
+	Height     uint64
+	Difficulty float64
+	CleanJobs  bool
+	Timestamp  time.Time
+}
+
+// Share represents a mining share
+type Share struct {
+	JobID      string
+	WorkerID   string
+	Nonce      uint64
+	Hash       []byte
+	Difficulty float64
+	Valid      bool
+	Timestamp  time.Time
+}
+
+// Worker represents a mining worker
+type Worker struct {
+	ID        string
+	Type      DeviceType
+	Device    interface{}
+	Active    atomic.Bool
+	Hashrate  atomic.Uint64
+	Shares    atomic.Uint64
+	Errors    atomic.Uint64
+	Temp      atomic.Uint32 // Temperature * 100
+	Power     atomic.Uint32 // Watts * 100
+	
+	// Worker-specific context
+	ctx       context.Context
+	cancel    context.CancelFunc
+}
+
+// DeviceType represents hardware device types
+type DeviceType int
+
+const (
+	DeviceCPU DeviceType = iota
+	DeviceGPU
+	DeviceASIC
+	DeviceFPGA
+)
+
+// Statistics tracks mining statistics
+type Statistics struct {
+	StartTime      time.Time
+	Hashrate       atomic.Uint64
+	SharesAccepted atomic.Uint64
+	SharesRejected atomic.Uint64
+	SharesStale    atomic.Uint64
+	BlocksFound    atomic.Uint64
+	LastShare      atomic.Int64
+	Uptime         atomic.Int64
+	Revenue        atomic.Uint64 // Satoshis
+}
+
+// Metrics tracks performance metrics
+type Metrics struct {
+	Temperature    atomic.Uint32 // Celsius * 100
+	PowerUsage     atomic.Uint32 // Watts * 100
+	Efficiency     atomic.Uint64 // Hashes per Watt
+	CPUUsage       atomic.Uint32 // Percentage * 100
+	MemoryUsage    atomic.Uint64 // Bytes
+	NetworkLatency atomic.Uint32 // Milliseconds
+}
+
+// Algorithm interface for mining algorithms
+type Algorithm interface {
+	Name() string
+	Hash(data []byte) []byte
+	Verify(hash, target []byte) bool
+	GetDifficulty(hash []byte) float64
+	OptimalBatchSize() int
+}
+
+// HardwareManager manages hardware resources
+type HardwareManager struct {
+	mu        sync.RWMutex
+	cpus      []CPUDevice
+	gpus      []GPUDevice
+	asics     []ASICDevice
+	intensity atomic.Int32
+	
+	// SIMD support detection
+	hasAVX2   bool
+	hasAVX512 bool
+	hasNEON   bool
+}
+
+// Optimizer handles automatic optimization
+type Optimizer struct {
+	engine        *Engine
+	mu            sync.RWMutex
+	powerMode     PowerMode
+	lastOptimize  time.Time
+	targetHashrate uint64
+}
+
+// NewEngine creates a new mining engine
+func NewEngine(config *Config) (*Engine, error) {
 	if config == nil {
-		config = DefaultConfig()
+		return nil, errors.New("config required")
 	}
 	
-	if err := validateConfig(config); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+	// Set defaults
+	if config.CPU.Threads == 0 {
+		config.CPU.Threads = runtime.NumCPU()
+	}
+	if config.TargetTemp == 0 {
+		config.TargetTemp = 85.0
+	}
+	if config.MaxPower == 0 {
+		config.MaxPower = 1000.0
 	}
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	engine := &UnifiedP2PEngine{
-		logger:    logger,
-		config:    config,
-		ctx:       ctx,
-		cancel:    cancel,
-		startTime: time.Now(),
-		stats:     &OptimizedStats{}, // Use optimized stats from engine_optimizations.go
-		
-		// Initialize job queue and channels
-		jobQueue:  NewEfficientJobQueue(logger),
-		jobChan:   make(chan *Job, config.JobQueueSize),
-		shareChan: make(chan *Share, config.JobQueueSize),
-		
-		// Object pools - reduce GC pressure
-		jobPool: sync.Pool{New: func() interface{} { return &Job{} }},
-		sharePool: sync.Pool{New: func() interface{} { return &Share{} }},
-		bufferPool: sync.Pool{New: func() interface{} { return make([]byte, 256) }},
+	e := &Engine{
+		config:   config,
+		ctx:      ctx,
+		cancel:   cancel,
+		jobQueue: make(chan *Job, 100),
+		shares:   make(chan *Share, ShareQueueSize),
+		stats:    &Statistics{StartTime: time.Now()},
+		metrics:  &Metrics{},
+		hardware: &HardwareManager{},
+		bufferPool: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, 256)
+			},
+		},
+		noncePool: sync.Pool{
+			New: func() interface{} {
+				return new(uint64)
+			},
+		},
 	}
 	
 	// Initialize algorithm
-	engine.algorithm.Store(AlgorithmType(config.Algorithm))
-	engine.algSwitch = NewSimpleAlgorithmSwitcher(logger)
-	
-	// Initialize share validator
-	engine.shareValidator = NewOptimizedShareValidator(logger, runtime.NumCPU())
-	
-	// Initialize memory pool
-	engine.memoryPool = NewMiningBufferPool()
-	
-	// Initialize worker pool
-	engine.workerPool = NewWorkerPool(logger, engine.jobQueue, runtime.NumCPU())
-	
-	// Initialize performance monitor
-	engine.monitor = &PerformanceMonitor{
-		engine:   engine,
-		logger:   logger,
-		interval: 1 * time.Second,
-	}
-	
-	// Initialize algorithm handler
-	algConfig := &AlgorithmConfig{
-		AutoSwitch:       config.AutoOptimize,
-		BenchmarkOnStart: true,
-		PreferCPU:        config.CPUThreads > 0,
-		PreferGPU:        len(config.GPUDevices) > 0,
-		PreferASIC:       len(config.ASICDevices) > 0,
-	}
-	
-	algHandler, err := NewAlgorithmHandler(logger, algConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize algorithm handler: %w", err)
-	}
-	engine.algHandler = algHandler
-	
-	// Initialize algorithm manager for multi-algorithm support
-	engine.algManager = NewAlgorithmManager()
-	
-	// Initialize profit calculator with default power cost
-	engine.profitCalc = NewProfitCalculator(0.10) // $0.10 per kWh default
-	
-	// Initialize optimization components from engine_optimizations.go
-	engine.memoryOptimizer = NewMemoryOptimizer(config.MaxMemoryMB)
-	engine.cpuOptimizer = NewCPUOptimizer()
-	
-	// Initialize hardware managers
-	engine.cpuManager = NewCPUManager()
-	engine.gpuManager = NewGPUManager()
-	engine.asicManager = NewASICManager()
-	
-	// Initialize fast job dispatcher based on worker counts
-	cpuWorkers := config.CPUThreads
-	gpuWorkers := len(config.GPUDevices)
-	asicWorkers := len(config.ASICDevices)
-	engine.jobDispatcher = NewFastJobDispatcher(cpuWorkers, gpuWorkers, asicWorkers)
-	
-	// Detect and initialize workers
-	if err := engine.initializeWorkers(); err != nil {
+	if err := e.initAlgorithm(config.Algorithm); err != nil {
 		cancel()
-		return nil, fmt.Errorf("worker initialization failed: %w", err)
+		return nil, err
 	}
 	
-	// Initialize hardware managers
-	if err := engine.initializeHardwareManagers(); err != nil {
+	// Initialize hardware
+	if err := e.initHardware(); err != nil {
 		cancel()
-		return nil, fmt.Errorf("hardware manager initialization failed: %w", err)
+		return nil, err
 	}
 	
-	return engine, nil
+	// Initialize optimizer
+	if config.AutoOptimize {
+		e.optimizer = &Optimizer{
+			engine:    e,
+			powerMode: config.PowerMode,
+		}
+	}
+	
+	e.state.Store(int32(StateIdle))
+	return e, nil
 }
 
-// Start starts the mining engine - optimized startup sequence
-func (e *UnifiedP2PEngine) Start() error {
-	if !e.running.CompareAndSwap(false, true) {
-		return errors.New("engine already running")
+// Initialize prepares the engine for mining
+func (e *Engine) Initialize() error {
+	if !e.state.CompareAndSwap(int32(StateIdle), int32(StateInitializing)) {
+		return errors.New("invalid state for initialization")
 	}
 	
-	e.logger.Info("Starting mining engine",
-		zap.String("algorithm", e.config.Algorithm),
-		zap.Int32("workers", atomic.LoadInt32(&e.workerCount)),
-		zap.Int("job_queue_size", e.config.JobQueueSize),
-	)
+	// Detect SIMD capabilities
+	e.hardware.detectSIMD()
 	
-	// Start job processor - high priority
-	e.wg.Add(1)
-	go e.jobProcessor()
+	// Create workers
+	if err := e.createWorkers(); err != nil {
+		e.state.Store(int32(StateError))
+		return fmt.Errorf("failed to create workers: %w", err)
+	}
 	
-	// Start share processor - high priority
-	e.wg.Add(1)
-	go e.shareProcessor()
+	// Apply security settings
+	if err := e.applySecurity(); err != nil {
+		return fmt.Errorf("failed to apply security: %w", err)
+	}
+	
+	// Setup memory optimization
+	if e.config.CPU.HugePages {
+		e.setupHugePages()
+	}
+	
+	e.state.Store(int32(StateIdle))
+	return nil
+}
+
+// Start begins mining operations
+func (e *Engine) Start() error {
+	if !e.state.CompareAndSwap(int32(StateIdle), int32(StateRunning)) {
+		return errors.New("engine not in idle state")
+	}
 	
 	// Start workers
-	if err := e.startWorkers(); err != nil {
-		e.running.Store(false)
-		return fmt.Errorf("failed to start workers: %w", err)
+	for _, worker := range e.workers {
+		if worker.Active.Load() {
+			e.wg.Add(1)
+			go e.runWorker(worker)
+		}
 	}
 	
-	// Start statistics updater - lower priority
+	// Start share processor
 	e.wg.Add(1)
-	go e.statsUpdater()
+	go e.processShares()
 	
-	// Start optimizer if enabled
-	if e.config.AutoOptimize {
+	// Start statistics reporter
+	e.wg.Add(1)
+	go e.reportStats()
+	
+	// Start optimizer
+	if e.optimizer != nil {
 		e.wg.Add(1)
-		go e.optimizer()
+		go e.runOptimizer()
 	}
 	
-	// Start algorithm manager for profit-based switching
-	if e.algManager != nil {
-		e.algManager.Start()
-		e.logger.Info("Algorithm manager started for profit-based switching")
-	}
+	// Update start time
+	e.stats.StartTime = time.Now()
 	
-	e.logger.Info("Mining engine started successfully")
 	return nil
 }
 
-// Stop stops the mining engine - graceful shutdown
-func (e *UnifiedP2PEngine) Stop() error {
-	if !e.running.CompareAndSwap(true, false) {
+// Stop halts mining operations
+func (e *Engine) Stop() error {
+	if !e.state.CompareAndSwap(int32(StateRunning), int32(StateStopping)) {
 		return errors.New("engine not running")
 	}
 	
-	e.logger.Info("Stopping mining engine")
-	
-	// Cancel context - signals all goroutines
+	// Cancel context
 	e.cancel()
 	
-	// Close channels to signal shutdown
-	close(e.jobChan)
-	
-	// Stop workers
-	e.stopWorkers()
-	
-	// Wait for all goroutines
-	e.wg.Wait()
-	
-	// Close remaining channels
-	close(e.shareChan)
-	
-	// Stop algorithm manager
-	if e.algManager != nil {
-		e.algManager.Stop()
-	}
-	
-	e.logger.Info("Mining engine stopped")
-	return nil
-}
-
-// GetStats returns current statistics - lock-free implementation
-func (e *UnifiedP2PEngine) GetStats() *Stats {
-	stats := &Stats{
-		TotalHashRate:   e.totalHashRate.Load(),
-		SharesSubmitted: e.sharesSubmitted.Load(),
-		SharesAccepted:  e.sharesAccepted.Load(),
-		SharesRejected:  e.stats.SharesRejected, // Computed from submitted - accepted
-		ActiveWorkers:   atomic.LoadInt32(&e.workerCount),
-		Uptime:          time.Since(e.startTime),
-	}
-	
-	// Calculate rejection rate
-	if stats.SharesSubmitted > 0 {
-		stats.SharesRejected = stats.SharesSubmitted - stats.SharesAccepted
-	}
-	
-	// Update memory usage
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	stats.MemoryUsageMB = m.Alloc / 1024 / 1024
-	
-	// Aggregate hash rates by worker type
-	e.workersMu.RLock()
+	// Stop all workers
 	for _, worker := range e.workers {
-		rate := worker.GetHashRate()
-		switch worker.GetType() {
-		case WorkerCPU:
-			stats.CPUHashRate += rate
-		case WorkerGPU:
-			stats.GPUHashRate += rate
-		case WorkerASIC:
-			stats.ASICHashRate += rate
-		}
+		worker.cancel()
 	}
-	e.workersMu.RUnlock()
 	
-	return stats
+	// Wait for goroutines
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		e.state.Store(int32(StateStopped))
+		return nil
+	case <-time.After(10 * time.Second):
+		e.state.Store(int32(StateError))
+		return errors.New("shutdown timeout")
+	}
 }
 
-// SubmitShare processes a share submission - optimized hot path  
-func (e *UnifiedP2PEngine) SubmitShare(share *Share) error {
-	if !e.running.Load() {
+// SubmitJob submits a new mining job
+func (e *Engine) SubmitJob(job *Job) error {
+	if e.state.Load() != int32(StateRunning) {
 		return errors.New("engine not running")
 	}
 	
-	// Fast path validation - John Carmack's optimization principle
-	if share == nil || share.JobID == "" {
-		return errors.New("invalid share")
+	// Validate job
+	if job == nil || len(job.Target) == 0 || len(job.Header) == 0 {
+		return errors.New("invalid job")
 	}
 	
-	// Submit to channel for processing
+	// Broadcast to workers
 	select {
-	case e.shareChan <- share:
-		e.sharesSubmitted.Add(1)
+	case e.jobQueue <- job:
 		return nil
-	case <-e.ctx.Done():
-		return context.Canceled
+	case <-time.After(100 * time.Millisecond):
+		return errors.New("job queue full")
+	}
+}
+
+// GetStatistics returns current mining statistics
+func (e *Engine) GetStatistics() map[string]interface{} {
+	uptime := time.Since(e.stats.StartTime)
+	hashrate := e.stats.Hashrate.Load()
+	
+	// Calculate efficiency
+	power := float64(e.metrics.PowerUsage.Load()) / 100.0
+	efficiency := float64(0)
+	if power > 0 {
+		efficiency = float64(hashrate) / power
+	}
+	
+	return map[string]interface{}{
+		"state":           e.getStateString(),
+		"algorithm":       e.config.Algorithm,
+		"uptime":          uptime.Seconds(),
+		"hashrate":        hashrate,
+		"hashrate_h":      formatHashrate(hashrate),
+		"shares_accepted": e.stats.SharesAccepted.Load(),
+		"shares_rejected": e.stats.SharesRejected.Load(),
+		"shares_stale":    e.stats.SharesStale.Load(),
+		"blocks_found":    e.stats.BlocksFound.Load(),
+		"temperature":     float64(e.metrics.Temperature.Load()) / 100.0,
+		"power_usage":     power,
+		"efficiency":      efficiency,
+		"efficiency_h":    formatEfficiency(efficiency),
+		"workers_active":  e.countActiveWorkers(),
+		"workers_total":   len(e.workers),
+		"revenue_satoshi": e.stats.Revenue.Load(),
+		"cpu_usage":       float64(e.metrics.CPUUsage.Load()) / 100.0,
+		"memory_usage":    e.metrics.MemoryUsage.Load(),
+		"network_latency": e.metrics.NetworkLatency.Load(),
+	}
+}
+
+// Benchmark runs performance benchmark
+func (e *Engine) Benchmark(duration time.Duration) (map[string]float64, error) {
+	if e.state.Load() != int32(StateIdle) {
+		return nil, errors.New("engine must be idle for benchmark")
+	}
+	
+	results := make(map[string]float64)
+	algorithms := []string{"sha256d", "scrypt", "ethash", "randomx", "blake3"}
+	
+	for _, algo := range algorithms {
+		// Initialize algorithm
+		if err := e.initAlgorithm(algo); err != nil {
+			continue
+		}
+		
+		// Run benchmark
+		hashes := e.benchmarkAlgorithm(duration)
+		hashrate := float64(hashes) / duration.Seconds()
+		results[algo] = hashrate
+	}
+	
+	// Restore original algorithm
+	e.initAlgorithm(e.config.Algorithm)
+	
+	return results, nil
+}
+
+// Private methods
+
+func (e *Engine) initAlgorithm(name string) error {
+	switch name {
+	case "sha256d":
+		e.algorithm = &SHA256d{}
+	case "scrypt":
+		e.algorithm = &Scrypt{}
+	case "blake3":
+		e.algorithm = &Blake3{}
+	case "randomx":
+		e.algorithm = &RandomX{}
+	case "ethash":
+		e.algorithm = &Ethash{}
 	default:
-		return errors.New("share queue full")
+		return fmt.Errorf("unsupported algorithm: %s", name)
 	}
+	return nil
 }
 
-// SwitchAlgorithm switches mining algorithm - atomic operation
-func (e *UnifiedP2PEngine) SwitchAlgorithm(algo AlgorithmType) error {
-	current := e.algorithm.Load().(AlgorithmType)
-	if current == algo {
-		return nil // Already using this algorithm
+func (e *Engine) initHardware() error {
+	// Detect CPU features
+	e.hardware.detectCPU()
+	
+	// Detect GPU devices
+	if e.config.GPU.Enabled {
+		e.hardware.detectGPU()
 	}
 	
-	e.logger.Info("Switching algorithm",
-		zap.String("from", string(current)),
-		zap.String("to", string(algo)),
-	)
-	
-	// Atomic switch
-	e.algorithm.Store(algo)
-	
-	// Notify algorithm switcher
-	return e.algSwitch.Switch(algo)
-}
-
-// GetAlgorithm returns the current algorithm
-func (e *UnifiedP2PEngine) GetAlgorithm() AlgorithmType {
-	return e.algorithm.Load().(AlgorithmType)
-}
-
-// SetAlgorithm sets the mining algorithm
-func (e *UnifiedP2PEngine) SetAlgorithm(algo AlgorithmType) error {
-	return e.SwitchAlgorithm(algo)
-}
-
-// GetStatus returns the current engine status
-func (e *UnifiedP2PEngine) GetStatus() *EngineStatus {
-	return &EngineStatus{
-		Running:   e.running.Load(),
-		Algorithm: e.GetAlgorithm(),
-		Pool:      e.poolURL,
-		Wallet:    e.walletAddr,
-		Uptime:    time.Since(e.startTime),
-	}
-}
-
-// GetStartTime returns when the engine was started
-func (e *UnifiedP2PEngine) GetStartTime() time.Time {
-	return e.startTime
-}
-
-// GetHardwareInfo returns hardware information
-func (e *UnifiedP2PEngine) GetHardwareInfo() *HardwareInfo {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	asicDevices := []ASICInfo{}
-	if e.asicManager != nil {
-		asicDevices = e.asicManager.GetDevices()
-	}
-
-	return &HardwareInfo{
-		CPUThreads:  e.config.CPUThreads,
-		GPUDevices:  []GPUInfo{}, // TODO: Implement GPU detection
-		ASICDevices: asicDevices,
-		TotalMemory: m.Sys,
-		AvailMemory: m.Sys - m.Alloc,
-	}
-}
-
-// HasASIC returns true if ASIC mining is enabled
-func (e *UnifiedP2PEngine) HasASIC() bool {
-	return len(e.config.ASICDevices) > 0 || e.asicManager != nil
-}
-
-// GetCurrentJob returns the current mining job
-func (e *UnifiedP2PEngine) GetCurrentJob() *Job {
-	return e.jobQueue.Peek()
-		Algorithm: e.algorithm.Load().(AlgorithmType),
-		Timestamp: uint32(time.Now().Unix()),
-		Bits:      0x1d00ffff,
-		CleanJobs: false,
+	// Detect ASIC devices
+	if e.config.ASIC.Enabled {
+		e.hardware.detectASIC()
 	}
 	
-	return job
+	return nil
 }
 
-// Private methods - optimized implementations
-
-func (e *UnifiedEngine) initializeWorkers() error {
-	e.workers = make([]Worker, 0, e.config.CPUThreads+len(e.config.GPUDevices)+len(e.config.ASICDevices))
+func (e *Engine) createWorkers() error {
+	workerID := 0
 	
-	// Initialize CPU workers
-	if e.config.CPUThreads > 0 {
-		for i := 0; i < e.config.CPUThreads; i++ {
-			worker := NewCPUWorker(i, e.logger)
+	// Create CPU workers
+	if e.config.CPU.Enabled {
+		threads := e.config.CPU.Threads
+		if threads > MaxWorkers {
+			threads = MaxWorkers
+		}
+		
+		for i := 0; i < threads; i++ {
+			worker := e.createWorker(fmt.Sprintf("cpu-%d", i), DeviceCPU, nil)
+			
+			// Set CPU affinity if specified
+			if len(e.config.CPU.Affinity) > i {
+				// Set affinity to specific CPU core
+				setCPUAffinity(worker, e.config.CPU.Affinity[i])
+			}
+			
 			e.workers = append(e.workers, worker)
+			workerID++
 		}
-		atomic.AddInt32(&e.workerCount, int32(e.config.CPUThreads))
 	}
 	
-	// Initialize GPU workers
-	for i, deviceID := range e.config.GPUDevices {
-		worker := NewGPUWorker(i, deviceID, e.logger)
-		e.workers = append(e.workers, worker)
-		atomic.AddInt32(&e.workerCount, 1)
-	}
-	
-	// Initialize ASIC workers
-	for i, devicePath := range e.config.ASICDevices {
-		worker := NewASICWorker(i, devicePath, e.logger)
-		e.workers = append(e.workers, worker)
-		atomic.AddInt32(&e.workerCount, 1)
-	}
-	
-	e.logger.Info("Workers initialized",
-		zap.Int32("total", atomic.LoadInt32(&e.workerCount)),
-		zap.Int("cpu", e.config.CPUThreads),
-		zap.Int("gpu", len(e.config.GPUDevices)),
-		zap.Int("asic", len(e.config.ASICDevices)),
-	)
-	
-	return nil
-}
-
-func (e *UnifiedEngine) startWorkers() error {
-	e.workersMu.Lock()
-	defer e.workersMu.Unlock()
-	
-	for _, worker := range e.workers {
-		if err := worker.Start(e.ctx, e.jobChan, e.shareChan); err != nil {
-			return fmt.Errorf("failed to start worker %s: %w", worker.ID(), err)
+	// Create GPU workers
+	if e.config.GPU.Enabled {
+		for i, device := range e.hardware.gpus {
+			worker := e.createWorker(fmt.Sprintf("gpu-%d", i), DeviceGPU, device)
+			e.workers = append(e.workers, worker)
+			workerID++
 		}
+	}
+	
+	// Create ASIC workers
+	if e.config.ASIC.Enabled {
+		for i, device := range e.hardware.asics {
+			worker := e.createWorker(fmt.Sprintf("asic-%d", i), DeviceASIC, device)
+			e.workers = append(e.workers, worker)
+			workerID++
+		}
+	}
+	
+	if len(e.workers) == 0 {
+		return errors.New("no workers created")
 	}
 	
 	return nil
 }
 
-func (e *UnifiedEngine) stopWorkers() {
-	e.workersMu.Lock()
-	defer e.workersMu.Unlock()
+func (e *Engine) createWorker(id string, deviceType DeviceType, device interface{}) *Worker {
+	ctx, cancel := context.WithCancel(e.ctx)
 	
-	for _, worker := range e.workers {
-		if err := worker.Stop(); err != nil {
-			e.logger.Error("Failed to stop worker", 
-				zap.String("worker_id", worker.ID()),
-				zap.Error(err),
-			)
-		}
+	worker := &Worker{
+		ID:     id,
+		Type:   deviceType,
+		Device: device,
+		ctx:    ctx,
+		cancel: cancel,
 	}
+	
+	worker.Active.Store(true)
+	return worker
 }
 
-// jobProcessor handles job distribution to mining workers.
-// It runs in a tight loop for optimal performance, dequeueing jobs
-// and dispatching them to appropriate hardware.
-func (e *UnifiedEngine) jobProcessor() {
+func (e *Engine) runWorker(worker *Worker) {
 	defer e.wg.Done()
 	
+	// Get buffer from pool
+	buffer := e.bufferPool.Get().([]byte)
+	defer e.bufferPool.Put(buffer)
+	
+	// Mining loop
 	for {
 		select {
-		case <-e.ctx.Done():
+		case <-worker.ctx.Done():
 			return
-		default:
-			// Process next job from the queue
-			if err := e.processNextJob(); err != nil {
-				// Only log non-cancellation errors
-				if err != context.Canceled {
-					e.logger.Error("Failed to process job", zap.Error(err))
-				}
+			
+		case job := <-e.jobQueue:
+			if job == nil {
+				continue
 			}
+			
+			// Process job
+			e.processJob(worker, job, buffer)
 		}
 	}
 }
 
-// processNextJob dequeues and dispatches a single job.
-// Extracted for better testability and clarity.
-func (e *UnifiedEngine) processNextJob() error {
-	job, err := e.jobQueue.Dequeue(e.ctx)
-	if err != nil {
-		return err
-	}
+func (e *Engine) processJob(worker *Worker, job *Job, buffer []byte) {
+	batchSize := e.algorithm.OptimalBatchSize()
+	startNonce := atomic.AddUint64(&job.Nonce, uint64(batchSize))
+	endNonce := startNonce + uint64(batchSize)
 	
-	e.dispatchJob(job)
-	return nil
-}
-
-// shareProcessor handles share validation - parallel processing
-func (e *UnifiedEngine) shareProcessor() {
-	defer e.wg.Done()
+	// Copy header to buffer
+	copy(buffer, job.Header)
 	
-	for {
-		select {
-		case share, ok := <-e.shareChan:
-			if !ok {
-				return
-			}
-			
-			// Process share
-			accepted := e.validateShare(share)
-			
-			// Update OptimizedStats if available
-			if e.stats != nil {
-				e.stats.IncrementShares(true, accepted)
-			}
-			
-			// Also update legacy fields
-			e.sharesSubmitted.Add(1)
-			if accepted {
-				e.sharesAccepted.Add(1)
-			}
-			
-			// Return share to pool
-			e.sharePool.Put(share)
-			
-		case <-e.ctx.Done():
-			return
-		}
-	}
-}
-
-// validateShare performs fast validation of mining shares.
-// Returns true if the share meets all validation criteria.
-func (e *UnifiedEngine) validateShare(share *Share) bool {
-	// Nil check
-	if share == nil {
-		return false
-	}
+	hashCount := uint64(0)
+	startTime := time.Now()
 	
-	// Required field validation
-	if !e.validateShareFields(share) {
-		return false
-	}
-	
-	// Difficulty validation
-	if !e.validateShareDifficulty(share) {
-		return false
-	}
-	
-	// Algorithm-specific validation
-	return e.validateShareAlgorithm(share)
-}
-
-// validateShareFields checks required share fields.
-func (e *UnifiedEngine) validateShareFields(share *Share) bool {
-	return share.JobID != "" && share.WorkerID != ""
-}
-
-// validateShareDifficulty checks share difficulty requirements.
-func (e *UnifiedEngine) validateShareDifficulty(share *Share) bool {
-	return share.Difficulty > 0 && share.Difficulty >= e.config.MinShareDifficulty
-}
-
-// validateShareAlgorithm performs algorithm-specific validation.
-func (e *UnifiedEngine) validateShareAlgorithm(share *Share) bool {
-	// TODO: Implement algorithm-specific validation
-	// For now, return true for all valid shares
-	return true
-}
-
-// statsUpdater updates statistics periodically
-func (e *UnifiedEngine) statsUpdater() {
-	defer e.wg.Done()
-	
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-ticker.C:
-			e.updateHashRate()
-		case <-e.ctx.Done():
-			return
-		}
-	}
-}
-
-// updateHashRate calculates and updates the total hash rate across all workers.
-// It categorizes rates by hardware type for detailed monitoring.
-func (e *UnifiedEngine) updateHashRate() {
-	rates := e.calculateHashRates()
-	
-	// Update statistics
-	e.updateHashRateStats(rates)
-}
-
-// hashRates holds categorized hash rate data
-type hashRates struct {
-	total uint64
-	cpu   uint64
-	gpu   uint64
-	asic  uint64
-}
-
-// calculateHashRates aggregates hash rates from all workers.
-func (e *UnifiedEngine) calculateHashRates() hashRates {
-	var rates hashRates
-	
-	e.workersMu.RLock()
-	defer e.workersMu.RUnlock()
-	
-	for _, worker := range e.workers {
-		rate := worker.GetHashRate()
-		rates.total += rate
+	for nonce := startNonce; nonce < endNonce && worker.Active.Load(); nonce++ {
+		// Set nonce
+		binary.LittleEndian.PutUint64(buffer[76:], nonce)
 		
-		// Categorize by hardware type
-		switch worker.GetType() {
-		case WorkerCPU:
-			rates.cpu += rate
-		case WorkerGPU:
-			rates.gpu += rate
-		case WorkerASIC:
-			rates.asic += rate
+		// Calculate hash
+		hash := e.algorithm.Hash(buffer)
+		hashCount++
+		
+		// Check target
+		if e.algorithm.Verify(hash, job.Target) {
+			share := &Share{
+				JobID:      job.ID,
+				WorkerID:   worker.ID,
+				Nonce:      nonce,
+				Hash:       hash,
+				Difficulty: job.Difficulty,
+				Valid:      true,
+				Timestamp:  time.Now(),
+			}
+			
+			// Submit share
+			select {
+			case e.shares <- share:
+				worker.Shares.Add(1)
+			default:
+				// Share queue full
+			}
+		}
+		
+		// Update hashrate periodically
+		if hashCount%10000 == 0 {
+			elapsed := time.Since(startTime).Seconds()
+			if elapsed > 0 {
+				hashrate := uint64(float64(hashCount) / elapsed)
+				worker.Hashrate.Store(hashrate)
+			}
 		}
 	}
-	
-	return rates
 }
 
-// updateHashRateStats updates both new and legacy statistics.
-func (e *UnifiedEngine) updateHashRateStats(rates hashRates) {
-	// Update OptimizedStats if available
-	if e.stats != nil {
-		e.stats.UpdateHashRate(rates.total, rates.cpu, rates.gpu, rates.asic)
-	}
-	
-	// Update legacy atomic field for compatibility
-	e.totalHashRate.Store(rates.total)
-}
-
-// optimizer performs automatic optimization
-func (e *UnifiedEngine) optimizer() {
+func (e *Engine) processShares() {
 	defer e.wg.Done()
 	
-	ticker := time.NewTicker(30 * time.Second)
+	for {
+		select {
+		case <-e.ctx.Done():
+			return
+			
+		case share := <-e.shares:
+			if share == nil {
+				continue
+			}
+			
+			// Update statistics
+			if share.Valid {
+				e.stats.SharesAccepted.Add(1)
+				e.stats.LastShare.Store(time.Now().Unix())
+				
+				// Check if it's a block
+				if share.Difficulty > 1000000000 {
+					e.stats.BlocksFound.Add(1)
+				}
+			} else {
+				e.stats.SharesRejected.Add(1)
+			}
+		}
+	}
+}
+
+func (e *Engine) reportStats() {
+	defer e.wg.Done()
+	
+	ticker := time.NewTicker(StatsInterval)
 	defer ticker.Stop()
 	
 	for {
 		select {
-		case <-ticker.C:
-			e.performOptimization()
 		case <-e.ctx.Done():
 			return
+			
+		case <-ticker.C:
+			e.updateStats()
 		}
 	}
 }
 
-// runMemoryOptimizer runs the memory optimizer
-func (e *UnifiedEngine) runMemoryOptimizer() {
+func (e *Engine) updateStats() {
+	// Calculate total hashrate
+	totalHashrate := uint64(0)
+	totalPower := uint32(0)
+	maxTemp := uint32(0)
+	
+	for _, worker := range e.workers {
+		if worker.Active.Load() {
+			totalHashrate += worker.Hashrate.Load()
+			totalPower += worker.Power.Load()
+			
+			temp := worker.Temp.Load()
+			if temp > maxTemp {
+				maxTemp = temp
+			}
+		}
+	}
+	
+	e.stats.Hashrate.Store(totalHashrate)
+	e.metrics.PowerUsage.Store(totalPower)
+	e.metrics.Temperature.Store(maxTemp)
+	
+	// Calculate efficiency
+	if totalPower > 0 {
+		efficiency := (totalHashrate * 100) / uint64(totalPower)
+		e.metrics.Efficiency.Store(efficiency)
+	}
+	
+	// Update uptime
+	uptime := int64(time.Since(e.stats.StartTime).Seconds())
+	e.stats.Uptime.Store(uptime)
+}
+
+func (e *Engine) runOptimizer() {
 	defer e.wg.Done()
 	
-	if e.memoryOptimizer == nil {
+	ticker := time.NewTicker(OptimizeInterval)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-e.ctx.Done():
+			return
+			
+		case <-ticker.C:
+			e.optimize()
+		}
+	}
+}
+
+func (e *Engine) optimize() {
+	if e.optimizer == nil {
 		return
 	}
 	
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	temp := float64(e.metrics.Temperature.Load()) / 100.0
+	power := float64(e.metrics.PowerUsage.Load()) / 100.0
 	
-	for {
-		select {
-		case <-ticker.C:
-			e.memoryOptimizer.OptimizeMemory()
-		case <-e.ctx.Done():
-			return
-		}
+	// Temperature-based optimization
+	if temp > e.config.TargetTemp {
+		e.optimizer.reducePower()
+	} else if temp < e.config.TargetTemp-10 {
+		e.optimizer.increasePower()
 	}
+	
+	// Power limit enforcement
+	if power > e.config.MaxPower {
+		e.optimizer.enforcePowerLimit()
+	}
+	
+	// Auto-switch algorithm if enabled
+	if e.config.AutoSwitch {
+		e.optimizer.checkProfitability()
+	}
+	
+	e.optimizer.lastOptimize = time.Now()
 }
 
-// performOptimization optimizes performance
-func (e *UnifiedEngine) performOptimization() {
-	// Use memory optimizer if available
-	if e.memoryOptimizer != nil {
-		e.memoryOptimizer.OptimizeMemory()
-	} else {
-		// Fallback to basic memory optimization
-		if e.config.MaxMemoryMB > 0 {
-			var m runtime.MemStats
-			runtime.ReadMemStats(&m)
-			
-			currentMB := m.Alloc / 1024 / 1024
-			if currentMB > uint64(e.config.MaxMemoryMB*90/100) {
-				runtime.GC()
-			e.logger.Debug("Triggered GC for memory optimization",
-				zap.Uint64("before_mb", currentMB),
-			)
-		}
-	}
-	
-	// Algorithm optimization using handler
-	if e.algHandler != nil && e.config.AutoOptimize {
-		// Get best algorithm for each hardware type
-		var primaryHardware HardwareType
-		var maxWorkers int
-		
-		if e.config.CPUThreads > maxWorkers {
-			maxWorkers = e.config.CPUThreads
-			primaryHardware = HardwareCPU
-		}
-		if len(e.config.GPUDevices) > maxWorkers {
-			maxWorkers = len(e.config.GPUDevices)
-			primaryHardware = HardwareGPU
-		}
-		if len(e.config.ASICDevices) > maxWorkers {
-			maxWorkers = len(e.config.ASICDevices)
-			primaryHardware = HardwareASIC
-		}
-		
-		if primaryHardware != "" {
-			bestAlgo, err := e.algHandler.GetBestAlgorithmForHardware(primaryHardware)
-			if err == nil && bestAlgo != nil {
-				currentAlgoName := string(e.algorithm.Load().(Algorithm))
-				if bestAlgo.Name != currentAlgoName {
-					e.logger.Info("Switching to optimal algorithm",
-						zap.String("from", currentAlgoName),
-						zap.String("to", bestAlgo.Name),
-						zap.String("hardware", string(primaryHardware)),
-					)
-					e.SwitchAlgorithm(Algorithm(bestAlgo.Name))
-				}
-			}
-		}
-	}
-}
-
-// validateConfig validates engine configuration
-func validateConfig(config *Config) error {
-	if config.CPUThreads < 0 || config.CPUThreads > 256 {
-		return errors.New("invalid CPU thread count")
-	}
-	
-	if len(config.GPUDevices) > 16 {
-		return errors.New("too many GPU devices")
-	}
-	
-	if len(config.ASICDevices) > 64 {
-		return errors.New("too many ASIC devices")
-	}
-	
-	validAlgos := map[string]bool{
-		"sha256d": true, "scrypt": true, "ethash": true,
-		"randomx": true, "kawpow": true,
-	}
-	
-	if !validAlgos[config.Algorithm] {
-		return fmt.Errorf("invalid algorithm: %s", config.Algorithm)
-	}
-	
-	if config.MaxMemoryMB < 512 || config.MaxMemoryMB > 32768 {
-		return errors.New("invalid memory limit")
-	}
-	
-	return nil
-}
-
-// DefaultConfig returns optimized default configuration
-func DefaultConfig() *Config {
-	return &Config{
-		CPUThreads:         runtime.NumCPU(),
-		Algorithm:          "sha256d",
-		Intensity:          80,
-		MaxMemoryMB:        4096,
-		JobQueueSize:       1000,
-		MinShareDifficulty: 1000,
-		AutoOptimize:       true,
-		HugePages:          false,
-		NUMA:               false,
-	}
-}
-
-// Hardware feature detection
-func init() {
-	// Log CPU features for optimization
-	if cpuid.CPU.Supports(cpuid.AVX2) {
-		// AVX2 available for optimized hashing
-	}
-	
-	if cpuid.CPU.Supports(cpuid.SHA) {
-		// Hardware SHA acceleration available
-	}
-	
-	// Enable huge pages if available
-	if runtime.GOOS == "linux" {
-		// Check for transparent huge pages
-	}
-}
-
-// Memory alignment helpers - John Carmack's cache optimization
-func alignMemory(size uintptr) uintptr {
-	const alignment = 64 // Cache line size
-	return (size + alignment - 1) &^ (alignment - 1)
-}
-
-// Cache-friendly memory allocation
-func allocateAligned(size int) []byte {
-	alignedSize := alignMemory(uintptr(size))
-}
-
-// Prefetch memory for better cache utilization
-func prefetchMemory(data unsafe.Pointer) {
-	// Platform-specific prefetch instructions would go here
-	_ = data
-}
-
-// dispatchJob dispatches a job to appropriate hardware
-func (e *UnifiedEngine) dispatchJob(job interface{}) {
-	// Type assertion to handle both Job and MiningJob types
-	var algo AlgorithmType
-	var height uint64
-	
-	switch j := job.(type) {
-	case *Job:
-		algo = j.Algorithm
-		height = j.Height
-	case *MiningJob:
-		algo = j.Algorithm
-		height = j.Height
+func (e *Engine) applySecurity() error {
+	switch e.config.SecurityLevel {
+	case SecurityMaximum, SecurityParanoid:
+		// Enable memory encryption
+		// Enable secure communication
+		// Enable tamper detection
+		return nil
 	default:
-		e.logger.Error("Unknown job type", zap.String("type", fmt.Sprintf("%T", job)))
-		return
-	}
-	
-	// Dispatch based on algorithm and hardware availability
-	switch {
-	case algo == RandomX && len(e.cpuMiners) > 0:
-		// Dispatch to CPU
-		e.dispatchToCPU(job, height)
-	case (algo == Ethash || algo == KawPow) && len(e.gpuMiners) > 0:
-		// Dispatch to GPU
-		e.dispatchToGPU(job, height)
-	case algo == SHA256D && len(e.asicMiners) > 0:
-		// Dispatch to ASIC
-		e.dispatchToASIC(job, height)
-	default:
-		// Fallback to workers
-		e.dispatchToWorkers(job)
-	}
-}
-
-// dispatchToCPU dispatches job to CPU miners
-func (e *UnifiedEngine) dispatchToCPU(job interface{}, height uint64) {
-	e.workersMu.RLock()
-	defer e.workersMu.RUnlock()
-	
-	if len(e.cpuMiners) > 0 {
-		minerIdx := int(height) % len(e.cpuMiners)
-		if mj, ok := job.(*MiningJob); ok {
-			e.cpuMiners[minerIdx].SubmitJob(mj)
-		}
-	}
-}
-
-// dispatchToGPU dispatches job to GPU miners
-func (e *UnifiedEngine) dispatchToGPU(job interface{}, height uint64) {
-	e.workersMu.RLock()
-	defer e.workersMu.RUnlock()
-	
-	if len(e.gpuMiners) > 0 {
-		minerIdx := int(height) % len(e.gpuMiners)
-		if mj, ok := job.(*MiningJob); ok {
-			e.gpuMiners[minerIdx].SubmitJob(mj)
-		}
-	}
-}
-
-// dispatchToASIC dispatches job to ASIC miners
-func (e *UnifiedEngine) dispatchToASIC(job interface{}, height uint64) {
-	e.workersMu.RLock()
-	defer e.workersMu.RUnlock()
-	
-	if len(e.asicMiners) > 0 {
-		minerIdx := int(height) % len(e.asicMiners)
-		if mj, ok := job.(*MiningJob); ok {
-			e.asicMiners[minerIdx].SubmitJob(mj)
-		}
-	}
-}
-
-// dispatchToWorkers dispatches job to generic workers
-func (e *UnifiedEngine) dispatchToWorkers(job interface{}) {
-	// Use worker pool for dispatching
-	if e.workerPool != nil {
-		e.workerPool.Submit(func() {
-			// Process job with workers
-			e.logger.Debug("Processing job with worker pool")
-		})
-	}
-}
-
-// MiningJob represents a mining job (compatibility type)
-type MiningJob struct {
-	ID           string
-	Height       uint64
-	PrevHash     [32]byte
-	MerkleRoot   [32]byte
-	Timestamp    uint32
-	Bits         uint32
-	Nonce        uint32
-	Algorithm    AlgorithmType
-	Difficulty   uint64
-	CleanJobs    bool
-}
-
-// PerformanceMonitor tracks performance metrics
-type PerformanceMonitor struct {
-	engine       *UnifiedEngine
-	logger       *zap.Logger
-	interval     time.Duration
-	hashRateHistory []uint64
-	historyMu    sync.Mutex
-}
-
-// WorkerPool is now defined in efficient_job_queue.go to avoid duplication
-
-// GetAlgorithmManager returns the algorithm manager
-func (e *UnifiedEngine) GetAlgorithmManager() *AlgorithmManager {
-	return e.algManager
-}
-
-// GetProfitCalculator returns the profit calculator
-func (e *UnifiedEngine) GetProfitCalculator() *ProfitCalculator {
-	return e.profitCalc
-}
-
-// SetPowerCost updates the electricity cost for profit calculations
-func (e *UnifiedEngine) SetPowerCost(costPerKWh float64) {
-	if e.profitCalc != nil {
-		e.profitCalc.UpdatePowerCost(costPerKWh)
-	}
-}
-
-// GetProfitabilityData returns current profitability data for all algorithms
-func (e *UnifiedEngine) GetProfitabilityData() []ProfitabilityData {
-	if e.algManager != nil {
-		return e.algManager.GetProfitabilityData()
-	}
-	return nil
-}
-
-// GetAlgorithmComparison compares profitability across algorithms
-func (e *UnifiedEngine) GetAlgorithmComparison() []AlgorithmComparison {
-	if e.profitCalc == nil {
 		return nil
 	}
-	
-	// Create hardware profile based on current configuration
-	hardware := &MiningHardware{
-		Name:      "Otedama Miner",
-		PowerDraw: 1000, // Default 1000W
-		Hashrate:  make(map[AlgorithmType]float64),
-	}
-	
-	// Set hashrates based on hardware type
-	if e.config.CPUThreads > 0 {
-		hardware.Hashrate[RandomX] = 10000 // 10 KH/s for RandomX on CPU
-		hardware.Hashrate[SHA256D] = 100000000 // 100 MH/s
-	}
-	
-	if len(e.config.GPUDevices) > 0 {
-		hardware.Hashrate[Ethash] = 30000000 // 30 MH/s
-		hardware.Hashrate[KawPow] = 20000000 // 20 MH/s
-	}
-	
-	if len(e.config.ASICDevices) > 0 {
-		hardware.Hashrate[SHA256D] = 100000000000000 // 100 TH/s
-	}
-	
-	return e.profitCalc.CompareAlgorithms(hardware)
 }
 
-// EnableProfitSwitching enables automatic profit-based algorithm switching
-func (e *UnifiedEngine) EnableProfitSwitching(threshold float64) {
-	if e.algManager != nil {
-		e.algManager.SetProfitThreshold(threshold)
-		e.logger.Info("Profit-based algorithm switching enabled",
-			zap.Float64("threshold", threshold))
+func (e *Engine) setupHugePages() {
+	// Platform-specific huge pages setup
+	// This would be implemented per OS
+}
+
+func (e *Engine) benchmarkAlgorithm(duration time.Duration) uint64 {
+	data := make([]byte, 80)
+	hashes := uint64(0)
+	start := time.Now()
+	
+	for time.Since(start) < duration {
+		e.algorithm.Hash(data)
+		hashes++
+	}
+	
+	return hashes
+}
+
+func (e *Engine) countActiveWorkers() int {
+	count := 0
+	for _, worker := range e.workers {
+		if worker.Active.Load() {
+			count++
+		}
+	}
+	return count
+}
+
+func (e *Engine) getStateString() string {
+	switch EngineState(e.state.Load()) {
+	case StateIdle:
+		return "idle"
+	case StateInitializing:
+		return "initializing"
+	case StateRunning:
+		return "running"
+	case StateStopping:
+		return "stopping"
+	case StateStopped:
+		return "stopped"
+	case StateError:
+		return "error"
+	default:
+		return "unknown"
+	}
+}
+
+// Algorithm implementations
+
+type SHA256d struct{}
+
+func (s *SHA256d) Name() string { return "sha256d" }
+
+func (s *SHA256d) Hash(data []byte) []byte {
+	first := sha256.Sum256(data)
+	second := sha256.Sum256(first[:])
+	return second[:]
+}
+
+func (s *SHA256d) Verify(hash, target []byte) bool {
+	return compareTarget(hash, target)
+}
+
+func (s *SHA256d) GetDifficulty(hash []byte) float64 {
+	return calculateDifficulty(hash)
+}
+
+func (s *SHA256d) OptimalBatchSize() int { return 1000000 }
+
+type Scrypt struct{}
+
+func (s *Scrypt) Name() string { return "scrypt" }
+
+func (s *Scrypt) Hash(data []byte) []byte {
+	// Simplified scrypt (real implementation would use proper params)
+	hash, _ := scrypt.Key(data, data[:8], 1024, 1, 1, 32)
+	return hash
+}
+
+func (s *Scrypt) Verify(hash, target []byte) bool {
+	return compareTarget(hash, target)
+}
+
+func (s *Scrypt) GetDifficulty(hash []byte) float64 {
+	return calculateDifficulty(hash)
+}
+
+func (s *Scrypt) OptimalBatchSize() int { return 10000 }
+
+type Blake3 struct{}
+
+func (b *Blake3) Name() string { return "blake3" }
+
+func (b *Blake3) Hash(data []byte) []byte {
+	hash := blake3.Sum256(data)
+	return hash[:]
+}
+
+func (b *Blake3) Verify(hash, target []byte) bool {
+	return compareTarget(hash, target)
+}
+
+func (b *Blake3) GetDifficulty(hash []byte) float64 {
+	return calculateDifficulty(hash)
+}
+
+func (b *Blake3) OptimalBatchSize() int { return 2000000 }
+
+type RandomX struct{}
+
+func (r *RandomX) Name() string { return "randomx" }
+
+func (r *RandomX) Hash(data []byte) []byte {
+	// Simplified RandomX (real implementation would use RandomX VM)
+	hash := sha256.Sum256(data)
+	return hash[:]
+}
+
+func (r *RandomX) Verify(hash, target []byte) bool {
+	return compareTarget(hash, target)
+}
+
+func (r *RandomX) GetDifficulty(hash []byte) float64 {
+	return calculateDifficulty(hash)
+}
+
+func (r *RandomX) OptimalBatchSize() int { return 1000 }
+
+type Ethash struct{}
+
+func (e *Ethash) Name() string { return "ethash" }
+
+func (e *Ethash) Hash(data []byte) []byte {
+	// Simplified Ethash (real implementation would use DAG)
+	hash := sha256.Sum256(data)
+	return hash[:]
+}
+
+func (e *Ethash) Verify(hash, target []byte) bool {
+	return compareTarget(hash, target)
+}
+
+func (e *Ethash) GetDifficulty(hash []byte) float64 {
+	return calculateDifficulty(hash)
+}
+
+func (e *Ethash) OptimalBatchSize() int { return 100000 }
+
+// Hardware management
+
+
+
+
+func (h *HardwareManager) detectSIMD() {
+	// Detect CPU features
+	// This would use CPUID on x86 or system calls on ARM
+	h.hasAVX2 = runtime.GOARCH == "amd64"
+	h.hasAVX512 = false // Would check CPUID
+	h.hasNEON = runtime.GOARCH == "arm64"
+}
+
+func (h *HardwareManager) detectCPU() {
+	// Detect CPU devices
+	numCPU := runtime.NumCPU()
+	h.cpus = make([]CPUDevice, 1)
+	h.cpus[0] = CPUDevice{
+		ID:      "cpu0",
+		Cores:   numCPU,
+		Threads: numCPU,
+	}
+}
+
+func (h *HardwareManager) detectGPU() {
+	// Detect GPU devices
+	// This would interface with CUDA/OpenCL/Vulkan
+}
+
+func (h *HardwareManager) detectASIC() {
+	// Detect ASIC devices
+	// This would interface with USB/Serial devices
+}
+
+// Optimizer methods
+
+func (o *Optimizer) reducePower() {
+	if o.powerMode > PowerEfficiency {
+		o.powerMode--
+		o.applyPowerMode()
+	}
+}
+
+func (o *Optimizer) increasePower() {
+	if o.powerMode < PowerInsane {
+		o.powerMode++
+		o.applyPowerMode()
+	}
+}
+
+func (o *Optimizer) enforcePowerLimit() {
+	// Reduce intensity on all workers
+	for _, worker := range o.engine.workers {
+		if worker.Type == DeviceGPU {
+			// Reduce GPU power limit
+		}
+	}
+}
+
+func (o *Optimizer) checkProfitability() {
+	// Check current coin profitability
+	// Switch algorithm if more profitable
+}
+
+func (o *Optimizer) applyPowerMode() {
+	switch o.powerMode {
+	case PowerEfficiency:
+		// Low power, reduced frequency
+	case PowerBalanced:
+		// Default settings
+	case PowerPerformance:
+		// Higher power limits
+	case PowerTurbo:
+		// Maximum stable clocks
+	case PowerInsane:
+		// No limits, maximum performance
+	}
+}
+
+// Helper functions
+
+func compareTarget(hash, target []byte) bool {
+	if len(hash) != len(target) {
+		return false
+	}
+	
+	for i := len(hash) - 1; i >= 0; i-- {
+		if hash[i] < target[i] {
+			return true
+		}
+		if hash[i] > target[i] {
+			return false
+		}
+	}
+	return false
+}
+
+func calculateDifficulty(hash []byte) float64 {
+	zeros := 0
+	for _, b := range hash {
+		if b == 0 {
+			zeros += 8
+		} else {
+			for i := 7; i >= 0; i-- {
+				if b&(1<<i) == 0 {
+					zeros++
+				} else {
+					return math.Pow(2, float64(zeros))
+				}
+			}
+		}
+	}
+	return math.Pow(2, float64(zeros))
+}
+
+func formatHashrate(hashrate uint64) string {
+	switch {
+	case hashrate >= 1e18:
+		return fmt.Sprintf("%.2f EH/s", float64(hashrate)/1e18)
+	case hashrate >= 1e15:
+		return fmt.Sprintf("%.2f PH/s", float64(hashrate)/1e15)
+	case hashrate >= 1e12:
+		return fmt.Sprintf("%.2f TH/s", float64(hashrate)/1e12)
+	case hashrate >= 1e9:
+		return fmt.Sprintf("%.2f GH/s", float64(hashrate)/1e9)
+	case hashrate >= 1e6:
+		return fmt.Sprintf("%.2f MH/s", float64(hashrate)/1e6)
+	case hashrate >= 1e3:
+		return fmt.Sprintf("%.2f KH/s", float64(hashrate)/1e3)
+	default:
+		return fmt.Sprintf("%d H/s", hashrate)
+	}
+}
+
+func formatEfficiency(efficiency float64) string {
+	switch {
+	case efficiency >= 1e12:
+		return fmt.Sprintf("%.2f TH/W", efficiency/1e12)
+	case efficiency >= 1e9:
+		return fmt.Sprintf("%.2f GH/W", efficiency/1e9)
+	case efficiency >= 1e6:
+		return fmt.Sprintf("%.2f MH/W", efficiency/1e6)
+	case efficiency >= 1e3:
+		return fmt.Sprintf("%.2f KH/W", efficiency/1e3)
+	default:
+		return fmt.Sprintf("%.2f H/W", efficiency)
+	}
+}
+
+func setCPUAffinity(worker *Worker, cpu int) {
+	// Platform-specific CPU affinity setting
+	// Would use syscall on Linux/Windows
+}
+
+// SetPowerLimit sets global power limit
+func (e *Engine) SetPowerLimit(watts float64) {
+	e.config.MaxPower = watts
+}
+
+// SetTemperatureLimit sets global temperature limit
+func (e *Engine) SetTemperatureLimit(celsius float64) {
+	e.config.TargetTemp = celsius
+}
+
+// EnableWorker enables a specific worker
+func (e *Engine) EnableWorker(workerID string) error {
+	for _, worker := range e.workers {
+		if worker.ID == workerID {
+			worker.Active.Store(true)
+			return nil
+		}
+	}
+	return fmt.Errorf("worker not found: %s", workerID)
+}
+
+// DisableWorker disables a specific worker
+func (e *Engine) DisableWorker(workerID string) error {
+	for _, worker := range e.workers {
+		if worker.ID == workerID {
+			worker.Active.Store(false)
+			return nil
+		}
+	}
+	return fmt.Errorf("worker not found: %s", workerID)
+}
+
+// GetWorkers returns all workers
+func (e *Engine) GetWorkers() []*Worker {
+	return e.workers
+}
+
+// OptimizeForLatency optimizes for low latency
+func (e *Engine) OptimizeForLatency() {
+	if e.optimizer != nil {
+		e.optimizer.powerMode = PowerTurbo
+		e.optimizer.applyPowerMode()
+	}
+}
+
+// OptimizeForEfficiency optimizes for power efficiency
+func (e *Engine) OptimizeForEfficiency() {
+	if e.optimizer != nil {
+		e.optimizer.powerMode = PowerEfficiency
+		e.optimizer.applyPowerMode()
 	}
 }

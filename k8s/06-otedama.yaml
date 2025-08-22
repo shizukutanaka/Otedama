@@ -7,16 +7,26 @@ metadata:
   namespace: otedama
   labels:
     app: otedama
+    component: mining
 spec:
   replicas: 3
   selector:
     matchLabels:
       app: otedama
+      component: mining
   template:
     metadata:
       labels:
         app: otedama
+        component: mining
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
       - name: wait-for-postgres
         image: busybox:1.35
@@ -28,18 +38,23 @@ spec:
       - name: otedama
         image: otedama:production
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
         ports:
-        - containerPort: 3333
-          name: stratum
-          protocol: TCP
         - containerPort: 8080
           name: api
           protocol: TCP
         - containerPort: 9090
           name: metrics
           protocol: TCP
-        - containerPort: 4444
-          name: federation
+        - containerPort: 18555
+          name: p2p
+          protocol: TCP
+        - containerPort: 8082
+          name: health
           protocol: TCP
         env:
         - name: OTEDAMA_ENV
@@ -65,12 +80,15 @@ spec:
               key: api-key
         volumeMounts:
         - name: config
-          mountPath: /app/config
+          mountPath: /config.yaml
+          subPath: config.yaml
           readOnly: true
         - name: data
-          mountPath: /app/data
+          mountPath: /data
         - name: logs
-          mountPath: /app/logs
+          mountPath: /logs
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "1Gi"
@@ -80,18 +98,12 @@ spec:
             cpu: "4000m"
         livenessProbe:
           httpGet:
-            path: /api/health
-            port: 8080
-          initialDelaySeconds: 60
-          periodSeconds: 30
-          timeoutSeconds: 10
+            path: /live
+            port: health
         readinessProbe:
           httpGet:
-            path: /api/ready
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
+            path: /ready
+            port: health
       volumes:
       - name: config
         configMap:
@@ -102,9 +114,11 @@ spec:
       - name: logs
         persistentVolumeClaim:
           claimName: otedama-logs-pvc
+      - name: tmp
+        emptyDir: {}
 
 ---
-# Otedama Service
+# Kubernetes Service for Otedama
 apiVersion: v1
 kind: Service
 metadata:
@@ -112,26 +126,74 @@ metadata:
   namespace: otedama
   labels:
     app: otedama
+    component: mining
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
 spec:
   type: LoadBalancer
   selector:
     app: otedama
+    component: mining
   ports:
-  - name: stratum
-    port: 3333
-    targetPort: 3333
-    protocol: TCP
   - name: api
     port: 8080
-    targetPort: 8080
+    targetPort: api
     protocol: TCP
   - name: metrics
     port: 9090
-    targetPort: 9090
+    targetPort: metrics
     protocol: TCP
-  - name: federation
-    port: 4444
-    targetPort: 4444
+  - name: p2p
+    port: 18555
+    targetPort: p2p
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+# Headless Service for P2P discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-headless
+  namespace: otedama
+  labels:
+    app: otedama
+    component: mining
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: otedama
+    component: mining
+  ports:
+  - name: p2p
+    port: 18555
+    targetPort: p2p
+    protocol: TCP
+
+---
+# Internal Service for health checks
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama-health
+  namespace: otedama
+  labels:
+    app: otedama
+    component: health
+spec:
+  type: ClusterIP
+  selector:
+    app: otedama
+    component: mining
+  ports:
+  - name: health
+    port: 8082
+    targetPort: health
     protocol: TCP
 
 ---

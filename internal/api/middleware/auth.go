@@ -13,17 +13,19 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
-	internalauth "github.com/shizukutanaka/Otedama/internal/auth"
+	internalauth "github.com/otedama/otedama/internal/auth"
+	"github.com/otedama/otedama/internal/security"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // AuthMiddleware handles authentication
 type AuthMiddleware struct {
-	logger       *zap.Logger
-	jwtSecret    []byte
-	adminUser    string
+	logger        *zap.Logger
+	keyVault      *security.KeyVault
+	adminUser     string
 	adminPassHash string
+	jwtSecretKey  string // Configurable JWT secret key
 }
 
 // Metrics
@@ -51,12 +53,21 @@ func init() {
 }
 
 // NewAuthMiddleware creates new auth middleware
-func NewAuthMiddleware(logger *zap.Logger, jwtSecret []byte, adminUser, adminPassHash string) *AuthMiddleware {
+func NewAuthMiddleware(logger *zap.Logger, kv *security.KeyVault, adminUser, adminPassHash, jwtSecretKey string) *AuthMiddleware {
+	// Generate secure JWT secret if not provided
+	if jwtSecretKey == "" {
+		// Generate a random 256-bit key
+		hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d", adminUser, adminPassHash, time.Now().UnixNano())))
+		jwtSecretKey = hex.EncodeToString(hash[:])
+		logger.Info("Generated secure JWT secret key")
+	}
+	
 	return &AuthMiddleware{
 		logger:        logger,
-		jwtSecret:     jwtSecret,
+		keyVault:      kv,
 		adminUser:     adminUser,
 		adminPassHash: adminPassHash,
+		jwtSecretKey:  jwtSecretKey,
 	}
 }
 
@@ -227,7 +238,16 @@ func (m *AuthMiddleware) validateToken(tokenString string) (*Claims, bool) {
 	claims := &Claims{}
 	
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return m.jwtSecret, nil
+		if m.keyVault == nil {
+			m.logger.Error("KeyVault is not available for JWT validation")
+			return nil, fmt.Errorf("authentication service is misconfigured")
+		}
+		secret, err := m.keyVault.Get(m.jwtSecretKey)
+		if err != nil {
+			m.logger.Error("Failed to retrieve JWT secret from vault for validation", zap.Error(err))
+			return nil, fmt.Errorf("could not retrieve signing key")
+		}
+		return secret, nil
 	})
 	
 	if err != nil || !token.Valid {
@@ -280,7 +300,16 @@ func (m *AuthMiddleware) generateToken(username, role string) (string, error) {
 	}
 	
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(m.jwtSecret)
+	if m.keyVault == nil {
+		m.logger.Error("KeyVault is not available for JWT signing")
+		return "", fmt.Errorf("authentication service is misconfigured")
+	}
+	secret, err := m.keyVault.Get(m.jwtSecretKey)
+	if err != nil {
+		m.logger.Error("Failed to retrieve JWT secret from vault for signing", zap.Error(err))
+		return "", fmt.Errorf("could not retrieve signing key")
+	}
+	return token.SignedString(secret)
 }
 
 // Simple password hashing for demo (use bcrypt in production)

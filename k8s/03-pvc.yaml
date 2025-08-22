@@ -1,10 +1,51 @@
+# PersistentVolumeClaims for Otedama Stack
+
 ---
-# PersistentVolumeClaim for data storage
+# PVC for Otedama application data
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: otedama-data-pvc
   namespace: otedama
+  labels:
+    app: otedama
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+
+---
+# PVC for Otedama application logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-logs-pvc
+  namespace: otedama
+  labels:
+    app: otedama
+    component: logging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard
+
+---
+# PVC for PostgreSQL data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-pvc
+  namespace: otedama
+  labels:
+    app: postgres
+    component: database
 spec:
   accessModes:
     - ReadWriteOnce
@@ -14,12 +55,15 @@ spec:
   storageClassName: standard
 
 ---
-# PersistentVolumeClaim for logs
+# PVC for Redis data
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: otedama-logs-pvc
+  name: redis-data-pvc
   namespace: otedama
+  labels:
+    app: redis
+    component: cache
 spec:
   accessModes:
     - ReadWriteOnce
@@ -29,16 +73,37 @@ spec:
   storageClassName: standard
 
 ---
-# PersistentVolumeClaim for PostgreSQL
+# PVC for Prometheus data
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: postgres-pvc
+  name: prometheus-data-pvc
   namespace: otedama
+  labels:
+    app: prometheus
+    component: monitoring
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 50Gi
+  storageClassName: standard
+
+---
+# PVC for Grafana data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data-pvc
+  namespace: otedama
+  labels:
+    app: grafana
+    component: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
   storageClassName: standard

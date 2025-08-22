@@ -1,3 +1,6 @@
+//go:build experimental_unified
+// +build experimental_unified
+
 package mining
 
 import (

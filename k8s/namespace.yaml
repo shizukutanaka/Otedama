@@ -1,3 +1,4 @@
+# Kubernetes Namespace
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -5,12 +6,3 @@ metadata:
   labels:
     app: otedama
     environment: production
-    component: mining-pool
-    version: v2.1.4
-  annotations:
-    description: "Otedama Mining Pool - High-performance multi-algorithm mining pool"
-    contact: "admin@otedama.network"
-    documentation: "https://docs.otedama.network"
-spec:
-  finalizers:
-  - kubernetes

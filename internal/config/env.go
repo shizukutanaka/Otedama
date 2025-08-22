@@ -265,47 +265,38 @@ func (el *EnvLoader) buildEnvName(prefix, fieldName string) string {
 
 // OverrideFromEnv applies common environment variable overrides
 func (el *EnvLoader) OverrideFromEnv(config *Config) {
-	// System overrides
-	if nodeID := os.Getenv(el.prefix + "_NODE_ID"); nodeID != "" {
-		config.System.NodeID = nodeID
-	}
-	
-	if dataDir := os.Getenv(el.prefix + "_DATA_DIR"); dataDir != "" {
-		config.System.DataDir = dataDir
-	}
-	
+	// Mining overrides - removed App as it doesn't exist in Config
+
 	// Mining overrides
 	if algo := os.Getenv(el.prefix + "_MINING_ALGORITHM"); algo != "" {
 		config.Mining.Algorithm = algo
 	}
-	
-	if workers := os.Getenv(el.prefix + "_MINING_WORKERS"); workers != "" {
+
+	if workers := os.Getenv(el.prefix + "_MINING_CPU_THREADS"); workers != "" {
 		if val, err := strconv.Atoi(workers); err == nil {
-			config.Mining.CPUThreads = val
+			config.Mining.CPU.Threads = val
 		}
 	}
-	
+
 	// API overrides
-	if apiAddr := os.Getenv(el.prefix + "_API_LISTEN_ADDR"); apiAddr != "" {
-		config.API.ListenAddr = apiAddr
+	if apiAddr := os.Getenv(el.prefix + "_API_ADDRESS"); apiAddr != "" {
+		config.API.Address = apiAddr
 	}
-	
+
 	if apiEnabled := os.Getenv(el.prefix + "_API_ENABLED"); apiEnabled != "" {
 		if val, err := strconv.ParseBool(apiEnabled); err == nil {
-			config.API.Enabled = val
+			config.API.Enable = val
 		}
 	}
-	
-	// Security overrides
-	if jwtSecret := os.Getenv(el.prefix + "_SECURITY_JWT_SECRET"); jwtSecret != "" {
-		config.Security.JWTSecret = jwtSecret
-	}
-	
+
+	// JWT secret field doesn't exist in current APIConfig
+
 	// Database overrides
-	if dbDSN := os.Getenv(el.prefix + "_DATABASE_DSN"); dbDSN != "" {
-		config.Database.DSN = dbDSN
+	// Database configuration - type specific
+	if dbType := os.Getenv(el.prefix + "_DATABASE_TYPE"); dbType != "" {
+		config.Database.Type = dbType
 	}
-	
+
 	// Logging overrides
 	if logLevel := os.Getenv(el.prefix + "_LOGGING_LEVEL"); logLevel != "" {
 		config.Logging.Level = logLevel

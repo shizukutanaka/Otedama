@@ -721,12 +721,14 @@ func (g *APIGateway) setupMiddleware() {
 
 // Start starts the API gateway
 func (g *APIGateway) Start(addr string) error {
-	g.server = &http.Server{
-		Addr:         addr,
-		Handler:      g.router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+				g.server = &http.Server{
+		Addr:    addr,
+		Handler: g.router,
+		// Set timeouts to prevent resource exhaustion from slowloris attacks and other slow client issues.
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	
 	g.logger.Info("Starting API Gateway", zap.String("address", addr))
@@ -954,6 +956,10 @@ func NewCacheManager() *CacheManager {
 func NewWebSocketManager() *WebSocketManager {
 	return &WebSocketManager{
 		upgrader: websocket.Upgrader{
+			// Standardized buffer sizes and compression for performance
+			ReadBufferSize:    8192,
+			WriteBufferSize:   8192,
+			EnableCompression: true,
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 		connections: make(map[string]*WSConnection),

@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/memory"
-	"github.com/shizukutanaka/Otedama/internal/mining"
-	"github.com/shizukutanaka/Otedama/internal/network"
+	"github.com/otedama/otedama/internal/memory"
+	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/network"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )

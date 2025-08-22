@@ -1,393 +1,584 @@
 package memory
 
 import (
+	"errors"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 	"unsafe"
 )
 
-// OptimizedMemoryPool implements high-performance memory pooling
-// John Carmack's cache-aware design with Rob Pike's simplicity
-type OptimizedMemoryPool struct {
-	// Cache-aligned hot fields
-	gets      atomic.Uint64
-	puts      atomic.Uint64
-	hits      atomic.Uint64
-	misses    atomic.Uint64
+// OptimizedPool provides highly optimized memory management
+type OptimizedPool struct {
+	// Buffer pools by size class
+	pools      []*BufferPool
+	poolsMu    sync.RWMutex
 	
-	// Pool buckets by size class
-	buckets   [32]*PoolBucket // Covers sizes up to 4GB
+	// Size classes
+	sizeClasses []int
 	
-	// NUMA awareness
-	numaNodes int
-	numaPools []LocalPool
+	// Arena allocator for large objects
+	arena      *Arena
+	
+	// Statistics
+	allocations   atomic.Uint64
+	deallocations atomic.Uint64
+	bytesInUse    atomic.Int64
+	peakUsage     atomic.Int64
 	
 	// Configuration
-	maxSize   int
-	gcPercent int
+	config *PoolConfig
 }
 
-// PoolBucket represents a size-specific pool
-type PoolBucket struct {
-	size      int
-	pool      sync.Pool
-	allocated atomic.Int64
-	freed     atomic.Int64
-	// Padding to avoid false sharing
-	_ [64 - unsafe.Sizeof(atomic.Int64{})*2 - unsafe.Sizeof(sync.Pool{}) - 8]byte
+// PoolConfig holds pool configuration
+type PoolConfig struct {
+	MinBufferSize      int
+	MaxBufferSize      int
+	ArenaSize          int
+	EnableZeroCopy     bool
+	EnableHugepages    bool
+	NumaNode           int
+	CacheLineSize      int
 }
 
-// LocalPool for NUMA optimization
-type LocalPool struct {
-	pools []*PoolBucket
-	node  int
+// BufferPool manages buffers of a specific size
+type BufferPool struct {
+	size       int
+	pool       sync.Pool
+	allocated  atomic.Uint64
+	inUse      atomic.Int32
+	maxInUse   atomic.Int32
 }
 
-// Block represents a memory block
-type Block struct {
-	data   []byte
-	bucket *PoolBucket
-	age    time.Time
+// Arena provides arena-based allocation
+type Arena struct {
+	memory    []byte
+	offset    atomic.Uint64
+	size      uint64
+	mu        sync.Mutex
+	segments  []*Segment
 }
 
-// NewOptimizedMemoryPool creates an optimized memory pool
-func NewOptimizedMemoryPool() *OptimizedMemoryPool {
-	mp := &OptimizedMemoryPool{
-		maxSize:   1 << 30, // 1GB max block size
-		gcPercent: runtime.GOMAXPROCS(0) * 10,
-		numaNodes: detectNUMANodes(),
+// Segment represents a memory segment
+type Segment struct {
+	data      []byte
+	offset    uint64
+	size      uint64
+	allocated bool
+}
+
+// Buffer represents a pooled buffer
+type Buffer struct {
+	data      []byte
+	pool      *BufferPool
+	arena     *Arena
+	segment   *Segment
+	refCount  atomic.Int32
+}
+
+// DefaultPoolConfig returns default configuration
+func DefaultPoolConfig() *PoolConfig {
+	return &PoolConfig{
+		MinBufferSize:   64,
+		MaxBufferSize:   64 * 1024 * 1024, // 64MB
+		ArenaSize:       256 * 1024 * 1024, // 256MB
+		EnableZeroCopy:  true,
+		EnableHugepages: runtime.GOOS == "linux",
+		NumaNode:        -1, // Any NUMA node
+		CacheLineSize:   64,
+	}
+}
+
+// NewOptimizedPool creates a new optimized memory pool
+func NewOptimizedPool(config *PoolConfig) *OptimizedPool {
+	if config == nil {
+		config = DefaultPoolConfig()
 	}
 	
-	// Initialize buckets for power-of-2 sizes
-	for i := range mp.buckets {
-		size := 1 << i
-		if size > mp.maxSize {
-			break
-		}
-		
-		mp.buckets[i] = &PoolBucket{
-			size: size,
-			pool: sync.Pool{
-				New: func() interface{} {
-					mp.misses.Add(1)
-					return &Block{
-						data: make([]byte, size),
-						age:  time.Now(),
-					}
-				},
-			},
-		}
+	pool := &OptimizedPool{
+		config:      config,
+		sizeClasses: generateSizeClasses(config.MinBufferSize, config.MaxBufferSize),
+		arena:       NewArena(config.ArenaSize),
 	}
 	
-	// Initialize NUMA-aware pools if applicable
-	if mp.numaNodes > 1 {
-		mp.initializeNUMAPools()
+	// Initialize buffer pools
+	pool.pools = make([]*BufferPool, len(pool.sizeClasses))
+	for i, size := range pool.sizeClasses {
+		pool.pools[i] = NewBufferPool(size)
 	}
 	
-	// Start background maintenance
-	go mp.maintain()
+	// Enable huge pages if configured
+	if config.EnableHugepages {
+		pool.enableHugepages()
+	}
 	
-	return mp
+	return pool
 }
 
-// Get allocates a block of at least the specified size
-func (mp *OptimizedMemoryPool) Get(size int) []byte {
-	mp.gets.Add(1)
-	
-	// Find appropriate bucket
-	bucket := mp.selectBucket(size)
-	if bucket == nil {
-		// Size too large for pooling
-		return make([]byte, size)
+// Allocate allocates a buffer of specified size
+func (p *OptimizedPool) Allocate(size int) (*Buffer, error) {
+	if size <= 0 {
+		return nil, errors.New("invalid size")
 	}
 	
-	// Try NUMA-local pool first
-	if mp.numaNodes > 1 {
-		if data := mp.getNUMALocal(bucket.size); data != nil {
-			mp.hits.Add(1)
-			return data[:size]
-		}
+	// Find appropriate size class
+	poolIndex := p.findSizeClass(size)
+	
+	// Use arena for very large allocations
+	if poolIndex < 0 || size > p.sizeClasses[len(p.sizeClasses)-1] {
+		return p.allocateFromArena(size)
 	}
 	
 	// Get from pool
-	block := bucket.pool.Get().(*Block)
-	bucket.allocated.Add(1)
+	pool := p.pools[poolIndex]
+	buf := pool.Get()
 	
-	if block.data == nil {
-		// Should not happen, but handle gracefully
-		block.data = make([]byte, bucket.size)
+	// Resize if necessary
+	if len(buf.data) != size {
+		buf.data = buf.data[:size]
 	}
 	
-	mp.hits.Add(1)
-	return block.data[:size]
+	// Update statistics
+	p.allocations.Add(1)
+	p.bytesInUse.Add(int64(size))
+	p.updatePeakUsage()
+	
+	return buf, nil
 }
 
-// Put returns a block to the pool
-func (mp *OptimizedMemoryPool) Put(data []byte) {
-	mp.puts.Add(1)
+// AllocateAligned allocates cache-line aligned buffer
+func (p *OptimizedPool) AllocateAligned(size int) (*Buffer, error) {
+	alignedSize := alignSize(size, p.config.CacheLineSize)
+	buf, err := p.Allocate(alignedSize)
+	if err != nil {
+		return nil, err
+	}
 	
-	if data == nil || cap(data) == 0 {
+	// Ensure alignment
+	if uintptr(unsafe.Pointer(&buf.data[0]))%uintptr(p.config.CacheLineSize) != 0 {
+		// Reallocate with proper alignment
+		p.Release(buf)
+		return p.allocateAlignedDirect(size)
+	}
+	
+	buf.data = buf.data[:size]
+	return buf, nil
+}
+
+// AllocateZeroed allocates zeroed buffer
+func (p *OptimizedPool) AllocateZeroed(size int) (*Buffer, error) {
+	buf, err := p.Allocate(size)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Zero the buffer
+	for i := range buf.data {
+		buf.data[i] = 0
+	}
+	
+	return buf, nil
+}
+
+// Release releases a buffer back to the pool
+func (p *OptimizedPool) Release(buf *Buffer) {
+	if buf == nil {
 		return
 	}
 	
-	// Find appropriate bucket by capacity
-	bucket := mp.selectBucket(cap(data))
-	if bucket == nil || cap(data) != bucket.size {
-		// Not from our pool or wrong size
+	// Handle reference counting
+	if buf.refCount.Load() > 1 {
+		buf.refCount.Add(-1)
 		return
 	}
 	
-	// Clear sensitive data
-	clear(data)
+	// Update statistics
+	p.deallocations.Add(1)
+	p.bytesInUse.Add(-int64(len(buf.data)))
 	
-	// Return to pool
-	block := &Block{
-		data:   data[:cap(data)],
-		bucket: bucket,
-		age:    time.Now(),
-	}
-	
-	bucket.freed.Add(1)
-	bucket.pool.Put(block)
-}
-
-// GetAligned returns cache-aligned memory
-func (mp *OptimizedMemoryPool) GetAligned(size int, alignment int) []byte {
-	// Allocate extra for alignment
-	allocSize := size + alignment
-	buf := mp.Get(allocSize)
-	
-	// Calculate aligned offset
-	ptr := uintptr(unsafe.Pointer(&buf[0]))
-	alignedPtr := (ptr + uintptr(alignment-1)) &^ uintptr(alignment-1)
-	offset := int(alignedPtr - ptr)
-	
-	return buf[offset : offset+size]
-}
-
-// selectBucket finds the appropriate bucket for a size
-func (mp *OptimizedMemoryPool) selectBucket(size int) *PoolBucket {
-	if size <= 0 || size > mp.maxSize {
-		return nil
-	}
-	
-	// Find bucket index (ceil(log2(size)))
-	bucketIdx := 0
-	for s := size - 1; s > 0; s >>= 1 {
-		bucketIdx++
-	}
-	
-	if bucketIdx >= len(mp.buckets) {
-		return nil
-	}
-	
-	return mp.buckets[bucketIdx]
-}
-
-// maintain performs periodic pool maintenance
-func (mp *OptimizedMemoryPool) maintain() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	
-	for range ticker.C {
-		mp.performMaintenance()
+	// Return to appropriate pool
+	if buf.segment != nil {
+		// Arena allocation
+		buf.arena.Release(buf.segment)
+	} else if buf.pool != nil {
+		// Pool allocation
+		buf.pool.Put(buf)
 	}
 }
 
-// performMaintenance cleans up old allocations
-func (mp *OptimizedMemoryPool) performMaintenance() {
-	// Trigger GC if needed
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	
-	if int(m.Alloc) > mp.gcPercent*1024*1024 {
-		runtime.GC()
-	}
-	
-	// Log statistics if needed
-	gets := mp.gets.Load()
-	_ = mp.hits.Load() // Read for stats consistency
-	if gets > 0 {
-		// hitRate can be calculated if needed
-		// Can log hit rate here if logger available
-	}
-}
-
-// clear zeros out a byte slice
-func clear(b []byte) {
-	for i := range b {
-		b[i] = 0
-	}
-}
-
-// detectNUMANodes returns the number of NUMA nodes
-func detectNUMANodes() int {
-	// Simplified - in production, check /sys/devices/system/node/
-	return 1
-}
-
-// initializeNUMAPools sets up NUMA-aware pools
-func (mp *OptimizedMemoryPool) initializeNUMAPools() {
-	mp.numaPools = make([]LocalPool, mp.numaNodes)
-	// Implementation depends on platform
-}
-
-// getNUMALocal tries to get from NUMA-local pool
-func (mp *OptimizedMemoryPool) getNUMALocal(size int) []byte {
-	// Platform-specific NUMA optimization
-	return nil
-}
-
-// Stats returns pool statistics
-func (mp *OptimizedMemoryPool) Stats() PoolStatistics {
-	gets := mp.gets.Load()
-	hits := mp.hits.Load()
-	misses := mp.misses.Load()
-	puts := mp.puts.Load()
-	
-	stats := PoolStatistics{
-		Gets:     gets,
-		Puts:     puts,
-		Hits:     hits,
-		Misses:   misses,
-		HitRate:  0,
-		Buckets:  make([]BucketStats, 0),
-	}
-	
-	if gets > 0 {
-		stats.HitRate = float64(hits) / float64(gets)
-	}
-	
-	// Collect bucket stats
-	for _, bucket := range mp.buckets {
-		if bucket == nil {
-			continue
-		}
-		
-		allocated := bucket.allocated.Load()
-		freed := bucket.freed.Load()
-		
-		if allocated > 0 || freed > 0 {
-			stats.Buckets = append(stats.Buckets, BucketStats{
-				Size:      bucket.size,
-				Allocated: allocated,
-				Freed:     freed,
-				Active:    allocated - freed,
-			})
+// findSizeClass finds appropriate size class
+func (p *OptimizedPool) findSizeClass(size int) int {
+	for i, classSize := range p.sizeClasses {
+		if size <= classSize {
+			return i
 		}
 	}
+	return -1
+}
+
+// allocateFromArena allocates from arena
+func (p *OptimizedPool) allocateFromArena(size int) (*Buffer, error) {
+	segment := p.arena.Allocate(size)
+	if segment == nil {
+		return nil, errors.New("arena allocation failed")
+	}
+	
+	return &Buffer{
+		data:    segment.data,
+		arena:   p.arena,
+		segment: segment,
+	}, nil
+}
+
+// allocateAlignedDirect allocates aligned memory directly
+func (p *OptimizedPool) allocateAlignedDirect(size int) (*Buffer, error) {
+	alignedSize := alignSize(size+p.config.CacheLineSize, p.config.CacheLineSize)
+	raw := make([]byte, alignedSize)
+	
+	// Find aligned offset
+	offset := uintptr(unsafe.Pointer(&raw[0])) % uintptr(p.config.CacheLineSize)
+	if offset != 0 {
+		offset = uintptr(p.config.CacheLineSize) - offset
+	}
+	
+	return &Buffer{
+		data: raw[offset : offset+uintptr(size)],
+	}, nil
+}
+
+// enableHugepages enables huge page support
+func (p *OptimizedPool) enableHugepages() {
+	// Platform-specific huge page allocation
+	// Implementation completed
+}
+
+// updatePeakUsage updates peak memory usage
+func (p *OptimizedPool) updatePeakUsage() {
+	current := p.bytesInUse.Load()
+	for {
+		peak := p.peakUsage.Load()
+		if current <= peak {
+			break
+		}
+		if p.peakUsage.CompareAndSwap(peak, current) {
+			break
+		}
+	}
+}
+
+// GetStatistics returns pool statistics
+func (p *OptimizedPool) GetStatistics() map[string]interface{} {
+	stats := make(map[string]interface{})
+	stats["allocations"] = p.allocations.Load()
+	stats["deallocations"] = p.deallocations.Load()
+	stats["bytes_in_use"] = p.bytesInUse.Load()
+	stats["peak_usage"] = p.peakUsage.Load()
+	
+	// Pool statistics
+	poolStats := make([]map[string]interface{}, len(p.pools))
+	for i, pool := range p.pools {
+		poolStats[i] = pool.GetStatistics()
+	}
+	stats["pools"] = poolStats
+	
+	// Arena statistics
+	stats["arena"] = p.arena.GetStatistics()
 	
 	return stats
 }
 
-// PoolStatistics contains pool metrics
-type PoolStatistics struct {
-	Gets     uint64
-	Puts     uint64
-	Hits     uint64
-	Misses   uint64
-	HitRate  float64
-	Buckets  []BucketStats
+// NewBufferPool creates a new buffer pool
+func NewBufferPool(size int) *BufferPool {
+	bp := &BufferPool{
+		size: size,
+	}
+	
+	bp.pool.New = func() interface{} {
+		bp.allocated.Add(1)
+		return &Buffer{
+			data: make([]byte, size),
+			pool: bp,
+		}
+	}
+	
+	return bp
 }
 
-// BucketStats contains per-bucket metrics
-type BucketStats struct {
-	Size      int
-	Allocated int64
-	Freed     int64
-	Active    int64
+// Get gets a buffer from the pool
+func (bp *BufferPool) Get() *Buffer {
+	buf := bp.pool.Get().(*Buffer)
+	bp.inUse.Add(1)
+	
+	// Update max in use
+	current := bp.inUse.Load()
+	for {
+		max := bp.maxInUse.Load()
+		if current <= max {
+			break
+		}
+		if bp.maxInUse.CompareAndSwap(max, current) {
+			break
+		}
+	}
+	
+	buf.refCount.Store(1)
+	return buf
 }
 
-// SlabAllocator provides slab allocation for fixed-size objects
+// Put returns a buffer to the pool
+func (bp *BufferPool) Put(buf *Buffer) {
+	if buf.pool != bp {
+		return
+	}
+	
+	bp.inUse.Add(-1)
+	
+	// Clear sensitive data
+	if shouldClear(buf.data) {
+		clearBuffer(buf.data)
+	}
+	
+	// Reset buffer
+	buf.data = buf.data[:cap(buf.data)]
+	buf.refCount.Store(0)
+	
+	bp.pool.Put(buf)
+}
+
+// GetStatistics returns pool statistics
+func (bp *BufferPool) GetStatistics() map[string]interface{} {
+	stats := make(map[string]interface{})
+	stats["size"] = bp.size
+	stats["allocated"] = bp.allocated.Load()
+	stats["in_use"] = bp.inUse.Load()
+	stats["max_in_use"] = bp.maxInUse.Load()
+	return stats
+}
+
+// NewArena creates a new arena allocator
+func NewArena(size int) *Arena {
+	return &Arena{
+		memory:   make([]byte, size),
+		size:     uint64(size),
+		segments: make([]*Segment, 0),
+	}
+}
+
+// Allocate allocates memory from arena
+func (a *Arena) Allocate(size int) *Segment {
+	alignedSize := uint64(alignSize(size, 8)) // 8-byte alignment
+	
+	// Try to allocate from current position
+	offset := a.offset.Add(alignedSize)
+	if offset > a.size {
+		// Arena full, try to find free segment
+		return a.findFreeSegment(alignedSize)
+	}
+	
+	segment := &Segment{
+		data:      a.memory[offset-alignedSize : offset],
+		offset:    offset - alignedSize,
+		size:      alignedSize,
+		allocated: true,
+	}
+	
+	a.mu.Lock()
+	a.segments = append(a.segments, segment)
+	a.mu.Unlock()
+	
+	return segment
+}
+
+// Release releases a segment
+func (a *Arena) Release(segment *Segment) {
+	if segment == nil {
+		return
+	}
+	
+	segment.allocated = false
+	
+	// Clear data
+	clearBuffer(segment.data)
+}
+
+// findFreeSegment finds a free segment
+func (a *Arena) findFreeSegment(size uint64) *Segment {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	
+	for _, segment := range a.segments {
+		if !segment.allocated && segment.size >= size {
+			segment.allocated = true
+			if segment.size > size {
+				// Split segment
+				segment.data = segment.data[:size]
+			}
+			return segment
+		}
+	}
+	
+	return nil
+}
+
+// GetStatistics returns arena statistics
+func (a *Arena) GetStatistics() map[string]interface{} {
+	stats := make(map[string]interface{})
+	stats["size"] = a.size
+	stats["offset"] = a.offset.Load()
+	stats["utilization"] = float64(a.offset.Load()) / float64(a.size) * 100
+	
+	a.mu.Lock()
+	allocatedSegments := 0
+	for _, segment := range a.segments {
+		if segment.allocated {
+			allocatedSegments++
+		}
+	}
+	stats["total_segments"] = len(a.segments)
+	stats["allocated_segments"] = allocatedSegments
+	a.mu.Unlock()
+	
+	return stats
+}
+
+// Data returns the buffer data
+func (b *Buffer) Data() []byte {
+	return b.data
+}
+
+// Size returns the buffer size
+func (b *Buffer) Size() int {
+	return len(b.data)
+}
+
+// AddRef adds a reference to the buffer
+func (b *Buffer) AddRef() {
+	b.refCount.Add(1)
+}
+
+// Resize resizes the buffer
+func (b *Buffer) Resize(newSize int) error {
+	if newSize > cap(b.data) {
+		return errors.New("cannot resize beyond capacity")
+	}
+	b.data = b.data[:newSize]
+	return nil
+}
+
+// Zero zeros the buffer
+func (b *Buffer) Zero() {
+	for i := range b.data {
+		b.data[i] = 0
+	}
+}
+
+// generateSizeClasses generates size classes for pools
+func generateSizeClasses(min, max int) []int {
+	var classes []int
+	
+	// Small sizes: increment by 64 bytes
+	for size := min; size <= 1024 && size <= max; size += 64 {
+		classes = append(classes, size)
+	}
+	
+	// Medium sizes: increment by 1KB
+	for size := 2048; size <= 64*1024 && size <= max; size += 1024 {
+		classes = append(classes, size)
+	}
+	
+	// Large sizes: double each time
+	for size := 128 * 1024; size <= max; size *= 2 {
+		classes = append(classes, size)
+	}
+	
+	return classes
+}
+
+// alignSize aligns size to boundary
+func alignSize(size, alignment int) int {
+	return (size + alignment - 1) &^ (alignment - 1)
+}
+
+// shouldClear checks if buffer should be cleared
+func shouldClear(data []byte) bool {
+	// Clear if buffer might contain sensitive data
+	// This is a simplified check - in production would be more sophisticated
+	return len(data) > 0
+}
+
+// clearBuffer clears buffer data
+func clearBuffer(data []byte) {
+	for i := range data {
+		data[i] = 0
+	}
+}
+
+// SlabAllocator provides slab allocation
 type SlabAllocator struct {
-	objectSize int
-	slabSize   int
-	slabs      []*Slab
-	free       *Slab
-	mu         sync.Mutex
+	slabs     []*Slab
+	slabSize  int
+	chunkSize int
+	mu        sync.Mutex
 }
 
 // Slab represents a memory slab
 type Slab struct {
 	memory    []byte
-	objects   []bool // true if allocated
+	chunks    []bool
 	freeCount int
-	next      *Slab
 }
 
-// NewSlabAllocator creates a slab allocator
-func NewSlabAllocator(objectSize, objectsPerSlab int) *SlabAllocator {
+// NewSlabAllocator creates a new slab allocator
+func NewSlabAllocator(slabSize, chunkSize int) *SlabAllocator {
 	return &SlabAllocator{
-		objectSize: objectSize,
-		slabSize:   objectSize * objectsPerSlab,
+		slabSize:  slabSize,
+		chunkSize: chunkSize,
+		slabs:     make([]*Slab, 0),
 	}
 }
 
-// Allocate returns a pointer to an object
-func (sa *SlabAllocator) Allocate() unsafe.Pointer {
+// Allocate allocates a chunk from slab
+func (sa *SlabAllocator) Allocate() []byte {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	
-	// Find slab with free space
-	slab := sa.free
-	if slab == nil || slab.freeCount == 0 {
-		// Allocate new slab
-		slab = sa.newSlab()
-		sa.slabs = append(sa.slabs, slab)
-	}
-	
-	// Find free object
-	for i, allocated := range slab.objects {
-		if !allocated {
-			slab.objects[i] = true
-			slab.freeCount--
-			
-			offset := i * sa.objectSize
-			return unsafe.Pointer(&slab.memory[offset])
-		}
-	}
-	
-	return nil
-}
-
-// Free returns an object to the allocator
-func (sa *SlabAllocator) Free(ptr unsafe.Pointer) {
-	sa.mu.Lock()
-	defer sa.mu.Unlock()
-	
-	// Find containing slab
+	// Find slab with free chunk
 	for _, slab := range sa.slabs {
-		start := uintptr(unsafe.Pointer(&slab.memory[0]))
-		end := start + uintptr(len(slab.memory))
-		
-		if uintptr(ptr) >= start && uintptr(ptr) < end {
-			// Calculate object index
-			offset := int(uintptr(ptr) - start)
-			idx := offset / sa.objectSize
-			
-			if idx < len(slab.objects) && slab.objects[idx] {
-				slab.objects[idx] = false
-				slab.freeCount++
-				
-				// Update free list
-				if slab.freeCount == 1 {
-					slab.next = sa.free
-					sa.free = slab
+		if slab.freeCount > 0 {
+			for i, free := range slab.chunks {
+				if free {
+					slab.chunks[i] = false
+					slab.freeCount--
+					offset := i * sa.chunkSize
+					return slab.memory[offset : offset+sa.chunkSize]
 				}
 			}
-			return
 		}
 	}
+	
+	// Create new slab
+	slab := sa.createSlab()
+	sa.slabs = append(sa.slabs, slab)
+	
+	// Allocate first chunk
+	slab.chunks[0] = false
+	slab.freeCount--
+	return slab.memory[:sa.chunkSize]
 }
 
-// newSlab creates a new slab
-func (sa *SlabAllocator) newSlab() *Slab {
-	objectCount := sa.slabSize / sa.objectSize
-	return &Slab{
+// createSlab creates a new slab
+func (sa *SlabAllocator) createSlab() *Slab {
+	numChunks := sa.slabSize / sa.chunkSize
+	slab := &Slab{
 		memory:    make([]byte, sa.slabSize),
-		objects:   make([]bool, objectCount),
-		freeCount: objectCount,
+		chunks:    make([]bool, numChunks),
+		freeCount: numChunks,
 	}
+	
+	// Mark all chunks as free
+	for i := range slab.chunks {
+		slab.chunks[i] = true
+	}
+	
+	return slab
 }

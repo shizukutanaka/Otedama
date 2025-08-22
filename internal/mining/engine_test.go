@@ -1,11 +1,9 @@
 package mining
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -13,375 +11,289 @@ import (
 
 func TestNewEngine(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   4,
-		Intensity:    20,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 100,
-		AutoOptimize: true,
+	config := &Config{
+		Algorithm: "sha256d",
+		CPU: CPUConfig{
+			Enabled: true,
+			Threads: 4,
+		},
+		GPU: GPUConfig{
+			Enabled:   false,
+			Intensity: 20,
+		},
 	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
+	
+	engine := NewEngine(logger, config)
+	
 	assert.NotNil(t, engine)
+	assert.Equal(t, config, engine.config)
+	assert.NotNil(t, engine.algorithms)
+	assert.NotNil(t, engine.stats)
 }
 
-func TestEngine_Start(t *testing.T) {
+func TestEngineInitialize(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   2,
-		Intensity:    10,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 100,
-		AutoOptimize: false,
+	config := &Config{
+		Algorithm: "sha256d",
+		CPU: CPUConfig{
+			Enabled: true,
+		},
 	}
+	
+	engine := NewEngine(logger, config)
+	
+	// Mock hardware manager
+	mockHardware := &mockHardwareManager{}
+	engine.hardware = mockHardware
+	
+	err := engine.Initialize()
+	assert.NoError(t, err)
+}
 
-	engine, err := NewEngine(logger, cfg)
+func TestEngineStartStop(t *testing.T) {
+	logger := zap.NewNop()
+	config := &Config{
+		Algorithm: "sha256d",
+		CPU: CPUConfig{
+			Enabled: true,
+			Threads: 2,
+		},
+	}
+	
+	engine := NewEngine(logger, config)
+	
+	// Mock hardware
+	mockHardware := &mockHardwareManager{}
+	engine.hardware = mockHardware
+	
+	// Initialize
+	err := engine.Initialize()
 	require.NoError(t, err)
-
+	
+	// Start
 	err = engine.Start()
 	assert.NoError(t, err)
-
-	// Let it run briefly
-	time.Sleep(100 * time.Millisecond)
-
+	assert.True(t, engine.running.Load())
+	
+	// Start again should fail
+	err = engine.Start()
+	assert.Error(t, err)
+	
+	// Stop
 	err = engine.Stop()
 	assert.NoError(t, err)
-}
-
-func TestEngine_MultiDevice(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   2,
-		GPUDevices:   []int{0, 1},
-		ASICDevices:  []string{"asic0", "asic1"},
-		Intensity:    15,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 100,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	err = engine.Start()
-	require.NoError(t, err)
-	defer engine.Stop()
-
-	// Test multi-device support
-	assert.True(t, engine.HasCPU())
-	assert.True(t, engine.HasGPU())
-	assert.True(t, engine.HasASIC())
-
-	// Get hardware info
-	info := engine.GetHardwareInfo()
-	assert.Greater(t, info.CPUThreads, 0)
-	assert.Len(t, info.GPUDevices, 2)
-	assert.Len(t, info.ASICDevices, 2)
-}
-
-func TestEngine_GetHashRate(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   2,
-		Intensity:    10,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 100,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	err = engine.Start()
-	require.NoError(t, err)
-	defer engine.Stop()
-
-	// Let it run briefly
-	time.Sleep(100 * time.Millisecond)
-
-	stats := engine.GetStats()
-	assert.NotNil(t, stats)
-	assert.GreaterOrEqual(t, stats.TotalHashRate, uint64(0))
-}
-
-func TestEngine_AlgorithmManagement(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   1,
-		Intensity:    5,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 50,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	// Test algorithm switching
-	assert.Equal(t, SHA256D, engine.GetAlgorithm())
-
-	// Test algorithm validation
-	assert.True(t, engine.ValidateAlgorithm("sha256d"))
-	assert.True(t, engine.ValidateAlgorithm("scrypt"))
-	assert.False(t, engine.ValidateAlgorithm("invalid"))
-}
-
-func TestEngine_PoolManagement(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   1,
-		Intensity:    5,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 50,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	// Test pool configuration
-	err = engine.SetPool("stratum+tcp://127.0.0.1:3333", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
-	assert.NoError(t, err)
-}
-
-func TestEngine_ConfigManagement(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   2,
-		Intensity:    10,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 100,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	// Test configuration
-	config := engine.GetConfig()
-	assert.NotNil(t, config)
-	assert.Equal(t, 2, engine.GetCPUThreads())
-
-	// Test CPU thread adjustment
-	err = engine.SetCPUThreads(4)
-	assert.NoError(t, err)
-	assert.Equal(t, 4, engine.GetCPUThreads())
-}
-
-func TestEngine_HealthCheck(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   1,
-		Intensity:    5,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 50,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	// Test health check
-	err = engine.Start()
-	require.NoError(t, err)
-	defer engine.Stop()
-
-	// Engine should be healthy after starting
-	assert.True(t, engine.GetStatus().Running)
-}
-
-func TestEngine_JobProcessing(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := &Config{
-		Algorithm:    SHA256D,
-		CPUThreads:   1,
-		Intensity:    5,
-		MaxMemoryMB:  1024,
-		JobQueueSize: 50,
-		AutoOptimize: false,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	err = engine.Start()
-	require.NoError(t, err)
-	defer engine.Stop()
-
-	// Test job processing
-	job := &Job{
-		ID:        "test-job-1",
-		Algorithm: SHA256D,
-		Target:    "0000ffff00000000000000000000000000000000000000000000000000000000",
-		Data:      make([]byte, 80),
-	}
-
-	// Submit job
-	err = engine.SubmitJob(job)
-	assert.NoError(t, err)
-
-	// Get current job
-	currentJob := engine.GetCurrentJob()
-	assert.NotNil(t, currentJob)
-}
-
-func TestEngine_GetHashRate(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   2,
-		Intensity: 10,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	err = engine.Start()
-	require.NoError(t, err)
-	defer engine.Stop()
-
-	// Initially should be 0
-	hashRate := engine.GetHashRate()
-	assert.GreaterOrEqual(t, hashRate, uint64(0))
-
-	// After some mining, should increase
-	time.Sleep(500 * time.Millisecond)
-	hashRate = engine.GetHashRate()
-	assert.GreaterOrEqual(t, hashRate, uint64(0))
-}
-
-func TestEngine_UpdateConfig(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   2,
-		Intensity: 10,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	err = engine.Start()
-	require.NoError(t, err)
-	defer engine.Stop()
-
-	// Update configuration
-	newCfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   4,
-		Intensity: 20,
-	}
-
-	engine.UpdateConfig(newCfg)
+	assert.False(t, engine.running.Load())
 	
-	// Verify config was updated
-	// This would need access to internal state to verify properly
+	// Stop again should fail
+	err = engine.Stop()
+	assert.Error(t, err)
 }
 
-func TestEngine_EnableCPU(t *testing.T) {
+func TestEngineSetJob(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := config.MiningConfig{
+	config := &Config{
 		Algorithm: "sha256d",
-		Threads:   2,
-		Intensity: 10,
 	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	cpuConfig := config.CPUConfig{
-		Enabled:  true,
-		Threads:  4,
-		Affinity: []int{0, 1, 2, 3},
-		Priority: 0,
-	}
-
-	engine.EnableCPU(cpuConfig)
-}
-
-func TestEngine_ValidateShare(t *testing.T) {
-	logger := zap.NewNop()
-	cfg := config.MiningConfig{
-		Algorithm: "sha256d",
-		Threads:   1,
-		Intensity: 5,
-	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(t, err)
-
-	share := &Share{
-		JobID:      "test-job-1",
-		Nonce:      12345,
-		Hash:       "0000000000000000000000000000000000000000000000000000000000000001",
+	
+	engine := NewEngine(logger, config)
+	
+	job := &Job{
+		ID:         "test-job-1",
+		Algorithm:  "sha256d",
+		Target:     []byte{0xFF, 0xFF},
+		Header:     []byte{0x01, 0x02, 0x03},
+		Height:     100,
 		Difficulty: 1.0,
 		Timestamp:  time.Now(),
 	}
-
-	valid := engine.ValidateShare(share)
-	assert.NotNil(t, valid) // Can be true or false depending on implementation
+	
+	engine.SetJob(job)
+	
+	currentJob := engine.currentJob.Load()
+	assert.NotNil(t, currentJob)
+	assert.Equal(t, job.ID, currentJob.ID)
 }
 
-func BenchmarkEngine_Hash(b *testing.B) {
+func TestEngineSubmitShare(t *testing.T) {
 	logger := zap.NewNop()
-	cfg := config.MiningConfig{
+	config := &Config{
 		Algorithm: "sha256d",
-		Threads:   1,
-		Intensity: 10,
 	}
+	
+	engine := NewEngine(logger, config)
+	
+	// Set a job first
+	job := &Job{
+		ID:         "test-job-1",
+		Algorithm:  "sha256d",
+		Target:     []byte{0xFF, 0xFF, 0xFF, 0xFF},
+		Header:     []byte{0x01, 0x02, 0x03},
+		Height:     100,
+		Difficulty: 1.0,
+		Timestamp:  time.Now(),
+	}
+	engine.SetJob(job)
+	
+	// Submit a share
+	nonce := uint64(12345)
+	hash := []byte{0x00, 0x00, 0xFF, 0xFF}
+	
+	err := engine.SubmitShare(nonce, hash)
+	assert.NoError(t, err)
+	
+	// Check statistics
+	assert.Greater(t, engine.stats.SharesAccepted.Load(), uint64(0))
+}
 
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(b, err)
+func TestEngineGetStatistics(t *testing.T) {
+	logger := zap.NewNop()
+	config := &Config{
+		Algorithm: "sha256d",
+	}
+	
+	engine := NewEngine(logger, config)
+	
+	stats := engine.GetStatistics()
+	
+	assert.NotNil(t, stats)
+	assert.Contains(t, stats, "running")
+	assert.Contains(t, stats, "algorithm")
+	assert.Contains(t, stats, "hashrate")
+	assert.Contains(t, stats, "shares_accepted")
+	assert.Contains(t, stats, "shares_rejected")
+}
 
-	data := make([]byte, 80)
+func TestEnginePowerModes(t *testing.T) {
+	logger := zap.NewNop()
+	config := &Config{
+		Algorithm: "sha256d",
+	}
+	
+	engine := NewEngine(logger, config)
+	
+	// Test optimize for latency
+	engine.OptimizeForLatency()
+	// Should not panic
+	
+	// Test optimize for efficiency
+	engine.OptimizeForEfficiency()
+	// Should not panic
+}
+
+func TestEngineWorkerManagement(t *testing.T) {
+	logger := zap.NewNop()
+	config := &Config{
+		Algorithm: "sha256d",
+		CPU: CPUConfig{
+			Enabled: true,
+		},
+	}
+	
+	engine := NewEngine(logger, config)
+	
+	// Create test workers
+	engine.workers = []*Worker{
+		{ID: "worker-1", Active: atomic.Bool{}},
+		{ID: "worker-2", Active: atomic.Bool{}},
+	}
+	
+	// Get workers
+	workers := engine.GetWorkers()
+	assert.Len(t, workers, 2)
+	
+	// Enable worker
+	err := engine.EnableWorker("worker-1")
+	assert.NoError(t, err)
+	assert.True(t, engine.workers[0].Active.Load())
+	
+	// Disable worker
+	err = engine.DisableWorker("worker-1")
+	assert.NoError(t, err)
+	assert.False(t, engine.workers[0].Active.Load())
+	
+	// Non-existent worker
+	err = engine.EnableWorker("worker-999")
+	assert.Error(t, err)
+}
+
+// Mock hardware manager for testing
+type mockHardwareManager struct{}
+
+func (m *mockHardwareManager) Initialize() error {
+	return nil
+}
+
+func (m *mockHardwareManager) Start(algorithm string) error {
+	return nil
+}
+
+func (m *mockHardwareManager) Stop() error {
+	return nil
+}
+
+func (m *mockHardwareManager) GetDevices() []interface{} {
+	return []interface{}{}
+}
+
+func (m *mockHardwareManager) SubmitJob(job *HardwareJob) error {
+	return nil
+}
+
+func (m *mockHardwareManager) GetMetrics() map[string]interface{} {
+	return map[string]interface{}{
+		"devices_total": 1,
+		"hashrate":      1000000,
+	}
+}
+
+func (m *mockHardwareManager) SetPowerLimit(watts float64) error {
+	return nil
+}
+
+func (m *mockHardwareManager) SetTemperatureLimit(celsius float64) error {
+	return nil
+}
+
+// Benchmark tests
+func BenchmarkEngineSubmitShare(b *testing.B) {
+	logger := zap.NewNop()
+	config := &Config{
+		Algorithm: "sha256d",
+	}
+	
+	engine := NewEngine(logger, config)
+	
+	job := &Job{
+		ID:         "bench-job",
+		Algorithm:  "sha256d",
+		Target:     []byte{0xFF, 0xFF, 0xFF, 0xFF},
+		Header:     []byte{0x01, 0x02, 0x03},
+		Height:     100,
+		Difficulty: 1.0,
+		Timestamp:  time.Now(),
+	}
+	engine.SetJob(job)
+	
+	nonce := uint64(0)
+	hash := []byte{0x00, 0x00, 0xFF, 0xFF}
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = engine.Hash(data)
+		engine.SubmitShare(nonce, hash)
+		nonce++
 	}
 }
 
-func BenchmarkEngine_Mine(b *testing.B) {
+func BenchmarkEngineGetStatistics(b *testing.B) {
 	logger := zap.NewNop()
-	cfg := config.MiningConfig{
+	config := &Config{
 		Algorithm: "sha256d",
-		Threads:   4,
-		Intensity: 20,
 	}
-
-	engine, err := NewEngine(logger, cfg)
-	require.NoError(b, err)
-
-	err = engine.Start()
-	require.NoError(b, err)
-	defer engine.Stop()
-
-	job := &Job{
-		ID:         "bench-job",
-		Target:     "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-		Data:       make([]byte, 80),
-		NonceStart: 0,
-		NonceEnd:   1000000,
-	}
-
+	
+	engine := NewEngine(logger, config)
+	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		nonceChan := make(chan uint64, 1)
-		go engine.Mine(ctx, job, nonceChan)
-		select {
-		case <-nonceChan:
-		case <-ctx.Done():
-		}
-		cancel()
+		_ = engine.GetStatistics()
 	}
 }

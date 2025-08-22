@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/memory"
+	"github.com/otedama/otedama/internal/memory"
 	"go.uber.org/zap"
 )
 

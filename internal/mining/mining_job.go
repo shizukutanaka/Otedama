@@ -47,14 +47,6 @@ type Block struct {
 }
 
 // Transaction represents a transaction in the block
-type Transaction struct {
-	TxID      string    `json:"tx_id"`
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Amount    uint64    `json:"amount"`
-	Fee       uint64    `json:"fee"`
-	Timestamp time.Time `json:"timestamp"`
-}
 
 // JobManager manages mining jobs
 type JobManager struct {
@@ -412,7 +404,7 @@ func (jm *JobManager) calculateNextDifficulty(latestBlock Block) float64 {
 	}
 	
 	// For now, keep difficulty constant
-	// TODO: Implement proper difficulty adjustment algorithm
+	// Difficulty adjustment would be implemented here
 	return currentDiff
 }
 

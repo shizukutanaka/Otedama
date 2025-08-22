@@ -75,22 +75,22 @@ type DeviceInfo struct {
 
 // NotificationSettings contains user notification preferences
 type NotificationSettings struct {
-	Enabled         bool
-	WorkerOffline   bool
-	PayoutSent      bool
-	BlockFound      bool
-	ProfitSwitch    bool
-	LowHashrate     bool
-	HighRejects     bool
-	QuietHours      *QuietHours
+	Enabled         bool         `json:"enabled"`
+	WorkerOffline   bool         `json:"worker_offline"`
+	PayoutSent      bool         `json:"payout_sent"`
+	BlockFound      bool         `json:"block_found"`
+	ProfitSwitch    bool         `json:"profit_switch"`
+	LowHashrate     bool         `json:"low_hashrate"`
+	HighRejects     bool         `json:"high_rejects"`
+	QuietHours      *QuietHours  `json:"quiet_hours,omitempty"`
 }
 
 // QuietHours defines quiet hours for notifications
 type QuietHours struct {
-	Enabled   bool
-	StartHour int // 0-23
-	EndHour   int // 0-23
-	TimeZone  string
+	Enabled   bool   `json:"enabled"`
+	StartHour int    `json:"start_hour"` // 0-23
+	EndHour   int    `json:"end_hour"`   // 0-23
+	TimeZone  string `json:"time_zone"`
 }
 
 // PushNotification represents a push notification

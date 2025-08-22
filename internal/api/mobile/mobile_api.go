@@ -2,10 +2,15 @@ package mobile
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,10 +18,13 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/shizukutanaka/Otedama/internal/analytics"
-	"github.com/shizukutanaka/Otedama/internal/mining"
-	"github.com/shizukutanaka/Otedama/internal/pool"
-	"github.com/shizukutanaka/Otedama/internal/profit"
+	"github.com/otedama/otedama/internal/analytics"
+	"github.com/otedama/otedama/internal/auth"
+	"github.com/otedama/otedama/internal/common"
+	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/pool"
+	"github.com/otedama/otedama/internal/profit"
+	"github.com/otedama/otedama/internal/security"
 	"go.uber.org/zap"
 )
 
@@ -29,6 +37,7 @@ type MobileAPI struct {
 	miningEngine   mining.Engine
 	analytics      *analytics.AnalyticsEngine
 	profitSwitcher *profit.ProfitSwitcher
+	walletSecurity *security.WalletSecurityManager
 	// WebSocket
 	upgrader       websocket.Upgrader
 	wsConnections  map[string]*WSConnection
@@ -36,6 +45,117 @@ type MobileAPI struct {
 	rateLimiter    *MobileRateLimiter
 	// Authentication
 	authManager    *AuthManager
+	// Notifications (in-memory store for MVP)
+	notifMu        sync.RWMutex
+	notifStore     map[string][]Notification // userID -> notifications
+	notifSettings  map[string]NotificationSettings // userID -> settings
+}
+
+// Security: Wallet backup/restore handlers
+
+// handleBackupWallets creates an encrypted backup and returns it as base64 content.
+func (api *MobileAPI) handleBackupWallets(w http.ResponseWriter, r *http.Request) {
+	if api.walletSecurity == nil {
+		api.sendError(w, http.StatusNotImplemented, "Wallet security not configured")
+		return
+	}
+
+	userID := api.getUserID(r)
+
+	var req struct {
+		BackupPassword string `json:"backup_password"`
+		MFAChallenge   string `json:"mfa_challenge"`
+		MFAResponse    string `json:"mfa_response"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		api.sendError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if strings.TrimSpace(req.BackupPassword) == "" {
+		api.sendError(w, http.StatusBadRequest, "backup_password cannot be empty")
+		return
+	}
+
+	path, err := api.walletSecurity.BackupWalletsWithAuth(r.Context(), userID, req.MFAChallenge, req.MFAResponse, req.BackupPassword)
+	if err != nil {
+		// Propagate access control or validation errors to client
+		api.sendError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		api.sendError(w, http.StatusInternalServerError, "Failed to read backup")
+		return
+	}
+
+	api.sendSuccess(w, map[string]interface{}{
+		"filename":       filepath.Base(path),
+		"size":           len(data),
+		"content_base64": base64.StdEncoding.EncodeToString(data),
+	})
+}
+
+// handleRestoreWallets accepts a multipart upload with field name "backup" and restores wallets.
+// Form fields: mfa_challenge, mfa_response, backup_password
+func (api *MobileAPI) handleRestoreWallets(w http.ResponseWriter, r *http.Request) {
+	if api.walletSecurity == nil {
+		api.sendError(w, http.StatusNotImplemented, "Wallet security not configured")
+		return
+	}
+
+	userID := api.getUserID(r)
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MiB
+		api.sendError(w, http.StatusBadRequest, "Invalid multipart form")
+		return
+	}
+
+	file, header, err := r.FormFile("backup")
+	if err != nil {
+		api.sendError(w, http.StatusBadRequest, "Missing backup file")
+		return
+	}
+	defer file.Close()
+
+	tmpDir, err := os.MkdirTemp("", "wallet-restore-*")
+	if err != nil {
+		api.sendError(w, http.StatusInternalServerError, "Failed to prepare restore")
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpPath := filepath.Join(tmpDir, header.Filename)
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		api.sendError(w, http.StatusInternalServerError, "Failed to save backup")
+		return
+	}
+	if _, err := io.Copy(out, file); err != nil {
+		out.Close()
+		api.sendError(w, http.StatusInternalServerError, "Failed to write backup")
+		return
+	}
+	out.Close()
+
+	mfaChallenge := r.FormValue("mfa_challenge")
+	mfaResponse := r.FormValue("mfa_response")
+	backupPassword := r.FormValue("backup_password")
+	if strings.TrimSpace(backupPassword) == "" {
+		api.sendError(w, http.StatusBadRequest, "backup_password cannot be empty")
+		return
+	}
+
+	if err := api.walletSecurity.RestoreWalletsWithAuth(r.Context(), userID, mfaChallenge, mfaResponse, tmpPath, backupPassword); err != nil {
+		api.sendError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	api.sendSuccess(w, map[string]string{
+		"message": "Wallets restored successfully",
+	})
 }
 
 // MobileAPIConfig contains mobile API configuration
@@ -93,6 +213,77 @@ type MobileAPIDeps struct {
 	MiningEngine   mining.Engine
 	Analytics      *analytics.AnalyticsEngine
 	ProfitSwitcher *profit.ProfitSwitcher
+	WalletSecurity *security.WalletSecurityManager
+}
+
+// NewMobileAPI creates and initializes a MobileAPI instance with dependencies and configuration
+func NewMobileAPI(deps MobileAPIDeps, cfg MobileAPIConfig, logger *zap.Logger) *MobileAPI {
+    // Ensure sensible defaults
+    if cfg.RateLimit <= 0 {
+        cfg.RateLimit = 60
+    }
+    if cfg.BurstLimit < 0 {
+        cfg.BurstLimit = 0
+    }
+    if cfg.WSReadTimeout == 0 {
+        cfg.WSReadTimeout = 60 * time.Second
+    }
+    if cfg.WSWriteTimeout == 0 {
+        cfg.WSWriteTimeout = 10 * time.Second
+    }
+    if cfg.WSMaxMessageSize == 0 {
+        cfg.WSMaxMessageSize = 1 << 20 // 1 MiB
+    }
+
+    api := &MobileAPI{
+        logger:         logger,
+        config:         cfg,
+        poolManager:    deps.PoolManager,
+        miningEngine:   deps.MiningEngine,
+        analytics:      deps.Analytics,
+        profitSwitcher: deps.ProfitSwitcher,
+        walletSecurity: deps.WalletSecurity,
+        upgrader: websocket.Upgrader{
+            ReadBufferSize:  1024,
+            WriteBufferSize: 1024,
+            CheckOrigin: func(r *http.Request) bool {
+                // Allow mobile app origins; main server CORS already enforced at HTTP layer
+                return true
+            },
+            EnableCompression: true,
+        },
+        wsConnections: make(map[string]*WSConnection),
+        rateLimiter: &MobileRateLimiter{
+            requests: make(map[string]*UserRateLimit),
+            rpm:      cfg.RateLimit,
+            burst:    cfg.BurstLimit,
+        },
+        authManager: &AuthManager{
+            jwtSecret: []byte(cfg.JWTSecret),
+            expiry:    cfg.TokenExpiry,
+        },
+        notifStore:    make(map[string][]Notification),
+        notifSettings: make(map[string]NotificationSettings),
+    }
+
+    return api
+}
+
+// SetupRoutes registers all Mobile API routes on the given router under the provided prefix
+func (api *MobileAPI) SetupRoutes(router *mux.Router) {
+    // Protected subrouter with JWT auth middleware
+    protected := router.PathPrefix("/").Subrouter()
+    protected.Use(api.authMiddleware)
+
+    // Core feature routes already defined in internal setup
+    api.setupRoutes(protected)
+
+    // Wallet backup/restore
+    protected.HandleFunc("/wallets/backup", api.handleBackupWallets).Methods("POST")
+    protected.HandleFunc("/wallets/restore", api.handleRestoreWallets).Methods("POST")
+
+    // WebSocket endpoint for real-time mobile updates
+    protected.HandleFunc("/ws", api.handleWebSocket)
 }
 
 // Response structures
@@ -102,6 +293,28 @@ type APIResponse struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
+}
+
+// Helper response methods
+func (api *MobileAPI) sendError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(APIResponse{Success: false, Error: msg})
+}
+
+func (api *MobileAPI) sendSuccess(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(APIResponse{Success: true, Data: data})
+}
+
+func (api *MobileAPI) getUserID(r *http.Request) string {
+	if v := r.Context().Value("user_id"); v != nil {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // DashboardData contains dashboard information
@@ -155,10 +368,20 @@ type EarningHistoryPoint struct {
 	Date     time.Time `json:"date"`
 	Amount   float64   `json:"amount"`
 	Currency string    `json:"currency"`
-	TxID     string    `json:"tx_id,omitempty"`
 }
 
-// PoolStatistics contains pool-wide statistics
+// Notification represents a user-visible notification in the mobile app
+type Notification struct {
+	ID        string            `json:"id"`
+	Type      string            `json:"type"`
+	Title     string            `json:"title"`
+	Body      string            `json:"body"`
+	Data      map[string]string `json:"data,omitempty"`
+	Read      bool              `json:"read"`
+	Timestamp time.Time         `json:"timestamp"`
+}
+
+// PoolStatistics summarizes pool-level stats for dashboard
 type PoolStatistics struct {
 	TotalHashrate  float64 `json:"total_hashrate"`
 	ActiveMiners   int     `json:"active_miners"`
@@ -167,605 +390,127 @@ type PoolStatistics struct {
 	MinPayout      float64 `json:"min_payout"`
 }
 
-// Notification represents a user notification
-type Notification struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`
-	Title     string    `json:"title"`
-	Message   string    `json:"message"`
-	Timestamp time.Time `json:"timestamp"`
-	Read      bool      `json:"read"`
-}
+// ...
 
-// NewMobileAPI creates a new mobile API instance
-func NewMobileAPI(logger *zap.Logger, config MobileAPIConfig, deps MobileAPIDeps) *MobileAPI {
-	api := &MobileAPI{
-		logger:         logger,
-		config:         config,
-		poolManager:    deps.PoolManager,
-		miningEngine:   deps.MiningEngine,
-		analytics:      deps.Analytics,
-		profitSwitcher: deps.ProfitSwitcher,
-		wsConnections:  make(map[string]*WSConnection),
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
-				// Allow connections from mobile apps
-				return true
-			},
-		},
-		rateLimiter: &MobileRateLimiter{
-			requests: make(map[string]*UserRateLimit),
-			rpm:      func() int { if config.RateLimit > 0 { return config.RateLimit }; return 60 }(),
-			burst:    func() int { if config.BurstLimit > 0 { return config.BurstLimit }; return 10 }(),
-		},
-		authManager: &AuthManager{
-			jwtSecret: []byte(config.JWTSecret),
-			expiry:    config.TokenExpiry,
-		},
-	}
-	
-	return api
-}
-
-// Start starts the mobile API server
-func (api *MobileAPI) Start() error {
-	router := mux.NewRouter()
-	
-	// Setup routes
-	api.setupRoutes(router)
-	
-	// Start WebSocket handler
-	go api.handleWebSocketMessages()
-	
-	// Start server
-	api.logger.Info("Starting mobile API server",
-		zap.String("address", api.config.ListenAddress),
-		zap.Bool("tls", api.config.EnableTLS),
-	)
-	
-	if api.config.EnableTLS {
-		return http.ListenAndServeTLS(
-			api.config.ListenAddress,
-			api.config.TLSCertFile,
-			api.config.TLSKeyFile,
-			router,
-		)
-	}
-	
-	return http.ListenAndServe(api.config.ListenAddress, router)
-}
-
-// setupRoutes sets up all API routes
 func (api *MobileAPI) setupRoutes(router *mux.Router) {
-	// API v1 routes
-	v1 := router.PathPrefix("/api/v1").Subrouter()
-	
-	// Public routes
-	v1.HandleFunc("/auth/login", api.handleLogin).Methods("POST")
-	v1.HandleFunc("/auth/register", api.handleRegister).Methods("POST")
-	v1.HandleFunc("/auth/refresh", api.handleRefreshToken).Methods("POST")
-	
-	// Protected routes (require authentication)
-	protected := v1.PathPrefix("").Subrouter()
-	protected.Use(api.authMiddleware)
-	protected.Use(api.rateLimitMiddleware)
-	
-	// Dashboard
-	protected.HandleFunc("/dashboard", api.handleGetDashboard).Methods("GET")
-	protected.HandleFunc("/dashboard/refresh", api.handleRefreshDashboard).Methods("POST")
-	
-	// Workers
-	protected.HandleFunc("/workers", api.handleGetWorkers).Methods("GET")
-	protected.HandleFunc("/workers/{id}", api.handleGetWorker).Methods("GET")
-	protected.HandleFunc("/workers/{id}/restart", api.handleRestartWorker).Methods("POST")
-	
-	// Earnings
-	protected.HandleFunc("/earnings", api.handleGetEarnings).Methods("GET")
-	protected.HandleFunc("/earnings/history", api.handleGetEarningHistory).Methods("GET")
-	protected.HandleFunc("/payouts", api.handleGetPayouts).Methods("GET")
-	
-	// Settings
-	protected.HandleFunc("/settings", api.handleGetSettings).Methods("GET")
-	protected.HandleFunc("/settings", api.handleUpdateSettings).Methods("PUT")
-	protected.HandleFunc("/settings/payout", api.handleUpdatePayoutSettings).Methods("PUT")
-	
-	// Notifications
-	protected.HandleFunc("/notifications", api.handleGetNotifications).Methods("GET")
-	protected.HandleFunc("/notifications/{id}/read", api.handleMarkNotificationRead).Methods("POST")
-	protected.HandleFunc("/notifications/settings", api.handleUpdateNotificationSettings).Methods("PUT")
-	
-	// Statistics
-	protected.HandleFunc("/stats/pool", api.handleGetPoolStats).Methods("GET")
-	protected.HandleFunc("/stats/profit", api.handleGetProfitStats).Methods("GET")
-	protected.HandleFunc("/stats/performance", api.handleGetPerformanceStats).Methods("GET")
-	
-	// WebSocket endpoint
-	protected.HandleFunc("/ws", api.handleWebSocket)
-	
-	// Health check
-	router.HandleFunc("/health", api.handleHealthCheck).Methods("GET")
+    // Create a protected subrouter and attach authentication middleware
+    protected := router.PathPrefix("/").Subrouter()
+    protected.Use(api.authMiddleware)
+
+    // Notifications (protected)
+    protected.HandleFunc("/notifications", api.handleGetNotifications).Methods("GET")
+    protected.HandleFunc("/notifications/{id}/read", api.handleMarkNotificationRead).Methods("POST")
+    protected.HandleFunc("/notifications/settings", api.handleGetNotificationSettings).Methods("GET")
+    protected.HandleFunc("/notifications/settings", api.handleUpdateNotificationSettings).Methods("PUT")
 }
 
-// Authentication handlers
-
-func (api *MobileAPI) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		DeviceID string `json:"device_id"`
-	}
-	
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.sendError(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	
-	// Authenticate user (simplified)
-	user, err := api.authenticateUser(req.Username, req.Password)
-	if err != nil {
-		api.sendError(w, http.StatusUnauthorized, "Invalid credentials")
-		return
-	}
-	
-	// Generate token
-	token, err := api.authManager.GenerateToken(user.ID, req.DeviceID)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to generate token")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]interface{}{
-		"token":      token,
-		"user_id":    user.ID,
-		"expires_at": time.Now().Add(api.config.TokenExpiry),
-	})
-}
-
-func (api *MobileAPI) handleRegister(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		WalletAddress string `json:"wallet_address"`
-	}
-	
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.sendError(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	
-	// Create user (simplified)
-	user, err := api.createUser(req.Username, req.Email, req.Password, req.WalletAddress)
-	if err != nil {
-		api.sendError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	
-	api.sendSuccess(w, map[string]interface{}{
-		"user_id": user.ID,
-		"message": "Registration successful. Please login.",
-	})
-}
-
-func (api *MobileAPI) handleRefreshToken(w http.ResponseWriter, r *http.Request) {
-	// Extract token from header
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		api.sendError(w, http.StatusUnauthorized, "Missing authorization header")
-		return
-	}
-	
-	// Refresh token
-	newToken, err := api.authManager.RefreshToken(authHeader)
-	if err != nil {
-		api.sendError(w, http.StatusUnauthorized, "Invalid token")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]interface{}{
-		"token":      newToken,
-		"expires_at": time.Now().Add(api.config.TokenExpiry),
-	})
-}
-
-// Dashboard handlers
-
-func (api *MobileAPI) handleGetDashboard(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Get dashboard data
-	dashboard, err := api.getDashboardData(r.Context(), userID)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get dashboard data")
-		return
-	}
-	
-	api.sendSuccess(w, dashboard)
-}
-
-func (api *MobileAPI) handleRefreshDashboard(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Force refresh of dashboard data
-	dashboard, err := api.getDashboardData(r.Context(), userID)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to refresh dashboard")
-		return
-	}
-	
-	// Send update via WebSocket too
-	api.broadcastToUser(userID, "dashboard_update", dashboard)
-	
-	api.sendSuccess(w, dashboard)
-}
-
-// Worker handlers
-
-func (api *MobileAPI) handleGetWorkers(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Get query parameters
-	status := r.URL.Query().Get("status")
-	sortBy := r.URL.Query().Get("sort_by")
-	
-	workers, err := api.getWorkers(userID, status, sortBy)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get workers")
-		return
-	}
-	
-	api.sendSuccess(w, workers)
-}
-
-func (api *MobileAPI) handleGetWorker(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	workerID := mux.Vars(r)["id"]
-	
-	worker, err := api.getWorkerDetails(userID, workerID)
-	if err != nil {
-		api.sendError(w, http.StatusNotFound, "Worker not found")
-		return
-	}
-	
-	api.sendSuccess(w, worker)
-}
-
-func (api *MobileAPI) handleRestartWorker(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	workerID := mux.Vars(r)["id"]
-	
-	if err := api.restartWorker(userID, workerID); err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to restart worker")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]string{
-		"message": "Worker restart initiated",
-	})
-}
-
-// Earnings handlers
-
-func (api *MobileAPI) handleGetEarnings(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Get time range
-	period := r.URL.Query().Get("period")
-	if period == "" {
-		period = "week"
-	}
-	
-	earnings, err := api.getEarnings(userID, period)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get earnings")
-		return
-	}
-	
-	api.sendSuccess(w, earnings)
-}
-
-func (api *MobileAPI) handleGetEarningHistory(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Get pagination
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil {
-			limit = parsed
-		}
-	}
-	
-	offset := 0
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if parsed, err := strconv.Atoi(o); err == nil {
-			offset = parsed
-		}
-	}
-	
-	history, err := api.getEarningHistory(userID, limit, offset)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get earning history")
-		return
-	}
-	
-	api.sendSuccess(w, history)
-}
-
-func (api *MobileAPI) handleGetPayouts(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	payouts, err := api.getPayouts(userID)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get payouts")
-		return
-	}
-	
-	api.sendSuccess(w, payouts)
-}
-
-// Settings handlers
-
-func (api *MobileAPI) handleGetSettings(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	settings, err := api.getUserSettings(userID)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get settings")
-		return
-	}
-	
-	api.sendSuccess(w, settings)
-}
-
-func (api *MobileAPI) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	var settings map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-		api.sendError(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	
-	if err := api.updateUserSettings(userID, settings); err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to update settings")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]string{
-		"message": "Settings updated successfully",
-	})
-}
-
-func (api *MobileAPI) handleUpdatePayoutSettings(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	var req struct {
-		WalletAddress string  `json:"wallet_address"`
-		MinPayout     float64 `json:"min_payout"`
-		PayoutCurrency string `json:"payout_currency"`
-	}
-	
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.sendError(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	
-	if err := api.updatePayoutSettings(userID, req.WalletAddress, req.MinPayout, req.PayoutCurrency); err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to update payout settings")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]string{
-		"message": "Payout settings updated successfully",
-	})
-}
-
-// Statistics handlers
-
-func (api *MobileAPI) handleGetPoolStats(w http.ResponseWriter, r *http.Request) {
-	stats, err := api.poolManager.GetPoolStats(r.Context())
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get pool stats")
-		return
-	}
-	api.sendSuccess(w, stats)
-}
-
-func (api *MobileAPI) handleGetProfitStats(w http.ResponseWriter, r *http.Request) {
-	stats := api.profitSwitcher.GetStats()
-	api.sendSuccess(w, stats)
-}
-
-func (api *MobileAPI) handleGetPerformanceStats(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	period := r.URL.Query().Get("period")
-	
-	stats, err := api.getPerformanceStats(userID, period)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get performance stats")
-		return
-	}
-	
-	api.sendSuccess(w, stats)
-}
-
-// Notification handlers
-
-func (api *MobileAPI) handleGetNotifications(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Get filter
-	unreadOnly := r.URL.Query().Get("unread_only") == "true"
-	
-	notifications, err := api.getNotifications(userID, unreadOnly)
-	if err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to get notifications")
-		return
-	}
-	
-	api.sendSuccess(w, notifications)
-}
-
-func (api *MobileAPI) handleMarkNotificationRead(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	notificationID := mux.Vars(r)["id"]
-	
-	if err := api.markNotificationRead(userID, notificationID); err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to mark notification as read")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]string{
-		"message": "Notification marked as read",
-	})
+func (api *MobileAPI) handleGetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+    userID := api.getUserID(r)
+    api.notifMu.RLock()
+    settings, ok := api.notifSettings[userID]
+    api.notifMu.RUnlock()
+    if !ok {
+        // sensible defaults
+        settings = NotificationSettings{
+            Enabled:         true,
+            WorkerOffline:   true,
+            PayoutSent:      true,
+            BlockFound:      true,
+            ProfitSwitch:    true,
+            LowHashrate:     true,
+            HighRejects:     true,
+        }
+    }
+    api.sendSuccess(w, settings)
 }
 
 func (api *MobileAPI) handleUpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	var settings struct {
-		WorkerOffline   bool `json:"worker_offline"`
-		PayoutSent      bool `json:"payout_sent"`
-		BlockFound      bool `json:"block_found"`
-		ProfitSwitch    bool `json:"profit_switch"`
-		LowHashrate     bool `json:"low_hashrate"`
-		HighRejects     bool `json:"high_rejects"`
-	}
-	
-	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-		api.sendError(w, http.StatusBadRequest, "Invalid request")
-		return
-	}
-	
-	if err := api.updateNotificationSettings(userID, settings); err != nil {
-		api.sendError(w, http.StatusInternalServerError, "Failed to update notification settings")
-		return
-	}
-	
-	api.sendSuccess(w, map[string]string{
-		"message": "Notification settings updated",
-	})
+    userID := api.getUserID(r)
+    
+    var settings NotificationSettings
+    
+    if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+        api.sendError(w, http.StatusBadRequest, "Invalid request")
+        return
+    }
+    
+    if err := api.updateNotificationSettings(userID, settings); err != nil {
+        api.sendError(w, http.StatusInternalServerError, "Failed to update notification settings")
+        return
+    }
+    
+    api.sendSuccess(w, map[string]string{
+        "message": "Notification settings updated",
+    })
 }
 
-// WebSocket handler
-
-func (api *MobileAPI) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	userID := api.getUserID(r)
-	
-	// Upgrade connection
-	conn, err := api.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		api.logger.Error("Failed to upgrade WebSocket",
-			zap.String("user_id", userID),
-			zap.Error(err),
-		)
-		return
-	}
-	
-	// Create WebSocket connection
-	wsConn := &WSConnection{
-		ID:         fmt.Sprintf("%s-%d", userID, time.Now().Unix()),
-		UserID:     userID,
-		Conn:       conn,
-		Send:       make(chan []byte, 256),
-		LastActive: time.Now(),
-	}
-	
-	// Register connection
-	api.wsConnections[wsConn.ID] = wsConn
-	
-	// Start handlers
-	go wsConn.readPump(api)
-	go wsConn.writePump(api)
-	
-	// Send initial data
-	dashboard, err := api.getDashboardData(r.Context(), userID)
-	if err != nil {
-		api.sendWSMessage(wsConn, "error", map[string]string{"message": "Failed to load dashboard"})
-	} else {
-		api.sendWSMessage(wsConn, "connected", dashboard)
-	}
+// handleGetNotifications returns notifications for the authenticated user
+func (api *MobileAPI) handleGetNotifications(w http.ResponseWriter, r *http.Request) {
+    userID := api.getUserID(r)
+    unreadOnly := false
+    if q := strings.TrimSpace(r.URL.Query().Get("unread")); q != "" {
+        if b, err := strconv.ParseBool(q); err == nil {
+            unreadOnly = b
+        }
+    }
+    list, err := api.getNotifications(userID, unreadOnly)
+    if err != nil {
+        api.sendError(w, http.StatusInternalServerError, "Failed to get notifications")
+        return
+    }
+    // Sort latest first just in case
+    sort.Slice(list, func(i, j int) bool { return list[i].Timestamp.After(list[j].Timestamp) })
+    api.sendSuccess(w, list)
 }
 
-// Health check
-
-func (api *MobileAPI) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
-	health := map[string]interface{}{
-		"status": "healthy",
-		"timestamp": time.Now(),
-		"services": map[string]bool{
-			"pool": api.poolManager != nil,
-			"mining": api.miningEngine != nil,
-			"analytics": api.analytics != nil,
-			"profit": api.profitSwitcher != nil,
-		},
-	}
-	
-	api.sendSuccess(w, health)
+// handleMarkNotificationRead marks a notification as read for the authenticated user
+func (api *MobileAPI) handleMarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+    userID := api.getUserID(r)
+    vars := mux.Vars(r)
+    id := strings.TrimSpace(vars["id"])
+    if id == "" {
+        api.sendError(w, http.StatusBadRequest, "Missing notification id")
+        return
+    }
+    if err := api.markNotificationRead(userID, id); err != nil {
+        api.sendError(w, http.StatusNotFound, err.Error())
+        return
+    }
+    api.sendSuccess(w, map[string]string{"message": "Notification marked as read"})
 }
 
-// Helper methods
-
-func (api *MobileAPI) sendSuccess(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(APIResponse{
-		Success: true,
-		Data:    data,
-	})
-}
-
-func (api *MobileAPI) sendError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(APIResponse{
-		Success: false,
-		Error:   message,
-	})
-}
-
-func (api *MobileAPI) getUserID(r *http.Request) string {
-	// Extract from context (set by auth middleware)
-	if userID, ok := r.Context().Value("user_id").(string); ok {
-		return userID
-	}
-	return ""
-}
-
-// Middleware
+// ...
 
 func (api *MobileAPI) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			api.sendError(w, http.StatusUnauthorized, "Missing authorization header")
-			return
-		}
-		
-		// Validate token
-		userID, err := api.authManager.ValidateToken(authHeader)
-		if err != nil {
-			api.sendError(w, http.StatusUnauthorized, "Invalid token")
-			return
-		}
-		
-		// Add user ID to context
-		ctx := context.WithValue(r.Context(), "user_id", userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func (api *MobileAPI) rateLimitMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        userID := api.getUserID(r)
-        
-        if !api.rateLimiter.Allow(userID) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            api.sendError(w, http.StatusUnauthorized, "Missing authorization header")
+            return
+        }
+
+        // Extract token (supports "Bearer <token>")
+        token := strings.TrimSpace(authHeader)
+        if len(token) >= 7 && strings.EqualFold(token[:7], "Bearer ") {
+            token = strings.TrimSpace(token[7:])
+        }
+
+        // Validate token to get userID
+        userID, err := api.authManager.ValidateToken(token)
+        if err != nil {
+            api.sendError(w, http.StatusUnauthorized, "Invalid token")
+            return
+        }
+
+        // Rate limit per user (if configured)
+        if api.rateLimiter != nil && !api.rateLimiter.Allow(userID) {
             api.sendError(w, http.StatusTooManyRequests, "Rate limit exceeded")
             return
         }
-        
-        next.ServeHTTP(w, r)
+
+        // Add user ID to context and continue
+        ctx := context.WithValue(r.Context(), "user_id", userID)
+        next.ServeHTTP(w, r.WithContext(ctx))
     })
 }
 
@@ -833,6 +578,18 @@ func (api *MobileAPI) getDashboardData(ctx context.Context, userID string) (*Das
     }
     topWorkers := workers[:topN]
     
+    // Build recent notifications (latest first, up to 10)
+    recent := []Notification{}
+    api.notifMu.RLock()
+    if list, ok := api.notifStore[userID]; ok && len(list) > 0 {
+        tmp := make([]Notification, len(list))
+        copy(tmp, list)
+        sort.Slice(tmp, func(i, j int) bool { return tmp[i].Timestamp.After(tmp[j].Timestamp) })
+        if len(tmp) > 10 { tmp = tmp[:10] }
+        recent = tmp
+    }
+    api.notifMu.RUnlock()
+
     dashboard := &DashboardData{
         Overview: OverviewData{
             TotalHashrate:    totalHashrate,
@@ -850,7 +607,7 @@ func (api *MobileAPI) getDashboardData(ctx context.Context, userID string) (*Das
             PoolFee:        2.0,
             MinPayout:      0.01,
         },
-        Notifications: []Notification{}, // Recent notifications
+        Notifications: recent, // Recent notifications
     }
     
     return dashboard, nil
@@ -888,14 +645,25 @@ func (api *MobileAPI) getEarnings(userID, period string) (*EarningsData, error) 
 }
 
 // Stub implementations for other methods
-func (api *MobileAPI) authenticateUser(username, password string) (*User, error) {
+func (api *MobileAPI) authenticateUser(username, password string) (*auth.User, error) {
     // Implementation needed
-    return &User{ID: "user123"}, nil
+    return &auth.User{ID: "user123"}, nil
 }
 
-func (api *MobileAPI) createUser(username, email, password, wallet string) (*User, error) {
+func (api *MobileAPI) createUser(username, email, password, wallet string) (*auth.User, error) {
+    // Validate wallet within business logic for defense-in-depth
+    if strings.TrimSpace(wallet) == "" {
+        return nil, fmt.Errorf("wallet address cannot be empty")
+    }
+    curr := api.profitSwitcher.GetCurrentCurrency()
+    if strings.TrimSpace(curr) == "" {
+        return nil, fmt.Errorf("unable to determine payout currency for validation")
+    }
+    if err := common.ValidateWalletAddress(strings.TrimSpace(wallet), curr); err != nil {
+        return nil, err
+    }
     // Implementation needed
-    return &User{ID: "user456"}, nil
+    return &auth.User{ID: "user456"}, nil
 }
 
 func (api *MobileAPI) getWorkerDetails(userID, workerID string) (interface{}, error) {
@@ -929,6 +697,20 @@ func (api *MobileAPI) updateUserSettings(userID string, settings map[string]inte
 }
 
 func (api *MobileAPI) updatePayoutSettings(userID, wallet string, minPayout float64, currency string) error {
+    // Validate wallet and currency here as well
+    if strings.TrimSpace(wallet) == "" {
+        return fmt.Errorf("wallet address cannot be empty")
+    }
+    curr := strings.TrimSpace(currency)
+    if curr == "" {
+        curr = api.profitSwitcher.GetCurrentCurrency()
+    }
+    if strings.TrimSpace(curr) == "" {
+        return fmt.Errorf("unable to determine payout currency for validation")
+    }
+    if err := common.ValidateWalletAddress(strings.TrimSpace(wallet), curr); err != nil {
+        return err
+    }
     // Implementation needed
     return nil
 }
@@ -939,21 +721,95 @@ func (api *MobileAPI) getPerformanceStats(userID, period string) (interface{}, e
 }
 
 func (api *MobileAPI) getNotifications(userID string, unreadOnly bool) ([]Notification, error) {
-    // Implementation needed
-    return []Notification{}, nil
+    api.notifMu.RLock()
+    defer api.notifMu.RUnlock()
+    list := api.notifStore[userID]
+    if !unreadOnly {
+        // Return a shallow copy to avoid races with callers
+        out := make([]Notification, len(list))
+        copy(out, list)
+        return out, nil
+    }
+    // Filter unread only
+    out := make([]Notification, 0, len(list))
+    for _, n := range list {
+        if !n.Read {
+            out = append(out, n)
+        }
+    }
+    return out, nil
 }
 
 func (api *MobileAPI) markNotificationRead(userID, notificationID string) error {
-    // Implementation needed
-    return nil
+    api.notifMu.Lock()
+    defer api.notifMu.Unlock()
+    list := api.notifStore[userID]
+    for i := range list {
+        if list[i].ID == notificationID {
+            list[i].Read = true
+            api.notifStore[userID] = list
+            return nil
+        }
+    }
+    return fmt.Errorf("notification not found")
 }
 
-func (api *MobileAPI) updateNotificationSettings(userID string, settings interface{}) error {
-    // Implementation needed
+func (api *MobileAPI) updateNotificationSettings(userID string, settings NotificationSettings) error {
+    // Ensure Enabled defaults to true if not explicitly set
+    // If caller wants to disable, they must set Enabled=false in payload
+    if settings.QuietHours != nil {
+        // Basic sanitize of QuietHours values
+        if settings.QuietHours.StartHour < 0 || settings.QuietHours.StartHour > 23 {
+            settings.QuietHours.StartHour = 0
+        }
+        if settings.QuietHours.EndHour < 0 || settings.QuietHours.EndHour > 23 {
+            settings.QuietHours.EndHour = 0
+        }
+        if settings.QuietHours.TimeZone == "" {
+            settings.QuietHours.TimeZone = "UTC"
+        }
+    }
+    api.notifMu.Lock()
+    api.notifSettings[userID] = settings
+    api.notifMu.Unlock()
     return nil
 }
 
 // WebSocket methods
+
+// handleWebSocket upgrades the HTTP connection to a WebSocket and registers it
+func (api *MobileAPI) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+    userID := api.getUserID(r)
+    if strings.TrimSpace(userID) == "" {
+        api.sendError(w, http.StatusUnauthorized, "unauthorized")
+        return
+    }
+
+    conn, err := api.upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        api.logger.Error("websocket upgrade failed", zap.Error(err))
+        return
+    }
+
+    ws := &WSConnection{
+        ID:         generateID(),
+        UserID:     userID,
+        Conn:       conn,
+        Send:       make(chan []byte, 256),
+        LastActive: time.Now(),
+    }
+
+    api.wsConnections[ws.ID] = ws
+
+    // Start pumps
+    go ws.writePump(api)
+    go ws.readPump(api)
+}
+
+// generateID returns a simple unique ID string
+func generateID() string {
+    return fmt.Sprintf("%d", time.Now().UnixNano())
+}
 
 func (api *MobileAPI) handleWebSocketMessages() {
     // Handle incoming WebSocket messages
@@ -1102,8 +958,13 @@ func (rl *MobileRateLimiter) Allow(userID string) bool {
         if max < 1 {
             max = 1
         }
+        // Consume a token upon first initialization to align with rpm+burst semantics
+        initTokens := max - 1
+        if initTokens < 0 {
+            initTokens = 0
+        }
         rl.requests[userID] = &UserRateLimit{
-            Tokens:    max,
+            Tokens:    initTokens,
             MaxTokens: max,
             LastReset: now,
         }

@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/app"
-	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/otedama/otedama/internal/app"
+	"github.com/otedama/otedama/internal/config"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

@@ -2,14 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/shizukutanaka/Otedama/internal/auth"
-	"github.com/shizukutanaka/Otedama/internal/pool"
+	"github.com/otedama/otedama/internal/auth"
+	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/pool"
 	"go.uber.org/zap"
 )
 
@@ -18,14 +20,408 @@ type AdminHandlers struct {
 	logger      *zap.Logger
 	poolManager *pool.PoolManager
 	totp        *auth.TOTPProvider
+	server      *Server
+}
+
+// Firmware optimizer endpoints
+
+// getEngine resolves and validates the mining engine instance
+func (h *AdminHandlers) getEngine() (*mining.Engine, error) {
+	if h.server == nil || h.server.miningEngine == nil {
+		return nil, errors.New("mining engine not available")
+	}
+	eng, ok := h.server.miningEngine.(*mining.Engine)
+	if !ok || eng == nil {
+		return nil, errors.New("invalid mining engine type")
+	}
+	return eng, nil
+}
+
+// FirmwareListProfiles lists available firmware profiles
+func (h *AdminHandlers) FirmwareListProfiles(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	profiles, err := eng.ListFirmwareProfiles()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"profiles": profiles}, nil)
+}
+
+// FirmwareApplyProfile applies a named firmware profile
+func (h *AdminHandlers) FirmwareApplyProfile(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	var req struct {
+		Name   string `json:"name"`
+		DryRun bool   `json:"dry_run"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	if err := h.server.validator.ValidateProfileName(req.Name); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	result, err := eng.ApplyFirmwareProfile(req.Name, req.DryRun)
+	if err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{
+		"profile": req.Name,
+		"dry_run": req.DryRun,
+		"result":  result,
+	}, nil)
+}
+
+// FirmwareResetDefaults resets firmware to default profile
+func (h *AdminHandlers) FirmwareResetDefaults(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	result, err := eng.ResetFirmwareDefaults()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"result": result}, nil)
+}
+
+// FirmwareGetSettings returns current firmware settings snapshot
+func (h *AdminHandlers) FirmwareGetSettings(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	settings := eng.GetFirmwareSettings()
+	if settings == nil {
+		h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"settings": map[string]interface{}{}}, nil)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"settings": settings}, nil)
+}
+
+// FirmwareApplySettings validates/applies settings; supports dry run
+func (h *AdminHandlers) FirmwareApplySettings(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	var req struct {
+		Settings map[string]interface{} `json:"settings"`
+		DryRun   bool                   `json:"dry_run"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	if req.Settings == nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("settings is required"))
+		return
+	}
+	result, err := eng.ApplyFirmwareSettings(req.Settings, req.DryRun)
+	if err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{
+		"dry_run": req.DryRun,
+		"result":  result,
+	}, nil)
+}
+
+// FirmwareBackup creates a backup snapshot of current firmware settings
+func (h *AdminHandlers) FirmwareBackup(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	snap, err := eng.BackupFirmware()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"backup": snap}, nil)
+}
+
+// FirmwareBackupCount returns the number of retained backups
+func (h *AdminHandlers) FirmwareBackupCount(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	n, err := eng.GetFirmwareBackupCount()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"count": n}, nil)
+}
+
+// FirmwareRollback restores the most recent backup
+func (h *AdminHandlers) FirmwareRollback(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	result, err := eng.RollbackFirmware()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"result": result}, nil)
+}
+
+// FirmwareSaveToFile saves current settings to a JSON file
+func (h *AdminHandlers) FirmwareSaveToFile(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	if err := h.server.validator.ValidateFilePath(req.Path); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	if err := eng.SaveFirmwareToFile(req.Path); err != nil {
+		h.server.sendResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"status": "saved", "path": req.Path}, nil)
+}
+
+// FirmwareLoadFromFile loads settings from a JSON file; supports dry run
+func (h *AdminHandlers) FirmwareLoadFromFile(w http.ResponseWriter, r *http.Request) {
+	eng, err := h.getEngine()
+	if err != nil {
+		h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+		return
+	}
+	var req struct {
+		Path   string `json:"path"`
+		DryRun bool   `json:"dry_run"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	if err := h.server.validator.ValidateFilePath(req.Path); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	result, err := eng.LoadFirmwareFromFile(req.Path, req.DryRun)
+	if err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	h.server.sendResponse(w, http.StatusOK, map[string]interface{}{
+		"dry_run": req.DryRun,
+		"result":  result,
+		"path":    req.Path,
+	}, nil)
+}
+
+// FirmwareSetMode sets the firmware operational mode
+func (h *AdminHandlers) FirmwareSetMode(w http.ResponseWriter, r *http.Request) {
+    eng, err := h.getEngine()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+        return
+    }
+    var req struct {
+        Mode string `json:"mode"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    if strings.TrimSpace(req.Mode) == "" {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("mode is required"))
+        return
+    }
+    allowedModes := map[string]struct{}{
+		"eco":      {},
+		"balanced": {},
+		"turbo":    {},
+		"silent":   {},
+	}
+	if _, ok := allowedModes[req.Mode]; !ok {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("invalid mode specified, allowed modes are: eco, balanced, turbo, silent"))
+		return
+	}
+    if err := eng.SetFirmwareMode(req.Mode); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"status": "updated", "mode": req.Mode}, nil)
+}
+
+// FirmwareSetFanPercent sets the fan speed percentage
+func (h *AdminHandlers) FirmwareSetFanPercent(w http.ResponseWriter, r *http.Request) {
+    eng, err := h.getEngine()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+        return
+    }
+    var req struct {
+        FanPercent int `json:"fan_percent"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+
+	if req.FanPercent < 0 || req.FanPercent > 100 {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("fan_percent must be between 0 and 100"))
+		return
+	}
+
+    if err := eng.SetFanPercent(req.FanPercent); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"status": "updated", "fan_percent": req.FanPercent}, nil)
+}
+
+// FirmwareSetPowerLimit sets the power limit in Watts
+func (h *AdminHandlers) FirmwareSetPowerLimit(w http.ResponseWriter, r *http.Request) {
+    eng, err := h.getEngine()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+        return
+    }
+    var req struct {
+        PowerLimitW int `json:"power_limit_w"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+
+	if req.PowerLimitW < 0 {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("power_limit_w must be a non-negative integer"))
+		return
+	}
+
+    if err := eng.SetPowerLimit(req.PowerLimitW); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"status": "updated", "power_limit_w": req.PowerLimitW}, nil)
+}
+
+// FirmwareSetMinApplyInterval sets minimum interval between firmware apply operations
+func (h *AdminHandlers) FirmwareSetMinApplyInterval(w http.ResponseWriter, r *http.Request) {
+    eng, err := h.getEngine()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+        return
+    }
+    var req struct {
+        Interval string `json:"interval"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    if strings.TrimSpace(req.Interval) == "" {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("interval is required"))
+        return
+    }
+    d, err := time.ParseDuration(req.Interval)
+    if err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("invalid interval format"))
+        return
+    }
+    if d < 0 {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("interval must be a non-negative duration"))
+        return
+    }
+    if err := eng.SetFirmwareMinApplyInterval(d); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"status": "updated", "interval": d.String()}, nil)
+}
+
+// FirmwareSetMaxBackups sets the maximum number of retained firmware backups
+func (h *AdminHandlers) FirmwareSetMaxBackups(w http.ResponseWriter, r *http.Request) {
+    eng, err := h.getEngine()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+        return
+    }
+    var req struct {
+        Max int `json:"max"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+
+	if req.Max < 0 {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, errors.New("max must be a non-negative integer"))
+		return
+	}
+
+    if err := eng.SetFirmwareMaxBackups(req.Max); err != nil {
+        h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+        return
+    }
+    h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"status": "updated", "max": req.Max}, nil)
+}
+
+// FirmwareGetLastAppliedAt returns the last applied time for firmware settings
+func (h *AdminHandlers) FirmwareGetLastAppliedAt(w http.ResponseWriter, r *http.Request) {
+    eng, err := h.getEngine()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusServiceUnavailable, nil, err)
+        return
+    }
+    t, err := eng.GetFirmwareLastAppliedAt()
+    if err != nil {
+        h.server.sendResponse(w, http.StatusInternalServerError, nil, err)
+        return
+    }
+    var ts string
+    if !t.IsZero() {
+        ts = t.Format(time.RFC3339)
+    } else {
+        ts = ""
+    }
+    h.server.sendResponse(w, http.StatusOK, map[string]interface{}{"last_applied_at": ts}, nil)
 }
 
 // NewAdminHandlers creates new admin handlers
-func NewAdminHandlers(logger *zap.Logger, poolManager *pool.PoolManager, totp *auth.TOTPProvider) *AdminHandlers {
+func NewAdminHandlers(logger *zap.Logger, poolManager *pool.PoolManager, totp *auth.TOTPProvider, server *Server) *AdminHandlers {
 	return &AdminHandlers{
 		logger:      logger,
 		poolManager: poolManager,
 		totp:        totp,
+		server:      server,
 	}
 }
 
@@ -50,6 +446,26 @@ func (h *AdminHandlers) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/workers/{id}/unban", h.UnbanWorker).Methods("POST")
 	router.HandleFunc("/payouts/process", h.ProcessPayouts).Methods("POST")
 	router.HandleFunc("/maintenance/cleanup", h.RunCleanup).Methods("POST")
+
+	// Firmware optimizer endpoints (protected by admin auth + 2FA)
+	router.HandleFunc("/firmware/profiles", h.FirmwareListProfiles).Methods("GET")
+	router.HandleFunc("/firmware/profile/apply", h.FirmwareApplyProfile).Methods("POST")
+	router.HandleFunc("/firmware/reset-defaults", h.FirmwareResetDefaults).Methods("POST")
+	router.HandleFunc("/firmware/settings", h.FirmwareGetSettings).Methods("GET")
+	router.HandleFunc("/firmware/settings/apply", h.FirmwareApplySettings).Methods("POST")
+	router.HandleFunc("/firmware/backup", h.FirmwareBackup).Methods("POST")
+	router.HandleFunc("/firmware/backups/count", h.FirmwareBackupCount).Methods("GET")
+	router.HandleFunc("/firmware/rollback", h.FirmwareRollback).Methods("POST")
+	router.HandleFunc("/firmware/save", h.FirmwareSaveToFile).Methods("POST")
+	router.HandleFunc("/firmware/load", h.FirmwareLoadFromFile).Methods("POST")
+
+	// Additional firmware controls
+	router.HandleFunc("/firmware/mode/set", h.FirmwareSetMode).Methods("POST")
+	router.HandleFunc("/firmware/fan/set", h.FirmwareSetFanPercent).Methods("POST")
+	router.HandleFunc("/firmware/power/set", h.FirmwareSetPowerLimit).Methods("POST")
+	router.HandleFunc("/firmware/apply-interval/set", h.FirmwareSetMinApplyInterval).Methods("POST")
+	router.HandleFunc("/firmware/backups/max/set", h.FirmwareSetMaxBackups).Methods("POST")
+	router.HandleFunc("/firmware/last-applied-at", h.FirmwareGetLastAppliedAt).Methods("GET")
 }
 
 // GetDashboard returns dashboard summary data
@@ -117,43 +533,23 @@ func (h *AdminHandlers) GetPoolStats(w http.ResponseWriter, r *http.Request) {
 
 // GetWorkers returns list of workers
 func (h *AdminHandlers) GetWorkers(w http.ResponseWriter, r *http.Request) {
-	// Parse query parameters
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
+	page, limit := getPagination(r)
+	offset := (page - 1) * limit
+
+	workers, total, err := h.poolManager.GetWorkers(r.Context(), limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to get workers", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit < 1 || limit > 100 {
-		limit = 50
-	}
-	
-	sortBy := r.URL.Query().Get("sort")
-	if sortBy == "" {
-		sortBy = "hashrate"
-	}
-	
-	// TODO: Implement worker listing with pagination
-	workers := []map[string]interface{}{
-		{
-			"id":           "worker1",
-			"username":     "miner1",
-			"hashrate":     125000000,
-			"valid_shares": 1234,
-			"invalid_shares": 12,
-			"last_seen":    time.Now().Add(-5 * time.Minute).Unix(),
-			"status":       "active",
-		},
-		// Add more mock data or implement actual database query
-	}
-	
+
 	response := map[string]interface{}{
-		"workers": workers,
+		"data":  workers,
 		"page":    page,
 		"limit":   limit,
-		"total":   len(workers),
+		"total":   total,
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -162,6 +558,11 @@ func (h *AdminHandlers) GetWorkers(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandlers) GetWorker(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	workerID := vars["id"]
+
+	if err := h.server.validator.ValidateWorkerID(workerID); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
 	
 	ctx := r.Context()
 	
@@ -178,108 +579,98 @@ func (h *AdminHandlers) GetWorker(w http.ResponseWriter, r *http.Request) {
 
 // GetBlocks returns list of blocks
 func (h *AdminHandlers) GetBlocks(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement block listing from database
-	blocks := []map[string]interface{}{
-		{
-			"height":        1234567,
-			"hash":          "0x123...abc",
-			"reward":        6.25,
-			"status":        "confirmed",
-			"confirmations": 12,
-			"found_at":      time.Now().Add(-2 * time.Hour).Unix(),
-			"miner":         "worker1",
-		},
-		// Add more mock data
+	page, limit := getPagination(r)
+	offset := (page - 1) * limit
+
+	blocks, total, err := h.poolManager.GetBlocks(r.Context(), limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to get blocks", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	
+
+	response := map[string]interface{}{
+		"data":  blocks,
+		"page":    page,
+		"limit":   limit,
+		"total":   total,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(blocks)
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetPayouts returns list of payouts
 func (h *AdminHandlers) GetPayouts(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement payout listing from database
-	payouts := []map[string]interface{}{
-		{
-			"id":             1,
-			"worker_id":      "worker1",
-			"amount":         0.01234567,
-			"currency":       "BTC",
-			"address":        "bc1q...",
-			"transaction_id": "tx123...",
-			"status":         "completed",
-			"created_at":     time.Now().Add(-1 * time.Hour).Unix(),
-		},
-		// Add more mock data
+	page, limit := getPagination(r)
+	offset := (page - 1) * limit
+
+	payouts, total, err := h.poolManager.GetPayouts(r.Context(), limit, offset)
+	if err != nil {
+		h.logger.Error("Failed to get payouts", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	
+
+	response := map[string]interface{}{
+		"data":  payouts,
+		"page":    page,
+		"limit":   limit,
+		"total":   total,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(payouts)
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetHashrateChart returns hashrate time series data
 func (h *AdminHandlers) GetHashrateChart(w http.ResponseWriter, r *http.Request) {
-	// Parse time range
-	from := r.URL.Query().Get("from")
-	to := r.URL.Query().Get("to")
-	interval := r.URL.Query().Get("interval")
-	
-	if interval == "" {
-		interval = "5m"
+	start, end, interval := parseTimeParams(r)
+
+	data, err := h.poolManager.GetHashrateChartData(r.Context(), start, end, interval)
+	if err != nil {
+		h.logger.Error("Failed to get hashrate chart data", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	
-	// TODO: Implement actual time series query
-	data := []map[string]interface{}{
-		{"time": time.Now().Add(-1 * time.Hour).Unix(), "value": 100000000},
-		{"time": time.Now().Add(-50 * time.Minute).Unix(), "value": 120000000},
-		{"time": time.Now().Add(-40 * time.Minute).Unix(), "value": 115000000},
-		{"time": time.Now().Add(-30 * time.Minute).Unix(), "value": 125000000},
-		{"time": time.Now().Add(-20 * time.Minute).Unix(), "value": 130000000},
-		{"time": time.Now().Add(-10 * time.Minute).Unix(), "value": 128000000},
-		{"time": time.Now().Unix(), "value": 135000000},
-	}
-	
+
 	response := map[string]interface{}{
 		"data":     data,
-		"from":     from,
-		"to":       to,
-		"interval": interval,
+		"from":     start.Format(time.RFC3339),
+		"to":       end.Format(time.RFC3339),
+		"interval": interval.String(),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
 // GetSharesChart returns shares time series data
 func (h *AdminHandlers) GetSharesChart(w http.ResponseWriter, r *http.Request) {
-	// Similar to hashrate chart but for shares
-	data := []map[string]interface{}{
-		{"time": time.Now().Add(-1 * time.Hour).Unix(), "valid": 100, "invalid": 2},
-		{"time": time.Now().Add(-50 * time.Minute).Unix(), "valid": 120, "invalid": 3},
-		{"time": time.Now().Add(-40 * time.Minute).Unix(), "valid": 115, "invalid": 1},
-		{"time": time.Now().Add(-30 * time.Minute).Unix(), "valid": 125, "invalid": 4},
-		{"time": time.Now().Add(-20 * time.Minute).Unix(), "valid": 130, "invalid": 2},
-		{"time": time.Now().Add(-10 * time.Minute).Unix(), "valid": 128, "invalid": 3},
-		{"time": time.Now().Unix(), "valid": 135, "invalid": 2},
+	start, end, interval := parseTimeParams(r)
+
+	data, err := h.poolManager.GetSharesChartData(r.Context(), start, end, interval)
+	if err != nil {
+		h.logger.Error("Failed to get shares chart data", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"data": data})
 }
 
 // GetEarningsChart returns earnings time series data
 func (h *AdminHandlers) GetEarningsChart(w http.ResponseWriter, r *http.Request) {
-	// Earnings over time
-	data := []map[string]interface{}{
-		{"time": time.Now().Add(-7 * 24 * time.Hour).Unix(), "value": 0.5},
-		{"time": time.Now().Add(-6 * 24 * time.Hour).Unix(), "value": 0.7},
-		{"time": time.Now().Add(-5 * 24 * time.Hour).Unix(), "value": 0.6},
-		{"time": time.Now().Add(-4 * 24 * time.Hour).Unix(), "value": 0.8},
-		{"time": time.Now().Add(-3 * 24 * time.Hour).Unix(), "value": 0.9},
-		{"time": time.Now().Add(-2 * 24 * time.Hour).Unix(), "value": 0.7},
-		{"time": time.Now().Add(-1 * 24 * time.Hour).Unix(), "value": 1.1},
+	start, end, interval := parseTimeParams(r)
+
+	data, err := h.poolManager.GetEarningsChartData(r.Context(), start, end, interval)
+	if err != nil {
+		h.logger.Error("Failed to get earnings chart data", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"data": data})
 }
@@ -290,10 +681,24 @@ func (h *AdminHandlers) GetEarningsChart(w http.ResponseWriter, r *http.Request)
 func (h *AdminHandlers) BanWorker(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	workerID := vars["id"]
-	
-	// TODO: Implement worker ban logic
-	h.logger.Info("Banning worker", zap.String("worker_id", workerID))
-	
+
+	if err := h.server.validator.ValidateWorkerID(workerID); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+
+	if err := h.poolManager.BanWorker(r.Context(), workerID); err != nil {
+		h.logger.Error("Failed to ban worker", zap.String("worker_id", workerID), zap.Error(err))
+		// Distinguish between not found and other errors
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Worker not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to ban worker", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	h.logger.Info("Banned worker", zap.String("worker_id", workerID))
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "banned", "worker_id": workerID})
 }
@@ -302,30 +707,51 @@ func (h *AdminHandlers) BanWorker(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandlers) UnbanWorker(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	workerID := vars["id"]
-	
-	// TODO: Implement worker unban logic
-	h.logger.Info("Unbanning worker", zap.String("worker_id", workerID))
-	
+
+	if err := h.server.validator.ValidateWorkerID(workerID); err != nil {
+		h.server.sendResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+
+	if err := h.poolManager.UnbanWorker(r.Context(), workerID); err != nil {
+		h.logger.Error("Failed to unban worker", zap.String("worker_id", workerID), zap.Error(err))
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Worker not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to unban worker", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	h.logger.Info("Unbanned worker", zap.String("worker_id", workerID))
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "active", "worker_id": workerID})
 }
 
 // ProcessPayouts triggers payout processing
 func (h *AdminHandlers) ProcessPayouts(w http.ResponseWriter, r *http.Request) {
-	// TODO: Trigger payout processing
+	if err := h.poolManager.TriggerPayouts(); err != nil {
+		h.logger.Error("Failed to trigger payouts", zap.Error(err))
+		http.Error(w, "Failed to trigger payouts", http.StatusInternalServerError)
+		return
+	}
+
 	h.logger.Info("Processing payouts triggered by admin")
-	
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "processing"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "payout processing triggered"})
 }
 
 // RunCleanup runs cleanup tasks
 func (h *AdminHandlers) RunCleanup(w http.ResponseWriter, r *http.Request) {
-	// TODO: Trigger cleanup
+	if err := h.poolManager.TriggerCleanup(); err != nil {
+		h.logger.Error("Failed to trigger cleanup", zap.Error(err))
+		http.Error(w, "Failed to trigger cleanup", http.StatusInternalServerError)
+		return
+	}
+
 	h.logger.Info("Cleanup triggered by admin")
-	
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "cleanup started"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "cleanup triggered"})
 }
 
 // MFA management endpoints (admin-authenticated; enrollment flows should be accessible without 2FA)
@@ -428,6 +854,57 @@ func (h *AdminHandlers) RegenerateBackupCodes(w http.ResponseWriter, r *http.Req
 }
 
 // Helper functions
+
+func parseTimeParams(r *http.Request) (start, end time.Time, interval time.Duration) {
+	// Default to the last 24 hours
+	end = time.Now()
+	start = end.Add(-24 * time.Hour)
+
+	if fromStr := r.URL.Query().Get("from"); fromStr != "" {
+		if from, err := time.Parse(time.RFC3339, fromStr); err == nil {
+			start = from
+		}
+	}
+
+	if toStr := r.URL.Query().Get("to"); toStr != "" {
+		if to, err := time.Parse(time.RFC3339, toStr); err == nil {
+			end = to
+		}
+	}
+
+	if start.After(end) {
+		start = end.Add(-24 * time.Hour) // Reset start to a valid range if order is wrong
+	}
+
+	// Default interval to 1 hour
+	interval = time.Hour
+	if intervalStr := r.URL.Query().Get("interval"); intervalStr != "" {
+		if d, err := time.ParseDuration(intervalStr); err == nil {
+			interval = d
+		}
+	}
+
+	if interval <= 0 {
+		interval = time.Hour // Default to 1 hour if not a positive duration
+	}
+
+	return start, end, interval
+}
+
+func getPagination(r *http.Request) (page, limit int) {
+	page, _ = strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 {
+		limit = 20 // Default limit
+	} else if limit > 100 {
+		limit = 100 // Max limit
+	}
+	return page, limit
+}
 
 func getNestedValue(data map[string]interface{}, path string, defaultValue interface{}) interface{} {
 	keys := []string{path}

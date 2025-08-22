@@ -1,3 +1,6 @@
+//go:build p2p
+// +build p2p
+
 package security
 
 import (

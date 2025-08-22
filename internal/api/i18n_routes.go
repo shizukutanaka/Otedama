@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	// "github.com/shizukutanaka/Otedama/internal/i18n" // Temporarily disabled
+	// "github.com/otedama/otedama/internal/i18n" // Temporarily disabled
 	"go.uber.org/zap"
 )
 

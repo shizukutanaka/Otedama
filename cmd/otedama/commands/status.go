@@ -4,73 +4,131 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // statusCmd represents the status command
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show mining status",
-	Long:  `Display current mining status including hashrate, temperature, and earnings.`,
+	Long:  `Display current mining status including hash rate, shares, and system information.`,
 	RunE:  runStatus,
+}
+
+// MiningStatus represents the mining status response
+type MiningStatus struct {
+	Status      string                 `json:"status"`
+	Algorithm   string                 `json:"algorithm"`
+	Uptime      float64                `json:"uptime"`
+	Mining      MiningInfo             `json:"mining"`
+	Network     NetworkInfo            `json:"network"`
+	System      SystemInfo             `json:"system"`
+	Pools       []PoolInfo             `json:"pools,omitempty"`
+	Devices     []DeviceInfo           `json:"devices,omitempty"`
+	LastUpdated time.Time              `json:"last_updated"`
+}
+
+type MiningInfo struct {
+	HashRate        float64 `json:"hashrate"`
+	SharesAccepted  uint64  `json:"shares_accepted"`
+	SharesRejected  uint64  `json:"shares_rejected"`
+	SharesStale     uint64  `json:"shares_stale"`
+	BlocksFound     uint64  `json:"blocks_found"`
+	Efficiency      float64 `json:"efficiency"`
+	PowerUsage      float64 `json:"power_usage"`
+}
+
+type NetworkInfo struct {
+	P2PEnabled      bool   `json:"p2p_enabled"`
+	PeersConnected  int    `json:"peers_connected"`
+	StratumEnabled  bool   `json:"stratum_enabled"`
+	WorkersOnline   int    `json:"workers_online"`
+}
+
+type SystemInfo struct {
+	CPUUsage        float64 `json:"cpu_usage"`
+	MemoryUsage     uint64  `json:"memory_usage"`
+	Temperature     float64 `json:"temperature"`
+	Version         string  `json:"version"`
+}
+
+type PoolInfo struct {
+	URL             string  `json:"url"`
+	Status          string  `json:"status"`
+	Difficulty      float64 `json:"difficulty"`
+	LastShare       string  `json:"last_share"`
+}
+
+type DeviceInfo struct {
+	ID              string  `json:"id"`
+	Type            string  `json:"type"`
+	Name            string  `json:"name"`
+	HashRate        float64 `json:"hashrate"`
+	Temperature     float64 `json:"temperature"`
+	PowerUsage      float64 `json:"power_usage"`
+	Status          string  `json:"status"`
 }
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
 	
-	statusCmd.Flags().String("api-url", "http://localhost:8081", "API server URL")
-	statusCmd.Flags().String("format", "table", "Output format (table, json, yaml)")
-	statusCmd.Flags().Bool("watch", false, "Watch status (refresh every 5s)")
+	statusCmd.Flags().String("api", "http://localhost:8080", "API endpoint")
+	statusCmd.Flags().String("format", "text", "Output format (text, json, table)")
+	statusCmd.Flags().Bool("watch", false, "Watch status continuously")
 	statusCmd.Flags().Duration("interval", 5*time.Second, "Watch interval")
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	apiURL, _ := cmd.Flags().GetString("api-url")
+	apiEndpoint, _ := cmd.Flags().GetString("api")
 	format, _ := cmd.Flags().GetString("format")
 	watch, _ := cmd.Flags().GetBool("watch")
 	interval, _ := cmd.Flags().GetDuration("interval")
 	
-	// If watching, clear screen and loop
 	if watch {
+		// Clear screen
+		fmt.Print("\033[H\033[2J")
+		
 		for {
-			// Clear screen (ANSI escape code)
-			fmt.Print("\033[H\033[2J")
+			// Move cursor to top
+			fmt.Print("\033[H")
 			
-			if err := displayStatus(apiURL, format); err != nil {
-				return err
+			if err := displayStatus(apiEndpoint, format); err != nil {
+				fmt.Printf("Error: %v\n", err)
 			}
 			
 			time.Sleep(interval)
 		}
+	} else {
+		return displayStatus(apiEndpoint, format)
 	}
-	
-	return displayStatus(apiURL, format)
 }
 
-func displayStatus(apiURL, format string) error {
+func displayStatus(apiEndpoint, format string) error {
 	// Fetch status from API
-	status, err := fetchStatus(apiURL)
+	status, err := fetchStatus(apiEndpoint)
 	if err != nil {
-		return fmt.Errorf("failed to fetch status: %w", err)
+		// If API is not available, try to get local status
+		status = getLocalStatus()
 	}
 	
 	switch format {
 	case "json":
 		return displayJSON(status)
-	case "yaml":
-		return displayYAML(status)
-	default:
+	case "table":
 		return displayTable(status)
+	default:
+		return displayText(status)
 	}
 }
 
-func fetchStatus(apiURL string) (*MiningStatus, error) {
-	resp, err := http.Get(apiURL + "/api/v1/status")
+func fetchStatus(apiEndpoint string) (*MiningStatus, error) {
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	
+	resp, err := client.Get(apiEndpoint + "/api/v1/status")
 	if err != nil {
 		return nil, err
 	}
@@ -88,183 +146,169 @@ func fetchStatus(apiURL string) (*MiningStatus, error) {
 	return &status, nil
 }
 
-func displayTable(status *MiningStatus) error {
-	fmt.Printf("Otedama Mining Status - %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
-    
-    // Overview
-    fmt.Println("Overview:")
-    fmt.Printf("  Status           : %s %s\n", getStatusEmoji(status.Status), status.Status)
-    fmt.Printf("  Uptime           : %s\n", humanize.Time(status.StartTime))
-    fmt.Printf("  Total Hashrate   : %s\n", humanize.SI(status.TotalHashrate, "H/s"))
-    fmt.Printf("  Shares Accepted  : %d (%.1f%%)\n", status.SharesAccepted, status.SharesAcceptedRate*100)
-    fmt.Printf("  Shares Rejected  : %d (%.1f%%)\n", status.SharesRejected, status.SharesRejectedRate*100)
-    fmt.Printf("  Total Earnings   : %.8f %s\n", status.TotalEarnings, status.Currency)
-    fmt.Printf("  Active Workers   : %d\n", status.ActiveWorkers)
-    fmt.Printf("  Connected Peers  : %d\n", status.ConnectedPeers)
-    
-    // Workers
-    if len(status.Workers) > 0 {
-        fmt.Println("\nWorkers:")
-        for _, worker := range status.Workers {
-            efficiency := float64(worker.Hashrate)
-            if worker.Power > 0 {
-                efficiency = efficiency / float64(worker.Power)
-            }
-            fmt.Printf("  - %s [%s] rate=%s temp=%d°C power=%dW eff=%.2f MH/W status=%s %s\n",
-                worker.Name,
-                worker.Type,
-                humanize.SI(worker.Hashrate, "H/s"),
-                worker.Temperature,
-                worker.Power,
-                efficiency/1e6,
-                getWorkerStatusEmoji(worker.Status),
-                worker.Status,
-            )
-        }
-    }
-    
-    // Algorithms
-    if len(status.Algorithms) > 0 {
-        fmt.Println("\nAlgorithms:")
-        for _, algo := range status.Algorithms {
-            fmt.Printf("  - %-10s rate=%s shares=%d profit/day=%.4f %s\n",
-                algo.Name,
-                humanize.SI(algo.Hashrate, "H/s"),
-                algo.Shares,
-                algo.ProfitPerDay,
-                status.Currency,
-            )
-        }
-    }
-    
-    // Pool
-    if status.Pool != nil {
-        fmt.Println("\nPool:")
-        fmt.Printf("  Name       : %s\n", status.Pool.Name)
-        fmt.Printf("  Difficulty : %s\n", humanize.SI(status.Pool.Difficulty, ""))
-        fmt.Printf("  RoundShare : %d\n", status.Pool.RoundShares)
-        fmt.Printf("  Last Block : %s\n", humanize.Time(status.Pool.LastBlockTime))
-        fmt.Printf("  Fee        : %.1f%%\n", status.Pool.Fee*100)
-    }
-    
-    // Alerts
-    if len(status.Alerts) > 0 {
-        fmt.Println("\nAlerts:")
-        for _, alert := range status.Alerts {
-            marker := getAlertEmoji(alert.Severity)
-            fmt.Printf("  %s [%s] %s - %s\n", marker, alert.Severity, alert.Message, humanize.Time(alert.Time))
-        }
-    }
-    return nil
+func getLocalStatus() *MiningStatus {
+	// Return a mock status when API is not available
+	return &MiningStatus{
+		Status:    "offline",
+		Algorithm: "unknown",
+		Uptime:    0,
+		Mining: MiningInfo{
+			HashRate:       0,
+			SharesAccepted: 0,
+			SharesRejected: 0,
+			SharesStale:    0,
+			BlocksFound:    0,
+			Efficiency:     0,
+			PowerUsage:     0,
+		},
+		Network: NetworkInfo{
+			P2PEnabled:     false,
+			PeersConnected: 0,
+			StratumEnabled: false,
+			WorkersOnline:  0,
+		},
+		System: SystemInfo{
+			CPUUsage:    0,
+			MemoryUsage: 0,
+			Temperature: 0,
+			Version:     "unknown",
+		},
+		LastUpdated: time.Now(),
+	}
+}
+
+func displayText(status *MiningStatus) error {
+	fmt.Println("=== Otedama Mining Status ===")
+	fmt.Printf("Status:     %s\n", getStatusColor(status.Status))
+	fmt.Printf("Algorithm:  %s\n", status.Algorithm)
+	fmt.Printf("Uptime:     %s\n", formatDuration(status.Uptime))
+	fmt.Println()
+	
+	fmt.Println("Mining Performance:")
+	fmt.Printf("  Hash Rate:       %s\n", formatHashRate(status.Mining.HashRate))
+	fmt.Printf("  Shares Accepted: %d\n", status.Mining.SharesAccepted)
+	fmt.Printf("  Shares Rejected: %d (%.2f%%)\n", 
+		status.Mining.SharesRejected, 
+		getRejectRate(status.Mining))
+	fmt.Printf("  Blocks Found:    %d\n", status.Mining.BlocksFound)
+	fmt.Printf("  Power Usage:     %.2f W\n", status.Mining.PowerUsage)
+	fmt.Printf("  Efficiency:      %.2f H/W\n", status.Mining.Efficiency)
+	fmt.Println()
+	
+	fmt.Println("Network:")
+	fmt.Printf("  P2P:      %s (%d peers)\n", 
+		getEnabledStatus(status.Network.P2PEnabled),
+		status.Network.PeersConnected)
+	fmt.Printf("  Stratum:  %s (%d workers)\n",
+		getEnabledStatus(status.Network.StratumEnabled),
+		status.Network.WorkersOnline)
+	fmt.Println()
+	
+	if len(status.Devices) > 0 {
+		fmt.Println("Devices:")
+		for _, device := range status.Devices {
+			fmt.Printf("  [%s] %s: %s @ %.1f°C, %.2f W\n",
+				device.Type,
+				device.Name,
+				formatHashRate(device.HashRate),
+				device.Temperature,
+				device.PowerUsage)
+		}
+		fmt.Println()
+	}
+	
+	if len(status.Pools) > 0 {
+		fmt.Println("Pools:")
+		for _, pool := range status.Pools {
+			fmt.Printf("  %s: %s (diff: %.0f)\n",
+				pool.URL,
+				pool.Status,
+				pool.Difficulty)
+		}
+		fmt.Println()
+	}
+	
+	fmt.Printf("Last Updated: %s\n", status.LastUpdated.Format("15:04:05"))
+	
+	return nil
 }
 
 func displayJSON(status *MiningStatus) error {
-	encoder := json.NewEncoder(os.Stdout)
+	encoder := json.NewEncoder(fmt.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(status)
 }
 
-func displayYAML(status *MiningStatus) error {
-	data, err := yaml.Marshal(status)
-	if err != nil {
-		return err
-	}
-	fmt.Print(string(data))
+func displayTable(status *MiningStatus) error {
+	// Simple table format
+	fmt.Println("┌─────────────────────┬────────────────────┐")
+	fmt.Printf("│ %-19s │ %-18s │\n", "Metric", "Value")
+	fmt.Println("├─────────────────────┼────────────────────┤")
+	fmt.Printf("│ %-19s │ %-18s │\n", "Status", status.Status)
+	fmt.Printf("│ %-19s │ %-18s │\n", "Algorithm", status.Algorithm)
+	fmt.Printf("│ %-19s │ %-18s │\n", "Hash Rate", formatHashRate(status.Mining.HashRate))
+	fmt.Printf("│ %-19s │ %-18d │\n", "Shares Accepted", status.Mining.SharesAccepted)
+	fmt.Printf("│ %-19s │ %-18d │\n", "Shares Rejected", status.Mining.SharesRejected)
+	fmt.Printf("│ %-19s │ %-18d │\n", "Blocks Found", status.Mining.BlocksFound)
+	fmt.Printf("│ %-19s │ %-18.2f │\n", "Power (W)", status.Mining.PowerUsage)
+	fmt.Printf("│ %-19s │ %-18.2f │\n", "Efficiency (H/W)", status.Mining.Efficiency)
+	fmt.Printf("│ %-19s │ %-18d │\n", "Peers Connected", status.Network.PeersConnected)
+	fmt.Printf("│ %-19s │ %-18s │\n", "Uptime", formatDuration(status.Uptime))
+	fmt.Println("└─────────────────────┴────────────────────┘")
+	
 	return nil
 }
 
-func getStatusEmoji(status string) string {
+// Helper functions
+
+func getStatusColor(status string) string {
 	switch status {
-	case "running":
-		return "[RUN]"
-	case "stopped":
-		return "[STOP]"
-	case "paused":
-		return "[PAUSE]"
-	case "error":
-		return "[ERROR]"
+	case "running", "online":
+		return fmt.Sprintf("\033[32m%s\033[0m", status) // Green
+	case "stopped", "offline":
+		return fmt.Sprintf("\033[31m%s\033[0m", status) // Red
 	default:
-		return "[N/A]"
+		return fmt.Sprintf("\033[33m%s\033[0m", status) // Yellow
 	}
 }
 
-func getWorkerStatusEmoji(status string) string {
-	switch status {
-	case "active":
-		return "[OK]"
-	case "idle":
-		return "[IDLE]"
-	case "error":
-		return "[ERROR]"
-	case "overheating":
-		return "[HOT]"
-	default:
-		return "[N/A]"
+func getEnabledStatus(enabled bool) string {
+	if enabled {
+		return "\033[32mEnabled\033[0m"
 	}
+	return "\033[31mDisabled\033[0m"
 }
 
-func getAlertEmoji(severity string) string {
-	switch severity {
-	case "critical":
-		return "[CRIT]"
-	case "warning":
-		return "[WARN]"
-	case "info":
-		return "[INFO]"
-	default:
-		return "[NOTE]"
+func formatHashRate(hashRate float64) string {
+	units := []string{"H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s"}
+	unitIndex := 0
+	
+	for hashRate >= 1000 && unitIndex < len(units)-1 {
+		hashRate /= 1000
+		unitIndex++
 	}
+	
+	return fmt.Sprintf("%.2f %s", hashRate, units[unitIndex])
 }
 
-// MiningStatus represents the current mining status
-type MiningStatus struct {
-	Status             string     `json:"status"`
-	StartTime          time.Time  `json:"start_time"`
-	TotalHashrate      float64    `json:"total_hashrate"`
-	SharesAccepted     int64      `json:"shares_accepted"`
-	SharesRejected     int64      `json:"shares_rejected"`
-	SharesAcceptedRate float64    `json:"shares_accepted_rate"`
-	SharesRejectedRate float64    `json:"shares_rejected_rate"`
-	TotalEarnings      float64    `json:"total_earnings"`
-	Currency           string     `json:"currency"`
-	ActiveWorkers      int        `json:"active_workers"`
-	ConnectedPeers     int        `json:"connected_peers"`
-	Workers            []Worker   `json:"workers"`
-	Algorithms         []Algorithm `json:"algorithms"`
-	Pool               *PoolInfo  `json:"pool,omitempty"`
-	Alerts             []Alert    `json:"alerts"`
+func formatDuration(seconds float64) string {
+	duration := time.Duration(seconds) * time.Second
+	days := int(duration.Hours() / 24)
+	hours := int(duration.Hours()) % 24
+	minutes := int(duration.Minutes()) % 60
+	
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	} else if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
-// Worker represents a mining worker
-type Worker struct {
-	Name        string  `json:"name"`
-	Type        string  `json:"type"` // CPU, GPU, ASIC
-	Hashrate    float64 `json:"hashrate"`
-	Temperature int     `json:"temperature"`
-	Power       int     `json:"power"`
-	Status      string  `json:"status"`
-}
-
-// Algorithm represents mining algorithm stats
-type Algorithm struct {
-	Name         string  `json:"name"`
-	Hashrate     float64 `json:"hashrate"`
-	Shares       int64   `json:"shares"`
-	ProfitPerDay float64 `json:"profit_per_day"`
-}
-
-// PoolInfo represents pool information
-type PoolInfo struct {
-	Name          string    `json:"name"`
-	Difficulty    float64   `json:"difficulty"`
-	RoundShares   int64     `json:"round_shares"`
-	LastBlockTime time.Time `json:"last_block_time"`
-	Fee           float64   `json:"fee"`
-}
-
-// Alert represents a system alert
-type Alert struct {
-	Severity string    `json:"severity"`
-	Message  string    `json:"message"`
-	Time     time.Time `json:"time"`
+func getRejectRate(mining MiningInfo) float64 {
+	total := mining.SharesAccepted + mining.SharesRejected
+	if total == 0 {
+		return 0
+	}
+	return float64(mining.SharesRejected) * 100 / float64(total)
 }

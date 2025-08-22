@@ -1,49 +1,112 @@
+# PostgreSQL StatefulSet, Service, and Initialization ConfigMap
+
 ---
-# PostgreSQL StatefulSet
+# Service for PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: otedama
+  labels:
+    app: postgres
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  - port: 9187
+    targetPort: 9187
+    protocol: TCP
+    name: metrics
+  selector:
+    app: postgres
+    component: database
+
+---
+# Headless Service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: otedama
+  labels:
+    app: postgres
+    component: database
+spec:
+  ports:
+  - port: 5432
+    name: postgres
+  clusterIP: None
+  selector:
+    app: postgres
+    component: database
+
+---
+# StatefulSet for PostgreSQL
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
   namespace: otedama
+  labels:
+    app: postgres
+    component: database
 spec:
-  serviceName: postgres
+  serviceName: postgres-headless
   replicas: 1
   selector:
     matchLabels:
       app: postgres
+      component: database
   template:
     metadata:
       labels:
         app: postgres
+        component: database
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+        prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
       containers:
       - name: postgres
-        image: postgres:14-alpine
+        image: postgres:16-alpine
         ports:
         - containerPort: 5432
           name: postgres
         env:
         - name: POSTGRES_DB
-          value: otedama
+          value: "otedama"
         - name: POSTGRES_USER
-          value: otedama
+          value: "otedama"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
               name: otedama-secrets
               key: database-password
         - name: PGDATA
-          value: /var/lib/postgresql/data/pgdata
+          value: "/var/lib/postgresql/data/pgdata"
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
         resources:
           requests:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "500m"
           limits:
             memory: "2Gi"
-            cpu: "2000m"
+            cpu: "1000m"
         livenessProbe:
           exec:
             command:
@@ -60,22 +123,64 @@ spec:
             - otedama
           initialDelaySeconds: 5
           periodSeconds: 5
+
+      - name: postgres-exporter
+        image: prometheuscommunity/postgres-exporter:latest
+        ports:
+        - containerPort: 9187
+          name: metrics
+        env:
+        - name: DATA_SOURCE_NAME
+          value: "postgresql://otedama:$(POSTGRES_PASSWORD)@localhost:5432/otedama?sslmode=disable"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: otedama-secrets
+              key: database-password
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        securityContext:
+          runAsUser: 65534
+          runAsGroup: 65534
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
       volumes:
-      - name: postgres-storage
-        persistentVolumeClaim:
-          claimName: postgres-pvc
+      - name: init-scripts
+        configMap:
+          name: postgres-init-scripts
+          defaultMode: 0755
+
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 100Gi
 
 ---
-# PostgreSQL Service
+# ConfigMap for PostgreSQL initialization scripts
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: postgres
+  name: postgres-init-scripts
   namespace: otedama
-spec:
-  selector:
+  labels:
     app: postgres
-  ports:
-  - port: 5432
-    targetPort: 5432
-  clusterIP: None
+    component: config
+data:
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";

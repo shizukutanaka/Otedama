@@ -1,67 +1,119 @@
 package security
 
 import (
-	"encoding/json"
 	"fmt"
-	"net"
-	"net/url"
-	"path/filepath"
 	"regexp"
-	"strconv"
-	"strings"
-	"unicode/utf8"
 
 	"go.uber.org/zap"
 )
 
-// InputValidator provides comprehensive input validation
+// ValidationConfig defines configuration for the InputValidator.
+// We can add complexity here later (e.g., regex patterns from config).
+type ValidationConfig struct{}
+
+// InputValidator provides comprehensive and configurable input validation.
+// It replaces the legacy api.InputValidator.
 type InputValidator struct {
 	logger *zap.Logger
-	
-	// Validation rules
-	rules      map[string]ValidationRule
-	
-	// SQL injection patterns
-	sqlPatterns []*regexp.Regexp
-	
-	// Path traversal patterns
-	pathPatterns []*regexp.Regexp
-	
-	// Command injection patterns
-	cmdPatterns []*regexp.Regexp
-	
-	// Configuration
-	config     ValidationConfig
+	config ValidationConfig
+
+	// Pre-compiled regex for efficiency
+	workerIDRegex  *regexp.Regexp
+	actionRegex    *regexp.Regexp
+	algorithmRegex *regexp.Regexp
 }
 
-// ValidationConfig defines validation configuration
-type ValidationConfig struct {
-	// Length limits
-	MaxStringLength   int `json:"max_string_length"`
-	MaxArrayLength    int `json:"max_array_length"`
-	MaxJSONDepth      int `json:"max_json_depth"`
-	MaxFileSize       int64 `json:"max_file_size"`
-	
-	// Pattern validation
-	EnablePatternCheck bool `json:"enable_pattern_check"`
-	CustomPatterns    map[string]string `json:"custom_patterns"`
-	
-	// File validation
-	AllowedFileTypes  []string `json:"allowed_file_types"`
-	BlockedFileTypes  []string `json:"blocked_file_types"`
-	
-	// Network validation
-	AllowPrivateIPs   bool `json:"allow_private_ips"`
-	AllowedPorts      []int `json:"allowed_ports"`
-	
-	// Encoding
-	RequireUTF8       bool `json:"require_utf8"`
+// NewInputValidator creates a new, enhanced input validator.
+func NewInputValidator(logger *zap.Logger, config ValidationConfig) *InputValidator {
+	return &InputValidator{
+		logger: logger,
+		config: config,
+		// Strict regex: alphanumeric, dashes, underscores, 1-64 chars.
+		workerIDRegex:  regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`),
+		// Strict regex: lowercase letters, 1-16 chars.
+		actionRegex:    regexp.MustCompile(`^[a-z]{1,16}$`),
+		// Strict regex: PascalCase or uppercase, 1-32 chars.
+		algorithmRegex: regexp.MustCompile(`^[A-Z][a-zA-Z0-9]{1,31}$`),
+	}
 }
 
-// ValidationRule defines a validation rule
-type ValidationRule struct {
-	Type        string                 `json:"type"`
-	Required    bool                   `json:"required"`
+// ValidateWorkerID checks if a worker ID is valid.
+func (v *InputValidator) ValidateWorkerID(id string) error {
+	if !v.workerIDRegex.MatchString(id) {
+		v.logger.Warn("Invalid worker ID format", zap.String("worker_id", id))
+		return fmt.Errorf("invalid worker ID format")
+	}
+	return nil
+}
+
+// ValidateAction checks if a control action is valid.
+func (v *InputValidator) ValidateAction(action string) error {
+	allowedActions := map[string]struct{}{
+		"start":  {},
+		"stop":   {},
+		"reboot": {},
+		"pause":  {},
+	}
+	if _, ok := allowedActions[action]; !ok || !v.actionRegex.MatchString(action) {
+		v.logger.Warn("Invalid or disallowed action", zap.String("action", action))
+		return fmt.Errorf("invalid or disallowed action: %s", action)
+	}
+	return nil
+}
+
+// ValidateAlgorithm checks if an algorithm name is valid.
+func (v *InputValidator) ValidateAlgorithm(algo string) error {
+	if !v.algorithmRegex.MatchString(algo) {
+		v.logger.Warn("Invalid algorithm format", zap.String("algorithm", algo))
+		return fmt.Errorf("invalid algorithm format")
+	}
+	return nil
+}
+
+// PasswordValidationError provides detailed password validation feedback
+type PasswordValidationError struct {
+	Issues []string `json:"issues"`
+}
+
+func (e *PasswordValidationError) Error() string {
+	return fmt.Sprintf("password validation failed: %s", strings.Join(e.Issues, ", "))
+}
+
+// ValidatePasswordStrength validates password with detailed feedback
+func (v *InputValidator) ValidatePasswordStrength(password string) error {
+	var issues []string
+	
+	if len(password) < 8 {
+		issues = append(issues, "must be at least 8 characters long")
+	}
+	if len(password) > 128 {
+		issues = append(issues, "must not exceed 128 characters")
+	}
+	
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
+	hasDigit := regexp.MustCompile(`[0-9]`).MatchString(password)
+	hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(password)
+	
+	if !hasUpper {
+		issues = append(issues, "must contain at least one uppercase letter")
+	}
+	if !hasLower {
+		issues = append(issues, "must contain at least one lowercase letter")
+	}
+	if !hasDigit {
+		issues = append(issues, "must contain at least one digit")
+	}
+	if !hasSpecial {
+		issues = append(issues, "must contain at least one special character")
+	}
+	
+	if len(issues) > 0 {
+		return &PasswordValidationError{Issues: issues}
+	}
+	
+	return nil
+}
 	MinLength   int                    `json:"min_length"`
 	MaxLength   int                    `json:"max_length"`
 	Pattern     string                 `json:"pattern"`

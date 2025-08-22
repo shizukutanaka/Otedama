@@ -7,7 +7,11 @@ on:
     branches: [ main, master ]
 
 env:
-  GO_VERSION: 1.21
+  GO_VERSION: 1.23.x
+  GIT_TERMINAL_PROMPT: 0
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+  GOTOOLCHAIN: local
 
 jobs:
   test:
@@ -16,7 +20,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: [1.21, 1.22]
+        go: [1.23.x]
     
     steps:
     - name: Checkout code
@@ -52,8 +56,17 @@ jobs:
     - name: Run vet
       run: go vet ./...
       
-    - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+    - name: Run tests (Windows, CGO disabled)
+      if: matrix.os == 'windows-latest'
+      env:
+        CGO_ENABLED: 0
+      run: go test -v -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
+      timeout-minutes: 15
+
+    - name: Run tests (non-Windows, with race)
+      if: matrix.os != 'windows-latest'
+      run: go test -v -timeout 10m -race -coverprofile=coverage.out -covermode=atomic ./...
+      timeout-minutes: 15
       
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -61,7 +74,7 @@ jobs:
         file: ./coverage.out
         flags: unittests
         name: codecov-umbrella
-      if: matrix.os == 'ubuntu-latest' && matrix.go == '1.21'
+      if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
 
   lint:
     name: Lint
@@ -167,6 +180,7 @@ jobs:
     - name: Run benchmarks
       run: |
         go test -run=XXX -bench=. -benchmem ./... | tee benchmark-results.txt
+      timeout-minutes: 20
         
     - name: Upload benchmark results
       uses: actions/upload-artifact@v3

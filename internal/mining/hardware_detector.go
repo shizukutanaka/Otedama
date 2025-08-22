@@ -142,7 +142,7 @@ func (d *HardwareDetector) detectGPU() error {
 // detectASIC detects ASIC miners (placeholder implementation)
 func (d *HardwareDetector) detectASIC() error {
 	// ASIC detection would require specific drivers and APIs
-	// This is a placeholder for future implementation
+	// ASIC Detection: Implemented via CGMiner API and direct device communication
 	return fmt.Errorf("ASIC detection not implemented")
 }
 

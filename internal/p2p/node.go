@@ -9,10 +9,14 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/core/routing"
+	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	"github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +45,9 @@ type Node struct {
 	
 	// Health monitoring
 	healthMonitor *HealthMonitor
+
+	// Kademlia DHT
+	dht *dht.IpfsDHT
 }
 
 // Config contains P2P node configuration
@@ -82,11 +89,16 @@ func NewNode(config *Config) *Node {
 
 // Start starts the P2P node
 func (n *Node) Start() error {
-	// Create libp2p host
+	// Create libp2p host with DHT
 	host, err := libp2p.New(
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", n.config.Port)),
 		libp2p.EnableAutoRelay(),
 		libp2p.EnableNATService(),
+		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			var err error
+			n.dht, err = dht.New(n.ctx, h)
+			return n.dht, err
+		}),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create libp2p host: %w", err)
@@ -97,6 +109,11 @@ func (n *Node) Start() error {
 	// Set up protocol handlers
 	n.setupProtocolHandlers()
 	
+	// Bootstrap the DHT
+	if err := n.dht.Bootstrap(n.ctx); err != nil {
+		return fmt.Errorf("failed to bootstrap DHT: %w", err)
+	}
+
 	// Connect to bootstrap nodes
 	if err := n.connectToBootstrapNodes(); err != nil {
 		return fmt.Errorf("failed to connect to bootstrap nodes: %w", err)
@@ -106,6 +123,9 @@ func (n *Node) Start() error {
 	if err := n.healthMonitor.Start(); err != nil {
 		return fmt.Errorf("failed to start health monitoring: %w", err)
 	}
+
+	// Start peer discovery
+	go n.discoverPeers()
 	
 	return nil
 }
@@ -140,11 +160,6 @@ func (n *Node) setupProtocolHandlers() {
 		n.handleBlockStream(stream)
 	})
 	
-	// Peer discovery handler
-	n.host.SetStreamHandler(protocol.ID("/otedama/discovery/1.0.0"), func(stream network.Stream) {
-		defer stream.Close()
-		n.handleDiscoveryStream(stream)
-	})
 }
 
 // handleMiningStream handles mining protocol streams
@@ -204,24 +219,6 @@ func (n *Node) handleBlockStream(stream network.Stream) {
 	}
 }
 
-// handleDiscoveryStream handles peer discovery streams
-func (n *Node) handleDiscoveryStream(stream network.Stream) {
-	// Read discovery request
-	var request DiscoveryRequest
-	if err := json.NewDecoder(stream).Decode(&request); err != nil {
-		n.logger.Error("Failed to decode discovery request", zap.Error(err))
-		return
-	}
-	
-	// Process discovery request
-	response := n.processDiscoveryRequest(request)
-	
-	// Send response
-	if err := json.NewEncoder(stream).Encode(response); err != nil {
-		n.logger.Error("Failed to encode discovery response", zap.Error(err))
-		return
-	}
-}
 
 // connectToBootstrapNodes connects to bootstrap nodes
 func (n *Node) connectToBootstrapNodes() error {
@@ -367,18 +364,42 @@ func (n *Node) sendToPeer(peerID string, data []byte) error {
 	return nil
 }
 
-// processDiscoveryRequest processes a discovery request
-func (n *Node) processDiscoveryRequest(request DiscoveryRequest) DiscoveryResponse {
-	// Get current peers
-	peers := n.GetPeers()
-	
-	// Create response
-	response := DiscoveryResponse{
-		Peers: peers,
-		Timestamp: time.Now(),
+
+// discoverPeers periodically discovers and connects to new peers using the DHT
+func (n *Node) discoverPeers() {
+	routingDiscovery := routing.NewRoutingDiscovery(n.dht)
+	dutil.Advertise(n.ctx, routingDiscovery, n.config.NetworkID)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-n.ctx.Done():
+			return
+		case <-ticker.C:
+			n.logger.Info("Searching for peers...")
+			peerChan, err := routingDiscovery.FindPeers(n.ctx, n.config.NetworkID)
+			if err != nil {
+				n.logger.Error("Failed to find peers", zap.Error(err))
+				continue
+			}
+
+			for p := range peerChan {
+				if p.ID == n.host.ID() || len(p.Addrs) == 0 {
+					continue
+				}
+
+				if n.host.Network().Connectedness(p.ID) != network.Connected {
+					if err := n.host.Connect(n.ctx, p); err != nil {
+						n.logger.Warn("Failed to connect to peer", zap.String("peer", p.ID.String()), zap.Error(err))
+					} else {
+						n.logger.Info("Connected to new peer", zap.String("peer", p.ID.String()))
+					}
+				}
+			}
+		}
 	}
-	
-	return response
 }
 
 // HealthCheck performs a health check

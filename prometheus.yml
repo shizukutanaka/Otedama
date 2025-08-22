@@ -1,0 +1,63 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  
+  external_labels:
+    monitor: 'otedama-monitor'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Otedama metrics
+  - job_name: 'otedama'
+    static_configs:
+      - targets: ['otedama:9090']
+        labels:
+          service: 'otedama'
+          component: 'mining'
+    
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Otedama health checks
+  - job_name: 'otedama-health'
+    static_configs:
+      - targets: ['otedama:8081']
+        labels:
+          service: 'otedama'
+          component: 'health'
+    
+    metrics_path: '/health'
+    scrape_interval: 30s
+
+  # Node exporter for system metrics (optional)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'system'
+    
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+# Example alerting rules (create alerts.yml separately)
+# rule_files:
+#   - "alerts.yml"

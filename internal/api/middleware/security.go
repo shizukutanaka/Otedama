@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/common"
-	"github.com/shizukutanaka/Otedama/internal/security"
+	"github.com/otedama/otedama/internal/common"
+	"github.com/otedama/otedama/internal/security"
 	"go.uber.org/zap"
 )
 

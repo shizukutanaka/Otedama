@@ -1,0 +1,74 @@
+# Otedama Configuration Example
+# Copy this file to config.yaml and modify as needed
+# For full configuration options, see config.yaml
+
+# Basic mining configuration
+mining:
+  algorithm: sha256d              # Mining algorithm
+  auto_start: false              # Start mining on launch
+  
+  # CPU mining (most common setup)
+  cpu:
+    enabled: true
+    threads: 0                   # 0 = auto-detect optimal threads
+    priority: normal
+  
+  # GPU mining (enable if you have GPUs)  
+  gpu:
+    enabled: false
+    intensity: 20                # Adjust based on your GPU
+    temperature_limit: 85
+  
+  # ASIC mining (for dedicated hardware)
+  asic:
+    enabled: false
+
+# Pool connection
+stratum:
+  enabled: true
+  pools:
+    - url: stratum+tcp://pool.example.com:3333
+      user: YOUR_WALLET_ADDRESS.worker1
+      password: x
+      priority: 1
+
+# P2P network (for distributed mining)
+p2p:
+  enable: false                  # Set to true for P2P mode
+  port: 18555
+
+# API and monitoring
+api:
+  enable: true
+  address: ":8080"              # Web interface and API
+
+monitoring:
+  enable: true
+  metrics_port: 9090
+
+# Security
+security:
+  # Authentication (recommended for production)
+  auth:
+    enabled: false              # Set to true and configure JWT secret
+  
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+
+# Database
+database:
+  type: sqlite                  # sqlite, postgres, mysql
+  sqlite:
+    path: "data/otedama.db"
+
+# Logging
+logging:
+  level: info                   # debug, info, warn, error
+  output: both                  # stdout, file, both
+  file:
+    enabled: true
+    path: "logs/otedama.log"
+
+# For advanced configuration options, see the main config.yaml file

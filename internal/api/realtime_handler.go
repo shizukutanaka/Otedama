@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/mining"
-	"github.com/shizukutanaka/Otedama/internal/p2p"
+	"github.com/otedama/otedama/internal/mining"
+	"github.com/otedama/otedama/internal/p2p"
 	"go.uber.org/zap"
 )
 

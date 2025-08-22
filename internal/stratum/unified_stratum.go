@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/otedama/otedama/internal/config"
 	"go.uber.org/zap"
 )
 

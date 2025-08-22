@@ -1,35 +1,112 @@
+# Redis StatefulSet, Service, ConfigMap, and Secret
+
 ---
-# Redis StatefulSet
+# Secret for Redis password
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+  namespace: otedama
+  labels:
+    app: redis
+    component: cache
+type: Opaque
+stringData:
+  redis-password: "change-this-to-a-strong-password"
+
+---
+# ConfigMap for Redis configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: otedama
+  labels:
+    app: redis
+    component: cache
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    requirepass "change-this-to-a-strong-password"
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    save 60 10000
+    appendonly yes
+    dir /data
+
+---
+# Service for Redis
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: otedama
+  labels:
+    app: redis
+    component: cache
+spec:
+  ports:
+  - port: 6379
+    name: redis
+  - port: 9121
+    name: metrics
+  selector:
+    app: redis
+    component: cache
+
+---
+# StatefulSet for Redis
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: redis
   namespace: otedama
+  labels:
+    app: redis
+    component: cache
 spec:
-  serviceName: redis
+  serviceName: redis-service
   replicas: 1
   selector:
     matchLabels:
       app: redis
+      component: cache
   template:
     metadata:
       labels:
         app: redis
+        component: cache
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
     spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
       containers:
       - name: redis
         image: redis:7-alpine
+        command: ["redis-server", "/etc/redis/redis.conf"]
         ports:
         - containerPort: 6379
           name: redis
-        command:
-        - redis-server
-        - --maxmemory
-        - 512mb
-        - --maxmemory-policy
-        - allkeys-lru
-        - --save
-        - ""
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
         resources:
           requests:
             memory: "256Mi"
@@ -37,30 +114,44 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
-        livenessProbe:
-          tcpSocket:
-            port: 6379
-          initialDelaySeconds: 30
-          periodSeconds: 10
         readinessProbe:
           exec:
-            command:
-            - redis-cli
-            - ping
-          initialDelaySeconds: 5
+            command: ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+          initialDelaySeconds: 15
           periodSeconds: 5
 
----
-# Redis Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis
-  namespace: otedama
-spec:
-  selector:
-    app: redis
-  ports:
-  - port: 6379
-    targetPort: 6379
-  clusterIP: None
+      - name: redis-exporter
+        image: oliver006/redis_exporter:latest
+        env:
+        - name: REDIS_ADDR
+          value: "redis://localhost:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password
+        ports:
+        - containerPort: 9121
+          name: metrics
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 10Gi

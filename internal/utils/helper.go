@@ -258,66 +258,6 @@ func RandomInt(min, max int64) (int64, error) {
 	return n.Int64() + min, nil
 }
 
-// Retry executes function with exponential backoff
-func Retry(attempts int, delay time.Duration, fn func() error) error {
-	var err error
-	for i := 0; i < attempts; i++ {
-		err = fn()
-		if err == nil {
-			return nil
-		}
-		
-		if i < attempts-1 {
-			time.Sleep(delay)
-			delay *= 2 // Exponential backoff
-		}
-	}
-	return fmt.Errorf("after %d attempts: %w", attempts, err)
-}
-
-// MinInt returns minimum of two integers
-func MinInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// MaxInt returns maximum of two integers
-func MaxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// MinInt64 returns minimum of two int64
-func MinInt64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// MaxInt64 returns maximum of two int64
-func MaxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// ClampInt clamps integer value between min and max
-func ClampInt(value, min, max int) int {
-	if value < min {
-		return min
-	}
-	if value > max {
-		return max
-	}
-	return value
-}
-
 // SafeDivide performs safe division avoiding divide by zero
 func SafeDivide(numerator, denominator float64) float64 {
 	if denominator == 0 {
