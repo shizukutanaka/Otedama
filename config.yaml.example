@@ -1,74 +1,107 @@
-# Otedama Configuration Example
-# Copy this file to config.yaml and modify as needed
-# For full configuration options, see config.yaml
+# Otedama configuration file
+# Place this file at: ~/.config/otedama/config.yaml
+# Override with:      --config /path/to/config.yaml
+#
+# Every field is optional. The minimum viable configuration is either:
+#   - This file with bitcoin_address set, or
+#   - No file at all, with --bitcoin-address passed on the command line.
+#
+# Precedence (highest to lowest):
+#   1. Command-line flags  (--bitcoin-address, --log-level, etc.)
+#   2. Environment vars    (OTEDAMA_BITCOIN_ADDRESS, OTEDAMA_LOG_LEVEL, etc.)
+#   3. This config file
+#   4. Built-in defaults
 
-# Basic mining configuration
-mining:
-  algorithm: sha256d              # Mining algorithm
-  auto_start: false              # Start mining on launch
-  
-  # CPU mining (most common setup)
-  cpu:
-    enabled: true
-    threads: 0                   # 0 = auto-detect optimal threads
-    priority: normal
-  
-  # GPU mining (enable if you have GPUs)  
-  gpu:
-    enabled: false
-    intensity: 20                # Adjust based on your GPU
-    temperature_limit: 85
-  
-  # ASIC mining (for dedicated hardware)
-  asic:
-    enabled: false
+# ── Wallet ──────────────────────────────────────────────────────────────────
+#
+# Your Bitcoin or Lightning address for receiving mining rewards.
+# Accepted formats:
+#   P2PKH  : starts with '1'
+#   P2SH   : starts with '3'
+#   Bech32 : starts with 'bc1'
+#
+bitcoin_address: ""
 
-# Pool connection
-stratum:
-  enabled: true
-  pools:
-    - url: stratum+tcp://pool.example.com:3333
-      user: YOUR_WALLET_ADDRESS.worker1
-      password: x
-      priority: 1
+# ── Pools ────────────────────────────────────────────────────────────────────
+#
+# List of mining pools in order of preference. Otedama connects to the
+# first and fails over to subsequent entries if the connection drops.
+#
+# If this list is empty, Otedama uses its built-in recommended pool list
+# (Stratum V2 pools prioritised, 0% fee where available).
+#
+# Supported URL schemes:
+#   stratum+v2://       Stratum V2 unencrypted  (LAN or trusted networks only)
+#   stratum+v2tls://    Stratum V2 encrypted    (recommended for internet)
+#   stratum+tls://      Stratum V1 encrypted
+#   stratum+tcp://      Stratum V1 plain        (not recommended)
+#
+pools:
+  - url: "stratum+v2tls://public.stratum.slushpool.com:3336"
+    # user is optional; defaults to bitcoin_address.
+    user: ""
+    # password is optional; most pools accept any value.
+    password: "x"
 
-# P2P network (for distributed mining)
-p2p:
-  enable: false                  # Set to true for P2P mode
-  port: 18555
+  # Failover: list pools in priority order. Otedama tries the first;
+  # if a connection fails or drops, it rotates to the next immediately,
+  # and only applies reconnect backoff once every pool has been tried.
+  # Uncomment to add a backup:
+  # - url: "stratum+v2tls://demand.fun:3336"
+  #   password: "x"
 
-# API and monitoring
-api:
-  enable: true
-  address: ":8080"              # Web interface and API
+# ── Workers ──────────────────────────────────────────────────────────────────
+workers:
+  # Human-readable worker name sent to the pool for identification.
+  # Defaults to the hostname if empty.
+  name: ""
 
-monitoring:
-  enable: true
-  metrics_port: 9090
+# ── Language ─────────────────────────────────────────────────────────────────
+#
+# BCP 47 language tag for UI messages and log output.
+# Supported: en, ja, zh-CN, ko, es, fr, de, pt
+# (Other tags are accepted and fall back to English.)
+# If empty, Otedama detects the language from the operating system.
+#
+language: ""
 
-# Security
-security:
-  # Authentication (recommended for production)
-  auth:
-    enabled: false              # Set to true and configure JWT secret
-  
-  # Rate limiting
-  rate_limit:
-    enabled: true
-    requests_per_minute: 60
+# ── Logging ──────────────────────────────────────────────────────────────────
+#
+# Log level: debug | info | warn | error
+# Default: info
+#
+log_level: "info"
 
-# Database
-database:
-  type: sqlite                  # sqlite, postgres, mysql
-  sqlite:
-    path: "data/otedama.db"
+# ── Data directory ───────────────────────────────────────────────────────────
+#
+# Directory where Otedama stores the Lightning wallet and usage data.
+# Defaults:
+#   Linux / BSD : $XDG_DATA_HOME/otedama   or  ~/.local/share/otedama
+#   macOS       : ~/Library/Application Support/Otedama
+#   Windows     : %APPDATA%\Otedama
+#
+data_dir: ""
 
-# Logging
-logging:
-  level: info                   # debug, info, warn, error
-  output: both                  # stdout, file, both
-  file:
-    enabled: true
-    path: "logs/otedama.log"
+# ── HTTP endpoints ────────────────────────────────────────────────────────────
+#
+# Address for Prometheus metrics and health endpoints.
+# Leave empty to disable (default).
+#
+# Endpoints exposed when set:
+#   GET /metrics   — Prometheus text exposition format
+#   GET /healthz   — liveness probe (always 200 when server is alive)
+#   GET /readyz    — readiness probe (200 when engine is mining, 503 otherwise)
+#   GET /          — HTML landing page
+#
+# Security note: bind to 127.0.0.1 (loopback) unless you have a reverse proxy
+# with authentication in front. The metrics endpoint is unauthenticated.
+#
+# http_addr: "127.0.0.1:9090"
 
-# For advanced configuration options, see the main config.yaml file
+# ── Log format ───────────────────────────────────────────────────────────────
+#
+# Output format for log messages.
+#   text   — Human-readable, coloured (default)
+#   json   — Structured JSON (recommended for log aggregation tools)
+#
+log_format: "text"

@@ -1,0 +1,619 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Otedama contributors. See NOTICE for details.
+
+package arbitration
+
+import (
+	"fmt"
+	"math/rand"
+	"strings"
+	"testing"
+
+	"github.com/shizukutanaka/Otedama/internal/hal"
+)
+
+// ----- Policy & Yield basic checks -----
+
+func TestPolicy_Valid(t *testing.T) {
+	valid := []Policy{PolicyMaximizeEarnings, PolicyStackBTC, PolicyMaximizePrivacy, PolicyEnvironmentFriendly}
+	for _, p := range valid {
+		t.Run(p.String(), func(t *testing.T) {
+			if !p.Valid() {
+				t.Errorf("%v reported as invalid", p)
+			}
+		})
+	}
+	if Policy(99).Valid() {
+		t.Error("unknown Policy value reported as valid")
+	}
+}
+
+func TestPolicy_String_Stable(t *testing.T) {
+	// These names are part of the log contract; operators grep for them.
+	cases := map[Policy]string{
+		PolicyMaximizeEarnings:    "maximize_earnings",
+		PolicyStackBTC:            "stack_btc",
+		PolicyMaximizePrivacy:     "maximize_privacy",
+		PolicyEnvironmentFriendly: "environment_friendly",
+	}
+	for p, want := range cases {
+		if got := p.String(); got != want {
+			t.Errorf("Policy(%d).String() = %q, want %q", int(p), got, want)
+		}
+	}
+}
+
+func TestYield_Effective(t *testing.T) {
+	tests := []struct {
+		name string
+		y    Yield
+		want float64
+	}{
+		{"positive, full confidence", Yield{100, 1.0}, 100},
+		{"positive, half confidence", Yield{100, 0.5}, 50},
+		{"zero sats", Yield{0, 1.0}, 0},
+		{"zero confidence", Yield{100, 0}, 0},
+		{"negative sats treated as zero", Yield{-50, 1.0}, 0},
+		{"negative confidence treated as zero", Yield{100, -0.5}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.y.Effective(); got != tt.want {
+				t.Errorf("Effective() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// ----- Decide: malformed input -----
+
+func TestDecide_RejectsInvalidPolicy(t *testing.T) {
+	_, err := Decide(Input{Policy: Policy(99)})
+	if err == nil {
+		t.Fatal("Decide must reject invalid Policy")
+	}
+}
+
+func TestDecide_RejectsNegativeHysteresis(t *testing.T) {
+	_, err := Decide(Input{HysteresisMargin: -0.1})
+	if err == nil {
+		t.Fatal("Decide must reject negative HysteresisMargin")
+	}
+}
+
+func TestDecide_RejectsDuplicateDeviceIDs(t *testing.T) {
+	devs := []DeviceRef{
+		{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
+		{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
+	}
+	_, err := Decide(Input{Devices: devs})
+	if err == nil {
+		t.Fatal("Decide must reject duplicate device IDs")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error %q must mention 'duplicate'", err)
+	}
+}
+
+func TestDecide_EmptyInputReturnsEmptyAllocation(t *testing.T) {
+	alloc, err := Decide(Input{Policy: PolicyMaximizeEarnings})
+	if err != nil {
+		t.Fatalf("Decide on empty input failed: %v", err)
+	}
+	if len(alloc.Assignments) != 0 {
+		t.Errorf("got %d assignments, want 0", len(alloc.Assignments))
+	}
+	if alloc.TotalYield != 0 {
+		t.Errorf("TotalYield = %v, want 0", alloc.TotalYield)
+	}
+}
+
+// ----- Decide: basic allocation -----
+
+func TestDecide_AssignsEachDeviceToBestStream(t *testing.T) {
+	// GPU and CPU both available; two streams exist. GPU's best stream
+	// pays more than CPU's best; we verify each device gets its own best.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
+
+	mining := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU, hal.FamilyCPU},
+		YieldPerDevice: map[string]Yield{
+			"gpu-0": {SatsPerSecond: 100, Confidence: 1.0},
+			"cpu-0": {SatsPerSecond: 10, Confidence: 1.0},
+		},
+	}
+	ai := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice: map[string]Yield{
+			"gpu-0": {SatsPerSecond: 200, Confidence: 1.0},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu, cpu},
+		Streams: []Stream{mining, ai},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+
+	byID := assignmentsByID(alloc)
+	if byID["gpu-0"].Stream != "ai.strawberry" {
+		t.Errorf("gpu-0 assigned to %q, want ai.strawberry (higher yield)", byID["gpu-0"].Stream)
+	}
+	if byID["cpu-0"].Stream != "mining.braiins" {
+		t.Errorf("cpu-0 assigned to %q, want mining.braiins (only compatible)", byID["cpu-0"].Stream)
+	}
+}
+
+func TestDecide_IdleWhenNoCompatibleStream(t *testing.T) {
+	// An ASIC with only GPU-only streams available must be left idle,
+	// not incorrectly assigned.
+	asic := DeviceRef{Identity: hal.Identity{ID: "asic-0", Family: hal.FamilyASIC}}
+	gpuOnly := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"asic-0": {SatsPerSecond: 1000, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{asic},
+		Streams: []Stream{gpuOnly},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if !alloc.Assignments[0].Idle() {
+		t.Error("ASIC must be idle when no compatible stream exists")
+	}
+	if alloc.SkippedDevice != 1 {
+		t.Errorf("SkippedDevice = %d, want 1", alloc.SkippedDevice)
+	}
+}
+
+func TestDecide_ZeroYieldStreamIsIgnored(t *testing.T) {
+	// A stream that quotes zero yield for a device must be treated as
+	// "not accepting this device right now", not as the best option.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	zero := Stream{
+		ID:              "render.rendernet",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 0, Confidence: 1.0}},
+	}
+	nonZero := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 10, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{zero, nonZero},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.braiins" {
+		t.Errorf("chose %q despite zero-yield alternative", alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_UsesDefaultYieldWhenDeviceNotListed(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-new", Family: hal.FamilyGPU}}
+	s := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		DefaultYield:    Yield{SatsPerSecond: 50, Confidence: 0.8},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{s},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Idle() {
+		t.Fatal("device left idle despite DefaultYield being available")
+	}
+	// 50 * 0.8 = 40
+	if alloc.Assignments[0].ExpectedYield != 40 {
+		t.Errorf("ExpectedYield = %v, want 40 (using DefaultYield)", alloc.Assignments[0].ExpectedYield)
+	}
+}
+
+// ----- Decide: policies -----
+
+func TestDecide_StackBTCPolicy_PrefersBitcoinMining(t *testing.T) {
+	// When yields are close, the StackBTC policy must prefer BTC-native.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	mining := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		IsBitcoinMining: true,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	ai := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 103, Confidence: 1.0}},
+	}
+
+	// 3% advantage for AI should not overcome the 5% BTC bonus under StackBTC.
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{mining, ai},
+		Policy:  PolicyStackBTC,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.braiins" {
+		t.Errorf("StackBTC chose %q, want mining.braiins", alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_PrivacyPolicy_PrefersHigherRating(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	private := Stream{
+		ID:              "mining.ocean",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		PrivacyRating:   9,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	kyc := Stream{
+		ID:              "mining.nicehash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		PrivacyRating:   2,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{private, kyc},
+		Policy:  PolicyMaximizePrivacy,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	// 100 * (1 + 9*0.01) = 109; 105 * (1 + 2*0.01) = 107.1 => private wins
+	if alloc.Assignments[0].Stream != "mining.ocean" {
+		t.Errorf("Privacy policy chose %q, want mining.ocean", alloc.Assignments[0].Stream)
+	}
+}
+
+// ----- Decide: hysteresis -----
+
+func TestDecide_HysteresisKeepsCurrentUnderMargin(t *testing.T) {
+	// If the new best only beats the incumbent by less than the margin,
+	// we must stay on the incumbent to avoid flapping.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10, // require 10% improvement
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	// 5% improvement < 10% margin => keep current.
+	if alloc.Assignments[0].Stream != "mining.braiins" {
+		t.Errorf("under 10%% hysteresis, kept switch from %q; hysteresis violated", alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_HysteresisAllowsSwitchAboveMargin(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
+	}
+
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "ai.strawberry" {
+		t.Errorf("100%% improvement failed to overcome 10%% hysteresis; got %q", alloc.Assignments[0].Stream)
+	}
+	if alloc.Assignments[0].SwitchedFromID != "mining.braiins" {
+		t.Errorf("SwitchedFromID = %q, want mining.braiins", alloc.Assignments[0].SwitchedFromID)
+	}
+}
+
+// ----- Decide: determinism -----
+
+func TestDecide_DeterministicForIdenticalInput(t *testing.T) {
+	in := Input{
+		Devices: []DeviceRef{
+			{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
+			{Identity: hal.Identity{ID: "gpu-1", Family: hal.FamilyGPU}},
+			{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}},
+		},
+		Streams: []Stream{
+			{
+				ID:              "mining.braiins",
+				AcceptsFamilies: []hal.Family{hal.FamilyGPU, hal.FamilyCPU},
+				DefaultYield:    Yield{50, 1.0},
+			},
+			{
+				ID:              "ai.strawberry",
+				AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+				DefaultYield:    Yield{70, 1.0},
+			},
+		},
+		Policy: PolicyMaximizeEarnings,
+	}
+
+	first, err := Decide(in)
+	if err != nil {
+		t.Fatalf("first Decide failed: %v", err)
+	}
+	for i := 0; i < 10; i++ {
+		next, err := Decide(in)
+		if err != nil {
+			t.Fatalf("iteration %d Decide failed: %v", i, err)
+		}
+		if !allocationsEqual(first, next) {
+			t.Fatalf("iteration %d: allocation diverged from first", i)
+		}
+	}
+}
+
+func TestDecide_DeterministicUnderShuffledDeviceInput(t *testing.T) {
+	// Shuffling the input order must not change the output order or
+	// assignments. This is what lets callers compare allocations for
+	// diffing.
+	devs := []DeviceRef{
+		{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}},
+		{Identity: hal.Identity{ID: "gpu-1", Family: hal.FamilyGPU}},
+		{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}},
+	}
+	streams := []Stream{
+		{
+			ID:              "s1",
+			AcceptsFamilies: []hal.Family{hal.FamilyGPU, hal.FamilyCPU},
+			DefaultYield:    Yield{50, 1.0},
+		},
+	}
+
+	first, _ := Decide(Input{Devices: devs, Streams: streams, Policy: PolicyMaximizeEarnings})
+
+	shuffled := []DeviceRef{devs[2], devs[0], devs[1]}
+	second, _ := Decide(Input{Devices: shuffled, Streams: streams, Policy: PolicyMaximizeEarnings})
+
+	if !allocationsEqual(first, second) {
+		t.Error("shuffled input produced different allocation; engine is not input-order-deterministic")
+	}
+}
+
+// ----- Property-based: invariants over random input -----
+
+func TestDecide_Property_NeverAssignsIncompatibleFamily(t *testing.T) {
+	// For any random configuration, no device may end up assigned to a
+	// stream whose AcceptsFamilies excludes its Family.
+	r := rand.New(rand.NewSource(42))
+	for trial := 0; trial < 200; trial++ {
+		in := randomInput(r)
+		alloc, err := Decide(in)
+		if err != nil {
+			continue // random input may hit duplicate IDs; skip those trials
+		}
+
+		streamByID := make(map[StreamID]Stream, len(in.Streams))
+		for _, s := range in.Streams {
+			streamByID[s.ID] = s
+		}
+		devByID := make(map[string]DeviceRef, len(in.Devices))
+		for _, d := range in.Devices {
+			devByID[d.Identity.ID] = d
+		}
+
+		for _, a := range alloc.Assignments {
+			if a.Idle() {
+				continue
+			}
+			s, ok := streamByID[a.Stream]
+			if !ok {
+				t.Fatalf("trial %d: assignment references unknown stream %q", trial, a.Stream)
+			}
+			d := devByID[a.DeviceID]
+			if !s.Accepts(d.Identity.Family) {
+				t.Fatalf("trial %d: device %v (family %q) assigned to stream %q (accepts %v)",
+					trial, a.DeviceID, d.Identity.Family, a.Stream, s.AcceptsFamilies)
+			}
+		}
+	}
+}
+
+func TestDecide_Property_AllocationMatchesOrExceedsGreedy(t *testing.T) {
+	// Without hysteresis, the engine's allocation must be at least as
+	// good (in total yield) as a greedy per-device max-yield allocation.
+	// This is the basic optimality guarantee.
+	r := rand.New(rand.NewSource(7))
+	for trial := 0; trial < 200; trial++ {
+		in := randomInput(r)
+		in.HysteresisMargin = 0
+		in.Previous = nil
+
+		alloc, err := Decide(in)
+		if err != nil {
+			continue
+		}
+		greedy := greedyTotalYield(in)
+		if alloc.TotalYield+1e-9 < greedy {
+			t.Fatalf("trial %d: engine yield %.4f < greedy %.4f", trial, alloc.TotalYield, greedy)
+		}
+	}
+}
+
+func TestDecide_Property_NoIdleWhenCompatibleStreamExists(t *testing.T) {
+	// A device must not be left idle if any stream accepts its Family
+	// and offers positive yield for it.
+	r := rand.New(rand.NewSource(99))
+	for trial := 0; trial < 200; trial++ {
+		in := randomInput(r)
+		in.HysteresisMargin = 0
+		in.Previous = nil
+
+		alloc, err := Decide(in)
+		if err != nil {
+			continue
+		}
+
+		for _, a := range alloc.Assignments {
+			if !a.Idle() {
+				continue
+			}
+			// Device is idle; verify no stream actually accepts it.
+			var dev DeviceRef
+			for _, d := range in.Devices {
+				if d.Identity.ID == a.DeviceID {
+					dev = d
+					break
+				}
+			}
+			for _, s := range in.Streams {
+				if s.Accepts(dev.Identity.Family) && s.YieldFor(dev.Identity.ID).Effective() > 0 {
+					t.Fatalf("trial %d: device %v idle but stream %v offers yield %.4f",
+						trial, a.DeviceID, s.ID, s.YieldFor(dev.Identity.ID).Effective())
+				}
+			}
+		}
+	}
+}
+
+// ----- Helpers -----
+
+func assignmentsByID(a *Allocation) map[string]Assignment {
+	m := make(map[string]Assignment, len(a.Assignments))
+	for _, x := range a.Assignments {
+		m[x.DeviceID] = x
+	}
+	return m
+}
+
+func allocationsEqual(a, b *Allocation) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if len(a.Assignments) != len(b.Assignments) {
+		return false
+	}
+	for i := range a.Assignments {
+		if a.Assignments[i] != b.Assignments[i] {
+			// Assignments differ by Reason string; compare field-by-field
+			// ignoring Reason, since Reason carries diagnostic text.
+			if a.Assignments[i].DeviceID != b.Assignments[i].DeviceID ||
+				a.Assignments[i].Stream != b.Assignments[i].Stream ||
+				a.Assignments[i].ExpectedYield != b.Assignments[i].ExpectedYield ||
+				a.Assignments[i].SwitchedFromID != b.Assignments[i].SwitchedFromID {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func randomInput(r *rand.Rand) Input {
+	families := []hal.Family{hal.FamilyASIC, hal.FamilyGPU, hal.FamilyCPU}
+
+	nDev := r.Intn(6) + 1
+	devs := make([]DeviceRef, 0, nDev)
+	for i := 0; i < nDev; i++ {
+		devs = append(devs, DeviceRef{
+			Identity: hal.Identity{
+				ID:     fmt.Sprintf("dev-%d", i),
+				Family: families[r.Intn(len(families))],
+			},
+		})
+	}
+
+	nStream := r.Intn(5) + 1
+	streams := make([]Stream, 0, nStream)
+	for i := 0; i < nStream; i++ {
+		accepted := make([]hal.Family, 0)
+		for _, f := range families {
+			if r.Intn(2) == 0 {
+				accepted = append(accepted, f)
+			}
+		}
+		streams = append(streams, Stream{
+			ID:                  StreamID(fmt.Sprintf("stream-%d", i)),
+			AcceptsFamilies:     accepted,
+			DefaultYield:        Yield{SatsPerSecond: float64(r.Intn(200)), Confidence: 0.5 + r.Float64()*0.5},
+			PrivacyRating:       r.Intn(11),
+			EnvironmentalRating: r.Intn(11),
+			IsBitcoinMining:     r.Intn(2) == 0,
+		})
+	}
+
+	return Input{
+		Devices: devs,
+		Streams: streams,
+		Policy:  Policy(r.Intn(4)),
+	}
+}
+
+func greedyTotalYield(in Input) float64 {
+	// For each device, take the max effective yield among compatible streams.
+	var total float64
+	for _, d := range in.Devices {
+		var best float64
+		for _, s := range in.Streams {
+			if !s.Accepts(d.Identity.Family) {
+				continue
+			}
+			y := s.YieldFor(d.Identity.ID).Effective()
+			if y > best {
+				best = y
+			}
+		}
+		total += best
+	}
+	return total
+}

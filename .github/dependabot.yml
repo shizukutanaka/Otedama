@@ -1,0 +1,56 @@
+# Dependabot configuration.
+#
+# Automatically creates PRs when dependencies have security updates.
+# This is the minimum bar for any production Go project in 2026.
+
+version: 2
+updates:
+  # Go modules — check weekly for updates to direct dependencies.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Security updates open PRs regardless of schedule.
+    groups:
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+
+  # GitHub Actions — third-party actions are a supply-chain risk.
+  # The tj-actions incident of March 2025 showed that even SHA pinning
+  # requires active maintenance. Dependabot helps stay current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # Docker base images.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "docker"

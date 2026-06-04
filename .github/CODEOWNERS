@@ -1,0 +1,30 @@
+# Otedama code owners.
+#
+# This file enforces automatic review requests on pull requests. The
+# listed owners are automatically requested for review on any PR
+# touching the matching paths.
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/managing-repository-settings/about-code-owners
+
+# Default owner for everything not matched by a more specific rule.
+*                          @shizukutanaka
+
+# Security-critical code paths require extra scrutiny.
+/internal/lightning/       @shizukutanaka
+/internal/btccrypto/       @shizukutanaka
+/internal/poolproto/       @shizukutanaka
+/internal/stratum/noise*   @shizukutanaka
+/internal/stratum/noise_pool* @shizukutanaka
+
+# Release and CI automation.
+/.github/                  @shizukutanaka
+/.goreleaser.yaml          @shizukutanaka
+/Makefile                  @shizukutanaka
+/install.sh                @shizukutanaka
+
+# Documentation that shapes project direction.
+/README.md                 @shizukutanaka
+/CLAUDE.md                 @shizukutanaka
+/docs/                     @shizukutanaka
+/BENCHMARKS.md             @shizukutanaka
+/SECURITY.md               @shizukutanaka

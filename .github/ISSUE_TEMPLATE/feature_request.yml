@@ -1,0 +1,61 @@
+name: Feature Request
+description: Suggest a new feature or improvement.
+title: "[feat] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Good feature requests describe the **problem** first, the solution second.
+
+        Please read `CONTRIBUTING.md` before submitting.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the user-facing problem, not your proposed implementation.
+      placeholder: "I want to monitor my miner from a remote dashboard, but there's no HTTP endpoint."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like Otedama to do?
+      placeholder: "Expose Prometheus metrics on a configurable port."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds have you tried? Why are they insufficient?
+      placeholder: "I tried parsing stdout logs but the format is not stable."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Core mining (SHA256d, Stratum)
+        - Wallet and custody
+        - TUI / CLI
+        - Observability
+        - Deployment / packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Are you willing to contribute?
+      options:
+        - label: I am willing to open a PR if the feature is accepted.
+        - label: I have read `CONTRIBUTING.md` and understand the review process.

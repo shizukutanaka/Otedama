@@ -1,76 +1,61 @@
-# Otedama P2P Mining Pool v2.1.9
-# Multi-stage build for minimal production image
+# ---- Build stage ----
+FROM golang:1.24-alpine AS builder
 
-# Build stage
-FROM golang:1.21-alpine AS builder
+# Install git for go module fetching and ca-certificates for TLS.
+RUN apk add --no-cache git ca-certificates tzdata
 
-# Install build dependencies
-RUN apk add --no-cache git gcc musl-dev
+WORKDIR /src
 
-# Set working directory
-WORKDIR /build
-
-# Copy go mod files
+# Copy dependency manifests first so Docker layer cache is effective
+# when only source files change.
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
+# Copy source and build a fully static binary.
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=1 GOOS=linux go build \
-    -ldflags="-s -w -X 'main.Version=Otedama-Docker' -X 'main.BuildTime=$(date -u +%Y-%m-%d_%H:%M:%S)'" \
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
-    -o otedama \
-    cmd/otedama/*.go
+    -ldflags "-s -w \
+        -X github.com/shizukutanaka/Otedama/internal/version.Version=${VERSION} \
+        -X github.com/shizukutanaka/Otedama/internal/version.Commit=${COMMIT} \
+        -X github.com/shizukutanaka/Otedama/internal/version.BuildDate=${BUILD_DATE}" \
+    -o /out/otedama ./cmd/otedama
 
-# Runtime stage
-FROM alpine:latest
+# ---- Final image ----
+# gcr.io/distroless/static contains only the root CA bundle, timezone
+# data, and a minimal libc shim — no shell, no package manager.
+# This keeps the attack surface minimal and the image around 5 MB.
+FROM gcr.io/distroless/static:nonroot
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata
+# Copy the binary.
+COPY --from=builder /out/otedama /usr/local/bin/otedama
 
-# Create non-root user
-RUN addgroup -g 1000 otedama && \
-    adduser -D -u 1000 -G otedama otedama
+# Copy license documents (Apache 2.0 §4(d) requires NOTICE distribution).
+COPY --from=builder /src/LICENSE /LICENSE
+COPY --from=builder /src/NOTICE /NOTICE
 
-# Set working directory
-WORKDIR /app
+# Copy timezone data (needed for correct timestamp formatting).
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Copy binary from builder
-COPY --from=builder /build/otedama /app/otedama
+# Run as a non-root user (distroless 'nonroot' is uid 65532).
+USER nonroot:nonroot
 
-# Copy configuration files
-COPY config.yaml.example /app/config.yaml.example
+# Data directory for wallet and config.
+VOLUME ["/home/nonroot/.config/otedama"]
 
-# Create data directories
-RUN mkdir -p /app/data /app/logs && \
-    chown -R otedama:otedama /app
+# Otedama has no listening ports of its own; it dials out to the pool.
+EXPOSE 0
 
-# Switch to non-root user
-USER otedama
+ENTRYPOINT ["/usr/local/bin/otedama"]
+CMD ["run", "--help"]
 
-# Expose ports
-# API port
-EXPOSE 8080
-# SSL API port
-EXPOSE 8443
-# Metrics port
-EXPOSE 9090
-# Health port
-EXPOSE 8081
-# P2P port
-EXPOSE 18555
-
-# Volume for data persistence
-VOLUME ["/app/data", "/app/logs"]
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health/live || exit 1
-
-# Default command
-ENTRYPOINT ["/app/otedama"]
-CMD ["-config", "/app/config.yaml"]
+LABEL org.opencontainers.image.title="Otedama" \
+      org.opencontainers.image.description="Non-custodial compute arbitration software" \
+      org.opencontainers.image.url="https://github.com/shizukutanaka/Otedama" \
+      org.opencontainers.image.source="https://github.com/shizukutanaka/Otedama" \
+      org.opencontainers.image.licenses="Apache-2.0"
