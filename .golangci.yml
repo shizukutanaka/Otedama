@@ -1,62 +1,151 @@
+# golangci-lint configuration for Otedama.
+# https://golangci-lint.run/usage/configuration/
+
 run:
   timeout: 5m
-  tests: false
+  tests: true
+  # Don't waste CPU analysing generated or vendored code.
   skip-dirs:
     - vendor
-    - test
-    - docs
-  skip-files:
-    - ".*_test\\.go$"
+    - dist
+    - bin
+  # Go toolchain version.
+  go: "1.22"
 
+# Output format.
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true
+
+# Linters enabled by default in golangci-lint + additional curated set.
 linters:
+  disable-all: true
   enable:
-    - gofmt
-    - goimports
-    - govet
-    - errcheck
-    - ineffassign
-    - unused
-    - staticcheck
-    - gosimple
-    - goconst
-    - misspell
-    - unconvert
-    - prealloc
-    - nakedret
-  disable:
-    - gosec # Security is handled separately
-    - gocyclo # Complexity is acceptable for performance
-    - dupl # Some duplication is acceptable
+    # Essential — catches real bugs.
+    - errcheck         # unchecked errors
+    - govet            # Go's own static analyser
+    - ineffassign      # unused assignments
+    - staticcheck      # multi-purpose static analyser
+    - unused           # unused code
+    - typecheck        # compilation check
 
+    # Security.
+    - gosec            # security scanner
+    - bodyclose        # forgotten Body.Close on HTTP responses
+    - rowserrcheck     # forgotten sql.Rows.Err()
+
+    # Code quality.
+    - goconst          # repeated strings → constants
+    - gocritic         # opinionated but valuable
+    - revive           # golint successor
+    - unconvert        # unnecessary type conversions
+    - unparam          # unused function parameters
+    - dogsled          # excessive blank identifiers
+    - dupl             # duplicate code
+    - gocyclo          # cyclomatic complexity
+    - misspell         # catches typos
+    - nakedret         # naked returns in long funcs
+    - prealloc         # slice capacity hints
+    - gosimple         # simplifications
+
+    # Formatting.
+    - gofmt
+    - gofumpt          # stricter gofmt
+    - goimports        # import grouping
+
+    # Error handling.
+    - errorlint        # errors.Is/As usage
+    - nilerr           # returning nil when error != nil
+
+    # Modernity.
+    - usestdlibvars    # use stdlib constants (http.MethodGet etc.)
+    - wastedassign     # wasted assignments
+
+# Per-linter configuration.
 linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/shizukutanaka/Otedama
-  govet:
-    check-shadowing: true
-  errcheck:
-    check-type-assertions: true
-    check-blank: false
+  gocyclo:
+    min-complexity: 15
+
   goconst:
-    min-len: 3
-    min-occurrences: 3
+    min-len: 4
+    min-occurrences: 4
+
+  dupl:
+    threshold: 150
+
+  revive:
+    severity: warning
+    rules:
+      - name: exported
+        arguments:
+          - disableStutteringCheck
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+      - opinionated
+    disabled-checks:
+      - unnamedResult   # named returns are sometimes clearer
+      - whyNoLint       # we prefer succinct disable comments
+
+  gofumpt:
+    module-path: github.com/shizukutanaka/Otedama
+    extra-rules: true
+
   misspell:
     locale: US
-  prealloc:
-    simple: true
-    range-loops: true
-  nakedret:
-    max-func-lines: 30
 
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+  gosec:
+    excludes:
+      # G104 (unchecked error) is caught by errcheck with more context.
+      - G104
+      # G601 (implicit memory aliasing in for loop) — we've audited
+      # every loop body for correctness.
+      - G601
+
+# Issue filtering.
 issues:
+  # Show all issues, not just a sample.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
   exclude-rules:
+    # Relax rules for test files.
     - path: _test\.go
       linters:
-        - errcheck
-        - ineffassign
+        - errcheck      # tests often ignore Close errors intentionally
+        - gosec         # test fixtures use weak RNG by design
+        - dupl          # tests are often repetitive by nature
+        - goconst       # repeated literals are clearer in tests
+        - unparam       # test helpers often have unused returns
+        - gocyclo       # long table-driven tests
+
+    # The CPU worker's main loop is inherently complex.
+    - path: internal/miner/worker\.go
+      text: "cyclomatic complexity"
+
+    # Version metadata fields are filled by ldflags; they are empty at
+    # compile time by design.
+    - path: internal/version/version\.go
+      linters:
+        - goconst
+
+# Severity — which issues block the PR.
+severity:
+  default-severity: warning
+  rules:
     - linters:
+        - errcheck
+        - gosec
         - staticcheck
-      text: "SA1019" # Ignore deprecation warnings
-  max-issues-per-linter: 50
-  max-same-issues: 10
+        - typecheck
+      severity: error

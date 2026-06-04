@@ -1,0 +1,193 @@
+# .goreleaser.yaml — Otedama release configuration.
+#
+# Run locally with: goreleaser release --snapshot --clean
+# Production run is triggered by the release.yml GitHub Action on tag push.
+#
+# References:
+#   https://goreleaser.com/customization/
+
+version: 2
+
+project_name: otedama
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: otedama
+    main: ./cmd/otedama
+    binary: otedama
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/shizukutanaka/Otedama/internal/version.Version={{.Version}}
+      - -X github.com/shizukutanaka/Otedama/internal/version.Commit={{.Commit}}
+      - -X github.com/shizukutanaka/Otedama/internal/version.BuildDate={{.Date}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64   # Windowsのarm64は現時点では非優先
+      - goos: freebsd
+        goarch: arm64
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - CHANGELOG.md
+      - LICENSE
+      - NOTICE
+      - VERIFY.md
+      - docs/locales/*.toml  # 翻訳ファイルを同梱
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+signs:
+  # 1. Cosign keyless signing of every archive + checksums file.
+  #    Produces .sig and .pem next to each artifact.
+  - id: cosign
+    cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+  # 2. Cosign --bundle form for offline verification.
+  #    Produces a single .bundle file embedding the cert, signature,
+  #    and signed timestamp — verifiable with `cosign verify-blob --offline`.
+  #    See VERIFY.md for the verification procedure.
+  - id: cosign-bundle
+    cmd: cosign
+    signature: "${artifact}.bundle"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "--new-bundle-format"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+sboms:
+  # 1. CycloneDX 1.6 — preferred by security scanners (grype, osv-scanner).
+  #    Generated via cyclonedx-gomod for deepest Go module fidelity.
+  - id: cyclonedx
+    artifacts: archive
+    cmd: cyclonedx-gomod
+    args:
+      - "mod"
+      - "-licenses"
+      - "-json"
+      - "-output"
+      - "$document"
+      - "-output-version"
+      - "1.6"
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.cyclonedx.json"
+
+  # 2. SPDX 3.0.1 — preferred by license-compliance workflows.
+  #    Generated via syft. Compatible with EU CRA / BSI TR-03183-2.
+  - id: spdx
+    artifacts: archive
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.spdx.json"
+    cmd: syft
+    args:
+      - "$artifact"
+      - "--output"
+      - "spdx-json=$document"
+
+# 変更履歴は git-cliff によって自動生成される
+changelog:
+  use: git-cliff
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge branch"
+      - "Merge pull request"
+
+release:
+  github:
+    owner: shizukutanaka
+    name: Otedama
+  draft: false
+  prerelease: auto  # タグに -alpha/-beta/-rc が含まれる場合は自動的にpre-release
+  name_template: "Otedama {{ .Tag }}"
+  header: |
+    ## Otedama {{ .Tag }}
+
+    非カストディ型計算資源裁定ソフトウェア。
+    ダウンロードしたバイナリのsha256ハッシュを `checksums.txt` で確認してください。
+    cosign署名の検証方法は [docs/verify-release.md](docs/verify-release.md) を参照。
+
+  footer: |
+    ---
+    **Lightning tipjar:** ⚡ shizukutanaka@getalby.com
+    **GitHub Sponsors:** https://github.com/sponsors/shizukutanaka
+
+brews:
+  - name: otedama
+    homepage: https://github.com/shizukutanaka/Otedama
+    description: "Non-custodial compute arbitration software"
+    license: Apache-2.0
+    repository:
+      owner: shizukutanaka
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    test: |
+      system "#{bin}/otedama version"
+    install: |
+      bin.install "otedama"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/shizukutanaka/otedama:{{ .Version }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/shizukutanaka/Otedama"
+  - image_templates:
+      - "ghcr.io/shizukutanaka/otedama:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/shizukutanaka/otedama:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/shizukutanaka/otedama:{{ .Version }}-amd64"
+      - "ghcr.io/shizukutanaka/otedama:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/shizukutanaka/otedama:latest"
+    image_templates:
+      - "ghcr.io/shizukutanaka/otedama:{{ .Version }}-amd64"
+      - "ghcr.io/shizukutanaka/otedama:{{ .Version }}-arm64"
+    skip_push: "{{ .Prerelease }}"  # prerelease は latest タグを上書きしない

@@ -1,524 +1,301 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Otedama contributors. See NOTICE for details.
+// Package config provides layered configuration loading for Otedama.
+//
+// # Design Rationale
+//
+// A persistent pain point of existing mining software (CGMiner, BFGMiner)
+// is that they require a complex configuration file before they can run.
+// Users must understand pool URLs, worker names, failover strategies,
+// difficulty settings, and dozens of other parameters just to see their
+// first hash. This is the opposite of the zero-configuration experience
+// we want for Otedama.
+//
+// This package implements a four-layer precedence model:
+//
+//  1. Command-line flags (highest priority)
+//  2. Environment variables
+//  3. YAML configuration file
+//  4. Built-in defaults (lowest priority)
+//
+// Each layer is optional. The minimum invocation is:
+//
+//	otedama run --bitcoin-address bc1q...
+//
+// This single flag overrides one default (the Bitcoin address, which has
+// no sensible default) and lets all other values fall through to
+// reasonable defaults. The result: a user can start mining in under 60
+// seconds without writing a single line of configuration.
+//
+// Advanced users can still provide a full config.yaml for detailed control.
+// The layers compose transparently: a config.yaml can set everything, and
+// a single flag can override one value for a test run.
 package config
 
 import (
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"time"
-
-	"gopkg.in/yaml.v3"
+	"strings"
 )
 
-// Config represents the main configuration structure
+// Config is the complete runtime configuration for Otedama.
+//
+// All fields are exported so that they can be populated from YAML and
+// inspected by tests. However, the zero value of Config is not usable;
+// callers must use Load or Resolve to produce a valid Config.
 type Config struct {
-	Mining     MiningConfig     `yaml:"mining"`
-	Stratum    StratumConfig    `yaml:"stratum"`
-	P2P        P2PConfig        `yaml:"p2p"`
-	API        APIConfig        `yaml:"api"`
-	Security   SecurityConfig   `yaml:"security"`
-	Monitoring MonitoringConfig `yaml:"monitoring"`
-	Logging    LoggingConfig    `yaml:"logging"`
-	Database   DatabaseConfig   `yaml:"database"`
-	Backup     BackupConfig     `yaml:"backup"`
-	Update     UpdateConfig     `yaml:"update"`
+	// BitcoinAddress is the destination address for mining rewards.
+	// It has no default; the user must provide it via flag, environment
+	// variable, or config file before mining can begin.
+	//
+	// Supported formats: P2PKH (starts with '1'), P2SH (starts with '3'),
+	// and Bech32 (starts with "bc1"). The address is validated at load
+	// time; malformed addresses cause Load to return an error.
+	BitcoinAddress string `yaml:"bitcoin_address"`
+
+	// Pools is the list of mining pools to connect to, in order of
+	// preference. Otedama connects to the first and uses subsequent
+	// entries for failover.
+	//
+	// If empty, Otedama uses its built-in list of recommended Stratum V2
+	// pools (Braiins, DEMAND, OCEAN, Luxor). This default prioritizes
+	// decentralization and non-custodial payouts.
+	Pools []PoolConfig `yaml:"pools"`
+
+	// Workers controls how Otedama names itself to pools. If empty,
+	// a hostname-derived name is used automatically.
+	Workers WorkerConfig `yaml:"workers"`
+
+	// Language is the IETF BCP 47 language tag for UI messages and logs,
+	// for example "en", "ja", "zh-CN". If empty, Otedama detects the
+	// language from the operating system.
+	Language string `yaml:"language"`
+
+	// LogLevel is one of "debug", "info", "warn", "error". If empty,
+	// defaults to "info".
+	LogLevel string `yaml:"log_level"`
+
+	// LogFormat is one of "text", "json". If empty, defaults to "text".
+	// "json" is recommended for production deployments where logs are
+	// ingested by structured log aggregation (Loki, Elasticsearch, etc.).
+	LogFormat string `yaml:"log_format"`
+
+	// DataDir is the directory where Otedama stores persistent data
+	// (Lightning wallet, known pool keys, usage statistics). If empty,
+	// defaults to an OS-appropriate location:
+	//   Linux:   $XDG_DATA_HOME/otedama or $HOME/.local/share/otedama
+	//   macOS:   $HOME/Library/Application Support/Otedama
+	//   Windows: %APPDATA%\Otedama
+	DataDir string `yaml:"data_dir"`
 }
 
-// MiningConfig contains mining configuration
-type MiningConfig struct {
-	Algorithm    string           `yaml:"algorithm"`
-	AutoStart    bool             `yaml:"auto_start"`
-	AutoSelect   bool             `yaml:"auto_select"`
-	CPU          CPUConfig        `yaml:"cpu"`
-	GPU          GPUConfig        `yaml:"gpu"`
-	ASIC         ASICConfig       `yaml:"asic"`
-	Optimization OptimizationConfig `yaml:"optimization"`
-}
-
-// CPUConfig contains CPU mining configuration
-type CPUConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Threads   int    `yaml:"threads"`
-	Affinity  []int  `yaml:"affinity"`
-	Priority  string `yaml:"priority"`
-	HugePages bool   `yaml:"huge_pages"`
-}
-
-// GPUConfig contains GPU mining configuration
-type GPUConfig struct {
-	Enabled          bool    `yaml:"enabled"`
-	Devices          []int   `yaml:"devices"`
-	Intensity        int     `yaml:"intensity"`
-	TemperatureLimit float64 `yaml:"temperature_limit"`
-	PowerLimit       float64 `yaml:"power_limit"`
-	MemoryClock      int     `yaml:"memory_clock"`
-	CoreClock        int     `yaml:"core_clock"`
-}
-
-// ASICConfig contains ASIC mining configuration
-type ASICConfig struct {
-	Enabled   bool     `yaml:"enabled"`
-	Devices   []string `yaml:"devices"`
-	Frequency int      `yaml:"frequency"`
-}
-
-// OptimizationConfig contains optimization settings
-type OptimizationConfig struct {
-	PowerMode        string  `yaml:"power_mode"`
-	AutoTuning       bool    `yaml:"auto_tuning"`
-	TuningInterval   int     `yaml:"tuning_interval"`
-	TargetEfficiency float64 `yaml:"target_efficiency"`
-	PowerLimit       float64 `yaml:"power_limit"`
-	TempLimit        float64 `yaml:"temp_limit"`
-}
-
-// StratumConfig contains Stratum configuration
-type StratumConfig struct {
-	Enabled        bool         `yaml:"enabled"`
-	Version        int          `yaml:"version"`
-	Pools          []PoolConfig `yaml:"pools"`
-	MaxRetries     int          `yaml:"max_retries"`
-	RetryDelay     int          `yaml:"retry_delay"`
-	Keepalive      int          `yaml:"keepalive"`
-	Timeout        int          `yaml:"timeout"`
-	ExtrannonceSize int         `yaml:"extranonce_size"`
-}
-
-// PoolConfig contains mining pool configuration
+// PoolConfig describes a single mining pool connection.
 type PoolConfig struct {
-	URL      string `yaml:"url"`
-	User     string `yaml:"user"`
+	// URL is the stratum endpoint, for example "stratum+tcp://pool.example.com:3333"
+	// or "stratum+v2://pool.example.com:34254". The scheme determines the
+	// protocol version.
+	URL string `yaml:"url"`
+
+	// User is the username or wallet identifier sent during authentication.
+	// If empty, Otedama uses the BitcoinAddress as the user.
+	User string `yaml:"user"`
+
+	// Password is the pool password. Most pools accept any value (often "x");
+	// some use it for difficulty hints. If empty, "x" is sent.
 	Password string `yaml:"password"`
-	Priority int    `yaml:"priority"`
-	Enabled  bool   `yaml:"enabled"`
 }
 
-// P2PConfig contains P2P network configuration
-type P2PConfig struct {
-	Enable              bool     `yaml:"enable"`
-	Port                int      `yaml:"port"`
-	ExternalPort        int      `yaml:"external_port"`
-	MaxPeers            int      `yaml:"max_peers"`
-	MinPeers            int      `yaml:"min_peers"`
-	PeerExchange        bool     `yaml:"peer_exchange"`
-	EnableDiscovery     bool     `yaml:"enable_discovery"`
-	BootstrapNodes      []string `yaml:"bootstrap_nodes"`
-	EnableUPNP          bool     `yaml:"enable_upnp"`
-	EnableNATPMP        bool     `yaml:"enable_nat_pmp"`
-	EnableRelay         bool     `yaml:"enable_relay"`
-	MaxUploadBandwidth  int      `yaml:"max_upload_bandwidth"`
-	MaxDownloadBandwidth int     `yaml:"max_download_bandwidth"`
+// WorkerConfig controls how Otedama identifies itself to pools.
+type WorkerConfig struct {
+	// Name is the worker name reported to pools. If empty, the hostname
+	// is used.
+	Name string `yaml:"name"`
 }
 
-// APIConfig contains API configuration
-type APIConfig struct {
-	Enable    bool               `yaml:"enable"`
-	Address   string             `yaml:"address"`
-	CORS      CORSConfig         `yaml:"cors"`
-	Auth      AuthConfig         `yaml:"auth"`
-	RateLimit RateLimitConfig    `yaml:"rate_limit"`
-	WebSocket WebSocketConfig    `yaml:"websocket"`
+// Defaults returns a Config populated with Otedama's built-in defaults.
+//
+// The returned Config is not usable for mining on its own (BitcoinAddress
+// is empty), but it provides the baseline onto which flags, environment
+// variables, and config files are overlaid.
+func Defaults() Config {
+	return Config{
+		BitcoinAddress: "",
+		Pools:          nil, // resolved from built-in recommendations at startup
+		Workers:        WorkerConfig{},
+		Language:       "", // resolved from OS locale at startup
+		LogLevel:       "info",
+		LogFormat:      "text",
+		DataDir:        "", // resolved from XDG/platform conventions at startup
+	}
 }
 
-// CORSConfig contains CORS configuration
-type CORSConfig struct {
-	Enabled     bool     `yaml:"enabled"`
-	Origins     []string `yaml:"origins"`
-	Credentials bool     `yaml:"credentials"`
-	MaxAge      int      `yaml:"max_age"`
+// FlagValues collects values set via command-line flags.
+//
+// A FlagValues with all-empty fields means "no flags were provided";
+// such a FlagValues does not override any other layer. This is the
+// invariant that makes the precedence model work cleanly.
+type FlagValues struct {
+	BitcoinAddress string
+	LogLevel       string
+	LogFormat      string
+	Language       string
+	DataDir        string
+	ConfigFile     string
 }
 
-// AuthConfig contains authentication configuration
-type AuthConfig struct {
-	Enabled            bool          `yaml:"enabled"`
-	JWTSecret          string        `yaml:"jwt_secret"`
-	TokenExpiry        time.Duration `yaml:"token_expiry"`
-	RefreshTokenExpiry time.Duration `yaml:"refresh_token_expiry"`
-	RequireMFA         bool          `yaml:"require_mfa"`
+// Resolve combines defaults, a config file (already loaded into fromFile),
+// environment variables (read from env), and flag values into a single
+// Config. Later layers override earlier ones.
+//
+// If env is nil, os.Getenv is used. This indirection exists so that tests
+// can inject a controlled environment.
+//
+// Resolve does not perform validation of the resulting Config; call
+// Config.Validate separately once all layers have been combined.
+func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
+	cfg := Defaults()
+
+	// Layer 1: config file overrides defaults where set.
+	if fromFile.BitcoinAddress != "" {
+		cfg.BitcoinAddress = fromFile.BitcoinAddress
+	}
+	if len(fromFile.Pools) > 0 {
+		cfg.Pools = fromFile.Pools
+	}
+	if fromFile.Workers.Name != "" {
+		cfg.Workers.Name = fromFile.Workers.Name
+	}
+	if fromFile.Language != "" {
+		cfg.Language = fromFile.Language
+	}
+	if fromFile.LogLevel != "" {
+		cfg.LogLevel = fromFile.LogLevel
+	}
+	if fromFile.LogFormat != "" {
+		cfg.LogFormat = fromFile.LogFormat
+	}
+	if fromFile.DataDir != "" {
+		cfg.DataDir = fromFile.DataDir
+	}
+
+	// Layer 2: environment variables override config file.
+	getEnv := func(key string) string {
+		if env != nil {
+			return env[key]
+		}
+		return os.Getenv(key)
+	}
+	if v := getEnv("OTEDAMA_BITCOIN_ADDRESS"); v != "" {
+		cfg.BitcoinAddress = v
+	}
+	if v := getEnv("OTEDAMA_LOG_LEVEL"); v != "" {
+		cfg.LogLevel = v
+	}
+	if v := getEnv("OTEDAMA_LOG_FORMAT"); v != "" {
+		cfg.LogFormat = v
+	}
+	if v := getEnv("OTEDAMA_LANGUAGE"); v != "" {
+		cfg.Language = v
+	}
+	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
+		cfg.DataDir = v
+	}
+
+	// Layer 3: flags override environment variables.
+	if flags.BitcoinAddress != "" {
+		cfg.BitcoinAddress = flags.BitcoinAddress
+	}
+	if flags.LogLevel != "" {
+		cfg.LogLevel = flags.LogLevel
+	}
+	if flags.LogFormat != "" {
+		cfg.LogFormat = flags.LogFormat
+	}
+	if flags.Language != "" {
+		cfg.Language = flags.Language
+	}
+	if flags.DataDir != "" {
+		cfg.DataDir = flags.DataDir
+	}
+
+	return cfg
 }
 
-// RateLimitConfig contains rate limiting configuration
-type RateLimitConfig struct {
-	Enabled           bool             `yaml:"enabled"`
-	RequestsPerMinute int              `yaml:"requests_per_minute"`
-	Burst             int              `yaml:"burst"`
-	Endpoints         []EndpointLimit  `yaml:"endpoints"`
-}
+// Validate checks that the Config is self-consistent and ready for use.
+//
+// Validation errors are returned as a single error that may describe
+// multiple problems at once, so that users can fix them in one edit
+// rather than one error per run.
+func (c Config) Validate() error {
+	var issues []string
 
-// EndpointLimit contains per-endpoint rate limits
-type EndpointLimit struct {
-	Path              string `yaml:"path"`
-	RequestsPerMinute int    `yaml:"requests_per_minute"`
-}
+	if c.BitcoinAddress == "" {
+		issues = append(issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
+	} else if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
+		issues = append(issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
+	}
 
-// WebSocketConfig contains WebSocket configuration
-type WebSocketConfig struct {
-	Enabled        bool `yaml:"enabled"`
-	PingInterval   int  `yaml:"ping_interval"`
-	PongTimeout    int  `yaml:"pong_timeout"`
-	MaxMessageSize int  `yaml:"max_message_size"`
-}
+	switch c.LogLevel {
+	case "debug", "info", "warn", "error":
+		// ok
+	case "":
+		// empty LogLevel is unreachable post-Resolve (defaults supply "info"),
+		// but we guard anyway.
+	default:
+		issues = append(issues, fmt.Sprintf("log_level %q is not one of debug, info, warn, error", c.LogLevel))
+	}
 
-// SecurityConfig contains security configuration
-type SecurityConfig struct {
-	RSAKeySize           int      `yaml:"rsa_key_size"`
-	AESKeySize           int      `yaml:"aes_key_size"`
-	RotateKeysEvery      int      `yaml:"rotate_keys_every"`
-	MinPasswordLength    int      `yaml:"min_password_length"`
-	RequireStrongPassword bool    `yaml:"require_strong_password"`
-	PasswordHistory      int      `yaml:"password_history"`
-	MaxLoginAttempts     int      `yaml:"max_login_attempts"`
-	LockoutDuration      int      `yaml:"lockout_duration"`
-	SessionTimeout       int      `yaml:"session_timeout"`
-	MaxSessions          int      `yaml:"max_sessions"`
-	MaxConnectionsPerIP  int      `yaml:"max_connections_per_ip"`
-	BanThreshold         int      `yaml:"ban_threshold"`
-	BanDuration          int      `yaml:"ban_duration"`
-	AllowedIPs           []string `yaml:"allowed_ips"`
-	BlockedIPs           []string `yaml:"blocked_ips"`
-	AllowedCountries     []string `yaml:"allowed_countries"`
-	BlockedCountries     []string `yaml:"blocked_countries"`
-	TLS                  TLSConfig `yaml:"tls"`
-}
-
-// TLSConfig contains TLS configuration
-type TLSConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	CertFile     string   `yaml:"cert_file"`
-	KeyFile      string   `yaml:"key_file"`
-	MinVersion   string   `yaml:"min_version"`
-	CipherSuites []string `yaml:"cipher_suites"`
-}
-
-// MonitoringConfig contains monitoring configuration
-type MonitoringConfig struct {
-	Enable      bool              `yaml:"enable"`
-	MetricsPort int               `yaml:"metrics_port"`
-	HealthPort  int               `yaml:"health_port"`
-	Prometheus  PrometheusConfig  `yaml:"prometheus"`
-	Health      HealthConfig      `yaml:"health"`
-	Alerting    AlertingConfig    `yaml:"alerting"`
-}
-
-// PrometheusConfig contains Prometheus configuration
-type PrometheusConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Namespace string `yaml:"namespace"`
-	Subsystem string `yaml:"subsystem"`
-}
-
-// HealthConfig contains health check configuration
-type HealthConfig struct {
-	LivenessPath  string `yaml:"liveness_path"`
-	ReadinessPath string `yaml:"readiness_path"`
-	StartupPath   string `yaml:"startup_path"`
-}
-
-// AlertingConfig contains alerting configuration
-type AlertingConfig struct {
-	Enabled  bool            `yaml:"enabled"`
-	Channels []AlertChannel  `yaml:"channels"`
-	Rules    []AlertRule     `yaml:"rules"`
-}
-
-// AlertChannel contains alert channel configuration
-type AlertChannel struct {
-	Type     string `yaml:"type"`
-	URL      string `yaml:"url"`
-	Enabled  bool   `yaml:"enabled"`
-	SMTPHost string `yaml:"smtp_host"`
-	SMTPPort int    `yaml:"smtp_port"`
-	From     string `yaml:"from"`
-	To       []string `yaml:"to"`
-}
-
-// AlertRule contains alert rule configuration
-type AlertRule struct {
-	Name      string `yaml:"name"`
-	Condition string `yaml:"condition"`
-	Severity  string `yaml:"severity"`
-	Message   string `yaml:"message"`
-}
-
-// LoggingConfig contains logging configuration
-type LoggingConfig struct {
-	Level    string        `yaml:"level"`
-	Output   string        `yaml:"output"`
-	File     FileLogConfig `yaml:"file"`
-	Format   string        `yaml:"format"`
-	Sampling SamplingConfig `yaml:"sampling"`
-}
-
-// FileLogConfig contains file logging configuration
-type FileLogConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	Path       string `yaml:"path"`
-	MaxSize    int    `yaml:"max_size"`
-	MaxBackups int    `yaml:"max_backups"`
-	MaxAge     int    `yaml:"max_age"`
-	Compress   bool   `yaml:"compress"`
-}
-
-// SamplingConfig contains log sampling configuration
-type SamplingConfig struct {
-	Enabled    bool `yaml:"enabled"`
-	Initial    int  `yaml:"initial"`
-	Thereafter int  `yaml:"thereafter"`
-}
-
-// DatabaseConfig contains database configuration
-type DatabaseConfig struct {
-	Type     string         `yaml:"type"`
-	SQLite   SQLiteConfig   `yaml:"sqlite"`
-	Postgres PostgresConfig `yaml:"postgres"`
-}
-
-// SQLiteConfig contains SQLite configuration
-type SQLiteConfig struct {
-	Path        string `yaml:"path"`
-	WALMode     bool   `yaml:"wal_mode"`
-	ForeignKeys bool   `yaml:"foreign_keys"`
-}
-
-// PostgresConfig contains PostgreSQL configuration
-type PostgresConfig struct {
-	Host                   string `yaml:"host"`
-	Port                   int    `yaml:"port"`
-	Database               string `yaml:"database"`
-	Username               string `yaml:"username"`
-	Password               string `yaml:"password"`
-	SSLMode                string `yaml:"ssl_mode"`
-	MaxConnections         int    `yaml:"max_connections"`
-	MaxIdleConnections     int    `yaml:"max_idle_connections"`
-	ConnectionMaxLifetime  int    `yaml:"connection_max_lifetime"`
-}
-
-// BackupConfig contains backup configuration
-type BackupConfig struct {
-	Enabled      bool                `yaml:"enabled"`
-	Interval     int                 `yaml:"interval"`
-	Destinations []BackupDestination `yaml:"destinations"`
-}
-
-// BackupDestination contains backup destination configuration
-type BackupDestination struct {
-	Type          string `yaml:"type"`
-	Path          string `yaml:"path"`
-	RetentionDays int    `yaml:"retention_days"`
-	Enabled       bool   `yaml:"enabled"`
-	Bucket        string `yaml:"bucket"`
-	Region        string `yaml:"region"`
-	AccessKey     string `yaml:"access_key"`
-	SecretKey     string `yaml:"secret_key"`
-}
-
-// UpdateConfig contains update configuration
-type UpdateConfig struct {
-	AutoUpdate     bool         `yaml:"auto_update"`
-	CheckInterval  int          `yaml:"check_interval"`
-	UpdateChannel  string       `yaml:"update_channel"`
-	Server         UpdateServer `yaml:"server"`
-}
-
-// UpdateServer contains update server configuration
-type UpdateServer struct {
-	URL       string `yaml:"url"`
-	PublicKey string `yaml:"public_key"`
-}
-
-// Load loads configuration from file
-func Load(filename string) (*Config, error) {
-	// Check if file exists
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		// Try to use example config
-		if _, err := os.Stat("config.yaml.example"); err == nil {
-			filename = "config.yaml.example"
-		} else {
-			return nil, fmt.Errorf("configuration file not found: %s", filename)
+	for i, p := range c.Pools {
+		if p.URL == "" {
+			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
+		} else if err := validatePoolURL(p.URL); err != nil {
+			issues = append(issues, fmt.Sprintf("pools[%d].url invalid: %v", i, err))
 		}
 	}
 
-	// Read file
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read configuration file: %w", err)
+	if len(issues) == 0 {
+		return nil
 	}
-
-	// Parse YAML
-	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse configuration: %w", err)
-	}
-
-	// Set defaults
-	setDefaults(&config)
-
-	// Validate
-	if err := Validate(&config); err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	// Expand environment variables
-	expandEnvVars(&config)
-
-	return &config, nil
+	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
 }
 
-// LoadFromFile loads configuration from a specific file
-func LoadFromFile(filename string) (*Config, error) {
-	return Load(filename)
-}
-
-// setDefaults sets default values for configuration
-func setDefaults(cfg *Config) {
-	// Mining defaults
-	if cfg.Mining.Algorithm == "" {
-		cfg.Mining.Algorithm = "sha256d"
+// validateBitcoinAddress performs a lightweight format check on a Bitcoin
+// address. Full cryptographic validation (checksum verification) is
+// performed by the lightning package when the address is first used;
+// this function only catches obvious typos and wrong-chain addresses.
+func validateBitcoinAddress(addr string) error {
+	if len(addr) < 26 {
+		return fmt.Errorf("address is too short (%d characters)", len(addr))
 	}
-	if cfg.Mining.CPU.Threads == 0 {
-		cfg.Mining.CPU.Threads = -1 // Auto-detect
+	if len(addr) > 90 {
+		return fmt.Errorf("address is too long (%d characters)", len(addr))
 	}
-	if cfg.Mining.GPU.Intensity == 0 {
-		cfg.Mining.GPU.Intensity = 20
-	}
-	if cfg.Mining.Optimization.PowerMode == "" {
-		cfg.Mining.Optimization.PowerMode = "balanced"
-	}
-
-	// API defaults
-	if cfg.API.Address == "" {
-		cfg.API.Address = ":8080"
-	}
-	if cfg.API.RateLimit.RequestsPerMinute == 0 {
-		cfg.API.RateLimit.RequestsPerMinute = 60
-	}
-	if cfg.API.RateLimit.Burst == 0 {
-		cfg.API.RateLimit.Burst = 10
-	}
-
-	// P2P defaults
-	if cfg.P2P.Port == 0 {
-		cfg.P2P.Port = 18555
-	}
-	if cfg.P2P.MaxPeers == 0 {
-		cfg.P2P.MaxPeers = 100
-	}
-	if cfg.P2P.MinPeers == 0 {
-		cfg.P2P.MinPeers = 10
-	}
-
-	// Monitoring defaults
-	if cfg.Monitoring.MetricsPort == 0 {
-		cfg.Monitoring.MetricsPort = 9090
-	}
-	if cfg.Monitoring.HealthPort == 0 {
-		cfg.Monitoring.HealthPort = 8081
-	}
-
-	// Security defaults
-	if cfg.Security.RSAKeySize == 0 {
-		cfg.Security.RSAKeySize = 4096
-	}
-	if cfg.Security.AESKeySize == 0 {
-		cfg.Security.AESKeySize = 256
-	}
-	if cfg.Security.MinPasswordLength == 0 {
-		cfg.Security.MinPasswordLength = 12
-	}
-	if cfg.Security.MaxLoginAttempts == 0 {
-		cfg.Security.MaxLoginAttempts = 5
-	}
-	if cfg.Security.MaxConnectionsPerIP == 0 {
-		cfg.Security.MaxConnectionsPerIP = 10
-	}
-
-	// Logging defaults
-	if cfg.Logging.Level == "" {
-		cfg.Logging.Level = "info"
-	}
-	if cfg.Logging.Output == "" {
-		cfg.Logging.Output = "both"
-	}
-	if cfg.Logging.Format == "" {
-		cfg.Logging.Format = "json"
+	// Bitcoin mainnet addresses start with '1' (P2PKH), '3' (P2SH), or "bc1" (Bech32).
+	// We reject testnet/signet addresses at this layer; test networks are
+	// enabled via a separate configuration option (not yet wired in v3.0.0-alpha).
+	switch {
+	case strings.HasPrefix(addr, "1"):
+		return nil
+	case strings.HasPrefix(addr, "3"):
+		return nil
+	case strings.HasPrefix(addr, "bc1"):
+		return nil
+	default:
+		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}
 }
 
-// Validate validates the configuration
-func Validate(cfg *Config) error {
-	// Validate mining algorithm
-	validAlgorithms := []string{"sha256d", "scrypt", "ethash", "randomx", "cryptonight", "x11", "blake2b"}
-	validAlgo := false
-	for _, algo := range validAlgorithms {
-		if cfg.Mining.Algorithm == algo {
-			validAlgo = true
-			break
+// validatePoolURL checks that a pool URL has an acceptable scheme.
+func validatePoolURL(raw string) error {
+	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
+	for _, s := range validSchemes {
+		if strings.HasPrefix(raw, s) {
+			rest := raw[len(s):]
+			if rest == "" {
+				return fmt.Errorf("URL has no host after scheme")
+			}
+			return nil
 		}
 	}
-	if !validAlgo {
-		return fmt.Errorf("invalid mining algorithm: %s", cfg.Mining.Algorithm)
-	}
-
-	// Validate power mode
-	validPowerModes := []string{"efficiency", "balanced", "performance", "turbo"}
-	validMode := false
-	for _, mode := range validPowerModes {
-		if cfg.Mining.Optimization.PowerMode == mode {
-			validMode = true
-			break
-		}
-	}
-	if !validMode {
-		return fmt.Errorf("invalid power mode: %s", cfg.Mining.Optimization.PowerMode)
-	}
-
-	// Validate pool configuration
-	if cfg.Stratum.Enabled && len(cfg.Stratum.Pools) == 0 {
-		return errors.New("stratum enabled but no pools configured")
-	}
-
-	// Validate API configuration
-	if cfg.API.Enable && cfg.API.Address == "" {
-		return errors.New("API enabled but no address configured")
-	}
-
-	// Validate security
-	if cfg.Security.MinPasswordLength < 8 {
-		return errors.New("minimum password length must be at least 8")
-	}
-
-	return nil
-}
-
-// expandEnvVars expands environment variables in configuration
-func expandEnvVars(cfg *Config) {
-	// Expand JWT secret
-	if cfg.API.Auth.JWTSecret == "${JWT_SECRET}" {
-		if secret := os.Getenv("JWT_SECRET"); secret != "" {
-			cfg.API.Auth.JWTSecret = secret
-		}
-	}
-
-	// Expand database password
-	if cfg.Database.Postgres.Password == "${DB_PASSWORD}" {
-		if password := os.Getenv("DB_PASSWORD"); password != "" {
-			cfg.Database.Postgres.Password = password
-		}
-	}
-
-	// Expand other environment variables as needed
-}
-
-// Save saves configuration to file
-func Save(cfg *Config, filename string) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal configuration: %w", err)
-	}
-
-	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-		return fmt.Errorf("failed to write configuration file: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("URL must start with one of: %s", strings.Join(validSchemes, ", "))
 }

@@ -1,0 +1,143 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Otedama contributors. See NOTICE for details.
+// Package provider defines the interface between Otedama's arbitration
+// engine and the external workload markets it connects to.
+//
+// # Why This Exists
+//
+// The arbitration engine (internal/arbitration) is a pure function that
+// takes yield quotes and returns an allocation. But it needs live yield
+// data from somewhere. That is the job of providers: each provider
+// connects to one external market (a mining pool, an AI-inference
+// marketplace, a rendering farm, a scientific grid) and continuously
+// publishes what it will pay for the user's hardware right now.
+//
+// # Provider Contract
+//
+// A Provider implementation must:
+//
+//  1. Implement Provider.Start, which begins the quote loop and returns
+//     immediately. Quotes are published asynchronously on the channel
+//     returned by Provider.Quotes.
+//
+//  2. Publish at least one quote per MinQuoteInterval. If the external
+//     market is unreachable, the provider should publish a Yield of
+//     {SatsPerSecond:0, Confidence:0} rather than going silent, so that
+//     the arbitration engine can route away from the unavailable market.
+//
+//  3. Honour context cancellation: when ctx is cancelled, the quote
+//     channel must be closed and all goroutines must exit.
+//
+// # Revenue comparison (2026-04 estimates)
+//
+//	RTX 4090 CPU  Bitcoin mining: ~0.07 sats/s  ($0.000064/day)
+//	RTX 4090 GPU  Bitcoin mining: ~60   sats/s  ($0.05/day)
+//	RTX 4090 GPU  AI inference:   ~14k  sats/s  ($12/day)
+//
+// The arbitration engine's value is entirely in routing the GPU to
+// whichever source is highest at any given moment.
+package provider
+
+import (
+	"context"
+	"time"
+
+	"github.com/shizukutanaka/Otedama/internal/hal"
+)
+
+// MinQuoteInterval is the minimum time between consecutive yield quotes
+// from a healthy provider. Providers that are slower than this are
+// treated as temporarily unavailable.
+const MinQuoteInterval = 30 * time.Second
+
+// Yield describes the expected revenue rate a provider will pay for
+// a device, expressed in satoshis per second.
+//
+// Using sat/s across all providers gives the arbitration engine a
+// single unit for comparison. Providers convert their native units
+// (USD/hour, credits/GPU-minute) to sat/s using a live BTC/USD rate
+// from their own feed or from an injected RateSource.
+type Yield struct {
+	// SatsPerSecond is the gross expected revenue rate, pre-fees.
+	SatsPerSecond float64
+
+	// NetSatsPerSecond is SatsPerSecond minus the provider's fee.
+	// If the provider has no explicit fee, this equals SatsPerSecond.
+	NetSatsPerSecond float64
+
+	// Confidence is the reliability of this quote, in [0,1].
+	// 1.0 = firm, real-time market data.
+	// 0.5 = estimated from recent history.
+	// 0.0 = provider unreachable; yield is unknown.
+	Confidence float64
+}
+
+// Effective returns the confidence-weighted net yield, which is what
+// the arbitration engine uses for comparison.
+func (y Yield) Effective() float64 {
+	if y.NetSatsPerSecond <= 0 || y.Confidence <= 0 {
+		return 0
+	}
+	return y.NetSatsPerSecond * y.Confidence
+}
+
+// Quote is a yield update published by a provider.
+type Quote struct {
+	// ProviderID identifies which provider issued this quote.
+	ProviderID string
+
+	// DeviceID is the hal.Identity.ID this quote applies to.
+	// An empty DeviceID means the quote applies to any compatible device.
+	DeviceID string
+
+	// Yield is the current yield estimate.
+	Yield Yield
+
+	// AcceptedFamilies lists the device families this provider accepts.
+	// A nil slice means all families are accepted.
+	AcceptedFamilies []hal.Family
+
+	// At is the wall-clock time the quote was generated.
+	At time.Time
+}
+
+// Provider is the interface implemented by each external workload market.
+type Provider interface {
+	// ID returns the unique, stable identifier for this provider.
+	// Format: "category.name", e.g. "mining.braiins", "ai.akash", "render.rendernet".
+	ID() string
+
+	// Name returns a human-readable display name.
+	Name() string
+
+	// Start begins the quote loop. Quotes are published on the channel
+	// returned by Quotes(). Start must return immediately; the loop runs
+	// in background goroutines. Start must only be called once.
+	Start(ctx context.Context, devices []hal.Device) error
+
+	// Quotes returns the channel on which this provider publishes yield
+	// updates. The channel is closed when the provider stops.
+	Quotes() <-chan Quote
+
+	// Stop signals the provider to shut down and waits for completion.
+	// Safe to call even if Start was never called.
+	Stop()
+}
+
+// RateSource provides the current BTC/USD exchange rate.
+// Providers use this to convert fiat-denominated yields to sat/s.
+type RateSource interface {
+	// BTCUSDRate returns the current BTC/USD rate and whether the rate
+	// is fresh (fetched within the last 5 minutes).
+	BTCUSDRate() (rate float64, fresh bool)
+}
+
+// SatsPerSecond converts a USD-per-hour yield to sat/s using rate.
+// If rate is zero or negative, returns 0.
+func SatsPerSecond(usdPerHour, btcUSDRate float64) float64 {
+	if btcUSDRate <= 0 || usdPerHour <= 0 {
+		return 0
+	}
+	// 1 BTC = 1e8 sats; 1 hour = 3600 seconds
+	return (usdPerHour / btcUSDRate) * 1e8 / 3600
+}

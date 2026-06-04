@@ -1,0 +1,115 @@
+name: Bug Report
+description: Something is not working as expected.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        Before submitting, please run `otedama doctor` and include the output below.
+        Doctor resolves ~80% of user-reported issues automatically.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of what the bug is.
+      placeholder: "When I run `otedama run --bitcoin-address bc1q...`, it crashes with..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: "The miner should connect to the pool and start submitting shares."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps to reproduce the problem.
+      value: |
+        1. Run `...`
+        2. Observe `...`
+        3. See error `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: otedama doctor output
+      description: Paste the full output of `otedama doctor` here.
+      render: shell
+      placeholder: |
+        [✓] Configuration: loaded from ~/.config/otedama/config.yaml
+        [✓] Bitcoin address: bc1qar0···5mdq (likely valid)
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        If the binary crashed, paste stderr output.
+        Scrub any sensitive data (passphrases, addresses) first.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Otedama version
+      description: Output of `otedama version`.
+      placeholder: "v3.0.0-alpha.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux (glibc)
+        - Linux (musl, e.g. Alpine)
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows 10
+        - Windows 11
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware
+      multiple: true
+      options:
+        - CPU only
+        - NVIDIA GPU
+        - AMD GPU
+        - Intel GPU
+        - ASIC miner
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I have scrubbed passphrases, private keys, and personal data from logs.
+          required: true
+        - label: I understand Otedama is non-custodial — if I lost funds, that is not an Otedama bug unless a specific protocol violation is demonstrated.
+          required: true

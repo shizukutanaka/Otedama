@@ -1,132 +1,241 @@
-# Otedama P2P Mining Pool v2.1.9
-# Binaries for programs and plugins
+# Otedama .gitignore
+# Comprehensive exclusions for build artifacts, secrets, and environment-specific files.
+
+# ============================================================================
+# Secrets and sensitive data — NEVER commit these
+# ============================================================================
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*.der
+*.jks
+*.keystore
+*.env
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.secret
+wallet.dat
+*.wallet
+config.yaml
+config.yml
+!config.yaml.example
+!config.production.yaml
+
+# Lightning Network channel and wallet data
+channel.db
+wallet.db
+neutrino.db
+chainstate.db
+blocks.db
+*.ldk
+lnd.conf
+ldk-node/
+
+# Bitcoin Core data
+blocks/
+chainstate/
+indexes/
+peers.dat
+
+# ============================================================================
+# Build artifacts
+# ============================================================================
+build/
+dist/
+bin/
+out/
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
-otedama
-build/
-
-# Test binary, built with `go test -c`
+*.a
+*.lib
 *.test
-
-# Output of the go coverage tool
-*.out
-coverage.html
-coverage.out
-
-# Go workspace file
-go.work
-
-# Dependency directories
+*.prof
+*.trace
 vendor/
+.vendor/
 
-# Environment files
-.env
-.env.local
-.env.*.local
+# Release artifacts
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.msi
+*.dmg
+*.pkg
+*.AppImage
+SHA256SUMS*
+!SHA256SUMS.example
 
-# Configuration files (keep examples)
-config.yaml
-config.yml
-config.json
-!config.yaml.example
+# ============================================================================
+# Go specific
+# ============================================================================
+# Test output
+coverage.out
+coverage.html
+coverage.txt
+*.cover
+*.coverprofile
+c.out
 
-# Data directories
-data/
-logs/
-temp/
-tmp/
-cache/
+# Go workspace files
+go.work
+go.work.sum
 
-# IDE specific files
+# Go build cache
+.cache/
+
+# Go debug binaries
+__debug_bin
+
+# ============================================================================
+# Development environment
+# ============================================================================
+# IDE and editor files
 .idea/
 .vscode/
 *.swp
 *.swo
+*.swn
 *~
-.DS_Store
-Thumbs.db
+.project
+.settings/
+*.sublime-workspace
+*.sublime-project
+.atom/
+nbproject/
 
-# Debug files
-debug
-debug.test
-*.pprof
-*.prof
-*.log
-
-# Docker
-.dockerignore
-docker-compose.override.yml
-
-# Prometheus/Grafana data
-prometheus-data/
-grafana-data/
-postgres-data/
-redis-data/
-
-# Build artifacts
-dist/
-*.tar.gz
-*.zip
-
-# Backup files
+# Editor temporary files
+*.orig
+*.rej
 *.bak
-*.backup
-*.old
+.#*
+\#*\#
 
-# PID files
-*.pid
-
-# TLS certificates (except examples)
-*.pem
-*.key
-*.crt
-*.csr
-!*.example.pem
-!*.example.key
-
-# Mining specific
-*.dat
-shares.db
-blocks.db
-
+# ============================================================================
 # OS specific
+# ============================================================================
+# macOS
 .DS_Store
-.DS_Store?
+.AppleDouble
+.LSOverride
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
+
+# Windows
 Thumbs.db
-desktop.ini
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msix
+*.lnk
 
-# Python (for any scripts)
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-env/
-venv/
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
 
-# Node.js (if web UI is added)
+# ============================================================================
+# Logs and runtime data
+# ============================================================================
+logs/
+*.log
+*.log.*
+log/
+otedama.pid
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================================================
+# Databases
+# ============================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db-journal
+
+# ============================================================================
+# Temporary files
+# ============================================================================
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+
+# ============================================================================
+# Documentation build output
+# ============================================================================
+docs/_build/
+docs/build/
+docs/.docusaurus/
+site/
+public/
+.vuepress/dist/
+
+# ============================================================================
+# Node.js (for web/ directory)
+# ============================================================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnp.*
+.next/
+.nuxt/
 
-# Documentation build
-docs/_build/
-docs/_site/
-site/
+# ============================================================================
+# Python (for scripts/ directory)
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
 
-# Temporary files
-*.tmp
-*.temp
-.*.swp
-.*.swo
+# ============================================================================
+# Docker and container artifacts
+# ============================================================================
+.docker/
+docker-compose.override.yml
+docker-compose.override.yaml
 
-# Cleanup scripts output
-cleanup_duplicates*.bat
-deprecated_*.go.bak
+# ============================================================================
+# Legacy v2 cleanup artifacts (will be removed post-reset)
+# ============================================================================
+fix_*.sh
+remove_*.sh
+*.bak.*
+
+# ============================================================================
+# Project-specific
+# ============================================================================
+# Mining work cache
+work-cache/
+share-cache/
+
+# Hardware benchmark data
+benchmark-results/
+*.benchmark
+
+# Profiling output
+cpu.pprof
+mem.pprof
+trace.out

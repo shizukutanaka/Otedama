@@ -1,467 +1,504 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Otedama contributors. See NOTICE for details.
+// Command otedama is the Otedama CLI.
+//
+// # Usage
+//
+//	otedama run --bitcoin-address bc1q...
+//	otedama run --bitcoin-address bc1q... --wallet-passphrase "your passphrase"
+//	otedama version [--json]
+//	otedama config show
+//	otedama config validate --bitcoin-address bc1q...
+//	otedama service install [--config path] [--data-dir path]
+//	otedama service uninstall
+//	otedama service status
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"io"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
-	"github.com/otedama/otedama/internal/app"
-	"github.com/otedama/otedama/internal/config"
-	"github.com/otedama/otedama/internal/improvements"
-	"github.com/otedama/otedama/internal/security"
-	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
+
+	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/daemon"
+	"github.com/shizukutanaka/Otedama/internal/doctor"
+	"github.com/shizukutanaka/Otedama/internal/engine"
+	"github.com/shizukutanaka/Otedama/internal/httpserver"
+	"github.com/shizukutanaka/Otedama/internal/i18n"
+	"github.com/shizukutanaka/Otedama/internal/i18n/messages"
+	"github.com/shizukutanaka/Otedama/internal/logger"
+	"github.com/shizukutanaka/Otedama/internal/metrics"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
+// Exit codes (sysexits.h conventions).
 const (
-	Version = "2.1.9"
-	AppName = "Otedama"
+	exitOK      = 0
+	exitUsage   = 64
+	exitConfig  = 78
+	exitRuntime = 1
 )
-
-// Config holds the application configuration
-type Config struct {
-	Algorithm      string
-	PoolURL        string
-	WalletAddress  string
-	WorkerName     string
-	CPUThreads     int
-	GPUEnabled     bool
-	ASICEnabled    bool
-	Benchmark      bool
-	WebServerPort  int
-	P2PPort        int
-	LogLevel       string
-	PowerMode      string // efficiency, balanced, performance, turbo
-	AutoOptimize   bool
-	SecurityLevel  string // standard, enhanced, maximum
-}
-
-// Application represents the main application structure
-type Application struct {
-	config              *Config
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	wg                  sync.WaitGroup
-	mining              *MiningEngine
-	p2pPool             *P2PPool
-	webServer           *WebServer
-	monitor             *Monitor
-	optimizer           *Optimizer
-	securityManager     *security.SecurityManager
-	logger              *zap.Logger
-	improvementsManager *ImprovementsManager
-}
 
 func main() {
-	// Parse command line flags
-	config := parseFlags()
-	
-	// Initialize application
-	app := NewApplication(config)
-	
-	// Setup signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	
-	// Start application
-	if err := app.Start(); err != nil {
-		log.Fatalf("Failed to start %s: %v", AppName, err)
-	}
-	
-	// Wait for shutdown signal
-	<-sigChan
-	log.Printf("%s shutting down...", AppName)
-	
-	// Graceful shutdown
-	if err := app.Shutdown(); err != nil {
-		log.Printf("Error during shutdown: %v", err)
-	}
-	
-	log.Printf("%s stopped", AppName)
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func parseFlags() *Config {
-	config := &Config{}
-	
-	flag.StringVar(&config.Algorithm, "algorithm", "sha256d", "Mining algorithm")
-	flag.StringVar(&config.PoolURL, "pool", "", "Mining pool URL")
-	flag.StringVar(&config.WalletAddress, "wallet", "", "Wallet address")
-	flag.StringVar(&config.WorkerName, "worker", getDefaultWorkerName(), "Worker name")
-	flag.IntVar(&config.CPUThreads, "threads", runtime.NumCPU(), "Number of CPU threads (0 for auto)")
-	flag.BoolVar(&config.GPUEnabled, "gpu", true, "Enable GPU mining")
-	flag.BoolVar(&config.ASICEnabled, "asic", false, "Enable ASIC mining")
-	flag.BoolVar(&config.Benchmark, "benchmark", false, "Run benchmark mode")
-	flag.IntVar(&config.WebServerPort, "web-port", 8080, "Web server port")
-	flag.IntVar(&config.P2PPort, "p2p-port", 18555, "P2P network port")
-	flag.StringVar(&config.LogLevel, "log", "info", "Log level (debug, info, warn, error)")
-	flag.StringVar(&config.PowerMode, "power", "balanced", "Power mode (efficiency, balanced, performance, turbo)")
-	flag.BoolVar(&config.AutoOptimize, "auto-optimize", true, "Enable automatic optimization")
-	flag.StringVar(&config.SecurityLevel, "security", "enhanced", "Security level (standard, enhanced, maximum)")
-	
-	flag.Parse()
-	
-	// Validate configuration
-	if !config.Benchmark && config.PoolURL == "" {
-		log.Fatal("Pool URL is required (use -pool flag)")
+func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		printUsage(stderr)
+		return exitUsage
 	}
-	
-	if config.CPUThreads == 0 {
-		config.CPUThreads = runtime.NumCPU()
+	switch args[0] {
+	case "run":
+		return cmdRun(args[1:], stdout, stderr)
+	case "version", "--version", "-v":
+		return cmdVersion(args[1:], stdout, stderr)
+	case "config":
+		return cmdConfig(args[1:], stdout, stderr)
+	case "service":
+		return cmdService(args[1:], stdout, stderr)
+	case "doctor":
+		return cmdDoctor(args[1:], stdout, stderr)
+	case "help", "--help", "-h":
+		printUsage(stdout)
+		return exitOK
+	default:
+		fmt.Fprintf(stderr, "otedama: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return exitUsage
 	}
-	
-	return config
 }
 
-func getDefaultWorkerName() string {
-	hostname, err := os.Hostname()
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `Otedama — non-custodial compute arbitration software.
+
+Usage:
+  otedama <command> [flags]
+
+Commands:
+  run       Start mining and/or other compute workloads.
+  version   Print version information and exit.
+  config    Inspect or validate the effective configuration.
+  service   Install/uninstall as a background service.
+  doctor    Run self-diagnostic checks.
+  help      Print this help and exit.
+
+Getting started (zero-configuration):
+  otedama run --bitcoin-address bc1q...
+
+With Lightning wallet:
+  otedama run --bitcoin-address bc1q... --wallet-passphrase "strong passphrase"
+
+Run 'otedama <command> --help' for flags.
+`)
+}
+
+// ----- version -----
+
+func cmdVersion(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOut := fs.Bool("json", false, "Output as JSON.")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	info := version.Get()
+	if *jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(info)
+	} else {
+		fmt.Fprintln(stdout, info.String())
+	}
+	return exitOK
+}
+
+// ----- config -----
+
+func cmdConfig(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "otedama config: expected subcommand (show|validate)")
+		return exitUsage
+	}
+	switch args[0] {
+	case "show":
+		return cmdConfigShow(args[1:], stdout, stderr)
+	case "validate":
+		return cmdConfigValidate(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "otedama config: unknown subcommand %q\n", args[0])
+		return exitUsage
+	}
+}
+
+// runFlags holds all parsed flags for the run subcommand.
+type runFlags struct {
+	config.FlagValues
+	configFile       string
+	dryRun           bool
+	noTUI            bool
+	walletPassphrase string
+	logFormat        string
+	httpAddr         string
+}
+
+func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var f runFlags
+	fs.StringVar(&f.BitcoinAddress, "bitcoin-address", "", "Bitcoin address for mining rewards (required).")
+	fs.StringVar(&f.LogLevel, "log-level", "", "Log level (debug|info|warn|error).")
+	fs.StringVar(&f.Language, "language", "", "UI language as BCP 47 tag (e.g., ja, en, zh-CN).")
+	fs.StringVar(&f.DataDir, "data-dir", "", "Directory for persistent data.")
+	fs.StringVar(&f.configFile, "config", "", "Path to config.yaml (optional).")
+	fs.BoolVar(&f.dryRun, "dry-run", false, "Validate configuration and exit without starting.")
+	fs.BoolVar(&f.noTUI, "no-tui", false, "Disable the terminal dashboard (plain log output).")
+	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
+		"Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
+	fs.StringVar(&f.logFormat, "log-format", "text", "Log output format: text or json.")
+	fs.StringVar(&f.httpAddr, "http-addr", "",
+		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
+	if err := fs.Parse(args); err != nil {
+		return runFlags{}, err
+	}
+	return f, nil
+}
+
+func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
+	f, err := parseRunFlags(args, stderr)
 	if err != nil {
-		return "worker1"
+		return exitUsage
 	}
-	return hostname
+	fromFile := loadConfigFile(f.configFile, stderr)
+	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	fmt.Fprintf(stdout, "bitcoin_address: %s\n", safeDisplay(cfg.BitcoinAddress))
+	fmt.Fprintf(stdout, "log_level:       %s\n", cfg.LogLevel)
+	fmt.Fprintf(stdout, "language:        %s\n", safeDisplay(cfg.Language))
+	fmt.Fprintf(stdout, "data_dir:        %s\n", safeDisplay(cfg.DataDir))
+	fmt.Fprintf(stdout, "pools:           %d configured\n", len(cfg.Pools))
+	return exitOK
 }
 
-func NewApplication(config *Config) *Application {
-	ctx, cancel := context.WithCancel(context.Background())
-	
-	return &Application{
-		config: config,
-		ctx:    ctx,
-		cancel: cancel,
-	}
-}
-
-func (app *Application) Start() error {
-	log.Printf("Starting %s...", AppName)
-	
-	// Initialize logger
-	loggerConfig := zap.NewProductionConfig()
-	loggerConfig.Level = zap.NewAtomicLevelAt(getLogLevel(app.config.LogLevel))
-	logger, err := loggerConfig.Build()
+func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
+	f, err := parseRunFlags(args, stderr)
 	if err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
+		return exitUsage
 	}
-	app.logger = logger
-	
-	// Initialize security manager with improvements
-	app.securityManager = security.NewSecurityManager(app.logger)
-	if err := app.securityManager.EnableSecurityImprovements(app.ctx); err != nil {
-		return fmt.Errorf("failed to initialize security: %w", err)
+	fromFile := loadConfigFile(f.configFile, stderr)
+	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return exitConfig
 	}
-	
-	// Initialize improvements manager
-	app.improvementsManager = NewImprovementsManager(app.logger)
-	if err := app.improvementsManager.Initialize(app.ctx); err != nil {
-		return fmt.Errorf("failed to initialize improvements: %w", err)
+	fmt.Fprintln(stdout, "configuration is valid")
+	return exitOK
+}
+
+// ----- run -----
+
+func cmdRun(args []string, stdout, stderr io.Writer) int {
+	f, err := parseRunFlags(args, stderr)
+	if err != nil {
+		return exitUsage
 	}
-	
-	// Initialize monitoring
-	app.monitor = NewMonitor(app.ctx)
-	app.monitor.Start()
-	
-	// Initialize optimizer if enabled
-	if app.config.AutoOptimize {
-		app.optimizer = NewOptimizer(app.ctx)
-		app.optimizer.Start()
+
+	fromFile := loadConfigFile(f.configFile, stderr)
+	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return exitConfig
 	}
-	
-	// Initialize mining engine
-	app.mining = NewMiningEngine(app.config, app.ctx)
-	if err := app.mining.Initialize(); err != nil {
-		return fmt.Errorf("failed to initialize mining engine: %w", err)
+
+	// Initialise i18n bundle.
+	bundle, _ := messages.NewBundle()
+	lang := messages.DetectLang(cfg.Language)
+
+	logln := func(level string, id i18n.ID, data map[string]any) {
+		msg, _ := bundle.RenderWith(lang, id, data)
+		fmt.Fprintf(stdout, "[%s] %s\n", level, msg)
 	}
-	
-	// Start P2P pool if not in benchmark mode
-	if !app.config.Benchmark {
-		app.p2pPool = NewP2PPool(app.config.P2PPort, app.ctx)
-		if err := app.p2pPool.Start(); err != nil {
-			return fmt.Errorf("failed to start P2P pool: %w", err)
+	plain := func(level, text string) {
+		fmt.Fprintf(stdout, "[%s] %s\n", level, text)
+	}
+
+	if f.dryRun {
+		fmt.Fprintln(stdout, "dry-run: configuration is valid; would start run")
+		return exitOK
+	}
+
+	logln("info", messages.StartupReady, nil)
+
+	poolURL := "stratum+v2://public.stratum.slushpool.com:3336"
+	if len(cfg.Pools) > 0 {
+		poolURL = cfg.Pools[0].URL
+	}
+	logln("info", messages.StartupPoolConnecting, map[string]any{"url": poolURL})
+
+	ctx, cancel := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt, syscall.SIGTERM,
+	)
+	defer cancel()
+
+	// Build the structured logger.
+	structlog := buildLogger(f, cfg, stdout)
+
+	// Start HTTP health/metrics server if requested.
+	metricsRegistry, httpSrv := startHTTPServer(ctx, f, stdout, stderr)
+	if httpSrv != nil {
+		defer httpSrv.Stop()
+	}
+
+	// Bridge engine readiness to HTTP /readyz.
+	onReady := func(ready bool) {
+		if httpSrv != nil {
+			httpSrv.SetReady(ready)
 		}
 	}
-	
-	// Start web server
-	app.webServer = NewWebServer(app.config.WebServerPort, app.mining, app.monitor)
-	app.wg.Add(1)
-	go func() {
-		defer app.wg.Done()
-		if err := app.webServer.Start(); err != nil {
-			log.Printf("Web server error: %v", err)
+
+	if err := engine.Run(ctx, engine.Options{
+		Config:           cfg,
+		Output:           stdout,
+		NoTUI:            f.noTUI,
+		WalletPassphrase: f.walletPassphrase,
+		Logger:           structlog.Adapter(),
+		Metrics:          metricsRegistry,
+		OnReady:          onReady,
+	}); err != nil && err != context.Canceled {
+		structlog.Error("engine", "error", err.Error())
+		plain("error", err.Error())
+		return exitRuntime
+	}
+
+	logln("info", messages.StatusShuttingDown, nil)
+	return exitOK
+}
+
+// buildLogger constructs the structured logger for a run. When the TUI
+// dashboard is active (default), log output is discarded so it does not
+// corrupt the dashboard. With --no-tui, logs go to stdout in the
+// configured format (text or JSON).
+func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) *logger.Logger {
+	if !f.noTUI {
+		return logger.Discard()
+	}
+	format := logger.FormatText
+	if f.logFormat == "json" {
+		format = logger.FormatJSON
+	}
+	return logger.New(logger.Config{
+		Level:  logger.ParseLevel(cfg.LogLevel),
+		Format: format,
+		Writer: stdout,
+	})
+}
+
+// startHTTPServer starts the health/metrics HTTP server if --http-addr
+// was provided. Returns the metrics registry and server handle (both
+// nil if no address was set, or if startup failed — a startup failure
+// is logged as a warning but does not abort the run).
+func startHTTPServer(ctx context.Context, f runFlags, stdout, stderr io.Writer) (*metrics.Registry, *httpserver.Server) {
+	if f.httpAddr == "" {
+		return nil, nil
+	}
+	reg := metrics.NewRegistry()
+	srv := httpserver.New(f.httpAddr, reg)
+	if err := srv.Start(ctx); err != nil {
+		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
+		return reg, nil
+	}
+	fmt.Fprintf(stdout, "[info] http: listening on %s\n", f.httpAddr)
+	return reg, srv
+}
+
+// ----- service -----
+
+func cmdService(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "otedama service: expected subcommand (install|uninstall|status)")
+		return exitUsage
+	}
+	switch args[0] {
+	case "install":
+		return cmdServiceInstall(args[1:], stdout, stderr)
+	case "uninstall":
+		return cmdServiceUninstall(stdout, stderr)
+	case "status":
+		return cmdServiceStatus(stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "otedama service: unknown subcommand %q\n", args[0])
+		return exitUsage
+	}
+}
+
+func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("service install", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	configFile := fs.String("config", "", "Path to config.yaml for the service.")
+	dataDir := fs.String("data-dir", "", "Data directory for the service.")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
+	}
+	mgr, err := daemon.NewManager(*configFile, *dataDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "service: %v\n", err)
+		return exitRuntime
+	}
+	if err := mgr.Install(); err != nil {
+		fmt.Fprintf(stderr, "service install failed: %v\n", err)
+		return exitRuntime
+	}
+	fmt.Fprintln(stdout, "Otedama service installed and started.")
+	fmt.Fprintln(stdout, "It will start automatically on login.")
+	return exitOK
+}
+
+func cmdServiceUninstall(stdout, stderr io.Writer) int {
+	mgr, err := daemon.NewManager("", "")
+	if err != nil {
+		fmt.Fprintf(stderr, "service: %v\n", err)
+		return exitRuntime
+	}
+	if err := mgr.Uninstall(); err != nil {
+		fmt.Fprintf(stderr, "service uninstall failed: %v\n", err)
+		return exitRuntime
+	}
+	fmt.Fprintln(stdout, "Otedama service uninstalled.")
+	return exitOK
+}
+
+func cmdServiceStatus(stdout, stderr io.Writer) int {
+	mgr, err := daemon.NewManager("", "")
+	if err != nil {
+		fmt.Fprintf(stderr, "service: %v\n", err)
+		return exitRuntime
+	}
+	status, err := mgr.Status()
+	if err != nil {
+		fmt.Fprintf(stderr, "service status: %v\n", err)
+		return exitRuntime
+	}
+	if status.Installed {
+		state := "stopped"
+		if status.Running {
+			state = "running"
 		}
-	}()
-	
-	// Start mining
-	if app.config.Benchmark {
-		return app.runBenchmark()
+		fmt.Fprintf(stdout, "Otedama service: installed, %s\n", state)
+	} else {
+		fmt.Fprintln(stdout, "Otedama service: not installed")
+		fmt.Fprintln(stdout, "Run 'otedama service install' to install.")
 	}
-	
-	return app.mining.Start()
+	return exitOK
 }
 
-func (app *Application) runBenchmark() error {
-	log.Printf("Running benchmark mode...")
-	
-	results := app.mining.Benchmark()
-	
-	// Display benchmark results
-	fmt.Printf("\n%s Benchmark Results\n", AppName)
-	fmt.Println(strings.Repeat("=", 50))
-	for algo, hashrate := range results {
-		fmt.Printf("%s: %.2f MH/s\n", algo, hashrate/1000000)
+// ----- YAML config loading -----
+
+func loadConfigFile(path string, stderr io.Writer) config.Config {
+	if path == "" {
+		path = defaultConfigPath()
 	}
-	fmt.Println(strings.Repeat("=", 50))
-	
-	return nil
-}
-
-func getLogLevel(level string) zap.AtomicLevel {
-	switch level {
-	case "debug":
-		return zap.NewAtomicLevelAt(zap.DebugLevel)
-	case "info":
-		return zap.NewAtomicLevelAt(zap.InfoLevel)
-	case "warn":
-		return zap.NewAtomicLevelAt(zap.WarnLevel)
-	case "error":
-		return zap.NewAtomicLevelAt(zap.ErrorLevel)
-	default:
-		return zap.NewAtomicLevelAt(zap.InfoLevel)
+	if path == "" {
+		return config.Config{}
 	}
-}
-
-// ImprovementsManager manages all 500 improvements
-type ImprovementsManager struct {
-	logger               *zap.Logger
-	securityImprovements *improvements.SecurityImprovements
-	perfImprovements     *improvements.PerformanceImprovements
-	stabilityImprovements *improvements.StabilityImprovements
-	uxImprovements       *improvements.UXImprovements
-	maintImprovements    *improvements.MaintainabilityImprovements
-}
-
-func NewImprovementsManager(logger *zap.Logger) *ImprovementsManager {
-	return &ImprovementsManager{
-		logger:                logger,
-		securityImprovements:  improvements.NewSecurityImprovements(),
-		perfImprovements:      improvements.NewPerformanceImprovements(),
-		stabilityImprovements: improvements.NewStabilityImprovements(),
-		uxImprovements:        improvements.NewUXImprovements(),
-		maintImprovements:     improvements.NewMaintainabilityImprovements(),
+	f, err := os.Open(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(stderr, "warning: cannot open config file %q: %v\n", path, err)
+		}
+		return config.Config{}
 	}
-}
-
-func (im *ImprovementsManager) Initialize(ctx context.Context) error {
-	im.logger.Info("Initializing 500 improvements system")
-	
-	// Enable improvements in priority order: security > performance > stability > UX > maintainability
-	im.logger.Info("Loading security improvements (1-100)")
-	im.logger.Info("Loading performance improvements (101-200)")
-	im.logger.Info("Loading stability improvements (201-300)")
-	im.logger.Info("Loading UX improvements (301-400)")
-	im.logger.Info("Loading maintainability improvements (401-500)")
-	
-	return nil
-}
-
-func (app *Application) Shutdown() error {
-	// Cancel context to signal shutdown
-	app.cancel()
-	
-	// Stop components in reverse order
-	if app.mining != nil {
-		app.mining.Stop()
+	defer f.Close()
+	var cfg config.Config
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		// An empty or comments-only file yields io.EOF (no YAML document);
+		// that is not a parse error — it means "use defaults".
+		if err == io.EOF {
+			return config.Config{}
+		}
+		fmt.Fprintf(stderr, "warning: cannot parse config file %q: %v\n", path, err)
+		return config.Config{}
 	}
-	
-	if app.p2pPool != nil {
-		app.p2pPool.Stop()
+	return cfg
+}
+
+func defaultConfigPath() string {
+	if p := os.Getenv("OTEDAMA_CONFIG"); p != "" {
+		return p
 	}
-	
-	if app.webServer != nil {
-		app.webServer.Stop()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
 	}
-	
-	if app.optimizer != nil {
-		app.optimizer.Stop()
+	return home + "/.config/otedama/config.yaml"
+}
+
+// ----- helpers -----
+
+func safeDisplay(v string) string {
+	if v == "" {
+		return "(default)"
 	}
-	
-	if app.monitor != nil {
-		app.monitor.Stop()
+	// Strip control characters (ESC, newlines, DEL, …) so a malicious
+	// config value cannot inject ANSI escape sequences or forge log lines
+	// when echoed to a terminal. Printable text is returned unchanged.
+	if !strings.ContainsFunc(v, unicode.IsControl) {
+		return v
 	}
-	
-	if app.securityManager != nil {
-		// Security manager cleanup if needed
+	var b strings.Builder
+	b.Grow(len(v))
+	for _, r := range v {
+		if !unicode.IsControl(r) {
+			b.WriteRune(r)
+		}
 	}
-	
-	// Wait for all goroutines to finish
-	done := make(chan struct{})
-	go func() {
-		app.wg.Wait()
-		close(done)
-	}()
-	
-	select {
-	case <-done:
-		return nil
-	case <-time.After(10 * time.Second):
-		return fmt.Errorf("shutdown timeout")
+	return b.String()
+}
+
+func maskAddress(addr string) string {
+	if len(addr) <= 10 {
+		return addr
 	}
+	return addr[:6] + strings.Repeat("·", 3) + addr[len(addr)-4:]
 }
 
-// Placeholder imports - actual implementations would be imported from internal packages
+// ----- doctor subcommand -----
 
-// MiningEngine wraps the actual mining engine
-type MiningEngine struct {
-	config     *Config
-	isRunning  bool
-	hashrate   float64
-}
-
-func NewMiningEngine(config *Config, ctx context.Context) *MiningEngine {
-	return &MiningEngine{
-		config: config,
+func cmdDoctor(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	configFile := fs.String("config", "", "Path to config.yaml to diagnose.")
+	btcAddr := fs.String("bitcoin-address", "", "Bitcoin address to validate.")
+	dataDir := fs.String("data-dir", "", "Data directory to check.")
+	if err := fs.Parse(args); err != nil {
+		return exitUsage
 	}
-}
 
-func (m *MiningEngine) Initialize() error {
-	log.Printf("Initializing mining engine with algorithm: %s", m.config.Algorithm)
-	return nil
-}
-
-func (m *MiningEngine) Start() error {
-	log.Printf("Starting mining with %d CPU threads", m.config.CPUThreads)
-	m.isRunning = true
-	m.hashrate = 1000000.0 // 1 MH/s placeholder
-	return nil
-}
-
-func (m *MiningEngine) Stop() {
-	log.Printf("Stopping mining engine")
-	m.isRunning = false
-}
-
-func (m *MiningEngine) Benchmark() map[string]float64 {
-	results := make(map[string]float64)
-	results["sha256d"] = 1500000.0
-	results["scrypt"] = 800000.0
-	results["ethash"] = 25000000.0
-	return results
-}
-
-// P2PPool wraps the actual P2P pool
-type P2PPool struct {
-	port      int
-	peers     int
-	isRunning bool
-}
-
-func NewP2PPool(port int, ctx context.Context) *P2PPool {
-	return &P2PPool{
-		port: port,
+	// Build effective config from the same layering used by `run`.
+	flags := config.FlagValues{
+		BitcoinAddress: *btcAddr,
+		DataDir:        *dataDir,
+		ConfigFile:     *configFile,
 	}
-}
+	fromFile := loadConfigFile(*configFile, stderr)
+	cfg := config.Resolve(fromFile, nil, flags)
 
-func (p *P2PPool) Start() error {
-	log.Printf("Starting P2P pool on port %d", p.port)
-	p.isRunning = true
-	p.peers = 5 // Placeholder peer count
-	return nil
-}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-func (p *P2PPool) Stop() {
-	log.Printf("Stopping P2P pool")
-	p.isRunning = false
-}
-
-// WebServer wraps the actual web server
-type WebServer struct {
-	port    int
-	mining  *MiningEngine
-	monitor *Monitor
-}
-
-func NewWebServer(port int, mining *MiningEngine, monitor *Monitor) *WebServer {
-	return &WebServer{
-		port:    port,
-		mining:  mining,
-		monitor: monitor,
-	}
-}
-
-func (w *WebServer) Start() error {
-	// Start actual web server implementation
-	log.Printf("Starting web server on port %d", w.port)
-	return nil
-}
-
-func (w *WebServer) Stop() {
-	log.Printf("Stopping web server...")
-}
-
-// Monitor wraps monitoring functionality
-type Monitor struct {
-	ctx context.Context
-}
-
-func NewMonitor(ctx context.Context) *Monitor {
-	return &Monitor{ctx: ctx}
-}
-
-func (m *Monitor) Start() {
-	log.Printf("Starting monitoring...")
-}
-
-func (m *Monitor) Stop() {
-	log.Printf("Stopping monitoring...")
-}
-
-// Optimizer wraps optimization functionality
-type Optimizer struct {
-	isRunning bool
-}
-
-func NewOptimizer(ctx context.Context) *Optimizer {
-	return &Optimizer{}
-}
-
-func (o *Optimizer) Start() {
-	log.Printf("Starting optimizer")
-	o.isRunning = true
-}
-
-func (o *Optimizer) Stop() {
-	log.Printf("Stopping optimizer")
-	o.isRunning = false
-}
-
-// SecurityManager wraps security functionality
-type SecurityManager struct {
-	level string
-}
-
-func NewSecurityManager(level string) *SecurityManager {
-	return &SecurityManager{level: level}
-}
-
-func (s *SecurityManager) Initialize() error {
-	log.Printf("Initializing security (level: %s)", s.level)
-	return nil
-}
-
-func (s *SecurityManager) Cleanup() {
-	log.Printf("Cleaning up security...")
-}
-
-// Helper function to validate power mode string
-func validatePowerMode(mode string) bool {
-	switch mode {
-	case "efficiency", "balanced", "performance", "turbo":
-		return true
-	default:
-		return false
-	}
+	runner := &doctor.Runner{Checks: doctor.DefaultChecks(cfg, *configFile)}
+	report := runner.Run(ctx)
+	report.Print(stdout)
+	return report.ExitCode()
 }
