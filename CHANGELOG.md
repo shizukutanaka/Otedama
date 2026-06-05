@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Bug fixes (session 53 — Noise transport framing hardening)
+
+- **Fixed two real bugs in `stratum.EncryptedConn` (the SV2 Noise transport), acting
+  on the session-52 research lesson that fuzzing found a length-arithmetic overflow in
+  SRI's `noise_sv2` crate.**
+  - **`Write` silently truncated oversize frames:** `uint16(len(ct))` wrapped when the
+    ciphertext exceeded 65535 bytes, emitting a wrong length prefix while writing the full
+    bytes — desynchronising the stream. It now rejects such a frame with an error (Noise
+    transport messages are u16-bounded by spec), so truncation can't corrupt the channel.
+  - **`Read` discarded plaintext:** `copy(p, pt)` dropped any decrypted plaintext beyond
+    the caller's buffer length. Because the Stratum decoder reads a 6-byte header first,
+    *every* real frame exceeded that first buffer and lost data. `Read` now buffers the
+    remainder and drains it across subsequent calls, so no plaintext is lost.
+  - Removed a dead `ctLen > 65535` guard (a `uint16` cannot exceed 65535) and documented
+    why the wire-driven `make([]byte, ctLen)` can't be coerced into a huge allocation.
+- **2 tests:** full-plaintext reassembly across small (header-sized) Read buffers, and the
+  oversize-write rejection (with nothing written on the error path) plus the exact-limit
+  success case. `go build`/`vet`/`test` all green.
+
 ### Research (session 52 — fresh GitHub/spec increment)
 
 - **Four verified updates to the backlog** (`docs/RESEARCH_IMPROVEMENTS.md`), no code change:
