@@ -86,8 +86,9 @@ type Hash [32]byte
 func (h Hash) String() string { return hex.EncodeToString(h[:]) }
 
 // LessOrEqual reports whether h is numerically less than or equal to other.
-// Both hashes are treated as big-endian 256-bit unsigned integers,
-// which is Bitcoin's convention for comparing hash values to targets.
+// Both values use the Hash type's little-endian byte order — the
+// most-significant byte is at index 31 (matching raw SHA256d output and
+// TargetFromNBits) — so the comparison walks from index 31 down to 0.
 func (h Hash) LessOrEqual(other Hash) bool {
 	for i := 31; i >= 0; i-- {
 		if h[i] < other[i] {
