@@ -307,6 +307,201 @@ comparisons (D-Central, Coin Bureau, Solo Satoshi).
 
 ---
 
+## June 2026 research pass (session 51) — new findings
+
+A fresh sweep of comparable software (SRI / stratum-mining, ESP-Miner,
+Akash, Vast.ai, sigstore/OpenSSF, prometheus/client_golang) and arXiv
+(2024–2026), cross-checked so nothing below duplicates the categories
+above. Every arXiv ID was verified against the arXiv listing; every API
+endpoint against current vendor documentation. Tags as before
+(✅/🔵/🟡/❌).
+
+### Category 1/2 — mining client & Stratum correctness (from SRI v1.5.0 + ESP-Miner)
+
+1. 🟡 **Validate the SV2 server certificate, not just the Noise DH.** The
+   SV2 security spec delivers a signed certificate (`valid_from`,
+   `not_valid_after`, `server_public_key`, BIP340 Schnorr sig over the
+   fields); the initiator MUST verify the signature against a known
+   authority key *and* check expiry — that is the actual MITM defence,
+   distinct from the handshake DH. When `noise.go` moves to secp256k1
+   (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
+   and a per-pool `authority_pubkey` config field.
+   (sv2-spec 04-Protocol-Security.md)
+2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
+   SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
+   because vardiff produced a target *easier* than the channel's declared
+   `max_target`. In the V2 channel/job path clamp the effective target into
+   `[min, max_target]` at channel open and on each `SetTarget`; add a
+   boundary test. (stratum-mining/stratum release v1.5.0)
+3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
+   Also fixed in SRI v1.5.0: a client assembling the coinbase from
+   `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
+   or every share is rejected on a wrong merkle root. Add a segwit-coinbase
+   regression fixture to the path feeding `engine.applyJob`.
+   (stratum-mining/stratum v1.5.0)
+4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
+   #212: after difficulty drops, in-flight shares against the old (harder)
+   target are rejected as "above target". Tag outstanding work with the
+   difficulty active when issued, validate locally against that, and treat
+   the resulting pool rejects as benign (exclude from the reject-rate
+   metric). Also accept *fractional* difficulty in `set_difficulty`.
+   Distinct cause from the existing stale/latency `rejectClass`.
+   (bitaxeorg/ESP-Miner #212)
+5. 🟡 **Handle `client.show_message` and unknown V1 notifications gracefully.**
+   ESP-Miner added explicit `client.show_message` handling (pools send
+   operator notices this way); an unhandled method can desync a strict
+   JSON-RPC reader. Log-and-surface it, and skip unknown notifications
+   rather than erroring the session. Complements Cat 1 #3.
+   (bitaxeorg/ESP-Miner releases)
+6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
+   fix for hashrate-counter overflow on reconnect; garbage readings would
+   poison `HashrateMonitor` and the arbitration yield estimate. Reset
+   windowed counters on reconnect, use saturating `uint64` accumulators,
+   and test that a reconnect produces no spurious spike or NaN J/TH.
+   (bitaxeorg/ESP-Miner releases)
+7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+   SRI split roles into a separate, independently-versioned repo after
+   v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
+   to cite the (stable) spec so the codec tracks the spec, not moving code.
+
+### Category 4 — decentralisation (arXiv grounding)
+
+8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+   Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
+   selfish-mining strategy whose orphan pattern is statistically
+   indistinguishable from honest mining, profitable from 38.2% hashrate.
+   Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
+   defaults as a *security* (not merely liveness) property; strengthens
+   Cat 4 #7.
+9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
+   Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
+   Feb 2025), show accounting for orphans makes honest mining the unique
+   optimum. Otedama can't change the DAA, but `doctor` can track
+   pool-acknowledged shares vs. pool-credited blocks over a window and warn
+   on divergence — grounds Cat 1 #10.
+10. 🔵 **Auditable PoW for verifiable share attribution (v4.0+).** Lerner,
+    "APoW: Auditable Proof-of-Work Against Block Withholding" (arXiv:
+    2601.02496), constructs PoW letting pool participants retroactively
+    audit each other's effort with no TTP. Catalogue as a research pointer
+    for any future "verifiable share" work; fits the non-aggregating ethos
+    (ADR-001).
+
+### Category 5 — replacing the simulated Akash provider
+
+11. 🟡 **Concrete Akash integration surface.** Akash exposes a provider REST
+    gateway (`/status`, `/version`, manifest POST on lease-won) and a gRPC
+    `akash.provider.v1.ProviderRPC.GetStatus` (per-node GPU model + status,
+    allocatable vs allocated), plus SDK `createLease(bidId)` /
+    `getLeases(owner,state)`. This is the unblocker for Cat 5 #1 /
+    KNOWN_LIMITATIONS §1: poll `GetStatus` for real GPU availability + live
+    lease count (feeds A6 reliability and Cat 5 #3 heartbeat), confirm a
+    routed GPU is actually leased before counting its yield, and gate
+    accounting (Cat 5 #8) on real lease state. gRPC adds a dependency —
+    weigh against ADR-003; the REST `/status` path may suffice read-only.
+12. 🟡 **Vast.ai as a second, simpler real compute backend.** Vast has a
+    documented Bearer-token REST API with a *direct-bid* market (`bid_price`
+    $/hr; highest bid runs, lower bids pause). Far less code than Akash gRPC
+    and a cleaner live testbed for ADR-010 A4 strategic bidding (real
+    preemption). A `VastProvider` behind the existing `provider` interface
+    gives a non-simulated backend now. (Renting out *own* hardware — fine
+    under the non-custodial stance.)
+13. 🟡 **Preemption is the dominant failure mode — price it in.** Duan et al.,
+    "GFS" (arXiv:2509.11134, ASPLOS '26), forecast GPU demand and keep a
+    reserve quota to cut eviction 33%. A preemption-risk term should raise a
+    provider's *effective* switch cost in the A2 ledger so the engine
+    doesn't churn a GPU onto a stream it loses in minutes. Pairs with #14
+    and Cat 5 #6.
+
+### Category 6 — arbitration / online optimisation (arXiv grounding)
+
+14. 🟡 **Randomized deadline-aware spot policy with √K competitive ratio.**
+    "ROSS" (arXiv:2601.14612) proves deterministic deadline policies are
+    stuck at Ω(K) (K = reliable/spot cost ratio) while a randomized reserve
+    rule achieves √K (~30% savings). The competitive-analysis counterpart to
+    ADR-010 A1/A6; load-bearing only if deadline-constrained inference
+    exists.
+15. 🟡 **Adaptive, learned switching cost with sub-linear dynamic regret.**
+    "SCaLE" (arXiv:2601.09042) handles ℓ2 switching costs under noisy bandit
+    feedback with no known cost structure. Justifies making ADR-010 A2's
+    switch-cost ledger *learned / non-stationary* rather than a fixed
+    calibration; the regret-optimal target for A2.
+16. 🟡 **Track which non-stationarity the engine self-tunes against.**
+    "Non-stationary Bandit Convex Optimization" (arXiv:2506.02980, NeurIPS
+    2025) gives regret bounds parameterised by switches / total-variation /
+    path-length — exactly the three drift types in hashprice/Akash yield
+    (difficulty steps, volatility, diurnal). Use its measures to choose the
+    self-tuning signal for the Holt-Winters reset threshold (A1+A8).
+
+### Category 8 — power: real, currently-live feeds
+
+17. 🟡 **Octopus Agile half-hourly REST (no key for read-only rates).**
+    `api.octopus.energy/v1/products/<P>/electricity-tariffs/<T>/standard-unit-rates/?period_from=…`
+    concretises ADR-008 sub-domain 4; a `power/tariff/octopus.go` poller
+    (~30 min) drives the Cat 8 #9 curtailment hook.
+18. 🟡 **Design the tariff interface as a forward *price curve*, not a spot
+    price.** Tibber (GraphQL, once-daily curve) and Amber (REST, 5-min AEMO
+    forecast) cover EU-Nordic and AU. A "return the forward curve" interface
+    accommodates all three and feeds the horizon-aware (Pontryagin) scheduler
+    (ADR-008 #2) — plan curtailment windows ahead instead of reacting to spot.
+19. 🟡 **For carbon-aware curtailment use *marginal*, not average, intensity.**
+    WattTime MOER (5-min marginal emissions) is the correct signal for
+    "pause to cut emissions" because curtailing changes load at the margin;
+    Electricity Maps average (AOER) understates the effect. Sharpens Cat 8
+    #10; keep optional (keys required) per ADR-003.
+
+### Category 9/10 — observability & supply-chain (current real tooling)
+
+20. 🟡 **Emit trace exemplars on the submit-latency histogram.**
+    prometheus/client_golang v1.23 (Jul 2025) + OpenMetrics 1.0 allow a
+    `{trace_id="…"}` exemplar on a histogram bucket so a p99 spike links to
+    its trace. Otedama already has the histogram (Cat 2 #7) and OTel spans
+    (Cat 9 #3); joining them is a small extension to the hand-rolled
+    exposition writer (no client_golang dep — keeps ADR-003/005).
+21. 🟡 **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
+    metrics.** Implement Cat 9 #9 as `otedama_build_info{version,commit,
+    goversion}` (value 1); keep `worker` out of labels unless device count is
+    bounded (Cat 1 #7 cardinality); expose `go_*`/`process_*` so existing
+    fleet dashboards work unmodified. (prometheus.io naming practices, 2025)
+22. 🔵 **SLSA Build L3 provenance + Sigstore keyless signing for releases.**
+    `actions/attest-build-provenance` + cosign keyless (Fulcio OIDC, Rekor)
+    is the current bar for a non-custodial money-handling binary users must
+    verify. Add provenance + `cosign sign-blob` (GitHub OIDC, no stored
+    keys) to release.yml and document `cosign verify-blob` /
+    `gh attestation verify`. (sigstore/cosign, slsa.dev)
+23. 🟡 **Publish an OpenSSF Scorecard workflow as a release gate.**
+    `ossf/scorecard-action` checks Branch-Protection / Pinned-Dependencies /
+    Signed-Releases / Token-Permissions and bundles osv-scanner; the
+    Signed-Releases check rewards #22 and Pinned-Dependencies reinforces
+    Cat 10 #10. (github.com/ossf/scorecard)
+24. 🟡 **Make govulncheck a hard CI gate and pin a patched toolchain.** Track
+    current Go advisories on the `net/http` surface Otedama exposes
+    (`/healthz /readyz /metrics`) — e.g. CVE-2025-22871 (request smuggling),
+    GO-2025-3563 — and fail the build on any govulncheck finding. CLAUDE.md
+    already mandates the tool; the gap is the gate. Record advisory IDs in
+    THREAT_MODEL's dependency assumptions.
+
+### Category 11 — Lightning routing & privacy (arXiv grounding)
+
+25. 🟡 **Bias path selection away from high-betweenness channels.** Abdesselam
+    et al., "Payment-failure times for random Lightning paths" (arXiv:
+    2511.16376, BRAINS 2025), tie time-to-failure to edge-betweenness — the
+    most-traversed channels deplete first. A depletion-aware tie-breaker
+    sharpens Cat 11 #6/#7 from qualitative to concrete; catalogue-only while
+    receive-only.
+26. 🟡 **Seed the min-cost-flow scorer with a cheap balance prior.** Davis et
+    al. (arXiv:2405.12087) beat the 50/50-split prior by ~27%. The
+    ADR-003-friendly takeaway is a *dependency-free heuristic* prior
+    (capacity + degree + age), not the ML model — a small deterministic
+    initial liquidity belief feeding Pickhardt-Richter (Cat 11 #6),
+    improving first-attempt success without probing.
+27. 🟡 **One countermeasure, two timing channels.** Rohrer & Tschorsch,
+    "Counting Down Thunder" (arXiv:2006.12143), show HTLC-resolution timing
+    leaks payment endpoints — the LN analogue of the Stratum timing leak
+    already in THREAT_MODEL (1703.06545). Note that Tor-by-default (ADR-007
+    B7) mitigates *both*; doc-only linkage.
+
+---
+
 ## Highest-leverage next actions (cross-category synthesis)
 
 Ranked by impact on the path to a real v3.1.0:
@@ -337,3 +532,17 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-51 additions (June 2026): arXiv (2309.06847 undetectable selfish
+mining; 2211.07270 block-withholding resilience; 2601.02496 APoW; 2601.14612
+ROSS randomized spot scheduling; 2601.09042 SCaLE switching-cost bandit;
+2506.02980 non-stationary BCO, NeurIPS 2025; 2509.11134 GFS, ASPLOS '26;
+2511.16376 LN payment-failure times, BRAINS 2025; 2405.12087 LN channel-balance
+interpolation; 2006.12143 Counting Down Thunder). Software/specs: stratum-mining
+SRI v1.5.0 release + sv2-spec (04-Protocol-Security); bitaxeorg/ESP-Miner
+(#212, releases); Akash provider REST/gRPC + SDK docs; Vast.ai REST/bidding
+docs; Octopus Agile, Tibber, Amber, WattTime (MOER), Electricity Maps APIs;
+sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
+prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
+Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
+the arXiv listing; all API endpoints against current vendor documentation.*

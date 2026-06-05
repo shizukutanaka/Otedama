@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Research (session 51 — comparable-software + arXiv improvement survey)
+
+- **Expanded `docs/RESEARCH_IMPROVEMENTS.md` with a 27-item "June 2026 research
+  pass"** drawn from comparable software and 2024–2026 arXiv papers, cross-checked
+  so none duplicate the existing 11 categories. No code change this pass — the goal
+  was to enumerate concrete, sourced improvement points for later sessions.
+- **Mining/Stratum correctness (from SRI v1.5.0 + ESP-Miner):** SV2 server-certificate
+  validation (BIP340 sig + expiry, separate from the Noise DH); clamp channel target to
+  `max_target` on vardiff; strip BIP141 fields from the coinbase on Extended Jobs; don't
+  count post-`set_difficulty` "above-target" rejects (+fractional difficulty); handle
+  `client.show_message`; saturate/reset hashrate counters on reconnect; pin protocol truth
+  to `sv2-spec`. Each is a concrete, testable client work item.
+- **Decentralisation (arXiv):** single-pool concentration enables *undetectable* selfish
+  mining (2309.06847) — a security rationale for the diversity defaults; orphan-aware
+  reconciliation fairness (2211.07270); auditable PoW for verifiable shares (2601.02496, v4.0+).
+- **Replacing the simulated Akash provider:** concrete Akash REST/gRPC + SDK lease-lifecycle
+  surface (the unblocker for KNOWN_LIMITATIONS §1); Vast.ai direct-bid market as a simpler
+  real backend and a live testbed for A4 bidding; preemption-risk pricing (GFS, 2509.11134).
+- **Arbitration (arXiv):** randomized deadline-aware spot scheduling with √K competitive ratio
+  (ROSS, 2601.14612); adaptive learned switching cost with sub-linear dynamic regret (SCaLE,
+  2601.09042); non-stationarity measures to self-tune the forecaster (2506.02980).
+- **Power:** real, currently-live feeds — Octopus Agile (no-key REST), Tibber/Amber — with a
+  "forward price curve" interface; *marginal* (WattTime MOER) vs average carbon for curtailment.
+- **Observability/supply-chain:** trace exemplars on the submit-latency histogram; Prometheus
+  `_info`/bounded-label/`go_*` conventions; SLSA L3 provenance + Sigstore keyless signing;
+  OpenSSF Scorecard gate; govulncheck as a hard CI gate (CVE-2025-22871, GO-2025-3563).
+- **Lightning (arXiv):** edge-betweenness depletion-aware path selection (2511.16376); a
+  dependency-free channel-balance prior seeding the min-cost-flow scorer (2405.12087); HTLC
+  timing side channel (2006.12143) — Tor-by-default mitigates both it and the Stratum leak.
+- All 10 new arXiv IDs were verified against the arXiv listing and all API endpoints against
+  current vendor documentation before inclusion (no fabricated citations, per CLAUDE.md).
+
 ### Bug fixes (session 50 — restore a correct, green build)
 
 - **🔴 The v3.0.0-alpha.1 tree did not build, and once it built ~10 packages failed their own tests — despite the prior "720 green tests" claim.** This session restores the project to a correct, green state on its declared toolchain (`go 1.24`), fixing the wrong side (code or test) of every failure after reading each end-to-end (CLAUDE.md). Result: `go build ./...`, `go vet ./...`, and `go test ./...` are all green; **716 test functions (877 incl. subtests)**, plus `gofmt` clean across the tree.
