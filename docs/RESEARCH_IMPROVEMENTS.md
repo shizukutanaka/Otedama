@@ -502,6 +502,46 @@ endpoint against current vendor documentation. Tags as before
 
 ---
 
+## June 2026 research pass — session 52 increment (fresh GitHub/spec findings)
+
+Four verified items that *update* earlier entries with newer reality.
+
+1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+   is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
+   early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
+   fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
+   the `sv1_api` translator parser is the next fuzz target. Otedama has a
+   directly analogous surface (`internal/stratum/noise.go` length math,
+   `frame.go` `MsgLength`/`DefaultMaxFrameSize`, the V1 JSON-RPC reader). Add
+   overflow-focused fuzz seeds to the existing `FuzzDecodeHeader` /
+   `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
+   length prefix; assert no `int`/`uint32` overflow or huge allocation.
+   (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
+2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
+   committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
+   SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
+   Stratum V2 / open block construction. Updates ADR-009's "~70%" figure and
+   strengthens the case for the Job Declaration Client (miner-built templates)
+   as the headline v3.x feature. (coindesk.com 2026-05-11)
+3. 🟡 **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
+   Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT Authentication for
+   Providers** — token-based auth on the provider APIs. The real
+   `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must therefore mint
+   and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
+   REST endpoint. Fold JWT acquisition into the provider client design.
+   (messari.io State of Akash Q3 2025; akash.network/docs)
+4. 🟡 **Offer an optional FIPS 140-3 mode and document the PQ key exchange
+   already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
+   enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
+   X25519MLKEM768 hybrid PQ key exchange Otedama already turns on via
+   `tlsmlkem=1` is part of that validated module. Low-effort, high-trust wins
+   for a money-handling binary: (a) document that outbound TLS uses hybrid
+   post-quantum key exchange; (b) provide a `fips140=on` build/runtime profile
+   for regulated operators; (c) note both in THREAT_MODEL. Pairs with the
+   existing godebug block (`GODEBUG_NOTES.md`). (go.dev/blog/fips140)
+
+---
+
 ## Highest-leverage next actions (cross-category synthesis)
 
 Ranked by impact on the path to a real v3.1.0:

@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Research (session 52 — fresh GitHub/spec increment)
+
+- **Four verified updates to the backlog** (`docs/RESEARCH_IMPROVEMENTS.md`), no code change:
+  (1) SRI reached v1.6.0 and split into `sv2-apps`; a 2026 fuzzing effort found an
+  arithmetic overflow in the `noise_sv2` crate — Otedama should add overflow-focused
+  fuzzing to its analogous Noise/frame length math; (2) ~75% of network hashrate
+  committed to Stratum V2 in May 2026 (updates ADR-009's figure, sharpens the JDC
+  priority); (3) the real Akash provider API now requires JWT auth (AEP-64, Mainnet 14,
+  Oct 2025) — a concrete requirement for the non-simulated `AkashProvider`; (4) Go 1.24+
+  ships a FIPS 140-3-validated crypto module (`GODEBUG=fips140=on`) that includes the
+  X25519MLKEM768 hybrid PQ key exchange Otedama already enables via `tlsmlkem=1` —
+  worth an optional FIPS profile and a THREAT_MODEL note. All sources verified.
+
 ### Research (session 51 — comparable-software + arXiv improvement survey)
 
 - **Expanded `docs/RESEARCH_IMPROVEMENTS.md` with a 27-item "June 2026 research
