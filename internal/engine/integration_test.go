@@ -512,3 +512,39 @@ func TestEngineMetrics_ObservabilityBundleAppearsInOutput(t *testing.T) {
 		t.Errorf("build_info should be a labeled series:\n%s", out)
 	}
 }
+
+// TestEngineRun_NotReadyWithoutPoolConnect verifies the session-61 fix:
+// /readyz (via OnReady) must NOT report ready until an actual pool session
+// is established. With an unreachable pool, OnReady(true) must never fire.
+func TestEngineRun_NotReadyWithoutPoolConnect(t *testing.T) {
+	var mu sync.Mutex
+	var states []bool
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_ = Run(ctx, Options{
+		Config: config.Config{
+			BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+			// Port 1 is reserved; the dial is refused immediately, so no
+			// session ever establishes.
+			Pools: []config.PoolConfig{{URL: "stratum+v2://127.0.0.1:1"}},
+		},
+		NoTUI:                true,
+		MaxReconnectAttempts: 1,
+		OnReady: func(ready bool) {
+			mu.Lock()
+			states = append(states, ready)
+			mu.Unlock()
+		},
+		Logger: func(_, _ string) {},
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, r := range states {
+		if r {
+			t.Errorf("OnReady(true) fired without an established pool session; states=%v", states)
+		}
+	}
+}

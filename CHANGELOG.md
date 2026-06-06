@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 61 — /readyz reflects actual pool connection)
+
+- **🔴 G10 (SPECIFICATION.md): `/readyz` reported ready before connecting to any pool.**
+  `OnReady(true)` fired at engine start (after subsystem init), so the readiness probe went
+  green even when the miner could reach no pool — the opposite of its documented "ready only
+  if pool connected" contract. A Kubernetes readiness probe would route a non-mining pod as
+  ready.
+- **Fix:** readiness is now driven from the session lifecycle inside `runReconnectLoop` —
+  `OnReady(true)` fires on handshake completion (reusing the session-56 `onConnected` hook),
+  `OnReady(false)` on each disconnect and on shutdown — so `/readyz` tracks a live pool
+  connection and flips back when it drops. Updated the `Options.OnReady` contract doc
+  accordingly (it now flips per session, not once).
+- **2 tests:** the existing fake-pool E2E still sees `OnReady(true)` on connect; a new test
+  confirms an unreachable pool never makes `OnReady(true)` fire. Updated SPECIFICATION.md
+  gap table (G10). `go build`/`vet`/`test` green.
+
 ### Fixes (session 60 — doctor validates the failover address list)
 
 - **G9 (SPECIFICATION.md): `doctor` checked only the primary `bitcoin_address`.** The

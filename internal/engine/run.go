@@ -92,10 +92,11 @@ type Options struct {
 	// latency, arbitration switches). Nil disables metrics emission.
 	Metrics *metrics.Registry
 
-	// OnReady, if set, is called with true when the engine is fully
-	// running (pool connected, at least one worker hashing) and with
-	// false when the engine shuts down. Used to flip HTTP /readyz
-	// between 200 and 503. Called at most once in each direction.
+	// OnReady, if set, is called with true each time a pool session is
+	// established and with false when that session ends (and on shutdown).
+	// Used to flip HTTP /readyz between 200 and 503, so readiness tracks an
+	// actual pool connection rather than mere process start. It may be
+	// called multiple times over a run as the connection drops and recovers.
 	OnReady func(ready bool)
 }
 
@@ -194,9 +195,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// ----- Phase 8: Pool connection with reconnect -----
-	// All subsystems initialised. Notify readiness observers.
+	// Readiness reflects an *established pool session* (driven inside
+	// runReconnectLoop via OnReady), not merely a started process, so
+	// /readyz only goes green once mining can actually proceed and flips
+	// back on disconnect. Mark not-ready on shutdown.
 	if opts.OnReady != nil {
-		opts.OnReady(true)
 		defer opts.OnReady(false)
 	}
 
@@ -275,24 +278,32 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		r.metrics.payoutActiveIndex.Set(float64(addrIdx))
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:     poolURL,
-			user:        user,
-			workers:     r.workers,
-			merged:      r.merged,
-			interval:    statsInterval,
-			dashboard:   r.dashboard,
-			startTime:   r.startTime,
-			wallet:      r.wallet,
-			devices:     r.deviceN,
-			log:         r.log,
-			providers:   r.providers,
-			m:           r.metrics,
-			onConnected: func() { addrConnected = true },
+			poolURL:   poolURL,
+			user:      user,
+			workers:   r.workers,
+			merged:    r.merged,
+			interval:  statsInterval,
+			dashboard: r.dashboard,
+			startTime: r.startTime,
+			wallet:    r.wallet,
+			devices:   r.deviceN,
+			log:       r.log,
+			providers: r.providers,
+			m:         r.metrics,
+			onConnected: func() {
+				addrConnected = true
+				if r.opts.OnReady != nil {
+					r.opts.OnReady(true) // pool session established → ready
+				}
+			},
 		})
 		if sessionErr != nil {
 			r.metrics.poolConnectFailures.Inc()
 		}
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
+		if r.opts.OnReady != nil {
+			r.opts.OnReady(false) // session ended → not ready
+		}
 
 		if ctx.Err() != nil {
 			break
