@@ -7,7 +7,10 @@
 // the metric-registration boilerplate live in separate files.
 package engine
 
-import "github.com/shizukutanaka/Otedama/internal/metrics"
+import (
+	"github.com/shizukutanaka/Otedama/internal/metrics"
+	"github.com/shizukutanaka/Otedama/internal/version"
+)
 
 // ----- Engine metrics -----
 //
@@ -32,6 +35,18 @@ type engineMetrics struct {
 
 	shareAcceptanceRate *metrics.Gauge
 
+	// up reflects whether the miner is currently producing hashrate
+	// (1) or has stalled (0); a scrape can alert on a wedged miner.
+	up *metrics.Gauge
+	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
+	// poolActiveIndex is the 0-based index of the active pool in the
+	// configured failover list, so failover is observable.
+	poolConnectionState *metrics.Gauge
+	poolActiveIndex     *metrics.Gauge
+	// buildInfo is the standard `_info` metric: constant 1, with the
+	// version/commit/goversion carried as labels for fleet tracking.
+	buildInfo *metrics.Gauge
+
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
 	reg            *metrics.Registry
@@ -39,7 +54,8 @@ type engineMetrics struct {
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
-	return &engineMetrics{
+	info := version.Get()
+	m := &engineMetrics{
 		hashrate: reg.NewGauge(
 			"otedama_hashrate_hashes_per_second",
 			"Current aggregate hashrate in hashes per second.",
@@ -99,9 +115,34 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Accepted shares / total judged shares (1.0 = all accepted).",
 			nil),
 
+		up: reg.NewGauge(
+			"otedama_up",
+			"1 if the miner is producing hashrate (not stalled), else 0.",
+			nil),
+		poolConnectionState: reg.NewGauge(
+			"otedama_pool_connection_state",
+			"Pool connection state: 0=disconnected, 1=connecting, 2=connected.",
+			nil),
+		poolActiveIndex: reg.NewGauge(
+			"otedama_pool_active_index",
+			"0-based index of the active pool in the configured failover list.",
+			nil),
+		buildInfo: reg.NewGauge(
+			"otedama_build_info",
+			"Build information (constant 1); version/commit/goversion are labels.",
+			map[string]string{
+				"version":   info.Version,
+				"commit":    info.Commit,
+				"goversion": info.GoVersion,
+			}),
+
 		reg:            reg,
 		rejectByReason: make(map[string]*metrics.Counter),
 	}
+	// build_info is a constant series; its value carries no information,
+	// only its label set does (standard Prometheus `_info` convention).
+	m.buildInfo.Set(1)
+	return m
 }
 
 // rejectReason returns (creating on first use) the counter for rejected

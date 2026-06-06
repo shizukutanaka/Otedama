@@ -260,6 +260,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 
 		r.metrics.poolConnectAttempts.Inc()
+		r.metrics.poolActiveIndex.Set(float64(poolIdx))
+		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:   poolURL,
 			user:      r.opts.Config.BitcoinAddress,
@@ -277,6 +279,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if sessionErr != nil {
 			r.metrics.poolConnectFailures.Inc()
 		}
+		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
 
 		if ctx.Err() != nil {
 			break
@@ -495,6 +498,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		return err
 	}
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
+	if opts.m != nil {
+		opts.m.poolConnectionState.Set(2) // handshake complete → connected
+	}
 
 	// Spawn reader goroutine.
 	inCh := make(chan poolMsg, 32)
@@ -544,6 +550,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			logStats(opts.workers, opts.log)
 			hashMon.Observe(totalHashrate(opts.workers))
 			if opts.m != nil {
+				if hashMon.Stalled() {
+					opts.m.up.Set(0)
+				} else {
+					opts.m.up.Set(1)
+				}
 				rate := acceptanceRate(opts.m.sharesAccepted.Value(), opts.m.sharesRejected.Value())
 				opts.m.shareAcceptanceRate.Set(rate)
 				// Warn once-per-tick if acceptance has dropped below the

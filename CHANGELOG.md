@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Features (session 54 — fleet-observability bundle)
+
+- **Added four operator-facing metrics** that make version, liveness, and failover
+  observable (closing `docs/RESEARCH_IMPROVEMENTS.md` session-51 #20–21 / Cat 9 #6–7–9),
+  with no new dependency (the hand-rolled exposition writer, ADR-005, already supports it):
+  - **`otedama_build_info{version,commit,goversion}`** — a constant-`1` series following
+    the standard Prometheus `_info` convention, so a fleet can track which build each
+    node runs. Labels come from `internal/version.Get()`.
+  - **`otedama_up`** — `1` when the miner is producing hashrate, `0` once
+    `HashrateMonitor.Stalled()` trips, so a scrape can alert on a silently wedged miner.
+  - **`otedama_pool_connection_state`** (`0`=disconnected, `1`=connecting, `2`=connected)
+    and **`otedama_pool_active_index`** (0-based index in the failover list) — the
+    multi-pool failover added in session 42 is now observable: a dashboard can show which
+    pool is live and catch flapping. Set across `runReconnectLoop` (connecting/disconnected
+    + active index) and `runSession` (connected on handshake completion).
+- **1 test** asserting all four appear in `/metrics` and that `build_info` is a labelled
+  constant-1 series. `go build`/`vet`/`test` all green.
+
 ### Bug fixes (session 53 — Noise transport framing hardening)
 
 - **Fixed two real bugs in `stratum.EncryptedConn` (the SV2 Noise transport), acting

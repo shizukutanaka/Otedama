@@ -477,3 +477,38 @@ func TestEngineMetrics_ShareAcceptanceRateRegistered(t *testing.T) {
 		t.Error("acceptance-rate gauge missing from /metrics output")
 	}
 }
+
+func TestEngineMetrics_ObservabilityBundleAppearsInOutput(t *testing.T) {
+	// Session-54 observability bundle: build_info (constant 1 with labels),
+	// up, and the pool connection-state / active-index gauges.
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.up.Set(1)
+	m.poolConnectionState.Set(2)
+	m.poolActiveIndex.Set(1)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"otedama_build_info",
+		"otedama_up",
+		"otedama_pool_connection_state",
+		"otedama_pool_active_index",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("metric %q missing from /metrics output", want)
+		}
+	}
+	// build_info follows the _info convention: a constant-1 series whose
+	// version/commit/goversion live in labels.
+	if !strings.Contains(out, `version=`) || !strings.Contains(out, `goversion=`) {
+		t.Errorf("build_info should carry version/goversion labels:\n%s", out)
+	}
+	if !strings.Contains(out, "otedama_build_info{") {
+		t.Errorf("build_info should be a labeled series:\n%s", out)
+	}
+}
