@@ -5,6 +5,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -273,5 +275,48 @@ func TestService_Uninstall_DoesNotCrash(t *testing.T) {
 	default:
 		t.Errorf("service uninstall returned unexpected exit code %d (out=%s err=%s)",
 			code, out.String(), err.String())
+	}
+}
+
+func TestConfigShow_ShowsFailoverAddressesAndPools(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+bitcoin_addresses:
+  - "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+  - "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+log_format: json
+workers:
+  name: rig-01
+pools:
+  - url: stratum+v2tls://primary.example.com:3336
+  - url: stratum+v2://backup.example.com:3336
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var out, errb bytes.Buffer
+	if code := run([]string{"config", "show", "--config", path}, &out, &errb); code != exitOK {
+		t.Fatalf("config show exit = %d, want 0 (stderr: %s)", code, errb.String())
+	}
+	got := out.String()
+
+	// The effective config must surface ALL configured values, not just a count.
+	for _, want := range []string{
+		"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", // failover address 1
+		"1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", // failover address 2
+		"bitcoin_addresses (failover): 2",    // list header
+		"log_format:",                        // previously missing
+		"json",                               // its value
+		"worker_name:",                       // previously missing
+		"rig-01",                             // its value
+		"stratum+v2tls://primary.example.com:3336", // actual pool URLs, not just a count
+		"stratum+v2://backup.example.com:3336",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("config show missing %q:\n%s", want, got)
+		}
 	}
 }

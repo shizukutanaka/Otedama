@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & fixes (session 57 — specification + gap closure)
+
+- **Added `docs/SPECIFICATION.md`** — a descriptive spec of Otedama's *actual* observable
+  behaviour (CLI + exit codes, config + precedence + validation, mining-session lifecycle
+  incl. pool and payout-address failover, Stratum V2 transport, the full metrics set, and
+  known limitations). It ends with a **"Gaps found"** table that audits intended vs actual
+  behaviour, each with status.
+- **G1 — `config show` was incomplete (fixed).** It printed only `bitcoin_address`,
+  `log_level`, `language`, `data_dir`, and a pool *count* — not the *effective*
+  configuration the README/spec promise. It now also shows the `bitcoin_addresses`
+  failover list (added session 56), `log_format`, `worker_name`, and the actual pool URLs.
+  Without this, an operator could not see their configured failover addresses or pools.
+- **G2 — exit-code contract documented** (0 ok / 1 runtime / 64 usage / 78 config) in the
+  spec for scripting.
+- Remaining gaps (G3 engine→poolproto, G4 secp256k1 Noise, G5 live Akash, G6 Linux-only
+  GPU) are catalogued in the spec with status, cross-referencing KNOWN_LIMITATIONS and the
+  research backlog.
+- **1 test** asserting `config show` surfaces the failover addresses, pool URLs,
+  `log_format`, and `worker_name`. `go build`/`vet`/`test` green; smoke-tested via the binary.
+
 ### Features (session 56 — payout-address failover)
 
 - **Multiple payout addresses with automatic failover.** Added
