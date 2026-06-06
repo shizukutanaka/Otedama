@@ -615,3 +615,24 @@ func TestMaskAddr_HidesMiddle(t *testing.T) {
 		t.Errorf("maskAddr = %q, want bc1qja…nwr5 form", m)
 	}
 }
+
+func TestSessionUser_Precedence(t *testing.T) {
+	addr := "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+	cases := []struct {
+		name             string
+		poolUser, worker string
+		want             string
+	}{
+		{"plain address", "", "", addr},
+		{"worker suffix", "", "rig-01", addr + ".rig-01"},
+		{"explicit pool user overrides", "acct.worker7", "rig-01", "acct.worker7"},
+		{"explicit pool user, no worker", "acct.worker7", "", "acct.worker7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sessionUser(tc.poolUser, addr, tc.worker); got != tc.want {
+				t.Errorf("sessionUser(%q, addr, %q) = %q, want %q", tc.poolUser, tc.worker, got, tc.want)
+			}
+		})
+	}
+}

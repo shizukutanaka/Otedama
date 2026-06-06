@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 58 — honor documented config: pool User + worker name)
+
+- **G7 (from SPECIFICATION.md): `PoolConfig.User` and `Workers.Name` were documented but
+  the engine never read them.** The Stratum V2 `user_identity` sent in OpenMiningChannel
+  was always the bare payout address. Added `sessionUser(poolUser, addr, worker)`:
+  an explicit per-pool `User` overrides everything; otherwise the active payout address is
+  used, suffixed as `address.worker` (the standard Stratum convention for per-rig pool
+  stats) when `Workers.Name` is set. Default behaviour (no `User`, no worker name) is
+  unchanged.
+- **Honest config docs:** `PoolConfig.Password` is documented as reserved for the Stratum
+  V1 fallback (not yet wired) and currently unused, since the V2 transport has no password.
+- Updated `docs/SPECIFICATION.md` (§3/§4 + gap table G7). **1 test** covering the
+  precedence (plain address / worker suffix / explicit override). `go build`/`vet`/`test`
+  green. This keeps payout-address failover (session 56) intact: when no per-pool `User`
+  is set, the user_identity still tracks the active address.
+
 ### Documentation & fixes (session 57 — specification + gap closure)
 
 - **Added `docs/SPECIFICATION.md`** — a descriptive spec of Otedama's *actual* observable

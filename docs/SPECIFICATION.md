@@ -81,6 +81,9 @@ the configured pool URLs.
      (`payoutAddresses`: primary first, de-duplicated, empties skipped).
    - For each attempt: dial TCP → Stratum V2 handshake (SetupConnection +
      OpenMiningChannel) → on success the address is marked *known-good*.
+     The channel's `user_identity` is the per-pool `User` if set, otherwise
+     the active payout address, suffixed with `.worker` when `Workers.Name`
+     is configured.
    - **Pool failover (fast):** on session failure, advance to the next pool
      immediately; back off only after every pool has been tried.
    - **Payout-address failover (slow, safe):** rotate to the next address
@@ -134,7 +137,8 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
 | # | Gap | Status |
 |---|---|---|
 | G1 | `config show` omitted the failover addresses, `log_format`, `worker_name`, and the actual pool URLs (showed only a count) — it did not show the *effective* configuration as documented. | **Fixed this session** (session 57): `config show` now prints all effective fields incl. `bitcoin_addresses` and pool URLs. |
-| G2 | The exit-code contract was defined in code but undocumented for scripting. | **Fixed this session**: documented in §2.1. |
+| G2 | The exit-code contract was defined in code but undocumented for scripting. | **Fixed (session 57)**: documented in §2.1. |
+| G7 | `PoolConfig.User` and `Workers.Name` were documented config fields the engine never read — the Stratum user_identity was always the bare payout address. | **Fixed (session 58)**: `sessionUser` now honours an explicit per-pool `User`, else uses `address.worker` when `Workers.Name` is set, else the address. `PoolConfig.Password` is documented as V1-only/unused (no password in the V2 transport). |
 | G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | Open — KNOWN_LIMITATIONS §3; deferred (would regress submit-latency/reject telemetry until `poolproto.Session` is extended — see CHANGELOG session 55). |
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |

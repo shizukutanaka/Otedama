@@ -106,12 +106,16 @@ type PoolConfig struct {
 	// protocol version.
 	URL string `yaml:"url"`
 
-	// User is the username or wallet identifier sent during authentication.
-	// If empty, Otedama uses the BitcoinAddress as the user.
+	// User is the Stratum user_identity sent when opening the mining
+	// channel. If empty, Otedama uses the active payout address (suffixed
+	// with the worker name as "address.worker" when Workers.Name is set);
+	// if non-empty, it overrides that entirely.
 	User string `yaml:"user"`
 
-	// Password is the pool password. Most pools accept any value (often "x");
-	// some use it for difficulty hints. If empty, "x" is sent.
+	// Password is the pool password. The Stratum V2 transport has no
+	// password concept, so this field is reserved for the Stratum V1
+	// fallback path (not yet wired in v3.0.0-alpha) and is currently
+	// unused. Most V1 pools accept any value (often "x").
 	Password string `yaml:"password"`
 }
 

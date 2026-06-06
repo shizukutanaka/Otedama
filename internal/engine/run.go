@@ -255,7 +255,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			return fmt.Errorf("engine: exceeded %d reconnect attempts", r.opts.MaxReconnectAttempts)
 		}
 		poolURL := pools[poolIdx]
-		user := addrs[addrIdx]
+		var poolUser string
+		if poolIdx < len(r.opts.Config.Pools) {
+			poolUser = r.opts.Config.Pools[poolIdx].User
+		}
+		user := sessionUser(poolUser, addrs[addrIdx], r.opts.Config.Workers.Name)
 
 		loc := fmt.Sprintf("attempt %d", attempt)
 		if len(pools) > 1 {
@@ -1236,6 +1240,22 @@ func payoutAddresses(cfg config.Config) []string {
 		add(a)
 	}
 	return addrs
+}
+
+// sessionUser builds the Stratum user_identity sent in OpenMiningChannel,
+// honouring the documented config precedence:
+//   - an explicit per-pool User overrides everything (operator's choice);
+//   - otherwise the active payout address is used, suffixed with the
+//     configured worker name as "address.worker" — the standard Stratum
+//     convention for per-rig stats at the pool — when a name is set.
+func sessionUser(poolUser, addr, worker string) string {
+	if poolUser != "" {
+		return poolUser
+	}
+	if worker != "" {
+		return addr + "." + worker
+	}
+	return addr
 }
 
 // maskAddr renders a payout address for logs without printing it in full,
