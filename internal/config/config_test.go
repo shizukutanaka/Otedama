@@ -329,3 +329,47 @@ func TestZeroConfigurationStartup_IncludesLogFormat(t *testing.T) {
 		t.Errorf("zero-config LogFormat = %q, want text", cfg.LogFormat)
 	}
 }
+
+func TestValidate_BitcoinAddresses_FailoverList(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.LogLevel = "info"
+		return c
+	}
+
+	t.Run("valid primary plus valid backups", func(t *testing.T) {
+		c := base()
+		c.BitcoinAddress = "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+		c.BitcoinAddresses = []string{"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"}
+		if err := c.Validate(); err != nil {
+			t.Errorf("valid failover list should pass: %v", err)
+		}
+	})
+
+	t.Run("only backups, no primary", func(t *testing.T) {
+		c := base()
+		c.BitcoinAddress = ""
+		c.BitcoinAddresses = []string{"bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"}
+		if err := c.Validate(); err != nil {
+			t.Errorf("a valid backup with no primary should satisfy the address requirement: %v", err)
+		}
+	})
+
+	t.Run("invalid backup is rejected", func(t *testing.T) {
+		c := base()
+		c.BitcoinAddress = "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+		c.BitcoinAddresses = []string{"not-a-valid-address"}
+		if err := c.Validate(); err == nil {
+			t.Error("an invalid failover address should fail validation")
+		}
+	})
+
+	t.Run("no addresses at all", func(t *testing.T) {
+		c := base()
+		c.BitcoinAddress = ""
+		c.BitcoinAddresses = nil
+		if err := c.Validate(); err == nil {
+			t.Error("config with no payout address should fail validation")
+		}
+	})
+}

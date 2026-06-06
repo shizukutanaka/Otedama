@@ -558,3 +558,60 @@ func TestAcceptanceRate_NoDivByZeroOnFreshStart(t *testing.T) {
 		t.Errorf("fresh-start acceptanceRate = %v, want 1.0", got)
 	}
 }
+
+func TestPayoutAddresses_PrimaryFirstThenList(t *testing.T) {
+	cfg := config.Config{
+		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
+		BitcoinAddresses: []string{"bc1qbackup100000000000000000000000000000", "bc1qbackup200000000000000000000000000000"},
+	}
+	got := payoutAddresses(cfg)
+	want := []string{
+		"bc1qprimary00000000000000000000000000000",
+		"bc1qbackup100000000000000000000000000000",
+		"bc1qbackup200000000000000000000000000000",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d addresses, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("address[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestPayoutAddresses_DedupAndSkipEmpty(t *testing.T) {
+	cfg := config.Config{
+		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
+		BitcoinAddresses: []string{"", "bc1qprimary00000000000000000000000000000", "bc1qbackup100000000000000000000000000000"},
+	}
+	got := payoutAddresses(cfg)
+	// primary + one unique backup; empty and duplicate-of-primary dropped.
+	if len(got) != 2 {
+		t.Fatalf("got %d addresses, want 2 (dedup + skip empty): %v", len(got), got)
+	}
+	if got[0] != "bc1qprimary00000000000000000000000000000" || got[1] != "bc1qbackup100000000000000000000000000000" {
+		t.Errorf("unexpected dedup result: %v", got)
+	}
+}
+
+func TestPayoutAddresses_ListOnlyNoPrimary(t *testing.T) {
+	cfg := config.Config{
+		BitcoinAddresses: []string{"bc1qonly000000000000000000000000000000000"},
+	}
+	got := payoutAddresses(cfg)
+	if len(got) != 1 || got[0] != "bc1qonly000000000000000000000000000000000" {
+		t.Fatalf("list-only config: got %v, want single backup as the active address", got)
+	}
+}
+
+func TestMaskAddr_HidesMiddle(t *testing.T) {
+	full := "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+	m := maskAddr(full)
+	if m == full {
+		t.Error("maskAddr should not return the full address")
+	}
+	if !strings.HasPrefix(m, "bc1qja") || !strings.HasSuffix(m, "nwr5") {
+		t.Errorf("maskAddr = %q, want bc1qja…nwr5 form", m)
+	}
+}

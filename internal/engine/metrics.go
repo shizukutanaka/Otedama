@@ -43,6 +43,9 @@ type engineMetrics struct {
 	// configured failover list, so failover is observable.
 	poolConnectionState *metrics.Gauge
 	poolActiveIndex     *metrics.Gauge
+	// payoutActiveIndex is the 0-based index of the active payout address
+	// in the configured failover list, so address failover is observable.
+	payoutActiveIndex *metrics.Gauge
 	// buildInfo is the standard `_info` metric: constant 1, with the
 	// version/commit/goversion carried as labels for fleet tracking.
 	buildInfo *metrics.Gauge
@@ -126,6 +129,10 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		poolActiveIndex: reg.NewGauge(
 			"otedama_pool_active_index",
 			"0-based index of the active pool in the configured failover list.",
+			nil),
+		payoutActiveIndex: reg.NewGauge(
+			"otedama_payout_active_index",
+			"0-based index of the active payout address in the failover list.",
 			nil),
 		buildInfo: reg.NewGauge(
 			"otedama_build_info",

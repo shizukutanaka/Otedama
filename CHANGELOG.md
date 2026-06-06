@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Features (session 56 — payout-address failover)
+
+- **Multiple payout addresses with automatic failover.** Added
+  `bitcoin_addresses` (an ordered list) alongside `bitcoin_address`: if the active
+  address cannot establish a mining session on any configured pool (e.g. a pool rejects
+  it), Otedama rotates to the next address. `payoutAddresses(cfg)` builds the ordered,
+  de-duplicated list (primary first, empty entries skipped), mirroring the session-42
+  `poolURLs` pool-failover design.
+- **Designed to never silently redirect earnings (fund safety).** Address failover is
+  deliberately conservative: the engine rotates to a backup address **only while the
+  active address has never established a session**. A working address is never abandoned
+  — transient pool/network problems are handled by the existing fast pool failover and
+  backoff — and since no session establishes during an outage, an outage can never move
+  payouts to a different address. Implemented via a new `sessionOpts.onConnected`
+  callback that marks the active address "known good"; the loop tries pools fast (inner)
+  and addresses slow (outer), logging address switches loudly with masked addresses.
+- **Validation:** `Config.Validate` now requires at least one payout address (primary or
+  a backup) and validates every `bitcoin_addresses` entry, so a typo in a backup is
+  caught at config time, not only when failover reaches it.
+- **Observability:** added `otedama_payout_active_index` (0-based index of the active
+  payout address), so address failover is visible alongside the session-54 pool gauges.
+- **9 tests** (`payoutAddresses` ordering/dedup/skip-empty/list-only, `maskAddr`, and
+  `Validate` failover-list cases) plus `config.yaml.example` documentation. `go
+  build`/`vet`/`test` green; multi-address config validated end-to-end via the binary
+  (valid list passes; a bad backup fails with exit 78).
+
 ### Features (session 55 — shell completion)
 
 - **Added `otedama completion bash|zsh|fish`** (RESEARCH_IMPROVEMENTS Cat 7 #6) — emits a

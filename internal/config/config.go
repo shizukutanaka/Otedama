@@ -53,6 +53,16 @@ type Config struct {
 	// time; malformed addresses cause Load to return an error.
 	BitcoinAddress string `yaml:"bitcoin_address"`
 
+	// BitcoinAddresses is an optional ordered list of additional payout
+	// addresses used for failover. If the active address cannot be used
+	// to establish a mining session (e.g. a pool rejects it), Otedama
+	// rotates to the next address in this list. BitcoinAddress is always
+	// tried first; these follow in order. All entries are validated like
+	// BitcoinAddress. Earnings only ever go to whichever address actually
+	// establishes a session, so a network outage never silently redirects
+	// payouts.
+	BitcoinAddresses []string `yaml:"bitcoin_addresses"`
+
 	// Pools is the list of mining pools to connect to, in order of
 	// preference. Otedama connects to the first and uses subsequent
 	// entries for failover.
@@ -159,6 +169,9 @@ func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
 	if fromFile.BitcoinAddress != "" {
 		cfg.BitcoinAddress = fromFile.BitcoinAddress
 	}
+	if len(fromFile.BitcoinAddresses) > 0 {
+		cfg.BitcoinAddresses = fromFile.BitcoinAddresses
+	}
 	if len(fromFile.Pools) > 0 {
 		cfg.Pools = fromFile.Pools
 	}
@@ -229,10 +242,21 @@ func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
 func (c Config) Validate() error {
 	var issues []string
 
-	if c.BitcoinAddress == "" {
+	if c.BitcoinAddress == "" && len(c.BitcoinAddresses) == 0 {
 		issues = append(issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
-	} else if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
-		issues = append(issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
+	} else if c.BitcoinAddress != "" {
+		if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
+			issues = append(issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
+		}
+	}
+	// Validate every failover address too, so a typo in a backup is caught
+	// at config time rather than only when failover actually reaches it.
+	for i, a := range c.BitcoinAddresses {
+		if a == "" {
+			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] is empty", i))
+		} else if err := validateBitcoinAddress(a); err != nil {
+			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] invalid: %v", i, err))
+		}
 	}
 
 	switch c.LogLevel {

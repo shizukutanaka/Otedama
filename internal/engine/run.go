@@ -234,7 +234,10 @@ type reconnectOpts struct {
 // error occurs, or MaxReconnectAttempts is exceeded.
 func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	pools := poolURLs(r.opts.Config)
+	addrs := payoutAddresses(r.opts.Config)
 	poolIdx := 0
+	addrIdx := 0
+	addrConnected := false // has the active address ever established a session?
 	attempt := 0
 	backoff := reconnectBackoffInitial
 
@@ -252,29 +255,35 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			return fmt.Errorf("engine: exceeded %d reconnect attempts", r.opts.MaxReconnectAttempts)
 		}
 		poolURL := pools[poolIdx]
+		user := addrs[addrIdx]
+
+		loc := fmt.Sprintf("attempt %d", attempt)
 		if len(pools) > 1 {
-			r.log("info", fmt.Sprintf("engine: connecting to %s (attempt %d, pool %d/%d)",
-				poolURL, attempt, poolIdx+1, len(pools)))
-		} else {
-			r.log("info", fmt.Sprintf("engine: connecting to %s (attempt %d)", poolURL, attempt))
+			loc += fmt.Sprintf(", pool %d/%d", poolIdx+1, len(pools))
 		}
+		if len(addrs) > 1 {
+			loc += fmt.Sprintf(", address %d/%d", addrIdx+1, len(addrs))
+		}
+		r.log("info", fmt.Sprintf("engine: connecting to %s (%s)", poolURL, loc))
 
 		r.metrics.poolConnectAttempts.Inc()
 		r.metrics.poolActiveIndex.Set(float64(poolIdx))
+		r.metrics.payoutActiveIndex.Set(float64(addrIdx))
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:   poolURL,
-			user:      r.opts.Config.BitcoinAddress,
-			workers:   r.workers,
-			merged:    r.merged,
-			interval:  statsInterval,
-			dashboard: r.dashboard,
-			startTime: r.startTime,
-			wallet:    r.wallet,
-			devices:   r.deviceN,
-			log:       r.log,
-			providers: r.providers,
-			m:         r.metrics,
+			poolURL:     poolURL,
+			user:        user,
+			workers:     r.workers,
+			merged:      r.merged,
+			interval:    statsInterval,
+			dashboard:   r.dashboard,
+			startTime:   r.startTime,
+			wallet:      r.wallet,
+			devices:     r.deviceN,
+			log:         r.log,
+			providers:   r.providers,
+			m:           r.metrics,
+			onConnected: func() { addrConnected = true },
 		})
 		if sessionErr != nil {
 			r.metrics.poolConnectFailures.Inc()
@@ -288,19 +297,46 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			return sessionErr
 		}
 
-		// Failover: on error, advance to the next pool in priority
-		// order. When we wrap back to the highest-priority pool, apply
-		// the exponential backoff so a total outage does not spin. A
-		// single-pool config simply retries the same pool with backoff.
+		// Pool failover (fast): advance to the next pool in priority order
+		// before touching the payout address or backing off. A single-pool
+		// config skips this and falls through to address failover / backoff.
 		if len(pools) > 1 {
 			poolIdx = (poolIdx + 1) % len(pools)
-			if poolIdx == 0 {
-				r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
-			} else {
+			if poolIdx != 0 {
 				r.log("warn", fmt.Sprintf("engine: session ended: %v; failing over to next pool", sessionErr))
-				continue // try next pool immediately, no backoff
+				continue // next pool immediately, no backoff
 			}
-		} else {
+			// poolIdx wrapped to 0: every pool failed for this address.
+		}
+
+		// Payout-address failover (slow, deliberately conservative): rotate
+		// to a backup address ONLY when the active address has never
+		// established a session. A working address is never abandoned —
+		// transient pool/network failures are handled by pool failover and
+		// backoff above — so an outage can never silently redirect earnings
+		// to a different address (no session establishes during an outage).
+		switch {
+		case !addrConnected && len(addrs) > 1:
+			prev := addrIdx
+			addrIdx = (addrIdx + 1) % len(addrs)
+			poolIdx = 0
+			if addrIdx != 0 {
+				r.log("warn", fmt.Sprintf(
+					"engine: payout address %s (%d/%d) could not establish a session on any pool; "+
+						"failing over to %s (%d/%d)",
+					maskAddr(addrs[prev]), prev+1, len(addrs),
+					maskAddr(addrs[addrIdx]), addrIdx+1, len(addrs)))
+				continue // try next address immediately, no backoff
+			}
+			// Wrapped through every address; none connected. Back off and
+			// retry from the primary so a recovered network resumes there.
+			addrConnected = false
+			r.log("warn", fmt.Sprintf(
+				"engine: none of the %d configured payout addresses could connect; "+
+					"backing off %v and retrying from the primary", len(addrs), backoff))
+		case len(pools) > 1:
+			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
+		default:
 			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
 		}
 		select {
@@ -330,6 +366,10 @@ type sessionOpts struct {
 	log       func(level, msg string)
 	providers []provider.Provider
 	m         *engineMetrics
+	// onConnected, if set, is called once the handshake completes and the
+	// session is established. The reconnect loop uses it to mark the
+	// active payout address as "known good" so it is not failed over.
+	onConnected func()
 }
 
 type poolMsg struct {
@@ -500,6 +540,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2) // handshake complete → connected
+	}
+	if opts.onConnected != nil {
+		opts.onConnected()
 	}
 
 	// Spawn reader goroutine.
@@ -1170,6 +1213,38 @@ func poolURLs(cfg config.Config) []string {
 		urls = append(urls, p.URL)
 	}
 	return urls
+}
+
+// payoutAddresses returns the ordered, de-duplicated list of payout
+// addresses to try, for failover: BitcoinAddress first (the primary),
+// then BitcoinAddresses in order. Empty entries are skipped. The engine
+// rotates to the next address only when the current one has never
+// established a session (see runReconnectLoop), so a working payout
+// address is never abandoned due to a transient pool or network failure.
+func payoutAddresses(cfg config.Config) []string {
+	seen := make(map[string]bool)
+	var addrs []string
+	add := func(a string) {
+		if a == "" || seen[a] {
+			return
+		}
+		seen[a] = true
+		addrs = append(addrs, a)
+	}
+	add(cfg.BitcoinAddress)
+	for _, a := range cfg.BitcoinAddresses {
+		add(a)
+	}
+	return addrs
+}
+
+// maskAddr renders a payout address for logs without printing it in full,
+// so operator logs do not needlessly expose the complete address.
+func maskAddr(a string) string {
+	if len(a) <= 12 {
+		return a
+	}
+	return a[:6] + "…" + a[len(a)-4:]
 }
 
 func parseHost(url string) (string, error) {

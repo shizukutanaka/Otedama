@@ -22,6 +22,16 @@
 #
 bitcoin_address: ""
 
+# Optional failover payout addresses. If the address above cannot be used
+# to establish a mining session on any configured pool (e.g. a pool rejects
+# it), Otedama rotates to the next address here, in order. Earnings only go
+# to whichever address actually connects, and a working address is never
+# abandoned for a transient pool/network problem — so an outage can never
+# silently redirect your payouts. All entries are validated like the above.
+# bitcoin_addresses:
+#   - "bc1q...backup1..."
+#   - "3...backup2..."
+
 # ── Pools ────────────────────────────────────────────────────────────────────
 #
 # List of mining pools in order of preference. Otedama connects to the
