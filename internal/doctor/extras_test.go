@@ -474,3 +474,25 @@ func TestSortedResults_DoesNotMutateOriginal(t *testing.T) {
 		t.Errorf("original Results mutated: %+v", r.Results)
 	}
 }
+
+func TestCheckFailoverAddresses(t *testing.T) {
+	run := func(addrs []string) Result {
+		return checkFailoverAddresses(addrs).Run(context.Background())
+	}
+
+	if got := run(nil); got.Status != StatusSkip {
+		t.Errorf("empty list: status = %v, want StatusSkip", got.Status)
+	}
+	if got := run([]string{
+		"bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5",
+		"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
+	}); got.Status != StatusPass {
+		t.Errorf("valid list: status = %v (detail=%q), want StatusPass", got.Status, got.Detail)
+	}
+	if got := run([]string{
+		"bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5",
+		"not-a-valid-address",
+	}); got.Status != StatusFail {
+		t.Errorf("list with a bad entry: status = %v, want StatusFail", got.Status)
+	}
+}

@@ -185,6 +185,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 	return []Check{
 		checkConfig(cfg, configPath),
 		checkBitcoinAddress(cfg.BitcoinAddress),
+		checkFailoverAddresses(cfg.BitcoinAddresses),
 		checkDataDir(cfg.DataDir),
 		checkPoolReachability(cfg),
 		checkHardware(),
@@ -246,6 +247,34 @@ func checkBitcoinAddress(addr string) Check {
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%s (likely valid)", maskAddress(addr)),
+			}
+		},
+	}
+}
+
+// checkFailoverAddresses validates the optional bitcoin_addresses failover
+// list (session 56) so doctor catches a typo in a backup address, not just
+// the primary. A typo here would silently send earnings elsewhere if
+// failover ever reached it.
+func checkFailoverAddresses(addrs []string) Check {
+	return Check{
+		Name: "Failover payout addresses",
+		Run: func(_ context.Context) Result {
+			if len(addrs) == 0 {
+				return Result{Status: StatusSkip, Detail: "none configured"}
+			}
+			for i, a := range addrs {
+				if a == "" || !isLikelyBitcoinAddress(a) {
+					return Result{
+						Status: StatusFail,
+						Detail: fmt.Sprintf("bitcoin_addresses[%d] %q does not look valid", i, a),
+						Fix:    "verify every failover address — a typo would send earnings to strangers",
+					}
+				}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("%d failover address(es), all likely valid", len(addrs)),
 			}
 		},
 	}

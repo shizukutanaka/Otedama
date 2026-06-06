@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 60 — doctor validates the failover address list)
+
+- **G9 (SPECIFICATION.md): `doctor` checked only the primary `bitcoin_address`.** The
+  session-56 `bitcoin_addresses` failover list was not diagnosed, so a typo in a backup
+  address — which would silently misdirect earnings if failover ever reached it — went
+  uncaught by the very tool meant to catch it. Added a **"Failover payout addresses"**
+  check to `doctor`: it skips cleanly when none are configured, passes when all entries
+  look valid, and fails (with a fix hint) on the first malformed entry.
+- **1 test** (empty → skip, valid list → pass, bad entry → fail). Updated SPECIFICATION.md
+  gap table (G9). `go build`/`vet`/`test` green.
+
 ### Fixes (session 59 — log_format precedence + validation)
 
 - **🔴 G8 (SPECIFICATION.md): `log_format` from a config file or environment was silently
