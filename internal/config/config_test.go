@@ -373,3 +373,40 @@ func TestValidate_BitcoinAddresses_FailoverList(t *testing.T) {
 		}
 	})
 }
+
+func TestValidate_LogFormat(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+		return c
+	}
+	for _, ok := range []string{"text", "json"} {
+		c := base()
+		c.LogFormat = ok
+		if err := c.Validate(); err != nil {
+			t.Errorf("log_format %q should be valid: %v", ok, err)
+		}
+	}
+	c := base()
+	c.LogFormat = "yaml"
+	if err := c.Validate(); err == nil {
+		t.Error("invalid log_format should fail validation")
+	}
+}
+
+func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
+	// Regression: --log-format previously defaulted to "text" on a
+	// standalone field, so a config-file log_format was ignored. With the
+	// flag bound to FlagValues (empty default), the file value must win
+	// when no flag is passed.
+	fromFile := Config{LogFormat: "json"}
+	cfg := Resolve(fromFile, nil, FlagValues{})
+	if cfg.LogFormat != "json" {
+		t.Errorf("Resolve: file log_format=json overridden, got %q", cfg.LogFormat)
+	}
+	// An explicit flag still wins.
+	cfg = Resolve(fromFile, nil, FlagValues{LogFormat: "text"})
+	if cfg.LogFormat != "text" {
+		t.Errorf("Resolve: flag log_format=text should win, got %q", cfg.LogFormat)
+	}
+}

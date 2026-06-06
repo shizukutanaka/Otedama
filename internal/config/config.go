@@ -273,6 +273,15 @@ func (c Config) Validate() error {
 		issues = append(issues, fmt.Sprintf("log_level %q is not one of debug, info, warn, error", c.LogLevel))
 	}
 
+	switch c.LogFormat {
+	case "text", "json":
+		// ok
+	case "":
+		// empty is unreachable post-Resolve (defaults supply "text").
+	default:
+		issues = append(issues, fmt.Sprintf("log_format %q is not one of text, json", c.LogFormat))
+	}
+
 	for i, p := range c.Pools {
 		if p.URL == "" {
 			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))

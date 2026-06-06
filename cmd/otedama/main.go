@@ -151,7 +151,6 @@ type runFlags struct {
 	dryRun           bool
 	noTUI            bool
 	walletPassphrase string
-	logFormat        string
 	httpAddr         string
 }
 
@@ -168,7 +167,7 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	fs.BoolVar(&f.noTUI, "no-tui", false, "Disable the terminal dashboard (plain log output).")
 	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
 		"Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
-	fs.StringVar(&f.logFormat, "log-format", "text", "Log output format: text or json.")
+	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.httpAddr, "http-addr", "",
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
 	if err := fs.Parse(args); err != nil {
@@ -311,7 +310,7 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) *logger.Logger
 		return logger.Discard()
 	}
 	format := logger.FormatText
-	if f.logFormat == "json" {
+	if cfg.LogFormat == "json" {
 		format = logger.FormatJSON
 	}
 	return logger.New(logger.Config{

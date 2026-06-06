@@ -167,8 +167,8 @@ func TestBuildLogger_TUIModeDiscardsOutput(t *testing.T) {
 
 func TestBuildLogger_NoTUIWritesText(t *testing.T) {
 	var out bytes.Buffer
-	f := runFlags{noTUI: true, logFormat: "text"}
-	log := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	f := runFlags{noTUI: true}
+	log := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
 
 	log.Adapter()("info", "hello-text-log")
 	if !strings.Contains(out.String(), "hello-text-log") {
@@ -178,8 +178,8 @@ func TestBuildLogger_NoTUIWritesText(t *testing.T) {
 
 func TestBuildLogger_NoTUIWritesJSON(t *testing.T) {
 	var out bytes.Buffer
-	f := runFlags{noTUI: true, logFormat: "json"}
-	log := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	f := runFlags{noTUI: true}
+	log := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "json"}, &out)
 
 	log.Adapter()("info", "hello-json-log")
 	line := strings.TrimSpace(out.String())

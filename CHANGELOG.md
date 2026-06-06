@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 59 — log_format precedence + validation)
+
+- **🔴 G8 (SPECIFICATION.md): `log_format` from a config file or environment was silently
+  ignored.** `--log-format` bound to a *standalone* `runFlags.logFormat` field with a
+  non-empty `"text"` default, and `buildLogger` read that flag — not the resolved
+  `cfg.LogFormat` — so `log_format: json` in `config.yaml` (or `OTEDAMA_LOG_FORMAT`) never
+  took effect, even though `config show` displayed it correctly. Also `Config.Validate`
+  never checked `log_format`, so a typo fell through to text silently.
+- **Fix:** bind `--log-format` to the embedded `FlagValues.LogFormat` (empty default) so
+  `config.Resolve` applies the documented flag > env > file > default precedence;
+  `buildLogger` now uses `cfg.LogFormat`; and `Validate` rejects any value outside
+  {text, json} (mirroring the existing `log_level` check).
+- **3 tests:** `Validate` accepts text/json and rejects others; `Resolve` keeps a
+  file-provided `log_format` when no flag is passed and lets an explicit flag win; the
+  existing `buildLogger` text/JSON tests now exercise `cfg.LogFormat`. Updated
+  SPECIFICATION.md gap table (G8). `go build`/`vet`/`test` green.
+
 ### Fixes (session 58 — honor documented config: pool User + worker name)
 
 - **G7 (from SPECIFICATION.md): `PoolConfig.User` and `Workers.Name` were documented but
