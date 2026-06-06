@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Features (session 55 — shell completion)
+
+- **Added `otedama completion bash|zsh|fish`** (RESEARCH_IMPROVEMENTS Cat 7 #6) — emits a
+  static completion script for the chosen shell, completing the top-level subcommands and
+  the `config`/`service`/`completion` sub-subcommands. Self-contained in `cmd/otedama`
+  (no dependency; the CLI is hand-rolled, so the scripts are static and kept in sync with
+  the dispatch switch). Unknown/missing shell args exit with the usage code and write
+  nothing to stdout. Wired into the command dispatch and `printUsage`.
+- **3 tests:** per-shell script content, bad-argument rejection (empty / unknown shell /
+  extra args, with nothing written on the error path), and end-to-end dispatch through
+  `run`. `go build`/`vet`/`test` green; binary smoke-tested.
+- **Deliberately deferred:** the engine→poolproto wiring (KNOWN_LIMITATIONS §3 step 3b)
+  is *not* a drop-in — `poolproto.Session.Submit` returns synchronously while the engine
+  correlates async `SubmitSharesSuccess/Error` by sequence number to drive the
+  submit-latency quantiles and reject-reason classification (sessions 44–48). Doing 3b
+  without first extending `poolproto.Session` to surface submit results/latency would
+  regress that telemetry, so it is left for a dedicated, tested hot-path pass.
+
 ### Features (session 54 — fleet-observability bundle)
 
 - **Added four operator-facing metrics** that make version, liveness, and failover

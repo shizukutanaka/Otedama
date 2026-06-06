@@ -69,6 +69,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdService(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "completion":
+		return cmdCompletion(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printUsage(stdout)
 		return exitOK
@@ -91,6 +93,7 @@ Commands:
   config    Inspect or validate the effective configuration.
   service   Install/uninstall as a background service.
   doctor    Run self-diagnostic checks.
+  completion Generate a shell-completion script (bash|zsh|fish).
   help      Print this help and exit.
 
 Getting started (zero-configuration):
