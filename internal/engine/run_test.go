@@ -13,8 +13,10 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
 
@@ -634,5 +636,17 @@ func TestSessionUser_Precedence(t *testing.T) {
 				t.Errorf("sessionUser(%q, addr, %q) = %q, want %q", tc.poolUser, tc.worker, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPublishBTCRate_SetsGauge(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	f := rates.NewFetcher(95000) // fallback used before any fetch
+
+	publishBTCRate(m, f)
+
+	if got := m.btcUSDRate.Value(); got != 95000 {
+		t.Errorf("btc_usd_rate gauge = %v, want fallback 95000", got)
 	}
 }

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 62 — publish the BTC/USD rate metric)
+
+- **G11 (SPECIFICATION.md): `otedama_btc_usd_rate` was registered (and listed in §6) but
+  never set.** The rate fetcher ran in the background and exposed `BTCUSDRate()`, but no one
+  copied it into the gauge — so the metric was permanently 0 and any BTC-price dashboard or
+  alert built on it saw nothing. Added a `publishBTCRate` helper and a ctx-bounded 30s
+  publisher goroutine in `Run` that populates the gauge (the fetcher returns its fallback
+  before the first successful fetch, then live Coinbase/Kraken/CoinGecko medians, so the
+  gauge is never stuck at zero).
+- **1 test** (`publishBTCRate` sets the gauge to the fetcher's value). Updated
+  SPECIFICATION.md gap table (G11). `go build`/`vet`/`test` green.
+
 ### Fixes (session 61 — /readyz reflects actual pool connection)
 
 - **🔴 G10 (SPECIFICATION.md): `/readyz` reported ready before connecting to any pool.**

@@ -151,6 +151,22 @@ func Run(ctx context.Context, opts Options) error {
 	rateFetcher := rates.NewFetcher(95000) // $95k fallback
 	rateFetcher.StartBackground(ctx, 5*time.Minute)
 
+	// Publish the BTC/USD rate to its gauge as it refreshes, so
+	// otedama_btc_usd_rate is populated (it was registered but never set).
+	go func() {
+		publishBTCRate(m, rateFetcher)
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				publishBTCRate(m, rateFetcher)
+			}
+		}
+	}()
+
 	// ----- Phase 5: Providers -----
 	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, log)
 	defer miningProvider.Stop()
@@ -1228,6 +1244,15 @@ func poolURLs(cfg config.Config) []string {
 		urls = append(urls, p.URL)
 	}
 	return urls
+}
+
+// publishBTCRate copies the fetcher's current BTC/USD rate into its gauge.
+// The fetcher returns its fallback before the first successful fetch, so the
+// gauge is never left at zero once a fetcher exists.
+func publishBTCRate(m *engineMetrics, f *rates.Fetcher) {
+	if rate, _ := f.BTCUSDRate(); rate > 0 {
+		m.btcUSDRate.Set(rate)
+	}
 }
 
 // payoutAddresses returns the ordered, de-duplicated list of payout
