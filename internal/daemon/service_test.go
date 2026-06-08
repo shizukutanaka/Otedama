@@ -27,7 +27,7 @@ func makeTestManager(t *testing.T) *Manager {
 // ----- NewManager -----
 
 func TestNewManager_ReturnsManagerWithBinaryPath(t *testing.T) {
-	m, err := NewManager("", "")
+	m, err := NewManager("", "", ServiceFlags{})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -64,6 +64,61 @@ func TestServiceArgs_EmptyConfigAndDataDir(t *testing.T) {
 	args := m.serviceArgs()
 	if args != "run" {
 		t.Errorf("serviceArgs with no config/datadir = %q, want %q", args, "run")
+	}
+}
+
+func TestServiceArgs_IncludesBitcoinAddress(t *testing.T) {
+	m := &Manager{
+		binaryPath: "/usr/local/bin/otedama",
+		serviceFlags: ServiceFlags{
+			BitcoinAddress: "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5",
+		},
+	}
+	args := m.serviceArgs()
+	if !strings.Contains(args, "--bitcoin-address") {
+		t.Errorf("serviceArgs missing --bitcoin-address: %q", args)
+	}
+	if !strings.Contains(args, "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5") {
+		t.Errorf("serviceArgs missing address value: %q", args)
+	}
+}
+
+func TestServiceArgs_IncludesAllFlags(t *testing.T) {
+	m := &Manager{
+		binaryPath: "/usr/local/bin/otedama",
+		configPath: "/etc/otedama/config.yaml",
+		dataDir:    "/var/lib/otedama",
+		serviceFlags: ServiceFlags{
+			BitcoinAddress: "bc1qtest",
+			LogLevel:       "debug",
+			LogFormat:      "json",
+			Language:       "ja",
+		},
+	}
+	args := m.serviceArgs()
+	for _, want := range []string{
+		"--config", "--data-dir",
+		"--bitcoin-address", "bc1qtest",
+		"--log-level", "debug",
+		"--log-format", "json",
+		"--language", "ja",
+	} {
+		if !strings.Contains(args, want) {
+			t.Errorf("serviceArgs missing %q: %q", want, args)
+		}
+	}
+}
+
+func TestServiceArgs_EmptyFlagsOmitted(t *testing.T) {
+	m := &Manager{
+		binaryPath:   "/usr/local/bin/otedama",
+		serviceFlags: ServiceFlags{},
+	}
+	args := m.serviceArgs()
+	for _, unwanted := range []string{"--bitcoin-address", "--log-level", "--log-format", "--language"} {
+		if strings.Contains(args, unwanted) {
+			t.Errorf("serviceArgs should not contain %q when flag is empty: %q", unwanted, args)
+		}
 	}
 }
 

@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 63 — service install persists run-time flags)
+
+- **G12 (SPECIFICATION.md): `service install` silently discarded `--bitcoin-address`
+  (and `--log-level`, `--log-format`, `--language`).** The CLI accepted these flags but
+  `daemon.Manager` never stored or emitted them, so the installed systemd unit / launchd
+  plist / Windows service command line contained only `run [--config …] [--data-dir …]`.
+  Without a payout address — and when no config file is specified — the service would exit
+  78 on first start: a service that installs successfully but immediately fails, with no
+  indication of why.
+- **Fix:** added `daemon.ServiceFlags{BitcoinAddress, LogLevel, LogFormat, Language}`;
+  `NewManager` now accepts a `ServiceFlags` argument; `serviceArgs()` emits each non-empty
+  flag. `cmdServiceInstall` accepts all four flags and forwards them; uninstall/status
+  pass an empty `ServiceFlags{}`.
+- **4 new tests:** `TestServiceArgs_IncludesBitcoinAddress`, `TestServiceArgs_IncludesAllFlags`,
+  `TestServiceArgs_EmptyFlagsOmitted`, plus the existing `TestServiceArgs_EmptyConfigAndDataDir`
+  still passes. Updated SPECIFICATION.md gap table (G12). `go build`/`vet`/`test` green (24 packages).
+
 ### Fixes (session 62 — publish the BTC/USD rate metric)
 
 - **G11 (SPECIFICATION.md): `otedama_btc_usd_rate` was registered (and listed in §6) but

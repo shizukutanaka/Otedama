@@ -38,18 +38,33 @@ type ServiceStatus struct {
 	Details   string
 }
 
+// ServiceFlags holds optional run-time flags to embed in the installed service
+// definition. Flags left empty are omitted from the service command line;
+// those settings fall back to the config file or built-in defaults at
+// service startup (the same precedence as a direct `otedama run` invocation).
+//
+// At minimum, set BitcoinAddress when no config file is specified — without
+// at least one payout address the service will fail to start (exit 78).
+type ServiceFlags struct {
+	BitcoinAddress string // --bitcoin-address
+	LogLevel       string // --log-level  (debug|info|warn|error)
+	LogFormat      string // --log-format (text|json)
+	Language       string // --language   (en, ja, …)
+}
+
 // Manager installs, uninstalls, starts, stops, and queries the Otedama
 // background service for the current platform.
 type Manager struct {
-	binaryPath string // absolute path to the otedama executable
-	configPath string // path to config.yaml to pass to the service
-	dataDir    string // data directory for the service instance
+	binaryPath   string // absolute path to the otedama executable
+	configPath   string // path to config.yaml to pass to the service
+	dataDir      string // data directory for the service instance
+	serviceFlags ServiceFlags
 }
 
 // NewManager creates a Manager using the current executable as the
 // service binary. It returns an error if the current executable path
 // cannot be determined.
-func NewManager(configPath, dataDir string) (*Manager, error) {
+func NewManager(configPath, dataDir string, flags ServiceFlags) (*Manager, error) {
 	binary, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("daemon: cannot determine executable path: %w", err)
@@ -60,9 +75,10 @@ func NewManager(configPath, dataDir string) (*Manager, error) {
 		return nil, fmt.Errorf("daemon: resolve symlink: %w", err)
 	}
 	return &Manager{
-		binaryPath: binary,
-		configPath: configPath,
-		dataDir:    dataDir,
+		binaryPath:   binary,
+		configPath:   configPath,
+		dataDir:      dataDir,
+		serviceFlags: flags,
 	}, nil
 }
 
@@ -303,6 +319,18 @@ func (m *Manager) serviceArgs() string {
 	}
 	if m.dataDir != "" {
 		args += fmt.Sprintf(" --data-dir %q", m.dataDir)
+	}
+	if m.serviceFlags.BitcoinAddress != "" {
+		args += fmt.Sprintf(" --bitcoin-address %q", m.serviceFlags.BitcoinAddress)
+	}
+	if m.serviceFlags.LogLevel != "" {
+		args += fmt.Sprintf(" --log-level %q", m.serviceFlags.LogLevel)
+	}
+	if m.serviceFlags.LogFormat != "" {
+		args += fmt.Sprintf(" --log-format %q", m.serviceFlags.LogFormat)
+	}
+	if m.serviceFlags.Language != "" {
+		args += fmt.Sprintf(" --language %q", m.serviceFlags.Language)
 	}
 	return args
 }

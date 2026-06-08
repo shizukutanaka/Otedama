@@ -235,7 +235,7 @@ func TestNewManager_ResolvesSymlinks(t *testing.T) {
 	// should be the canonical (non-symlink) path. We cannot easily mock
 	// os.Executable, so we just verify that the path is absolute and
 	// refers to an existing file.
-	m, err := NewManager("/tmp/cfg.yaml", "/tmp/data")
+	m, err := NewManager("/tmp/cfg.yaml", "/tmp/data", ServiceFlags{})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestWindowsService_NotLinuxOrDarwin(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("only meaningful on Windows")
 	}
-	m, err := NewManager("", "")
+	m, err := NewManager("", "", ServiceFlags{})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}

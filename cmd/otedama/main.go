@@ -9,7 +9,7 @@
 //	otedama version [--json]
 //	otedama config show
 //	otedama config validate --bitcoin-address bc1q...
-//	otedama service install [--config path] [--data-dir path]
+//	otedama service install [--config path] [--data-dir path] [--bitcoin-address addr]
 //	otedama service uninstall
 //	otedama service status
 package main
@@ -363,10 +363,20 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	configFile := fs.String("config", "", "Path to config.yaml for the service.")
 	dataDir := fs.String("data-dir", "", "Data directory for the service.")
+	bitcoinAddress := fs.String("bitcoin-address", "", "Payout address to embed in the service definition (required when no config file is specified).")
+	logLevel := fs.String("log-level", "", "Log level for the service (debug|info|warn|error).")
+	logFormat := fs.String("log-format", "", "Log format for the service (text|json).")
+	language := fs.String("language", "", "UI language for the service (en, ja, …).")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
-	mgr, err := daemon.NewManager(*configFile, *dataDir)
+	svcFlags := daemon.ServiceFlags{
+		BitcoinAddress: *bitcoinAddress,
+		LogLevel:       *logLevel,
+		LogFormat:      *logFormat,
+		Language:       *language,
+	}
+	mgr, err := daemon.NewManager(*configFile, *dataDir, svcFlags)
 	if err != nil {
 		fmt.Fprintf(stderr, "service: %v\n", err)
 		return exitRuntime
@@ -381,7 +391,7 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdServiceUninstall(stdout, stderr io.Writer) int {
-	mgr, err := daemon.NewManager("", "")
+	mgr, err := daemon.NewManager("", "", daemon.ServiceFlags{})
 	if err != nil {
 		fmt.Fprintf(stderr, "service: %v\n", err)
 		return exitRuntime
@@ -395,7 +405,7 @@ func cmdServiceUninstall(stdout, stderr io.Writer) int {
 }
 
 func cmdServiceStatus(stdout, stderr io.Writer) int {
-	mgr, err := daemon.NewManager("", "")
+	mgr, err := daemon.NewManager("", "", daemon.ServiceFlags{})
 	if err != nil {
 		fmt.Fprintf(stderr, "service: %v\n", err)
 		return exitRuntime
