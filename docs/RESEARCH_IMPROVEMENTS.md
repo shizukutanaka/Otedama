@@ -353,6 +353,12 @@ endpoint against current vendor documentation. Tags as before
    JSON-RPC reader. Log-and-surface it, and skip unknown notifications
    rather than erroring the session. Complements Cat 1 #3.
    (bitaxeorg/ESP-Miner releases)
+   — **Partly implemented (session 64):** `client.reconnect` /
+   `mining.reconnect` is now honoured (the higher-value liveness directive) —
+   the session re-dials cleanly instead of clinging to a dropped node, without
+   following the pool-supplied `host:port` (redirection-vector guard). See
+   SPECIFICATION.md G13. `client.show_message` surfacing still open (needs a
+   logger/notice channel the not-yet-wired V1 session lacks).
 6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset

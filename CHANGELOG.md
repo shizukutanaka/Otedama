@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 64 — Stratum V1 honours pool-directed reconnect)
+
+- **G13 (SPECIFICATION.md): the Stratum V1 session silently ignored
+  `client.reconnect` / `mining.reconnect`.** This is the standard directive a
+  pool sends to move a miner to another node (load balancing, maintenance,
+  failover) — every major pool (Braiins, F2Pool, AntPool, ViaBTC, NiceHash) and
+  every comparable client (cgminer, bfgminer, ESP-Miner) implements it. Because
+  the dispatch switch had no case for it, the directive fell through to silent
+  ignore: Otedama clung to a connection the pool wanted dropped until the socket
+  died or the 5-minute read deadline expired — wasting reconnect time and shares.
+- **Fix:** `parseReconnect` decodes the optional `[host, port, wait]` params
+  (tolerating a string-encoded port and a bare param-less notification). On
+  receipt the session records the directive in `lastReconnect` and closes
+  cleanly, so the read loop returns and `Jobs()` closes — exactly the signal the
+  reconnect machinery already uses to re-dial the configured pool list.
+- **Security stance:** the pool-supplied `host:port` is parsed and recorded but
+  **deliberately not followed**. Honouring an arbitrary endpoint from an
+  unauthenticated notification is a redirection vector; the reconnect loop owns
+  the operator-configured pool list. Documented in `reconnectDirective`.
+- **5 tests:** `parseReconnect` (full params, string port, empty/bare/garbage),
+  plus two E2E tests (a fake pool sends `client.reconnect` / `mining.reconnect`
+  and the session's `Jobs()` channel closes on its own). Race-clean. Grounded in
+  RESEARCH_IMPROVEMENTS session-51 Cat 1/2 #5. `go build`/`vet`/`test` green
+  (24 packages).
+
 ### Fixes (session 63 — service install persists run-time flags)
 
 - **G12 (SPECIFICATION.md): `service install` silently discarded `--bitcoin-address`

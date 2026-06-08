@@ -665,3 +665,121 @@ func TestConnection_Close_NilRaw_DocumentsBehavior(t *testing.T) {
 	}()
 	_ = c.Close()
 }
+
+// ============================================================================
+// client.reconnect handling
+// ============================================================================
+
+func TestParseReconnect_FullParams(t *testing.T) {
+	d, ok := parseReconnect(json.RawMessage(`["us-east.pool.example",4444,30]`))
+	if !ok {
+		t.Fatal("parseReconnect returned ok=false")
+	}
+	if d.Host != "us-east.pool.example" {
+		t.Errorf("Host = %q, want us-east.pool.example", d.Host)
+	}
+	if d.Port != 4444 {
+		t.Errorf("Port = %d, want 4444", d.Port)
+	}
+	if d.Wait != 30 {
+		t.Errorf("Wait = %d, want 30", d.Wait)
+	}
+}
+
+func TestParseReconnect_PortAsString(t *testing.T) {
+	// Some pools encode the port as a string.
+	d, ok := parseReconnect(json.RawMessage(`["host","3333",5]`))
+	if !ok {
+		t.Fatal("ok=false")
+	}
+	if d.Port != 3333 {
+		t.Errorf("Port = %d, want 3333", d.Port)
+	}
+}
+
+func TestParseReconnect_EmptyAndBareParams(t *testing.T) {
+	// A bare client.reconnect with no params is still a valid directive.
+	for _, raw := range []string{``, `[]`, `null`, `"garbage"`} {
+		d, ok := parseReconnect(json.RawMessage(raw))
+		if !ok {
+			t.Errorf("parseReconnect(%q) ok=false, want true", raw)
+		}
+		if d.Host != "" || d.Port != 0 || d.Wait != 0 {
+			t.Errorf("parseReconnect(%q) = %+v, want zero directive", raw, d)
+		}
+	}
+}
+
+// reconnectPool sends a client.reconnect notification shortly after connect,
+// then keeps the pipe open. A correct client must drop the connection itself.
+type reconnectPool struct {
+	conn   net.Conn
+	method string // "client.reconnect" or "mining.reconnect"
+	params string // JSON array literal, e.g. `["h",1,2]`
+}
+
+func (p *reconnectPool) run() {
+	defer p.conn.Close()
+	msg := `{"id":null,"method":"` + p.method + `","params":` + p.params + "}\n"
+	_, _ = p.conn.Write([]byte(msg))
+	// Hold the connection open: the client must initiate the disconnect.
+	time.Sleep(2 * time.Second)
+}
+
+func TestSession_E2E_ClientReconnect_ClosesSession(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &reconnectPool{conn: serverConn, method: "client.reconnect", params: `["alt.pool.example",4444,10]`}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// On client.reconnect the session must end on its own: Jobs() closes.
+	// This is the signal the reconnect loop uses to re-dial.
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Error("expected Jobs channel to close on client.reconnect")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Jobs channel did not close after client.reconnect")
+	}
+
+	// The directive must be recorded (Host parsed but deliberately not followed).
+	if d := sess.lastReconnect.Load(); d == nil {
+		t.Error("lastReconnect not recorded")
+	} else if d.Host != "alt.pool.example" || d.Port != 4444 || d.Wait != 10 {
+		t.Errorf("lastReconnect = %+v, want {alt.pool.example 4444 10}", *d)
+	}
+}
+
+func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
+	// Some pools use the "mining." prefix for the same directive.
+	clientConn, serverConn := net.Pipe()
+	pool := &reconnectPool{conn: serverConn, method: "mining.reconnect", params: `[]`}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Error("expected Jobs channel to close on mining.reconnect")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Jobs channel did not close after mining.reconnect")
+	}
+}

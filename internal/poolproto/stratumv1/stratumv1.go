@@ -89,6 +89,11 @@ type session struct {
 	// difficulty is the most recent set_difficulty value.
 	difficulty atomic.Uint64 // float64 bits
 
+	// lastReconnect records the most recent pool-directed reconnect
+	// (client.reconnect), nil until one is seen. Read race-free; useful
+	// for diagnostics and tests.
+	lastReconnect atomic.Pointer[reconnectDirective]
+
 	// extranonce1, extranonce2Size are negotiated at subscribe time.
 	extranonce1     string
 	extranonce2Size int
@@ -195,8 +200,20 @@ func (s *session) dispatch(line []byte) {
 			s.extranonce1 = en1
 			s.extranonce2Size = sz
 		}
-		// Other notifications (mining.set_version_mask, etc.) are ignored;
-		// silent ignore is forward-compatible.
+	case "client.reconnect", "mining.reconnect":
+		// The pool is asking us to move to another node (load balancing,
+		// maintenance, failover). Record the directive, then end the
+		// session cleanly: closing the connection makes the read loop
+		// return and Jobs() close, which is exactly the signal the
+		// reconnect machinery uses to re-dial the configured pool list.
+		// We deliberately do NOT follow the pool-supplied Host:Port — see
+		// reconnectDirective for the rationale.
+		if d, ok := parseReconnect(msg.Params); ok {
+			s.lastReconnect.Store(&d)
+		}
+		go s.Close()
+		// Other notifications (mining.set_version_mask, client.show_message,
+		// etc.) are ignored; silent ignore is forward-compatible.
 	}
 }
 
