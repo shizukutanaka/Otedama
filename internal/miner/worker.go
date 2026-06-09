@@ -59,7 +59,7 @@ type Stats struct {
 	HashesTotal uint64        // total hashes computed since Start
 	SharesFound uint64        // valid shares found
 	Uptime      time.Duration // time since Start was called
-	HashRate    float64       // hashes per second (rolling average)
+	HashRate    float64       // hashes per second (lifetime average: HashesTotal/Uptime)
 }
 
 // Worker runs SHA-256d hashing across multiple goroutines and delivers

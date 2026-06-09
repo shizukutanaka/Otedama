@@ -449,6 +449,95 @@ func TestHashrateMonitor_FloorAboveZero(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// hashrateWindow — current rate from cumulative samples
+// ============================================================================
+
+func TestHashrateWindow_FirstSampleIsZero(t *testing.T) {
+	var w hashrateWindow
+	t0 := time.Unix(1000, 0)
+	if r := w.observe(0, t0); r != 0 {
+		t.Errorf("first observe = %v, want 0 (baseline)", r)
+	}
+}
+
+func TestHashrateWindow_ComputesRateOverInterval(t *testing.T) {
+	var w hashrateWindow
+	t0 := time.Unix(1000, 0)
+	w.observe(0, t0)
+	// 10,000 hashes over 10 seconds → 1,000 H/s.
+	if r := w.observe(10_000, t0.Add(10*time.Second)); r != 1000 {
+		t.Errorf("rate = %v, want 1000", r)
+	}
+	// Another 5,000 over the next 5 seconds → 1,000 H/s.
+	if r := w.observe(15_000, t0.Add(15*time.Second)); r != 1000 {
+		t.Errorf("rate = %v, want 1000", r)
+	}
+}
+
+func TestHashrateWindow_StallShowsZeroRate(t *testing.T) {
+	// The whole point: once the counter stops advancing, the windowed rate
+	// is 0 even though the lifetime average (total/uptime) would stay high.
+	var w hashrateWindow
+	t0 := time.Unix(1000, 0)
+	w.observe(0, t0)
+	w.observe(1_000_000, t0.Add(10*time.Second)) // hashed a lot
+	// Now the device wedges: counter frozen at 1,000,000.
+	for i := 1; i <= 3; i++ {
+		r := w.observe(1_000_000, t0.Add(time.Duration(10+i)*time.Second))
+		if r != 0 {
+			t.Errorf("stalled rate at +%ds = %v, want 0", 10+i, r)
+		}
+	}
+}
+
+func TestHashrateWindow_SaturatesOnCounterReset(t *testing.T) {
+	// Workers recreated on reconnect → cumulative total drops to (near) 0.
+	// The rate must be 0, never negative or NaN (ESP-Miner reconnect fix).
+	var w hashrateWindow
+	t0 := time.Unix(1000, 0)
+	w.observe(5_000_000, t0)
+	r := w.observe(200, t0.Add(5*time.Second)) // counters reset after reconnect
+	if r != 0 {
+		t.Errorf("rate after counter reset = %v, want 0 (saturating)", r)
+	}
+	// And it recovers cleanly on the next interval from the new baseline.
+	if r := w.observe(5_200, t0.Add(10*time.Second)); r != 1000 {
+		t.Errorf("post-reset rate = %v, want 1000", r)
+	}
+}
+
+func TestHashrateWindow_ZeroDeltaTimeYieldsZero(t *testing.T) {
+	// Two samples at the same instant must not divide by zero.
+	var w hashrateWindow
+	t0 := time.Unix(1000, 0)
+	w.observe(0, t0)
+	if r := w.observe(10_000, t0); r != 0 {
+		t.Errorf("rate with dt=0 = %v, want 0 (no div-by-zero)", r)
+	}
+}
+
+// TestHashrateWindow_FeedsStallMonitor is the integration that motivates the
+// whole change: a worker that hashes then wedges must drive Stalled()=true,
+// which a lifetime average could never do.
+func TestHashrateWindow_FeedsStallMonitor(t *testing.T) {
+	var w hashrateWindow
+	mon := NewHashrateMonitor(0, 3, nil)
+	t0 := time.Unix(1000, 0)
+	w.observe(0, t0)
+	mon.Observe(w.observe(1_000_000, t0.Add(time.Second))) // healthy
+	if mon.Stalled() {
+		t.Fatal("should not be stalled while hashing")
+	}
+	// Counter frozen for 3 intervals → stall detected.
+	for i := 2; i <= 4; i++ {
+		mon.Observe(w.observe(1_000_000, t0.Add(time.Duration(i)*time.Second)))
+	}
+	if !mon.Stalled() {
+		t.Error("stall monitor should fire once the windowed rate hits 0")
+	}
+}
+
 func TestRejectClass(t *testing.T) {
 	cases := []struct {
 		reason       string

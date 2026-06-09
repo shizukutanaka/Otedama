@@ -365,6 +365,12 @@ endpoint against current vendor documentation. Tags as before
    windowed counters on reconnect, use saturating `uint64` accumulators,
    and test that a reconnect produces no spurious spike or NaN J/TH.
    (bitaxeorg/ESP-Miner releases)
+   — **Implemented (session 65):** `hashrateWindow` differentiates the
+   cumulative hash counter into a *current* windowed rate (the monitor, gauge,
+   log, and TUI all consume it), which also fixed a latent bug where the
+   lifetime-average rate could never reach the stall floor. Saturating on
+   counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
+   G14.
 7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments

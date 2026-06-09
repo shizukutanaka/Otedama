@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 65 — windowed hashrate makes stall detection actually work)
+
+- **🔴 G14 (SPECIFICATION.md): the stall monitor was structurally defeated by a
+  lifetime-average hashrate.** `Worker.Stats().HashRate` is `HashesTotal/Uptime`
+  — a lifetime average. Once a worker has hashed at all, that average stays
+  positive *forever*, so with the stall floor at 0 H/s it can never reach the
+  floor: a device that wedges (driver hang, thermal cutoff, work starvation)
+  after running for a while would keep `otedama_up=1` and never trip the warning
+  the monitor exists to raise. cgminer/bfgminer/ESP-Miner all report *windowed*
+  rates for exactly this reason.
+- **Fix:** added `hashrateWindow`, which differentiates the cumulative
+  `totalHashes` counter into a current rate (Δhashes/Δt) once per stats tick.
+  The stall monitor, the `otedama_hashrate_hashes_per_second` gauge, the log
+  line, and the TUI now all consume this single windowed value, so a real stall
+  is visible within `maxStall` intervals.
+- **Saturating (ESP-Miner reconnect fix):** when workers are recreated on
+  reconnect and their counters reset, the cumulative total drops; the window
+  clamps a negative delta (and a zero time delta) to a rate of 0 — never a
+  negative reading, a spurious spike, or a NaN — then re-baselines cleanly.
+- Removed the now-dead lifetime `totalHashrate` helper; corrected the
+  `Stats.HashRate` doc comment (it is a lifetime, not rolling, average).
+- **7 tests** (`hashrateWindow`: baseline, interval rate, stall→0, counter-reset
+  saturation, zero-Δt, and the stall-monitor integration; plus `buildStats` now
+  asserts the threaded rate). Race-clean. Grounded in RESEARCH_IMPROVEMENTS
+  session-51 Cat 1/2 #6. `go build`/`vet`/`test` green (24 packages).
+
 ### Fixes (session 64 — Stratum V1 honours pool-directed reconnect)
 
 - **G13 (SPECIFICATION.md): the Stratum V1 session silently ignored

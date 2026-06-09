@@ -605,6 +605,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 	// Watch for a stalled miner (zero hashrate sustained across samples).
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
+	// Differentiate the cumulative hash counter into a current rate; the
+	// stall monitor and the hashrate gauge both consume this, not the
+	// lifetime average (which can never reach the stall floor).
+	var hashWindow hashrateWindow
 
 	// Track share-submission round-trip latency. submitTimes maps a
 	// sequence number to the time the share was sent; on accept we
@@ -618,12 +622,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			return ctx.Err()
 
 		case <-statsTicker.C:
+			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, totalSats))
+				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats))
 			}
-			logStats(opts.workers, opts.log)
-			hashMon.Observe(totalHashrate(opts.workers))
+			logStats(opts.workers, currentHashRate, opts.log)
+			hashMon.Observe(currentHashRate)
 			if opts.m != nil {
+				opts.m.hashrate.Set(currentHashRate)
 				if hashMon.Stalled() {
 					opts.m.up.Set(0)
 				} else {
@@ -718,17 +724,16 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 }
 
 // buildStats assembles a tui.Stats snapshot from live engine state.
-// Also updates live-valued metrics (hashrate gauge, uptime).
-func buildStats(opts sessionOpts, totalSats uint64) tui.Stats {
-	var total float64
+// Also updates the uptime gauge. hashRate is the current (windowed) rate
+// computed once per stats tick by hashrateWindow; the hashrate gauge is set
+// by the caller from the same value, so display, log, gauge, and stall
+// monitor all agree.
+func buildStats(opts sessionOpts, hashRate float64, totalSats uint64) tui.Stats {
 	var sharesSent, sharesFound uint64
 	for _, w := range opts.workers {
-		s := w.Stats()
-		total += s.HashRate
-		sharesFound += s.SharesFound
+		sharesFound += w.Stats().SharesFound
 	}
 	if opts.m != nil {
-		opts.m.hashrate.Set(total)
 		opts.m.uptime.Set(time.Since(opts.startTime).Seconds())
 	}
 	sharesSent = sharesFound // approximation
@@ -744,7 +749,7 @@ func buildStats(opts sessionOpts, totalSats uint64) tui.Stats {
 	}
 
 	return tui.Stats{
-		HashRate:          total,
+		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
 		PoolURL:           opts.poolURL,
@@ -1021,25 +1026,63 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32) error {
 
 // (mergeShares: see fanIn-based wrapper above)
 
-// totalHashrate sums the current hashrate across all workers.
-func totalHashrate(workers []*miner.Worker) float64 {
-	var total float64
+// totalHashes sums the lifetime cumulative hash count across all workers.
+// This is the raw counter that hashrateWindow differentiates into a
+// *current* rate — as opposed to a lifetime average (total/uptime), which
+// barely moves once a worker has run for a while and so can never fall to
+// the stall floor after startup, defeating HashrateMonitor.
+func totalHashes(workers []*miner.Worker) uint64 {
+	var total uint64
 	for _, w := range workers {
-		total += w.Stats().HashRate
+		total += w.Stats().HashesTotal
 	}
 	return total
 }
 
-func logStats(workers []*miner.Worker, log func(string, string)) {
-	var total float64
+// hashrateWindow turns successive cumulative hash-count samples into a
+// current hashrate (hashes/sec over the last interval). This is what every
+// comparable miner reports (cgminer/bfgminer/ESP-Miner rolling averages)
+// and what the stall monitor must consume: a lifetime average (total/uptime)
+// stays positive forever after the first hash, so it can never signal a
+// stall — only a windowed rate can.
+//
+// It is saturating: when the cumulative total *decreases* — which happens
+// when workers are recreated on reconnect and their counters reset to zero
+// (ESP-Miner reconnect fix) — the rate is 0, never negative or NaN. The
+// first observation primes the baseline and returns 0.
+type hashrateWindow struct {
+	lastTotal uint64
+	lastTime  time.Time
+	primed    bool
+}
+
+// observe records one cumulative sample and returns the hashrate since the
+// previous sample. The first call returns 0 (baseline).
+func (w *hashrateWindow) observe(total uint64, now time.Time) float64 {
+	if !w.primed {
+		w.primed = true
+		w.lastTotal = total
+		w.lastTime = now
+		return 0
+	}
+	dt := now.Sub(w.lastTime).Seconds()
+	var rate float64
+	if dt > 0 && total >= w.lastTotal {
+		rate = float64(total-w.lastTotal) / dt
+	}
+	// total < lastTotal → counters reset (reconnect): leave rate at 0.
+	w.lastTotal = total
+	w.lastTime = now
+	return rate
+}
+
+func logStats(workers []*miner.Worker, hashRate float64, log func(string, string)) {
 	var shares uint64
 	for _, w := range workers {
-		s := w.Stats()
-		total += s.HashRate
-		shares += s.SharesFound
+		shares += w.Stats().SharesFound
 	}
 	log("info", fmt.Sprintf("engine: hashrate=%s shares=%d",
-		miner.HashRateString(total), shares))
+		miner.HashRateString(hashRate), shares))
 }
 
 // classifyReject maps a pool's share-rejection reason to the likely

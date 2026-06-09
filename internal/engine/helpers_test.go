@@ -401,8 +401,11 @@ func TestBuildStats_IncludesHashRateAndWalletFingerprint(t *testing.T) {
 			provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000}),
 		},
 	}
-	stats := buildStats(opts, 42)
+	stats := buildStats(opts, 1234.5, 42)
 
+	if stats.HashRate != 1234.5 {
+		t.Errorf("HashRate = %v, want 1234.5", stats.HashRate)
+	}
 	if stats.WalletFingerprint != "a1b2c3d4" {
 		t.Errorf("WalletFingerprint = %q, want a1b2c3d4", stats.WalletFingerprint)
 	}
