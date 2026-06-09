@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -291,8 +292,14 @@ func TestDecryptSeed_RejectsWrongPassphrase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncryptSeed: %v", err)
 	}
-	if _, err := DecryptSeed(es, "wrong-passphrase"); err == nil {
-		t.Error("DecryptSeed accepted wrong passphrase")
+	_, err = DecryptSeed(es, "wrong-passphrase")
+	if err == nil {
+		t.Fatal("DecryptSeed accepted wrong passphrase")
+	}
+	// Callers must be able to identify a wrong passphrase via the sentinel,
+	// distinct from structural errors (bad version, empty ciphertext).
+	if !errors.Is(err, ErrWrongPassphrase) {
+		t.Errorf("err = %v, want errors.Is(err, ErrWrongPassphrase)", err)
 	}
 }
 

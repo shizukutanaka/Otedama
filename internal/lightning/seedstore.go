@@ -28,6 +28,15 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
+// ErrWrongPassphrase is returned by DecryptSeed when AES-GCM authentication
+// fails. This is the expected error for a wrong passphrase or a tampered
+// file; the two are deliberately indistinguishable (a precise distinction
+// would be a decryption oracle). Callers can test for it with
+// errors.Is(err, ErrWrongPassphrase) instead of matching the message text,
+// while structural problems (unsupported version, empty ciphertext) return
+// other, distinguishable errors.
+var ErrWrongPassphrase = errors.New("lightning: decryption failed (wrong passphrase or corrupted file)")
+
 // EncryptedSeed is the on-disk representation of a user's seed. The
 // format is:
 //
@@ -140,7 +149,7 @@ func DecryptSeed(es EncryptedSeed, passphrase string) (Seed, error) {
 	}
 	plaintext, err := gcm.Open(nil, es.Nonce[:], es.Ciphertext, nil)
 	if err != nil {
-		return zero, errors.New("lightning: decryption failed (wrong passphrase or corrupted file)")
+		return zero, ErrWrongPassphrase
 	}
 	// The plaintext holds the raw seed; copy it into the result and wipe the
 	// intermediate buffer so the secret does not linger on the heap waiting

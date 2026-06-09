@@ -96,9 +96,12 @@ finding was re-verified against the code before any change.
   no change to the crypto behaviour; uses only stdlib. (`seedstore.go`.)
 - Reviewed and confirmed correct: BIP-39 entropy uses `crypto/rand`; the GCM
   nonce is random per encrypt; the decryption error is deliberately opaque.
-- ⏸ Decryption error could be a sentinel (`errors.Is`) instead of a fresh
-  `errors.New`; passphrase bytes from the caller's `string` can't be wiped (Go
-  strings are immutable) — documented, deferred.
+- ✅ **Decryption error is now a sentinel.** `DecryptSeed` returns
+  `ErrWrongPassphrase` (testable via `errors.Is`) on GCM auth failure, distinct
+  from structural errors (bad version, empty ciphertext), without leaking which
+  via the message. (session 69; `TestDecryptSeed_RejectsWrongPassphrase`.)
+- ⏸ Passphrase bytes from the caller's `string` can't be wiped (Go strings are
+  immutable) — documented, deferred.
 
 ### C — Noise transport security (funds-critical; CODEOWNERS — 🚩 all flagged)
 These touch `internal/stratum/noise*` which requires maintainer review. Verified
@@ -165,9 +168,10 @@ and flagged, not changed this session:
   shutdown; documented behaviour.
 
 ### G — Providers
-- ⏸ Quote-channel "drop oldest" pattern has a benign race that can briefly empty
-  the 1-slot channel under concurrent drain. Low impact (quotes are periodic);
-  deferred — a size-2 buffer would remove it.
+- ❎ Quote-channel "drop oldest" pattern — re-verified low-risk: the channel is
+  buffered at 16 with a *single* publisher goroutine, so the drop path rarely
+  triggers and the nested select cannot deadlock (only the consumer drains;
+  the publisher's resend always succeeds). Working code; not churned.
 - ❎ Unused `rate` in the mining provider is intentional (mining yield is
   price-independent; the BTC/USD rate is used by the Akash provider) — clarified
   by comment, no behaviour change needed.
@@ -190,10 +194,21 @@ and flagged, not changed this session:
 - ❎ `ReadHeaderTimeout` < `ReadTimeout` is correct slowloris mitigation; only a
   clarifying comment was suggested.
 
+### T — i18n
+- ✅ **Placeholder parity was claimed but unverified.** The package doc promises
+  "no format-specifier mismatches between languages," and key-set completeness is
+  tested — but nothing verified that each translation references the *same*
+  `{{.field}}` placeholders as the English source, nor that every message is a
+  valid `text/template`. A translator typo (`{{.ur}}`), a dropped placeholder, or
+  a malformed brace (`{{.url}`) would only surface at runtime in that one
+  language. Added `TestAllCatalogs_PlaceholdersMatchEnglish` and
+  `TestAllCatalogs_TemplatesParse`. The current 10 catalogs pass — so this is a
+  regression guard that finally backs the documented invariant. (session 69.)
+
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), K (config), L (CLI beyond items already fixed in
-G1–G15), P (logger), T (i18n), U (clock/version) — reviewed, no concrete defects
-beyond what the spec gap table already tracks.
+G1–G15), P (logger), U (clock/version) — reviewed, no concrete defects beyond
+what the spec gap table already tracks.
 
 ---
 

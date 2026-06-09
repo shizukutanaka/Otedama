@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 69 — deeper category pass: i18n invariant guard + funds-API hardening)
+
+Went deeper into categories not yet exhaustively examined and worked more of the
+deferred backlog.
+
+- **i18n — placeholder parity claimed but unverified.** The package documents
+  "no format-specifier mismatches between languages," and key-set completeness is
+  tested, but nothing verified that each translation uses the *same* `{{.field}}`
+  placeholders as the English source, nor that every message is a parseable
+  `text/template`. A translator typo (`{{.ur}}`), a dropped placeholder, or a
+  malformed brace (`{{.url}`) would only surface at runtime in that one language.
+  Added `TestAllCatalogs_PlaceholdersMatchEnglish` and
+  `TestAllCatalogs_TemplatesParse`; the current 10 catalogs pass, so these are
+  regression guards that finally back the documented invariant across all
+  languages.
+- **Lightning — decryption error is now a sentinel.** `DecryptSeed` returns
+  `ErrWrongPassphrase` (testable via `errors.Is`) on GCM authentication failure,
+  letting callers distinguish a wrong passphrase from structural errors (bad
+  version, empty ciphertext) without parsing message text — and without leaking
+  which occurred (no decryption oracle). (`TestDecryptSeed_RejectsWrongPassphrase`.)
+- **Re-verified not-a-defect:** the provider quote channel (buffered 16, single
+  publisher) cannot deadlock or meaningfully lose quotes via its drop-oldest
+  path — working code, not churned. 24 packages build/vet/test green; `-race`
+  clean on touched packages.
+
 ### Fixes (session 68 — work the per-category deferred backlog)
 
 Continued the exhaustive per-category pass by implementing the clearly-correct

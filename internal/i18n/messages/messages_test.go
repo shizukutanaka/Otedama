@@ -4,11 +4,34 @@
 package messages
 
 import (
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/shizukutanaka/Otedama/internal/i18n"
 )
+
+// placeholderRE matches a text/template field reference like {{.url}} or
+// {{ .count }} and captures the field name.
+var placeholderRE = regexp.MustCompile(`{{\s*\.(\w+)\s*}}`)
+
+// placeholders returns the sorted, de-duplicated set of {{.field}} names
+// referenced in a message string.
+func placeholders(msg string) []string {
+	matches := placeholderRE.FindAllStringSubmatch(msg, -1)
+	set := make(map[string]struct{}, len(matches))
+	for _, m := range matches {
+		set[m[1]] = struct{}{}
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 var allCatalogSpecs = []struct {
 	name string
@@ -64,6 +87,70 @@ func TestAllCatalogs_CoverAllEnglishIDs(t *testing.T) {
 			for _, id := range en.IDs() {
 				if _, ok := catIDs[id]; !ok {
 					t.Errorf("%s missing ID %q", tc.name, id)
+				}
+			}
+		})
+	}
+}
+
+// TestAllCatalogs_PlaceholdersMatchEnglish enforces the package's documented
+// promise of "no format-specifier mismatches between languages": every
+// translation must reference exactly the same {{.field}} placeholders as the
+// English source for that ID. A translation that drops a placeholder loses
+// information at runtime; one that adds/misspells a placeholder renders an
+// empty "<no value>" because the caller only supplies the English fields.
+func TestAllCatalogs_PlaceholdersMatchEnglish(t *testing.T) {
+	en, err := English()
+	if err != nil {
+		t.Fatalf("English() failed: %v", err)
+	}
+	want := make(map[i18n.ID][]string)
+	for _, id := range en.IDs() {
+		msg, _ := en.Lookup(id)
+		want[id] = placeholders(msg)
+	}
+
+	for _, tc := range allCatalogSpecs {
+		if tc.lang == i18n.LangEnglish {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := tc.fn()
+			if err != nil {
+				t.Fatalf("%s() failed: %v", tc.name, err)
+			}
+			for id, wantPH := range want {
+				msg, ok := c.Lookup(id)
+				if !ok {
+					continue // covered by TestAllCatalogs_CoverAllEnglishIDs
+				}
+				got := placeholders(msg)
+				if strings.Join(got, ",") != strings.Join(wantPH, ",") {
+					t.Errorf("%s: ID %q placeholders %v, want %v (message: %q)",
+						tc.name, id, got, wantPH, msg)
+				}
+			}
+		})
+	}
+}
+
+// TestAllCatalogs_TemplatesParse ensures every message is a syntactically
+// valid text/template, so RenderWith never fails to parse at runtime (a
+// malformed brace like "{{.url}" only surfaces when that language renders).
+func TestAllCatalogs_TemplatesParse(t *testing.T) {
+	for _, tc := range allCatalogSpecs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := tc.fn()
+			if err != nil {
+				t.Fatalf("%s() failed: %v", tc.name, err)
+			}
+			for _, id := range c.IDs() {
+				msg, _ := c.Lookup(id)
+				if _, err := template.New("").Parse(msg); err != nil {
+					t.Errorf("%s: ID %q is not a valid template: %v (message: %q)",
+						tc.name, id, err, msg)
 				}
 			}
 		})
