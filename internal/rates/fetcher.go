@@ -103,7 +103,20 @@ type Fetcher struct {
 	fetchedAt  time.Time
 	sources    []Source
 	httpClient *http.Client
-	fallback   float64 // used when all sources fail
+	fallback   float64      // used when all sources fail
+	logFn      func(string) // nil = silent; set via SetLogger
+}
+
+// SetLogger installs a log callback for error events (initial fetch failure,
+// recurring fetch failure). The callback receives a human-readable message and
+// must be safe to call from any goroutine. Call before StartBackground.
+func (f *Fetcher) SetLogger(fn func(string)) { f.logFn = fn }
+
+// logMsg calls f.logFn if set, otherwise discards the message.
+func (f *Fetcher) logMsg(msg string) {
+	if f.logFn != nil {
+		f.logFn(msg)
+	}
 }
 
 // NewFetcher returns a Fetcher with default public price sources.
@@ -210,8 +223,9 @@ func (f *Fetcher) StartBackground(ctx context.Context, interval time.Duration) {
 		interval = CacheDuration
 	}
 	go func() {
-		// Initial fetch — ignore error; fallback will be used.
-		_ = f.Fetch(ctx)
+		if err := f.Fetch(ctx); err != nil {
+			f.logMsg("rates: initial fetch failed: " + err.Error())
+		}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -219,7 +233,9 @@ func (f *Fetcher) StartBackground(ctx context.Context, interval time.Duration) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_ = f.Fetch(ctx)
+				if err := f.Fetch(ctx); err != nil {
+					f.logMsg("rates: periodic fetch failed: " + err.Error())
+				}
 			}
 		}
 	}()

@@ -51,9 +51,11 @@ finding was re-verified against the code before any change.
   three fails) this returns the *upper* middle value, not the average — biasing
   toward the higher source and weakening outlier resistance. Now averages the
   two middle values. (`fetcher.go`; test `TestFetcher_MedianOfTwoSourcesAverages`.)
-- ⏸ Initial background `Fetch` error is swallowed (`_ = f.Fetch(ctx)`); operators
-  get no signal when every price source is unreachable at startup. The fetcher
-  has no logger handle today — deferred (would need a logger seam).
+- ✅ **Initial background fetch error was swallowed.** Added `SetLogger(fn func(string))`
+  seam to `Fetcher`; `StartBackground` now calls it on both the initial and
+  periodic fetch errors instead of discarding them. Tests:
+  `TestFetcher_StartBackground_LogsInitialFetchError`,
+  `TestFetcher_SetLogger_NilIsSilent`. (session 70.)
 
 ### N — Doctor
 - ✅ **Address length bound mismatched config.** `isLikelyBitcoinAddress`
@@ -84,9 +86,11 @@ finding was re-verified against the code before any change.
   lines). (`metrics.go`; test `TestWriteText_HelpTextIsEscaped`.)
 - ✅ Package comment claimed "a handful of histograms"; none exist. Corrected to
   describe the gauge-quantile approach actually used. (session 68.)
-- ⏸ No metric-name validation in `NewCounter/NewGauge`. Low risk: every name is a
-  compile-time constant, so an invalid name is a developer error caught in tests,
-  not a runtime/untrusted-input path. Deferred.
+- ✅ **No metric-name validation.** Added `isValidMetricName` (`[a-zA-Z_:][a-zA-Z0-9_:]*`);
+  `NewCounter`/`NewGauge` now panic with a clear message on invalid names. Every
+  name is a compile-time constant, so the panic fires at test time, not runtime.
+  Tests: `TestNewCounter_InvalidNamePanics`, `TestNewGauge_InvalidNamePanics`,
+  `TestIsValidMetricName_ValidNames`, `TestIsValidMetricName_InvalidNames`. (session 70.)
 
 ### J — Lightning wallet (funds-critical; CODEOWNERS)
 - ✅ **Secret material left on the heap.** `EncryptSeed`/`DecryptSeed` derived a
@@ -186,9 +190,11 @@ and flagged, not changed this session:
   suggested constant rewrite changes semantics and is not a defect.
 
 ### R — HAL
-- ⏸ `parseGPUDevice` silently returns nil when the constructed identity fails
-  validation; the logger handle is available and could record *why* a GPU was
-  skipped. Deferred (observability nit).
+- ✅ **`parseGPUDevice` silently dropped invalid GPU identities.** Added
+  `LogFn func(string)` exported field to `GPULinuxDriver`; `parseGPUDevice` now
+  accepts a `logFn` parameter and calls it with the render-node name and
+  validation error when skipping a device. `Enumerate` passes `d.LogFn`.
+  Test: `TestParseGPUDevice_LogFnCalledOnValidationFailure`. (session 70.)
 
 ### Q — HTTP server
 - ❎ `ReadHeaderTimeout` < `ReadTimeout` is correct slowloris mitigation; only a
@@ -205,8 +211,16 @@ and flagged, not changed this session:
   `TestAllCatalogs_TemplatesParse`. The current 10 catalogs pass — so this is a
   regression guard that finally backs the documented invariant. (session 69.)
 
+### K — Configuration
+- ✅ **`FlagValues.ConfigFile` dead field.** The field was set by `cmdDoctor` in
+  `main.go` but never consumed by `Resolve` (which receives an already-decoded
+  `Config`, not a path). Dead state creates false impressions about the four-layer
+  model. Removed `ConfigFile` from `FlagValues`; updated `cmdDoctor` to not set
+  it; added a doc comment to `Resolve` explaining that file loading is the
+  caller's responsibility. (session 70.)
+
 ### Categories with no actionable findings this pass
-F (arbitration), I (btccrypto), K (config), L (CLI beyond items already fixed in
+F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
 G1–G15), P (logger), U (clock/version) — reviewed, no concrete defects beyond
 what the spec gap table already tracks.
 
@@ -221,7 +235,15 @@ what the spec gap table already tracks.
 | Daemon | launchd consumes `serviceArgv` (paths with spaces survive) + XML-escape | `TestServiceArgv_PreservesValuesWithSpaces`, `TestLaunchdPlist_PathWithSpacesIsSingleString`, `TestXMLEscape` |
 | Metrics | escape HELP text (Prometheus spec) | `TestWriteText_HelpTextIsEscaped` |
 | Lightning | wipe scrypt key / passphrase / decrypted plaintext | existing seedstore tests still pass |
+| Mining core | `Worker.Start` double-call panics immediately; `grind` tracks dropped shares | `TestWorker_StartTwicePanics`; `Stats.SharesDropped` |
+| TUI | `visibleLen` terminates on any CSI final byte, not just `m` | `TestVisibleLen_NonColorCSITerminator` |
+| i18n | placeholder parity + template parse guard across all 10 catalogs | `TestAllCatalogs_PlaceholdersMatchEnglish`, `TestAllCatalogs_TemplatesParse` |
+| Lightning | `ErrWrongPassphrase` sentinel for `errors.Is` callers | `TestDecryptSeed_RejectsWrongPassphrase` |
+| Rates (s70) | `SetLogger` seam — startup/periodic fetch errors surface to operator | `TestFetcher_StartBackground_LogsInitialFetchError` |
+| Metrics (s70) | `isValidMetricName` guard in `NewCounter`/`NewGauge` | `TestNewCounter_InvalidNamePanics`, `TestIsValidMetricName_*` |
+| Config (s70) | removed dead `FlagValues.ConfigFile` field | compile-time (field no longer exists) |
+| HAL (s70) | `GPULinuxDriver.LogFn` seam — skipped render nodes now logged | `TestParseGPUDevice_LogFnCalledOnValidationFailure` |
 
 All 24 packages build, vet, and test green (`-race` clean on the touched
 packages). Flagged Noise/engine items are funds-critical and left for maintainer
-review; deferred items are tracked above.
+review; remaining deferred items are tracked above.

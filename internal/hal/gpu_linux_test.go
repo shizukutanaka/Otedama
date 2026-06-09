@@ -117,7 +117,7 @@ func TestParseGPUDevice_WithValidSysfs(t *testing.T) {
 		t.Fatalf("write uevent: %v", err)
 	}
 
-	dev := parseGPUDevice("renderD128", devicePath)
+	dev := parseGPUDevice("renderD128", devicePath, nil)
 	if dev == nil {
 		t.Fatal("parseGPUDevice returned nil for valid input")
 	}
@@ -146,7 +146,7 @@ func TestParseGPUDevice_MissingVendorFile(t *testing.T) {
 	devicePath := filepath.Join(root, "device")
 	_ = os.MkdirAll(devicePath, 0755)
 
-	dev := parseGPUDevice("renderD129", devicePath)
+	dev := parseGPUDevice("renderD129", devicePath, nil)
 	// Even without vendor info, the device should be created.
 	if dev == nil {
 		t.Fatal("parseGPUDevice returned nil when vendor missing")
@@ -261,6 +261,34 @@ func TestRegisterGPULinux_RejectsDoubleRegistration(t *testing.T) {
 }
 
 // ============================================================================
+// parseGPUDevice — LogFn seam
+// ============================================================================
+
+func TestParseGPUDevice_LogFnCalledOnValidationFailure(t *testing.T) {
+	// A render-node name that contains a space produces an Identity.ID with
+	// a space, which fails Validate (spaces are forbidden). Confirm the LogFn
+	// seam fires with the render-node name in the message.
+	dir := t.TempDir()
+	devicePath := filepath.Join(dir, "device")
+	_ = os.MkdirAll(devicePath, 0755)
+	_ = os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de"), 0644)
+
+	var logged []string
+	dev := parseGPUDevice("render D128", devicePath, func(msg string) {
+		logged = append(logged, msg)
+	})
+	if dev != nil {
+		t.Fatal("expected nil for render node name with space")
+	}
+	if len(logged) == 0 {
+		t.Fatal("LogFn was not called when parseGPUDevice returned nil")
+	}
+	if !strings.Contains(logged[0], "render D128") {
+		t.Errorf("log message %q does not contain render node name", logged[0])
+	}
+}
+
+// ============================================================================
 // inferModel — PCI_ID parsing
 // ============================================================================
 
@@ -299,8 +327,8 @@ func TestParseGPUDevice_UsesCorrectRenderNodeInID(t *testing.T) {
 	_ = os.MkdirAll(devicePath, 0755)
 	_ = os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de"), 0644)
 
-	d1 := parseGPUDevice("renderD128", devicePath)
-	d2 := parseGPUDevice("renderD129", devicePath)
+	d1 := parseGPUDevice("renderD128", devicePath, nil)
+	d2 := parseGPUDevice("renderD129", devicePath, nil)
 
 	if d1 == nil || d2 == nil {
 		t.Fatal("parseGPUDevice returned nil")

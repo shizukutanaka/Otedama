@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 70 — deferred category-audit backlog: logger seams, dead field, name validation)
+
+Four ⏸-deferred items from `docs/CATEGORY_AUDIT.md` landed, clearing every
+low-risk deferred in categories H, K, O, and R.
+
+- **Rates (H) — startup fetch error was swallowed.** `StartBackground` discarded
+  the initial (and periodic) `Fetch` error with `_ = f.Fetch(ctx)`, giving
+  operators no signal when every price source was unreachable at startup.
+  Added `SetLogger(fn func(string))` seam to `Fetcher`; `StartBackground` now
+  calls it on both the initial and recurring fetch failures.
+  Tests: `TestFetcher_StartBackground_LogsInitialFetchError`,
+  `TestFetcher_SetLogger_NilIsSilent`.
+- **Config (K) — `FlagValues.ConfigFile` was a dead field.** The field was set
+  by `cmdDoctor` but never consumed by `Resolve` (which receives an already-decoded
+  `Config`, not a path). Removed it; updated `cmdDoctor`; added a doc comment
+  to `Resolve` explaining the separation. Silently broken state → compile-time
+  absence.
+- **Metrics (O) — no metric-name validation.** `NewCounter`/`NewGauge` accepted
+  any string; an invalid name (hyphen, leading digit, empty) would produce a
+  corrupt Prometheus scrape silently. Added `isValidMetricName` (Prometheus spec:
+  `[a-zA-Z_:][a-zA-Z0-9_:]*`) and a panic in both constructors. All existing
+  names are valid; the panic surfaces developer errors in tests, not at runtime.
+  Tests: `TestNewCounter_InvalidNamePanics`, `TestNewGauge_InvalidNamePanics`,
+  `TestIsValidMetricName_ValidNames`, `TestIsValidMetricName_InvalidNames`.
+- **HAL (R) — `parseGPUDevice` silently dropped devices.** When `Identity.Validate`
+  failed (e.g. a render-node name with a space producing a forbidden character in
+  the ID), the function returned nil with no message. Added `LogFn func(string)`
+  exported field to `GPULinuxDriver`; `parseGPUDevice` now accepts a `logFn`
+  parameter and calls it with the render-node name and validation error before
+  returning nil. `Enumerate` passes `d.LogFn`.
+  Test: `TestParseGPUDevice_LogFnCalledOnValidationFailure`.
+
+24 packages build/vet/test green; `-race` clean on all four touched packages.
+
 ### Fixes (session 69 — deeper category pass: i18n invariant guard + funds-API hardening)
 
 Went deeper into categories not yet exhaustively examined and worked more of the

@@ -69,10 +69,35 @@ type Gauge struct {
 	value float64
 }
 
+// isValidMetricName reports whether name conforms to the Prometheus metric
+// naming rule: [a-zA-Z_:][a-zA-Z0-9_:]* — no hyphens, no leading digits.
+// Every name in Otedama is a compile-time constant, so an invalid name is a
+// developer error that surfaces immediately in tests.
+func isValidMetricName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r == '_' || r == ':':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // ----- Counter API -----
 
 // NewCounter registers a new Counter. Duplicate name+labels returns the existing one.
+// Panics if name does not satisfy [a-zA-Z_:][a-zA-Z0-9_:]*.
 func (r *Registry) NewCounter(name, help string, labels map[string]string) *Counter {
+	if !isValidMetricName(name) {
+		panic(fmt.Sprintf("metrics: invalid metric name %q (must match [a-zA-Z_:][a-zA-Z0-9_:]*)", name))
+	}
 	key := metricKey(name, labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -96,7 +121,11 @@ func (c *Counter) Value() uint64 { return atomic.LoadUint64(&c.value) }
 // ----- Gauge API -----
 
 // NewGauge registers a new Gauge.
+// Panics if name does not satisfy [a-zA-Z_:][a-zA-Z0-9_:]*.
 func (r *Registry) NewGauge(name, help string, labels map[string]string) *Gauge {
+	if !isValidMetricName(name) {
+		panic(fmt.Sprintf("metrics: invalid metric name %q (must match [a-zA-Z_:][a-zA-Z0-9_:]*)", name))
+	}
 	key := metricKey(name, labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()

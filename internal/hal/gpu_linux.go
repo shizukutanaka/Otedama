@@ -30,7 +30,12 @@ import (
 // GPULinuxDriver enumerates GPU devices via the Linux DRM sysfs interface.
 // It discovers all render nodes (/sys/class/drm/renderD*) and classifies
 // each by vendor using the PCI vendor ID.
-type GPULinuxDriver struct{}
+//
+// LogFn is an optional callback that receives a message for each render node
+// that is skipped due to identity-validation failure. Nil = silent.
+type GPULinuxDriver struct {
+	LogFn func(string)
+}
 
 func (d *GPULinuxDriver) Name() string { return "gpu_linux" }
 
@@ -66,7 +71,7 @@ func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 		}
 		seen[canonical] = true
 
-		dev := parseGPUDevice(name, canonical)
+		dev := parseGPUDevice(name, canonical, d.LogFn)
 		if dev != nil {
 			devices = append(devices, dev)
 		}
@@ -75,8 +80,9 @@ func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 }
 
 // parseGPUDevice reads the PCI vendor/device IDs and the device name
-// from sysfs and constructs a Device.
-func parseGPUDevice(renderNode, devicePath string) Device {
+// from sysfs and constructs a Device. logFn, if non-nil, is called when
+// the constructed identity fails validation and the device is skipped.
+func parseGPUDevice(renderNode, devicePath string, logFn func(string)) Device {
 	vendor := readSysFile(filepath.Join(devicePath, "vendor"))
 	model := inferModel(devicePath, vendor)
 	vendorName := inferVendorName(vendor)
@@ -88,6 +94,9 @@ func parseGPUDevice(renderNode, devicePath string) Device {
 		Model:  model,
 	}
 	if err := id.Validate(); err != nil {
+		if logFn != nil {
+			logFn(fmt.Sprintf("hal: gpu_linux: render node %s skipped: %v", renderNode, err))
+		}
 		return nil
 	}
 	caps := Capabilities{

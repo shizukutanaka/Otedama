@@ -320,6 +320,67 @@ func TestWriteText_NegativeInfinityGauge(t *testing.T) {
 }
 
 // ============================================================================
+// Metric-name validation
+// ============================================================================
+
+func TestNewCounter_InvalidNamePanics(t *testing.T) {
+	// Invalid names must panic immediately so the developer error surfaces
+	// in tests rather than silently corrupting the Prometheus scrape.
+	invalid := []string{"", "0starts_with_digit", "has-hyphen", "has space", "-leading-dash"}
+	for _, name := range invalid {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("NewCounter(%q) did not panic on invalid name", name)
+				}
+			}()
+			r := NewRegistry()
+			r.NewCounter(name, "help", nil)
+		})
+	}
+}
+
+func TestNewGauge_InvalidNamePanics(t *testing.T) {
+	invalid := []string{"", "0starts_with_digit", "has-hyphen"}
+	for _, name := range invalid {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("NewGauge(%q) did not panic on invalid name", name)
+				}
+			}()
+			r := NewRegistry()
+			r.NewGauge(name, "help", nil)
+		})
+	}
+}
+
+func TestIsValidMetricName_ValidNames(t *testing.T) {
+	valid := []string{
+		"a", "_", ":", "otedama_hashrate_hashes_per_second",
+		"requests_total", "http_requests:latency", "A1",
+	}
+	for _, name := range valid {
+		if !isValidMetricName(name) {
+			t.Errorf("isValidMetricName(%q) = false, want true", name)
+		}
+	}
+}
+
+func TestIsValidMetricName_InvalidNames(t *testing.T) {
+	invalid := []string{
+		"", "0digit", "has-hyphen", "has space", "has.dot",
+	}
+	for _, name := range invalid {
+		if isValidMetricName(name) {
+			t.Errorf("isValidMetricName(%q) = true, want false", name)
+		}
+	}
+}
+
+// ============================================================================
 // Realistic Otedama metric scenario
 // ============================================================================
 

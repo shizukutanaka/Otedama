@@ -513,10 +513,11 @@ func cmdDoctor(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Build effective config from the same layering used by `run`.
+	// The config file is loaded separately (loadConfigFile); FlagValues
+	// does not carry a file path — Resolve takes an already-decoded Config.
 	flags := config.FlagValues{
 		BitcoinAddress: *btcAddr,
 		DataDir:        *dataDir,
-		ConfigFile:     *configFile,
 	}
 	fromFile := loadConfigFile(*configFile, stderr)
 	cfg := config.Resolve(fromFile, nil, flags)

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -199,6 +200,68 @@ func TestFetcher_RateIsStaleAfterCacheDuration(t *testing.T) {
 	if fresh {
 		t.Error("expired rate should not be fresh")
 	}
+}
+
+func TestFetcher_StartBackground_LogsInitialFetchError(t *testing.T) {
+	// A server that returns 503 causes all sources to fail; the swallowed
+	// error must reach the log callback installed via SetLogger.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	logged := make(chan string, 1)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "fake-503",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case logged <- msg:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	f.StartBackground(ctx, 10*time.Minute) // long interval; only initial fetch matters
+
+	select {
+	case msg := <-logged:
+		if !strings.Contains(msg, "initial fetch failed") {
+			t.Errorf("log message = %q, want to contain 'initial fetch failed'", msg)
+		}
+	case <-time.After(3 * time.Second):
+		t.Error("timeout: SetLogger callback never received error from StartBackground")
+	}
+}
+
+func TestFetcher_SetLogger_NilIsSilent(t *testing.T) {
+	// No logger set — StartBackground must not panic when the fetch fails.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "boom",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	// Intentionally do NOT call SetLogger.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	f.StartBackground(ctx, 10*time.Minute)
+	<-ctx.Done() // let the goroutine run and exit; must not panic
 }
 
 func parseFloat(s string, out *float64) (int, error) {

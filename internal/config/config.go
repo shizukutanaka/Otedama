@@ -148,13 +148,16 @@ func Defaults() Config {
 // A FlagValues with all-empty fields means "no flags were provided";
 // such a FlagValues does not override any other layer. This is the
 // invariant that makes the precedence model work cleanly.
+//
+// Config-file loading is the caller's responsibility (before calling
+// Resolve). FlagValues intentionally does not carry a config-file path
+// because Resolve receives an already-decoded Config value, not a path.
 type FlagValues struct {
 	BitcoinAddress string
 	LogLevel       string
 	LogFormat      string
 	Language       string
 	DataDir        string
-	ConfigFile     string
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
