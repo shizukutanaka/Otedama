@@ -385,6 +385,10 @@ func shortenURL(url string, maxLen int) string {
 	if len(url) <= maxLen {
 		return url
 	}
+	if maxLen < 4 {
+		// Can't fit "..." plus at least one character; return as-is.
+		return url
+	}
 	return url[:maxLen-3] + "..."
 }
 

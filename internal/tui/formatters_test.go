@@ -78,6 +78,18 @@ func TestShortenURL_VeryShort(t *testing.T) {
 	}
 }
 
+func TestShortenURL_MaxLenTooSmall(t *testing.T) {
+	// maxLen < 4 would produce a negative slice index (maxLen-3 < 0).
+	// shortenURL must return the original URL rather than panic.
+	url := "https://pool.example.com"
+	for _, max := range []int{0, 1, 2, 3} {
+		got := shortenURL(url, max)
+		if got != url {
+			t.Errorf("shortenURL(url, %d) = %q, want original url", max, got)
+		}
+	}
+}
+
 // ============================================================================
 // defaultSatsPerHash
 // ============================================================================

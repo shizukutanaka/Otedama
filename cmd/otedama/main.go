@@ -119,7 +119,10 @@ func cmdVersion(args []string, stdout, stderr io.Writer) int {
 	if *jsonOut {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(info)
+		if err := enc.Encode(info); err != nil {
+			fmt.Fprintf(stderr, "otedama: version: %v\n", err)
+			return exitRuntime
+		}
 	} else {
 		fmt.Fprintln(stdout, info.String())
 	}

@@ -219,10 +219,53 @@ and flagged, not changed this session:
   it; added a doc comment to `Resolve` explaining that file loading is the
   caller's responsibility. (session 70.)
 
+### S — TUI (session 71)
+- ✅ **`shortenURL` panics on `maxLen < 4`.** `url[:maxLen-3]` produces a
+  negative slice index when `maxLen` is 0–3 (valid inputs for a narrow
+  terminal column). Added early return: `if maxLen < 4 { return url }`.
+  Test: `TestShortenURL_MaxLenTooSmall`. (`dashboard.go`.)
+
+### A — Mining core (session 71)
+- ✅ **`Worker.Stats()` returns garbage before `Start()`.** Before `Start`
+  is called `startTime` is 0; `time.Now().UnixNano() − 0` is a large
+  positive number, so `Uptime` and `HashRate` are wildly wrong on first
+  read. Added `if w.startTime.Load() == 0 { return Stats{} }` guard.
+  Test: `TestWorker_StatsBeforeStart`. (`worker.go`.)
+
+### R — HAL (session 71)
+- ✅ **`Detect()` drain loop could not be interrupted by context
+  cancellation.** The `for res := range resultsCh` loop blocks until
+  `resultsCh` is closed, which requires all driver goroutines to finish.
+  A driver that ignores context (e.g. opens a blocking syscall) would
+  prevent `Detect` from returning promptly after `ctx` is cancelled.
+  Replaced with a `select`-based loop that `break loop`s on `ctx.Done()`.
+  Test: `TestDetector_ContextCancellationInterruptsDrainLoop`
+  (uses new `blockingDriver` helper that ignores context). (`registry.go`.)
+
+### G — Providers (session 71)
+- ✅ **`MiningProvider.Stop()` / `AkashProvider.Stop()` left provider
+  permanently broken.** After `Stop()` returned, `p.cancel` still held the
+  old (already-called) `CancelFunc`. A subsequent `Start()` saw
+  `p.cancel != nil` and returned "already started", making the provider
+  un-restartable. Also, `p.quoteCh` was closed by the goroutine's
+  `defer close()`, so callers that continued to hold the `Quotes()` channel
+  reference would get the zero value on every read.  Fixed both providers:
+  after `wg.Wait()`, nil `p.cancel` and recreate `p.quoteCh` with the same
+  capacity under the mutex. Tests: `TestMiningProvider_StopClearsStateForRestart`,
+  `TestAkashProvider_StopClearsStateForRestart`. (`mining.go`,
+  `ai_inference.go`; updated `TestAkashProvider_StopCleansUpGoroutine` to
+  save the channel reference before Stop.)
+
+### L — CLI (session 71)
+- ✅ **`cmdVersion --json` silently ignored `json.Encoder.Encode` error.**
+  The only `_ = enc.Encode(info)` in the version command discarded the
+  error (e.g. a broken pipe when the caller exits early). Now returns
+  `exitRuntime` and prints to stderr. (`cmd/otedama/main.go`.)
+
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
-G1–G15), P (logger), U (clock/version) — reviewed, no concrete defects beyond
-what the spec gap table already tracks.
+G1–G15 and session 71), P (logger), U (clock/version) — reviewed, no
+concrete defects beyond what the spec gap table already tracks.
 
 ---
 
@@ -243,6 +286,11 @@ what the spec gap table already tracks.
 | Metrics (s70) | `isValidMetricName` guard in `NewCounter`/`NewGauge` | `TestNewCounter_InvalidNamePanics`, `TestIsValidMetricName_*` |
 | Config (s70) | removed dead `FlagValues.ConfigFile` field | compile-time (field no longer exists) |
 | HAL (s70) | `GPULinuxDriver.LogFn` seam — skipped render nodes now logged | `TestParseGPUDevice_LogFnCalledOnValidationFailure` |
+| TUI (s71) | `shortenURL` panic guard for `maxLen < 4` | `TestShortenURL_MaxLenTooSmall` |
+| Mining core (s71) | `Worker.Stats()` returns zero-value before `Start()` | `TestWorker_StatsBeforeStart` |
+| HAL (s71) | `Detect()` drain loop exits on `ctx.Done()` (blocking driver no longer hangs) | `TestDetector_ContextCancellationInterruptsDrainLoop` |
+| Providers (s71) | `Stop()` nils `p.cancel` + recreates `quoteCh` → provider is restartable | `TestMiningProvider_StopClearsStateForRestart`, `TestAkashProvider_StopClearsStateForRestart` |
+| CLI (s71) | `version --json` propagates `Encode` error to stderr + `exitRuntime` | no separate test (exercised by `TestCmdVersion_*` integration) |
 
 All 24 packages build, vet, and test green (`-race` clean on the touched
 packages). Flagged Noise/engine items are funds-critical and left for maintainer

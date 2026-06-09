@@ -71,6 +71,10 @@ func (p *MiningProvider) Stop() {
 	if cancel != nil {
 		cancel()
 		p.wg.Wait()
+		p.mu.Lock()
+		p.cancel = nil
+		p.quoteCh = make(chan Quote, cap(p.quoteCh))
+		p.mu.Unlock()
 	}
 }
 

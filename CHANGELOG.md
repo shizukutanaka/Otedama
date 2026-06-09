@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 71 — category-audit pass: latent panics, drain-loop liveness, provider restart)
+
+Five confirmed bugs from an exhaustive parallel re-audit of categories A, G, L,
+R, and S. Each was verified against the production code before fixing.
+
+- **TUI (S) — `shortenURL` panics on `maxLen < 4`.** The expression
+  `url[:maxLen-3]` produces a negative index (runtime panic) when `maxLen` is
+  0–3, which is a valid input for a narrow terminal column. Added an early
+  return: `if maxLen < 4 { return url }`.
+  Test: `TestShortenURL_MaxLenTooSmall`.
+- **Mining core (A) — `Worker.Stats()` returned garbage before `Start()`.** Before
+  `Start` is called `startTime` is 0; `time.Now().UnixNano() − 0` evaluates to a
+  large positive integer, so `Uptime` is ~56 years and `HashRate` is nonsense on
+  the first call. Added `if w.startTime.Load() == 0 { return Stats{} }` guard.
+  Test: `TestWorker_StatsBeforeStart`.
+- **HAL (R) — `Detect()` drain loop was not context-aware.** The
+  `for res := range resultsCh` loop could not be interrupted: it blocked until
+  `resultsCh` was closed, which required *every* driver goroutine to return.
+  A driver that ignores context (opens a blocking syscall, uses `time.Sleep`) would
+  hold up `Detect` past the caller's deadline. Replaced with a `select`-based loop
+  that breaks on `ctx.Done()`. Test: `TestDetector_ContextCancellationInterruptsDrainLoop`
+  (new `blockingDriver` helper ignores context to exercise the path).
+- **Providers (G) — `Stop()` left providers permanently un-restartable.** After
+  `Stop()` returned, `p.cancel` still held the old (already-called) `CancelFunc`;
+  any subsequent `Start()` call saw `p.cancel != nil` and returned "already started".
+  Additionally `p.quoteCh` had been closed by the goroutine's `defer close()`, so
+  callers holding the old `Quotes()` reference would receive the zero value
+  immediately. Fixed `MiningProvider.Stop()` and `AkashProvider.Stop()`: after
+  `wg.Wait()`, nil `p.cancel` and recreate `p.quoteCh` (same capacity) under the
+  mutex. Also updated `TestAkashProvider_StopCleansUpGoroutine` to save the channel
+  reference before `Stop()` (the old test inadvertently tested the newly-recreated
+  open channel, not the closed one).
+  Tests: `TestMiningProvider_StopClearsStateForRestart`,
+  `TestAkashProvider_StopClearsStateForRestart`.
+- **CLI (L) — `version --json` silently ignored encode error.** `_ = enc.Encode(info)`
+  discarded errors such as a broken pipe (caller exits early). Now propagates to
+  stderr and returns `exitRuntime`.
+
+24 packages build/vet/test green; `-race` clean on all five touched packages.
+
 ### Fixes (session 70 — deferred category-audit backlog: logger seams, dead field, name validation)
 
 Four ⏸-deferred items from `docs/CATEGORY_AUDIT.md` landed, clearing every

@@ -57,26 +57,44 @@ func TestAkashProvider_StopCleansUpGoroutine(t *testing.T) {
 		},
 	})
 
-	// Quotes channel must close after Stop.
+	// Save the channel reference before Stop; Stop() recreates quoteCh so
+	// p.Quotes() after Stop returns a fresh open channel, not the closed one.
+	quotes := p.Quotes()
 	p.Stop()
 
-	select {
-	case _, ok := <-p.Quotes():
-		// Either channel is closed or we get a final buffered quote.
-		if ok {
-			// Drain and continue.
-			select {
-			case _, ok := <-p.Quotes():
-				if ok {
-					t.Error("Quotes channel still producing after Stop")
-				}
-			case <-time.After(1 * time.Second):
-				t.Error("Quotes channel did not close within 1s after Stop")
+	// The original channel (saved above) must be closed by the goroutine's
+	// defer close; draining buffered items first.
+	deadline := time.After(1 * time.Second)
+	for {
+		select {
+		case _, ok := <-quotes:
+			if !ok {
+				return // channel closed — goroutine exited cleanly
 			}
+		case <-deadline:
+			t.Error("Quotes channel did not close within 1s after Stop")
+			return
 		}
-	case <-time.After(1 * time.Second):
-		t.Error("Quotes channel did not close within 1s after Stop")
 	}
+}
+
+func TestAkashProvider_StopClearsStateForRestart(t *testing.T) {
+	// After Stop(), p.cancel must be nil'd so Start() can be called again.
+	// Previously Stop() left p.cancel set, causing Start() to return
+	// "already started" on every call after the first.
+	p := NewAkashProvider(StaticRateSource{Rate: 95000})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := p.Start(ctx, nil); err != nil {
+		t.Fatalf("first Start failed: %v", err)
+	}
+	p.Stop()
+
+	if err := p.Start(ctx, nil); err != nil {
+		t.Fatalf("Start after Stop returned error: %v", err)
+	}
+	p.Stop()
 }
 
 // ============================================================================

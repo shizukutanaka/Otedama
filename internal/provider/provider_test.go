@@ -166,6 +166,25 @@ func TestMiningProvider_StopWithoutStart(t *testing.T) {
 	p.Stop() // must not panic
 }
 
+func TestMiningProvider_StopClearsStateForRestart(t *testing.T) {
+	// After Stop(), p.cancel must be nil'd so Start() can be called again.
+	// Previously Stop() left p.cancel set, causing Start() to return
+	// "already started" on every call after the first.
+	p := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := p.Start(ctx, nil); err != nil {
+		t.Fatalf("first Start failed: %v", err)
+	}
+	p.Stop()
+
+	if err := p.Start(ctx, nil); err != nil {
+		t.Fatalf("Start after Stop returned error: %v", err)
+	}
+	p.Stop()
+}
+
 func TestMiningProvider_DoubleStartRejected(t *testing.T) {
 	p := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
 	ctx, cancel := context.WithCancel(context.Background())

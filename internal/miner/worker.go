@@ -155,7 +155,11 @@ func (w *Worker) SetWork(work *Work) {
 }
 
 // Stats returns a snapshot of the Worker's performance counters.
+// Before Start is called, Stats returns a zero-value Stats.
 func (w *Worker) Stats() Stats {
+	if w.startTime.Load() == 0 {
+		return Stats{}
+	}
 	uptime := time.Duration(time.Now().UnixNano() - w.startTime.Load())
 	hashes := w.hashCount.Load()
 	var rate float64

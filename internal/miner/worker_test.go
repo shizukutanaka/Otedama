@@ -36,6 +36,23 @@ func makeEasyWork() *Work {
 
 // ----- Worker lifecycle -----
 
+func TestWorker_StatsBeforeStart(t *testing.T) {
+	// Before Start is called, Stats must return a zero-value Stats so
+	// callers see zero uptime and hashrate rather than a garbage negative
+	// duration (time.Now() − 0 = a large positive number).
+	w := NewWorker(WorkerConfig{Threads: 1})
+	s := w.Stats()
+	if s.Uptime != 0 {
+		t.Errorf("Stats().Uptime before Start = %v, want 0", s.Uptime)
+	}
+	if s.HashRate != 0 {
+		t.Errorf("Stats().HashRate before Start = %v, want 0", s.HashRate)
+	}
+	if s.HashesTotal != 0 || s.SharesFound != 0 || s.SharesDropped != 0 {
+		t.Error("Stats() before Start returned non-zero counters")
+	}
+}
+
 func TestWorker_StartTwicePanics(t *testing.T) {
 	w := NewWorker(WorkerConfig{Threads: 1})
 	ctx, cancel := context.WithCancel(context.Background())
