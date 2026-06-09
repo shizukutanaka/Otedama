@@ -164,6 +164,29 @@ func TestWriteText_IncludesHelpAndTypeLines(t *testing.T) {
 	}
 }
 
+func TestWriteText_HelpTextIsEscaped(t *testing.T) {
+	// A HELP string containing a newline or backslash must be escaped so it
+	// stays on one line; otherwise the embedded newline splits the HELP line
+	// and corrupts the scrape (Prometheus text exposition format).
+	r := NewRegistry()
+	r.NewCounter("otedama_test_total", "line one\nline two \\ end", nil)
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, `# HELP otedama_test_total line one\nline two \\ end`) {
+		t.Errorf("HELP text not escaped:\n%s", out)
+	}
+	// The raw newline must NOT appear inside the HELP text (it would start a
+	// spurious second line).
+	if strings.Contains(out, "line one\nline two") {
+		t.Errorf("HELP text contains a raw newline:\n%s", out)
+	}
+}
+
 func TestWriteText_GaugeTypeLine(t *testing.T) {
 	r := NewRegistry()
 	r.NewGauge("otedama_hashrate_hps", "Hashrate in hashes per second.", nil).Set(2.5e6)

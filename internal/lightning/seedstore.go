@@ -90,10 +90,13 @@ func EncryptSeed(s Seed, passphrase string, reader io.Reader) (EncryptedSeed, er
 		return EncryptedSeed{}, fmt.Errorf("lightning: nonce generation failed: %w", err)
 	}
 
-	key, err := scrypt.Key([]byte(passphrase), es.Salt[:], scryptN, scryptR, scryptP, 32)
+	pass := []byte(passphrase)
+	defer zeroBytes(pass)
+	key, err := scrypt.Key(pass, es.Salt[:], scryptN, scryptR, scryptP, 32)
 	if err != nil {
 		return EncryptedSeed{}, fmt.Errorf("lightning: scrypt derivation failed: %w", err)
 	}
+	defer zeroBytes(key)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return EncryptedSeed{}, fmt.Errorf("lightning: aes init failed: %w", err)
@@ -120,10 +123,13 @@ func DecryptSeed(es EncryptedSeed, passphrase string) (Seed, error) {
 		return zero, errors.New("lightning: EncryptedSeed has empty ciphertext")
 	}
 
-	key, err := scrypt.Key([]byte(passphrase), es.Salt[:], scryptN, scryptR, scryptP, 32)
+	pass := []byte(passphrase)
+	defer zeroBytes(pass)
+	key, err := scrypt.Key(pass, es.Salt[:], scryptN, scryptR, scryptP, 32)
 	if err != nil {
 		return zero, fmt.Errorf("lightning: scrypt derivation failed: %w", err)
 	}
+	defer zeroBytes(key)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return zero, fmt.Errorf("lightning: aes init failed: %w", err)
@@ -136,12 +142,27 @@ func DecryptSeed(es EncryptedSeed, passphrase string) (Seed, error) {
 	if err != nil {
 		return zero, errors.New("lightning: decryption failed (wrong passphrase or corrupted file)")
 	}
+	// The plaintext holds the raw seed; copy it into the result and wipe the
+	// intermediate buffer so the secret does not linger on the heap waiting
+	// for the GC.
+	defer zeroBytes(plaintext)
 	if len(plaintext) != 64 {
 		return zero, fmt.Errorf("lightning: decrypted seed is %d bytes, want 64", len(plaintext))
 	}
 	var out Seed
 	copy(out[:], plaintext)
 	return out, nil
+}
+
+// zeroBytes overwrites b with zeros. It is used to wipe key material and
+// plaintext secrets from the heap as soon as they are no longer needed,
+// limiting how long they survive in memory. (This is best-effort: Go may
+// have copied the value during a stack/heap move, but wiping the live
+// buffer is still strictly better than leaving it for the GC.)
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
 }
 
 // Marshal serializes EncryptedSeed to a byte slice suitable for disk

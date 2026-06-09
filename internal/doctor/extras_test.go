@@ -121,8 +121,12 @@ func TestIsLikelyBitcoinAddress_LengthBoundaries(t *testing.T) {
 	}{
 		// Too short — 25 chars (minimum plausible length is 26).
 		{"bc1qar0srrr7xfkvy5l643lyd", false},
-		// Too long — 63 chars (limit is 62).
-		{"bc1" + strings.Repeat("q", 60), false},
+		// 63 chars is now accepted — the upper bound is 90, matching
+		// internal/config so a longer bech32m address that passes
+		// `config validate` is not flagged by `doctor`.
+		{"bc1" + strings.Repeat("q", 60), true},
+		// Too long — 91 chars (limit is 90).
+		{"bc1" + strings.Repeat("q", 88), false},
 		// Whitespace trimming.
 		{"   bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq   ", true},
 	}

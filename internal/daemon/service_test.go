@@ -109,6 +109,47 @@ func TestServiceArgs_IncludesAllFlags(t *testing.T) {
 	}
 }
 
+func TestServiceArgv_PreservesValuesWithSpaces(t *testing.T) {
+	m := &Manager{
+		binaryPath: "/opt/otedama",
+		configPath: "/Users/John Doe/config.yaml",
+		dataDir:    "/var/lib/otedama",
+	}
+	argv := m.serviceArgv()
+	// The config path with a space must be a single element, not split.
+	found := false
+	for _, a := range argv {
+		if a == "/Users/John Doe/config.yaml" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("serviceArgv split a path with spaces: %#v", argv)
+	}
+}
+
+func TestLaunchdPlist_PathWithSpacesIsSingleString(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("launchd plist test only relevant on macOS")
+	}
+	m := &Manager{
+		binaryPath: "/opt/otedama",
+		configPath: "/Users/John Doe/config.yaml",
+	}
+	plist := m.launchdPlist()
+	if !strings.Contains(plist, "<string>/Users/John Doe/config.yaml</string>") {
+		t.Errorf("plist split a path with spaces; got:\n%s", plist)
+	}
+}
+
+func TestXMLEscape(t *testing.T) {
+	got := xmlEscape(`a&b<c>d"e'f`)
+	want := "a&amp;b&lt;c&gt;d&quot;e&apos;f"
+	if got != want {
+		t.Errorf("xmlEscape = %q, want %q", got, want)
+	}
+}
+
 func TestServiceArgs_EmptyFlagsOmitted(t *testing.T) {
 	m := &Manager{
 		binaryPath:   "/usr/local/bin/otedama",

@@ -164,7 +164,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 	for _, e := range entries {
 		if !seen[e.name] {
 			seen[e.name] = true
-			if _, err := fmt.Fprintf(w, "# HELP %s %s\n", e.name, e.help); err != nil {
+			if _, err := fmt.Fprintf(w, "# HELP %s %s\n", e.name, escapeHelp(e.help)); err != nil {
 				return err
 			}
 			if _, err := fmt.Fprintf(w, "# TYPE %s %s\n", e.name, e.kind); err != nil {
@@ -230,6 +230,18 @@ func escapeLabel(v string) string {
 	r := strings.NewReplacer(
 		`\`, `\\`,
 		`"`, `\"`,
+		"\n", `\n`,
+	)
+	return r.Replace(v)
+}
+
+// escapeHelp escapes a HELP string per the Prometheus text exposition
+// format: only backslash and newline are escaped (the double-quote is not
+// special in HELP lines, unlike label values). Without this, a help string
+// containing a newline would split the HELP line and corrupt the scrape.
+func escapeHelp(v string) string {
+	r := strings.NewReplacer(
+		`\`, `\\`,
 		"\n", `\n`,
 	)
 	return r.Replace(v)

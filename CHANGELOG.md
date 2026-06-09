@@ -10,6 +10,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 67 — exhaustive per-category audit + cross-cutting fixes)
+
+Divided the product into 21 functional categories (`docs/CATEGORY_AUDIT.md`) and
+ran five parallel reviews, one per cluster. Every finding was re-verified against
+the code; this session lands the clearly-correct, non-funds fixes and flags the
+funds-critical Noise/engine items for maintainer review.
+
+- **Rates — median biased on even source counts.** `Fetch` picked
+  `rates[len/2]` after sorting; with an even number of surviving sources (common
+  when one of three fails) that returns the upper middle value, biasing toward
+  the higher source and weakening outlier resistance. Now averages the two middle
+  values. (`TestFetcher_MedianOfTwoSourcesAverages`.)
+- **Doctor — address length bound mismatched config.** `isLikelyBitcoinAddress`
+  rejected addresses > 62 chars while `config.validateAddress` accepts up to 90,
+  so a long bech32m address that passed `config validate` was flagged by
+  `doctor`. Aligned doctor to 26–90.
+- **Daemon — launchd split arguments on whitespace.** `launchdPlist` built
+  `ProgramArguments` by `strings.Split`-ing the joined command line, so a path or
+  value containing a space (e.g. `/Users/John Doe/config.yaml`) was broken into
+  multiple `<string>` entries and the macOS service started with malformed args.
+  Added a canonical `serviceArgv() []string` consumed directly by launchd (one
+  `<string>` per element, XML-escaped); `serviceArgs` now joins it for
+  systemd/Windows with selective quoting. (3 tests.)
+- **Metrics — HELP text not escaped (Prometheus spec violation).** A help string
+  containing a newline/backslash would split the `# HELP` line and corrupt the
+  scrape. Added `escapeHelp` (escapes backslash + newline; the double-quote is
+  not special in HELP lines). (`TestWriteText_HelpTextIsEscaped`.)
+- **Lightning — secret material left on the heap.** `EncryptSeed`/`DecryptSeed`
+  never wiped the derived scrypt key or the decrypted 64-byte seed plaintext,
+  leaving them for the GC. Added `zeroBytes` and `defer`-wiped the key, the
+  passphrase byte copy, and the plaintext. Additive hardening, stdlib-only, no
+  change to crypto behaviour (funds-critical file — flagged for CODEOWNERS review
+  at merge).
+- **Flagged for maintainer review (funds-critical, not changed):** Noise
+  `CipherState` nonce atomicity + exhaustion guard, the alpha x-only handshake
+  fallback, custom-HMAC→`crypto/hmac`, and the engine payout-address failover
+  ordering. See `docs/CATEGORY_AUDIT.md`.
+- **Verified not-a-defect:** `SubmitSharesError` STR0_255 over-read (guarded by
+  `io.ReadFull`), `Worker.Stop` wait (grind returns promptly on cancel), frame
+  length int conversion (64-bit safe). 24 packages build/vet/test green; `-race`
+  clean on touched packages.
+
 ### Fixes (session 66 — grind to the pool-assigned share target, not the block target)
 
 - **🔴 G15 (SPECIFICATION.md): the miner ignored the pool-assigned share target

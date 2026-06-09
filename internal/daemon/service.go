@@ -262,14 +262,17 @@ func (m *Manager) statusLaunchd() (ServiceStatus, error) {
 }
 
 func (m *Manager) launchdPlist() string {
-	// Build the ProgramArguments array.
-	args := strings.Split(m.binaryPath+" "+m.serviceArgs(), " ")
+	// Build the ProgramArguments array from the canonical argv slice so a
+	// path or value containing spaces is emitted as a single <string>
+	// rather than split across entries. Each value is XML-escaped because
+	// it may contain characters that are significant in XML (e.g. '&').
+	argv := append([]string{m.binaryPath}, m.serviceArgv()...)
 	var argEntries strings.Builder
-	for _, a := range args {
+	for _, a := range argv {
 		if a == "" {
 			continue
 		}
-		fmt.Fprintf(&argEntries, "\t\t<string>%s</string>\n", a)
+		fmt.Fprintf(&argEntries, "\t\t<string>%s</string>\n", xmlEscape(a))
 	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -311,28 +314,66 @@ func (m *Manager) uninstallWindowsService() error {
 
 // ----- Helpers -----
 
-// serviceArgs builds the command-line arguments for the service process.
-func (m *Manager) serviceArgs() string {
-	args := "run"
+// serviceArgv returns the service command-line arguments as a slice, with
+// no shell quoting. This is the canonical form: serviceArgs joins it into a
+// single string for systemd ExecStart= and Windows sc.exe binPath= (both of
+// which parse their own quoting), and launchdPlist consumes the slice
+// directly — emitting each element as its own <string> — so a path or value
+// containing spaces (e.g. "/Users/John Doe/config.yaml") survives intact
+// instead of being split into separate arguments.
+func (m *Manager) serviceArgv() []string {
+	argv := []string{"run"}
 	if m.configPath != "" {
-		args += fmt.Sprintf(" --config %q", m.configPath)
+		argv = append(argv, "--config", m.configPath)
 	}
 	if m.dataDir != "" {
-		args += fmt.Sprintf(" --data-dir %q", m.dataDir)
+		argv = append(argv, "--data-dir", m.dataDir)
 	}
 	if m.serviceFlags.BitcoinAddress != "" {
-		args += fmt.Sprintf(" --bitcoin-address %q", m.serviceFlags.BitcoinAddress)
+		argv = append(argv, "--bitcoin-address", m.serviceFlags.BitcoinAddress)
 	}
 	if m.serviceFlags.LogLevel != "" {
-		args += fmt.Sprintf(" --log-level %q", m.serviceFlags.LogLevel)
+		argv = append(argv, "--log-level", m.serviceFlags.LogLevel)
 	}
 	if m.serviceFlags.LogFormat != "" {
-		args += fmt.Sprintf(" --log-format %q", m.serviceFlags.LogFormat)
+		argv = append(argv, "--log-format", m.serviceFlags.LogFormat)
 	}
 	if m.serviceFlags.Language != "" {
-		args += fmt.Sprintf(" --language %q", m.serviceFlags.Language)
+		argv = append(argv, "--language", m.serviceFlags.Language)
 	}
-	return args
+	return argv
+}
+
+// serviceArgs joins serviceArgv into a single command-line string, quoting
+// only the elements that need it. Used by systemd (ExecStart=) and Windows
+// (sc.exe binPath=), which parse their own quoting; launchd uses serviceArgv
+// directly.
+func (m *Manager) serviceArgs() string {
+	argv := m.serviceArgv()
+	var b strings.Builder
+	for i, a := range argv {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		if i > 0 && strings.ContainsAny(a, " \t\"") {
+			fmt.Fprintf(&b, "%q", a)
+		} else {
+			b.WriteString(a)
+		}
+	}
+	return b.String()
+}
+
+// xmlEscape escapes the five XML special characters so an argument value
+// (e.g. a filesystem path) is safe to embed inside a plist <string> element.
+func xmlEscape(s string) string {
+	return strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&apos;",
+	).Replace(s)
 }
 
 func runCmd(name string, args ...string) error {

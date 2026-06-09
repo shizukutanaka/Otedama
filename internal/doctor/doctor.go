@@ -428,9 +428,12 @@ func checkNetwork() Check {
 // isLikelyBitcoinAddress performs a cheap format validity check.
 // Full address validation requires base58/bech32 decoding, which is
 // out of scope for doctor (we trust the user's runtime validation).
+// The length bounds (26–90) match internal/config.validateAddress, so an
+// address that passes `config validate` is never flagged by `doctor`
+// (longer bech32m outputs reach up to 90 characters).
 func isLikelyBitcoinAddress(s string) bool {
 	s = strings.TrimSpace(s)
-	if len(s) < 26 || len(s) > 62 {
+	if len(s) < 26 || len(s) > 90 {
 		return false
 	}
 	switch {

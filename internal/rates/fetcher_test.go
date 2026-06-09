@@ -114,6 +114,52 @@ func TestFetcher_UsesMedianAcrossSources(t *testing.T) {
 	}
 }
 
+func TestFetcher_MedianOfTwoSourcesAverages(t *testing.T) {
+	// With an even number of surviving sources the median must be the
+	// average of the two middle values, not the upper one — otherwise the
+	// result is biased toward the higher source and loses outlier
+	// resistance. This is the common case when one of three sources fails.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srv1 := httptest.NewServer(makeHandler("90000"))
+	srv2 := httptest.NewServer(makeHandler("100000"))
+	defer srv1.Close()
+	defer srv2.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv1.Client(),
+		sources:    []Source{makeSource("s1", srv1.URL), makeSource("s2", srv2.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	// Median of [90000, 100000] = 95000 (the average), not 100000.
+	if rate != 95000 {
+		t.Errorf("median of two sources = %v, want 95000 (average)", rate)
+	}
+}
+
 func TestFetcher_AllSourcesFailReturnsFallback(t *testing.T) {
 	f := &Fetcher{
 		fallback:   80000,

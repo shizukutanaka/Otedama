@@ -160,9 +160,17 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 		return fmt.Errorf("rates: all sources failed")
 	}
 
-	// Use the median to resist outlier manipulation.
+	// Use the median to resist outlier manipulation. For an even number
+	// of surviving sources, average the two middle values — picking a
+	// single middle element would bias toward the higher source and
+	// defeat the outlier resistance when exactly two sources remain.
 	sort.Float64s(rates)
-	median := rates[len(rates)/2]
+	var median float64
+	if n := len(rates); n%2 == 1 {
+		median = rates[n/2]
+	} else {
+		median = (rates[n/2-1] + rates[n/2]) / 2
+	}
 
 	f.mu.Lock()
 	f.rate = median
