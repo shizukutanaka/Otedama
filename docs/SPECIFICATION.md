@@ -92,8 +92,11 @@ the configured pool URLs.
      an outage, so an outage cannot silently redirect earnings.
    - **Backoff:** exponential from `reconnectBackoffInitial` to
      `reconnectBackoffMax`; honoured between full cycles.
-5. **In-session:** decode frames; apply `NewMiningJob` to workers; submit
-   found shares (`SubmitSharesStandard`); on `SubmitSharesSuccess` settle
+5. **In-session:** decode frames; apply `NewMiningJob` to workers — workers
+   grind to the pool-assigned **share target** from `OpenMiningChannelSuccess`
+   (far easier than the block target; the block target is used only as a
+   fallback when the pool assigns none); submit found shares
+   (`SubmitSharesStandard`); on `SubmitSharesSuccess` settle
    submit→accept latency and increment accepted; on `SubmitSharesError`
    classify the reason (`rejectClass` → stale/duplicate/difficulty/hardware/
    other) and increment the per-reason counter.
@@ -146,6 +149,7 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
 | G12 | `service install` accepted `--bitcoin-address` / `--log-level` / `--log-format` / `--language` flags at the CLI but `daemon.Manager` never stored or emitted them — the installed service unit started without a payout address and exited 78. | **Fixed (session 63)**: `daemon.ServiceFlags` struct added; all four flags are forwarded to `Manager` and emitted by `serviceArgs()` into the systemd unit / launchd plist / Windows service command line. |
 | G13 | The Stratum V1 session silently ignored `client.reconnect` / `mining.reconnect` — the standard directive every major pool (Braiins/F2Pool/AntPool/ViaBTC/NiceHash) and client (cgminer/bfgminer/ESP-Miner) uses to move a miner to another node. Otedama held the connection until the socket died or the 5-minute read deadline fired, wasting connect time and shares. | **Fixed (session 64)**: `parseReconnect` decodes `[host,port,wait]`; on receipt the session records the directive and closes cleanly so `Jobs()` closes and the reconnect loop re-dials. The pool-supplied `host:port` is recorded but deliberately **not** followed (redirection-vector guard for a non-custodial miner). Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 #5. |
 | G14 | The stall monitor (`HashrateMonitor`, floor 0 H/s) was fed a *lifetime-average* hashrate (`HashesTotal/Uptime`), which stays positive forever after the first hash — so a device that wedges after running could never trip the stall warning, and `otedama_up`/`otedama_hashrate` reported lifetime, not current, values. | **Fixed (session 65)**: `hashrateWindow` differentiates the cumulative hash counter into a current (Δ/interval) rate consumed by the monitor, gauge, log, and TUI. Saturating on counter reset (reconnect) — no negative/NaN/spurious-spike readings. Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 #6. |
+| G15 | The miner ground against the **block target** (`TargetFromNBits(job.NBits)`) and discarded the pool-assigned **share target** (`OpenMiningChannelSuccess.Target`), so a worker emitted a share only on an actual block solve — effectively never on a live pool. No shares submitted ⇒ no credited work, no payout, no vardiff feedback. The integration test masked it with an easy block nBits and never asserted shares were submitted. | **Fixed (session 66)**: `handshake` returns the channel share target; `updateWork` grinds to it (block-target fallback only when the pool assigns none). Integration test now asserts `pool.SharesReceived() >= 1`. Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 (#2/#4). |
 | G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | Open — KNOWN_LIMITATIONS §3; deferred (would regress submit-latency/reject telemetry until `poolproto.Session` is extended — see CHANGELOG session 55). |
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |

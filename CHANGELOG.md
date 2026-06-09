@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 66 — grind to the pool-assigned share target, not the block target)
+
+- **🔴 G15 (SPECIFICATION.md): the miner ignored the pool-assigned share target
+  and ground against the block target, so it could essentially never submit a
+  share.** `handshake` discarded `OpenMiningChannelSuccess.Target` (the channel's
+  initial share target) and `updateWork` set each worker's grind target to
+  `TargetFromNBits(job.NBits)` — the *block* target. A worker only emits a share
+  when `hash ≤ target`; against the block target that means finding an actual
+  block (~4×10⁹ hashes per *share* even at the easy genesis nBits, astronomically
+  more at real network difficulty), so on a live pool the worker would mine
+  indefinitely and submit **nothing** — no credited shares, no payout, no vardiff
+  feedback. Every comparable miner (cgminer/bfgminer/ESP-Miner) grinds to the
+  much easier pool-assigned share target.
+- **Fix:** `handshake` now returns the channel's initial share target alongside
+  the channel ID (SV2 target and `miner.Hash` are both little-endian U256s, so
+  the bytes map directly); `updateWork` grinds to that share target, falling back
+  to the block target only when the pool assigned none (zero target). The block
+  `NBits` is still carried in `miner.Work` for block-detection metadata.
+- **Regression guard:** the integration test asserted connect/readiness but never
+  that shares were *submitted* — the latent bug was untested. It now asserts
+  `pool.SharesReceived() >= 1`; with the pool's easy 0xFF…FF share target this
+  passes only because the engine grinds to it (it would time out against the
+  block target). Updated the `updateWork` unit test for the new signature
+  (zero-target fallback + non-zero override).
+- Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 (#2/#4 share-target/vardiff
+  family). `go build`/`vet`/`test -race` green (24 packages).
+
 ### Fixes (session 65 — windowed hashrate makes stall detection actually work)
 
 - **🔴 G14 (SPECIFICATION.md): the stall monitor was structurally defeated by a

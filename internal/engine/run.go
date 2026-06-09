@@ -564,7 +564,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
-	chanID, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
+	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
 	if err != nil {
 		return err
 	}
@@ -666,7 +666,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
 			if pm.msg.NewMiningJob != nil {
-				updateWork(opts.workers, pm.msg.NewMiningJob, chanID)
+				updateWork(opts.workers, pm.msg.NewMiningJob, chanID, shareTarget)
 				opts.log("info", fmt.Sprintf("engine: job %d nBits=0x%08X",
 					pm.msg.NewMiningJob.JobID, pm.msg.NewMiningJob.NBits))
 			}
@@ -891,7 +891,13 @@ func mergeShares(ctx context.Context, channels []<-chan miner.Share) <-chan mine
 
 // ----- Handshake -----
 
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, error) {
+// handshake performs the SV2 SetupConnection + OpenMiningChannel exchange
+// and returns the opened channel ID and the pool-assigned initial share
+// target (OpenMiningChannelSuccess.Target). The share target is what
+// workers must grind to: it is far easier than the block target, and a hash
+// meeting it is exactly what the pool credits. A zero target means the pool
+// did not assign one; the caller falls back to the block target.
+func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
@@ -904,21 +910,21 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		DeviceID:        "cpu",
 	}
 	if err := sendMsg(conn, stratum.MsgSetupConnection, false, &sc); err != nil {
-		return 0, err
+		return 0, miner.Hash{}, err
 	}
 	f, err := dec.ReadFrame()
 	if err != nil {
-		return 0, fmt.Errorf("engine: setup response: %w", err)
+		return 0, miner.Hash{}, fmt.Errorf("engine: setup response: %w", err)
 	}
 	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
-		return 0, err
+		return 0, miner.Hash{}, err
 	}
 	if msg.SetupConnectionError != nil {
-		return 0, &fatalError{"pool rejected: " + msg.SetupConnectionError.Error}
+		return 0, miner.Hash{}, &fatalError{"pool rejected: " + msg.SetupConnectionError.Error}
 	}
 	if msg.SetupConnectionSuccess == nil {
-		return 0, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
+		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 
 	var hashRate float32
@@ -931,20 +937,23 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		NominalHashrate: hashRate,
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
-		return 0, err
+		return 0, miner.Hash{}, err
 	}
 	f, err = dec.ReadFrame()
 	if err != nil {
-		return 0, fmt.Errorf("engine: channel response: %w", err)
+		return 0, miner.Hash{}, fmt.Errorf("engine: channel response: %w", err)
 	}
 	msg, err = stratum.DispatchFrame(f)
 	if err != nil {
-		return 0, err
+		return 0, miner.Hash{}, err
 	}
 	if msg.OpenMiningChannelSuccess == nil {
-		return 0, fmt.Errorf("engine: channel open failed")
+		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
 	}
-	return msg.OpenMiningChannelSuccess.ChannelID, nil
+	omcs := msg.OpenMiningChannelSuccess
+	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
+	// map directly.
+	return omcs.ChannelID, miner.Hash(omcs.Target), nil
 }
 
 // ----- Shared helpers -----
@@ -968,10 +977,20 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 	return err
 }
 
-func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32) {
+func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32, shareTarget miner.Hash) {
 	target, err := miner.TargetFromNBits(job.NBits)
 	if err != nil {
 		return
+	}
+	// Grind to the pool-assigned share target, not the block target. The
+	// share target is far easier; a hash meeting it is exactly what the
+	// pool credits, and every comparable miner submits against it. Using
+	// the block target here would mean a worker only ever emits a share on
+	// an actual block solve — effectively never, so the pool would see no
+	// shares at all. Fall back to the block target only when the pool
+	// assigned none (zero target).
+	if shareTarget != (miner.Hash{}) {
+		target = shareTarget
 	}
 	w := &miner.Work{
 		JobID:     job.JobID,

@@ -256,6 +256,16 @@ func TestEngine_Integration_HandshakeSucceeds(t *testing.T) {
 		t.Errorf("OnReady(true) never called; states=%v", readyStates)
 	}
 
+	// Shares must actually reach the pool. The pool assigned an easy share
+	// target (0xFF…FF) in OpenMiningChannelSuccess, so every hash is a valid
+	// share — provided the engine grinds to that share target. If it instead
+	// used the block target (NBits 0x1d00ffff, ~4e9 hashes/share), no share
+	// could land in this window. This is the regression guard for the
+	// share-target fix.
+	if got := pool.SharesReceived(); got < 1 {
+		t.Errorf("pool received %d shares, want >= 1 (engine must grind to the assigned share target)", got)
+	}
+
 	cancel()
 	select {
 	case <-done:

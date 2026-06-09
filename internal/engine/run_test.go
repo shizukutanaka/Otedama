@@ -279,8 +279,16 @@ func TestUpdateWork_SetsTargetOnAllWorkers(t *testing.T) {
 	}
 	// This must not panic even without ctx/shares active.
 	// updateWork calls SetWork which is safe without Start.
-	updateWork(workers, job, 1)
-	// No assertions needed — non-panic is the test.
+	// Zero share target → falls back to the block target (legacy path).
+	updateWork(workers, job, 1, miner.Hash{})
+	// Non-zero share target → workers grind to it instead. Behavioural
+	// proof (that shares actually flow to the pool) lives in the
+	// integration test; here we assert the path does not panic.
+	var easy miner.Hash
+	for i := range easy {
+		easy[i] = 0xFF
+	}
+	updateWork(workers, job, 1, easy)
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
