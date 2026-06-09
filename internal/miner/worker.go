@@ -56,10 +56,11 @@ func DefaultWorkerConfig() WorkerConfig {
 
 // Stats carries live performance counters from a running Worker.
 type Stats struct {
-	HashesTotal uint64        // total hashes computed since Start
-	SharesFound uint64        // valid shares found
-	Uptime      time.Duration // time since Start was called
-	HashRate    float64       // hashes per second (lifetime average: HashesTotal/Uptime)
+	HashesTotal   uint64        // total hashes computed since Start
+	SharesFound   uint64        // valid shares found
+	SharesDropped uint64        // valid shares discarded because the consumer was full
+	Uptime        time.Duration // time since Start was called
+	HashRate      float64       // hashes per second (lifetime average: HashesTotal/Uptime)
 }
 
 // Worker runs SHA-256d hashing across multiple goroutines and delivers
@@ -76,7 +77,9 @@ type Worker struct {
 	// Atomic counters for stats.
 	hashCount  atomic.Uint64
 	shareCount atomic.Uint64
-	startTime  atomic.Int64 // UnixNano
+	dropCount  atomic.Uint64 // shares dropped because the share channel was full
+	startTime  atomic.Int64  // UnixNano
+	started    atomic.Bool   // guards Start against a second call
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -98,8 +101,12 @@ func NewWorker(cfg WorkerConfig) *Worker {
 // returned channel, which is closed when the Worker stops.
 //
 // ctx cancellation stops all goroutines and closes the share channel.
-// Start may only be called once; subsequent calls panic.
+// Start may only be called once; a second call panics immediately (rather
+// than corrupting the share channel and panicking later).
 func (w *Worker) Start(ctx context.Context) <-chan Share {
+	if !w.started.CompareAndSwap(false, true) {
+		panic("miner: Worker.Start called more than once")
+	}
 	shares := make(chan Share, w.cfg.Threads*4)
 	innerCtx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
@@ -156,10 +163,11 @@ func (w *Worker) Stats() Stats {
 		rate = float64(hashes) / uptime.Seconds()
 	}
 	return Stats{
-		HashesTotal: hashes,
-		SharesFound: w.shareCount.Load(),
-		Uptime:      uptime,
-		HashRate:    rate,
+		HashesTotal:   hashes,
+		SharesFound:   w.shareCount.Load(),
+		SharesDropped: w.dropCount.Load(),
+		Uptime:        uptime,
+		HashRate:      rate,
 	}
 }
 
@@ -217,10 +225,12 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share
 				// is dropped rather than blocking the miner. A larger
-				// buffer (Threads*4) makes this unlikely in practice.
+				// buffer (Threads*4) makes this unlikely in practice;
+				// dropCount makes the rare drop observable instead of silent.
 				select {
 				case shares <- share:
 				default:
+					w.dropCount.Add(1)
 				}
 			}
 

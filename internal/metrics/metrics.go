@@ -7,10 +7,11 @@
 //
 // The official Go client library is excellent but adds ~10MB to the
 // binary and a transitive dependency on dozens of packages. For the
-// metrics Otedama needs — counters, gauges, a handful of histograms —
-// the Prometheus text exposition format is a few hundred lines of
-// straightforward code. Going dependency-free keeps supply-chain risk
-// minimal and the binary small.
+// metrics Otedama needs — counters and gauges — the Prometheus text
+// exposition format is a few hundred lines of straightforward code.
+// (Latency distributions are reported as gauge quantiles rather than a
+// native histogram type, which keeps the registry minimal.) Going
+// dependency-free keeps supply-chain risk minimal and the binary small.
 //
 // # Exposition format
 //

@@ -36,6 +36,21 @@ func makeEasyWork() *Work {
 
 // ----- Worker lifecycle -----
 
+func TestWorker_StartTwicePanics(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_ = w.Start(ctx)
+	defer w.Stop()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("second Start should panic")
+		}
+	}()
+	_ = w.Start(ctx) // must panic
+}
+
 func TestWorker_StartAndStop(t *testing.T) {
 	w := NewWorker(WorkerConfig{Threads: 1})
 	ctx, cancel := context.WithCancel(context.Background())

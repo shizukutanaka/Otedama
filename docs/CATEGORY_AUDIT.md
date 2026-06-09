@@ -82,10 +82,11 @@ finding was re-verified against the code before any change.
   newline/backslash would split the `# HELP` line and corrupt the scrape. Added
   `escapeHelp` (backslash + newline; the double-quote is not special in HELP
   lines). (`metrics.go`; test `TestWriteText_HelpTextIsEscaped`.)
+- ✅ Package comment claimed "a handful of histograms"; none exist. Corrected to
+  describe the gauge-quantile approach actually used. (session 68.)
 - ⏸ No metric-name validation in `NewCounter/NewGauge`. Low risk: every name is a
   compile-time constant, so an invalid name is a developer error caught in tests,
   not a runtime/untrusted-input path. Deferred.
-- ⏸ Package comment mentions "histograms"; none implemented. Doc nit — deferred.
 
 ### J — Lightning wallet (funds-critical; CODEOWNERS)
 - ✅ **Secret material left on the heap.** `EncryptSeed`/`DecryptSeed` derived a
@@ -118,14 +119,15 @@ and flagged, not changed this session:
   to shrink the custom-crypto surface.
 
 ### A — Mining core
-- ⏸ `Worker.Start` documents "subsequent calls panic" but has no explicit guard
-  — a second call incidentally panics later via double-`close(w.done)`. A
-  `sync.Once`/explicit panic would make the contract immediate. Deferred (calling
-  Start twice is a programming error; low value).
-- ⏸ `grind` drops a found share silently when the share channel is full
-  (`select { case shares<-s: default: }`). With a correctly-set pool share
-  target this is rare, but a `Stats.SharesDropped` counter would make it
-  observable. Deferred (contained follow-up).
+- ✅ **`Worker.Start` contract not enforced.** Documented "subsequent calls
+  panic" but a second call only panicked *later*, incidentally, via
+  double-`close(w.done)` (after corrupting the share channel). Now an
+  `atomic.Bool` guard panics immediately with a clear message. (session 68;
+  `TestWorker_StartTwicePanics`.)
+- ✅ **`grind` dropped found shares silently** when the share channel was full.
+  Added `dropCount`/`Stats.SharesDropped`; the engine stats tick now logs a
+  warning when the drop total grows (`totalDropped`), so a consumer that can't
+  keep up is visible instead of silently losing shares. (session 68.)
 - ❎ `Worker.Stop` "unbounded wait" — safe: `grind` selects on `ctx.Done()` every
   batch (~µs) and after a 10 ms idle sleep, so it always returns promptly after
   `cancel()`.
@@ -152,9 +154,10 @@ and flagged, not changed this session:
   extra iteration. Funds-adjacent invariant ("a known-good address is never
   abandoned") — flagged for careful maintainer review; needs a test that pins
   the exact ordering before any change.
-- ⏸ Per-session reader goroutine can linger on a hung `ReadFrame` until the read
-  deadline after `ctx` cancel; closing the conn on `ctx.Done()` would speed
-  shutdown. Deferred (OS eventually closes; bounded by the 5-min deadline).
+- ❎ "Reader goroutine lingers on a hung `ReadFrame` after cancel" — re-verified
+  as acceptable: `runSession` has `defer conn.Close()`, which unblocks
+  `ReadFrame` (returns an error) as soon as the loop returns on `ctx.Done()`, so
+  the goroutine exits promptly. No leak.
 - ⏸ Providers/rates use `time.Now()` rather than the injected `clock.Clock`,
   limiting deterministic time control in tests. Deferred (test-only;
   threading the clock through is a larger refactor).
@@ -170,9 +173,11 @@ and flagged, not changed this session:
   by comment, no behaviour change needed.
 
 ### S — TUI
-- ⏸ `visibleLen` only resets its ANSI state on a `m` terminator; an unterminated
-  escape swallows trailing characters. The TUI only emits colour codes (all end
-  in `m`), so benign today. Deferred (broaden the reset for robustness).
+- ✅ **`visibleLen` only reset its ANSI state on an `m` terminator.** A non-colour
+  CSI sequence (e.g. `\x1b[2J`) never reset the state and swallowed the rest of
+  the string in width calculations. Now terminates on any CSI final byte
+  (`@`..`~`, excluding the `[` introducer). (session 68;
+  `TestVisibleLen_NonColorCSITerminator`.)
 - ❎ Earnings float precision — `float64` is adequate for a display estimate; the
   suggested constant rewrite changes semantics and is not a defect.
 

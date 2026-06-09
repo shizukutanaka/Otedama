@@ -352,7 +352,12 @@ func visibleLen(s string) int {
 	inEsc := false
 	for _, r := range s {
 		if inEsc {
-			if r == 'm' {
+			// A CSI sequence ends at its final byte, any character in the
+			// range '@'..'~' (0x40-0x7E) — not only 'm'. The '[' introducer
+			// and the numeric/';' parameter bytes (< '@') are consumed
+			// silently. Ending on any final byte means a non-colour escape
+			// (e.g. "\x1b[2J") can't swallow the rest of the string.
+			if r >= '@' && r <= '~' && r != '[' {
 				inEsc = false
 			}
 			continue

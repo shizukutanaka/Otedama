@@ -610,6 +610,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// lifetime average (which can never reach the stall floor).
 	var hashWindow hashrateWindow
 
+	// Track dropped shares so a consumer that cannot keep up surfaces as a
+	// warning rather than silently losing found shares.
+	var lastDropped uint64
+
 	// Track share-submission round-trip latency. submitTimes maps a
 	// sequence number to the time the share was sent; on accept we
 	// compute the RTT. Bounded by pruning on read.
@@ -627,6 +631,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats))
 			}
 			logStats(opts.workers, currentHashRate, opts.log)
+			if dropped := totalDropped(opts.workers); dropped > lastDropped {
+				opts.log("warn", fmt.Sprintf(
+					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
+					dropped-lastDropped))
+				lastDropped = dropped
+			}
 			hashMon.Observe(currentHashRate)
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
@@ -1054,6 +1064,15 @@ func totalHashes(workers []*miner.Worker) uint64 {
 	var total uint64
 	for _, w := range workers {
 		total += w.Stats().HashesTotal
+	}
+	return total
+}
+
+// totalDropped sums the shares dropped (consumer-full) across all workers.
+func totalDropped(workers []*miner.Worker) uint64 {
+	var total uint64
+	for _, w := range workers {
+		total += w.Stats().SharesDropped
 	}
 	return total
 }

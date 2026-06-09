@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 68 — work the per-category deferred backlog)
+
+Continued the exhaustive per-category pass by implementing the clearly-correct
+deferred (⏸) items from `docs/CATEGORY_AUDIT.md` and re-verifying the rest.
+
+- **Mining — `Worker.Start` contract now enforced.** The doc said a second call
+  panics, but it only panicked *later* and incidentally (double-`close`), after
+  corrupting the share channel. An `atomic.Bool` guard now panics immediately
+  with a clear message. (`TestWorker_StartTwicePanics`.)
+- **Mining — found shares were dropped silently** when the share channel filled.
+  Added `dropCount`/`Stats.SharesDropped`; the engine stats tick logs a warning
+  when the drop total grows (`totalDropped`), so a submission path that cannot
+  keep up with discovery is visible instead of silently losing shares.
+- **TUI — `visibleLen` mis-measured non-colour ANSI.** It only reset on an `m`
+  terminator, so a CSI sequence like `\x1b[2J` swallowed the rest of the string
+  in padding/width math. Now terminates on any CSI final byte (`@`..`~`).
+  (`TestVisibleLen_NonColorCSITerminator`.)
+- **Metrics — honesty fix:** the package comment claimed "a handful of
+  histograms" that don't exist; corrected to describe the gauge-quantile
+  approach actually used.
+- **Re-verified not-a-defect:** the per-session reader goroutine does not leak on
+  cancel (`runSession`'s `defer conn.Close()` unblocks `ReadFrame`). HAL GPU
+  silent-skip logging deferred (needs a `Driver`-interface logger seam, out of
+  proportion for this batch). 24 packages build/vet/test green; `-race` clean on
+  touched packages.
+
 ### Fixes (session 67 — exhaustive per-category audit + cross-cutting fixes)
 
 Divided the product into 21 functional categories (`docs/CATEGORY_AUDIT.md`) and

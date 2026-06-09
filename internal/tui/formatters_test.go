@@ -376,6 +376,16 @@ func TestVisibleLen_MultipleEscapeSequences(t *testing.T) {
 	}
 }
 
+func TestVisibleLen_NonColorCSITerminator(t *testing.T) {
+	// A non-'m' CSI sequence (here "\x1b[2J", clear-screen) must terminate
+	// at its final byte 'J' so the trailing visible text is still counted.
+	// The old logic only reset on 'm' and would swallow "DONE".
+	s := "\x1b[2JDONE"
+	if got := visibleLen(s); got != len("DONE") {
+		t.Errorf("visibleLen(%q) = %d, want %d", s, got, len("DONE"))
+	}
+}
+
 func TestVisibleLen_IncompleteEscapeAtEnd(t *testing.T) {
 	// An incomplete escape (e.g., a truncation bug) should not crash.
 	s := "hello\x1b["
