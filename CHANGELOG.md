@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 72 — stratum completeness: missing Encode methods, test coverage 79.3%→81.8%)
+
+Coverage audit revealed `poolproto/stratumv2` at 23.7% and two missing `Encode`
+methods — the core Stratum V2 adapter had never been integration-tested with a
+real handshake.
+
+- **Stratum (B) — `OpenMiningChannelError` and `SubmitSharesError` had no `Encode`.** Every
+  other V2 message type has a symmetric Encode+Decode pair; these two error
+  messages were decode-only — a server or test that needed to *send* them had no
+  supported path. Added `OpenMiningChannelError.Encode()` to `handshake.go` and
+  `SubmitSharesError.Encode()` to `messages.go` (`bytes` import added). Both
+  round-trip through the existing decoders.
+- **Stratum (B) — `DispatchFrame` coverage at 15.9%.** Added 9 dispatch tests
+  covering `SetupConnection`, `SetupConnectionError`, `OpenMiningChannel`,
+  `OpenMiningChannelError`, `SubmitSharesSuccess`, `SubmitSharesError`, and
+  a truncated-payload malformed-message case. `SubmitSharesSuccess.Encode`
+  round-trip test added. `stratum` coverage: 75.5% → 81.3%.
+- **poolproto/stratumv2 (D) — coverage 23.7% → 80.4%.** The entire `Negotiate`,
+  `readLoop`, `Jobs`, `Submit`, `sendMsg`, `float64FromBits`, and `SuggestedDifficulty`
+  code paths were at 0% — never exercised by any test. Added a `poolSide` /
+  `writeMsgTo` mock-pool-server helper using `net.Pipe()` and 10 new tests covering
+  the full `Dial→Negotiate→Jobs→Submit→Close` lifecycle, pool-rejection paths
+  (`SetupConnectionError`, `OpenMiningChannelError`), idempotent `connection.Close`,
+  and `float64FromBits`.
+
+Total statement coverage: **79.3% → 81.8%** (24 packages, all green, -race clean on
+touched packages).
+
 ### Fixes (session 71 — category-audit pass: latent panics, drain-loop liveness, provider restart)
 
 Five confirmed bugs from an exhaustive parallel re-audit of categories A, G, L,

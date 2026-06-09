@@ -350,3 +350,223 @@ func TestFloat32Encoding(t *testing.T) {
 		}
 	}
 }
+
+// ----- SubmitSharesSuccess.Encode -----
+
+func TestSubmitSharesSuccess_Encode_Roundtrip(t *testing.T) {
+	orig := SubmitSharesSuccess{
+		ChannelID:          7,
+		LastSequenceNumber: 99,
+		NewSubmitsAccepted: 3,
+		NewSharesSummed:    10,
+	}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeSubmitSharesSuccess(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip mismatch: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestSubmitSharesSuccess_Encode_ShortPayload(t *testing.T) {
+	_, err := DecodeSubmitSharesSuccess(make([]byte, 3))
+	if err == nil {
+		t.Error("DecodeSubmitSharesSuccess(3 bytes) should error")
+	}
+}
+
+// ----- SubmitSharesError -----
+
+func TestDecodeSubmitSharesError_Basic(t *testing.T) {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint32(buf[0:4], 5)  // ChannelID
+	binary.LittleEndian.PutUint32(buf[4:8], 12) // SequenceNumber
+
+	got, err := DecodeSubmitSharesError(buf)
+	if err != nil {
+		t.Fatalf("DecodeSubmitSharesError: %v", err)
+	}
+	if got.ChannelID != 5 || got.SequenceNumber != 12 {
+		t.Errorf("got %+v, want ChannelID=5 SequenceNumber=12", got)
+	}
+	if got.Error != "" {
+		t.Errorf("Error = %q, want empty (no string bytes)", got.Error)
+	}
+}
+
+func TestDecodeSubmitSharesError_WithMessage(t *testing.T) {
+	msg := "duplicate share"
+	raw := make([]byte, 8, 8+1+len(msg))
+	binary.LittleEndian.PutUint32(raw[0:4], 2)
+	binary.LittleEndian.PutUint32(raw[4:8], 7)
+	raw = append(raw, byte(len(msg)))
+	raw = append(raw, []byte(msg)...)
+
+	got, err := DecodeSubmitSharesError(raw)
+	if err != nil {
+		t.Fatalf("DecodeSubmitSharesError: %v", err)
+	}
+	if got.Error != msg {
+		t.Errorf("Error = %q, want %q", got.Error, msg)
+	}
+}
+
+func TestDecodeSubmitSharesError_ShortPayload(t *testing.T) {
+	_, err := DecodeSubmitSharesError(make([]byte, 4))
+	if err == nil {
+		t.Error("DecodeSubmitSharesError(4 bytes) should error (need ≥8)")
+	}
+}
+
+// ----- OpenMiningChannelError -----
+
+func TestDecodeOpenMiningChannelError_Basic(t *testing.T) {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf[0:4], 1) // ReqID
+
+	got, err := DecodeOpenMiningChannelError(buf)
+	if err != nil {
+		t.Fatalf("DecodeOpenMiningChannelError: %v", err)
+	}
+	if got.ReqID != 1 {
+		t.Errorf("ReqID = %d, want 1", got.ReqID)
+	}
+	if got.Error != "" {
+		t.Errorf("Error = %q, want empty", got.Error)
+	}
+}
+
+func TestDecodeOpenMiningChannelError_WithMessage(t *testing.T) {
+	msg := "unauthorized"
+	raw := make([]byte, 4, 4+1+len(msg))
+	binary.LittleEndian.PutUint32(raw[0:4], 3) // ReqID
+	raw = append(raw, byte(len(msg)))
+	raw = append(raw, []byte(msg)...)
+
+	got, err := DecodeOpenMiningChannelError(raw)
+	if err != nil {
+		t.Fatalf("DecodeOpenMiningChannelError: %v", err)
+	}
+	if got.ReqID != 3 || got.Error != msg {
+		t.Errorf("got %+v, want ReqID=3 Error=%q", got, msg)
+	}
+}
+
+func TestDecodeOpenMiningChannelError_ShortPayload(t *testing.T) {
+	_, err := DecodeOpenMiningChannelError(make([]byte, 3))
+	if err == nil {
+		t.Error("DecodeOpenMiningChannelError(3 bytes) should error (need ≥4)")
+	}
+}
+
+// ----- DispatchFrame — additional message types -----
+
+func TestDispatchFrame_SubmitSharesSuccess(t *testing.T) {
+	orig := SubmitSharesSuccess{ChannelID: 1, LastSequenceNumber: 5, NewSubmitsAccepted: 1, NewSharesSummed: 1}
+	payload, _ := orig.Encode()
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesSuccess, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.SubmitSharesSuccess == nil {
+		t.Fatal("SubmitSharesSuccess not populated")
+	}
+	if msg.SubmitSharesSuccess.ChannelID != 1 {
+		t.Errorf("ChannelID = %d, want 1", msg.SubmitSharesSuccess.ChannelID)
+	}
+}
+
+func TestDispatchFrame_SubmitSharesError(t *testing.T) {
+	raw := make([]byte, 8)
+	binary.LittleEndian.PutUint32(raw[0:4], 2)
+	binary.LittleEndian.PutUint32(raw[4:8], 3)
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesError, MsgLength: 8}, Payload: raw}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.SubmitSharesError == nil {
+		t.Fatal("SubmitSharesError not populated")
+	}
+	if msg.SubmitSharesError.ChannelID != 2 {
+		t.Errorf("ChannelID = %d, want 2", msg.SubmitSharesError.ChannelID)
+	}
+}
+
+func TestDispatchFrame_OpenMiningChannelError(t *testing.T) {
+	raw := make([]byte, 4)
+	binary.LittleEndian.PutUint32(raw[0:4], 9) // ReqID
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannelError, MsgLength: 4}, Payload: raw}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.OpenMiningChannelError == nil {
+		t.Fatal("OpenMiningChannelError not populated")
+	}
+	if msg.OpenMiningChannelError.ReqID != 9 {
+		t.Errorf("ReqID = %d, want 9", msg.OpenMiningChannelError.ReqID)
+	}
+}
+
+func TestDispatchFrame_SetupConnection(t *testing.T) {
+	orig := SetupConnection{Protocol: MiningProtocol, MinVersion: 2, MaxVersion: 2}
+	payload, _ := orig.Encode()
+	f := Frame{Header: Header{MsgType: MsgSetupConnection, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.SetupConnection == nil {
+		t.Fatal("SetupConnection not populated")
+	}
+}
+
+func TestDispatchFrame_SetupConnectionError(t *testing.T) {
+	orig := SetupConnectionError{Flags: 0, Error: "unsupported version"}
+	payload, _ := orig.Encode()
+	f := Frame{Header: Header{MsgType: MsgSetupConnectionError, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.SetupConnectionError == nil {
+		t.Fatal("SetupConnectionError not populated")
+	}
+	if msg.SetupConnectionError.Error != "unsupported version" {
+		t.Errorf("Error = %q", msg.SetupConnectionError.Error)
+	}
+}
+
+func TestDispatchFrame_OpenMiningChannel(t *testing.T) {
+	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6}
+	payload, _ := orig.Encode()
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannel, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.OpenMiningChannel == nil {
+		t.Fatal("OpenMiningChannel not populated")
+	}
+}
+
+func TestDispatchFrame_MalformedKnownMsg_ReturnsError(t *testing.T) {
+	// A known message type with a truncated payload must return an error,
+	// not silently produce a zero-value message.
+	f := Frame{
+		Header:  Header{MsgType: MsgSetupConnectionSuccess, MsgLength: 2},
+		Payload: []byte{0x01, 0x00}, // too short: need 6 bytes
+	}
+	_, err := DispatchFrame(f)
+	if err == nil {
+		t.Error("DispatchFrame with truncated SetupConnectionSuccess payload should error")
+	}
+}
+

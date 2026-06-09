@@ -37,6 +37,7 @@
 package stratum
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -190,6 +191,22 @@ type SubmitSharesError struct {
 	ChannelID      uint32
 	SequenceNumber uint32
 	Error          string // STR0_255
+}
+
+// Encode serialises SubmitSharesError (symmetric inverse of DecodeSubmitSharesError).
+func (m SubmitSharesError) Encode() ([]byte, error) {
+	var buf bytes.Buffer
+	w := &byteWriter{&buf}
+	if err := putU32LE(w, m.ChannelID); err != nil {
+		return nil, err
+	}
+	if err := putU32LE(w, m.SequenceNumber); err != nil {
+		return nil, err
+	}
+	if err := putStr0_255(w, m.Error); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // DecodeSubmitSharesError parses a SubmitSharesError payload.

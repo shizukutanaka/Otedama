@@ -262,6 +262,59 @@ and flagged, not changed this session:
   error (e.g. a broken pipe when the caller exits early). Now returns
   `exitRuntime` and prints to stderr. (`cmd/otedama/main.go`.)
 
+### B — Stratum V2 transport (session 72)
+- ✅ **`OpenMiningChannelError` and `SubmitSharesError` had no `Encode`
+  method.** Every other message type exposes `Encode()` as the symmetric
+  inverse of its `Decode*` function; these two were missing it. Without
+  `Encode`, a server-side (or test-side) implementation could not send
+  these rejection messages. Added `OpenMiningChannelError.Encode()` to
+  `handshake.go` and `SubmitSharesError.Encode()` to `messages.go`
+  (which required adding `"bytes"` to the import). Both round-trip
+  correctly through the existing `Decode*` functions.
+  Tests: `TestDecodeSubmitSharesError_Basic`,
+  `TestDecodeSubmitSharesError_WithMessage`,
+  `TestDecodeOpenMiningChannelError_Basic`,
+  `TestDecodeOpenMiningChannelError_WithMessage`.
+- ✅ **`DispatchFrame` coverage at 15.9%.** Added `TestDispatchFrame_*`
+  cases for `SetupConnection`, `SetupConnectionError`,
+  `OpenMiningChannel`, `OpenMiningChannelError`, `SubmitSharesSuccess`,
+  `SubmitSharesError`, and a truncated-payload malformed-message test.
+  Stratum coverage: 75.5% → 81.3%.
+- ✅ **`SubmitSharesSuccess.Encode` at 0%.** Added
+  `TestSubmitSharesSuccess_Encode_Roundtrip`.
+
+### D — Pool-protocol abstraction / stratumv2 (session 72)
+- ✅ **`poolproto/stratumv2` coverage at 23.7% (critical gap).**
+  `Negotiate`, `readLoop`, `Jobs`, `Submit`, `sendMsg`, `SuggestedDifficulty`,
+  `float64FromBits` were all at 0% — the core runtime path untested.
+  Added a `poolSide`/`writeMsgTo` mock-pool-server helper using
+  `net.Pipe()`; new tests exercise the full `Dial→Negotiate→Jobs→Submit→Close`
+  lifecycle, pool-rejection paths (`SetupConnectionError`,
+  `OpenMiningChannelError`), and idempotent `connection.Close()`.
+  Coverage: 23.7% → 80.4%.
+  Tests: `TestDialer_Negotiate_Success`,
+  `TestDialer_Negotiate_PoolRejectsSetup`,
+  `TestDialer_Negotiate_PoolRejectsChannel`,
+  `TestDialer_Negotiate_WrongConnectionType`,
+  `TestSession_Jobs_DeliversNewMiningJob`,
+  `TestSession_Submit_SendsFrame`,
+  `TestSession_Close_ClosesJobsChannel`,
+  `TestSession_SuggestedDifficulty_Default`,
+  `TestConnection_Close_IsIdempotent`,
+  `TestFloat64FromBits`.
+
+### Coverage tracking (session 72)
+Total statement coverage across all 24 packages rose from **79.3%** to
+**81.8%** this session. Remaining packages below 90%:
+
+| Package | Coverage | Notes |
+|---|---|---|
+| `internal/daemon` | 36.2% | `installSystemd`, `installLaunchd`, `runCmd` need root/OS to exercise; unit-testable parts (`serviceArgv`, `xmlEscape`, `launchdPlist`) already covered |
+| `cmd/otedama` | 68.3% | Subcommand integration paths; the 90% gap is in OS-interaction paths (`service install/uninstall/status`) |
+| `internal/engine` | 77.3% | `totalHashes`, `totalDropped`, `logStats` helpers at 0% — need a live mining session |
+| `internal/stratum` | 81.3% | `ReadMessage2` noise path, `EncodeFrame` error path |
+| `internal/poolproto/stratumv2` | 80.4% | `readLoop` error paths, TLS dial path |
+
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
 G1–G15 and session 71), P (logger), U (clock/version) — reviewed, no
@@ -291,6 +344,9 @@ concrete defects beyond what the spec gap table already tracks.
 | HAL (s71) | `Detect()` drain loop exits on `ctx.Done()` (blocking driver no longer hangs) | `TestDetector_ContextCancellationInterruptsDrainLoop` |
 | Providers (s71) | `Stop()` nils `p.cancel` + recreates `quoteCh` → provider is restartable | `TestMiningProvider_StopClearsStateForRestart`, `TestAkashProvider_StopClearsStateForRestart` |
 | CLI (s71) | `version --json` propagates `Encode` error to stderr + `exitRuntime` | no separate test (exercised by `TestCmdVersion_*` integration) |
+| Stratum B (s72) | `OpenMiningChannelError.Encode` + `SubmitSharesError.Encode` missing; added both | `TestDecodeOpenMiningChannelError_*`, `TestDecodeSubmitSharesError_*` |
+| Stratum B (s72) | `DispatchFrame` + `SubmitSharesSuccess.Encode` branches at 0%; 15 new tests | `TestDispatchFrame_*`, `TestSubmitSharesSuccess_Encode_Roundtrip` |
+| Stratum D (s72) | `poolproto/stratumv2` 23.7%→80.4%; full mock pool server tests for Negotiate/Jobs/Submit/Close | 10 new `TestDialer_*` / `TestSession_*` / `TestFloat64FromBits` |
 
 All 24 packages build, vet, and test green (`-race` clean on the touched
 packages). Flagged Noise/engine items are funds-critical and left for maintainer

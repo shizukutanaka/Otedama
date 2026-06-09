@@ -282,6 +282,19 @@ type OpenMiningChannelError struct {
 	Error string // STR0_255
 }
 
+// Encode serialises OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
+func (m OpenMiningChannelError) Encode() ([]byte, error) {
+	var buf bytes.Buffer
+	w := &byteWriter{&buf}
+	if err := putU32LE(w, m.ReqID); err != nil {
+		return nil, err
+	}
+	if err := putStr0_255(w, m.Error); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // DecodeOpenMiningChannelError parses an OpenMiningChannelError payload.
 func DecodeOpenMiningChannelError(payload []byte) (OpenMiningChannelError, error) {
 	if len(payload) < 4 {
