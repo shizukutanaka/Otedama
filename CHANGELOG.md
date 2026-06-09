@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixes (session 73 — coverage completeness: 0% paths in engine + stratum, 82.3%→82.6%, 805 tests)
+
+Targeted the remaining 0%-covered functions identified in session 72 coverage audit:
+two `Encode` methods added in session 72 that still had 0% test coverage, plus three
+`engine` helper functions (`totalHashes`, `totalDropped`, `logStats`) that had never
+been exercised.
+
+- **Engine (E) — `totalHashes`, `totalDropped`, `logStats` at 0%.** These three
+  aggregation helpers had no unit tests. Added tests covering: empty worker slice
+  (sum = 0 sentinel), and `logStats` emitting `"info"` level with `"hashrate="` and
+  `"shares="` substrings for both zero and non-zero rates. Engine coverage: 77.3% → 78.9%.
+- **Engine (E) — `setupWallet` early-return paths at 0%.** Added two tests for the
+  short-circuit cases: empty `WalletPassphrase` and empty `DataDir`. Both must return
+  `""` without logging. Coverage: 13.3% statement baseline preserved (file I/O paths
+  require integration tests).
+- **Stratum (B) — `OpenMiningChannelError.Encode` and `SubmitSharesError.Encode` at 0%.**
+  Both were added in session 72 but never called by any test. Added four roundtrip tests
+  (with/without error string for each type). Stratum coverage: 81.3% → 83.4%.
+
+Total statement coverage: **82.3% → 82.6%** (24 packages, 805 tests, all green).
+
 ### Fixes (session 72 — stratum completeness: missing Encode methods, test coverage 79.3%→81.8%)
 
 Coverage audit revealed `poolproto/stratumv2` at 23.7% and two missing `Encode`

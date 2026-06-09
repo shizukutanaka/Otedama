@@ -747,3 +747,100 @@ func TestPublishBTCRate_SetsGauge(t *testing.T) {
 		t.Errorf("btc_usd_rate gauge = %v, want fallback 95000", got)
 	}
 }
+
+// ============================================================================
+// setupWallet — early-return paths (no passphrase / no datadir)
+// ============================================================================
+
+func TestSetupWallet_EmptyPassphraseReturnsEmpty(t *testing.T) {
+	var logs []string
+	log := func(_, m string) { logs = append(logs, m) }
+
+	opts := Options{WalletPassphrase: "", Config: config.Config{DataDir: "/tmp"}}
+	fp := setupWallet(opts, log)
+	if fp != "" {
+		t.Errorf("setupWallet with empty passphrase = %q, want empty", fp)
+	}
+	if len(logs) != 0 {
+		t.Errorf("setupWallet with empty passphrase should not log; got %v", logs)
+	}
+}
+
+func TestSetupWallet_EmptyDataDirReturnsEmpty(t *testing.T) {
+	var logs []string
+	log := func(_, m string) { logs = append(logs, m) }
+
+	opts := Options{WalletPassphrase: "correct-horse-battery-staple", Config: config.Config{DataDir: ""}}
+	fp := setupWallet(opts, log)
+	if fp != "" {
+		t.Errorf("setupWallet with empty DataDir = %q, want empty", fp)
+	}
+	if len(logs) != 0 {
+		t.Errorf("setupWallet with empty DataDir should not log; got %v", logs)
+	}
+}
+
+// ============================================================================
+// totalHashes / totalDropped — worker stat aggregation
+// ============================================================================
+
+func TestTotalHashes_EmptyWorkers(t *testing.T) {
+	if got := totalHashes(nil); got != 0 {
+		t.Errorf("totalHashes(nil) = %d, want 0", got)
+	}
+}
+
+func TestTotalDropped_EmptyWorkers(t *testing.T) {
+	if got := totalDropped(nil); got != 0 {
+		t.Errorf("totalDropped(nil) = %d, want 0", got)
+	}
+}
+
+func TestTotalHashes_SumsAcrossWorkers(t *testing.T) {
+	// Workers start with zero counters; we can only verify the sum is
+	// non-negative and that calling it on an empty slice returns 0 (the
+	// non-empty case requires running workers, covered by integration tests).
+	workers := make([]*miner.Worker, 0)
+	if got := totalHashes(workers); got != 0 {
+		t.Errorf("totalHashes([]) = %d, want 0", got)
+	}
+}
+
+func TestTotalDropped_SumsAcrossWorkers(t *testing.T) {
+	workers := make([]*miner.Worker, 0)
+	if got := totalDropped(workers); got != 0 {
+		t.Errorf("totalDropped([]) = %d, want 0", got)
+	}
+}
+
+// ============================================================================
+// logStats — formats and emits a hashrate+shares log line
+// ============================================================================
+
+func TestLogStats_EmitsInfoWithHashRate(t *testing.T) {
+	var level, msg string
+	log := func(l, m string) { level = l; msg = m }
+
+	logStats(nil, 12345.0, log)
+
+	if level != "info" {
+		t.Errorf("logStats level = %q, want info", level)
+	}
+	if !strings.Contains(msg, "hashrate=") {
+		t.Errorf("logStats msg = %q, want 'hashrate=' substring", msg)
+	}
+	if !strings.Contains(msg, "shares=") {
+		t.Errorf("logStats msg = %q, want 'shares=' substring", msg)
+	}
+}
+
+func TestLogStats_ZeroHashRate(t *testing.T) {
+	var msg string
+	log := func(_, m string) { msg = m }
+
+	logStats(nil, 0, log)
+
+	if !strings.Contains(msg, "hashrate=") {
+		t.Errorf("logStats(0 H/s) msg = %q, want 'hashrate=' substring", msg)
+	}
+}

@@ -570,3 +570,77 @@ func TestDispatchFrame_MalformedKnownMsg_ReturnsError(t *testing.T) {
 	}
 }
 
+// ----- OpenMiningChannelError.Encode (added session 72) -----
+
+func TestOpenMiningChannelError_Encode_Roundtrip(t *testing.T) {
+	orig := OpenMiningChannelError{ReqID: 7, Error: "invalid user"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeOpenMiningChannelError(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.ReqID != orig.ReqID {
+		t.Errorf("ReqID: got %d, want %d", got.ReqID, orig.ReqID)
+	}
+	if got.Error != orig.Error {
+		t.Errorf("Error: got %q, want %q", got.Error, orig.Error)
+	}
+}
+
+func TestOpenMiningChannelError_Encode_EmptyError(t *testing.T) {
+	orig := OpenMiningChannelError{ReqID: 1, Error: ""}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeOpenMiningChannelError(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.ReqID != 1 || got.Error != "" {
+		t.Errorf("got {%d, %q}, want {1, \"\"}", got.ReqID, got.Error)
+	}
+}
+
+// ----- SubmitSharesError.Encode (added session 72) -----
+
+func TestSubmitSharesError_Encode_Roundtrip(t *testing.T) {
+	orig := SubmitSharesError{ChannelID: 3, SequenceNumber: 12, Error: "stale share"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeSubmitSharesError(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.ChannelID != orig.ChannelID {
+		t.Errorf("ChannelID: got %d, want %d", got.ChannelID, orig.ChannelID)
+	}
+	if got.SequenceNumber != orig.SequenceNumber {
+		t.Errorf("SequenceNumber: got %d, want %d", got.SequenceNumber, orig.SequenceNumber)
+	}
+	if got.Error != orig.Error {
+		t.Errorf("Error: got %q, want %q", got.Error, orig.Error)
+	}
+}
+
+func TestSubmitSharesError_Encode_EmptyError(t *testing.T) {
+	orig := SubmitSharesError{ChannelID: 1, SequenceNumber: 0, Error: ""}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeSubmitSharesError(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.ChannelID != 1 || got.Error != "" {
+		t.Errorf("got {%d, %q}, want {1, \"\"}", got.ChannelID, got.Error)
+	}
+}
+
+
