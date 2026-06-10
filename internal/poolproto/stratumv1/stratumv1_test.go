@@ -1457,3 +1457,75 @@ func TestNegotiate_NonV1Connection_ReturnsError(t *testing.T) {
 		t.Error("Negotiate with non-V1 connection should return error")
 	}
 }
+
+// ============================================================================
+// sendJob — clean_jobs purge and normal queueing behaviour
+// ============================================================================
+
+// makeTestSession returns a bare *session with a jobsCh of capacity cap.
+// The conn field is nil; only jobsCh is used in sendJob.
+func makeTestSession(cap int) *session {
+	return &session{jobsCh: make(chan poolproto.Job, cap)}
+}
+
+func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
+	s := makeTestSession(4)
+	s.sendJob(poolproto.Job{JobID: "j1", CleanJobs: false})
+	if got := len(s.jobsCh); got != 1 {
+		t.Errorf("jobsCh len = %d, want 1", got)
+	}
+	j := <-s.jobsCh
+	if j.JobID != "j1" {
+		t.Errorf("JobID = %q, want j1", j.JobID)
+	}
+}
+
+func TestSendJob_DropsOldestWhenFullAndCleanJobsFalse(t *testing.T) {
+	s := makeTestSession(2)
+	s.sendJob(poolproto.Job{JobID: "old1"})
+	s.sendJob(poolproto.Job{JobID: "old2"})
+	// Channel is now full (cap 2). Sending with clean_jobs=false must drop old1.
+	s.sendJob(poolproto.Job{JobID: "new"})
+
+	// Drain channel; should contain old2 and new (old1 was dropped).
+	var got []string
+	for len(s.jobsCh) > 0 {
+		got = append(got, (<-s.jobsCh).JobID)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d jobs, want 2: %v", len(got), got)
+	}
+	if got[0] != "old2" || got[1] != "new" {
+		t.Errorf("jobs = %v, want [old2 new]", got)
+	}
+}
+
+func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
+	s := makeTestSession(8)
+	// Pre-fill with 5 stale jobs.
+	for i := range 5 {
+		s.sendJob(poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false})
+	}
+	if got := len(s.jobsCh); got != 5 {
+		t.Fatalf("pre-fill: jobsCh len = %d, want 5", got)
+	}
+
+	// New block: clean_jobs=true must discard all 5 stale jobs.
+	s.sendJob(poolproto.Job{JobID: "newblock", CleanJobs: true})
+
+	if got := len(s.jobsCh); got != 1 {
+		t.Fatalf("after clean_jobs: jobsCh len = %d, want 1", got)
+	}
+	j := <-s.jobsCh
+	if j.JobID != "newblock" {
+		t.Errorf("JobID = %q, want newblock", j.JobID)
+	}
+}
+
+func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
+	s := makeTestSession(4)
+	s.sendJob(poolproto.Job{JobID: "only", CleanJobs: true})
+	if got := len(s.jobsCh); got != 1 {
+		t.Errorf("jobsCh len = %d, want 1", got)
+	}
+}

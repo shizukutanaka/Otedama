@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 97 — V1 clean_jobs purge: prevent stale share submissions)
+
+**`internal/poolproto/stratumv1/stratumv1.go`** — extracted `sendJob` method
+from `dispatch`; the clean_jobs flag is now honoured:
+
+- **Before:** `mining.notify` with `clean_jobs=true` only dropped the
+  **oldest** single job when the channel was full, leaving up to 7 stale
+  jobs queued. Workers would submit those on the old block's jobs, producing
+  stale (rejected) shares — the #1 reject category after network latency.
+- **After:** when `CleanJobs=true`, `sendJob` drains **all** pending jobs
+  from `jobsCh` before queuing the new job. Workers immediately work on the
+  current block with no stale backlog.
+- `clean_jobs=false` behaviour is unchanged (drop-oldest-push-newest).
+- `RESEARCH_IMPROVEMENTS.md` Category 1 item 9 addressed.
+
+Tests: `TestSendJob_NormalQueueingWhenChannelEmpty`,
+`TestSendJob_DropsOldestWhenFullAndCleanJobsFalse`,
+`TestSendJob_PurgesAllPendingJobsWhenCleanJobs`,
+`TestSendJob_CleanJobsOnEmptyChannelJustSends`.
+
+Coverage: `internal/poolproto/stratumv1` remains 97.6%. 24 packages green.
+
 ### Feat (session 96 — TUI PoolLatency wiring + stalled-miner indicator)
 
 Two previously-missing TUI signal wirings that close the gap between what

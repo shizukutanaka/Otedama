@@ -174,22 +174,7 @@ func (s *session) dispatch(line []byte) {
 		if err != nil {
 			return
 		}
-		// Non-blocking send: if the worker is too slow, drop the
-		// oldest job (the new one is always more current).
-		select {
-		case s.jobsCh <- job:
-		default:
-			// Drop oldest, push newest. Keeps the channel from
-			// staling on slow consumers.
-			select {
-			case <-s.jobsCh:
-			default:
-			}
-			select {
-			case s.jobsCh <- job:
-			default:
-			}
-		}
+		s.sendJob(job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -219,6 +204,40 @@ func (s *session) dispatch(line []byte) {
 
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
+
+// sendJob enqueues a new job, respecting the clean_jobs flag.
+// When clean_jobs=true the pool signals a new block has been found;
+// all pending jobs must be discarded immediately — submitting them would
+// produce stale (rejected) shares, which is the #1 reject cause after
+// network latency. When clean_jobs=false, only the oldest job is dropped
+// if the worker cannot keep up (the new job is always more current).
+func (s *session) sendJob(job poolproto.Job) {
+	if job.CleanJobs {
+		// Purge all pending jobs before queueing the new block's work.
+		for {
+			select {
+			case <-s.jobsCh:
+			default:
+				goto send // channel empty
+			}
+		}
+	}
+send:
+	select {
+	case s.jobsCh <- job:
+	default:
+		// Channel still full (clean_jobs=false, slow worker):
+		// drop oldest, push newest.
+		select {
+		case <-s.jobsCh:
+		default:
+		}
+		select {
+		case s.jobsCh <- job:
+		default:
+		}
+	}
+}
 
 // Submit sends a share via mining.submit and returns the pool's verdict.
 // Stratum V1 submission format: ["worker", "job_id", "extranonce2",
