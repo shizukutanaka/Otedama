@@ -167,6 +167,33 @@ func parseReconnect(raw json.RawMessage) (reconnectDirective, bool) {
 	return d, true
 }
 
+// parseSubscribeResult extracts extranonce1 and extranonce2Size from a
+// mining.subscribe response. The V1 result envelope is:
+//
+//	[[[sub_type, sub_id], ...], extranonce1_hex, extranonce2_size_int]
+//
+// The subscriptions array (index 0) is advisory and ignored; only the
+// extranonce fields at indices 1 and 2 are needed for share construction.
+func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
+	arr, ok := result.([]interface{})
+	if !ok || len(arr) < 3 {
+		n := 0
+		if a, ok2 := result.([]interface{}); ok2 {
+			n = len(a)
+		}
+		return "", 0, fmt.Errorf("stratumv1: unexpected subscribe result (type=%T, len=%d)", result, n)
+	}
+	en1, ok = arr[1].(string)
+	if !ok {
+		return "", 0, fmt.Errorf("stratumv1: extranonce1 not a string: %T", arr[1])
+	}
+	en2SizeF, ok := arr[2].(float64)
+	if !ok {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
+	}
+	return en1, int(en2SizeF), nil
+}
+
 // ----- helpers -----
 
 // parseAddress extracts host:port from a stratum+tcp:// or stratum+tls:// URL.

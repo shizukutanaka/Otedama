@@ -5,6 +5,7 @@
 package engine
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -21,6 +22,9 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
+
+	// Register the Stratum V1 dialer so poolproto.DialURL works in V1 tests.
+	_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"
 )
 
 // ============================================================================
@@ -635,5 +639,428 @@ func TestRunReconnectLoop_MultiAddr_Failover(t *testing.T) {
 
 	if !strings.Contains(joined, "address") {
 		t.Errorf("expected address failover in logs; got: %v", logs)
+	}
+}
+
+// ============================================================================
+// runSessionV1 — Stratum V1 poolproto path
+// ============================================================================
+
+// fakeV1Pool runs a minimal Stratum V1 server on a random local port.
+// It responds to subscribe and authorize, optionally sends one notify job,
+// then closes the connection. Returns the listen address.
+func fakeV1Pool(t *testing.T, sendJob bool) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1Pool listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		// mining.subscribe
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+
+		// mining.authorize
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+
+		if sendJob {
+			// Use numeric job ID "1" so applyJob can parse it with fmt.Sscanf.
+			fmt.Fprintf(conn,
+				`{"id":null,"method":"mining.notify","params":[`+
+					`"1",`+
+					`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+					`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+			time.Sleep(50 * time.Millisecond)
+		}
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_PoolClosesAfterHandshake(t *testing.T) {
+	addr := fakeV1Pool(t, false) // closes immediately after authorize
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	err := runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log:      func(_, _ string) {},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool closed connection") {
+		t.Errorf("expected 'pool closed connection', got: %v", err)
+	}
+}
+
+func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
+	addr := fakeV1Pool(t, true) // sends one job then closes
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	connected := false
+	err := runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log:      func(_, _ string) {},
+		onConnected: func() { connected = true },
+	})
+	if !connected {
+		t.Error("onConnected was not called")
+	}
+	// Ends with pool disconnect.
+	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRunSessionV1_StatsTicker(t *testing.T) {
+	// Stats ticker must fire and not panic; run a session that stays alive
+	// long enough for the ticker to fire at least once.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		// Keep alive longer than the tick interval.
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	workers := []*miner.Worker{miner.NewWorker(miner.WorkerConfig{Threads: 1})}
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		workers:  workers,
+		merged:   merged,
+		interval: 50 * time.Millisecond, // fire quickly so test doesn't time out
+		log:      func(_, _ string) {},
+		m:        m,
+	})
+}
+
+func TestRunSessionV1_ContextCancelled(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		time.Sleep(2 * time.Second)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	err = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 500 * time.Millisecond,
+		log:      func(_, _ string) {},
+	})
+	if err != context.Canceled {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
+	// Server: full handshake + one mining.submit → respond true → hold alive.
+	// We use a signal channel to cancel ctx AFTER the response is sent, so
+	// the Submit goroutine inside runSessionV1 can complete before sess.Close.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	submitResponseSent := make(chan struct{})
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit
+		fmt.Fprintf(conn, `{"id":3,"result":true,"error":null}`+"\n")
+		close(submitResponseSent)
+		time.Sleep(500 * time.Millisecond) // keep connection alive
+	}()
+
+	// Keep merged open; one share in buffer.  Closing it would cause
+	// runSessionV1 to return before the Submit goroutine finishes.
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var watcherDone sync.WaitGroup
+	watcherDone.Add(1)
+	go func() {
+		defer watcherDone.Done()
+		select {
+		case <-submitResponseSent:
+			// 50 ms gives the Submit goroutine time to process the result
+			// (log, latency.Record, sharesAccepted.Inc) before sess.Close.
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		case <-time.After(3 * time.Second):
+			cancel()
+		}
+	}()
+
+	// Call via runSession (V1 URL) to cover the V1 dispatch in runSession.
+	_ = runSession(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "worker.1",
+		merged:   merged,
+		interval: 10 * time.Second, // no stats-ticker noise
+		log:      func(_, _ string) {},
+		m:        m,
+	})
+	watcherDone.Wait()
+
+	if got := m.sharesAccepted.Value(); got != 1 {
+		t.Errorf("sharesAccepted = %d, want 1", got)
+	}
+}
+
+func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
+	// Server rejects the submitted share (result: false + error array).
+	// Same signal-based approach: cancel ctx only after the response is sent.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	submitResponseSent := make(chan struct{})
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // submit
+		fmt.Fprintf(conn, `{"id":3,"result":false,"error":["23","Duplicate share",null]}`+"\n")
+		close(submitResponseSent)
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var watcherDone sync.WaitGroup
+	watcherDone.Add(1)
+	go func() {
+		defer watcherDone.Done()
+		select {
+		case <-submitResponseSent:
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		case <-time.After(3 * time.Second):
+			cancel()
+		}
+	}()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 10 * time.Second,
+		log:      func(_, _ string) {},
+		m:        m,
+	})
+	watcherDone.Wait()
+
+	if got := m.sharesRejected.Value(); got != 1 {
+		t.Errorf("sharesRejected = %d, want 1", got)
+	}
+}
+
+func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
+	// Verify that after a share is accepted (latency recorded), the stats
+	// ticker logs p50/p95/p99.  We must NOT close merged before the Submit
+	// goroutine finishes, or sess.Close() will race with the latency record.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // submit
+		// Delay reply by 5 ms so elapsed rounds to >= 1 ms and the p95 > 0
+		// branch in the stats ticker is exercised.
+		time.Sleep(5 * time.Millisecond)
+		fmt.Fprintf(conn, `{"id":3,"result":true,"error":null}`+"\n")
+		// Hold alive long enough for the ticker to fire after latency is recorded.
+		time.Sleep(600 * time.Millisecond)
+	}()
+
+	// One share in buffer; keep merged open so runSessionV1 doesn't return
+	// via the "merged closed" path before the Submit goroutine finishes.
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+
+	var mu sync.Mutex
+	var logLines []string
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logLines = append(logLines, msg)
+		mu.Unlock()
+	}
+
+	// 400 ms timeout: Submit goroutine (< 10 ms) + ticker at 50 ms = covered.
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 50 * time.Millisecond,
+		log:      logFn,
+		m:        newEngineMetrics(metrics.NewRegistry()),
+	})
+
+	mu.Lock()
+	joined := strings.Join(logLines, " ")
+	mu.Unlock()
+	if !strings.Contains(joined, "latency") {
+		t.Errorf("expected latency log from stats ticker; got: %v", logLines)
+	}
+}
+
+// ============================================================================
+// startMinerWorkers — non-SHA256d device skip and no-device error
+// ============================================================================
+
+func TestStartMinerWorkers_NonSHA256dDeviceSkipped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Only a GPU without SHA256d capability.
+	gpuNoHash := &cpuDevice{
+		id:   hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU},
+		caps: hal.Capabilities{GeneralCompute: true, SHA256d: false},
+	}
+	_, _, err := startMinerWorkers(ctx, []hal.Device{gpuNoHash}, func(_, _ string) {})
+	if err == nil {
+		t.Error("expected error when no SHA256d device is present")
+	}
+	if !strings.Contains(err.Error(), "SHA256d") {
+		t.Errorf("error should mention SHA256d, got: %v", err)
+	}
+}
+
+func TestStartMinerWorkers_MixedDevices(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cpuWithHash := &cpuDevice{
+		id:   hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+		caps: hal.Capabilities{SHA256d: true},
+	}
+	gpuNoHash := &cpuDevice{
+		id:   hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU},
+		caps: hal.Capabilities{GeneralCompute: true, SHA256d: false},
+	}
+	workers, merged, err := startMinerWorkers(ctx, []hal.Device{gpuNoHash, cpuWithHash}, func(_, _ string) {})
+	if err != nil {
+		t.Fatalf("startMinerWorkers: %v", err)
+	}
+	if len(workers) != 1 {
+		t.Errorf("workers = %d, want 1 (only the SHA256d CPU)", len(workers))
+	}
+	if merged == nil {
+		t.Error("merged channel is nil")
+	}
+	for _, w := range workers {
+		w.Stop()
 	}
 }

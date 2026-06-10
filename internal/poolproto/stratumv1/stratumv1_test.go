@@ -906,14 +906,19 @@ func TestDialer_Dial_InvalidURL_ReturnsError(t *testing.T) {
 func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 
-	// The current V1 Negotiate is a stub that does not drive a client-side
-	// subscribe/authorize handshake (see dialer.go), so the pool does not
-	// wait for requests over the synchronous net.Pipe — it simply
-	// disconnects after a moment. The session's read loop must then close
-	// the Jobs channel, which is the property this test verifies.
+	// Server completes the V1 handshake (subscribe + authorize) then
+	// disconnects to simulate a mid-session pool failure. The session's
+	// read loop must close the Jobs channel — the signal the engine's
+	// reconnect loop uses to re-dial.
 	go func() {
+		defer serverConn.Close()
+		r := bufio.NewReader(serverConn)
+		_, _ = r.ReadString('\n') // consume subscribe request
+		fmt.Fprintf(serverConn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"abc123",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // consume authorize request
+		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+		// Close mid-session without sending any jobs.
 		time.Sleep(50 * time.Millisecond)
-		serverConn.Close()
 	}()
 
 	conn := &connection{
@@ -927,7 +932,7 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 		t.Fatalf("Negotiate: %v", err)
 	}
 
-	// Jobs channel should eventually close when pool disconnects.
+	// Jobs channel should close when pool disconnects.
 	select {
 	case _, ok := <-sess.Jobs():
 		if ok {
@@ -1154,5 +1159,301 @@ func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Jobs channel did not close after mining.reconnect")
+	}
+}
+
+// ============================================================================
+// parseSubscribeResult
+// ============================================================================
+
+func TestParseSubscribeResult_Valid(t *testing.T) {
+	result := []interface{}{
+		[]interface{}{
+			[]interface{}{"mining.set_difficulty", "sub1"},
+			[]interface{}{"mining.notify", "sub2"},
+		},
+		"extranonce1hex",
+		float64(4),
+	}
+	en1, en2Size, err := parseSubscribeResult(result)
+	if err != nil {
+		t.Fatalf("parseSubscribeResult: %v", err)
+	}
+	if en1 != "extranonce1hex" {
+		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	}
+	if en2Size != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", en2Size)
+	}
+}
+
+func TestParseSubscribeResult_EmptySubscriptionsArray(t *testing.T) {
+	result := []interface{}{
+		[]interface{}{},
+		"abc123",
+		float64(8),
+	}
+	en1, en2Size, err := parseSubscribeResult(result)
+	if err != nil {
+		t.Fatalf("parseSubscribeResult with empty subscriptions: %v", err)
+	}
+	if en1 != "abc123" || en2Size != 8 {
+		t.Errorf("got (%q, %d), want (abc123, 8)", en1, en2Size)
+	}
+}
+
+func TestParseSubscribeResult_TooShort(t *testing.T) {
+	_, _, err := parseSubscribeResult([]interface{}{"only-one"})
+	if err == nil {
+		t.Error("too-short result should error")
+	}
+}
+
+func TestParseSubscribeResult_WrongType(t *testing.T) {
+	_, _, err := parseSubscribeResult("not an array")
+	if err == nil {
+		t.Error("non-array result should error")
+	}
+}
+
+func TestParseSubscribeResult_Extranonce1NotString(t *testing.T) {
+	result := []interface{}{[]interface{}{}, float64(42), float64(4)}
+	_, _, err := parseSubscribeResult(result)
+	if err == nil {
+		t.Error("non-string extranonce1 should error")
+	}
+}
+
+func TestParseSubscribeResult_Extranonce2SizeNotNumber(t *testing.T) {
+	result := []interface{}{[]interface{}{}, "abc", "not-a-number"}
+	_, _, err := parseSubscribeResult(result)
+	if err == nil {
+		t.Error("non-number extranonce2_size should error")
+	}
+}
+
+// ============================================================================
+// Dialer.Negotiate — full handshake paths
+// ============================================================================
+
+// newFakeServer creates a fake pool goroutine that responds to
+// subscribe (id=1) and authorize (id=2) requests, then optionally
+// keeps the connection open. The server's pipe end is returned so
+// callers can Close() it to simulate disconnect.
+type fakeServerConfig struct {
+	subscribeResult string // JSON for the subscribe result field (nil → use default)
+	subscribeError  string // JSON for the error field (replaces result)
+	authorizeResult string // "true" or "false"
+	authorizeError  string // JSON for the error field (replaces result)
+	keepAlive       bool   // hold connection open after handshake
+}
+
+func runFakeServer(t *testing.T, serverConn net.Conn, cfg fakeServerConfig) {
+	t.Helper()
+	go func() {
+		defer serverConn.Close()
+		r := bufio.NewReader(serverConn)
+
+		// respond to subscribe
+		_, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if cfg.subscribeError != "" {
+			fmt.Fprintf(serverConn, `{"id":1,"result":null,"error":%s}`+"\n", cfg.subscribeError)
+		} else {
+			sr := cfg.subscribeResult
+			if sr == "" {
+				sr = `[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4]`
+			}
+			fmt.Fprintf(serverConn, `{"id":1,"result":%s,"error":null}`+"\n", sr)
+		}
+		if cfg.subscribeError != "" {
+			return // handshake terminated at subscribe
+		}
+
+		// respond to authorize
+		_, err = r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if cfg.authorizeError != "" {
+			fmt.Fprintf(serverConn, `{"id":2,"result":null,"error":%s}`+"\n", cfg.authorizeError)
+		} else {
+			ar := cfg.authorizeResult
+			if ar == "" {
+				ar = "true"
+			}
+			fmt.Fprintf(serverConn, `{"id":2,"result":%s,"error":null}`+"\n", ar)
+		}
+		if !cfg.keepAlive {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}()
+}
+
+func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	runFakeServer(t, serverConn, fakeServerConfig{
+		subscribeResult: `[[["mining.notify","n1"]],"deadbeef01",8]`,
+		keepAlive:       true,
+	})
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:3333",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	d := &Dialer{}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	sv1 := sess.(*session)
+	if sv1.extranonce1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
+	}
+	if sv1.extranonce2Size != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	}
+}
+
+func TestNegotiate_Success_EmptyPasswordDefaultsToX(t *testing.T) {
+	// Verify that an empty password in Credentials is transmitted as "x".
+	clientConn, serverConn := net.Pipe()
+	var capturedAuthorize []byte
+	go func() {
+		defer serverConn.Close()
+		r := bufio.NewReader(serverConn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(serverConn, `{"id":1,"result":[[[],"abc",4]],"error":null}`+"\n")
+		// Oops — that subscribe result is malformed (len=1), so the test below
+		// verifies that a minimal valid result still works. Let's fix it:
+		// We'll just read the authorize line but not respond (simulate immediate
+		// close after subscribe). Actually we need a valid subscribe response.
+		// Rebuild correctly.
+		line, _ := r.ReadBytes('\n')
+		capturedAuthorize = append([]byte(nil), line...)
+		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+	}()
+
+	// Start over with a proper server.
+	_ = capturedAuthorize
+	clientConn.Close()
+
+	// Real test with correct server.
+	clientConn2, serverConn2 := net.Pipe()
+	var gotAuth string
+	go func() {
+		defer serverConn2.Close()
+		r := bufio.NewReader(serverConn2)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(serverConn2, `{"id":1,"result":[[["mining.notify","n1"]],"aabb",4],"error":null}`+"\n")
+		line, _ := r.ReadString('\n') // authorize
+		gotAuth = line
+		fmt.Fprintf(serverConn2, `{"id":2,"result":true,"error":null}`+"\n")
+		time.Sleep(100 * time.Millisecond)
+	}()
+
+	conn2 := &connection{
+		raw:        clientConn2,
+		remoteAddr: "fake:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "myworker", Password: ""},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sess2, err := (&Dialer{}).Negotiate(ctx, conn2)
+	if err != nil {
+		t.Fatalf("Negotiate with empty password: %v", err)
+	}
+	defer sess2.Close()
+
+	// Verify the authorize request used "x" as password.
+	if !strings.Contains(gotAuth, `"x"`) {
+		t.Errorf("authorize params should contain 'x' as password, got: %s", gotAuth)
+	}
+}
+
+func TestNegotiate_SubscribeRejected_ReturnsHandshakeFailed(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	runFakeServer(t, serverConn, fakeServerConfig{
+		subscribeError: `[20,"Other/Unknown",null]`,
+	})
+
+	conn := &connection{
+		raw:      clientConn,
+		remoteAddr: "fake:0",
+		protocol: poolproto.ProtocolStratumV1,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := (&Dialer{}).Negotiate(ctx, conn)
+	if err == nil {
+		t.Fatal("expected error from rejected subscribe")
+	}
+	if !strings.Contains(err.Error(), "handshake") {
+		t.Errorf("error should mention handshake, got: %v", err)
+	}
+}
+
+func TestNegotiate_AuthorizeFailed_ReturnsHandshakeFailed(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	runFakeServer(t, serverConn, fakeServerConfig{
+		authorizeResult: "false",
+	})
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "bad", Password: "wrong"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := (&Dialer{}).Negotiate(ctx, conn)
+	if err == nil {
+		t.Fatal("expected error when authorize returns false")
+	}
+	if !strings.Contains(err.Error(), "not authorized") {
+		t.Errorf("error should mention 'not authorized', got: %v", err)
+	}
+}
+
+func TestNegotiate_AuthorizeError_ReturnsHandshakeFailed(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	runFakeServer(t, serverConn, fakeServerConfig{
+		authorizeError: `[24,"Unauthorized worker",null]`,
+	})
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "u", Password: "p"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := (&Dialer{}).Negotiate(ctx, conn)
+	if err == nil {
+		t.Fatal("expected error from authorize error response")
+	}
+	if !strings.Contains(err.Error(), "handshake") {
+		t.Errorf("error should mention handshake, got: %v", err)
+	}
+}
+
+func TestNegotiate_NonV1Connection_ReturnsError(t *testing.T) {
+	// A connection that is not *connection should be rejected immediately.
+	type otherConn struct{ poolproto.Connection }
+	_, err := (&Dialer{}).Negotiate(context.Background(), otherConn{})
+	if err == nil {
+		t.Error("Negotiate with non-V1 connection should return error")
 	}
 }

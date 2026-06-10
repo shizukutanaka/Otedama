@@ -19,6 +19,10 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/i18n/messages"
 	"github.com/shizukutanaka/Otedama/internal/logger"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
+
+	// Register pool-protocol dialers so poolproto.DialURL can find them.
+	// Each package's init() calls poolproto.Register with its Dialer.
+	_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"
 )
 
 // runFlags holds all parsed flags for the run subcommand. The same flag

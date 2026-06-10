@@ -408,7 +408,17 @@ type poolMsg struct {
 // jobs to workers and shares back to the pool until the connection
 // drops or ctx is cancelled. Returns the error that ended the session
 // (nil if ctx was cancelled cleanly).
+//
+// Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
+// poolproto.DialURL so the protocol abstraction is load-bearing for V1.
+// The Stratum V2 path uses the existing inline framing code until the
+// V2 poolproto dialer completes Step 3b (docs/KNOWN_LIMITATIONS.md §3).
 func runSession(ctx context.Context, opts sessionOpts) error {
+	proto := poolproto.FromURL(opts.poolURL)
+	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS {
+		return runSessionV1(ctx, opts)
+	}
+
 	host, err := parseHost(opts.poolURL)
 	if err != nil {
 		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
@@ -587,6 +597,139 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			submitTimes[seqNum] = time.Now()
 			opts.log("info", fmt.Sprintf("engine: share seq=%d nonce=0x%08X", seqNum, share.Nonce))
+		}
+	}
+}
+
+// runSessionV1 handles one Stratum V1 pool connection via poolproto.DialURL.
+// It mirrors the structure of the V2 runSession loop but consumes the
+// protocol-agnostic poolproto.Session interface (Jobs() / Submit()) instead
+// of the Stratum V2 framing directly.
+func runSessionV1(ctx context.Context, opts sessionOpts) error {
+	creds := poolproto.Credentials{
+		User:     opts.user,
+		Password: "x",
+	}
+	sess, err := poolproto.DialURL(ctx, opts.poolURL, creds)
+	if err != nil {
+		return fmt.Errorf("engine: %w", err)
+	}
+	defer sess.Close()
+	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", opts.poolURL))
+	if opts.m != nil {
+		opts.m.poolConnectionState.Set(2)
+	}
+	if opts.onConnected != nil {
+		opts.onConnected()
+	}
+
+	// V1 is single-channel; channel ID 0 is the conventional value.
+	const chanID = uint32(0)
+
+	var totalSats uint64
+	statsTicker := time.NewTicker(opts.interval)
+	defer statsTicker.Stop()
+
+	hashMon := NewHashrateMonitor(0, 3, opts.log)
+	var hashWindow hashrateWindow
+	var lastDropped uint64
+	latency := NewLatencyTracker(256)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-statsTicker.C:
+			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
+			if opts.dashboard != nil {
+				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats))
+			}
+			logStats(opts.workers, currentHashRate, opts.log)
+			if dropped := totalDropped(opts.workers); dropped > lastDropped {
+				opts.log("warn", fmt.Sprintf(
+					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
+					dropped-lastDropped))
+				lastDropped = dropped
+			}
+			hashMon.Observe(currentHashRate)
+			if opts.m != nil {
+				opts.m.hashrate.Set(currentHashRate)
+				if hashMon.Stalled() {
+					opts.m.up.Set(0)
+				} else {
+					opts.m.up.Set(1)
+				}
+				rate := acceptanceRate(opts.m.sharesAccepted.Value(), opts.m.sharesRejected.Value())
+				opts.m.shareAcceptanceRate.Set(rate)
+				judged := opts.m.sharesAccepted.Value() + opts.m.sharesRejected.Value()
+				if judged >= 20 && rate < 0.97 {
+					opts.log("warn", fmt.Sprintf(
+						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
+						rate*100, opts.m.sharesAccepted.Value(), judged))
+				}
+			}
+			if p95 := latency.Quantile(0.95); p95 > 0 {
+				opts.log("info", fmt.Sprintf(
+					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
+					latency.Quantile(0.50), p95, latency.Quantile(0.99)))
+				if opts.m != nil {
+					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
+					opts.m.submitLatencyP95.Set(p95)
+					opts.m.submitLatencyP99.Set(latency.Quantile(0.99))
+				}
+			}
+
+		case job, ok := <-sess.Jobs():
+			if !ok {
+				return fmt.Errorf("engine: pool closed connection")
+			}
+			if err := applyJob(opts.workers, job, chanID); err != nil {
+				opts.log("warn", err.Error())
+				continue
+			}
+			opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
+
+		case share, ok := <-opts.merged:
+			if !ok {
+				return ctx.Err()
+			}
+			totalSats++
+			if opts.m != nil {
+				opts.m.sharesFound.Inc()
+			}
+			// V1 Submit is synchronous. Run it in a goroutine so a slow
+			// pool response doesn't block the job-receive path.
+			capturedShare := share
+			capturedSess := sess
+			go func() {
+				sendTime := time.Now()
+				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
+					JobID: fmt.Sprintf("%d", capturedShare.JobID),
+					Nonce: capturedShare.Nonce,
+					NTime: capturedShare.NTime,
+				})
+				elapsed := float64(time.Since(sendTime).Milliseconds())
+				if err != nil {
+					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v", err))
+					return
+				}
+				if result.Accepted {
+					opts.log("info", "engine: V1 share accepted")
+					latency.Record(elapsed)
+					if opts.m != nil {
+						opts.m.sharesAccepted.Inc()
+					}
+				} else {
+					category, diagnosis := rejectClass(result.Reason)
+					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
+						result.Reason, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+					}
+				}
+			}()
 		}
 	}
 }

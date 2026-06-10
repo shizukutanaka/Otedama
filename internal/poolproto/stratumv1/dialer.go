@@ -43,8 +43,9 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 
 // Dial opens a TCP connection to the pool. The URL must be of the form
 // stratum+tcp://host:port (or stratum+tls://host:port for the TLS
-// dialer).
-func (d *Dialer) Dial(ctx context.Context, url string, _ poolproto.Credentials) (poolproto.Connection, error) {
+// dialer). Credentials are stashed on the returned Connection so that
+// Negotiate can use them without requiring a second credentials argument.
+func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := parseAddress(url)
 	if err != nil {
 		return nil, err
@@ -64,23 +65,64 @@ func (d *Dialer) Dial(ctx context.Context, url string, _ poolproto.Credentials) 
 		raw:        conn,
 		remoteAddr: address,
 		protocol:   d.Protocol(),
+		creds:      creds,
 	}, nil
 }
 
-// Negotiate performs the SV1 handshake (mining.subscribe + mining.authorize).
-// On success a Session is returned that delivers Jobs and accepts shares.
+// Negotiate performs the SV1 handshake: mining.subscribe (extranonce
+// negotiation) followed by mining.authorize (worker authentication).
+// On success the returned Session is ready to deliver Jobs and accept
+// shares. A failed authorize terminates the connection and returns
+// poolproto.ErrHandshakeFailed.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
 	conn, ok := c.(*connection)
 	if !ok {
 		return nil, fmt.Errorf("stratumv1: Negotiate received non-V1 connection: %T", c)
 	}
-	// We don't have credentials at Negotiate time — they live on the
-	// session. The expected flow from poolproto.DialURL passes
-	// credentials through Dial; we stash them on the connection.
-	// For now Negotiate is called with an already-authenticated
-	// connection, so we initialise the session and start the read loop.
+
 	sess := newSession(conn)
 	sess.start(ctx)
+
+	// Step 1: mining.subscribe — negotiate extranonce1 / extranonce2_size.
+	id := sess.nextID.Add(1)
+	resp, err := sess.call(ctx, id, "mining.subscribe", []any{"Otedama/3.0.0"})
+	if err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("stratumv1: subscribe: %w", err)
+	}
+	if resp.errResult != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%w: subscribe rejected: %v", poolproto.ErrHandshakeFailed, resp.errResult)
+	}
+	en1, en2Size, err := parseSubscribeResult(resp.result)
+	if err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%w: %v", poolproto.ErrHandshakeFailed, err)
+	}
+	sess.extranonce1 = en1
+	sess.extranonce2Size = en2Size
+
+	// Step 2: mining.authorize — authenticate the worker.
+	user := conn.creds.User
+	password := conn.creds.Password
+	if password == "" {
+		password = "x" // most pools accept "x" as the password
+	}
+	id = sess.nextID.Add(1)
+	resp, err = sess.call(ctx, id, "mining.authorize", []any{user, password})
+	if err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("stratumv1: authorize: %w", err)
+	}
+	if resp.errResult != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%w: authorization rejected: %v", poolproto.ErrHandshakeFailed, resp.errResult)
+	}
+	if accepted, _ := resp.result.(bool); !accepted {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
+	}
+
 	return sess, nil
 }
 
@@ -92,6 +134,7 @@ type connection struct {
 	raw        net.Conn
 	remoteAddr string
 	protocol   poolproto.ProtocolID
+	creds      poolproto.Credentials // stashed from Dial for use in Negotiate
 
 	closeOnce sync.Once
 	closed    atomic.Bool

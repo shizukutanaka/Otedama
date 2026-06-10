@@ -10,6 +10,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat + Test (session 92 — V1 share goroutine coverage: engine 88.6%→90.5%)
+
+- **engine — +11 stmts covered** (88.6% → 90.5%). Four targeted fixes to
+  `internal/engine/coverage_test.go`:
+  - **V1 job log (line 691):** Changed `fakeV1Pool`'s mining.notify job ID from
+    `"job1"` to `"1"` so `fmt.Sscanf` parses it as `uint32`. `applyJob` now
+    succeeds and the `opts.log("info", "engine: V1 job …")` statement is reached
+    (+1 stmt).
+  - **V1 share accepted goroutine (lines 717–722, +4 stmts):** Rewrote
+    `TestRunSessionV1_ShareSubmitAccepted` to keep `merged` open (not closed),
+    and cancel the context via a watcher goroutine only *after* the server has
+    confirmed it sent the submit response. This ensures the Submit goroutine
+    inside `runSessionV1` completes (`result.Accepted` check, log,
+    `latency.Record`, `sharesAccepted.Inc`) before `sess.Close` is deferred.
+    Added assertion `m.sharesAccepted.Value() == 1`.
+  - **V1 share rejected goroutine (lines 723–730, +5 stmts):** Same signal-based
+    approach in `TestRunSessionV1_ShareSubmitRejected` — server sends
+    `result:false + error["23","Duplicate share"]`; verifies
+    `m.sharesRejected.Value() == 1` covers `rejectClass` + `sharesRejected.Inc` +
+    `rejectReason.Inc`.
+  - **V1 latency stats ticker (lines 672–680, +3 stmts):** Rewrote
+    `TestRunSessionV1_LatencyRecordedInStatsTicker` to (a) keep merged open and
+    (b) add a 5 ms server delay before the submit response so `elapsed ≥ 1 ms` and
+    `latency.Quantile(0.95) > 0`. The stats ticker then logs `submit latency
+    p50/p95/p99` and sets the three gauge metrics. Test asserts the log line.
+- Root cause: the old tests closed `merged` before the Submit goroutine received
+  the server response. The resulting `return ctx.Err()` → `defer sess.Close()`
+  raced with the goroutine's in-flight `Submit` call, causing it to fail with
+  "stratumv1: session closed" instead of processing the accepted/rejected result.
+- 24 packages green, 1,059 tests, gofmt/vet clean.
+
+### Feat + Test (session 91 — engine→poolproto V1 wiring: runSessionV1 dispatch)
+
+- **`internal/engine/run.go` — `runSessionV1` function (+~100 lines):**
+  Added full Stratum V1 session loop using the `poolproto` abstraction:
+  `poolproto.DialURL` → `sess.Jobs()` channel for job delivery via `applyJob` →
+  `sess.Submit()` in a goroutine (async to not block the job-receive path) →
+  stats ticker (hashrate/dropped/stall/acceptance-rate/latency) → metrics
+  integration (`poolConnectionState`, `sharesFound/Accepted/Rejected`,
+  `submitLatency{P50,P95,P99}`).
+- **`internal/engine/run.go` — `runSession` dispatch (3 lines):**
+  `proto := poolproto.FromURL(opts.poolURL)` → if V1 or V1TLS → `runSessionV1`.
+  Engine now routes Stratum V1 URLs through the `poolproto` layer instead of raw
+  `net.Dialer`.
+- **`cmd/otedama/run.go` — blank import:**
+  `_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"` fires the
+  package's `init()` so the V1 dialer is registered in the `poolproto` registry
+  before `engine.Run` is called.
+- **`internal/engine/coverage_test.go` — 8 new tests:**
+  `TestRunSessionV1_PoolClosesAfterHandshake`, `_ReceivesJobAndConnects`,
+  `_StatsTicker`, `_ContextCancelled`, `_ShareSubmitAccepted`,
+  `_ShareSubmitRejected`, `_LatencyRecordedInStatsTicker`,
+  `TestStartMinerWorkers_{NonSHA256dDeviceSkipped,MixedDevices}`.
+- 24 packages green, 1,059 tests.
+
+### Feat + Test (session 90 — Stratum V1 Negotiate: mining.subscribe + mining.authorize)
+
+- **`internal/poolproto/stratumv1/parse.go` — `parseSubscribeResult`:**
+  New parser for the `mining.subscribe` response array
+  `[[subscriptions], extranonce1_hex, extranonce2_size_int]`.  Returns
+  `extranonce1` (hex string) and `extranonce2Size` (int), or a descriptive error.
+- **`internal/poolproto/stratumv1/dialer.go` — `Negotiate` (stub → full):**
+  Replaced the one-line stub with a two-step SV1 handshake:
+  (1) `mining.subscribe` — negotiates extranonce1/extranonce2_size;
+  (2) `mining.authorize` — authenticates the worker (password defaults to `"x"`
+  if empty, per pool convention). Credentials are stashed on `*connection.creds`
+  in `Dial` so `Negotiate` can read them without a second argument. On subscribe
+  rejection, parse failure, authorize failure, or `result:false` the function
+  returns `poolproto.ErrHandshakeFailed` and closes the connection.
+- **`internal/poolproto/stratumv1/stratumv1_test.go` — 12 new tests:**
+  `TestParseSubscribeResult_{Valid,EmptySubscriptionsArray,TooShort,WrongType,`
+  `Extranonce1NotString,Extranonce2SizeNotNumber}`;
+  `TestNegotiate_{Success_ExtranonceParsed,Success_EmptyPasswordDefaultsToX,`
+  `SubscribeRejected_ReturnsHandshakeFailed,AuthorizeFailed_ReturnsHandshakeFailed,`
+  `AuthorizeError_ReturnsHandshakeFailed,NonV1Connection_ReturnsError}`.
+  Updated `TestSession_E2E_PoolClosedMidSession` to handle subscribe/authorize
+  before disconnecting (required by the new real handshake).
+- 24 packages green.
+
 ### Test (session 89 — coverage: internal/engine 82.4%→91.0%, overall 89.8%→91.4%)
 
 - **engine (E) — coverage: +8.6 pp** (82.4% → 91.0%). Two production changes and 28 new tests:

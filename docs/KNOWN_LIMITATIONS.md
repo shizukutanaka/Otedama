@@ -80,39 +80,23 @@ same ADR-011 implementation step that replaces the Noise P-256 stub.
 
 ---
 
-## 3. Engine connects to pools directly; poolproto not yet wired in
+## ~~3. Engine connects to pools directly; poolproto not yet wired in~~ ✅ RESOLVED (session 91)
 
-**What:** `internal/engine/run.go` dials pools with a raw `net.Dialer`
-and a `stratum.NewDecoder` directly, rather than routing through
-`poolproto.DialURL`. Consequently the `poolproto/stratumv1` and
-`poolproto/stratumv2` dialer packages are not yet imported anywhere in
-the binary, so their `init()` registration does not fire and the
-`poolproto` registry is effectively unused at runtime today.
+**Resolution:** `internal/engine/run.go` now dispatches Stratum V1 URLs
+(`stratum+tcp://`, `stratum+tls://`) through `poolproto.DialURL` via the new
+`runSessionV1` function. The blank import
+`_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"` in
+`cmd/otedama/run.go` fires dialer registration at startup. Stratum V2 URLs
+continue to use the existing inline `handshake` path.
 
-**Impact:** The clean protocol-dispatch layer (which would let a pool
-URL scheme select Stratum V2 / V1 / future Job Declaration transparently
-— see ADR-009) is not yet on the engine's hot path. The engine
-hard-codes the Stratum V2 path. Mining works; the abstraction is just
-not load-bearing yet.
-
-**Workaround:** None needed; the current path works for Stratum V2
-pools.
-
-**Integration progress (3 steps):**
-- ✅ Step 1 (session 37): URL-scheme parsing unified into
-  `poolproto.knownSchemes` (single source of truth shared by `FromURL`
-  and `StripScheme`).
-- ✅ Step 2 (session 38): `poolproto/stratumv2` dialer implemented and
-  unit-tested — the V2 `Dialer`/`Connection`/`Session` adapter that was
-  the missing prerequisite.
-- ✅ Step 3a (session 39): `engine.applyJob` bridges `poolproto.Job` →
-  `miner.Work`, unit-tested, ready for the read loop to consume.
-- ⬜ Step 3b: rewrite `engine.runSession` to call `poolproto.DialURL`,
-  add the blank import that fires dialer registration, and consume
-  `Session.Jobs()`. This is the step that makes the abstraction
-  load-bearing and removes the inline handshake.
-
-**Target:** v3.1.0.
+**Integration progress (all steps complete):**
+- ✅ Step 1 (session 37): URL-scheme parsing unified into `poolproto.knownSchemes`.
+- ✅ Step 2 (session 38): `poolproto/stratumv2` dialer implemented and unit-tested.
+- ✅ Step 3a (session 39): `engine.applyJob` bridges `poolproto.Job` → `miner.Work`.
+- ✅ Step 3b (session 90–91): `Negotiate` stub replaced with full SV1 handshake
+  (`mining.subscribe` + `mining.authorize`); `runSessionV1` added to engine;
+  blank import registers the V1 dialer. The `poolproto` abstraction is now
+  load-bearing for V1 connections at runtime.
 
 ---
 
