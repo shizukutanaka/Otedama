@@ -642,3 +642,248 @@ func TestSubmitSharesError_Encode_EmptyError(t *testing.T) {
 		t.Errorf("got {%d, %q}, want {1, \"\"}", got.ChannelID, got.Error)
 	}
 }
+
+// ============================================================================
+// DispatchFrame — three previously uncovered cases
+// ============================================================================
+
+func TestDispatchFrame_OpenMiningChannelSuccess(t *testing.T) {
+	orig := OpenMiningChannelSuccess{ReqID: 7, ChannelID: 3, ExtraNonce2Size: 4}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannelSuccess, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.OpenMiningChannelSuccess == nil {
+		t.Fatal("OpenMiningChannelSuccess not populated")
+	}
+	if msg.OpenMiningChannelSuccess.ChannelID != 3 {
+		t.Errorf("ChannelID = %d, want 3", msg.OpenMiningChannelSuccess.ChannelID)
+	}
+}
+
+func TestDispatchFrame_NewMiningJob(t *testing.T) {
+	orig := NewMiningJob{ChannelID: 1, JobID: 5, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	f := Frame{Header: Header{MsgType: MsgNewMiningJob, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.NewMiningJob == nil {
+		t.Fatal("NewMiningJob not populated")
+	}
+	if msg.NewMiningJob.JobID != 5 {
+		t.Errorf("JobID = %d, want 5", msg.NewMiningJob.JobID)
+	}
+}
+
+func TestDispatchFrame_SubmitSharesStandard(t *testing.T) {
+	orig := SubmitSharesStandard{ChannelID: 1, SequenceNumber: 2, JobID: 5, Nonce: 0xDEADBEEF, NTime: 0x60000000}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesStandard, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.SubmitSharesStandard == nil {
+		t.Fatal("SubmitSharesStandard not populated")
+	}
+	if msg.SubmitSharesStandard.Nonce != 0xDEADBEEF {
+		t.Errorf("Nonce = 0x%08X, want 0xDEADBEEF", msg.SubmitSharesStandard.Nonce)
+	}
+}
+
+// ============================================================================
+// Encode error paths — string/bytes > 255
+// ============================================================================
+
+func TestSetupConnectionError_Encode_LongError(t *testing.T) {
+	m := SetupConnectionError{Flags: 0, Error: string(make([]byte, 256))}
+	if _, err := m.Encode(); err == nil {
+		t.Error("Encode should reject Error string > 255 bytes")
+	}
+}
+
+func TestOpenMiningChannel_Encode_LongUser(t *testing.T) {
+	m := OpenMiningChannel{ReqID: 1, User: string(make([]byte, 256)), NominalHashrate: 1e6}
+	if _, err := m.Encode(); err == nil {
+		t.Error("Encode should reject User string > 255 bytes")
+	}
+}
+
+func TestOpenMiningChannelSuccess_Encode_LongExtranonce(t *testing.T) {
+	m := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: make([]byte, 256)}
+	if _, err := m.Encode(); err == nil {
+		t.Error("Encode should reject Extranonce > 255 bytes")
+	}
+}
+
+func TestSubmitSharesError_Encode_LongError(t *testing.T) {
+	m := SubmitSharesError{ChannelID: 1, SequenceNumber: 0, Error: string(make([]byte, 256))}
+	if _, err := m.Encode(); err == nil {
+		t.Error("Encode should reject Error string > 255 bytes")
+	}
+}
+
+// ============================================================================
+// Decode truncation paths
+// ============================================================================
+
+func TestDecodeSubmitSharesStandard_ShortPayload(t *testing.T) {
+	if _, err := DecodeSubmitSharesStandard(make([]byte, 20)); err == nil {
+		t.Error("DecodeSubmitSharesStandard(20 bytes) should error (need ≥24)")
+	}
+}
+
+func TestDecodeOpenMiningChannel_TruncatedAtHashrate(t *testing.T) {
+	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6}
+	payload, _ := orig.Encode()
+	// Remove last 3 bytes to cut into the 4-byte float32 field.
+	if _, err := DecodeOpenMiningChannel(payload[:len(payload)-3]); err == nil {
+		t.Error("expected error for payload truncated at NominalHashrate")
+	}
+}
+
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtReqID(t *testing.T) {
+	if _, err := DecodeOpenMiningChannelSuccess(make([]byte, 2)); err == nil {
+		t.Error("expected error for payload too short for ReqID")
+	}
+}
+
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtChannelID(t *testing.T) {
+	if _, err := DecodeOpenMiningChannelSuccess(make([]byte, 6)); err == nil {
+		t.Error("expected error for payload too short for ChannelID")
+	}
+}
+
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtTarget(t *testing.T) {
+	// 8 bytes = ReqID + ChannelID, but Target needs 32 more.
+	if _, err := DecodeOpenMiningChannelSuccess(make([]byte, 20)); err == nil {
+		t.Error("expected error for payload too short for Target (need ReqID+ChannelID+32)")
+	}
+}
+
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtExtraNonce2Size(t *testing.T) {
+	// Build a valid payload then chop the last ExtraNonce2Size bytes.
+	orig := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: []byte{0x01}, ExtraNonce2Size: 4}
+	payload, _ := orig.Encode()
+	// Remove the last 2 bytes (ExtraNonce2Size is uint16).
+	if _, err := DecodeOpenMiningChannelSuccess(payload[:len(payload)-2]); err == nil {
+		t.Error("expected error for payload missing ExtraNonce2Size")
+	}
+}
+
+func TestDecodeSetupConnection_TruncatedLate(t *testing.T) {
+	// Truncate after reading the first 3 strings (Endpoint, Vendor, HardwareVersion)
+	// but before Firmware and DeviceID. This exercises the error path on the
+	// later iterations of the string-reading loop.
+	orig := SetupConnection{
+		Protocol:        MiningProtocol,
+		MinVersion:      2,
+		MaxVersion:      2,
+		Endpoint:        "pool.example.com",
+		Vendor:          "Otedama",
+		HardwareVersion: "v3.0.0",
+		Firmware:        "main-firmware",
+		DeviceID:        "cpu-0",
+	}
+	payload, _ := orig.Encode()
+	// Keep only enough bytes to get through Endpoint+Vendor+HardwareVersion
+	// but cut off Firmware+DeviceID (remove last ~20 bytes).
+	short := payload[:len(payload)-15]
+	if _, err := DecodeSetupConnection(short); err == nil {
+		t.Error("expected error for payload truncated within last strings")
+	}
+}
+
+// ============================================================================
+// WrapMessage and EncodeFrame — oversized payload error paths
+// ============================================================================
+
+func TestWrapMessage_OversizedPayloadReturnsError(t *testing.T) {
+	// MaxMessageLength = (1<<24)-1 = 16,777,215. One byte over triggers Validate.
+	payload := make([]byte, MaxMessageLength+1)
+	if _, err := WrapMessage(MsgSetupConnection, false, payload); err == nil {
+		t.Error("WrapMessage should reject payload exceeding MaxMessageLength")
+	}
+}
+
+func TestEncodeFrame_OversizedPayloadReturnsError(t *testing.T) {
+	payload := make([]byte, MaxMessageLength+1)
+	f := Frame{
+		Header:  Header{MsgType: MsgSetupConnection, MsgLength: uint32(len(payload))},
+		Payload: payload,
+	}
+	if _, err := EncodeFrame(f); err == nil {
+		t.Error("EncodeFrame should reject payload exceeding MaxMessageLength")
+	}
+}
+
+// ============================================================================
+// Decode truncation — SetupConnectionError and OpenMiningChannel
+// ============================================================================
+
+func TestDecodeSetupConnectionError_TruncatedAtFlags(t *testing.T) {
+	if _, err := DecodeSetupConnectionError(make([]byte, 2)); err == nil {
+		t.Error("expected error for payload too short for Flags (need ≥4)")
+	}
+}
+
+func TestDecodeSetupConnectionError_TruncatedAtErrorString(t *testing.T) {
+	// 4 bytes is enough for Flags but leaves no bytes for the STR0_255 length.
+	if _, err := DecodeSetupConnectionError(make([]byte, 4)); err == nil {
+		t.Error("expected error for payload missing error string length byte")
+	}
+}
+
+func TestDecodeOpenMiningChannel_TruncatedAtReqID(t *testing.T) {
+	if _, err := DecodeOpenMiningChannel(make([]byte, 2)); err == nil {
+		t.Error("expected error for payload too short for ReqID")
+	}
+}
+
+func TestDecodeOpenMiningChannel_TruncatedAtUser(t *testing.T) {
+	// 4 bytes = just ReqID; no bytes left for the STR0_255 length of User.
+	if _, err := DecodeOpenMiningChannel(make([]byte, 4)); err == nil {
+		t.Error("expected error for payload missing User string")
+	}
+}
+
+// ============================================================================
+// DispatchFrame — decode-error paths for the 3 newly added cases
+// ============================================================================
+
+func TestDispatchFrame_OpenMiningChannelSuccess_Malformed(t *testing.T) {
+	// 4 bytes is enough for ReqID but too short for ChannelID+Target.
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannelSuccess, MsgLength: 4}, Payload: make([]byte, 4)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed OpenMiningChannelSuccess payload should return error")
+	}
+}
+
+func TestDispatchFrame_NewMiningJob_Malformed(t *testing.T) {
+	// NewMiningJob requires ≥48 bytes; 10 bytes triggers the short-payload error.
+	f := Frame{Header: Header{MsgType: MsgNewMiningJob, MsgLength: 10}, Payload: make([]byte, 10)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed NewMiningJob payload should return error")
+	}
+}
+
+func TestDispatchFrame_SubmitSharesStandard_Malformed(t *testing.T) {
+	// SubmitSharesStandard requires exactly 24 bytes; 10 triggers error.
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesStandard, MsgLength: 10}, Payload: make([]byte, 10)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed SubmitSharesStandard payload should return error")
+	}
+}
