@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -344,7 +345,7 @@ func TestApplyAllocation_LogsOnStreamChange(t *testing.T) {
 	applyAllocation(alloc, workers, log)
 
 	joined := fmt.Sprint(lines)
-	if !contains(joined, "ai.akash") && !contains(joined, "AI") {
+	if !strings.Contains(joined, "ai.akash") && !strings.Contains(joined, "AI") {
 		t.Errorf("log must mention stream change to ai.akash; got: %v", lines)
 	}
 }
@@ -362,7 +363,7 @@ func TestApplyAllocation_IdleAssignment(t *testing.T) {
 	applyAllocation(alloc, nil, log)
 
 	joined := fmt.Sprint(lines)
-	if !contains(joined, "idle") {
+	if !strings.Contains(joined, "idle") {
 		t.Errorf("log must mention idle; got %v", lines)
 	}
 }
@@ -476,21 +477,4 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 		keys = append(keys, k)
 	}
 	return keys
-}
-
-func contains(s, substr string) bool {
-	return len(substr) == 0 || (len(s) >= len(substr) && indexOf(s, substr) != -1)
-}
-
-func indexOf(haystack, needle string) int {
-	n := len(needle)
-	if n == 0 {
-		return 0
-	}
-	for i := 0; i+n <= len(haystack); i++ {
-		if haystack[i:i+n] == needle {
-			return i
-		}
-	}
-	return -1
 }

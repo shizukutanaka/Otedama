@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 74 — split engine/run.go (1427 lines) into five single-concern files)
+
+Behavior-preserving reorganisation of `internal/engine`, the package that wires
+every subsystem together. `run.go` had grown to 1427 lines mixing six concerns;
+navigating it required scrolling past unrelated code, and two godoc comments had
+drifted away from their functions.
+
+- **engine (E) — `run.go` split into five files.** `run.go` (760 lines) keeps the
+  session core: `Options`/`Run`, the reconnect loop, `runSession`, the SV2
+  `handshake`, and `sendMsg`/`updateWork`/`applyJob`. New files, code moved
+  verbatim: `fanin.go` (generic `fanIn` + `mergeQuotes`/`mergeShares`; pairs with
+  the existing `fanin_test.go`), `arbitrate.go` (`runArbitrationLoop`,
+  `updateStream`, `streamsSlice`, `applyAllocation`), `setup.go` (`detectDevices`,
+  `startMinerWorkers`, `startProviders`, `setupWallet`, pool/payout config helpers,
+  built-in CPU driver), `stats.go` (`buildStats`, `hashrateWindow`,
+  `LatencyTracker`, `HashrateMonitor`, `rejectClass`, `acceptanceRate`,
+  `publishBTCRate`).
+- **engine (E) — orphaned godoc comments reattached.** The doc comments for
+  `setupWallet` and `detectDevices` were stranded above `arbitrationLoopOpts`
+  (run.go:411-417), so godoc rendered them on the wrong symbol. They now sit on
+  their functions in `setup.go`. Three previously-undocumented helpers
+  (`updateStream`, `streamsSlice`, `applyAllocation`, `defaultPoolURL`, `logStats`)
+  gained godoc comments.
+- **engine (E) — test helpers simplified.** `helpers_test.go` hand-rolled
+  `contains`/`indexOf` (re-implementing `strings.Contains`); replaced with the
+  stdlib call and deleted both helpers.
+- **stratum (B) — gofmt drift fixed.** `messages_test.go` had trailing blank lines
+  introduced in session 73.
+
+No behavior change: full suite green (24 packages, 805 tests), engine coverage
+identical at 78.9%, `-race` clean on engine.
+
 ### Fixes (session 73 — coverage completeness: 0% paths in engine + stratum, 82.3%→82.6%, 805 tests)
 
 Targeted the remaining 0%-covered functions identified in session 72 coverage audit:

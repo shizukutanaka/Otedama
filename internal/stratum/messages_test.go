@@ -642,5 +642,3 @@ func TestSubmitSharesError_Encode_EmptyError(t *testing.T) {
 		t.Errorf("got {%d, %q}, want {1, \"\"}", got.ChannelID, got.Error)
 	}
 }
-
-
