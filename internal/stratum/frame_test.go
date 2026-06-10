@@ -426,3 +426,16 @@ func TestFrame_ChannelID_RejectsShortPayload(t *testing.T) {
 		t.Error("ChannelID on short payload returned no error")
 	}
 }
+
+func TestEncodeFrame_ChannelMsgValidationError(t *testing.T) {
+	// ChannelMsg bit set with payload smaller than MinimumChannelPayload
+	// triggers Header.Validate() error inside EncodeFrame.
+	f := Frame{
+		Header:  Header{ExtensionType: channelMsgBit},
+		Payload: []byte{0x01, 0x02}, // 2 bytes < MinimumChannelPayload (4)
+	}
+	_, err := EncodeFrame(f)
+	if err == nil {
+		t.Error("EncodeFrame should reject channel message with payload < MinimumChannelPayload")
+	}
+}

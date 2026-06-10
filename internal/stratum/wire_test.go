@@ -5,6 +5,7 @@ package stratum
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -162,6 +163,42 @@ func TestGetU32LE_TruncatedInput(t *testing.T) {
 	_, err := getU32LE(newByteReader([]byte{0x01, 0x02, 0x03})) // need 4
 	if err == nil {
 		t.Error("getU32LE should error on 3-byte input")
+	}
+}
+
+// ----- Write error paths (length byte) -----
+
+// errWriter always errors on Write.
+type errWriter struct{}
+
+func (errWriter) Write(_ []byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestPutStr0_255_WriteError_OnLengthByte(t *testing.T) {
+	if err := putStr0_255(errWriter{}, "hi"); err == nil {
+		t.Error("putStr0_255 should return error when writing length byte fails")
+	}
+}
+
+func TestPutB0_255_WriteError_OnLengthByte(t *testing.T) {
+	if err := putB0_255(errWriter{}, []byte{0x01, 0x02}); err == nil {
+		t.Error("putB0_255 should return error when writing length byte fails")
+	}
+}
+
+// ----- GetB0_255 read error paths -----
+
+func TestGetB0_255_EmptyReader_LengthByteFails(t *testing.T) {
+	_, err := getB0_255(bytes.NewReader([]byte{}))
+	if err == nil {
+		t.Error("getB0_255 should error when length byte cannot be read")
+	}
+}
+
+func TestGetB0_255_TruncatedData(t *testing.T) {
+	// Length says 5, but only 2 data bytes follow.
+	_, err := getB0_255(bytes.NewReader([]byte{5, 'a', 'b'}))
+	if err == nil {
+		t.Error("getB0_255 should error when data bytes are truncated")
 	}
 }
 

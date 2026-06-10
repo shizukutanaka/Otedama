@@ -315,3 +315,38 @@ func TestServeError_NilAfterCleanStop(t *testing.T) {
 		t.Errorf("ServeError after clean Stop = %v, want nil", err)
 	}
 }
+
+func TestAddr_ReturnsBindAddress(t *testing.T) {
+	s := New("127.0.0.1:0", metrics.NewRegistry())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Skip("port unavailable:", err)
+	}
+	defer s.Stop()
+	addr := s.Addr()
+	if addr == "" {
+		t.Error("Addr() returned empty string after successful Start")
+	}
+}
+
+func TestMetrics_NilRegistry_Returns500(t *testing.T) {
+	// New accepts a nil registry; accessing /metrics should return 500.
+	s := New("127.0.0.1:0", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Skip("port unavailable:", err)
+	}
+	defer s.Stop()
+	time.Sleep(20 * time.Millisecond)
+
+	resp, err := http.Get("http://" + s.Addr() + "/metrics")
+	if err != nil {
+		t.Fatalf("GET /metrics: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("/metrics with nil registry = %d, want 500", resp.StatusCode)
+	}
+}

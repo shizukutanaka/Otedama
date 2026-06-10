@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 86 — coverage: internal/httpserver 89.4%→94.1%, internal/stratum 89.1%→90.1%)
+
+- **httpserver (H) — coverage: +4.7 pp** (89.4% → 94.1%). Fixed `Addr()` to
+  return the actual bound address (stored via `boundAddr atomic.Pointer[string]`
+  in `Start`; the previous implementation returned the configured string and was
+  incorrect for port 0). Added `TestAddr_ReturnsBindAddress` (exercises `Addr`)
+  and `TestMetrics_NilRegistry_Returns500` (exercises the `nil registry` error
+  path in `handleMetrics`). The `Addr()` fix is also a correctness improvement:
+  callers using port 0 can now retrieve the OS-assigned ephemeral port.
+- **stratum (S) — coverage: +1.0 pp** (89.1% → 90.1%). Added tests for four
+  write/read error paths in `wire.go` (putStr0_255 length-byte write failure,
+  putB0_255 length-byte write failure, getB0_255 empty reader, getB0_255
+  truncated data) and one `EncodeFrame` validation error (channel message with
+  payload < MinimumChannelPayload triggers `h.Validate()` inside EncodeFrame).
+- 24 packages green, 870+ tests, gofmt/vet clean.
+
 ### Test (session 85 — coverage: cmd/otedama 78.9%→90.6%)
 
 - **cmd/otedama (L) — CLI coverage: +11.7 pp** (78.9% → 90.6%, over the 90% threshold).

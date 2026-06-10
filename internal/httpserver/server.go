@@ -52,6 +52,10 @@ type Server struct {
 
 	httpSrv *http.Server
 
+	// boundAddr is the actual address the listener bound to, set in Start.
+	// Differs from addr when port 0 was requested.
+	boundAddr atomic.Pointer[string]
+
 	// serveErr holds the error returned by the background Serve
 	// goroutine, if any (other than the expected ErrServerClosed).
 	// Readable via ServeError() for observability.
@@ -90,6 +94,8 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("httpserver: listen on %s: %w", s.addr, err)
 	}
+	bound := ln.Addr().String()
+	s.boundAddr.Store(&bound)
 
 	// Serve in background.
 	go func() {
@@ -124,9 +130,13 @@ func (s *Server) SetReady(ready bool) {
 }
 
 // Addr returns the actual bind address (useful when port 0 was requested
-// and the OS chose an ephemeral port).
+// and the OS chose an ephemeral port). Returns the configured address
+// before Start is called.
 func (s *Server) Addr() string {
-	return s.httpSrv.Addr
+	if p := s.boundAddr.Load(); p != nil {
+		return *p
+	}
+	return s.addr
 }
 
 // ServeError returns the error from the background Serve goroutine, if
