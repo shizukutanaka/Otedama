@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 89 — coverage: internal/engine 82.4%→91.0%, overall 89.8%→91.4%)
+
+- **engine (E) — coverage: +8.6 pp** (82.4% → 91.0%). Two production changes and 28 new tests:
+  - `arbitrationInterval` promoted from `const` to `var` (same default value) so tests
+    can shrink the 30 s ticker to 5 ms without a flaky timing harness.
+  - **stats.go (+6 stmts):** `buildStats`, `totalHashes`, `totalDropped`, `logStats` worker
+    loop bodies (need a non-nil workers slice); `Quantile` idx<0 clamp (n=1, 0<q<0.5 → idx=-1).
+  - **setup.go (+2 stmts):** `startMinerWorkers` skip-non-SHA256d (`continue`) and
+    no-SHA256d error return.
+  - **arbitrate.go (+11 stmts):** ticker.C happy path (lock/Decide/prevAlloc/for/applyAllocation)
+    and Decide error path (duplicate device IDs → warns, continues).
+  - **run.go (+25 stmts):** `sendMsg` encode-error and WrapMessage-error paths; `updateWork`
+    invalid-NBits early return; `runSession` bad-URL return; nine `handshake` error paths
+    via net.Pipe fake servers (write-setup-fails, read-setup-fails, decode-error,
+    SetupConnectionError→fatalError, unexpected-msg, write-OMC-fails, read-OMC-fails,
+    OMC-decode-error, channel-open-failed); `runReconnectLoop` multi-pool failover
+    (pool-loc formatting, poolIdx++, failover log) and multi-address failover
+    (addr-loc formatting, addrIdx rotate, addr-failover log, addr-wrap log).
+  - The 2 dead-code stmts in `Quantile` (idx≥n guard, unreachable given q<1) and ticker
+    branches in providers are intentionally left uncovered.
+- **overall: +1.6 pp** (89.8% → 91.4%). All 24 packages green; 960+ tests; gofmt/vet clean.
+
 ### Test (session 88 — coverage: poolproto/stratumv1 83.7%→100%, internal/provider 89.8%→96.1%)
 
 - **stratumv1 (V) — coverage: +16.3 pp** (83.7% → 100%). Added 24 tests and a

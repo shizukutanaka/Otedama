@@ -58,11 +58,12 @@ const (
 
 	// reconnectBackoffMax caps the exponential reconnect backoff.
 	reconnectBackoffMax = 64 * time.Second
-
-	// arbitrationInterval is how often the engine re-evaluates the
-	// device→stream assignment in the absence of a fresh quote.
-	arbitrationInterval = 30 * time.Second
 )
+
+// arbitrationInterval is how often the engine re-evaluates the
+// device→stream assignment in the absence of a fresh quote.
+// It is a var (not const) so tests can shrink it to milliseconds.
+var arbitrationInterval = 30 * time.Second
 
 // Options configures a Run session.
 type Options struct {
