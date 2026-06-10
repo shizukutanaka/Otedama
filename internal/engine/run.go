@@ -430,6 +430,7 @@ type poolMsg struct {
 // V2 poolproto dialer completes Step 3b (docs/KNOWN_LIMITATIONS.md §3).
 func runSession(ctx context.Context, opts sessionOpts) error {
 	proto := poolproto.FromURL(opts.poolURL)
+	opts.log("info", fmt.Sprintf("engine: transport protocol: %s", proto))
 	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS {
 		return runSessionV1(ctx, opts)
 	}

@@ -68,10 +68,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    a closer pool *before* it costs them in the reject rate.
 8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
    `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
-9. 🟡 **Graceful handling of `SetNewPrevHash` / clean-jobs flag** to drop
-   stale work immediately on new block — reduces stale rejects.
-10. 🟡 **Protocol-version negotiation logging** so operators can confirm which
-    transport (V2/V2TLS/V1) actually got used.
+9. ✅ **Graceful handling of `SetNewPrevHash` / clean-jobs flag** (session 97).
+   `sendJob` now drains ALL pending jobs when `clean_jobs=true` (new block
+   found), preventing stale-share submissions. Previously only the oldest
+   was dropped; up to 7 stale jobs could remain queued.
+10. ✅ **Protocol-version negotiation logging** (session 98). `runSession`
+    logs `"engine: transport protocol: stratum-v1|stratum-v2|..."` at
+    session start so operators can confirm which transport was negotiated.
 
 ---
 

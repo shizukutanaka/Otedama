@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 98 — protocol-version negotiation logging)
+
+- **`internal/engine/run.go`**: `runSession` now logs
+  `"engine: transport protocol: <proto>"` before dispatching to the V1 or
+  V2 session path. Operators can now confirm in the log which transport
+  (stratum-v1, stratum-v1-tls, stratum-v2, stratum-v2-tls) was actually
+  negotiated, useful for debugging pool misconfiguration.
+- `docs/RESEARCH_IMPROVEMENTS.md` Category 2 items 9 and 10 marked ✅.
+
 ### Fix (session 97 — V1 clean_jobs purge: prevent stale share submissions)
 
 **`internal/poolproto/stratumv1/stratumv1.go`** — extracted `sendJob` method
