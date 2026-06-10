@@ -30,6 +30,11 @@ import (
 	"strings"
 )
 
+// goos is a var so tests can set it to "darwin", "windows", etc. to exercise
+// platform-specific branches without running on a different OS. Production
+// code never changes it; default is the real runtime.GOOS.
+var goos = runtime.GOOS
+
 // ServiceStatus describes the current state of the Otedama service.
 type ServiceStatus struct {
 	Installed bool
@@ -84,7 +89,7 @@ func NewManager(configPath, dataDir string, flags ServiceFlags) (*Manager, error
 
 // Install writes the service definition and enables auto-start.
 func (m *Manager) Install() error {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return m.installSystemd()
 	case "darwin":
@@ -98,7 +103,7 @@ func (m *Manager) Install() error {
 
 // Uninstall removes the service definition and disables auto-start.
 func (m *Manager) Uninstall() error {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return m.uninstallSystemd()
 	case "darwin":
@@ -112,7 +117,7 @@ func (m *Manager) Uninstall() error {
 
 // Status returns the current service state.
 func (m *Manager) Status() (ServiceStatus, error) {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return m.statusSystemd()
 	case "darwin":
@@ -376,7 +381,9 @@ func xmlEscape(s string) string {
 	).Replace(s)
 }
 
-func runCmd(name string, args ...string) error {
+// runCmd is a var so tests can replace it with a stub that avoids real
+// OS service calls (systemctl, launchctl, sc.exe).
+var runCmd = func(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s %v: %w: %s", name, args, err, out)
