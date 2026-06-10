@@ -342,6 +342,65 @@ engine logs). Not fixed: consolidation needs an architecture decision on
 a shared home (no existing path fits; new paths need review). See
 https://github.com/shizukutanaka/Otedama/issues/2.
 
+### Whole-program dead-code triage (session 76)
+`golang.org/x/tools/cmd/deadcode ./...` reports ~120 unreachable functions.
+Triage so future sessions do not re-investigate:
+
+**Deleted (genuinely dead):**
+- `cmd/otedama maskAddress` — unreachable; only callers were two tests
+  (one asserting consistency with doctor's copy). Reduces Issue #2's
+  triplicate to a duplicate. Tests deleted with it.
+- `doctor.SortedResults` (+3 tests) — speculative API. `Runner.Run`
+  already writes results by check index (doctor.go:159), so output order
+  is deterministic and matches the curated `DefaultChecks` order;
+  alphabetical sorting would degrade the UX. No production caller ever
+  appeared.
+- `engine.classifyReject` (+1 test, session 75) — wrapper superseded by
+  `rejectClass`.
+
+**KEEP — planned-integration scaffolds (roadmap P1, do not delete):**
+- all of `poolproto/stratumv1`, `poolproto/stratumv2`, and
+  `poolproto.Register/Lookup/Available/DialURL/FromURL`, plus
+  `engine.applyJob` — the engine→poolproto wiring (Step 3b) consumes
+  these; heavily tested in sessions 72–73.
+- all of `stratum/noise*` — Noise NX for `stratum+v2tls`, pending
+  ADR-011 secp256k1; CODEOWNERS-protected.
+- `btccrypto.*` registry + `secp256k1Stub` — ADR-011 scaffold.
+
+**KEEP — test seams / QA mechanisms (the architecture depends on them):**
+- `clock.NewFake/Fake.*` — the package's reason to exist (CLAUDE.md map).
+- server→client `stratum` Encode methods + `wire.putB0_255` — used by the
+  mock pool servers (`fakePool`, `poolSide`) in tests; Encode/Decode
+  symmetry is a session-72 invariant.
+- `i18n` `Catalog.IDs`/`Bundle.MissingTranslations`/`Bundle.Languages`/
+  `messages.AllIDs` — drive the 10-language parity tests.
+- `httpserver.Server.Addr`, `tui.Dashboard.SetWidth`,
+  `provider.StaticRateSource` — test injection points.
+- `miner.ParseHeader/NBitsFromTarget/MeetsTarget/Hash.String` — inverse
+  ops used by property tests.
+- `metrics.Counter.Add` — standard counter API surface with `Inc`.
+
+**Recorded as candidates (decide later, not deleted):**
+- `logger.IntoContext/FromContext/SetDefault` — context-logger plumbing;
+  the codebase settled on explicit log-func injection instead. Tested but
+  unused; removal would be API-shape decision.
+- `tui.FormatHashRate/FormatDuration/SatsToDisplay` — "exported for the
+  CLI status line" which never materialised; note `tui.FormatHashRate`
+  overlaps `miner.HashRateString` (display-formatter duplication family,
+  same class as Issue #2/#3).
+- `lightning.WalletManager.Seed/Mnemonic/ChangePassphrase`,
+  `MnemonicToEntropy`, `WordList.Index` — obvious future wallet-UX API
+  (backup phrase display, passphrase rotation); CODEOWNERS territory,
+  leave untouched.
+
+### Duplicate code recorded as Issue #3 (session 76, per CLAUDE.md rule 3)
+`internal/doctor/doctor.go stripScheme` (returns `""` on unknown scheme)
+near-duplicates `poolproto.StripScheme` (returns error). Same prefix
+list, divergent failure semantics; a future scheme added to poolproto
+would silently desync `otedama doctor`. Consolidation = dependency
+decision (doctor currently does not import poolproto; no cycle if it
+did). https://github.com/shizukutanaka/Otedama/issues/3
+
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
 G1–G15 and session 71), P (logger), U (clock/version) — reviewed, no

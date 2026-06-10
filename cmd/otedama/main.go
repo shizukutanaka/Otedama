@@ -496,13 +496,6 @@ func safeDisplay(v string) string {
 	return b.String()
 }
 
-func maskAddress(addr string) string {
-	if len(addr) <= 10 {
-		return addr
-	}
-	return addr[:6] + strings.Repeat("·", 3) + addr[len(addr)-4:]
-}
-
 // ----- doctor subcommand -----
 
 func cmdDoctor(args []string, stdout, stderr io.Writer) int {

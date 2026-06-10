@@ -39,7 +39,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -487,15 +486,6 @@ func stripScheme(url string) string {
 	return ""
 }
 
-// ----- Sort helpers for deterministic output -----
-
-// SortedResults returns results sorted by name, for callers that want
-// stable ordering regardless of goroutine scheduling.
-func SortedResults(r *Report) []Result {
-	out := make([]Result, len(r.Results))
-	copy(out, r.Results)
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Name < out[j].Name
-	})
-	return out
-}
+// (Report.Results is already deterministic: Runner.Run writes results
+// by check index, so output order always matches the curated order of
+// DefaultChecks regardless of goroutine scheduling.)

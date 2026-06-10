@@ -447,38 +447,6 @@ func TestDefaultChecks_AllHaveRunFunction(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// SortedResults — stability guarantee
-// ============================================================================
-
-func TestSortedResults_StableForEqualNames(t *testing.T) {
-	r := &Report{
-		Results: []Result{
-			{Name: "A", Detail: "first"},
-			{Name: "B", Detail: "middle"},
-			{Name: "A", Detail: "second"},
-		},
-	}
-	sorted := SortedResults(r)
-	// Stable sort preserves relative order of equal elements.
-	if sorted[0].Detail != "first" || sorted[1].Detail != "second" {
-		t.Errorf("stable sort broken:\n%+v", sorted)
-	}
-}
-
-func TestSortedResults_DoesNotMutateOriginal(t *testing.T) {
-	original := []Result{
-		{Name: "Zeta"},
-		{Name: "Alpha"},
-	}
-	r := &Report{Results: original}
-	_ = SortedResults(r)
-
-	if r.Results[0].Name != "Zeta" {
-		t.Errorf("original Results mutated: %+v", r.Results)
-	}
-}
-
 func TestCheckFailoverAddresses(t *testing.T) {
 	run := func(addrs []string) Result {
 		return checkFailoverAddresses(addrs).Run(context.Background())

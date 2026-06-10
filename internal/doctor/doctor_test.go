@@ -278,25 +278,3 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 		}
 	}
 }
-
-// ----- SortedResults -----
-
-func TestSortedResults_Alphabetical(t *testing.T) {
-	r := &Report{
-		Results: []Result{
-			{Name: "Zebra", Status: StatusPass},
-			{Name: "Apple", Status: StatusPass},
-			{Name: "Mango", Status: StatusPass},
-		},
-	}
-	sorted := SortedResults(r)
-	for i, want := range []string{"Apple", "Mango", "Zebra"} {
-		if sorted[i].Name != want {
-			t.Errorf("sorted[%d] = %q, want %q", i, sorted[i].Name, want)
-		}
-	}
-	// Original must be unchanged.
-	if r.Results[0].Name != "Zebra" {
-		t.Error("SortedResults mutated the original")
-	}
-}

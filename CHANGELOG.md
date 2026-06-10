@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 76 — whole-program dead-code audit; two deletions, full triage recorded)
+
+Ran `golang.org/x/tools/cmd/deadcode` over the module (~120 unreachable functions)
+and triaged every hit into deleted / scaffold-keep / test-seam-keep / candidate
+(full taxonomy in docs/CATEGORY_AUDIT.md so the list is not re-investigated).
+
+- **CLI (L) — dead `maskAddress` copy deleted.** The `cmd/otedama` copy was
+  unreachable in the binary; its only callers were two tests, one of which existed
+  to assert consistency with `internal/doctor`'s copy. Function and both tests
+  removed — Issue #2's triplicate is now a doctor-vs-engine duplicate (comment
+  posted on #2).
+- **Doctor (N) — speculative `SortedResults` API deleted (+3 tests, `sort` import).**
+  `Runner.Run` writes results by check index, so report order is already
+  deterministic and matches the deliberately curated `DefaultChecks` order;
+  no production caller ever appeared.
+- **Doctor (N) — `stripScheme` duplication recorded as
+  [#3](https://github.com/shizukutanaka/Otedama/issues/3).** It near-duplicates
+  `poolproto.StripScheme` with divergent failure semantics (`""` vs error);
+  consolidating is a dependency-posture decision (doctor currently does not
+  import poolproto).
+
 ### Refactor (session 75 — dead-code removal; duplicate masking helpers recorded as Issue #2)
 
 - **engine (E) — `classifyReject` deleted.** The wrapper had no production caller

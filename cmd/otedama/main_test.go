@@ -119,17 +119,6 @@ func TestRun_NoTUIFlag(t *testing.T) {
 	}
 }
 
-func TestMaskAddress(t *testing.T) {
-	addr := "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-	got := maskAddress(addr)
-	if !strings.HasPrefix(got, "bc1qar") {
-		t.Errorf("prefix lost: %q", got)
-	}
-	if !strings.HasSuffix(got, "5mdq") {
-		t.Errorf("suffix lost: %q", got)
-	}
-}
-
 func TestSafeDisplay(t *testing.T) {
 	if safeDisplay("") != "(default)" {
 		t.Error("empty → '(default)'")

@@ -207,24 +207,3 @@ func TestSafeDisplay_PreservesASCII(t *testing.T) {
 		t.Errorf("safeDisplay(%q) = %q, want unchanged", in, got)
 	}
 }
-
-// ============================================================================
-// maskAddress — consistency with doctor package
-// ============================================================================
-
-func TestMaskAddress_CmdAndDoctorConsistent(t *testing.T) {
-	// The maskAddress function in cmd/otedama should produce the same
-	// output as internal/doctor's maskAddress for the same input.
-	addr := "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-	masked := maskAddress(addr)
-	if len(masked) >= len(addr) {
-		t.Errorf("masked %q not shorter than original", masked)
-	}
-	// First 6 and last 4 chars preserved.
-	if !strings.HasPrefix(masked, addr[:6]) {
-		t.Errorf("masked lost prefix: %q", masked)
-	}
-	if !strings.HasSuffix(masked, addr[len(addr)-4:]) {
-		t.Errorf("masked lost suffix: %q", masked)
-	}
-}
