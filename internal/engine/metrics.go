@@ -50,6 +50,13 @@ type engineMetrics struct {
 	// version/commit/goversion carried as labels for fleet tracking.
 	buildInfo *metrics.Gauge
 
+	// lastJobReceivedAt is a Unix-timestamp gauge updated on every
+	// mining.notify / NewMiningJob message from the pool.  A scrape can
+	// alert when the value is older than, say, 2× the pool's expected
+	// notify interval (typically 30–60 s), which reliably surfaces stale
+	// pool connections that look "connected" but deliver no work.
+	lastJobReceivedAt *metrics.Gauge
+
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
 	reg            *metrics.Registry
@@ -142,6 +149,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"commit":    info.Commit,
 				"goversion": info.GoVersion,
 			}),
+
+		lastJobReceivedAt: reg.NewGauge(
+			"otedama_last_job_received_seconds",
+			"Unix timestamp of the most recent mining job received from the pool. "+
+				"Alert when this is older than 2× the pool's expected notify interval "+
+				"(~30–60 s) to detect a stale connection that looks connected but delivers no work.",
+			nil),
 
 		reg:            reg,
 		rejectByReason: make(map[string]*metrics.Counter),

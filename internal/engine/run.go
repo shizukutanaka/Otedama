@@ -122,6 +122,21 @@ func Run(ctx context.Context, opts Options) error {
 	m.uptime.Set(0)
 	m.startTime.Set(float64(startTime.Unix()))
 
+	// Update otedama_uptime_seconds every second so scrapers always see a
+	// fresh value, not just the stale value from the last stats tick.
+	go func() {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				m.uptime.Set(time.Since(startTime).Seconds())
+			}
+		}
+	}()
+
 	// ----- Phase 1: Lightning wallet -----
 	walletFingerprint := setupWallet(opts, log)
 
@@ -547,6 +562,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				updateWork(opts.workers, pm.msg.NewMiningJob, chanID, shareTarget)
 				opts.log("info", fmt.Sprintf("engine: job %d nBits=0x%08X",
 					pm.msg.NewMiningJob.JobID, pm.msg.NewMiningJob.NBits))
+				if opts.m != nil {
+					opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
+				}
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
 				opts.log("info", "engine: share accepted")
@@ -689,6 +707,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				continue
 			}
 			opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
+			if opts.m != nil {
+				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
+			}
 
 		case share, ok := <-opts.merged:
 			if !ok {

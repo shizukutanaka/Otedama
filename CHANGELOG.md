@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 93 — observability: otedama_last_job_received_seconds + uptime fix)
+
+- **`otedama_last_job_received_seconds` gauge** (new):
+  - Added `lastJobReceivedAt *metrics.Gauge` to `engineMetrics`; registered in
+    `newEngineMetrics` with description explaining the alerting use case.
+  - Updated in `runSession` (V2, `internal/engine/run.go` line 566) when
+    `pm.msg.NewMiningJob != nil`: `opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))`.
+  - Updated in `runSessionV1` (V1) after successful `applyJob` (line 710).
+  - **Operational impact:** a Prometheus alert on
+    `time() - otedama_last_job_received_seconds > 120` reliably detects a stale
+    pool connection that `poolConnectionState=2` (connected) masks. This closes
+    the most common "connected but not mining" silent failure mode.
+- **`otedama_uptime_seconds` 1-second continuous tick** (fix):
+  - Previously updated only inside `buildStats()` on the 10-second stats ticker;
+    between ticks the value was stale, and if the app exited before the first tick
+    (e.g. fast context cancel) it stayed 0.
+  - Added a 1-second ticker goroutine in `Run()`:
+    `m.uptime.Set(time.Since(startTime).Seconds())`.
+  - The stats ticker's uptime update in `buildStats()` is retained for the TUI
+    dashboard; the new goroutine keeps the /metrics scrape endpoint accurate.
+- 24 packages green, 1059 tests, gofmt/vet clean.
+
 ### Feat + Test (session 92 — V1 share goroutine coverage: engine 88.6%→90.5%)
 
 - **engine — +11 stmts covered** (88.6% → 90.5%). Four targeted fixes to
