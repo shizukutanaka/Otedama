@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 95 — internal/lightning coverage ≥90%)
+
+- **`internal/lightning/coverage_test.go`** — added 3 tests to cover the last 4
+  uncovered statements and push the package from 88.5% to exactly 90.0%:
+  - `TestMnemonicToEntropy_EmptyMnemonic`: calls `MnemonicToEntropy(Mnemonic{}, wl)`;
+    covers the `len(m) == 0` guard in `seed.go`.
+  - `TestNewWalletManager_CreateNewEntropyError`: passes a 0-byte reader to
+    `NewWalletManager`; `GenerateEntropy` fails immediately, covering both the
+    entropy-read error branch in `createNew` (wallet.go:134) and the `createNew`
+    error-propagation branch in `NewWalletManager` (wallet.go:95).
+  - `TestLoadExisting_ReadFileError`: constructs a `WalletManager` pointing at an
+    empty temp dir and calls `loadExisting` directly; covers the `os.ReadFile` error
+    path (wallet.go:165).
+- All 24 packages green, 1062 tests, every package ≥90% (total 93.6%).
+- **Test-count correction:** 1062 (was 1059 before this session).
+
 ### Feat + Test (session 94 — doctor pool-diversity check + V1 latency-on-error)
 
 - **`checkPoolDiversity` (new doctor check):**

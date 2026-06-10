@@ -217,6 +217,50 @@ func TestSave_CreateTempError(t *testing.T) {
 }
 
 // ============================================================================
+// MnemonicToEntropy — empty mnemonic branch
+// ============================================================================
+
+func TestMnemonicToEntropy_EmptyMnemonic(t *testing.T) {
+	wl := testWL(t)
+	if _, err := MnemonicToEntropy(Mnemonic{}, wl); err == nil {
+		t.Error("MnemonicToEntropy: expected error for empty mnemonic")
+	}
+}
+
+// ============================================================================
+// NewWalletManager — propagates createNew error (entropy read fails)
+//
+// A 0-byte reader causes GenerateEntropy to fail on the first ReadFull,
+// so createNew returns an error and NewWalletManager propagates it.
+// This covers both the wallet.go:95 (error propagation) and
+// wallet.go:134 (entropy read error) branches in one test.
+// ============================================================================
+
+func TestNewWalletManager_CreateNewEntropyError(t *testing.T) {
+	dir := t.TempDir()
+	wl := testWL(t)
+	// 0-byte reader: GenerateEntropy(256, r) tries to read 32 bytes but gets none.
+	if _, err := NewWalletManager(dir, "passphrase", &failAfterNReader{remaining: 0}, wl); err == nil {
+		t.Error("NewWalletManager: expected error when entropy reader is exhausted")
+	}
+}
+
+// ============================================================================
+// loadExisting — read-file error branch
+//
+// A WalletManager pointing at an empty directory has no wallet.dat;
+// calling loadExisting directly returns a file-not-found error, covering
+// the os.ReadFile error path inside loadExisting.
+// ============================================================================
+
+func TestLoadExisting_ReadFileError(t *testing.T) {
+	wm := &WalletManager{dataDir: t.TempDir()}
+	if err := wm.loadExisting("passphrase"); err == nil {
+		t.Error("loadExisting: expected error when wallet.dat is absent")
+	}
+}
+
+// ============================================================================
 // ChangePassphrase — UnmarshalEncryptedSeed error branch
 // ============================================================================
 
