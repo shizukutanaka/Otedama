@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 80 — split doctor.go into framework + checks)
+
+- **Doctor (N) — `doctor.go` (501 lines) split.** The check framework (Status,
+  Result, Check, Report, Runner and their methods) stays in `doctor.go` (170
+  lines); the seven built-in checks (`DefaultChecks` + `check*`) and their private
+  helpers (`isLikelyBitcoinAddress`, `isBech32Char`, `isBase58Char`, `maskAddress`,
+  `stripScheme`) moved verbatim to `checks.go` (334 lines). The framework no longer
+  pulls in `net`/`os`/`path/filepath`/`runtime`/`strings`/`config` — those are
+  check-only concerns. Same per-concern split applied to engine (s74) and the CLI
+  (s78). Behavior unchanged: 24 packages green, staticcheck clean.
+
 ### Refactor (session 78 — single-source the default pool URL; split cmd/otedama/main.go)
 
 - **config (K) — `DefaultPoolURL` constant introduced.** The literal
