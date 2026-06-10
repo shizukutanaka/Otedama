@@ -10,6 +10,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 99 — pprof opt-in profiling endpoint)
+
+Added an optional Go `net/http/pprof` profiling endpoint behind the `--pprof`
+CLI flag. Disabled by default; enabled only when the operator explicitly opts in.
+
+**`internal/httpserver/server.go`**:
+- `New(addr, registry, enablePprof bool)` — new third parameter controls whether
+  pprof handlers are registered on the server's custom mux.
+- `registerPprofHandlers(mux)` — mounts `pprof.Index`, `pprof.Cmdline`,
+  `pprof.Profile`, `pprof.Symbol`, `pprof.Trace`, and named profiles
+  (`heap`, `goroutine`, `allocs`, `block`, `mutex`, `threadcreate`) on the
+  provided mux. Uses **explicit handler registration** — not a blank import of
+  `net/http/pprof` — so handlers land on the custom mux, never on
+  `http.DefaultServeMux`.
+- When `enablePprof=false` (default), `/debug/pprof/` returns 404.
+
+**`cmd/otedama/run.go`**:
+- Added `pprofEnabled bool` to `runFlags`.
+- Added `--pprof` boolean flag: "Mount Go pprof profiling at /debug/pprof/
+  (only on loopback/private addresses)."
+- Wired through to `httpserver.New(f.httpAddr, reg, f.pprofEnabled)`.
+
+**Security note** (in source comment and godoc): pprof exposes goroutine stacks,
+heap contents, and CPU profiles. The flag description explicitly warns to use
+only on loopback/private networks.
+
+Tests: `TestPprof_DisabledByDefault` (404 when false),
+`TestPprof_EnabledServesIndex` (200 + goroutine link when true),
+`TestPprof_NamedProfilesAccessible` (heap/goroutine/allocs all 200 when true).
+`RESEARCH_IMPROVEMENTS.md` Category 7 item 7 marked ✅.
+
+Coverage: `internal/httpserver` 97.2% (18 tests). 24 packages green, 1074 tests.
+
 ### Feat (session 98 — protocol-version negotiation logging)
 
 - **`internal/engine/run.go`**: `runSession` now logs

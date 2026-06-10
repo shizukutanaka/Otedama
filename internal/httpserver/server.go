@@ -35,6 +35,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	// pprof registers its handlers via its init(); we do NOT blank-import it
+	// because that would register on http.DefaultServeMux. Instead we call
+	// the pprof handler functions explicitly so they land on our custom mux.
+	// The import is here to make the usage visible to linters.
+	"net/http/pprof" //nolint:gosec
 	"sync/atomic"
 	"time"
 
@@ -64,7 +69,12 @@ type Server struct {
 
 // New creates an HTTP server that exposes metrics from the given registry.
 // The server is not started until Start is called.
-func New(addr string, registry *metrics.Registry) *Server {
+//
+// If enablePprof is true the standard Go pprof profiling endpoints are
+// mounted at /debug/pprof/. Only enable this on localhost or a private
+// network: pprof exposes goroutine stacks, heap contents, and CPU profiles
+// — do not expose it publicly without authentication.
+func New(addr string, registry *metrics.Registry, enablePprof bool) *Server {
 	s := &Server{
 		addr:     addr,
 		registry: registry,
@@ -74,6 +84,9 @@ func New(addr string, registry *metrics.Registry) *Server {
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 	mux.HandleFunc("/metrics", s.handleMetrics)
+	if enablePprof {
+		registerPprofHandlers(mux)
+	}
 	mux.HandleFunc("/", s.handleIndex)
 
 	s.httpSrv = &http.Server{
@@ -186,6 +199,21 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = io.WriteString(w, indexHTML)
+}
+
+// registerPprofHandlers mounts the stdlib pprof profiling endpoints on mux.
+// It must only be called when the caller has verified that the server is
+// not internet-facing: pprof can leak sensitive runtime data.
+func registerPprofHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// Named profiles: heap, goroutine, allocs, block, mutex, threadcreate.
+	for _, name := range []string{"heap", "goroutine", "allocs", "block", "mutex", "threadcreate"} {
+		mux.Handle("/debug/pprof/"+name, pprof.Handler(name))
+	}
 }
 
 // indexHTML is a minimal landing page listing available endpoints.

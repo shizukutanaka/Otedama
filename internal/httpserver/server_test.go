@@ -20,7 +20,7 @@ import (
 
 func TestHealthz_Returns200(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19801", r)
+	s := New("127.0.0.1:19801", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -52,7 +52,7 @@ func TestHealthz_Returns200(t *testing.T) {
 
 func TestReadyz_503_WhenNotReady(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19802", r)
+	s := New("127.0.0.1:19802", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -74,7 +74,7 @@ func TestReadyz_503_WhenNotReady(t *testing.T) {
 
 func TestReadyz_200_WhenReady(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19803", r)
+	s := New("127.0.0.1:19803", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -98,7 +98,7 @@ func TestReadyz_200_WhenReady(t *testing.T) {
 
 func TestReadyz_FlipsBackTo503WhenSetFalse(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19804", r)
+	s := New("127.0.0.1:19804", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -125,7 +125,7 @@ func TestMetrics_ServesPrometheusFormat(t *testing.T) {
 	r := metrics.NewRegistry()
 	r.NewCounter("test_total", "help", nil).Add(5)
 
-	s := New("127.0.0.1:19805", r)
+	s := New("127.0.0.1:19805", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -155,7 +155,7 @@ func TestMetrics_ServesPrometheusFormat(t *testing.T) {
 
 func TestIndex_Returns200WithHTML(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19806", r)
+	s := New("127.0.0.1:19806", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -185,7 +185,7 @@ func TestIndex_Returns200WithHTML(t *testing.T) {
 
 func TestUnknownPath_Returns404(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19807", r)
+	s := New("127.0.0.1:19807", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -209,7 +209,7 @@ func TestConcurrentRequests_NoRace(t *testing.T) {
 	r := metrics.NewRegistry()
 	counter := r.NewCounter("hits_total", "help", nil)
 
-	s := New("127.0.0.1:19808", r)
+	s := New("127.0.0.1:19808", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -240,7 +240,7 @@ func TestConcurrentRequests_NoRace(t *testing.T) {
 
 func TestStart_InvalidAddressReturnsError(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("invalid-address-no-colon", r)
+	s := New("invalid-address-no-colon", r, false)
 	ctx := context.Background()
 	if err := s.Start(ctx); err == nil {
 		t.Error("Start with invalid address should return error")
@@ -249,7 +249,7 @@ func TestStart_InvalidAddressReturnsError(t *testing.T) {
 
 func TestStop_GracefulShutdown(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19809", r)
+	s := New("127.0.0.1:19809", r, false)
 	ctx := context.Background()
 	if err := s.Start(ctx); err != nil {
 		t.Skip("port unavailable:", err)
@@ -264,7 +264,7 @@ func TestStop_GracefulShutdown(t *testing.T) {
 
 func TestContextCancellation_TriggersShutdown(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19810", r)
+	s := New("127.0.0.1:19810", r, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	if err := s.Start(ctx); err != nil {
 		t.Skip("port unavailable:", err)
@@ -283,7 +283,7 @@ func TestContextCancellation_TriggersShutdown(t *testing.T) {
 }
 
 func TestServeError_NilWhenHealthy(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry())
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -300,7 +300,7 @@ func TestServeError_NilWhenHealthy(t *testing.T) {
 }
 
 func TestServeError_NilAfterCleanStop(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry())
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
 	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
@@ -317,7 +317,7 @@ func TestServeError_NilAfterCleanStop(t *testing.T) {
 }
 
 func TestAddr_ReturnsBindAddress(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry())
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -332,7 +332,7 @@ func TestAddr_ReturnsBindAddress(t *testing.T) {
 
 func TestMetrics_NilRegistry_Returns500(t *testing.T) {
 	// New accepts a nil registry; accessing /metrics should return 500.
-	s := New("127.0.0.1:0", nil)
+	s := New("127.0.0.1:0", nil, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -348,5 +348,72 @@ func TestMetrics_NilRegistry_Returns500(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("/metrics with nil registry = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestPprof_DisabledByDefault(t *testing.T) {
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Skip("port unavailable:", err)
+	}
+	defer s.Stop()
+	time.Sleep(20 * time.Millisecond)
+
+	resp, err := http.Get("http://" + s.Addr() + "/debug/pprof/")
+	if err != nil {
+		t.Fatalf("GET /debug/pprof/: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("/debug/pprof/ when pprof disabled = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestPprof_EnabledServesIndex(t *testing.T) {
+	s := New("127.0.0.1:0", metrics.NewRegistry(), true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Skip("port unavailable:", err)
+	}
+	defer s.Stop()
+	time.Sleep(20 * time.Millisecond)
+
+	resp, err := http.Get("http://" + s.Addr() + "/debug/pprof/")
+	if err != nil {
+		t.Fatalf("GET /debug/pprof/: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/debug/pprof/ when pprof enabled = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "goroutine") {
+		t.Errorf("/debug/pprof/ missing goroutine profile link:\n%s", body)
+	}
+}
+
+func TestPprof_NamedProfilesAccessible(t *testing.T) {
+	s := New("127.0.0.1:0", metrics.NewRegistry(), true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Skip("port unavailable:", err)
+	}
+	defer s.Stop()
+	time.Sleep(20 * time.Millisecond)
+
+	for _, profile := range []string{"heap", "goroutine", "allocs"} {
+		resp, err := http.Get("http://" + s.Addr() + "/debug/pprof/" + profile)
+		if err != nil {
+			t.Fatalf("GET /debug/pprof/%s: %v", profile, err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("/debug/pprof/%s = %d, want 200", profile, resp.StatusCode)
+		}
 	}
 }

@@ -35,6 +35,7 @@ type runFlags struct {
 	noTUI            bool
 	walletPassphrase string
 	httpAddr         string
+	pprofEnabled     bool
 }
 
 func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
@@ -53,6 +54,8 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.httpAddr, "http-addr", "",
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
+	fs.BoolVar(&f.pprofEnabled, "pprof", false,
+		"Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
 	if err := fs.Parse(args); err != nil {
 		return runFlags{}, err
 	}
@@ -165,7 +168,7 @@ func startHTTPServer(ctx context.Context, f runFlags, stdout, stderr io.Writer) 
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
-	srv := httpserver.New(f.httpAddr, reg)
+	srv := httpserver.New(f.httpAddr, reg, f.pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
 		return reg, nil

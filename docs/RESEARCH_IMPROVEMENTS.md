@@ -129,8 +129,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
    their chosen pool exceeds a large network share, nudging decentralisation.
 8. ❌ **Running a pool server** — explicitly out of scope (ADR-001).
-9. 🟡 **Block-template freshness metric** — time since last template; a stale
-   template source is a silent failure.
+9. ✅ **Block-template freshness metric** (session 93):
+   `otedama_last_job_received_seconds` (Unix timestamp of last
+   `mining.notify`); alert `time() - metric > 120` to detect stale
+   connections that look connected but deliver no work.
 10. 🔵 **Stratum V2 header-only / coinbase negotiation** for censorship
     resistance — part of the JDC story (ADR-009).
 
@@ -198,8 +200,10 @@ arXiv grounding (collected sessions 40–41 and here):
    it exists.
 6. 🟡 **Shell completion generation** (`otedama completion bash|zsh|fish`) —
    table-stakes for a polished CLI.
-7. 🟡 **`GODEBUG`/pprof opt-in endpoint** behind a flag for field debugging
-   (already have an HTTP server; could mount `/debug/pprof`).
+7. ✅ **`GODEBUG`/pprof opt-in endpoint** behind a flag for field debugging
+   (already have an HTTP server; could mount `/debug/pprof`). — session 99: `--pprof`
+   flag mounts `/debug/pprof/` and named profiles; explicit handler registration
+   (not blank import on DefaultServeMux); loopback/private-IP safety note in docs.
 8. 🟡 **Config precedence documentation** (flags > env > file > defaults) and
    an `otedama config show --origin` annotating where each value came from.
 9. ✅ **Graceful shutdown on SIGINT/SIGTERM**.
@@ -239,14 +243,15 @@ arXiv grounding (session 41):
    mentions OTel; confirm spans exist on pool dial and submit.
 4. 🟡 **Reject-rate & stale-rate gauges** (ties to Category 1).
 5. ✅ **Submit-latency quantiles** (session 46) — see Category 2 item 7.
-6. 🟡 **`otedama_up` / readiness reflecting HashrateMonitor.Stalled()** so a
-   scrape can alert on a stalled miner.
-7. 🟡 **Pool-connection state gauge** (connected/reconnecting/failed + current
-   pool index) — failover is now implemented (session 42) but not yet
-   observable as a metric.
+6. ✅ **`otedama_up` / readiness reflecting HashrateMonitor.Stalled()**
+   (sessions 43/93). `otedama_up=0` when stalled; TUI also shows ⚠ stalled
+   badge (session 96).
+7. ✅ **Pool-connection state gauges** (sessions 91–93):
+   `otedama_pool_connection_state` (0/1/2), `otedama_pool_active_index`,
+   `otedama_payout_active_index`.
 8. ✅ **Structured JSON logs** with level filtering.
-9. 🟡 **Build-info metric** (`otedama_build_info{version,commit}`) — standard
-   Prometheus convention for fleet version tracking.
+9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
+   goversion}` — standard Prometheus `_info` convention for fleet tracking.
 10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
     metrics actionable.
 
