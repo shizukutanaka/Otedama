@@ -213,6 +213,9 @@ func checkPoolReachability(cfg config.Config) Check {
 	}
 }
 
+// gpuDRMPath is the sysfs path scanned for render devices; overridable in tests.
+var gpuDRMPath = "/sys/class/drm"
+
 func checkHardware() Check {
 	return Check{
 		Name: "Hardware",
@@ -224,7 +227,7 @@ func checkHardware() Check {
 
 			// On Linux, see if /sys/class/drm exposes a GPU.
 			if runtime.GOOS == "linux" {
-				if entries, err := os.ReadDir("/sys/class/drm"); err == nil {
+				if entries, err := os.ReadDir(gpuDRMPath); err == nil {
 					var gpus int
 					for _, e := range entries {
 						if strings.HasPrefix(e.Name(), "renderD") {
@@ -245,17 +248,20 @@ func checkHardware() Check {
 	}
 }
 
+// networkCheckEndpoint is the TCP address used by checkNetwork; overridable in tests.
+var networkCheckEndpoint = "1.1.1.1:53"
+
 func checkNetwork() Check {
 	return Check{
 		Name: "Network",
 		Run: func(ctx context.Context) Result {
 			d := net.Dialer{Timeout: 3 * time.Second}
 			// Cloudflare DNS (1.1.1.1:53) is a reliable reachability test.
-			conn, err := d.DialContext(ctx, "tcp", "1.1.1.1:53")
+			conn, err := d.DialContext(ctx, "tcp", networkCheckEndpoint)
 			if err != nil {
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("cannot reach 1.1.1.1:53: %v", err),
+					Detail: fmt.Sprintf("cannot reach %s: %v", networkCheckEndpoint, err),
 					Fix:    "check your firewall, proxy, or VPN",
 				}
 			}

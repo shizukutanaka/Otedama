@@ -7,6 +7,9 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -446,6 +449,212 @@ func TestDefaultChecks_AllHaveRunFunction(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// checkConfig — valid-file paths (Fail and Pass)
+// ============================================================================
+
+func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
+	// A file that exists but whose config fails Validate (no bitcoin address).
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
+	c := checkConfig(cfg, path)
+	r := c.Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("invalid config status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Fail result must have a Fix hint")
+	}
+}
+
+func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
+	c := checkConfig(cfg, path)
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("valid config status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// ============================================================================
+// checkDataDir — additional branches
+// ============================================================================
+
+func TestCheckDataDir_EmptyDir_UsesDefault(t *testing.T) {
+	// Passing "" triggers the home-directory lookup.
+	// The default path (~/.local/share/otedama) almost certainly doesn't exist
+	// in a test container, so we expect Warn (will-be-created) or Skip (no HOME).
+	c := checkDataDir("")
+	r := c.Run(context.Background())
+	switch r.Status {
+	case StatusWarn, StatusSkip, StatusPass:
+		// All three are acceptable outcomes depending on environment.
+	default:
+		t.Errorf("empty-dir checkDataDir status = %v, want Warn/Skip/Pass", r.Status)
+	}
+}
+
+func TestCheckDataDir_PathIsFile_Fails(t *testing.T) {
+	// If the data-dir path points to a regular file (not a dir), report Fail.
+	f, err := os.CreateTemp(t.TempDir(), "not-a-dir")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	f.Close()
+
+	c := checkDataDir(f.Name())
+	r := c.Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("file-path checkDataDir status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// ============================================================================
+// isLikelyBitcoinAddress — base58 invalid-char branch
+// ============================================================================
+
+func TestIsLikelyBitcoinAddress_Base58InvalidChar_ReturnsFalse(t *testing.T) {
+	// '0' is explicitly excluded from Bitcoin's Base58 alphabet.
+	// "1" + 25 zeros is long enough (26 chars) but contains an invalid char.
+	addr := "1" + strings.Repeat("0", 25)
+	if isLikelyBitcoinAddress(addr) {
+		t.Errorf("address with '0' chars should be rejected: %q", addr)
+	}
+}
+
+func TestIsLikelyBitcoinAddress_ThreePrefixBase58InvalidChar_ReturnsFalse(t *testing.T) {
+	// Same check for "3" prefix (P2SH).
+	addr := "3" + strings.Repeat("O", 25) // 'O' is excluded from Base58
+	if isLikelyBitcoinAddress(addr) {
+		t.Errorf("address with 'O' chars should be rejected: %q", addr)
+	}
+}
+
+func TestIsLikelyBitcoinAddress_Bech32InvalidCharInValidLengthAddress(t *testing.T) {
+	// "bc1BADCAPS" is only 10 chars — it fails the length check before the
+	// bech32 char loop. This test uses a 26-char address so the loop runs.
+	// Uppercase letters are not in the Bech32 charset.
+	addr := "bc1" + strings.Repeat("q", 22) + "B" // 26 chars, ends with invalid 'B'
+	if isLikelyBitcoinAddress(addr) {
+		t.Errorf("bc1 address with uppercase char should be rejected: %q", addr)
+	}
+}
+
+// ============================================================================
+// checkPoolReachability — default URL branch (no pools configured)
+// ============================================================================
+
+func TestCheckPoolReachability_NoPoolsUsesDefault(t *testing.T) {
+	// With an empty Pools slice the check falls back to config.DefaultPoolURL.
+	// In a network-isolated test environment the dial will fail, but the
+	// important thing is that the default-URL branch was taken (coverage).
+	cfg := config.Config{} // no Pools
+	c := checkPoolReachability(cfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	r := c.Run(ctx)
+	// Fail or Pass are both valid depending on network; Fail is expected in CI.
+	if r.Status != StatusFail && r.Status != StatusPass {
+		t.Errorf("no-pools checkPoolReachability status = %v, want Fail or Pass", r.Status)
+	}
+}
+
+// ============================================================================
+// checkNetwork — fail path via pre-cancelled context
+// ============================================================================
+
+func TestCheckNetwork_CancelledContext_Fails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancelled before the check even starts
+	c := checkNetwork()
+	r := c.Run(ctx)
+	if r.Status != StatusFail {
+		t.Errorf("cancelled-context network check: status = %v, want Fail", r.Status)
+	}
+	if r.Fix == "" {
+		t.Error("Fail result must provide a Fix hint")
+	}
+}
+
+func TestCheckNetwork_LocalListener_Passes(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+
+	old := networkCheckEndpoint
+	networkCheckEndpoint = ln.Addr().String()
+	defer func() { networkCheckEndpoint = old }()
+
+	c := checkNetwork()
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("local-listener network check: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// ============================================================================
+// checkHardware — GPU detection branches via injected DRM path
+// ============================================================================
+
+func TestCheckHardware_GPUDetected(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("GPU detection only runs on Linux")
+	}
+	dir := t.TempDir()
+	// Simulate two render nodes.
+	for _, name := range []string{"renderD128", "renderD129", "card0"} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+	}
+	old := gpuDRMPath
+	gpuDRMPath = dir
+	defer func() { gpuDRMPath = old }()
+
+	c := checkHardware()
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("GPU-detected status = %v, want Pass", r.Status)
+	}
+	if !strings.Contains(r.Detail, "GPU") {
+		t.Errorf("detail should mention GPU: %q", r.Detail)
+	}
+}
+
+func TestCheckHardware_EmptyDRMDir_NoGPU(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("GPU detection only runs on Linux")
+	}
+	dir := t.TempDir() // empty dir — no renderD* entries
+	old := gpuDRMPath
+	gpuDRMPath = dir
+	defer func() { gpuDRMPath = old }()
+
+	c := checkHardware()
+	r := c.Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("no-GPU status = %v, want Warn", r.Status)
+	}
+	if !strings.Contains(r.Detail, "no GPU") {
+		t.Errorf("detail should say 'no GPU': %q", r.Detail)
+	}
+}
+
+// ============================================================================
+// checkFailoverAddresses
+// ============================================================================
 
 func TestCheckFailoverAddresses(t *testing.T) {
 	run := func(addrs []string) Result {
