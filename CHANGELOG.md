@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 87 — coverage: internal/i18n 86.5%→100%, internal/hal 86.3%→98.5%, internal/miner 85.5%→98.6%)
+
+- **i18n (I) — coverage: +13.5 pp** (86.5% → 100%). Added tests for all
+  previously uncovered branches: `NewBundle` nil-extra-catalog guard, `RenderWith`
+  nil-data fast-path, no-template fast-path, missing-ID error path, successful
+  template substitution, template parse error, and template execute error. All
+  branches now covered.
+- **hal (H) — coverage: +12.2 pp** (86.3% → 98.5%). Made `drmBasePath` a
+  package-level injectable variable (replaces `const drmBase` inside `Enumerate`)
+  so tests can provide a temp-dir fake sysfs tree. Added three tests:
+  `TestGPULinuxDriver_Enumerate_WithFakeSysfs_FindsGPUs` (happy path — one
+  renderD128 node with vendor 0x10de → NVIDIA GPU), `_SkipsNonRenderDEntries`
+  (cardN entries are ignored), `_DeduplicatesCanonicalPaths` (symlink cycle
+  resolved via `EvalSymlinks` dedup). Remaining 1.5% is unreachable dead code in
+  `seen[canonical]` branch when `EvalSymlinks` fails and returns `devPath` which
+  was already inserted.
+- **miner (M) — coverage: +13.1 pp** (85.5% → 98.6%). Added six
+  `NBitsFromTarget` tests covering all four `switch` branches: zero hash (returns
+  0), genesis-difficulty round-trip, one-byte mantissa, two-byte mantissa, sign-bit
+  padding (high bit set forces extra zero byte), and overflow exponent error
+  (exp > 32 returns error). Added `TestNewWorker_ZeroThreads_DefaultsToCPUCount`
+  exercising the `cfg.Threads == 0` default guard in `NewWorker`.
+- 24 packages green, 890+ tests, gofmt/vet clean.
+
 ### Test (session 86 — coverage: internal/httpserver 89.4%→94.1%, internal/stratum 89.1%→90.1%)
 
 - **httpserver (H) — coverage: +4.7 pp** (89.4% → 94.1%). Fixed `Addr()` to

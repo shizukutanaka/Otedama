@@ -39,12 +39,15 @@ type GPULinuxDriver struct {
 
 func (d *GPULinuxDriver) Name() string { return "gpu_linux" }
 
+// drmBasePath is the sysfs DRM directory scanned for render devices;
+// overridable in tests so the loop can be exercised without real GPU hardware.
+var drmBasePath = "/sys/class/drm"
+
 // Enumerate returns all GPU devices visible via DRM. If the DRM sysfs
 // tree is absent or empty, Enumerate returns an empty slice with no
 // error, so that the partial-failure policy in Detector applies.
 func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
-	const drmBase = "/sys/class/drm"
-	entries, err := os.ReadDir(drmBase)
+	entries, err := os.ReadDir(drmBasePath)
 	if err != nil {
 		// DRM not available — not an error, just no GPUs detected.
 		return nil, nil
@@ -59,7 +62,7 @@ func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 		if !strings.HasPrefix(name, "renderD") {
 			continue
 		}
-		devPath := filepath.Join(drmBase, name, "device")
+		devPath := filepath.Join(drmBasePath, name, "device")
 
 		// Resolve the canonical device path to deduplicate multi-node GPUs.
 		canonical, err := filepath.EvalSymlinks(devPath)

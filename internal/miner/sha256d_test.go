@@ -253,3 +253,76 @@ func BenchmarkSHA256d(b *testing.B) {
 		_ = SHA256d(data)
 	}
 }
+
+// ============================================================================
+// NBitsFromTarget — full coverage of all branches
+// ============================================================================
+
+func TestNBitsFromTarget_ZeroHash_ReturnsZero(t *testing.T) {
+	var zero Hash
+	if got := NBitsFromTarget(zero); got != 0 {
+		t.Errorf("NBitsFromTarget(zero) = 0x%08x, want 0", got)
+	}
+}
+
+func TestNBitsFromTarget_RoundTrip_GenesisDifficulty(t *testing.T) {
+	const genesisNBits = uint32(0x1d00ffff)
+	target, err := TargetFromNBits(genesisNBits)
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	got := NBitsFromTarget(target)
+	if got != genesisNBits {
+		t.Errorf("NBitsFromTarget round-trip: got 0x%08x, want 0x%08x", got, genesisNBits)
+	}
+}
+
+func TestNBitsFromTarget_OneByteMantissa(t *testing.T) {
+	// Construct a hash whose big-endian value is exactly 1 byte (0x7f).
+	// little-endian: byte 0 = 0x7f, all others = 0.
+	var h Hash
+	h[0] = 0x7f // LSB in little-endian
+	got := NBitsFromTarget(h)
+	// exp=1, mant=0x7f → 0x01007f00... but compact is 0x01007f
+	exp := byte(got >> 24)
+	if exp != 1 {
+		t.Errorf("one-byte mantissa: exponent = %d, want 1", exp)
+	}
+}
+
+func TestNBitsFromTarget_TwoByteMantissa(t *testing.T) {
+	// Construct a hash whose big-endian value is exactly 2 bytes.
+	var h Hash
+	h[0] = 0x34 // little-endian LSB
+	h[1] = 0x12 // second byte → big-endian = 0x12 0x34
+	got := NBitsFromTarget(h)
+	exp := byte(got >> 24)
+	if exp != 2 {
+		t.Errorf("two-byte mantissa: exponent = %d, want 2", exp)
+	}
+}
+
+func TestNBitsFromTarget_SignBitPad(t *testing.T) {
+	// High byte with bit 0x80 set requires 0x00 padding (sign bit avoidance).
+	// Construct a hash whose big-endian value has high byte >= 0x80.
+	var h Hash
+	h[0] = 0xbc
+	h[1] = 0xde
+	h[2] = 0xf0 // big-endian = 0xf0 0xde 0xbc → high byte 0xf0 >= 0x80 → pad
+	got := NBitsFromTarget(h)
+	// Exponent should be incremented due to padding.
+	exp := byte(got >> 24)
+	if exp < 4 {
+		t.Errorf("sign-bit pad: exponent = %d, want >= 4", exp)
+	}
+}
+
+func TestTargetFromNBits_OverflowReturnsError(t *testing.T) {
+	// An nBits value that would produce > 32 bytes of magnitude.
+	// exp=33 means the target is 33 bytes, which overflows 256 bits.
+	overflowNBits := uint32(33)<<24 | 0x7fffff // exp=33, mant=0x7fffff
+	_, err := TargetFromNBits(overflowNBits)
+	if err == nil {
+		t.Error("TargetFromNBits with overflow exponent should return error")
+	}
+}

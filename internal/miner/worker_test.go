@@ -283,3 +283,11 @@ func BenchmarkWorkerGrind_SingleThread(b *testing.B) {
 		_ = HashHeader(h)
 	}
 }
+
+func TestNewWorker_ZeroThreads_DefaultsToCPUCount(t *testing.T) {
+	// cfg.Threads == 0 triggers the default to runtime.NumCPU().
+	w := NewWorker(WorkerConfig{Threads: 0})
+	if w.cfg.Threads <= 0 {
+		t.Errorf("Threads after default = %d, want > 0", w.cfg.Threads)
+	}
+}

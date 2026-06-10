@@ -447,3 +447,92 @@ func TestTenLanguageCoverage_EnglishOnlyBundleReportsMissing(t *testing.T) {
 		t.Errorf("bundle with only English has %d missing entries, want 0", len(missing))
 	}
 }
+
+// ============================================================================
+// NewBundle — nil catalog in variadic args
+// ============================================================================
+
+func TestNewBundle_RejectsNilExtraCatalog(t *testing.T) {
+	en, _ := NewCatalog(LangEnglish, map[ID]string{ID("hi"): "Hello"})
+	_, err := NewBundle(en, nil)
+	if err == nil {
+		t.Error("NewBundle(en, nil) must return error for nil extra catalog")
+	}
+}
+
+// ============================================================================
+// RenderWith — all branches
+// ============================================================================
+
+func TestRenderWith_NilData_ReturnsMsgDirectly(t *testing.T) {
+	en, _ := NewCatalog(LangEnglish, map[ID]string{ID("greet"): "Hello, world"})
+	b, _ := NewBundle(en)
+	got, err := b.RenderWith(LangEnglish, ID("greet"), nil)
+	if err != nil {
+		t.Errorf("RenderWith nil data: %v", err)
+	}
+	if got != "Hello, world" {
+		t.Errorf("RenderWith nil data = %q, want %q", got, "Hello, world")
+	}
+}
+
+func TestRenderWith_NoTemplate_ReturnsMsgDirectly(t *testing.T) {
+	en, _ := NewCatalog(LangEnglish, map[ID]string{ID("greet"): "Hello, world"})
+	b, _ := NewBundle(en)
+	got, err := b.RenderWith(LangEnglish, ID("greet"), map[string]any{"x": 1})
+	if err != nil {
+		t.Errorf("RenderWith no template: %v", err)
+	}
+	if got != "Hello, world" {
+		t.Errorf("RenderWith no template = %q, want %q", got, "Hello, world")
+	}
+}
+
+func TestRenderWith_MissingID_ReturnsRenderError(t *testing.T) {
+	en, _ := NewCatalog(LangEnglish, map[ID]string{})
+	b, _ := NewBundle(en)
+	_, err := b.RenderWith(LangEnglish, ID("nonexistent"), nil)
+	if err == nil {
+		t.Error("RenderWith missing ID must return error")
+	}
+}
+
+func TestRenderWith_WithTemplate_SubstitutesVariables(t *testing.T) {
+	en, _ := NewCatalog(LangEnglish, map[ID]string{
+		ID("tmpl"): "Hello, {{.name}}!",
+	})
+	b, _ := NewBundle(en)
+	got, err := b.RenderWith(LangEnglish, ID("tmpl"), map[string]any{"name": "Alice"})
+	if err != nil {
+		t.Errorf("RenderWith template: %v", err)
+	}
+	if !strings.Contains(got, "Alice") {
+		t.Errorf("RenderWith template = %q, want to contain 'Alice'", got)
+	}
+}
+
+func TestRenderWith_BadTemplate_ReturnsParseError(t *testing.T) {
+	en, _ := NewCatalog(LangEnglish, map[ID]string{
+		ID("bad"): "Hello, {{.name",
+	})
+	b, _ := NewBundle(en)
+	_, err := b.RenderWith(LangEnglish, ID("bad"), map[string]any{"name": "x"})
+	if err == nil {
+		t.Error("RenderWith bad template must return parse error")
+	}
+}
+
+func TestRenderWith_ExecuteError_ReturnsExecError(t *testing.T) {
+	// Use a template that calls a function that doesn't exist in the data.
+	// In Go templates, accessing a field that doesn't exist returns empty,
+	// but calling an undefined function causes an execute error.
+	en, _ := NewCatalog(LangEnglish, map[ID]string{
+		ID("fn"): "{{call .fn}}",
+	})
+	b, _ := NewBundle(en)
+	// Pass data with a non-callable "fn" to force Execute to fail.
+	_, err := b.RenderWith(LangEnglish, ID("fn"), map[string]any{"fn": "not a function"})
+	if err == nil {
+		t.Error("RenderWith execute error must return exec error")
+	}
+}

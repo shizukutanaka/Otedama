@@ -337,3 +337,105 @@ func TestParseGPUDevice_UsesCorrectRenderNodeInID(t *testing.T) {
 		t.Errorf("different render nodes produced same ID: %s", d1.Identity().ID)
 	}
 }
+
+// ============================================================================
+// GPULinuxDriver.Enumerate — fake sysfs tests (injectable drmBasePath)
+// ============================================================================
+
+func TestGPULinuxDriver_Enumerate_WithFakeSysfs_FindsGPUs(t *testing.T) {
+	// Build a minimal fake /sys/class/drm with one render node.
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = root
+	defer func() { drmBasePath = orig }()
+
+	// Create renderD128/device with vendor and uevent files.
+	devDir := filepath.Join(root, "renderD128", "device")
+	if err := os.MkdirAll(devDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Errorf("Enumerate returned error: %v", err)
+	}
+	if len(devs) == 0 {
+		t.Error("expected at least one GPU device")
+	}
+}
+
+func TestGPULinuxDriver_Enumerate_SkipsNonRenderDEntries(t *testing.T) {
+	// Only renderD* entries are GPUs; card0, version, etc. are skipped.
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = root
+	defer func() { drmBasePath = orig }()
+
+	// Create a non-renderD entry and one renderD entry.
+	if err := os.MkdirAll(filepath.Join(root, "card0"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	devDir := filepath.Join(root, "renderD128", "device")
+	if err := os.MkdirAll(devDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x1002\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Errorf("Enumerate returned error: %v", err)
+	}
+	if len(devs) != 1 {
+		t.Errorf("expected 1 GPU, got %d", len(devs))
+	}
+}
+
+func TestGPULinuxDriver_Enumerate_DeduplicatesCanonicalPaths(t *testing.T) {
+	// Two renderD nodes pointing to the same canonical device path produce
+	// only one Device entry.
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = root
+	defer func() { drmBasePath = orig }()
+
+	// Shared canonical device directory.
+	devDir := filepath.Join(root, "shared-device")
+	if err := os.MkdirAll(devDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// renderD128/device → symlink to shared-device
+	if err := os.MkdirAll(filepath.Join(root, "renderD128"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(devDir, filepath.Join(root, "renderD128", "device")); err != nil {
+		t.Fatal(err)
+	}
+
+	// renderD129/device → same symlink target
+	if err := os.MkdirAll(filepath.Join(root, "renderD129"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(devDir, filepath.Join(root, "renderD129", "device")); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Errorf("Enumerate returned error: %v", err)
+	}
+	if len(devs) != 1 {
+		t.Errorf("expected 1 deduplicated GPU, got %d", len(devs))
+	}
+}
