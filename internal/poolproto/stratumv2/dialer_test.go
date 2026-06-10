@@ -458,6 +458,429 @@ func TestConnection_Close_IsIdempotent(t *testing.T) {
 // Unit tests for package-level helpers
 // ============================================================================
 
+// ============================================================================
+// Dial — real-TCP and dial-error paths
+// ============================================================================
+
+func TestDialer_Dial_RealTCPListener(t *testing.T) {
+	// Verify the nil-dialFn path (real net.Dialer) against a local listener.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+	go func() {
+		c, _ := ln.Accept()
+		if c != nil {
+			c.Close()
+		}
+	}()
+
+	d := &Dialer{} // no dialFn → real TCP path
+	ctx := context.Background()
+	conn, err := d.Dial(ctx, "stratum+v2://"+ln.Addr().String(), poolproto.Credentials{User: "test"})
+	if err != nil {
+		t.Fatalf("Dial with real TCP listener: %v", err)
+	}
+	conn.Close()
+}
+
+func TestDialer_Dial_DialFnError(t *testing.T) {
+	d := &Dialer{
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return nil, net.ErrClosed
+		},
+	}
+	_, err := d.Dial(context.Background(), "stratum+v2://pool.example.com:3336", poolproto.Credentials{})
+	if err == nil {
+		t.Error("Dial with failing dialFn should return error")
+	}
+}
+
+// ============================================================================
+// Negotiate — all early-exit error paths
+// ============================================================================
+
+func TestDialer_Negotiate_SendSetupConnectionFails(t *testing.T) {
+	// Close the server-side pipe immediately so the client Write fails.
+	server, client := net.Pipe()
+	server.Close() // closed before any write from client
+
+	d := makeDialer(client)
+	conn, _ := d.Dial(context.Background(), "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(context.Background(), conn)
+	if err == nil {
+		t.Error("Negotiate should fail when sending SetupConnection to closed conn")
+	}
+}
+
+func TestDialer_Negotiate_ReadSetupResponseFails(t *testing.T) {
+	// Server reads SetupConnection then closes without replying.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck — discard
+		pool.conn.Close()
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail when server closes without SetupConnection reply")
+	}
+}
+
+func TestDialer_Negotiate_SetupResponseGarbage(t *testing.T) {
+	// Send a SetupConnectionSuccess frame (0x01) with a 0-byte payload.
+	// DecodeSetupConnectionSuccess requires at least 2 bytes, so DispatchFrame
+	// returns an error on this truncated frame.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck
+		// msg_type=0x01 (SetupConnectionSuccess), payload_length=0.
+		pool.conn.Write([]byte{0x00, 0x00, 0x01, 0x00, 0x00, 0x00}) //nolint:errcheck
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail when DispatchFrame returns error for SetupConnection response")
+	}
+}
+
+func TestDialer_Negotiate_UnexpectedMsgDuringSetup(t *testing.T) {
+	// Server replies to SetupConnection with an unexpected message type.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck
+		// Send OpenMiningChannelSuccess instead of SetupConnectionSuccess/Error.
+		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail on unexpected message type during setup")
+	}
+}
+
+func TestDialer_Negotiate_SendOpenMiningChannelFails(t *testing.T) {
+	// Server sends SetupConnectionSuccess then closes immediately.
+	// The client reads success, then tries to send OpenMiningChannel → Write fails.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		pool.conn.Close() // close right after success reply
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail when connection closes after SetupConnectionSuccess")
+	}
+}
+
+func TestDialer_Negotiate_ReadOpenMiningResponseFails(t *testing.T) {
+	// Server reads SetupConnection+OpenMiningChannel, then closes without replying.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		pool.dec.ReadFrame() //nolint:errcheck
+		pool.conn.Close()
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail when server closes without OpenMiningChannel reply")
+	}
+}
+
+func TestDialer_Negotiate_OpenMiningResponseGarbage(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		pool.dec.ReadFrame() //nolint:errcheck
+		// OpenMiningChannelSuccess (0x11) with 0-byte payload → DispatchFrame error.
+		pool.conn.Write([]byte{0x00, 0x00, 0x11, 0x00, 0x00, 0x00}) //nolint:errcheck
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail when DispatchFrame returns error for OpenMiningChannel response")
+	}
+}
+
+func TestDialer_Negotiate_UnexpectedMsgDuringChannelOpen(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.dec.ReadFrame() //nolint:errcheck
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		pool.dec.ReadFrame() //nolint:errcheck
+		// Send SetupConnectionSuccess (unexpected during channel-open phase).
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	_, err := d.Negotiate(ctx, conn)
+	if err == nil {
+		t.Error("Negotiate should fail on unexpected message type during channel open")
+	}
+}
+
+// ============================================================================
+// readLoop — context cancellation inside select
+// ============================================================================
+
+func TestSession_Jobs_ContextCancelExitsLoop(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doHandshake(1)
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// Cancel the context while the read loop is blocking on ReadFrame.
+	// The loop sees ctx.Done() at the top of its next iteration or in the select.
+	cancel()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			// A job was buffered; drain until closed.
+			for range sess.Jobs() {
+			}
+		}
+		// jobsCh closed — loop exited as expected.
+	case <-time.After(2 * time.Second):
+		t.Error("Jobs() channel not closed after context cancellation")
+	}
+}
+
+// ============================================================================
+// Submit — error path when underlying connection is closed
+// ============================================================================
+
+func TestSession_Submit_ErrorOnClosedConn(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doHandshake(1)
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// Close the underlying connection so the next Write fails.
+	sess.Close()
+
+	_, err = sess.Submit(ctx, poolproto.ShareSubmission{JobID: "1", Nonce: 0xDEADBEEF})
+	if err == nil {
+		t.Error("Submit on closed connection should return error")
+	}
+}
+
+// ============================================================================
+// readLoop — ctx.Done() fires while trying to forward a job (buffer full)
+// ============================================================================
+
+func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// jobsCh has a buffer of 8. Send 12 jobs without reading from Jobs() to
+	// fill the buffer, then cancel ctx so the readLoop's select fires ctx.Done().
+	go func() {
+		pool.doHandshake(1)
+		for i := 0; i < 12; i++ {
+			job := stratum.NewMiningJob{
+				ChannelID: 1,
+				JobID:     uint32(i),
+				MinNtime:  0x60000000,
+				NBits:     0x1d00ffff,
+			}
+			copy(job.MerkleRoot[:], make([]byte, 32))
+			writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		}
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// Give the readLoop time to fill the buffer, then cancel.
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	// Jobs() channel must close when the loop exits.
+	select {
+	case <-sess.Jobs():
+		// drain remaining buffered jobs
+		for range sess.Jobs() {
+		}
+	case <-time.After(3 * time.Second):
+		t.Error("Jobs() channel not closed after ctx cancel with full buffer")
+	}
+}
+
+// ============================================================================
+// readLoop — unrecognised frame causes continue (not return)
+// ============================================================================
+
+func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
+	// Send a SubmitSharesSuccess frame (0x1c) with 0-byte payload.
+	// DecodeSubmitSharesSuccess requires at least some bytes, so DispatchFrame
+	// returns an error. The readLoop must `continue` (not exit) and still
+	// deliver the subsequent valid job.
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		// SubmitSharesSuccess (0x1c) with 0-byte payload → DispatchFrame error.
+		pool.conn.Write([]byte{0x00, 0x00, 0x1c, 0x00, 0x00, 0x00}) //nolint:errcheck
+		// Then send a real job — readLoop should continue and deliver it.
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 77, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		copy(job.MerkleRoot[:], make([]byte, 32))
+		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case j, ok := <-sess.Jobs():
+		if !ok {
+			t.Fatal("Jobs() closed before receiving the job")
+		}
+		if j.JobID != "77" {
+			t.Errorf("JobID = %q, want 77", j.JobID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for job after malformed frame")
+	}
+}
+
+// ============================================================================
+// sendMsg — write-error path via closed connection, and encode-error path
+// ============================================================================
+
+func TestSendMsg_WriteError(t *testing.T) {
+	server, client := net.Pipe()
+	server.Close() // close server so client Write fails
+	defer client.Close()
+
+	err := sendMsg(client, stratum.MsgSetupConnection, &stratum.SetupConnection{
+		Protocol: stratum.MiningProtocol, MinVersion: 2, MaxVersion: 2,
+		Endpoint: "x:1", Vendor: "test",
+	})
+	if err == nil {
+		t.Error("sendMsg to closed conn should return error")
+	}
+}
+
+// errEncodable is a fake encodable that always returns an error from Encode.
+type errEncodable struct{}
+
+func (e errEncodable) Encode() ([]byte, error) { return nil, net.ErrClosed }
+
+func TestSendMsg_EncodeError(t *testing.T) {
+	_, client := net.Pipe()
+	defer client.Close()
+	if err := sendMsg(client, 0x01, errEncodable{}); err == nil {
+		t.Error("sendMsg with failing Encode should return error")
+	}
+}
+
+// bigEncodable returns a payload larger than MaxMessageLength so that
+// stratum.WrapMessage returns an error.
+type bigEncodable struct{}
+
+func (b bigEncodable) Encode() ([]byte, error) {
+	return make([]byte, stratum.MaxMessageLength+1), nil
+}
+
+func TestSendMsg_WrapMessageError(t *testing.T) {
+	_, client := net.Pipe()
+	defer client.Close()
+	if err := sendMsg(client, 0x01, bigEncodable{}); err == nil {
+		t.Error("sendMsg with oversized payload should return WrapMessage error")
+	}
+}
+
+// ============================================================================
+// Unit tests for package-level helpers
+// ============================================================================
+
 func TestFloat64FromBits(t *testing.T) {
 	cases := []float64{0, 1, -1, 3.14, 1e100, math.Inf(1), math.Inf(-1)}
 	for _, want := range cases {
