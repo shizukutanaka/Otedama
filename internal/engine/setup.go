@@ -112,7 +112,7 @@ func defaultPoolURL(cfg config.Config) string {
 	if len(cfg.Pools) > 0 {
 		return cfg.Pools[0].URL
 	}
-	return "stratum+v2://public.stratum.slushpool.com:3336"
+	return config.DefaultPoolURL
 }
 
 // poolURLs returns the ordered list of pool URLs to try, for failover.
@@ -122,7 +122,7 @@ func defaultPoolURL(cfg config.Config) string {
 // built-in default when no pools are configured.
 func poolURLs(cfg config.Config) []string {
 	if len(cfg.Pools) == 0 {
-		return []string{"stratum+v2://public.stratum.slushpool.com:3336"}
+		return []string{config.DefaultPoolURL}
 	}
 	urls := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {

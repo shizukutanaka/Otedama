@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 78 — single-source the default pool URL; split cmd/otedama/main.go)
+
+- **config (K) — `DefaultPoolURL` constant introduced.** The literal
+  `stratum+v2://public.stratum.slushpool.com:3336` was copy-pasted in four places
+  across three packages (`engine.defaultPoolURL`, `engine.poolURLs`,
+  `doctor.checkPoolReachability`, the CLI startup banner). Any change would have had
+  to be made in all four or the subsystems would disagree on the fallback pool.
+  Hoisted to `config.DefaultPoolURL` (config is a leaf package already imported by
+  all three consumers); all four sites now reference it. The literal exists in
+  exactly one place.
+- **CLI (L) — `main.go` (528 lines) split per subcommand.** Following the existing
+  `completion.go` convention, each subcommand moved to its own file: `run.go`
+  (cmdRun, parseRunFlags, runFlags, buildLogger, startHTTPServer), `config.go`
+  (cmdConfig*, safeDisplay), `service.go` (cmdService*), `doctor.go` (cmdDoctor),
+  `version.go` (cmdVersion), `configfile.go` (loadConfigFile, defaultConfigPath).
+  `main.go` now holds only `main`, the `run` dispatcher, and `printUsage` (≈90
+  lines). Code moved verbatim; build, vet, staticcheck clean.
+
 ### Refactor (session 77 — staticcheck sweep: goroutine-unsafe Fatalf, spin-loop break, dead field)
 
 All `staticcheck ./...` findings fixed except one flagged for maintainer review:

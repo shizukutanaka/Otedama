@@ -340,7 +340,7 @@ func checkPoolReachability(cfg config.Config) Check {
 			if len(cfg.Pools) > 0 {
 				url = cfg.Pools[0].URL
 			} else {
-				url = "stratum+v2://public.stratum.slushpool.com:3336"
+				url = config.DefaultPoolURL
 			}
 			host := stripScheme(url)
 			if host == "" {

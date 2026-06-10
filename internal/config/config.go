@@ -38,6 +38,14 @@ import (
 	"strings"
 )
 
+// DefaultPoolURL is the built-in fallback Stratum V2 pool, used when the
+// user has configured no pools of their own. It is the single source of
+// truth for that endpoint: the engine (defaultPoolURL/poolURLs), the CLI
+// startup banner, and the doctor reachability check all reference this
+// constant rather than repeating the literal, so the default can never
+// drift out of sync between subsystems.
+const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
+
 // Config is the complete runtime configuration for Otedama.
 //
 // All fields are exported so that they can be populated from YAML and
