@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 75 — dead-code removal; duplicate masking helpers recorded as Issue #2)
+
+- **engine (E) — `classifyReject` deleted.** The wrapper had no production caller
+  (`runSession` uses `rejectClass` directly); only its own test referenced it.
+  Function and `TestClassifyReject_DelegatesToRejectClass` removed.
+- **cmd/doctor/engine — triplicate address masking recorded, not fixed.** Three
+  near-duplicate helpers (`maskAddress` ×2 byte-identical, `maskAddr` with a
+  different threshold and ellipsis) render the same address differently in doctor
+  output vs engine logs. Per CLAUDE.md rule 3 (duplicate code → Issue first),
+  recorded as [#2](https://github.com/shizukutanaka/Otedama/issues/2) with
+  consolidation options; fixing needs an architecture decision on a shared home.
+
 ### Refactor (session 74 — split engine/run.go (1427 lines) into five single-concern files)
 
 Behavior-preserving reorganisation of `internal/engine`, the package that wires

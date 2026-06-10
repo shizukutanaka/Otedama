@@ -152,13 +152,6 @@ func rejectClass(reason string) (category, diagnosis string) {
 	}
 }
 
-// classifyReject returns just the human-readable diagnosis (kept for the
-// log line; see rejectClass for the metric-label category).
-func classifyReject(reason string) string {
-	_, diagnosis := rejectClass(reason)
-	return diagnosis
-}
-
 // acceptanceRate computes the share acceptance rate — accepted /
 // (accepted + rejected) — as a fraction in [0,1]. This is the metric
 // that maps to "net BTC retained": every rejected share is work the

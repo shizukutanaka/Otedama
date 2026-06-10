@@ -315,6 +315,33 @@ Total statement coverage across all 24 packages rose from **79.3%** to
 | `internal/stratum` | 81.3% | `ReadMessage2` noise path, `EncodeFrame` error path |
 | `internal/poolproto/stratumv2` | 80.4% | `readLoop` error paths, TLS dial path |
 
+### Coverage tracking (sessions 73–75)
+Session 73 covered the remaining 0% paths (`totalHashes`, `totalDropped`,
+`logStats`, the two session-72 `Encode` methods): total **81.8% → 82.6%**,
+805 tests. Engine 77.3% → 78.9%; stratum 81.3% → 83.4%.
+
+### E — Engine structure (session 74, refactor)
+`run.go` had grown to 1,427 lines mixing six concerns, and the godoc
+comments for `setupWallet`/`detectDevices` had drifted onto
+`arbitrationLoopOpts` (rendered on the wrong symbol). Split into
+`run.go` (session core), `fanin.go`, `arbitrate.go`, `setup.go`,
+`stats.go`; comments reattached; code otherwise moved verbatim.
+Coverage identical (78.9%) before/after — confirms no behavior change.
+
+### E — Dead code (session 75)
+`classifyReject` (stats.go) had no production caller — `runSession`
+calls `rejectClass` directly; only the wrapper's own test referenced it.
+Function and test deleted.
+
+### Duplicate code recorded as Issue #2 (session 75, per CLAUDE.md rule 3)
+Three near-duplicate address-masking helpers: `cmd/otedama/main.go:499
+maskAddress`, `internal/doctor/doctor.go:471 maskAddress` (byte-identical
+to cmd), `internal/engine/setup.go maskAddr` (threshold ≤12 vs ≤10,
+`…` vs `···` — same address renders differently in doctor output vs
+engine logs). Not fixed: consolidation needs an architecture decision on
+a shared home (no existing path fits; new paths need review). See
+https://github.com/shizukutanaka/Otedama/issues/2.
+
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
 G1–G15 and session 71), P (logger), U (clock/version) — reviewed, no

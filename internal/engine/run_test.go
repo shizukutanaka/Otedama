@@ -572,17 +572,6 @@ func TestRejectClass(t *testing.T) {
 	}
 }
 
-func TestClassifyReject_DelegatesToRejectClass(t *testing.T) {
-	// classifyReject is the log-only convenience wrapper; it must return
-	// the same diagnosis rejectClass produces.
-	for _, reason := range []string{"Stale share", "Duplicate", "bad", "weird"} {
-		_, diag := rejectClass(reason)
-		if got := classifyReject(reason); got != diag {
-			t.Errorf("classifyReject(%q) = %q, want %q", reason, got, diag)
-		}
-	}
-}
-
 func TestLatencyTracker_EmptyReturnsZero(t *testing.T) {
 	l := NewLatencyTracker(16)
 	if got := l.Quantile(0.5); got != 0 {
