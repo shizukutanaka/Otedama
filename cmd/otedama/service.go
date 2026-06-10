@@ -11,6 +11,12 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/daemon"
 )
 
+// Injectable function variables — overridden in tests to avoid real OS service operations.
+var newDaemonManager = daemon.NewManager
+var managerInstall = func(m *daemon.Manager) error { return m.Install() }
+var managerUninstall = func(m *daemon.Manager) error { return m.Uninstall() }
+var managerStatus = func(m *daemon.Manager) (daemon.ServiceStatus, error) { return m.Status() }
+
 func cmdService(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "otedama service: expected subcommand (install|uninstall|status)")
@@ -47,12 +53,12 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 		LogFormat:      *logFormat,
 		Language:       *language,
 	}
-	mgr, err := daemon.NewManager(*configFile, *dataDir, svcFlags)
+	mgr, err := newDaemonManager(*configFile, *dataDir, svcFlags)
 	if err != nil {
 		fmt.Fprintf(stderr, "service: %v\n", err)
 		return exitRuntime
 	}
-	if err := mgr.Install(); err != nil {
+	if err := managerInstall(mgr); err != nil {
 		fmt.Fprintf(stderr, "service install failed: %v\n", err)
 		return exitRuntime
 	}
@@ -62,12 +68,12 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdServiceUninstall(stdout, stderr io.Writer) int {
-	mgr, err := daemon.NewManager("", "", daemon.ServiceFlags{})
+	mgr, err := newDaemonManager("", "", daemon.ServiceFlags{})
 	if err != nil {
 		fmt.Fprintf(stderr, "service: %v\n", err)
 		return exitRuntime
 	}
-	if err := mgr.Uninstall(); err != nil {
+	if err := managerUninstall(mgr); err != nil {
 		fmt.Fprintf(stderr, "service uninstall failed: %v\n", err)
 		return exitRuntime
 	}
@@ -76,12 +82,12 @@ func cmdServiceUninstall(stdout, stderr io.Writer) int {
 }
 
 func cmdServiceStatus(stdout, stderr io.Writer) int {
-	mgr, err := daemon.NewManager("", "", daemon.ServiceFlags{})
+	mgr, err := newDaemonManager("", "", daemon.ServiceFlags{})
 	if err != nil {
 		fmt.Fprintf(stderr, "service: %v\n", err)
 		return exitRuntime
 	}
-	status, err := mgr.Status()
+	status, err := managerStatus(mgr)
 	if err != nil {
 		fmt.Fprintf(stderr, "service status: %v\n", err)
 		return exitRuntime

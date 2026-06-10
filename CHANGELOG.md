@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 85 — coverage: cmd/otedama 78.9%→90.6%)
+
+- **cmd/otedama (L) — CLI coverage: +11.7 pp** (78.9% → 90.6%, over the 90% threshold).
+  Added injectable function variables to `service.go` (`newDaemonManager`,
+  `managerInstall`, `managerUninstall`, `managerStatus`) mirroring the same pattern
+  used in `doctor/checks.go`, enabling all service command branches to be exercised
+  without real OS service operations.
+  New tests cover: `cmdServiceInstall` flag-parse error, NewManager error, and
+  success paths; `cmdServiceUninstall` NewManager error, Uninstall error, and success;
+  `cmdServiceStatus` NewManager error, Status error, installed-stopped, installed-running,
+  and not-installed paths; `cmdDoctor` unknown-flag fs.Parse error; `cmdRun`
+  cfg.Validate error (invalid address, reached before the dry-run check); and
+  `loadConfigFile` double-empty guard (empty path AND no HOME). The `context` import,
+  `errors` sentinel (`errInjected`), and `daemon` package import were added to the
+  test file.
+- 24 packages green, 855+ tests, gofmt/vet clean.
+
 ### Test (session 81 — coverage: internal/config 86.7%→97.6%, internal/engine 78.9%→82.4%, cmd/otedama 68.3%→78.9%)
 
 - **config (K) — Resolve coverage: +11 pp.** Added tests for the seven fields
