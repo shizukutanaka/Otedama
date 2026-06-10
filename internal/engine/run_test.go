@@ -11,11 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
@@ -769,6 +771,62 @@ func TestSetupWallet_EmptyDataDirReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestSetupWallet_BadDataDirLogsWarningAndReturnsEmpty(t *testing.T) {
+	// /dev/null is a device, not a directory; creating a child under it fails.
+	var logs []string
+	log := func(_, m string) { logs = append(logs, m) }
+
+	opts := Options{
+		WalletPassphrase: "correct-horse-battery-staple",
+		Config:           config.Config{DataDir: "/dev/null/impossible"},
+	}
+	fp := setupWallet(opts, log)
+	if fp != "" {
+		t.Errorf("setupWallet with unwritable DataDir = %q, want empty", fp)
+	}
+	foundWarn := false
+	for _, l := range logs {
+		if strings.Contains(l, "wallet") {
+			foundWarn = true
+		}
+	}
+	if !foundWarn {
+		t.Errorf("setupWallet with bad DataDir should emit a wallet warning; got %v", logs)
+	}
+}
+
+func TestSetupWallet_NewWalletReturnsFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	var logs []string
+	log := func(_, m string) { logs = append(logs, m) }
+
+	opts := Options{
+		WalletPassphrase: "correct-horse-battery-staple-engine-test",
+		Config:           config.Config{DataDir: dir},
+	}
+	fp := setupWallet(opts, log)
+	if fp == "" {
+		t.Error("setupWallet should return a non-empty fingerprint for a new wallet")
+	}
+	// Must log "new wallet created" (IsNew path) and "fingerprint ..."
+	foundNew := false
+	foundFP := false
+	for _, l := range logs {
+		if strings.Contains(l, "new wallet") {
+			foundNew = true
+		}
+		if strings.Contains(l, "fingerprint") {
+			foundFP = true
+		}
+	}
+	if !foundNew {
+		t.Errorf("new wallet should log creation message; got %v", logs)
+	}
+	if !foundFP {
+		t.Errorf("new wallet should log fingerprint; got %v", logs)
+	}
+}
+
 // ============================================================================
 // totalHashes / totalDropped — worker stat aggregation
 // ============================================================================
@@ -831,5 +889,328 @@ func TestLogStats_ZeroHashRate(t *testing.T) {
 
 	if !strings.Contains(msg, "hashrate=") {
 		t.Errorf("logStats(0 H/s) msg = %q, want 'hashrate=' substring", msg)
+	}
+}
+
+// ============================================================================
+// NewLatencyTracker — default size guard
+// ============================================================================
+
+func TestNewLatencyTracker_DefaultSizeWhenZero(t *testing.T) {
+	// size < 1 must default to 256, not panic with a zero-length slice.
+	l := NewLatencyTracker(0)
+	if l == nil {
+		t.Fatal("NewLatencyTracker(0) returned nil")
+	}
+	// Fill more than 256 samples to confirm the ring wraps correctly.
+	for i := 0; i < 300; i++ {
+		l.Record(float64(i))
+	}
+	// After wrapping, the tracker should still return a sane quantile.
+	if got := l.Quantile(0.5); got <= 0 {
+		t.Errorf("Quantile(0.5) after 300 samples = %v, want positive", got)
+	}
+}
+
+func TestNewLatencyTracker_NegativeSizeDefaultsTo256(t *testing.T) {
+	l := NewLatencyTracker(-10)
+	if l == nil {
+		t.Fatal("NewLatencyTracker(-10) returned nil")
+	}
+}
+
+// ============================================================================
+// NewHashrateMonitor — default maxStall guard
+// ============================================================================
+
+func TestNewHashrateMonitor_DefaultMaxStallWhenZero(t *testing.T) {
+	// maxStall < 1 must default to 3.
+	var warns int
+	log := func(level, _ string) {
+		if level == "warn" {
+			warns++
+		}
+	}
+	m := NewHashrateMonitor(0, 0, log)
+	// With defaulted maxStall=3, exactly 3 zero-hashrate samples trigger one warn.
+	m.Observe(0)
+	m.Observe(0)
+	if warns != 0 {
+		t.Errorf("should not have warned after 2 samples, got %d", warns)
+	}
+	m.Observe(0)
+	if warns != 1 {
+		t.Errorf("expected 1 warning at default threshold 3, got %d", warns)
+	}
+}
+
+// ============================================================================
+// maskAddr — short-address path (len ≤ 12 returned as-is)
+// ============================================================================
+
+func TestMaskAddr_ShortAddressReturnedAsIs(t *testing.T) {
+	short := "bc1q1234"
+	if got := maskAddr(short); got != short {
+		t.Errorf("maskAddr(%q) = %q, want unchanged (len≤12)", short, got)
+	}
+}
+
+func TestMaskAddr_ExactlyTwelveCharsReturnedAsIs(t *testing.T) {
+	addr := "123456789012" // exactly 12 chars
+	if got := maskAddr(addr); got != addr {
+		t.Errorf("maskAddr(%q) = %q, want unchanged (len==12)", addr, got)
+	}
+}
+
+// ============================================================================
+// Quantile — boundary cases (q ≤ 0 and q ≥ 1)
+// ============================================================================
+
+func TestLatencyTracker_QuantileAtZeroReturnsMin(t *testing.T) {
+	l := NewLatencyTracker(8)
+	for _, v := range []float64{50, 10, 90, 30} {
+		l.Record(v)
+	}
+	got := l.Quantile(0)
+	if got != 10 {
+		t.Errorf("Quantile(0) = %v, want min=10", got)
+	}
+}
+
+func TestLatencyTracker_QuantileAtOneReturnsMax(t *testing.T) {
+	l := NewLatencyTracker(8)
+	for _, v := range []float64{50, 10, 90, 30} {
+		l.Record(v)
+	}
+	got := l.Quantile(1)
+	if got != 90 {
+		t.Errorf("Quantile(1) = %v, want max=90", got)
+	}
+}
+
+func TestLatencyTracker_QuantileNegativeClampedToMin(t *testing.T) {
+	l := NewLatencyTracker(8)
+	l.Record(5)
+	l.Record(15)
+	if got := l.Quantile(-1); got != 5 {
+		t.Errorf("Quantile(-1) = %v, want min=5", got)
+	}
+}
+
+func TestLatencyTracker_QuantileGreaterThanOneClampedToMax(t *testing.T) {
+	l := NewLatencyTracker(8)
+	l.Record(5)
+	l.Record(15)
+	if got := l.Quantile(2); got != 15 {
+		t.Errorf("Quantile(2) = %v, want max=15", got)
+	}
+}
+
+// ============================================================================
+// applyAllocation — device→stream assignment outcomes
+// ============================================================================
+
+func TestApplyAllocation_EmptyAssignments(t *testing.T) {
+	alloc := &arbitration.Allocation{}
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, nil, log)
+
+	if len(logged) != 0 {
+		t.Errorf("empty allocation should log nothing; got %v", logged)
+	}
+}
+
+func TestApplyAllocation_IdleDevice(t *testing.T) {
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{DeviceID: "cpu-0", Stream: ""}, // empty Stream → Idle()
+		},
+	}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, []*miner.Worker{w}, log)
+
+	if len(logged) == 0 {
+		t.Error("idle device should emit an info log")
+	}
+	if !strings.Contains(logged[0], "idle") {
+		t.Errorf("idle log = %q, want 'idle' substring", logged[0])
+	}
+}
+
+func TestApplyAllocation_MiningToAI(t *testing.T) {
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{
+				DeviceID:       "gpu-0",
+				Stream:         "ai.akash",
+				SwitchedFromID: "mining.stratum",
+			},
+		},
+	}
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, []*miner.Worker{w}, log)
+
+	if len(logged) == 0 {
+		t.Error("mining→AI switch should emit a log")
+	}
+	if !strings.Contains(logged[0], "AI") && !strings.Contains(logged[0], "ai") {
+		t.Errorf("mining→AI log = %q, want AI mention", logged[0])
+	}
+}
+
+func TestApplyAllocation_AIToMining(t *testing.T) {
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{
+				DeviceID:       "gpu-0",
+				Stream:         "mining.stratum",
+				SwitchedFromID: "ai.akash",
+			},
+		},
+	}
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, nil, log)
+
+	if len(logged) == 0 {
+		t.Error("AI→mining switch should emit a log")
+	}
+	if !strings.Contains(logged[0], "mining") {
+		t.Errorf("AI→mining log = %q, want 'mining' mention", logged[0])
+	}
+}
+
+func TestApplyAllocation_GenericStreamSwitch(t *testing.T) {
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{
+				DeviceID:       "gpu-0",
+				Stream:         "mining.stratum",
+				SwitchedFromID: "mining.other",
+			},
+		},
+	}
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, nil, log)
+
+	if len(logged) == 0 {
+		t.Error("generic stream switch should emit a log")
+	}
+}
+
+func TestApplyAllocation_NoChange(t *testing.T) {
+	// SwitchedFromID == "" and Stream != "" → no-change default branch.
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{DeviceID: "cpu-0", Stream: "mining.stratum", SwitchedFromID: ""},
+		},
+	}
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, nil, log)
+
+	if len(logged) != 0 {
+		t.Errorf("no-change assignment should not log; got %v", logged)
+	}
+}
+
+// ============================================================================
+// runArbitrationLoop — channel-driven exit paths
+// ============================================================================
+
+func TestRunArbitrationLoop_ContextCancelExits(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	quoteCh := make(chan provider.Quote)
+	opts := arbitrationLoopOpts{
+		streamsMu: &sync.Mutex{},
+		streamMap: make(map[string]arbitration.Stream),
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log:       func(_, _ string) {},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Error("runArbitrationLoop did not exit after context cancel")
+	}
+}
+
+func TestRunArbitrationLoop_ClosedQuoteChannelExits(t *testing.T) {
+	ctx := context.Background()
+	quoteCh := make(chan provider.Quote)
+	close(quoteCh)
+	opts := arbitrationLoopOpts{
+		streamsMu: &sync.Mutex{},
+		streamMap: make(map[string]arbitration.Stream),
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log:       func(_, _ string) {},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Error("runArbitrationLoop did not exit when quote channel was closed")
+	}
+}
+
+func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	quoteCh := make(chan provider.Quote, 1)
+	mu := &sync.Mutex{}
+	streamMap := make(map[string]arbitration.Stream)
+	opts := arbitrationLoopOpts{
+		streamsMu: mu,
+		streamMap: streamMap,
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log:       func(_, _ string) {},
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	quoteCh <- provider.Quote{
+		ProviderID: "mining.stratum",
+		DeviceID:   "cpu-0",
+		Yield:      provider.Yield{SatsPerSecond: 1000, Confidence: 0.9},
+	}
+
+	// Wait briefly for the goroutine to consume the quote.
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	mu.Lock()
+	_, ok := streamMap["mining.stratum:cpu-0"]
+	mu.Unlock()
+	if !ok {
+		t.Error("runArbitrationLoop: stream map should contain the quote after processing")
 	}
 }

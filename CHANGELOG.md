@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 81 — coverage: internal/config 86.7%→97.6%, internal/engine 78.9%→82.4%, cmd/otedama 68.3%→78.9%)
+
+- **config (K) — Resolve coverage: +11 pp.** Added tests for the seven fields
+  previously unexercised in `Resolve` (`Workers.Name`, `Language`, `DataDir` from
+  each of file/env/flag layers) and two uncovered `Validate` branches (empty string
+  in `bitcoin_addresses` list, empty pool URL). Coverage: 86.7% → 97.6%.
+- **engine (E) — stats/setup/arbitrate coverage: +3.5 pp.** Added guard-branch
+  tests: `NewLatencyTracker(0)` (default-size guard), `NewHashrateMonitor(0,0,nil)`
+  (default-maxStall guard), `maskAddr` with short address (len≤12 path),
+  `Quantile` at q≤0 and q≥1 boundaries. Added `applyAllocation` unit tests
+  covering all five branches (idle, mining→AI, AI→mining, generic switch,
+  no-change). Added `runArbitrationLoop` channel-driven tests (ctx cancel, closed
+  quote channel, quote update). Added `setupWallet` with real temp-dir and
+  unwritable dir, covering the `NewWalletManager` error path and the new-wallet
+  happy path. Coverage: 78.9% → 82.4%.
+- **cmd/otedama (L) — CLI coverage: +10.6 pp.** Added: `joinOr` edge cases
+  (0-item, 1-item, 2-item), `defaultConfigPath` with `OTEDAMA_CONFIG` env var,
+  `cmdVersion` with unknown flag (flag-parse error path), `startHTTPServer` with
+  no addr (nil/nil) and with `127.0.0.1:0` (server start + stop), `cmdServiceInstall`
+  routing test. Coverage: 68.3% → 78.9%.
+- 24 packages green, 834 tests, gofmt/vet/staticcheck clean.
+
 ### Refactor (session 80 — split doctor.go into framework + checks)
 
 - **Doctor (N) — `doctor.go` (501 lines) split.** The check framework (Status,

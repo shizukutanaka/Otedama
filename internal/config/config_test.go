@@ -410,3 +410,107 @@ func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
 		t.Errorf("Resolve: flag log_format=text should win, got %q", cfg.LogFormat)
 	}
 }
+
+// ============================================================================
+// Resolve — coverage for fields not exercised in the table above
+// ============================================================================
+
+func TestResolve_WorkerNameFromFile(t *testing.T) {
+	fromFile := Config{Workers: WorkerConfig{Name: "rig-01"}}
+	cfg := Resolve(fromFile, nil, FlagValues{})
+	if cfg.Workers.Name != "rig-01" {
+		t.Errorf("Workers.Name = %q, want rig-01 (from config file)", cfg.Workers.Name)
+	}
+}
+
+func TestResolve_LanguageFromFile(t *testing.T) {
+	fromFile := Config{Language: "ja"}
+	cfg := Resolve(fromFile, nil, FlagValues{})
+	if cfg.Language != "ja" {
+		t.Errorf("Language = %q, want ja (from config file)", cfg.Language)
+	}
+}
+
+func TestResolve_DataDirFromFile(t *testing.T) {
+	fromFile := Config{DataDir: "/data/otedama"}
+	cfg := Resolve(fromFile, nil, FlagValues{})
+	if cfg.DataDir != "/data/otedama" {
+		t.Errorf("DataDir = %q, want /data/otedama (from config file)", cfg.DataDir)
+	}
+}
+
+func TestResolve_LanguageFromEnv(t *testing.T) {
+	env := map[string]string{"OTEDAMA_LANGUAGE": "zh"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.Language != "zh" {
+		t.Errorf("Language = %q, want zh (from env)", cfg.Language)
+	}
+}
+
+func TestResolve_DataDirFromEnv(t *testing.T) {
+	env := map[string]string{"OTEDAMA_DATA_DIR": "/var/lib/otedama"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.DataDir != "/var/lib/otedama" {
+		t.Errorf("DataDir = %q, want /var/lib/otedama (from env)", cfg.DataDir)
+	}
+}
+
+func TestResolve_LanguageFromFlag(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{Language: "ko"})
+	if cfg.Language != "ko" {
+		t.Errorf("Language = %q, want ko (from flag)", cfg.Language)
+	}
+}
+
+func TestResolve_DataDirFromFlag(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{DataDir: "/tmp/mydata"})
+	if cfg.DataDir != "/tmp/mydata" {
+		t.Errorf("DataDir = %q, want /tmp/mydata (from flag)", cfg.DataDir)
+	}
+}
+
+func TestResolve_FlagLanguageOverridesEnv(t *testing.T) {
+	env := map[string]string{"OTEDAMA_LANGUAGE": "fr"}
+	cfg := Resolve(Config{}, env, FlagValues{Language: "de"})
+	if cfg.Language != "de" {
+		t.Errorf("Language = %q, want de (flag overrides env)", cfg.Language)
+	}
+}
+
+func TestResolve_FlagDataDirOverridesEnv(t *testing.T) {
+	env := map[string]string{"OTEDAMA_DATA_DIR": "/env/data"}
+	cfg := Resolve(Config{}, env, FlagValues{DataDir: "/flag/data"})
+	if cfg.DataDir != "/flag/data" {
+		t.Errorf("DataDir = %q, want /flag/data (flag overrides env)", cfg.DataDir)
+	}
+}
+
+// ============================================================================
+// Validate — uncovered branches
+// ============================================================================
+
+func TestValidate_EmptyStringInBitcoinAddressesList(t *testing.T) {
+	c := Defaults()
+	c.BitcoinAddress = "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+	c.BitcoinAddresses = []string{""}
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("Validate() must reject an empty string in bitcoin_addresses")
+	}
+	if !strings.Contains(err.Error(), "bitcoin_addresses[0] is empty") {
+		t.Errorf("error = %q, want mention of empty slot", err)
+	}
+}
+
+func TestValidate_EmptyPoolURL(t *testing.T) {
+	c := Defaults()
+	c.BitcoinAddress = "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
+	c.Pools = []PoolConfig{{URL: ""}}
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("Validate() must reject an empty pool URL")
+	}
+	if !strings.Contains(err.Error(), "pools[0]") {
+		t.Errorf("error = %q, want mention of pools[0]", err)
+	}
+}

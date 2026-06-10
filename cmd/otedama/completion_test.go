@@ -54,3 +54,29 @@ func TestRun_CompletionSubcommandDispatches(t *testing.T) {
 		t.Error("run did not dispatch to cmdCompletion")
 	}
 }
+
+// ============================================================================
+// joinOr — edge cases (0-item and 1-item slices)
+// ============================================================================
+
+func TestJoinOr_EmptySliceReturnsEmpty(t *testing.T) {
+	if got := joinOr(nil); got != "" {
+		t.Errorf("joinOr(nil) = %q, want empty", got)
+	}
+	if got := joinOr([]string{}); got != "" {
+		t.Errorf("joinOr([]) = %q, want empty", got)
+	}
+}
+
+func TestJoinOr_SingleItemReturnsIt(t *testing.T) {
+	if got := joinOr([]string{"bash"}); got != "bash" {
+		t.Errorf("joinOr([bash]) = %q, want bash", got)
+	}
+}
+
+func TestJoinOr_TwoItemsUsesOr(t *testing.T) {
+	got := joinOr([]string{"bash", "zsh"})
+	if !strings.Contains(got, "bash") || !strings.Contains(got, "zsh") || !strings.Contains(got, "or") {
+		t.Errorf("joinOr([bash,zsh]) = %q, want 'bash or zsh' form", got)
+	}
+}

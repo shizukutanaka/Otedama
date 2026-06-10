@@ -176,6 +176,20 @@ func TestDefaultConfigPath_ReturnsExpandedPath(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigPath_EnvVarOverridesDefault(t *testing.T) {
+	const key = "OTEDAMA_CONFIG"
+	old := os.Getenv(key)
+	defer os.Setenv(key, old) //nolint:errcheck
+
+	want := "/tmp/my-custom-otedama.yaml"
+	os.Setenv(key, want) //nolint:errcheck
+
+	got := defaultConfigPath()
+	if got != want {
+		t.Errorf("defaultConfigPath with %s=%q = %q, want %q", key, want, got, want)
+	}
+}
+
 // ============================================================================
 // safeDisplay — input sanitization for tty output
 // ============================================================================

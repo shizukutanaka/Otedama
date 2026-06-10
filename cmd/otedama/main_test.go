@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -179,5 +180,70 @@ func TestBuildLogger_NoTUIWritesJSON(t *testing.T) {
 	var obj map[string]any
 	if err := json.Unmarshal([]byte(line), &obj); err != nil {
 		t.Errorf("json logger output is not valid JSON: %v\n%s", err, line)
+	}
+}
+
+// ============================================================================
+// cmdVersion — flag parse error path
+// ============================================================================
+
+func TestVersion_UnknownFlagReturnsUsage(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"version", "--this-flag-does-not-exist"}, &out, &errb)
+	if code != exitUsage {
+		t.Errorf("version with unknown flag: code=%d, want exitUsage(%d)", code, exitUsage)
+	}
+}
+
+// ============================================================================
+// startHTTPServer — no-addr and with-addr paths
+// ============================================================================
+
+func TestStartHTTPServer_NoAddrReturnsNils(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errb bytes.Buffer
+	reg, srv := startHTTPServer(ctx, runFlags{}, &out, &errb)
+	if reg != nil {
+		t.Error("startHTTPServer(no addr): reg should be nil")
+	}
+	if srv != nil {
+		t.Error("startHTTPServer(no addr): srv should be nil")
+	}
+}
+
+func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errb bytes.Buffer
+	reg, srv := startHTTPServer(ctx, runFlags{httpAddr: "127.0.0.1:0"}, &out, &errb)
+	if errb.Len() != 0 {
+		t.Fatalf("startHTTPServer: unexpected stderr: %s", errb.String())
+	}
+	if reg == nil {
+		t.Fatal("startHTTPServer: reg should not be nil")
+	}
+	if srv == nil {
+		t.Fatal("startHTTPServer: srv should not be nil")
+	}
+	defer srv.Stop()
+	if !strings.Contains(out.String(), "http:") {
+		t.Errorf("startHTTPServer: expected log line; got %q", out.String())
+	}
+}
+
+// ============================================================================
+// cmdService install — flag parsing path (fails at OS level, not flag level)
+// ============================================================================
+
+func TestService_Install_DoesNotCrash(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"service", "install"}, &out, &errb)
+	switch code {
+	case exitOK, exitRuntime:
+		// Both are acceptable: success on a configured system, or a graceful
+		// "cannot install service" on an unconfigured/CI environment.
+	default:
+		t.Errorf("service install: unexpected exit code %d (out=%s err=%s)", code, out.String(), errb.String())
 	}
 }
