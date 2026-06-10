@@ -424,9 +424,33 @@ would silently desync `otedama doctor`. Consolidation = dependency
 decision (doctor currently does not import poolproto; no cycle if it
 did). https://github.com/shizukutanaka/Otedama/issues/3
 
+### Single-sourced the default pool URL (session 78)
+`stratum+v2://public.stratum.slushpool.com:3336` was copy-pasted in four
+sites (engine `defaultPoolURL`/`poolURLs`, doctor `checkPoolReachability`,
+CLI startup banner). Hoisted to `config.DefaultPoolURL` (config is a pure
+leaf already imported by all three consumers); literal now in one place.
+
+### Duplication family — scheme list & address validators (session 79)
+Recorded, not fixed (rule 3; consolidation is a layering decision):
+- **Scheme-prefix list triplicated** — `poolproto.knownSchemes`
+  (canonical), `config.validatePoolURL` (validation, error-returning),
+  `doctor.stripScheme` (reachability, `""`-returning). Extends Issue #3
+  (which had noted only the latter two). Verified: `config` is a pure
+  leaf and `poolproto` does not import `config`, so neither importing the
+  other would cycle — the blocker is purely whether the config resolver
+  should depend on the protocol layer.
+- **Bitcoin-address validators duplicated** — `config.validateBitcoinAddress`
+  (len 26–90 + prefix 1/3/bc1, descriptive errors) vs
+  `doctor.isLikelyBitcoinAddress` (same bounds + prefix set, **plus**
+  bech32/base58 charset validation, bool). Shared facts (bounds, prefix
+  set) duplicated; strictness and return type diverge. Note: CLAUDE.md
+  designates `internal/btccrypto` as the Bitcoin abstraction home, so a
+  future `btccrypto.ValidateMainnetAddress` could be the single source —
+  an architecture decision, deferred.
+
 ### Categories with no actionable findings this pass
 F (arbitration), I (btccrypto), L (CLI beyond items already fixed in
-G1–G15 and session 71), P (logger), U (clock/version) — reviewed, no
+G1–G15 and sessions 71/78), P (logger), U (clock/version) — reviewed, no
 concrete defects beyond what the spec gap table already tracks.
 
 ---
