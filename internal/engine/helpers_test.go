@@ -402,7 +402,7 @@ func TestBuildStats_IncludesHashRateAndWalletFingerprint(t *testing.T) {
 			provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000}),
 		},
 	}
-	stats := buildStats(opts, 1234.5, 42)
+	stats := buildStats(opts, 1234.5, 42, nil, false)
 
 	if stats.HashRate != 1234.5 {
 		t.Errorf("HashRate = %v, want 1234.5", stats.HashRate)
@@ -427,6 +427,52 @@ func TestBuildStats_IncludesHashRateAndWalletFingerprint(t *testing.T) {
 	}
 	if len(stats.Providers) != 1 {
 		t.Errorf("Providers count = %d, want 1", len(stats.Providers))
+	}
+}
+
+// ============================================================================
+// buildStats — PoolLatency wired from LatencyTracker p50
+// ============================================================================
+
+func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
+	opts := sessionOpts{
+		poolURL:   "stratum+tcp://pool.example.com:3333",
+		startTime: time.Now(),
+	}
+
+	// No latency samples: PoolLatency must be zero (unknown).
+	lt := NewLatencyTracker(16)
+	stats := buildStats(opts, 0, 0, lt, false)
+	if stats.PoolLatency != 0 {
+		t.Errorf("PoolLatency with no samples = %v, want 0", stats.PoolLatency)
+	}
+
+	// Record samples (all 50 ms) so p50 = 50 ms.
+	for range 8 {
+		lt.Record(50.0)
+	}
+	stats = buildStats(opts, 0, 0, lt, false)
+	want := 50 * time.Millisecond
+	if stats.PoolLatency != want {
+		t.Errorf("PoolLatency = %v, want %v", stats.PoolLatency, want)
+	}
+}
+
+// ============================================================================
+// buildStats — Stalled flag propagation
+// ============================================================================
+
+func TestBuildStats_StalledPropagated(t *testing.T) {
+	opts := sessionOpts{startTime: time.Now()}
+
+	notStalled := buildStats(opts, 100.0, 0, nil, false)
+	if notStalled.Stalled {
+		t.Error("buildStats(stalled=false): Stats.Stalled should be false")
+	}
+
+	stalled := buildStats(opts, 0, 0, nil, true)
+	if !stalled.Stalled {
+		t.Error("buildStats(stalled=true): Stats.Stalled should be true")
 	}
 }
 

@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 96 — TUI PoolLatency wiring + stalled-miner indicator)
+
+Two previously-missing TUI signal wirings that close the gap between what
+the Prometheus metrics surface and what the operator sees on their terminal.
+
+**`PoolLatency` wiring** (`internal/engine/stats.go`, `run.go`):
+- `buildStats` gained a `latency *LatencyTracker` parameter (was missing; the
+  field `tui.Stats.PoolLatency` always showed 0 in production).
+- The p50 of the session's `LatencyTracker` is now converted to
+  `time.Duration` and returned in `Stats.PoolLatency`.
+- Both V1 and V2 stats-ticker call sites updated to pass the session-local
+  tracker.
+- `TestBuildStats_PoolLatencyFromTracker`: verifies 0 when no samples, 50ms
+  when 8×50ms samples are recorded.
+
+**Stalled-miner TUI indicator** (`internal/tui/dashboard.go`,
+`internal/engine/stats.go`, `internal/engine/run.go`):
+- Added `Stalled bool` field to `tui.Stats`.
+- `miningLine` now renders the hashrate in **yellow** + `⚠ stalled` badge
+  when `Stats.Stalled` is true (green otherwise).
+- `buildStats` gained a `stalled bool` parameter; `Stats.Stalled` is set
+  from it. Both V1 and V2 stats-ticker loops now call
+  `buildStats(..., hashMon.Stalled())` **after** `hashMon.Observe()` (previously
+  called before; this also fixes a one-tick lag in the TUI vs Prometheus).
+- `TestDashboard_MiningLine_StalledIndicator`: verifies "stalled" appears in
+  the line when `Stalled=true`.
+- `TestDashboard_MiningLine_NoStalledIndicatorWhenFalse`: verifies it is
+  absent when `Stalled=false`.
+- `TestBuildStats_StalledPropagated`: verifies `Stats.Stalled` reflects the
+  `stalled` argument correctly.
+
+**Impact:** Before this session, an operator whose miner wedged silently
+(driver hang, thermal shutdown, GPU power event) would only see the alert
+via Prometheus `otedama_up=0` or by noticing a stale hashrate line. Now
+the TUI dashboard prominently shows `⚠ stalled` in yellow, matching the
+Prometheus signal with no scrape interval lag.
+
+- 24 packages green, 1069 tests, gofmt/vet clean.
+
 ### Test (session 95 — internal/lightning coverage ≥90%)
 
 - **`internal/lightning/coverage_test.go`** — added 3 tests to cover the last 4

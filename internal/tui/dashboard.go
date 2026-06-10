@@ -56,6 +56,12 @@ type Stats struct {
 	Uptime   time.Duration
 	Devices  int
 	Language string
+
+	// Stalled is true when the hashrate monitor has detected that the miner
+	// has produced zero (or below-floor) hashrate for several consecutive
+	// samples. The TUI renders a ⚠ indicator so the operator sees the
+	// warning immediately without checking Prometheus.
+	Stalled bool
 }
 
 // ProviderStats describes a single provider's live state.
@@ -217,6 +223,14 @@ func (d *Dashboard) miningLine(s Stats) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	shares := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
+	if s.Stalled {
+		// Yellow hashrate + stall badge so the operator sees the warning
+		// immediately without needing to check Prometheus.
+		return fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  %s%s%s",
+			yellow, rate, reset,
+			dim+devs+reset,
+			dim, shares, reset)
+	}
 	return fmt.Sprintf("  %s%-14s%s  %-20s  %s%s%s",
 		green, rate, reset,
 		dim+devs+reset,

@@ -174,6 +174,28 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	}
 }
 
+func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 0, Devices: 1, Stalled: true,
+	})
+	if !strings.Contains(line, "stalled") {
+		t.Errorf("miningLine with Stalled=true missing stall indicator: %q", line)
+	}
+}
+
+func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 1e9, Devices: 2, Stalled: false,
+	})
+	if strings.Contains(line, "stalled") {
+		t.Errorf("miningLine with Stalled=false should not show stall indicator: %q", line)
+	}
+}
+
 func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)

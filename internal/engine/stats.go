@@ -27,7 +27,14 @@ import (
 // computed once per stats tick by hashrateWindow; the hashrate gauge is set
 // by the caller from the same value, so display, log, gauge, and stall
 // monitor all agree.
-func buildStats(opts sessionOpts, hashRate float64, totalSats uint64) tui.Stats {
+//
+// latency is the session's live LatencyTracker; its p50 populates
+// PoolLatency so the TUI shows actual measured round-trip time instead of
+// a constant zero. Passing nil is safe and leaves PoolLatency at 0.
+//
+// stalled reflects HashrateMonitor.Stalled(); true renders the ⚠ stalled
+// indicator in the TUI so operators see the warning immediately.
+func buildStats(opts sessionOpts, hashRate float64, totalSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
 	var sharesSent, sharesFound uint64
 	for _, w := range opts.workers {
 		sharesFound += w.Stats().SharesFound
@@ -36,6 +43,13 @@ func buildStats(opts sessionOpts, hashRate float64, totalSats uint64) tui.Stats 
 		opts.m.uptime.Set(time.Since(opts.startTime).Seconds())
 	}
 	sharesSent = sharesFound // approximation
+
+	var poolLatency time.Duration
+	if latency != nil {
+		if p50 := latency.Quantile(0.50); p50 > 0 {
+			poolLatency = time.Duration(p50 * float64(time.Millisecond))
+		}
+	}
 
 	var providerStats []tui.ProviderStats
 	for _, p := range opts.providers {
@@ -52,7 +66,9 @@ func buildStats(opts sessionOpts, hashRate float64, totalSats uint64) tui.Stats 
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
 		PoolURL:           opts.poolURL,
+		PoolLatency:       poolLatency,
 		Connected:         true,
+		Stalled:           stalled,
 		TotalSatsEarned:   totalSats,
 		WalletFingerprint: opts.wallet,
 		Uptime:            time.Since(opts.startTime),

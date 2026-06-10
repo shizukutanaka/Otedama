@@ -510,9 +510,6 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
-			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats))
-			}
 			logStats(opts.workers, currentHashRate, opts.log)
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
@@ -521,6 +518,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				lastDropped = dropped
 			}
 			hashMon.Observe(currentHashRate)
+			if opts.dashboard != nil {
+				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, hashMon.Stalled()))
+			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
 				if hashMon.Stalled() {
@@ -660,9 +660,6 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
-			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats))
-			}
 			logStats(opts.workers, currentHashRate, opts.log)
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
@@ -671,6 +668,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				lastDropped = dropped
 			}
 			hashMon.Observe(currentHashRate)
+			if opts.dashboard != nil {
+				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, hashMon.Stalled()))
+			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
 				if hashMon.Stalled() {

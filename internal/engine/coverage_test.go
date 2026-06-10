@@ -44,7 +44,7 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 		m:         m,
 		providers: nil,
 	}
-	stats := buildStats(opts, 500.0, 10)
+	stats := buildStats(opts, 500.0, 10, nil, false)
 	if stats.HashRate != 500.0 {
 		t.Errorf("HashRate = %v, want 500.0", stats.HashRate)
 	}
