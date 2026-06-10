@@ -20,15 +20,14 @@ import (
 //   - The device's measured hashrate changes by more than 5%.
 //   - MinQuoteInterval has elapsed without an update.
 type MiningProvider struct {
-	id       string
-	poolURL  string
-	rates    RateSource
-	quoteCh  chan Quote
-	devices  []hal.Device
-	mu       sync.Mutex
-	lastRate float64
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
+	id      string
+	poolURL string
+	rates   RateSource
+	quoteCh chan Quote
+	devices []hal.Device
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.

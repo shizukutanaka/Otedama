@@ -74,15 +74,9 @@ func TestHash256_BitcoinGenesisBlockHeader(t *testing.T) {
 	}
 }
 
-func TestHash256_OutputIsAlways32Bytes(t *testing.T) {
-	for _, n := range []int{0, 1, 32, 80, 1000} {
-		input := make([]byte, n)
-		got := Hash256(input)
-		if len(got) != 32 {
-			t.Errorf("Hash256(%d bytes) returned %d bytes, want 32", n, len(got))
-		}
-	}
-}
+// (No output-length tests for Hash256/TaggedHash: both return [32]byte,
+// so the type system already guarantees the length — a runtime check can
+// never fail.)
 
 // ============================================================================
 // TaggedHash — BIP-340 test vectors
@@ -126,13 +120,6 @@ func TestTaggedHash_Structure(t *testing.T) {
 	}
 	if bytes.Equal(a[:], c[:]) {
 		t.Error("same message, different tag, same hash")
-	}
-}
-
-func TestTaggedHash_OutputIs32Bytes(t *testing.T) {
-	got := TaggedHash("any", []byte("test"))
-	if len(got) != 32 {
-		t.Errorf("TaggedHash output = %d bytes, want 32", len(got))
 	}
 }
 

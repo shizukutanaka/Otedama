@@ -393,6 +393,29 @@ Triage so future sessions do not re-investigate:
   (backup phrase display, passphrase rotation); CODEOWNERS territory,
   leave untouched.
 
+### Staticcheck sweep (session 77)
+`staticcheck ./...` findings, all fixed except the flagged one:
+- **D (stratumv2 tests)** — SA2002: `writeMsgTo`/`doHandshake` called
+  `t.Fatalf` from the mock pool's goroutine (`Fatalf` runs
+  `runtime.Goexit`, only valid on the test goroutine). Now `t.Errorf` +
+  early return.
+- **D (stratumv1 tests)** — SA4011: ineffective `break` inside `select`
+  in the difficulty-wait loop; after the one-shot `deadline` channel
+  fired, the loop would spin forever on a failed assertion. Fixed with a
+  labeled break.
+- **G (provider)** — U1000: `MiningProvider.lastRate` field declared,
+  never read or written. Deleted.
+- **I (btccrypto tests)** — SA4006: two tautological length tests
+  (`Hash256`/`TaggedHash` return `[32]byte`; `len != 32` can never be
+  true). Deleted per the no-meaningless-tests rule.
+- **Q (httpserver tests)** — U1000: unused `setupServer` helper (plus the
+  orphaned design-note comments around it). Deleted.
+- **E (engine tests)** — S1009: redundant `!= nil` before `len()`.
+- 🚩 **C (noise)** — U1000: `HandshakeState.remoteStatic` field is
+  unused. `internal/stratum/noise*` is CODEOWNERS/funds-critical; left
+  for maintainer review (it may be a placeholder for the responder
+  static-key check, or genuinely vestigial).
+
 ### Duplicate code recorded as Issue #3 (session 76, per CLAUDE.md rule 3)
 `internal/doctor/doctor.go stripScheme` (returns `""` on unknown scheme)
 near-duplicates `poolproto.StripScheme` (returns error). Same prefix

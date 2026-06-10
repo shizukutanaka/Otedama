@@ -351,18 +351,18 @@ func TestSession_E2E_SubscribeNotifySubmitAccepted(t *testing.T) {
 	// Difficulty should be set.
 	// Allow a brief moment for set_difficulty to be processed.
 	deadline := time.After(500 * time.Millisecond)
+waitDifficulty:
 	for {
 		if sess.SuggestedDifficulty() == 1024 {
 			break
 		}
 		select {
 		case <-deadline:
+			// Must break the for loop, not just the select: deadline is a
+			// one-shot channel, so falling through would spin forever.
 			t.Errorf("difficulty = %v, want 1024", sess.SuggestedDifficulty())
-			break
+			break waitDifficulty
 		case <-time.After(20 * time.Millisecond):
-		}
-		if sess.SuggestedDifficulty() == 1024 {
-			break
 		}
 	}
 

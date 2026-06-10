@@ -317,7 +317,7 @@ func TestStreamsSlice_DeduplicatesByID(t *testing.T) {
 
 func TestStreamsSlice_EmptyInput(t *testing.T) {
 	got := streamsSlice(map[string]arbitration.Stream{})
-	if got != nil && len(got) != 0 {
+	if len(got) != 0 {
 		t.Errorf("empty input: got %v, want empty", got)
 	}
 }

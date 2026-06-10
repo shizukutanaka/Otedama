@@ -114,35 +114,43 @@ type poolSide struct {
 }
 
 // writeMsgTo encodes a Stratum V2 message and writes the framed bytes to w.
+// It runs on the mock pool's goroutine, so it must use t.Errorf (safe from
+// any goroutine), never t.Fatalf (which calls runtime.Goexit and is only
+// valid on the test's own goroutine).
 func writeMsgTo(t *testing.T, w net.Conn, msgType uint8, isChannel bool, enc interface{ Encode() ([]byte, error) }) {
 	t.Helper()
 	payload, err := enc.Encode()
 	if err != nil {
-		t.Fatalf("writeMsgTo Encode(%T): %v", enc, err)
+		t.Errorf("writeMsgTo Encode(%T): %v", enc, err)
+		return
 	}
 	f, err := stratum.WrapMessage(msgType, isChannel, payload)
 	if err != nil {
-		t.Fatalf("writeMsgTo WrapMessage: %v", err)
+		t.Errorf("writeMsgTo WrapMessage: %v", err)
+		return
 	}
 	data, err := stratum.EncodeFrame(f)
 	if err != nil {
-		t.Fatalf("writeMsgTo EncodeFrame: %v", err)
+		t.Errorf("writeMsgTo EncodeFrame: %v", err)
+		return
 	}
 	if _, err := w.Write(data); err != nil {
 		// Connection may have been closed by the other side after
-		// the test is done — do not fatal on write errors after the
+		// the test is done — do not fail on write errors after the
 		// happy path.
 		t.Logf("writeMsgTo Write: %v (likely closed by client)", err)
 	}
 }
 
 // doHandshake performs the standard SV2 handshake from the pool side and
-// returns the channel ID assigned to the client.
+// returns the channel ID assigned to the client. It runs on the mock
+// pool's goroutine (see writeMsgTo for why errors use t.Errorf).
 func (p *poolSide) doHandshake(channelID uint32) {
 	p.t.Helper()
 	// Read and discard SetupConnection.
 	if _, err := p.dec.ReadFrame(); err != nil {
-		p.t.Fatalf("pool: read SetupConnection: %v", err)
+		p.t.Errorf("pool: read SetupConnection: %v", err)
+		return
 	}
 	// Send SetupConnectionSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgSetupConnectionSuccess, false,
@@ -150,7 +158,8 @@ func (p *poolSide) doHandshake(channelID uint32) {
 
 	// Read and discard OpenMiningChannel.
 	if _, err := p.dec.ReadFrame(); err != nil {
-		p.t.Fatalf("pool: read OpenMiningChannel: %v", err)
+		p.t.Errorf("pool: read OpenMiningChannel: %v", err)
+		return
 	}
 	// Send OpenMiningChannelSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgOpenMiningChannelSuccess, false,

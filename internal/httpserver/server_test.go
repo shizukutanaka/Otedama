@@ -15,35 +15,8 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 )
 
-// setupServer starts an HTTP server on a random port and returns it plus
-// a client configured to talk to it.
-func setupServer(t *testing.T, r *metrics.Registry) (*Server, string) {
-	t.Helper()
-	s := New("127.0.0.1:0", r)
-
-	// Start with a background context we'll cancel at teardown.
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	if err := s.Start(ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Stop() })
-
-	// The Server struct's addr is "127.0.0.1:0" which doesn't help us;
-	// instead we listen to what httpSrv reports.
-	// Since Server wraps the listener internally, we need to probe
-	// by trying a known port range — but in our test we use the
-	// documented API: capture through Addr() which returns configured addr.
-	// For this test to work, we bind a real listener manually.
-	return s, "http://" + s.httpSrv.Addr
-}
-
-// Since the current Server API uses net.Listen internally but stores
-// only the original configured address, we need a different approach:
-// use a known ephemeral port. Simpler: use httptest-like pattern where
-// we construct the mux ourselves.
-//
-// For simplicity, use a fixed loopback port that's unlikely to be in use.
+// Tests use fixed loopback ports (and Skip when unavailable) because
+// Server stores only the configured address, not the bound listener's.
 
 func TestHealthz_Returns200(t *testing.T) {
 	r := metrics.NewRegistry()

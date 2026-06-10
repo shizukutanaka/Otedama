@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 77 — staticcheck sweep: goroutine-unsafe Fatalf, spin-loop break, dead field)
+
+All `staticcheck ./...` findings fixed except one flagged for maintainer review:
+
+- **stratumv2 tests (D) — `t.Fatalf` from the mock-pool goroutine (SA2002).**
+  `writeMsgTo`/`doHandshake` run on the pool side of `net.Pipe()`; `Fatalf` calls
+  `runtime.Goexit` and is only valid on the test goroutine. Switched to `t.Errorf`
+  + early return.
+- **stratumv1 tests (D) — ineffective `break` in select (SA4011).** In the
+  difficulty-wait loop, `break` after the one-shot `deadline` fired exited only the
+  `select`, so a failed assertion would spin the loop forever. Labeled break.
+- **provider (G) — dead `MiningProvider.lastRate` field deleted (U1000).**
+- **btccrypto tests (I) — two tautological tests deleted (SA4006).** Both asserted
+  `len(x) != 32` on `[32]byte` return values, which can never fail.
+- **httpserver tests (Q) — unused `setupServer` helper deleted (U1000).**
+- **engine tests (E) — redundant nil check before `len()` (S1009).**
+- 🚩 **noise (C) — `HandshakeState.remoteStatic` unused (U1000)** — CODEOWNERS
+  territory, recorded in docs/CATEGORY_AUDIT.md for maintainer review instead of
+  being changed.
+
 ### Refactor (session 76 — whole-program dead-code audit; two deletions, full triage recorded)
 
 Ran `golang.org/x/tools/cmd/deadcode` over the module (~120 unreachable functions)
