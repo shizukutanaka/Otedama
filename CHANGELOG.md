@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 100 — V1 extranonce.subscribe + cancelPending fix)
+
+Two improvements to the Stratum V1 connection lifecycle, fixing Categories
+1-item-3 and 2-item-5 from RESEARCH_IMPROVEMENTS.md.
+
+**`extranonce.subscribe` in handshake** (`internal/poolproto/stratumv1/dialer.go`):
+- After `mining.authorize` succeeds, `Negotiate()` now sends `extranonce.subscribe`
+  as an optional step 3. This announces that Otedama supports mid-session
+  extranonce rotation via `mining.set_extranonce` (already handled in dispatch).
+- Pools that support it return `true`; pools that predate it (OCEAN, older
+  Antpool) return `"Method not found"`. Both outcomes are silently accepted
+  and the handshake completes normally.
+- Critically, this response is correlated by JSON-RPC id in `Negotiate()` —
+  it NEVER reaches `rejectClass()` or the share counters (closing the
+  ESP-Miner #1383 category of false-reject inflation).
+
+**`cancelPending()` on readLoop exit** (`internal/poolproto/stratumv1/stratumv1.go`):
+- Previously, if the TCP connection closed while a `call()` was in-flight
+  (awaiting a response), the pending channel would block until the caller's
+  context expired. This was a latent bug.
+- Added `cancelPending()` helper that drains and closes all pending channels
+  under `pendingMu` — safe to call from both `readLoop` and `Close()` (the
+  mutex prevents double-close; an already-empty map is a no-op).
+- `readLoop` now defers `cancelPending()` so any in-flight `call()` returns
+  `"session closed before response"` immediately when the pool closes, rather
+  than blocking for up to 5 minutes (the read deadline).
+- `Close()` refactored to use the same `cancelPending()` helper.
+
+Tests:
+- `TestNegotiate_ExtranonceSubscribe_MethodNotFound_HandshakeSucceeds`: pool
+  returns "Method not found" — Negotiate succeeds.
+- `TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds`: pool returns
+  true — Negotiate succeeds.
+- All existing Negotiate/submit/E2E tests updated to handle the new step 3.
+- `RESEARCH_IMPROVEMENTS.md` Cat 1 item 3 and Cat 2 item 5 marked ✅.
+- Cat 7 items 5 and 6 also marked ✅ (already implemented, discovered during audit).
+
+24 packages green, 1076 tests.
+
 ### Feat (session 99 — pprof opt-in profiling endpoint)
 
 Added an optional Go `net/http/pprof` profiling endpoint behind the `--pprof`

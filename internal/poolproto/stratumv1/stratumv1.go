@@ -123,6 +123,12 @@ func (s *session) start(ctx context.Context) {
 // It runs until the connection closes or the context is cancelled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
+	// When the loop exits for any reason (EOF, network error, or ctx cancel),
+	// cancel all in-flight call() invocations so they return immediately
+	// instead of blocking until the caller's context expires. This mirrors
+	// what Close() does but without closing the network connection (which
+	// is already closed or will be closed by the caller).
+	defer s.cancelPending()
 	for {
 		// Cooperative cancellation check.
 		select {
@@ -141,6 +147,18 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		s.dispatch(line)
 	}
+}
+
+// cancelPending closes all in-flight call() channels so those callers
+// receive "session closed before response" immediately. Safe to call
+// from both readLoop and Close() — the mutex ensures no double-close.
+func (s *session) cancelPending() {
+	s.pendingMu.Lock()
+	for id, ch := range s.pending {
+		close(ch)
+		delete(s.pending, id)
+	}
+	s.pendingMu.Unlock()
 }
 
 // dispatch parses one JSON-RPC line and routes it.
@@ -292,13 +310,7 @@ func (s *session) Close() error {
 		if s.ctxCancel != nil {
 			s.ctxCancel()
 		}
-		// Cancel any pending calls so callers don't block forever.
-		s.pendingMu.Lock()
-		for id, ch := range s.pending {
-			close(ch)
-			delete(s.pending, id)
-		}
-		s.pendingMu.Unlock()
+		s.cancelPending()
 		err = s.conn.Close()
 	})
 	return err

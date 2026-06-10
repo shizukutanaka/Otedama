@@ -69,11 +69,20 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
-// Negotiate performs the SV1 handshake: mining.subscribe (extranonce
-// negotiation) followed by mining.authorize (worker authentication).
-// On success the returned Session is ready to deliver Jobs and accept
-// shares. A failed authorize terminates the connection and returns
-// poolproto.ErrHandshakeFailed.
+// Negotiate performs the SV1 handshake:
+//  1. mining.subscribe — extranonce negotiation.
+//  2. mining.authorize — worker authentication.
+//  3. extranonce.subscribe (optional) — announce support for mid-session
+//     extranonce rotation. Pools that support it will push new extranonce
+//     values via mining.set_extranonce without requiring a reconnect. Pools
+//     that do not support it (OCEAN, older Antpool, etc.) respond with
+//     "Method not found"; we treat that as informational and proceed. This
+//     response is correlated by JSON-RPC id and handled here — it never
+//     reaches rejectClass or the share counters (fixing ESP-Miner #1383).
+//
+// On success the returned Session is ready to deliver Jobs and accept shares.
+// A failed mandatory step (subscribe/authorize) terminates the connection and
+// returns poolproto.ErrHandshakeFailed.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
 	conn, ok := c.(*connection)
 	if !ok {
@@ -122,6 +131,21 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
 	}
+
+	// Step 3 (optional): extranonce.subscribe — announce that we handle
+	// mining.set_extranonce notifications. Write errors (connection dropped)
+	// and pool-level errors ("Method not found") both mean the pool does not
+	// support extranonce rotation; we proceed without it. A network error here
+	// does NOT close the session — the mandatory steps succeeded, so the
+	// session is in a valid state and the engine will detect stale connections
+	// through the normal Jobs-channel lifecycle.
+	id = sess.nextID.Add(1)
+	if _, eerr := sess.call(ctx, id, "extranonce.subscribe", []any{}); eerr != nil {
+		// Write failed (connection closed) or context expired: proceed without
+		// extranonce rotation — not a fatal condition.
+		_ = eerr
+	}
+	// resp.errResult ("Method not found") is also silently ignored here.
 
 	return sess, nil
 }

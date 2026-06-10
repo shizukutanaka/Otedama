@@ -25,11 +25,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    (<0.5% excellent … >3% act now) is derivable in Prometheus from this
    plus `otedama_shares_total`; a built-in warning gauge is the remaining
    sub-task.
-3. 🟡 **Do not count `Method not found` setup responses as rejected shares.**
+3. ✅ **Do not count `Method not found` setup responses as rejected shares.**
    ESP-Miner #1383: pools like OCEAN reject `mining.suggest_difficulty` /
-   `extranonce.subscribe` with "Method not found"; counting these as share
-   rejects corrupts the reject rate. Otedama is Stratum-V2-first so less
-   exposed, but the V1 fallback path must guard against this.
+   `extranonce.subscribe` with "Method not found". — session 100: these are
+   correlated by JSON-RPC id in `Negotiate()` and never reach `rejectClass`
+   or the share counters. `cancelPending()` in readLoop ensures no call()
+   blocks indefinitely when the pool closes mid-handshake.
 4. ✅ **Multi-pool failover** (session 42) — matches cgminer/bfgminer.
 5. ✅ **Hashrate-drop detection** (session 43, HashrateMonitor) — matches
    Awesome Miner triggers.
@@ -57,8 +58,11 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    P-256 stub (KNOWN_LIMITATIONS §2). See Category 10.
 4. 🔵 **Job Declaration Client (JDC)** — SV2's headline feature letting the
    miner build its own block template. Tracked ADR-009.
-5. 🟡 **`extranonce.subscribe` / `suggest_difficulty` handling on the V1
-   fallback** — see Category 1 item 3.
+5. ✅ **`extranonce.subscribe` / `suggest_difficulty` handling on the V1
+   fallback** — see Category 1 item 3. — session 100: `extranonce.subscribe`
+   sent as step 3 of Negotiate(); "Method not found" and other pool errors
+   are silently ignored (optional extension). Enables mid-session extranonce
+   rotation on pools that support it (OCEAN, AntPool 2.x, etc.).
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
 7. ✅ **Share-submission latency histogram** (session 46). `LatencyTracker`
@@ -196,10 +200,10 @@ arXiv grounding (collected sessions 40–41 and here):
 2. ✅ **Background-service install** (launchd/systemd/Task Scheduler).
 3. ✅ **Structured logging** (text/JSON via slog-style adapter).
 4. ✅ **`doctor` self-diagnostics**.
-5. 🟡 **`--version --json` machine-readable output** for CI/monitoring; verify
-   it exists.
-6. 🟡 **Shell completion generation** (`otedama completion bash|zsh|fish`) —
-   table-stakes for a polished CLI.
+5. ✅ **`--version --json` machine-readable output** for CI/monitoring —
+   `version.go` implements `-json` flag emitting `{"version":...}` JSON.
+6. ✅ **Shell completion generation** (`otedama completion bash|zsh|fish`) —
+   `completion.go` implements bash/zsh/fish static completion scripts.
 7. ✅ **`GODEBUG`/pprof opt-in endpoint** behind a flag for field debugging
    (already have an HTTP server; could mount `/debug/pprof`). — session 99: `--pprof`
    flag mounts `/debug/pprof/` and named profiles; explicit handler registration

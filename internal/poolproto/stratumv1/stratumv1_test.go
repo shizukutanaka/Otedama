@@ -906,10 +906,10 @@ func TestDialer_Dial_InvalidURL_ReturnsError(t *testing.T) {
 func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 
-	// Server completes the V1 handshake (subscribe + authorize) then
-	// disconnects to simulate a mid-session pool failure. The session's
-	// read loop must close the Jobs channel — the signal the engine's
-	// reconnect loop uses to re-dial.
+	// Server completes the V1 handshake (subscribe + authorize +
+	// extranonce.subscribe) then disconnects to simulate a mid-session pool
+	// failure. The session's read loop must close the Jobs channel — the
+	// signal the engine's reconnect loop uses to re-dial.
 	go func() {
 		defer serverConn.Close()
 		r := bufio.NewReader(serverConn)
@@ -917,6 +917,8 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"abc123",4],"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // consume authorize request
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // consume extranonce.subscribe request
+		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		// Close mid-session without sending any jobs.
 		time.Sleep(50 * time.Millisecond)
 	}()
@@ -953,6 +955,8 @@ func TestSession_Close_Idempotent(t *testing.T) {
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[],"cc",2],"error":null}`+"\n")
 		_, _ = r.ReadString('\n')
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		// Keep alive briefly.
 		time.Sleep(200 * time.Millisecond)
 		serverConn.Close()
@@ -987,6 +991,8 @@ func TestSession_SuggestedDifficulty_InitialDefault(t *testing.T) {
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[],"dd",2],"error":null}`+"\n")
 		_, _ = r.ReadString('\n')
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		time.Sleep(500 * time.Millisecond)
 		serverConn.Close()
 	}()
@@ -1286,6 +1292,19 @@ func runFakeServer(t *testing.T, serverConn net.Conn, cfg fakeServerConfig) {
 			}
 			fmt.Fprintf(serverConn, `{"id":2,"result":%s,"error":null}`+"\n", ar)
 		}
+		if cfg.authorizeError != "" || cfg.authorizeResult == "false" {
+			return // handshake terminated at authorize
+		}
+
+		// Step 3: extranonce.subscribe (optional). Read it and respond with
+		// "Method not found" (the default for pools that predate extranonce
+		// rotation). The client must proceed normally regardless of this error.
+		_, err = r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
 		if !cfg.keepAlive {
 			return
 		}
@@ -1358,6 +1377,8 @@ func TestNegotiate_Success_EmptyPasswordDefaultsToX(t *testing.T) {
 		line, _ := r.ReadString('\n') // authorize
 		gotAuth = line
 		fmt.Fprintf(serverConn2, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn2, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		time.Sleep(100 * time.Millisecond)
 	}()
 
@@ -1456,6 +1477,59 @@ func TestNegotiate_NonV1Connection_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Error("Negotiate with non-V1 connection should return error")
 	}
+}
+
+func TestNegotiate_ExtranonceSubscribe_MethodNotFound_HandshakeSucceeds(t *testing.T) {
+	// Pool responds "Method not found" to extranonce.subscribe — this is the
+	// common case for pools that predate extranonce rotation. Negotiate must
+	// succeed and not count the error as a share rejection.
+	clientConn, serverConn := net.Pipe()
+	runFakeServer(t, serverConn, fakeServerConfig{keepAlive: true})
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:3333",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "w", Password: "x"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sess, err := (&Dialer{}).Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate should succeed even when pool rejects extranonce.subscribe: %v", err)
+	}
+	defer sess.Close()
+}
+
+func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) {
+	// Pool accepts extranonce.subscribe (returns true) — handshake must
+	// also succeed. We already handle mining.set_extranonce in dispatch.
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		r := bufio.NewReader(serverConn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(serverConn, `{"id":1,"result":[[["mining.notify","n1"]],"ff00",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn, `{"id":3,"result":true,"error":null}`+"\n")
+		time.Sleep(200 * time.Millisecond)
+	}()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:3333",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "w", Password: "x"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sess, err := (&Dialer{}).Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate should succeed when pool accepts extranonce.subscribe: %v", err)
+	}
+	defer sess.Close()
 }
 
 // ============================================================================
