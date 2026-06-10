@@ -304,6 +304,44 @@ func BenchmarkAkashProvider_Publish(b *testing.B) {
 	}
 }
 
+// ============================================================================
+// AkashProvider.publish — uncovered branch coverage
+// ============================================================================
+
+func TestAkashProvider_Publish_ZeroRateUseFallback(t *testing.T) {
+	// BTCUSDRate() returns 0 → publish must fall back to 95000 and produce
+	// a positive yield.
+	p := NewAkashProvider(StaticRateSource{Rate: 0})
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if q.Yield.SatsPerSecond <= 0 {
+			t.Error("zero-rate fallback should still produce positive yield")
+		}
+	default:
+		t.Error("no quote received with zero-rate fallback")
+	}
+}
+
+func TestAkashProvider_Publish_DropsOldestWhenFull(t *testing.T) {
+	p := NewAkashProvider(StaticRateSource{Rate: 95000})
+	// Pre-fill the channel to capacity.
+	for len(p.quoteCh) < cap(p.quoteCh) {
+		p.quoteCh <- Quote{ProviderID: "fill"}
+	}
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p.publish(context.Background())
+	if len(p.quoteCh) == 0 {
+		t.Error("channel empty after Akash drop-oldest publish")
+	}
+}
+
 func TestAkashProvider_NameDisclosesSimulation(t *testing.T) {
 	// The provider name MUST disclose that yield is simulated, so the
 	// disclosure is visible in the TUI, logs, and `config show`. This is

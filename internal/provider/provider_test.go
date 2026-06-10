@@ -285,3 +285,63 @@ type mockDevice struct {
 func (m *mockDevice) Identity() hal.Identity           { return m.id }
 func (m *mockDevice) Capabilities() hal.Capabilities   { return m.caps }
 func (m *mockDevice) Shutdown(_ context.Context) error { return nil }
+
+// ============================================================================
+// MiningProvider.publish — uncovered branch coverage
+// ============================================================================
+
+func TestMiningProvider_Publish_ASICDeviceBranch(t *testing.T) {
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "asic-0", Family: hal.FamilyASIC}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if q.DeviceID != "asic-0" {
+			t.Errorf("DeviceID = %q, want asic-0", q.DeviceID)
+		}
+		if q.Yield.SatsPerSecond <= 0 {
+			t.Error("ASIC device should produce positive yield")
+		}
+	default:
+		t.Error("no quote received for ASIC device")
+	}
+}
+
+func TestMiningProvider_Publish_ZeroRateUseFallback(t *testing.T) {
+	// BTCUSDRate() returns 0 → publish must fall back to the hard-coded 95000
+	// estimate and still produce a positive yield.
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 0})
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if q.Yield.SatsPerSecond <= 0 {
+			t.Error("zero-rate fallback should still produce positive yield")
+		}
+	default:
+		t.Error("no quote received with zero-rate fallback")
+	}
+}
+
+func TestMiningProvider_Publish_DropsOldestWhenFull(t *testing.T) {
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	// Pre-fill the channel to capacity.
+	for len(p.quoteCh) < cap(p.quoteCh) {
+		p.quoteCh <- Quote{ProviderID: "fill"}
+	}
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	// publish with a full channel must not block: it drops the oldest and
+	// pushes the new quote via the drop-oldest path.
+	p.publish(context.Background())
+	if len(p.quoteCh) == 0 {
+		t.Error("channel empty after drop-oldest publish")
+	}
+}

@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 88 — coverage: poolproto/stratumv1 83.7%→100%, internal/provider 89.8%→96.1%)
+
+- **stratumv1 (V) — coverage: +16.3 pp** (83.7% → 100%). Added 24 tests and a
+  `fakePoolConn` helper covering all 34 previously-uncovered statements:
+  `rpcMessage.uintID` int64 and unknown-type cases; `parseNotify` per-field
+  unmarshal errors (p[0] through p[7]) and cleanJobs double-fail; `parseSetExtranonce`
+  per-field errors; `Dialer.Dial` dialFn success and error paths;
+  `Dialer.Negotiate` non-`*connection` type assertion error; `session.dispatch`
+  empty line, malformed JSON, parseNotify error, set_extranonce update, and
+  full-channel drop-oldest; `session.call` unmarshalable-params error, write
+  error, context timeout, and session-closed-while-waiting; `session.Close`
+  pending-call cancellation; `session.Submit` pool-error result propagation and
+  call-error propagation. All 34 statements now covered; zero flakiness.
+- **provider (P) — coverage: +6.3 pp** (89.8% → 96.1%). Added five
+  `publish`-direct tests to both `MiningProvider` and `AkashProvider`:
+  ASIC device branch in the family switch (mining only), zero-rate fallback
+  (`rate ≤ 0 → 95000`), and drop-oldest path (pre-fill channel to cap then
+  call publish). Ticker branches (30 s / 60 s) and ctx.Done races inside publish
+  are intentionally left uncovered — they require flaky timing or injectable
+  timers, which add fragility beyond the 90% requirement.
+- 24 packages green, 930+ tests, gofmt/vet clean.
+
 ### Test (session 87 — coverage: internal/i18n 86.5%→100%, internal/hal 86.3%→98.5%, internal/miner 85.5%→98.6%)
 
 - **i18n (I) — coverage: +13.5 pp** (86.5% → 100%). Added tests for all

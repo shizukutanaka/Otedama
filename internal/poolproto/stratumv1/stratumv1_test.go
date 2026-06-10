@@ -496,6 +496,379 @@ func TestCompileTimeContracts(t *testing.T) {
 var _ = strings.HasPrefix
 
 // ============================================================================
+// rpcMessage.uintID — additional type cases (int64, unknown)
+// ============================================================================
+
+func TestRPCMessage_UintID_FromInt64(t *testing.T) {
+	m := rpcMessage{ID: int64(77)}
+	if got := m.uintID(); got != 77 {
+		t.Errorf("uintID(int64) = %d, want 77", got)
+	}
+}
+
+func TestRPCMessage_UintID_UnknownType_ReturnsZero(t *testing.T) {
+	m := rpcMessage{ID: true} // bool is not a handled type
+	if got := m.uintID(); got != 0 {
+		t.Errorf("uintID(bool) = %d, want 0", got)
+	}
+}
+
+// ============================================================================
+// parseNotify — per-field unmarshal error paths
+// ============================================================================
+
+func TestParseNotify_P0NonString_Errors(t *testing.T) {
+	raw := json.RawMessage(`[123,"hash","c1","c2",[],"00000002","1d00ffff","68d36c5e",true]`)
+	_, err := parseNotify(raw)
+	if err == nil {
+		t.Error("non-string job_id should produce error")
+	}
+}
+
+func TestParseNotify_P1NonString_Errors(t *testing.T) {
+	raw := json.RawMessage(`["jid",456,"c1","c2",[],"00000002","1d00ffff","68d36c5e",true]`)
+	_, err := parseNotify(raw)
+	if err == nil {
+		t.Error("non-string prevhash should produce error")
+	}
+}
+
+func TestParseNotify_P5NonString_Errors(t *testing.T) {
+	raw := json.RawMessage(`["jid","hash","c1","c2",[],789,"1d00ffff","68d36c5e",true]`)
+	_, err := parseNotify(raw)
+	if err == nil {
+		t.Error("non-string version should produce error")
+	}
+}
+
+func TestParseNotify_P6NonString_Errors(t *testing.T) {
+	raw := json.RawMessage(`["jid","hash","c1","c2",[],"00000002",789,"68d36c5e",true]`)
+	_, err := parseNotify(raw)
+	if err == nil {
+		t.Error("non-string nbits should produce error")
+	}
+}
+
+func TestParseNotify_P7NonString_Errors(t *testing.T) {
+	raw := json.RawMessage(`["jid","hash","c1","c2",[],"00000002","1d00ffff",789,true]`)
+	_, err := parseNotify(raw)
+	if err == nil {
+		t.Error("non-string ntime should produce error")
+	}
+}
+
+func TestParseNotify_CleanJobsBothFail_Errors(t *testing.T) {
+	// p[8] is neither bool nor int — both unmarshal attempts fail.
+	raw := json.RawMessage(`["jid","hash","c1","c2",[],"00000002","1d00ffff","68d36c5e","bad"]`)
+	_, err := parseNotify(raw)
+	if err == nil {
+		t.Error("non-bool, non-int cleanJobs should produce error")
+	}
+}
+
+// ============================================================================
+// parseSetExtranonce — per-field unmarshal error paths
+// ============================================================================
+
+func TestParseSetExtranonce_P0NonString_NotOK(t *testing.T) {
+	_, _, ok := parseSetExtranonce(json.RawMessage(`[123, 4]`))
+	if ok {
+		t.Error("non-string extranonce1 should return !ok")
+	}
+}
+
+func TestParseSetExtranonce_P1NonInt_NotOK(t *testing.T) {
+	_, _, ok := parseSetExtranonce(json.RawMessage(`["abc", "not-int"]`))
+	if ok {
+		t.Error("non-int extranonce2_size should return !ok")
+	}
+}
+
+// ============================================================================
+// Dialer — extra error paths
+// ============================================================================
+
+func TestDialer_Dial_DialFnError_ReturnsError(t *testing.T) {
+	d := &Dialer{
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return nil, fmt.Errorf("injected dial error")
+		},
+	}
+	_, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", poolproto.Credentials{})
+	if err == nil {
+		t.Error("Dial with failing dialFn should return error")
+	}
+}
+
+func TestDialer_Dial_DialFnSuccess_ReturnsConnection(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	d := &Dialer{
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return clientConn, nil
+		},
+	}
+	c, err := d.Dial(context.Background(), "stratum+tcp://any.example:3333", poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	if c == nil {
+		t.Fatal("Dial returned nil connection")
+	}
+	if c.RemoteAddr() == "" {
+		t.Error("RemoteAddr should be non-empty")
+	}
+	c.Close()
+}
+
+// fakePoolConn satisfies poolproto.Connection but is NOT *connection.
+type fakePoolConn struct{}
+
+func (f *fakePoolConn) RemoteAddr() string               { return "fake:0" }
+func (f *fakePoolConn) Protocol() poolproto.ProtocolID   { return poolproto.ProtocolStratumV1 }
+func (f *fakePoolConn) Close() error                     { return nil }
+
+func TestDialer_Negotiate_NonV1Connection_ReturnsError(t *testing.T) {
+	d := &Dialer{}
+	_, err := d.Negotiate(context.Background(), &fakePoolConn{})
+	if err == nil {
+		t.Error("Negotiate with non-*connection should return error")
+	}
+}
+
+// ============================================================================
+// session.dispatch — direct unit tests (no goroutine / no pool needed)
+// ============================================================================
+
+// makeBareSess builds a minimal session for direct dispatch testing.
+func makeBareSess() *session {
+	return &session{
+		jobsCh:  make(chan poolproto.Job, 8),
+		pending: map[uint64]chan rpcResponse{},
+	}
+}
+
+func TestSession_Dispatch_EmptyLine_IsIgnored(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte("\n"))
+	if len(sess.jobsCh) != 0 {
+		t.Error("empty line should not enqueue a job")
+	}
+}
+
+func TestSession_Dispatch_MalformedJSON_IsIgnored(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte("not valid json\n"))
+	if len(sess.jobsCh) != 0 {
+		t.Error("malformed JSON should not enqueue a job")
+	}
+}
+
+func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
+	sess := makeBareSess()
+	// mining.notify with one param instead of 9 → parseNotify error → silently ignored.
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["only-one"]}`))
+	if len(sess.jobsCh) != 0 {
+		t.Error("notify parse error should not enqueue a job")
+	}
+}
+
+func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
+	if sess.extranonce1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
+	}
+	if sess.extranonce2Size != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	}
+}
+
+func TestSession_Dispatch_FullChannel_DropsOldest(t *testing.T) {
+	sess := makeBareSess()
+	// Fill channel to capacity (8) before dispatch.
+	for i := 0; i < cap(sess.jobsCh); i++ {
+		sess.jobsCh <- poolproto.Job{JobID: fmt.Sprintf("fill%d", i)}
+	}
+	// One more job: triggers the drop-oldest / push-newest path.
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["NEW","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`))
+	if len(sess.jobsCh) == 0 {
+		t.Error("channel empty after drop-oldest dispatch")
+	}
+}
+
+// ============================================================================
+// session.call — error paths
+// ============================================================================
+
+func TestSession_Call_UnmarshalableParams_ReturnsError(t *testing.T) {
+	// json.Marshal fails before any I/O: no conn needed.
+	sess := &session{pending: map[uint64]chan rpcResponse{}}
+	_, err := sess.call(context.Background(), 1, "test", []any{make(chan int)})
+	if err == nil {
+		t.Error("non-marshalable params should return error")
+	}
+}
+
+func TestSession_Call_WriteError_ReturnsError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	serverConn.Close() // close server end so Write on client fails
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	_, err := sess.call(context.Background(), 1, "mining.submit", nil)
+	if err == nil {
+		t.Error("call with closed connection should return write error")
+	}
+}
+
+func TestSession_Call_ContextTimeout_ReturnsCtxError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Server reads the request but never responds; test ctx times out first.
+	go func() {
+		buf := make([]byte, 4096)
+		_, _ = serverConn.Read(buf)
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	_, err := sess.call(ctx, 1, "mining.subscribe", []any{"agent"})
+	if err == nil {
+		t.Error("call should fail when context times out with no response")
+	}
+}
+
+func TestSession_Call_SessionClosedWhileWaiting_ReturnsError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+
+	// Server reads the request, then close the session — this cancels the pending
+	// channel so call returns "session closed before response".
+	go func() {
+		buf := make([]byte, 4096)
+		_, _ = serverConn.Read(buf)
+		time.Sleep(30 * time.Millisecond)
+		sess.Close()
+		serverConn.Close()
+	}()
+
+	_, err := sess.call(context.Background(), 2, "mining.subscribe", []any{"agent"})
+	if err == nil {
+		t.Error("call should fail when session is closed while waiting for response")
+	}
+}
+
+// ============================================================================
+// session.Close — cancels in-flight pending calls
+// ============================================================================
+
+func TestSession_Close_CancelsPendingCalls(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+
+	// Register a pending channel directly (simulates an in-flight call).
+	respCh := make(chan rpcResponse, 1)
+	sess.pendingMu.Lock()
+	sess.pending[777] = respCh
+	sess.pendingMu.Unlock()
+
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	select {
+	case _, ok := <-respCh:
+		if ok {
+			t.Error("pending channel should be closed (not deliver a value) after Close")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Error("pending call not cancelled within 500ms")
+	}
+}
+
+// ============================================================================
+// session.Submit — pool returns error / call itself errors
+// ============================================================================
+
+func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal(line, &req) != nil {
+				continue
+			}
+			if req.Method == "mining.submit" {
+				id, _ := json.Marshal(req.ID)
+				resp := `{"id":` + string(id) + `,"result":null,"error":["21","Job not found",null]}` + "\n"
+				_, _ = serverConn.Write([]byte(resp))
+			}
+		}
+	}()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "X", Nonce: 1, NTime: 1})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if res.Accepted {
+		t.Error("share should not be accepted when pool returns error result")
+	}
+	if res.Reason == "" {
+		t.Error("Reason should be non-empty when pool returns error")
+	}
+}
+
+func TestSession_Submit_CallError_ReturnsError(t *testing.T) {
+	// Closing the server before any submission causes Write in call to fail;
+	// Submit must propagate that error rather than silently swallowing it.
+	clientConn, serverConn := net.Pipe()
+	serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	_, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "X", Nonce: 1, NTime: 1})
+	if err == nil {
+		t.Error("Submit should propagate the underlying call write error")
+	}
+}
+
+// ============================================================================
 // Dialer.Dial — error paths
 // ============================================================================
 
