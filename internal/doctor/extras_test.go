@@ -677,3 +677,48 @@ func TestCheckFailoverAddresses(t *testing.T) {
 		t.Errorf("list with a bad entry: status = %v, want StatusFail", got.Status)
 	}
 }
+
+// checkPoolDiversity — no pools, single pool, multiple pools
+func TestCheckPoolDiversity(t *testing.T) {
+	ctx := context.Background()
+
+	run := func(cfg config.Config) Result {
+		return checkPoolDiversity(cfg).Run(ctx)
+	}
+
+	// No pools configured → warn (built-in default, no failover).
+	noPools := run(config.Config{})
+	if noPools.Status != StatusWarn {
+		t.Errorf("no pools: status = %v, want StatusWarn", noPools.Status)
+	}
+	if !strings.Contains(noPools.Detail, "default") {
+		t.Errorf("no pools: detail = %q, want 'default' substring", noPools.Detail)
+	}
+
+	// Single pool → warn (no failover).
+	onePool := run(config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://pool.example.com:3333"},
+		},
+	})
+	if onePool.Status != StatusWarn {
+		t.Errorf("one pool: status = %v, want StatusWarn", onePool.Status)
+	}
+	if !strings.Contains(onePool.Detail, "one pool") {
+		t.Errorf("one pool: detail = %q, want 'one pool' substring", onePool.Detail)
+	}
+
+	// Two pools → pass.
+	twoPools := run(config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://pool1.example.com:3333"},
+			{URL: "stratum+tcp://pool2.example.com:3333"},
+		},
+	})
+	if twoPools.Status != StatusPass {
+		t.Errorf("two pools: status = %v, want StatusPass", twoPools.Status)
+	}
+	if !strings.Contains(twoPools.Detail, "2 pools") {
+		t.Errorf("two pools: detail = %q, want '2 pools' substring", twoPools.Detail)
+	}
+}

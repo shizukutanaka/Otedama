@@ -30,6 +30,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkFailoverAddresses(cfg.BitcoinAddresses),
 		checkDataDir(cfg.DataDir),
 		checkPoolReachability(cfg),
+		checkPoolDiversity(cfg),
 		checkHardware(),
 		checkNetwork(),
 	}
@@ -208,6 +209,39 @@ func checkPoolReachability(cfg config.Config) Check {
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%s (%s)", host, latency),
+			}
+		},
+	}
+}
+
+// checkPoolDiversity warns when only one pool is configured so operators
+// are aware they have no automatic failover. A single pool is a single
+// point of failure: if it goes down, mining stops until the operator
+// manually updates the config. Two or more pools give the reconnect loop
+// a failover target without human intervention.
+func checkPoolDiversity(cfg config.Config) Check {
+	return Check{
+		Name: "Pool diversity",
+		Run: func(_ context.Context) Result {
+			n := len(cfg.Pools)
+			if n == 0 {
+				// No pools configured → using built-in default. Mention it.
+				return Result{
+					Status: StatusWarn,
+					Detail: "using built-in default pool (no failover configured)",
+					Fix:    "add at least two pools under 'pools:' in config.yaml for automatic failover",
+				}
+			}
+			if n == 1 {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("only one pool configured (%s) — no automatic failover", cfg.Pools[0].URL),
+					Fix:    "add a second pool under 'pools:' in config.yaml; mining stops if this pool goes down",
+				}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("%d pools configured; failover available", n),
 			}
 		},
 	}

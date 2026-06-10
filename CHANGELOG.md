@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat + Test (session 94 — doctor pool-diversity check + V1 latency-on-error)
+
+- **`checkPoolDiversity` (new doctor check):**
+  - Added to `DefaultChecks` alongside `checkPoolReachability`.
+  - WARN if no pools are configured (using built-in default, no failover).
+  - WARN if exactly 1 pool is configured ("no automatic failover" with the URL).
+  - PASS if 2+ pools are configured.
+  - Three tests cover all branches in `TestCheckPoolDiversity`.
+  - Coverage: `internal/doctor` remains at 98.7%.
+- **V1 submit-error latency recording:**
+  - `internal/engine/run.go` V1 goroutine: when `capturedSess.Submit()` returns
+    an error, the elapsed time is now recorded to `latency` (if > 0). Previously
+    discarded, which hid p99 spikes caused by pool disconnects. The fix makes the
+    stats ticker's `submit latency p50/p95/p99` log reflect real-world RTT under
+    reconnect pressure, not just ideal-path latency.
+- 24 packages green, 1059 tests, gofmt/vet clean.
+
 ### Feat (session 93 — observability: otedama_last_job_received_seconds + uptime fix)
 
 - **`otedama_last_job_received_seconds` gauge** (new):

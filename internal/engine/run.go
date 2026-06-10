@@ -733,6 +733,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				elapsed := float64(time.Since(sendTime).Milliseconds())
 				if err != nil {
 					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v", err))
+					// Still record the latency on error: a p99 spike caused by
+					// a pool disconnect is a signal worth surfacing, not hiding.
+					if elapsed > 0 {
+						latency.Record(elapsed)
+					}
 					return
 				}
 				if result.Accepted {
