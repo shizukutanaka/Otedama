@@ -35,6 +35,17 @@ type engineMetrics struct {
 
 	shareAcceptanceRate *metrics.Gauge
 
+	// rejectRate is the complement of shareAcceptanceRate: rejected /
+	// (accepted + rejected). Having it as an explicit gauge lets operators
+	// build simple threshold alerts without PromQL arithmetic. Maps to the
+	// <0.5% excellent … >3% act-now thresholds from D-Central's guide.
+	rejectRate *metrics.Gauge
+	// staleRate is the fraction of total judged shares that were rejected
+	// with a "stale" reason (network-latency driven). Separating it from
+	// the overall reject rate makes it easy to distinguish latency problems
+	// from hardware errors in Grafana without parsing label sets.
+	staleRate *metrics.Gauge
+
 	// up reflects whether the miner is currently producing hashrate
 	// (1) or has stalled (0); a scrape can alert on a wedged miner.
 	up *metrics.Gauge
@@ -124,6 +135,16 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_share_acceptance_rate",
 			"Accepted shares / total judged shares (1.0 = all accepted).",
 			nil),
+		rejectRate: reg.NewGauge(
+			"otedama_reject_rate",
+			"Rejected shares / total judged shares (complement of acceptance_rate). "+
+				"<0.005 excellent, >0.03 investigate immediately.",
+			nil),
+		staleRate: reg.NewGauge(
+			"otedama_stale_rate",
+			"Stale-rejected shares / total judged shares. "+
+				"High values indicate network latency or a pool that is too far away.",
+			nil),
 
 		up: reg.NewGauge(
 			"otedama_up",
@@ -182,4 +203,28 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// updateShareRates recomputes the acceptance/reject/stale rate gauges from
+// the current share counters. Returns the acceptance rate and the number of
+// judged shares so the caller can decide whether to log a warning. Safe to
+// call with no shares judged yet (returns rate=1.0, judged=0).
+func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
+	accepted := m.sharesAccepted.Value()
+	rejected := m.sharesRejected.Value()
+	judged = accepted + rejected
+	rate = acceptanceRate(accepted, rejected)
+	m.shareAcceptanceRate.Set(rate)
+	if judged == 0 {
+		m.rejectRate.Set(0)
+		m.staleRate.Set(0)
+		return rate, judged
+	}
+	m.rejectRate.Set(float64(rejected) / float64(judged))
+	var stale uint64
+	if c, ok := m.rejectByReason["stale"]; ok {
+		stale = c.Value()
+	}
+	m.staleRate.Set(float64(stale) / float64(judged))
+	return rate, judged
 }

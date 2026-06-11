@@ -625,9 +625,9 @@ func TestDialer_Dial_DialFnSuccess_ReturnsConnection(t *testing.T) {
 // fakePoolConn satisfies poolproto.Connection but is NOT *connection.
 type fakePoolConn struct{}
 
-func (f *fakePoolConn) RemoteAddr() string               { return "fake:0" }
-func (f *fakePoolConn) Protocol() poolproto.ProtocolID   { return poolproto.ProtocolStratumV1 }
-func (f *fakePoolConn) Close() error                     { return nil }
+func (f *fakePoolConn) RemoteAddr() string             { return "fake:0" }
+func (f *fakePoolConn) Protocol() poolproto.ProtocolID { return poolproto.ProtocolStratumV1 }
+func (f *fakePoolConn) Close() error                   { return nil }
 
 func TestDialer_Negotiate_NonV1Connection_ReturnsError(t *testing.T) {
 	d := &Dialer{}
@@ -1409,9 +1409,9 @@ func TestNegotiate_SubscribeRejected_ReturnsHandshakeFailed(t *testing.T) {
 	})
 
 	conn := &connection{
-		raw:      clientConn,
+		raw:        clientConn,
 		remoteAddr: "fake:0",
-		protocol: poolproto.ProtocolStratumV1,
+		protocol:   poolproto.ProtocolStratumV1,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

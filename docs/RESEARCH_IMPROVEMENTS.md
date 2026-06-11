@@ -22,9 +22,9 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 2. ✅ **Reject breakdown metric** (session 45):
    `otedama_shares_rejected_by_reason_total{reason=...}` lets operators
    see *why* shares fail. Reject *rate* against the industry thresholds
-   (<0.5% excellent … >3% act now) is derivable in Prometheus from this
-   plus `otedama_shares_total`; a built-in warning gauge is the remaining
-   sub-task.
+   (<0.5% excellent … >3% act now) is now also exposed directly as
+   `otedama_reject_rate` / `otedama_stale_rate` gauges (session 101), so
+   the warning thresholds need no PromQL arithmetic.
 3. ✅ **Do not count `Method not found` setup responses as rejected shares.**
    ESP-Miner #1383: pools like OCEAN reject `mining.suggest_difficulty` /
    `extranonce.subscribe` with "Method not found". — session 100: these are
@@ -245,7 +245,11 @@ arXiv grounding (session 41):
 2. ✅ **Health endpoint** + `ServeError()` accessor (session 31).
 3. 🟡 **OpenTelemetry traces** for the connect→handshake→mine span — ADR
    mentions OTel; confirm spans exist on pool dial and submit.
-4. 🟡 **Reject-rate & stale-rate gauges** (ties to Category 1).
+4. ✅ **Reject-rate & stale-rate gauges** (ties to Category 1). — session 101:
+   `otedama_reject_rate` (rejected/judged) and `otedama_stale_rate`
+   (stale-rejected/judged) gauges, recomputed each stats tick via
+   `updateShareRates()`. Lets operators alert on the D-Central thresholds
+   (<0.5% excellent … >3% act-now) without PromQL arithmetic.
 5. ✅ **Submit-latency quantiles** (session 46) — see Category 2 item 7.
 6. ✅ **`otedama_up` / readiness reflecting HashrateMonitor.Stalled()**
    (sessions 43/93). `otedama_up=0` when stalled; TUI also shows ⚠ stalled

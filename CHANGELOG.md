@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 101 — reject-rate & stale-rate gauges)
+
+Added two derived gauges so operators can alert on share-rejection health
+without writing PromQL arithmetic over the raw counters.
+
+**`internal/engine/metrics.go`**:
+- `otedama_reject_rate` — rejected / (accepted + rejected). The direct
+  complement of `otedama_share_acceptance_rate`. Maps to D-Central's field
+  thresholds: <0.005 excellent, >0.03 investigate immediately.
+- `otedama_stale_rate` — stale-rejected / total judged. Separating the
+  network-latency-driven stale rejects from hardware/difficulty rejects lets
+  Grafana distinguish "pool too far away" from "failing chip" at a glance.
+- `updateShareRates()` helper recomputes all three rate gauges from the
+  current counters in one place; returns (rate, judged) so the caller still
+  drives the once-per-tick acceptance warning. Guards against divide-by-zero
+  when no shares have been judged (rate=1.0, reject/stale=0).
+
+**`internal/engine/run.go`**: both the V1 and V2 stats-ticker loops now call
+`opts.m.updateShareRates()` instead of inlining the acceptance-rate math,
+removing the duplication between the two loops.
+
+Tests: `TestEngineMetrics_UpdateShareRates_NoSharesJudged`,
+`TestEngineMetrics_UpdateShareRates_ComputesRejectAndStale` (90/10 with 6
+stale → 0.10 reject, 0.06 stale), `TestEngineMetrics_RejectAndStaleRateAppearInOutput`.
+`RESEARCH_IMPROVEMENTS.md` Cat 9 item 4 marked ✅ (and Cat 1 item 2 updated).
+
+Also: ran `gofmt -w` on `internal/engine/coverage_test.go` to fix pre-existing
+comment-alignment drift in the V2 test sections.
+
+24 packages green, 1079 tests.
+
 ### Feat (session 100 — V1 extranonce.subscribe + cancelPending fix)
 
 Two improvements to the Stratum V1 connection lifecycle, fixing Categories

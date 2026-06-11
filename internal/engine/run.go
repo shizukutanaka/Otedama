@@ -529,12 +529,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				} else {
 					opts.m.up.Set(1)
 				}
-				rate := acceptanceRate(opts.m.sharesAccepted.Value(), opts.m.sharesRejected.Value())
-				opts.m.shareAcceptanceRate.Set(rate)
+				// Recompute acceptance / reject / stale rate gauges.
 				// Warn once-per-tick if acceptance has dropped below the
 				// "acceptable" band (industry guidance: >1% reject ≈
 				// <99% acceptance warrants attention).
-				judged := opts.m.sharesAccepted.Value() + opts.m.sharesRejected.Value()
+				rate, judged := opts.m.updateShareRates()
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
@@ -679,9 +678,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				} else {
 					opts.m.up.Set(1)
 				}
-				rate := acceptanceRate(opts.m.sharesAccepted.Value(), opts.m.sharesRejected.Value())
-				opts.m.shareAcceptanceRate.Set(rate)
-				judged := opts.m.sharesAccepted.Value() + opts.m.sharesRejected.Value()
+				rate, judged := opts.m.updateShareRates()
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",

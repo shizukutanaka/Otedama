@@ -461,7 +461,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
 		data, _ := stratum.EncodeFrame(f)
 		serverConn.Write(data) //nolint:errcheck
-		serverConn.Close() // close AFTER sending success so the client can read it
+		serverConn.Close()     // close AFTER sending success so the client can read it
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
@@ -485,7 +485,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
 		data, _ := stratum.EncodeFrame(f)
 		serverConn.Write(data) //nolint:errcheck
-		sDec.ReadFrame() //nolint:errcheck // OpenMiningChannel
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
 		serverConn.Close()
 	}()
 
@@ -511,7 +511,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
 		data, _ := stratum.EncodeFrame(f)
 		serverConn.Write(data) //nolint:errcheck
-		sDec.ReadFrame() //nolint:errcheck // OpenMiningChannel
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
 		// Send MsgOpenMiningChannelSuccess with only 2 bytes (truncated payload).
 		f2, _ := stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, []byte{0x01, 0x00})
 		data2, _ := stratum.EncodeFrame(f2)
@@ -540,7 +540,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
 		data, _ := stratum.EncodeFrame(f)
 		serverConn.Write(data) //nolint:errcheck
-		sDec.ReadFrame() //nolint:errcheck // OpenMiningChannel
+		sDec.ReadFrame()       //nolint:errcheck // OpenMiningChannel
 		// Send the same SetupConnectionSuccess again instead of OMC success.
 		// DispatchFrame sets SetupConnectionSuccess, not OpenMiningChannelSuccess.
 		serverConn.Write(data) //nolint:errcheck
@@ -722,12 +722,12 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 
 	connected := false
 	err := runSessionV1(ctx, sessionOpts{
-		poolURL:  "stratum+tcp://" + addr,
-		user:     "worker.1",
-		workers:  nil,
-		merged:   merged,
-		interval: 200 * time.Millisecond,
-		log:      func(_, _ string) {},
+		poolURL:     "stratum+tcp://" + addr,
+		user:        "worker.1",
+		workers:     nil,
+		merged:      merged,
+		interval:    200 * time.Millisecond,
+		log:         func(_, _ string) {},
 		onConnected: func() { connected = true },
 	})
 	if !connected {
