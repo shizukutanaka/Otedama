@@ -98,9 +98,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to re-enter N words) — reduces fund-loss from un-backed-up seeds.
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
-10. 🟡 **Address-type validation breadth** — confirm bech32m (P2TR) is
-    accepted, not just bech32 (P2WPKH), since taproot payout addresses are
-    now common.
+10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not
+    just bech32 (P2WPKH). — session 102: `btccrypto.ClassifyAddress()` maps an
+    address string to its AddressType (bc1p→P2TR, bc1q→P2WPKH/P2WSH by length,
+    1→P2PKH, 3→P2SH), and `doctor` surfaces the detected type in its
+    Bitcoin-address check so operators can confirm a Taproot payout address
+    is understood. The existing `SchemeForAddressType` dispatch is now
+    reachable from a raw address.
 11. 🟡 **Payout-scheme awareness (FPPS / PPLNS / TIDES).** 2026 pool
     comparisons converge on one message: *compare net BTC retained, not the
     headline fee* — FPPS smooths variance (pool absorbs it), PPLNS is cheaper

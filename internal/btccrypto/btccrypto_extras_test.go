@@ -258,3 +258,73 @@ func TestSchemes_ContainsBuiltins(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// ClassifyAddress — prefix/length-based address-type recognition
+// ============================================================================
+
+func TestClassifyAddress_KnownPrefixes(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want AddressType
+	}{
+		// Real-world mainnet example addresses (well-known, e.g. genesis /
+		// docs samples) chosen only for their prefix+length shape.
+		{"P2PKH legacy", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", AddressP2PKH},
+		{"P2SH", "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", AddressP2SH},
+		{"P2WPKH v0", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", AddressP2WPKH},
+		{"P2WSH v0", "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3", AddressP2WSH},
+		{"P2TR taproot", "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr", AddressP2TR},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyAddress(tt.addr); got != tt.want {
+				t.Errorf("ClassifyAddress(%q) = %v, want %v", tt.addr, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyAddress_TaprootDistinctFromV0(t *testing.T) {
+	// bc1p must classify as Taproot (Schnorr), bc1q as v0 (ECDSA). This is
+	// the bech32m-vs-bech32 breadth check (RESEARCH_IMPROVEMENTS Cat 3 #10).
+	v1 := ClassifyAddress("bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr")
+	v0 := ClassifyAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+	if v1 != AddressP2TR {
+		t.Errorf("bc1p classified as %v, want P2TR", v1)
+	}
+	if v0 == AddressP2TR {
+		t.Error("bc1q must NOT classify as P2TR")
+	}
+
+	// The classified types must dispatch to the right signature schemes.
+	trScheme, err := SchemeForAddressType(v1)
+	if err != nil {
+		t.Fatalf("SchemeForAddressType(P2TR): %v", err)
+	}
+	if !strings.Contains(trScheme.Name(), "schnorr") {
+		t.Errorf("P2TR scheme = %q, want schnorr", trScheme.Name())
+	}
+	v0Scheme, err := SchemeForAddressType(v0)
+	if err != nil {
+		t.Fatalf("SchemeForAddressType(v0): %v", err)
+	}
+	if !strings.Contains(v0Scheme.Name(), "ecdsa") {
+		t.Errorf("v0 scheme = %q, want ecdsa", v0Scheme.Name())
+	}
+}
+
+func TestClassifyAddress_UnknownReturnsUnknown(t *testing.T) {
+	for _, addr := range []string{
+		"",
+		"tb1qxyz",    // testnet bech32
+		"2N1234",     // testnet P2SH
+		"xpub6abc",   // not an address
+		"0xdeadbeef", // ethereum-style
+	} {
+		if got := ClassifyAddress(addr); got != AddressUnknown {
+			t.Errorf("ClassifyAddress(%q) = %v, want AddressUnknown", addr, got)
+		}
+	}
+}

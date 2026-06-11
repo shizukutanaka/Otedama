@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 102 — address-type classification + doctor surfacing)
+
+Confirm and surface bech32m / Taproot (P2TR) payout-address support, closing
+RESEARCH_IMPROVEMENTS.md Cat 3 item 10.
+
+**`internal/btccrypto/btccrypto.go`**:
+- `ClassifyAddress(addr string) AddressType` — maps a mainnet address string
+  to its type by prefix and (for SegWit) length:
+  - `bc1p…` → `AddressP2TR` (witness v1, Schnorr, bech32m)
+  - `bc1q…` → `AddressP2WPKH` (42 chars) or `AddressP2WSH` (≥60 chars), witness v0
+  - `1…` → `AddressP2PKH`; `3…` → `AddressP2SH`; else `AddressUnknown`.
+- Lightweight (no checksum decode) — its purpose is to make the existing
+  `SchemeForAddressType` dispatch reachable from a raw address, so a Taproot
+  address is recognised distinctly from a v0 SegWit address.
+
+**`internal/doctor/checks.go`**: the Bitcoin-address check PASS detail now
+names the detected type (e.g. "P2TR Taproot", "P2WPKH SegWit v0", "P2PKH
+legacy") via a new `addressKind` helper, so operators get explicit
+confirmation that doctor understood their (possibly Taproot) payout address.
+
+Tests: `TestClassifyAddress_KnownPrefixes`,
+`TestClassifyAddress_TaprootDistinctFromV0` (verifies bc1p→Schnorr,
+bc1q→ECDSA dispatch), `TestClassifyAddress_UnknownReturnsUnknown`,
+`TestCheckBitcoinAddress_SurfacesType`.
+
+24 packages green, 1083 tests.
+
 ### Feat (session 101 — reject-rate & stale-rate gauges)
 
 Added two derived gauges so operators can alert on share-rejection health

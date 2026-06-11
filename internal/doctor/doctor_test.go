@@ -109,6 +109,26 @@ func TestCheckBitcoinAddress_Invalid(t *testing.T) {
 	}
 }
 
+func TestCheckBitcoinAddress_SurfacesType(t *testing.T) {
+	// The PASS detail must name the detected address type so the operator
+	// can confirm doctor understood it — including bech32m Taproot (bc1p).
+	cases := map[string]string{
+		"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq":                     "P2WPKH",
+		"bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr": "P2TR",
+		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa":                             "P2PKH",
+	}
+	for addr, wantType := range cases {
+		r := checkBitcoinAddress(addr).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Errorf("%s: status = %v, want Pass", addr, r.Status)
+			continue
+		}
+		if !strings.Contains(r.Detail, wantType) {
+			t.Errorf("%s: detail = %q, want to contain %q", addr, r.Detail, wantType)
+		}
+	}
+}
+
 func TestCheckDataDir_CreatesOnFirstRun(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "will-be-created")
 	c := checkDataDir(dir)

@@ -47,6 +47,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -277,6 +278,48 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 		return nil, fmt.Errorf("%w: P2MR (BIP-360) not yet implemented", ErrSchemeNotImplemented)
 	default:
 		return nil, fmt.Errorf("%w: unknown address type %v", ErrUnknownScheme, t)
+	}
+}
+
+// ClassifyAddress maps a mainnet Bitcoin address string to its AddressType
+// using the address prefix and (for SegWit) length. This is a lightweight
+// classifier — it does NOT verify the bech32/base58 checksum (that is done
+// when the address is first used for a payout). Its purpose is to recognise
+// which signature scheme an address will need, so callers can branch via
+// SchemeForAddressType without a full decode.
+//
+// Prefix mapping (BIP-173 / BIP-350):
+//
+//	"1..."   → P2PKH        (base58, ECDSA)
+//	"3..."   → P2SH         (base58, ECDSA)
+//	"bc1q..." → P2WPKH (42 chars) or P2WSH (62 chars) — witness v0, ECDSA
+//	"bc1p..." → P2TR        — witness v1, Schnorr (bech32m)
+//
+// The witness version lives in the first character after "bc1": 'q' encodes
+// version 0 (SegWit v0), 'p' encodes version 1 (Taproot). bech32m P2TR
+// addresses are therefore recognised distinctly from bech32 v0 addresses —
+// which is exactly the breadth a 2026 payout configuration needs. Returns
+// AddressUnknown for anything that does not match (including testnet/signet
+// prefixes, which Otedama does not configure).
+func ClassifyAddress(addr string) AddressType {
+	switch {
+	case strings.HasPrefix(addr, "bc1p"):
+		// Witness v1: Taproot. (bech32m-encoded.)
+		return AddressP2TR
+	case strings.HasPrefix(addr, "bc1q"):
+		// Witness v0: distinguish key-hash (P2WPKH) from script-hash (P2WSH)
+		// by encoded length. A 20-byte program yields a 42-char address; a
+		// 32-byte program yields a 62-char address.
+		if len(addr) >= 60 {
+			return AddressP2WSH
+		}
+		return AddressP2WPKH
+	case strings.HasPrefix(addr, "1"):
+		return AddressP2PKH
+	case strings.HasPrefix(addr, "3"):
+		return AddressP2SH
+	default:
+		return AddressUnknown
 	}
 }
 

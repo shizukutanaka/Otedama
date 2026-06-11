@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
 
@@ -89,9 +90,29 @@ func checkBitcoinAddress(addr string) Check {
 			}
 			return Result{
 				Status: StatusPass,
-				Detail: fmt.Sprintf("%s (likely valid)", maskAddress(addr)),
+				Detail: fmt.Sprintf("%s (%s, likely valid)", maskAddress(addr), addressKind(addr)),
 			}
 		},
+	}
+}
+
+// addressKind returns a short human-readable label for the payout address
+// type so `doctor` confirms it understood the address — in particular that a
+// bech32m Taproot (bc1p…) address is recognised, not just bech32 v0 (bc1q…).
+func addressKind(addr string) string {
+	switch btccrypto.ClassifyAddress(strings.TrimSpace(addr)) {
+	case btccrypto.AddressP2PKH:
+		return "P2PKH legacy"
+	case btccrypto.AddressP2SH:
+		return "P2SH"
+	case btccrypto.AddressP2WPKH:
+		return "P2WPKH SegWit v0"
+	case btccrypto.AddressP2WSH:
+		return "P2WSH SegWit v0"
+	case btccrypto.AddressP2TR:
+		return "P2TR Taproot"
+	default:
+		return "unrecognised type"
 	}
 }
 
