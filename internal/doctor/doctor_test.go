@@ -289,6 +289,7 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 		"Bitcoin address",
 		"Data directory",
 		"Pool reachability",
+		"Pool endpoint diversity",
 		"Hardware",
 		"Network",
 	}

@@ -6,6 +6,7 @@ package doctor
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -720,5 +721,76 @@ func TestCheckPoolDiversity(t *testing.T) {
 	}
 	if !strings.Contains(twoPools.Detail, "2 pools") {
 		t.Errorf("two pools: detail = %q, want '2 pools' substring", twoPools.Detail)
+	}
+}
+
+func TestCheckPoolEndpointDiversity(t *testing.T) {
+	ctx := context.Background()
+
+	// Swap in a deterministic resolver for the duration of the test.
+	orig := poolIPResolver
+	t.Cleanup(func() { poolIPResolver = orig })
+
+	twoPools := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://pool1.example.com:3333"},
+			{URL: "stratum+tcp://pool2.example.com:3333"},
+		},
+	}
+
+	// Fewer than two pools → Skip (nothing to compare).
+	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
+		return []string{"203.0.113.1"}, nil
+	}
+	one := checkPoolEndpointDiversity(config.Config{
+		Pools: []config.PoolConfig{{URL: "stratum+tcp://only.example.com:3333"}},
+	}).Run(ctx)
+	if one.Status != StatusSkip {
+		t.Errorf("one pool: status = %v, want StatusSkip", one.Status)
+	}
+
+	// Two pools, distinct endpoints → Pass.
+	poolIPResolver = func(_ context.Context, host string) ([]string, error) {
+		if strings.HasPrefix(host, "pool1") {
+			return []string{"203.0.113.1"}, nil
+		}
+		return []string{"203.0.113.2"}, nil
+	}
+	distinct := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	if distinct.Status != StatusPass {
+		t.Errorf("distinct endpoints: status = %v, want StatusPass (detail: %s)", distinct.Status, distinct.Detail)
+	}
+
+	// Two pools sharing an endpoint → Warn (illusory failover).
+	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
+		return []string{"203.0.113.7"}, nil
+	}
+	shared := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	if shared.Status != StatusWarn {
+		t.Errorf("shared endpoint: status = %v, want StatusWarn", shared.Status)
+	}
+	if !strings.Contains(shared.Detail, "203.0.113.7") || !strings.Contains(shared.Detail, "illusory") {
+		t.Errorf("shared endpoint: detail = %q, want shared IP + 'illusory'", shared.Detail)
+	}
+
+	// All pools unresolvable → Skip (not enough data to judge).
+	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
+		return nil, fmt.Errorf("no such host")
+	}
+	unresolved := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	if unresolved.Status != StatusSkip {
+		t.Errorf("unresolvable: status = %v, want StatusSkip", unresolved.Status)
+	}
+
+	// Only one of two resolves → Skip (resolved < 2).
+	poolIPResolver = func(_ context.Context, host string) ([]string, error) {
+		if strings.HasPrefix(host, "pool1") {
+			return []string{"203.0.113.1"}, nil
+		}
+		return nil, fmt.Errorf("no such host")
+	}
+	partial := checkPoolEndpointDiversity(twoPools).Run(ctx)
+	if partial.Status != StatusSkip {
+		t.Errorf("partial resolve: status = %v, want StatusSkip", partial.Status)
 	}
 }

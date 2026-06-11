@@ -32,6 +32,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkDataDir(cfg.DataDir),
 		checkPoolReachability(cfg),
 		checkPoolDiversity(cfg),
+		checkPoolEndpointDiversity(cfg),
 		checkHardware(),
 		checkNetwork(),
 	}
@@ -266,6 +267,88 @@ func checkPoolDiversity(cfg config.Config) Check {
 			}
 		},
 	}
+}
+
+// poolIPResolver resolves a host (or host:port) to its IP addresses.
+// Overridable in tests so checkPoolEndpointDiversity does not hit real DNS.
+// Defaults to the system resolver, honouring the check's context deadline.
+var poolIPResolver = func(ctx context.Context, host string) ([]string, error) {
+	h := host
+	if hh, _, err := net.SplitHostPort(host); err == nil {
+		h = hh
+	}
+	return net.DefaultResolver.LookupHost(ctx, h)
+}
+
+// checkPoolEndpointDiversity resolves each configured pool to its IP
+// addresses and warns when two or more pools share an address. Two pool
+// URLs that resolve to the same endpoint provide no real failover: a single
+// machine (or operator) outage takes both down at once. This complements
+// checkPoolDiversity, which only counts URLs — this catches the case where
+// the URLs differ but the endpoints behind them do not.
+//
+// A proper "same ASN / same operator" check needs an external IP-to-ASN
+// dataset, which Otedama does not bundle; sharing a resolved IP is a strong,
+// dependency-free centralisation signal that covers the common misconfig
+// (two hostnames that are CNAMEs/round-robin for the same pool node).
+func checkPoolEndpointDiversity(cfg config.Config) Check {
+	return Check{
+		Name: "Pool endpoint diversity",
+		Run: func(ctx context.Context) Result {
+			if len(cfg.Pools) < 2 {
+				// Counting diversity is handled by checkPoolDiversity; with
+				// fewer than two pools there is nothing to compare.
+				return Result{Status: StatusSkip, Detail: "fewer than two pools configured"}
+			}
+			ipToPools := map[string][]string{}
+			resolved := 0
+			for _, p := range cfg.Pools {
+				host := stripScheme(p.URL)
+				if host == "" {
+					continue
+				}
+				ips, err := poolIPResolver(ctx, host)
+				if err != nil {
+					continue // unresolvable host: reachability check reports it
+				}
+				resolved++
+				for _, ip := range ips {
+					ipToPools[ip] = appendUnique(ipToPools[ip], p.URL)
+				}
+			}
+			if resolved < 2 {
+				// Offline / sandbox / DNS failure: not enough data to judge.
+				return Result{
+					Status: StatusSkip,
+					Detail: "could not resolve enough pool endpoints to compare",
+				}
+			}
+			for ip, urls := range ipToPools {
+				if len(urls) >= 2 {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("pools %s resolve to the same endpoint %s — failover is illusory",
+							strings.Join(urls, ", "), ip),
+						Fix: "configure pools run by different operators so one outage cannot take down both",
+					}
+				}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("%d pools resolve to distinct endpoints", resolved),
+			}
+		},
+	}
+}
+
+// appendUnique appends s to xs only if it is not already present.
+func appendUnique(xs []string, s string) []string {
+	for _, x := range xs {
+		if x == s {
+			return xs
+		}
+	}
+	return append(xs, s)
 }
 
 // gpuDRMPath is the sysfs path scanned for render devices; overridable in tests.

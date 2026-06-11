@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 103 — doctor pool-endpoint diversity check)
+
+Added a `doctor` check that catches *illusory* pool failover, closing
+RESEARCH_IMPROVEMENTS.md Cat 4 item 5.
+
+**`internal/doctor/checks.go`**:
+- `checkPoolEndpointDiversity` resolves each configured pool's host (via an
+  injectable `poolIPResolver`, default `net.DefaultResolver`, context-aware)
+  and WARNs when two or more pools resolve to the same IP. Two URLs that
+  point at the same endpoint provide no real failover — a single machine or
+  operator outage takes both down at once. This complements `checkPoolDiversity`
+  (which only counts URLs).
+- Degrades safely: <2 pools → Skip; <2 resolvable → Skip (offline/sandbox);
+  a proper IP→ASN check is intentionally out of scope (needs a bundled
+  dataset), and shared-IP detection is the dependency-free signal.
+- `appendUnique` helper keeps the per-IP pool list de-duplicated.
+- Registered in `DefaultChecks` between Pool diversity and Hardware.
+
+Tests: `TestCheckPoolEndpointDiversity` covers distinct→Pass, shared→Warn,
+all-unresolvable→Skip, partial-resolve→Skip, and <2 pools→Skip via an
+injected deterministic resolver (no real DNS). `TestDefaultChecks_ReturnsAllExpectedChecks`
+updated to expect the new check.
+
+24 packages green, 1084 tests.
+
 ### Feat (session 102 — address-type classification + doctor surfacing)
 
 Confirm and surface bech32m / Taproot (P2TR) payout-address support, closing

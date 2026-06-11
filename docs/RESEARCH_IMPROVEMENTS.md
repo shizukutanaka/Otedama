@@ -130,8 +130,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 3. 🔵 **OCEAN DATUM integration** (C→Go port) — ADR-009.
 4. ✅ **Non-aggregating stance** — Otedama never pools others' hashrate
    (ADR-001), a deliberate decentralisation choice.
-5. 🟡 **Stratum endpoint diversity check** in `doctor` — warn if all
+5. ✅ **Stratum endpoint diversity check** in `doctor` — warn if all
    configured pools resolve to the same operator/ASN (centralisation risk).
+   — session 103: `checkPoolEndpointDiversity` resolves each configured pool
+   and WARNs when two or more share a resolved IP (failover is illusory). A
+   full IP→ASN check needs an external dataset Otedama does not bundle;
+   shared-IP detection is the dependency-free signal that catches the common
+   misconfig (two hostnames that are CNAMEs/round-robin for the same node).
 6. 🔵 **TemplateSource abstraction** — ADR-009 lets a URL scheme select
    pool/JDC/solo template provenance.
 7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
