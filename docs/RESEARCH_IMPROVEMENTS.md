@@ -224,8 +224,12 @@ arXiv grounding (collected sessions 40–41 and here):
    see which precedence layer set each value — critical for debugging "why is
    this config wrong?"
 9. ✅ **Graceful shutdown on SIGINT/SIGTERM**.
-10. 🟡 **Exit-code contract documented** (0 ok, 1 runtime, 2 usage) in the man
-    page / README for scripting.
+10. ✅ **Exit-code contract documented** in the package godoc and `--help`
+    output for scripting. — session 105: sysexits.h codes (0=ok, 1=runtime,
+    64=EX_USAGE, 78=EX_CONFIG) plus the doctor exception (0/1/2) are
+    documented in the package godoc `# Exit codes` section and printed by
+    `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
+    to prevent silent breakage.
 
 ---
 

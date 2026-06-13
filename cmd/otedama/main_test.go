@@ -23,6 +23,44 @@ func TestRun_NoArgsPrintsUsage(t *testing.T) {
 	}
 }
 
+func TestPrintUsage_ContainsExitCodes(t *testing.T) {
+	var buf bytes.Buffer
+	printUsage(&buf)
+	out := buf.String()
+
+	// The usage text must document the exit-code contract so operators can
+	// rely on it for shell scripting without reading the source.
+	for _, want := range []string{
+		"Exit codes",
+		"0",  // success
+		"1",  // runtime
+		"64", // usage (EX_USAGE)
+		"78", // config (EX_CONFIG)
+		"doctor",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("printUsage missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestExitCodeConstants_Values(t *testing.T) {
+	// Verify exit code constants match documented sysexits.h values so
+	// accidental renaming never silently breaks the contract.
+	if exitOK != 0 {
+		t.Errorf("exitOK = %d, want 0", exitOK)
+	}
+	if exitRuntime != 1 {
+		t.Errorf("exitRuntime = %d, want 1", exitRuntime)
+	}
+	if exitUsage != 64 {
+		t.Errorf("exitUsage = %d, want 64 (EX_USAGE)", exitUsage)
+	}
+	if exitConfig != 78 {
+		t.Errorf("exitConfig = %d, want 78 (EX_CONFIG)", exitConfig)
+	}
+}
+
 func TestRun_Help(t *testing.T) {
 	for _, arg := range []string{"help", "--help", "-h"} {
 		var out, err bytes.Buffer

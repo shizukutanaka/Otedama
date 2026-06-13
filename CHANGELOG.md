@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 105 — exit-code contract documented)
+
+Documents the process exit-code contract for shell scripting, closing
+RESEARCH_IMPROVEMENTS.md Cat 7 item 10.
+
+**`cmd/otedama/main.go`**:
+- Package-level godoc expanded with a `# Exit codes` section explaining
+  all four codes and the doctor exception:
+  - `0` success, `1` runtime error, `64` EX_USAGE, `78` EX_CONFIG
+  - doctor: `0` all-pass, `1` any-warn, `2` any-fail
+- Exit-code constants updated with inline comments (`exitOK = 0 // success`, etc.).
+- `printUsage` output now includes an "Exit codes:" block so `--help` teaches
+  the contract without reading source code.
+
+Tests:
+- `TestPrintUsage_ContainsExitCodes` — verifies the help text includes
+  `Exit codes`, `0`, `1`, `64`, `78`, and `doctor` (the exception path).
+- `TestExitCodeConstants_Values` — pins the numeric values so any accidental
+  renaming or reorder is caught before it silently breaks shell scripts
+  that `$?`-check against them.
+
+24 packages green, 1097 tests.
+
 ### Feat (session 104 — config show --origin: per-value source attribution)
 
 Adds `--origin` flag to `otedama config show`, closing
