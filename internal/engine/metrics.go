@@ -41,6 +41,12 @@ type engineMetrics struct {
 
 	shareAcceptanceRate *metrics.Gauge
 
+	// sharesUnaccounted is shares found locally but not yet judged by the pool
+	// (found − accepted − rejected, clamped at 0). Small values are normal
+	// in-flight latency; a sustained/growing value means found shares are not
+	// reaching the pool — the local-vs-pool reconciliation signal.
+	sharesUnaccounted *metrics.Gauge
+
 	// rejectRate is the complement of shareAcceptanceRate: rejected /
 	// (accepted + rejected). Having it as an explicit gauge lets operators
 	// build simple threshold alerts without PromQL arithmetic. Maps to the
@@ -163,6 +169,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_share_acceptance_rate",
 			"Accepted shares / total judged shares (1.0 = all accepted).",
 			nil),
+		sharesUnaccounted: reg.NewGauge(
+			"otedama_shares_unaccounted",
+			"Shares found locally but not yet judged by the pool (found − accepted − "+
+				"rejected, clamped at 0). A sustained or growing value means found shares "+
+				"are not reaching the pool (submission failures or drops).",
+			nil),
 		rejectRate: reg.NewGauge(
 			"otedama_reject_rate",
 			"Rejected shares / total judged shares (complement of acceptance_rate). "+
@@ -275,12 +287,30 @@ func (m *engineMetrics) incSharesFoundForDevice(deviceID string) {
 // the current share counters. Returns the acceptance rate and the number of
 // judged shares so the caller can decide whether to log a warning. Safe to
 // call with no shares judged yet (returns rate=1.0, judged=0).
+//
+// It also reconciles local discovery against the pool's numbers: shares found
+// locally but not yet judged by the pool are exposed as otedama_shares_unaccounted.
+// A few in-flight shares are normal (submit→accept latency); a sustained or
+// growing value means found shares are not reaching the pool — submission
+// failures or drops that would otherwise be invisible (the "trust the pool's
+// numbers" reconciliation, RESEARCH_IMPROVEMENTS Category 1 item 10).
 func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	accepted := m.sharesAccepted.Value()
 	rejected := m.sharesRejected.Value()
 	judged = accepted + rejected
 	rate = acceptanceRate(accepted, rejected)
 	m.shareAcceptanceRate.Set(rate)
+
+	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
+	// can briefly report more judged than we have locally counted if a stats
+	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
+	found := m.sharesFound.Value()
+	var unaccounted uint64
+	if found > judged {
+		unaccounted = found - judged
+	}
+	m.sharesUnaccounted.Set(float64(unaccounted))
+
 	if judged == 0 {
 		m.rejectRate.Set(0)
 		m.staleRate.Set(0)

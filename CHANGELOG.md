@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 123 — local-vs-pool share reconciliation metric)
+
+Implements the "trust the pool's numbers" reconciliation (RESEARCH_IMPROVEMENTS
+Category 1 item 10): local share counters can silently drift from pool-side
+truth — shares found locally but never accepted/rejected by the pool indicate
+submission failures or drops that were otherwise invisible.
+
+**`internal/engine/metrics.go`**:
+- `otedama_shares_unaccounted` gauge = `sharesFound − sharesAccepted −
+  sharesRejected`, clamped at 0 (a stats tick can race a burst of accepts and
+  briefly see more judged than locally counted). Recomputed in the existing
+  `updateShareRates`, so it updates every stats tick on both the V1 and V2
+  paths with no new call sites. Small values are normal in-flight latency; a
+  sustained or growing value means found shares are not reaching the pool.
+
+Tests (1 new): `TestEngineMetrics_UpdateShareRates_Reconciliation` — 5
+unaccounted with 100 found / 95 judged, then clamps to 0 when judged exceeds
+found.
+
+24 packages green.
+
 ### Fix (session 122 — expire stale provider quotes so dead providers stop being routed to)
 
 Arbitration-correctness gap (RESEARCH_IMPROVEMENTS Category 5 item 3): the

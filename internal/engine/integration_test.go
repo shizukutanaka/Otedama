@@ -545,6 +545,37 @@ func TestEngineMetrics_UpdateShareRates_ComputesRejectAndStale(t *testing.T) {
 	}
 }
 
+func TestEngineMetrics_UpdateShareRates_Reconciliation(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// Found 100 locally; pool has judged 95 (90 accepted + 5 rejected).
+	// 5 are unaccounted (in-flight or lost).
+	for range 100 {
+		m.sharesFound.Inc()
+	}
+	for range 90 {
+		m.sharesAccepted.Inc()
+	}
+	for range 5 {
+		m.sharesRejected.Inc()
+	}
+	m.updateShareRates()
+	if got := m.sharesUnaccounted.Value(); got != 5 {
+		t.Errorf("sharesUnaccounted = %v, want 5", got)
+	}
+
+	// Once the pool judges the rest (and more, simulating a tick race),
+	// unaccounted clamps at 0 rather than going negative.
+	for range 10 {
+		m.sharesAccepted.Inc() // 105 judged > 100 found
+	}
+	m.updateShareRates()
+	if got := m.sharesUnaccounted.Value(); got != 0 {
+		t.Errorf("sharesUnaccounted = %v, want 0 (clamped, not negative)", got)
+	}
+}
+
 func TestEngineMetrics_RejectAndStaleRateAppearInOutput(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
