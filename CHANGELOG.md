@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 113 — J/TH efficiency metric)
+
+Adds `power_watts` config field and derives `otedama_joules_per_terahash`
+and `otedama_power_watts` Prometheus metrics, closing RESEARCH_IMPROVEMENTS.md
+Cat 8 item 8.
+
+**`internal/config/config.go`**:
+- `Config.PowerWatts float64` (YAML: `power_watts`, env: `OTEDAMA_POWER_WATTS`).
+  Default 0 (disabled). Negative values rejected by `Validate()`.
+- `Origins.PowerWatts ValueOrigin` tracked through all four layers.
+
+**`internal/engine/metrics.go`**:
+- `engineMetrics.powerWatts *metrics.Gauge` → `otedama_power_watts`
+  (set to the configured wattage; 0 = not configured).
+- `engineMetrics.joulesPerTerahash *metrics.Gauge` →
+  `otedama_joules_per_terahash` = `PowerWatts × 1e12 / currentHashRate`.
+  The canonical efficiency figure miners optimise for.
+
+**`internal/engine/run.go`**:
+- `sessionOpts.powerWatts float64` — extracted from `Config.PowerWatts` at
+  session creation.
+- Both the V2 and V1 stats-tick branches now update `powerWatts` and
+  `joulesPerTerahash` when `powerWatts > 0 && currentHashRate > 0`.
+
+Tests (7 new):
+- `TestValidate_PowerWatts` (valid: 0/positive; invalid: negative)
+- `TestResolve_PowerWatts_EnvOverride`
+- `TestResolve_PowerWatts_InvalidEnvIgnored`
+- `TestEngineMetrics_JoulesPerTerahash_RegisteredAndZero`
+- `TestEngineMetrics_JoulesPerTerahash_Calculation` (100 W ÷ 100 GH/s = 1000 J/TH)
+- `TestEngineMetrics_JoulesPerTerahash_AppearsInWriteText`
+
+24 packages green, 1161 tests.
+
 ### Feat (session 112 — idle/curtailment hook: pause hashing when BTC/USD < threshold)
 
 Adds a `curtail_below_btc_usd` config field that pauses all hashing workers

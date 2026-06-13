@@ -598,7 +598,6 @@ func TestEngineMetrics_CurtailedGauge_RegisteredAndZero(t *testing.T) {
 func TestEngineMetrics_CurtailedGauge_AppearsInWriteText(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
-	// Simulate curtailment by setting the gauge directly.
 	m.curtailed.Set(1)
 
 	var buf strings.Builder
@@ -611,6 +610,57 @@ func TestEngineMetrics_CurtailedGauge_AppearsInWriteText(t *testing.T) {
 	}
 	if !strings.Contains(out, "otedama_curtailed 1") {
 		t.Errorf("otedama_curtailed should be 1 after Set(1):\n%s", out)
+	}
+}
+
+// ============================================================================
+// J/TH efficiency metric
+// ============================================================================
+
+func TestEngineMetrics_JoulesPerTerahash_RegisteredAndZero(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	if got := m.joulesPerTerahash.Value(); got != 0 {
+		t.Errorf("joulesPerTerahash initial = %v, want 0", got)
+	}
+	if got := m.powerWatts.Value(); got != 0 {
+		t.Errorf("powerWatts initial = %v, want 0", got)
+	}
+}
+
+func TestEngineMetrics_JoulesPerTerahash_Calculation(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// At 100 W and 100 GH/s: J/TH = 100W × 1e12 / 100e9 H/s = 1000 J/TH.
+	const watts = 100.0
+	const hashrate = 100e9
+	m.powerWatts.Set(watts)
+	m.joulesPerTerahash.Set(watts * 1e12 / hashrate)
+
+	got := m.joulesPerTerahash.Value()
+	const want = 1000.0
+	if got != want {
+		t.Errorf("J/TH = %v, want %v", got, want)
+	}
+}
+
+func TestEngineMetrics_JoulesPerTerahash_AppearsInWriteText(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.powerWatts.Set(100)
+	m.joulesPerTerahash.Set(1000)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "otedama_joules_per_terahash") {
+		t.Errorf("otedama_joules_per_terahash missing from WriteText:\n%s", out)
+	}
+	if !strings.Contains(out, "otedama_power_watts") {
+		t.Errorf("otedama_power_watts missing from WriteText:\n%s", out)
 	}
 }
 

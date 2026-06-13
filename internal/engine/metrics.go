@@ -55,6 +55,12 @@ type engineMetrics struct {
 	// curtail_below_btc_usd threshold; 0 otherwise. Distinct from
 	// otedama_up (which reflects the miner stalling, not a deliberate pause).
 	curtailed *metrics.Gauge
+	// powerWatts is the user-configured system power draw in watts.
+	// 0 when not configured (power_watts = 0).
+	powerWatts *metrics.Gauge
+	// joulesPerTerahash = powerWatts × 1e12 / hashrate. Only meaningful
+	// when powerWatts > 0; set to 0 otherwise.
+	joulesPerTerahash *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -166,6 +172,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		curtailed: reg.NewGauge(
 			"otedama_curtailed",
 			"1 if hashing is paused because BTC/USD is below curtail_below_btc_usd threshold, else 0.",
+			nil),
+		powerWatts: reg.NewGauge(
+			"otedama_power_watts",
+			"Configured total system power draw in watts (from power_watts config). 0 when not set.",
+			nil),
+		joulesPerTerahash: reg.NewGauge(
+			"otedama_joules_per_terahash",
+			"Energy efficiency: watts × 1e12 / hashrate. 0 when power_watts is not configured.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",

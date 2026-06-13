@@ -334,18 +334,19 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		r.metrics.payoutActiveIndex.Set(float64(addrIdx))
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:   poolURL,
-			user:      user,
-			workers:   r.workers,
-			merged:    r.merged,
-			interval:  statsInterval,
-			dashboard: r.dashboard,
-			startTime: r.startTime,
-			wallet:    r.wallet,
-			devices:   r.deviceN,
-			log:       r.log,
-			providers: r.providers,
-			m:         r.metrics,
+			poolURL:    poolURL,
+			user:       user,
+			workers:    r.workers,
+			merged:     r.merged,
+			interval:   statsInterval,
+			dashboard:  r.dashboard,
+			startTime:  r.startTime,
+			wallet:     r.wallet,
+			devices:    r.deviceN,
+			log:        r.log,
+			providers:  r.providers,
+			m:          r.metrics,
+			powerWatts: r.opts.Config.PowerWatts,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -425,18 +426,19 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 // ----- Session -----
 
 type sessionOpts struct {
-	poolURL   string
-	user      string
-	workers   []*miner.Worker
-	merged    <-chan miner.Share
-	interval  time.Duration
-	dashboard *tui.Dashboard
-	startTime time.Time
-	wallet    string
-	devices   int
-	log       func(level, msg string)
-	providers []provider.Provider
-	m         *engineMetrics
+	poolURL    string
+	user       string
+	workers    []*miner.Worker
+	merged     <-chan miner.Share
+	interval   time.Duration
+	dashboard  *tui.Dashboard
+	startTime  time.Time
+	wallet     string
+	devices    int
+	log        func(level, msg string)
+	providers  []provider.Provider
+	m          *engineMetrics
+	powerWatts float64 // from config.PowerWatts; used for J/TH metric
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
@@ -557,6 +559,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					opts.m.up.Set(0)
 				} else {
 					opts.m.up.Set(1)
+				}
+				// J/TH efficiency: only meaningful when power is configured and
+				// the miner is running (avoids division-by-zero and spurious 0).
+				if opts.powerWatts > 0 {
+					opts.m.powerWatts.Set(opts.powerWatts)
+					if currentHashRate > 0 {
+						opts.m.joulesPerTerahash.Set(opts.powerWatts * 1e12 / currentHashRate)
+					}
 				}
 				// Recompute acceptance / reject / stale rate gauges.
 				// Warn once-per-tick if acceptance has dropped below the
@@ -707,6 +717,12 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					opts.m.up.Set(0)
 				} else {
 					opts.m.up.Set(1)
+				}
+				if opts.powerWatts > 0 {
+					opts.m.powerWatts.Set(opts.powerWatts)
+					if currentHashRate > 0 {
+						opts.m.joulesPerTerahash.Set(opts.powerWatts * 1e12 / currentHashRate)
+					}
 				}
 				rate, judged := opts.m.updateShareRates()
 				if judged >= 20 && rate < 0.97 {

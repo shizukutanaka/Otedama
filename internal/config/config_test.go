@@ -466,6 +466,46 @@ func TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored(t *testing.T) {
 	}
 }
 
+func TestValidate_PowerWatts(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, v := range []float64{0, 100, 1200, 3000} {
+		c := base()
+		c.PowerWatts = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("PowerWatts=%.0f should be valid; got %v", v, err)
+		}
+	}
+	c := base()
+	c.PowerWatts = -1
+	err := c.Validate()
+	if err == nil {
+		t.Error("negative PowerWatts should fail Validate()")
+	}
+	if !strings.Contains(err.Error(), "power_watts") {
+		t.Errorf("error should mention power_watts: %v", err)
+	}
+}
+
+func TestResolve_PowerWatts_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_POWER_WATTS": "1200"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.PowerWatts != 1200 {
+		t.Errorf("PowerWatts = %g, want 1200", cfg.PowerWatts)
+	}
+}
+
+func TestResolve_PowerWatts_InvalidEnvIgnored(t *testing.T) {
+	env := map[string]string{"OTEDAMA_POWER_WATTS": "not-a-number"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.PowerWatts != 0 {
+		t.Errorf("invalid env should leave default 0; got %g", cfg.PowerWatts)
+	}
+}
+
 func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
 	// Regression: --log-format previously defaulted to "text" on a
 	// standalone field, so a config-file log_format was ignored. With the

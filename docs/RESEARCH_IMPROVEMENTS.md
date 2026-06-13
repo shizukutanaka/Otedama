@@ -247,8 +247,9 @@ arXiv grounding (session 41):
 5. 🔵 **Demand-response participation** — ADR-008 sub-domain 5.
 6. 🔵 **Thermal/ambient awareness** — ADR-008 sub-domain 6.
 7. 🔵 **Battery/Powerwall integration** — ADR-008 sub-domain 7.
-8. 🟡 **J/TH efficiency metric in the TUI/metrics** — the single number miners
-   optimise; expose `joules_per_terahash` from power draw ÷ hashrate.
+8. ✅ **J/TH efficiency metric in metrics** (session 113) — `power_watts`
+   config field (YAML/env); `otedama_joules_per_terahash` = watts × 1e12 /
+   hashrate; `otedama_power_watts` gauge; updated in both V1 and V2 stat ticks.
 9. ✅ **Idle/curtailment hook** (session 112) — `curtail_below_btc_usd` config
    field; BTC rate goroutine calls `SetWork(nil)` when price drops below
    threshold and logs re-start on recovery; `otedama_curtailed` gauge.

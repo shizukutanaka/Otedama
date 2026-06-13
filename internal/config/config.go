@@ -127,6 +127,17 @@ type Config struct {
 	// 0 disables the feature (default). Negative values are rejected by
 	// Validate(). Set via OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
 	CurtailBelowBTCUSD float64 `yaml:"curtail_below_btc_usd"`
+
+	// PowerWatts is the user's estimated total system power draw in watts.
+	// When set (> 0), Otedama computes and exposes
+	// `otedama_joules_per_terahash` (J/TH), the single efficiency metric
+	// miners optimise for. J/TH = PowerWatts × 1e12 / HashesPerSecond.
+	// Power measurement from hardware sensors is not yet available; this
+	// field lets users enter their measured TDP or wall-meter reading.
+	//
+	// 0 disables the metric (default). Negative values are rejected.
+	// Set via OTEDAMA_POWER_WATTS or config file.
+	PowerWatts float64 `yaml:"power_watts"`
 }
 
 // PoolConfig describes a single mining pool connection.
@@ -240,6 +251,7 @@ type Origins struct {
 	DataDir                  ValueOrigin
 	ArbitrationHysteresisPct ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
+	PowerWatts               ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -309,6 +321,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
 		o.CurtailBelowBTCUSD = OriginFile
 	}
+	if fromFile.PowerWatts != 0 {
+		cfg.PowerWatts = fromFile.PowerWatts
+		o.PowerWatts = OriginFile
+	}
 
 	// Layer 2: environment variables override config file.
 	getEnv := func(key string) string {
@@ -347,6 +363,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.CurtailBelowBTCUSD = f
 			o.CurtailBelowBTCUSD = OriginEnv
+		}
+	}
+	if v := getEnv("OTEDAMA_POWER_WATTS"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.PowerWatts = f
+			o.PowerWatts = OriginEnv
 		}
 	}
 
@@ -440,6 +462,10 @@ func (c Config) Validate() error {
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+	}
+	if c.PowerWatts < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
 	}
 
 	if len(issues) == 0 {
