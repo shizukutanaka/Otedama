@@ -10,6 +10,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 108 — configurable arbitration hysteresis margin)
+
+Exposes the previously hard-coded 5% yield-improvement threshold for
+workload switching as a user-configurable field, closing
+RESEARCH_IMPROVEMENTS.md Category 5 item 6.
+
+**`internal/config/config.go`**:
+- `Config.ArbitrationHysteresisPct float64` (YAML: `arbitration_hysteresis_pct`,
+  env: `OTEDAMA_ARBITRATION_HYSTERESIS_PCT`). Default 0.05 (5%). Accepts any
+  value in [0.0, 1.0); out-of-range values are caught by `Validate()`.
+- `Origins.ArbitrationHysteresisPct ValueOrigin` — tracked through all four
+  layers (default/file/env/flag) like every other config field.
+- Float parsing from the env var (`strconv.ParseFloat`); invalid strings are
+  silently ignored, leaving the default.
+
+**`internal/engine/arbitrate.go`**:
+- `arbitrationLoopOpts.hysteresisPct float64` — zero falls back to
+  `defaultHysteresisPct` (0.05) for backward-compat with existing tests.
+- `runArbitrationLoop` passes the field as `HysteresisMargin` to
+  `arbitration.Decide` instead of the previous literal 0.05.
+
+**`internal/engine/run.go`**:
+- `runArbitrationLoop` call now passes
+  `hysteresisPct: opts.Config.ArbitrationHysteresisPct`.
+
+Tests (10 new):
+- `TestArbitrationHysteresisPct_DefaultIs5Pct`
+- `TestArbitrationHysteresisPct_ResolvePreservesDefault`
+- `TestArbitrationHysteresisPct_EnvOverride`
+- `TestArbitrationHysteresisPct_InvalidEnvIgnored`
+- `TestArbitrationHysteresisPct_FileOverride`
+- `TestArbitrationHysteresisPct_EnvOverridesFile`
+- `TestValidate_ArbitrationHysteresisPct_OutOfRange` (3 subtests)
+- `TestValidate_ArbitrationHysteresisPct_ValidRange`
+- `TestRunArbitrationLoop_HysteresisPctIsUsed` (engine)
+
+24 packages green, 1122 tests.
+
 ### Feat (session 107 — Go runtime metrics via CollectFunc in internal/metrics)
 
 Adds a dynamic-collector hook (`CollectFunc` / `RegisterCollector`) to the

@@ -161,9 +161,11 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
-6. 🟡 **Spot-price volatility guard** — don't thrash between mining and
-   inference on noisy price ticks (hysteresis already exists in arbitration;
-   confirm it covers the inference side).
+6. ✅ **Spot-price volatility guard** — hysteresis exists in arbitration and
+   now has a user-configurable knob: `arbitration_hysteresis_pct` (YAML) /
+   `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` (env), default 0.05 (5%). Applies
+   to all workload switches (mining ↔ AI). Validation rejects values outside
+   [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
 8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
    conversion path and that simulated vs real yield is never mixed in

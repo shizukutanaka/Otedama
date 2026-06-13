@@ -204,13 +204,14 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Arbitration loop: re-run Decide whenever quotes change.
 	go runArbitrationLoop(ctx, arbitrationLoopOpts{
-		devRefs:   devRefs,
-		streamsMu: &streamsMu,
-		streamMap: streamMap,
-		quoteCh:   quoteCh,
-		workers:   workers,
-		metrics:   m,
-		log:       log,
+		devRefs:       devRefs,
+		streamsMu:     &streamsMu,
+		streamMap:     streamMap,
+		quoteCh:       quoteCh,
+		workers:       workers,
+		metrics:       m,
+		log:           log,
+		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 	})
 
 	// ----- Phase 7: TUI dashboard -----

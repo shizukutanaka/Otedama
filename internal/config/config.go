@@ -35,6 +35,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -105,6 +106,17 @@ type Config struct {
 	//   macOS:   $HOME/Library/Application Support/Otedama
 	//   Windows: %APPDATA%\Otedama
 	DataDir string `yaml:"data_dir"`
+
+	// ArbitrationHysteresisPct is the minimum fractional yield improvement
+	// required to switch a device from its current workload (mining → AI or
+	// vice versa). A value of 0.05 means a switch only happens when the new
+	// workload earns at least 5% more. Higher values reduce oscillation on
+	// noisy price feeds; lower values react faster to price changes.
+	//
+	// Valid range: [0.0, 1.0). The default 0.05 (5%) is a safe operating
+	// point that prevents thrashing without meaningfully delaying profitable
+	// switches. Set via OTEDAMA_ARBITRATION_HYSTERESIS_PCT or config file.
+	ArbitrationHysteresisPct float64 `yaml:"arbitration_hysteresis_pct"`
 }
 
 // PoolConfig describes a single mining pool connection.
@@ -141,13 +153,14 @@ type WorkerConfig struct {
 // variables, and config files are overlaid.
 func Defaults() Config {
 	return Config{
-		BitcoinAddress: "",
-		Pools:          nil, // resolved from built-in recommendations at startup
-		Workers:        WorkerConfig{},
-		Language:       "", // resolved from OS locale at startup
-		LogLevel:       "info",
-		LogFormat:      "text",
-		DataDir:        "", // resolved from XDG/platform conventions at startup
+		BitcoinAddress:           "",
+		Pools:                    nil, // resolved from built-in recommendations at startup
+		Workers:                  WorkerConfig{},
+		Language:                 "", // resolved from OS locale at startup
+		LogLevel:                 "info",
+		LogFormat:                "text",
+		DataDir:                  "", // resolved from XDG/platform conventions at startup
+		ArbitrationHysteresisPct: 0.05,
 	}
 }
 
@@ -196,14 +209,15 @@ func (o ValueOrigin) String() string {
 // A field set to OriginDefault means no higher-priority layer overrode the
 // built-in value.
 type Origins struct {
-	BitcoinAddress   ValueOrigin
-	BitcoinAddresses ValueOrigin
-	Pools            ValueOrigin
-	WorkerName       ValueOrigin
-	Language         ValueOrigin
-	LogLevel         ValueOrigin
-	LogFormat        ValueOrigin
-	DataDir          ValueOrigin
+	BitcoinAddress           ValueOrigin
+	BitcoinAddresses         ValueOrigin
+	Pools                    ValueOrigin
+	WorkerName               ValueOrigin
+	Language                 ValueOrigin
+	LogLevel                 ValueOrigin
+	LogFormat                ValueOrigin
+	DataDir                  ValueOrigin
+	ArbitrationHysteresisPct ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -260,6 +274,13 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.DataDir = fromFile.DataDir
 		o.DataDir = OriginFile
 	}
+	// ArbitrationHysteresisPct: 0.0 in the file is indistinguishable from
+	// "unset" at the Go level, so we treat any non-default file value as an
+	// explicit override. Users who genuinely want 0.0 must use the env var.
+	if fromFile.ArbitrationHysteresisPct != 0 {
+		cfg.ArbitrationHysteresisPct = fromFile.ArbitrationHysteresisPct
+		o.ArbitrationHysteresisPct = OriginFile
+	}
 
 	// Layer 2: environment variables override config file.
 	getEnv := func(key string) string {
@@ -287,6 +308,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
 		cfg.DataDir = v
 		o.DataDir = OriginEnv
+	}
+	if v := getEnv("OTEDAMA_ARBITRATION_HYSTERESIS_PCT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.ArbitrationHysteresisPct = f
+			o.ArbitrationHysteresisPct = OriginEnv
+		}
 	}
 
 	// Layer 3: flags override environment variables.
@@ -364,6 +391,11 @@ func (c Config) Validate() error {
 		} else if err := validatePoolURL(p.URL); err != nil {
 			issues = append(issues, fmt.Sprintf("pools[%d].url invalid: %v", i, err))
 		}
+	}
+
+	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
+		issues = append(issues, fmt.Sprintf(
+			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
 	}
 
 	if len(issues) == 0 {

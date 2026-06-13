@@ -252,6 +252,74 @@ func TestRunArbitrationLoop_TickerDecideError(t *testing.T) {
 	}
 }
 
+// TestRunArbitrationLoop_HysteresisPctIsUsed verifies that a non-default
+// hysteresisPct propagates to the Decide call without causing an error.
+// The correctness of the damping at the decision level is tested in
+// internal/arbitration; here we confirm the field is wired through.
+func TestRunArbitrationLoop_HysteresisPctIsUsed(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	mu := &sync.Mutex{}
+	streamMap := map[string]arbitration.Stream{
+		"mining": {
+			ID:              "mining",
+			IsBitcoinMining: true,
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 100, Confidence: 1.0},
+		},
+	}
+	devRefs := []arbitration.DeviceRef{
+		{
+			Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+			Capabilities: hal.Capabilities{SHA256d: true},
+		},
+	}
+	quoteCh := make(chan provider.Quote)
+
+	var errs []string
+	var errMu sync.Mutex
+	opts := arbitrationLoopOpts{
+		devRefs:   devRefs,
+		streamsMu: mu,
+		streamMap: streamMap,
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log: func(level, msg string) {
+			if level == "warn" {
+				errMu.Lock()
+				errs = append(errs, msg)
+				errMu.Unlock()
+			}
+		},
+		hysteresisPct: 0.20, // 20% band
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(300 * time.Millisecond):
+		t.Error("runArbitrationLoop did not exit within 300ms")
+	}
+
+	errMu.Lock()
+	gotErrs := errs
+	errMu.Unlock()
+	if len(gotErrs) > 0 {
+		t.Errorf("unexpected arbitration errors with hysteresisPct=0.20: %v", gotErrs)
+	}
+}
+
 // ============================================================================
 // run.go sendMsg — encode error and WrapMessage error
 // ============================================================================

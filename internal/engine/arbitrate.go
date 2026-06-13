@@ -22,14 +22,18 @@ import (
 
 // arbitrationLoopOpts bundles the arguments to runArbitrationLoop.
 type arbitrationLoopOpts struct {
-	devRefs   []arbitration.DeviceRef
-	streamsMu *sync.Mutex
-	streamMap map[string]arbitration.Stream
-	quoteCh   <-chan provider.Quote
-	workers   []*miner.Worker
-	metrics   *engineMetrics
-	log       func(level, msg string)
+	devRefs       []arbitration.DeviceRef
+	streamsMu     *sync.Mutex
+	streamMap     map[string]arbitration.Stream
+	quoteCh       <-chan provider.Quote
+	workers       []*miner.Worker
+	metrics       *engineMetrics
+	log           func(level, msg string)
+	hysteresisPct float64 // 0 uses defaultHysteresisPct
 }
+
+// defaultHysteresisPct matches the default in config.Defaults().
+const defaultHysteresisPct = 0.05
 
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
 // or whenever a fresh quote arrives. Blocks until ctx is cancelled or
@@ -52,12 +56,16 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
 
+			margin := opts.hysteresisPct
+			if margin == 0 {
+				margin = defaultHysteresisPct
+			}
 			alloc, err := arbitration.Decide(arbitration.Input{
 				Devices:          opts.devRefs,
 				Streams:          streams,
 				Previous:         prevAlloc,
 				Policy:           arbitration.PolicyMaximizeEarnings,
-				HysteresisMargin: 0.05,
+				HysteresisMargin: margin,
 			})
 			if err != nil {
 				opts.log("warn", fmt.Sprintf("arbitration: %v", err))

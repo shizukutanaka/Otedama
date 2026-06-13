@@ -636,3 +636,107 @@ func TestResolveWithOrigins_ConsistentWithResolve(t *testing.T) {
 		t.Errorf("DataDir mismatch: Resolve=%q ResolveWithOrigins=%q", want.DataDir, got.DataDir)
 	}
 }
+
+// ============================================================================
+// ArbitrationHysteresisPct
+// ============================================================================
+
+func TestArbitrationHysteresisPct_DefaultIs5Pct(t *testing.T) {
+	cfg := Defaults()
+	if cfg.ArbitrationHysteresisPct != 0.05 {
+		t.Errorf("default ArbitrationHysteresisPct = %v, want 0.05", cfg.ArbitrationHysteresisPct)
+	}
+}
+
+func TestArbitrationHysteresisPct_ResolvePreservesDefault(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{})
+	if cfg.ArbitrationHysteresisPct != 0.05 {
+		t.Errorf("resolved ArbitrationHysteresisPct = %v, want 0.05", cfg.ArbitrationHysteresisPct)
+	}
+}
+
+func TestArbitrationHysteresisPct_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "0.10"}
+	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.ArbitrationHysteresisPct != 0.10 {
+		t.Errorf("ArbitrationHysteresisPct = %v, want 0.10", cfg.ArbitrationHysteresisPct)
+	}
+	if o.ArbitrationHysteresisPct != OriginEnv {
+		t.Errorf("origin = %v, want env", o.ArbitrationHysteresisPct)
+	}
+}
+
+func TestArbitrationHysteresisPct_InvalidEnvIgnored(t *testing.T) {
+	// A non-numeric env value must be silently ignored, leaving the default.
+	env := map[string]string{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "not_a_number"}
+	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.ArbitrationHysteresisPct != 0.05 {
+		t.Errorf("invalid env: ArbitrationHysteresisPct = %v, want 0.05 (default)", cfg.ArbitrationHysteresisPct)
+	}
+	if o.ArbitrationHysteresisPct != OriginDefault {
+		t.Errorf("invalid env: origin = %v, want default", o.ArbitrationHysteresisPct)
+	}
+}
+
+func TestArbitrationHysteresisPct_FileOverride(t *testing.T) {
+	fromFile := Config{ArbitrationHysteresisPct: 0.15}
+	cfg, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	if cfg.ArbitrationHysteresisPct != 0.15 {
+		t.Errorf("from file: ArbitrationHysteresisPct = %v, want 0.15", cfg.ArbitrationHysteresisPct)
+	}
+	if o.ArbitrationHysteresisPct != OriginFile {
+		t.Errorf("from file: origin = %v, want file", o.ArbitrationHysteresisPct)
+	}
+}
+
+func TestArbitrationHysteresisPct_EnvOverridesFile(t *testing.T) {
+	fromFile := Config{ArbitrationHysteresisPct: 0.15}
+	env := map[string]string{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "0.20"}
+	cfg, o := ResolveWithOrigins(fromFile, env, FlagValues{})
+	if cfg.ArbitrationHysteresisPct != 0.20 {
+		t.Errorf("env > file: ArbitrationHysteresisPct = %v, want 0.20", cfg.ArbitrationHysteresisPct)
+	}
+	if o.ArbitrationHysteresisPct != OriginEnv {
+		t.Errorf("env > file: origin = %v, want env", o.ArbitrationHysteresisPct)
+	}
+}
+
+func TestValidate_ArbitrationHysteresisPct_OutOfRange(t *testing.T) {
+	cases := []struct {
+		name string
+		val  float64
+	}{
+		{"negative", -0.01},
+		{"exactly 1.0", 1.0},
+		{"above 1.0", 1.5},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Config{
+				BitcoinAddress:           "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+				LogLevel:                 "info",
+				LogFormat:                "text",
+				ArbitrationHysteresisPct: tc.val,
+			}
+			if err := cfg.Validate(); err == nil {
+				t.Errorf("Validate(%v) = nil, want error for out-of-range ArbitrationHysteresisPct", tc.val)
+			}
+		})
+	}
+}
+
+func TestValidate_ArbitrationHysteresisPct_ValidRange(t *testing.T) {
+	cases := []float64{0.0, 0.01, 0.05, 0.10, 0.50, 0.99}
+	for _, v := range cases {
+		cfg := Config{
+			BitcoinAddress:           "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+			LogLevel:                 "info",
+			LogFormat:                "text",
+			ArbitrationHysteresisPct: v,
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate(%v) = %v, want nil for valid ArbitrationHysteresisPct", v, err)
+		}
+	}
+}
