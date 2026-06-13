@@ -514,3 +514,125 @@ func TestValidate_EmptyPoolURL(t *testing.T) {
 		t.Errorf("error = %q, want mention of pools[0]", err)
 	}
 }
+
+// ============================================================================
+// ResolveWithOrigins — per-layer attribution
+// ============================================================================
+
+func TestResolveWithOrigins_AllDefault(t *testing.T) {
+	_, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	if o.LogLevel != OriginDefault {
+		t.Errorf("LogLevel origin = %v, want default", o.LogLevel)
+	}
+	if o.LogFormat != OriginDefault {
+		t.Errorf("LogFormat origin = %v, want default", o.LogFormat)
+	}
+	if o.BitcoinAddress != OriginDefault {
+		t.Errorf("BitcoinAddress origin = %v, want default", o.BitcoinAddress)
+	}
+}
+
+func TestResolveWithOrigins_FromFile(t *testing.T) {
+	fromFile := Config{
+		LogLevel: "debug",
+		DataDir:  "/data",
+		Workers:  WorkerConfig{Name: "rig-01"},
+	}
+	_, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	if o.LogLevel != OriginFile {
+		t.Errorf("LogLevel origin = %v, want file", o.LogLevel)
+	}
+	if o.DataDir != OriginFile {
+		t.Errorf("DataDir origin = %v, want file", o.DataDir)
+	}
+	if o.WorkerName != OriginFile {
+		t.Errorf("WorkerName origin = %v, want file", o.WorkerName)
+	}
+	// LogFormat not set in file → still default.
+	if o.LogFormat != OriginDefault {
+		t.Errorf("LogFormat origin = %v, want default (not in file)", o.LogFormat)
+	}
+}
+
+func TestResolveWithOrigins_EnvOverridesFile(t *testing.T) {
+	fromFile := Config{LogLevel: "debug"}
+	env := map[string]string{"OTEDAMA_LOG_LEVEL": "warn"}
+	_, o := ResolveWithOrigins(fromFile, env, FlagValues{})
+	if o.LogLevel != OriginEnv {
+		t.Errorf("LogLevel origin = %v, want env (env > file)", o.LogLevel)
+	}
+}
+
+func TestResolveWithOrigins_FlagOverridesEnv(t *testing.T) {
+	env := map[string]string{
+		"OTEDAMA_BITCOIN_ADDRESS": "bc1qfromenv0000000000000000000000000000000",
+		"OTEDAMA_LOG_LEVEL":       "warn",
+	}
+	flags := FlagValues{
+		BitcoinAddress: "bc1qfromflag00000000000000000000000000000000",
+	}
+	_, o := ResolveWithOrigins(Config{}, env, flags)
+	if o.BitcoinAddress != OriginFlag {
+		t.Errorf("BitcoinAddress origin = %v, want flag (flag > env)", o.BitcoinAddress)
+	}
+	// LogLevel was env only, no flag.
+	if o.LogLevel != OriginEnv {
+		t.Errorf("LogLevel origin = %v, want env", o.LogLevel)
+	}
+}
+
+func TestResolveWithOrigins_PoolsAndAddressesFromFile(t *testing.T) {
+	fromFile := Config{
+		BitcoinAddress:   "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5",
+		BitcoinAddresses: []string{"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"},
+		Pools:            []PoolConfig{{URL: "stratum+v2://pool.example.com:3336"}},
+	}
+	_, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	if o.BitcoinAddress != OriginFile {
+		t.Errorf("BitcoinAddress origin = %v, want file", o.BitcoinAddress)
+	}
+	if o.BitcoinAddresses != OriginFile {
+		t.Errorf("BitcoinAddresses origin = %v, want file", o.BitcoinAddresses)
+	}
+	if o.Pools != OriginFile {
+		t.Errorf("Pools origin = %v, want file", o.Pools)
+	}
+}
+
+func TestValueOrigin_String(t *testing.T) {
+	cases := map[ValueOrigin]string{
+		OriginDefault: "default",
+		OriginFile:    "file",
+		OriginEnv:     "env",
+		OriginFlag:    "flag",
+	}
+	for o, want := range cases {
+		if got := o.String(); got != want {
+			t.Errorf("ValueOrigin(%d).String() = %q, want %q", o, got, want)
+		}
+	}
+}
+
+func TestResolveWithOrigins_ConsistentWithResolve(t *testing.T) {
+	// The Config returned by ResolveWithOrigins must equal that returned by
+	// Resolve for the same inputs.
+	fromFile := Config{LogLevel: "error", DataDir: "/tmp/data"}
+	env := map[string]string{"OTEDAMA_LANGUAGE": "ja"}
+	flags := FlagValues{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
+
+	want := Resolve(fromFile, env, flags)
+	got, _ := ResolveWithOrigins(fromFile, env, flags)
+
+	if want.BitcoinAddress != got.BitcoinAddress {
+		t.Errorf("BitcoinAddress mismatch: Resolve=%q ResolveWithOrigins=%q", want.BitcoinAddress, got.BitcoinAddress)
+	}
+	if want.LogLevel != got.LogLevel {
+		t.Errorf("LogLevel mismatch: Resolve=%q ResolveWithOrigins=%q", want.LogLevel, got.LogLevel)
+	}
+	if want.Language != got.Language {
+		t.Errorf("Language mismatch: Resolve=%q ResolveWithOrigins=%q", want.Language, got.Language)
+	}
+	if want.DataDir != got.DataDir {
+		t.Errorf("DataDir mismatch: Resolve=%q ResolveWithOrigins=%q", want.DataDir, got.DataDir)
+	}
+}

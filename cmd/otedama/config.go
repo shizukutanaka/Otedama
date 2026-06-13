@@ -34,23 +34,32 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
-	fmt.Fprintf(stdout, "bitcoin_address: %s\n", safeDisplay(cfg.BitcoinAddress))
+	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
+
+	// tag returns " [layer]" when --origin is active, otherwise empty.
+	tag := func(o config.ValueOrigin) string {
+		if f.showOrigin {
+			return fmt.Sprintf(" [%s]", o)
+		}
+		return ""
+	}
+
+	fmt.Fprintf(stdout, "bitcoin_address: %s%s\n", safeDisplay(cfg.BitcoinAddress), tag(origins.BitcoinAddress))
 	if len(cfg.BitcoinAddresses) > 0 {
-		fmt.Fprintf(stdout, "bitcoin_addresses (failover): %d\n", len(cfg.BitcoinAddresses))
+		fmt.Fprintf(stdout, "bitcoin_addresses (failover): %d%s\n", len(cfg.BitcoinAddresses), tag(origins.BitcoinAddresses))
 		for i, a := range cfg.BitcoinAddresses {
 			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(a))
 		}
 	}
-	fmt.Fprintf(stdout, "log_level:       %s\n", cfg.LogLevel)
-	fmt.Fprintf(stdout, "log_format:      %s\n", cfg.LogFormat)
-	fmt.Fprintf(stdout, "language:        %s\n", safeDisplay(cfg.Language))
-	fmt.Fprintf(stdout, "data_dir:        %s\n", safeDisplay(cfg.DataDir))
-	fmt.Fprintf(stdout, "worker_name:     %s\n", safeDisplay(cfg.Workers.Name))
+	fmt.Fprintf(stdout, "log_level:       %s%s\n", cfg.LogLevel, tag(origins.LogLevel))
+	fmt.Fprintf(stdout, "log_format:      %s%s\n", cfg.LogFormat, tag(origins.LogFormat))
+	fmt.Fprintf(stdout, "language:        %s%s\n", safeDisplay(cfg.Language), tag(origins.Language))
+	fmt.Fprintf(stdout, "data_dir:        %s%s\n", safeDisplay(cfg.DataDir), tag(origins.DataDir))
+	fmt.Fprintf(stdout, "worker_name:     %s%s\n", safeDisplay(cfg.Workers.Name), tag(origins.WorkerName))
 	if len(cfg.Pools) == 0 {
-		fmt.Fprintf(stdout, "pools:           (built-in default)\n")
+		fmt.Fprintf(stdout, "pools:           (built-in default)%s\n", tag(origins.Pools))
 	} else {
-		fmt.Fprintf(stdout, "pools:           %d configured\n", len(cfg.Pools))
+		fmt.Fprintf(stdout, "pools:           %d configured%s\n", len(cfg.Pools), tag(origins.Pools))
 		for i, p := range cfg.Pools {
 			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(p.URL))
 		}

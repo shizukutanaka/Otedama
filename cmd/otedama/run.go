@@ -36,6 +36,7 @@ type runFlags struct {
 	walletPassphrase string
 	httpAddr         string
 	pprofEnabled     bool
+	showOrigin       bool // --origin: annotate config show output with value sources
 }
 
 func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
@@ -56,6 +57,8 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
 	fs.BoolVar(&f.pprofEnabled, "pprof", false,
 		"Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
+	fs.BoolVar(&f.showOrigin, "origin", false,
+		"(config show only) Annotate each value with the layer that set it (default/file/env/flag).")
 	if err := fs.Parse(args); err != nil {
 		return runFlags{}, err
 	}

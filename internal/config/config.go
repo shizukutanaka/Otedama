@@ -168,6 +168,44 @@ type FlagValues struct {
 	DataDir        string
 }
 
+// ValueOrigin indicates which configuration layer provided a particular value.
+type ValueOrigin uint8
+
+const (
+	OriginDefault ValueOrigin = iota // built-in default (lowest priority)
+	OriginFile                       // YAML configuration file
+	OriginEnv                        // environment variable
+	OriginFlag                       // command-line flag (highest priority)
+)
+
+// String returns the human-readable label used in "config show --origin" output.
+func (o ValueOrigin) String() string {
+	switch o {
+	case OriginFile:
+		return "file"
+	case OriginEnv:
+		return "env"
+	case OriginFlag:
+		return "flag"
+	default:
+		return "default"
+	}
+}
+
+// Origins records which layer provided each Config field.
+// A field set to OriginDefault means no higher-priority layer overrode the
+// built-in value.
+type Origins struct {
+	BitcoinAddress   ValueOrigin
+	BitcoinAddresses ValueOrigin
+	Pools            ValueOrigin
+	WorkerName       ValueOrigin
+	Language         ValueOrigin
+	LogLevel         ValueOrigin
+	LogFormat        ValueOrigin
+	DataDir          ValueOrigin
+}
+
 // Resolve combines defaults, a config file (already loaded into fromFile),
 // environment variables (read from env), and flag values into a single
 // Config. Later layers override earlier ones.
@@ -178,32 +216,49 @@ type FlagValues struct {
 // Resolve does not perform validation of the resulting Config; call
 // Config.Validate separately once all layers have been combined.
 func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
+	cfg, _ := ResolveWithOrigins(fromFile, env, flags)
+	return cfg
+}
+
+// ResolveWithOrigins is identical to Resolve but also returns an Origins
+// value indicating which layer provided each Config field. This powers
+// "otedama config show --origin".
+func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues) (Config, Origins) {
 	cfg := Defaults()
+	var o Origins
 
 	// Layer 1: config file overrides defaults where set.
 	if fromFile.BitcoinAddress != "" {
 		cfg.BitcoinAddress = fromFile.BitcoinAddress
+		o.BitcoinAddress = OriginFile
 	}
 	if len(fromFile.BitcoinAddresses) > 0 {
 		cfg.BitcoinAddresses = fromFile.BitcoinAddresses
+		o.BitcoinAddresses = OriginFile
 	}
 	if len(fromFile.Pools) > 0 {
 		cfg.Pools = fromFile.Pools
+		o.Pools = OriginFile
 	}
 	if fromFile.Workers.Name != "" {
 		cfg.Workers.Name = fromFile.Workers.Name
+		o.WorkerName = OriginFile
 	}
 	if fromFile.Language != "" {
 		cfg.Language = fromFile.Language
+		o.Language = OriginFile
 	}
 	if fromFile.LogLevel != "" {
 		cfg.LogLevel = fromFile.LogLevel
+		o.LogLevel = OriginFile
 	}
 	if fromFile.LogFormat != "" {
 		cfg.LogFormat = fromFile.LogFormat
+		o.LogFormat = OriginFile
 	}
 	if fromFile.DataDir != "" {
 		cfg.DataDir = fromFile.DataDir
+		o.DataDir = OriginFile
 	}
 
 	// Layer 2: environment variables override config file.
@@ -215,38 +270,48 @@ func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
 	}
 	if v := getEnv("OTEDAMA_BITCOIN_ADDRESS"); v != "" {
 		cfg.BitcoinAddress = v
+		o.BitcoinAddress = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
+		o.LogLevel = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_LOG_FORMAT"); v != "" {
 		cfg.LogFormat = v
+		o.LogFormat = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_LANGUAGE"); v != "" {
 		cfg.Language = v
+		o.Language = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
 		cfg.DataDir = v
+		o.DataDir = OriginEnv
 	}
 
 	// Layer 3: flags override environment variables.
 	if flags.BitcoinAddress != "" {
 		cfg.BitcoinAddress = flags.BitcoinAddress
+		o.BitcoinAddress = OriginFlag
 	}
 	if flags.LogLevel != "" {
 		cfg.LogLevel = flags.LogLevel
+		o.LogLevel = OriginFlag
 	}
 	if flags.LogFormat != "" {
 		cfg.LogFormat = flags.LogFormat
+		o.LogFormat = OriginFlag
 	}
 	if flags.Language != "" {
 		cfg.Language = flags.Language
+		o.Language = OriginFlag
 	}
 	if flags.DataDir != "" {
 		cfg.DataDir = flags.DataDir
+		o.DataDir = OriginFlag
 	}
 
-	return cfg
+	return cfg, o
 }
 
 // Validate checks that the Config is self-consistent and ready for use.

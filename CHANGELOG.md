@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 104 — config show --origin: per-value source attribution)
+
+Adds `--origin` flag to `otedama config show`, closing
+RESEARCH_IMPROVEMENTS.md Cat 7 item 8 (config precedence documentation).
+
+**`internal/config/config.go`**:
+- `ValueOrigin` (uint8) with four constants: `OriginDefault`, `OriginFile`,
+  `OriginEnv`, `OriginFlag`. `String()` returns the human-readable label.
+- `Origins` struct with one `ValueOrigin` field per `Config` field
+  (`BitcoinAddress`, `BitcoinAddresses`, `Pools`, `WorkerName`, `Language`,
+  `LogLevel`, `LogFormat`, `DataDir`).
+- `ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues) (Config, Origins)`
+  tracks the origin of each value as the four layers are applied in
+  precedence order (default → file → env → flag). Existing `Resolve`
+  now delegates to `ResolveWithOrigins`, keeping the public API stable.
+
+**`cmd/otedama/run.go`**: `--origin` bool flag added to `runFlags` and
+registered in `parseRunFlags` (shared by `config show`).
+
+**`cmd/otedama/config.go`**: `cmdConfigShow` calls `ResolveWithOrigins` and,
+when `--origin` is active, appends ` [default|file|env|flag]` to each output
+line so operators can immediately see which layer set a value. Sub-items
+(indented pool / failover-address entries) do not carry a tag.
+
+Tests (12 new):
+- `internal/config`: `TestResolveWithOrigins_AllDefault`,
+  `_FromFile`, `_EnvOverridesFile`, `_FlagOverridesEnv`,
+  `_PoolsAndAddressesFromFile`, `TestValueOrigin_String`,
+  `TestResolveWithOrigins_ConsistentWithResolve` (round-trip equality).
+- `cmd/otedama`: `TestConfigShow_Origin_DefaultValues`,
+  `_FlagAnnotated`, `_FileAnnotated`,
+  `TestConfigShow_NoOriginFlag_NoAnnotations`.
+
+24 packages green, 1095 tests.
+
 ### Feat (session 103 — doctor pool-endpoint diversity check)
 
 Added a `doctor` check that catches *illusory* pool failover, closing

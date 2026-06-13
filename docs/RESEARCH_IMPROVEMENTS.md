@@ -217,8 +217,12 @@ arXiv grounding (collected sessions 40–41 and here):
    (already have an HTTP server; could mount `/debug/pprof`). — session 99: `--pprof`
    flag mounts `/debug/pprof/` and named profiles; explicit handler registration
    (not blank import on DefaultServeMux); loopback/private-IP safety note in docs.
-8. 🟡 **Config precedence documentation** (flags > env > file > defaults) and
-   an `otedama config show --origin` annotating where each value came from.
+8. ✅ **Config precedence documentation** (flags > env > file > defaults) and
+   `otedama config show --origin`. — session 104: `ResolveWithOrigins` tracks
+   a `ValueOrigin` (default/file/env/flag) per Config field. `config show
+   --origin` appends ` [layer]` to each output line so operators immediately
+   see which precedence layer set each value — critical for debugging "why is
+   this config wrong?"
 9. ✅ **Graceful shutdown on SIGINT/SIGTERM**.
 10. 🟡 **Exit-code contract documented** (0 ok, 1 runtime, 2 usage) in the man
     page / README for scripting.

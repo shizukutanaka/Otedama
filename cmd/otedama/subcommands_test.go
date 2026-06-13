@@ -461,6 +461,96 @@ pools:
 }
 
 // ============================================================================
+// config show --origin
+// ============================================================================
+
+func TestConfigShow_Origin_DefaultValues(t *testing.T) {
+	// With no file, env, or flags, all values are from the default layer.
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show", "--origin"}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --origin exit = %d, want 0 (stderr: %s)", code, errb.String())
+	}
+	got := out.String()
+	// Every line must include "[default]" since nothing was explicitly set.
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		if line == "" || strings.HasPrefix(line, "  ") {
+			continue // sub-items (indented pool/address lines) have no tag
+		}
+		if !strings.Contains(line, "[default]") {
+			t.Errorf("expected [default] on line %q", line)
+		}
+	}
+}
+
+func TestConfigShow_Origin_FlagAnnotated(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{
+		"config", "show",
+		"--origin",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--log-level", "debug",
+	}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --origin --bitcoin-address exit = %d (stderr: %s)", code, errb.String())
+	}
+	got := out.String()
+	// bitcoin_address was provided via flag — must say [flag].
+	if !strings.Contains(got, "bitcoin_address:") || !strings.Contains(got, "[flag]") {
+		t.Errorf("expected [flag] annotation for bitcoin_address:\n%s", got)
+	}
+	// log_level was provided via flag — must say [flag].
+	if !strings.Contains(got, "log_level:") {
+		t.Errorf("log_level line missing:\n%s", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "log_level:") && !strings.Contains(line, "[flag]") {
+			t.Errorf("log_level should have [flag] annotation: %q", line)
+		}
+	}
+}
+
+func TestConfigShow_Origin_FileAnnotated(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("log_level: warn\nlog_format: json\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show", "--origin", "--config", path}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --origin --config exit = %d (stderr: %s)", code, errb.String())
+	}
+	got := out.String()
+	// log_level and log_format came from the file.
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "log_level:") && !strings.Contains(line, "[file]") {
+			t.Errorf("log_level should have [file] annotation: %q", line)
+		}
+		if strings.Contains(line, "log_format:") && !strings.Contains(line, "[file]") {
+			t.Errorf("log_format should have [file] annotation: %q", line)
+		}
+	}
+}
+
+func TestConfigShow_NoOriginFlag_NoAnnotations(t *testing.T) {
+	// Without --origin, no bracket annotations should appear in the output.
+	var out, errb bytes.Buffer
+	code := run([]string{
+		"config", "show",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+	}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show exit = %d (stderr: %s)", code, errb.String())
+	}
+	got := out.String()
+	if strings.Contains(got, "[flag]") || strings.Contains(got, "[default]") || strings.Contains(got, "[file]") || strings.Contains(got, "[env]") {
+		t.Errorf("origin annotations found without --origin flag:\n%s", got)
+	}
+}
+
+// ============================================================================
 // doctor — fs.Parse error path
 // ============================================================================
 
