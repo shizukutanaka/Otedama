@@ -665,6 +665,77 @@ func TestEngineMetrics_JoulesPerTerahash_AppearsInWriteText(t *testing.T) {
 }
 
 // ============================================================================
+// pruneStaleStreams — dead-provider quote expiry (session 122)
+// ============================================================================
+
+func TestPruneStaleStreams_RemovesExpiredKeepsFresh(t *testing.T) {
+	now := time.Now()
+	m := map[string]arbitration.Stream{
+		"ai.akash:gpu-0":       {ID: "ai.akash"},
+		"mining.stratum:cpu-0": {ID: "mining.stratum"},
+	}
+	seen := map[string]time.Time{
+		"ai.akash:gpu-0":       now.Add(-5 * time.Minute),  // stale (> 3m)
+		"mining.stratum:cpu-0": now.Add(-30 * time.Second), // fresh
+	}
+	pruned := pruneStaleStreams(m, seen, now, streamStaleTimeout)
+
+	if len(pruned) != 1 || pruned[0] != "ai.akash:gpu-0" {
+		t.Fatalf("pruned = %v, want [ai.akash:gpu-0]", pruned)
+	}
+	if _, ok := m["ai.akash:gpu-0"]; ok {
+		t.Error("stale stream still present in map")
+	}
+	if _, ok := seen["ai.akash:gpu-0"]; ok {
+		t.Error("stale stream still present in seen map")
+	}
+	if _, ok := m["mining.stratum:cpu-0"]; !ok {
+		t.Error("fresh stream was wrongly pruned")
+	}
+}
+
+func TestPruneStaleStreams_NeverPrunesUntimestampedEntries(t *testing.T) {
+	// A stream present in the map but absent from `seen` (e.g. pre-seeded
+	// directly, never quoted) must never be pruned, regardless of `now`.
+	now := time.Now()
+	m := map[string]arbitration.Stream{"mining.stratum:cpu-0": {ID: "mining.stratum"}}
+	seen := map[string]time.Time{} // no timestamp recorded
+
+	if pruned := pruneStaleStreams(m, seen, now.Add(100*time.Hour), streamStaleTimeout); len(pruned) != 0 {
+		t.Errorf("pruned untimestamped entry: %v", pruned)
+	}
+	if _, ok := m["mining.stratum:cpu-0"]; !ok {
+		t.Error("untimestamped stream was pruned")
+	}
+}
+
+func TestPruneStaleStreams_BoundaryAtTTL(t *testing.T) {
+	now := time.Now()
+	m := map[string]arbitration.Stream{"a:x": {ID: "a"}, "b:y": {ID: "b"}}
+	seen := map[string]time.Time{
+		"a:x": now.Add(-streamStaleTimeout),               // exactly ttl old → not yet stale (> ttl is the test)
+		"b:y": now.Add(-streamStaleTimeout - time.Second), // just past ttl → stale
+	}
+	pruned := pruneStaleStreams(m, seen, now, streamStaleTimeout)
+	if len(pruned) != 1 || pruned[0] != "b:y" {
+		t.Errorf("pruned = %v, want [b:y] (exactly-ttl entry must survive)", pruned)
+	}
+}
+
+func TestEngineMetrics_ActiveStreamsGauge_Registered(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.activeStreams.Set(3)
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(buf.String(), "otedama_active_streams 3") {
+		t.Errorf("otedama_active_streams missing/incorrect:\n%s", buf.String())
+	}
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

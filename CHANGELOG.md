@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 122 — expire stale provider quotes so dead providers stop being routed to)
+
+Arbitration-correctness gap (RESEARCH_IMPROVEMENTS Category 5 item 3): the
+engine's `streamMap` was never expired. When a provider crashed or went silent,
+its last quote stayed in the map forever and `Decide` kept routing devices to
+that dead revenue stream on every tick — the "detect a dead inference provider
+and stop routing GPUs to it" case, previously unhandled.
+
+**`internal/engine/arbitrate.go`**:
+- `pruneStaleStreams(m, seen, now, ttl)` — pure, deterministically testable:
+  removes streams whose last quote is older than `ttl`. Only entries with a
+  recorded quote time are eligible, so a directly-seeded stream (never quoted)
+  is never pruned.
+- `runArbitrationLoop` tracks each stream's last-quote time (`Quote.At`, falling
+  back to now) and prunes on every tick before `Decide`, logging each expiry.
+- `streamStaleTimeout = 3 * time.Minute` — generous vs the 30s/60s provider
+  quote cadence, so ordinary jitter never prunes a live provider.
+- `updateStream` now returns the key it wrote (single source of truth for the
+  stream-key format) so the loop can track freshness.
+
+**`internal/engine/metrics.go`**:
+- `otedama_active_streams` gauge — number of live streams after pruning; a drop
+  surfaces a provider that stopped quoting.
+
+Tests (4 new): `pruneStaleStreams` removes-expired/keeps-fresh, never-prunes-
+untimestamped, TTL boundary; plus the `otedama_active_streams` gauge. Existing
+loop tests (which pre-seed `streamMap` without a quote) are unaffected by design.
+
+24 packages green (race-checked).
+
 ### Fix (session 121 — metrics formatFloat misclassified large finite values as +Inf)
 
 `formatFloat` detected infinities with magnitude thresholds (`v > 1e308`,

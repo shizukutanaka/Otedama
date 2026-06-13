@@ -27,9 +27,13 @@ type engineMetrics struct {
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
 	arbitrationSwitches *metrics.Counter
-	btcUSDRate          *metrics.Gauge
-	uptime              *metrics.Gauge
-	startTime           *metrics.Gauge
+	// activeStreams is the number of live revenue streams arbitration is
+	// choosing between after stale (dead-provider) streams are pruned. A
+	// drop here surfaces a provider that has stopped quoting.
+	activeStreams *metrics.Gauge
+	btcUSDRate    *metrics.Gauge
+	uptime        *metrics.Gauge
+	startTime     *metrics.Gauge
 
 	submitLatencyP50 *metrics.Gauge
 	submitLatencyP95 *metrics.Gauge
@@ -123,6 +127,11 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		arbitrationSwitches: reg.NewCounter(
 			"otedama_arbitration_switches_total",
 			"Total arbitration workload switches (mining ↔ AI).",
+			nil),
+		activeStreams: reg.NewGauge(
+			"otedama_active_streams",
+			"Number of live revenue streams in arbitration after pruning stale "+
+				"(dead-provider) quotes. A drop indicates a provider stopped quoting.",
 			nil),
 		btcUSDRate: reg.NewGauge(
 			"otedama_btc_usd_rate",

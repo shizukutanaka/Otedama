@@ -35,6 +35,15 @@ type arbitrationLoopOpts struct {
 // defaultHysteresisPct matches the default in config.Defaults().
 const defaultHysteresisPct = 0.05
 
+// streamStaleTimeout is how long a provider's quote remains usable after it
+// was generated. Providers re-quote every 30s (mining) / 60s (AI), so a
+// provider that has sent no quote within this window is treated as dead and
+// its stream is dropped from arbitration — otherwise a crashed or partitioned
+// provider's last quote would route devices to a revenue source that no longer
+// exists (RESEARCH_IMPROVEMENTS Category 5 item 3). The window is generous
+// (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
+const streamStaleTimeout = 3 * time.Minute
+
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
 // or whenever a fresh quote arrives. Blocks until ctx is cancelled or
 // the quote channel is closed.
@@ -42,6 +51,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
 	defer ticker.Stop()
 	var prevAlloc *arbitration.Allocation
+	// lastQuoteAt records when each stream (keyed as in updateStream) last
+	// received a quote, so stale streams from dead providers can be expired.
+	lastQuoteAt := make(map[string]time.Time)
 	for {
 		select {
 		case <-ctx.Done():
@@ -50,11 +62,24 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if !ok {
 				return
 			}
-			updateStream(opts.streamsMu, opts.streamMap, q)
+			key := updateStream(opts.streamsMu, opts.streamMap, q)
+			ts := q.At
+			if ts.IsZero() {
+				ts = time.Now()
+			}
+			lastQuoteAt[key] = ts
 		case <-ticker.C:
 			opts.streamsMu.Lock()
+			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
+				opts.log("info", fmt.Sprintf(
+					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
+					key, streamStaleTimeout))
+			}
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
+			if opts.metrics != nil {
+				opts.metrics.activeStreams.Set(float64(len(streams)))
+			}
 
 			margin := opts.hysteresisPct
 			if margin == 0 {
@@ -82,9 +107,27 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	}
 }
 
+// pruneStaleStreams removes from m (and seen) every stream whose last quote is
+// older than ttl, returning the pruned keys. Only entries that have a recorded
+// quote time are considered: a stream present in m but absent from seen (e.g.
+// pre-seeded directly, never quoted) is never pruned. now is passed in so the
+// logic is deterministically testable.
+func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time, ttl time.Duration) []string {
+	var pruned []string
+	for key, ts := range seen {
+		if now.Sub(ts) > ttl {
+			delete(m, key)
+			delete(seen, key)
+			pruned = append(pruned, key)
+		}
+	}
+	return pruned
+}
+
 // updateStream folds one provider quote into the live streams map,
-// keyed by "providerID:deviceID".
-func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) {
+// keyed by "providerID:deviceID". It returns the key it wrote, so the caller
+// can track per-stream freshness for staleness pruning.
+func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) string {
 	mu.Lock()
 	defer mu.Unlock()
 	key := q.ProviderID + ":" + q.DeviceID
@@ -106,6 +149,7 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
 	m[key] = existing
+	return key
 }
 
 // streamsSlice flattens the streams map into a slice, de-duplicated by
