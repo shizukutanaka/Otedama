@@ -97,6 +97,33 @@ type Options struct {
 	OnReady func(ready bool)
 }
 
+// curtailDecision is the pure decision function for the price-curtailment
+// gate. Given the current gate state and a price observation, it returns the
+// next state and whether it changed.
+//
+// Safety rule: a price that is not fresh (the fallback value before any
+// successful fetch, or a rate older than rates.CacheDuration) NEVER changes
+// the gate. Otedama must not pause or resume mining based on a price it does
+// not trust — acting on the startup fallback would spuriously curtail before
+// the real price is even known, and acting on a stale rate during a sources
+// outage could pause (or resume) mining against a price that has since moved.
+// When the data is untrustworthy the engine holds the last trusted state.
+//
+// A threshold of 0 (or negative) disables curtailment entirely.
+func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (next bool, changed bool) {
+	if threshold <= 0 || !fresh || rate <= 0 {
+		return curr, false
+	}
+	switch {
+	case rate < threshold && !curr:
+		return true, true // price dropped below threshold → pause
+	case rate >= threshold && curr:
+		return false, true // price recovered → resume
+	default:
+		return curr, false
+	}
+}
+
 // Run starts a full mining session and blocks until ctx is cancelled.
 // It orchestrates every subsystem: wallet, HAL, providers, arbitration,
 // TUI, and the Stratum V2 pool connection.
@@ -187,13 +214,13 @@ func Run(ctx context.Context, opts Options) error {
 			case <-t.C:
 				publishBTCRate(m, rateFetcher)
 				threshold := opts.Config.CurtailBelowBTCUSD
-				if threshold <= 0 {
+				rate, fresh := rateFetcher.BTCUSDRate()
+				next, changed := curtailDecision(curtailGate.Load(), rate, fresh, threshold)
+				if !changed {
 					continue
 				}
-				rate, _ := rateFetcher.BTCUSDRate()
-				curtailed := curtailGate.Load()
-				if rate > 0 && rate < threshold && !curtailed {
-					curtailGate.Store(true)
+				curtailGate.Store(next)
+				if next {
 					for _, w := range workers {
 						w.SetWork(nil)
 					}
@@ -203,8 +230,7 @@ func Run(ctx context.Context, opts Options) error {
 					if m != nil {
 						m.curtailed.Set(1)
 					}
-				} else if (rate == 0 || rate >= threshold) && curtailed {
-					curtailGate.Store(false)
+				} else {
 					log("info", fmt.Sprintf(
 						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
 						rate, threshold))

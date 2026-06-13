@@ -741,6 +741,57 @@ func TestPublishBTCRate_SetsGauge(t *testing.T) {
 }
 
 // ============================================================================
+// curtailDecision — pure price-curtailment decision (session 116)
+//
+// The critical safety property: a non-fresh price (startup fallback or a
+// rate older than the cache duration) must NEVER change the gate, so the
+// engine cannot pause or resume mining on a price it does not trust.
+// ============================================================================
+
+func TestCurtailDecision(t *testing.T) {
+	tests := []struct {
+		name        string
+		curr        bool
+		rate        float64
+		fresh       bool
+		threshold   float64
+		wantNext    bool
+		wantChanged bool
+	}{
+		// --- the bug this fixes: never act on a non-fresh price ---
+		{"not fresh below threshold does not curtail", false, 95000, false, 100000, false, false},
+		{"not fresh above threshold does not uncurtail", true, 95000, false, 90000, true, false},
+		{"fallback at startup (not fresh) is ignored", false, 95000, false, 100000, false, false},
+
+		// --- normal fresh transitions ---
+		{"fresh below threshold curtails", false, 89000, true, 90000, true, true},
+		{"fresh above threshold uncurtails", true, 95000, true, 90000, false, true},
+
+		// --- no-op steady states ---
+		{"fresh below while already curtailed: no change", true, 80000, true, 90000, true, false},
+		{"fresh above while not curtailed: no change", false, 95000, true, 90000, false, false},
+		{"exactly at threshold is not below (uncurtails)", true, 90000, true, 90000, false, true},
+		{"exactly at threshold when not curtailed: no change", false, 90000, true, 90000, false, false},
+
+		// --- feature disabled / invalid inputs ---
+		{"threshold 0 disables (no curtail)", false, 1, true, 0, false, false},
+		{"threshold 0 disables (no uncurtail either)", true, 1, true, 0, true, false},
+		{"negative threshold disabled", false, 50000, true, -1, false, false},
+		{"zero rate never changes state", true, 0, true, 90000, true, false},
+		{"negative rate never changes state", false, -5, true, 90000, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			next, changed := curtailDecision(tt.curr, tt.rate, tt.fresh, tt.threshold)
+			if next != tt.wantNext || changed != tt.wantChanged {
+				t.Errorf("curtailDecision(curr=%v, rate=%g, fresh=%v, thr=%g) = (%v, %v), want (%v, %v)",
+					tt.curr, tt.rate, tt.fresh, tt.threshold, next, changed, tt.wantNext, tt.wantChanged)
+			}
+		})
+	}
+}
+
+// ============================================================================
 // sessionOpts.isCurtailed — curtailment gate predicate (session 115)
 //
 // This predicate guards both job-application call sites in runSession /

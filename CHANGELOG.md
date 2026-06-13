@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 116 — curtailment ignores untrusted (stale/fallback) prices)
+
+Socratic-inquiry finding against the session-112/115 curtailment feature: the
+price goroutine read `rate, _ := rateFetcher.BTCUSDRate()` — discarding the
+`fresh` flag. So it would act on prices it should not trust:
+- At startup, before any successful fetch, `BTCUSDRate` returns the **fallback
+  $95k with fresh=false**. With `curtail_below_btc_usd` set above the fallback
+  (e.g. 100000), mining was **spuriously paused on the fallback value** before
+  the real price was ever known.
+- During a multi-minute sources outage the rate goes stale (fresh=false) but
+  the loop kept pausing/resuming against the last/fallback value.
+
+Pausing mining on an untrusted price is exactly the kind of false action that
+costs the user revenue.
+
+**`internal/engine/run.go`**:
+- New pure function `curtailDecision(curr, rate, fresh, threshold) (next, changed)`.
+  A non-fresh price (or rate ≤ 0, or threshold ≤ 0) **never changes the gate** —
+  the engine holds its last trusted state. Fresh transitions behave as before.
+- The price goroutine now uses `rate, fresh := rateFetcher.BTCUSDRate()` and
+  applies side effects (SetWork(nil), `otedama_curtailed`, logging) only when
+  `curtailDecision` reports a change. Extracting the decision makes the
+  safety-critical logic a pure, exhaustively-testable function.
+
+Tests (1 new table test, 14 cases — `TestCurtailDecision`): covers the
+not-fresh-never-changes property (the bug), normal fresh transitions, steady
+no-op states, threshold-disabled, and zero/negative rate guards.
+
+24 packages green, 1391 test cases (incl. subtests).
+
 ### Fix (session 115 — curtailment now durable: gate blocks incoming jobs)
 
 Socratic-inquiry finding against the session-112 curtailment feature: the
