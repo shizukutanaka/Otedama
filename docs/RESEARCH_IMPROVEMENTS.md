@@ -107,13 +107,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
     Bitcoin-address check so operators can confirm a Taproot payout address
     is understood. The existing `SchemeForAddressType` dispatch is now
     reachable from a raw address.
-11. 🟡 **Payout-scheme awareness (FPPS / PPLNS / TIDES).** 2026 pool
-    comparisons converge on one message: *compare net BTC retained, not the
-    headline fee* — FPPS smooths variance (pool absorbs it), PPLNS is cheaper
-    but variance falls on the miner, TIDES (OCEAN) is non-custodial and pays
-    into the coinbase. Otedama's non-custodial stance aligns with
-    TIDES/PPLNS. Improvement: surface the configured pool's payout scheme
-    (where known) and its variance/custody trade-off in `doctor`.
+11. ✅ **Payout-scheme awareness (FPPS / PPLNS / TIDES)** (session 111) —
+    `PoolConfig.PayoutScheme` field (YAML: `payout_scheme`) and
+    `checkPayoutScheme` doctor check surface per-pool variance/custody
+    trade-offs; `Validate()` rejects unknown values.
 12. 🟡 **Effective-yield accounting > fee rate.** The comparisons stress
     *"reliability dwarfs fee differences"* — a 4% uptime gap can cost ~4× a
     1% fee gap. ✅ First piece shipped (session 48):

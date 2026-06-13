@@ -34,6 +34,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolReachability(cfg),
 		checkPoolDiversity(cfg),
 		checkPoolEndpointDiversity(cfg),
+		checkPayoutScheme(cfg),
 		checkHardware(),
 		checkNetwork(),
 	}
@@ -412,6 +413,52 @@ func appendUnique(xs []string, s string) []string {
 
 // gpuDRMPath is the sysfs path scanned for render devices; overridable in tests.
 var gpuDRMPath = "/sys/class/drm"
+
+// checkPayoutScheme surfaces the payout scheme trade-offs for each configured
+// pool so operators understand the variance/custody implications of their
+// choice. The check is advisory (StatusPass or StatusSkip only — the scheme
+// field is optional and has no effect on the mining protocol).
+func checkPayoutScheme(cfg config.Config) Check {
+	return Check{
+		Name: "Pool payout schemes",
+		Run: func(_ context.Context) Result {
+			if len(cfg.Pools) == 0 {
+				return Result{Status: StatusSkip, Detail: "no pools configured; using built-in default"}
+			}
+			// Collect per-scheme summaries, noting when any pool is unconfigured.
+			var lines []string
+			anyUnknown := false
+			for _, p := range cfg.Pools {
+				host := stripScheme(p.URL)
+				if host == "" {
+					host = p.URL
+				}
+				switch p.PayoutScheme {
+				case "fpps":
+					lines = append(lines, fmt.Sprintf("%s: FPPS — smooth payouts, pool absorbs variance (typically higher fee)", host))
+				case "pplns":
+					lines = append(lines, fmt.Sprintf("%s: PPLNS — lower fee, miner absorbs variance; expect payout variability", host))
+				case "tides":
+					lines = append(lines, fmt.Sprintf("%s: TIDES — non-custodial coinbase payouts (OCEAN); best alignment with Otedama's sovereignty stance", host))
+				case "solo":
+					lines = append(lines, fmt.Sprintf("%s: Solo — full block reward or nothing; only viable for large miners", host))
+				default:
+					lines = append(lines, fmt.Sprintf("%s: scheme not set", host))
+					anyUnknown = true
+				}
+			}
+			detail := strings.Join(lines, "; ")
+			if anyUnknown {
+				return Result{
+					Status: StatusPass,
+					Detail: detail,
+					Fix:    "set payout_scheme: fpps/pplns/tides/solo in config.yaml for variance/custody context",
+				}
+			}
+			return Result{Status: StatusPass, Detail: detail}
+		},
+	}
+}
 
 func checkHardware() Check {
 	return Check{

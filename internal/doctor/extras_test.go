@@ -772,6 +772,100 @@ func TestDefaultChecks_IncludesWalletCheck(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// checkPayoutScheme — payout scheme advisory check
+// ============================================================================
+
+func TestCheckPayoutScheme_NoPoolsSkips(t *testing.T) {
+	c := checkPayoutScheme(config.Config{})
+	r := c.Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("no pools: status = %v, want Skip", r.Status)
+	}
+}
+
+func TestCheckPayoutScheme_KnownSchemes(t *testing.T) {
+	tests := []struct {
+		scheme string
+		want   string // substring expected in detail
+	}{
+		{"fpps", "FPPS"},
+		{"pplns", "PPLNS"},
+		{"tides", "TIDES"},
+		{"solo", "Solo"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.scheme, func(t *testing.T) {
+			cfg := config.Config{
+				Pools: []config.PoolConfig{
+					{URL: "stratum+tcp://pool.example.com:3333", PayoutScheme: tt.scheme},
+				},
+			}
+			r := checkPayoutScheme(cfg).Run(context.Background())
+			if r.Status != StatusPass {
+				t.Errorf("%s: status = %v, want Pass", tt.scheme, r.Status)
+			}
+			if !strings.Contains(r.Detail, tt.want) {
+				t.Errorf("%s: %q not in detail: %q", tt.scheme, tt.want, r.Detail)
+			}
+			if r.Fix != "" {
+				t.Errorf("%s: known scheme should not emit Fix hint, got: %q", tt.scheme, r.Fix)
+			}
+		})
+	}
+}
+
+func TestCheckPayoutScheme_UnknownScheme_EmitsFixHint(t *testing.T) {
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://pool.example.com:3333", PayoutScheme: ""},
+		},
+	}
+	r := checkPayoutScheme(cfg).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("unknown scheme: status = %v, want Pass", r.Status)
+	}
+	if r.Fix == "" {
+		t.Error("unknown scheme should emit Fix hint")
+	}
+	if !strings.Contains(r.Detail, "scheme not set") {
+		t.Errorf("detail should mention 'scheme not set': %q", r.Detail)
+	}
+}
+
+func TestCheckPayoutScheme_MultiplePoolsMixedSchemes(t *testing.T) {
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://pool1.example.com:3333", PayoutScheme: "fpps"},
+			{URL: "stratum+tcp://pool2.example.com:3333", PayoutScheme: "pplns"},
+		},
+	}
+	r := checkPayoutScheme(cfg).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("mixed schemes: status = %v, want Pass", r.Status)
+	}
+	if !strings.Contains(r.Detail, "FPPS") || !strings.Contains(r.Detail, "PPLNS") {
+		t.Errorf("detail should mention both schemes: %q", r.Detail)
+	}
+	if r.Fix != "" {
+		t.Errorf("all-known schemes should not emit Fix hint, got: %q", r.Fix)
+	}
+}
+
+func TestDefaultChecks_IncludesPayoutSchemeCheck(t *testing.T) {
+	checks := DefaultChecks(config.Config{}, "")
+	var found bool
+	for _, c := range checks {
+		if c.Name == "Pool payout schemes" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("DefaultChecks does not include the 'Pool payout schemes' check")
+	}
+}
+
 // checkPoolDiversity — no pools, single pool, multiple pools
 func TestCheckPoolDiversity(t *testing.T) {
 	ctx := context.Background()

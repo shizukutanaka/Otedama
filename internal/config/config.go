@@ -137,6 +137,16 @@ type PoolConfig struct {
 	// fallback path (not yet wired in v3.0.0-alpha) and is currently
 	// unused. Most V1 pools accept any value (often "x").
 	Password string `yaml:"password"`
+
+	// PayoutScheme is the pool's reward distribution method, used by
+	// `doctor` to surface its variance/custody trade-offs. Valid values:
+	// "fpps" (Full Pay Per Share — smooth payouts, pool absorbs variance),
+	// "pplns" (Pay Per Last N Shares — lower fee, miner absorbs variance),
+	// "tides" (Transparent Index of Distinct Extended Shares, OCEAN —
+	// non-custodial coinbase payouts, best alignment with Otedama's stance),
+	// "solo" (full block reward or nothing). Empty means unknown/unset.
+	// This field has no effect on the mining protocol.
+	PayoutScheme string `yaml:"payout_scheme"`
 }
 
 // WorkerConfig controls how Otedama identifies itself to pools.
@@ -390,6 +400,12 @@ func (c Config) Validate() error {
 			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
 		} else if err := validatePoolURL(p.URL); err != nil {
 			issues = append(issues, fmt.Sprintf("pools[%d].url invalid: %v", i, err))
+		}
+		switch p.PayoutScheme {
+		case "", "fpps", "pplns", "tides", "solo":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("pools[%d].payout_scheme %q is not one of fpps, pplns, tides, solo", i, p.PayoutScheme))
 		}
 	}
 

@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 111 — payout-scheme awareness in doctor and config)
+
+Adds an optional `payout_scheme` field to `PoolConfig` and a new
+`checkPayoutScheme` doctor check that surfaces each pool's
+variance/custody trade-offs, closing RESEARCH_IMPROVEMENTS.md Cat 3 item 11.
+
+**`internal/config/config.go`**:
+- `PoolConfig.PayoutScheme string` (YAML: `payout_scheme`). Valid values:
+  `fpps`, `pplns`, `tides`, `solo`, or empty (unknown/unset). Empty is the
+  default (the field is optional). Invalid values are caught by `Validate()`.
+  The field has no effect on the mining protocol — it is purely advisory.
+- `Validate()` now checks `pools[i].payout_scheme` and reports unknown values
+  alongside other pool-config issues.
+
+**`internal/doctor/checks.go`**:
+- `checkPayoutScheme(cfg config.Config) Check` — iterates configured pools and
+  emits per-pool trade-off summaries:
+  - `fpps`: smooth payouts, pool absorbs variance (typically higher fee)
+  - `pplns`: lower fee, miner absorbs variance; payout variability expected
+  - `tides`: non-custodial coinbase payouts (OCEAN); best alignment with
+    Otedama's non-custodial stance
+  - `solo`: full block reward or nothing; only viable for large miners
+  - empty: "scheme not set" with a Fix hint to add `payout_scheme:` to config
+  - No pools configured → StatusSkip.
+- Added to `DefaultChecks` between `checkPoolEndpointDiversity` and
+  `checkHardware`.
+
+Tests (7 new):
+- `TestValidate_PayoutScheme` (config — 5 valid values + 1 invalid, 6 subtests)
+- `TestCheckPayoutScheme_NoPoolsSkips`
+- `TestCheckPayoutScheme_KnownSchemes` (4 subtests: fpps/pplns/tides/solo)
+- `TestCheckPayoutScheme_UnknownScheme_EmitsFixHint`
+- `TestCheckPayoutScheme_MultiplePoolsMixedSchemes`
+- `TestDefaultChecks_IncludesPayoutSchemeCheck`
+
+24 packages green, 1147 tests.
+
 ### Feat (session 110 — wallet fingerprint in doctor)
 
 Adds a `checkWallet` check to `doctor.DefaultChecks` that surfaces the

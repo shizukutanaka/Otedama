@@ -229,6 +229,36 @@ func TestValidate_PoolURLs(t *testing.T) {
 	}
 }
 
+func TestValidate_PayoutScheme(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		c.Pools = []PoolConfig{{URL: "stratum+tcp://pool.example.com:3333"}}
+		return c
+	}
+	valid := []string{"", "fpps", "pplns", "tides", "solo"}
+	for _, s := range valid {
+		t.Run("valid_"+s, func(t *testing.T) {
+			c := base()
+			c.Pools[0].PayoutScheme = s
+			if err := c.Validate(); err != nil {
+				t.Errorf("payout_scheme %q should be valid; got %v", s, err)
+			}
+		})
+	}
+	t.Run("invalid_scheme", func(t *testing.T) {
+		c := base()
+		c.Pools[0].PayoutScheme = "pow"
+		err := c.Validate()
+		if err == nil {
+			t.Error("unknown payout_scheme should fail Validate()")
+		}
+		if !strings.Contains(err.Error(), "payout_scheme") {
+			t.Errorf("error should mention payout_scheme: %v", err)
+		}
+	})
+}
+
 func TestValidate_AggregatesMultipleIssues(t *testing.T) {
 	// A Config with multiple problems must report all of them in one
 	// error message, so users can fix everything in a single edit.
