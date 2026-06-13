@@ -803,9 +803,8 @@ func TestCheckBitcoinAddress_ValidTaprootPasses(t *testing.T) {
 	}
 }
 
-func TestCheckBitcoinAddress_LegacyBase58StillPasses(t *testing.T) {
-	// Base58 (1.../3...) addresses are not bech32; the checksum step must defer
-	// to the existing format check rather than reject them.
+func TestCheckBitcoinAddress_ValidBase58Passes(t *testing.T) {
+	// Valid Base58Check (1.../3...) addresses must pass the checksum step.
 	for _, a := range []string{
 		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
 		"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
@@ -814,6 +813,18 @@ func TestCheckBitcoinAddress_LegacyBase58StillPasses(t *testing.T) {
 		if r.Status != StatusPass {
 			t.Errorf("legacy address %q: status = %v, want Pass (detail: %s)", a, r.Status, r.Detail)
 		}
+	}
+}
+
+func TestCheckBitcoinAddress_Base58TypoFailsChecksum(t *testing.T) {
+	// In-alphabet typo of a valid P2PKH address: passes the charset check but
+	// fails the Base58Check checksum, so it must now be caught.
+	r := checkBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb").Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("typo'd base58 address: status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Fail result must provide a Fix hint")
 	}
 }
 

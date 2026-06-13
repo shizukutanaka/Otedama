@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 119 — Base58Check verification completes payout-address typo protection)
+
+Socratic-inquiry continuation of session 118: that session verified bech32
+checksums but left the symmetric gap open — legacy base58 addresses (`1…`
+P2PKH / `3…` P2SH) still fell back to a charset-only check, so an in-alphabet
+typo passed unchecked. This session closes the documented follow-up #2.
+
+**`internal/btccrypto/base58.go`** (new):
+- `ValidateBase58Address(addr) (AddressType, error)` — base58 decode +
+  Base58Check double-SHA256 checksum verification (reusing the existing
+  `Hash256`; not custom cryptography). Validates length (25 bytes) and mainnet
+  version byte (0x00 P2PKH, 0x05 P2SH). Returns `ErrNotBase58` for bech32/empty.
+- `ValidateAddress(addr) (AddressType, error)` — unified entry point: tries
+  bech32 then base58, returning the AddressType on a verified checksum or a
+  descriptive error otherwise. This is what payout-address validation should call.
+- `base58Decode` via `math/big`, preserving leading-zero bytes.
+
+**`internal/btccrypto/btccrypto.go`**:
+- `ErrNotBase58` sentinel.
+
+**`internal/doctor/checks.go`**:
+- `checkBitcoinAddress` and `checkFailoverAddresses` now call the unified
+  `btccrypto.ValidateAddress`, so **both** SegWit and legacy addresses are
+  checksum-verified. A typo in a `1…`/`3…` address now Fails the doctor check
+  (previously it passed). Removed the now-unused bech32-only special-casing.
+
+Verified against known-good vectors (genesis address, 1Boat…, valid P2SH) and
+the repo's fixtures; all are checksum-valid, so wiring is safe. Legacy and
+SegWit typo detection are now symmetric.
+
+Tests: 6 new in btccrypto (valid P2PKH/P2SH vectors, typo, invalid char, wrong
+length, not-base58 sentinel, unified-dispatch table) + 2 new in doctor (valid
+base58 passes, base58 typo fails).
+
+Note: config-load enforcement remains the one outstanding follow-up from 118
+(blocked on placeholder fixtures in config/cmd layering tests).
+
+24 packages green.
+
 ### Feat (session 118 — bech32/bech32m payout-address checksum verification)
 
 Socratic-inquiry finding: nothing in the codebase ever verified a payout

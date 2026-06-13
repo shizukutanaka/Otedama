@@ -75,6 +75,11 @@ var (
 	// a bech32 mainnet address (e.g. a legacy base58 "1.../3..." address), so
 	// callers can fall back to their own legacy-format handling.
 	ErrNotBech32 = errors.New("btccrypto: not a bech32 address")
+
+	// ErrNotBase58 is returned by ValidateBase58Address when the input is not a
+	// legacy base58 mainnet address (e.g. a bech32 "bc1..." address), so
+	// callers (and ValidateAddress) can fall back to another format.
+	ErrNotBase58 = errors.New("btccrypto: not a base58 address")
 )
 
 // ----- Interfaces -----
