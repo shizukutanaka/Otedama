@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 124 — effective-uptime accounting (productive-seconds counter))
+
+Closes the remaining piece of RESEARCH_IMPROVEMENTS Category 12 item 12: the
+research consensus is that reliability dwarfs fee differences, so the headline
+number is *effective uptime* — the fraction of time the rig actually produced
+hashrate. A dedicated counter gives an exact figure that survives scrape gaps
+and restarts, which PromQL `avg_over_time` over the `otedama_up` gauge cannot.
+
+**`internal/engine/stats.go`**:
+- `uptimeAccountant` — accumulates wall-clock seconds the miner was productive
+  (hashing, not stalled, not curtailed). Tracks the delta between observations
+  with the sub-second remainder carried forward, so it stays accurate across
+  non-uniform stats ticks. Primes on first observe (accounts nothing), ignores
+  non-positive deltas (clock skew), and is nil-counter-safe.
+
+**`internal/engine/metrics.go`**:
+- `otedama_productive_seconds_total` counter. Effective uptime =
+  `otedama_productive_seconds_total / otedama_uptime_seconds`.
+
+**`internal/engine/run.go`**:
+- Both the V2 and V1 stats ticks observe `currentHashRate > 0 && !stalled` into
+  the accountant each tick.
+
+Tests (5 new): priming, accumulation, non-productive exclusion, fractional-
+remainder carry, and clock-skew / nil-counter safety.
+
+24 packages green.
+
 ### Feat (session 123 — local-vs-pool share reconciliation metric)
 
 Implements the "trust the pool's numbers" reconciliation (RESEARCH_IMPROVEMENTS

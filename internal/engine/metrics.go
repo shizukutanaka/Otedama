@@ -47,6 +47,12 @@ type engineMetrics struct {
 	// reaching the pool — the local-vs-pool reconciliation signal.
 	sharesUnaccounted *metrics.Gauge
 
+	// productiveSeconds accumulates wall-clock seconds the miner actually
+	// produced hashrate (not stalled, not curtailed). Effective uptime =
+	// productive_seconds_total / uptime_seconds — the reliability number that
+	// dominates yield more than fee differences do.
+	productiveSeconds *metrics.Counter
+
 	// rejectRate is the complement of shareAcceptanceRate: rejected /
 	// (accepted + rejected). Having it as an explicit gauge lets operators
 	// build simple threshold alerts without PromQL arithmetic. Maps to the
@@ -174,6 +180,11 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Shares found locally but not yet judged by the pool (found − accepted − "+
 				"rejected, clamped at 0). A sustained or growing value means found shares "+
 				"are not reaching the pool (submission failures or drops).",
+			nil),
+		productiveSeconds: reg.NewCounter(
+			"otedama_productive_seconds_total",
+			"Cumulative wall-clock seconds the miner actually produced hashrate "+
+				"(not stalled, not curtailed). Effective uptime = this / otedama_uptime_seconds.",
 			nil),
 		rejectRate: reg.NewGauge(
 			"otedama_reject_rate",

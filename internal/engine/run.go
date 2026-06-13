@@ -602,6 +602,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// stall monitor and the hashrate gauge both consume this, not the
 	// lifetime average (which can never reach the stall floor).
 	var hashWindow hashrateWindow
+	// Accumulate productive (actually-hashing) time for effective-uptime accounting.
+	var uptime uptimeAccountant
 
 	// Track dropped shares so a consumer that cannot keep up surfaces as a
 	// warning rather than silently losing found shares.
@@ -633,6 +635,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
+				uptime.observe(time.Now(), currentHashRate > 0 && !stalled, opts.m.productiveSeconds)
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				// J/TH efficiency: only meaningful when power is configured and
 				// the miner is running (avoids division-by-zero and spurious 0).
@@ -773,6 +776,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
 	var hashWindow hashrateWindow
+	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
 
@@ -796,6 +800,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
+				uptime.observe(time.Now(), currentHashRate > 0 && !stalled, opts.m.productiveSeconds)
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				if opts.powerWatts > 0 {
 					opts.m.powerWatts.Set(opts.powerWatts)

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/tui"
@@ -134,6 +135,39 @@ func (w *hashrateWindow) observe(total uint64, now time.Time) float64 {
 	w.lastTotal = total
 	w.lastTime = now
 	return rate
+}
+
+// uptimeAccountant accumulates the wall-clock time the miner spends actually
+// producing hashrate (not stalled, not curtailed) into a counter, so an
+// operator can compute effective uptime = productive_seconds / uptime_seconds.
+// The research consensus is that reliability dwarfs fee differences — a few
+// percent of lost productive time outweighs a fee gap — so this is the headline
+// uptime number. Time is tracked as a wall-clock delta between observations,
+// with the sub-second remainder carried forward, so it stays accurate across
+// non-uniform stats ticks (RESEARCH_IMPROVEMENTS Category 12 item 12).
+type uptimeAccountant struct {
+	lastTick time.Time
+	accum    float64 // productive seconds not yet flushed to the counter
+}
+
+// observe accounts the time since the previous observe() call as productive or
+// not, flushing whole productive seconds to counter. The first call primes the
+// clock and accounts nothing. A nil counter (no metrics) is a no-op.
+func (u *uptimeAccountant) observe(now time.Time, productive bool, counter *metrics.Counter) {
+	if u.lastTick.IsZero() {
+		u.lastTick = now
+		return
+	}
+	elapsed := now.Sub(u.lastTick).Seconds()
+	u.lastTick = now
+	if elapsed <= 0 || !productive || counter == nil {
+		return
+	}
+	u.accum += elapsed
+	if whole := uint64(u.accum); whole > 0 {
+		counter.Add(whole)
+		u.accum -= float64(whole)
+	}
 }
 
 // logStats emits the periodic hashrate + cumulative share-count log line.

@@ -736,6 +736,80 @@ func TestEngineMetrics_ActiveStreamsGauge_Registered(t *testing.T) {
 }
 
 // ============================================================================
+// uptimeAccountant — effective-uptime accounting (session 124)
+// ============================================================================
+
+func TestUptimeAccountant_PrimesOnFirstObserve(t *testing.T) {
+	reg := metrics.NewRegistry()
+	c := reg.NewCounter("otedama_productive_seconds_total", "", nil)
+	var u uptimeAccountant
+	base := time.Now()
+	u.observe(base, true, c) // first call primes; accounts nothing
+	if c.Value() != 0 {
+		t.Errorf("first observe accounted %d seconds, want 0 (priming)", c.Value())
+	}
+}
+
+func TestUptimeAccountant_AccumulatesProductiveSeconds(t *testing.T) {
+	reg := metrics.NewRegistry()
+	c := reg.NewCounter("otedama_productive_seconds_total", "", nil)
+	var u uptimeAccountant
+	base := time.Now()
+	u.observe(base, true, c)                     // prime
+	u.observe(base.Add(10*time.Second), true, c) // +10s productive
+	u.observe(base.Add(25*time.Second), true, c) // +15s productive
+	if c.Value() != 25 {
+		t.Errorf("productive seconds = %d, want 25", c.Value())
+	}
+}
+
+func TestUptimeAccountant_SkipsNonProductiveTime(t *testing.T) {
+	reg := metrics.NewRegistry()
+	c := reg.NewCounter("otedama_productive_seconds_total", "", nil)
+	var u uptimeAccountant
+	base := time.Now()
+	u.observe(base, true, c)                      // prime
+	u.observe(base.Add(10*time.Second), false, c) // stalled/curtailed: not counted
+	u.observe(base.Add(20*time.Second), true, c)  // +10s productive
+	if c.Value() != 10 {
+		t.Errorf("productive seconds = %d, want 10 (non-productive interval excluded)", c.Value())
+	}
+}
+
+func TestUptimeAccountant_CarriesFractionalRemainder(t *testing.T) {
+	reg := metrics.NewRegistry()
+	c := reg.NewCounter("otedama_productive_seconds_total", "", nil)
+	var u uptimeAccountant
+	base := time.Now()
+	u.observe(base, true, c)
+	// Two 0.6s productive intervals = 1.2s → 1 whole second flushed, 0.2 carried.
+	u.observe(base.Add(600*time.Millisecond), true, c)
+	if c.Value() != 0 {
+		t.Errorf("after 0.6s: counter = %d, want 0 (sub-second carried)", c.Value())
+	}
+	u.observe(base.Add(1200*time.Millisecond), true, c)
+	if c.Value() != 1 {
+		t.Errorf("after 1.2s: counter = %d, want 1 (whole second flushed)", c.Value())
+	}
+}
+
+func TestUptimeAccountant_IgnoresNonPositiveAndNilCounter(t *testing.T) {
+	reg := metrics.NewRegistry()
+	c := reg.NewCounter("otedama_productive_seconds_total", "", nil)
+	var u uptimeAccountant
+	base := time.Now()
+	u.observe(base, true, c)
+	u.observe(base.Add(-5*time.Second), true, c) // clock went backwards: ignore
+	if c.Value() != 0 {
+		t.Errorf("counter = %d, want 0 (negative elapsed ignored)", c.Value())
+	}
+	// nil counter must not panic.
+	var u2 uptimeAccountant
+	u2.observe(base, true, nil)
+	u2.observe(base.Add(time.Second), true, nil)
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
