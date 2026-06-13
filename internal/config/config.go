@@ -37,6 +37,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 )
 
 // DefaultPoolURL is the built-in fallback Stratum V2 pool, used when the
@@ -490,14 +492,19 @@ func validateBitcoinAddress(addr string) error {
 	// enabled via a separate configuration option (not yet wired in v3.0.0-alpha).
 	switch {
 	case strings.HasPrefix(addr, "1"):
-		return nil
 	case strings.HasPrefix(addr, "3"):
-		return nil
 	case strings.HasPrefix(addr, "bc1"):
-		return nil
 	default:
 		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}
+	// Verify the address checksum (bech32/bech32m for bc1…, Base58Check for
+	// 1…/3…) so a transcription error that stays inside the character set —
+	// which would otherwise pass the prefix/length check and silently
+	// misdirect earnings — is rejected at config load, before mining begins.
+	if _, err := btccrypto.ValidateAddress(addr); err != nil {
+		return fmt.Errorf("checksum verification failed (likely a typo in the address): %w", err)
+	}
+	return nil
 }
 
 // validatePoolURL checks that a pool URL has an acceptable scheme.

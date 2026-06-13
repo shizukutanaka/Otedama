@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 120 — checksum-verify payout addresses at config load)
+
+Completes the last outstanding follow-up from sessions 118/119: enforce
+address-checksum verification at config-validation time, so a typo'd payout
+address is rejected **before any mining begins** rather than only being flagged
+by `doctor`. This is the fail-fast, fund-protection placement.
+
+**`internal/config/config.go`**:
+- `validateBitcoinAddress` now calls `btccrypto.ValidateAddress` after the
+  prefix/length check, rejecting any `1…`/`3…`/`bc1…` address whose
+  bech32/Base58Check checksum does not verify. Reached via `Config.Validate()`,
+  which both `otedama run` and `otedama config validate` call before starting.
+
+Verified safe: `engine.Run` does not call `Validate()` (engine tests that use
+placeholder addresses are unaffected), the config layering tests exercise
+`Resolve` (not `Validate`), and every `Validate()`-path fixture in config/cmd
+tests is a real checksum-valid address — so the previously-cited fixture
+blocker did not apply to the validation path. Full suite stays green.
+
+Tests (2 new): `TestValidate_RejectsChecksumTypo` (bech32 + base58 typos) and
+`TestValidate_RejectsChecksumTypoInFailoverList`.
+
+With this, payout-address typo protection is complete and enforced at every
+layer: config load (run / config validate) and `doctor`, across bech32,
+bech32m, and Base58Check.
+
+24 packages green.
+
 ### Feat (session 119 — Base58Check verification completes payout-address typo protection)
 
 Socratic-inquiry continuation of session 118: that session verified bech32

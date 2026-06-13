@@ -168,6 +168,43 @@ func TestValidate_RejectsInvalidAddresses(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsChecksumTypo(t *testing.T) {
+	// In-charset single-character typos that pass the prefix/length check but
+	// fail the address checksum must be rejected at config load — before any
+	// mining directs earnings at the wrong address. (Sessions 118/119 added
+	// the verifier; this wires it into Validate.)
+	tests := []struct {
+		name string
+		addr string
+	}{
+		{"bech32 typo", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdr"}, // last q->r
+		{"base58 typo", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb"},         // last a->b
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := Defaults()
+			c.BitcoinAddress = tt.addr
+			err := c.Validate()
+			if err == nil {
+				t.Fatalf("Validate() accepted checksum-invalid address %q", tt.addr)
+			}
+			if !strings.Contains(err.Error(), "checksum") {
+				t.Errorf("error should mention checksum: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidate_RejectsChecksumTypoInFailoverList(t *testing.T) {
+	c := Defaults()
+	c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"             // valid primary
+	c.BitcoinAddresses = []string{"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdr"} // typo backup
+	if err := c.Validate(); err == nil {
+		t.Error("Validate() accepted a checksum-invalid failover address")
+	}
+}
+
 func TestValidate_RejectsUnknownLogLevel(t *testing.T) {
 	c := Defaults()
 	c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
