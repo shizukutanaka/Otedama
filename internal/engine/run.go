@@ -496,6 +496,33 @@ func (o sessionOpts) isCurtailed() bool {
 	return o.curtailGate != nil && o.curtailGate.Load()
 }
 
+// updateLiveness feeds the stall monitor and sets the otedama_up gauge,
+// honouring curtailment. While curtailed the miner is intentionally idle, so a
+// zero hashrate is *expected*, not a fault: the stall monitor is not advanced
+// (no false "hashrate stalled — check device health" warning) and otedama_up
+// stays 1 (healthy, deliberately paused). otedama_curtailed carries the paused
+// signal separately, so operators can alert on otedama_up==0 for real stalls
+// without being paged during a price-driven pause. Returns whether the miner
+// is in a fault stall (for the dashboard badge); always false while curtailed.
+func (o sessionOpts) updateLiveness(hashMon *HashrateMonitor, currentHashRate float64) bool {
+	if o.isCurtailed() {
+		if o.m != nil {
+			o.m.up.Set(1)
+		}
+		return false
+	}
+	hashMon.Observe(currentHashRate)
+	stalled := hashMon.Stalled()
+	if o.m != nil {
+		if stalled {
+			o.m.up.Set(0)
+		} else {
+			o.m.up.Set(1)
+		}
+	}
+	return stalled
+}
+
 type poolMsg struct {
 	msg stratum.Message
 	err error
@@ -600,17 +627,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					dropped-lastDropped))
 				lastDropped = dropped
 			}
-			hashMon.Observe(currentHashRate)
+			stalled := opts.updateLiveness(hashMon, currentHashRate)
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, hashMon.Stalled()))
+				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, stalled))
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
-				if hashMon.Stalled() {
-					opts.m.up.Set(0)
-				} else {
-					opts.m.up.Set(1)
-				}
+				// otedama_up is set by updateLiveness (curtailment-aware).
 				// J/TH efficiency: only meaningful when power is configured and
 				// the miner is running (avoids division-by-zero and spurious 0).
 				if opts.powerWatts > 0 {
@@ -767,17 +790,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					dropped-lastDropped))
 				lastDropped = dropped
 			}
-			hashMon.Observe(currentHashRate)
+			stalled := opts.updateLiveness(hashMon, currentHashRate)
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, hashMon.Stalled()))
+				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, stalled))
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
-				if hashMon.Stalled() {
-					opts.m.up.Set(0)
-				} else {
-					opts.m.up.Set(1)
-				}
+				// otedama_up is set by updateLiveness (curtailment-aware).
 				if opts.powerWatts > 0 {
 					opts.m.powerWatts.Set(opts.powerWatts)
 					if currentHashRate > 0 {

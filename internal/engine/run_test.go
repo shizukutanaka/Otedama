@@ -880,6 +880,67 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 }
 
 // ============================================================================
+// sessionOpts.updateLiveness — curtailment must not be mistaken for a stall
+// (session 117)
+// ============================================================================
+
+func TestUpdateLiveness_CurtailedReportsHealthyAndDoesNotStall(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	gate := new(atomic.Bool)
+	gate.Store(true) // curtailed
+	opts := sessionOpts{m: m, curtailGate: gate}
+	hashMon := NewHashrateMonitor(0, 3, func(_, _ string) {})
+
+	// Workers are idled by curtailment, so the hashrate is 0 every tick.
+	// This must NOT be read as a fault: up stays 1 and the stall monitor is
+	// never advanced (so it would emit no "hashrate stalled" warning).
+	for i := 0; i < 5; i++ {
+		if stalled := opts.updateLiveness(hashMon, 0); stalled {
+			t.Fatalf("sample %d: reported stalled while curtailed", i)
+		}
+	}
+	if hashMon.Stalled() {
+		t.Error("stall monitor advanced to stalled while curtailed (would emit a false warning)")
+	}
+	if got := m.up.Value(); got != 1 {
+		t.Errorf("otedama_up = %v while curtailed, want 1 (healthy/paused)", got)
+	}
+}
+
+func TestUpdateLiveness_NotCurtailedZeroHashrateStalls(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	opts := sessionOpts{m: m} // nil gate -> not curtailed
+	hashMon := NewHashrateMonitor(0, 3, func(_, _ string) {})
+
+	var stalled bool
+	for i := 0; i < 3; i++ {
+		stalled = opts.updateLiveness(hashMon, 0)
+	}
+	if !stalled {
+		t.Error("expected a fault stall after 3 zero samples when not curtailed")
+	}
+	if got := m.up.Value(); got != 0 {
+		t.Errorf("otedama_up = %v on real stall, want 0", got)
+	}
+}
+
+func TestUpdateLiveness_HealthyHashrateReportsUp(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	opts := sessionOpts{m: m}
+	hashMon := NewHashrateMonitor(0, 3, func(_, _ string) {})
+
+	if stalled := opts.updateLiveness(hashMon, 1e6); stalled {
+		t.Error("healthy hashrate reported as stalled")
+	}
+	if got := m.up.Value(); got != 1 {
+		t.Errorf("otedama_up = %v while hashing, want 1", got)
+	}
+}
+
+// ============================================================================
 // setupWallet — early-return paths (no passphrase / no datadir)
 // ============================================================================
 

@@ -167,7 +167,9 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 
 		up: reg.NewGauge(
 			"otedama_up",
-			"1 if the miner is producing hashrate (not stalled), else 0.",
+			"1 if the miner is healthy (hashing, or intentionally paused by "+
+				"curtailment), 0 if it has stalled when it should be hashing. "+
+				"Use otedama_curtailed to distinguish a deliberate pause.",
 			nil),
 		curtailed: reg.NewGauge(
 			"otedama_curtailed",

@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 117 — curtailment is no longer misread as a hashrate stall)
+
+Socratic-inquiry finding on the interaction between curtailment (112/115/116)
+and the pre-existing stall monitor: when curtailment idled the workers, the
+hashrate fell to 0, and after 3 ticks `HashrateMonitor` flagged a stall —
+setting `otedama_up=0` and logging "hashrate stalled — check device health,
+cooling, and pool connection". Both are false during a *deliberate, healthy*
+price pause: operators alerting on `otedama_up==0` would be paged, and the log
+would point them at non-existent hardware faults.
+
+**`internal/engine/run.go`**:
+- New `sessionOpts.updateLiveness(hashMon, currentHashRate) bool` helper,
+  shared by the V2 and V1 stats ticks (removing the duplicated stall/up logic).
+  While curtailed it does **not** advance the stall monitor (no false warning)
+  and holds `otedama_up=1` (healthy, paused); otherwise it behaves exactly as
+  before. Returns the stall state for the TUI badge (false while curtailed).
+- Both stats-tick branches now call `updateLiveness` instead of inlining
+  `hashMon.Observe` + `otedama_up` set.
+
+**`internal/engine/metrics.go`**:
+- `otedama_up` help text updated to the healthy-vs-faulted semantics: 1 =
+  hashing or intentionally paused by curtailment, 0 = stalled when it should be
+  hashing; use `otedama_curtailed` to distinguish a deliberate pause. (Matches
+  the session-101 principle of not forcing operators into PromQL arithmetic.)
+
+Tests (3 new):
+- `TestUpdateLiveness_CurtailedReportsHealthyAndDoesNotStall` — 5 zero-hashrate
+  samples while curtailed never stall and keep up=1 (verified to fail under the
+  pre-fix always-observe logic).
+- `TestUpdateLiveness_NotCurtailedZeroHashrateStalls` — real stall still sets up=0.
+- `TestUpdateLiveness_HealthyHashrateReportsUp`.
+
+24 packages green (race-checked).
+
 ### Fix (session 116 — curtailment ignores untrusted (stale/fallback) prices)
 
 Socratic-inquiry finding against the session-112/115 curtailment feature: the
