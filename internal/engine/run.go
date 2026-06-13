@@ -34,6 +34,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
@@ -162,13 +163,21 @@ func Run(ctx context.Context, opts Options) error {
 	rateFetcher := rates.NewFetcher(95000) // $95k fallback
 	rateFetcher.StartBackground(ctx, 5*time.Minute)
 
+	// curtailGate is the single source of truth for whether hashing is
+	// paused by the curtail_below_btc_usd threshold. The price goroutine
+	// below flips it, and the session loop consults it before applying any
+	// pool job — without this shared gate the next mining.notify (~30–60 s)
+	// would silently re-arm the idled workers while otedama_curtailed still
+	// read 1, so the pause neither held nor matched the metric.
+	curtailGate := new(atomic.Bool)
+
 	// Publish the BTC/USD rate to its gauge and enforce the optional
 	// curtailment threshold (curtail_below_btc_usd). When the price falls
-	// below the threshold all workers are idled (SetWork(nil)); they resume
-	// on the next pool notify after the price recovers.
+	// below the threshold all workers are idled (SetWork(nil)) and the gate
+	// is raised so incoming jobs are not applied; they resume on the next
+	// pool notify after the price recovers and the gate is lowered.
 	go func() {
 		publishBTCRate(m, rateFetcher)
-		var curtailed bool
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
 		for {
@@ -182,8 +191,9 @@ func Run(ctx context.Context, opts Options) error {
 					continue
 				}
 				rate, _ := rateFetcher.BTCUSDRate()
+				curtailed := curtailGate.Load()
 				if rate > 0 && rate < threshold && !curtailed {
-					curtailed = true
+					curtailGate.Store(true)
 					for _, w := range workers {
 						w.SetWork(nil)
 					}
@@ -194,7 +204,7 @@ func Run(ctx context.Context, opts Options) error {
 						m.curtailed.Set(1)
 					}
 				} else if (rate == 0 || rate >= threshold) && curtailed {
-					curtailed = false
+					curtailGate.Store(false)
 					log("info", fmt.Sprintf(
 						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
 						rate, threshold))
@@ -260,16 +270,17 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	return runReconnectLoop(ctx, reconnectOpts{
-		opts:      opts,
-		workers:   workers,
-		merged:    merged,
-		dashboard: dashboard,
-		startTime: startTime,
-		wallet:    walletFingerprint,
-		deviceN:   len(devices),
-		providers: []provider.Provider{miningProvider, akashProvider},
-		metrics:   m,
-		log:       log,
+		opts:        opts,
+		workers:     workers,
+		merged:      merged,
+		dashboard:   dashboard,
+		startTime:   startTime,
+		wallet:      walletFingerprint,
+		deviceN:     len(devices),
+		providers:   []provider.Provider{miningProvider, akashProvider},
+		metrics:     m,
+		log:         log,
+		curtailGate: curtailGate,
 	})
 }
 
@@ -286,6 +297,10 @@ type reconnectOpts struct {
 	providers []provider.Provider
 	metrics   *engineMetrics
 	log       func(level, msg string)
+	// curtailGate, when non-nil and true, means hashing is paused by the
+	// curtail_below_btc_usd threshold; the session loop must not apply
+	// incoming pool jobs while it is raised.
+	curtailGate *atomic.Bool
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
@@ -334,19 +349,20 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		r.metrics.payoutActiveIndex.Set(float64(addrIdx))
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:    poolURL,
-			user:       user,
-			workers:    r.workers,
-			merged:     r.merged,
-			interval:   statsInterval,
-			dashboard:  r.dashboard,
-			startTime:  r.startTime,
-			wallet:     r.wallet,
-			devices:    r.deviceN,
-			log:        r.log,
-			providers:  r.providers,
-			m:          r.metrics,
-			powerWatts: r.opts.Config.PowerWatts,
+			poolURL:     poolURL,
+			user:        user,
+			workers:     r.workers,
+			merged:      r.merged,
+			interval:    statsInterval,
+			dashboard:   r.dashboard,
+			startTime:   r.startTime,
+			wallet:      r.wallet,
+			devices:     r.deviceN,
+			log:         r.log,
+			providers:   r.providers,
+			m:           r.metrics,
+			powerWatts:  r.opts.Config.PowerWatts,
+			curtailGate: r.curtailGate,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -439,10 +455,19 @@ type sessionOpts struct {
 	providers  []provider.Provider
 	m          *engineMetrics
 	powerWatts float64 // from config.PowerWatts; used for J/TH metric
+	// curtailGate, when non-nil and raised, suppresses applying pool jobs to
+	// workers (they stay idle) because BTC/USD is below the curtail threshold.
+	curtailGate *atomic.Bool
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
 	onConnected func()
+}
+
+// isCurtailed reports whether hashing is currently paused by the
+// curtail_below_btc_usd threshold. Safe to call with a nil gate.
+func (o sessionOpts) isCurtailed() bool {
+	return o.curtailGate != nil && o.curtailGate.Load()
 }
 
 type poolMsg struct {
@@ -598,9 +623,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
 			if pm.msg.NewMiningJob != nil {
-				updateWork(opts.workers, pm.msg.NewMiningJob, chanID, shareTarget)
-				opts.log("info", fmt.Sprintf("engine: job %d nBits=0x%08X",
-					pm.msg.NewMiningJob.JobID, pm.msg.NewMiningJob.NBits))
+				// While curtailed, do not arm the workers with the new job —
+				// they must stay idle until the price recovers. The pool
+				// connection is still alive, so lastJobReceivedAt is updated
+				// regardless (it tracks pool liveness, not hashing).
+				if opts.isCurtailed() {
+					opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)",
+						pm.msg.NewMiningJob.JobID))
+				} else {
+					updateWork(opts.workers, pm.msg.NewMiningJob, chanID, shareTarget)
+					opts.log("info", fmt.Sprintf("engine: job %d nBits=0x%08X",
+						pm.msg.NewMiningJob.JobID, pm.msg.NewMiningJob.NBits))
+				}
 				if opts.m != nil {
 					opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 				}
@@ -746,11 +780,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")
 			}
-			if err := applyJob(opts.workers, job, chanID); err != nil {
-				opts.log("warn", err.Error())
-				continue
+			// While curtailed, keep workers idle and ignore the job (see the
+			// V2 path for rationale). lastJobReceivedAt still updates because
+			// the pool connection remains alive.
+			if opts.isCurtailed() {
+				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
+			} else {
+				if err := applyJob(opts.workers, job, chanID); err != nil {
+					opts.log("warn", err.Error())
+					continue
+				}
+				opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
 			}
-			opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
 			if opts.m != nil {
 				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 			}

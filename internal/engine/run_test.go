@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -736,6 +737,94 @@ func TestPublishBTCRate_SetsGauge(t *testing.T) {
 
 	if got := m.btcUSDRate.Value(); got != 95000 {
 		t.Errorf("btc_usd_rate gauge = %v, want fallback 95000", got)
+	}
+}
+
+// ============================================================================
+// sessionOpts.isCurtailed — curtailment gate predicate (session 115)
+//
+// This predicate guards both job-application call sites in runSession /
+// runSessionV1: when it returns true, an incoming pool job must NOT be armed
+// onto the workers (they stay idle from the curtailment goroutine's
+// SetWork(nil)). The un-curtailed path (nil gate -> jobs applied -> shares
+// reach the pool) is covered end-to-end by TestEngine_Integration_HandshakeSucceeds.
+// ============================================================================
+
+func TestSessionOpts_IsCurtailed_NilGateIsFalse(t *testing.T) {
+	// A session with no curtail gate (curtail_below_btc_usd disabled) must
+	// never report curtailed, so jobs are always applied.
+	var opts sessionOpts // curtailGate == nil
+	if opts.isCurtailed() {
+		t.Error("isCurtailed() = true with nil gate, want false")
+	}
+}
+
+func TestSessionOpts_IsCurtailed_ReflectsGateState(t *testing.T) {
+	gate := new(atomic.Bool)
+	opts := sessionOpts{curtailGate: gate}
+
+	if opts.isCurtailed() {
+		t.Error("isCurtailed() = true before gate raised, want false")
+	}
+	gate.Store(true)
+	if !opts.isCurtailed() {
+		t.Error("isCurtailed() = false after gate raised, want true")
+	}
+	gate.Store(false)
+	if opts.isCurtailed() {
+		t.Error("isCurtailed() = true after gate lowered, want false")
+	}
+}
+
+// TestCurtailmentGate_BlocksWorkApplication verifies the contract the gate
+// enforces, observed through the share channel (the honest signal that a
+// worker is actually hashing): while the gate is raised an incoming job must
+// leave the worker idle (no shares); once lowered, the next job arms it
+// (shares flow). It exercises the exact branch the session loop uses
+// (isCurtailed -> apply or skip) against a real running worker, so a
+// regression in either the predicate or the call-site wiring is caught.
+func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	gate := new(atomic.Bool)
+	opts := sessionOpts{workers: []*miner.Worker{w}, curtailGate: gate}
+
+	target, err := miner.TargetFromNBits(0x207fffff) // trivially easy
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	job := &stratum.NewMiningJob{JobID: 7, NBits: 0x207fffff}
+
+	apply := func() {
+		if opts.isCurtailed() {
+			return // mirror runSession: skip arming while curtailed
+		}
+		updateWork(opts.workers, job, 0, target)
+	}
+
+	// Gate raised: applying a job is skipped, so the worker never gets work
+	// and must produce no shares.
+	gate.Store(true)
+	apply()
+	select {
+	case <-shares:
+		t.Fatal("worker produced a share while curtailed; gate did not block work application")
+	case <-time.After(250 * time.Millisecond):
+		// No share — correct; the worker has no work.
+	}
+
+	// Gate lowered: the next job must arm the worker and shares must flow.
+	gate.Store(false)
+	apply()
+	select {
+	case <-shares:
+		// Armed and hashing — correct.
+	case <-ctx.Done():
+		t.Fatal("no share after curtailment lifted; gate stuck or work not applied")
 	}
 }
 

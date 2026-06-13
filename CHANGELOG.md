@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 115 — curtailment now durable: gate blocks incoming jobs)
+
+Socratic-inquiry finding against the session-112 curtailment feature: the
+curtailment goroutine idled workers with `SetWork(nil)`, but the session loop
+unconditionally re-armed them via `updateWork`/`applyJob` on the next pool
+notify (~30–60 s). So the pause silently lifted within a minute while
+`otedama_curtailed` still read 1 — the feature did not hold and the metric
+lied.
+
+**`internal/engine/run.go`**:
+- New shared `curtailGate *atomic.Bool` created in `Run()`, owned by the price
+  goroutine (raises/lowers it alongside `SetWork(nil)` and the
+  `otedama_curtailed` gauge) and threaded through `reconnectOpts` →
+  `sessionOpts`.
+- `sessionOpts.isCurtailed()` predicate (nil-safe).
+- Both job-application sites (`runSession` V2 `NewMiningJob`, `runSessionV1`
+  `sess.Jobs()`) now skip arming workers while the gate is raised — the
+  workers stay idle until the price recovers and the gate is lowered.
+  `otedama_last_job_received_seconds` still updates (pool liveness is
+  independent of hashing).
+
+Tests (3 new):
+- `TestSessionOpts_IsCurtailed_NilGateIsFalse`
+- `TestSessionOpts_IsCurtailed_ReflectsGateState`
+- `TestCurtailmentGate_BlocksWorkApplication` — observed via the share channel:
+  no shares while the gate is raised, shares flow once lowered. Verified to
+  fail under the pre-fix logic (worker mined despite curtailment) and passes
+  under `-race`. The un-curtailed apply path remains covered end-to-end by
+  `TestEngine_Integration_HandshakeSucceeds`.
+
+24 packages green, 1166 tests.
+
 ### Fix (session 114 — arbitration hysteresis measured in policy-score space)
 
 Socratic-inquiry finding: the arbitration engine *selected* streams in
