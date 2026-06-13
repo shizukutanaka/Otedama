@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 121 — metrics formatFloat misclassified large finite values as +Inf)
+
+`formatFloat` detected infinities with magnitude thresholds (`v > 1e308`,
+`v < -1e308`) rather than `math.IsInf`. Those thresholds also match large
+*finite* values — anything in `(1e308, MaxFloat64]` — so a gauge holding, e.g.,
+1.5e308 was rendered as `+Inf` in the `/metrics` output, contradicting the
+function's stated contract of converting only special values. Switched to
+`math.IsNaN` / `math.IsInf`. No Otedama metric currently reaches that
+magnitude, so this is a latent-correctness fix, not a user-visible regression.
+
+Tests (1 new table, 8 cases incl. NaN/±Inf, large finite, MaxFloat64, and a
+large negative finite — the regression cases).
+
+24 packages green.
+
 ### Feat (session 120 — checksum-verify payout addresses at config load)
 
 Completes the last outstanding follow-up from sessions 118/119: enforce

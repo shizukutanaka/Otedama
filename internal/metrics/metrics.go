@@ -29,6 +29,7 @@ package metrics
 import (
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -318,13 +319,16 @@ func cloneLabels(in map[string]string) map[string]string {
 
 // formatFloat renders a float in the format Prometheus expects.
 // Uses %g but converts special values to the Prometheus-canonical strings.
+// Inf/NaN are detected with math.IsInf/IsNaN rather than magnitude thresholds:
+// a threshold like v > 1e308 also matches large *finite* values (anything in
+// (1e308, MaxFloat64]), which would be mis-rendered as "+Inf".
 func formatFloat(v float64) string {
 	switch {
-	case v != v: // NaN
+	case math.IsNaN(v):
 		return "NaN"
-	case v > 1e308:
+	case math.IsInf(v, 1):
 		return "+Inf"
-	case v < -1e308:
+	case math.IsInf(v, -1):
 		return "-Inf"
 	}
 	return fmt.Sprintf("%g", v)

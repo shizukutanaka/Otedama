@@ -606,3 +606,31 @@ func TestFullScenario_MiningMetrics(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatFloat_SpecialAndFiniteValues(t *testing.T) {
+	tests := []struct {
+		name string
+		in   float64
+		want string
+	}{
+		{"zero", 0, "0"},
+		{"small int", 42, "42"},
+		{"negative", -3.5, "-3.5"},
+		{"NaN", math.NaN(), "NaN"},
+		{"positive inf", math.Inf(1), "+Inf"},
+		{"negative inf", math.Inf(-1), "-Inf"},
+		// Regression: a large *finite* value must NOT be rendered as +Inf.
+		// 1.5e308 is finite (< MaxFloat64 ~1.7976931348623157e308) but exceeds
+		// the old `v > 1e308` threshold that misclassified it as infinity.
+		{"large finite is not +Inf", 1.5e308, "1.5e+308"},
+		{"max finite is not +Inf", math.MaxFloat64, "1.7976931348623157e+308"},
+		{"large negative finite is not -Inf", -1.5e308, "-1.5e+308"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatFloat(tt.in); got != tt.want {
+				t.Errorf("formatFloat(%g) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
