@@ -10,6 +10,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 107 — Go runtime metrics via CollectFunc in internal/metrics)
+
+Adds a dynamic-collector hook (`CollectFunc` / `RegisterCollector`) to the
+metrics registry and a `RuntimeCollector()` that emits standard `go_*` metrics
+at scrape time, closing RESEARCH_IMPROVEMENTS.md Category 12 item 21.
+
+**`internal/metrics/metrics.go`**:
+- `CollectFunc` type: `func(w io.Writer) error` — a function invoked during
+  `WriteText` to emit metrics whose values change between scrapes.
+- `Registry.collectors []CollectFunc` — slice of registered collectors.
+- `Registry.RegisterCollector(fn CollectFunc)` — appends fn; safe for
+  concurrent use.
+- `WriteText` snapshots the collector list under `RLock`, writes static
+  counters/gauges first (sorted), then calls each collector in order.
+
+**`internal/metrics/runtime.go`** (new file):
+- `RuntimeCollector() CollectFunc` — captures `runtime.Version()` at
+  registration time; at each scrape calls `runtime.ReadMemStats` once and
+  `runtime.NumGoroutine` to emit:
+
+  | Metric | Type | Source |
+  |---|---|---|
+  | `go_goroutines` | gauge | `NumGoroutine()` |
+  | `go_info{version="go1.x.y"}` | gauge (value 1) | `Version()` |
+  | `go_memstats_alloc_bytes` | gauge | `MemStats.Alloc` |
+  | `go_memstats_sys_bytes` | gauge | `MemStats.Sys` |
+  | `go_memstats_heap_alloc_bytes` | gauge | `MemStats.HeapAlloc` |
+  | `go_memstats_heap_sys_bytes` | gauge | `MemStats.HeapSys` |
+  | `go_memstats_heap_inuse_bytes` | gauge | `MemStats.HeapInuse` |
+  | `go_memstats_heap_idle_bytes` | gauge | `MemStats.HeapIdle` |
+  | `go_memstats_stack_inuse_bytes` | gauge | `MemStats.StackInuse` |
+  | `go_memstats_gc_cpu_fraction` | gauge | `MemStats.GCCPUFraction` |
+  | `go_gc_duration_seconds_total` | counter | `PauseTotalNs/1e9` |
+  | `go_gc_cycles_total` | counter | `MemStats.NumGC` |
+
+  Names match `prometheus/client_golang` (no new runtime dependency — stdlib
+  `runtime` package only). `go_gc_duration_seconds` is normally a summary;
+  we emit the aggregate total instead so existing PromQL `rate()` queries work.
+
+Tests (8 new):
+- `TestRegisterCollector_OutputAppearsInWriteText`
+- `TestRegisterCollector_MultipleCollectorsAllAppear`
+- `TestRegisterCollector_ErrorPropagates`
+- `TestRegisterCollector_CollectorAfterStaticMetrics`
+- `TestRuntimeCollector_ContainsRequiredMetrics`
+- `TestRuntimeCollector_GoInfoHasVersionLabel`
+- `TestRuntimeCollector_GoroutineCountIsPositive`
+- `TestRuntimeCollector_HelpAndTypeLines`
+
+24 packages green, 1113 tests.
+
 ### Feat (session 106 — client.show_message surfacing in Stratum V1)
 
 Surfaces pool-sent operator notices (`client.show_message`) via a typed

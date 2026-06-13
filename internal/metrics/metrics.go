@@ -35,12 +35,19 @@ import (
 	"sync/atomic"
 )
 
+// CollectFunc is a function invoked during WriteText to emit dynamic metrics.
+// It writes lines in Prometheus text exposition format directly to w.
+// Useful for metrics whose values change between scrapes and are most
+// efficiently gathered in one call (e.g. runtime.ReadMemStats).
+type CollectFunc func(w io.Writer) error
+
 // Registry holds all registered metrics.
 // Safe for concurrent use.
 type Registry struct {
-	mu       sync.RWMutex
-	counters map[string]*Counter
-	gauges   map[string]*Gauge
+	mu         sync.RWMutex
+	counters   map[string]*Counter
+	gauges     map[string]*Gauge
+	collectors []CollectFunc
 }
 
 // NewRegistry returns an empty metrics registry.
@@ -49,6 +56,16 @@ func NewRegistry() *Registry {
 		counters: make(map[string]*Counter),
 		gauges:   make(map[string]*Gauge),
 	}
+}
+
+// RegisterCollector adds fn to the registry. WriteText calls all registered
+// collectors (in registration order) after writing the static counters and
+// gauges. fn must write valid Prometheus text lines and may not call any
+// Registry method (deadlock). Safe to call concurrently.
+func (r *Registry) RegisterCollector(fn CollectFunc) {
+	r.mu.Lock()
+	r.collectors = append(r.collectors, fn)
+	r.mu.Unlock()
 }
 
 // Counter is a monotonically increasing value (e.g. total shares submitted).
@@ -154,7 +171,8 @@ func (g *Gauge) Value() float64 {
 // ----- Exposition -----
 
 // WriteText writes the Prometheus text exposition format to w.
-// Metrics are sorted by name for stable diffing in tests.
+// Static counters and gauges are written first (sorted by name for stable
+// diffing), then all registered CollectFuncs are called in registration order.
 func (r *Registry) WriteText(w io.Writer) error {
 	r.mu.RLock()
 	// Collect and sort.
@@ -179,6 +197,9 @@ func (r *Registry) WriteText(w io.Writer) error {
 			text:   formatFloat(g.Value()),
 		})
 	}
+	// Snapshot collector list while the lock is held.
+	fns := make([]CollectFunc, len(r.collectors))
+	copy(fns, r.collectors)
 	r.mu.RUnlock()
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -203,6 +224,13 @@ func (r *Registry) WriteText(w io.Writer) error {
 		}
 		labelStr := renderLabels(e.labels)
 		if _, err := fmt.Fprintf(w, "%s%s %s\n", e.name, labelStr, e.text); err != nil {
+			return err
+		}
+	}
+
+	// Call dynamic collectors.
+	for _, fn := range fns {
+		if err := fn(w); err != nil {
 			return err
 		}
 	}

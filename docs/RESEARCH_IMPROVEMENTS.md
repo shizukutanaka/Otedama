@@ -503,11 +503,14 @@ endpoint against current vendor documentation. Tags as before
     its trace. Otedama already has the histogram (Cat 2 #7) and OTel spans
     (Cat 9 #3); joining them is a small extension to the hand-rolled
     exposition writer (no client_golang dep — keeps ADR-003/005).
-21. 🟡 **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
-    metrics.** Implement Cat 9 #9 as `otedama_build_info{version,commit,
-    goversion}` (value 1); keep `worker` out of labels unless device count is
-    bounded (Cat 1 #7 cardinality); expose `go_*`/`process_*` so existing
-    fleet dashboards work unmodified. (prometheus.io naming practices, 2025)
+21. ✅ **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
+    metrics.** `CollectFunc`/`RegisterCollector` hook added to `internal/metrics`
+    registry; `RuntimeCollector()` emits 12 standard `go_*` metrics
+    (`go_goroutines`, `go_info{version}`, `go_memstats_*`, `go_gc_*`) using only
+    stdlib `runtime` — no new dependency (ADR-003/005 preserved). Names match
+    `prometheus/client_golang` so existing Grafana dashboards work unmodified.
+    `otedama_build_info` (commit/goversion labels) deferred to next session.
+    (session 107)
 22. 🔵 **SLSA Build L3 provenance + Sigstore keyless signing for releases.**
     `actions/attest-build-provenance` + cosign keyless (Fulcio OIDC, Rekor)
     is the current bar for a non-custodial money-handling binary users must

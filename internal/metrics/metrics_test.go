@@ -5,6 +5,8 @@ package metrics
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"math"
 	"strings"
 	"sync"
@@ -376,6 +378,183 @@ func TestIsValidMetricName_InvalidNames(t *testing.T) {
 	for _, name := range invalid {
 		if isValidMetricName(name) {
 			t.Errorf("isValidMetricName(%q) = true, want false", name)
+		}
+	}
+}
+
+// ============================================================================
+// CollectFunc / RegisterCollector
+// ============================================================================
+
+func TestRegisterCollector_OutputAppearsInWriteText(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterCollector(func(w io.Writer) error {
+		_, err := fmt.Fprint(w, "# HELP custom_metric A custom metric.\n# TYPE custom_metric gauge\ncustom_metric 99\n")
+		return err
+	})
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "custom_metric 99") {
+		t.Errorf("collector output missing from WriteText:\n%s", out)
+	}
+}
+
+func TestRegisterCollector_MultipleCollectorsAllAppear(t *testing.T) {
+	r := NewRegistry()
+	for i, name := range []string{"metric_a", "metric_b", "metric_c"} {
+		i, name := i, name
+		r.RegisterCollector(func(w io.Writer) error {
+			_, err := fmt.Fprintf(w, "# HELP %s help.\n# TYPE %s gauge\n%s %d\n", name, name, name, i+1)
+			return err
+		})
+	}
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"metric_a 1", "metric_b 2", "metric_c 3"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output:\n%s", want, out)
+		}
+	}
+}
+
+func TestRegisterCollector_ErrorPropagates(t *testing.T) {
+	r := NewRegistry()
+	sentinel := fmt.Errorf("injected write error")
+	r.RegisterCollector(func(_ io.Writer) error { return sentinel })
+
+	var buf bytes.Buffer
+	err := r.WriteText(&buf)
+	if err == nil {
+		t.Fatal("expected error from collector, got nil")
+	}
+	if err != sentinel {
+		t.Errorf("error = %v, want %v", err, sentinel)
+	}
+}
+
+func TestRegisterCollector_CollectorAfterStaticMetrics(t *testing.T) {
+	// Collectors are emitted AFTER the static counter/gauge section.
+	r := NewRegistry()
+	r.NewCounter("alpha_total", "static", nil).Inc()
+	r.RegisterCollector(func(w io.Writer) error {
+		_, err := fmt.Fprint(w, "# HELP zzz_dynamic dynamic.\n# TYPE zzz_dynamic gauge\nzzz_dynamic 7\n")
+		return err
+	})
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	idxStatic := strings.Index(out, "alpha_total")
+	idxDynamic := strings.Index(out, "zzz_dynamic")
+	if idxStatic == -1 || idxDynamic == -1 {
+		t.Fatalf("expected both metrics in output:\n%s", out)
+	}
+	if idxDynamic < idxStatic {
+		t.Errorf("collector output appeared before static metric (idxDynamic=%d < idxStatic=%d):\n%s",
+			idxDynamic, idxStatic, out)
+	}
+}
+
+// ============================================================================
+// RuntimeCollector
+// ============================================================================
+
+func TestRuntimeCollector_ContainsRequiredMetrics(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterCollector(RuntimeCollector())
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	required := []string{
+		"go_goroutines",
+		"go_info",
+		"go_memstats_alloc_bytes",
+		"go_memstats_sys_bytes",
+		"go_memstats_heap_alloc_bytes",
+		"go_memstats_heap_sys_bytes",
+		"go_memstats_heap_inuse_bytes",
+		"go_memstats_heap_idle_bytes",
+		"go_memstats_stack_inuse_bytes",
+		"go_memstats_gc_cpu_fraction",
+		"go_gc_duration_seconds_total",
+		"go_gc_cycles_total",
+	}
+	for _, name := range required {
+		if !strings.Contains(out, name) {
+			t.Errorf("missing metric %q in runtime output:\n%s", name, out)
+		}
+	}
+}
+
+func TestRuntimeCollector_GoInfoHasVersionLabel(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterCollector(RuntimeCollector())
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, `go_info{version="`) {
+		t.Errorf("go_info missing version label in output:\n%s", out)
+	}
+	// go_info value must be 1.
+	if !strings.Contains(out, "} 1") {
+		t.Errorf("go_info value must be 1:\n%s", out)
+	}
+}
+
+func TestRuntimeCollector_GoroutineCountIsPositive(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterCollector(RuntimeCollector())
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	// The running goroutine count must be at least 1 (this test goroutine).
+	if strings.Contains(out, "go_goroutines 0") {
+		t.Errorf("go_goroutines should be > 0:\n%s", out)
+	}
+}
+
+func TestRuntimeCollector_HelpAndTypeLines(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterCollector(RuntimeCollector())
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	checks := []struct{ line string }{
+		{"# TYPE go_goroutines gauge"},
+		{"# TYPE go_info gauge"},
+		{"# TYPE go_memstats_alloc_bytes gauge"},
+		{"# TYPE go_gc_duration_seconds_total counter"},
+		{"# TYPE go_gc_cycles_total counter"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(out, c.line) {
+			t.Errorf("expected %q in output:\n%s", c.line, out)
 		}
 	}
 }
