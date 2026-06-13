@@ -51,6 +51,10 @@ type engineMetrics struct {
 	// up reflects whether the miner is currently producing hashrate
 	// (1) or has stalled (0); a scrape can alert on a wedged miner.
 	up *metrics.Gauge
+	// curtailed is 1 when hashing has been paused due to the
+	// curtail_below_btc_usd threshold; 0 otherwise. Distinct from
+	// otedama_up (which reflects the miner stalling, not a deliberate pause).
+	curtailed *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -158,6 +162,10 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		up: reg.NewGauge(
 			"otedama_up",
 			"1 if the miner is producing hashrate (not stalled), else 0.",
+			nil),
+		curtailed: reg.NewGauge(
+			"otedama_curtailed",
+			"1 if hashing is paused because BTC/USD is below curtail_below_btc_usd threshold, else 0.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",

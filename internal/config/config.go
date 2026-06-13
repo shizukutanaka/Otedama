@@ -117,6 +117,16 @@ type Config struct {
 	// point that prevents thrashing without meaningfully delaying profitable
 	// switches. Set via OTEDAMA_ARBITRATION_HYSTERESIS_PCT or config file.
 	ArbitrationHysteresisPct float64 `yaml:"arbitration_hysteresis_pct"`
+
+	// CurtailBelowBTCUSD pauses all hashing workers when the BTC/USD rate
+	// falls below this threshold. Workers resume automatically when the rate
+	// recovers (on the next pool notify, up to ~60 s). This is the
+	// electricity-tariff curtailment hook: set it to your break-even price
+	// so Otedama stops mining when it becomes unprofitable.
+	//
+	// 0 disables the feature (default). Negative values are rejected by
+	// Validate(). Set via OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
+	CurtailBelowBTCUSD float64 `yaml:"curtail_below_btc_usd"`
 }
 
 // PoolConfig describes a single mining pool connection.
@@ -171,6 +181,7 @@ func Defaults() Config {
 		LogFormat:                "text",
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
+		CurtailBelowBTCUSD:       0, // disabled by default
 	}
 }
 
@@ -228,6 +239,7 @@ type Origins struct {
 	LogFormat                ValueOrigin
 	DataDir                  ValueOrigin
 	ArbitrationHysteresisPct ValueOrigin
+	CurtailBelowBTCUSD       ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -291,6 +303,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.ArbitrationHysteresisPct = fromFile.ArbitrationHysteresisPct
 		o.ArbitrationHysteresisPct = OriginFile
 	}
+	// CurtailBelowBTCUSD: same zero-value caveat; treat non-zero file value
+	// as an explicit override.
+	if fromFile.CurtailBelowBTCUSD != 0 {
+		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
+		o.CurtailBelowBTCUSD = OriginFile
+	}
 
 	// Layer 2: environment variables override config file.
 	getEnv := func(key string) string {
@@ -323,6 +341,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.ArbitrationHysteresisPct = f
 			o.ArbitrationHysteresisPct = OriginEnv
+		}
+	}
+	if v := getEnv("OTEDAMA_CURTAIL_BELOW_BTC_USD"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.CurtailBelowBTCUSD = f
+			o.CurtailBelowBTCUSD = OriginEnv
 		}
 	}
 
@@ -412,6 +436,10 @@ func (c Config) Validate() error {
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+	}
+	if c.CurtailBelowBTCUSD < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
 	}
 
 	if len(issues) == 0 {

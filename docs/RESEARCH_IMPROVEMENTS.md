@@ -249,8 +249,9 @@ arXiv grounding (session 41):
 7. 🔵 **Battery/Powerwall integration** — ADR-008 sub-domain 7.
 8. 🟡 **J/TH efficiency metric in the TUI/metrics** — the single number miners
    optimise; expose `joules_per_terahash` from power draw ÷ hashrate.
-9. 🟡 **Idle/curtailment hook** — a clean "pause hashing when price > X" path
-   that the tariff feed can drive (precursor to full demand response).
+9. ✅ **Idle/curtailment hook** (session 112) — `curtail_below_btc_usd` config
+   field; BTC rate goroutine calls `SetWork(nil)` when price drops below
+   threshold and logs re-start on recovery; `otedama_curtailed` gauge.
 10. 🟡 **Carbon-intensity feed (optional)** — for users who want to mine on
     low-carbon grid windows; aligns with SUSTAINABILITY.md.
 

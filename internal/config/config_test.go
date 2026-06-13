@@ -424,6 +424,48 @@ func TestValidate_LogFormat(t *testing.T) {
 	}
 }
 
+func TestValidate_CurtailBelowBTCUSD(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	// 0 (disabled) and positive values are valid.
+	for _, v := range []float64{0, 1, 50000, 100000} {
+		c := base()
+		c.CurtailBelowBTCUSD = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("CurtailBelowBTCUSD=%.0f should be valid; got %v", v, err)
+		}
+	}
+	// Negative values are rejected.
+	c := base()
+	c.CurtailBelowBTCUSD = -1
+	err := c.Validate()
+	if err == nil {
+		t.Error("negative CurtailBelowBTCUSD should fail Validate()")
+	}
+	if !strings.Contains(err.Error(), "curtail_below_btc_usd") {
+		t.Errorf("error should mention curtail_below_btc_usd: %v", err)
+	}
+}
+
+func TestResolve_CurtailBelowBTCUSD_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_CURTAIL_BELOW_BTC_USD": "50000"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.CurtailBelowBTCUSD != 50000 {
+		t.Errorf("CurtailBelowBTCUSD = %g, want 50000", cfg.CurtailBelowBTCUSD)
+	}
+}
+
+func TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored(t *testing.T) {
+	env := map[string]string{"OTEDAMA_CURTAIL_BELOW_BTC_USD": "not-a-number"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.CurtailBelowBTCUSD != 0 {
+		t.Errorf("invalid env should leave default 0; got %g", cfg.CurtailBelowBTCUSD)
+	}
+}
+
 func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
 	// Regression: --log-format previously defaulted to "text" on a
 	// standalone field, so a config-file log_format was ignored. With the

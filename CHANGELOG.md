@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 112 — idle/curtailment hook: pause hashing when BTC/USD < threshold)
+
+Adds a `curtail_below_btc_usd` config field that pauses all hashing workers
+when the BTC/USD rate falls below the configured break-even price, closing
+RESEARCH_IMPROVEMENTS.md Cat 8 item 9.
+
+**`internal/config/config.go`**:
+- `Config.CurtailBelowBTCUSD float64` (YAML: `curtail_below_btc_usd`,
+  env: `OTEDAMA_CURTAIL_BELOW_BTC_USD`). Default 0 (disabled). Negative
+  values rejected by `Validate()`.
+- `Origins.CurtailBelowBTCUSD ValueOrigin` tracked through all four layers.
+
+**`internal/engine/metrics.go`**:
+- `engineMetrics.curtailed *metrics.Gauge` — `otedama_curtailed` gauge
+  (1 = hashing paused by threshold, 0 = running). Distinct from
+  `otedama_up` (stall detection) — this reflects a deliberate profitability
+  pause, not a hardware problem.
+
+**`internal/engine/run.go`**:
+- BTC rate goroutine (30 s tick) now also checks `CurtailBelowBTCUSD`. When
+  `rate < threshold`: calls `SetWork(nil)` on all workers (workers idle at
+  10 ms spin), sets `otedama_curtailed=1`, logs at `info`. When rate
+  recovers: logs "resumes on next job", sets `otedama_curtailed=0`. Workers
+  resume on the next pool notify (≤ ~60 s).
+
+Tests (5 new):
+- `TestValidate_CurtailBelowBTCUSD` (valid: 0/positive; invalid: negative)
+- `TestResolve_CurtailBelowBTCUSD_EnvOverride`
+- `TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored`
+- `TestEngineMetrics_CurtailedGauge_RegisteredAndZero`
+- `TestEngineMetrics_CurtailedGauge_AppearsInWriteText`
+
+24 packages green, 1154 tests.
+
 ### Feat (session 111 — payout-scheme awareness in doctor and config)
 
 Adds an optional `payout_scheme` field to `PoolConfig` and a new

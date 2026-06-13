@@ -583,6 +583,38 @@ func TestIncSharesFoundForDevice_AppearsInWriteText(t *testing.T) {
 }
 
 // ============================================================================
+// Curtailment metric — gauge is registered and starts at 0
+// ============================================================================
+
+func TestEngineMetrics_CurtailedGauge_RegisteredAndZero(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	// Before any curtailment event the gauge must be 0.
+	if got := m.curtailed.Value(); got != 0 {
+		t.Errorf("curtailed gauge initial = %v, want 0", got)
+	}
+}
+
+func TestEngineMetrics_CurtailedGauge_AppearsInWriteText(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	// Simulate curtailment by setting the gauge directly.
+	m.curtailed.Set(1)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "otedama_curtailed") {
+		t.Errorf("otedama_curtailed missing from WriteText output:\n%s", out)
+	}
+	if !strings.Contains(out, "otedama_curtailed 1") {
+		t.Errorf("otedama_curtailed should be 1 after Set(1):\n%s", out)
+	}
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

@@ -162,10 +162,13 @@ func Run(ctx context.Context, opts Options) error {
 	rateFetcher := rates.NewFetcher(95000) // $95k fallback
 	rateFetcher.StartBackground(ctx, 5*time.Minute)
 
-	// Publish the BTC/USD rate to its gauge as it refreshes, so
-	// otedama_btc_usd_rate is populated (it was registered but never set).
+	// Publish the BTC/USD rate to its gauge and enforce the optional
+	// curtailment threshold (curtail_below_btc_usd). When the price falls
+	// below the threshold all workers are idled (SetWork(nil)); they resume
+	// on the next pool notify after the price recovers.
 	go func() {
 		publishBTCRate(m, rateFetcher)
+		var curtailed bool
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
 		for {
@@ -174,6 +177,31 @@ func Run(ctx context.Context, opts Options) error {
 				return
 			case <-t.C:
 				publishBTCRate(m, rateFetcher)
+				threshold := opts.Config.CurtailBelowBTCUSD
+				if threshold <= 0 {
+					continue
+				}
+				rate, _ := rateFetcher.BTCUSDRate()
+				if rate > 0 && rate < threshold && !curtailed {
+					curtailed = true
+					for _, w := range workers {
+						w.SetWork(nil)
+					}
+					log("info", fmt.Sprintf(
+						"engine: curtailed — BTC/USD $%.0f below threshold $%.0f; hashing paused",
+						rate, threshold))
+					if m != nil {
+						m.curtailed.Set(1)
+					}
+				} else if (rate == 0 || rate >= threshold) && curtailed {
+					curtailed = false
+					log("info", fmt.Sprintf(
+						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
+						rate, threshold))
+					if m != nil {
+						m.curtailed.Set(0)
+					}
+				}
 			}
 		}
 	}()
