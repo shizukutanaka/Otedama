@@ -14,6 +14,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/hal"
+	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 )
@@ -510,6 +511,74 @@ func TestCPUDriver_EnumerateReturnsCPUDevice(t *testing.T) {
 	// Shutdown should not panic.
 	if err := devs[0].Shutdown(context.Background()); err != nil {
 		t.Errorf("Shutdown returned error: %v", err)
+	}
+}
+
+// ============================================================================
+// Per-device share counter
+// ============================================================================
+
+func TestIncSharesFoundForDevice_CreatesCounterOnFirstCall(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.incSharesFoundForDevice("cpu-0")
+
+	// Verify the counter was created and incremented.
+	if m.sharesFoundPerDevice["cpu-0"] == nil {
+		t.Fatal("counter for cpu-0 was not created")
+	}
+	if got := m.sharesFoundPerDevice["cpu-0"].Value(); got != 1 {
+		t.Errorf("counter = %d, want 1", got)
+	}
+}
+
+func TestIncSharesFoundForDevice_AccumulatesAcrossCalls(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	for i := 0; i < 5; i++ {
+		m.incSharesFoundForDevice("cpu-1")
+	}
+	if got := m.sharesFoundPerDevice["cpu-1"].Value(); got != 5 {
+		t.Errorf("counter = %d, want 5", got)
+	}
+}
+
+func TestIncSharesFoundForDevice_EmptyIDIsNoOp(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.incSharesFoundForDevice("") // must not panic or create a counter
+	if len(m.sharesFoundPerDevice) != 0 {
+		t.Errorf("empty DeviceID created %d entries, want 0", len(m.sharesFoundPerDevice))
+	}
+}
+
+func TestIncSharesFoundForDevice_MultipleDevicesTrackedSeparately(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.incSharesFoundForDevice("cpu-0")
+	m.incSharesFoundForDevice("cpu-0")
+	m.incSharesFoundForDevice("cpu-1")
+
+	if got := m.sharesFoundPerDevice["cpu-0"].Value(); got != 2 {
+		t.Errorf("cpu-0 = %d, want 2", got)
+	}
+	if got := m.sharesFoundPerDevice["cpu-1"].Value(); got != 1 {
+		t.Errorf("cpu-1 = %d, want 1", got)
+	}
+}
+
+func TestIncSharesFoundForDevice_AppearsInWriteText(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.incSharesFoundForDevice("gpu-0")
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_device_shares_found_total{device="gpu-0"} 1`) {
+		t.Errorf("per-device counter missing from WriteText output:\n%s", out)
 	}
 }
 

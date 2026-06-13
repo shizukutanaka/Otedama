@@ -36,8 +36,9 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    Awesome Miner triggers.
 6. 🔵 **Temperature-based throttling / shutdown.** Awesome Miner triggers on
    temperature thresholds. Tracked in ADR-008 sub-domain 6 (thermal).
-7. 🟡 **Per-device share statistics** (accepted/rejected/HW-error per worker),
-   as cgminer reports. Otedama aggregates; per-device would aid diagnosis.
+7. ✅ **Per-device share statistics** (session 109) — `Share.DeviceID` propagated
+   from `WorkerConfig.DeviceID`; lazy `otedama_device_shares_found_total{device=...}`
+   counter in `engineMetrics`; 7 new tests.
 8. 🔵 **Solo-mining mode** (bfgminer auto-fails-over to solo+local block
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is

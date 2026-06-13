@@ -602,6 +602,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			totalSats++ // approximation; real value comes from pool SubmitSharesSuccess
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
+				opts.m.incSharesFoundForDevice(share.DeviceID)
 			}
 			sub := stratum.SubmitSharesStandard{
 				ChannelID:      chanID,
@@ -717,6 +718,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			totalSats++
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
+				opts.m.incSharesFoundForDevice(share.DeviceID)
 			}
 			// V1 Submit is synchronous. Run it in a goroutine so a slow
 			// pool response doesn't block the job-receive path.

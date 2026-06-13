@@ -8,6 +8,8 @@
 package engine
 
 import (
+	"sync"
+
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/version"
 )
@@ -72,6 +74,13 @@ type engineMetrics struct {
 	// reject category (stale/duplicate/difficulty/hardware/other).
 	reg            *metrics.Registry
 	rejectByReason map[string]*metrics.Counter
+
+	// sharesFoundPerDevice tracks shares found per device
+	// (otedama_device_shares_found_total{device="cpu-0"}).
+	// Created lazily when the first share from each device arrives;
+	// the device set is bounded to detected hardware so cardinality is safe.
+	sharesFoundPerDeviceMu sync.Mutex
+	sharesFoundPerDevice   map[string]*metrics.Counter
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
@@ -178,8 +187,9 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"(~30–60 s) to detect a stale connection that looks connected but delivers no work.",
 			nil),
 
-		reg:            reg,
-		rejectByReason: make(map[string]*metrics.Counter),
+		reg:                  reg,
+		rejectByReason:       make(map[string]*metrics.Counter),
+		sharesFoundPerDevice: make(map[string]*metrics.Counter),
 	}
 	// build_info is a constant series; its value carries no information,
 	// only its label set does (standard Prometheus `_info` convention).
@@ -203,6 +213,29 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// incSharesFoundForDevice increments the per-device shares-found counter
+// (otedama_device_shares_found_total{device="cpu-0"}).
+// Safe for concurrent use; counters are created lazily on first call for
+// a given deviceID. If deviceID is empty, the call is a no-op.
+func (m *engineMetrics) incSharesFoundForDevice(deviceID string) {
+	if deviceID == "" {
+		return
+	}
+	m.sharesFoundPerDeviceMu.Lock()
+	c, ok := m.sharesFoundPerDevice[deviceID]
+	if !ok {
+		c = m.reg.NewCounter(
+			"otedama_device_shares_found_total",
+			"Total shares found by this device. "+
+				"Per-device breakdown of otedama_shares_found_total.",
+			map[string]string{"device": deviceID},
+		)
+		m.sharesFoundPerDevice[deviceID] = c
+	}
+	m.sharesFoundPerDeviceMu.Unlock()
+	c.Inc()
 }
 
 // updateShareRates recomputes the acceptance/reject/stale rate gauges from

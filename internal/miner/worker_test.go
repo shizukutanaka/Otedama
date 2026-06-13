@@ -291,3 +291,81 @@ func TestNewWorker_ZeroThreads_DefaultsToCPUCount(t *testing.T) {
 		t.Errorf("Threads after default = %d, want > 0", w.cfg.Threads)
 	}
 }
+
+// ----- DeviceID propagation -----
+
+func TestShare_DeviceID_PropagatedFromConfig(t *testing.T) {
+	// Create a worker with a DeviceID, plant a trivial target so it finds a
+	// share immediately, and verify the share carries the DeviceID.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	w := NewWorker(WorkerConfig{
+		Threads:  1,
+		DeviceID: "test-device-42",
+	})
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	// Use the genesis block difficulty: NBits=0x1d00ffff gives a target
+	// that a CPU can satisfy quickly in tests.
+	target, err := TargetFromNBits(0x207fffff) // extremely easy for tests
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	w.SetWork(&Work{
+		JobID:  1,
+		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x207fffff},
+		Target: target,
+	})
+
+	for {
+		select {
+		case share, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed before finding a share")
+			}
+			if share.DeviceID != "test-device-42" {
+				t.Errorf("share.DeviceID = %q, want %q", share.DeviceID, "test-device-42")
+			}
+			return
+		case <-ctx.Done():
+			t.Fatal("timeout: no share found within 3s")
+		}
+	}
+}
+
+func TestShare_DeviceID_EmptyWhenNotSet(t *testing.T) {
+	// A worker created without DeviceID must emit shares with empty DeviceID.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	w := NewWorker(WorkerConfig{Threads: 1}) // no DeviceID
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	target, err := TargetFromNBits(0x207fffff)
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	w.SetWork(&Work{
+		JobID:  1,
+		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x207fffff},
+		Target: target,
+	})
+
+	for {
+		select {
+		case share, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed before finding a share")
+			}
+			if share.DeviceID != "" {
+				t.Errorf("share.DeviceID = %q, want empty (no DeviceID in config)", share.DeviceID)
+			}
+			return
+		case <-ctx.Done():
+			t.Fatal("timeout: no share found within 3s")
+		}
+	}
+}

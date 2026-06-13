@@ -31,6 +31,9 @@ type Share struct {
 	Nonce     uint32
 	NTime     uint32
 	Hash      Hash
+	// DeviceID is the HAL identity of the device whose worker found this
+	// share. Set from WorkerConfig.DeviceID; empty when not configured.
+	DeviceID string
 }
 
 // WorkerConfig controls the behaviour of a Worker.
@@ -43,6 +46,12 @@ type WorkerConfig struct {
 	// iteration, interleaving the nonce space across threads. Zero is
 	// replaced with 1.
 	NonceStep uint32
+
+	// DeviceID is the HAL identity of the hardware device this worker
+	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
+	// emits so the engine can attribute shares per device.
+	// Empty string means "unidentified device".
+	DeviceID string
 }
 
 // DefaultWorkerConfig returns a WorkerConfig that uses all available
@@ -225,6 +234,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					Nonce:     nonce,
 					NTime:     h.Time,
 					Hash:      hash,
+					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share

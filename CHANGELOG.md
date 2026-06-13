@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 109 — per-device share statistics)
+
+Propagates each worker's hardware identity into every share it emits and
+tracks per-device share counts as a Prometheus metric, closing
+RESEARCH_IMPROVEMENTS.md Category 1 item 7.
+
+**`internal/miner/worker.go`**:
+- `Share.DeviceID string` — HAL identity ID carried on every found share;
+  empty string when no DeviceID was configured (backward-compatible zero value).
+- `WorkerConfig.DeviceID string` — set by the engine at worker creation time to
+  the device's `hal.Identity.ID` (e.g. `"cpu-0"`, `"gpu-0"`).
+- `grind()` copies `w.cfg.DeviceID` into each emitted `Share`.
+
+**`internal/engine/setup.go`**:
+- `startMinerWorkers` sets `cfg.DeviceID = dev.Identity().ID` before creating
+  each worker, so every share carries the originating device ID.
+
+**`internal/engine/metrics.go`**:
+- `engineMetrics.sharesFoundPerDevice map[string]*metrics.Counter` — lazily
+  created per-device counter map, guarded by `sharesFoundPerDeviceMu sync.Mutex`.
+- `incSharesFoundForDevice(deviceID string)` — increments (creating on first
+  call) `otedama_device_shares_found_total{device="<id>"}`. No-op on empty ID.
+  Cardinality is bounded to detected hardware, not arbitrary user input.
+
+**`internal/engine/run.go`**:
+- `opts.m.incSharesFoundForDevice(share.DeviceID)` called in both the
+  Stratum V1 and V2 share paths.
+
+Tests (7 new):
+- `TestShare_DeviceID_PropagatedFromConfig` — worker with `DeviceID="test-device-42"`
+  finds a share and the share carries that ID.
+- `TestShare_DeviceID_EmptyWhenNotSet` — worker without DeviceID emits shares
+  with empty DeviceID.
+- `TestIncSharesFoundForDevice_CreatesCounterOnFirstCall`
+- `TestIncSharesFoundForDevice_AccumulatesAcrossCalls`
+- `TestIncSharesFoundForDevice_EmptyIDIsNoOp`
+- `TestIncSharesFoundForDevice_MultipleDevicesTrackedSeparately`
+- `TestIncSharesFoundForDevice_AppearsInWriteText`
+
+24 packages green, 1129 tests.
+
 ### Feat (session 108 — configurable arbitration hysteresis margin)
 
 Exposes the previously hard-coded 5% yield-improvement threshold for

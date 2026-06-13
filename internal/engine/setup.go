@@ -53,7 +53,9 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 		if !dev.Capabilities().SHA256d {
 			continue
 		}
-		w := miner.NewWorker(miner.DefaultWorkerConfig())
+		cfg := miner.DefaultWorkerConfig()
+		cfg.DeviceID = dev.Identity().ID
+		w := miner.NewWorker(cfg)
 		workers = append(workers, w)
 		shareChans = append(shareChans, w.Start(ctx))
 		log("info", fmt.Sprintf("engine: worker for %s", dev.Identity()))
