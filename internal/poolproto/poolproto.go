@@ -215,6 +215,22 @@ type Session interface {
 	SuggestedDifficulty() float64
 }
 
+// PoolNoticeReceiver is an optional extension to Session implemented by
+// protocols that deliver human-readable operator notices (e.g.
+// client.show_message in Stratum V1). Callers should type-assert a
+// Session to this interface; protocols that do not implement it have no
+// notice channel.
+//
+// The returned channel is closed when the Session ends. A nil channel
+// means no notices will ever be delivered.
+type PoolNoticeReceiver interface {
+	// PoolNotices returns a channel on which pool-sent notices are delivered.
+	// Messages are non-empty UTF-8 strings. The channel is buffered; a slow
+	// consumer causes notices to be dropped silently rather than blocking
+	// the read loop.
+	PoolNotices() <-chan string
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

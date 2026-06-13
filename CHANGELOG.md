@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 106 — client.show_message surfacing in Stratum V1)
+
+Surfaces pool-sent operator notices (`client.show_message`) via a typed
+channel, closing RESEARCH_IMPROVEMENTS.md Category 12 item 5.
+
+**`internal/poolproto/poolproto.go`**:
+- Added `PoolNoticeReceiver` interface: `PoolNotices() <-chan string`. Callers
+  type-assert a `poolproto.Session` to this interface before draining notices;
+  protocols that do not implement it produce no channel.
+
+**`internal/poolproto/stratumv1/stratumv1.go`**:
+- `session.noticeCh chan string` (capacity 8) — mirrors `jobsCh`.
+- `readLoop` defers `close(s.noticeCh)` so receivers can range-over it.
+- `dispatch` case `"client.show_message"`: calls `parseShowMessage`; drops empty
+  messages; when the channel is full it drops the oldest notice rather than
+  blocking the read loop (same pattern as `sendJob` / drop-oldest).
+- `PoolNotices() <-chan string` method (implements `PoolNoticeReceiver`).
+- Compile-time assertion: `var _ poolproto.PoolNoticeReceiver = (*session)(nil)`.
+- `makeBareSess()` updated to include `noticeCh`.
+
+**`internal/poolproto/stratumv1/parse.go`**:
+- `parseShowMessage(raw json.RawMessage) (string, bool)` decodes
+  `client.show_message` params: `["message"]`.
+
+Tests (8 new):
+- `TestParseShowMessage_Valid`, `_Empty`, `_MalformedJSON`
+- `TestSession_Dispatch_ShowMessage_DeliveredOnNoticeChannel`
+- `TestSession_Dispatch_ShowMessage_EmptyMessage_NotDelivered`
+- `TestSession_Dispatch_ShowMessage_FullChannel_DropsOldest`
+- `TestSession_PoolNotices_ImplementsInterface`
+- `TestSession_Dispatch_UnknownNotification_SilentlyIgnored`
+
+24 packages green, 1105 tests.
+
 ### Feat (session 105 — exit-code contract documented)
 
 Documents the process exit-code contract for shell scripting, closing

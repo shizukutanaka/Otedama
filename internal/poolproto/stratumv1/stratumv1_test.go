@@ -644,8 +644,9 @@ func TestDialer_Negotiate_NonV1Connection_ReturnsError(t *testing.T) {
 // makeBareSess builds a minimal session for direct dispatch testing.
 func makeBareSess() *session {
 	return &session{
-		jobsCh:  make(chan poolproto.Job, 8),
-		pending: map[uint64]chan rpcResponse{},
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
 	}
 }
 
@@ -1601,5 +1602,102 @@ func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
 	s.sendJob(poolproto.Job{JobID: "only", CleanJobs: true})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
+	}
+}
+
+// ============================================================================
+// client.show_message handling
+// ============================================================================
+
+func TestParseShowMessage_Valid(t *testing.T) {
+	msg, ok := parseShowMessage(json.RawMessage(`["Pool maintenance in 10 minutes"]`))
+	if !ok {
+		t.Fatal("parseShowMessage returned ok=false")
+	}
+	if msg != "Pool maintenance in 10 minutes" {
+		t.Errorf("msg = %q, want 'Pool maintenance in 10 minutes'", msg)
+	}
+}
+
+func TestParseShowMessage_Empty(t *testing.T) {
+	_, ok := parseShowMessage(json.RawMessage(`[]`))
+	if ok {
+		t.Error("empty params should return ok=false")
+	}
+}
+
+func TestParseShowMessage_MalformedJSON(t *testing.T) {
+	_, ok := parseShowMessage(json.RawMessage(`not json`))
+	if ok {
+		t.Error("malformed JSON should return ok=false")
+	}
+}
+
+func TestSession_Dispatch_ShowMessage_DeliveredOnNoticeChannel(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"client.show_message","params":["Scheduled downtime in 5 min"]}`))
+
+	select {
+	case got, ok := <-sess.noticeCh:
+		if !ok {
+			t.Fatal("noticeCh closed unexpectedly")
+		}
+		if got != "Scheduled downtime in 5 min" {
+			t.Errorf("notice = %q, want 'Scheduled downtime in 5 min'", got)
+		}
+	default:
+		t.Error("expected notice on noticeCh after client.show_message dispatch")
+	}
+}
+
+func TestSession_Dispatch_ShowMessage_EmptyMessage_NotDelivered(t *testing.T) {
+	// An empty message string should not be sent on the channel.
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"client.show_message","params":[""]}`))
+	if len(sess.noticeCh) != 0 {
+		t.Error("empty message should not be delivered on noticeCh")
+	}
+}
+
+func TestSession_Dispatch_ShowMessage_FullChannel_DropsOldest(t *testing.T) {
+	sess := makeBareSess()
+	// Fill the notice channel to capacity.
+	for i := range cap(sess.noticeCh) {
+		sess.noticeCh <- fmt.Sprintf("old-%d", i)
+	}
+	// One more notice: must displace the oldest rather than blocking.
+	sess.dispatch([]byte(`{"method":"client.show_message","params":["newest notice"]}`))
+
+	// Channel must still hold cap(noticeCh) messages and "newest notice" must be present.
+	var found bool
+	for len(sess.noticeCh) > 0 {
+		if n := <-sess.noticeCh; n == "newest notice" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("newest notice not found in notice channel after drop-oldest")
+	}
+}
+
+func TestSession_PoolNotices_ImplementsInterface(t *testing.T) {
+	sess := makeBareSess()
+	// PoolNotices must satisfy poolproto.PoolNoticeReceiver.
+	var _ poolproto.PoolNoticeReceiver = sess
+	ch := sess.PoolNotices()
+	if ch == nil {
+		t.Error("PoolNotices() returned nil channel")
+	}
+}
+
+func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
+	// Unknown method must not produce any job, notice, or error.
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"mining.set_version_mask","params":["1fffe000"]}`))
+	if len(sess.jobsCh) != 0 {
+		t.Error("unknown method enqueued a job")
+	}
+	if len(sess.noticeCh) != 0 {
+		t.Error("unknown method enqueued a notice")
 	}
 }

@@ -89,6 +89,12 @@ type session struct {
 	// difficulty is the most recent set_difficulty value.
 	difficulty atomic.Uint64 // float64 bits
 
+	// noticeCh delivers pool-sent client.show_message notices to the caller.
+	// Buffered so the read loop never blocks on a slow consumer; closed when
+	// the session ends. The caller may type-assert the Session to
+	// poolproto.PoolNoticeReceiver and range over PoolNotices().
+	noticeCh chan string
+
 	// lastReconnect records the most recent pool-directed reconnect
 	// (client.reconnect), nil until one is seen. Read race-free; useful
 	// for diagnostics and tests.
@@ -105,10 +111,11 @@ type session struct {
 
 func newSession(conn *connection) *session {
 	return &session{
-		conn:    conn,
-		reader:  bufio.NewReaderSize(conn.raw, 64<<10), // 64 KiB max line
-		jobsCh:  make(chan poolproto.Job, 8),
-		pending: map[uint64]chan rpcResponse{},
+		conn:     conn,
+		reader:   bufio.NewReaderSize(conn.raw, 64<<10), // 64 KiB max line
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
 	}
 }
 
@@ -123,6 +130,7 @@ func (s *session) start(ctx context.Context) {
 // It runs until the connection closes or the context is cancelled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
+	defer close(s.noticeCh)
 	// When the loop exits for any reason (EOF, network error, or ctx cancel),
 	// cancel all in-flight call() invocations so they return immediately
 	// instead of blocking until the caller's context expires. This mirrors
@@ -203,6 +211,24 @@ func (s *session) dispatch(line []byte) {
 			s.extranonce1 = en1
 			s.extranonce2Size = sz
 		}
+	case "client.show_message":
+		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
+		// Surface it via PoolNotices(); if the caller is not draining the
+		// channel, drop the oldest notice to avoid blocking the read loop.
+		if notice, ok := parseShowMessage(msg.Params); ok && notice != "" {
+			select {
+			case s.noticeCh <- notice:
+			default:
+				select {
+				case <-s.noticeCh:
+				default:
+				}
+				select {
+				case s.noticeCh <- notice:
+				default:
+				}
+			}
+		}
 	case "client.reconnect", "mining.reconnect":
 		// The pool is asking us to move to another node (load balancing,
 		// maintenance, failover). Record the directive, then end the
@@ -215,13 +241,18 @@ func (s *session) dispatch(line []byte) {
 			s.lastReconnect.Store(&d)
 		}
 		go s.Close()
-		// Other notifications (mining.set_version_mask, client.show_message,
-		// etc.) are ignored; silent ignore is forward-compatible.
+		// Other notifications (mining.set_version_mask, etc.) are
+		// silently ignored; forward-compatible with pool extensions.
 	}
 }
 
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
+
+// PoolNotices returns the channel of pool-sent operator notices
+// (client.show_message). The channel is closed when the session ends.
+// Implements poolproto.PoolNoticeReceiver.
+func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
@@ -399,6 +430,9 @@ func init() {
 
 // Compile-time assertion that *Dialer satisfies poolproto.Dialer.
 var _ poolproto.Dialer = (*Dialer)(nil)
+
+// Compile-time assertion that *session satisfies poolproto.PoolNoticeReceiver.
+var _ poolproto.PoolNoticeReceiver = (*session)(nil)
 
 // We deliberately keep io.Reader satisfied via bufio.Reader.
 var _ io.Reader = (*bufio.Reader)(nil)

@@ -119,6 +119,17 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	return en1, sz, true
 }
 
+// parseShowMessage decodes a client.show_message notification.
+// Params format: ["human-readable message text"].
+// Returns the message and true on success; empty string and false on any parse error.
+func parseShowMessage(raw json.RawMessage) (string, bool) {
+	var p []string
+	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
+		return "", false
+	}
+	return p[0], true
+}
+
 // reconnectDirective is a parsed client.reconnect notification.
 //
 // V1 client.reconnect params: [hostname, port, wait] — all optional.

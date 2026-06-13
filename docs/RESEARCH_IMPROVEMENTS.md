@@ -380,18 +380,19 @@ endpoint against current vendor documentation. Tags as before
    metric). Also accept *fractional* difficulty in `set_difficulty`.
    Distinct cause from the existing stale/latency `rejectClass`.
    (bitaxeorg/ESP-Miner #212)
-5. 🟡 **Handle `client.show_message` and unknown V1 notifications gracefully.**
+5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict
    JSON-RPC reader. Log-and-surface it, and skip unknown notifications
    rather than erroring the session. Complements Cat 1 #3.
    (bitaxeorg/ESP-Miner releases)
-   — **Partly implemented (session 64):** `client.reconnect` /
-   `mining.reconnect` is now honoured (the higher-value liveness directive) —
-   the session re-dials cleanly instead of clinging to a dropped node, without
-   following the pool-supplied `host:port` (redirection-vector guard). See
-   SPECIFICATION.md G13. `client.show_message` surfacing still open (needs a
-   logger/notice channel the not-yet-wired V1 session lacks).
+   — `client.reconnect` / `mining.reconnect` handled (session 64).
+   — session 106: `client.show_message` now surfaced via
+   `session.PoolNotices() <-chan string` (implements `poolproto.PoolNoticeReceiver`).
+   Messages are queued on a buffered channel (cap 8); a full channel drops the
+   oldest notice rather than blocking the read loop. Unknown notifications
+   (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
+   is the pure decode function.
 6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset
