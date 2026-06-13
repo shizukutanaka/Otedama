@@ -365,6 +365,97 @@ func TestDecide_HysteresisAllowsSwitchAboveMargin(t *testing.T) {
 	}
 }
 
+func TestDecide_HysteresisUsesPolicyScoreNotRawYield(t *testing.T) {
+	// Regression for the Socratic-inquiry finding (session 114): under a
+	// non-earnings policy, hysteresis must be measured in the same
+	// policy-adjusted metric used for selection. A challenger with higher
+	// *raw* yield but only a marginal *policy-score* gain must not trigger a
+	// switch when that gain is below the hysteresis margin.
+	//
+	// incumbent: raw 100, privacy 10 -> score 100*(1+10*0.01) = 110
+	// challenger: raw 115, privacy 0 -> score 115
+	// policy-score gain = 115/110 = +4.5%, below the 10% margin -> hold.
+	// (The old raw-yield logic would have switched: 115 > 100*1.10 = 110.)
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.ocean",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		PrivacyRating:   10,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "mining.kyc",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		PrivacyRating:   0,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 115, Confidence: 1.0}},
+	}
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "mining.ocean", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizePrivacy,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.ocean" {
+		t.Errorf("policy-score gain (+4.5%%) is below the 10%% margin; "+
+			"engine switched to %q instead of holding the private incumbent",
+			alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_HysteresisPolicyScore_AllowsSwitchWhenScoreGainExceedsMargin(t *testing.T) {
+	// Complement of the above: when the policy-score gain *does* exceed the
+	// margin, the switch must occur even under a non-earnings policy.
+	//
+	// incumbent: raw 100, privacy 10 -> score 110
+	// challenger: raw 130, privacy 0 -> score 130; gain 130/110 = +18% > 10%.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.ocean",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		PrivacyRating:   10,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "mining.kyc",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		PrivacyRating:   0,
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 130, Confidence: 1.0}},
+	}
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "mining.ocean", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizePrivacy,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.kyc" {
+		t.Errorf("policy-score gain (+18%%) exceeds the 10%% margin; "+
+			"engine held %q instead of switching", alloc.Assignments[0].Stream)
+	}
+	if alloc.Assignments[0].SwitchedFromID != "mining.ocean" {
+		t.Errorf("SwitchedFromID = %q, want mining.ocean", alloc.Assignments[0].SwitchedFromID)
+	}
+}
+
 // ----- Decide: determinism -----
 
 func TestDecide_DeterministicForIdenticalInput(t *testing.T) {

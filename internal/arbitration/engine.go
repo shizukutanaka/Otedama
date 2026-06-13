@@ -34,8 +34,11 @@
 //   - Every device with at least one compatible stream receives an
 //     assignment. Idle is only allowed when no stream accepts the device.
 //   - No device is assigned to a stream that does not accept its Family.
-//   - Switching occurs only when the yield gain exceeds the switching
-//     cost (including the caller-supplied hysteresis margin).
+//   - Switching occurs only when the policy-adjusted yield gain exceeds the
+//     caller-supplied hysteresis margin. The gain is measured in the same
+//     policy-adjusted metric used for selection, so hysteresis never
+//     overrides the active policy's notion of "better" (e.g. a higher raw
+//     yield with worse privacy is not a switch trigger under MaximizePrivacy).
 //   - Total yield of the allocation is >= any allocation produced by a
 //     greedy per-device max-yield rule (ignoring switching costs).
 //
@@ -343,20 +346,29 @@ func chooseForDevice(
 	})
 
 	best := candidates[0]
+	bestScore := policyScore(best.stream, best.yield, policy)
 
 	// Hysteresis: if we currently have a previous assignment on a still-
-	// available stream, keep it unless the best candidate beats it by
-	// the hysteresis margin.
+	// available stream, keep it unless the best candidate beats it by the
+	// hysteresis margin. The comparison is made in the *policy-adjusted*
+	// score space (the same metric used for selection above), not raw yield,
+	// so the "only switch on a meaningful improvement" guarantee is
+	// consistent with what "better" means under the active policy. Under
+	// PolicyMaximizeEarnings the score equals the raw yield, so this is
+	// identical to a plain yield comparison; under privacy/environment/BTC
+	// policies a higher raw yield with a worse rating is correctly treated
+	// as a marginal (or non-existent) gain rather than a reason to switch.
 	if previous.Stream != "" {
 		for _, c := range candidates {
 			if c.stream.ID == previous.Stream {
-				threshold := c.yield * (1.0 + hysteresis)
-				if best.yield <= threshold {
+				incScore := policyScore(c.stream, c.yield, policy)
+				threshold := incScore * (1.0 + hysteresis)
+				if bestScore <= threshold {
 					return Assignment{
 						DeviceID:      dev.Identity.ID,
 						Stream:        c.stream.ID,
 						ExpectedYield: c.yield,
-						Reason:        fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (best.yield-c.yield)/math.Max(c.yield, 1e-9)*100, hysteresis*100),
+						Reason:        fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100),
 					}
 				}
 				break

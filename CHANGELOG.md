@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 114 — arbitration hysteresis measured in policy-score space)
+
+Socratic-inquiry finding: the arbitration engine *selected* streams in
+policy-adjusted score space (privacy/environment/BTC bonuses) but applied
+the switching hysteresis in raw-yield space — two inconsistent metrics. Under
+a non-earnings policy this let a higher-raw-yield-but-worse-rating challenger
+override the user's policy and trigger a switch even when the policy-adjusted
+gain was below the hysteresis margin.
+
+**`internal/arbitration/engine.go`** (`chooseForDevice`):
+- Hysteresis threshold is now computed from `policyScore(incumbent)` and
+  compared against `policyScore(best)`, the same metric used for selection.
+- Under `PolicyMaximizeEarnings` the score equals the raw yield, so behaviour
+  is unchanged (the previous tests still pass byte-identically); under
+  privacy/environment/StackBTC policies a higher raw yield with a worse rating
+  is now correctly treated as a marginal gain rather than a switch trigger.
+- Updated the package-level invariant docstring to state the gain is measured
+  in the policy-adjusted metric.
+
+Tests (2 new):
+- `TestDecide_HysteresisUsesPolicyScoreNotRawYield` — incumbent (raw 100,
+  privacy 10 → score 110) vs challenger (raw 115, privacy 0 → score 115):
+  +4.5% policy-score gain is below the 10% margin → holds the private
+  incumbent. (Verified to fail under the old raw-yield logic, which switched.)
+- `TestDecide_HysteresisPolicyScore_AllowsSwitchWhenScoreGainExceedsMargin` —
+  challenger raw 130 → score 130 (+18% > 10%) → switch occurs.
+
+24 packages green, 1163 tests.
+
 ### Feat (session 113 — J/TH efficiency metric)
 
 Adds `power_watts` config field and derives `otedama_joules_per_terahash`
