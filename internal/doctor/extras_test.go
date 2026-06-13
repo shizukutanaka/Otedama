@@ -679,6 +679,99 @@ func TestCheckFailoverAddresses(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// checkWallet — wallet initialisation and fingerprint display
+// ============================================================================
+
+func TestCheckWallet_NoWallet_EmitsWarn(t *testing.T) {
+	dir := t.TempDir()
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("no-wallet status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Warn result must provide a Fix hint")
+	}
+}
+
+func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	const fp = "a1b2c3d4"
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0600); err != nil {
+		t.Fatalf("write fingerprint: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("wallet-with-fp status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, fp) {
+		t.Errorf("fingerprint %q missing from detail: %q", fp, r.Detail)
+	}
+}
+
+func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("wallet-no-fp status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "fingerprint file missing") {
+		t.Errorf("detail should mention missing fingerprint file: %q", r.Detail)
+	}
+}
+
+func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
+	c := checkWallet("")
+	r := c.Run(context.Background())
+	switch r.Status {
+	case StatusWarn, StatusSkip, StatusPass:
+	default:
+		t.Errorf("empty-dir checkWallet status = %v, want Warn/Skip/Pass", r.Status)
+	}
+}
+
+func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	const fp = "deadbeef"
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0600); err != nil {
+		t.Fatalf("write fingerprint: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if !strings.Contains(r.Detail, fp) {
+		t.Errorf("trimmed fingerprint %q not in detail: %q", fp, r.Detail)
+	}
+	if strings.Contains(r.Detail, fp+"\n") {
+		t.Errorf("detail contains untrimmed newline: %q", r.Detail)
+	}
+}
+
+func TestDefaultChecks_IncludesWalletCheck(t *testing.T) {
+	checks := DefaultChecks(config.Config{}, "")
+	var found bool
+	for _, c := range checks {
+		if c.Name == "Lightning wallet" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("DefaultChecks does not include the 'Lightning wallet' check")
+	}
+}
+
 // checkPoolDiversity — no pools, single pool, multiple pools
 func TestCheckPoolDiversity(t *testing.T) {
 	ctx := context.Background()

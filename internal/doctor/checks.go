@@ -30,6 +30,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkBitcoinAddress(cfg.BitcoinAddress),
 		checkFailoverAddresses(cfg.BitcoinAddresses),
 		checkDataDir(cfg.DataDir),
+		checkWallet(cfg.DataDir),
 		checkPoolReachability(cfg),
 		checkPoolDiversity(cfg),
 		checkPoolEndpointDiversity(cfg),
@@ -193,6 +194,64 @@ func checkDataDir(dir string) Check {
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%s (exists, writable)", dir),
+			}
+		},
+	}
+}
+
+// walletDatFile and walletFingerprintFile mirror the constants in
+// internal/lightning so doctor can inspect wallet state without importing
+// the full lightning package (and its crypto dependencies).
+const (
+	walletDatFile         = "wallet.dat"
+	walletFingerprintFile = "wallet.fingerprint"
+)
+
+// checkWallet verifies that the Lightning wallet is initialised and surfaces
+// its public fingerprint so operators can cross-check against a hardware
+// wallet without exposing the seed. The fingerprint is a best-effort
+// convenience — its absence is non-fatal (it regenerates on next run).
+func checkWallet(dataDir string) Check {
+	return Check{
+		Name: "Lightning wallet",
+		Run: func(_ context.Context) Result {
+			dir := dataDir
+			if dir == "" {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return Result{Status: StatusSkip, Detail: "no home directory; cannot locate wallet"}
+				}
+				dir = filepath.Join(home, ".local", "share", "otedama")
+			}
+
+			walletPath := filepath.Join(dir, walletDatFile)
+			if _, err := os.Stat(walletPath); os.IsNotExist(err) {
+				return Result{
+					Status: StatusWarn,
+					Detail: "no wallet found in " + dir,
+					Fix:    "set wallet-passphrase in config.yaml or via OTEDAMA_WALLET_PASSPHRASE to create a wallet on next run",
+				}
+			} else if err != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("cannot stat %s: %v", walletPath, err),
+					Fix:    "check filesystem permissions",
+				}
+			}
+
+			// Wallet exists — read the public fingerprint file for display.
+			fpPath := filepath.Join(dir, walletFingerprintFile)
+			fp, err := os.ReadFile(fpPath)
+			if err != nil {
+				return Result{
+					Status: StatusPass,
+					Detail: "initialized (fingerprint file missing; re-run to regenerate)",
+				}
+			}
+			fingerprint := strings.TrimSpace(string(fp))
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("initialized, fingerprint: %s", fingerprint),
 			}
 		},
 	}

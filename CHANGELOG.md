@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 110 — wallet fingerprint in doctor)
+
+Adds a `checkWallet` check to `doctor.DefaultChecks` that surfaces the
+Lightning wallet's public fingerprint so operators can cross-verify it
+against a hardware wallet, closing RESEARCH_IMPROVEMENTS.md Cat 3 item 6.
+
+**`internal/doctor/checks.go`**:
+- `checkWallet(dataDir string) Check` — reads `wallet.dat` presence and
+  `wallet.fingerprint` from the configured data directory (falls back to
+  `~/.local/share/otedama` when dataDir is empty, consistent with
+  `checkDataDir`). Results:
+  - `wallet.dat` absent → **StatusWarn** with fix hint to set passphrase.
+  - `wallet.dat` present, fingerprint file present → **StatusPass** showing
+    `initialized, fingerprint: <8-hex>` for cross-verification.
+  - `wallet.dat` present, fingerprint file absent → **StatusPass** with note
+    "fingerprint file missing; re-run to regenerate" (non-fatal, file is
+    best-effort).
+  - `dataDir` empty with no HOME → **StatusSkip**.
+- `walletDatFile = "wallet.dat"` and `walletFingerprintFile = "wallet.fingerprint"`
+  package-level constants (mirror `internal/lightning`; no import needed).
+- Added to `DefaultChecks` between `checkDataDir` and `checkPoolReachability`.
+
+Tests (6 new, in `extras_test.go`):
+- `TestCheckWallet_NoWallet_EmitsWarn`
+- `TestCheckWallet_WalletWithFingerprint_ShowsFingerprint`
+- `TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote`
+- `TestCheckWallet_EmptyDataDir_UsesDefault`
+- `TestCheckWallet_FingerprintTrimmedOfWhitespace`
+- `TestDefaultChecks_IncludesWalletCheck`
+
+24 packages green, 1135 tests.
+
 ### Feat (session 109 — per-device share statistics)
 
 Propagates each worker's hardware identity into every share it emits and

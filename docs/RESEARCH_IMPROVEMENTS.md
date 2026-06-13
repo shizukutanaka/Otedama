@@ -91,9 +91,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 4. 🔵 **BOLT12 offers for payouts** — ADR-007 B1.
 5. 🟡 **BIP-39 passphrase (25th word) support** — standard hardening; verify
    whether the current seed derivation accepts an optional passphrase.
-6. 🟡 **Wallet fingerprint display for verification** — partially present
-   (fingerprint file); surface it in `config show` / first-run output so
-   users can cross-check against a hardware wallet.
+6. ✅ **Wallet fingerprint display for verification** (session 110) —
+   `doctor` now checks `wallet.dat` existence and reads `wallet.fingerprint`
+   to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
+   against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
 8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
    to re-enter N words) — reduces fund-loss from un-backed-up seeds.
