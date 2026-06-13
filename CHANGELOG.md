@@ -10,6 +10,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 118 — bech32/bech32m payout-address checksum verification)
+
+Socratic-inquiry finding: nothing in the codebase ever verified a payout
+address's checksum. `config.validateBitcoinAddress` and the doctor checks only
+tested prefix + length + charset, and the `ClassifyAddress` comment's claim
+that the checksum "is done when the address is first used for a payout" was
+**false** — no such verification existed anywhere. A single-character typo in a
+`bc1…` address stays inside the bech32 charset yet fails the checksum, so it
+passed every check — the exact "earnings to strangers" risk the doctor warns
+about, with a warning it could not actually enforce.
+
+**`internal/btccrypto/bech32.go`** (new):
+- `ValidateBech32Address(addr) (AddressType, error)` — verifies the BIP-173
+  (bech32, witness v0) / BIP-350 (bech32m, witness v1+) checksum, case
+  uniformity, charset, separator, witness version, and program length
+  (v0: 20/32 bytes; v1/Taproot: 32). Dependency-free; bech32 is a BCH
+  error-detection code, not cryptography. Returns `ErrNotBech32` for legacy
+  base58 (1.../3...) so callers fall back to existing handling.
+- Verified against official BIP-173/350 vectors plus the repo's fixtures; a
+  v0 (bech32) and a v1/Taproot (bech32m) address both validate, proving the
+  version-dependent checksum-constant selection.
+
+**`internal/doctor/checks.go`**:
+- `checkBitcoinAddress` and `checkFailoverAddresses` now run
+  `ValidateBech32Address` for `bc1…` addresses and Fail with a clear "checksum
+  does not match (likely a typo)" message. Legacy base58 addresses are
+  unaffected (ErrNotBech32 → existing format check).
+
+**`internal/btccrypto/btccrypto.go`**:
+- `ErrNotBech32` sentinel; corrected the misleading `ClassifyAddress` comment
+  to point at `ValidateBech32Address` as the verifier.
+
+Scope: this session wires checksum verification into `doctor` (diagnostic, safe
+blast radius). Config-load enforcement and Base58Check (legacy 1.../3...)
+verification are deliberate follow-ups — many config/cmd layering tests use
+placeholder bech32 fixtures that are not checksum-valid, so config-load
+enforcement requires minting real fixtures first.
+
+Tests: 7 new in btccrypto (valid vectors incl. Taproot, typo, mixed case,
+invalid char, over-length, legacy ErrNotBech32, malformed) + 5 new in doctor
+(valid/typo/Taproot/legacy/failover-typo).
+
+24 packages green.
+
 ### Fix (session 117 — curtailment is no longer misread as a hashrate stall)
 
 Socratic-inquiry finding on the interaction between curtailment (112/115/116)

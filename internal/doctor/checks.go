@@ -10,6 +10,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -91,6 +92,18 @@ func checkBitcoinAddress(addr string) Check {
 					Fix:    "verify the address — typos here would send your earnings to strangers",
 				}
 			}
+			// For SegWit (bc1…) addresses, verify the bech32/bech32m checksum.
+			// This catches a single-character typo that the prefix-and-charset
+			// check above cannot — the kind of mistake that silently sends
+			// earnings to a wrong or undecodable address.
+			if _, err := btccrypto.ValidateBech32Address(strings.TrimSpace(addr)); err != nil &&
+				!errors.Is(err, btccrypto.ErrNotBech32) {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("%s: %v", maskAddress(addr), err),
+					Fix:    "re-check the address character by character; the checksum does not match (likely a typo)",
+				}
+			}
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%s (%s, likely valid)", maskAddress(addr), addressKind(addr)),
@@ -136,6 +149,17 @@ func checkFailoverAddresses(addrs []string) Check {
 						Status: StatusFail,
 						Detail: fmt.Sprintf("bitcoin_addresses[%d] %q does not look valid", i, a),
 						Fix:    "verify every failover address — a typo would send earnings to strangers",
+					}
+				}
+				// Verify the bech32/bech32m checksum for SegWit failover
+				// addresses too, so a mistyped backup is caught at diagnosis
+				// rather than only if failover ever reaches it.
+				if _, err := btccrypto.ValidateBech32Address(strings.TrimSpace(a)); err != nil &&
+					!errors.Is(err, btccrypto.ErrNotBech32) {
+					return Result{
+						Status: StatusFail,
+						Detail: fmt.Sprintf("bitcoin_addresses[%d] %s: %v", i, maskAddress(a), err),
+						Fix:    "re-check the failover address; its checksum does not match (likely a typo)",
 					}
 				}
 			}

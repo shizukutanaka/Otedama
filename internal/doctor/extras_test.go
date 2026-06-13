@@ -773,6 +773,62 @@ func TestDefaultChecks_IncludesWalletCheck(t *testing.T) {
 }
 
 // ============================================================================
+// checkBitcoinAddress / checkFailoverAddresses — bech32 checksum verification
+// ============================================================================
+
+func TestCheckBitcoinAddress_ValidBech32Passes(t *testing.T) {
+	r := checkBitcoinAddress("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("valid bech32 address: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckBitcoinAddress_TypoFailsChecksum(t *testing.T) {
+	// Same address as above with the final character flipped: in-charset, so
+	// the prefix/length check passes, but the bech32 checksum fails. This is
+	// the typo class the check now catches.
+	r := checkBitcoinAddress("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdr").Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("typo'd bech32 address: status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Fail result must provide a Fix hint")
+	}
+}
+
+func TestCheckBitcoinAddress_ValidTaprootPasses(t *testing.T) {
+	r := checkBitcoinAddress("bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr").Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("valid taproot address: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckBitcoinAddress_LegacyBase58StillPasses(t *testing.T) {
+	// Base58 (1.../3...) addresses are not bech32; the checksum step must defer
+	// to the existing format check rather than reject them.
+	for _, a := range []string{
+		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
+	} {
+		r := checkBitcoinAddress(a).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Errorf("legacy address %q: status = %v, want Pass (detail: %s)", a, r.Status, r.Detail)
+		}
+	}
+}
+
+func TestCheckFailoverAddresses_TypoFailsChecksum(t *testing.T) {
+	addrs := []string{
+		"bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5", // valid
+		"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdr", // checksum typo
+	}
+	r := checkFailoverAddresses(addrs).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("failover list with a checksum typo: status = %v, want Fail", r.Status)
+	}
+}
+
+// ============================================================================
 // checkPayoutScheme — payout scheme advisory check
 // ============================================================================
 

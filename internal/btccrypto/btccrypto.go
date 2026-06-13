@@ -70,6 +70,11 @@ var (
 	// implementation. ML-DSA and SPHINCS+ return this until BIP-360
 	// activates and Go's stdlib ships crypto/mldsa.
 	ErrSchemeNotImplemented = errors.New("btccrypto: scheme registered but implementation pending")
+
+	// ErrNotBech32 is returned by ValidateBech32Address when the input is not
+	// a bech32 mainnet address (e.g. a legacy base58 "1.../3..." address), so
+	// callers can fall back to their own legacy-format handling.
+	ErrNotBech32 = errors.New("btccrypto: not a bech32 address")
 )
 
 // ----- Interfaces -----
@@ -283,8 +288,9 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 
 // ClassifyAddress maps a mainnet Bitcoin address string to its AddressType
 // using the address prefix and (for SegWit) length. This is a lightweight
-// classifier — it does NOT verify the bech32/base58 checksum (that is done
-// when the address is first used for a payout). Its purpose is to recognise
+// classifier — it does NOT verify the bech32/base58 checksum. To verify that a
+// SegWit address is well-formed (catching a mistyped payout address), call
+// ValidateBech32Address. ClassifyAddress's own purpose is only to recognise
 // which signature scheme an address will need, so callers can branch via
 // SchemeForAddressType without a full decode.
 //
