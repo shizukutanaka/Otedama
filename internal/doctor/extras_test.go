@@ -6,7 +6,14 @@ package doctor
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -904,6 +911,89 @@ func TestDefaultChecks_IncludesPoolEncryptionCheck(t *testing.T) {
 	}
 	if !found {
 		t.Error("DefaultChecks does not include the 'Pool connection encryption' check")
+	}
+}
+
+// ============================================================================
+// checkPoolTLSCA — per-pool tls_ca_file validation
+// ============================================================================
+
+func writePEMCert(t *testing.T) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	tmpl := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("createcert: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	return path
+}
+
+func TestCheckPoolTLSCA_NoneConfiguredSkips(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{{URL: "stratum+tls://p.example.com:3334"}}}
+	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusSkip {
+		t.Errorf("status = %v, want Skip", r.Status)
+	}
+}
+
+func TestCheckPoolTLSCA_ValidFilePasses(t *testing.T) {
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: ca},
+	}}
+	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusPass {
+		t.Errorf("status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: "/nonexistent/ca.pem"},
+	}}
+	r := checkPoolTLSCA(cfg).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("status = %v, want Fail", r.Status)
+	}
+	if r.Fix == "" {
+		t.Error("Fail must include a Fix hint")
+	}
+}
+
+func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.pem")
+	if err := os.WriteFile(path, []byte("not a certificate"), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: path},
+	}}
+	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusFail {
+		t.Errorf("status = %v, want Fail (no valid PEM)", r.Status)
+	}
+}
+
+func TestCheckPoolTLSCA_NonTLSSchemeWarns(t *testing.T) {
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tcp://p.example.com:3333", TLSCAFile: ca},
+	}}
+	r := checkPoolTLSCA(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("status = %v, want Warn (CA set on non-TLS pool)", r.Status)
 	}
 }
 

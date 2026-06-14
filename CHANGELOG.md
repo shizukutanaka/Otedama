@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 129 — doctor validates per-pool tls_ca_file)
+
+Follow-up to session 128: `doctor` now validates each pool's `tls_ca_file` so a
+mistyped path or a non-certificate file is caught at diagnosis, rather than
+silently degrading to system-roots verification at dial time (where it would
+then fail confusingly for the very private-CA pool it was meant to trust).
+
+**`internal/doctor/checks.go`**:
+- `checkPoolTLSCA` — for each pool that sets `tls_ca_file`: **Fail** if the file
+  is unreadable or contains no valid PEM certificate (validated with the same
+  `x509.CertPool.AppendCertsFromPEM` the dialer uses, so doctor and the live
+  path agree); **Warn** if it is set on a non-`stratum+tls://` pool (it is
+  ignored there at runtime); **Pass** when all configured files are valid;
+  **Skip** when none are set. Added to `DefaultChecks`.
+
+Tests (5 new): none-configured skip, valid file pass, missing-file fail,
+garbage-file fail, non-TLS-scheme warn.
+
+24 packages green.
+
 ### Feat (session 128 — per-pool TLS CA for private-CA / self-signed stratum pools)
 
 Removes the session-126 limitation: a Stratum-V1-over-TLS pool that presents a

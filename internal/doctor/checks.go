@@ -10,6 +10,7 @@ package doctor
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"os"
@@ -35,6 +36,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolDiversity(cfg),
 		checkPoolEndpointDiversity(cfg),
 		checkPoolEncryption(cfg),
+		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
 		checkHardware(),
 		checkNetwork(),
@@ -473,6 +475,59 @@ func checkPoolEncryption(cfg config.Config) Check {
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("all %d pool(s) use an encrypted transport", len(cfg.Pools)),
+			}
+		},
+	}
+}
+
+// checkPoolTLSCA validates each pool's optional tls_ca_file (session 128) at
+// diagnosis time, so a mistyped path or a non-certificate file is reported here
+// rather than silently degrading to system-roots verification at dial time
+// (where it would then fail confusingly for the private-CA pool it was meant to
+// trust). The PEM is parsed with the same x509.CertPool.AppendCertsFromPEM the
+// dialer uses, so doctor and the live path agree on what "valid" means.
+func checkPoolTLSCA(cfg config.Config) Check {
+	return Check{
+		Name: "Pool TLS CA files",
+		Run: func(_ context.Context) Result {
+			var configured int
+			for _, p := range cfg.Pools {
+				if p.TLSCAFile == "" {
+					continue
+				}
+				configured++
+				// tls_ca_file is only honoured for stratum+tls:// (V1 over TLS);
+				// for any other scheme it is silently ignored at runtime.
+				if !strings.HasPrefix(p.URL, "stratum+tls://") {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
+							stripScheme(p.URL)),
+						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
+					}
+				}
+				pem, err := os.ReadFile(p.TLSCAFile)
+				if err != nil {
+					return Result{
+						Status: StatusFail,
+						Detail: fmt.Sprintf("cannot read tls_ca_file %q: %v", p.TLSCAFile, err),
+						Fix:    "fix the path, or remove tls_ca_file to use the system root store",
+					}
+				}
+				if !x509.NewCertPool().AppendCertsFromPEM(pem) {
+					return Result{
+						Status: StatusFail,
+						Detail: fmt.Sprintf("tls_ca_file %q contains no valid PEM certificates", p.TLSCAFile),
+						Fix:    "ensure the file is a PEM-encoded certificate bundle",
+					}
+				}
+			}
+			if configured == 0 {
+				return Result{Status: StatusSkip, Detail: "no pool sets tls_ca_file"}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("%d pool CA file(s) valid", configured),
 			}
 		},
 	}
