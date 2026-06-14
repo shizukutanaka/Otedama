@@ -149,6 +149,11 @@ func Run(ctx context.Context, opts Options) error {
 	m := newEngineMetrics(reg)
 	m.uptime.Set(0)
 	m.startTime.Set(float64(startTime.Unix()))
+	// Power cost is a constant for the run (config × config); publish it once so
+	// a profitability dashboard can subtract it from revenue. Needs both inputs.
+	if opts.Config.PowerWatts > 0 && opts.Config.ElectricityPricePerKWh > 0 {
+		m.powerCostUSDPerHour.Set(opts.Config.PowerWatts / 1000 * opts.Config.ElectricityPricePerKWh)
+	}
 
 	// Update otedama_uptime_seconds every second so scrapers always see a
 	// fresh value, not just the stale value from the last stats tick.

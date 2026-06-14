@@ -140,6 +140,19 @@ type Config struct {
 	// 0 disables the metric (default). Negative values are rejected.
 	// Set via OTEDAMA_POWER_WATTS or config file.
 	PowerWatts float64 `yaml:"power_watts"`
+
+	// ElectricityPricePerKWh is the user's electricity price in USD per
+	// kilowatt-hour. Together with PowerWatts it lets Otedama expose
+	// `otedama_power_cost_usd_per_hour` (= PowerWatts/1000 × price), the cost
+	// half of the profitability picture: combined with the BTC/USD rate and
+	// the revenue metrics, an operator can see net profit, not just gross
+	// yield or efficiency. This is the economic dimension the engine otherwise
+	// lacks — "valuable" workload selection is measured in gross sats, but what
+	// the operator keeps is revenue minus power cost.
+	//
+	// 0 disables the cost metric (default). Negative values are rejected.
+	// Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
+	ElectricityPricePerKWh float64 `yaml:"electricity_price_per_kwh"`
 }
 
 // PoolConfig describes a single mining pool connection.
@@ -263,6 +276,7 @@ type Origins struct {
 	ArbitrationHysteresisPct ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
 	PowerWatts               ValueOrigin
+	ElectricityPricePerKWh   ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -336,6 +350,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.PowerWatts = fromFile.PowerWatts
 		o.PowerWatts = OriginFile
 	}
+	if fromFile.ElectricityPricePerKWh != 0 {
+		cfg.ElectricityPricePerKWh = fromFile.ElectricityPricePerKWh
+		o.ElectricityPricePerKWh = OriginFile
+	}
 
 	// Layer 2: environment variables override config file.
 	getEnv := func(key string) string {
@@ -380,6 +398,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.PowerWatts = f
 			o.PowerWatts = OriginEnv
+		}
+	}
+	if v := getEnv("OTEDAMA_ELECTRICITY_PRICE_PER_KWH"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.ElectricityPricePerKWh = f
+			o.ElectricityPricePerKWh = OriginEnv
 		}
 	}
 
@@ -477,6 +501,10 @@ func (c Config) Validate() error {
 	if c.PowerWatts < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+	}
+	if c.ElectricityPricePerKWh < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
 	}
 
 	if len(issues) == 0 {

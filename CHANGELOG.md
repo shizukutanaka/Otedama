@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 130 — electricity-cost awareness: the net-profit perspective)
+
+A Socratic-thinking new perspective: the arbitration engine measures "value" in
+*gross* sats/sec, and sessions added efficiency (J/TH, 113) and uptime (124) —
+but Otedama never knew the operator's **electricity price**, so it could not
+express the one number a miner ultimately cares about: revenue *minus* power
+cost. This adds the cost dimension.
+
+**`internal/config/config.go`**:
+- `Config.ElectricityPricePerKWh float64` (YAML: `electricity_price_per_kwh`,
+  env: `OTEDAMA_ELECTRICITY_PRICE_PER_KWH`). Default 0 (disabled); negatives
+  rejected; tracked through all four layers like `power_watts`.
+
+**`internal/engine/metrics.go` / `run.go`**:
+- `otedama_power_cost_usd_per_hour` gauge = `power_watts/1000 ×
+  electricity_price_per_kwh`. Constant for a run, so published once at startup
+  when both inputs are set. Combined with `otedama_btc_usd_rate` and the
+  hashrate/revenue metrics, an operator can now build a true net-profit
+  dashboard rather than only gross-yield/efficiency.
+
+Tests (4 new): config validation (valid prices + negative rejected), env
+override with origin tracking, gauge registration, and the cost computation
+(1200 W @ $0.10/kWh = $0.12/h) appearing in `/metrics`.
+
+24 packages green.
+
 ### Feat (session 129 — doctor validates per-pool tls_ca_file)
 
 Follow-up to session 128: `doctor` now validates each pool's `tls_ca_file` so a

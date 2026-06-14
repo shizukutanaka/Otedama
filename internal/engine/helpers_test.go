@@ -810,6 +810,39 @@ func TestUptimeAccountant_IgnoresNonPositiveAndNilCounter(t *testing.T) {
 }
 
 // ============================================================================
+// Power-cost metric — economic (net-profit) perspective (session 130)
+// ============================================================================
+
+func TestEngineMetrics_PowerCostGauge_RegisteredAndZero(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	if got := m.powerCostUSDPerHour.Value(); got != 0 {
+		t.Errorf("powerCostUSDPerHour initial = %v, want 0", got)
+	}
+}
+
+func TestEngineMetrics_PowerCost_Computation(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	// 1200 W at $0.10/kWh = 1.2 kW × 0.10 = $0.12/hour.
+	const watts, price = 1200.0, 0.10
+	m.powerCostUSDPerHour.Set(watts / 1000 * price)
+	got := m.powerCostUSDPerHour.Value()
+	const want = 0.12
+	if got < want-1e-9 || got > want+1e-9 {
+		t.Errorf("power cost = %v, want %v", got, want)
+	}
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(buf.String(), "otedama_power_cost_usd_per_hour") {
+		t.Errorf("otedama_power_cost_usd_per_hour missing from output:\n%s", buf.String())
+	}
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

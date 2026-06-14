@@ -543,6 +543,41 @@ func TestResolve_PowerWatts_InvalidEnvIgnored(t *testing.T) {
 	}
 }
 
+func TestValidate_ElectricityPricePerKWh(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, v := range []float64{0, 0.08, 0.42, 1.5} {
+		c := base()
+		c.ElectricityPricePerKWh = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("ElectricityPricePerKWh=%g should be valid; got %v", v, err)
+		}
+	}
+	c := base()
+	c.ElectricityPricePerKWh = -0.1
+	err := c.Validate()
+	if err == nil {
+		t.Error("negative ElectricityPricePerKWh should fail Validate()")
+	}
+	if !strings.Contains(err.Error(), "electricity_price_per_kwh") {
+		t.Errorf("error should mention electricity_price_per_kwh: %v", err)
+	}
+}
+
+func TestResolve_ElectricityPricePerKWh_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_ELECTRICITY_PRICE_PER_KWH": "0.12"}
+	cfg, origins := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.ElectricityPricePerKWh != 0.12 {
+		t.Errorf("ElectricityPricePerKWh = %g, want 0.12", cfg.ElectricityPricePerKWh)
+	}
+	if origins.ElectricityPricePerKWh != OriginEnv {
+		t.Errorf("origin = %v, want OriginEnv", origins.ElectricityPricePerKWh)
+	}
+}
+
 func TestResolve_FileLogFormatNotClobberedByFlagDefault(t *testing.T) {
 	// Regression: --log-format previously defaulted to "text" on a
 	// standalone field, so a config-file log_format was ignored. With the

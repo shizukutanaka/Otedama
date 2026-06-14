@@ -77,6 +77,10 @@ type engineMetrics struct {
 	// joulesPerTerahash = powerWatts × 1e12 / hashrate. Only meaningful
 	// when powerWatts > 0; set to 0 otherwise.
 	joulesPerTerahash *metrics.Gauge
+	// powerCostUSDPerHour = powerWatts/1000 × electricity_price_per_kwh, the
+	// cost half of profitability. Constant for a run; set once at startup when
+	// both power and price are configured.
+	powerCostUSDPerHour *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -214,6 +218,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		joulesPerTerahash: reg.NewGauge(
 			"otedama_joules_per_terahash",
 			"Energy efficiency: watts × 1e12 / hashrate. 0 when power_watts is not configured.",
+			nil),
+		powerCostUSDPerHour: reg.NewGauge(
+			"otedama_power_cost_usd_per_hour",
+			"Estimated electricity cost: power_watts/1000 × electricity_price_per_kwh. "+
+				"Combine with the BTC/USD rate and revenue to see net profit. "+
+				"0 when power_watts or electricity_price_per_kwh is unset.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",
