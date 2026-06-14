@@ -840,6 +840,74 @@ func TestCheckFailoverAddresses_TypoFailsChecksum(t *testing.T) {
 }
 
 // ============================================================================
+// checkPoolEncryption — plaintext stratum warning
+// ============================================================================
+
+func TestCheckPoolEncryption_NoPoolsSkips(t *testing.T) {
+	r := checkPoolEncryption(config.Config{}).Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("no pools: status = %v, want Skip", r.Status)
+	}
+}
+
+func TestCheckPoolEncryption_PlaintextWarns(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tcp://pool.example.com:3333"},
+	}}
+	r := checkPoolEncryption(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("plaintext pool: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Warn must include a Fix hint")
+	}
+	if !strings.Contains(r.Detail, "pool.example.com:3333") {
+		t.Errorf("detail should name the plaintext pool: %q", r.Detail)
+	}
+}
+
+func TestCheckPoolEncryption_EncryptedSchemesPass(t *testing.T) {
+	for _, url := range []string{
+		"stratum+tls://pool.example.com:3334",
+		"stratum+v2://pool.example.com:34254",
+		"stratum+v2tls://pool.example.com:34254",
+	} {
+		cfg := config.Config{Pools: []config.PoolConfig{{URL: url}}}
+		r := checkPoolEncryption(cfg).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Errorf("%s: status = %v, want Pass (detail: %s)", url, r.Status, r.Detail)
+		}
+	}
+}
+
+func TestCheckPoolEncryption_MixedWarnsOnPlaintextOnly(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tls://safe.example.com:3334"},
+		{URL: "stratum+tcp://risky.example.com:3333"},
+	}}
+	r := checkPoolEncryption(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("mixed: status = %v, want Warn", r.Status)
+	}
+	if strings.Contains(r.Detail, "safe.example.com") {
+		t.Errorf("only the plaintext pool should be named: %q", r.Detail)
+	}
+}
+
+func TestDefaultChecks_IncludesPoolEncryptionCheck(t *testing.T) {
+	var found bool
+	for _, c := range DefaultChecks(config.Config{}, "") {
+		if c.Name == "Pool connection encryption" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("DefaultChecks does not include the 'Pool connection encryption' check")
+	}
+}
+
+// ============================================================================
 // checkPayoutScheme — payout scheme advisory check
 // ============================================================================
 

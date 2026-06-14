@@ -34,6 +34,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolReachability(cfg),
 		checkPoolDiversity(cfg),
 		checkPoolEndpointDiversity(cfg),
+		checkPoolEncryption(cfg),
 		checkPayoutScheme(cfg),
 		checkHardware(),
 		checkNetwork(),
@@ -440,6 +441,43 @@ var gpuDRMPath = "/sys/class/drm"
 // pool so operators understand the variance/custody implications of their
 // choice. The check is advisory (StatusPass or StatusSkip only — the scheme
 // field is optional and has no effect on the mining protocol).
+// checkPoolEncryption warns when a configured pool uses the plaintext
+// stratum+tcp:// transport. Plaintext stratum is not merely an eavesdropping
+// concern: a network attacker (rogue Wi-Fi, compromised router, hostile ISP)
+// can rewrite the mining.authorize username or share submissions in flight and
+// redirect every payout to their own address — a well-known stratum-hijacking
+// attack. The encrypted transports (stratum+tls:// V1-over-TLS, stratum+v2://
+// which carries an AEAD Noise session, and stratum+v2tls://) defeat it.
+func checkPoolEncryption(cfg config.Config) Check {
+	return Check{
+		Name: "Pool connection encryption",
+		Run: func(_ context.Context) Result {
+			if len(cfg.Pools) == 0 {
+				// The built-in default pool uses an encrypted (stratum+v2://) URL.
+				return Result{Status: StatusSkip, Detail: "using built-in default pool (encrypted)"}
+			}
+			var plaintext []string
+			for _, p := range cfg.Pools {
+				if strings.HasPrefix(p.URL, "stratum+tcp://") {
+					plaintext = append(plaintext, stripScheme(p.URL))
+				}
+			}
+			if len(plaintext) > 0 {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("%d pool(s) use plaintext stratum+tcp:// (%s) — a network attacker can rewrite your payout address and steal earnings",
+						len(plaintext), strings.Join(plaintext, ", ")),
+					Fix: "switch to stratum+tls:// (V1 over TLS), stratum+v2:// (encrypted), or stratum+v2tls://",
+				}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("all %d pool(s) use an encrypted transport", len(cfg.Pools)),
+			}
+		},
+	}
+}
+
 func checkPayoutScheme(cfg config.Config) Check {
 	return Check{
 		Name: "Pool payout schemes",

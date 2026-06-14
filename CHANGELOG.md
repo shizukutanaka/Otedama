@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 127 — doctor warns about plaintext pool connections)
+
+Complements session 126: now that `stratum+tls://` works, `doctor` flags pools
+that are still configured with the plaintext `stratum+tcp://` transport.
+Plaintext stratum is not just an eavesdropping concern — a network attacker
+(rogue Wi-Fi, compromised router, hostile ISP) can rewrite the
+`mining.authorize` username or share submissions in flight and **redirect every
+payout to their own address** (stratum hijacking).
+
+**`internal/doctor/checks.go`**:
+- `checkPoolEncryption` — Warn (with the offending host named and a Fix hint)
+  when any pool uses `stratum+tcp://`; Pass when all pools use an encrypted
+  transport (`stratum+tls://`, `stratum+v2://` carries an AEAD Noise session,
+  or `stratum+v2tls://`); Skip when no pools are configured (the built-in
+  default is `stratum+v2://`). Added to `DefaultChecks`.
+
+Tests (5 new): no-pools skip, plaintext warn (names the host), each encrypted
+scheme passes, mixed list warns on the plaintext one only, and DefaultChecks
+inclusion.
+
+24 packages green.
+
 ### Security (session 126 — stratum+tls:// V1 no longer silently downgrades to plaintext)
 
 The Stratum V1 `stratum+tls://` Dialer variant was registered and routed, but
