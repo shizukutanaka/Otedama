@@ -10,6 +10,7 @@ package stratumv1
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -28,9 +29,14 @@ type Dialer struct {
 	// inject net.Pipe()-based fake transports.
 	dialFn func(ctx context.Context, address string) (net.Conn, error)
 
-	// useTLS is true for the stratum+tls:// scheme variant. Reserved
-	// for the TLS implementation in tls.go (not yet shipped).
+	// useTLS is true for the stratum+tls:// scheme variant: Dial then opens a
+	// certificate-verified TLS connection (see tls.go) instead of plaintext.
 	useTLS bool
+
+	// tlsConfig overrides the TLS settings used when useTLS is true. nil means
+	// the secure default (verify against the system roots, TLS 1.2+). Exposed
+	// for tests to trust a self-signed certificate; production leaves it nil.
+	tlsConfig *tls.Config
 }
 
 // Protocol identifies which scheme this Dialer handles.
@@ -52,9 +58,16 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}
 	dialFn := d.dialFn
 	if dialFn == nil {
-		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-			var dialer net.Dialer
-			return dialer.DialContext(ctx, "tcp", address)
+		if d.useTLS {
+			cfg := d.tlsConfig
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				return dialTLS(ctx, address, cfg)
+			}
+		} else {
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "tcp", address)
+			}
 		}
 	}
 	conn, err := dialFn(ctx, address)

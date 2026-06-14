@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 126 — stratum+tls:// V1 no longer silently downgrades to plaintext)
+
+The Stratum V1 `stratum+tls://` Dialer variant was registered and routed, but
+`Dial` ignored `useTLS` and always opened a **plaintext** TCP connection. A user
+configuring `stratum+tls://` for a V1 pool therefore sent worker traffic — which
+carries the payout address as the Stratum username — in cleartext while
+believing the link was encrypted. Silent TLS→plaintext downgrade.
+
+**`internal/poolproto/stratumv1/tls.go`** (new):
+- `dialTLS` opens a certificate-verified TLS connection using only stdlib
+  `crypto/tls` (no new dependency, no custom cryptography). `defaultTLSConfig`
+  verifies the pool certificate against the system root store and requires
+  TLS 1.2+; SNI/hostname verification uses the dialed host. It never falls back
+  to plaintext.
+
+**`internal/poolproto/stratumv1/dialer.go`**:
+- `Dial` now uses `dialTLS` when `useTLS` is set; plaintext only for the
+  `stratum+tcp://` variant.
+- Added an unexported `tlsConfig *tls.Config` field (nil → secure default) so
+  tests can trust a self-signed certificate; production leaves it nil.
+
+Tests (3 new): verified handshake succeeds against a self-signed listener with a
+trusting root pool; the secure default **rejects** that untrusted cert (proving
+verification is enforced, not skipped); and the `useTLS` Dialer end-to-end
+produces a `*tls.Conn` (silent-downgrade regression guard).
+
+Known limitation: pools using self-signed stratum-TLS certs will fail the
+default verification; a per-pool CA/pinning config is a follow-up (it parallels
+the SV2 server-certificate validation tracked in RESEARCH_IMPROVEMENTS Cat 10).
+
+NOTE: security-sensitive change — should receive human security review per
+CLAUDE.md's three-layer policy before release.
+
+24 packages green (race-checked).
+
 ### Fix (session 125 — reject implausible rate readings before they pull the median)
 
 The rates package's stated goal is to "prevent a single manipulated or stale
