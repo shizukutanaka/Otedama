@@ -365,6 +365,104 @@ func TestDecide_HysteresisAllowsSwitchAboveMargin(t *testing.T) {
 	}
 }
 
+func TestDecide_HeldFlag_SetWhenBetterAlternativeSuppressed(t *testing.T) {
+	// Session 131: a strictly higher-yielding challenger that does not clear the
+	// hysteresis margin must mark the held assignment as Held (yield declined).
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10, // 5% gain < 10% margin → hold
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "mining.braiins" {
+		t.Fatalf("expected hold on mining.braiins, got %q", a.Stream)
+	}
+	if !a.Held {
+		t.Error("Held = false, want true (a better alternative was suppressed)")
+	}
+}
+
+func TestDecide_HeldFlag_FalseWhenIncumbentIsBest(t *testing.T) {
+	// No better alternative exists, so staying is not a "hold" — nothing declined.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	weaker := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 80, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, weaker},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if alloc.Assignments[0].Held {
+		t.Error("Held = true, want false (incumbent is already the best; nothing declined)")
+	}
+}
+
+func TestDecide_HeldFlag_FalseOnActualSwitch(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10, // 100% gain clears margin → switch
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "ai.strawberry" {
+		t.Fatalf("expected switch to ai.strawberry, got %q", a.Stream)
+	}
+	if a.Held {
+		t.Error("Held = true on an actual switch, want false")
+	}
+}
+
 func TestDecide_HysteresisUsesPolicyScoreNotRawYield(t *testing.T) {
 	// Regression for the Socratic-inquiry finding (session 114): under a
 	// non-earnings policy, hysteresis must be measured in the same

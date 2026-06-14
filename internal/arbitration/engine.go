@@ -186,6 +186,14 @@ type Assignment struct {
 	ExpectedYield  float64 // effective yield at the time of decision
 	SwitchedFromID StreamID
 	Reason         string // human-readable explanation for logging
+
+	// Held is true when a strictly higher-scoring stream was available but the
+	// device was kept on its previous one because the gain did not exceed the
+	// hysteresis margin. It distinguishes "deliberately declined a better
+	// option" (yield left on the table to avoid flapping) from "stayed because
+	// the current stream is still the best", which lets operators see whether
+	// the hysteresis margin is costing them and tune it.
+	Held bool
 }
 
 // Idle reports whether this assignment leaves the device idle.
@@ -364,11 +372,15 @@ func chooseForDevice(
 				incScore := policyScore(c.stream, c.yield, policy)
 				threshold := incScore * (1.0 + hysteresis)
 				if bestScore <= threshold {
+					// Held only counts when a *different*, higher-scoring stream
+					// was suppressed — not when the incumbent is itself the best
+					// (in which case nothing was declined).
 					return Assignment{
 						DeviceID:      dev.Identity.ID,
 						Stream:        c.stream.ID,
 						ExpectedYield: c.yield,
 						Reason:        fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100),
+						Held:          best.stream.ID != c.stream.ID,
 					}
 				}
 				break

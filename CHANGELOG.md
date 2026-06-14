@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 131 — observe the road not taken: arbitration holds)
+
+A Socratic new perspective — observe the decisions the engine *declined*, not
+just the ones it made. `otedama_arbitration_switches_total` counts switches that
+happened, but the engine also deliberately *holds* on an inferior workload when
+a better one fails to clear the hysteresis margin (sessions 108/114). That
+decision lived only in a log string, uncounted — so the operator could not tell
+whether `arbitration_hysteresis_pct` was costing them yield.
+
+**`internal/arbitration/engine.go`**:
+- `Assignment.Held bool` — true only when a *strictly higher-scoring* stream was
+  available but suppressed by hysteresis (not when the incumbent is itself the
+  best, where nothing was declined). Set in `chooseForDevice`.
+
+**`internal/engine/metrics.go` / `arbitrate.go`**:
+- `otedama_arbitration_holds_total` counter, incremented per held assignment in
+  the arbitration loop (alongside the existing switch count). Rising holds vs
+  switches signals the hysteresis margin may be too high (yield left on the
+  table); zero holds means it never binds — making the knob tunable.
+
+Tests (4 new): `Held` set when a better alternative is suppressed, false when
+the incumbent is already best, false on an actual switch; and the
+`otedama_arbitration_holds_total` metric output. (A loop-level counting test was
+omitted as it would only exercise scheduling/ordering, not the trivial mirror of
+the already-tested switch counting.)
+
+24 packages green.
+
 ### Feat (session 130 — electricity-cost awareness: the net-profit perspective)
 
 A Socratic-thinking new perspective: the arbitration engine measures "value" in

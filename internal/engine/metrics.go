@@ -27,6 +27,12 @@ type engineMetrics struct {
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
 	arbitrationSwitches *metrics.Counter
+	// arbitrationHolds counts decisions where a strictly better stream existed
+	// but hysteresis kept the device on its current one. Together with
+	// arbitrationSwitches it makes the hysteresis margin tunable: many holds
+	// mean yield is being left on the table; zero holds mean the margin never
+	// binds. (The "road not taken" — decisions the engine declined.)
+	arbitrationHolds *metrics.Counter
 	// activeStreams is the number of live revenue streams arbitration is
 	// choosing between after stale (dead-provider) streams are pruned. A
 	// drop here surfaces a provider that has stopped quoting.
@@ -143,6 +149,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		arbitrationSwitches: reg.NewCounter(
 			"otedama_arbitration_switches_total",
 			"Total arbitration workload switches (mining ↔ AI).",
+			nil),
+		arbitrationHolds: reg.NewCounter(
+			"otedama_arbitration_holds_total",
+			"Total decisions where a higher-yielding stream existed but hysteresis "+
+				"kept the current one. Rising vs switches indicates the hysteresis "+
+				"margin may be too high (yield left on the table).",
 			nil),
 		activeStreams: reg.NewGauge(
 			"otedama_active_streams",

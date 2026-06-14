@@ -101,6 +101,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				if a.SwitchedFromID != "" {
 					opts.metrics.arbitrationSwitches.Inc()
 				}
+				if a.Held {
+					opts.metrics.arbitrationHolds.Inc()
+				}
 			}
 			applyAllocation(alloc, opts.workers, opts.log)
 		}

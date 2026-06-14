@@ -810,6 +810,25 @@ func TestUptimeAccountant_IgnoresNonPositiveAndNilCounter(t *testing.T) {
 }
 
 // ============================================================================
+// Arbitration holds metric — observing declined switches (session 131)
+// ============================================================================
+
+func TestEngineMetrics_ArbitrationHolds_AppearsInOutput(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.arbitrationHolds.Inc()
+	m.arbitrationHolds.Inc()
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(buf.String(), "otedama_arbitration_holds_total 2") {
+		t.Errorf("otedama_arbitration_holds_total missing/incorrect:\n%s", buf.String())
+	}
+}
+
+// ============================================================================
 // Power-cost metric — economic (net-profit) perspective (session 130)
 // ============================================================================
 
