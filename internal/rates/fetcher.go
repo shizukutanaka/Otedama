@@ -95,6 +95,19 @@ var defaultSources = []Source{
 // CacheDuration is how long a fetched rate is considered fresh.
 const CacheDuration = 5 * time.Minute
 
+// minPlausibleRateUSD and maxPlausibleRateUSD bound a believable BTC/USD price.
+// They are deliberately very wide sanity rails — orders of magnitude beyond any
+// real price for the foreseeable future — whose only job is to reject a source
+// reading mangled by a unit or parse error (a price returned in BTC, in
+// thousands, or in satoshis) before it can pull the median. A reading outside
+// this band is a bug or manipulation, never a real quote, so dropping it
+// strengthens the median's outlier resistance in the vulnerable two-source
+// case, where a relative test cannot tell which of two values is wrong.
+const (
+	minPlausibleRateUSD = 100.0
+	maxPlausibleRateUSD = 100_000_000.0
+)
+
 // Fetcher periodically fetches the BTC/USD exchange rate from multiple
 // sources and caches the result.
 type Fetcher struct {
@@ -164,9 +177,21 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 	var rates []float64
 	for range f.sources {
 		r := <-results
-		if r.err == nil && r.rate > 0 {
-			rates = append(rates, r.rate)
+		if r.err != nil {
+			continue
 		}
+		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
+			// A reading outside the sanity band is a unit/parse error or
+			// manipulation, never a real quote. Drop it so it cannot pull the
+			// median. Stay quiet on a plain zero (a source that simply has no
+			// value yet); only flag genuinely implausible non-zero readings.
+			if r.rate != 0 {
+				f.logMsg(fmt.Sprintf("rates: ignoring implausible reading %.2f (outside [%.0f, %.0f])",
+					r.rate, minPlausibleRateUSD, maxPlausibleRateUSD))
+			}
+			continue
+		}
+		rates = append(rates, r.rate)
 	}
 
 	if len(rates) == 0 {

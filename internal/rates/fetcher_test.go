@@ -161,6 +161,101 @@ func TestFetcher_MedianOfTwoSourcesAverages(t *testing.T) {
 	}
 }
 
+func TestFetcher_ImplausibleReadingExcludedFromMedian(t *testing.T) {
+	// Three sources, one returning a unit-mangled value (price in BTC ≈ 0.95
+	// instead of USD). It must be dropped before the median so it cannot pull
+	// the result, leaving the median of the two honest sources.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvA := httptest.NewServer(makeHandler("95000"))
+	srvB := httptest.NewServer(makeHandler("95200"))
+	srvBad := httptest.NewServer(makeHandler("0.95")) // implausible
+	defer srvA.Close()
+	defer srvB.Close()
+	defer srvBad.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvA.Client(),
+		sources: []Source{
+			makeSource("a", srvA.URL),
+			makeSource("b", srvB.URL),
+			makeSource("bad", srvBad.URL),
+		},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	// Median of the two in-band readings [95000, 95200] = 95100; the 0.95
+	// reading must have been dropped (a plain median of all three would be 95000).
+	if rate != 95100 {
+		t.Errorf("rate = %v, want 95100 (implausible 0.95 reading must be excluded)", rate)
+	}
+}
+
+func TestFetcher_TwoSourcesOneImplausibleKeepsGoodOne(t *testing.T) {
+	// The vulnerable two-source case: one honest, one wildly wrong. The band
+	// rescues it — without filtering, the average would be dragged halfway.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvGood := httptest.NewServer(makeHandler("95000"))
+	srvBad := httptest.NewServer(makeHandler("950000000")) // ~1e9, out of band
+	defer srvGood.Close()
+	defer srvBad.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvGood.Client(),
+		sources:    []Source{makeSource("good", srvGood.URL), makeSource("bad", srvBad.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	if rate != 95000 {
+		t.Errorf("rate = %v, want 95000 (out-of-band source must be dropped, not averaged)", rate)
+	}
+}
+
 func TestFetcher_AllSourcesFailReturnsFallback(t *testing.T) {
 	f := &Fetcher{
 		fallback:   80000,

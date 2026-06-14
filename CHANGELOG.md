@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 125 — reject implausible rate readings before they pull the median)
+
+The rates package's stated goal is to "prevent a single manipulated or stale
+source from distorting the arbitration decision," but a source returning a
+unit-/parse-mangled value (a price in BTC, in thousands, or in satoshis) could
+still enter the median — and with only two sources surviving, the average is
+dragged halfway toward it. Since the BTC/USD rate now drives both the
+curtailment gate (session 116) and arbitration, a glitched feed could trigger a
+false pause or a bad workload switch.
+
+**`internal/rates/fetcher.go`**:
+- `Fetch` now drops any source reading outside a wide sanity band
+  (`minPlausibleRateUSD = 100`, `maxPlausibleRateUSD = 100_000_000`) before
+  computing the median, logging genuinely implausible non-zero readings. The
+  rails are orders of magnitude beyond any real price for the foreseeable
+  future; their only job is to reject gross unit/parse errors. This is more
+  effective than a relative test in the vulnerable two-source case, where
+  there is no majority to decide which value is wrong. "All sources failed →
+  fallback" behaviour is unchanged.
+
+Tests (2 new): an implausible 0.95 reading excluded from a 3-source median
+(95100, not the 95000 a plain all-three median would give); and a two-source
+case where a ~1e9 reading is dropped rather than averaged (keeps 95000).
+
+24 packages green.
+
 ### Feat (session 124 — effective-uptime accounting (productive-seconds counter))
 
 Closes the remaining piece of RESEARCH_IMPROVEMENTS Category 12 item 12: the
