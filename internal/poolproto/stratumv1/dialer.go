@@ -59,7 +59,17 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	dialFn := d.dialFn
 	if dialFn == nil {
 		if d.useTLS {
+			// Precedence: an explicit test-injected config wins; otherwise build
+			// one from any per-pool CA bundle the caller supplied; otherwise nil
+			// (secure default — system roots only). Verification is always on.
 			cfg := d.tlsConfig
+			if cfg == nil {
+				c, err := tlsConfigWithExtraCAs(creds.TLSRootCAsPEM)
+				if err != nil {
+					return nil, err
+				}
+				cfg = c
+			}
 			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
 				return dialTLS(ctx, address, cfg)
 			}

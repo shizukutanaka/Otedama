@@ -355,9 +355,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			return fmt.Errorf("engine: exceeded %d reconnect attempts", r.opts.MaxReconnectAttempts)
 		}
 		poolURL := pools[poolIdx]
-		var poolUser string
+		var poolUser, poolTLSCAFile string
 		if poolIdx < len(r.opts.Config.Pools) {
 			poolUser = r.opts.Config.Pools[poolIdx].User
+			poolTLSCAFile = r.opts.Config.Pools[poolIdx].TLSCAFile
 		}
 		user := sessionUser(poolUser, addrs[addrIdx], r.opts.Config.Workers.Name)
 
@@ -389,6 +390,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			m:           r.metrics,
 			powerWatts:  r.opts.Config.PowerWatts,
 			curtailGate: r.curtailGate,
+			tlsCAFile:   poolTLSCAFile,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -484,6 +486,9 @@ type sessionOpts struct {
 	// curtailGate, when non-nil and raised, suppresses applying pool jobs to
 	// workers (they stay idle) because BTC/USD is below the curtail threshold.
 	curtailGate *atomic.Bool
+	// tlsCAFile is the active pool's optional PEM CA bundle path (PoolConfig
+	// .TLSCAFile), used to verify a private-CA/self-signed stratum+tls:// pool.
+	tlsCAFile string
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
@@ -753,6 +758,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	creds := poolproto.Credentials{
 		User:     opts.user,
 		Password: "x",
+	}
+	// For a stratum+tls:// pool with a configured CA bundle, load it so the
+	// dialer can verify a private-CA/self-signed certificate. An unreadable
+	// file degrades to system-roots verification (which will cleanly fail for a
+	// private-CA pool) — it never falls back to plaintext.
+	if opts.tlsCAFile != "" {
+		if pem, rerr := os.ReadFile(opts.tlsCAFile); rerr != nil {
+			opts.log("warn", fmt.Sprintf("engine: cannot read tls_ca_file %q: %v; using system roots only",
+				opts.tlsCAFile, rerr))
+		} else {
+			creds.TLSRootCAsPEM = pem
+		}
 	}
 	sess, err := poolproto.DialURL(ctx, opts.poolURL, creds)
 	if err != nil {

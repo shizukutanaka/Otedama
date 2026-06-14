@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"math/big"
 	"net"
 	"testing"
@@ -20,10 +21,11 @@ import (
 )
 
 // newSelfSignedTLSListener starts a TLS listener on 127.0.0.1 with a freshly
-// generated self-signed certificate, and returns the listener plus an x509
-// pool that trusts it. The listener accepts connections and immediately closes
-// them after the handshake — enough to verify the transport is TLS.
-func newSelfSignedTLSListener(t *testing.T) (net.Listener, *x509.CertPool) {
+// generated self-signed certificate, and returns the listener, an x509 pool
+// that trusts it, and the certificate in PEM form (for the per-pool CA path).
+// The listener accepts connections and immediately closes them after the
+// handshake — enough to verify the transport is TLS.
+func newSelfSignedTLSListener(t *testing.T) (net.Listener, *x509.CertPool, []byte) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -73,11 +75,12 @@ func newSelfSignedTLSListener(t *testing.T) (net.Listener, *x509.CertPool) {
 			_ = c.Close()
 		}
 	}()
-	return ln, pool
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	return ln, pool, certPEM
 }
 
 func TestDialTLS_VerifiedHandshakeSucceeds(t *testing.T) {
-	ln, pool := newSelfSignedTLSListener(t)
+	ln, pool, _ := newSelfSignedTLSListener(t)
 	defer ln.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -106,7 +109,7 @@ func TestDialTLS_DefaultConfigRejectsUntrustedCert(t *testing.T) {
 	// The secure default verifies against the system roots, so a self-signed
 	// certificate must be rejected. This proves verification is NOT disabled —
 	// the whole point of using TLS rather than plaintext.
-	ln, _ := newSelfSignedTLSListener(t)
+	ln, _, _ := newSelfSignedTLSListener(t)
 	defer ln.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -119,10 +122,51 @@ func TestDialTLS_DefaultConfigRejectsUntrustedCert(t *testing.T) {
 	}
 }
 
+func TestDialer_PerPoolCAVerifiesSelfSignedPool(t *testing.T) {
+	// A pool presenting a self-signed cert is rejected by the system roots, but
+	// supplying that cert as a per-pool CA bundle (via Credentials.TLSRootCAsPEM)
+	// lets the connection verify — without disabling verification.
+	ln, _, certPEM := newSelfSignedTLSListener(t)
+	defer ln.Close()
+
+	d := &Dialer{useTLS: true} // no test tlsConfig: exercise the creds path
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Sanity: without the CA bundle, the self-signed pool is rejected.
+	if _, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), poolproto.Credentials{User: "x"}); err == nil {
+		t.Fatal("expected verification failure without the per-pool CA")
+	}
+
+	// With the CA bundle, it verifies and connects over TLS.
+	c, err := d.Dial(ctx, "stratum+tls://"+ln.Addr().String(), poolproto.Credentials{
+		User:          "x",
+		TLSRootCAsPEM: certPEM,
+	})
+	if err != nil {
+		t.Fatalf("Dial with per-pool CA failed: %v", err)
+	}
+	defer c.Close()
+	if _, ok := c.(*connection).raw.(*tls.Conn); !ok {
+		t.Error("connection is not TLS")
+	}
+}
+
+func TestTLSConfigWithExtraCAs_RejectsGarbagePEM(t *testing.T) {
+	if _, err := tlsConfigWithExtraCAs([]byte("not a pem")); err == nil {
+		t.Error("expected error for PEM with no valid certificates")
+	}
+	// Empty PEM → secure default (nil config, nil error).
+	cfg, err := tlsConfigWithExtraCAs(nil)
+	if err != nil || cfg != nil {
+		t.Errorf("empty PEM = (%v, %v), want (nil, nil)", cfg, err)
+	}
+}
+
 func TestDialer_UseTLSProducesEncryptedConnection(t *testing.T) {
 	// End-to-end through the Dialer: the useTLS variant must open a *tls.Conn,
 	// not a plaintext one (the silent-downgrade regression guard).
-	ln, pool := newSelfSignedTLSListener(t)
+	ln, pool, _ := newSelfSignedTLSListener(t)
 	defer ln.Close()
 
 	d := &Dialer{

@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 128 — per-pool TLS CA for private-CA / self-signed stratum pools)
+
+Removes the session-126 limitation: a Stratum-V1-over-TLS pool that presents a
+private-CA or self-signed certificate previously failed the secure default
+verification with no recourse short of disabling TLS (i.e. going plaintext).
+Now an operator can point Otedama at the pool's CA bundle so the certificate is
+*verified* — verification is never disabled.
+
+**`internal/config/config.go`**:
+- `PoolConfig.TLSCAFile string` (YAML: `tls_ca_file`) — optional path to a PEM
+  CA bundle to trust for that pool, in addition to the system roots. No effect
+  on non-TLS schemes.
+
+**`internal/poolproto/poolproto.go`**:
+- `Credentials.TLSRootCAsPEM []byte` — extra trusted CA PEM, mirroring the
+  existing `PoolPubKey` security-config field. Flows through `DialURL`.
+
+**`internal/poolproto/stratumv1/tls.go` / `dialer.go`**:
+- `tlsConfigWithExtraCAs` builds RootCAs = system roots + the supplied PEM
+  (errors on a PEM with no valid certs); `Dial` uses it for the TLS variant
+  when no test override is set. Verification (and TLS 1.2+) stays on.
+
+**`internal/engine/run.go`**:
+- Threads the active pool's `TLSCAFile` through the reconnect loop and
+  `sessionOpts` into `runSessionV1`, which reads the file into
+  `Credentials.TLSRootCAsPEM`. An unreadable file logs a warning and degrades
+  to system-roots verification — never to plaintext.
+
+Tests (3 new): a self-signed pool is rejected without the CA but verifies with
+it (via `Credentials.TLSRootCAsPEM`); garbage PEM errors; empty PEM yields the
+secure default. Existing TLS test helper now also returns the cert PEM.
+
+24 packages green (race-checked). Security-sensitive (TLS trust): warrants human
+review per CLAUDE.md.
+
 ### Feat (session 127 — doctor warns about plaintext pool connections)
 
 Complements session 126: now that `stratum+tls://` works, `doctor` flags pools

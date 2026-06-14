@@ -170,6 +170,15 @@ type PoolConfig struct {
 	// "solo" (full block reward or nothing). Empty means unknown/unset.
 	// This field has no effect on the mining protocol.
 	PayoutScheme string `yaml:"payout_scheme"`
+
+	// TLSCAFile is an optional path to a PEM file of certificate authorities
+	// to trust for this pool's stratum+tls:// connection, in addition to the
+	// system root store. Use it for a pool that presents a private-CA or
+	// self-signed certificate, so the connection can be verified rather than
+	// either failing or being run in the clear. Empty means "system roots
+	// only". It has no effect on non-TLS schemes. Certificate verification is
+	// always performed; this never disables it.
+	TLSCAFile string `yaml:"tls_ca_file"`
 }
 
 // WorkerConfig controls how Otedama identifies itself to pools.

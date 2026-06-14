@@ -18,6 +18,8 @@ package stratumv1
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"net"
 )
 
@@ -28,6 +30,25 @@ import (
 // empty here, so each connection verifies against the host it dialed.
 func defaultTLSConfig() *tls.Config {
 	return &tls.Config{MinVersion: tls.VersionTLS12}
+}
+
+// tlsConfigWithExtraCAs returns a TLS config that trusts the system root store
+// plus the given PEM certificate authorities. It is used for pools that present
+// a private-CA or self-signed certificate: the extra CAs let the certificate be
+// verified rather than rejected, while verification itself stays enabled. A nil
+// or empty pem yields (nil, nil) so the caller uses the secure default.
+func tlsConfigWithExtraCAs(pem []byte) (*tls.Config, error) {
+	if len(pem) == 0 {
+		return nil, nil
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("stratumv1: tls_ca_file contains no valid PEM certificates")
+	}
+	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 }
 
 // dialTLS opens a certificate-verified TLS connection to address. When cfg is
