@@ -915,6 +915,59 @@ func TestDefaultChecks_IncludesPoolEncryptionCheck(t *testing.T) {
 }
 
 // ============================================================================
+// checkPowerEconomics — cross-field config coherence
+// ============================================================================
+
+func TestCheckPowerEconomics_BothUnsetSkips(t *testing.T) {
+	r := checkPowerEconomics(config.Config{}).Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("both unset: status = %v, want Skip", r.Status)
+	}
+}
+
+func TestCheckPowerEconomics_BothSetPasses(t *testing.T) {
+	cfg := config.Config{PowerWatts: 1200, ElectricityPricePerKWh: 0.10}
+	if r := checkPowerEconomics(cfg).Run(context.Background()); r.Status != StatusPass {
+		t.Errorf("both set: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckPowerEconomics_PowerOnlyWarnsAboutCost(t *testing.T) {
+	cfg := config.Config{PowerWatts: 1200}
+	r := checkPowerEconomics(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("power only: status = %v, want Warn", r.Status)
+	}
+	if !strings.Contains(r.Detail, "electricity_price_per_kwh") || r.Fix == "" {
+		t.Errorf("power only: detail/fix should point at electricity_price_per_kwh: %q / %q", r.Detail, r.Fix)
+	}
+}
+
+func TestCheckPowerEconomics_PriceOnlyWarnsInert(t *testing.T) {
+	cfg := config.Config{ElectricityPricePerKWh: 0.10}
+	r := checkPowerEconomics(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("price only: status = %v, want Warn", r.Status)
+	}
+	if !strings.Contains(r.Detail, "power_watts") {
+		t.Errorf("price only: detail should point at power_watts: %q", r.Detail)
+	}
+}
+
+func TestDefaultChecks_IncludesPowerEconomicsCheck(t *testing.T) {
+	var found bool
+	for _, c := range DefaultChecks(config.Config{}, "") {
+		if c.Name == "Power & cost config" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("DefaultChecks does not include the 'Power & cost config' check")
+	}
+}
+
+// ============================================================================
 // checkPoolTLSCA — per-pool tls_ca_file validation
 // ============================================================================
 

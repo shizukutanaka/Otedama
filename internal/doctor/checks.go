@@ -38,6 +38,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolEncryption(cfg),
 		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
+		checkPowerEconomics(cfg),
 		checkHardware(),
 		checkNetwork(),
 	}
@@ -528,6 +529,47 @@ func checkPoolTLSCA(cfg config.Config) Check {
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%d pool CA file(s) valid", configured),
+			}
+		},
+	}
+}
+
+// checkPowerEconomics verifies the coherence of the power/cost configuration
+// pair, not just each field's individual validity. power_watts and
+// electricity_price_per_kwh are each valid alone, but the cost metric
+// (otedama_power_cost_usd_per_hour) needs both — so one set without the other is
+// a "half-configured feature" that silently does nothing the operator expects.
+// This is the cross-field-intent perspective: do these values, together, achieve
+// what the operator apparently wanted?
+func checkPowerEconomics(cfg config.Config) Check {
+	return Check{
+		Name: "Power & cost config",
+		Run: func(_ context.Context) Result {
+			hasW := cfg.PowerWatts > 0
+			hasP := cfg.ElectricityPricePerKWh > 0
+			switch {
+			case !hasW && !hasP:
+				return Result{
+					Status: StatusSkip,
+					Detail: "power_watts and electricity_price_per_kwh unset (efficiency/cost metrics off)",
+				}
+			case hasW && hasP:
+				return Result{
+					Status: StatusPass,
+					Detail: "power_watts and electricity_price_per_kwh both set; J/TH and power-cost metrics available",
+				}
+			case hasW: // && !hasP
+				return Result{
+					Status: StatusWarn,
+					Detail: "power_watts is set but electricity_price_per_kwh is not — otedama_power_cost_usd_per_hour cannot be computed (J/TH still works)",
+					Fix:    "set electricity_price_per_kwh to see power cost and net profit",
+				}
+			default: // !hasW && hasP
+				return Result{
+					Status: StatusWarn,
+					Detail: "electricity_price_per_kwh is set but power_watts is not — it has no effect (no J/TH, no power cost)",
+					Fix:    "set power_watts (your measured wattage) to enable the efficiency and cost metrics",
+				}
 			}
 		},
 	}

@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 133 — configuration coherence: do the settings together achieve intent?)
+
+A Socratic new perspective — `config.Validate()` checks each field's *individual*
+validity, but individually-valid settings can be *jointly* inert: the operator
+configures half a feature and it silently does nothing they expect. `doctor` now
+checks cross-field coherence, starting with the power/cost pair added in session
+130.
+
+**`internal/doctor/checks.go`**:
+- `checkPowerEconomics` — `power_watts` and `electricity_price_per_kwh` are each
+  valid alone, but `otedama_power_cost_usd_per_hour` needs both. Skip when
+  neither is set; Pass when both are; **Warn** precisely when only one is:
+  power-only notes that cost can't be computed (J/TH still works); price-only
+  notes it has no effect at all. Added to `DefaultChecks`.
+
+Tests (5 new): both-unset skip, both-set pass, power-only warn (points at
+electricity_price_per_kwh), price-only warn (points at power_watts), and
+DefaultChecks inclusion.
+
+24 packages green.
+
 ### Feat (session 132 — payout-destination transparency for a non-custodial tool)
 
 A Socratic new perspective — for a non-custodial miner the core trust question is
