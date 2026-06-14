@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 132 — payout-destination transparency for a non-custodial tool)
+
+A Socratic new perspective — for a non-custodial miner the core trust question is
+not "is my address valid?" (validation, sessions 118–120) but "**where is this
+running instance sending my rewards right now**, especially after a payout-address
+failover?" `otedama_payout_active_index` gives only an index that must be
+cross-referenced against config; nothing surfaces the address itself.
+
+**`internal/engine/metrics.go` / `run.go`**:
+- `otedama_payout_info{address="bc1q…mdq"}` — an info-style series, valued 1 for
+  the masked address currently receiving rewards (0 for any previously-active
+  one), so exactly one reads 1. `setActivePayout` lazily creates a gauge per
+  masked address (bounded to the configured failover list), zeroes the prior
+  active series on failover, and is a no-op when unchanged. The reconnect loop
+  sets it for the active payout address alongside `payout_active_index`.
+- Address is masked (first6…last4) exactly as the logs already do, so the
+  operator can recognise their address without the endpoint publishing it in
+  full.
+
+This lets an operator confirm — directly from `/metrics` on a remote rig — that
+a non-custodial instance is paying the address they expect, and *see* when
+failover has switched to a backup address.
+
+Tests (4 new): active address exposed as 1; failover zeroes the previous and
+sets the new to 1; unchanged is a no-op (no series churn); empty ignored.
+Race-checked.
+
+24 packages green.
+
 ### Feat (session 131 — observe the road not taken: arbitration holds)
 
 A Socratic new perspective — observe the decisions the engine *declined*, not

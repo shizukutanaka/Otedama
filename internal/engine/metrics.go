@@ -117,6 +117,16 @@ type engineMetrics struct {
 	// the device set is bounded to detected hardware so cardinality is safe.
 	sharesFoundPerDeviceMu sync.Mutex
 	sharesFoundPerDevice   map[string]*metrics.Counter
+
+	// payoutInfo exposes the active payout destination as
+	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
+	// masked address currently receiving rewards. It lets an operator confirm,
+	// via /metrics, that a non-custodial instance is paying to the address they
+	// expect even after payout-address failover. Masked (first6…last4) like the
+	// logs; the address set is bounded to the configured failover list.
+	payoutInfoMu       sync.Mutex
+	payoutInfo         map[string]*metrics.Gauge
+	payoutActiveMasked string
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
@@ -268,6 +278,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		reg:                  reg,
 		rejectByReason:       make(map[string]*metrics.Counter),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
+		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
 	// only its label set does (standard Prometheus `_info` convention).
@@ -314,6 +325,40 @@ func (m *engineMetrics) incSharesFoundForDevice(deviceID string) {
 	}
 	m.sharesFoundPerDeviceMu.Unlock()
 	c.Inc()
+}
+
+// setActivePayout marks masked as the active payout destination:
+// otedama_payout_info{address="<masked>"} = 1, with the previously-active
+// series set to 0 so exactly one series reads 1 at a time. Gauges are created
+// lazily per masked address (bounded to the configured failover list) and the
+// no-op fast path avoids churn when the active address is unchanged. Safe for
+// concurrent use. An empty masked string is ignored.
+func (m *engineMetrics) setActivePayout(masked string) {
+	if masked == "" {
+		return
+	}
+	m.payoutInfoMu.Lock()
+	defer m.payoutInfoMu.Unlock()
+	if masked == m.payoutActiveMasked {
+		return
+	}
+	if prev := m.payoutActiveMasked; prev != "" {
+		if g, ok := m.payoutInfo[prev]; ok {
+			g.Set(0)
+		}
+	}
+	g, ok := m.payoutInfo[masked]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_payout_info",
+			"Active payout destination (masked). The series valued 1 is the address "+
+				"currently receiving rewards; tracks payout-address failover.",
+			map[string]string{"address": masked},
+		)
+		m.payoutInfo[masked] = g
+	}
+	g.Set(1)
+	m.payoutActiveMasked = masked
 }
 
 // updateShareRates recomputes the acceptance/reject/stale rate gauges from

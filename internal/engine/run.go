@@ -379,6 +379,9 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		r.metrics.poolConnectAttempts.Inc()
 		r.metrics.poolActiveIndex.Set(float64(poolIdx))
 		r.metrics.payoutActiveIndex.Set(float64(addrIdx))
+		if addrIdx < len(addrs) {
+			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
+		}
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:     poolURL,

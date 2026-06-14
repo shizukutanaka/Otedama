@@ -829,6 +829,67 @@ func TestEngineMetrics_ArbitrationHolds_AppearsInOutput(t *testing.T) {
 }
 
 // ============================================================================
+// setActivePayout — payout-destination transparency (session 132)
+// ============================================================================
+
+func TestSetActivePayout_ExposesActiveAddress(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.setActivePayout("bc1q…mdq")
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(buf.String(), `otedama_payout_info{address="bc1q…mdq"} 1`) {
+		t.Errorf("active payout series missing/incorrect:\n%s", buf.String())
+	}
+}
+
+func TestSetActivePayout_FailoverZeroesPrevious(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.setActivePayout("bc1q…aaa") // primary
+	m.setActivePayout("bc1q…bbb") // failover to backup
+
+	out := func() string {
+		var b strings.Builder
+		if err := reg.WriteText(&b); err != nil {
+			t.Fatalf("WriteText: %v", err)
+		}
+		return b.String()
+	}()
+	if !strings.Contains(out, `otedama_payout_info{address="bc1q…aaa"} 0`) {
+		t.Errorf("previous payout address should read 0 after failover:\n%s", out)
+	}
+	if !strings.Contains(out, `otedama_payout_info{address="bc1q…bbb"} 1`) {
+		t.Errorf("new payout address should read 1 after failover:\n%s", out)
+	}
+}
+
+func TestSetActivePayout_UnchangedIsNoOp(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.setActivePayout("bc1q…mdq")
+	m.setActivePayout("bc1q…mdq") // same → no churn
+	if len(m.payoutInfo) != 1 {
+		t.Errorf("payoutInfo has %d series, want 1", len(m.payoutInfo))
+	}
+	if m.payoutInfo["bc1q…mdq"].Value() != 1 {
+		t.Error("active series should still read 1")
+	}
+}
+
+func TestSetActivePayout_EmptyIgnored(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.setActivePayout("")
+	if len(m.payoutInfo) != 0 {
+		t.Errorf("empty address created %d series, want 0", len(m.payoutInfo))
+	}
+}
+
+// ============================================================================
 // Power-cost metric — economic (net-profit) perspective (session 130)
 // ============================================================================
 
