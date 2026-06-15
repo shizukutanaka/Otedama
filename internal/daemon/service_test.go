@@ -215,6 +215,35 @@ func TestSystemdUnit_ContainsRequiredFields(t *testing.T) {
 	}
 }
 
+func TestSystemdUnit_QuotesBinaryPathWithSpaces(t *testing.T) {
+	// A binary installed under a path containing a space (e.g. a home dir like
+	// "/home/John Doe/bin/otedama") must be quoted in ExecStart, or systemd
+	// parses the executable as the substring before the first space and the
+	// service silently fails to start.
+	m := &Manager{
+		binaryPath: "/home/John Doe/bin/otedama",
+		configPath: "/home/John Doe/config.yaml",
+	}
+	unit := m.systemdUnit()
+	if !strings.Contains(unit, `ExecStart="/home/John Doe/bin/otedama"`) {
+		t.Errorf("systemd ExecStart did not quote a binary path with spaces; got:\n%s", unit)
+	}
+	// The config path (an arg) must likewise be quoted.
+	if !strings.Contains(unit, `"/home/John Doe/config.yaml"`) {
+		t.Errorf("systemd ExecStart did not quote a config path with spaces; got:\n%s", unit)
+	}
+}
+
+func TestSystemdUnit_DoesNotQuoteSimpleBinaryPath(t *testing.T) {
+	// A normal path with no spaces must remain unquoted (clean output, and
+	// the previous behaviour for the common case is preserved).
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	unit := m.systemdUnit()
+	if !strings.Contains(unit, "ExecStart=/usr/local/bin/otedama run") {
+		t.Errorf("systemd ExecStart should leave a space-free path unquoted; got:\n%s", unit)
+	}
+}
+
 // ----- launchd plist -----
 
 func TestLaunchdPlist_IsValidXMLLike(t *testing.T) {

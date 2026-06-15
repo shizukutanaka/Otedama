@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 148 — daemon: quote the binary path in the systemd unit so a space-containing path starts)
+
+A strengths/weaknesses pass on the cross-platform service installer found a real
+service-won't-start bug. The systemd unit template emitted `ExecStart=%s %s` with the binary
+path **unquoted**, while `serviceArgs` quoted only the *arguments* (`i > 0`). A binary
+installed under a path containing a space — e.g. a home directory like
+`/home/John Doe/bin/otedama` — would make systemd parse the executable as `/home/John` and
+the service would silently fail to start with a confusing error. (Windows already wrapped the
+binary in quotes; launchd emits each token as its own `<string>`; only systemd was affected.)
+
+**`internal/daemon/service.go`**:
+- Extracted `quoteToken(s)` — wraps a token in Go-style double quotes (which both systemd
+  `ExecStart=` and Windows `binPath=` accept) when it contains whitespace or a quote, else
+  returns it unchanged.
+- `systemdUnit` now quotes `m.binaryPath` via `quoteToken`; `serviceArgs` reuses the same
+  helper for every element (replacing the inline `i > 0` logic — behaviour identical, the
+  subcommand `run` never needs quoting).
+
+Tests (2 new): a binary and config path with spaces are both quoted in `ExecStart`; a normal
+space-free path stays unquoted (common-case output preserved).
+
+24 packages green.
+
 ### Fix (session 147 — config: surface malformed numeric env vars instead of silently dropping them)
 
 A strengths/weaknesses pass found another silent-misconfiguration failure (the recurring

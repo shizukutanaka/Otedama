@@ -211,7 +211,7 @@ PrivateTmp=true
 
 [Install]
 WantedBy=default.target
-`, m.binaryPath, args)
+`, quoteToken(m.binaryPath), args)
 }
 
 // ----- macOS / launchd -----
@@ -355,18 +355,24 @@ func (m *Manager) serviceArgv() []string {
 // directly.
 func (m *Manager) serviceArgs() string {
 	argv := m.serviceArgv()
-	var b strings.Builder
+	parts := make([]string, len(argv))
 	for i, a := range argv {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		if i > 0 && strings.ContainsAny(a, " \t\"") {
-			fmt.Fprintf(&b, "%q", a)
-		} else {
-			b.WriteString(a)
-		}
+		parts[i] = quoteToken(a)
 	}
-	return b.String()
+	return strings.Join(parts, " ")
+}
+
+// quoteToken wraps s in Go-style double quotes (which both systemd ExecStart=
+// and Windows sc.exe binPath= accept, with C-style escapes) when it contains
+// whitespace or a quote; otherwise it returns s unchanged. This is what lets a
+// binary path or flag value containing a space — e.g. an executable under
+// "/home/John Doe/bin/otedama" — survive as a single argument instead of being
+// split by the service manager's own command-line parser.
+func quoteToken(s string) string {
+	if strings.ContainsAny(s, " \t\"") {
+		return fmt.Sprintf("%q", s)
+	}
+	return s
 }
 
 // xmlEscape escapes the five XML special characters so an argument value
