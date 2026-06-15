@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 144 — forecast accountability: does the engine expose its own earnings prediction?)
+
+A Socratic new perspective — the arbitration engine computes `alloc.TotalYield` (the summed
+ExpectedYield of the chosen allocation, sats/s) on every `Decide`, but never published it.
+Switches, holds, foregone cost, and active streams are all exposed — yet the most basic
+number, the engine's own *forecast earning rate*, was invisible. Without publishing the
+forecast, the engine can never be held accountable: there is no baseline to detect when
+provider quotes are over-optimistic or hardware underperforms.
+
+This is distinct from session 142 (foregone = *relative* sacrifice vs the best option). This
+is the *absolute* expected earnings of the chosen allocation: foregone can be zero (best
+chosen) while expected yield is still low because the best itself pays little.
+
+`otedama_arbitration_expected_yield_sats_per_second` — new gauge, set to `alloc.TotalYield`
+each tick. Compare against realized earnings (accepted shares × difficulty value) to judge
+quote accuracy; multiply by `otedama_btc_usd_rate` for an expected $/day. The expectation
+half of the expectation-vs-realization accountability pair.
+
+**`internal/engine/metrics.go` / `arbitrate.go`**: registered the gauge; the arbitration loop
+publishes `alloc.TotalYield` alongside the existing per-tick metrics. The value was already
+computed by `Decide` — this session only surfaces it.
+
+**`docs/API.md`**: documented (39 = 39 code/doc parity verified).
+
+Tests: extended the arbitration-loop wiring test to assert the forecast equals the assigned
+stream's yield (cpu-0 → 1000 sat/s).
+
+24 packages green.
+
 ### Feat (session 143 — redundancy health: does the engine reveal the health of its redundancy, not just its value?)
 
 A Socratic new perspective — Otedama has built-in redundancy (BTC/USD median of 3 sources,

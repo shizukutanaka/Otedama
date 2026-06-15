@@ -1509,6 +1509,11 @@ func TestRunArbitrationLoop_PublishesForegoneGauge(t *testing.T) {
 	if got := m.arbitrationForegoneSatsPerSec.Value(); got != 0 {
 		t.Errorf("foregone gauge = %v, want 0 (single best stream; sentinel must be overwritten)", got)
 	}
+	// The expected-yield forecast must reflect the assigned stream's yield:
+	// 1000 sats/s × 1.0 confidence for the single cpu-0 assignment.
+	if got := m.arbitrationExpectedYieldSatsPerSec.Value(); got != 1000 {
+		t.Errorf("expected-yield gauge = %v, want 1000 (cpu-0 → mining.stratum @ 1000 sat/s)", got)
+	}
 }
 
 func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {

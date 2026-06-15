@@ -40,6 +40,14 @@ type engineMetrics struct {
 	// a non-earnings policy prefers a lower-yield stream, letting an operator see
 	// what stability/policy preferences cost per second and tune accordingly.
 	arbitrationForegoneSatsPerSec *metrics.Gauge
+	// arbitrationExpectedYieldSatsPerSec is the engine's own forecast of the
+	// current earning rate: the summed ExpectedYield of the chosen allocation
+	// (alloc.TotalYield) from the latest Decide. Publishing the forecast is what
+	// makes it accountable — an operator can compare this expectation against
+	// realized earnings (accepted shares × difficulty value) to detect when
+	// provider quotes are over-optimistic or hardware is underperforming. The
+	// expectation half of the expectation-vs-realization pair.
+	arbitrationExpectedYieldSatsPerSec *metrics.Gauge
 	// activeStreams is the number of live revenue streams arbitration is
 	// choosing between after stale (dead-provider) streams are pruned. A
 	// drop here surfaces a provider that has stopped quoting.
@@ -226,6 +234,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"Non-zero when hysteresis holds a device or a non-earnings policy "+
 				"prefers a lower-yield stream. The magnitude companion to "+
 				"otedama_arbitration_holds_total.",
+			nil),
+		arbitrationExpectedYieldSatsPerSec: reg.NewGauge(
+			"otedama_arbitration_expected_yield_sats_per_second",
+			"The engine's forecast earning rate: summed ExpectedYield of the chosen "+
+				"allocation. Compare against realized earnings to judge whether provider "+
+				"quotes are accurate; combine with otedama_btc_usd_rate for an expected "+
+				"$/day.",
 			nil),
 		activeStreams: reg.NewGauge(
 			"otedama_active_streams",
