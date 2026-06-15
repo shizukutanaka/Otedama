@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 146 — miner: reject zero-mantissa nBits that yields an impossible (zero) target)
+
+A robustness pass on the core mining path found that `TargetFromNBits` validated a negative
+mantissa, an exponent below 3, and a 256-bit overflow — but not a **zero mantissa**. nBits
+like `0x03000000` (valid exponent, no sign bit, mantissa 0) produced an all-zero target and
+returned **no error**. A zero target is one no hash can ever meet (`hash <= 0` is effectively
+impossible), so the worker would grind forever finding nothing, with no signal — a silent
+dead end. A legitimate pool never sends this, but a buggy or hostile one could, turning the
+rig into a space heater that looks busy (non-zero hashrate) yet can never produce a share.
+
+**`internal/miner/sha256d.go`**:
+- `TargetFromNBits` now rejects `mant == 0` with a descriptive error, alongside the existing
+  malformed-nBits checks. Because mantissa 0 is the *only* way to reach a zero target
+  (`target = mant × 2^shift`), this check is exact and cheap.
+- Both job-application paths already handle the error: `applyJob` (V1) returns it (logged,
+  job skipped) and `updateWork` (V2) returns early — so a degenerate job is now skipped
+  instead of mined into the void. No new error handling was needed.
+
+Tests (2 new): rejects three zero-mantissa nBits across the exponent range; still accepts a
+minimal non-zero mantissa (`0x03000001`, the hardest valid target) and returns a non-zero
+target. Full suite (incl. fuzz corpus and `NBitsFromTarget` round-trips) green.
+
+24 packages green.
+
 ### Fix (session 145 — TUI: surface curtailment so a price-pause isn't mistaken for a broken miner)
 
 A strengths/weaknesses pass found a real UX gap for the operator *without* a Prometheus

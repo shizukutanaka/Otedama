@@ -141,6 +141,14 @@ func TargetFromNBits(nBits uint32) (Hash, error) {
 	if exp < 3 {
 		return Hash{}, fmt.Errorf("miner: nBits 0x%08X exponent %d is below minimum 3", nBits, exp)
 	}
+	// A zero mantissa yields an all-zero target, which no hash can ever meet
+	// (hash <= 0 is effectively impossible). Such a job would make the worker
+	// grind forever finding nothing, with no error — a silent dead end. A
+	// legitimate pool never sends this; reject it like any other malformed
+	// nBits so applyJob/updateWork surface it instead of mining into the void.
+	if mant == 0 {
+		return Hash{}, fmt.Errorf("miner: nBits 0x%08X has zero mantissa (target would be zero; no hash can meet it)", nBits)
+	}
 
 	// Build a *big.Int: mantissa * 2^(8*(exp-3))
 	v := new(big.Int).SetUint64(uint64(mant))

@@ -172,6 +172,30 @@ func TestTargetFromNBits_RejectsSmallExponent(t *testing.T) {
 	}
 }
 
+func TestTargetFromNBits_RejectsZeroMantissa(t *testing.T) {
+	// A zero mantissa (valid exponent, no sign bit) produces an all-zero
+	// target that no hash can ever meet — the worker would grind forever
+	// finding nothing. It must be rejected, not silently accepted.
+	for _, badNBits := range []uint32{0x03000000, 0x1d000000, 0x20000000} {
+		if _, err := TargetFromNBits(badNBits); err == nil {
+			t.Errorf("TargetFromNBits(0x%08X) accepted zero mantissa (target would be zero)", badNBits)
+		}
+	}
+}
+
+func TestTargetFromNBits_AcceptsMinimalNonZeroMantissa(t *testing.T) {
+	// A mantissa of 1 is the smallest valid (hardest) target; it must still
+	// be accepted and produce a non-zero target.
+	target, err := TargetFromNBits(0x03000001)
+	if err != nil {
+		t.Fatalf("TargetFromNBits(0x03000001) rejected a valid minimal mantissa: %v", err)
+	}
+	var zero Hash
+	if target == zero {
+		t.Error("TargetFromNBits(0x03000001) returned a zero target for a non-zero mantissa")
+	}
+}
+
 // ----- Hash comparison -----
 
 func TestHash_LessOrEqual(t *testing.T) {
