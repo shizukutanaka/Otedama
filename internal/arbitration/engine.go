@@ -400,24 +400,37 @@ func chooseForDevice(
 	return a
 }
 
+// Scoring constants for policyScore. Extracted so the documented intent and
+// the arithmetic share a single source of truth (the previous inline comment
+// claimed "~10% yield" per rating point while the code applied 1%).
+const (
+	// btcStackBonus is the score multiplier applied to BTC-native streams
+	// under PolicyStackBTC, approximating the conversion friction avoided by
+	// being paid directly in Bitcoin. A 5% edge lets a BTC stream win a near
+	// tie without overriding a materially higher-yielding alternative.
+	btcStackBonus = 1.05
+
+	// ratingBonusPerPoint is the score bonus per privacy / environmental
+	// rating point. Ratings run 0..10, so at 0.01 the maximum rating of 10
+	// yields a 10% score premium total — enough to prefer a well-rated stream
+	// over a marginally higher-yielding one, but not enough to ignore revenue.
+	ratingBonusPerPoint = 0.01
+)
+
 // policyScore assigns a comparison score that reflects the active policy.
 // Higher scores are preferred. When scores are equal, sort falls back to
 // yield, then StreamID.
 func policyScore(s Stream, yield float64, p Policy) float64 {
 	switch p {
 	case PolicyStackBTC:
-		// BTC-native streams get a yield bonus equivalent to skipping
-		// conversion friction. The 5% factor is a rough heuristic.
 		if s.IsBitcoinMining {
-			return yield * 1.05
+			return yield * btcStackBonus
 		}
 		return yield
 	case PolicyMaximizePrivacy:
-		// Each privacy rating point is worth ~10% yield. This prefers
-		// private streams without completely ignoring revenue.
-		return yield * (1.0 + float64(s.PrivacyRating)*0.01)
+		return yield * (1.0 + float64(s.PrivacyRating)*ratingBonusPerPoint)
 	case PolicyEnvironmentFriendly:
-		return yield * (1.0 + float64(s.EnvironmentalRating)*0.01)
+		return yield * (1.0 + float64(s.EnvironmentalRating)*ratingBonusPerPoint)
 	case PolicyMaximizeEarnings:
 		fallthrough
 	default:

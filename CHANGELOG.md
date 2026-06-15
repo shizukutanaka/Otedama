@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 139 — arbitration scoring: comment/code mismatch + magic-number extraction)
+
+A strengths/weaknesses pass found a genuine documentation defect in the **core**
+arbitration engine. `policyScore` carried the comment "Each privacy rating point is
+worth ~10% yield", but the code applied `0.01` (**1%** per point). The code is correct
+and test-asserted (`100 × (1 + 9×0.01) = 109` in `engine_test.go`), so the misleading
+comment was the bug — it would lead a future maintainer to "fix" the multiplier 10× the
+wrong way, which (at PrivacyRating 10) would double a stream's score and override revenue
+entirely, contradicting the design's own "without completely ignoring revenue" intent.
+
+**`internal/arbitration/engine.go`**:
+- Extracted the two scoring magic numbers into named, accurately-documented constants so
+  the stated intent and the arithmetic share one source of truth and cannot drift again:
+  - `btcStackBonus = 1.05` (PolicyStackBTC BTC-native multiplier)
+  - `ratingBonusPerPoint = 0.01` (privacy / environmental per-point bonus; 10% total at
+    the max rating of 10)
+- Behaviour is byte-identical (same constants); all existing arbitration tests
+  (including property-based) pass unchanged.
+
+24 packages green.
+
 ### Feat (session 138 — data-freshness transparency: does the engine reveal how stale the data it acts on is?)
 
 A Socratic new perspective — `otedama_btc_usd_rate` publishes the current price, but if
