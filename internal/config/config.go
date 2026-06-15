@@ -293,6 +293,61 @@ func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
 	return cfg
 }
 
+// numericEnvVars is the single source of truth for the OTEDAMA_* float
+// environment variables: the key and how to apply a parsed value. Both
+// ResolveWithOrigins (which applies them) and EnvWarnings (which reports
+// malformed ones) iterate this slice, so the set parsed and the set validated
+// can never drift apart.
+var numericEnvVars = []struct {
+	key   string
+	apply func(cfg *Config, o *Origins, v float64)
+}{
+	{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT", func(c *Config, o *Origins, v float64) {
+		c.ArbitrationHysteresisPct = v
+		o.ArbitrationHysteresisPct = OriginEnv
+	}},
+	{"OTEDAMA_CURTAIL_BELOW_BTC_USD", func(c *Config, o *Origins, v float64) {
+		c.CurtailBelowBTCUSD = v
+		o.CurtailBelowBTCUSD = OriginEnv
+	}},
+	{"OTEDAMA_POWER_WATTS", func(c *Config, o *Origins, v float64) {
+		c.PowerWatts = v
+		o.PowerWatts = OriginEnv
+	}},
+	{"OTEDAMA_ELECTRICITY_PRICE_PER_KWH", func(c *Config, o *Origins, v float64) {
+		c.ElectricityPricePerKWh = v
+		o.ElectricityPricePerKWh = OriginEnv
+	}},
+}
+
+// EnvWarnings returns human-readable warnings for environment variables that
+// are set but cannot be applied — currently, numeric OTEDAMA_* variables whose
+// value does not parse as a float. Such a variable is silently ignored during
+// resolution (the prior layer's value stands), so without this an operator's
+// typo (e.g. OTEDAMA_POWER_WATTS=300w, or a comma decimal "300,5") would vanish
+// with no feedback. If env is nil the process environment is consulted, exactly
+// as ResolveWithOrigins does. The CLI prints these to stderr before running.
+func EnvWarnings(env map[string]string) []string {
+	getEnv := func(key string) string {
+		if env != nil {
+			return env[key]
+		}
+		return os.Getenv(key)
+	}
+	var warnings []string
+	for _, spec := range numericEnvVars {
+		v := getEnv(spec.key)
+		if v == "" {
+			continue
+		}
+		if _, err := strconv.ParseFloat(v, 64); err != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v))
+		}
+	}
+	return warnings
+}
+
 // ResolveWithOrigins is identical to Resolve but also returns an Origins
 // value indicating which layer provided each Config field. This powers
 // "otedama config show --origin".
@@ -382,28 +437,15 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.DataDir = v
 		o.DataDir = OriginEnv
 	}
-	if v := getEnv("OTEDAMA_ARBITRATION_HYSTERESIS_PCT"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.ArbitrationHysteresisPct = f
-			o.ArbitrationHysteresisPct = OriginEnv
+	for _, spec := range numericEnvVars {
+		v := getEnv(spec.key)
+		if v == "" {
+			continue
 		}
-	}
-	if v := getEnv("OTEDAMA_CURTAIL_BELOW_BTC_USD"); v != "" {
+		// A malformed value is left for EnvWarnings to surface; here it is
+		// simply not applied (the default/file/earlier-layer value stands).
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.CurtailBelowBTCUSD = f
-			o.CurtailBelowBTCUSD = OriginEnv
-		}
-	}
-	if v := getEnv("OTEDAMA_POWER_WATTS"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.PowerWatts = f
-			o.PowerWatts = OriginEnv
-		}
-	}
-	if v := getEnv("OTEDAMA_ELECTRICITY_PRICE_PER_KWH"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.ElectricityPricePerKWh = f
-			o.ElectricityPricePerKWh = OriginEnv
+			spec.apply(&cfg, &o, f)
 		}
 	}
 

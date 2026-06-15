@@ -503,6 +503,53 @@ func TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored(t *testing.T) {
 	}
 }
 
+func TestEnvWarnings_FlagsMalformedNumericVars(t *testing.T) {
+	env := map[string]string{
+		"OTEDAMA_POWER_WATTS":               "300w",   // unit suffix typo
+		"OTEDAMA_CURTAIL_BELOW_BTC_USD":     "50,000", // comma decimal
+		"OTEDAMA_ELECTRICITY_PRICE_PER_KWH": "0.12",   // valid → no warning
+	}
+	warns := EnvWarnings(env)
+	if len(warns) != 2 {
+		t.Fatalf("EnvWarnings = %d warnings %v, want 2", len(warns), warns)
+	}
+	joined := strings.Join(warns, "\n")
+	if !strings.Contains(joined, "OTEDAMA_POWER_WATTS") {
+		t.Errorf("warnings missing OTEDAMA_POWER_WATTS: %v", warns)
+	}
+	if !strings.Contains(joined, "OTEDAMA_CURTAIL_BELOW_BTC_USD") {
+		t.Errorf("warnings missing OTEDAMA_CURTAIL_BELOW_BTC_USD: %v", warns)
+	}
+	if strings.Contains(joined, "OTEDAMA_ELECTRICITY_PRICE_PER_KWH") {
+		t.Errorf("valid var should not warn: %v", warns)
+	}
+}
+
+func TestEnvWarnings_NoneWhenAllValidOrUnset(t *testing.T) {
+	if w := EnvWarnings(map[string]string{}); len(w) != 0 {
+		t.Errorf("empty env should yield no warnings; got %v", w)
+	}
+	valid := map[string]string{
+		"OTEDAMA_POWER_WATTS":                "300",
+		"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "0.05",
+	}
+	if w := EnvWarnings(valid); len(w) != 0 {
+		t.Errorf("valid env should yield no warnings; got %v", w)
+	}
+}
+
+func TestEnvWarnings_DoesNotFlagNonNumericVars(t *testing.T) {
+	// Non-numeric vars (address, log level) are never parsed as floats and
+	// must not be reported by EnvWarnings regardless of content.
+	env := map[string]string{
+		"OTEDAMA_BITCOIN_ADDRESS": "definitely-not-a-number",
+		"OTEDAMA_LOG_LEVEL":       "verbose",
+	}
+	if w := EnvWarnings(env); len(w) != 0 {
+		t.Errorf("non-numeric vars must not be flagged; got %v", w)
+	}
+}
+
 func TestValidate_PowerWatts(t *testing.T) {
 	base := func() Config {
 		c := Defaults()

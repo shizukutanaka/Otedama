@@ -73,6 +73,11 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)
+	// Malformed numeric env vars are dropped silently during resolution; a
+	// validate command should call them out so the operator can fix the typo.
+	for _, w := range config.EnvWarnings(nil) {
+		fmt.Fprintf(stderr, "config: warning: %s\n", w)
+	}
 	cfg := config.Resolve(fromFile, nil, f.FlagValues)
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)

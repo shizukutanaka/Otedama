@@ -72,6 +72,12 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fromFile := loadConfigFile(f.configFile, stderr)
+	// Surface env vars that were set but could not be parsed: they are
+	// silently ignored during resolution, so warn before starting rather than
+	// let an operator's typo'd setting vanish unnoticed.
+	for _, w := range config.EnvWarnings(nil) {
+		fmt.Fprintf(stderr, "config: warning: %s\n", w)
+	}
 	cfg := config.Resolve(fromFile, nil, f.FlagValues)
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)

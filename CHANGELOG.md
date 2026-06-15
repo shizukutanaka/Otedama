@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 147 — config: surface malformed numeric env vars instead of silently dropping them)
+
+A strengths/weaknesses pass found another silent-misconfiguration failure (the recurring
+theme of sessions 133/136/145). The four numeric `OTEDAMA_*` env vars
+(`ARBITRATION_HYSTERESIS_PCT`, `CURTAIL_BELOW_BTC_USD`, `POWER_WATTS`,
+`ELECTRICITY_PRICE_PER_KWH`) were parsed with `if f, err := ParseFloat(...); err == nil`,
+so a malformed value (a unit-suffix typo like `300w`, a comma decimal like `50,000`) was
+**silently discarded** — the operator's explicit setting vanished with no feedback and the
+default quietly stood.
+
+**`internal/config/config.go`**:
+- Introduced `numericEnvVars`, a single source-of-truth slice (key + apply func) for the
+  float env vars. `ResolveWithOrigins` now iterates it instead of four hand-written blocks,
+  and `EnvWarnings` iterates the same slice — so the set that is *parsed* and the set that
+  is *validated* can never drift (the session-139 single-source-of-truth philosophy).
+- `EnvWarnings(env) []string` reports each set-but-unparseable numeric var. Resolution
+  behaviour is unchanged (still ignored); the warning is the only new effect.
+
+**`cmd/otedama/run.go` / `config.go`**:
+- `cmdRun` and `cmdConfigValidate` print `config: warning: …` to stderr for each malformed
+  var before proceeding. Not a hard error: an optional economics var typo should be surfaced,
+  not block startup.
+
+Tests (3 new): flags two malformed vars while passing a valid one; no warnings when all
+valid/unset; never flags non-numeric vars (address, log level). Existing silent-ignore
+tests still pass (resolution behaviour preserved).
+
+24 packages green.
+
 ### Fix (session 146 — miner: reject zero-mantissa nBits that yields an impossible (zero) target)
 
 A robustness pass on the core mining path found that `TargetFromNBits` validated a negative
