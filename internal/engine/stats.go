@@ -360,6 +360,12 @@ func publishBTCRate(m *engineMetrics, f *rates.Fetcher) {
 	if skew := f.ClockSkewSeconds(); skew > 0 {
 		m.clockSkewSeconds.Set(skew)
 	}
+	// Publish the age of the cached rate so a stalled price feed is visible
+	// even while the rate value itself still looks healthy. Only set once a
+	// real fetch has happened; before that the age is meaningless.
+	if age, everFetched := f.RateAge(); everFetched {
+		m.btcRateAgeSeconds.Set(age.Seconds())
+	}
 }
 
 // publishDifficulty updates the pool-difficulty and estimated-share-interval

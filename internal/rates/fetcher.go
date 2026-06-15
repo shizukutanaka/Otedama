@@ -173,6 +173,21 @@ func (f *Fetcher) BTCUSDRate() (rate float64, fresh bool) {
 	return f.rate, time.Since(f.fetchedAt) < CacheDuration
 }
 
+// RateAge returns how long ago the cached rate was last successfully fetched,
+// and whether any successful fetch has occurred. everFetched is false before
+// the first success (age is then meaningless and returned as 0). This exposes
+// "silent staleness": the rate value can look healthy long after sources stop
+// responding, but a monotonically rising age reveals the stall. Safe for
+// concurrent use.
+func (f *Fetcher) RateAge() (age time.Duration, everFetched bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.fetchedAt.IsZero() {
+		return 0, false
+	}
+	return time.Since(f.fetchedAt), true
+}
+
 // Fetch queries all sources in parallel and updates the cached rate.
 // It is safe to call from multiple goroutines simultaneously; only one
 // fetch will run at a time.

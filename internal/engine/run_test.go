@@ -740,6 +740,21 @@ func TestPublishBTCRate_SetsGauge(t *testing.T) {
 	}
 }
 
+func TestPublishBTCRate_AgeGaugeZeroBeforeAnyFetch(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	f := rates.NewFetcher(95000) // no fetch yet → RateAge everFetched=false
+
+	// pre-set to a sentinel to confirm publishBTCRate does NOT touch it
+	// before any real fetch (age is meaningless without a fetch).
+	m.btcRateAgeSeconds.Set(-1)
+	publishBTCRate(m, f)
+
+	if got := m.btcRateAgeSeconds.Value(); got != -1 {
+		t.Errorf("btc_rate_age_seconds before any fetch = %v, want unchanged (-1)", got)
+	}
+}
+
 // ============================================================================
 // publishDifficulty — pool difficulty and estimated share interval (session 135)
 // ============================================================================

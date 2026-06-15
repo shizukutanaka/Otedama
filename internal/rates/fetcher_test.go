@@ -537,6 +537,69 @@ func TestFetcher_ClockSkewSeconds_WarnLoggedWhenThresholdExceeded(t *testing.T) 
 	}
 }
 
+func TestFetcher_RateAge_FalseBeforeAnyFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	age, ever := f.RateAge()
+	if ever {
+		t.Error("RateAge everFetched should be false before any fetch")
+	}
+	if age != 0 {
+		t.Errorf("RateAge age before fetch = %v, want 0", age)
+	}
+}
+
+func TestFetcher_RateAge_RisesAfterFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	// Simulate a successful fetch 90 seconds ago.
+	f.mu.Lock()
+	f.rate = 95000
+	f.fetchedAt = time.Now().Add(-90 * time.Second)
+	f.mu.Unlock()
+
+	age, ever := f.RateAge()
+	if !ever {
+		t.Fatal("RateAge everFetched should be true after a fetch")
+	}
+	if age < 89*time.Second || age > 92*time.Second {
+		t.Errorf("RateAge = %v, want ~90s", age)
+	}
+}
+
+func TestFetcher_RateAge_SmallAfterRealFetch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "s",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	age, ever := f.RateAge()
+	if !ever {
+		t.Fatal("RateAge everFetched should be true after Fetch")
+	}
+	if age > 5*time.Second {
+		t.Errorf("RateAge right after fetch = %v, want < 5s", age)
+	}
+}
+
 func parseFloat(s string, out *float64) (int, error) {
 	return fmt.Sscanf(s, "%f", out)
 }

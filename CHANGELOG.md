@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 138 — data-freshness transparency: does the engine reveal how stale the data it acts on is?)
+
+A Socratic new perspective — `otedama_btc_usd_rate` publishes the current price, but if
+*every* rate source goes down, `Fetcher.BTCUSDRate()` keeps returning the last good value
+forever. The gauge looks perfectly healthy at $95,000 while actually serving a 3-hour-old
+number. The engine already *knows* freshness internally (`curtailDecision` consumes a
+`fresh` bool and never acts on a stale rate — the session-116 safety rule), but neither the
+freshness nor the fetch time was ever exposed to a scraper.
+
+This is distinct from session 134 (clock skew = "is my *clock* correct?"). This axis is
+"is my *data* current?" — a perfect clock still serves stale data when the rate API is down.
+
+`otedama_btc_rate_age_seconds` — new gauge, seconds since the last successful rate fetch.
+0 until the first success. It rises monotonically during a price-source outage even while
+`otedama_btc_usd_rate` still shows the last good value, making "silent staleness" alertable
+(e.g. age > 2× the 5-min refresh interval).
+
+**`internal/rates/fetcher.go`**:
+- `RateAge() (age time.Duration, everFetched bool)` — `everFetched` is false before the
+  first success (age then meaningless, returned as 0). Reads `fetchedAt` under the existing
+  `mu`. Safe for concurrent use.
+
+**`internal/engine/metrics.go`**:
+- `btcRateAgeSeconds *metrics.Gauge` registered as `otedama_btc_rate_age_seconds`.
+
+**`internal/engine/stats.go`**:
+- `publishBTCRate` sets the age gauge each tick, but only once `everFetched` is true (so it
+  is never set to a meaningless value before the first fetch).
+
+Tests (3 new in `fetcher_test.go`): false before any fetch; ~90 s after a backdated fetch;
+small after a real fetch. (1 new in `run_test.go`): age gauge untouched before any fetch.
+
+24 packages green.
+
 ### Feat (session 137 — temporal event indexing: does the engine know when problems last happened?)
 
 A Socratic new perspective — `otedama_shares_rejected_by_reason_total{reason="stale"}` tells

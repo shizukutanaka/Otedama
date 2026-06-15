@@ -114,6 +114,13 @@ type engineMetrics struct {
 	// rate-freshness judgements all break at that magnitude.
 	clockSkewSeconds *metrics.Gauge
 
+	// btcRateAgeSeconds is how long ago the BTC/USD rate was last successfully
+	// fetched. 0 until the first success. Unlike otedama_btc_usd_rate (which
+	// keeps showing the last good value indefinitely when sources fail), this
+	// rises monotonically during an outage — making "silent staleness" of the
+	// price feed alertable (e.g. age > 2× the 5-min refresh interval).
+	btcRateAgeSeconds *metrics.Gauge
+
 	// poolDifficulty is the current share difficulty assigned by the pool via
 	// mining.set_difficulty. 0 until the first set_difficulty is received. A
 	// drop signals the pool is giving the miner easier work (lost var-diff
@@ -311,6 +318,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"wall-clock reported by BTC/USD rate-source servers via HTTP Date "+
 				"headers. 0 until the first successful fetch. Alert when >120: TLS "+
 				"certificate validation, mining nTime, and rate freshness break.",
+			nil),
+
+		btcRateAgeSeconds: reg.NewGauge(
+			"otedama_btc_rate_age_seconds",
+			"Seconds since the BTC/USD rate was last successfully fetched. 0 until "+
+				"the first success. Rises during a price-source outage even while "+
+				"otedama_btc_usd_rate still shows the last good value; alert when this "+
+				"exceeds ~2× the refresh interval to catch silent staleness.",
 			nil),
 
 		poolDifficulty: reg.NewGauge(
