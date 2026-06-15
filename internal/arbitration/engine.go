@@ -194,6 +194,16 @@ type Assignment struct {
 	// the current stream is still the best", which lets operators see whether
 	// the hysteresis margin is costing them and tune it.
 	Held bool
+
+	// ForegoneSatsPerSec is the raw revenue (satoshis/second) sacrificed by
+	// this assignment relative to pure yield maximization: the highest raw
+	// effective yield among all streams compatible with this device, minus the
+	// yield of the stream actually assigned. It is always >= 0 and quantifies
+	// the *magnitude* of every deliberate deviation from max-earnings —
+	// hysteresis holds and non-earnings policies (privacy/environment/BTC) both
+	// surface here. Zero under PolicyMaximizeEarnings with no hold. Where Held
+	// counts that a better option was declined, this measures how much it cost.
+	ForegoneSatsPerSec float64
 }
 
 // Idle reports whether this assignment leaves the device idle.
@@ -342,6 +352,17 @@ func chooseForDevice(
 		}
 	}
 
+	// maxRaw is the highest raw effective yield among compatible streams,
+	// independent of policy. It is the reference point for ForegoneSatsPerSec:
+	// the most this device could earn if routed purely by yield. Computed
+	// before the policy sort so it reflects raw yield, not policy score.
+	maxRaw := candidates[0].yield
+	for _, c := range candidates[1:] {
+		if c.yield > maxRaw {
+			maxRaw = c.yield
+		}
+	}
+
 	// Sort candidates by policy-adjusted score, then by StreamID for
 	// determinism.
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -376,11 +397,12 @@ func chooseForDevice(
 					// was suppressed — not when the incumbent is itself the best
 					// (in which case nothing was declined).
 					return Assignment{
-						DeviceID:      dev.Identity.ID,
-						Stream:        c.stream.ID,
-						ExpectedYield: c.yield,
-						Reason:        fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100),
-						Held:          best.stream.ID != c.stream.ID,
+						DeviceID:           dev.Identity.ID,
+						Stream:             c.stream.ID,
+						ExpectedYield:      c.yield,
+						Reason:             fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100),
+						Held:               best.stream.ID != c.stream.ID,
+						ForegoneSatsPerSec: maxRaw - c.yield,
 					}
 				}
 				break
@@ -389,10 +411,11 @@ func chooseForDevice(
 	}
 
 	a := Assignment{
-		DeviceID:      dev.Identity.ID,
-		Stream:        best.stream.ID,
-		ExpectedYield: best.yield,
-		Reason:        fmt.Sprintf("best yield under policy %s", policy),
+		DeviceID:           dev.Identity.ID,
+		Stream:             best.stream.ID,
+		ExpectedYield:      best.yield,
+		Reason:             fmt.Sprintf("best yield under policy %s", policy),
+		ForegoneSatsPerSec: maxRaw - best.yield,
 	}
 	if previous.Stream != "" && previous.Stream != best.stream.ID {
 		a.SwitchedFromID = previous.Stream

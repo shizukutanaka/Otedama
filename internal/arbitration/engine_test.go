@@ -463,6 +463,130 @@ func TestDecide_HeldFlag_FalseOnActualSwitch(t *testing.T) {
 	}
 }
 
+func TestDecide_ForegoneSatsPerSec_ZeroWhenBestChosen(t *testing.T) {
+	// Session 142: under MaximizeEarnings with no hold, the best raw-yield
+	// stream is chosen, so nothing is sacrificed.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	hi := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
+	}
+	lo := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{hi, lo},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if got := alloc.Assignments[0].ForegoneSatsPerSec; got != 0 {
+		t.Errorf("ForegoneSatsPerSec = %v, want 0 (best stream chosen)", got)
+	}
+}
+
+func TestDecide_ForegoneSatsPerSec_EqualsGapWhenHeld(t *testing.T) {
+	// When hysteresis holds the incumbent (100) over a better challenger (105),
+	// the opportunity cost is exactly the raw yield gap: 105 - 100 = 5 sats/s.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10, // 5% gain < 10% margin → hold
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "mining.braiins" {
+		t.Fatalf("expected hold on mining.braiins, got %q", a.Stream)
+	}
+	if got := a.ForegoneSatsPerSec; got != 5 {
+		t.Errorf("ForegoneSatsPerSec = %v, want 5 (105 - 100)", got)
+	}
+}
+
+func TestDecide_ForegoneSatsPerSec_QuantifiesPolicyDeviation(t *testing.T) {
+	// A non-earnings policy can prefer a lower raw-yield stream. The foregone
+	// metric must capture that sacrifice even with no hysteresis hold: privacy
+	// picks the 100-yield rating-9 stream over the 105-yield rating-2 stream,
+	// so 105 - 100 = 5 sats/s is sacrificed for privacy.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	private := Stream{
+		ID:              "ai.private",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+		PrivacyRating:   9,
+	}
+	lucrative := Stream{
+		ID:              "ai.public",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+		PrivacyRating:   2,
+	}
+	// score(private) = 100*(1+9*0.01)=109; score(lucrative)=105*(1+2*0.01)=107.1
+	// → private wins on score, but sacrifices 5 raw sats/s.
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{private, lucrative},
+		Policy:  PolicyMaximizePrivacy,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "ai.private" {
+		t.Fatalf("expected privacy to pick ai.private, got %q", a.Stream)
+	}
+	if got := a.ForegoneSatsPerSec; got != 5 {
+		t.Errorf("ForegoneSatsPerSec = %v, want 5 (105 - 100 sacrificed for privacy)", got)
+	}
+}
+
+func TestDecide_ForegoneSatsPerSec_ZeroWhenIdle(t *testing.T) {
+	// An idle device (no compatible stream) sacrifices nothing.
+	asic := DeviceRef{Identity: hal.Identity{ID: "asic-0", Family: hal.FamilyASIC}}
+	gpuOnly := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
+	}
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{asic},
+		Streams: []Stream{gpuOnly},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if !a.Idle() {
+		t.Fatalf("expected asic-0 idle, got %q", a.Stream)
+	}
+	if got := a.ForegoneSatsPerSec; got != 0 {
+		t.Errorf("ForegoneSatsPerSec = %v, want 0 for idle device", got)
+	}
+}
+
 func TestDecide_HysteresisUsesPolicyScoreNotRawYield(t *testing.T) {
 	// Regression for the Socratic-inquiry finding (session 114): under a
 	// non-earnings policy, hysteresis must be measured in the same

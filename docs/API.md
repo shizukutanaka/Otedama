@@ -246,6 +246,7 @@ addresses) appear once their first event occurs.
 |--------|------|--------|-------------|
 | `otedama_arbitration_switches_total` | counter | — | Workload reroutes by the arbitration engine. |
 | `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
+| `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
 
 **Economics & power**

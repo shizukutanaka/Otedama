@@ -33,6 +33,13 @@ type engineMetrics struct {
 	// mean yield is being left on the table; zero holds mean the margin never
 	// binds. (The "road not taken" — decisions the engine declined.)
 	arbitrationHolds *metrics.Counter
+	// arbitrationForegoneSatsPerSec is the instantaneous opportunity cost of the
+	// current allocation: summed across devices, the raw sats/second sacrificed
+	// versus routing purely by yield. It is the *magnitude* companion to
+	// arbitrationHolds (a count): non-zero whenever hysteresis holds a device or
+	// a non-earnings policy prefers a lower-yield stream, letting an operator see
+	// what stability/policy preferences cost per second and tune accordingly.
+	arbitrationForegoneSatsPerSec *metrics.Gauge
 	// activeStreams is the number of live revenue streams arbitration is
 	// choosing between after stale (dead-provider) streams are pruned. A
 	// drop here surfaces a provider that has stopped quoting.
@@ -202,6 +209,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Total decisions where a higher-yielding stream existed but hysteresis "+
 				"kept the current one. Rising vs switches indicates the hysteresis "+
 				"margin may be too high (yield left on the table).",
+			nil),
+		arbitrationForegoneSatsPerSec: reg.NewGauge(
+			"otedama_arbitration_foregone_sats_per_second",
+			"Instantaneous opportunity cost of the current allocation: raw sats/s "+
+				"sacrificed versus routing purely by yield, summed across devices. "+
+				"Non-zero when hysteresis holds a device or a non-earnings policy "+
+				"prefers a lower-yield stream. The magnitude companion to "+
+				"otedama_arbitration_holds_total.",
 			nil),
 		activeStreams: reg.NewGauge(
 			"otedama_active_streams",

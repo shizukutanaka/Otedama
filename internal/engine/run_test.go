@@ -15,6 +15,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
@@ -1445,6 +1446,51 @@ func TestRunArbitrationLoop_ClosedQuoteChannelExits(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Error("runArbitrationLoop did not exit when quote channel was closed")
+	}
+}
+
+func TestRunArbitrationLoop_PublishesForegoneGauge(t *testing.T) {
+	// Verify the loop publishes otedama_arbitration_foregone_sats_per_second on
+	// each tick. With a single best stream the foregone cost is 0, so we pre-set
+	// the gauge to a sentinel and confirm a tick resets it to 0 (proving the
+	// Set call executes, not that the gauge merely defaults to 0).
+	old := arbitrationInterval
+	arbitrationInterval = 10 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	m.arbitrationForegoneSatsPerSec.Set(-999) // sentinel
+
+	quoteCh := make(chan provider.Quote, 1)
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{
+			{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}},
+		},
+		streamsMu: &sync.Mutex{},
+		streamMap: make(map[string]arbitration.Stream),
+		quoteCh:   quoteCh,
+		metrics:   m,
+		log:       func(_, _ string) {},
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	quoteCh <- provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+	}
+
+	// Wait for at least one tick to run Decide and publish.
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+
+	if got := m.arbitrationForegoneSatsPerSec.Value(); got != 0 {
+		t.Errorf("foregone gauge = %v, want 0 (single best stream; sentinel must be overwritten)", got)
 	}
 }
 

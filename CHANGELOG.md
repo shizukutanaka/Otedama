@@ -10,6 +10,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 142 — opportunity cost: does the engine quantify the price of its own preferences?)
+
+A Socratic new perspective — session 131 added `otedama_arbitration_holds_total`, which
+*counts* decisions where hysteresis kept a device on a worse stream. But a count cannot
+distinguish 100 holds costing 0.01 sats/s each from 100 holds costing 50 sats/s each. More
+broadly, the engine deliberately deviates from pure yield maximization in two ways —
+hysteresis (anti-flapping) and non-earnings policies (privacy / environment / BTC-stacking) —
+yet never quantified what those preferences cost. This session turns the "road not taken"
+from a count into a **magnitude**.
+
+`otedama_arbitration_foregone_sats_per_second` — new gauge, the instantaneous opportunity
+cost of the current allocation, defined cleanly for all policies and assignments:
+
+```
+foregoneSatsPerSec = (max raw effective yield among compatible streams) − (assigned stream's yield)  ≥ 0
+```
+
+Zero under `PolicyMaximizeEarnings` with no hold; positive whenever hysteresis holds a device
+or a non-earnings policy prefers a lower-yield stream. An operator can now see what stability
+and policy preferences cost per second and tune the hysteresis margin or policy accordingly.
+
+**`internal/arbitration/engine.go`**:
+- `Assignment.ForegoneSatsPerSec float64` — computed in `chooseForDevice` from `maxRaw`
+  (highest raw effective yield among compatible candidates, computed before the policy sort),
+  set on every non-idle return path (hold and normal). Always ≥ 0; 0 for idle devices.
+
+**`internal/engine/metrics.go` / `arbitrate.go`**:
+- Registered `arbitrationForegoneSatsPerSec`; the arbitration loop sums `ForegoneSatsPerSec`
+  across the allocation each tick and publishes it.
+
+**`docs/API.md`**: documented the new metric (36 = 36 code/doc parity verified).
+
+Tests (4 arbitration + 1 engine): zero when best chosen; equals the gap when held (105−100=5);
+quantifies policy deviation (privacy picks 100-yield over 105-yield → 5 foregone); zero when
+idle; loop publishes the gauge (sentinel overwrite).
+
+24 packages green.
+
 ### Fix (session 141 — metrics: validate label names at registration, not just metric names)
 
 A strengths/weaknesses pass found an asymmetry in the dependency-free `metrics`

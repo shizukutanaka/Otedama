@@ -97,6 +97,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				continue
 			}
 			prevAlloc = alloc
+			var foregone float64
 			for _, a := range alloc.Assignments {
 				if a.SwitchedFromID != "" {
 					opts.metrics.arbitrationSwitches.Inc()
@@ -104,7 +105,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				if a.Held {
 					opts.metrics.arbitrationHolds.Inc()
 				}
+				foregone += a.ForegoneSatsPerSec
 			}
+			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
 			applyAllocation(alloc, opts.workers, opts.log)
 		}
 	}
