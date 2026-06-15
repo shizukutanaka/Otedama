@@ -12,7 +12,9 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"math"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,6 +43,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPowerEconomics(cfg),
 		checkHardware(),
 		checkNetwork(),
+		checkClockSkew(),
 	}
 }
 
@@ -668,6 +671,101 @@ func checkNetwork() Check {
 			}
 			_ = conn.Close()
 			return Result{Status: StatusPass, Detail: "IPv4 OK"}
+		},
+	}
+}
+
+// clockSkewProbeURL is the endpoint used to measure local clock skew. It is
+// a public, no-auth HTTPS endpoint whose servers return accurate Date headers
+// and has high global availability. We reuse the same source the rate fetcher
+// uses so the doctor check validates the same network path. Overridable in tests.
+var clockSkewProbeURL = "https://api.coinbase.com/v2/time"
+
+// clockSkewHTTPClient is the HTTP client used by checkClockSkew. Nil means
+// use http.DefaultClient. Tests replace this with a fake-server client.
+var clockSkewHTTPClient *http.Client
+
+// clockSkewWarnSecs is the skew magnitude at which we warn; beyond this TLS
+// certificate validation windows, mining nTime fields, and rate-freshness
+// judgements all become unreliable. Matches rates.clockSkewWarnThreshold.
+const clockSkewWarnSecs = 120.0
+
+// clockSkewFailSecs is the magnitude at which we escalate to Fail. At >5 min
+// most TLS stacks begin rejecting certificates as "not yet valid" or "expired",
+// so mining cannot start regardless of other settings.
+const clockSkewFailSecs = 300.0
+
+func checkClockSkew() Check {
+	return Check{
+		Name: "System clock accuracy",
+		Run: func(ctx context.Context) Result {
+			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, nil)
+			if err != nil {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("could not build request: %v", err),
+					Fix:    "this is an internal error; report it",
+				}
+			}
+			req.Header.Set("User-Agent", "Otedama/3.0.0-alpha (doctor)")
+
+			client := clockSkewHTTPClient
+			if client == nil {
+				client = http.DefaultClient
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("cannot reach clock probe endpoint: %v", err),
+					Fix:    "check internet connectivity; re-run when online to verify clock accuracy",
+				}
+			}
+			defer resp.Body.Close()
+
+			dateHdr := resp.Header.Get("Date")
+			if dateHdr == "" {
+				return Result{
+					Status: StatusWarn,
+					Detail: "server returned no Date header; cannot measure clock skew",
+					Fix:    "try again; if persistent, the probe endpoint may have changed",
+				}
+			}
+			serverTime, err := http.ParseTime(dateHdr)
+			if err != nil {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("cannot parse server Date header %q: %v", dateHdr, err),
+					Fix:    "try again; if persistent, the probe endpoint date format may have changed",
+				}
+			}
+
+			skew := math.Abs(time.Since(serverTime).Seconds())
+			switch {
+			case skew > clockSkewFailSecs:
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("local clock is %.0f s off server time (threshold %.0f s)", skew, clockSkewFailSecs),
+					Fix: fmt.Sprintf(
+						"synchronise your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
+							"`w32tm /resync` on Windows). Skew >%.0f s breaks TLS certificate "+
+							"validation and mining nTime checks.", clockSkewFailSecs),
+				}
+			case skew > clockSkewWarnSecs:
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("local clock is %.0f s off server time (warn threshold %.0f s)", skew, clockSkewWarnSecs),
+					Fix: "synchronise your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
+				}
+			default:
+				return Result{
+					Status: StatusPass,
+					Detail: fmt.Sprintf("clock skew %.1f s (within %.0f s threshold)", skew, clockSkewWarnSecs),
+				}
+			}
 		},
 	}
 }

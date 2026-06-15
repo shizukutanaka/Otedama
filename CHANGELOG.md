@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 136 — from configuration possibility to runtime health: does doctor know if we are actually working?)
+
+A Socratic new perspective — the `doctor` subcommand previously diagnosed only
+*static configuration*: Bitcoin address format, pool URL scheme, TLS CA path,
+wallet file existence, power/cost coherence. These answer "is the setup correct?"
+but not "is the system currently healthy in the ways that matter for mining?"
+
+The key gap: clock skew is the most dangerous silent failure. TLS certificate
+validation, mining `nTime` fields, and rate-freshness judgements all depend on
+the local clock being accurate. A developer machine with NTP disabled or a VM
+that drifted after a snapshot restore can appear fully configured but produce no
+accepted shares. Before this session, `doctor` could not detect this.
+
+**`internal/doctor/checks.go`**:
+- `checkClockSkew()` — makes a single HTTPS GET to `api.coinbase.com/v2/time`
+  (the same path the rate fetcher uses), reads the `Date` response header, and
+  computes `|time.Now() − serverTime|` via `http.ParseTime`. Classification:
+  - **Pass**: skew ≤ 120 s (normal NTP-synced system)
+  - **Warn**: 120 s < skew ≤ 300 s (TLS may start behaving oddly)
+  - **Fail**: skew > 300 s (most TLS stacks reject certificates at this magnitude)
+  - **Warn** on network error (reports "check connectivity" rather than silently skipping)
+  - **Warn** on missing Date header (unexpected; warns rather than erroring out)
+- `var clockSkewProbeURL` — overridable for test injection (follows `networkCheckEndpoint` pattern)
+- `var clockSkewHTTPClient` — overridable for test injection (nil uses `http.DefaultClient`)
+- Added to `DefaultChecks` list.
+
+Tests (6 new in `extras_test.go`): accurate date passes; 180 s skew warns; 400 s skew
+fails; network error warns with connectivity hint; stripped Date header warns;
+`DefaultChecks` includes the check. `stripDateRoundTripper` helper for Date-less testing.
+
+24 packages green.
+
 ### Feat (session 135 — work-difficulty self-awareness: does the engine know how hard its work is?)
 
 A Socratic new perspective — the engine tracks whether shares are found (`shares_found_total`)

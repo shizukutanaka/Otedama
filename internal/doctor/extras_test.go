@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1258,4 +1260,154 @@ func TestCheckPoolEndpointDiversity(t *testing.T) {
 	if partial.Status != StatusSkip {
 		t.Errorf("partial resolve: status = %v, want StatusSkip", partial.Status)
 	}
+}
+
+// ============================================================================
+// checkClockSkew — live clock accuracy check (session 136)
+// ============================================================================
+
+func TestCheckClockSkew_AccurateDatePasses(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = srv.Client()
+
+	result := checkClockSkew().Run(context.Background())
+	if result.Status != StatusPass {
+		t.Errorf("accurate Date header: status = %v, want Pass (detail: %s)", result.Status, result.Detail)
+	}
+}
+
+func TestCheckClockSkew_LargeSkewWarns(t *testing.T) {
+	const skewSecs = 180 // > clockSkewWarnSecs (120) but < clockSkewFailSecs (300)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		past := time.Now().Add(-skewSecs * time.Second).UTC()
+		w.Header().Set("Date", past.Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = srv.Client()
+
+	result := checkClockSkew().Run(context.Background())
+	if result.Status != StatusWarn {
+		t.Errorf("skew=%ds: status = %v, want Warn", skewSecs, result.Status)
+	}
+}
+
+func TestCheckClockSkew_VeryLargeSkewFails(t *testing.T) {
+	const skewSecs = 400 // > clockSkewFailSecs (300)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		past := time.Now().Add(-skewSecs * time.Second).UTC()
+		w.Header().Set("Date", past.Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = srv.Client()
+
+	result := checkClockSkew().Run(context.Background())
+	if result.Status != StatusFail {
+		t.Errorf("skew=%ds: status = %v, want Fail", skewSecs, result.Status)
+	}
+}
+
+func TestCheckClockSkew_NetworkErrorWarns(t *testing.T) {
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	// Point at a closed server — the request will fail immediately.
+	clockSkewProbeURL = "http://127.0.0.1:1"
+	clockSkewHTTPClient = &http.Client{Timeout: 100 * time.Millisecond}
+
+	result := checkClockSkew().Run(context.Background())
+	if result.Status != StatusWarn {
+		t.Errorf("unreachable endpoint: status = %v, want Warn", result.Status)
+	}
+	if !strings.Contains(result.Fix, "internet connectivity") {
+		t.Errorf("fix = %q, want it to mention internet connectivity", result.Fix)
+	}
+}
+
+func TestCheckClockSkew_MissingDateHeaderWarns(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Suppress the automatic Date header by deleting it before writing.
+		w.Header()["Date"] = nil
+		// We must write something to trigger the header flush, but httptest
+		// may still add Date. Use a custom ResponseWriter approach: just set
+		// content-length and write directly.
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// Use a transport that strips the Date header from responses.
+	inner := srv.Client().Transport
+	if inner == nil {
+		inner = http.DefaultTransport
+	}
+	strippedClient := &http.Client{
+		Transport: &stripDateRoundTripper{inner: inner},
+	}
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = strippedClient
+
+	result := checkClockSkew().Run(context.Background())
+	if result.Status != StatusWarn {
+		t.Errorf("missing Date header: status = %v, want Warn", result.Status)
+	}
+}
+
+// stripDateRoundTripper removes the Date header from HTTP responses.
+type stripDateRoundTripper struct{ inner http.RoundTripper }
+
+func (t *stripDateRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.inner.RoundTrip(req)
+	if resp != nil {
+		resp.Header.Del("Date")
+	}
+	return resp, err
+}
+
+func TestDefaultChecks_IncludesClockSkewCheck(t *testing.T) {
+	checks := DefaultChecks(config.Config{}, "")
+	for _, c := range checks {
+		if c.Name == "System clock accuracy" {
+			return
+		}
+	}
+	t.Error("DefaultChecks does not include 'System clock accuracy' check")
 }
