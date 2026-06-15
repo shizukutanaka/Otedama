@@ -208,19 +208,74 @@ Use case: load balancer removes a not-yet-ready instance from rotation.
 ### `GET /metrics`
 
 Prometheus text exposition format (version 0.0.4). All metrics are
-prefixed `otedama_`.
+prefixed `otedama_`. Metrics are created at startup; counters and the
+lazily-created per-label series (reject reasons, per-device shares, payout
+addresses) appear once their first event occurs.
+
+**Mining & shares**
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `otedama_hashrate_hashes_per_second` | gauge | — | Live aggregate hash rate. |
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
+| `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
+| `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
+| `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
+| `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |
+| `otedama_share_acceptance_rate` | gauge | — | Accepted / judged (1.0 = all accepted). |
+| `otedama_reject_rate` | gauge | — | Rejected / judged (complement of acceptance; >0.03 investigate). |
+| `otedama_stale_rate` | gauge | — | Stale-rejected / judged (network-latency signal). |
+| `otedama_submit_latency_milliseconds` | gauge | `quantile={0.5,0.95,0.99}` | Submit→accept round-trip latency. |
+
+**Pool & connection**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
 | `otedama_pool_connect_attempts_total` | counter | — | Pool dial attempts, including reconnects. |
 | `otedama_pool_connect_failures_total` | counter | — | Pool dial failures. |
+| `otedama_pool_connection_state` | gauge | — | 0=disconnected, 1=connecting, 2=connected. |
+| `otedama_pool_active_index` | gauge | — | 0-based index of the active pool in the failover list. |
+| `otedama_pool_difficulty` | gauge | — | Current share difficulty (`mining.set_difficulty`). |
+| `otedama_estimated_share_interval_seconds` | gauge | — | Expected seconds between shares (difficulty × 2³² / hashrate). |
+| `otedama_last_job_received_seconds` | gauge | — | Unix timestamp of the most recent pool job (stale-connection detector). |
+
+**Arbitration**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
 | `otedama_arbitration_switches_total` | counter | — | Workload reroutes by the arbitration engine. |
+| `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
+| `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
+
+**Economics & power**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
 | `otedama_btc_usd_rate` | gauge | — | Current BTC/USD rate (median of 3 sources). |
+| `otedama_btc_rate_age_seconds` | gauge | — | Seconds since the rate was last successfully fetched (silent-staleness detector). |
+| `otedama_power_watts` | gauge | — | Configured system power draw (0 = unset). |
+| `otedama_joules_per_terahash` | gauge | — | Energy efficiency: watts × 1e12 / hashrate. |
+| `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |
+
+**Payout (non-custodial transparency)**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `otedama_payout_active_index` | gauge | — | 0-based index of the active payout address in the failover list. |
+| `otedama_payout_info` | gauge | `address=<masked>` | Active payout destination; the series valued 1 is the address currently receiving rewards. |
+
+**Health & liveness**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `otedama_up` | gauge | — | 1 if healthy (hashing, or intentionally curtailed), 0 if stalled. |
+| `otedama_curtailed` | gauge | — | 1 if hashing is paused by `curtail_below_btc_usd`, else 0. |
+| `otedama_productive_seconds_total` | counter | — | Cumulative seconds the miner actually produced hashrate (effective-uptime numerator). |
+| `otedama_clock_skew_seconds` | gauge | — | Max \|local − server\| clock offset from rate-source HTTP Date headers (alert >120). |
 | `otedama_uptime_seconds` | gauge | — | Seconds since engine start. |
 | `otedama_start_time_seconds` | gauge | — | Unix timestamp at which engine started. |
+| `otedama_build_info` | gauge | `version,commit,goversion` | Constant 1; build metadata carried as labels. |
 
 ### `GET /`
 

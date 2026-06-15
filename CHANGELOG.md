@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 140 — metrics reference drift: API.md documented 9 of 35 metrics)
+
+A strengths/weaknesses pass found significant documentation drift: `docs/API.md`'s
+`GET /metrics` table listed only 9 metrics while the engine now exports **35**. Every
+metric added since the observability push (sessions 112–138) — power economics, payout
+transparency, clock skew, rate age, pool difficulty, reject timestamps, arbitration
+holds, build info, and more — was undefined for operators building dashboards and alerts.
+For a tool whose differentiator is non-custodial transparency, an incomplete metrics
+reference is a real defect.
+
+**`docs/API.md`**:
+- Rewrote the `/metrics` table as six grouped sections (Mining & shares, Pool &
+  connection, Arbitration, Economics & power, Payout, Health & liveness) covering all 35
+  metrics with type, labels, and operator-facing descriptions.
+- Noted that lazily-created per-label series (reject reasons, per-device shares, payout
+  addresses) appear only after their first event.
+
+Verified by diffing the documented metric names against the code: exact parity, 35 = 35,
+zero missing and zero stale entries.
+
 ### Fix (session 139 — arbitration scoring: comment/code mismatch + magic-number extraction)
 
 A strengths/weaknesses pass found a genuine documentation defect in the **core**
