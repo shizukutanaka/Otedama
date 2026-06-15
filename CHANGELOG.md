@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 137 — temporal event indexing: does the engine know when problems last happened?)
+
+A Socratic new perspective — `otedama_shares_rejected_by_reason_total{reason="stale"}` tells
+how many stale rejects have accumulated since startup, but not *when the most recent one
+occurred*. A rising count is ambiguous: is it still happening right now, or did a burst
+fire hours ago and the pool connection has since recovered? Without knowing the last
+occurrence time, an operator cannot distinguish an ongoing problem from a cleared event.
+
+`otedama_last_reject_seconds{reason="..."}` — new gauge, lazily created per reject category
+(stale/duplicate/difficulty/hardware/other), set to `time.Now().Unix()` on each rejection.
+Pairs with the `_total` counter to make rejection history *time-indexed*:
+
+- `_total` rising + `last_reject_seconds` ≈ now → problem is happening **right now**
+- `_total` non-zero + `last_reject_seconds` hours old → problem **cleared, history remains**
+
+**`internal/engine/metrics.go`**:
+- `lastRejectByReasonMu sync.Mutex` + `lastRejectByReason map[string]*metrics.Gauge`
+- `touchLastReject(category string, now int64)` — lazy-create + update, safe for concurrent
+  use (both V1 and V2 submit paths are goroutines).
+
+**`internal/engine/run.go`**:
+- V2 `SubmitSharesError` path: `opts.m.touchLastReject(category, time.Now().Unix())`
+- V1 `result.Accepted == false` path: same call.
+
+Tests (3 new in `integration_test.go`): lazy-create and timestamp accuracy; reuse (no
+second gauge on repeat call, value updates); metric appears in `/metrics` output with
+correct label. Existing reject tests unchanged and still pass.
+
+24 packages green.
+
 ### Feat (session 136 — from configuration possibility to runtime health: does doctor know if we are actually working?)
 
 A Socratic new perspective — the `doctor` subcommand previously diagnosed only

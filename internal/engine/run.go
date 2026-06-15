@@ -728,6 +728,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				if opts.m != nil {
 					opts.m.sharesRejected.Inc()
 					opts.m.rejectReason(category).Inc()
+					opts.m.touchLastReject(category, time.Now().Unix())
 				}
 			}
 
@@ -918,6 +919,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					if opts.m != nil {
 						opts.m.sharesRejected.Inc()
 						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
 					}
 				}
 			}()

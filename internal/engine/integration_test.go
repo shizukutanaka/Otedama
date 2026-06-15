@@ -462,6 +462,66 @@ func TestEngineMetrics_RejectReasonLazyCreateAndReuse(t *testing.T) {
 	}
 }
 
+func TestEngineMetrics_TouchLastReject_LazyCreateAndUpdate(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	before := time.Now().Unix() - 1
+	m.touchLastReject("stale", time.Now().Unix())
+	after := time.Now().Unix() + 1
+
+	m.lastRejectByReasonMu.Lock()
+	g, ok := m.lastRejectByReason["stale"]
+	m.lastRejectByReasonMu.Unlock()
+	if !ok || g == nil {
+		t.Fatal("touchLastReject(stale) did not create a gauge")
+	}
+	val := int64(g.Value())
+	if val < before || val > after {
+		t.Errorf("last_reject_seconds value = %d, want in [%d, %d]", val, before, after)
+	}
+}
+
+func TestEngineMetrics_TouchLastReject_ReusesGauge(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	m.touchLastReject("duplicate", 1000)
+	m.lastRejectByReasonMu.Lock()
+	g1 := m.lastRejectByReason["duplicate"]
+	m.lastRejectByReasonMu.Unlock()
+
+	m.touchLastReject("duplicate", 2000)
+	m.lastRejectByReasonMu.Lock()
+	g2 := m.lastRejectByReason["duplicate"]
+	m.lastRejectByReasonMu.Unlock()
+
+	if g1 != g2 {
+		t.Error("touchLastReject created a second gauge for the same category")
+	}
+	if got := int64(g2.Value()); got != 2000 {
+		t.Errorf("gauge value = %d, want 2000 (updated)", got)
+	}
+}
+
+func TestEngineMetrics_TouchLastReject_AppearsInOutput(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.touchLastReject("hardware", 1750000000)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "otedama_last_reject_seconds") {
+		t.Error("last_reject_seconds metric missing from /metrics output")
+	}
+	if !strings.Contains(out, `reason="hardware"`) {
+		t.Errorf("reason label missing from output:\n%s", out)
+	}
+}
+
 func TestEngineMetrics_RejectReasonAppearsInOutput(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)

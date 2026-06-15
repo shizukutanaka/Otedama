@@ -131,6 +131,16 @@ type engineMetrics struct {
 	reg            *metrics.Registry
 	rejectByReason map[string]*metrics.Counter
 
+	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
+	// one per reject category, created lazily on first rejection of that type.
+	// The gauge value is the Unix timestamp of the most recent rejection in that
+	// category, so operators can tell whether a high reject count represents an
+	// ongoing problem (last_reject == now) or a past event that has cleared
+	// (last_reject is hours old). Pairs with rejectByReason counts to distinguish
+	// "count rose a while ago, has since recovered" from "still happening now".
+	lastRejectByReasonMu sync.Mutex
+	lastRejectByReason   map[string]*metrics.Gauge
+
 	// sharesFoundPerDevice tracks shares found per device
 	// (otedama_device_shares_found_total{device="cpu-0"}).
 	// Created lazily when the first share from each device arrives;
@@ -320,6 +330,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 
 		reg:                  reg,
 		rejectByReason:       make(map[string]*metrics.Counter),
+		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
@@ -345,6 +356,28 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// touchLastReject records the current Unix timestamp as the most recent
+// rejection time for category, exposed as
+// otedama_last_reject_seconds{reason="..."}. The gauge is created lazily on
+// first rejection of that category; subsequent calls update the value.
+// Safe for concurrent use.
+func (m *engineMetrics) touchLastReject(category string, now int64) {
+	m.lastRejectByReasonMu.Lock()
+	g, ok := m.lastRejectByReason[category]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_last_reject_seconds",
+			"Unix timestamp of the most recent share rejection of this category. "+
+				"Pairs with otedama_shares_rejected_by_reason_total to distinguish "+
+				"an ongoing rejection problem (value near now) from a past one "+
+				"that has since cleared (value hours old).",
+			map[string]string{"reason": category})
+		m.lastRejectByReason[category] = g
+	}
+	m.lastRejectByReasonMu.Unlock()
+	g.Set(float64(now))
 }
 
 // incSharesFoundForDevice increments the per-device shares-found counter
