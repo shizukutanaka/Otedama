@@ -108,6 +108,42 @@ func isValidMetricName(name string) bool {
 	return true
 }
 
+// isValidLabelName reports whether name conforms to the Prometheus label
+// naming rule: [a-zA-Z_][a-zA-Z0-9_]* — note this is stricter than a metric
+// name (no colon is permitted in a label name). Like metric names, every label
+// name in Otedama is a compile-time constant, so an invalid one is a developer
+// error. Validating it at registration matters because a single malformed label
+// name emits a line Prometheus rejects on scrape, which discards the *entire*
+// /metrics response — so one bad label would silently break all metrics, not
+// just its own series.
+func isValidLabelName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r == '_':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// validateLabelNames panics if any key in labels is not a valid Prometheus
+// label name. metricName is included in the panic message to locate the
+// offending registration.
+func validateLabelNames(metricName string, labels map[string]string) {
+	for k := range labels {
+		if !isValidLabelName(k) {
+			panic(fmt.Sprintf("metrics: invalid label name %q on metric %q (must match [a-zA-Z_][a-zA-Z0-9_]*)", k, metricName))
+		}
+	}
+}
+
 // ----- Counter API -----
 
 // NewCounter registers a new Counter. Duplicate name+labels returns the existing one.
@@ -116,6 +152,7 @@ func (r *Registry) NewCounter(name, help string, labels map[string]string) *Coun
 	if !isValidMetricName(name) {
 		panic(fmt.Sprintf("metrics: invalid metric name %q (must match [a-zA-Z_:][a-zA-Z0-9_:]*)", name))
 	}
+	validateLabelNames(name, labels)
 	key := metricKey(name, labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -144,6 +181,7 @@ func (r *Registry) NewGauge(name, help string, labels map[string]string) *Gauge 
 	if !isValidMetricName(name) {
 		panic(fmt.Sprintf("metrics: invalid metric name %q (must match [a-zA-Z_:][a-zA-Z0-9_:]*)", name))
 	}
+	validateLabelNames(name, labels)
 	key := metricKey(name, labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()

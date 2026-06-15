@@ -359,6 +359,68 @@ func TestNewGauge_InvalidNamePanics(t *testing.T) {
 	}
 }
 
+func TestNewCounter_InvalidLabelNamePanics(t *testing.T) {
+	// An invalid label name must panic at registration: a single malformed
+	// label name emits a line Prometheus rejects on scrape, discarding the
+	// entire /metrics response, so the failure must surface in tests.
+	invalid := []string{"has-hyphen", "has space", "0leadingdigit", "", "has:colon", "has.dot"}
+	for _, label := range invalid {
+		label := label
+		t.Run(label, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("NewCounter with label %q did not panic", label)
+				}
+			}()
+			r := NewRegistry()
+			r.NewCounter("valid_name_total", "help", map[string]string{label: "v"})
+		})
+	}
+}
+
+func TestNewGauge_InvalidLabelNamePanics(t *testing.T) {
+	invalid := []string{"has-hyphen", "0leadingdigit", "has:colon"}
+	for _, label := range invalid {
+		label := label
+		t.Run(label, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("NewGauge with label %q did not panic", label)
+				}
+			}()
+			r := NewRegistry()
+			r.NewGauge("valid_name", "help", map[string]string{label: "v"})
+		})
+	}
+}
+
+func TestNewGauge_ValidLabelNameDoesNotPanic(t *testing.T) {
+	// Every label name currently used in Otedama must pass: status, quantile,
+	// reason, device, address, version, commit, goversion.
+	valid := []string{"status", "quantile", "reason", "device", "address", "version", "commit", "goversion", "_underscore", "A1"}
+	r := NewRegistry()
+	for _, label := range valid {
+		// A panic here fails the test.
+		r.NewGauge("valid_name", "help", map[string]string{label: "v"})
+	}
+}
+
+func TestIsValidLabelName(t *testing.T) {
+	valid := []string{"status", "_", "a1", "A_B_2"}
+	for _, name := range valid {
+		if !isValidLabelName(name) {
+			t.Errorf("isValidLabelName(%q) = false, want true", name)
+		}
+	}
+	// Note: a colon is valid in a metric name but NOT in a label name.
+	invalid := []string{"", "0digit", "has-hyphen", "has space", "has.dot", "has:colon"}
+	for _, name := range invalid {
+		if isValidLabelName(name) {
+			t.Errorf("isValidLabelName(%q) = true, want false", name)
+		}
+	}
+}
+
 func TestIsValidMetricName_ValidNames(t *testing.T) {
 	valid := []string{
 		"a", "_", ":", "otedama_hashrate_hashes_per_second",

@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 141 — metrics: validate label names at registration, not just metric names)
+
+A strengths/weaknesses pass found an asymmetry in the dependency-free `metrics`
+package: `NewCounter`/`NewGauge` validate the **metric name** (panicking on an
+invalid one so the developer error surfaces in tests), but never validated
+**label names**. This matters more than it appears: a single malformed label name
+emits a line that Prometheus rejects on scrape, and a rejected scrape discards the
+*entire* `/metrics` response — so one bad label added in a future session would
+silently break every metric, not just its own series. The blast radius is the whole
+endpoint.
+
+**`internal/metrics/metrics.go`**:
+- `isValidLabelName` — enforces the Prometheus label rule `[a-zA-Z_][a-zA-Z0-9_]*`
+  (stricter than a metric name: no colon permitted in a label name).
+- `validateLabelNames(metricName, labels)` — panics with a locating message,
+  called from both `NewCounter` and `NewGauge` right after the metric-name check.
+
+Behaviour for all existing call sites is unchanged: the full test suite passes,
+confirming every label name in use (`status`, `quantile`, `reason`, `device`,
+`address`, `version`, `commit`, `goversion`) is valid.
+
+Tests (4 new): invalid label panics on counter and gauge; all in-use label names
+plus edge cases pass; `isValidLabelName` table (note a colon is valid in a metric
+name but not a label name).
+
+24 packages green.
+
 ### Docs (session 140 — metrics reference drift: API.md documented 9 of 35 metrics)
 
 A strengths/weaknesses pass found significant documentation drift: `docs/API.md`'s
