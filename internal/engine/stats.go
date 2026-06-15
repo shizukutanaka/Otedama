@@ -366,6 +366,13 @@ func publishBTCRate(m *engineMetrics, f *rates.Fetcher) {
 	if age, everFetched := f.RateAge(); everFetched {
 		m.btcRateAgeSeconds.Set(age.Seconds())
 	}
+	// Publish redundancy health so silent erosion (median backed by 1 of 3
+	// sources) is visible before the feed fails outright. total is published
+	// always (it is a constant); ok only once a fetch has run.
+	if ok, total, fetched := f.SourceHealth(); fetched {
+		m.rateSourcesOK.Set(float64(ok))
+		m.rateSourcesTotal.Set(float64(total))
+	}
 }
 
 // publishDifficulty updates the pool-difficulty and estimated-share-interval

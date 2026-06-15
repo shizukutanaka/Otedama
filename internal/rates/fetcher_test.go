@@ -600,6 +600,94 @@ func TestFetcher_RateAge_SmallAfterRealFetch(t *testing.T) {
 	}
 }
 
+func TestFetcher_SourceHealth_FalseBeforeAnyFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	ok, total, fetched := f.SourceHealth()
+	if fetched {
+		t.Error("SourceHealth fetched should be false before any fetch")
+	}
+	if ok != 0 {
+		t.Errorf("ok before fetch = %d, want 0", ok)
+	}
+	if total != len(defaultSources) {
+		t.Errorf("total = %d, want %d (configured sources)", total, len(defaultSources))
+	}
+}
+
+func TestFetcher_SourceHealth_CountsInBandSources(t *testing.T) {
+	// Three sources: two return good readings, one returns an implausible value
+	// that is dropped by the band. ok must be 2, total 3 — the redundancy is
+	// degraded even though the fetch succeeds.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvA := httptest.NewServer(makeHandler("95000"))
+	srvB := httptest.NewServer(makeHandler("95200"))
+	srvBad := httptest.NewServer(makeHandler("0.95")) // out of band
+	defer srvA.Close()
+	defer srvB.Close()
+	defer srvBad.Close()
+
+	mk := func(name, url string) Source {
+		return Source{Name: name, URL: url, extract: func(b []byte) (float64, error) {
+			var v struct {
+				Rate float64 `json:"rate"`
+			}
+			if err := json.Unmarshal(b, &v); err != nil {
+				return 0, err
+			}
+			return v.Rate, nil
+		}}
+	}
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvA.Client(),
+		sources:    []Source{mk("a", srvA.URL), mk("b", srvB.URL), mk("bad", srvBad.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	ok, total, fetched := f.SourceHealth()
+	if !fetched {
+		t.Fatal("fetched should be true after Fetch")
+	}
+	if ok != 2 {
+		t.Errorf("ok = %d, want 2 (implausible source dropped)", ok)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+}
+
+func TestFetcher_SourceHealth_ZeroOKButFetchedWhenAllFail(t *testing.T) {
+	// All sources fail: fetched becomes true, ok is 0. This distinguishes
+	// "feed has collapsed" (fetched=true, ok=0) from "never fetched" (fetched=false).
+	f := &Fetcher{
+		fallback:   80000,
+		httpClient: &http.Client{Timeout: 100 * time.Millisecond},
+		sources: []Source{{
+			Name:    "bad",
+			URL:     "http://192.0.2.1:9999", // unreachable (TEST-NET-1)
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Error("Fetch with unreachable source should return error")
+	}
+	ok, total, fetched := f.SourceHealth()
+	if !fetched {
+		t.Error("fetched should be true even when all sources fail")
+	}
+	if ok != 0 {
+		t.Errorf("ok = %d, want 0 (all failed)", ok)
+	}
+	if total != 1 {
+		t.Errorf("total = %d, want 1", total)
+	}
+}
+
 func parseFloat(s string, out *float64) (int, error) {
 	return fmt.Sscanf(s, "%f", out)
 }

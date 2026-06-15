@@ -128,6 +128,15 @@ type engineMetrics struct {
 	// price feed alertable (e.g. age > 2× the 5-min refresh interval).
 	btcRateAgeSeconds *metrics.Gauge
 
+	// rateSourcesOK / rateSourcesTotal expose the *redundancy health* behind the
+	// BTC/USD median, not just the value it produces. ok is how many sources
+	// returned a usable in-band reading in the last fetch; total is how many are
+	// configured. The rate gauge reads identically whether backed by 3 sources
+	// or 1, so ok < total is the only signal of silent redundancy erosion before
+	// the feed fails outright (ok == 0).
+	rateSourcesOK    *metrics.Gauge
+	rateSourcesTotal *metrics.Gauge
+
 	// poolDifficulty is the current share difficulty assigned by the pool via
 	// mining.set_difficulty. 0 until the first set_difficulty is received. A
 	// drop signals the pool is giving the miner easier work (lost var-diff
@@ -341,6 +350,17 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"the first success. Rises during a price-source outage even while "+
 				"otedama_btc_usd_rate still shows the last good value; alert when this "+
 				"exceeds ~2× the refresh interval to catch silent staleness.",
+			nil),
+		rateSourcesOK: reg.NewGauge(
+			"otedama_rate_sources_ok",
+			"Number of BTC/USD price sources that returned a usable in-band reading "+
+				"in the last fetch. Compare with otedama_rate_sources_total: ok < total "+
+				"means the median is running on degraded redundancy (alert before ok=0).",
+			nil),
+		rateSourcesTotal: reg.NewGauge(
+			"otedama_rate_sources_total",
+			"Number of BTC/USD price sources configured. The denominator for "+
+				"otedama_rate_sources_ok.",
 			nil),
 
 		poolDifficulty: reg.NewGauge(

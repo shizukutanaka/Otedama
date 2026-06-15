@@ -255,6 +255,8 @@ addresses) appear once their first event occurs.
 |--------|------|--------|-------------|
 | `otedama_btc_usd_rate` | gauge | — | Current BTC/USD rate (median of 3 sources). |
 | `otedama_btc_rate_age_seconds` | gauge | — | Seconds since the rate was last successfully fetched (silent-staleness detector). |
+| `otedama_rate_sources_ok` | gauge | — | Price sources returning a usable in-band reading in the last fetch. `ok < total` = degraded redundancy. |
+| `otedama_rate_sources_total` | gauge | — | Price sources configured (denominator for `_ok`). |
 | `otedama_power_watts` | gauge | — | Configured system power draw (0 = unset). |
 | `otedama_joules_per_terahash` | gauge | — | Energy efficiency: watts × 1e12 / hashrate. |
 | `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |

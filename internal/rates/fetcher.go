@@ -119,7 +119,9 @@ type Fetcher struct {
 	mu            sync.RWMutex
 	rate          float64
 	fetchedAt     time.Time
-	clockSkewSecs float64      // max |local − server Date header| seen this fetch cycle
+	clockSkewSecs float64 // max |local − server Date header| seen this fetch cycle
+	lastOKSources int     // count of in-band successful sources in the last Fetch
+	fetchAttempts int     // number of Fetch calls that have completed (any outcome)
 	sources       []Source
 	httpClient    *http.Client
 	fallback      float64      // used when all sources fail
@@ -158,6 +160,20 @@ func (f *Fetcher) ClockSkewSeconds() float64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.clockSkewSecs
+}
+
+// SourceHealth reports how many price sources returned a usable, in-band
+// reading in the most recent fetch (ok), the total number configured (total),
+// and whether any fetch has completed yet (fetched). Before the first fetch,
+// ok is 0 and fetched is false. This exposes silent redundancy erosion: the
+// rate value is identical whether backed by 3 sources or 1, but ok reveals the
+// difference — letting an operator alert when the median's backing degrades
+// (e.g. ok < total) well before it reaches 0 and the feed fails entirely.
+// Safe for concurrent use.
+func (f *Fetcher) SourceHealth() (ok, total int, fetched bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.lastOKSources, len(f.sources), f.fetchAttempts > 0
 }
 
 // BTCUSDRate implements provider.RateSource.
@@ -251,6 +267,18 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 				maxSkew, clockSkewWarnThreshold))
 		}
 	}
+
+	// Record redundancy health: how many sources returned a usable, in-band
+	// reading this cycle. Persisted whether or not the fetch ultimately
+	// succeeds, so an operator can see the median's true backing degrade from
+	// 3 sources to 1 long before it reaches 0 (the silent-redundancy-erosion
+	// failure: the rate value looks identical, but the robustness behind it is
+	// gone). fetchAttempts marks that at least one cycle has run, so "0 OK
+	// sources" can be distinguished from "never fetched".
+	f.mu.Lock()
+	f.lastOKSources = len(rates)
+	f.fetchAttempts++
+	f.mu.Unlock()
 
 	if len(rates) == 0 {
 		return fmt.Errorf("rates: all sources failed")

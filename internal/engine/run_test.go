@@ -756,6 +756,23 @@ func TestPublishBTCRate_AgeGaugeZeroBeforeAnyFetch(t *testing.T) {
 	}
 }
 
+func TestPublishBTCRate_SourceHealthGaugesUntouchedBeforeFetch(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	f := rates.NewFetcher(95000) // no fetch → SourceHealth fetched=false
+
+	m.rateSourcesOK.Set(-1)
+	m.rateSourcesTotal.Set(-1)
+	publishBTCRate(m, f)
+
+	if got := m.rateSourcesOK.Value(); got != -1 {
+		t.Errorf("rate_sources_ok before fetch = %v, want unchanged (-1)", got)
+	}
+	if got := m.rateSourcesTotal.Value(); got != -1 {
+		t.Errorf("rate_sources_total before fetch = %v, want unchanged (-1)", got)
+	}
+}
+
 // ============================================================================
 // publishDifficulty — pool difficulty and estimated share interval (session 135)
 // ============================================================================

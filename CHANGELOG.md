@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 143 — redundancy health: does the engine reveal the health of its redundancy, not just its value?)
+
+A Socratic new perspective — Otedama has built-in redundancy (BTC/USD median of 3 sources,
+pool failover, payout-address failover), but redundancy that silently erodes is the most
+dangerous failure. The median of 3 sources and the "median" of 1 surviving source produce
+an *identical* `otedama_btc_usd_rate` value — yet their robustness differs enormously. An
+instance can run on 1 of 3 sources for days; the day that source fails, it goes down with
+no prior warning.
+
+This is distinct from session 138 (data age = "how old is the value?"). This axis is "how
+healthy is the redundancy *behind* the value?" — a perfectly fresh rate (one source answers
+instantly every cycle) can still be backed by collapsed redundancy.
+
+`otedama_rate_sources_ok` / `otedama_rate_sources_total` — new gauges. `ok` is how many
+sources returned a usable in-band reading in the last fetch; `total` is how many are
+configured. `ok < total` reveals degraded redundancy long before `ok == 0` (feed failure).
+
+**`internal/rates/fetcher.go`**:
+- `Fetcher.lastOKSources` + `fetchAttempts` fields (under existing `mu`).
+- `Fetch` records `len(rates)` (in-band successes) on both the success and all-fail paths,
+  so the count is current even during an outage.
+- `SourceHealth() (ok, total int, fetched bool)` — `fetched` distinguishes "feed collapsed"
+  (fetched=true, ok=0) from "never fetched" (fetched=false).
+
+**`internal/engine/metrics.go` / `stats.go`**:
+- Registered `rateSourcesOK` / `rateSourcesTotal`; `publishBTCRate` sets them once a fetch
+  has run (untouched before, so they are never a misleading 0).
+
+**`docs/API.md`**: documented both metrics (38 = 38 code/doc parity verified).
+
+Tests (3 rates + 1 engine): false before any fetch; counts in-band sources (2 of 3 when one
+is implausible); fetched=true/ok=0 when all fail; engine gauges untouched before first fetch.
+
+24 packages green.
+
 ### Feat (session 142 — opportunity cost: does the engine quantify the price of its own preferences?)
 
 A Socratic new perspective — session 131 added `otedama_arbitration_holds_total`, which
