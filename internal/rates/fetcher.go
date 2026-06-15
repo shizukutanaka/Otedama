@@ -108,16 +108,22 @@ const (
 	maxPlausibleRateUSD = 100_000_000.0
 )
 
+// clockSkewWarnThreshold is the skew magnitude (in seconds) at which a warning
+// is logged. Beyond this TLS certificate validation, mining nTime fields, and
+// rate-freshness judgements all become unreliable.
+const clockSkewWarnThreshold = 120.0
+
 // Fetcher periodically fetches the BTC/USD exchange rate from multiple
 // sources and caches the result.
 type Fetcher struct {
-	mu         sync.RWMutex
-	rate       float64
-	fetchedAt  time.Time
-	sources    []Source
-	httpClient *http.Client
-	fallback   float64      // used when all sources fail
-	logFn      func(string) // nil = silent; set via SetLogger
+	mu            sync.RWMutex
+	rate          float64
+	fetchedAt     time.Time
+	clockSkewSecs float64      // max |local − server Date header| seen this fetch cycle
+	sources       []Source
+	httpClient    *http.Client
+	fallback      float64      // used when all sources fail
+	logFn         func(string) // nil = silent; set via SetLogger
 }
 
 // SetLogger installs a log callback for error events (initial fetch failure,
@@ -144,6 +150,16 @@ func NewFetcher(fallback float64) *Fetcher {
 	}
 }
 
+// ClockSkewSeconds returns the maximum observed absolute offset (in seconds)
+// between the local system clock and the wall-clock reported by rate-source
+// HTTPS servers via their HTTP Date response header. Returns 0 until the first
+// successful fetch that included a Date header. Safe for concurrent use.
+func (f *Fetcher) ClockSkewSeconds() float64 {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.clockSkewSecs
+}
+
 // BTCUSDRate implements provider.RateSource.
 // Returns the cached rate and whether it is fresh (< CacheDuration old).
 // If no rate has ever been successfully fetched, returns the fallback
@@ -162,21 +178,32 @@ func (f *Fetcher) BTCUSDRate() (rate float64, fresh bool) {
 // fetch will run at a time.
 func (f *Fetcher) Fetch(ctx context.Context) error {
 	type result struct {
-		rate float64
-		err  error
+		rate     float64
+		skewSecs float64
+		err      error
 	}
 	results := make(chan result, len(f.sources))
 
 	for _, src := range f.sources {
 		go func(s Source) {
-			r, err := f.fetchOne(ctx, s)
-			results <- result{rate: r, err: err}
+			r, sk, err := f.fetchOne(ctx, s)
+			results <- result{rate: r, skewSecs: sk, err: err}
 		}(src)
 	}
 
 	var rates []float64
+	var maxSkew float64
+	var skewSeen bool
 	for range f.sources {
 		r := <-results
+		// Aggregate skew regardless of whether the rate fetch succeeded:
+		// a non-200 response still carries a valid server Date header.
+		if r.skewSecs > 0 {
+			skewSeen = true
+			if r.skewSecs > maxSkew {
+				maxSkew = r.skewSecs
+			}
+		}
 		if r.err != nil {
 			continue
 		}
@@ -192,6 +219,22 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 			continue
 		}
 		rates = append(rates, r.rate)
+	}
+
+	// Persist the clock skew and warn loudly if it exceeds the threshold.
+	// This is done before the rate check so skew is always updated even
+	// when all rate sources fail (useful for clock-health alerting).
+	if skewSeen {
+		f.mu.Lock()
+		f.clockSkewSecs = maxSkew
+		f.mu.Unlock()
+		if maxSkew > clockSkewWarnThreshold {
+			f.logMsg(fmt.Sprintf(
+				"rates: WARNING: local clock is %.0f s off server time "+
+					"(threshold %.0f s); TLS certificate validation, mining "+
+					"nTime fields, and rate-freshness judgements may be incorrect",
+				maxSkew, clockSkewWarnThreshold))
+		}
 	}
 
 	if len(rates) == 0 {
@@ -217,27 +260,45 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 	return nil
 }
 
-func (f *Fetcher) fetchOne(ctx context.Context, src Source) (float64, error) {
+// fetchOne performs a single HTTP GET against src and returns the parsed
+// BTC/USD rate, the absolute clock skew observed from the HTTP Date response
+// header (0 if absent or unparseable), and any error.
+func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate float64, skewSecs float64, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	req.Header.Set("User-Agent", "Otedama/3.0.0-alpha (non-custodial mining)")
 
 	resp, err := f.httpClient.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("rates: %s: %w", src.Name, err)
+		return 0, 0, fmt.Errorf("rates: %s: %w", src.Name, err)
 	}
 	defer resp.Body.Close()
 
+	// Measure clock skew from the HTTP Date header before reading the body.
+	// http.ParseTime understands RFC 7231 / 850 / ANSI-C date formats that
+	// all major CDNs and API servers emit. A missing or malformed header
+	// yields skewSecs = 0, which the caller treats as "no observation".
+	if dateHdr := resp.Header.Get("Date"); dateHdr != "" {
+		if serverTime, parseErr := http.ParseTime(dateHdr); parseErr == nil {
+			diff := time.Since(serverTime)
+			if diff < 0 {
+				diff = -diff
+			}
+			skewSecs = diff.Seconds()
+		}
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		return 0, fmt.Errorf("rates: %s: read body: %w", src.Name, err)
+		return 0, skewSecs, fmt.Errorf("rates: %s: read body: %w", src.Name, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("rates: %s: HTTP %d", src.Name, resp.StatusCode)
+		return 0, skewSecs, fmt.Errorf("rates: %s: HTTP %d", src.Name, resp.StatusCode)
 	}
-	return src.extract(body)
+	rate, err = src.extract(body)
+	return rate, skewSecs, err
 }
 
 // StartBackground launches a goroutine that refreshes the rate every

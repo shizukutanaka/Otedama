@@ -106,6 +106,14 @@ type engineMetrics struct {
 	// pool connections that look "connected" but deliver no work.
 	lastJobReceivedAt *metrics.Gauge
 
+	// clockSkewSeconds is the maximum absolute offset (in seconds) observed
+	// between the local system clock and the wall-clock reported by BTC/USD
+	// rate-source HTTPS servers via their HTTP Date response headers. Reuses
+	// existing HTTPS traffic — no NTP dependency, no new endpoints. Alert
+	// when >120 s: TLS certificate validation, mining nTime fields, and
+	// rate-freshness judgements all break at that magnitude.
+	clockSkewSeconds *metrics.Gauge
+
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
 	reg            *metrics.Registry
@@ -273,6 +281,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Unix timestamp of the most recent mining job received from the pool. "+
 				"Alert when this is older than 2× the pool's expected notify interval "+
 				"(~30–60 s) to detect a stale connection that looks connected but delivers no work.",
+			nil),
+
+		clockSkewSeconds: reg.NewGauge(
+			"otedama_clock_skew_seconds",
+			"Maximum absolute offset (s) between the local system clock and the "+
+				"wall-clock reported by BTC/USD rate-source servers via HTTP Date "+
+				"headers. 0 until the first successful fetch. Alert when >120: TLS "+
+				"certificate validation, mining nTime, and rate freshness break.",
 			nil),
 
 		reg:                  reg,

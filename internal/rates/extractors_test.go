@@ -167,7 +167,7 @@ func TestFetchOne_ReturnsErrorOn500(t *testing.T) {
 		URL:     srv.URL,
 		extract: func([]byte) (float64, error) { return 1.0, nil },
 	}
-	if _, err := f.fetchOne(context.Background(), src); err == nil {
+	if _, _, err := f.fetchOne(context.Background(), src); err == nil {
 		t.Error("fetchOne should fail on HTTP 500")
 	}
 }
@@ -186,7 +186,7 @@ func TestFetchOne_IncludesUserAgent(t *testing.T) {
 		URL:     srv.URL,
 		extract: func([]byte) (float64, error) { return 1.0, nil },
 	}
-	_, _ = f.fetchOne(context.Background(), src)
+	_, _, _ = f.fetchOne(context.Background(), src)
 
 	if gotUA == "" {
 		t.Error("fetchOne should set User-Agent header")
@@ -216,7 +216,7 @@ func TestFetchOne_RespectsContext(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	_, err := f.fetchOne(ctx, src)
+	_, _, err := f.fetchOne(ctx, src)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -248,7 +248,7 @@ func TestFetchOne_LimitsResponseSize(t *testing.T) {
 			return 0, nil
 		},
 	}
-	_, _ = f.fetchOne(context.Background(), src)
+	_, _, _ = f.fetchOne(context.Background(), src)
 }
 
 // ============================================================================

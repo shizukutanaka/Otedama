@@ -359,6 +359,184 @@ func TestFetcher_SetLogger_NilIsSilent(t *testing.T) {
 	<-ctx.Done() // let the goroutine run and exit; must not panic
 }
 
+func TestFetcher_ClockSkewSeconds_ZeroBeforeAnyFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	if skew := f.ClockSkewSeconds(); skew != 0 {
+		t.Errorf("ClockSkewSeconds before any fetch = %v, want 0", skew)
+	}
+}
+
+func TestFetcher_ClockSkewSeconds_DetectsAccurateDate(t *testing.T) {
+	// Server returns a Date header matching "now". Skew must be < 2 s even
+	// accounting for test execution time.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "accurate-date",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if skew := f.ClockSkewSeconds(); skew >= 2 {
+		t.Errorf("ClockSkewSeconds = %.2f, want < 2 for an accurate server Date header", skew)
+	}
+}
+
+func TestFetcher_ClockSkewSeconds_DetectsLargeSkew(t *testing.T) {
+	// Server returns a Date header 300 s in the past.  Observed skew must be
+	// roughly 300 s (allow ±5 s for test-execution jitter).
+	const fakeOffsetSecs = 300
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		past := time.Now().Add(-fakeOffsetSecs * time.Second).UTC()
+		w.Header().Set("Date", past.Format(http.TimeFormat))
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "stale-date",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	skew := f.ClockSkewSeconds()
+	if skew < fakeOffsetSecs-5 || skew > fakeOffsetSecs+5 {
+		t.Errorf("ClockSkewSeconds = %.2f, want ~%d (±5 s jitter)", skew, fakeOffsetSecs)
+	}
+}
+
+// stripDateTransport wraps an http.RoundTripper and removes the Date header
+// from every response, simulating an HTTP server that omits the Date header
+// (or a proxy that strips it). Used to test the "no skew observation" path.
+type stripDateTransport struct{ inner http.RoundTripper }
+
+func (t *stripDateTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.inner.RoundTrip(req)
+	if resp != nil {
+		resp.Header.Del("Date")
+	}
+	return resp, err
+}
+
+func TestFetcher_ClockSkewSeconds_MissingDateHeaderYieldsZero(t *testing.T) {
+	// Simulate a server whose Date header is stripped in transit.
+	// ClockSkewSeconds must remain 0 — no observation, not a spurious value.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	inner := srv.Client().Transport
+	if inner == nil {
+		inner = http.DefaultTransport
+	}
+	stripped := &http.Client{Transport: &stripDateTransport{inner: inner}}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: stripped,
+		sources: []Source{{
+			Name: "no-date",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if skew := f.ClockSkewSeconds(); skew != 0 {
+		t.Errorf("ClockSkewSeconds with stripped Date header = %v, want 0", skew)
+	}
+}
+
+func TestFetcher_ClockSkewSeconds_WarnLoggedWhenThresholdExceeded(t *testing.T) {
+	// Server returns a Date header far in the future (well beyond
+	// clockSkewWarnThreshold). The logger callback must receive a warning.
+	const bigOffset = 300
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		future := time.Now().Add(bigOffset * time.Second).UTC()
+		w.Header().Set("Date", future.Format(http.TimeFormat))
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	warned := make(chan string, 1)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "big-skew",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case warned <- msg:
+		default:
+		}
+	})
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	select {
+	case msg := <-warned:
+		if !strings.Contains(msg, "WARNING") || !strings.Contains(msg, "clock") {
+			t.Errorf("expected clock-skew WARNING in log, got: %q", msg)
+		}
+	default:
+		t.Error("expected a clock-skew warning log; none received")
+	}
+}
+
 func parseFloat(s string, out *float64) (int, error) {
 	return fmt.Sscanf(s, "%f", out)
 }

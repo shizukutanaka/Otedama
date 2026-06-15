@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 134 — temporal self-awareness: does the engine know its time axis is correct?)
+
+A Socratic new perspective — mining is deeply time-sensitive (nTime in submitted
+shares, TLS certificate validity windows, rate-freshness judgements all depend on
+the local clock), yet Otedama had no way to detect that its system clock is
+wrong. The engine knew *what* was happening, but not *when* it was happening
+relative to the rest of the world.
+
+**`internal/rates/fetcher.go`**:
+- `fetchOne` now returns `(rate, skewSecs, error)` — it reads the `Date`
+  response header from each source's HTTPS reply and computes
+  `|time.Now() − serverTime|` using `http.ParseTime` (stdlib, no new dep). Reuses
+  existing HTTPS traffic; no NTP dependency, no new endpoints.
+- `Fetch` aggregates the **maximum** skew across all sources (giving the most
+  conservative observation), persists it in `Fetcher.clockSkewSecs` under `mu`,
+  and logs a `WARNING` when it exceeds `clockSkewWarnThreshold` (120 s). Skew
+  is updated even when all rate fetches fail (a non-200 response still carries a
+  valid Date header).
+- `ClockSkewSeconds() float64` — new method, safe for concurrent use.
+- `const clockSkewWarnThreshold = 120.0` (TLS typically fails at ~±5 min).
+
+**`internal/engine/metrics.go`**:
+- `otedama_clock_skew_seconds` — gauge, maximum observed |local − server| in
+  seconds. 0 until the first fetch that included a Date header. Alert threshold:
+  >120 s.
+
+**`internal/engine/stats.go`**:
+- `publishBTCRate` also calls `f.ClockSkewSeconds()` and sets the gauge,
+  piggybacking on every 30 s rate-publish tick at zero cost.
+
+**`internal/rates/extractors_test.go`**:
+- 4 call sites for `fetchOne` updated for the new 3-value return.
+
+Tests (5 new in `fetcher_test.go`): zero before any fetch; near-zero skew for an
+accurate Date header; ~300 s skew for a Date header 300 s in the past; zero when
+the Date header is stripped via a custom `RoundTripper`; warning logged when skew
+exceeds the threshold.
+
+24 packages green.
+
 ### Feat (session 133 — configuration coherence: do the settings together achieve intent?)
 
 A Socratic new perspective — `config.Validate()` checks each field's *individual*
