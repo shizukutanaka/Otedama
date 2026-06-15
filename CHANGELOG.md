@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 145 — TUI: surface curtailment so a price-pause isn't mistaken for a broken miner)
+
+A strengths/weaknesses pass found a real UX gap for the operator *without* a Prometheus
+stack — the one who relies solely on the TUI dashboard. When the BTC/USD rate drops below
+`curtail_below_btc_usd`, the engine deliberately pauses hashing, and `updateLiveness`
+correctly keeps `Stalled=false` (a price pause is not a fault). But the TUI had no
+curtailment field, so it rendered green "0 H/s", `✓ connected`, no stall badge — visually
+identical to a healthy miner that simply found no hashes. The user sees zero output with no
+explanation and reasonably concludes the miner is broken. The pause was observable in
+Prometheus (`otedama_curtailed`) but invisible in the only window a non-Prometheus user has.
+
+**`internal/tui/dashboard.go`**:
+- `Stats.Curtailed bool` — new field.
+- `miningLine` now renders a distinct cyan `⏸ paused (price below threshold)` badge when
+  curtailed, taking priority over the stall path (a deliberate pause is never shown as the
+  yellow `⚠ stalled` fault). The informational cyan colour signals "healthy, waiting" rather
+  than "error".
+
+**`internal/engine/stats.go`**:
+- `buildStats` sets `Curtailed: opts.isCurtailed()` so the existing curtail gate drives the
+  badge.
+
+Tests (2 new): curtailed shows "paused" and not "stalled"; curtailed takes priority when
+both flags are set.
+
+24 packages green.
+
 ### Feat (session 144 — forecast accountability: does the engine expose its own earnings prediction?)
 
 A Socratic new perspective — the arbitration engine computes `alloc.TotalYield` (the summed

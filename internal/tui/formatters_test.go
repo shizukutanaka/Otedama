@@ -196,6 +196,37 @@ func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 	}
 }
 
+func TestDashboard_MiningLine_CurtailedShowsPausedNotStalled(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 0, Devices: 1, Curtailed: true,
+	})
+	if !strings.Contains(line, "paused") {
+		t.Errorf("miningLine with Curtailed=true missing paused indicator: %q", line)
+	}
+	// A deliberate pause must NOT be rendered as a fault stall.
+	if strings.Contains(line, "stalled") {
+		t.Errorf("curtailed miningLine must not show 'stalled' (it is not a fault): %q", line)
+	}
+}
+
+func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
+	// If both flags were ever set, curtailment (deliberate) is the explanation
+	// shown — never the misleading fault badge.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 0, Devices: 1, Curtailed: true, Stalled: true,
+	})
+	if !strings.Contains(line, "paused") {
+		t.Errorf("curtailed+stalled miningLine should show paused: %q", line)
+	}
+	if strings.Contains(line, "stalled") {
+		t.Errorf("curtailed+stalled miningLine must not show stalled: %q", line)
+	}
+}
+
 func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)

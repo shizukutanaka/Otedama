@@ -62,6 +62,14 @@ type Stats struct {
 	// samples. The TUI renders a ⚠ indicator so the operator sees the
 	// warning immediately without checking Prometheus.
 	Stalled bool
+
+	// Curtailed is true when hashing is intentionally paused because the
+	// BTC/USD rate is below the configured curtail_below_btc_usd threshold.
+	// This is NOT a fault: zero hashrate is expected. The TUI renders a
+	// distinct "paused" badge so the operator does not mistake a deliberate
+	// price-driven pause for a broken miner (the failure mode without a
+	// Prometheus stack: green "0 H/s", connected, not stalled, no explanation).
+	Curtailed bool
 }
 
 // ProviderStats describes a single provider's live state.
@@ -223,18 +231,28 @@ func (d *Dashboard) miningLine(s Stats) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	shares := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
-	if s.Stalled {
+	switch {
+	case s.Curtailed:
+		// Deliberate price-driven pause: zero hashrate is expected, not a
+		// fault. Cyan "paused" badge (informational, not the yellow ⚠ used for
+		// stalls) so the operator knows the miner is healthy and waiting for the
+		// price to recover rather than broken.
+		return fmt.Sprintf("  %s%-14s ⏸ paused (price below threshold)%s  %s%s%s",
+			cyan, rate, reset,
+			dim, shares, reset)
+	case s.Stalled:
 		// Yellow hashrate + stall badge so the operator sees the warning
 		// immediately without needing to check Prometheus.
 		return fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  %s%s%s",
 			yellow, rate, reset,
 			dim+devs+reset,
 			dim, shares, reset)
+	default:
+		return fmt.Sprintf("  %s%-14s%s  %-20s  %s%s%s",
+			green, rate, reset,
+			dim+devs+reset,
+			dim, shares, reset)
 	}
-	return fmt.Sprintf("  %s%-14s%s  %-20s  %s%s%s",
-		green, rate, reset,
-		dim+devs+reset,
-		dim, shares, reset)
 }
 
 func (d *Dashboard) poolLine(s Stats) string {

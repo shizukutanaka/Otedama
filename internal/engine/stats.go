@@ -70,6 +70,7 @@ func buildStats(opts sessionOpts, hashRate float64, totalSats uint64, latency *L
 		PoolLatency:       poolLatency,
 		Connected:         true,
 		Stalled:           stalled,
+		Curtailed:         opts.isCurtailed(),
 		TotalSatsEarned:   totalSats,
 		WalletFingerprint: opts.wallet,
 		Uptime:            time.Since(opts.startTime),
