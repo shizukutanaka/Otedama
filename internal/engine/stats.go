@@ -361,3 +361,20 @@ func publishBTCRate(m *engineMetrics, f *rates.Fetcher) {
 		m.clockSkewSeconds.Set(skew)
 	}
 }
+
+// publishDifficulty updates the pool-difficulty and estimated-share-interval
+// gauges. diff is the pool's current share difficulty (from
+// Session.SuggestedDifficulty). hashrate is in hashes per second. Either
+// being 0 or negative is a no-op / zero on the computed gauge.
+func publishDifficulty(m *engineMetrics, diff, hashrate float64) {
+	if diff <= 0 {
+		return
+	}
+	m.poolDifficulty.Set(diff)
+	if hashrate > 0 {
+		// E[seconds between shares] = D × 2^32 / hashrate
+		m.estimatedShareIntervalSeconds.Set(diff * 4294967296 / hashrate)
+	} else {
+		m.estimatedShareIntervalSeconds.Set(0)
+	}
+}

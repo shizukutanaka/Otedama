@@ -114,6 +114,18 @@ type engineMetrics struct {
 	// rate-freshness judgements all break at that magnitude.
 	clockSkewSeconds *metrics.Gauge
 
+	// poolDifficulty is the current share difficulty assigned by the pool via
+	// mining.set_difficulty. 0 until the first set_difficulty is received. A
+	// drop signals the pool is giving the miner easier work (lost var-diff
+	// trust, or insufficient hashrate); a sustained high value with near-zero
+	// shares_found reveals a misconfigured or malicious pool.
+	poolDifficulty *metrics.Gauge
+	// estimatedShareIntervalSeconds = poolDifficulty × 2^32 / hashrate.
+	// The expected wall-clock seconds between consecutive found shares at the
+	// current pool difficulty and hashrate. 0 when either input is unknown.
+	// Use to distinguish "hardware is slow" from "difficulty is too high".
+	estimatedShareIntervalSeconds *metrics.Gauge
+
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
 	reg            *metrics.Registry
@@ -289,6 +301,21 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"wall-clock reported by BTC/USD rate-source servers via HTTP Date "+
 				"headers. 0 until the first successful fetch. Alert when >120: TLS "+
 				"certificate validation, mining nTime, and rate freshness break.",
+			nil),
+
+		poolDifficulty: reg.NewGauge(
+			"otedama_pool_difficulty",
+			"Current share difficulty assigned by the pool (mining.set_difficulty). "+
+				"0 until the first assignment. A sudden drop indicates lost var-diff "+
+				"trust; a high value with near-zero shares_found indicates difficulty "+
+				"is above what the local hashrate can serve within a reasonable interval.",
+			nil),
+		estimatedShareIntervalSeconds: reg.NewGauge(
+			"otedama_estimated_share_interval_seconds",
+			"Expected wall-clock seconds between consecutive shares: "+
+				"pool_difficulty × 2^32 / hashrate. 0 when difficulty or hashrate "+
+				"is unknown. Use to distinguish 'hardware is slow' from 'difficulty "+
+				"is too high' when shares_found drops.",
 			nil),
 
 		reg:                  reg,

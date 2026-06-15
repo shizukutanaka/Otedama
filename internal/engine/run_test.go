@@ -741,6 +741,58 @@ func TestPublishBTCRate_SetsGauge(t *testing.T) {
 }
 
 // ============================================================================
+// publishDifficulty — pool difficulty and estimated share interval (session 135)
+// ============================================================================
+
+func TestPublishDifficulty_SetsGaugesAtKnownHashrate(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	const diff = 1024.0
+	const hashrate = 1_000_000_000.0 // 1 GH/s
+
+	publishDifficulty(m, diff, hashrate)
+
+	if got := m.poolDifficulty.Value(); got != diff {
+		t.Errorf("poolDifficulty = %v, want %v", got, diff)
+	}
+	// E[seconds] = 1024 × 2^32 / 1e9 ≈ 4398.0 s
+	wantInterval := diff * 4294967296 / hashrate
+	if got := m.estimatedShareIntervalSeconds.Value(); got != wantInterval {
+		t.Errorf("estimatedShareIntervalSeconds = %v, want %v", got, wantInterval)
+	}
+}
+
+func TestPublishDifficulty_ZeroHashrateYieldsZeroInterval(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	publishDifficulty(m, 512.0, 0)
+
+	if got := m.poolDifficulty.Value(); got != 512 {
+		t.Errorf("poolDifficulty = %v, want 512", got)
+	}
+	if got := m.estimatedShareIntervalSeconds.Value(); got != 0 {
+		t.Errorf("estimatedShareIntervalSeconds with zero hashrate = %v, want 0", got)
+	}
+}
+
+func TestPublishDifficulty_ZeroDifficultyIsNoOp(t *testing.T) {
+	// Zero difficulty (before any mining.set_difficulty) must not write the gauge;
+	// the gauge stays at its initial 0 rather than being explicitly set to 0.
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	// pre-set to a sentinel to confirm no update
+	m.poolDifficulty.Set(999)
+
+	publishDifficulty(m, 0, 1e9)
+
+	if got := m.poolDifficulty.Value(); got != 999 {
+		t.Errorf("poolDifficulty after zero-diff call = %v, want 999 (unchanged)", got)
+	}
+}
+
+// ============================================================================
 // curtailDecision — pure price-curtailment decision (session 116)
 //
 // The critical safety property: a non-fresh price (startup fallback or a

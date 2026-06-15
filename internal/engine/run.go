@@ -839,6 +839,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
 						rate*100, opts.m.sharesAccepted.Value(), judged))
 				}
+				// Publish pool difficulty and estimated share interval so
+				// operators can distinguish "hardware is slow" from "the pool
+				// assigned more difficulty than our hashrate can serve".
+				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(

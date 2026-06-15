@@ -10,6 +10,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 135 — work-difficulty self-awareness: does the engine know how hard its work is?)
+
+A Socratic new perspective — the engine tracks whether shares are found (`shares_found_total`)
+and whether the pool accepts them, but it cannot answer "why are so few shares found?"
+`shares_found_total` near zero is ambiguous between three distinct causes: hardware is slow,
+pool difficulty is too high for the local hashrate, or the pool is assigning pathological
+var-diff. Until now, the engine had no way to expose which of these was true.
+
+`Session.SuggestedDifficulty()` already existed in the `poolproto.Session` interface and
+was implemented in both `stratumv1` (updated on each `mining.set_difficulty` via an
+`atomic.Uint64`) and `stratumv2`. The engine simply never read it.
+
+**`internal/engine/metrics.go`**:
+- `otedama_pool_difficulty` — current share difficulty from the pool's last
+  `mining.set_difficulty`. 0 until first assignment. A sudden drop signals lost var-diff
+  trust; a sustained high value with near-zero `shares_found` is a misconfigured pool.
+- `otedama_estimated_share_interval_seconds` — `D × 2^32 / hashrate`; the expected
+  seconds between consecutive shares. 0 when either input is unknown. Directly answers
+  "should I expect a share now, or is the interval just long?"
+
+**`internal/engine/stats.go`**:
+- `publishDifficulty(m, diff, hashrate float64)` — extracted helper (like `publishBTCRate`
+  and `publishClockSkew`) that sets both gauges; no-op when `diff == 0`.
+
+**`internal/engine/run.go`**:
+- V1 session stats tick calls `publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)`
+  on every stats interval alongside the other per-tick metrics.
+
+Tests (3 new in `run_test.go`): known hashrate produces correct interval; zero hashrate
+yields zero interval; zero difficulty is a no-op (gauge stays unchanged, not zeroed).
+
+24 packages green.
+
 ### Feat (session 134 — temporal self-awareness: does the engine know its time axis is correct?)
 
 A Socratic new perspective — mining is deeply time-sensitive (nTime in submitted
