@@ -10,6 +10,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 167 — engine package: 93.7% → 95.0%; arbitration switch/hold metrics, V2 dashboard and acceptance-rate warning, V1 curtailment, applyJob error, submit error)
+
+**Coverage improvements:**
+- `internal/engine` 93.7% → **95.0%** — 8 new tests covering 12 previously dark statements across
+  `arbitrate.go` and `run.go`.
+
+**Tests added (8 new) in `internal/engine/coverage_test.go`:**
+
+- `TestRunArbitrationLoop_StaleStreamPruning`: Sends a quote with `At = time.Now().Add(-4*time.Minute)`
+  (older than `streamStaleTimeout = 3 min`). The first ticker cycle calls `pruneStaleStreams`, finds
+  the stale entry, and logs `"arbitration: stream … expired"` (arbitrate.go:73–77). Covers 1 stmt.
+
+- `TestRunArbitrationLoop_SwitchMetrics`: Pre-populates streamA (yield=100). First tick assigns
+  cpu-0 → streamA and stores `prevAlloc`. A buffered quote for streamB (yield=300, far above the
+  5% hysteresis threshold) is injected between ticks; the second tick calls `Decide` with both
+  streams and the previous allocation, detects `SwitchedFromID != ""`, and increments
+  `arbitrationSwitches` (arbitrate.go:102–104). Covers 1 stmt.
+
+- `TestRunArbitrationLoop_HoldMetrics`: Same setup but streamB has yield=305 (1.7% above
+  streamA=300, below the 5% threshold of 315). The second tick returns `Held=true` (the incumbent
+  is kept) and increments `arbitrationHolds` (arbitrate.go:105–107). Covers 1 stmt.
+
+- `TestRunSession_DashboardUpdated`: Runs a V2 session via `newFakePool` with
+  `opts.dashboard = tui.NewDashboard(io.Discard)` and `interval = 50ms`. The first stats tick
+  calls `opts.dashboard.Update(buildStats(...))` (run.go:646–648). Covers 1 stmt.
+
+- `TestRunSession_AcceptanceRateWarning`: Pre-seeds metrics with 1 accepted + 19 rejected
+  (judged=20, rate=4%, below the 97% threshold) before running a V2 session. The first stats tick
+  calls `updateShareRates()`, finds `judged >= 20 && rate < 0.97`, and logs the acceptance-rate
+  warning (run.go:666–670). Covers 1 stmt.
+
+- `TestRunSessionV1_CurtailmentIgnoresJob`: Sets `curtailGate.Store(true)` in sessionOpts before
+  connecting to a V1 pool that sends one job. When the job case fires, `isCurtailed()` returns true
+  and the engine logs `"engine: V1 job … ignored (curtailed)"` instead of calling applyJob
+  (run.go:866–868). Covers 1 stmt.
+
+- `TestRunSessionV1_ApplyJobError`: Custom V1 server sends a `mining.notify` with a non-numeric
+  job ID (`"not-a-number"`). `applyJob` calls `fmt.Sscanf(job.JobID, "%d", &jobID)` which fails,
+  returning `"engine: unparseable job ID …"`. The engine logs the warning and `continue`s
+  (run.go:869–871). Covers 2 stmts.
+
+- `TestRunSessionV1_SubmitError`: Custom V1 server reads the `mining.submit` message but sleeps
+  5ms then closes the connection without responding. `sess.Submit` returns a connection error;
+  the submit goroutine logs `"engine: V1 submit: …"` and, because elapsed > 0, calls
+  `latency.Record(elapsed)` (run.go:900–907). Covers 4 stmts. A 50ms sleep after the function
+  returns ensures the async goroutine has flushed its log line before assertions run.
+
+**`sync/atomic` import added** to `coverage_test.go` for `new(atomic.Bool)` in the curtailment test.
+
+**Test count:** 24 packages, all green. Total engine tests: 62.
+
 ### Test (session 166 — tui package: 94.6% → 100%; footer gap-clamp branch, renderLoop updateCh and ticker cases)
 
 **Coverage improvements:**

@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1330,4 +1331,416 @@ func TestRunSessionV1_DashboardUpdated(t *testing.T) {
 		dashboard: dash,
 		log:       func(_, _ string) {},
 	})
+}
+
+// ============================================================================
+// session 167 — arbitration switch/hold metrics and remaining run.go branches
+// ============================================================================
+
+// TestRunArbitrationLoop_StaleStreamPruning covers arbitrate.go:73–77:
+// the log line emitted when a stream's last quote is older than streamStaleTimeout.
+func TestRunArbitrationLoop_StaleStreamPruning(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 20 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	quoteCh := make(chan provider.Quote, 1)
+	mu := &sync.Mutex{}
+	streamMap := make(map[string]arbitration.Stream)
+
+	var logMu sync.Mutex
+	var logs []string
+
+	opts := arbitrationLoopOpts{
+		streamsMu: mu,
+		streamMap: streamMap,
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log: func(_, m string) {
+			logMu.Lock()
+			logs = append(logs, m)
+			logMu.Unlock()
+		},
+	}
+
+	// Pre-queue a quote older than streamStaleTimeout (3 min) so the first
+	// ticker cycle finds a stale stream and logs the expiry message.
+	quoteCh <- provider.Quote{
+		ProviderID: "stale-provider",
+		DeviceID:   "cpu-0",
+		At:         time.Now().Add(-4 * time.Minute),
+	}
+
+	done := make(chan struct{})
+	go func() { runArbitrationLoop(ctx, opts); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(400 * time.Millisecond):
+		t.Error("runArbitrationLoop did not exit within 400ms")
+	}
+
+	logMu.Lock()
+	joined := strings.Join(logs, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "expired") {
+		t.Errorf("expected stale-stream 'expired' log; got: %v", logs)
+	}
+}
+
+// TestRunArbitrationLoop_SwitchMetrics covers arbitrate.go:102–104:
+// arbitrationSwitches.Inc() fires when a device switches from one stream to another.
+// Sequence: first tick assigns cpu-0 → streamA (yield=100); we then inject a quote
+// for streamB (yield=300, far above the 5% hysteresis threshold); second tick
+// detects the switch and increments the counter.
+func TestRunArbitrationLoop_SwitchMetrics(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 20 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	mu := &sync.Mutex{}
+	streamMap := map[string]arbitration.Stream{
+		"streamA:cpu-0": {
+			ID:              "streamA",
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 100, Confidence: 1.0},
+		},
+	}
+	devRefs := []arbitration.DeviceRef{{
+		Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+		Capabilities: hal.Capabilities{SHA256d: true},
+	}}
+	quoteCh := make(chan provider.Quote, 1)
+	m := newEngineMetrics(metrics.NewRegistry())
+
+	opts := arbitrationLoopOpts{
+		devRefs:   devRefs,
+		streamsMu: mu,
+		streamMap: streamMap,
+		quoteCh:   quoteCh,
+		metrics:   m,
+		log:       func(_, _ string) {},
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	// Wait for first tick (assigns cpu-0 → streamA, sets prevAlloc).
+	time.Sleep(40 * time.Millisecond)
+
+	// Inject streamB with much higher yield — well above hysteresis threshold.
+	quoteCh <- provider.Quote{
+		ProviderID:       "streamB",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 300, Confidence: 1.0},
+	}
+
+	// Wait for second tick (cpu-0 switches to streamB → SwitchedFromID set).
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond) // drain goroutine
+
+	if got := m.arbitrationSwitches.Value(); got == 0 {
+		t.Error("expected arbitrationSwitches > 0 after stream switch")
+	}
+}
+
+// TestRunArbitrationLoop_HoldMetrics covers arbitrate.go:105–107:
+// arbitrationHolds.Inc() fires when a better-scoring stream is available but
+// suppressed by the hysteresis margin.
+// Sequence: first tick assigns cpu-0 → streamA (yield=300); we inject streamB
+// (yield=305, only 1.7% better — below the 5% threshold); second tick holds
+// on streamA and sets Held=true → increments the counter.
+func TestRunArbitrationLoop_HoldMetrics(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 20 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	mu := &sync.Mutex{}
+	streamMap := map[string]arbitration.Stream{
+		"streamA:cpu-0": {
+			ID:              "streamA",
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 300, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 300, Confidence: 1.0},
+		},
+	}
+	devRefs := []arbitration.DeviceRef{{
+		Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+		Capabilities: hal.Capabilities{SHA256d: true},
+	}}
+	quoteCh := make(chan provider.Quote, 1)
+	m := newEngineMetrics(metrics.NewRegistry())
+
+	opts := arbitrationLoopOpts{
+		devRefs:   devRefs,
+		streamsMu: mu,
+		streamMap: streamMap,
+		quoteCh:   quoteCh,
+		metrics:   m,
+		log:       func(_, _ string) {},
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	// Wait for first tick (assigns cpu-0 → streamA at yield=300).
+	time.Sleep(40 * time.Millisecond)
+
+	// Inject streamB at yield=305: threshold = 300*1.05 = 315 > 305 → Held.
+	quoteCh <- provider.Quote{
+		ProviderID:       "streamB",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 305, Confidence: 1.0},
+	}
+
+	// Wait for second tick (held on streamA, Held=true).
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond) // drain goroutine
+
+	if got := m.arbitrationHolds.Value(); got == 0 {
+		t.Error("expected arbitrationHolds > 0 after hysteresis hold")
+	}
+}
+
+// TestRunSession_DashboardUpdated covers run.go:646–648: the V2 stats tick
+// calls dashboard.Update when opts.dashboard != nil.
+func TestRunSession_DashboardUpdated(t *testing.T) {
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	dash := tui.NewDashboard(io.Discard)
+
+	_ = runSession(ctx, sessionOpts{
+		poolURL:   fp.URL(),
+		user:      "test.1",
+		merged:    merged,
+		interval:  50 * time.Millisecond,
+		dashboard: dash,
+		log:       func(_, _ string) {},
+	})
+}
+
+// TestRunSession_AcceptanceRateWarning covers run.go:666–670: the V2 stats
+// tick logs a warning when judged >= 20 and the acceptance rate < 97%.
+// We pre-seed the metrics with 1 accepted + 19 rejected (rate=4%, judged=20).
+func TestRunSession_AcceptanceRateWarning(t *testing.T) {
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	m.sharesAccepted.Inc()
+	for i := 0; i < 19; i++ {
+		m.sharesRejected.Inc()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var logMu sync.Mutex
+	var logLines []string
+
+	_ = runSession(ctx, sessionOpts{
+		poolURL:  fp.URL(),
+		user:     "test.1",
+		merged:   merged,
+		interval: 50 * time.Millisecond,
+		m:        m,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logLines = append(logLines, msg)
+			logMu.Unlock()
+		},
+	})
+
+	logMu.Lock()
+	joined := strings.Join(logLines, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "acceptance") {
+		t.Errorf("expected acceptance rate warning; got: %v", logLines)
+	}
+}
+
+// TestRunSessionV1_CurtailmentIgnoresJob covers run.go:866–868: when
+// isCurtailed() is true the engine logs a debug message instead of applying
+// the job to workers.
+func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
+	addr := fakeV1Pool(t, true) // sends one job then closes after 50ms
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	gate := new(atomic.Bool)
+	gate.Store(true)
+
+	var logMu sync.Mutex
+	var logLines []string
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:     "stratum+tcp://" + addr,
+		user:        "w",
+		merged:      merged,
+		interval:    200 * time.Millisecond,
+		curtailGate: gate,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logLines = append(logLines, msg)
+			logMu.Unlock()
+		},
+	})
+
+	logMu.Lock()
+	joined := strings.Join(logLines, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "curtailed") {
+		t.Errorf("expected 'curtailed' in log; got: %v", logLines)
+	}
+}
+
+// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
+// error when the pool sends a non-numeric job ID, triggering the warn log and
+// continue.
+func TestRunSessionV1_ApplyJobError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"not-a-number",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var logMu sync.Mutex
+	var logLines []string
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logLines = append(logLines, msg)
+			logMu.Unlock()
+		},
+	})
+
+	logMu.Lock()
+	joined := strings.Join(logLines, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "unparseable") {
+		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	}
+}
+
+// TestRunSessionV1_SubmitError covers run.go:900–907: when sess.Submit returns
+// an error (pool reads the submit then closes without responding), the engine
+// logs "V1 submit: <err>" and, when elapsed > 0, records the latency sample.
+func TestRunSessionV1_SubmitError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit — read but do not respond
+		// Sleep so elapsed > 0 (triggers latency.Record branch on line 904–906).
+		time.Sleep(5 * time.Millisecond)
+		// Goroutine exits; connection closes → sess.Submit returns error.
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Pre-queue one share so the merged case fires and Submit is called.
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+
+	var logMu sync.Mutex
+	var logLines []string
+	m := newEngineMetrics(metrics.NewRegistry())
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: time.Minute,
+		m:        m,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logLines = append(logLines, msg)
+			logMu.Unlock()
+		},
+	})
+	// Allow the Submit goroutine (which runs async) to complete and log the error.
+	time.Sleep(50 * time.Millisecond)
+
+	logMu.Lock()
+	joined := strings.Join(logLines, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "V1 submit") {
+		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
 }
