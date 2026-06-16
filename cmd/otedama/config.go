@@ -56,6 +56,14 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "language:        %s%s\n", safeDisplay(cfg.Language), tag(origins.Language))
 	fmt.Fprintf(stdout, "data_dir:        %s%s\n", safeDisplay(cfg.DataDir), tag(origins.DataDir))
 	fmt.Fprintf(stdout, "worker_name:     %s%s\n", safeDisplay(cfg.Workers.Name), tag(origins.WorkerName))
+	// Economic & arbitration scalars. Shown so an operator can confirm these
+	// took effect (especially via env/flag) — `config show --origin` reveals
+	// which layer set each. %g keeps 0 ("disabled/unset" for the optional ones)
+	// and fractions readable.
+	fmt.Fprintf(stdout, "arbitration_hysteresis_pct: %g%s\n", cfg.ArbitrationHysteresisPct, tag(origins.ArbitrationHysteresisPct))
+	fmt.Fprintf(stdout, "curtail_below_btc_usd:      %g%s\n", cfg.CurtailBelowBTCUSD, tag(origins.CurtailBelowBTCUSD))
+	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
+	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
 	if len(cfg.Pools) == 0 {
 		fmt.Fprintf(stdout, "pools:           (built-in default)%s\n", tag(origins.Pools))
 	} else {

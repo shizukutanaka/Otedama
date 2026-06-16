@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 155 — config show: display the economic/arbitration fields so settings are verifiable)
+
+`otedama config show` displayed 7 scalar fields plus pools, but not the four economic/
+arbitration settings a user can now configure: `arbitration_hysteresis_pct`,
+`curtail_below_btc_usd`, `power_watts`, `electricity_price_per_kwh`. So after setting, say,
+`OTEDAMA_POWER_WATTS=300` or a `curtail_below_btc_usd` in the file, there was no way to
+confirm it resolved — and `config show --origin` (the "which layer set this?" tool) couldn't
+attribute them either, even though the `Origins` struct already tracked all four.
+
+**`cmd/otedama/config.go`**: `cmdConfigShow` now prints the four fields with `%g` (keeping 0
+= "disabled/unset" and fractions readable) and the same `--origin` tag support as every other
+field. Placed with the other scalars, before the pools list.
+
+Tests: extended `TestConfigShow_NoArgs` to require all four keys; added
+`TestConfigShow_EconomicFieldReflectsEnvWithOrigin` (an env-set `power_watts` appears with the
+`[env]` origin tag).
+
+24 packages green.
+
 ### Fix (session 154 — btccrypto: correct stale base58 comment + cover funds-critical bech32 rejection paths)
 
 A pass over the funds-critical address validators found a stale doc comment and untested

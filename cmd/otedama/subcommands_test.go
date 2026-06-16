@@ -169,9 +169,37 @@ func TestConfigShow_NoArgs(t *testing.T) {
 		"log_level",
 		"data_dir",
 		"pools",
+		"arbitration_hysteresis_pct",
+		"curtail_below_btc_usd",
+		"power_watts",
+		"electricity_price_per_kwh",
 	} {
 		if !strings.Contains(out.String(), field) {
 			t.Errorf("config show missing %q:\n%s", field, out.String())
+		}
+	}
+}
+
+func TestConfigShow_EconomicFieldReflectsEnvWithOrigin(t *testing.T) {
+	// A value set via env must appear in `config show`, and `--origin` must
+	// attribute it to the env layer — the operator's way to confirm an
+	// economic setting took effect.
+	t.Setenv("OTEDAMA_POWER_WATTS", "325")
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show", "--origin"}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --origin exit = %d, want 0", code)
+	}
+	s := out.String()
+	if !strings.Contains(s, "power_watts") || !strings.Contains(s, "325") {
+		t.Errorf("config show did not reflect OTEDAMA_POWER_WATTS=325:\n%s", s)
+	}
+	// The power_watts line must carry the [env] origin tag.
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, "power_watts:") {
+			if !strings.Contains(line, "[env]") {
+				t.Errorf("power_watts line missing [env] origin: %q", line)
+			}
 		}
 	}
 }
