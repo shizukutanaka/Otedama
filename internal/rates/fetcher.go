@@ -126,6 +126,19 @@ type Fetcher struct {
 	httpClient    *http.Client
 	fallback      float64      // used when all sources fail
 	logFn         func(string) // nil = silent; set via SetLogger
+
+	// inflightMu guards inflight. It is a separate, short-held lock from mu
+	// (which guards the cached results): a fetch holds neither lock across its
+	// HTTP round-trips, so readers of the cached rate never block on the network.
+	inflightMu sync.Mutex
+	inflight   *fetchCall // non-nil while a fetch is in progress; coalesces callers
+}
+
+// fetchCall represents a single in-flight fetch whose result is shared by every
+// caller that arrives while it runs (single-flight coalescing).
+type fetchCall struct {
+	done chan struct{} // closed when the fetch completes
+	err  error         // the fetch outcome, valid once done is closed
 }
 
 // SetLogger installs a log callback for error events (initial fetch failure,
@@ -205,9 +218,48 @@ func (f *Fetcher) RateAge() (age time.Duration, everFetched bool) {
 }
 
 // Fetch queries all sources in parallel and updates the cached rate.
-// It is safe to call from multiple goroutines simultaneously; only one
-// fetch will run at a time.
+//
+// It is safe to call from multiple goroutines simultaneously. Calls are
+// coalesced: if a fetch is already in progress, concurrent callers wait for it
+// and share its result rather than launching their own. This keeps the request
+// rate to each price API at one in-flight fetch regardless of how many
+// callers ask at once — without it, a background refresh racing a manual or
+// diagnostic fetch would double the request rate and risk an HTTP 429 ban
+// (CoinGecko's free tier rejects bursts aggressively). A coalesced caller
+// receiving the shared result observes the leader's context outcome, which is
+// the intended behaviour: every caller wants the same current rate.
 func (f *Fetcher) Fetch(ctx context.Context) error {
+	f.inflightMu.Lock()
+	if call := f.inflight; call != nil {
+		f.inflightMu.Unlock()
+		// A fetch is already running; wait for it (or for our own context to be
+		// cancelled, so a coalesced caller is never pinned to the leader's
+		// lifetime) and adopt its result.
+		select {
+		case <-call.done:
+			return call.err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	call := &fetchCall{done: make(chan struct{})}
+	f.inflight = call
+	f.inflightMu.Unlock()
+
+	err := f.doFetch(ctx)
+
+	f.inflightMu.Lock()
+	f.inflight = nil
+	f.inflightMu.Unlock()
+	call.err = err
+	close(call.done)
+	return err
+}
+
+// doFetch performs the actual multi-source fetch. It is only ever called by the
+// single-flight leader in Fetch, so it needs no concurrency guard of its own
+// beyond mu (which protects the cached fields it writes).
+func (f *Fetcher) doFetch(ctx context.Context) error {
 	type result struct {
 		rate     float64
 		skewSecs float64

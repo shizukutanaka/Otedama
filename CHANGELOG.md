@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 159 — rates.Fetch single-flight coalescing: close latent HTTP 429 risk)
+
+**Weakness found**: The doc-comment on `Fetcher.Fetch` promised *"only one fetch will run at
+a time"*, but the implementation had no mechanism to enforce this. Every concurrent caller
+launched its own parallel HTTP storm at all three price APIs. CoinGecko's free tier rejects
+rapid-fire requests with HTTP 429, and the rate-limiter doesn't reset immediately, so a burst
+(background refresh + a doctor check + a manual force-refresh) could blacklist Otedama from the
+price feed. The underlying rate remained correct (the mutex serialised the write), but the
+network behaviour violated the contract.
+
+**Fix (`internal/rates/fetcher.go`)**: Added a `fetchCall` struct (channel + error) and an
+`inflight *fetchCall` field protected by a separate `inflightMu sync.Mutex`. `Fetch` now acts
+as a single-flight leader/follower:
+
+- The first caller locks `inflightMu`, finds `inflight == nil`, sets `inflight = call`, releases
+  the lock, and runs `doFetch` (renamed from the old body).
+- Every subsequent caller that arrives while the leader is running locks, finds `inflight != nil`,
+  releases the lock, and blocks on a `select` over `{call.done, ctx.Done()}`.
+- When `doFetch` returns, the leader nils `inflight`, stores `call.err`, and closes `call.done`;
+  all followers wake and return the shared error.
+- A coalesced caller whose context is cancelled exits the `select` immediately with `ctx.Err()`
+  — it is never pinned to the leader's lifetime.
+
+The short-held `inflightMu` is kept separate from `mu` (which guards cached results) so readers
+of `BTCUSDRate()` never block on in-flight network I/O.
+
+**Tests (2 new in `internal/rates/fetcher_test.go`)**:
+- `TestFetcher_Fetch_CoalescesConcurrentCalls` — 8 goroutines call `Fetch` concurrently against a
+  server that blocks until released; asserts the server receives exactly 1 request, not 8.
+- `TestFetcher_Fetch_CoalescedCallerHonorsOwnContext` — leader blocks ~200ms; a follower with a
+  30ms deadline returns within 150ms with a context error, proving it is not pinned.
+
+Both tests pass under `-race`. 24 packages green.
+
 ### Test (session 158 — Noise NX protocol: test untested security-critical paths)
 
 **Socratic lens**: *"The Noise NX handshake is the security layer protecting hashrate from MITM

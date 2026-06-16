@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -686,6 +688,116 @@ func TestFetcher_SourceHealth_ZeroOKButFetchedWhenAllFail(t *testing.T) {
 	if total != 1 {
 		t.Errorf("total = %d, want 1", total)
 	}
+}
+
+// TestFetcher_Fetch_CoalescesConcurrentCalls verifies the single-flight
+// contract: while one fetch is in progress, concurrent callers share its
+// result instead of each issuing their own HTTP requests. Without coalescing,
+// N concurrent Fetch calls would produce N hits per source — the failure mode
+// that risks an HTTP 429 ban from rate-limited price APIs.
+func TestFetcher_Fetch_CoalescesConcurrentCalls(t *testing.T) {
+	var hits int32
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		<-release // block so all callers pile up on the one in-flight fetch
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "s",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+
+	const callers = 8
+	var wg sync.WaitGroup
+	errs := make([]error, callers)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = f.Fetch(context.Background())
+		}(i)
+	}
+
+	// Give the goroutines time to all enter Fetch and coalesce onto one leader,
+	// then release the single in-flight HTTP request.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("caller %d: Fetch returned error: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("server saw %d requests, want 1 (concurrent fetches must coalesce)", got)
+	}
+	if rate, _ := f.BTCUSDRate(); rate != 95000 {
+		t.Errorf("rate = %v, want 95000", rate)
+	}
+}
+
+// TestFetcher_Fetch_CoalescedCallerHonorsOwnContext verifies that a caller
+// which coalesces onto an in-flight fetch is released when its own context is
+// cancelled, rather than being pinned to the leader's lifetime.
+func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
+	// The leader's request takes ~200ms; a fixed delay (rather than an
+	// indefinite block) keeps the server's in-flight request bounded so the
+	// deferred srv.Close() cannot deadlock.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "s",
+			URL:     srv.URL,
+			extract: func(b []byte) (float64, error) { return 95000, nil },
+		}},
+	}
+
+	// Leader starts a fetch that will block on the server for ~200ms.
+	leaderDone := make(chan struct{})
+	go func() {
+		_ = f.Fetch(context.Background())
+		close(leaderDone)
+	}()
+	time.Sleep(50 * time.Millisecond) // let the leader claim the in-flight slot
+
+	// A second caller with a short-deadline context must not block for the
+	// leader's full duration; it should return its own context error promptly.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := f.Fetch(ctx)
+	if err == nil {
+		t.Fatal("coalesced caller with cancelled context should return an error")
+	}
+	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
+		t.Errorf("coalesced caller blocked %v, expected prompt (~30ms) context cancellation", elapsed)
+	}
+
+	<-leaderDone // let the leader finish before the deferred srv.Close()
 }
 
 func parseFloat(s string, out *float64) (int, error) {
