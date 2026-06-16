@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 169 — httpserver 95.0% → 98.3%; lightning 90.0% → 90.3%; Addr fallback, ServeError stored, EntropyToMnemonic word-range error, ChangePassphrase wrong-passphrase)
+
+**Coverage improvements:**
+- `internal/httpserver` 95.0% → **98.3%** — 2 new tests covering the `Addr()` fallback path
+  and the `ServeError()` non-nil return (server.go:152 and 160-162).
+- `internal/lightning` 90.0% → **90.3%** — 2 new tests covering the `EntropyToMnemonic`
+  `w.Word(idx)` error return (seed.go:218-220) and the `ChangePassphrase` wrong-passphrase
+  branch (wallet.go:245-247). Remaining uncovered blocks are dead code (scrypt/AES/GCM paths
+  that never fail with valid parameters) or OS-specific error paths unreachable in containers.
+
+**Overall project coverage: 95.8% → 95.9%** (all 24 packages green).
+
+**Tests added (4 new):**
+
+- `TestAddr_BeforeStart_ReturnsConfiguredAddress` in `internal/httpserver/server_test.go`:
+  Calls `s.Addr()` without first calling `Start()`. `boundAddr` is nil, so the fallback
+  `return s.addr` branch at `server.go:152` is taken. Covers 1 stmt.
+
+- `TestServeError_ReturnsStoredError` in `internal/httpserver/server_test.go`:
+  White-box test: injects an error directly into `s.serveErr` via `s.serveErr.Store(&injected)`
+  (accessible from `package httpserver`), then asserts `s.ServeError()` returns it. Covers the
+  `return *p` at `server.go:160-162` (1 stmt). The `s.serveErr.Store` path in the background
+  Serve goroutine (`server.go:115-120`) is confirmed dead code in normal operation because
+  `http.Server.Close/Shutdown` always causes Serve to return `ErrServerClosed`, making the
+  `!errors.Is(err, http.ErrServerClosed)` guard permanently false.
+
+- `TestEntropyToMnemonic_WordListTooSmall` in `internal/lightning/coverage_test.go`:
+  Creates a `&WordList{words: []string{"only"}}` (bypassing `NewWordList`'s 2048-word check)
+  and calls `EntropyToMnemonic` with 32 bytes of `0xFF` entropy. The first 11 bits are all 1
+  → idx=2047, which is out-of-range for a 1-element list. `w.Word(2047)` returns an error,
+  hitting `seed.go:218-220`. No crypto involved; runs instantly. Covers 1 stmt.
+
+- `TestChangePassphrase_WrongOldPassphrase` in `internal/lightning/coverage_test.go`:
+  Creates a wallet with passphrase `"correct-pass"`, then calls
+  `wm.ChangePassphrase("wrong-pass", "new-pass", nil)`. `DecryptSeed` returns
+  `ErrWrongPassphrase` (GCM authentication tag mismatch), hitting the
+  `return "lightning: incorrect old passphrase"` branch at `wallet.go:245-247`.
+  Requires one scrypt round (~1.3 s). Covers 1 stmt.
+
 ### Test (session 168 — stratum + rates coverage: DispatchFrame SetupConnection error path; rates/fetcher 96.3% → 100%)
 
 **Coverage improvements:**

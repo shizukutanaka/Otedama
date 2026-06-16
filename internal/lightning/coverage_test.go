@@ -279,3 +279,41 @@ func TestChangePassphrase_UnmarshalError(t *testing.T) {
 		t.Error("ChangePassphrase: expected error when wallet file is corrupt")
 	}
 }
+
+// ============================================================================
+// session 169 — cover seed.go:218-220 and wallet.go:245-247
+// ============================================================================
+
+func TestEntropyToMnemonic_WordListTooSmall(t *testing.T) {
+	// A WordList with only 1 word causes w.Word(idx) to fail for any idx > 0.
+	// With all-0xFF entropy (32 bytes), the first 11 bits are all 1, so
+	// idx=2047 which is out of range for a 1-element list. This covers the
+	// return-on-error branch at seed.go:218-220 without running any crypto.
+	tinyWL := &WordList{words: []string{"only"}}
+	e := make(Entropy, 32)
+	for i := range e {
+		e[i] = 0xFF
+	}
+	if _, err := EntropyToMnemonic(e, tinyWL); err == nil {
+		t.Error("EntropyToMnemonic: expected error when wordlist is too small for computed index")
+	}
+}
+
+func TestChangePassphrase_WrongOldPassphrase(t *testing.T) {
+	// Create a real wallet, then call ChangePassphrase with the wrong old
+	// passphrase. DecryptSeed returns ErrWrongPassphrase, which hits the
+	// error branch at wallet.go:245-247.
+	dir := t.TempDir()
+	wl, _ := NewEnglishWordList()
+	if _, err := NewWalletManager(dir, "correct-pass", nil, wl); err != nil {
+		t.Fatalf("create wallet: %v", err)
+	}
+	// Re-open the wallet manager (it now loads the existing wallet).
+	wm, err := NewWalletManager(dir, "correct-pass", nil, wl)
+	if err != nil {
+		t.Fatalf("load wallet: %v", err)
+	}
+	if err := wm.ChangePassphrase("wrong-pass", "new-pass", nil); err == nil {
+		t.Error("ChangePassphrase: expected error for wrong old passphrase")
+	}
+}

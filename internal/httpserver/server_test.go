@@ -5,6 +5,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -415,5 +416,36 @@ func TestPprof_NamedProfilesAccessible(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("/debug/pprof/%s = %d, want 200", profile, resp.StatusCode)
 		}
+	}
+}
+
+// ============================================================================
+// session 169 — cover Addr() fallback and ServeError() non-nil path
+// ============================================================================
+
+func TestAddr_BeforeStart_ReturnsConfiguredAddress(t *testing.T) {
+	// Addr() returns the configured address string when Start has not been
+	// called yet (boundAddr is nil). This covers server.go:152.
+	const addr = "127.0.0.1:12399"
+	s := New(addr, metrics.NewRegistry(), false)
+	if got := s.Addr(); got != addr {
+		t.Errorf("Addr() before Start = %q, want %q", got, addr)
+	}
+}
+
+func TestServeError_ReturnsStoredError(t *testing.T) {
+	// ServeError() returns the error stored by the Serve goroutine when
+	// it terminates with a non-ErrServerClosed error. We inject the error
+	// directly (white-box) to cover server.go:160-162 without needing to
+	// race the background goroutine.
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	injected := errors.New("injected serve error")
+	s.serveErr.Store(&injected)
+	got := s.ServeError()
+	if got == nil {
+		t.Fatal("ServeError() returned nil, want stored error")
+	}
+	if got.Error() != "injected serve error" {
+		t.Errorf("ServeError() = %q, want 'injected serve error'", got.Error())
 	}
 }
