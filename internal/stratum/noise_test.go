@@ -5,6 +5,10 @@ package stratum
 
 import (
 	"bytes"
+	"crypto/ecdh"
+	"crypto/rand"
+	"errors"
+	"io"
 	"testing"
 )
 
@@ -169,6 +173,213 @@ func TestEncryptedConn_RoundTrip(t *testing.T) {
 	}
 	if !bytes.Equal(out[:n], original) {
 		t.Errorf("decrypted = %q, want %q", out[:n], original)
+	}
+}
+
+// ----- HandshakeState — ReadMessage2 paths -----
+
+func TestHandshakeState_ReadMessage2_TooShort(t *testing.T) {
+	hs, _ := NewHandshakeInitiator()
+	_, _ = hs.WriteMessage1()
+	err := hs.ReadMessage2([]byte("short")) // 5 bytes < 32
+	if err == nil {
+		t.Error("ReadMessage2 with payload < 32 should return error")
+	}
+}
+
+func TestHandshakeState_ReadMessage2_With65BUncompressedKey(t *testing.T) {
+	hs, _ := NewHandshakeInitiator()
+	_, _ = hs.WriteMessage1()
+
+	// 65-byte uncompressed P-256 key (04 || X || Y) — the path taken when
+	// the responder sends a full uncompressed point.
+	serverEph, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate server ephemeral: %v", err)
+	}
+	payload := serverEph.PublicKey().Bytes() // 65 bytes
+	if len(payload) != 65 {
+		t.Fatalf("expected 65-byte P-256 key, got %d", len(payload))
+	}
+
+	if err := hs.ReadMessage2(payload); err != nil {
+		t.Fatalf("ReadMessage2 with 65-byte uncompressed key: %v", err)
+	}
+	if !hs.Complete() {
+		t.Error("handshake should be complete after 65B key")
+	}
+}
+
+func TestHandshakeState_ReadMessage2_With33BCompressedKey(t *testing.T) {
+	hs, _ := NewHandshakeInitiator()
+	_, _ = hs.WriteMessage1()
+
+	// Build a compressed (33-byte) P-256 public key from an uncompressed one.
+	// Go's ecdh.P256().NewPublicKey accepts SEC 1 compressed (0x02/0x03 || X).
+	serverEph, _ := ecdh.P256().GenerateKey(rand.Reader)
+	raw := serverEph.PublicKey().Bytes() // 65 bytes: [04, X(32), Y(32)]
+	compressed := make([]byte, 33)
+	if raw[64]&1 != 0 { // last byte of Y determines odd/even
+		compressed[0] = 0x03
+	} else {
+		compressed[0] = 0x02
+	}
+	copy(compressed[1:], raw[1:33]) // copy X coordinate
+
+	// Sanity check: ecdh must accept this compressed key.
+	if _, err := ecdh.P256().NewPublicKey(compressed); err != nil {
+		t.Skipf("ecdh.P256 does not accept compressed keys in this Go build: %v", err)
+	}
+
+	if err := hs.ReadMessage2(compressed); err != nil {
+		t.Fatalf("ReadMessage2 with 33-byte compressed key: %v", err)
+	}
+	if !hs.Complete() {
+		t.Error("handshake should be complete after 33B compressed key")
+	}
+}
+
+// ----- HandshakeState — Transport happy path -----
+
+func TestHandshakeState_Transport_AfterComplete(t *testing.T) {
+	hs, _ := NewHandshakeInitiator()
+	_, _ = hs.WriteMessage1()
+
+	// Complete via x-only fallback (32-byte payload).
+	payload := make([]byte, 32)
+	for i := range payload {
+		payload[i] = byte(i + 1)
+	}
+	if err := hs.ReadMessage2(payload); err != nil {
+		t.Fatalf("ReadMessage2: %v", err)
+	}
+
+	send, recv, err := hs.Transport()
+	if err != nil {
+		t.Fatalf("Transport after complete: %v", err)
+	}
+	if send == nil || recv == nil {
+		t.Error("Transport should return non-nil CipherState pair after complete handshake")
+	}
+}
+
+// ----- EncryptedConn additional paths -----
+
+// errorReadWriter always returns an error on both Read and Write.
+type errorReadWriter struct{ err error }
+
+func (e errorReadWriter) Write(_ []byte) (int, error) { return 0, e.err }
+func (e errorReadWriter) Read(_ []byte) (int, error)  { return 0, e.err }
+
+// failAfterFirstWriter succeeds on the first Write (the length prefix) and
+// then fails, letting us cover the ciphertext-write error path independently.
+type failAfterFirstWriter struct {
+	first bool
+	buf   bytes.Buffer
+}
+
+func (f *failAfterFirstWriter) Write(p []byte) (int, error) {
+	if !f.first {
+		f.first = true
+		return f.buf.Write(p) // length prefix succeeds
+	}
+	return 0, errors.New("ciphertext write error")
+}
+func (f *failAfterFirstWriter) Read(p []byte) (int, error) { return f.buf.Read(p) }
+
+func TestEncryptedConn_Write_PayloadExceedsMaxFrame(t *testing.T) {
+	var buf bytes.Buffer
+	var key [32]byte
+	conn := NewEncryptedConn(&buf, &CipherState{key: key}, &CipherState{key: key})
+
+	// Plaintext > maxNoiseFrame - poly1305 tag (16 B) = 65519 B produces
+	// a ciphertext > 65535 which overflows the u16 length prefix.
+	bigPayload := make([]byte, maxNoiseFrame) // 65535 plaintext → 65551-byte CT
+	_, err := conn.Write(bigPayload)
+	if err == nil {
+		t.Error("Write with payload exceeding maxNoiseFrame should return error")
+	}
+}
+
+func TestEncryptedConn_Write_LengthPrefixWriteError(t *testing.T) {
+	var key [32]byte
+	conn := NewEncryptedConn(
+		errorReadWriter{errors.New("write error")},
+		&CipherState{key: key},
+		&CipherState{key: key},
+	)
+	_, err := conn.Write([]byte("x"))
+	if err == nil {
+		t.Error("Write when underlying length-prefix write fails should return error")
+	}
+}
+
+func TestEncryptedConn_Write_CiphertextWriteError(t *testing.T) {
+	var key [32]byte
+	w := &failAfterFirstWriter{}
+	conn := NewEncryptedConn(w, &CipherState{key: key}, &CipherState{key: key})
+	_, err := conn.Write([]byte("hello"))
+	if err == nil {
+		t.Error("Write when ciphertext write fails should return error")
+	}
+}
+
+func TestEncryptedConn_Read_TamperedCiphertext(t *testing.T) {
+	var writeBuf bytes.Buffer
+	var key [32]byte
+	writer := NewEncryptedConn(&writeBuf, &CipherState{key: key}, &CipherState{key: key})
+
+	if _, err := writer.Write([]byte("secret message")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Flip the last byte of the buffer — that's within the Poly1305 auth tag.
+	raw := writeBuf.Bytes()
+	tampered := make([]byte, len(raw))
+	copy(tampered, raw)
+	tampered[len(tampered)-1] ^= 0xFF
+
+	reader := NewEncryptedConn(bytes.NewBuffer(tampered), &CipherState{key: key}, &CipherState{key: key})
+	out := make([]byte, 64)
+	_, err := reader.Read(out)
+	if err == nil {
+		t.Error("Read should fail when ciphertext authentication tag is tampered")
+	}
+}
+
+func TestEncryptedConn_Read_SmallBuffer_DrainsProperly(t *testing.T) {
+	var writeBuf bytes.Buffer
+	var key [32]byte
+	writer := NewEncryptedConn(&writeBuf, &CipherState{key: key}, &CipherState{key: key})
+
+	original := []byte("hello noise protocol world")
+	if _, err := writer.Write(original); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Read in two chunks smaller than the plaintext, exercising the readbuf
+	// draining path that retains leftover plaintext across Read calls.
+	reader := NewEncryptedConn(
+		bytes.NewBuffer(writeBuf.Bytes()),
+		&CipherState{key: key},
+		&CipherState{key: key},
+	)
+
+	first := make([]byte, 5) // partial read — leaves 21 bytes in readbuf
+	n1, err := reader.Read(first)
+	if err != nil {
+		t.Fatalf("first Read: %v", err)
+	}
+
+	rest := make([]byte, len(original))
+	n2, err := reader.Read(rest)
+	if err != nil && err != io.EOF {
+		t.Fatalf("second Read: %v", err)
+	}
+
+	reassembled := append(first[:n1], rest[:n2]...)
+	if !bytes.Equal(reassembled, original) {
+		t.Errorf("reassembled = %q, want %q", reassembled, original)
 	}
 }
 

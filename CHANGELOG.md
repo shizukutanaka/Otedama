@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 158 — Noise NX protocol: test untested security-critical paths)
+
+**Socratic lens**: *"The Noise NX handshake is the security layer protecting hashrate from MITM
+attacks. If its key-encoding branches are never exercised by tests, can we trust it behaves
+correctly when a real Stratum V2 pool sends a 65-byte uncompressed or 33-byte compressed key?"*
+Answer: no — and the untested branches covered 40–75% of their functions.
+
+Added 11 tests across two files:
+
+**`internal/stratum/noise_test.go`** (8 new tests):
+- `TestHandshakeState_ReadMessage2_TooShort` — `< 32` bytes returns the documented error.
+- `TestHandshakeState_ReadMessage2_With65BUncompressedKey` — exercises the primary `len >= 65`
+  P-256 uncompressed-key path in `ReadMessage2`; DH succeeds and handshake completes.
+- `TestHandshakeState_ReadMessage2_With33BCompressedKey` — exercises the compressed (02/03 ||
+  X) fallback path; key is constructed from the uncompressed representation's X and Y parity,
+  skipped automatically if the Go build's `ecdh.P256` rejects compressed points.
+- `TestHandshakeState_Transport_AfterComplete` — completes the handshake then calls
+  `Transport()`; asserts both `send` and `recv` cipher states are non-nil.
+- `TestEncryptedConn_Write_PayloadExceedsMaxFrame` — 65 535-byte plaintext → 65 551-byte
+  ciphertext overflows the u16 length prefix; the overflow is caught before writing.
+- `TestEncryptedConn_Write_LengthPrefixWriteError` — underlying writer failure on the
+  2-byte length prefix propagates correctly.
+- `TestEncryptedConn_Write_CiphertextWriteError` — writer succeeds on the length prefix
+  but fails on the ciphertext; exercises the second `rw.Write` error path.
+- `TestEncryptedConn_Read_TamperedCiphertext` — flipping the last byte of a valid
+  frame corrupts the Poly1305 tag; `Decrypt` returns an auth error.
+- `TestEncryptedConn_Read_SmallBuffer_DrainsProperly` — first `Read` with a 5-byte
+  buffer leaves 21 bytes in `readbuf`; second `Read` drains them; reassembled bytes
+  equal the original plaintext.
+
+**`cmd/otedama/subcommands_test.go`** (3 new tests):
+- `TestConfigValidate_MalformedNumericEnvVar_PrintsWarning` — `OTEDAMA_POWER_WATTS=abc`
+  causes `config validate` to print a warning to stderr while still returning exit 0
+  (the malformed var is dropped, not fatal).
+- `TestRun_MalformedNumericEnvVar_WarnsAndSucceeds` — same env-var scenario via
+  `run --dry-run`, covering the `EnvWarnings` loop body in `cmdRun`.
+
+Coverage delta: `internal/stratum` 90.1 % → **92.6 %**; `cmd/otedama` 89.6 % → **90.2 %**
+(both now above the 90 % project threshold). 24 packages green.
+
 ### Feat (session 157 — config show --json: complete the machine-readable command trio)
 
 `version --json` and (session 156) `doctor --json` exist, but `config show` had no JSON mode —

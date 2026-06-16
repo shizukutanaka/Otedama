@@ -365,6 +365,26 @@ func TestRun_LogFormatJSON_DryRun(t *testing.T) {
 	}
 }
 
+func TestRun_MalformedNumericEnvVar_WarnsAndSucceeds(t *testing.T) {
+	// A non-parseable numeric env var (e.g. OTEDAMA_POWER_WATTS=abc) must be
+	// warned about before the run starts, not silently discarded. The run
+	// itself should succeed with the default value for that field.
+	t.Setenv("OTEDAMA_POWER_WATTS", "not-a-number")
+	var out, errb bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--dry-run",
+	}, &out, &errb)
+	if code != exitOK {
+		t.Errorf("run with malformed env var should succeed (dry-run): code=%d, stderr=%q",
+			code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "warning") {
+		t.Errorf("malformed numeric env var should produce warning; got stderr=%q", errb.String())
+	}
+}
+
 // ============================================================================
 // Unknown flag handling
 // ============================================================================
@@ -436,6 +456,23 @@ func TestConfigValidate_UnknownFlag_ReturnsUsage(t *testing.T) {
 	code := run([]string{"config", "validate", "--this-flag-is-not-defined"}, &out, &err)
 	if code != exitUsage {
 		t.Errorf("config validate unknown flag exit = %d, want %d", code, exitUsage)
+	}
+}
+
+func TestConfigValidate_MalformedNumericEnvVar_PrintsWarning(t *testing.T) {
+	// OTEDAMA_POWER_WATTS=abc is a non-parseable float; it is dropped silently
+	// during resolution, but `config validate` should emit a warning so the
+	// operator notices the typo rather than silently mining at default settings.
+	t.Setenv("OTEDAMA_POWER_WATTS", "not-a-number")
+	t.Setenv("OTEDAMA_BITCOIN_ADDRESS", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "validate"}, &out, &errb)
+	if code != exitOK {
+		t.Errorf("config validate with malformed numeric env var should still succeed: code=%d stderr=%q",
+			code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "warning") {
+		t.Errorf("malformed numeric env var should print a warning to stderr; got %q", errb.String())
 	}
 }
 
