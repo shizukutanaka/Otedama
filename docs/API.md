@@ -85,8 +85,10 @@ JSON output fields:
 
 Inspect or validate the effective configuration.
 
-- `otedama config show [--config path]` — Print the merged configuration
-  (defaults + file + env + flags).
+- `otedama config show [--config path] [--origin] [--json]` — Print the merged
+  configuration (defaults + file + env + flags). `--origin` annotates each value
+  with the layer that set it; `--json` emits a JSON object (resolved values, plus
+  an `origins` map when combined with `--origin`) for deploy/config-management scripts.
 - `otedama config validate [flags]` — Check validity and exit with
   exit code 78 on problems. Takes the same flags as `otedama run`.
 

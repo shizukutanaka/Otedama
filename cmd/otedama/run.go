@@ -38,6 +38,7 @@ type runFlags struct {
 	pprofEnabled     bool
 	logFile          string // --log-file: audit-trail path, written even under the TUI
 	showOrigin       bool   // --origin: annotate config show output with value sources
+	jsonOut          bool   // --json: emit config show output as JSON
 }
 
 func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
@@ -63,6 +64,8 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 		"Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
 	fs.BoolVar(&f.showOrigin, "origin", false,
 		"(config show only) Annotate each value with the layer that set it (default/file/env/flag).")
+	fs.BoolVar(&f.jsonOut, "json", false,
+		"(config show only) Emit the resolved configuration as a JSON object instead of text.")
 	if err := fs.Parse(args); err != nil {
 		return runFlags{}, err
 	}

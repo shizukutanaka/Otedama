@@ -4,6 +4,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -35,6 +36,10 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)
 	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
+
+	if f.jsonOut {
+		return writeConfigJSON(stdout, stderr, cfg, origins, f.showOrigin)
+	}
 
 	// tag returns " [layer]" when --origin is active, otherwise empty.
 	tag := func(o config.ValueOrigin) string {
@@ -71,6 +76,72 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 		for i, p := range cfg.Pools {
 			fmt.Fprintf(stdout, "  [%d] %s\n", i+1, safeDisplay(p.URL))
 		}
+	}
+	return exitOK
+}
+
+// writeConfigJSON emits the resolved configuration as a JSON object, the
+// machine-readable counterpart to the text view — for a deploy or
+// config-management script verifying the effective config after file/env/flag
+// layering. When withOrigins is set (i.e. --json --origin together) a parallel
+// "origins" map records which layer set each field, preserving the text mode's
+// --origin information. JSON encoding escapes control characters natively, so
+// the safeDisplay terminal-sanitisation used by the text view is unnecessary
+// here (a consumer parses the bytes; it does not echo them to a terminal).
+func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config.Origins, withOrigins bool) int {
+	pools := make([]string, 0, len(cfg.Pools))
+	for _, p := range cfg.Pools {
+		pools = append(pools, p.URL)
+	}
+	doc := struct {
+		BitcoinAddress           string            `json:"bitcoin_address"`
+		BitcoinAddresses         []string          `json:"bitcoin_addresses,omitempty"`
+		LogLevel                 string            `json:"log_level"`
+		LogFormat                string            `json:"log_format"`
+		Language                 string            `json:"language"`
+		DataDir                  string            `json:"data_dir"`
+		WorkerName               string            `json:"worker_name"`
+		ArbitrationHysteresisPct float64           `json:"arbitration_hysteresis_pct"`
+		CurtailBelowBTCUSD       float64           `json:"curtail_below_btc_usd"`
+		PowerWatts               float64           `json:"power_watts"`
+		ElectricityPricePerKWh   float64           `json:"electricity_price_per_kwh"`
+		Pools                    []string          `json:"pools"`
+		Origins                  map[string]string `json:"origins,omitempty"`
+	}{
+		BitcoinAddress:           cfg.BitcoinAddress,
+		BitcoinAddresses:         cfg.BitcoinAddresses,
+		LogLevel:                 cfg.LogLevel,
+		LogFormat:                cfg.LogFormat,
+		Language:                 cfg.Language,
+		DataDir:                  cfg.DataDir,
+		WorkerName:               cfg.Workers.Name,
+		ArbitrationHysteresisPct: cfg.ArbitrationHysteresisPct,
+		CurtailBelowBTCUSD:       cfg.CurtailBelowBTCUSD,
+		PowerWatts:               cfg.PowerWatts,
+		ElectricityPricePerKWh:   cfg.ElectricityPricePerKWh,
+		Pools:                    pools,
+	}
+	if withOrigins {
+		doc.Origins = map[string]string{
+			"bitcoin_address":            origins.BitcoinAddress.String(),
+			"bitcoin_addresses":          origins.BitcoinAddresses.String(),
+			"log_level":                  origins.LogLevel.String(),
+			"log_format":                 origins.LogFormat.String(),
+			"language":                   origins.Language.String(),
+			"data_dir":                   origins.DataDir.String(),
+			"worker_name":                origins.WorkerName.String(),
+			"arbitration_hysteresis_pct": origins.ArbitrationHysteresisPct.String(),
+			"curtail_below_btc_usd":      origins.CurtailBelowBTCUSD.String(),
+			"power_watts":                origins.PowerWatts.String(),
+			"electricity_price_per_kwh":  origins.ElectricityPricePerKWh.String(),
+			"pools":                      origins.Pools.String(),
+		}
+	}
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(&doc); err != nil {
+		fmt.Fprintf(stderr, "otedama: config show: %v\n", err)
+		return exitRuntime
 	}
 	return exitOK
 }

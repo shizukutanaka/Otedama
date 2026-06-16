@@ -218,6 +218,62 @@ func TestConfigShow_NoArgs(t *testing.T) {
 	}
 }
 
+func TestConfigShow_JSON_EmitsResolvedConfig(t *testing.T) {
+	t.Setenv("OTEDAMA_POWER_WATTS", "275")
+	var out, errb bytes.Buffer
+	code := run([]string{
+		"config", "show", "--json",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+	}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --json exit = %d, want 0", code)
+	}
+	var doc struct {
+		BitcoinAddress string  `json:"bitcoin_address"`
+		PowerWatts     float64 `json:"power_watts"`
+		LogLevel       string  `json:"log_level"`
+		Pools          []string
+		Origins        map[string]string `json:"origins"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("config show --json not valid JSON: %v\n%s", err, out.String())
+	}
+	if doc.BitcoinAddress != "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" {
+		t.Errorf("bitcoin_address = %q", doc.BitcoinAddress)
+	}
+	if doc.PowerWatts != 275 {
+		t.Errorf("power_watts = %v, want 275 (from env)", doc.PowerWatts)
+	}
+	if doc.LogLevel != "info" {
+		t.Errorf("log_level = %q, want info default", doc.LogLevel)
+	}
+	// Without --origin, the origins object must be omitted.
+	if doc.Origins != nil {
+		t.Errorf("origins present without --origin: %v", doc.Origins)
+	}
+}
+
+func TestConfigShow_JSONWithOrigin_IncludesOrigins(t *testing.T) {
+	t.Setenv("OTEDAMA_POWER_WATTS", "275")
+	var out, errb bytes.Buffer
+	run([]string{
+		"config", "show", "--json", "--origin",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+	}, &out, &errb)
+	var doc struct {
+		Origins map[string]string `json:"origins"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, out.String())
+	}
+	if doc.Origins["power_watts"] != "env" {
+		t.Errorf("origins.power_watts = %q, want env", doc.Origins["power_watts"])
+	}
+	if doc.Origins["bitcoin_address"] != "flag" {
+		t.Errorf("origins.bitcoin_address = %q, want flag", doc.Origins["bitcoin_address"])
+	}
+}
+
 func TestConfigShow_EconomicFieldReflectsEnvWithOrigin(t *testing.T) {
 	// A value set via env must appear in `config show`, and `--origin` must
 	// attribute it to the env layer — the operator's way to confirm an

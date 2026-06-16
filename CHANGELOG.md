@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 157 — config show --json: complete the machine-readable command trio)
+
+`version --json` and (session 156) `doctor --json` exist, but `config show` had no JSON mode —
+so a deploy or config-management script could not read the *resolved* effective configuration
+(after file + env + flag layering) as structured data to verify a deployment. Added
+`config show --json`.
+
+**`cmd/otedama/config.go`**: `writeConfigJSON` emits the resolved config as a JSON object
+(bitcoin address(es), log level/format, language, data dir, worker name, the four
+economic/arbitration scalars, and pool URLs). When combined with `--origin`, a parallel
+`origins` map records which layer (default/file/env/flag) set each field, preserving the
+text mode's attribution. JSON encoding escapes control characters natively, so the terminal
+`safeDisplay` sanitisation is unnecessary for machine output.
+
+**`cmd/otedama/run.go`**: `--json` flag added to the shared run flags (config-show only, like
+`--origin`).
+
+**`docs/API.md`**: documented the flag.
+
+Tests (2 new): `--json` emits valid JSON with the env-set `power_watts` resolved and no
+`origins` key absent `--origin`; `--json --origin` includes the `origins` map attributing
+`power_watts` to `env` and `bitcoin_address` to `flag`.
+
+24 packages green.
+
 ### Feat (session 156 — doctor --json: machine-readable diagnostics for CI and monitoring)
 
 `otedama doctor` only emitted a human text report, so a CI pipeline or monitoring agent
