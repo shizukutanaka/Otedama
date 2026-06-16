@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -183,7 +185,8 @@ func TestLoadConfigFile_NonExistent(t *testing.T) {
 func TestBuildLogger_TUIModeDiscardsOutput(t *testing.T) {
 	var out bytes.Buffer
 	f := runFlags{noTUI: false} // TUI active
-	log := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	log, cleanup := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	defer cleanup()
 
 	// In TUI mode, log output must be discarded so it does not corrupt
 	// the dashboard.
@@ -196,7 +199,8 @@ func TestBuildLogger_TUIModeDiscardsOutput(t *testing.T) {
 func TestBuildLogger_NoTUIWritesText(t *testing.T) {
 	var out bytes.Buffer
 	f := runFlags{noTUI: true}
-	log := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+	defer cleanup()
 
 	log.Adapter()("info", "hello-text-log")
 	if !strings.Contains(out.String(), "hello-text-log") {
@@ -207,7 +211,8 @@ func TestBuildLogger_NoTUIWritesText(t *testing.T) {
 func TestBuildLogger_NoTUIWritesJSON(t *testing.T) {
 	var out bytes.Buffer
 	f := runFlags{noTUI: true}
-	log := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "json"}, &out)
+	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "json"}, &out)
+	defer cleanup()
 
 	log.Adapter()("info", "hello-json-log")
 	line := strings.TrimSpace(out.String())
@@ -218,6 +223,84 @@ func TestBuildLogger_NoTUIWritesJSON(t *testing.T) {
 	var obj map[string]any
 	if err := json.Unmarshal([]byte(line), &obj); err != nil {
 		t.Errorf("json logger output is not valid JSON: %v\n%s", err, line)
+	}
+}
+
+func TestBuildLogger_TUIWithLogFileWritesToFileNotStdout(t *testing.T) {
+	// The key audit-trail case: TUI active + --log-file. Logs must reach the
+	// file (the dashboard otherwise hides them) but never stdout (it would
+	// corrupt the display).
+	var out bytes.Buffer
+	path := filepath.Join(t.TempDir(), "audit.log")
+	f := runFlags{noTUI: false, logFile: path}
+	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+
+	log.Adapter()("info", "tui-audit-entry")
+	cleanup() // close the file before reading
+
+	if out.Len() != 0 {
+		t.Errorf("TUI+log-file wrote to stdout, want 0 bytes:\n%s", out.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+	if !strings.Contains(string(data), "tui-audit-entry") {
+		t.Errorf("log file missing entry; got:\n%s", data)
+	}
+}
+
+func TestBuildLogger_NoTUIWithLogFileWritesBoth(t *testing.T) {
+	// Plain mode + --log-file: logs go to both the console and the file.
+	var out bytes.Buffer
+	path := filepath.Join(t.TempDir(), "audit.log")
+	f := runFlags{noTUI: true, logFile: path}
+	log, cleanup := buildLogger(f, config.Config{LogLevel: "info", LogFormat: "text"}, &out)
+
+	log.Adapter()("info", "both-sinks-entry")
+	cleanup()
+
+	if !strings.Contains(out.String(), "both-sinks-entry") {
+		t.Errorf("stdout missing entry:\n%s", out.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+	if !strings.Contains(string(data), "both-sinks-entry") {
+		t.Errorf("log file missing entry; got:\n%s", data)
+	}
+}
+
+func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.log")
+	f := runFlags{noTUI: true, logFile: path}
+	_, cleanup := buildLogger(f, config.Config{LogLevel: "info"}, &bytes.Buffer{})
+	cleanup()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat log file: %v", err)
+	}
+	// The log file may contain pool URLs / worker names — keep it owner-only.
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("log file perms = %04o, want 0600", perm)
+	}
+}
+
+func TestBuildLogger_UnopenableLogFileDoesNotPanic(t *testing.T) {
+	// A bad path must degrade to the no-file behaviour (warning to stderr),
+	// not crash the run. Point at a file under a non-existent directory.
+	var out bytes.Buffer
+	path := filepath.Join(t.TempDir(), "no-such-dir", "audit.log")
+	f := runFlags{noTUI: true, logFile: path}
+	log, cleanup := buildLogger(f, config.Config{LogLevel: "info"}, &out)
+	defer cleanup()
+
+	// Logging still works (falls back to stdout since the file failed to open).
+	log.Adapter()("info", "fallback-entry")
+	if !strings.Contains(out.String(), "fallback-entry") {
+		t.Errorf("expected fallback to stdout when log file cannot open:\n%s", out.String())
 	}
 }
 

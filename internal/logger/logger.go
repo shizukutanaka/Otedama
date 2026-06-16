@@ -26,10 +26,10 @@
 //
 // # TUI coexistence
 //
-// When the TUI dashboard is active, log output is silently dropped to
-// stdout (which the TUI controls) to avoid mangling the display.
-// Logs still reach a log file if --log-file is set. This gives users
-// both a pretty dashboard and an audit trail.
+// When the TUI dashboard is active it owns stdout, so console log output is
+// suppressed to avoid mangling the display. Logs still reach a file when
+// --log-file is set (the run command writes there even under the TUI), giving
+// users both a pretty dashboard and an audit trail.
 package logger
 
 import (

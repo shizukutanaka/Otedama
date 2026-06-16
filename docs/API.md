@@ -26,6 +26,7 @@ otedama run [flags]
 | `--language` | string | `en` | UI language. BCP 47 tag (e.g. `ja`, `zh-CN`). |
 | `--log-level` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. |
 | `--log-format` | string | `text` | Log output format: `text` or `json`. |
+| `--log-file` | string | (empty) | Append structured logs to this file. Written even under the TUI, so it provides an audit trail the dashboard otherwise hides. Created `0600`. |
 | `--no-tui` | bool | `false` | Disable the terminal dashboard. |
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |

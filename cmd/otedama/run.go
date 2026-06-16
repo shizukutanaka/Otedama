@@ -36,7 +36,8 @@ type runFlags struct {
 	walletPassphrase string
 	httpAddr         string
 	pprofEnabled     bool
-	showOrigin       bool // --origin: annotate config show output with value sources
+	logFile          string // --log-file: audit-trail path, written even under the TUI
+	showOrigin       bool   // --origin: annotate config show output with value sources
 }
 
 func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
@@ -53,6 +54,9 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
 		"Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
+	fs.StringVar(&f.logFile, "log-file", "",
+		"Append structured logs to this file. Written even while the TUI is active, "+
+			"giving a long-running service an audit trail the dashboard otherwise hides.")
 	fs.StringVar(&f.httpAddr, "http-addr", "",
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
 	fs.BoolVar(&f.pprofEnabled, "pprof", false,
@@ -115,8 +119,9 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	)
 	defer cancel()
 
-	// Build the structured logger.
-	structlog := buildLogger(f, cfg, stdout)
+	// Build the structured logger. closeLog flushes/closes the --log-file.
+	structlog, closeLog := buildLogger(f, cfg, stdout)
+	defer closeLog()
 
 	// Start HTTP health/metrics server if requested.
 	metricsRegistry, httpSrv := startHTTPServer(ctx, f, stdout, stderr)
@@ -153,10 +158,49 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 // dashboard is active (default), log output is discarded so it does not
 // corrupt the dashboard. With --no-tui, logs go to stdout in the
 // configured format (text or JSON).
-func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) *logger.Logger {
-	if !f.noTUI {
-		return logger.Discard()
+// buildLogger constructs the structured logger for a run and returns a cleanup
+// function the caller must defer (it closes the --log-file, if one was opened).
+//
+// Sink selection: the TUI owns stdout, so while it is active logs must never go
+// there (they would corrupt the dashboard). --log-file is what gives a TUI
+// session any audit trail at all. The combinations:
+//
+//	TUI on,  no file  → discard (unchanged; dashboard only)
+//	TUI on,  file     → file only
+//	TUI off, no file  → stdout (unchanged)
+//	TUI off, file     → stdout + file
+//
+// A file that cannot be opened is a warning, not a fatal error: the run
+// proceeds without the audit trail rather than refusing to mine.
+func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logger, func()) {
+	cleanup := func() {}
+
+	var fileW io.Writer
+	if f.logFile != "" {
+		// 0600: logs can include pool URLs and worker names; match the
+		// restrictive posture used for the wallet and data directory.
+		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
+		} else {
+			fileW = lf
+			cleanup = func() { _ = lf.Close() }
+		}
 	}
+
+	var w io.Writer
+	switch {
+	case !f.noTUI:
+		if fileW == nil {
+			return logger.Discard(), cleanup // dashboard only; logs dropped
+		}
+		w = fileW // TUI active: the file is the audit trail
+	case fileW != nil:
+		w = io.MultiWriter(stdout, fileW) // plain mode: console + file
+	default:
+		w = stdout // plain mode, no file
+	}
+
 	format := logger.FormatText
 	if cfg.LogFormat == "json" {
 		format = logger.FormatJSON
@@ -164,8 +208,8 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) *logger.Logger
 	return logger.New(logger.Config{
 		Level:  logger.ParseLevel(cfg.LogLevel),
 		Format: format,
-		Writer: stdout,
-	})
+		Writer: w,
+	}), cleanup
 }
 
 // startHTTPServer starts the health/metrics HTTP server if --http-addr

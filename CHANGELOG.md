@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 150 — implement the documented `--log-file` so a TUI session has an audit trail)
+
+A strengths/weaknesses pass found a documentation/behaviour mismatch that violated the
+project's honesty rule (CLAUDE.md: no documenting non-existent features). The `logger`
+package doc promised "logs still reach a log file if `--log-file` is set … both a pretty
+dashboard and an audit trail," but `--log-file` **existed nowhere** in the CLI. Worse, this
+exposed a real operational hole: with the default TUI, `buildLogger` returns
+`logger.Discard()` — every log line is dropped, so a long-running service had **no audit
+trail at all**.
+
+Rather than delete the promise, this implements it (the design intent was clear and the gap
+is genuine):
+
+**`cmd/otedama/run.go`**:
+- New `--log-file PATH` flag. `buildLogger` now returns `(*logger.Logger, cleanup func())`
+  and selects the sink by TUI state:
+  - TUI on, no file → discard (unchanged)
+  - TUI on, file → file only (stdout is owned by the dashboard)
+  - TUI off, no file → stdout (unchanged)
+  - TUI off, file → stdout + file (`io.MultiWriter`)
+- The file is opened append/create `0600` (it can contain pool URLs and worker names — same
+  restrictive posture as the wallet/data dir). An unopenable path is a warning, not fatal:
+  the run proceeds without the audit trail. `cmdRun` defers the cleanup to close it.
+
+**`internal/logger/logger.go`**: tightened the now-accurate TUI-coexistence doc.
+
+**`docs/API.md`**: documented `--log-file` in the run-flags table.
+
+Tests (4 new + 3 updated): TUI+file writes to the file and not stdout; no-TUI+file writes
+both; file is `0600`; an unopenable path falls back to stdout without panicking; existing
+discard/text/JSON tests updated for the two-value signature.
+
+24 packages green.
+
 ### Fix (session 149 — doctor: report malformed env vars so the diagnostic command is complete)
 
 Session 147 surfaced malformed numeric `OTEDAMA_*` env vars in `run` and `config validate`,
