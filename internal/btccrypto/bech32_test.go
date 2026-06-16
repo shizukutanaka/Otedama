@@ -106,3 +106,65 @@ func makeRepeat(c byte, n int) string {
 	}
 	return string(b)
 }
+
+func TestValidateBech32Address_InvalidWitnessVersionRejected(t *testing.T) {
+	// The first data character encodes the witness version. '3' has charset
+	// index 17, i.e. witness version 17 — above the valid maximum of 16. This
+	// is rejected before the checksum is even consulted, so any padding of
+	// charset chars after it suffices to reach the version check.
+	addr := "bc13" + makeRepeat('q', 8) // version 17, long enough to pass length gate
+	if _, err := ValidateBech32Address(addr); err == nil {
+		t.Errorf("witness version 17 accepted: %q", addr)
+	}
+}
+
+func TestValidateBech32Address_WrongHRPRejected(t *testing.T) {
+	// A second '1' makes the human-readable part "bc1" (the separator is the
+	// LAST '1'), which is not the mainnet "bc". Must be rejected. '1' is not in
+	// the bech32 charset, so this is the only way to shift the separator.
+	addr := "bc11" + makeRepeat('q', 8)
+	if _, err := ValidateBech32Address(addr); err == nil {
+		t.Errorf("non-'bc' HRP accepted: %q", addr)
+	}
+}
+
+func TestConvertBits_RejectsOutOfRangeValue(t *testing.T) {
+	// A 5-bit group cannot hold the value 32 (>= 1<<5); convertBits must reject
+	// it rather than silently truncate.
+	if _, err := convertBits([]int{32}, 5, 8, false); err == nil {
+		t.Error("convertBits accepted an out-of-range 5-bit value (32)")
+	}
+}
+
+func TestConvertBits_RejectsInvalidPadding(t *testing.T) {
+	// With pad=false, leftover non-zero bits are an invalid encoding (BIP-173
+	// decoding rule). A single 5-bit group of all ones (0x1f) leaves 5 non-zero
+	// bits that cannot form a full 8-bit byte, so it must be rejected.
+	if _, err := convertBits([]int{0x1f}, 5, 8, false); err == nil {
+		t.Error("convertBits accepted invalid non-zero padding")
+	}
+}
+
+func TestConvertBits_PadRoundTrip(t *testing.T) {
+	// With pad=true the trailing bits are zero-padded into a final group rather
+	// than rejected; 8→5 then 5→8 with padding round-trips the original bytes.
+	in := []int{0xff, 0x00, 0xab}
+	five, err := convertBits(in, 8, 5, true)
+	if err != nil {
+		t.Fatalf("8->5 convertBits: %v", err)
+	}
+	back, err := convertBits(five, 5, 8, true)
+	if err != nil {
+		t.Fatalf("5->8 convertBits: %v", err)
+	}
+	// Round-trip restores the original bytes (a trailing zero pad byte may be
+	// appended, so compare the meaningful prefix).
+	if len(back) < len(in) {
+		t.Fatalf("round-trip lost data: got %v, want prefix %v", back, in)
+	}
+	for i := range in {
+		if back[i] != in[i] {
+			t.Errorf("round-trip byte %d = %d, want %d", i, back[i], in[i])
+		}
+	}
+}

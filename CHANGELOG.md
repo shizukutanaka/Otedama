@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 154 — btccrypto: correct stale base58 comment + cover funds-critical bech32 rejection paths)
+
+A pass over the funds-critical address validators found a stale doc comment and untested
+rejection branches. `bech32.go` claimed legacy "1…/3…" addresses "still falls back to a format
+check" — but session 119 added full Base58Check (double-SHA256) verification in `base58.go`,
+and `ValidateAddress` dispatches to it. A maintainer trusting the comment might believe base58
+typos go uncaught and re-implement (or worse, weaken) the check.
+
+**`internal/btccrypto/bech32.go`**: corrected the comment to state that legacy addresses are
+checksum-verified by `base58.go` via the unified `ValidateAddress` entry point.
+
+**`internal/btccrypto/bech32_test.go`** (5 new tests): the address validator had uncovered
+*rejection* paths — the ones that must keep rejecting malformed payout addresses. Added:
+witness version > 16 rejected (`bc13…`); wrong HRP rejected (a second `1` shifts the separator
+to make HRP "bc1"); and three `convertBits` unit tests (out-of-range 5-bit value, invalid
+non-zero padding, and an 8→5→8 pad round-trip). btccrypto coverage 90.6% → 94.2%.
+
+No behaviour change. 24 packages green.
+
 ### Refactor (session 153 — engine: make publishBTCRate testable via dependency inversion)
 
 A coverage-driven pass found `publishBTCRate` at 55.6% — the lowest in the engine package.

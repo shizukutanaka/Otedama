@@ -13,8 +13,9 @@
 // between "looks like an address" and "is a well-formed address".
 //
 // Only mainnet ("bc") witness addresses are accepted; Otedama does not
-// configure testnet/signet. Base58 (legacy "1.../3...") checksum verification
-// (Base58Check) is tracked separately and still falls back to a format check.
+// configure testnet/signet. Legacy "1.../3..." addresses are verified
+// separately by Base58Check (see base58.go); ValidateAddress is the unified
+// entry point that dispatches to whichever encoding an address uses.
 
 package btccrypto
 
