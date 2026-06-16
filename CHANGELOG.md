@@ -10,6 +10,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 165 — btccrypto coverage: secp256k1 stub methods, bech32 v0/v1/future witness program edge cases, 1-byte program length boundary)
+
+**Coverage improvements:**
+- `internal/btccrypto` 94.2% → **98.2%** — covered secp256k1 stub methods (0% → 100%) and 4 bech32 edge-case branches
+
+**Tests added (7 new):**
+
+In `internal/btccrypto/bech32_test.go`:
+
+`testEncodeBech32` (white-box helper): Uses the package-internal `bech32Polymod`, `bech32HrpExpand`,
+`convertBits`, and `bech32Charset` to construct a syntactically correct mainnet bech32/bech32m
+address from an arbitrary witness version + program. This lets tests reach branches inside
+`ValidateBech32Address` that are guarded by a checksum check — otherwise unreachable from random
+or mistyped input strings.
+
+- `TestValidateBech32Address_V0With21ByteProgram`: v0 witness program must be 20 or 32 bytes;
+  21 bytes triggers the `default` case in the inner switch (bech32.go line 178). Requires a
+  correctly-checksummed address, hence the `testEncodeBech32` helper.
+- `TestValidateBech32Address_V1With31ByteProgram`: v1 Taproot programs must be exactly 32 bytes;
+  31 bytes triggers the `!= 32` check (line 182).
+- `TestValidateBech32Address_FutureWitnessVersion`: witness version 2-16 has a valid bech32m
+  checksum but Otedama rejects it as unsupported (line 187). Version 2 with a 32-byte program
+  is well-formed per spec, just not yet classified.
+
+In `internal/btccrypto/btccrypto_extras_test.go`:
+
+- `TestValidateBech32Address_WitnessProgramTooShort`: a 1-byte witness program, even with a
+  valid bech32 checksum, is below the spec minimum of 2 bytes (line 167). Uses testEncodeBech32
+  with a single zero byte; convertBits returns 1 output byte (zero leftover bits), reaching
+  the `len(program) < 2` branch.
+- `TestSecp256k1Stub_Verify_ReturnsNotImplemented`: `ecdsa-secp256k1` and `schnorr-secp256k1`
+  stubs registered in `secp256k1.go` always return `ErrSchemeNotImplemented`; previously
+  0% coverage (line 30).
+- `TestSecp256k1Stub_PublicKeyFromBytes_ReturnsNotImplemented`: stub returns ErrSchemeNotImplemented (line 35).
+- `TestSecp256k1Stub_SignatureFromBytes_ReturnsNotImplemented`: stub returns ErrSchemeNotImplemented (line 40).
+
+Remaining uncovered blocks (2 of 133): `bech32.go:124` (`pos < 1`) and `bech32.go:163`
+(`convertBits` error inside ValidateBech32Address) are dead code — the `pos < 1` branch can
+never fire after the `HasPrefix("bc1")` guard (which ensures the '1' separator is at index ≥ 2),
+and the `convertBits` error in decode requires non-zero padding bits that cannot occur after a
+valid bech32 checksum is verified.
+
 ### Test (session 164 — stratum package coverage: DispatchFrame error branches, DecodeSetupConnection early truncation, DecodeSubmitSharesError string error, DecodeOpenMiningChannelSuccess/Error truncated paths)
 
 **Coverage improvements:**

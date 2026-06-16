@@ -5,6 +5,7 @@ package btccrypto
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -166,5 +167,83 @@ func TestConvertBits_PadRoundTrip(t *testing.T) {
 		if back[i] != in[i] {
 			t.Errorf("round-trip byte %d = %d, want %d", i, back[i], in[i])
 		}
+	}
+}
+
+// ============================================================================
+// testEncodeBech32 — white-box helper that constructs a syntactically valid
+// mainnet bech32/bech32m address from a witness version and program, using the
+// package-internal polymod and charset functions. This lets tests reach
+// branches inside ValidateBech32Address that are guarded by a checksum check
+// and therefore unreachable from random/typed input strings.
+// ============================================================================
+
+func testEncodeBech32(t *testing.T, version int, program []byte) string {
+	t.Helper()
+	hrp := "bc"
+	// Convert program bytes (8-bit) to 5-bit groups with padding.
+	in8 := make([]int, len(program))
+	for i, b := range program {
+		in8[i] = int(b)
+	}
+	fiveBit, err := convertBits(in8, 8, 5, true)
+	if err != nil {
+		t.Fatalf("testEncodeBech32: convertBits 8→5: %v", err)
+	}
+
+	// Payload: version byte followed by 5-bit groups.
+	payload := append([]int{version}, fiveBit...)
+
+	// Compute checksum: version 0 uses bech32Const, version 1+ uses bech32mConst.
+	wantConst := bech32Const
+	if version != 0 {
+		wantConst = bech32mConst
+	}
+	values := append(bech32HrpExpand(hrp), payload...)
+	values = append(values, 0, 0, 0, 0, 0, 0)
+	poly := bech32Polymod(values) ^ wantConst
+	for i := 0; i < 6; i++ {
+		payload = append(payload, (poly>>(5*(5-i)))&0x1f)
+	}
+
+	// Encode as bech32 characters.
+	var sb strings.Builder
+	sb.WriteString(hrp + "1") // separator is '1'
+	for _, v := range payload {
+		sb.WriteByte(bech32Charset[v])
+	}
+	return sb.String()
+}
+
+// ============================================================================
+// ValidateBech32Address — edge cases for the version-specific dispatch (session 165)
+// ============================================================================
+
+func TestValidateBech32Address_V0With21ByteProgram(t *testing.T) {
+	// v0 witness programs must be exactly 20 (P2WPKH) or 32 (P2WSH) bytes.
+	// A 21-byte program with a valid checksum must be rejected.
+	addr := testEncodeBech32(t, 0, make([]byte, 21))
+	_, err := ValidateBech32Address(addr)
+	if err == nil {
+		t.Errorf("v0 address with 21-byte program should be rejected: %q", addr)
+	}
+}
+
+func TestValidateBech32Address_V1With31ByteProgram(t *testing.T) {
+	// v1 (Taproot/P2TR) programs must be exactly 32 bytes. 31 bytes is invalid.
+	addr := testEncodeBech32(t, 1, make([]byte, 31))
+	_, err := ValidateBech32Address(addr)
+	if err == nil {
+		t.Errorf("v1 address with 31-byte program should be rejected: %q", addr)
+	}
+}
+
+func TestValidateBech32Address_FutureWitnessVersion(t *testing.T) {
+	// Witness versions 2-16 are "future" versions; bech32m checksum passes but
+	// Otedama rejects them as unsupported (we only classify v0 and v1).
+	addr := testEncodeBech32(t, 2, make([]byte, 32))
+	_, err := ValidateBech32Address(addr)
+	if err == nil {
+		t.Errorf("witness version 2 (future) should be rejected: %q", addr)
 	}
 }

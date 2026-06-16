@@ -6,6 +6,7 @@ package btccrypto
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -326,5 +327,60 @@ func TestClassifyAddress_UnknownReturnsUnknown(t *testing.T) {
 		if got := ClassifyAddress(addr); got != AddressUnknown {
 			t.Errorf("ClassifyAddress(%q) = %v, want AddressUnknown", addr, got)
 		}
+	}
+}
+
+// ============================================================================
+// secp256k1 stubs — Verify, PublicKeyFromBytes, SignatureFromBytes (session 165)
+// ============================================================================
+
+func TestSecp256k1Stub_Verify_ReturnsNotImplemented(t *testing.T) {
+	for _, name := range []string{"ecdsa-secp256k1", "schnorr-secp256k1"} {
+		s, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if err := s.Verify(nil, nil, nil); !errors.Is(err, ErrSchemeNotImplemented) {
+			t.Errorf("%s.Verify: got %v, want ErrSchemeNotImplemented", name, err)
+		}
+	}
+}
+
+func TestSecp256k1Stub_PublicKeyFromBytes_ReturnsNotImplemented(t *testing.T) {
+	for _, name := range []string{"ecdsa-secp256k1", "schnorr-secp256k1"} {
+		s, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if _, err := s.PublicKeyFromBytes(nil); !errors.Is(err, ErrSchemeNotImplemented) {
+			t.Errorf("%s.PublicKeyFromBytes: got %v, want ErrSchemeNotImplemented", name, err)
+		}
+	}
+}
+
+func TestSecp256k1Stub_SignatureFromBytes_ReturnsNotImplemented(t *testing.T) {
+	for _, name := range []string{"ecdsa-secp256k1", "schnorr-secp256k1"} {
+		s, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if _, err := s.SignatureFromBytes(nil); !errors.Is(err, ErrSchemeNotImplemented) {
+			t.Errorf("%s.SignatureFromBytes: got %v, want ErrSchemeNotImplemented", name, err)
+		}
+	}
+}
+
+// ============================================================================
+// ValidateBech32Address — program length < 2 boundary (session 165)
+// ============================================================================
+
+func TestValidateBech32Address_WitnessProgramTooShort(t *testing.T) {
+	// A 1-byte witness program is below the minimum of 2 bytes required by
+	// the spec. testEncodeBech32 constructs a syntactically valid (correct-
+	// checksum) bech32 address so the validation reaches the length check.
+	addr := testEncodeBech32(t, 0, []byte{0x00})
+	_, err := ValidateBech32Address(addr)
+	if err == nil {
+		t.Errorf("1-byte witness program should be rejected: %q", addr)
 	}
 }
