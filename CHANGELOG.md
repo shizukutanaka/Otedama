@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 151 — config.yaml.example: document the 6 undiscoverable config fields + add a drift guard)
+
+A strengths/weaknesses pass found that six user-settable config fields existed in the struct
+but were absent from the shipped `config.yaml.example`, so a user could only discover them by
+reading source: `curtail_below_btc_usd`, `power_watts`, `electricity_price_per_kwh`,
+`arbitration_hysteresis_pct` (top-level) and `payout_scheme`, `tls_ca_file` (per-pool). For a
+tool whose config is the primary control surface, undiscoverable options are a real gap.
+
+**`config.yaml.example`**:
+- Added the two per-pool fields (`payout_scheme`, `tls_ca_file`) with their valid values and
+  effects, and two new sections — "Profitability & power" (`curtail_below_btc_usd`,
+  `power_watts`, `electricity_price_per_kwh`) and "Arbitration"
+  (`arbitration_hysteresis_pct`) — each commented, showing the default, matching the file's
+  existing style. Now documents all 18 yaml fields.
+
+**`internal/config/config_file_test.go`**:
+- `TestConfigFile_ExampleDocumentsEveryField` — a durable guard that extracts every
+  `yaml:"…"` tag from `config.go` and fails if any is missing (active or commented) from the
+  example. A field added in code without a matching example entry now breaks the build,
+  closing the drift permanently (same spirit as the metrics doc-parity discipline).
+
+24 packages green.
+
 ### Feat (session 150 — implement the documented `--log-file` so a TUI session has an audit trail)
 
 A strengths/weaknesses pass found a documentation/behaviour mismatch that violated the

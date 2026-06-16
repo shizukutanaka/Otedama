@@ -6,6 +6,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -136,4 +137,38 @@ func TestConfigFile_ExampleFileIsValid(t *testing.T) {
 	}
 	// The example has empty bitcoin_address, so validation fails by design.
 	// We only check parsing succeeds.
+}
+
+// TestConfigFile_ExampleDocumentsEveryField guards against silent drift between
+// the config struct and the shipped example: every yaml field a user can set
+// must appear (active or commented) in config.yaml.example, so a field added in
+// code can never ship undiscoverable. It reads the source rather than using
+// reflection because the yaml tags live on unexported-context structs across
+// the file; a regex over the source is the simplest source of truth.
+func TestConfigFile_ExampleDocumentsEveryField(t *testing.T) {
+	src, err := os.ReadFile("config.go")
+	if err != nil {
+		t.Fatalf("read config.go: %v", err)
+	}
+	example, err := os.ReadFile("../../config.yaml.example")
+	if err != nil {
+		t.Skip("config.yaml.example not found (run from repo root)")
+	}
+
+	tagRE := regexp.MustCompile(`yaml:"([a-z_]+)"`)
+	seen := map[string]bool{}
+	for _, m := range tagRE.FindAllStringSubmatch(string(src), -1) {
+		field := m[1]
+		if seen[field] {
+			continue
+		}
+		seen[field] = true
+		// The field must appear as a YAML key (active or commented) in the
+		// example: start of line, optional indent, optional '#', optional
+		// list-item dash (for keys under a sequence like pools), the key, ':'.
+		keyRE := regexp.MustCompile(`(?m)^[\t ]*#?[\t ]*-?[\t ]*` + regexp.QuoteMeta(field) + `:`)
+		if !keyRE.Match(example) {
+			t.Errorf("config field %q (yaml tag) is not documented in config.yaml.example", field)
+		}
+	}
 }
