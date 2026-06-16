@@ -1623,3 +1623,297 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 		t.Error("runArbitrationLoop: stream map should contain the quote after processing")
 	}
 }
+
+// ============================================================================
+// responsivePool — richer fake SV2 pool for share-response coverage
+// (session 161)
+// ============================================================================
+
+// responsivePool does a full Stratum V2 handshake, sends a trivially-easy
+// mining job, and then responds to shares: the first share gets a
+// SubmitSharesSuccess, the second gets a SubmitSharesError. It stays open
+// until the client disconnects, which allows multiple stats-tick cycles to
+// run inside runSession.
+type responsivePool struct {
+	t       *testing.T
+	ln      net.Listener
+	addr    string
+	started chan struct{}
+}
+
+func newResponsivePool(t *testing.T) *responsivePool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("responsivePool: listen: %v", err)
+	}
+	fp := &responsivePool{
+		t:       t,
+		ln:      ln,
+		addr:    ln.Addr().String(),
+		started: make(chan struct{}),
+	}
+	go fp.serve()
+	return fp
+}
+
+func (fp *responsivePool) URL() string { return "stratum+v2://" + fp.addr }
+func (fp *responsivePool) Close()      { fp.ln.Close() }
+
+func (fp *responsivePool) emit(conn net.Conn, msgType uint8, isChannel bool, payload []byte) {
+	f, err := stratum.WrapMessage(msgType, isChannel, payload)
+	if err != nil {
+		return
+	}
+	data, err := stratum.EncodeFrame(f)
+	if err != nil {
+		return
+	}
+	conn.Write(data) //nolint:errcheck
+}
+
+func (fp *responsivePool) serve() {
+	close(fp.started)
+	conn, err := fp.ln.Accept()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	dec := stratum.NewDecoder(conn)
+	dec.MaxFrameSize = 1 << 20
+
+	// Receive SetupConnection
+	if _, err = dec.ReadFrame(); err != nil {
+		return
+	}
+	// Send SetupConnectionSuccess
+	succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+	payload, _ := succ.Encode()
+	fp.emit(conn, stratum.MsgSetupConnectionSuccess, false, payload)
+
+	// Receive OpenMiningChannel
+	f, err := dec.ReadFrame()
+	if err != nil {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+
+	// Send OpenMiningChannelSuccess with all-0xFF target (trivially easy)
+	omcSucc := stratum.OpenMiningChannelSuccess{
+		ReqID:           omc.ReqID,
+		ChannelID:       1,
+		ExtraNonce2Size: 4,
+	}
+	for i := range omcSucc.Target {
+		omcSucc.Target[i] = 0xFF
+	}
+	payload, _ = omcSucc.Encode()
+	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+	// Send NewMiningJob with the easiest possible target (NBits = 0x207fffff)
+	job := stratum.NewMiningJob{
+		ChannelID: 1,
+		JobID:     1,
+		MinNtime:  0x60000000,
+		NBits:     0x207fffff,
+	}
+	payload, _ = job.Encode()
+	fp.emit(conn, stratum.MsgNewMiningJob, true, payload)
+
+	// Read shares and respond accordingly
+	shareCount := 0
+	for {
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+		f, err = dec.ReadFrame()
+		if err != nil {
+			return
+		}
+		if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+			continue
+		}
+		share, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+		if err != nil {
+			continue
+		}
+		shareCount++
+		switch shareCount {
+		case 1:
+			// First share: acknowledge. Exercises SubmitSharesSuccess handler
+			// and the latency-recording path.
+			resp := stratum.SubmitSharesSuccess{
+				ChannelID:          share.ChannelID,
+				LastSequenceNumber: share.SequenceNumber,
+				NewSubmitsAccepted: 1,
+			}
+			payload, _ = resp.Encode()
+			fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+		case 2:
+			// Second share: reject. Exercises SubmitSharesError handler and
+			// the rejectClass / reject-counter path.
+			resp := stratum.SubmitSharesError{
+				ChannelID:      share.ChannelID,
+				SequenceNumber: share.SequenceNumber,
+				Error:          "Stale share",
+			}
+			payload, _ = resp.Encode()
+			fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+		}
+	}
+}
+
+// TestRunSession_StatsTickAndShareResponses exercises the two largest
+// uncovered regions of runSession: the stats-ticker branch (hashrate,
+// uptime, J/TH, and latency-quantile logging) and the SubmitSharesSuccess /
+// SubmitSharesError inCh handlers. It calls runSession directly with a very
+// short stats interval so the ticker fires many times during the test.
+func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var logs []string
+	var logMu sync.Mutex
+	log := func(level, msg string) {
+		logMu.Lock()
+		logs = append(logs, level+": "+msg)
+		logMu.Unlock()
+	}
+
+	// powerWatts > 0 exercises the J/TH branch inside the stats tick.
+	_ = runSession(ctx, sessionOpts{
+		poolURL:    fp.URL(),
+		user:       "bc1qtest000000000000000000000000000000000",
+		workers:    []*miner.Worker{w},
+		merged:     merged,
+		interval:   5 * time.Millisecond,
+		m:          m,
+		powerWatts: 100.0,
+		log:        log,
+	})
+
+	logMu.Lock()
+	defer logMu.Unlock()
+
+	if got := m.sharesAccepted.Value(); got == 0 {
+		t.Error("sharesAccepted == 0; SubmitSharesSuccess handler was not exercised")
+	}
+	if got := m.sharesRejected.Value(); got == 0 {
+		t.Error("sharesRejected == 0; SubmitSharesError handler was not exercised")
+	}
+	if got := m.hashrate.Value(); got == 0 {
+		t.Error("hashrate gauge = 0; stats-tick branch did not run")
+	}
+	// The latency-logging branch fires once latency is recorded (after the first
+	// SubmitSharesSuccess) and a subsequent stats tick runs.
+	foundLatency := false
+	for _, l := range logs {
+		if strings.Contains(l, "submit latency") {
+			foundLatency = true
+			break
+		}
+	}
+	if !foundLatency {
+		t.Logf("all logs: %v", logs)
+		t.Error("submit-latency log not emitted; latency-quantile stats-tick path not covered")
+	}
+}
+
+// TestRunSession_CurtailmentSilencesJob verifies that when the curtailment
+// gate is raised a received pool job is not forwarded to workers: the session
+// loop logs a debug "ignored (curtailed)" message instead of calling updateWork.
+func TestRunSession_CurtailmentSilencesJob(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// The basic fakePool suffices: it does the full handshake, sends one job,
+	// waits up to 3s for a share (none arrives because workers are idle), then
+	// closes. The session returns before that via the curtail-debug path.
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	gate := new(atomic.Bool)
+	gate.Store(true) // hashing paused from the start
+
+	var logs []string
+	var logMu sync.Mutex
+	log := func(level, msg string) {
+		logMu.Lock()
+		logs = append(logs, level+": "+msg)
+		logMu.Unlock()
+	}
+
+	_ = runSession(ctx, sessionOpts{
+		poolURL:     fp.URL(),
+		user:        "bc1qtest000000000000000000000000000000000",
+		workers:     []*miner.Worker{w},
+		merged:      merged,
+		interval:    10 * time.Millisecond,
+		log:         log,
+		curtailGate: gate,
+	})
+
+	logMu.Lock()
+	defer logMu.Unlock()
+
+	foundIgnored := false
+	for _, l := range logs {
+		if strings.Contains(l, "curtailed") {
+			foundIgnored = true
+			break
+		}
+	}
+	if !foundIgnored {
+		t.Logf("logs: %v", logs)
+		t.Error("expected a 'curtailed' debug log when a job is received while curtailed")
+	}
+}
+
+// noSHA256dDevice is a hal.Device whose SHA256d capability is false,
+// representing a GPU that supports general compute (AI) but not Bitcoin mining.
+type noSHA256dDevice struct{}
+
+func (d *noSHA256dDevice) Identity() hal.Identity       { return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU} }
+func (d *noSHA256dDevice) Capabilities() hal.Capabilities { return hal.Capabilities{SHA256d: false, GeneralCompute: true} }
+func (d *noSHA256dDevice) Shutdown(_ context.Context) error { return nil }
+
+// TestStartMinerWorkers_NoSHA256dDevices covers the early-return error path
+// in startMinerWorkers when every detected device lacks SHA256d support
+// (e.g., an inference-only GPU fleet).
+func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
+	ctx := context.Background()
+	devices := []hal.Device{&noSHA256dDevice{}}
+	_, _, err := startMinerWorkers(ctx, devices, func(_, _ string) {})
+	if err == nil {
+		t.Fatal("startMinerWorkers: expected error when no SHA256d devices, got nil")
+	}
+	if !strings.Contains(err.Error(), "SHA256d") {
+		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}

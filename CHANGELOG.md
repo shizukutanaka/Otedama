@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 161 — engine: cover runSession stats-tick, share-response handlers, and startMinerWorkers no-SHA256d path)
+
+**Coverage gap closed (`internal/engine`): 88.9% → 92.6%**
+
+Three targeted tests were added to `internal/engine/run_test.go`:
+
+**`TestRunSession_StatsTickAndShareResponses`** exercises the largest uncovered block
+in `runSession` (67.6% → 94.6%):
+- Introduces `responsivePool`, a richer fake SV2 pool that does the full handshake, sends a
+  trivially-easy job (NBits=0x207fffff, all-0xFF target), and responds to the first share with
+  `SubmitSharesSuccess` and the second with `SubmitSharesError`.
+- Calls `runSession` directly with `interval = 5ms` so the `statsTicker.C` branch fires many
+  times.
+- Covers: hashrate-gauge `Set`, uptime-accountant `observe`, J/TH efficiency calculation
+  (`powerWatts = 100.0`), share-acceptance rate update, latency-quantile logging (the
+  `p95 > 0` branch — only fires once the first `SubmitSharesSuccess` has recorded a latency
+  sample), `sharesAccepted.Inc`, `sharesRejected.Inc`, and `rejectClass` for the "Stale share"
+  reason code.
+
+**`TestRunSession_CurtailmentSilencesJob`** covers the `isCurtailed()` branch inside the
+`inCh` job handler: when the curtailment gate is raised on entry, the received `NewMiningJob`
+is not forwarded to workers and a debug log "job N ignored (curtailed)" is emitted instead.
+
+**`TestStartMinerWorkers_NoSHA256dDevices`** covers the early-return error path in
+`startMinerWorkers` (line 63-65) when every detected device lacks SHA256d support (e.g., an
+AI-only GPU fleet); now at 100% coverage. Uses a new `noSHA256dDevice` stub implementing
+`hal.Device` with `SHA256d: false, GeneralCompute: true`.
+
+All 24 packages green. Test count: 728.
+
 ### Fix (session 160 — streamsSlice: merge per-device yields instead of random-pick)
 
 **Bug found**: `streamsSlice` converted the `streamMap` (keyed `"providerID:deviceID"`) into
