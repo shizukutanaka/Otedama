@@ -195,3 +195,45 @@ func TestDashboard_ShortenURL(t *testing.T) {
 		}
 	}
 }
+
+// ----- Dashboard.footer — gap clamp (session 166) -----
+
+func TestDashboard_Footer_GapClampedAtMinimum(t *testing.T) {
+	// 1_000_000 h produces "  uptime: 1000000h 0m 0s" (24 visible chars).
+	// At the minimum valid width of 40 cols: gap = 40 - 24 - 14 - 2 = 0,
+	// which triggers the gap < 1 clamp branch.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.SetWidth(40)
+	d.render(Stats{Uptime: 1_000_000 * time.Hour})
+	if !strings.Contains(buf.String(), "uptime:") {
+		t.Error("footer must contain 'uptime:' even when gap is clamped to 1")
+	}
+}
+
+// ----- Dashboard.renderLoop — updateCh and ticker branches (session 166) -----
+
+func TestDashboard_RenderLoop_UpdateAndTick(t *testing.T) {
+	if testing.Short() {
+		t.Skip("renderLoop timing test requires ~1.1 s; skipped in short mode")
+	}
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.Start()
+
+	// Deliver stats updates so renderLoop drains updateCh (lines 156-159).
+	for i := 0; i < 3; i++ {
+		d.Update(Stats{HashRate: 1.5e6, Connected: true, Devices: 1})
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait for the ticker (time.Second interval) to fire at least once,
+	// triggering the ticker case (lines 160-164) which calls d.render.
+	time.Sleep(1100 * time.Millisecond)
+
+	d.Stop()
+
+	if !strings.Contains(buf.String(), "1.50 MH/s") {
+		t.Error("expected rendered hashrate in output after ticker fired")
+	}
+}

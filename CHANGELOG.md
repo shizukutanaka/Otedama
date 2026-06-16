@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 166 — tui package: 94.6% → 100%; footer gap-clamp branch, renderLoop updateCh and ticker cases)
+
+**Coverage improvements:**
+- `internal/tui` 94.6% → **100.0%** — covered all remaining branches: the footer gap-clamp
+  (`gap < 1 → gap = 1`), the renderLoop updateCh case, and the renderLoop ticker case.
+
+**Tests added (2 new) in `internal/tui/dashboard_test.go`:**
+
+- `TestDashboard_Footer_GapClampedAtMinimum`: Sets `SetWidth(40)` (the minimum valid width) and
+  renders with `Uptime = 1_000_000 * time.Hour`, producing `"  uptime: 1000000h 0m 0s"` (24
+  visible chars). With right side = 14 visible chars, `gap = 40 − 24 − 14 − 2 = 0 < 1`, which
+  triggers the `gap = 1` clamp in `footer()` (dashboard.go line 310).
+
+- `TestDashboard_RenderLoop_UpdateAndTick`: Calls `d.Start()` to launch the renderLoop goroutine,
+  delivers three stats updates via `d.Update()` (covering the `case s := <-d.updateCh` branch,
+  lines 156-159), then waits 1.1 seconds for the `time.NewTicker(time.Second)` to fire (covering
+  the `case <-ticker.C` branch, lines 160-164 which call `d.render`). Guarded by
+  `testing.Short()` so it is skipped when running with `-short`. Verifies the rendered hashrate
+  appears in the output buffer after the tick.
+
+**Dead code note:** The two empty `default:` blocks inside `Update()` (lines 138 and 142) have
+zero statements and are counted as 0/0 by the coverage tool — they are race-condition guards with
+no body that cannot increase the statement-coverage percentage.
+
 ### Test (session 165 — btccrypto coverage: secp256k1 stub methods, bech32 v0/v1/future witness program edge cases, 1-byte program length boundary)
 
 **Coverage improvements:**
