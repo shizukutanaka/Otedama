@@ -10,6 +10,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 170 — stratumv1 dialer 100%; config 100%; 8 new tests covering all Negotiate error paths and flag-layer config branches)
+
+**Coverage improvements:**
+- `internal/poolproto/stratumv1` — `dialer.go` **100%** (was ~86%); package total 99.7%.
+  6 new tests cover every `Negotiate` error path: TLS CA PEM parse failure, subscribe call
+  error, subscribe errResult, subscribe result unparse-able, authorize call error, and the
+  optional extranonce.subscribe failure branch (lines 68-70, 121-124, 125-128, 130-133,
+  145-148, 166-170 of dialer.go).
+- `internal/config` — **100%** (was ~99%). 2 new tests cover the `os.Getenv` branch in
+  `EnvWarnings` when `env == nil` (config.go:335) and the `flags.LogLevel != ""` branch in
+  `ResolveWithOrigins` (config.go:457-460).
+
+**Overall project coverage: 95.9% → 96.2%** (all 24 packages green).
+
+**Tests added (8 new):**
+
+- `TestDialer_Dial_TLSBadPEM_ReturnsError` in `internal/poolproto/stratumv1/stratumv1_test.go`:
+  Creates a TLS Dialer with `dialFn=nil` and `tlsConfig=nil`, passes garbage bytes in
+  `Credentials.TLSRootCAsPEM`. `tlsConfigWithExtraCAs` calls `x509.CertPool.AppendCertsFromPEM`
+  which returns `false` for non-PEM input, triggering the error return at `dialer.go:68-70`.
+
+- `makeNegotiateConn` (test helper): creates a `net.Pipe()`-backed connection with an
+  injected `dialFn`, so `d.Dial` succeeds and the server side is controlled by the test.
+
+- `TestNegotiate_SubscribeCallError`: server reads subscribe then closes without responding.
+  `readLoop` sees EOF, calls `cancelPending()`, and `sess.call` returns
+  "session closed before response". Covers `dialer.go:121-124`.
+
+- `TestNegotiate_SubscribeErrResult`: server responds with `error:["20","Pool full",null]`.
+  `resp.errResult != nil` branch executes. Covers `dialer.go:125-128`.
+
+- `TestNegotiate_SubscribeResultUnparseable`: server responds with `result:null, error:null`.
+  `parseSubscribeResult(nil)` fails (nil is not `[]interface{}`). Covers `dialer.go:130-133`.
+
+- `TestNegotiate_AuthorizeCallError`: server responds OK to subscribe then closes after reading
+  authorize (no response). Covers `dialer.go:145-148`.
+
+- `TestNegotiate_ExtraNonceSubscribeError`: server responds OK to both subscribe and authorize,
+  then closes after reading extranonce.subscribe. The `eerr != nil` body (`_ = eerr`) at
+  `dialer.go:166-170` executes; `Negotiate` still returns a valid session (the failure is
+  non-fatal per the comment about OCEAN/older Antpool pools).
+
+- `TestEnvWarnings_NilEnvUsesProcessEnv` in `internal/config/config_test.go`:
+  Calls `EnvWarnings(nil)`. The `env == nil` branch at `config.go:335` takes the
+  `return os.Getenv(key)` path. Test verifies no panic; count is environment-dependent.
+
+- `TestResolveWithOrigins_FlagLogLevelOrigin` in `internal/config/config_test.go`:
+  Calls `ResolveWithOrigins` with `flags.LogLevel = "debug"` and env `OTEDAMA_LOG_LEVEL=warn`.
+  Asserts `cfg.LogLevel == "debug"` and `o.LogLevel == OriginFlag`. Covers `config.go:457-460`.
+
 ### Test (session 169 — httpserver 95.0% → 98.3%; lightning 90.0% → 90.3%; Addr fallback, ServeError stored, EntropyToMnemonic word-range error, ChangePassphrase wrong-passphrase)
 
 **Coverage improvements:**

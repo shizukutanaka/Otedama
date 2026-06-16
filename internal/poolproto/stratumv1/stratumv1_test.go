@@ -633,6 +633,161 @@ func TestDialer_Dial_DialFnError_ReturnsError(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// session 170 — Negotiate error paths (dialer.go:68-70, 121-124, 125-128,
+// 130-133, 145-148, 166-170)
+// ============================================================================
+
+// TestDialer_Dial_TLSBadPEM_ReturnsError covers dialer.go:68-70 —
+// tlsConfigWithExtraCAs fails when the PEM buffer contains no valid certificate
+// (x509.CertPool.AppendCertsFromPEM returns false for arbitrary bytes).
+func TestDialer_Dial_TLSBadPEM_ReturnsError(t *testing.T) {
+	d := &Dialer{useTLS: true} // dialFn and tlsConfig are nil: production path
+	creds := poolproto.Credentials{TLSRootCAsPEM: []byte("not-a-pem-certificate")}
+	_, err := d.Dial(context.Background(), "stratum+tls://pool.example.test:3334", creds)
+	if err == nil {
+		t.Error("Dial with invalid TLS CA PEM should return an error")
+	}
+}
+
+// makeNegotiateConn sets up a net.Pipe-backed connection and a Dialer whose
+// dialFn returns clientConn. The caller controls the server side via serverConn.
+func makeNegotiateConn(t *testing.T) (*Dialer, poolproto.Connection, net.Conn) {
+	t.Helper()
+	clientConn, serverConn := net.Pipe()
+	d := &Dialer{
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return clientConn, nil
+		},
+	}
+	conn, err := d.Dial(context.Background(), "stratum+tcp://test.local:3333", poolproto.Credentials{})
+	if err != nil {
+		clientConn.Close()
+		serverConn.Close()
+		t.Fatalf("makeNegotiateConn Dial: %v", err)
+	}
+	return d, conn, serverConn
+}
+
+// TestNegotiate_SubscribeCallError covers dialer.go:121-124 —
+// sess.call returns an error when the server closes the connection without
+// responding to mining.subscribe (readLoop EOF cancels the pending call).
+func TestNegotiate_SubscribeCallError(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		_, _ = reader.ReadBytes('\n') // drain subscribe request; then close
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Error("Negotiate: expected error when subscribe call fails (server closed)")
+	}
+}
+
+// TestNegotiate_SubscribeErrResult covers dialer.go:125-128 —
+// the pool responds to mining.subscribe with a non-nil JSON-RPC error field.
+func TestNegotiate_SubscribeErrResult(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		line, _ := reader.ReadBytes('\n')
+		var req rpcMessage
+		_ = json.Unmarshal(line, &req)
+		id, _ := json.Marshal(req.ID)
+		resp := `{"id":` + string(id) + `,"result":null,"error":["20","Pool full",null]}` + "\n"
+		_, _ = serverConn.Write([]byte(resp))
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Error("Negotiate: expected error when subscribe response contains errResult")
+	}
+}
+
+// TestNegotiate_SubscribeResultUnparseable covers dialer.go:130-133 —
+// parseSubscribeResult fails when the pool returns result:null with no error.
+func TestNegotiate_SubscribeResultUnparseable(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		line, _ := reader.ReadBytes('\n')
+		var req rpcMessage
+		_ = json.Unmarshal(line, &req)
+		id, _ := json.Marshal(req.ID)
+		resp := `{"id":` + string(id) + `,"result":null,"error":null}` + "\n"
+		_, _ = serverConn.Write([]byte(resp))
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Error("Negotiate: expected error when subscribe result cannot be parsed")
+	}
+}
+
+// TestNegotiate_AuthorizeCallError covers dialer.go:145-148 —
+// sess.call returns an error when the server closes the connection instead
+// of responding to mining.authorize.
+func TestNegotiate_AuthorizeCallError(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		// Respond OK to subscribe.
+		line, _ := reader.ReadBytes('\n')
+		var req rpcMessage
+		_ = json.Unmarshal(line, &req)
+		id, _ := json.Marshal(req.ID)
+		subscribeResp := `{"id":` + string(id) + `,"result":[[["mining.notify","s1"]],"deadbeef00",4],"error":null}` + "\n"
+		_, _ = serverConn.Write([]byte(subscribeResp))
+		// Read authorize then close without responding.
+		_, _ = reader.ReadBytes('\n')
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Error("Negotiate: expected error when authorize call fails (server closed)")
+	}
+}
+
+// TestNegotiate_ExtraNonceSubscribeError covers dialer.go:166-170 —
+// extranonce.subscribe fails (eerr != nil) when the server closes after
+// successful subscribe/authorize; Negotiate still returns a valid session.
+func TestNegotiate_ExtraNonceSubscribeError(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		var req rpcMessage
+		// Subscribe OK.
+		line, _ := reader.ReadBytes('\n')
+		_ = json.Unmarshal(line, &req)
+		id, _ := json.Marshal(req.ID)
+		_, _ = serverConn.Write([]byte(
+			`{"id":` + string(id) + `,"result":[[["mining.notify","s1"]],"deadbeef00",4],"error":null}` + "\n",
+		))
+		// Authorize OK.
+		line, _ = reader.ReadBytes('\n')
+		_ = json.Unmarshal(line, &req)
+		id, _ = json.Marshal(req.ID)
+		_, _ = serverConn.Write([]byte(
+			`{"id":` + string(id) + `,"result":true,"error":null}` + "\n",
+		))
+		// Read extranonce.subscribe then close without responding.
+		_, _ = reader.ReadBytes('\n')
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: expected success (extranonce failure is non-fatal); got %v", err)
+	}
+	_ = sess.Close()
+}
+
 func TestDialer_Dial_DialFnSuccess_ReturnsConnection(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()

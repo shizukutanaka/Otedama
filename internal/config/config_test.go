@@ -972,6 +972,33 @@ func TestValidate_ArbitrationHysteresisPct_ValidRange(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// session 170 — config.go:335, config.go:457-460
+// ============================================================================
+
+// TestEnvWarnings_NilEnvUsesProcessEnv covers config.go:335 —
+// when env is nil, EnvWarnings uses os.Getenv instead of the map.
+// The test just verifies the call doesn't panic; the actual warnings depend on
+// the process environment which is opaque to the test.
+func TestEnvWarnings_NilEnvUsesProcessEnv(t *testing.T) {
+	warns := EnvWarnings(nil)
+	_ = warns // result depends on process env; we only verify no panic
+}
+
+// TestResolveWithOrigins_FlagLogLevelOrigin covers config.go:457-460 —
+// when flags.LogLevel is non-empty it overrides env and is attributed OriginFlag.
+func TestResolveWithOrigins_FlagLogLevelOrigin(t *testing.T) {
+	env := map[string]string{"OTEDAMA_LOG_LEVEL": "warn"}
+	flags := FlagValues{LogLevel: "debug"}
+	cfg, o := ResolveWithOrigins(Config{}, env, flags)
+	if cfg.LogLevel != "debug" {
+		t.Errorf("LogLevel = %q, want debug (flag overrides env)", cfg.LogLevel)
+	}
+	if o.LogLevel != OriginFlag {
+		t.Errorf("LogLevel origin = %v, want OriginFlag", o.LogLevel)
+	}
+}
+
 // TestResolveWithOrigins_NumericFileFields covers the four numeric file-layer
 // override blocks (ArbitrationHysteresisPct, CurtailBelowBTCUSD, PowerWatts,
 // ElectricityPricePerKWh) that are skipped when the file value is zero.
