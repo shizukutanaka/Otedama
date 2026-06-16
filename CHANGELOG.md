@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactor (session 153 — engine: make publishBTCRate testable via dependency inversion)
+
+A coverage-driven pass found `publishBTCRate` at 55.6% — the lowest in the engine package.
+The clock-skew, rate-age, and source-health branches added in sessions 134/138/143 were
+effectively untestable: the function took the concrete `*rates.Fetcher`, whose post-fetch
+state (skew, age, source counts) cannot be constructed from the engine package (the fields
+are unexported in `rates`). That concrete dependency was a testability smell.
+
+**`internal/engine/stats.go`**:
+- Introduced a small `rateStats` interface (the four read methods publishBTCRate needs) and
+  changed the signature to accept it. `*rates.Fetcher` satisfies it unchanged; the `rates`
+  import is no longer needed in stats.go. This is dependency inversion (depend on the
+  narrow behaviour, not the concrete type) and leaves the production call site identical.
+
+**`internal/engine/run_test.go`**:
+- Added a `fakeRateStats` and two tests: all post-fetch branches publish their gauges
+  (rate/skew/age/sources); and before any fetch the skip-branches leave the gauges
+  untouched. `publishBTCRate` goes from 55.6% to **100%** coverage.
+
+No behaviour change. 24 packages green.
+
 ### Fix (session 152 — stratum V1: cap the line length so an untrusted pool cannot OOM the miner)
 
 A robustness pass on the untrusted pool-input path found a real unbounded-allocation DoS.

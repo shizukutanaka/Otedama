@@ -19,7 +19,6 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
-	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
@@ -349,12 +348,24 @@ func (m *HashrateMonitor) Observe(hashrate float64) {
 // state (useful for health endpoints / readiness).
 func (m *HashrateMonitor) Stalled() bool { return m.warned }
 
+// rateStats is the read-only view of the rate fetcher that publishBTCRate
+// needs. Depending on this interface rather than the concrete *rates.Fetcher
+// keeps the publish glue unit-testable with a fake that reports any post-fetch
+// state (skew, age, source health) without driving real network I/O.
+// *rates.Fetcher satisfies it.
+type rateStats interface {
+	BTCUSDRate() (rate float64, fresh bool)
+	ClockSkewSeconds() float64
+	RateAge() (age time.Duration, everFetched bool)
+	SourceHealth() (ok, total int, fetched bool)
+}
+
 // publishBTCRate copies the fetcher's current BTC/USD rate and observed clock
 // skew into their respective gauges. The rate gauge uses the fetcher's fallback
 // before the first successful fetch, so it is never left at zero. The skew
 // gauge is updated whenever the fetcher has seen at least one HTTP Date header
 // from a source (0 until then, signalling "not yet observed").
-func publishBTCRate(m *engineMetrics, f *rates.Fetcher) {
+func publishBTCRate(m *engineMetrics, f rateStats) {
 	if rate, _ := f.BTCUSDRate(); rate > 0 {
 		m.btcUSDRate.Set(rate)
 	}

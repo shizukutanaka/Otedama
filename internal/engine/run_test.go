@@ -741,6 +741,79 @@ func TestPublishBTCRate_SetsGauge(t *testing.T) {
 	}
 }
 
+// fakeRateStats is a configurable rateStats for exercising publishBTCRate's
+// post-fetch branches (skew, age, source health) without real network I/O.
+type fakeRateStats struct {
+	rate        float64
+	fresh       bool
+	skew        float64
+	age         time.Duration
+	everFetched bool
+	ok, total   int
+	fetched     bool
+}
+
+func (f fakeRateStats) BTCUSDRate() (float64, bool)    { return f.rate, f.fresh }
+func (f fakeRateStats) ClockSkewSeconds() float64      { return f.skew }
+func (f fakeRateStats) RateAge() (time.Duration, bool) { return f.age, f.everFetched }
+func (f fakeRateStats) SourceHealth() (int, int, bool) { return f.ok, f.total, f.fetched }
+
+func TestPublishBTCRate_PublishesAllPostFetchBranches(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	publishBTCRate(m, fakeRateStats{
+		rate: 96000, fresh: true,
+		skew:        42,
+		age:         90 * time.Second,
+		everFetched: true,
+		ok:          2, total: 3, fetched: true,
+	})
+
+	if got := m.btcUSDRate.Value(); got != 96000 {
+		t.Errorf("btcUSDRate = %v, want 96000", got)
+	}
+	if got := m.clockSkewSeconds.Value(); got != 42 {
+		t.Errorf("clockSkewSeconds = %v, want 42", got)
+	}
+	if got := m.btcRateAgeSeconds.Value(); got != 90 {
+		t.Errorf("btcRateAgeSeconds = %v, want 90", got)
+	}
+	if got := m.rateSourcesOK.Value(); got != 2 {
+		t.Errorf("rateSourcesOK = %v, want 2", got)
+	}
+	if got := m.rateSourcesTotal.Value(); got != 3 {
+		t.Errorf("rateSourcesTotal = %v, want 3", got)
+	}
+}
+
+func TestPublishBTCRate_SkipsBranchesBeforeFetch(t *testing.T) {
+	// Zero/false state (no fetch yet): rate gauge stays at the sentinel for a
+	// non-positive rate, skew stays untouched (skew==0), and the age/source
+	// gauges are not written (everFetched/fetched false).
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.btcUSDRate.Set(-1)
+	m.clockSkewSeconds.Set(-1)
+	m.btcRateAgeSeconds.Set(-1)
+	m.rateSourcesOK.Set(-1)
+
+	publishBTCRate(m, fakeRateStats{rate: 0, skew: 0, everFetched: false, fetched: false})
+
+	if got := m.btcUSDRate.Value(); got != -1 {
+		t.Errorf("btcUSDRate = %v, want unchanged -1 (rate<=0)", got)
+	}
+	if got := m.clockSkewSeconds.Value(); got != -1 {
+		t.Errorf("clockSkewSeconds = %v, want unchanged -1 (skew==0)", got)
+	}
+	if got := m.btcRateAgeSeconds.Value(); got != -1 {
+		t.Errorf("btcRateAgeSeconds = %v, want unchanged -1 (not fetched)", got)
+	}
+	if got := m.rateSourcesOK.Value(); got != -1 {
+		t.Errorf("rateSourcesOK = %v, want unchanged -1 (not fetched)", got)
+	}
+}
+
 func TestPublishBTCRate_AgeGaugeZeroBeforeAnyFetch(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
