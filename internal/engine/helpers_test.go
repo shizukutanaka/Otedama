@@ -323,6 +323,72 @@ func TestStreamsSlice_EmptyInput(t *testing.T) {
 	}
 }
 
+func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
+	// A provider with two GPU devices (gpu-0, gpu-1) produces two separate
+	// map entries, both sharing StreamID "ai.akash". The old first-seen pick
+	// would return only one entry, leaving one device with no YieldPerDevice
+	// hit so it would fall back to the other device's DefaultYield — silently
+	// returning the wrong rate for heterogeneous GPU configurations.
+	m := map[string]arbitration.Stream{
+		"ai.akash:gpu-0": {
+			ID: "ai.akash",
+			YieldPerDevice: map[string]arbitration.Yield{
+				"gpu-0": {SatsPerSecond: 1000, Confidence: 0.9},
+			},
+			DefaultYield: arbitration.Yield{SatsPerSecond: 1000, Confidence: 0.9},
+		},
+		"ai.akash:gpu-1": {
+			ID: "ai.akash",
+			YieldPerDevice: map[string]arbitration.Yield{
+				"gpu-1": {SatsPerSecond: 700, Confidence: 0.9},
+			},
+			DefaultYield: arbitration.Yield{SatsPerSecond: 700, Confidence: 0.9},
+		},
+	}
+
+	got := streamsSlice(m)
+	if len(got) != 1 {
+		t.Fatalf("want 1 merged stream, got %d: %+v", len(got), got)
+	}
+
+	s := got[0]
+	if s.ID != "ai.akash" {
+		t.Errorf("stream ID = %q, want ai.akash", s.ID)
+	}
+	if y := s.YieldFor("gpu-0"); y.SatsPerSecond != 1000 {
+		t.Errorf("gpu-0 yield = %v, want 1000", y.SatsPerSecond)
+	}
+	if y := s.YieldFor("gpu-1"); y.SatsPerSecond != 700 {
+		t.Errorf("gpu-1 yield = %v, want 700 (was silently wrong before the merge fix)", y.SatsPerSecond)
+	}
+}
+
+func TestStreamsSlice_MultiDeviceMergeDoesNotMutateInput(t *testing.T) {
+	// The merge must not alias its YieldPerDevice maps back into m;
+	// otherwise a later updateStream call would mutate the returned slice.
+	m := map[string]arbitration.Stream{
+		"ai.akash:gpu-0": {
+			ID: "ai.akash",
+			YieldPerDevice: map[string]arbitration.Yield{
+				"gpu-0": {SatsPerSecond: 500},
+			},
+		},
+	}
+
+	got := streamsSlice(m)
+	if len(got) != 1 {
+		t.Fatalf("want 1 stream, got %d", len(got))
+	}
+
+	// Mutating the returned stream's YieldPerDevice must not reach m.
+	got[0].YieldPerDevice["gpu-0"] = arbitration.Yield{SatsPerSecond: 9999}
+
+	orig := m["ai.akash:gpu-0"].YieldPerDevice["gpu-0"]
+	if orig.SatsPerSecond == 9999 {
+		t.Error("streamsSlice must deep-copy YieldPerDevice; mutating the result should not affect the input map")
+	}
+}
+
 // ============================================================================
 // applyAllocation — workload switching
 // ============================================================================

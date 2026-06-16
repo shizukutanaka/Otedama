@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 160 — streamsSlice: merge per-device yields instead of random-pick)
+
+**Bug found**: `streamsSlice` converted the `streamMap` (keyed `"providerID:deviceID"`) into
+the flat `[]arbitration.Stream` the engine passes to `Decide`. When a provider had N devices, N
+map entries all shared the same `StreamID`, and the function used a first-seen set to
+de-duplicate — keeping whichever entry Go's non-deterministic map walk returned first and
+silently discarding all others. The surviving entry only contained the `YieldPerDevice` for one
+device. For the dropped entries, the arbitration engine's `YieldFor(devID)` lookup fell through
+to `DefaultYield` (the single surviving device's rate), so every second GPU in a multi-GPU
+setup was evaluated at the first GPU's rate instead of its own. With homogeneous GPUs the error
+is numerically invisible; with heterogeneous configurations (e.g. RTX 4090 + RTX 3080) the
+engine would misallocate revenue.
+
+**Fix (`internal/engine/arbitrate.go` — `streamsSlice`)**: Replaced the first-seen set with a
+merge: the first entry for each `StreamID` becomes the representative (deep-copied to avoid
+aliasing the input map), and subsequent same-ID entries contribute their `YieldPerDevice` keys
+into it. The result is a single `Stream` per provider that contains correct per-device yields
+for all devices, which the arbitration engine can look up precisely.
+
+**Tests (2 new in `internal/engine/helpers_test.go`)**:
+- `TestStreamsSlice_MergesYieldPerDeviceForSameStreamID` — ai.akash with gpu-0 (1000 sat/s) and
+  gpu-1 (700 sat/s) produces exactly 1 merged stream; `YieldFor("gpu-0")` = 1000,
+  `YieldFor("gpu-1")` = 700 (would have returned 1000 before the fix, depending on map order).
+- `TestStreamsSlice_MultiDeviceMergeDoesNotMutateInput` — mutating the returned slice's
+  `YieldPerDevice` does not reach the input map (deep-copy guard).
+
+All 24 packages green.
+
 ### Fix (session 159 — rates.Fetch single-flight coalescing: close latent HTTP 429 risk)
 
 **Weakness found**: The doc-comment on `Fetcher.Fetch` promised *"only one fetch will run at

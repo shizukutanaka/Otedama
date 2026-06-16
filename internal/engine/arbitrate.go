@@ -160,16 +160,41 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 }
 
 // streamsSlice flattens the streams map into a slice, de-duplicated by
-// StreamID (the map is keyed per device, the arbitration engine wants
-// one entry per stream).
+// StreamID. The map is keyed "providerID:deviceID", so a provider with N
+// devices produces N entries all sharing the same StreamID. A simple
+// first-seen pick would lose the YieldPerDevice data for all but one device,
+// causing the arbitration engine to fall back to DefaultYield for the rest.
+// Instead, same-ID entries are merged: the first becomes the representative
+// and subsequent ones contribute their YieldPerDevice entries into it.
 func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
-	seen := make(map[arbitration.StreamID]bool)
-	var result []arbitration.Stream
+	merged := make(map[arbitration.StreamID]*arbitration.Stream, len(m))
 	for _, s := range m {
-		if !seen[s.ID] {
-			seen[s.ID] = true
-			result = append(result, s)
+		if rep, ok := merged[s.ID]; ok {
+			// Merge YieldPerDevice from this entry into the representative so
+			// the arbitration engine has per-device yields for every device, not
+			// just whichever map entry happened to be iterated first.
+			for devID, y := range s.YieldPerDevice {
+				if rep.YieldPerDevice == nil {
+					rep.YieldPerDevice = make(map[string]arbitration.Yield)
+				}
+				rep.YieldPerDevice[devID] = y
+			}
+		} else {
+			// Deep-copy to avoid aliasing the YieldPerDevice map inside m.
+			cp := s
+			if len(s.YieldPerDevice) > 0 {
+				ypd := make(map[string]arbitration.Yield, len(s.YieldPerDevice))
+				for k, v := range s.YieldPerDevice {
+					ypd[k] = v
+				}
+				cp.YieldPerDevice = ypd
+			}
+			merged[s.ID] = &cp
 		}
+	}
+	result := make([]arbitration.Stream, 0, len(merged))
+	for _, s := range merged {
+		result = append(result, *s)
 	}
 	return result
 }
