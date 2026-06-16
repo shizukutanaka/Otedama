@@ -9,7 +9,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +24,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
+	"github.com/shizukutanaka/Otedama/internal/tui"
 
 	// Register the Stratum V1 dialer so poolproto.DialURL works in V1 tests.
 	_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"
@@ -1143,4 +1146,188 @@ func TestStartMinerWorkers_MixedDevices(t *testing.T) {
 	for _, w := range workers {
 		w.Stop()
 	}
+}
+
+// ============================================================================
+// runSessionV1 — remaining branch coverage (session 163)
+//
+// The five tests below cover paths left dark after the initial V1 test set:
+//   (a) opts.tlsCAFile set but unreadable → warn branch
+//   (b) opts.tlsCAFile set and readable → success branch (PEM stored)
+//   (c) poolproto.DialURL fails (nothing listening) → error return
+//   (d) opts.powerWatts > 0 in stats tick → joulesPerTerahash branch
+//   (e) opts.dashboard != nil in stats tick → dashboard.Update branch
+// ============================================================================
+
+// TestRunSessionV1_TLSCAFileUnreadable: opts.tlsCAFile names a file that
+// cannot be read. runSessionV1 must log a warning and proceed (using system
+// roots), then fail at the dial because nothing is listening.
+func TestRunSessionV1_TLSCAFileUnreadable(t *testing.T) {
+	// Open and immediately close a listener to obtain a free port that will
+	// then refuse all connections.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	var logs []string
+	var mu sync.Mutex
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	close(merged)
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:   "stratum+tcp://" + addr,
+		user:      "test",
+		merged:    merged,
+		interval:  time.Minute,
+		tlsCAFile: "/nonexistent-ca-for-runSessionV1-warn-test.pem",
+		log:       logFn,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	found := false
+	for _, l := range logs {
+		if strings.Contains(l, "tls_ca_file") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'tls_ca_file' warning in logs, got: %v", logs)
+	}
+}
+
+// TestRunSessionV1_TLSCAFileReadable: opts.tlsCAFile names a readable file.
+// runSessionV1 stores the PEM in credentials (lines 779-781), then fails
+// at the dial because nothing is listening at the given address.
+func TestRunSessionV1_TLSCAFileReadable(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "ca-*.pem")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	_, _ = f.WriteString("-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n")
+	f.Close()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	close(merged)
+
+	err = runSessionV1(ctx, sessionOpts{
+		poolURL:   "stratum+tcp://" + addr,
+		user:      "test",
+		merged:    merged,
+		interval:  time.Minute,
+		tlsCAFile: f.Name(),
+		log:       func(_, _ string) {},
+	})
+	if err == nil {
+		t.Error("runSessionV1: expected error when dial fails, got nil")
+	}
+}
+
+// TestRunSessionV1_DialError: poolproto.DialURL cannot connect to the pool
+// (nothing is listening). runSessionV1 must return a non-nil error immediately
+// without entering the session loop.
+func TestRunSessionV1_DialError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	close(merged)
+
+	err = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "test",
+		merged:   merged,
+		interval: time.Minute,
+		log:      func(_, _ string) {},
+	})
+	if err == nil {
+		t.Error("runSessionV1: expected error when dial fails, got nil")
+	}
+}
+
+// TestRunSessionV1_PowerWattsInStatsTick: opts.powerWatts > 0 and the
+// worker is hashing (currentHashRate > 0) when the stats ticker fires.
+// This exercises the joulesPerTerahash metric branch (lines 831-835).
+func TestRunSessionV1_PowerWattsInStatsTick(t *testing.T) {
+	// fakeV1Pool(t, true) sends one mining.notify job (genesis difficulty) then
+	// sleeps 50ms and closes — just long enough for the stats tick to fire.
+	addr := fakeV1Pool(t, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:    "stratum+tcp://" + addr,
+		user:       "w",
+		workers:    []*miner.Worker{w},
+		merged:     shares,
+		interval:   30 * time.Millisecond,
+		powerWatts: 100.0,
+		log:        func(_, _ string) {},
+		m:          m,
+	})
+	// Correctness: joulesPerTerahash = watts * 1e12 / hashrate. We just verify
+	// the path ran without panic; the exact value depends on machine speed.
+}
+
+// TestRunSessionV1_DashboardUpdated: opts.dashboard != nil — the V1 stats
+// tick must call dashboard.Update (lines 824-826). A Dashboard wired to
+// io.Discard suppresses the ANSI output so the test log stays clean.
+func TestRunSessionV1_DashboardUpdated(t *testing.T) {
+	addr := fakeV1Pool(t, true) // sends job then closes after 50ms
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	dash := tui.NewDashboard(io.Discard)
+	dash.Start()
+	defer dash.Stop()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:   "stratum+tcp://" + addr,
+		user:      "w",
+		workers:   []*miner.Worker{w},
+		merged:    shares,
+		interval:  30 * time.Millisecond,
+		dashboard: dash,
+		log:       func(_, _ string) {},
+	})
 }

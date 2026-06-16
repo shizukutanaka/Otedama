@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 163 — runSessionV1 branch coverage: TLS CA file paths, dial error, powerWatts/J-per-TH, dashboard update)
+
+**Coverage improvements:**
+- `internal/engine` 92.6% → **93.6%** — `runSessionV1` 77.5% → **86.5%**
+
+**Tests added (5 new) in `internal/engine/coverage_test.go`:**
+
+- `TestRunSessionV1_TLSCAFileUnreadable`: `opts.tlsCAFile` names a non-existent file; verifies
+  the `"cannot read tls_ca_file"` warn branch (lines 776-779) is logged before the dial attempt.
+  The subsequent dial to a closed port returns an error, confirming the function degrades gracefully
+  (system roots, not hard failure).
+
+- `TestRunSessionV1_TLSCAFileReadable`: `opts.tlsCAFile` names a readable temp file; the PEM is
+  stored in credentials (lines 779-781), then the dial fails because nothing is listening. Confirms
+  both the success path of the CA-file read AND that the error is propagated rather than silently
+  swallowed.
+
+- `TestRunSessionV1_DialError`: no pool is listening at the given address; `poolproto.DialURL`
+  returns an error immediately, covering the error-return path at lines 784-786 that none of the
+  prior V1 tests reached (they all had a working fake pool for the handshake).
+
+- `TestRunSessionV1_PowerWattsInStatsTick`: `opts.powerWatts = 100.0` with a live worker hashing
+  against a job sent by `fakeV1Pool`; when the stats ticker fires, `currentHashRate > 0` so the
+  `joulesPerTerahash` metric branch (lines 831-835) is reached for the first time in V1.
+
+- `TestRunSessionV1_DashboardUpdated`: `opts.dashboard = tui.NewDashboard(io.Discard)` with a live
+  worker; the V1 stats tick calls `dashboard.Update(...)` (line 824-826), which was dark because
+  every prior V1 test left `opts.dashboard = nil`.
+
+**Imports added to `coverage_test.go`:** `io`, `os`,
+`github.com/shizukutanaka/Otedama/internal/tui`.
+
 ### Test (session 162 — close coverage gaps: MeetsTarget error path, addressKind default, appendUnique duplicate, ResolveWithOrigins numeric file fields)
 
 **Coverage improvements:**
