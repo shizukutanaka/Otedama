@@ -44,6 +44,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkHardware(),
 		checkNetwork(),
 		checkClockSkew(),
+		checkEnvVars(),
 	}
 }
 
@@ -578,6 +579,32 @@ func checkPowerEconomics(cfg config.Config) Check {
 	}
 }
 
+// checkEnvVars reports OTEDAMA_* numeric environment variables that are set but
+// could not be parsed. Such a variable is silently dropped during config
+// resolution (the default stands), so without this an operator who set, say,
+// OTEDAMA_POWER_WATTS=300w would run `otedama doctor` to find out why their cost
+// metrics are missing and learn nothing. This mirrors the warnings `run` and
+// `config validate` print (session 147), making doctor a complete diagnostic.
+func checkEnvVars() Check {
+	return Check{
+		Name: "Environment variables",
+		Run: func(_ context.Context) Result {
+			warnings := config.EnvWarnings(nil)
+			if len(warnings) == 0 {
+				return Result{
+					Status: StatusPass,
+					Detail: "no malformed OTEDAMA_* numeric environment variables",
+				}
+			}
+			return Result{
+				Status: StatusWarn,
+				Detail: strings.Join(warnings, "; "),
+				Fix:    "correct or unset the listed variable(s); a malformed value is ignored and the default is used",
+			}
+		},
+	}
+}
+
 func checkPayoutScheme(cfg config.Config) Check {
 	return Check{
 		Name: "Pool payout schemes",
@@ -758,7 +785,7 @@ func checkClockSkew() Check {
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (warn threshold %.0f s)", skew, clockSkewWarnSecs),
-					Fix: "synchronise your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
+					Fix:    "synchronise your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
 				}
 			default:
 				return Result{

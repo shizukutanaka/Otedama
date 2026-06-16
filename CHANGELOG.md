@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 149 — doctor: report malformed env vars so the diagnostic command is complete)
+
+Session 147 surfaced malformed numeric `OTEDAMA_*` env vars in `run` and `config validate`,
+but not in `doctor` — the command an operator reaches for *first* when something is off. A
+user who set `OTEDAMA_POWER_WATTS=300w` and then ran `otedama doctor` to find out why their
+cost metrics were missing would learn nothing. Closing that consistency gap.
+
+**`internal/doctor/checks.go`**:
+- `checkEnvVars()` — calls `config.EnvWarnings(nil)`; Pass when none, Warn listing each
+  malformed variable with a Fix hint. Added to `DefaultChecks`. Reuses the session-147
+  single-source-of-truth helper, so the set doctor reports always matches the set resolution
+  drops.
+
+Tests (3 new, using `t.Setenv` for isolation): passes when all valid; warns and names the
+offending variable on a malformed value; `DefaultChecks` includes the check.
+
+24 packages green.
+
 ### Fix (session 148 — daemon: quote the binary path in the systemd unit so a space-containing path starts)
 
 A strengths/weaknesses pass on the cross-platform service installer found a real

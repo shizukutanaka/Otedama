@@ -1411,3 +1411,38 @@ func TestDefaultChecks_IncludesClockSkewCheck(t *testing.T) {
 	}
 	t.Error("DefaultChecks does not include 'System clock accuracy' check")
 }
+
+func TestCheckEnvVars_PassesWhenAllValid(t *testing.T) {
+	// No malformed OTEDAMA_* vars set → Pass. (t.Setenv ensures isolation and
+	// restores the prior environment after the test.)
+	t.Setenv("OTEDAMA_POWER_WATTS", "300")
+	t.Setenv("OTEDAMA_ELECTRICITY_PRICE_PER_KWH", "0.12")
+	res := checkEnvVars().Run(context.Background())
+	if res.Status != StatusPass {
+		t.Errorf("status = %v, want Pass (detail: %s)", res.Status, res.Detail)
+	}
+}
+
+func TestCheckEnvVars_WarnsOnMalformed(t *testing.T) {
+	t.Setenv("OTEDAMA_POWER_WATTS", "300w") // unit-suffix typo
+	res := checkEnvVars().Run(context.Background())
+	if res.Status != StatusWarn {
+		t.Fatalf("status = %v, want Warn", res.Status)
+	}
+	if !strings.Contains(res.Detail, "OTEDAMA_POWER_WATTS") {
+		t.Errorf("detail should name the offending var: %q", res.Detail)
+	}
+	if res.Fix == "" {
+		t.Error("a Warn result should carry a Fix hint")
+	}
+}
+
+func TestDefaultChecks_IncludesEnvVarsCheck(t *testing.T) {
+	checks := DefaultChecks(config.Config{}, "")
+	for _, c := range checks {
+		if c.Name == "Environment variables" {
+			return
+		}
+	}
+	t.Error("DefaultChecks does not include 'Environment variables' check")
+}
