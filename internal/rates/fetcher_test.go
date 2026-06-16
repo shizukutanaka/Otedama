@@ -803,3 +803,164 @@ func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 func parseFloat(s string, out *float64) (int, error) {
 	return fmt.Sscanf(s, "%f", out)
 }
+
+// ============================================================================
+// session 168 — cover previously uncovered branches in fetcher.go
+// ============================================================================
+
+// errBodyReader is a body that always errors on Read, used to trigger the
+// io.ReadAll error path in fetchOne (fetcher.go:389-391).
+type errBodyReader struct{}
+
+func (errBodyReader) Read([]byte) (int, error) { return 0, fmt.Errorf("injected read error") }
+func (errBodyReader) Close() error             { return nil }
+
+// errBodyTransport returns a 200 OK response whose body always errors.
+type errBodyTransport struct{}
+
+func (errBodyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       errBodyReader{},
+	}, nil
+}
+
+func TestCoinGeckoExtract_JSONError(t *testing.T) {
+	// defaultSources[2] is CoinGecko. Its extract func must return an error
+	// when given non-JSON bytes (fetcher.go:82-84).
+	_, err := defaultSources[2].extract([]byte("not-valid-json"))
+	if err == nil {
+		t.Error("CoinGecko extract with invalid JSON should return error")
+	}
+}
+
+func TestFetchOne_BadURL(t *testing.T) {
+	// "://bad" is not a valid URL; http.NewRequestWithContext returns an error
+	// immediately, covering fetcher.go:363-365.
+	f := NewFetcher(50000)
+	ctx := context.Background()
+	_, _, err := f.fetchOne(ctx, Source{Name: "bad-url", URL: "://bad", extract: nil})
+	if err == nil {
+		t.Error("fetchOne with malformed URL must return an error")
+	}
+}
+
+func TestFetchOne_BodyReadError(t *testing.T) {
+	// The transport returns a 200 OK with a body that errors immediately on Read.
+	// This covers the io.ReadAll error branch at fetcher.go:389-391.
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: &http.Client{Transport: errBodyTransport{}},
+		sources:    nil,
+	}
+	ctx := context.Background()
+	src := Source{
+		Name: "err-body",
+		URL:  "http://example.com/price",
+		extract: func([]byte) (float64, error) { return 0, nil },
+	}
+	_, _, err := f.fetchOne(ctx, src)
+	if err == nil {
+		t.Error("fetchOne with an erroring body must return an error")
+	}
+}
+
+func TestStartBackground_ZeroIntervalUsesDefault(t *testing.T) {
+	// Passing interval=0 should fall through the guard at fetcher.go:403-405
+	// and use CacheDuration instead. We verify it does not panic and eventually
+	// calls Fetch (the log callback will receive the initial-fetch error).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	logged := make(chan string, 1)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "boom",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case logged <- msg:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	f.StartBackground(ctx, 0) // zero interval → CacheDuration branch (lines 403-405)
+
+	select {
+	case msg := <-logged:
+		if !strings.Contains(msg, "initial fetch failed") {
+			t.Errorf("expected 'initial fetch failed', got: %q", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("timeout: expected a log message from StartBackground with interval=0")
+	}
+}
+
+func TestStartBackground_PeriodicFetchFails(t *testing.T) {
+	// A short ticker interval causes the ticker.C case (fetcher.go:417-419) to
+	// fire quickly. The server returns 500 so Fetch fails and the periodic-error
+	// log path is exercised.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	logged := make(chan string, 8)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "unavailable",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case logged <- msg:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Use a very short interval so the ticker fires quickly (lines 417-419).
+	f.StartBackground(ctx, 50*time.Millisecond)
+
+	// Collect at least two log messages: one initial-fetch error and one
+	// periodic-fetch error.
+	var msgs []string
+	deadline := time.After(2 * time.Second)
+outer:
+	for len(msgs) < 2 {
+		select {
+		case m := <-logged:
+			msgs = append(msgs, m)
+		case <-deadline:
+			break outer
+		}
+	}
+	if len(msgs) < 2 {
+		t.Errorf("expected ≥2 log messages (initial + periodic); got %d: %v", len(msgs), msgs)
+	}
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m, "periodic fetch failed") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'periodic fetch failed' log; got: %v", msgs)
+	}
+}

@@ -997,3 +997,21 @@ func TestDecodeOpenMiningChannelError_TruncatedString(t *testing.T) {
 		t.Error("truncated Error string in OpenMiningChannelError should return error")
 	}
 }
+
+// ============================================================================
+// session 168 — DispatchFrame SetupConnection decode-error path
+// ============================================================================
+
+func TestDispatchFrame_SetupConnection_Malformed(t *testing.T) {
+	// A 1-byte payload is too short for DecodeSetupConnection (needs Protocol byte
+	// + MinVersion + MaxVersion + Flags + 5 strings). This exercises the
+	// messages.go:290-292 return-on-error branch that was not reached by any
+	// existing test.
+	f := Frame{
+		Header:  Header{MsgType: MsgSetupConnection, MsgLength: 1},
+		Payload: []byte{0x00},
+	}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("DispatchFrame with 1-byte SetupConnection payload must return a decode error")
+	}
+}

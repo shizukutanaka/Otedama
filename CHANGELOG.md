@@ -10,6 +10,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 168 — stratum + rates coverage: DispatchFrame SetupConnection error path; rates/fetcher 96.3% → 100%)
+
+**Coverage improvements:**
+- `internal/stratum` 94.7% → **94.9%** — 1 new test covering the `DispatchFrame` decode-error
+  return at `messages.go:290-292` (the only remaining coverable statement in the package; all other
+  uncovered blocks are confirmed dead code in chacha20poly1305/ECDH paths that never fail on this
+  platform).
+- `internal/rates` 96.3% → **100.0%** — 5 new tests covering all remaining dark statements.
+
+**Tests added (6 new):**
+
+- `TestDispatchFrame_SetupConnection_Malformed` in `internal/stratum/messages_test.go`:
+  Passes a 1-byte payload for `MsgSetupConnection` to `DispatchFrame`. `DecodeSetupConnection`
+  returns an error immediately because the single byte is enough for the Protocol field but nothing
+  else. Exercises `messages.go:290-292` (`return m, err`). Covers 1 stmt.
+
+- `TestCoinGeckoExtract_JSONError` in `internal/rates/fetcher_test.go`:
+  Calls `defaultSources[2].extract([]byte("not-valid-json"))` directly. The CoinGecko extract
+  function's `json.Unmarshal` fails and returns the error (fetcher.go:82-84). Covers 1 stmt.
+
+- `TestFetchOne_BadURL` in `internal/rates/fetcher_test.go`:
+  Calls `f.fetchOne(ctx, Source{URL: "://bad"})`. `http.NewRequestWithContext` returns an error for
+  the malformed URL before any network I/O occurs (fetcher.go:363-365). Covers 1 stmt.
+
+- `TestFetchOne_BodyReadError` in `internal/rates/fetcher_test.go`:
+  Uses a custom `errBodyTransport` (zero-allocation `RoundTripper`) that returns a 200 OK response
+  whose body always errors on `Read`. `io.ReadAll` inside `fetchOne` propagates the error
+  (fetcher.go:389-391). Covers 1 stmt.
+
+- `TestStartBackground_ZeroIntervalUsesDefault` in `internal/rates/fetcher_test.go`:
+  Calls `f.StartBackground(ctx, 0)`. The zero-interval guard clamps to `CacheDuration`
+  (fetcher.go:403-405). A 503 server triggers the initial-fetch-failed log message, confirming
+  `StartBackground` executed. Covers 1 stmt.
+
+- `TestStartBackground_PeriodicFetchFails` in `internal/rates/fetcher_test.go`:
+  Calls `f.StartBackground(ctx, 50*time.Millisecond)` against a 503 server. After the initial
+  fetch logs its error, the short-interval ticker fires within ~100ms and the `ticker.C` case
+  (fetcher.go:417-419) logs `"rates: periodic fetch failed: …"`. Collects ≥2 log messages to
+  confirm both the initial and periodic error paths fire. Covers 1 stmt.
+
+**Overall project coverage: 95.7% → 95.8%** (730 packages, all green).
+
 ### Test (session 167 — engine package: 93.7% → 95.0%; arbitration switch/hold metrics, V2 dashboard and acceptance-rate warning, V1 curtailment, applyJob error, submit error)
 
 **Coverage improvements:**
