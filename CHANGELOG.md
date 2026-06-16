@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 164 — stratum package coverage: DispatchFrame error branches, DecodeSetupConnection early truncation, DecodeSubmitSharesError string error, DecodeOpenMiningChannelSuccess/Error truncated paths)
+
+**Coverage improvements:**
+- `internal/stratum` 92.6% → **94.7%** — 11 new covered branches (38 → 27 uncovered)
+
+**Tests added (11 new) in `internal/stratum/messages_test.go`:**
+
+DispatchFrame decode-error branches — five `DispatchFrame` cases had their happy paths covered but
+their `if err != nil { return m, err }` branches were never reached because no test supplied a
+truncated payload through `DispatchFrame` for those message types:
+- `TestDispatchFrame_SetupConnectionError_Malformed`: 2-byte payload (Flags needs 4) → covers line 302
+- `TestDispatchFrame_OpenMiningChannel_Malformed`: 2-byte payload (ReqID needs 4) → covers line 308
+- `TestDispatchFrame_OpenMiningChannelError_Malformed`: 3-byte payload (ReqID needs 4) → covers line 320
+- `TestDispatchFrame_SubmitSharesSuccess_Malformed`: 8-byte payload (needs 16) → covers line 338
+- `TestDispatchFrame_SubmitSharesError_Malformed`: 4-byte payload (needs 8) → covers line 344
+
+DecodeSetupConnection early truncation — existing test (`TestDecodeSetupConnection_Truncated`) used
+half-length payload which skips past Protocol+MinVersion+MaxVersion, leaving three early error
+branches uncovered (handshake.go lines 75, 79, 82):
+- `TestDecodeSetupConnection_EmptyPayload`: 0 bytes → Protocol ReadByte fails
+- `TestDecodeSetupConnection_ProtocolOnly`: 1 byte → MinVersion getU16LE fails
+- `TestDecodeSetupConnection_TruncatedAtMaxVersion`: 3 bytes → MaxVersion getU16LE fails
+
+Additional decode truncation paths:
+- `TestDecodeSubmitSharesError_TruncatedString`: 9-byte payload (8-byte header + length byte=5,
+  no data bytes) → getStr0_255 fails → covers messages.go line 224
+- `TestDecodeOpenMiningChannelSuccess_TruncatedAtExtranonce`: exactly 40 bytes (ReqID+ChannelID+Target
+  complete, no Extranonce length byte) → getB0_255 fails → covers handshake.go line 266
+- `TestDecodeOpenMiningChannelError_TruncatedString`: 5-byte payload (4-byte ReqID + length byte=3,
+  no data bytes) → getStr0_255 fails via the `len(payload) > 4` branch → covers handshake.go line 309
+
+Remaining uncovered blocks (27) are dead code: bytes.Buffer.Write/WriteByte/putU16LE/putU32LE error
+branches in Encode functions that can never fire because bytes.Buffer.Write never returns an error.
+The noise.go paths are in the Noise NX handshake (CODEOWNERS area; deferred per ADR-003).
+
 ### Test (session 163 — runSessionV1 branch coverage: TLS CA file paths, dial error, powerWatts/J-per-TH, dashboard update)
 
 **Coverage improvements:**

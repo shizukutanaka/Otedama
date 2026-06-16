@@ -887,3 +887,113 @@ func TestDispatchFrame_SubmitSharesStandard_Malformed(t *testing.T) {
 		t.Error("malformed SubmitSharesStandard payload should return error")
 	}
 }
+
+// ============================================================================
+// DispatchFrame — decode-error paths for the remaining 5 uncovered cases
+// (session 164)
+// ============================================================================
+
+func TestDispatchFrame_SetupConnectionError_Malformed(t *testing.T) {
+	// SetupConnectionError.Flags needs 4 bytes; 2 triggers Decode error.
+	f := Frame{Header: Header{MsgType: MsgSetupConnectionError, MsgLength: 2}, Payload: make([]byte, 2)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed SetupConnectionError payload should return error")
+	}
+}
+
+func TestDispatchFrame_OpenMiningChannel_Malformed(t *testing.T) {
+	// OpenMiningChannel.ReqID needs 4 bytes; 2 triggers Decode error.
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannel, MsgLength: 2}, Payload: make([]byte, 2)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed OpenMiningChannel payload should return error")
+	}
+}
+
+func TestDispatchFrame_OpenMiningChannelError_Malformed(t *testing.T) {
+	// OpenMiningChannelError.ReqID needs 4 bytes; 3 triggers Decode error.
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannelError, MsgLength: 3}, Payload: make([]byte, 3)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed OpenMiningChannelError payload should return error")
+	}
+}
+
+func TestDispatchFrame_SubmitSharesSuccess_Malformed(t *testing.T) {
+	// SubmitSharesSuccess needs 16 bytes; 8 triggers Decode error.
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesSuccess, MsgLength: 8}, Payload: make([]byte, 8)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed SubmitSharesSuccess payload should return error")
+	}
+}
+
+func TestDispatchFrame_SubmitSharesError_Malformed(t *testing.T) {
+	// SubmitSharesError needs ≥8 bytes; 4 triggers Decode error.
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesError, MsgLength: 4}, Payload: make([]byte, 4)}
+	if _, err := DispatchFrame(f); err == nil {
+		t.Error("malformed SubmitSharesError payload should return error")
+	}
+}
+
+// ============================================================================
+// DecodeSetupConnection — early truncation paths (session 164)
+// ============================================================================
+
+func TestDecodeSetupConnection_EmptyPayload(t *testing.T) {
+	// Zero bytes: ReadByte for Protocol fails immediately.
+	if _, err := DecodeSetupConnection([]byte{}); err == nil {
+		t.Error("empty payload should fail at Protocol byte")
+	}
+}
+
+func TestDecodeSetupConnection_ProtocolOnly(t *testing.T) {
+	// 1 byte: Protocol OK but MinVersion getU16LE fails.
+	if _, err := DecodeSetupConnection([]byte{0x00}); err == nil {
+		t.Error("1-byte payload should fail at MinVersion")
+	}
+}
+
+func TestDecodeSetupConnection_TruncatedAtMaxVersion(t *testing.T) {
+	// 3 bytes: Protocol + MinVersion OK; MaxVersion getU16LE fails (need 2 more bytes).
+	if _, err := DecodeSetupConnection([]byte{0x00, 0x02, 0x00}); err == nil {
+		t.Error("3-byte payload should fail at MaxVersion")
+	}
+}
+
+// ============================================================================
+// DecodeSubmitSharesError — truncated Error string path (session 164)
+// ============================================================================
+
+func TestDecodeSubmitSharesError_TruncatedString(t *testing.T) {
+	// 8 bytes of header + a length byte claiming 5 bytes, but no payload bytes follow.
+	// getStr0_255 should return io.ErrUnexpectedEOF.
+	payload := make([]byte, 9)
+	// ChannelID and SequenceNumber can be zero; payload[8] = length byte = 5.
+	payload[8] = 0x05
+	if _, err := DecodeSubmitSharesError(payload); err == nil {
+		t.Error("truncated string in SubmitSharesError should return error")
+	}
+}
+
+// ============================================================================
+// DecodeOpenMiningChannelSuccess — Extranonce truncated path (session 164)
+// ============================================================================
+
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtExtranonce(t *testing.T) {
+	// 40 bytes: ReqID (4) + ChannelID (4) + Target (32) = exactly 40 bytes.
+	// getB0_255 tries to read the length byte for Extranonce but reader is empty.
+	if _, err := DecodeOpenMiningChannelSuccess(make([]byte, 40)); err == nil {
+		t.Error("payload missing Extranonce length byte should return error")
+	}
+}
+
+// ============================================================================
+// DecodeOpenMiningChannelError — truncated Error string path (session 164)
+// ============================================================================
+
+func TestDecodeOpenMiningChannelError_TruncatedString(t *testing.T) {
+	// 5 bytes: ReqID (4 bytes) + length byte claiming 3 bytes, but no bytes follow.
+	// The len(payload) > 4 branch is entered; getStr0_255 fails.
+	payload := []byte{0x01, 0x00, 0x00, 0x00, 0x03} // ReqID=1, then length=3 with no data
+	if _, err := DecodeOpenMiningChannelError(payload); err == nil {
+		t.Error("truncated Error string in OpenMiningChannelError should return error")
+	}
+}
