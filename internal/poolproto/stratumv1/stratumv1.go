@@ -62,6 +62,14 @@ import (
 
 // ----- session -----
 
+// maxLineBytes caps a single newline-delimited JSON-RPC line from the pool.
+// Real Stratum V1 messages (mining.notify, set_difficulty, share responses)
+// are well under 1 KiB; 64 KiB is generous. The cap matters because the pool
+// is untrusted input: bufio.Reader.ReadBytes would otherwise accumulate an
+// unbounded line (a stream with no newline) into memory until OOM. readLine
+// enforces this limit via ReadSlice, which never grows past the buffer.
+const maxLineBytes = 64 << 10 // 64 KiB
+
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
 type session struct {
@@ -112,7 +120,7 @@ type session struct {
 func newSession(conn *connection) *session {
 	return &session{
 		conn:     conn,
-		reader:   bufio.NewReaderSize(conn.raw, 64<<10), // 64 KiB max line
+		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
 		jobsCh:   make(chan poolproto.Job, 8),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
@@ -148,13 +156,33 @@ func (s *session) readLoop(ctx context.Context) {
 		// Apply a generous read deadline so a wedged pool doesn't hang
 		// us forever.
 		_ = s.conn.raw.SetReadDeadline(time.Now().Add(5 * time.Minute))
-		line, err := s.reader.ReadBytes('\n')
+		line, err := s.readLine()
 		if err != nil {
-			// EOF or network error: terminate cleanly.
+			// EOF, network error, or an oversized line: terminate cleanly.
 			return
 		}
 		s.dispatch(line)
 	}
+}
+
+// readLine reads one newline-terminated line, enforcing maxLineBytes as a hard
+// ceiling. ReadSlice returns bufio.ErrBufferFull (not more data) once the
+// buffer fills without a delimiter, so a pool that streams bytes with no
+// newline can never grow our memory — unlike ReadBytes, which would accumulate
+// the whole line. The returned slice is copied out of the bufio buffer because
+// ReadSlice aliases it (invalidated by the next read); the copy keeps dispatch's
+// previous "owns its line" contract and matches ReadBytes's old allocation cost.
+func (s *session) readLine() ([]byte, error) {
+	line, err := s.reader.ReadSlice('\n')
+	if errors.Is(err, bufio.ErrBufferFull) {
+		return nil, fmt.Errorf("stratumv1: line exceeds %d bytes; terminating session (misbehaving pool)", maxLineBytes)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]byte, len(line))
+	copy(out, line)
+	return out, nil
 }
 
 // cancelPending closes all in-flight call() channels so those callers

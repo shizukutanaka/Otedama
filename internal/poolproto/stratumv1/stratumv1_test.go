@@ -407,6 +407,39 @@ func TestSession_E2E_SubmitRejected(t *testing.T) {
 	}
 }
 
+func TestSession_OversizedLineTerminatesSession(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// A misbehaving pool streams more than maxLineBytes with no newline.
+	// readLine must cap it (ReadSlice → ErrBufferFull) and end the session,
+	// rather than ReadBytes accumulating the whole stream into memory.
+	go func() {
+		junk := make([]byte, maxLineBytes+4096)
+		for i := range junk {
+			junk[i] = 'a' // no '\n' anywhere
+		}
+		_, _ = serverConn.Write(junk) // unblocked by sess.Close() on teardown
+	}()
+
+	// readLoop returning closes Jobs(); that is our signal the session ended.
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Fatal("unexpected job parsed from a junk stream")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("session did not terminate on an oversized line (possible unbounded read)")
+	}
+}
+
 func TestSession_Close_IsIdempotent(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()

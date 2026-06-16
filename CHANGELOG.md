@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fix (session 152 — stratum V1: cap the line length so an untrusted pool cannot OOM the miner)
+
+A robustness pass on the untrusted pool-input path found a real unbounded-allocation DoS.
+`readLoop` used `bufio.Reader.ReadBytes('\n')`, and the buffer was sized 64 KiB with a comment
+claiming "64 KiB max line" — but `NewReaderSize` only sizes the *buffer*; `ReadBytes` grows its
+own return slice across buffer fills until it finds a newline. A pool (buggy or hostile) that
+streams bytes with no newline would have the entire stream accumulated into memory until OOM.
+The reassuring comment made the gap easy to miss.
+
+**`internal/poolproto/stratumv1/stratumv1.go`**:
+- `const maxLineBytes = 64 << 10` and a new `readLine` helper using `ReadSlice`, which returns
+  `bufio.ErrBufferFull` once the buffer fills without a delimiter — a true ceiling, never a
+  growing allocation. An oversized line ends the session (the reconnect loop handles recovery);
+  real V1 messages are well under 1 KiB so 64 KiB never trips legitimately. The slice is copied
+  out of the bufio buffer (ReadSlice aliases it), preserving dispatch's "owns its line" contract
+  at the same allocation cost as the old ReadBytes.
+- Corrected the misleading buffer-size comment.
+
+Tests (1 new): a >64 KiB newline-less stream terminates the session (Jobs channel closes)
+instead of buffering unboundedly. Race-clean.
+
+24 packages green.
+
 ### Docs (session 151 — config.yaml.example: document the 6 undiscoverable config fields + add a drift guard)
 
 A strengths/weaknesses pass found that six user-settable config fields existed in the struct
