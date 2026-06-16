@@ -105,13 +105,20 @@ Install, remove, or query the auto-start service.
 Run self-diagnostic checks and print a report.
 
 ```
-otedama doctor [--config path] [--bitcoin-address addr] [--data-dir path]
+otedama doctor [--config path] [--bitcoin-address addr] [--data-dir path] [--json]
 ```
+
+`--json` emits a single JSON object instead of the text report — suitable for CI
+gating or monitoring agents. Shape: `{"summary":{"passed","failed","warnings",
+"skipped"}, "duration_ms", "exit_code", "checks":[{"name","status","detail","fix",
+"elapsed_ms"}]}`, where `status` is one of `pass|warn|fail|skip`.
 
 **Exit codes:**
 - `0` — All checks passed.
 - `1` — At least one check emitted a warning.
 - `2` — At least one check failed.
+
+The same exit code is mirrored in the JSON `exit_code` field.
 
 Suitable as a container healthcheck command:
 ```yaml

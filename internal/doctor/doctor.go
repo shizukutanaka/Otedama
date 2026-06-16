@@ -33,6 +33,7 @@ package doctor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -52,6 +53,23 @@ const (
 	// StatusSkip means the check was not applicable.
 	StatusSkip
 )
+
+// String returns the lowercase status name used in machine-readable (JSON)
+// output: "pass", "warn", "fail", or "skip".
+func (s Status) String() string {
+	switch s {
+	case StatusPass:
+		return "pass"
+	case StatusWarn:
+		return "warn"
+	case StatusFail:
+		return "fail"
+	case StatusSkip:
+		return "skip"
+	default:
+		return "unknown"
+	}
+}
 
 func (s Status) symbol() string {
 	switch s {
@@ -140,6 +158,63 @@ func (r *Report) Print(w io.Writer) {
 		fmt.Fprintf(w, ", %d skipped", skipped)
 	}
 	fmt.Fprintf(w, " (completed in %s)\n", r.Duration.Round(time.Millisecond))
+}
+
+// WriteJSON writes the report to w as a single indented JSON object, for
+// machine consumption (CI gating, monitoring agents). Durations are expressed
+// in whole milliseconds and exit_code mirrors ExitCode(), so a script can act
+// on the report without re-deriving the verdict. Returns any encoding error.
+func (r *Report) WriteJSON(w io.Writer) error {
+	type jsonCheck struct {
+		Name      string `json:"name"`
+		Status    string `json:"status"`
+		Detail    string `json:"detail"`
+		Fix       string `json:"fix,omitempty"`
+		ElapsedMS int64  `json:"elapsed_ms"`
+	}
+	var passed, warned, failed, skipped int
+	checks := make([]jsonCheck, 0, len(r.Results))
+	for _, res := range r.Results {
+		switch res.Status {
+		case StatusPass:
+			passed++
+		case StatusWarn:
+			warned++
+		case StatusFail:
+			failed++
+		case StatusSkip:
+			skipped++
+		}
+		checks = append(checks, jsonCheck{
+			Name:      res.Name,
+			Status:    res.Status.String(),
+			Detail:    res.Detail,
+			Fix:       res.Fix,
+			ElapsedMS: res.Elapsed.Milliseconds(),
+		})
+	}
+	var doc struct {
+		Summary struct {
+			Passed   int `json:"passed"`
+			Failed   int `json:"failed"`
+			Warnings int `json:"warnings"`
+			Skipped  int `json:"skipped"`
+		} `json:"summary"`
+		DurationMS int64       `json:"duration_ms"`
+		ExitCode   int         `json:"exit_code"`
+		Checks     []jsonCheck `json:"checks"`
+	}
+	doc.Summary.Passed = passed
+	doc.Summary.Failed = failed
+	doc.Summary.Warnings = warned
+	doc.Summary.Skipped = skipped
+	doc.DurationMS = r.Duration.Milliseconds()
+	doc.ExitCode = r.ExitCode()
+	doc.Checks = checks
+
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(&doc)
 }
 
 // Runner executes a set of checks and produces a Report.

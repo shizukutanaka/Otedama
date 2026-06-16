@@ -19,6 +19,7 @@ func cmdDoctor(args []string, stdout, stderr io.Writer) int {
 	configFile := fs.String("config", "", "Path to config.yaml to diagnose.")
 	btcAddr := fs.String("bitcoin-address", "", "Bitcoin address to validate.")
 	dataDir := fs.String("data-dir", "", "Data directory to check.")
+	jsonOut := fs.Bool("json", false, "Emit results as a JSON object (for CI/monitoring) instead of text.")
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -38,6 +39,10 @@ func cmdDoctor(args []string, stdout, stderr io.Writer) int {
 
 	runner := &doctor.Runner{Checks: doctor.DefaultChecks(cfg, *configFile)}
 	report := runner.Run(ctx)
-	report.Print(stdout)
+	if *jsonOut {
+		_ = report.WriteJSON(stdout)
+	} else {
+		report.Print(stdout)
+	}
 	return report.ExitCode()
 }

@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Feat (session 156 — doctor --json: machine-readable diagnostics for CI and monitoring)
+
+`otedama doctor` only emitted a human text report, so a CI pipeline or monitoring agent
+wanting to gate on its results had to scrape formatted lines. Added a `--json` mode that
+emits the report as a structured object — the `Report` already held everything needed.
+
+**`internal/doctor/doctor.go`**:
+- `Status.String()` returns the machine name (`pass`/`warn`/`fail`/`skip`).
+- `Report.WriteJSON(w)` emits `{summary:{passed,failed,warnings,skipped}, duration_ms,
+  exit_code, checks:[{name,status,detail,fix,elapsed_ms}]}`. Durations are whole
+  milliseconds; `exit_code` mirrors `ExitCode()` so a script needn't re-derive the verdict;
+  `fix` is omitted on passing checks.
+
+**`cmd/otedama/doctor.go`**: `--json` flag selects `WriteJSON` over `Print`; exit code is
+unchanged in both modes.
+
+**`docs/API.md`**: documented `--json` and the output shape.
+
+Tests (3 new): `Status.String()` table incl. the unknown fallback; `WriteJSON` round-trips
+through `encoding/json` with correct summary counts, exit_code 2 on a failure, lowercase
+status strings, and omitempty `fix`; a CLI test asserting `doctor --json` emits valid JSON
+with the Bitcoin-address check passing.
+
+24 packages green.
+
 ### Feat (session 155 — config show: display the economic/arbitration fields so settings are verifiable)
 
 `otedama config show` displayed 7 scalar fields plus pools, but not the four economic/

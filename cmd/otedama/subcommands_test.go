@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -57,6 +58,43 @@ func TestDoctor_WithValidAddress_HigherPassCount(t *testing.T) {
 	if !strings.Contains(outWithAddr.String(), "[✓] Bitcoin address") {
 		t.Errorf("doctor with valid address should pass Bitcoin address check:\n%s",
 			outWithAddr.String())
+	}
+}
+
+func TestDoctor_JSONFlag_EmitsValidJSON(t *testing.T) {
+	var out, errb bytes.Buffer
+	run([]string{
+		"doctor", "--json",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+	}, &out, &errb)
+
+	var doc struct {
+		Summary struct {
+			Passed, Failed, Warnings, Skipped int
+		}
+		ExitCode int `json:"exit_code"`
+		Checks   []struct {
+			Name, Status string
+		}
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("doctor --json did not emit valid JSON: %v\n%s", err, out.String())
+	}
+	if len(doc.Checks) == 0 {
+		t.Error("doctor --json reported no checks")
+	}
+	// The valid address must show as a passing check in the structured output.
+	found := false
+	for _, c := range doc.Checks {
+		if c.Name == "Bitcoin address" {
+			found = true
+			if c.Status != "pass" {
+				t.Errorf("Bitcoin address status = %q, want pass", c.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("doctor --json missing the Bitcoin address check")
 	}
 }
 
