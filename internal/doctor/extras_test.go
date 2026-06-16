@@ -1446,3 +1446,54 @@ func TestDefaultChecks_IncludesEnvVarsCheck(t *testing.T) {
 	}
 	t.Error("DefaultChecks does not include 'Environment variables' check")
 }
+
+// ============================================================================
+// addressKind — default ("unrecognised type") branch (session 162)
+// ============================================================================
+
+// TestAddressKind_UnknownAddress covers the default branch of addressKind:
+// any address that ClassifyAddress does not recognise (not starting with
+// "bc1p", "bc1q", "1", or "3") returns "unrecognised type".
+func TestAddressKind_UnknownAddress(t *testing.T) {
+	got := addressKind("garbage-address-format")
+	if got != "unrecognised type" {
+		t.Errorf("addressKind(garbage) = %q, want \"unrecognised type\"", got)
+	}
+}
+
+// TestAddressKind_KnownP2WPKH verifies the P2WPKH branch is correctly labelled
+// (regression: ensures the switch-case isn't accidentally removed).
+func TestAddressKind_KnownP2WPKH(t *testing.T) {
+	got := addressKind("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+	if got != "P2WPKH SegWit v0" {
+		t.Errorf("addressKind(P2WPKH) = %q, want \"P2WPKH SegWit v0\"", got)
+	}
+}
+
+// ============================================================================
+// appendUnique — duplicate-suppression path (session 162)
+// ============================================================================
+
+// TestAppendUnique_DuplicateNotAppended covers the early-return path in
+// appendUnique: when the element is already present the slice is returned
+// unchanged (same length, no allocation).
+func TestAppendUnique_DuplicateNotAppended(t *testing.T) {
+	xs := []string{"a", "b", "c"}
+	got := appendUnique(xs, "b")
+	if len(got) != 3 {
+		t.Errorf("appendUnique(duplicate) len = %d, want 3 (unchanged)", len(got))
+	}
+	if &got[0] != &xs[0] {
+		t.Error("appendUnique(duplicate) returned a new slice; expected the original")
+	}
+}
+
+// TestAppendUnique_NewElementAppended verifies that a genuinely new element
+// is appended (happy path, complementary to the duplicate test).
+func TestAppendUnique_NewElementAppended(t *testing.T) {
+	xs := []string{"a", "b"}
+	got := appendUnique(xs, "c")
+	if len(got) != 3 || got[2] != "c" {
+		t.Errorf("appendUnique(new) = %v, want [a b c]", got)
+	}
+}

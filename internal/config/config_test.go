@@ -971,3 +971,43 @@ func TestValidate_ArbitrationHysteresisPct_ValidRange(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveWithOrigins_NumericFileFields covers the four numeric file-layer
+// override blocks (ArbitrationHysteresisPct, CurtailBelowBTCUSD, PowerWatts,
+// ElectricityPricePerKWh) that are skipped when the file value is zero.
+// This is the only layer where zero is ambiguous ("unset" vs "explicitly zero"),
+// so the four numeric fields are special-cased with != 0 guards in Layer 1.
+func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
+	fromFile := Config{
+		ArbitrationHysteresisPct: 0.07,
+		CurtailBelowBTCUSD:       80000,
+		PowerWatts:               150.0,
+		ElectricityPricePerKWh:   0.12,
+	}
+	got, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+
+	if got.ArbitrationHysteresisPct != 0.07 {
+		t.Errorf("ArbitrationHysteresisPct = %v, want 0.07", got.ArbitrationHysteresisPct)
+	}
+	if o.ArbitrationHysteresisPct != OriginFile {
+		t.Errorf("ArbitrationHysteresisPct origin = %v, want file", o.ArbitrationHysteresisPct)
+	}
+	if got.CurtailBelowBTCUSD != 80000 {
+		t.Errorf("CurtailBelowBTCUSD = %v, want 80000", got.CurtailBelowBTCUSD)
+	}
+	if o.CurtailBelowBTCUSD != OriginFile {
+		t.Errorf("CurtailBelowBTCUSD origin = %v, want file", o.CurtailBelowBTCUSD)
+	}
+	if got.PowerWatts != 150.0 {
+		t.Errorf("PowerWatts = %v, want 150", got.PowerWatts)
+	}
+	if o.PowerWatts != OriginFile {
+		t.Errorf("PowerWatts origin = %v, want file", o.PowerWatts)
+	}
+	if got.ElectricityPricePerKWh != 0.12 {
+		t.Errorf("ElectricityPricePerKWh = %v, want 0.12", got.ElectricityPricePerKWh)
+	}
+	if o.ElectricityPricePerKWh != OriginFile {
+		t.Errorf("ElectricityPricePerKWh origin = %v, want file", o.ElectricityPricePerKWh)
+	}
+}

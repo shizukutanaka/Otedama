@@ -257,6 +257,19 @@ func TestMeetsTarget_HashTooHigh(t *testing.T) {
 	}
 }
 
+// TestMeetsTarget_InvalidNBits covers the error-return path: when nBits is
+// malformed (here: exponent below the minimum of 3), TargetFromNBits fails
+// and MeetsTarget must propagate the error rather than returning a bogus bool.
+func TestMeetsTarget_InvalidNBits_ReturnsError(t *testing.T) {
+	var h Hash // zero hash
+	// nBits = 0x00000001: exponent = 0, mantissa = 1. The exponent is below
+	// the minimum of 3, so TargetFromNBits returns an error.
+	_, err := MeetsTarget(h, 0x00000001)
+	if err == nil {
+		t.Fatal("MeetsTarget with exponent-too-low nBits should return an error, got nil")
+	}
+}
+
 // ----- Benchmarks -----
 
 func BenchmarkHashHeader(b *testing.B) {

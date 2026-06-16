@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 162 — close coverage gaps: MeetsTarget error path, addressKind default, appendUnique duplicate, ResolveWithOrigins numeric file fields)
+
+**Coverage improvements:**
+- `internal/miner` 98.6% → **99.3%** — `MeetsTarget` 75% → **100%**
+- `internal/doctor` 95.1% → **95.7%** — `appendUnique` 75% → **100%**, `addressKind` 71% → **85.7%**
+- `internal/config` 94.3% → **98.1%** — `ResolveWithOrigins` 89.9% → **97.5%**
+
+**Tests added (7 new):**
+
+`internal/miner/sha256d_test.go` — `TestMeetsTarget_InvalidNBits_ReturnsError`: confirms that
+`MeetsTarget` propagates `TargetFromNBits` errors (nBits with exponent < 3) as `(false, error)`
+rather than silently returning a meaningless boolean. This is the branch that would allow a
+malformed pool job (e.g., nBits = 0x00000001) to silently pass or fail the target check.
+
+`internal/doctor/extras_test.go`:
+- `TestAddressKind_UnknownAddress`: calls `addressKind("garbage-address-format")`, which routes
+  through `ClassifyAddress` → `AddressUnknown` → the previously uncovered `default:` branch that
+  returns `"unrecognised type"`.
+- `TestAddressKind_KnownP2WPKH`: regression guard ensuring the switch isn't accidentally trimmed.
+- `TestAppendUnique_DuplicateNotAppended`: passes an already-present element; verifies the
+  function returns the original slice unchanged (early-return path at line 437).
+- `TestAppendUnique_NewElementAppended`: complementary happy-path test.
+
+`internal/config/config_test.go` — `TestResolveWithOrigins_NumericFileFields`: sets all four
+numeric file-layer fields (`ArbitrationHysteresisPct = 0.07`, `CurtailBelowBTCUSD = 80000`,
+`PowerWatts = 150`, `ElectricityPricePerKWh = 0.12`) and asserts they are applied and attributed
+to `OriginFile`. These fields are special-cased with `!= 0` guards because `0.0` is
+indistinguishable from "unset" at the Go level — all four `if fromFile.X != 0` bodies were
+previously uncovered.
+
+All 24 packages green. Test count: 735.
+
 ### Test (session 161 — engine: cover runSession stats-tick, share-response handlers, and startMinerWorkers no-SHA256d path)
 
 **Coverage gap closed (`internal/engine`): 88.9% → 92.6%**
