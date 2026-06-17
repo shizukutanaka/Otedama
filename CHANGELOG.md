@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 171 — doctor ~93% → 100%; 11 new tests covering address/dir/wallet/pool/clock-skew branches)
+
+**Coverage improvements:**
+- `internal/doctor` — `checks.go` **100%** (package 100%). 11 new tests close every
+  remaining branch: the P2WSH `addressKind` case, the non-`IsNotExist` `os.Stat` error path
+  in both `checkDataDir` and `checkWallet`, their no-home (`os.UserHomeDir` failure) skips, the
+  empty-host `continue`/fallback in `checkPoolEndpointDiversity` and `checkPayoutScheme`, the
+  default `poolIPResolver`, and three `checkClockSkew` paths (request-build error, nil-client
+  fallback to `http.DefaultClient`, and an unparseable `Date` header).
+
+**Overall project coverage: 96.2% → 96.4%** (all 24 packages green).
+
+**Tests added (11 new, all in `internal/doctor/extras_test.go`):**
+
+- `TestAddressKind_KnownP2WSH`: a 62-char `bc1q…` address classifies as P2WSH
+  (checks.go:133-134).
+- `TestCheckDataDir_StatErrorNotNotExist_Fails` / `TestCheckWallet_StatErrorNotNotExist_Fails`:
+  a path *under* a regular file makes `os.Stat` return `ENOTDIR` (not `ENOENT`), exercising the
+  "cannot stat" Fail path (checks.go:200-206, 265-271).
+- `TestCheckDataDir_NoHome_Skips` / `TestCheckWallet_NoHome_Skips`: with `HOME` unset (Linux),
+  `os.UserHomeDir` fails and the check skips (checks.go:187-189, 252-254).
+- `TestCheckPoolEndpointDiversity_EmptyHostSkipped`: a pool URL with an unrecognised scheme
+  yields an empty host from `stripScheme`, which is skipped (checks.go:397-398).
+- `TestCheckPayoutScheme_EmptyHostUsesURL`: same empty-host condition makes the payout check
+  fall back to the raw URL as the label (checks.go:620-622).
+- `TestPoolIPResolver_DefaultResolvesIPLiteral`: the package-default resolver, given an IP
+  literal with a port, strips the port and resolves offline (checks.go:365-370).
+- `TestCheckClockSkew_RequestBuildError`: a probe URL with a control character makes
+  `http.NewRequestWithContext` fail before any network call (checks.go:733-739).
+- `TestCheckClockSkew_NilClientUsesDefault`: a nil `clockSkewHTTPClient` falls back to
+  `http.DefaultClient`, reaching a local httptest server (checks.go:743-745).
+- `TestCheckClockSkew_MalformedDateWarns`: an unparseable `Date` header makes the check warn
+  rather than report a bogus skew (checks.go:765-771).
+
 ### Test (session 170 — stratumv1 dialer 100%; config 100%; 8 new tests covering all Negotiate error paths and flag-layer config branches)
 
 **Coverage improvements:**

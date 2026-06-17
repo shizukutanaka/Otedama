@@ -1497,3 +1497,221 @@ func TestAppendUnique_NewElementAppended(t *testing.T) {
 		t.Errorf("appendUnique(new) = %v, want [a b c]", got)
 	}
 }
+
+// ============================================================================
+// session 171 — doctor uncovered branches: addressKind P2WSH, checkDataDir /
+// checkWallet stat-error and no-home paths, pool-endpoint/payout empty-host,
+// checkClockSkew malformed-Date.
+// ============================================================================
+
+// TestAddressKind_KnownP2WSH covers the P2WSH branch of addressKind
+// (checks.go:133-134): a bc1q address of length >= 60 classifies as P2WSH.
+func TestAddressKind_KnownP2WSH(t *testing.T) {
+	// A 62-character bc1q... address: ClassifyAddress returns AddressP2WSH
+	// for any witness-v0 address with a 32-byte program.
+	addr := "bc1q" + strings.Repeat("q", 58)
+	got := addressKind(addr)
+	if got != "P2WSH SegWit v0" {
+		t.Errorf("addressKind(P2WSH) = %q, want %q", got, "P2WSH SegWit v0")
+	}
+}
+
+// TestCheckDataDir_StatErrorNotNotExist_Fails covers checks.go:200-206 —
+// os.Stat returns an error that is NOT os.IsNotExist (ENOTDIR) when a path
+// component is a regular file. The check must report Fail "cannot stat".
+func TestCheckDataDir_StatErrorNotNotExist_Fails(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "blocker")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	f.Close()
+	// A path *under* a regular file: os.Stat returns ENOTDIR, not ENOENT.
+	dir := filepath.Join(f.Name(), "sub")
+	r := checkDataDir(dir).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("stat-under-file: status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "cannot stat") {
+		t.Errorf("detail should mention 'cannot stat': %q", r.Detail)
+	}
+}
+
+// TestCheckWallet_StatErrorNotNotExist_Fails covers checks.go:265-271 —
+// os.Stat on the wallet path returns ENOTDIR (path under a regular file),
+// which is neither IsNotExist nor nil, so the check reports Fail.
+func TestCheckWallet_StatErrorNotNotExist_Fails(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "blocker")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	f.Close()
+	// dataDir under a regular file → walletPath stat returns ENOTDIR.
+	dir := filepath.Join(f.Name(), "sub")
+	r := checkWallet(dir).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("stat-under-file: status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "cannot stat") {
+		t.Errorf("detail should mention 'cannot stat': %q", r.Detail)
+	}
+}
+
+// TestCheckDataDir_NoHome_Skips covers checks.go:187-189 — when dir is empty
+// and os.UserHomeDir fails (HOME unset), the check skips. On non-Linux the
+// home lookup may use other sources, so this is gated to Linux.
+func TestCheckDataDir_NoHome_Skips(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("UserHomeDir error path is HOME-driven only on Linux")
+	}
+	t.Setenv("HOME", "")
+	r := checkDataDir("").Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("no-home checkDataDir: status = %v, want Skip (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// TestCheckWallet_NoHome_Skips covers checks.go:252-254 — empty dataDir with
+// HOME unset makes os.UserHomeDir fail, so the wallet check skips.
+func TestCheckWallet_NoHome_Skips(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("UserHomeDir error path is HOME-driven only on Linux")
+	}
+	t.Setenv("HOME", "")
+	r := checkWallet("").Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("no-home checkWallet: status = %v, want Skip (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// TestCheckPoolEndpointDiversity_EmptyHostSkipped covers checks.go:397-398 —
+// a pool URL with no recognised scheme yields an empty host from stripScheme,
+// which is skipped (continue). With only one resolvable host, the check
+// returns Skip ("could not resolve enough pool endpoints").
+func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
+	orig := poolIPResolver
+	t.Cleanup(func() { poolIPResolver = orig })
+	poolIPResolver = func(_ context.Context, _ string) ([]string, error) {
+		return []string{"203.0.113.1"}, nil
+	}
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://good.example.com:3333"},
+			{URL: "http://bad.example.com"}, // unrecognised scheme → host "" → skipped
+		},
+	}
+	r := checkPoolEndpointDiversity(cfg).Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("empty-host pool: status = %v, want Skip (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// TestCheckPayoutScheme_EmptyHostUsesURL covers checks.go:620-622 —
+// a pool URL with no recognised scheme makes stripScheme return "", so the
+// check falls back to using the raw URL string as the host label.
+func TestCheckPayoutScheme_EmptyHostUsesURL(t *testing.T) {
+	const rawURL = "noscheme-host:3333"
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			{URL: rawURL, PayoutScheme: "fpps"},
+		},
+	}
+	r := checkPayoutScheme(cfg).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("empty-host payout: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, rawURL) {
+		t.Errorf("detail should fall back to the raw URL %q: %q", rawURL, r.Detail)
+	}
+}
+
+// TestCheckClockSkew_MalformedDateWarns covers checks.go:765-771 —
+// the probe server returns a Date header that http.ParseTime cannot parse,
+// so the check warns rather than reporting a bogus skew.
+func TestCheckClockSkew_MalformedDateWarns(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// An explicitly-set Date header is preserved by net/http (it only
+		// auto-fills Date when absent). Garbage here forces a ParseTime error.
+		w.Header().Set("Date", "not-a-valid-http-date")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = srv.Client()
+
+	r := checkClockSkew().Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("malformed Date: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "cannot parse server Date header") {
+		t.Errorf("detail should mention the parse failure: %q", r.Detail)
+	}
+}
+
+// TestPoolIPResolver_DefaultResolvesIPLiteral covers checks.go:365-370 —
+// the package-default poolIPResolver. Given an IP literal with a port it must
+// strip the port and resolve the literal without performing real DNS (the Go
+// resolver short-circuits IP literals), so this is offline-safe.
+func TestPoolIPResolver_DefaultResolvesIPLiteral(t *testing.T) {
+	ips, err := poolIPResolver(context.Background(), "127.0.0.1:3333")
+	if err != nil {
+		t.Fatalf("default poolIPResolver on IP literal: %v", err)
+	}
+	var found bool
+	for _, ip := range ips {
+		if ip == "127.0.0.1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("default poolIPResolver(127.0.0.1:3333) = %v, want to contain 127.0.0.1", ips)
+	}
+}
+
+// TestCheckClockSkew_RequestBuildError covers checks.go:733-739 —
+// a probe URL containing a control character makes http.NewRequestWithContext
+// fail before any network call, and the check warns with an internal-error note.
+func TestCheckClockSkew_RequestBuildError(t *testing.T) {
+	origURL := clockSkewProbeURL
+	t.Cleanup(func() { clockSkewProbeURL = origURL })
+	clockSkewProbeURL = "http://\x7f-control-char" // invalid: control char in URL
+
+	r := checkClockSkew().Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("request-build error: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "could not build request") {
+		t.Errorf("detail should mention the build failure: %q", r.Detail)
+	}
+}
+
+// TestCheckClockSkew_NilClientUsesDefault covers checks.go:743-745 —
+// when clockSkewHTTPClient is nil the check falls back to http.DefaultClient,
+// which can still reach a local httptest server (no external network needed).
+func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = nil // force the http.DefaultClient fallback branch
+
+	r := checkClockSkew().Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
