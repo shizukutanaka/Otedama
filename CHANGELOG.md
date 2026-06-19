@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 172 — honesty fix: mining-side yield is a static estimate, not live telemetry)
+
+A Socratic review of the arbitration inputs found that the AI-inference side is
+scrupulously disclosed as simulated (the `(simulated)` name suffix is test-guarded and
+documented in KNOWN_LIMITATIONS §1), but the **mining side's static estimate was masked
+by inaccurate comments** — an honesty asymmetry in the data the arbitration engine compares.
+
+- `internal/provider/mining.go` — corrected three misleading comments in `publish`:
+  - removed the claim that device hashrate comes "from last `Stats()` reading" — the
+    `hal.Device` interface exposes **no** `Stats()`/telemetry method (verified in
+    `internal/hal/device.go`); the per-family estimate is always used.
+  - removed "hardcoded estimate updated periodically by config" for the network hashrate —
+    it is a compile-time `const`, not config-driven.
+  - clarified that there is no runtime-data path today, so the mining-side yield is a
+    stable estimate that moves only with the BTC price, not a live measurement.
+- `docs/KNOWN_LIMITATIONS.md` — added **§7 "Mining-side yield uses static hashrate
+  estimates"**, matching the disclosure style of §1 (AI simulated): states impact
+  (payouts are real income; only the *comparison* yield is an estimate), how to tell, the
+  workaround, and the v3.1.0 target (feed the engine's already-measured
+  `worker.Stats().HashRate` and a live difficulty source into `MiningProvider`).
+
+No behaviour change — comments and documentation only. Build, vet, and all provider tests green.
+
+**Follow-up (recorded, not implemented this session):** wiring the engine's measured
+worker hashrate into `MiningProvider` would make the mining-side arbitration input truly
+live. It crosses the engine→provider boundary and changes economic behaviour, so it belongs
+in the requirements→design workflow (a future Issue), not an ad-hoc change.
+
 ### Test (session 171 — doctor ~93% → 100%; 11 new tests covering address/dir/wallet/pool/clock-skew branches)
 
 **Coverage improvements:**

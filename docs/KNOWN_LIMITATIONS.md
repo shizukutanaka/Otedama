@@ -154,6 +154,40 @@ splice during the alpha.
 
 ---
 
+## 7. Mining-side yield uses static hashrate estimates
+
+**What:** The `MiningProvider` (`internal/provider/mining.go`) computes
+its yield quote from two **static** inputs: a per-family device hashrate
+estimate (ASIC ≈ 100 TH/s, GPU ≈ 1.5 GH/s, CPU ≈ 10 MH/s) and a
+compile-time network-hashrate constant (≈ 1000 EH/s). Only the BTC/USD
+price (and its freshness, which sets the confidence) varies between
+quotes.
+
+**Impact:** The Bitcoin earnings *real income* — the pool credits real
+shares the miner actually submits — but the **yield figure the
+arbitration engine compares against the AI-inference side** is a stable
+estimate, not a live measurement of this machine's hashrate or the
+current network difficulty. On hardware far from the per-family default,
+or during large difficulty swings, the mining-side estimate can be off.
+This does not affect *which* shares are submitted or *where* payouts go;
+it affects only the relative yield used to steer arbitration.
+
+**How you can tell:** the mining quote's `SatsPerSecond` does not change
+as the device's measured hashrate changes; it moves only with the BTC
+price. The engine *does* measure real worker hashrate
+(`worker.Stats().HashRate`), but that telemetry is not yet fed into the
+provider's quote.
+
+**Workaround:** none needed for correctness of payouts. Treat the
+mining-vs-inference yield comparison as approximate during the alpha.
+
+**Target:** v3.1.0 — feed the engine's measured worker hashrate and a
+live network-difficulty source into `MiningProvider`. The `hal.Device`
+interface gains no telemetry method for this; the measured rate is
+plumbed from the engine, which already tracks it.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

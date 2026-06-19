@@ -98,10 +98,16 @@ func (p *MiningProvider) loop(ctx context.Context) {
 
 // publish calculates the current yield and sends it on the quote channel.
 // Yield per device is estimated using:
-//   - Device hashrate (from last Stats() reading or a default estimate)
-//   - Network hashrate (hardcoded estimate updated periodically by config)
-//   - Current BTC price from RateSource
+//   - Device hashrate: a static per-family estimate (ASIC/GPU/CPU). The
+//     hal.Device interface does not yet expose live hashrate telemetry, so
+//     no measured rate is consumed here; see docs/KNOWN_LIMITATIONS.md §7.
+//   - Network hashrate: a compile-time constant estimate (not configurable).
+//   - Current BTC price from RateSource (freshness drives the confidence).
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
+//
+// Because both hashrate inputs are static, the mining-side yield is a stable
+// estimate rather than a live measurement; only the BTC price and its
+// freshness vary between quotes.
 func (p *MiningProvider) publish(ctx context.Context) {
 	rate, fresh := p.rates.BTCUSDRate()
 	if rate <= 0 {
@@ -112,7 +118,8 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		confidence = 0.95
 	}
 
-	// Network hashrate estimate: ~1000 EH/s in 2026
+	// Network hashrate estimate: ~1000 EH/s in 2026. This is a compile-time
+	// constant, not yet driven by config or a live difficulty feed.
 	const networkHashrate = 1e21 // H/s
 	const blockRewardBTC = 3.125
 	const blockTimeSec = 600.0
@@ -123,7 +130,10 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		if !dev.Capabilities().SHA256d {
 			continue
 		}
-		// Estimate device hashrate from family if no runtime data yet.
+		// Static per-family hashrate estimate. There is no live-telemetry
+		// path today (hal.Device exposes no Stats()), so this estimate is
+		// always used; wiring in the engine's measured worker hashrate is
+		// tracked as future work (docs/KNOWN_LIMITATIONS.md §7).
 		var deviceHashrate float64
 		switch dev.Identity().Family {
 		case hal.FamilyASIC:
