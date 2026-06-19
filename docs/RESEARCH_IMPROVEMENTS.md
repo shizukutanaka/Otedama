@@ -231,6 +231,28 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
+11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
+    recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
+    ad hoc"). `MiningProvider` and `AkashProvider`
+    (`internal/provider/{mining,ai_inference}.go`) share substantial
+    boilerplate: `Stop()` is **byte-identical** (cancel → `wg.Wait()` → nil
+    the cancel → re-create the buffered `quoteCh`); `loop()` is identical
+    except the tick interval (30 s vs 60 s); `Start()` differs only in the
+    device filter (mining accepts all SHA-256d devices, Akash filters to
+    GPUs with `GeneralCompute`); and the channel "drop-oldest when full"
+    send pattern in `publish()` is copied in both. A small shared core — e.g.
+    an unexported `baseProvider` holding `{quoteCh, cancel, wg, mu}` with
+    shared `Stop()`, a `runLoop(interval, publishFn)`, and a `sendQuote()`
+    helper — would remove ~60 LOC and one class of drift bug. **Trade-off to
+    weigh before doing it:** the providers are deliberately simple and
+    independent (Pike: "boring over clever"); a shared base adds an
+    abstraction. A refactor must preserve three load-bearing behaviours: the
+    `quoteCh` re-creation in `Stop()` (so a stopped provider can be
+    restarted — see `TestMiningProvider_StopClearsStateForRestart`), the
+    buffered drop-oldest semantics, and the distinct tick intervals/device
+    filters. Verdict: worth doing as one focused refactor session with the
+    existing provider tests as the safety net; not urgent (no correctness
+    impact today).
 
 ---
 

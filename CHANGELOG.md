@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 173 — record provider duplication as a tracked finding, per CLAUDE.md rule I3)
+
+A continued Socratic review of the codebase confirmed several areas are already mature and
+need no change — stated here so future passes don't re-plough them:
+- **Secret hygiene (strength):** no code path logs the payout address (only `config show`
+  prints it, via `safeDisplay`), passphrase, seed, or mnemonic; `internal/lightning/seedstore.go`
+  zeroizes the scrypt-derived key, the passphrase bytes, and the decrypted plaintext via
+  `defer zeroBytes(...)`.
+- **Observability (strength):** the `otedama_*` metric surface is comprehensive
+  (`otedama_up`, `otedama_pool_connection_state`, `otedama_build_info`, reject/stale-rate,
+  arbitration switch/hold/foregone, submit-latency, power) — the earlier "observability gap"
+  note was stale; those items are done (RESEARCH_IMPROVEMENTS Cat 9).
+- **Economic model (strength):** mining yield is computed natively in sats (price-independent,
+  correct since the block reward is BTC-denominated); the AI side converts USD→sats via the
+  live rate. Comparing both in sats/sec is sound.
+
+The one new actionable finding is **code duplication between the two `Provider`
+implementations**, recorded — not fixed — per CLAUDE.md rule I3:
+- `docs/RESEARCH_IMPROVEMENTS.md` Category 7 #11: `MiningProvider` and `AkashProvider` share a
+  byte-identical `Stop()`, a `loop()` identical but for the tick interval, near-identical
+  `Start()`, and a copied drop-oldest `publish()` send. Proposes an unexported `baseProvider`
+  core, notes the three load-bearing behaviours any refactor must preserve (quoteCh re-creation
+  on Stop for restart, buffered drop-oldest semantics, distinct intervals/filters), and judges
+  it a focused future refactor session — not urgent (no correctness impact today).
+
+Docs only — no code or behaviour change.
+
 ### Docs (session 172 — honesty fix: mining-side yield is a static estimate, not live telemetry)
 
 A Socratic review of the arbitration inputs found that the AI-inference side is
