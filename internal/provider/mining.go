@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -19,81 +18,35 @@ import (
 //   - The pool sends a new job with different nBits (difficulty change).
 //   - The device's measured hashrate changes by more than 5%.
 //   - MinQuoteInterval has elapsed without an update.
+//
+// The start/stop/loop/send lifecycle lives in the embedded pollingProvider;
+// only the Bitcoin-specific yield calculation (publish) is defined here.
 type MiningProvider struct {
+	pollingProvider
 	id      string
 	poolURL string
 	rates   RateSource
-	quoteCh chan Quote
 	devices []hal.Device
-	mu      sync.Mutex
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
 func NewMiningProvider(poolURL string, rates RateSource) *MiningProvider {
 	return &MiningProvider{
+		pollingProvider: pollingProvider{
+			quoteCh:  make(chan Quote, 16),
+			interval: 30 * time.Second,
+		},
 		id:      "mining.stratum",
 		poolURL: poolURL,
 		rates:   rates,
-		quoteCh: make(chan Quote, 16),
 	}
 }
 
-func (p *MiningProvider) ID() string           { return p.id }
-func (p *MiningProvider) Name() string         { return fmt.Sprintf("Bitcoin Mining (%s)", p.poolURL) }
-func (p *MiningProvider) Quotes() <-chan Quote { return p.quoteCh }
+func (p *MiningProvider) ID() string   { return p.id }
+func (p *MiningProvider) Name() string { return fmt.Sprintf("Bitcoin Mining (%s)", p.poolURL) }
 
 func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.cancel != nil {
-		return fmt.Errorf("provider: mining provider already started")
-	}
-	p.devices = devices
-	inner, cancel := context.WithCancel(ctx)
-	p.cancel = cancel
-
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer close(p.quoteCh)
-		p.loop(inner)
-	}()
-	return nil
-}
-
-func (p *MiningProvider) Stop() {
-	p.mu.Lock()
-	cancel := p.cancel
-	p.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		p.wg.Wait()
-		p.mu.Lock()
-		p.cancel = nil
-		p.quoteCh = make(chan Quote, cap(p.quoteCh))
-		p.mu.Unlock()
-	}
-}
-
-// loop periodically fetches the current BTC/USD rate and network stats
-// to produce a live yield estimate.
-func (p *MiningProvider) loop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	// Publish an initial quote immediately.
-	p.publish(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			p.publish(ctx)
-		}
-	}
+	return p.launch(ctx, "mining provider", func() { p.devices = devices }, p.publish)
 }
 
 // publish calculates the current yield and sends it on the quote channel.
@@ -164,21 +117,8 @@ func (p *MiningProvider) publish(ctx context.Context) {
 			},
 		}
 		_ = rate // used for future USD display
-		select {
-		case p.quoteCh <- q:
-		case <-ctx.Done():
+		if !p.sendQuote(ctx, q) {
 			return
-		default:
-			// Channel full — drop oldest, send newest.
-			select {
-			case <-p.quoteCh:
-			default:
-			}
-			select {
-			case p.quoteCh <- q:
-			case <-ctx.Done():
-				return
-			}
 		}
 	}
 }

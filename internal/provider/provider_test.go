@@ -345,3 +345,53 @@ func TestMiningProvider_Publish_DropsOldestWhenFull(t *testing.T) {
 		t.Error("channel empty after drop-oldest publish")
 	}
 }
+
+// ============================================================================
+// pollingProvider — shared loop and send lifecycle
+// ============================================================================
+
+func TestPollingLoop_RepublishesOnTicker(t *testing.T) {
+	// The polling loop publishes once immediately and then again on every
+	// ticker tick. With a tiny interval we can observe more than one quote,
+	// covering the ticker-driven republish branch deterministically (the
+	// production 30s/60s interval made this branch unreachable in tests).
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	p.interval = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := p.Start(ctx, []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer p.Stop()
+
+	// First quote is the immediate publish; a second quote can only arrive
+	// from a ticker tick.
+	for i := 0; i < 2; i++ {
+		select {
+		case _, ok := <-p.Quotes():
+			if !ok {
+				t.Fatalf("quote channel closed after %d quotes; ticker did not republish", i)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for quote %d; ticker did not republish", i)
+		}
+	}
+}
+
+func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
+	// sendQuote must report failure (not block) when the context is already
+	// cancelled and the channel is full, so the publish loop exits promptly
+	// on shutdown. With a full channel the buffered send blocks, so the
+	// ready ctx.Done() case is selected and sendQuote returns false.
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	for len(p.quoteCh) < cap(p.quoteCh) {
+		p.quoteCh <- Quote{ProviderID: "fill"}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if p.sendQuote(ctx, Quote{ProviderID: "new"}) {
+		t.Error("sendQuote returned true on a cancelled context; should report failure")
+	}
+}

@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 188 — provider: extract shared polling lifecycle; dedupe MiningProvider/AkashProvider and unlock the ticker-loop tests)
+
+The long-deferred provider-duplication cleanup (CLAUDE.md rule I3). `MiningProvider` and
+`AkashProvider` carried byte-identical lifecycle machinery — the same `Stop()`, the same
+Start goroutine launch, the same `loop()` (differing only in the 30s vs 60s interval), and
+the same channel-full drop-oldest send block — duplicated across both files.
+
+Extracted a single `pollingProvider` base (`internal/provider/polling.go`) that both providers
+embed:
+- `launch(ctx, label, prepare, publish)` — the start/already-started/goroutine plumbing. The
+  `prepare` closure runs under the lock *after* the already-started check, preserving the
+  exact semantics that a rejected double-start never mutates the device set the running loop
+  reads (Akash's GPU filter and Mining's pass-through both slot in here).
+- `loop(ctx, publish)`, `Stop()`, `Quotes()`, and `sendQuote(ctx, q)` (the drop-oldest send).
+
+Embedded fields are promoted, so existing references (`p.quoteCh`, `p.devices`, `p.publish`)
+and the white-box tests that use them keep working unchanged. Net: the two providers shed 121
+lines into a 124-line shared base written once.
+
+The poll interval is now a struct field (defaulting to 30s/60s) instead of a hardcoded
+`time.NewTicker` literal. This made the ticker-driven republish branch — previously
+unreachable in tests without a 30-second wait — testable with a 1ms interval. Added
+`TestPollingLoop_RepublishesOnTicker` (covers the `case <-ticker.C` republish) and
+`TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext`. The shared `loop`, `launch`,
+`Stop`, and `Quotes` are now at 100%; provider package 96.1% → 98.0%. Race-clean.
+
 ### Fixed (session 187 — engine: report interrupted device detection honestly instead of "no devices detected")
 
 Socratic interrogation of `detectDevices` found a swallowed-error diagnostics bug.
