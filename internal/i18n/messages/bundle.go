@@ -3,7 +3,11 @@
 
 package messages
 
-import "github.com/shizukutanaka/Otedama/internal/i18n"
+import (
+	"strings"
+
+	"github.com/shizukutanaka/Otedama/internal/i18n"
+)
 
 // NewBundle builds an i18n.Bundle containing all built-in language
 // catalogs. The English catalog is always present; catalogs that fail
@@ -43,12 +47,17 @@ func NewBundle() (*i18n.Bundle, error) {
 // DetectLang maps a raw BCP-47 tag string (from --language flag or
 // OS locale) to the nearest supported i18n.Lang. Returns LangEnglish
 // if no match is found.
+//
+// BCP-47 tags are case-insensitive (RFC 5646 §2.1.1), so the input is
+// lower-cased before matching: "JA", "ja-JP", and "ja" all resolve to
+// Japanese. The supported languages (PriorityLanguages) are all stored
+// in canonical lower case.
 func DetectLang(tag string) i18n.Lang {
 	if tag == "" {
 		return i18n.LangEnglish
 	}
+	candidate := i18n.Lang(strings.ToLower(tag))
 	// Exact match first.
-	candidate := i18n.Lang(tag)
 	for _, l := range i18n.PriorityLanguages() {
 		if l == candidate {
 			return l

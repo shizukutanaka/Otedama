@@ -303,6 +303,27 @@ func TestDetectLang_Unknown(t *testing.T) {
 	}
 }
 
+func TestDetectLang_CaseInsensitive(t *testing.T) {
+	// BCP-47 (RFC 5646 §2.1.1) tags are case-insensitive. An OS locale or
+	// --language flag reporting an upper- or mixed-case tag must resolve to
+	// the same language as its canonical lower-case form, not fall back to
+	// English.
+	tests := []struct{ in, want string }{
+		{"JA", "ja"},
+		{"EN", "en"},
+		{"JA-JP", "ja"},
+		{"ja-jp", "ja"},
+		{"Zh-Cn", "zh"},
+		{"PT-br", "pt"},
+		{"KO", "ko"},
+	}
+	for _, tt := range tests {
+		if got := DetectLang(tt.in); string(got) != tt.want {
+			t.Errorf("DetectLang(%q) = %q, want %q (BCP-47 is case-insensitive)", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestJapanese_CoversAllEnglishIDs(t *testing.T) {
 	en, _ := English()
 	ja, _ := Japanese()

@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 183 — i18n: DetectLang now honours BCP-47 case-insensitivity)
+
+Socratic interrogation of `DetectLang` found a real correctness bug. The function compared
+the raw input tag against `PriorityLanguages()` (all stored in canonical lower case) without
+case-folding, and `Lang.Base()` returns the tag prefix verbatim. So an upper- or mixed-case
+tag never matched:
+
+- `DetectLang("JA")` → no exact match, base `"JA"` ≠ `"ja"` → **English** (should be Japanese)
+- `DetectLang("JA-JP")`, `"Zh-Cn"`, `"PT-br"`, `"EN"` → all fell back to English
+
+Per RFC 5646 §2.1.1, BCP-47 language tags are explicitly case-insensitive. A user whose OS
+locale or `--language` flag reports an upper-case tag (common on some platforms) silently got
+the English UI instead of their language — a real, user-visible regression that the existing
+tests missed because every test vector used a lower-case language subtag (`ja-JP`).
+
+Fixed by lower-casing the input once at the top of `DetectLang` before exact- and base-tag
+matching. The fix is local to `DetectLang`; `Lang.Base()` is left unchanged because its other
+caller (`Bundle.Render`) only ever receives already-canonical langs. Added
+`TestDetectLang_CaseInsensitive` covering `JA`, `EN`, `JA-JP`, `ja-jp`, `Zh-Cn`, `PT-br`, `KO`.
+
+(Also examined `messages.NewBundle`'s two catalog-construction error branches at 83.3%:
+both are defensive dead code — `English()` and the sibling catalogs call `NewCatalog` with
+hardcoded valid maps and have no injection point, so they can only fail if compiled-in data
+is corrupted, which the per-catalog tests already guard. Classified, not tested.)
+
+All 24 packages green.
+
 ### Fixed (session 182 — btccrypto: cover the bech32 non-canonical-padding rejection path)
 
 `ValidateBech32Address` sat at 95.5% with two uncovered branches; Socratic interrogation
