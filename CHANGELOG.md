@@ -10,6 +10,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 179 — arbitration: fix flawed greedy-property test; add TotalYield-sum and ForegoneSatsPerSec≥0 invariant tests)
+
+Socratic interrogation of `TestDecide_Property_AllocationMatchesOrExceedsGreedy` found a
+correctness bug in the test itself:
+
+**Wrong invariant in the property test**
+
+The test used `in.Policy = Policy(r.Intn(4))` (random policies) but compared
+`alloc.TotalYield` (raw effective yield sum) against `greedyTotalYield` (maximum raw yield
+per device). This is a valid invariant only for `PolicyMaximizeEarnings`. Under
+`PolicyMaximizePrivacy` or `PolicyEnvironmentFriendly`, the engine deliberately picks a
+stream with lower raw yield when it has a higher policy-adjusted score — e.g., a
+stream with raw=100 and privacy=9 beats one with raw=105 and privacy=0. In that case
+`alloc.TotalYield=100 < greedyTotalYield=105`, and the test would fail.
+
+The test happened to pass because seed 7 + 200 trials never generated a falsifying
+constellation under those policies. Fixed by restricting the property test to
+`in.Policy = PolicyMaximizeEarnings`, where the engine's score IS the raw yield and the
+greedy invariant holds exactly. Updated the comment accordingly.
+
+Also corrected the `engine.go` invariants docstring (4th invariant over-claimed universality;
+now scoped to MaximizeEarnings). Added two missing invariants:
+- `TotalYield == sum(ExpectedYield)` across all Assignments
+- `ForegoneSatsPerSec >= 0` for every Assignment
+
+**New behavioral invariant tests**
+
+- `TestDecide_TotalYield_EqualsSumOfExpectedYields` — concrete 3-device case (GPU active,
+  CPU active, ASIC idle) verifying `TotalYield == sum(a.ExpectedYield)`. This catches any
+  future accumulation bug where TotalYield diverges from individual assignment yields.
+- `TestDecide_Property_ForegoneSatsPerSecNeverNegative` — 200 random-input trials (seed 17)
+  asserting `ForegoneSatsPerSec >= 0` for every Assignment under all policies and hysteresis
+  values. A negative value would mean the engine assigned a device to a stream paying more
+  than the theoretical maximum, which is arithmetically impossible — but the property test
+  is the guard if the computation ever regresses.
+
+All 24 packages green.
+
 ### Fixed (session 178 — btccrypto: cover unsupported base58 version byte; logger: cover CAS loser path in defaultLogger)
 
 Two improvements from the Socratic coverage probe:

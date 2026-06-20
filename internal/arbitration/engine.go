@@ -39,8 +39,13 @@
 //     policy-adjusted metric used for selection, so hysteresis never
 //     overrides the active policy's notion of "better" (e.g. a higher raw
 //     yield with worse privacy is not a switch trigger under MaximizePrivacy).
-//   - Total yield of the allocation is >= any allocation produced by a
-//     greedy per-device max-yield rule (ignoring switching costs).
+//   - Under PolicyMaximizeEarnings with no hysteresis, total yield equals
+//     the optimal per-device greedy maximum. Other policies deliberately
+//     accept lower raw yield in exchange for BTC-native payment, privacy,
+//     or environmental preference; raw TotalYield may therefore be less than
+//     the greedy maximum under those policies.
+//   - TotalYield equals the sum of ExpectedYield across all Assignments.
+//   - ForegoneSatsPerSec is always >= 0 for every Assignment.
 //
 // These invariants are verified by property-based tests, which exercise
 // the engine against many random inputs.

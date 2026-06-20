@@ -784,14 +784,17 @@ func TestDecide_Property_NeverAssignsIncompatibleFamily(t *testing.T) {
 }
 
 func TestDecide_Property_AllocationMatchesOrExceedsGreedy(t *testing.T) {
-	// Without hysteresis, the engine's allocation must be at least as
-	// good (in total yield) as a greedy per-device max-yield allocation.
-	// This is the basic optimality guarantee.
+	// Under PolicyMaximizeEarnings with no hysteresis, the engine's raw
+	// TotalYield must equal the greedy per-device maximum — it IS the
+	// per-device greedy optimum. Other policies deliberately sacrifice raw
+	// yield for privacy/environment/BTC preference, so this invariant is
+	// restricted to PolicyMaximizeEarnings.
 	r := rand.New(rand.NewSource(7))
 	for trial := 0; trial < 200; trial++ {
 		in := randomInput(r)
 		in.HysteresisMargin = 0
 		in.Previous = nil
+		in.Policy = PolicyMaximizeEarnings // invariant only holds for this policy
 
 		alloc, err := Decide(in)
 		if err != nil {
@@ -835,6 +838,63 @@ func TestDecide_Property_NoIdleWhenCompatibleStreamExists(t *testing.T) {
 					t.Fatalf("trial %d: device %v idle but stream %v offers yield %.4f",
 						trial, a.DeviceID, s.ID, s.YieldFor(dev.Identity.ID).Effective())
 				}
+			}
+		}
+	}
+}
+
+func TestDecide_TotalYield_EqualsSumOfExpectedYields(t *testing.T) {
+	// TotalYield must equal the sum of ExpectedYield values across all
+	// Assignments — idle devices contribute zero, and the identity holds
+	// regardless of policy.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
+	asic := DeviceRef{Identity: hal.Identity{ID: "asic-0", Family: hal.FamilyASIC}}
+	streams := []Stream{
+		{
+			ID:              "mining.braiins",
+			AcceptsFamilies: []hal.Family{hal.FamilyGPU, hal.FamilyCPU},
+			YieldPerDevice: map[string]Yield{
+				"gpu-0": {SatsPerSecond: 100, Confidence: 1.0},
+				"cpu-0": {SatsPerSecond: 10, Confidence: 0.9},
+			},
+		},
+	}
+	// asic-0 has no compatible stream → idle (ExpectedYield = 0).
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu, cpu, asic},
+		Streams: streams,
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	var sumYield float64
+	for _, a := range alloc.Assignments {
+		sumYield += a.ExpectedYield
+	}
+	if alloc.TotalYield != sumYield {
+		t.Errorf("TotalYield = %v, sum(ExpectedYield) = %v; must be equal", alloc.TotalYield, sumYield)
+	}
+}
+
+func TestDecide_Property_ForegoneSatsPerSecNeverNegative(t *testing.T) {
+	// ForegoneSatsPerSec must always be >= 0 for every Assignment,
+	// regardless of policy, devices, hysteresis, or stream configuration.
+	// A negative value would mean the engine assigned a device to a stream
+	// that pays *more* than the best available stream, which is impossible.
+	r := rand.New(rand.NewSource(17))
+	for trial := 0; trial < 200; trial++ {
+		in := randomInput(r)
+		alloc, err := Decide(in)
+		if err != nil {
+			continue
+		}
+		for _, a := range alloc.Assignments {
+			if a.ForegoneSatsPerSec < 0 {
+				t.Fatalf("trial %d device %q: ForegoneSatsPerSec = %v < 0",
+					trial, a.DeviceID, a.ForegoneSatsPerSec)
 			}
 		}
 	}
