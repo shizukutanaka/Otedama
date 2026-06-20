@@ -10,6 +10,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 190 — spec: reconcile SPECIFICATION.md §3/§6 with the implemented config and metrics surface)
+
+Socratic audit of `docs/SPECIFICATION.md` against the code found two drift gaps where the
+spec — which promises to describe *observable behaviour as actually implemented* — had
+fallen behind the implementation:
+
+- **§3 Configuration (G16):** documented only 8 of the 16 config fields. The power-awareness
+  (`power_watts`, `electricity_price_per_kwh`), arbitration/curtailment
+  (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`), and per-pool (`payout_scheme`,
+  `tls_ca_file`) fields are all live, range-validated in `config.Validate`, and printed by
+  `config show`, yet were absent — as were the four numeric `OTEDAMA_*` env vars. Rewrote §3
+  as a complete schema table (YAML key, env var, default, validation) with precedence and
+  validation subsections.
+- **§6 Metrics (G17):** listed 17 metrics, but `internal/engine/metrics.go` registers ~39.
+  The power/efficiency, rate-source-redundancy, clock-skew, pool-difficulty, per-device,
+  payout-info, and arbitration-economics families were exposed at `/metrics` but undocumented,
+  so an operator could not discover them from the spec. Replaced §6 with the full catalogue
+  grouped by purpose, with metric type and lazy-creation (†) annotations.
+
+Both gaps recorded and closed in the spec's own §8 "Gaps found" table. No code change; the
+implementation was already correct — only the description was stale.
+
+### Fixed (session 189 — stratum/engine/metrics/config: remove dead branches, cover write-error paths)
+
+Socratic coverage sweep across the highest non-100% functions, classifying each gap as dead
+code, a testable gap, or a real bug:
+
+- **Dead code removed.** `EncodeFrame`'s `EncodeHeader` error check (the header was already
+  validated and `buf[:HeaderSize]` is sized by construction); `ReadFrame`'s `DecodeHeader`
+  error check (`d.scratch` is `[HeaderSize]byte`) and its integer-overflow guard
+  (`total < HeaderSize` is dead on 64-bit — `int` cannot wrap from a `uint32`); and
+  `streamsSlice`'s `rep.YieldPerDevice == nil` guard (`updateStream`, the sole writer of the
+  input map, always initialises that field before inserting).
+- **Testable gaps covered.** `metrics.WriteText`'s `# TYPE`-line and sample-line write-error
+  paths via a `countingErrWriter` that fails after N writes (the always-failing `errWriter`
+  aborted on the first `# HELP` write and never reached them); `loadConfigFile`'s
+  `!os.IsNotExist` warning branch via a NUL-byte path (`EINVAL`, which reproduces under root,
+  unlike chmod-based tricks).
+
+`WriteText` 93.1%→100%, `loadConfigFile` 94.7%→100%, `streamsSlice` 94.4%→100%,
+`EncodeFrame`/`ReadFrame` 90.9%/89.5%→100%. All packages green and race-clean.
+
 ### Changed (session 188 — provider: extract shared polling lifecycle; dedupe MiningProvider/AkashProvider and unlock the ticker-loop tests)
 
 The long-deferred provider-duplication cleanup (CLAUDE.md rule I3). `MiningProvider` and

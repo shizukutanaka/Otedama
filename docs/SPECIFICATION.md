@@ -50,24 +50,53 @@ shutdown (SIGINT/SIGTERM).
 
 ## 3. Configuration
 
-Fields (YAML keys): `bitcoin_address`, `bitcoin_addresses` (failover list),
-`pools[]` (`url`,`user`,`password`), `workers.name`, `language`, `log_level`,
-`log_format`, `data_dir`.
+### 3.1 Schema
 
-**Precedence (highest→lowest):** flags → environment
-(`OTEDAMA_BITCOIN_ADDRESS`, `OTEDAMA_LOG_LEVEL`, `OTEDAMA_LOG_FORMAT`,
-`OTEDAMA_LANGUAGE`, `OTEDAMA_DATA_DIR`) → config file → built-in defaults.
-The address failover **list** is config-file-only; flags/env set the primary.
+Every field, its YAML key, the environment variable that overrides it (if any),
+its default, and its validation rule:
 
-**Validation rules:** at least one payout address is required (primary or a
-backup); every address must be a plausible mainnet address (length 26–90,
-prefix `1`/`3`/`bc1`; checksum is *not* verified here); `log_level` ∈
-{debug,info,warn,error}; each `pools[].url` must use a supported scheme
-(`stratum+tcp|tls|v2|v2tls://`) with a non-empty host. An empty/comments-only
-file is valid (defaults apply).
+| YAML key | Env var | Default | Validation |
+|---|---|---|---|
+| `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | plausible mainnet address (see §3.3) |
+| `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a plausible mainnet address |
+| `pools[].url` | — (file only) | built-in recommendations | supported scheme + non-empty host (§3.3) |
+| `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
+| `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
+| `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
+| `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured only for `stratum+tls://` |
+| `workers.name` | — (file only) | `""` | appended as `.name` to the `user_identity` |
+| `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
+| `log_level` | `OTEDAMA_LOG_LEVEL` | `info` | ∈ {debug, info, warn, error} |
+| `log_format` | `OTEDAMA_LOG_FORMAT` | `text` | ∈ {text, json} |
+| `data_dir` | `OTEDAMA_DATA_DIR` | `""` → XDG/platform convention | — |
+| `arbitration_hysteresis_pct` | `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `0.05` | ∈ [0.0, 1.0) |
+| `curtail_below_btc_usd` | `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `0` (disabled) | ≥ 0 |
+| `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
+| `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
 
-`config show` prints all effective fields including the failover addresses and
-the configured pool URLs.
+The path to the config file itself is resolved from `--config`, then
+`OTEDAMA_CONFIG`, then the platform default (`~/.config/otedama/config.yaml`).
+
+### 3.2 Precedence
+
+**Highest → lowest:** flags → environment → config file → built-in defaults.
+The address failover **list** (`bitcoin_addresses`) and all `pools[]` fields are
+config-file-only; flags/env set only the primary address and the scalar
+log/language/data-dir/power/arbitration fields. A malformed numeric env var
+(e.g. `OTEDAMA_POWER_WATTS=300w`) is reported, not silently dropped.
+
+### 3.3 Validation rules
+
+At least one payout address is required (primary or a backup); every address
+must be a plausible mainnet address (length 26–90, prefix `1`/`3`/`bc1`;
+checksum is *not* verified here). Each `pools[].url` must use a supported scheme
+(`stratum+tcp|tls|v2|v2tls://`) with a non-empty host. The numeric fields are
+range-checked per the table above. An empty/comments-only file is valid
+(defaults apply).
+
+`config show` prints **all** effective fields — including the failover
+addresses, the power/arbitration/curtailment fields, `worker_name`, and the
+configured pool URLs — each tagged with the layer it was resolved from.
 
 ## 4. Mining session lifecycle
 
@@ -105,8 +134,12 @@ the configured pool URLs.
 ## 5. Transport (Stratum V2)
 
 Binary frame layer (`internal/stratum`): 6-byte header (u16 ext_type, u8
-msg_type, u24 msg_length), length-bounded against `MaxFrameSize`
-(default 16 MiB) with explicit overflow guards before allocation. Optional
+msg_type, u24 msg_length). The declared length is checked against
+`MaxFrameSize` (default 16 MiB) *before* the payload buffer is allocated, so a
+malicious peer cannot trigger a large allocation by announcing a huge frame.
+(The u24 length is structurally incapable of overflowing a 64-bit `int`, the
+project's only supported word size, so no separate overflow guard is needed.)
+Optional
 Noise NX transport encryption (ChaCha20-Poly1305, SHA-256); the DH primitive
 is **P-256 in this alpha**, not secp256k1 (KNOWN_LIMITATIONS §2). The
 encrypted-frame codec is u16-length-prefixed, rejects oversize writes, and
@@ -114,17 +147,68 @@ buffers partial reads so no plaintext is dropped (session 53).
 
 ## 6. Metrics (`/metrics`, Prometheus text format, no client dependency)
 
-Counters: `otedama_shares_found_total`, `otedama_shares_total{status}`,
-`otedama_shares_rejected_by_reason_total{reason}`,
-`otedama_pool_connect_attempts_total`, `otedama_pool_connect_failures_total`,
-`otedama_arbitration_switches_total`.
-Gauges: `otedama_hashrate_hashes_per_second`, `otedama_btc_usd_rate`,
-`otedama_uptime_seconds`, `otedama_start_time_seconds`,
-`otedama_submit_latency_milliseconds{quantile}`,
-`otedama_share_acceptance_rate`, `otedama_up`,
-`otedama_pool_connection_state` (0/1/2), `otedama_pool_active_index`,
-`otedama_payout_active_index`, `otedama_build_info{version,commit,goversion}`.
-HTTP endpoints: `/metrics`, `/healthz`, `/readyz`, `/`.
+All metrics carry the `otedama_` prefix (omitted below). Metrics registered at
+startup always appear; lazily-created series (marked †) appear only after the
+first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
+`/healthz`, `/readyz`, `/`.
+
+**Shares & rejects**
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `shares_found_total` | counter | Shares found locally by all workers. |
+| `device_shares_found_total{device}` † | counter | Per-device breakdown of shares found. |
+| `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
+| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). |
+| `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
+| `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected, ≥0). |
+| `share_acceptance_rate` | gauge | accepted / judged. |
+| `reject_rate` | gauge | rejected / judged. |
+| `stale_rate` | gauge | stale-rejected / judged. |
+| `submit_latency_milliseconds{quantile}` | gauge | submit→accept RTT at q=0.5/0.95/0.99. |
+
+**Hashrate, health & power**
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `hashrate_hashes_per_second` | gauge | Current aggregate hashrate. |
+| `up` | gauge | 1 = healthy (hashing or curtailed), 0 = stalled when it should hash. |
+| `curtailed` | gauge | 1 = paused below `curtail_below_btc_usd`, else 0. |
+| `productive_seconds_total` | counter | Wall-clock seconds actually producing hashrate. |
+| `power_watts` | gauge | Configured system draw (0 = unset). |
+| `joules_per_terahash` | gauge | watts × 1e12 / hashrate (0 = power unset). |
+| `power_cost_usd_per_hour` | gauge | watts/1000 × price/kWh (0 = unset). |
+| `uptime_seconds` | gauge | Seconds since engine start. |
+| `start_time_seconds` | gauge | Unix start timestamp. |
+
+**Pool & payout**
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `pool_connect_attempts_total` | counter | Connection attempts incl. reconnects. |
+| `pool_connect_failures_total` | counter | Connection failures. |
+| `pool_connection_state` | gauge | 0=disconnected, 1=connecting, 2=connected. |
+| `pool_active_index` | gauge | 0-based index of active pool in the failover list. |
+| `pool_difficulty` | gauge | Current pool-assigned share difficulty. |
+| `estimated_share_interval_seconds` | gauge | difficulty × 2³² / hashrate. |
+| `last_job_received_seconds` | gauge | Unix time of the most recent job. |
+| `payout_active_index` | gauge | 0-based index of active payout address. |
+| `payout_info{address}` † | gauge | Active (masked) payout destination = 1. |
+| `build_info{version,commit,goversion}` | gauge | Constant 1; build metadata in labels. |
+
+**Arbitration & rates**
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `arbitration_switches_total` | counter | Workload switches (mining ↔ AI). |
+| `arbitration_holds_total` | counter | Better stream existed but hysteresis held. |
+| `arbitration_foregone_sats_per_second` | gauge | Instantaneous opportunity cost of the held allocation. |
+| `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
+| `active_streams` | gauge | Live revenue streams after stale-pruning. |
+| `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
+| `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |
+| `rate_sources_ok` / `rate_sources_total` | gauge | Healthy vs configured price sources. |
+| `clock_skew_seconds` | gauge | Max offset vs rate-source HTTP `Date` headers. |
 
 ## 7. Known limitations
 
@@ -150,6 +234,8 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
 | G13 | The Stratum V1 session silently ignored `client.reconnect` / `mining.reconnect` — the standard directive every major pool (Braiins/F2Pool/AntPool/ViaBTC/NiceHash) and client (cgminer/bfgminer/ESP-Miner) uses to move a miner to another node. Otedama held the connection until the socket died or the 5-minute read deadline fired, wasting connect time and shares. | **Fixed (session 64)**: `parseReconnect` decodes `[host,port,wait]`; on receipt the session records the directive and closes cleanly so `Jobs()` closes and the reconnect loop re-dials. The pool-supplied `host:port` is recorded but deliberately **not** followed (redirection-vector guard for a non-custodial miner). Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 #5. |
 | G14 | The stall monitor (`HashrateMonitor`, floor 0 H/s) was fed a *lifetime-average* hashrate (`HashesTotal/Uptime`), which stays positive forever after the first hash — so a device that wedges after running could never trip the stall warning, and `otedama_up`/`otedama_hashrate` reported lifetime, not current, values. | **Fixed (session 65)**: `hashrateWindow` differentiates the cumulative hash counter into a current (Δ/interval) rate consumed by the monitor, gauge, log, and TUI. Saturating on counter reset (reconnect) — no negative/NaN/spurious-spike readings. Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 #6. |
 | G15 | The miner ground against the **block target** (`TargetFromNBits(job.NBits)`) and discarded the pool-assigned **share target** (`OpenMiningChannelSuccess.Target`), so a worker emitted a share only on an actual block solve — effectively never on a live pool. No shares submitted ⇒ no credited work, no payout, no vardiff feedback. The integration test masked it with an easy block nBits and never asserted shares were submitted. | **Fixed (session 66)**: `handshake` returns the channel share target; `updateWork` grinds to it (block-target fallback only when the pool assigns none). Integration test now asserts `pool.SharesReceived() >= 1`. Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 (#2/#4). |
+| G16 | This spec's §3 documented only 8 of the 16 config fields — the power-awareness (`power_watts`, `electricity_price_per_kwh`), arbitration/curtailment (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`), and per-pool (`payout_scheme`, `tls_ca_file`) fields were all live, validated, and printed by `config show`, yet absent from the spec; the 4 numeric `OTEDAMA_*` env vars and the range-validation rules were also undocumented. | **Fixed this session** (session 190): §3 rewritten as a complete schema table (key, env var, default, validation) plus precedence and validation subsections. |
+| G17 | §6 listed 17 metrics, but the engine registers ~39 — the entire power/efficiency, rate-redundancy, clock-skew, pool-difficulty, per-device, payout-info, and arbitration-economics families were exposed at `/metrics` but undocumented, so an operator building dashboards/alerts could not discover them from the spec. | **Fixed this session** (session 190): §6 replaced with the full catalogue grouped by purpose (shares/rejects, hashrate/health/power, pool/payout, arbitration/rates), with type and lazy-creation (†) notes. |
 | G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | Open — KNOWN_LIMITATIONS §3; deferred (would regress submit-latency/reject telemetry until `poolproto.Session` is extended — see CHANGELOG session 55). |
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |
