@@ -55,6 +55,20 @@ func TestSystemdUnitPath_CreatesDirectory(t *testing.T) {
 	}
 }
 
+func TestSystemdUnitPath_ErrorsWhenHomeUnset(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd paths are Linux-specific")
+	}
+	// os.UserHomeDir() fails on Unix when $HOME is empty (e.g. a minimal
+	// container or a systemd context with no HOME). systemdUnitPath must
+	// surface that error rather than building a path under "".
+	t.Setenv("HOME", "")
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	if _, err := m.systemdUnitPath(); err == nil {
+		t.Error("systemdUnitPath should return an error when $HOME is unset")
+	}
+}
+
 // ============================================================================
 // launchdPlistPath
 // ============================================================================
@@ -79,6 +93,20 @@ func TestLaunchdPlistPath_UsesLibraryLaunchAgents(t *testing.T) {
 	}
 	if !strings.Contains(path, launchdLabel) {
 		t.Errorf("path missing label %q: %q", launchdLabel, path)
+	}
+}
+
+func TestLaunchdPlistPath_ErrorsWhenHomeUnset(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.UserHomeDir reads USERPROFILE on Windows, not HOME")
+	}
+	// The method is not OS-gated (only its caller is), so its $HOME error
+	// path is exercisable on any Unix. A missing HOME must produce an error,
+	// not a path rooted at "/Library/LaunchAgents".
+	t.Setenv("HOME", "")
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	if _, err := m.launchdPlistPath(); err == nil {
+		t.Error("launchdPlistPath should return an error when $HOME is unset")
 	}
 }
 

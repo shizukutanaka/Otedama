@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 186 — daemon: cover the no-$HOME error path in the systemd/launchd unit-path builders)
+
+`systemdUnitPath` and `launchdPlistPath` sat at 85.7% with the `os.UserHomeDir()` error
+branch uncovered. Unlike most error-path gaps, this one is genuinely reachable: on Unix
+`os.UserHomeDir()` fails when `$HOME` is empty — exactly the situation in a minimal
+container or a systemd context started without a HOME. `otedama service install` must report
+that cleanly rather than silently build a unit path rooted at `""`.
+
+Added `TestSystemdUnitPath_ErrorsWhenHomeUnset` (Linux) and
+`TestLaunchdPlistPath_ErrorsWhenHomeUnset` (any Unix — the method itself is not OS-gated,
+only its caller is), both using `t.Setenv("HOME", "")` to trigger the error deterministically.
+Both functions 85.7% → 100%; daemon package 96.5% → 98.2%.
+
+The remaining `NewManager` gaps (`os.Executable` and `filepath.EvalSymlinks` errors) are left
+uncovered: neither can be reliably triggered for the running test binary, and both are
+defensive guards around calls that do not fail in a normal process.
+
 ### Fixed (session 185 — poolproto: cover DialURL's success path and assert it keeps the connection open)
 
 Socratic interrogation of `DialURL` (92.9%) found the uncovered line was the **success path**
