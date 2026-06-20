@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 181 — engine: simplify LatencyTracker.Quantile to a single clamped path; cover the upper clamp)
+
+`LatencyTracker.Quantile` sat at 95.2% with the `idx >= n` clamp uncovered. Socratic
+interrogation showed *why* it was uncovered: the `if q >= 1 { return cp[n-1] }` early
+return guaranteed `0 < q < 1` by the time the index was computed, so `idx = int(q*n+0.5)-1`
+could never exceed `n-1`. The upper clamp was **dead code** — but only because of the
+early return that duplicated its purpose.
+
+Both early returns (`q <= 0` and `q >= 1`) were redundant with the index clamps:
+- `q <= 0` (or tiny/negative): `int(q*n+0.5)-1` underflows below 0 → `idx < 0` clamp → min.
+- `q >= 1` (or larger): the index overflows to `>= n` → `idx >= n` clamp → max.
+
+Removed both early returns, leaving a single nearest-rank computation with two clamps that
+now both fire on real inputs. This is fewer branches, one code path for the whole `q`
+domain, and the defensive bounds-check is retained so no caller-supplied `q` can cause an
+out-of-range index panic. Behaviour is identical at every endpoint (verified against the
+existing p50/p95/p99 and q=0 ring-buffer tests).
+
+Added `TestLatencyTracker_QuantileEndpointsClampToMinAndMax` covering q=0, q=-0.5, q=1,
+q=1.5, and q=1000 — exercising both clamps. `Quantile` 95.2% → 100%, race-clean.
+
+All 24 packages green.
+
 ### Fixed (session 180 — logger: make the CAS-loser branch deterministically testable; genuinely 100%)
 
 Session 178 added `TestDefaultLogger_ConcurrentInitNeverReturnsNil` to cover the CAS-loser

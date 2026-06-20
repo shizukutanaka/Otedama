@@ -275,12 +275,13 @@ func (l *LatencyTracker) Quantile(q float64) float64 {
 	l.mu.Unlock()
 
 	sort.Float64s(cp)
-	if q <= 0 {
-		return cp[0]
-	}
-	if q >= 1 {
-		return cp[n-1]
-	}
+	// Nearest-rank index, clamped to a valid sample. The clamps make the
+	// q<=0 and q>=1 endpoints fall out for free: a tiny/zero/negative q
+	// underflows the index below 0 (pinned to the minimum sample), and a
+	// q at or above 1 overflows it to n or beyond (pinned to the maximum).
+	// Keeping the clamps rather than separate early returns means a single
+	// code path serves the whole domain and the bounds-check still prevents
+	// an out-of-range index panic for any caller-supplied q.
 	idx := int(q*float64(n)+0.5) - 1
 	if idx < 0 {
 		idx = 0

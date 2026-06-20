@@ -601,6 +601,31 @@ func TestLatencyTracker_Quantiles(t *testing.T) {
 	}
 }
 
+func TestLatencyTracker_QuantileEndpointsClampToMinAndMax(t *testing.T) {
+	// q at or beyond the [0,1] endpoints must pin to the extreme samples,
+	// not panic or wrap. q>=1 exercises the upper idx>=n clamp; q<=0 the
+	// lower idx<0 clamp.
+	l := NewLatencyTracker(256)
+	for i := 1; i <= 100; i++ {
+		l.Record(float64(i))
+	}
+	cases := []struct {
+		q    float64
+		want float64
+	}{
+		{0, 1},      // 0th percentile → minimum
+		{-0.5, 1},   // below range → minimum (lower clamp)
+		{1, 100},    // 100th percentile → maximum
+		{1.5, 100},  // above range → maximum (upper clamp)
+		{1000, 100}, // far above → maximum (upper clamp)
+	}
+	for _, c := range cases {
+		if got := l.Quantile(c.q); got != c.want {
+			t.Errorf("Quantile(%v) = %v, want %v", c.q, got, c.want)
+		}
+	}
+}
+
 func TestLatencyTracker_RingBufferOverwrites(t *testing.T) {
 	l := NewLatencyTracker(4)
 	// Record more than capacity; only the last 4 (100,200,300,400) remain.
@@ -1899,8 +1924,12 @@ func TestRunSession_CurtailmentSilencesJob(t *testing.T) {
 // representing a GPU that supports general compute (AI) but not Bitcoin mining.
 type noSHA256dDevice struct{}
 
-func (d *noSHA256dDevice) Identity() hal.Identity       { return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU} }
-func (d *noSHA256dDevice) Capabilities() hal.Capabilities { return hal.Capabilities{SHA256d: false, GeneralCompute: true} }
+func (d *noSHA256dDevice) Identity() hal.Identity {
+	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
+}
+func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
+	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
+}
 func (d *noSHA256dDevice) Shutdown(_ context.Context) error { return nil }
 
 // TestStartMinerWorkers_NoSHA256dDevices covers the early-return error path
