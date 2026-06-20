@@ -128,6 +128,22 @@ func TestLoadConfigFile_EmptyPath_UsesDefault(t *testing.T) {
 	_ = cfg
 }
 
+func TestLoadConfigFile_NulBytePath_WarnsAboutOpenError(t *testing.T) {
+	// A path containing a NUL byte is rejected by the kernel with EINVAL
+	// (not ENOENT), so !os.IsNotExist(err) is true. This covers the warning
+	// branch without relying on file-permission tricks that break under root.
+	path := "/tmp/nul\x00byte"
+	var stderr bytes.Buffer
+	cfg := loadConfigFile(path, &stderr)
+
+	if cfg.BitcoinAddress != "" {
+		t.Errorf("NUL-byte path leaked config data: %q", cfg.BitcoinAddress)
+	}
+	if !strings.Contains(stderr.String(), "warning") {
+		t.Errorf("expected warning on stderr, got: %q", stderr.String())
+	}
+}
+
 func TestLoadConfigFile_UnreadableFile_WarnsOrReturnsEmpty(t *testing.T) {
 	// Create a file with no read permissions. Must not crash.
 	if runtime.GOOS == "windows" {

@@ -547,6 +547,43 @@ type errWriter struct{}
 
 func (errWriter) Write(_ []byte) (int, error) { return 0, io.ErrClosedPipe }
 
+// countingErrWriter succeeds for the first failAfter writes then returns an
+// error. It lets tests target specific write-error branches inside WriteText
+// (the TYPE line at write #2, the sample line at write #3) that the always-
+// failing errWriter never reaches because it aborts on write #1 (HELP line).
+type countingErrWriter struct {
+	failAfter int
+	n         int
+}
+
+func (w *countingErrWriter) Write(p []byte) (int, error) {
+	if w.n >= w.failAfter {
+		return 0, io.ErrClosedPipe
+	}
+	w.n++
+	return len(p), nil
+}
+
+func TestWriteText_PropagatesTypeLineWriteError(t *testing.T) {
+	// Fail after the first write (# HELP succeeds, # TYPE fails).
+	// This covers the TYPE-line error return inside the !seen[name] block.
+	r := NewRegistry()
+	r.NewCounter("otedama_test_total", "help", nil).Inc()
+	if err := r.WriteText(&countingErrWriter{failAfter: 1}); err == nil {
+		t.Error("WriteText: expected error when TYPE line write fails, got nil")
+	}
+}
+
+func TestWriteText_PropagatesSampleLineWriteError(t *testing.T) {
+	// Fail after two writes (# HELP and # TYPE succeed, sample line fails).
+	// This covers the sample-line error return after the !seen[name] block.
+	r := NewRegistry()
+	r.NewCounter("otedama_test_total", "help", nil).Inc()
+	if err := r.WriteText(&countingErrWriter{failAfter: 2}); err == nil {
+		t.Error("WriteText: expected error when sample line write fails, got nil")
+	}
+}
+
 func TestWriteText_PropagatesWriterError(t *testing.T) {
 	// WriteText must propagate the first io.Writer error it encounters.
 	// A counter is registered so there is at least one # HELP line to write.

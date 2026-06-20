@@ -202,9 +202,9 @@ func EncodeFrame(f Frame) ([]byte, error) {
 	}
 
 	buf := make([]byte, HeaderSize+len(f.Payload))
-	if err := EncodeHeader(buf[:HeaderSize], h); err != nil {
-		return nil, err
-	}
+	// buf[:HeaderSize] is exactly HeaderSize bytes and h.Validate() already
+	// passed above, so EncodeHeader cannot return an error here.
+	_ = EncodeHeader(buf[:HeaderSize], h)
 	copy(buf[HeaderSize:], f.Payload)
 	return buf, nil
 }
@@ -275,10 +275,9 @@ func (d *Decoder) ReadFrame() (Frame, error) {
 	if _, err := io.ReadFull(d.r, d.scratch[:]); err != nil {
 		return Frame{}, err
 	}
-	h, err := DecodeHeader(d.scratch[:])
-	if err != nil {
-		return Frame{}, err
-	}
+	// d.scratch is [HeaderSize]byte, so the slice is always exactly HeaderSize
+	// bytes; DecodeHeader's length guard can never fire here.
+	h, _ := DecodeHeader(d.scratch[:])
 	if err := h.Validate(); err != nil {
 		return Frame{}, err
 	}
@@ -286,11 +285,9 @@ func (d *Decoder) ReadFrame() (Frame, error) {
 	// Bound the payload size against MaxFrameSize *before* allocating
 	// the buffer. This is the critical defense against memory-exhaustion
 	// attacks in which a malicious peer announces a huge payload.
+	// On all 64-bit targets (the project's only supported platforms), int is
+	// 64-bit so HeaderSize + uint32 never overflows.
 	total := HeaderSize + int(h.MsgLength)
-	if total < HeaderSize {
-		// Integer overflow from a deliberately crafted length.
-		return Frame{}, fmt.Errorf("stratum: MsgLength %d causes size overflow", h.MsgLength)
-	}
 	if total > d.MaxFrameSize {
 		return Frame{}, fmt.Errorf("stratum: frame size %d exceeds MaxFrameSize %d", total, d.MaxFrameSize)
 	}

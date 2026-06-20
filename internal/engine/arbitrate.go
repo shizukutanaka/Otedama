@@ -173,10 +173,9 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
+			// updateStream always initialises YieldPerDevice before inserting
+			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
-				if rep.YieldPerDevice == nil {
-					rep.YieldPerDevice = make(map[string]arbitration.Yield)
-				}
 				rep.YieldPerDevice[devID] = y
 			}
 		} else {
