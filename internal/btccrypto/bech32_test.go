@@ -247,3 +247,50 @@ func TestValidateBech32Address_FutureWitnessVersion(t *testing.T) {
 		t.Errorf("witness version 2 (future) should be rejected: %q", addr)
 	}
 }
+
+// testEncodeBech32Raw5Bit builds a bech32/bech32m address directly from raw
+// 5-bit data groups (the witness program portion), bypassing the byte→5-bit
+// padding step that testEncodeBech32 uses. This lets a test craft a program
+// whose bit count does NOT pack cleanly into 8-bit bytes, which is otherwise
+// impossible to produce from a byte slice. The checksum is computed so the
+// address passes the checksum gate and reaches the convertBits decode step.
+func testEncodeBech32Raw5Bit(t *testing.T, version int, data5bit []int) string {
+	t.Helper()
+	hrp := "bc"
+	payload := append([]int{version}, data5bit...)
+
+	wantConst := bech32Const
+	if version != 0 {
+		wantConst = bech32mConst
+	}
+	values := append(bech32HrpExpand(hrp), payload...)
+	values = append(values, 0, 0, 0, 0, 0, 0)
+	poly := bech32Polymod(values) ^ wantConst
+	for i := 0; i < 6; i++ {
+		payload = append(payload, (poly>>(5*(5-i)))&0x1f)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(hrp + "1")
+	for _, v := range payload {
+		sb.WriteByte(bech32Charset[v])
+	}
+	return sb.String()
+}
+
+func TestValidateBech32Address_NonCanonicalPaddingRejected(t *testing.T) {
+	// A valid-checksum address whose witness program has non-zero leftover
+	// bits after the 5→8 regroup must be rejected by the convertBits decode
+	// step (BIP-173 canonical-encoding rule), NOT silently accepted. A single
+	// 5-bit group of value 0x1f leaves 5 bits over (>= fromBits), tripping the
+	// invalid-padding error. This is the address-validity case a checksum-only
+	// validator would miss — exactly what this file exists to catch.
+	addr := testEncodeBech32Raw5Bit(t, 0, []int{0x1f})
+	_, err := ValidateBech32Address(addr)
+	if err == nil {
+		t.Errorf("non-canonical-padding address should be rejected: %q", addr)
+	}
+	if err != nil && !strings.Contains(err.Error(), "program decode") {
+		t.Errorf("error %q should mention the program-decode failure", err)
+	}
+}

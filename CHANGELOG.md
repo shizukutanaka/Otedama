@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 182 — btccrypto: cover the bech32 non-canonical-padding rejection path)
+
+`ValidateBech32Address` sat at 95.5% with two uncovered branches; Socratic interrogation
+classified each:
+
+**Reachable and now covered: the convertBits decode error (BIP-173 canonical encoding)**
+
+After the checksum passes, the witness program is regrouped from 5-bit to 8-bit with
+`pad=false`, which rejects any address whose program has non-zero leftover bits — the
+BIP-173 rule that a witness program must encode canonically. This branch was uncovered
+because every existing test vector packs cleanly: the `testEncodeBech32` helper builds the
+address from a *byte* slice (8→5 with padding), which is always canonical by construction.
+
+Added `testEncodeBech32Raw5Bit`, a helper that emits raw 5-bit data groups directly (with a
+correctly computed checksum), and `TestValidateBech32Address_NonCanonicalPaddingRejected`,
+which crafts a valid-checksum v0 address with a single 5-bit group (5 leftover bits ≥
+fromBits) so the convertBits decode fails. This is precisely the "passes the checksum but
+is not a well-formed address" case the file exists to catch. `ValidateBech32Address`
+95.5% → 97.7%; btccrypto package 98.8% → 99.4%.
+
+**Unreachable (not tested): the `pos < 1` separator guard**
+
+`pos := strings.LastIndexByte(s, '1')` followed by `if pos < 1` is the standard BIP-173
+"no separator" check. In this function it is provably dead: line 1 requires a `bc1`/`BC1`
+prefix, so `s` always contains a '1' at index ≥ 2 and `pos ≥ 2` always. It is left in place
+as an idiomatic, defensive guard (removing it would make the code's safety depend implicitly
+on the prefix gate) but is not tested, since no input can reach it.
+
+All 24 packages green.
+
 ### Changed (session 181 — engine: simplify LatencyTracker.Quantile to a single clamped path; cover the upper clamp)
 
 `LatencyTracker.Quantile` sat at 95.2% with the `idx >= n` clamp uncovered. Socratic
