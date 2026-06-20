@@ -6,6 +6,7 @@ package lightning
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -217,7 +218,77 @@ func TestSave_CreateTempError(t *testing.T) {
 }
 
 // ============================================================================
-// MnemonicToEntropy — empty mnemonic branch
+// createNew — EntropyToMnemonic failure branch
+//
+// A 1-word WordList combined with any non-zero entropy causes
+// EntropyToMnemonic to fail: the second 11-bit word index (65 for
+// [0x00,0x01,0x02,...] entropy) is out of range. No scrypt is called because
+// the failure occurs before save() is reached.
+// ============================================================================
+
+func TestCreateNew_EntropyToMnemonicError(t *testing.T) {
+	dir := t.TempDir()
+	tinyWL := &WordList{words: []string{"only"}} // 1-word list
+	wm := &WalletManager{dataDir: dir, wordList: tinyWL}
+	// 64 bytes: 32 for GenerateEntropy, remainder never consumed (fails before save)
+	r := &failAfterNReader{remaining: 64}
+	if err := wm.createNew("passphrase", r); err == nil {
+		t.Error("createNew: expected error when EntropyToMnemonic fails (wordlist too small)")
+	}
+}
+
+// ============================================================================
+// save — os.Rename failure branch
+//
+// On Linux, renaming a regular file over an existing directory fails with
+// EISDIR. We create the test dir, put a sub-directory at the wallet.dat
+// location, then call save directly. CreateTemp, Write, Sync, Close, and
+// Chmod all succeed; only Rename fails — covering the cleanup (Remove + return)
+// at that step. EncryptSeed runs real scrypt (~1 s); that is expected and
+// is already the case for TestSave_CreateTempError.
+// ============================================================================
+
+func TestSave_RenameError_TargetIsDirectory(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root can rename files over directories; test is not meaningful")
+	}
+	dir := t.TempDir()
+
+	// Place a directory at the wallet.dat location so os.Rename fails.
+	finalPath := filepath.Join(dir, walletFile)
+	if err := os.MkdirAll(finalPath, 0700); err != nil {
+		t.Fatalf("setup: mkdir at wallet.dat location: %v", err)
+	}
+
+	wm := &WalletManager{dataDir: dir}
+	var s Seed
+	if err := wm.save(s, "test-passphrase", nil); err == nil {
+		t.Fatal("save: expected error when final path is a directory (Rename should fail)")
+	}
+
+	// Verify no leftover .wallet-*.tmp files (the cleanup Remove must have run).
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".wallet-") {
+			t.Errorf("leftover temp file after failed Rename: %s", e.Name())
+		}
+	}
+}
+
+// ============================================================================
+// ChangePassphrase — os.ReadFile failure branch
+//
+// Calling ChangePassphrase when wallet.dat does not exist causes os.ReadFile
+// to return an error (file not found). This covers the return-on-error branch
+// at wallet.go:245-246.
+// ============================================================================
+
+func TestChangePassphrase_WalletFileMissing(t *testing.T) {
+	wm := &WalletManager{dataDir: t.TempDir()} // empty dir — no wallet.dat
+	if err := wm.ChangePassphrase("old", "new", nil); err == nil {
+		t.Error("ChangePassphrase: expected error when wallet.dat does not exist")
+	}
+}
 // ============================================================================
 
 func TestMnemonicToEntropy_EmptyMnemonic(t *testing.T) {

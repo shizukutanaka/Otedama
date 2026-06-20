@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 175 — lightning: cover createNew/ChangePassphrase/save error paths; add Rename cleanup test)
+
+Socratic coverage probe of the funds-adjacent `internal/lightning/wallet.go` found three
+practical uncovered error branches:
+
+- `createNew:139-140` — `EntropyToMnemonic` failure: no existing test exercised a word
+  list too small to accommodate the generated entropy indices. A 1-word `WordList` with
+  `failAfterNReader{32}` triggers failure on the second 11-bit index (65 > 0). No scrypt
+  is called — the test completes in < 1 ms. `createNew` coverage: 86.7% → 93.3%.
+
+- `ChangePassphrase:244-246` — `os.ReadFile` failure: no test called `ChangePassphrase`
+  when `wallet.dat` is absent. Adding `TestChangePassphrase_WalletFileMissing` (empty
+  dataDir, direct call on a bare `WalletManager`) covers this immediately.
+  `ChangePassphrase` coverage: 92.9% → 100%.
+
+- `save:229-232` — `os.Rename` failure cleanup: added
+  `TestSave_RenameError_TargetIsDirectory` (a directory placed at the `wallet.dat` path
+  causes EISDIR on rename). The test is skipped for root (root ignores file-type
+  constraints on rename). The test will cover the cleanup branch in normal CI.
+  The remaining error bodies for Write/Sync/Close/Chmod require disk-full or OS-level
+  mocking — genuinely impractical without adding a mock filesystem (violates ADR-003 /
+  CLAUDE.md "no abstractions beyond what the task requires").
+
+Package coverage: 90.3% → 91.1%.
+
 ### Fixed (session 174 — arbitration: Reason string matches Held flag in all cases; add targeted tests)
 
 A Socratic probe of the arbitration engine's **self-reporting** found a misleading
