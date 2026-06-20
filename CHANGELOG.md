@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 178 — btccrypto: cover unsupported base58 version byte; logger: cover CAS loser path in defaultLogger)
+
+Two improvements from the Socratic coverage probe:
+
+**`btccrypto.ValidateBase58Address` 93.8% → 100%**
+
+The `default` case in the version-byte switch (line 90) — addresses with a valid
+checksum but a version byte other than 0x00 (P2PKH) or 0x05 (P2SH) — was not
+covered. To test it we need a valid base58 address (correct checksum) with a
+version byte that:
+a) produces an address starting with '1' or '3' (to pass the prefix guard), AND
+b) is not 0x00 or 0x05.
+
+The shell sweep found version 0x06 → "3..." prefix. Added `testBase58Encode` and
+`testBase58Address` helpers (package-internal test utilities, using only `crypto/sha256`
+and `math/big`) to construct such a vector at runtime, then added
+`TestValidateBase58Address_UnsupportedVersionByteReturnsError`. btccrypto 98.2% → 98.8%.
+
+**`logger.defaultLogger` 83.3% → 100%**
+
+The CAS loser branch (`if !defaultPtr.CompareAndSwap(nil, l) { return defaultPtr.Load() }`)
+fires when two goroutines both see nil, both call `New()`, and one loses the CAS. A
+start-gate pattern (all goroutines block on a closed channel) releases 100 goroutines
+simultaneously after `defaultPtr.Store(nil)`, maximising the probability that multiple
+goroutines pass the nil-check before any CAS succeeds. `TestDefaultLogger_ConcurrentInitNeverReturnsNil`
+also serves as a race-detector test: it asserts that no goroutine ever receives nil,
+regardless of which goroutine wins the CAS. `internal/logger` 97.2% → 100%.
+
+All 24 packages green.
+
 ### Fixed (session 177 — metrics: cover NewGauge deduplication, WriteText writer errors, RuntimeCollector writer error)
 
 Socratic sweep found four testable gaps in `internal/metrics`:

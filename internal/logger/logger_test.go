@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -150,6 +151,35 @@ func TestLogger_FromContext_DefaultsWhenMissing(t *testing.T) {
 	}
 	// Must not panic.
 	l.Info("works")
+}
+
+func TestDefaultLogger_ConcurrentInitNeverReturnsNil(t *testing.T) {
+	// Reset the default pointer to nil so that multiple goroutines race to
+	// initialise it, exercising the CAS loser branch ("Another goroutine beat
+	// us to it; use that one") in defaultLogger(). A start gate holds all
+	// goroutines until they are all spawned, maximising the chance that more
+	// than one goroutine passes the nil-check before any CAS succeeds.
+	defaultPtr.Store(nil)
+	const n = 100
+	loggers := make([]*Logger, n)
+	startGate := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			<-startGate // wait until all goroutines are ready
+			loggers[i] = defaultLogger()
+		}()
+	}
+	close(startGate) // release all goroutines simultaneously
+	wg.Wait()
+	for i, l := range loggers {
+		if l == nil {
+			t.Errorf("goroutine %d: defaultLogger() returned nil", i)
+		}
+	}
 }
 
 func TestLogger_IntoContext(t *testing.T) {

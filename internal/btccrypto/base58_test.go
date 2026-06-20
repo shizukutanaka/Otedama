@@ -4,7 +4,9 @@
 package btccrypto
 
 import (
+	"crypto/sha256"
 	"errors"
+	"math/big"
 	"testing"
 )
 
@@ -66,6 +68,60 @@ func TestValidateBase58Address_NotBase58ReturnsSentinel(t *testing.T) {
 		if !errors.Is(err, ErrNotBase58) {
 			t.Errorf("ValidateBase58Address(%q) error = %v, want ErrNotBase58", a, err)
 		}
+	}
+}
+
+// testBase58Encode encodes raw bytes as a base58 string (Bitcoin alphabet).
+// Used only for constructing test vectors.
+func testBase58Encode(b []byte) string {
+	n := new(big.Int).SetBytes(b)
+	zero := new(big.Int)
+	mod := new(big.Int)
+	var result []byte
+	for n.Cmp(zero) > 0 {
+		n.DivMod(n, big.NewInt(58), mod)
+		result = append(result, base58Alphabet[mod.Int64()])
+	}
+	// Reverse.
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	// Prepend '1' for each leading zero byte.
+	var leading []byte
+	for _, c := range b {
+		if c != 0 {
+			break
+		}
+		leading = append(leading, '1')
+	}
+	return string(leading) + string(result)
+}
+
+// testBase58Address constructs a valid-checksum base58 address from a version
+// byte and a 20-byte hash160. The checksum is computed via double-SHA256 per
+// the Base58Check specification, so the resulting address passes the decode
+// and checksum steps of ValidateBase58Address.
+func testBase58Address(t *testing.T, version byte, hash160 []byte) string {
+	t.Helper()
+	if len(hash160) != 20 {
+		t.Fatalf("testBase58Address: hash160 must be 20 bytes, got %d", len(hash160))
+	}
+	payload := append([]byte{version}, hash160...)
+	h1 := sha256.Sum256(payload)
+	h2 := sha256.Sum256(h1[:])
+	raw := append(payload, h2[:4]...)
+	return testBase58Encode(raw)
+}
+
+func TestValidateBase58Address_UnsupportedVersionByteReturnsError(t *testing.T) {
+	// A valid-checksum address whose version byte is not 0x00 (P2PKH) or
+	// 0x05 (P2SH) should be rejected with an "unsupported version byte" error.
+	// Version 0x06 produces a '3' prefix (passes the prefix guard) but is not
+	// a mainnet-assigned version byte — it hits the default case in the switch.
+	addr := testBase58Address(t, 0x06, make([]byte, 20))
+	_, err := ValidateBase58Address(addr)
+	if err == nil {
+		t.Errorf("version byte 0x06 should be rejected, got nil error (addr=%q)", addr)
 	}
 }
 
