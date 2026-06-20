@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 185 — poolproto: cover DialURL's success path and assert it keeps the connection open)
+
+Socratic interrogation of `DialURL` (92.9%) found the uncovered line was the **success path**
+itself — `return sess, nil`. The existing tests exercised all four error branches (unknown
+scheme, no dialer, Dial failure, Negotiate-failure-closes-connection) but never the happy
+path where both Dial and Negotiate succeed. The single most important behaviour of the
+high-level pool entry point — that it returns the negotiated session — was untested.
+
+Added `fakeSession` (minimal Session) and `succeedingDialer`, plus
+`TestDialURL_SuccessReturnsSessionAndKeepsConnectionOpen`, which asserts two things:
+1. DialURL returns exactly the session produced by `Negotiate`.
+2. On success the Connection is **not** closed — it is owned by the live Session, and the
+   error-path symmetry (Negotiate-failure closes it) made it worth pinning down that the
+   success path does the opposite. Closing it here would silently kill every session.
+
+`DialURL` 92.9% → 100%; poolproto package → 100%.
+
 ### Added (session 184 — i18n: implement the OS-locale language detection the docs already promised)
 
 Session 183's work on `DetectLang` surfaced a documentation-vs-reality gap. Three doc
