@@ -729,6 +729,13 @@ func TestOpenMiningChannelSuccess_Encode_LongExtranonce(t *testing.T) {
 	}
 }
 
+func TestOpenMiningChannelError_Encode_LongError(t *testing.T) {
+	m := OpenMiningChannelError{ReqID: 1, Error: string(make([]byte, 256))}
+	if _, err := m.Encode(); err == nil {
+		t.Error("Encode should reject Error string > 255 bytes")
+	}
+}
+
 func TestSubmitSharesError_Encode_LongError(t *testing.T) {
 	m := SubmitSharesError{ChannelID: 1, SequenceNumber: 0, Error: string(make([]byte, 256))}
 	if _, err := m.Encode(); err == nil {

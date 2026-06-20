@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 177 — metrics: cover NewGauge deduplication, WriteText writer errors, RuntimeCollector writer error)
+
+Socratic sweep found four testable gaps in `internal/metrics`:
+
+- `NewGauge` at 90.9%: the deduplication path (`return existing` when the same
+  name+labels are registered twice) was tested for `NewCounter` but not `Gauge`.
+  Added `TestGauge_DuplicateNameReturnsExisting` — mirrors the Counter test.
+  `NewGauge` 90.9% → 100%.
+
+- `WriteText` at 89.7%: no test exercised the `io.Writer` error return paths.
+  Added `TestWriteText_PropagatesWriterError` (writer that fails on the first write,
+  covering the `# HELP` error return) and `TestWriteText_CollectorErrorPropagates`
+  (a `CollectFunc` that returns an error, covering the collector-loop error return).
+  `WriteText` 89.7% → 93.1%.
+
+- `RuntimeCollector` at 90.9%: `RuntimeCollector()` returns a `CollectFunc` whose
+  single `fmt.Fprintf` error path was uncovered. Added
+  `TestRuntimeCollector_PropagatesWriterError` using the same `errWriter` helper.
+  `RuntimeCollector` 90.9% → 100%.
+
+Package coverage: ~92% → 98.5%. All 24 packages green.
+
+### Fixed (session 176 — stratum: cover OpenMiningChannelError.Encode long-Error branch)
+
+Socratic sweep of the stratum package identified the single remaining testable gap
+(as opposed to dead code) in the "Encode error paths" suite:
+
+- `OpenMiningChannelError.Encode` at `handshake.go:293` — `putStr0_255` returns an
+  error when the `Error` string exceeds 255 bytes. All four sibling Encode types
+  (`SetupConnectionError`, `OpenMiningChannel`, `OpenMiningChannelSuccess`,
+  `SubmitSharesError`) already had tests; only `OpenMiningChannelError` was missing
+  one. Added `TestOpenMiningChannelError_Encode_LongError` to `messages_test.go`.
+
+Coverage: `OpenMiningChannelError.Encode` 71.4% → 85.7%.  
+The remaining 14.3% (line 290) is the dead-code `putU32LE` error return; `bytes.Buffer`
+never fails, making it structurally unreachable without a mock writer.
+
+Total stratum package: 94.9% → 95.1%. All 24 packages green.
+
 ### Fixed (session 175 — lightning: cover createNew/ChangePassphrase/save error paths; add Rename cleanup test)
 
 Socratic coverage probe of the funds-adjacent `internal/lightning/wallet.go` found three

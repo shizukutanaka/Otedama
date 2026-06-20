@@ -137,6 +137,21 @@ func TestGauge_ConcurrentReadSafe(t *testing.T) {
 	wg.Wait()
 }
 
+func TestGauge_DuplicateNameReturnsExisting(t *testing.T) {
+	// Registering the same name+labels twice must return the same Gauge,
+	// not create a duplicate. This enables idempotent metric creation.
+	r := NewRegistry()
+	g1 := r.NewGauge("cpu_temp_celsius", "help", nil)
+	g1.Set(72.5)
+	g2 := r.NewGauge("cpu_temp_celsius", "help", nil)
+	if g1 != g2 {
+		t.Error("duplicate NewGauge returned different instances")
+	}
+	if g2.Value() != 72.5 {
+		t.Errorf("second handle sees value %v, want 72.5", g2.Value())
+	}
+}
+
 // ============================================================================
 // Prometheus text exposition format
 // ============================================================================
@@ -527,6 +542,33 @@ func TestRegisterCollector_CollectorAfterStaticMetrics(t *testing.T) {
 	}
 }
 
+// errWriter is a failing io.Writer used to test WriteText error propagation.
+type errWriter struct{}
+
+func (errWriter) Write(_ []byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestWriteText_PropagatesWriterError(t *testing.T) {
+	// WriteText must propagate the first io.Writer error it encounters.
+	// A counter is registered so there is at least one # HELP line to write.
+	r := NewRegistry()
+	r.NewCounter("otedama_test_total", "help", nil).Inc()
+	if err := r.WriteText(errWriter{}); err == nil {
+		t.Error("WriteText: expected error when writer fails, got nil")
+	}
+}
+
+func TestWriteText_CollectorErrorPropagates(t *testing.T) {
+	// When a registered CollectFunc returns an error, WriteText must
+	// propagate it instead of swallowing it.
+	r := NewRegistry()
+	r.RegisterCollector(func(w io.Writer) error {
+		return fmt.Errorf("collector failed")
+	})
+	if err := r.WriteText(&bytes.Buffer{}); err == nil {
+		t.Error("WriteText: expected error from failing collector, got nil")
+	}
+}
+
 // ============================================================================
 // RuntimeCollector
 // ============================================================================
@@ -694,5 +736,13 @@ func TestFormatFloat_SpecialAndFiniteValues(t *testing.T) {
 				t.Errorf("formatFloat(%g) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRuntimeCollector_PropagatesWriterError(t *testing.T) {
+	// RuntimeCollector must propagate the first io.Writer error it encounters.
+	fn := RuntimeCollector()
+	if err := fn(errWriter{}); err == nil {
+		t.Error("RuntimeCollector: expected error when writer fails, got nil")
 	}
 }
