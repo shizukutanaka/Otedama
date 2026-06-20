@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 174 — arbitration: Reason string matches Held flag in all cases; add targeted tests)
+
+A Socratic probe of the arbitration engine's **self-reporting** found a misleading
+diagnostic in `internal/arbitration/engine.go`:
+
+- **Before:** when the incumbent stream is already the best-scoring option (no challenger
+  beats it), the engine returned `Held: false` but `Reason: "held (best gain 0.00% below
+  hysteresis ...)"`. An operator tuning hysteresis by reading logs would see a held-looking
+  message on an assignment that was not a hold — nothing was declined; the engine simply
+  confirmed the incumbent. The `Held` flag was correct; the `Reason` string was not.
+- **After:** two distinct reason strings:
+  - Incumbent is best → `"incumbent is best; stayed"` (Held: false)
+  - Better alternative suppressed → `"held (best gain X% below hysteresis Y%)"` (Held: true)
+  Both strings now match the semantic of the `Held` flag they accompany.
+
+New tests added to `engine_test.go` (4):
+- `TestDecide_ReasonString_IncumbentIsBest_DoesNotSayHeld` — asserts Reason omits "held"
+  when `Held == false`; would have caught the previous mismatch.
+- `TestDecide_ReasonString_HeldOnSuppressedAlternative_ContainsHeld` — asserts Reason
+  contains "held" when a genuine alternative is suppressed.
+- `TestDecide_EnvironmentFriendlyPolicy_PrefersHigherRating` — first direct targeted test
+  for `PolicyEnvironmentFriendly` (previously covered only by random property tests).
+  Rating-9 stream (score 109) beats a 5%-higher-yield rating-1 stream (score 106.05).
+- `TestDecide_ZeroHysteresisExactTieStaysOnIncumbent` — verifies that with
+  `HysteresisMargin=0`, an exact yield tie (no improvement) keeps the incumbent and
+  sets `Held: true`, `Reason: "held ..."` (the challenger is lexicographically "better"
+  in the sort but offers zero gain, so suppression is the correct decision).
+
+All 24 packages green. Coverage in `internal/arbitration` now exercises every policy branch
+with a direct targeted test in addition to property coverage.
+
 ### Docs (session 173 — record provider duplication as a tracked finding, per CLAUDE.md rule I3)
 
 A continued Socratic review of the codebase confirmed several areas are already mature and

@@ -840,6 +840,163 @@ func TestDecide_Property_NoIdleWhenCompatibleStreamExists(t *testing.T) {
 	}
 }
 
+// ----- Decide: Reason string fidelity -----
+
+func TestDecide_ReasonString_IncumbentIsBest_DoesNotSayHeld(t *testing.T) {
+	// When the incumbent is the best available stream (nothing better exists),
+	// the Reason must NOT say "held" — saying so is misleading because nothing
+	// was sacrificed or declined; the engine simply confirmed the incumbent.
+	// Held must be false in the same case.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.best",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	weaker := Stream{
+		ID:              "ai.weaker",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 80, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.best"}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, weaker},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "mining.best" {
+		t.Fatalf("expected stay on mining.best, got %q", a.Stream)
+	}
+	if a.Held {
+		t.Error("Held = true, want false (incumbent is the best; no alternative was suppressed)")
+	}
+	if strings.Contains(a.Reason, "held") {
+		t.Errorf("Reason %q must not say 'held' when incumbent is already the best", a.Reason)
+	}
+}
+
+func TestDecide_ReasonString_HeldOnSuppressedAlternative_ContainsHeld(t *testing.T) {
+	// When a higher-scoring challenger is suppressed by hysteresis, the Reason
+	// must say "held" and Held must be true — both for operator log readability.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.strawberry",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.braiins"}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10, // 5% gain < 10% margin → hold
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if !a.Held {
+		t.Error("Held = false, want true (challenger was suppressed)")
+	}
+	if !strings.Contains(a.Reason, "held") {
+		t.Errorf("Reason %q must contain 'held' when a better alternative was suppressed", a.Reason)
+	}
+}
+
+// ----- Decide: PolicyEnvironmentFriendly -----
+
+func TestDecide_EnvironmentFriendlyPolicy_PrefersHigherRating(t *testing.T) {
+	// Under PolicyEnvironmentFriendly a stream with a high EnvironmentalRating
+	// must win over a marginally higher raw-yield stream with a poor rating.
+	//
+	// green: raw 100, env 9  → score = 100 * (1 + 9*0.01) = 109.0
+	// dirty: raw 105, env 1  → score = 105 * (1 + 1*0.01) = 106.05
+	// → green wins.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	green := Stream{
+		ID:                  "science.boinc",
+		AcceptsFamilies:     []hal.Family{hal.FamilyGPU},
+		EnvironmentalRating: 9,
+		YieldPerDevice:      map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	dirty := Stream{
+		ID:                  "mining.coal",
+		AcceptsFamilies:     []hal.Family{hal.FamilyGPU},
+		EnvironmentalRating: 1,
+		YieldPerDevice:      map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{green, dirty},
+		Policy:  PolicyEnvironmentFriendly,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "science.boinc" {
+		t.Errorf("EnvironmentFriendly policy chose %q (score 106.05), want science.boinc (score 109.0)",
+			alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_ZeroHysteresisExactTieStaysOnIncumbent(t *testing.T) {
+	// With HysteresisMargin=0, the engine should switch on ANY strict improvement.
+	// An exact yield tie is not an improvement; the incumbent must be kept and
+	// Held must be false (nothing was declined — scores are equal).
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.a", // lexicographically > "ai.b" so challenger would win sort
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.b",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{{DeviceID: "gpu-0", Stream: "mining.a"}}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0, // switch on any strict improvement
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	// Scores are equal; the tie-break sort picks "ai.b" (lexicographically first)
+	// as best. But incumbent "mining.a" has incScore == bestScore, threshold ==
+	// bestScore → hold fires. Held must be true since best != incumbent.
+	// The Reason must contain "held".
+	if a.Stream != "mining.a" {
+		t.Errorf("exact tie with hysteresis=0: expected incumbent mining.a, got %q (challenger had equal yield, no improvement)", a.Stream)
+	}
+	if !a.Held {
+		t.Errorf("Held = false; expected true because tie-break would pick ai.b but no gain justifies switching")
+	}
+	if !strings.Contains(a.Reason, "held") {
+		t.Errorf("Reason %q should say 'held' when a tie-break alternative was suppressed", a.Reason)
+	}
+}
+
 // ----- Helpers -----
 
 func assignmentsByID(a *Allocation) map[string]Assignment {

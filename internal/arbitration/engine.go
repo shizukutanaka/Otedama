@@ -396,12 +396,19 @@ func chooseForDevice(
 					// Held only counts when a *different*, higher-scoring stream
 					// was suppressed — not when the incumbent is itself the best
 					// (in which case nothing was declined).
+					held := best.stream.ID != c.stream.ID
+					var reason string
+					if held {
+						reason = fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100)
+					} else {
+						reason = "incumbent is best; stayed"
+					}
 					return Assignment{
 						DeviceID:           dev.Identity.ID,
 						Stream:             c.stream.ID,
 						ExpectedYield:      c.yield,
-						Reason:             fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100),
-						Held:               best.stream.ID != c.stream.ID,
+						Reason:             reason,
+						Held:               held,
 						ForegoneSatsPerSec: maxRaw - c.yield,
 					}
 				}

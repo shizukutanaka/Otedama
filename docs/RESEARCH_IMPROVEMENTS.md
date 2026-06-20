@@ -200,6 +200,17 @@ arXiv grounding (collected sessions 40–41 and here):
 10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but
     catalogued.
+11. ✅ **Arbitration Reason string matches Held flag in all cases** (session 174).
+    Socratic probe found a misleading diagnostic: when the incumbent stream was
+    already the best option (no challenger beats it), the engine returned
+    `Held: false` but `Reason: "held (best gain 0.00% ..."`. An operator tuning
+    hysteresis via logs would see a held-looking message on an assignment where
+    nothing was declined. Fixed in `engine.go:chooseForDevice`: now two distinct
+    reason strings — `"incumbent is best; stayed"` when Held=false, and the
+    existing `"held (best gain X% below hysteresis Y%)"` when Held=true. Added
+    4 new tests: Reason/Held consistency for both cases, direct `PolicyEnvironmentFriendly`
+    coverage (previously only in random property tests), and zero-hysteresis exact
+    tie behaviour.
 
 ---
 
