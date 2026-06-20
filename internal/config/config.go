@@ -89,7 +89,8 @@ type Config struct {
 
 	// Language is the IETF BCP 47 language tag for UI messages and logs,
 	// for example "en", "ja", "zh-CN". If empty, Otedama detects the
-	// language from the operating system.
+	// language from the POSIX locale environment (LC_ALL, LC_MESSAGES,
+	// LANG), falling back to English.
 	Language string `yaml:"language"`
 
 	// LogLevel is one of "debug", "info", "warn", "error". If empty,
@@ -211,7 +212,7 @@ func Defaults() Config {
 		BitcoinAddress:           "",
 		Pools:                    nil, // resolved from built-in recommendations at startup
 		Workers:                  WorkerConfig{},
-		Language:                 "", // resolved from OS locale at startup
+		Language:                 "", // resolved from POSIX locale env at startup
 		LogLevel:                 "info",
 		LogFormat:                "text",
 		DataDir:                  "", // resolved from XDG/platform conventions at startup

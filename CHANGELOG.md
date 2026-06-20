@@ -10,6 +10,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 184 — i18n: implement the OS-locale language detection the docs already promised)
+
+Session 183's work on `DetectLang` surfaced a documentation-vs-reality gap. Three doc
+comments promised automatic OS-locale detection that **did not exist**:
+
+- `config.Config.Language`: "If empty, Otedama detects the language from the operating system."
+- `config.Defaults`: `Language: "" // resolved from OS locale at startup`
+- `messages.DetectLang`: "from --language flag or OS locale"
+
+But no code ever read `$LANG`, `$LC_MESSAGES`, or `$LC_ALL`. When `Language` was empty,
+`DetectLang("")` simply returned English. A non-English user who relied on their OS locale
+(rather than passing `--language` explicitly) always got the English UI — and the docs said
+otherwise, violating the project's honesty principle ("report accurately; no phantom features").
+
+Rather than delete the promise, implemented the small, standard behavior it describes:
+
+- `messages.DetectLangFromEnv(getenv func(string) string)` resolves the language from the
+  POSIX locale variables in precedence order **LC_ALL > LC_MESSAGES > LANG** (per POSIX),
+  returning English when none is set or the neutral `C`/`POSIX` locale is requested. `getenv`
+  is injected so the resolution is unit-testable without mutating the process environment.
+- `normalizePOSIXLocale` converts a POSIX locale string (`ja_JP.UTF-8@modifier`) to a BCP-47
+  tag (`ja-JP`) by stripping the codeset (after `.`) and modifier (after `@`) and converting
+  the `_` territory separator to `-`. `C`/`POSIX` (and `C.UTF-8`) map to "no localization".
+- `cmd/otedama/run.go` now calls `DetectLangFromEnv(os.Getenv)` when no explicit language was
+  configured via flag, `OTEDAMA_LANGUAGE`, or config file — explicit config still wins.
+
+Corrected all three doc comments to describe the now-real behavior precisely (which env vars,
+what precedence, English fallback). Added `TestDetectLangFromEnv_POSIXPrecedenceAndNormalization`
+(11 cases: precedence, codeset/modifier stripping, neutral locales, unsupported language,
+empty-value skip). Both new functions at 100% coverage.
+
+All 24 packages green.
+
 ### Fixed (session 183 — i18n: DetectLang now honours BCP-47 case-insensitivity)
 
 Socratic interrogation of `DetectLang` found a real correctness bug. The function compared

@@ -94,6 +94,11 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	// Initialise i18n bundle.
 	bundle, _ := messages.NewBundle()
 	lang := messages.DetectLang(cfg.Language)
+	if cfg.Language == "" {
+		// No explicit language configured (flag/env/file); fall back to the
+		// OS locale, as documented on config.Config.Language.
+		lang = messages.DetectLangFromEnv(os.Getenv)
+	}
 
 	logln := func(level string, id i18n.ID, data map[string]any) {
 		msg, _ := bundle.RenderWith(lang, id, data)

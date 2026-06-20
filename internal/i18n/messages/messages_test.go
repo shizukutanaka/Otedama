@@ -303,6 +303,36 @@ func TestDetectLang_Unknown(t *testing.T) {
 	}
 }
 
+func TestDetectLangFromEnv_POSIXPrecedenceAndNormalization(t *testing.T) {
+	// LC_ALL > LC_MESSAGES > LANG, and POSIX locale strings
+	// ("ja_JP.UTF-8@mod") must normalise to a BCP-47 tag before matching.
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"none set → english", map[string]string{}, "en"},
+		{"LANG only", map[string]string{"LANG": "ja_JP.UTF-8"}, "ja"},
+		{"LC_MESSAGES overrides LANG", map[string]string{"LANG": "en_US.UTF-8", "LC_MESSAGES": "ko_KR.UTF-8"}, "ko"},
+		{"LC_ALL overrides all", map[string]string{"LANG": "en_US", "LC_MESSAGES": "ko_KR", "LC_ALL": "zh_CN.UTF-8"}, "zh"},
+		{"codeset and modifier stripped", map[string]string{"LANG": "fr_FR.ISO8859-1@euro"}, "fr"},
+		{"neutral C → english", map[string]string{"LANG": "C"}, "en"},
+		{"neutral POSIX → english", map[string]string{"LANG": "POSIX"}, "en"},
+		{"C.UTF-8 → english", map[string]string{"LANG": "C.UTF-8"}, "en"},
+		{"bare language tag", map[string]string{"LANG": "de"}, "de"},
+		{"unsupported language → english", map[string]string{"LANG": "xx_YY.UTF-8"}, "en"},
+		{"empty values skipped, fall through", map[string]string{"LC_ALL": "", "LANG": "ru_RU.UTF-8"}, "ru"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(k string) string { return tt.env[k] }
+			if got := DetectLangFromEnv(getenv); string(got) != tt.want {
+				t.Errorf("DetectLangFromEnv(%v) = %q, want %q", tt.env, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDetectLang_CaseInsensitive(t *testing.T) {
 	// BCP-47 (RFC 5646 §2.1.1) tags are case-insensitive. An OS locale or
 	// --language flag reporting an upper- or mixed-case tag must resolve to
