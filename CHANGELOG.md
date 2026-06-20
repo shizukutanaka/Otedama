@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 187 — engine: report interrupted device detection honestly instead of "no devices detected")
+
+Socratic interrogation of `detectDevices` found a swallowed-error diagnostics bug.
+`hal.Detector.Detect` returns an error only when the context is cancelled or times out
+(per-driver enumeration failures are logged separately via the callback). `detectDevices`
+discarded that error with `devices, _ := detector.Detect(ctx)`, then reported a generic
+`"engine: no devices detected"` whenever the device list was empty.
+
+Because the built-in CPU driver always enumerates a device, an empty result is effectively
+*only* reachable when detection was interrupted — so the one situation where the old message
+fired (engine startup cancelled mid-detection) is precisely the situation where it was
+**wrong**: it blamed missing hardware for what was actually a cancelled/timed-out context.
+
+Fixed by keeping the error and surfacing the real cause:
+`"engine: device detection interrupted: <context error>"` when `Detect` returns an error,
+falling back to `"no devices detected"` only for a genuinely empty (error-free) result.
+The wrapped error preserves `errors.Is(err, context.Canceled)` for callers.
+
+Added `TestDetectDevices_ReturnsBuiltinCPU` (happy path) and
+`TestDetectDevices_CancelledContextSurfacesRealCause`, the latter an invariant test robust to
+the `select` race inside `Detect`: under a cancelled context, detection must return either
+devices or a `context.Canceled`-wrapped error — never the misleading "no devices detected".
+The new error-surfacing branch is now covered.
+
 ### Fixed (session 186 — daemon: cover the no-$HOME error path in the systemd/launchd unit-path builders)
 
 `systemdUnitPath` and `launchdPlistPath` sat at 85.7% with the `os.UserHomeDir()` error

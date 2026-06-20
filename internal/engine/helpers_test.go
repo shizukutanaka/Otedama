@@ -554,6 +554,56 @@ func TestCPUDriver_Name(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// detectDevices — registry wiring and interrupted-detection diagnostics
+// ============================================================================
+
+func TestDetectDevices_ReturnsBuiltinCPU(t *testing.T) {
+	// The built-in CPU driver is always registered, so detection on a live
+	// context must return at least one device and no error.
+	devices, err := detectDevices(context.Background(), func(string, string) {})
+	if err != nil {
+		t.Fatalf("detectDevices: %v", err)
+	}
+	if len(devices) == 0 {
+		t.Fatal("detectDevices returned no devices; the built-in CPU must always be present")
+	}
+	var sawCPU bool
+	for _, d := range devices {
+		if d.Identity().Family == hal.FamilyCPU {
+			sawCPU = true
+		}
+	}
+	if !sawCPU {
+		t.Error("detectDevices did not include the built-in CPU device")
+	}
+}
+
+func TestDetectDevices_CancelledContextSurfacesRealCause(t *testing.T) {
+	// With a cancelled context, hal.Detector.Detect races between delivering
+	// the (fast, synchronous) CPU result and observing ctx.Done(), so the
+	// outcome varies run-to-run. The invariant that must hold every time:
+	// detectDevices either returns devices, or an error that surfaces the
+	// real cause (context cancellation) — it must NEVER report the misleading
+	// "no devices detected" when the real problem is an interrupted context.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel
+	for i := 0; i < 200; i++ {
+		devices, err := detectDevices(ctx, func(string, string) {})
+		switch {
+		case err != nil:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("iter %d: error must wrap context.Canceled, got %v", i, err)
+			}
+			if strings.Contains(err.Error(), "no devices detected") {
+				t.Fatalf("iter %d: cancelled detection misreported as 'no devices detected': %v", i, err)
+			}
+		case len(devices) == 0:
+			t.Fatalf("iter %d: nil error with zero devices", i)
+		}
+	}
+}
+
 func TestCPUDriver_EnumerateReturnsCPUDevice(t *testing.T) {
 	d := &cpuDriver{}
 	devs, err := d.Enumerate(context.Background())

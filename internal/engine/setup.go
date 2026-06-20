@@ -36,8 +36,17 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 	detector := hal.NewDetector(reg, func(driver, msg string, err error) {
 		log("warn", fmt.Sprintf("hal: %s: %s: %v", driver, msg, err))
 	})
-	devices, _ := detector.Detect(ctx)
+	devices, err := detector.Detect(ctx)
 	if len(devices) == 0 {
+		// Detect only returns an error when the context was cancelled or
+		// timed out (per-driver enumeration failures are logged via the
+		// callback above). The built-in CPU driver always enumerates a
+		// device, so an empty result effectively means detection was
+		// interrupted — surface that real cause instead of the misleading
+		// "no devices detected".
+		if err != nil {
+			return nil, fmt.Errorf("engine: device detection interrupted: %w", err)
+		}
 		return nil, fmt.Errorf("engine: no devices detected")
 	}
 	return devices, nil
