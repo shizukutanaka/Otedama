@@ -153,12 +153,31 @@ func TestLogger_FromContext_DefaultsWhenMissing(t *testing.T) {
 	l.Info("works")
 }
 
+func TestDefaultLoggerSlow_CASLoserReturnsSameInstanceAsWinner(t *testing.T) {
+	// Deterministically exercise the CAS-loser branch of defaultLoggerSlow():
+	// pre-populate defaultPtr so that defaultLoggerSlow()'s CAS fails and it
+	// must fall back to the already-stored value. The goroutine-racing test
+	// below cannot reliably hit this branch — when run after other tests the
+	// pointer is already populated (fast path), and when run alone the
+	// scheduler tends to let the first goroutine win before others reach the
+	// nil-check. Extracting the slow path lets us test it without racing.
+	winner := New(Config{Level: LevelInfo, Format: FormatText, Writer: new(bytes.Buffer)})
+	defaultPtr.Store(winner)
+	t.Cleanup(func() { defaultPtr.Store(nil) })
+
+	// defaultLoggerSlow() calls New() then CAS(nil, l), which FAILS because
+	// defaultPtr already holds winner, so it must return defaultPtr.Load().
+	got := defaultLoggerSlow()
+	if got != winner {
+		t.Errorf("CAS loser returned %p, want winner %p", got, winner)
+	}
+}
+
 func TestDefaultLogger_ConcurrentInitNeverReturnsNil(t *testing.T) {
-	// Reset the default pointer to nil so that multiple goroutines race to
-	// initialise it, exercising the CAS loser branch ("Another goroutine beat
-	// us to it; use that one") in defaultLogger(). A start gate holds all
-	// goroutines until they are all spawned, maximising the chance that more
-	// than one goroutine passes the nil-check before any CAS succeeds.
+	// Stress-test: many goroutines call defaultLogger() simultaneously after a
+	// Store(nil) reset. Every goroutine must receive a non-nil logger. Run with
+	// -race to verify the atomic.Pointer guards are correct. (The deterministic
+	// CAS-loser assertion lives in the test above.)
 	defaultPtr.Store(nil)
 	const n = 100
 	loggers := make([]*Logger, n)

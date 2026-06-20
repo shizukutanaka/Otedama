@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 180 — logger: make the CAS-loser branch deterministically testable; genuinely 100%)
+
+Session 178 added `TestDefaultLogger_ConcurrentInitNeverReturnsNil` to cover the CAS-loser
+branch in `defaultLogger`, and it reported 100% — but only when run in isolation. In the
+full `go test ./...` run the package fell back to **97.2%**: the branch was never hit.
+
+**Why the goroutine-racing test was unreliable**
+
+The CAS-loser branch (`if !defaultPtr.CompareAndSwap(nil, l) { return defaultPtr.Load() }`)
+only executes when a goroutine allocates a logger but loses the swap to another goroutine.
+A coverage HTML dump confirmed the block was `cov0` (zero hits) in the full run:
+
+- When the concurrent test runs **after** other tests, `defaultPtr` is already populated,
+  so every goroutine takes the fast path (`return l` at the top) and never reaches the CAS.
+- When it runs **alone**, the scheduler tends to let the first goroutine win the CAS before
+  the others pass the nil-check, so they too take the fast path.
+
+A test whose coverage depends on execution order and scheduler timing is not a real test.
+
+**Fix: extract the cold path so it is deterministically testable**
+
+Split `defaultLogger` into a fast inline load plus `defaultLoggerSlow()`, which does the
+`New()` + CAS + fallback. `TestDefaultLoggerSlow_CASLoserReturnsSameInstanceAsWinner`
+pre-stores a "winner" into `defaultPtr`, then calls `defaultLoggerSlow()` directly: its CAS
+is guaranteed to fail, so it must return the winner — exercising the loser branch with no
+racing. The concurrent stress test is kept (now documented as a `-race` guard, not a
+coverage device). `internal/logger` 97.2% → genuine **100%**, race-clean.
+
+All 24 packages green.
+
 ### Fixed (session 179 — arbitration: fix flawed greedy-property test; add TotalYield-sum and ForegoneSatsPerSec≥0 invariant tests)
 
 Socratic interrogation of `TestDecide_Property_AllocationMatchesOrExceedsGreedy` found a

@@ -192,7 +192,14 @@ func defaultLogger() *Logger {
 	if l := defaultPtr.Load(); l != nil {
 		return l
 	}
-	// Lazily initialise on first call.
+	return defaultLoggerSlow()
+}
+
+// defaultLoggerSlow handles the cold path: allocate a logger, try to
+// store it, and fall back to whatever another goroutine already stored
+// if the CAS races. Extracted so the CAS-loser branch is unit-testable
+// without relying on non-deterministic goroutine scheduling.
+func defaultLoggerSlow() *Logger {
 	l := New(Config{Level: LevelInfo, Format: FormatText})
 	if !defaultPtr.CompareAndSwap(nil, l) {
 		// Another goroutine beat us to it; use that one.
@@ -202,7 +209,7 @@ func defaultLogger() *Logger {
 }
 
 // SetDefault overrides the default logger returned by FromContext when
-// no logger is attached to the context. Intended for use in main().
+// no logger has been attached to the context. Intended for use in main().
 //
 // Passing nil is a no-op: it never clobbers the current logger with
 // nil, because downstream callers assume the default is always usable.
