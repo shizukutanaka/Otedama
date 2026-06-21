@@ -74,7 +74,7 @@ type Counter struct {
 	name   string
 	help   string
 	labels map[string]string
-	value  uint64
+	value  atomic.Uint64
 }
 
 // Gauge is an instantaneous value (e.g. current hashrate).
@@ -165,13 +165,13 @@ func (r *Registry) NewCounter(name, help string, labels map[string]string) *Coun
 }
 
 // Inc increments the counter by 1.
-func (c *Counter) Inc() { atomic.AddUint64(&c.value, 1) }
+func (c *Counter) Inc() { c.value.Add(1) }
 
-// Add adds delta to the counter. Panics if delta is negative.
-func (c *Counter) Add(delta uint64) { atomic.AddUint64(&c.value, delta) }
+// Add adds delta to the counter.
+func (c *Counter) Add(delta uint64) { c.value.Add(delta) }
 
 // Value returns the current counter value.
-func (c *Counter) Value() uint64 { return atomic.LoadUint64(&c.value) }
+func (c *Counter) Value() uint64 { return c.value.Load() }
 
 // ----- Gauge API -----
 

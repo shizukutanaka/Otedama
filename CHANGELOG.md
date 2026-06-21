@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 192 — metrics: migrate Counter to Go 1.19+ atomic.Uint64; unify the codebase's atomic-API style)
+
+A targeted audit (informed by a sweep of Qiita and Zenn for current Go best
+practices — see references below) found the codebase's last holdout using the
+old function-based `sync/atomic` API: `internal/metrics/metrics.Counter` used
+raw `uint64` with `atomic.AddUint64(&c.value, 1)` / `atomic.LoadUint64(&c.value)`,
+while every other package (`httpserver`, `tui`, `engine`, `poolproto`, `logger`)
+already used the typed `atomic.Uint64` / `atomic.Bool` / `atomic.Pointer[T]`
+forms Go 1.19+ recommends.
+
+Migrated `Counter.value` to `atomic.Uint64`. Two concrete improvements:
+
+- **Type-system safety.** A raw `uint64` field can be read or written without
+  the atomic functions, producing a silent data race; an `atomic.Uint64` field
+  only exposes `Add`/`Load`/`Store`/`CompareAndSwap` methods, so a stray
+  `c.value = 0` won't compile. The Money Forward Zenn article ("Go1.19~の
+  sync/atomic の新旧APIの使い分け") flags this as the *primary* reason to
+  prefer the new API over the old one.
+- **Internal consistency.** All Otedama atomic state now uses one style, so a
+  reader scanning new contributions has a single pattern to recognise.
+
+Also corrected a stale doc comment on `Add` ("Panics if delta is negative" —
+wrong, `delta` is `uint64` and can never be negative; the method does not
+panic).
+
+Output is byte-identical and `Counter` ABI is unchanged; the existing
+`TestCounter_*` race tests cover the migration (`Inc`/`Add`/`Value` all green
+under `-race`). Net 6 lines changed.
+
+References:
+- Money Forward Engineers' Blog (Zenn): "Go1.19~の sync/atomic の新旧APIの
+  使い分け" — argues for typed atomics on safety/readability grounds.
+- ngicks (Zenn): "Goで開発して3年のプラクティスまとめ(3/4): concurrent GO編"
+  — emphasises typed atomics in long-lived concurrent services.
+
+Also confirmed (no change needed): the project's only `sync.Pool` use
+(`internal/stratum/noise_pool.go`) stores `hash.Hash` interfaces, not slices,
+so it sidesteps the slice-pooling trap discussed in the Qiita article
+"Goでsliceをpoolするときの罠" (where `pool.Put(slice)` triggers a hidden
+heap copy of the slice header via `convTslice`).
+
 ### Changed (session 191 — stratum: append-based wire encoders; eliminate dead I/O error branches in the message serializers)
 
 A Socratic coverage sweep found six message `Encode` methods stuck at 69–85%
