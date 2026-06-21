@@ -27,11 +27,12 @@
 package metrics
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"maps"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -242,12 +243,11 @@ func (r *Registry) WriteText(w io.Writer) error {
 	copy(fns, r.collectors)
 	r.mu.RUnlock()
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].name != entries[j].name {
-			return entries[i].name < entries[j].name
+	slices.SortFunc(entries, func(a, b entry) int {
+		if n := cmp.Compare(a.name, b.name); n != 0 {
+			return n
 		}
-		return metricKey(entries[i].name, entries[i].labels) <
-			metricKey(entries[j].name, entries[j].labels)
+		return cmp.Compare(metricKey(a.name, a.labels), metricKey(b.name, b.labels))
 	})
 
 	// Emit one # HELP + # TYPE block per metric name, then all series.
@@ -287,7 +287,7 @@ func metricKey(name string, labels map[string]string) string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var sb strings.Builder
 	sb.WriteString(name)
 	for _, k := range keys {
@@ -307,7 +307,7 @@ func renderLabels(labels map[string]string) string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var sb strings.Builder
 	sb.WriteByte('{')
 	for i, k := range keys {

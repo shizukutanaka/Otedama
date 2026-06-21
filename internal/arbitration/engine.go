@@ -52,11 +52,11 @@
 package arbitration
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
 	"slices"
-	"sort"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
 )
@@ -291,8 +291,8 @@ func Decide(in Input) (*Allocation, error) {
 	// Sort devices by ID for deterministic output order.
 	devices := make([]DeviceRef, len(in.Devices))
 	copy(devices, in.Devices)
-	sort.Slice(devices, func(i, j int) bool {
-		return devices[i].Identity.ID < devices[j].Identity.ID
+	slices.SortFunc(devices, func(a, b DeviceRef) int {
+		return cmp.Compare(a.Identity.ID, b.Identity.ID)
 	})
 
 	// Previous assignments, for hysteresis and switch detection.
@@ -362,15 +362,15 @@ func chooseForDevice(
 		maxRaw = max(maxRaw, c.yield)
 	}
 
-	// Sort candidates by policy-adjusted score, then by StreamID for
+	// Sort candidates by policy-adjusted score (descending), then by StreamID for
 	// determinism.
-	sort.SliceStable(candidates, func(i, j int) bool {
-		si := policyScore(candidates[i].stream, candidates[i].yield, policy)
-		sj := policyScore(candidates[j].stream, candidates[j].yield, policy)
-		if si != sj {
-			return si > sj
+	slices.SortStableFunc(candidates, func(a, b candidate) int {
+		sa := policyScore(a.stream, a.yield, policy)
+		sb := policyScore(b.stream, b.yield, policy)
+		if sa != sb {
+			return cmp.Compare(sb, sa) // descending: higher score first
 		}
-		return candidates[i].stream.ID < candidates[j].stream.ID
+		return cmp.Compare(a.stream.ID, b.stream.ID)
 	})
 
 	best := candidates[0]

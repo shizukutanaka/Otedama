@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 199 — adopt Go 1.21 stdlib: slices.SortFunc / slices.SortStableFunc / slices.Sort replace sort.Slice / sort.SliceStable / sort.Strings)
+
+A continuation of the Qiita/Zenn-driven stdlib modernization sweep (sessions
+192–198). The Go 1.21 `slices` package provides value-based sorting functions
+(`slices.SortFunc`, `slices.SortStableFunc`, `slices.Sort`) that outperform the
+index-based `sort.Slice`/`sort.SliceStable`/`sort.Strings` API on readability and
+type-safety: the comparator receives *values* directly instead of closing over an
+index into a slice, eliminating the potential for index transposition bugs and
+making the sort intent immediately clear at the call site.
+
+Five call sites replaced across two packages; `"sort"` import removed from both:
+
+- `internal/arbitration/engine.go`
+  - `sort.Slice(devices, func(i,j int) bool { return devices[i].ID < devices[j].ID })`
+    → `slices.SortFunc(devices, func(a,b DeviceRef) int { return cmp.Compare(a.Identity.ID, b.Identity.ID) })`
+  - `sort.SliceStable(candidates, func(i,j int) bool { … })` → `slices.SortStableFunc(candidates, func(a,b candidate) int { … })`.
+    The stable variant is preserved because the composite comparator (policy score
+    descending, then StreamID ascending) is now written entirely with `cmp.Compare`,
+    making stability vs. unstable a non-issue for equal-score pairs — but keeping
+    `SortStableFunc` matches the original intent and is harmless.
+  Added `"cmp"` import; removed `"sort"`.
+
+- `internal/metrics/metrics.go`
+  - `sort.Slice(entries, func(i,j int) bool { … })` → `slices.SortFunc(entries, func(a,b entry) int { … })`.
+  - `sort.Strings(keys)` (×2, in `metricKey` and `renderLabels`) → `slices.Sort(keys)`.
+  Added `"cmp"` and `"slices"` imports; removed `"sort"`.
+
+Behaviour is unchanged: deterministic sort order is preserved (verified by
+existing round-trip and property tests). `internal/arbitration` holds at 100%
+coverage, `internal/metrics` holds at 100%, all 24 packages green under `-race`.
+Net: –12 source lines across 2 files.
+
+Reference: pae26 (Qiita) "Go1.21でリリースされたslices・mapsパッケージと今までの
+実装方法を比較してありがたみを知ろう"; Go blog "Slices functions" (go.dev/blog/slices).
+
 ### Changed (session 198 — adopt Go 1.21 stdlib: slices.Contains, maps.Clone, and the min/max builtins)
 
 A Qiita/Zenn sweep on the Go 1.21 `slices`/`maps` packages and `min`/`max`
