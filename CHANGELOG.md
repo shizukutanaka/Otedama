@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 194 — audit: verify constant-time crypto and HTTP hardening; recommend govulncheck in CI)
+
+A Qiita/Zenn security sweep (constant-time comparison, HTTP hardening, supply-
+chain scanning) prompted an audit of Otedama's crypto and CI:
+
+- **Constant-time comparison — clean.** Audited every secret/MAC comparison.
+  Seed decryption (`internal/lightning/seedstore.go`) uses AES-GCM and Noise
+  transport (`internal/stratum/noise.go`) uses ChaCha20-Poly1305 — both AEAD,
+  so tag verification is constant-time inside the stdlib; there is no manual
+  secret comparison to attack. The one `bytes.Equal` in crypto code
+  (`internal/btccrypto/base58.go`) compares a *public* address checksum (no
+  secret), so it is not timing-sensitive. No change needed.
+- **HTTP server hardening — clean.** `internal/httpserver/server.go` already
+  sets `ReadHeaderTimeout`/`ReadTimeout`/`WriteTimeout`/`IdleTimeout`
+  (Slowloris mitigation). No change needed.
+- **Supply-chain scanning — gap, recommended.** CLAUDE.md's security tier 1
+  lists "gosec、CodeQL、Semgrep、govulncheck", and the 2025 Go consensus treats
+  govulncheck in CI as standard, but `.github/workflows/security.yml` runs
+  gosec/CodeQL/Semgrep/Trivy/Nancy and *not* govulncheck. A dedicated
+  `govulncheck` job (install the official scanner; `govulncheck ./...`;
+  `go-version-file: go.mod` so the toolchain tracks the module) is recommended
+  — its call-graph analysis fails only on vulnerabilities the code actually
+  reaches, which matters because the tree pins older `golang.org/x/crypto
+  v0.23.0` and `golang.org/x/net v0.21.0`. This change is **not applied in this
+  branch**: the automation account lacks the GitHub `workflows` permission, so
+  a maintainer must add the job. The ready-to-paste YAML was provided alongside
+  this work.
+
+Also noted for the maintainer: `security.yml` has broader drift from this
+non-custodial miner's actual shape — it pins Go 1.21 (module needs 1.22), and
+its `security-tests`/`compliance-check` jobs reference a `tests/` directory and
+auth symbols (`ValidateToken`, `Authenticate`) that do not exist in the repo
+(auth is v4.0 scope per CLAUDE.md).
+
 ### Changed (session 193 — tests: drop redundant per-iteration loop-variable copies now that go.mod is 1.22)
 
 A Qiita/Zenn sweep for current Go practices surfaced the Go 1.22 for-loop
