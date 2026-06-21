@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 197 — rates: parse external price strings strictly with strconv.ParseFloat instead of fmt.Sscanf)
+
+A Qiita/Zenn sweep on HTTP-client patterns surfaced the standard advice to
+prefer `strconv.ParseFloat` over `fmt.Sscanf("%f")` for numeric strings. The
+`rates` package parses USD-BTC price strings from Coinbase
+(`{"data":{"amount":"95000.00"}}`) and Kraken
+(`{"result":{...:{"c":["95000.00", …]}}}`) with `fmt.Sscanf("%f", &rate)`.
+
+`Sscanf` is greedy from the left — it returns `(1, nil)` on `"95000foo"`,
+silently yielding `95000` and discarding the garbage suffix. The post-fetch
+sanity band ([min, max] plausibility check) ultimately caught extreme cases,
+but a price source returning `"95000abc"` would be **accepted** as a real
+quote, when the right behaviour is to reject the source and let the median fall
+back to the other two.
+
+`strconv.ParseFloat` rejects trailing non-numeric bytes, is faster (no format-
+string interpreter), and is the idiomatic Go choice for parsing a known-shaped
+numeric string. Migrated both extractors (Coinbase and Kraken) and the test
+helper. Added `TestCoinbaseExtract_RejectsTrailingGarbageInAmount` and
+`TestKrakenExtract_RejectsTrailingGarbageInPrice` to regression-catch a
+return to the lax parser.
+
+The two remaining `fmt.Sscanf` callers in the codebase parse hexadecimal
+integers (Stratum V1 `JobID`, V2 dialer message ID) where Sscanf's exact-match
+semantics are appropriate; only the float parsers needed migration.
+
+Reference: cube (Zenn) "Goのnet/httpのclient" and the broader Go community
+consensus on `strconv.ParseFloat` vs `fmt.Sscanf`.
+
 ### Fixed (session 196 — engine: replace time.After in the reconnect backoff select with a stoppable timer)
 
 A Qiita/Zenn sweep on Go timers flagged the classic `time.After`-in-`select`

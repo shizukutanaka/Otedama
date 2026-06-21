@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,9 +54,7 @@ func TestFetcher_FetchFromFakeServer(t *testing.T) {
 				if err := json.Unmarshal(b, &v); err != nil {
 					return 0, err
 				}
-				var rate float64
-				_, err := parseFloat(v.Data.Amount, &rate)
-				return rate, err
+				return strconv.ParseFloat(v.Data.Amount, 64)
 			},
 		}},
 	}
@@ -829,8 +828,16 @@ func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 	<-leaderDone // let the leader finish before the deferred srv.Close()
 }
 
+// parseFloat is the strict numeric parser used by the rates package: it
+// mirrors strconv.ParseFloat so test fixtures exercise the same semantics as
+// the production extract functions (rejects trailing garbage like "95000foo").
 func parseFloat(s string, out *float64) (int, error) {
-	return fmt.Sscanf(s, "%f", out)
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	*out = v
+	return 1, nil
 }
 
 // ============================================================================
@@ -861,6 +868,25 @@ func TestCoinGeckoExtract_JSONError(t *testing.T) {
 	_, err := defaultSources[2].extract([]byte("not-valid-json"))
 	if err == nil {
 		t.Error("CoinGecko extract with invalid JSON should return error")
+	}
+}
+
+func TestCoinbaseExtract_RejectsTrailingGarbageInAmount(t *testing.T) {
+	// strconv.ParseFloat rejects trailing non-numeric bytes — unlike the old
+	// fmt.Sscanf("%f"), which silently accepted "95000foo" as 95000. This
+	// regression-catches a return to the lax parser. defaultSources[0] is
+	// Coinbase.
+	body := []byte(`{"data":{"amount":"95000foo"}}`)
+	if _, err := defaultSources[0].extract(body); err == nil {
+		t.Error("Coinbase extract must reject an amount with trailing garbage")
+	}
+}
+
+func TestKrakenExtract_RejectsTrailingGarbageInPrice(t *testing.T) {
+	// Symmetric guard for the Kraken extractor (defaultSources[1]).
+	body := []byte(`{"result":{"XXBTZUSD":{"c":["95000xyz","1"]}}}`)
+	if _, err := defaultSources[1].extract(body); err == nil {
+		t.Error("Kraken extract must reject a price with trailing garbage")
 	}
 }
 

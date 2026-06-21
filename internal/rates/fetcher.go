@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -47,9 +48,13 @@ var defaultSources = []Source{
 			if err := json.Unmarshal(b, &v); err != nil {
 				return 0, err
 			}
-			var rate float64
-			_, err := fmt.Sscanf(v.Data.Amount, "%f", &rate)
-			return rate, err
+			// strconv.ParseFloat rather than fmt.Sscanf("%f"): Sscanf is greedy
+			// from the left and silently accepts trailing garbage (a price string
+			// "95000foo" would parse as 95000), whereas ParseFloat rejects any
+			// non-numeric suffix. The sanity band still catches out-of-range
+			// values, but strict parsing rejects them earlier and with a clearer
+			// error.
+			return strconv.ParseFloat(v.Data.Amount, 64)
 		},
 	},
 	{
@@ -68,9 +73,7 @@ var defaultSources = []Source{
 				if len(ticker.C) == 0 {
 					continue
 				}
-				var rate float64
-				_, err := fmt.Sscanf(ticker.C[0], "%f", &rate)
-				return rate, err
+				return strconv.ParseFloat(ticker.C[0], 64)
 			}
 			return 0, fmt.Errorf("rates: kraken: no ticker data")
 		},
