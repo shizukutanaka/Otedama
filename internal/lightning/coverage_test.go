@@ -289,6 +289,7 @@ func TestChangePassphrase_WalletFileMissing(t *testing.T) {
 		t.Error("ChangePassphrase: expected error when wallet.dat does not exist")
 	}
 }
+
 // ============================================================================
 
 func TestMnemonicToEntropy_EmptyMnemonic(t *testing.T) {

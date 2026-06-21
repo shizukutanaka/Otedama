@@ -856,8 +856,8 @@ func TestFetchOne_BodyReadError(t *testing.T) {
 	}
 	ctx := context.Background()
 	src := Source{
-		Name: "err-body",
-		URL:  "http://example.com/price",
+		Name:    "err-body",
+		URL:     "http://example.com/price",
 		extract: func([]byte) (float64, error) { return 0, nil },
 	}
 	_, _, err := f.fetchOne(ctx, src)
