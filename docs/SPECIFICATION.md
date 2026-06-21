@@ -165,7 +165,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `share_acceptance_rate` | gauge | accepted / judged. |
 | `reject_rate` | gauge | rejected / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |
-| `submit_latency_milliseconds{quantile}` | gauge | submit→accept RTT at q=0.5/0.95/0.99. |
+| `submit_latency_milliseconds{quantile}` | gauge | submit→accept RTT at q=0.5/0.95/0.99. Note: milliseconds, not the seconds base unit used by every other time metric — see §8 G18. |
 
 **Hashrate, health & power**
 
@@ -240,6 +240,7 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |
 | G6 | GPU detection is Linux-only. | Open — KNOWN_LIMITATIONS §4. |
+| G18 | `otedama_submit_latency_milliseconds` is the only time-valued metric expressed in milliseconds; the other eight (`uptime_seconds`, `start_time_seconds`, `clock_skew_seconds`, `btc_rate_age_seconds`, `last_job_received_seconds`, `last_reject_seconds`, `estimated_share_interval_seconds`, `productive_seconds_total`) use seconds. Prometheus naming guidance mandates base units (seconds), so the conventional name would be `otedama_submit_latency_seconds` with values in seconds. The stored value is genuinely milliseconds (`run.go` records `Sub(sent).Microseconds()/1000` and `Since(sendTime).Milliseconds()`), so the current name is *accurate* but non-idiomatic and inconsistent with the rest of the catalogue. | Open — **breaking rename**: any operator dashboard/alert keyed on the metric name or its ms scale would break. Recorded for a maintainer decision rather than changed unilaterally (options: rename to `_seconds` + divide by 1000 in one release; or expose a parallel `_seconds` series and deprecate the ms one). |
 
 This spec is updated alongside the code; new gaps are added here as they are
 found and removed in the same change that closes them.

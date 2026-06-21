@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 205 — verify the §6 metric catalogue is in sync, record the submit-latency unit gap as G18)
+
+A documentation-accuracy verification pass cross-checked the SPECIFICATION §6
+metric catalogue against the metrics the engine actually registers:
+
+- **All 39 registered metrics match the 39 documented** (exact name-by-name
+  correspondence after stripping the `otedama_` prefix the catalogue omits by
+  convention). G17's session-190 fix holds; the catalogue has not drifted as
+  metrics were added. No catalogue change needed.
+
+- **One genuine finding, recorded not "fixed":** `otedama_submit_latency_milliseconds`
+  is the only time-valued metric in milliseconds; the other eight time metrics use
+  seconds, and Prometheus naming guidance mandates base units (seconds). The stored
+  value is genuinely milliseconds (`run.go` records `Sub(sent).Microseconds()/1000`
+  and `Since(sendTime).Milliseconds()`), so the name is accurate but non-idiomatic
+  and inconsistent. Renaming is a **breaking change** for any dashboard/alert keyed
+  on the name or ms scale, so per CLAUDE.md ("record findings as issues, discuss
+  priority — do not fix unilaterally") this is logged as **§8 G18 (Open)** with the
+  migration options spelled out, plus a one-line caveat on the §6 catalogue row so
+  operators discover it. No code/metric change in this session.
+
+Doc-only, non-breaking. All 24 packages remain green (unchanged).
+
 ### Added (session 204 — cover the two real testable gaps in writeConfigJSON: configured pools and the JSON encode-error path)
 
 A coverage-profiling pass (`go test -coverprofile` + `go tool cover -func`) across
