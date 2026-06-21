@@ -854,8 +854,8 @@ func stripScheme(url string) string {
 		"stratum+v2tls://", "stratum+v2://",
 		"stratum+tls://", "stratum+tcp://",
 	} {
-		if strings.HasPrefix(url, p) {
-			return strings.TrimPrefix(url, p)
+		if rest, ok := strings.CutPrefix(url, p); ok {
+			return rest
 		}
 	}
 	return ""

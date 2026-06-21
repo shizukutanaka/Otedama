@@ -208,8 +208,7 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 // parseAddress extracts host:port from a stratum+tcp:// or stratum+tls:// URL.
 func parseAddress(url string) (string, error) {
 	for _, prefix := range []string{"stratum+tcp://", "stratum+tls://"} {
-		if strings.HasPrefix(url, prefix) {
-			rest := url[len(prefix):]
+		if rest, ok := strings.CutPrefix(url, prefix); ok {
 			if rest == "" {
 				return "", fmt.Errorf("stratumv1: empty host in %q", url)
 			}

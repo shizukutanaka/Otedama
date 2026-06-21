@@ -129,8 +129,7 @@ func inferModel(devicePath, vendorID string) string {
 	// Try uevent for DRIVER, which sometimes contains the model.
 	uevent := readSysFile(filepath.Join(devicePath, "uevent"))
 	for _, line := range strings.Split(uevent, "\n") {
-		if strings.HasPrefix(line, "PCI_ID=") {
-			pciID := strings.TrimPrefix(line, "PCI_ID=")
+		if pciID, ok := strings.CutPrefix(line, "PCI_ID="); ok {
 			vendor := inferVendorName(vendorID)
 			return fmt.Sprintf("%s GPU (%s)", vendor, pciID)
 		}

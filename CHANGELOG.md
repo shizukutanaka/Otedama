@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 202 — adopt strings.CutPrefix for the match-then-strip prefix idiom across four packages)
+
+A Qiita/Zenn sweep on the Go 1.20 `strings.CutPrefix`/`CutSuffix` helpers found
+four production sites that match a prefix and then strip it as two separate
+operations — `HasPrefix(s, p)` followed by `TrimPrefix(s, p)` or by the
+hand-written `s[len(p):]`. Each pair scans the prefix twice (once to test, once
+to strip); `strings.CutPrefix` returns `(after, found)` in a single pass and
+states the intent ("strip this prefix if present") directly.
+
+Four call sites migrated (all behaviour-preserving — `CutPrefix`'s `after` is
+exactly the old `TrimPrefix`/`s[len(p):]` result when the prefix matched):
+
+- `internal/hal/gpu_linux.go` `inferModel`: `HasPrefix(line,"PCI_ID=")` +
+  `TrimPrefix(line,"PCI_ID=")` → `if pciID, ok := strings.CutPrefix(line, "PCI_ID="); ok`.
+- `internal/doctor/checks.go` `stripScheme`: `HasPrefix(url,p)` +
+  `TrimPrefix(url,p)` → `if rest, ok := strings.CutPrefix(url, p); ok`.
+- `internal/config/config.go` `validatePoolURL`: `HasPrefix(raw,s)` +
+  `raw[len(s):]` → `if rest, ok := strings.CutPrefix(raw, s); ok`.
+- `internal/poolproto/stratumv1/parse.go` `parseAddress`: `HasPrefix(url,prefix)` +
+  `url[len(prefix):]` → `if rest, ok := strings.CutPrefix(url, prefix); ok`.
+
+(`internal/poolproto/poolproto.go` `FromURL` only tests the prefix and does not
+strip it, so it is left as a plain `HasPrefix` — no double scan to collapse.)
+
+Behaviour unchanged: the existing `validatePoolURL`, `parseAddress`/`stripScheme`
+scheme-parsing, and doctor URL tests all pass. All 24 packages green under
+`-race`. Net: –4 source lines.
+
+Reference: Go 1.20 release notes (`strings.CutPrefix`/`strings.CutSuffix`);
+`golang.org/x/tools` `modernize` analyzer.
+
 ### Changed (session 201 — stratumv1: interface{} → any and drop a redundant re-assertion in parseSubscribeResult)
 
 A Qiita/Zenn modernization sweep on the `any` alias (Go 1.18+) and the

@@ -591,8 +591,7 @@ func validateBitcoinAddress(addr string) error {
 func validatePoolURL(raw string) error {
 	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
 	for _, s := range validSchemes {
-		if strings.HasPrefix(raw, s) {
-			rest := raw[len(s):]
+		if rest, ok := strings.CutPrefix(raw, s); ok {
 			if rest == "" {
 				return fmt.Errorf("URL has no host after scheme")
 			}
