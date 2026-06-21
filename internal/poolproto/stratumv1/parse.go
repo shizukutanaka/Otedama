@@ -186,13 +186,11 @@ func parseReconnect(raw json.RawMessage) (reconnectDirective, bool) {
 // The subscriptions array (index 0) is advisory and ignored; only the
 // extranonce fields at indices 1 and 2 are needed for share construction.
 func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
-	arr, ok := result.([]interface{})
+	arr, ok := result.([]any)
 	if !ok || len(arr) < 3 {
-		n := 0
-		if a, ok2 := result.([]interface{}); ok2 {
-			n = len(a)
-		}
-		return "", 0, fmt.Errorf("stratumv1: unexpected subscribe result (type=%T, len=%d)", result, n)
+		// len(arr) is 0 when the assertion failed (nil slice), otherwise the
+		// actual element count — both are the right value for the diagnostic.
+		return "", 0, fmt.Errorf("stratumv1: unexpected subscribe result (type=%T, len=%d)", result, len(arr))
 	}
 	en1, ok = arr[1].(string)
 	if !ok {

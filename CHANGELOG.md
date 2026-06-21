@@ -10,6 +10,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 201 — stratumv1: interface{} → any and drop a redundant re-assertion in parseSubscribeResult)
+
+A Qiita/Zenn modernization sweep on the `any` alias (Go 1.18+) and the
+`modernize` analyzer's `efaceany` check found the last `interface{}` spellings in
+the tree, all in `internal/poolproto/stratumv1`. While migrating
+`parseSubscribeResult`, the error path turned out to contain a redundant second
+type assertion:
+
+```go
+arr, ok := result.([]interface{})
+if !ok || len(arr) < 3 {
+    n := 0
+    if a, ok2 := result.([]interface{}); ok2 { // re-asserts what arr already holds
+        n = len(a)
+    }
+    return ..., fmt.Errorf("...len=%d", result, n)
+}
+```
+
+`len(arr)` already yields exactly `n`: 0 when the assertion failed (a nil slice
+has length 0) and the real element count otherwise. The re-assertion was dead
+work producing a value already in hand, so it collapses to:
+
+```go
+arr, ok := result.([]any)
+if !ok || len(arr) < 3 {
+    return ..., fmt.Errorf("...len=%d", result, len(arr))
+}
+```
+
+- `internal/poolproto/stratumv1/parse.go`: `[]interface{}` → `[]any`; removed the
+  4-line redundant re-assertion block in `parseSubscribeResult`.
+- `internal/poolproto/stratumv1/stratumv1_test.go`: `interface{}` → `any`
+  throughout, for package consistency.
+
+Behaviour is unchanged — the existing `TestParseSubscribeResult_TooShort`
+(slice, len 1) and `_WrongType` (non-slice) tests both exercise the error path
+and assert only that an error is returned, which still holds with the identical
+`len`-based diagnostic. After this change no file in the tree spells
+`interface{}` (the `any` alias is used everywhere). All 24 packages green under
+`-race`. Net: –4 source lines.
+
+Reference: Go 1.18 release notes (the `any` alias); `golang.org/x/tools`
+`modernize` analyzer `efaceany` pass.
+
 ### Changed (session 200 — complete the slices migration: remove the last sort.* call sites from production code)
 
 Finishes the migration begun in session 199. The remaining `sort.*` calls in

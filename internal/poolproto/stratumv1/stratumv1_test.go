@@ -1362,10 +1362,10 @@ func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
 // ============================================================================
 
 func TestParseSubscribeResult_Valid(t *testing.T) {
-	result := []interface{}{
-		[]interface{}{
-			[]interface{}{"mining.set_difficulty", "sub1"},
-			[]interface{}{"mining.notify", "sub2"},
+	result := []any{
+		[]any{
+			[]any{"mining.set_difficulty", "sub1"},
+			[]any{"mining.notify", "sub2"},
 		},
 		"extranonce1hex",
 		float64(4),
@@ -1383,8 +1383,8 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 }
 
 func TestParseSubscribeResult_EmptySubscriptionsArray(t *testing.T) {
-	result := []interface{}{
-		[]interface{}{},
+	result := []any{
+		[]any{},
 		"abc123",
 		float64(8),
 	}
@@ -1398,7 +1398,7 @@ func TestParseSubscribeResult_EmptySubscriptionsArray(t *testing.T) {
 }
 
 func TestParseSubscribeResult_TooShort(t *testing.T) {
-	_, _, err := parseSubscribeResult([]interface{}{"only-one"})
+	_, _, err := parseSubscribeResult([]any{"only-one"})
 	if err == nil {
 		t.Error("too-short result should error")
 	}
@@ -1412,7 +1412,7 @@ func TestParseSubscribeResult_WrongType(t *testing.T) {
 }
 
 func TestParseSubscribeResult_Extranonce1NotString(t *testing.T) {
-	result := []interface{}{[]interface{}{}, float64(42), float64(4)}
+	result := []any{[]any{}, float64(42), float64(4)}
 	_, _, err := parseSubscribeResult(result)
 	if err == nil {
 		t.Error("non-string extranonce1 should error")
@@ -1420,7 +1420,7 @@ func TestParseSubscribeResult_Extranonce1NotString(t *testing.T) {
 }
 
 func TestParseSubscribeResult_Extranonce2SizeNotNumber(t *testing.T) {
-	result := []interface{}{[]interface{}{}, "abc", "not-a-number"}
+	result := []any{[]any{}, "abc", "not-a-number"}
 	_, _, err := parseSubscribeResult(result)
 	if err == nil {
 		t.Error("non-number extranonce2_size should error")
