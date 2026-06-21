@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 204 — cover the two real testable gaps in writeConfigJSON: configured pools and the JSON encode-error path)
+
+A coverage-profiling pass (`go test -coverprofile` + `go tool cover -func`) across
+all packages, filtering out the defensive/impossible-state dead code that
+dominates the sub-90% list (fresh-registry register errors, `os.Executable`
+failures, hand-written-catalog construction errors — none injectable, none worth a
+test), isolated `cmd/otedama/config.go:writeConfigJSON` at 75% as having two
+*genuinely reachable* uncovered blocks:
+
+1. The `cfg.Pools` → `[]string` flatten loop. Pools can only be set from a config
+   file, and every existing `config show --json` test drove the command with flags
+   only, so the loop body never ran under JSON mode (the text-mode pool test
+   exercises a different code path).
+2. The `enc.Encode(&doc)` error branch, which returns `exitRuntime` when the
+   destination writer fails.
+
+Two tests added in `cmd/otedama/subcommands_test.go` (no new imports; reuses the
+existing `run(...)` harness and `failWriter`):
+
+- `TestConfigShow_JSON_EmitsConfiguredPools`: writes a config with two pool URLs,
+  runs `config show --json --config <path>`, and asserts both URLs appear in the
+  JSON `pools` array in order.
+- `TestConfigShow_JSONEncodeError_ReturnsRuntime`: runs `config show --json` with
+  a failing stdout writer and asserts the exit code is `exitRuntime`.
+
+`writeConfigJSON` rises from 75.0% to **100%** statement coverage. The remaining
+sub-90% functions in the tree were each inspected and classified as defensive or
+impossible-state dead code (documented inline / in prior sessions), so no
+coverage-padding tests were added for them — coverage is a means, not a target
+(per CLAUDE.md). All 24 packages green.
+
 ### Changed (session 203 — doctor: prefer errors.Is(err, os.ErrNotExist) over the non-unwrapping os.IsNotExist predicate)
 
 A Qiita/Zenn sweep on error-handling idioms surfaced the well-documented caveat

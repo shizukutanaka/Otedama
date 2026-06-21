@@ -253,6 +253,61 @@ func TestConfigShow_JSON_EmitsResolvedConfig(t *testing.T) {
 	}
 }
 
+// TestConfigShow_JSON_EmitsConfiguredPools covers writeConfigJSON's pool-flatten
+// loop, which the flag-only JSON tests never reach (pools come only from a config
+// file). It asserts the URLs survive into the JSON "pools" array in order.
+func TestConfigShow_JSON_EmitsConfiguredPools(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+pools:
+  - url: stratum+v2tls://primary.example.com:3336
+  - url: stratum+v2://backup.example.com:3336
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show", "--json", "--config", path}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --json exit = %d, want 0 (stderr: %s)", code, errb.String())
+	}
+	var doc struct {
+		Pools []string `json:"pools"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("config show --json not valid JSON: %v\n%s", err, out.String())
+	}
+	want := []string{
+		"stratum+v2tls://primary.example.com:3336",
+		"stratum+v2://backup.example.com:3336",
+	}
+	if len(doc.Pools) != len(want) {
+		t.Fatalf("pools length = %d, want %d:\n%s", len(doc.Pools), len(want), out.String())
+	}
+	for i, w := range want {
+		if doc.Pools[i] != w {
+			t.Errorf("pools[%d] = %q, want %q", i, doc.Pools[i], w)
+		}
+	}
+}
+
+// TestConfigShow_JSONEncodeError_ReturnsRuntime covers writeConfigJSON's Encode
+// error branch: a failing stdout writer makes the JSON encoder's Write fail, and
+// the command must surface exitRuntime rather than exitOK.
+func TestConfigShow_JSONEncodeError_ReturnsRuntime(t *testing.T) {
+	var errb bytes.Buffer
+	code := run([]string{
+		"config", "show", "--json",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+	}, &failWriter{}, &errb)
+	if code != exitRuntime {
+		t.Errorf("config show --json with failing writer: code = %d, want exitRuntime (%d)", code, exitRuntime)
+	}
+}
+
 func TestConfigShow_JSONWithOrigin_IncludesOrigins(t *testing.T) {
 	t.Setenv("OTEDAMA_POWER_WATTS", "275")
 	var out, errb bytes.Buffer
