@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 195 — rates: surface per-source causes when all price sources fail, via errors.Join)
+
+A Qiita/Zenn sweep on modern error handling surfaced `errors.Join` (Go 1.20+)
+for aggregating multiple causes. `Fetcher.doFetch` collected per-source errors
+(`r.err`) in its fan-in loop but, when every source failed, threw them all away
+and returned a blind `errors.New("rates: all sources failed")` — so an operator
+debugging a price-feed outage saw no *why* (DNS failure? HTTP 429? JSON parse
+error? all three?), only the symptom.
+
+Now the per-source errors are collected into a pre-sized `[]error` and, on total
+failure, returned as `fmt.Errorf("rates: all sources failed: %w",
+errors.Join(causes...))`. Each cause stays inspectable via `errors.Is`/`As`
+(the joined tree), and the message lists every source's reason. The rare case
+where all readings are in-band-but-implausible (dropped without an error) keeps
+a clear dedicated message instead of an empty join. The price feed already logs
+`initial fetch failed: <err>` at startup, so this enriches an existing
+diagnostic path rather than adding a new one.
+
+Added `TestFetcher_AllSourcesFailJoinsPerSourceCauses` (two sources, two
+sentinel errors) asserting both causes are recoverable via `errors.Is` on the
+aggregated error. Full suite green, race-clean.
+
+Reference: future-architect 技術ブログ / lzap — "Go 1.20: wrapping multiple
+errors (errors.Join)"; the standard pattern for gathering errors from parallel
+workers.
+
 ### Security (session 194 — audit: verify constant-time crypto and HTTP hardening; recommend govulncheck in CI)
 
 A Qiita/Zenn security sweep (constant-time comparison, HTTP hardening, supply-

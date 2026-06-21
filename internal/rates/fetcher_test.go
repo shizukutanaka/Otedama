@@ -6,6 +6,7 @@ package rates
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -279,6 +280,34 @@ func TestFetcher_AllSourcesFailReturnsFallback(t *testing.T) {
 	}
 	if fresh {
 		t.Error("rate should not be fresh when all fetches failed")
+	}
+}
+
+func TestFetcher_AllSourcesFailJoinsPerSourceCauses(t *testing.T) {
+	// When every source fails, the returned error must carry each source's
+	// concrete cause via errors.Join — inspectable with errors.Is — instead of
+	// a blind "all sources failed" that discards why each one failed.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	errA := errors.New("source A parse failure")
+	errB := errors.New("source B parse failure")
+	f := &Fetcher{
+		fallback:   80000,
+		httpClient: srv.Client(),
+		sources: []Source{
+			{Name: "a", URL: srv.URL, extract: func([]byte) (float64, error) { return 0, errA }},
+			{Name: "b", URL: srv.URL, extract: func([]byte) (float64, error) { return 0, errB }},
+		},
+	}
+	err := f.Fetch(context.Background())
+	if err == nil {
+		t.Fatal("expected error when all sources fail")
+	}
+	if !errors.Is(err, errA) || !errors.Is(err, errB) {
+		t.Errorf("aggregated error must surface both source causes via errors.Join; got: %v", err)
 	}
 }
 

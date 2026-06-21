@@ -15,6 +15,7 @@ package rates
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -277,6 +278,11 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 	var rates []float64
 	var maxSkew float64
 	var skewSeen bool
+	// Collect per-source errors so that, if every source fails, the caller
+	// gets the concrete reasons (DNS, HTTP status, parse error) rather than a
+	// blind "all sources failed". errors.Join (Go 1.20+) keeps each cause
+	// inspectable via errors.Is/As.
+	fetchErrs := make([]error, 0, len(f.sources))
 	for range f.sources {
 		r := <-results
 		// Aggregate skew regardless of whether the rate fetch succeeded:
@@ -288,6 +294,7 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 			}
 		}
 		if r.err != nil {
+			fetchErrs = append(fetchErrs, r.err)
 			continue
 		}
 		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
@@ -333,7 +340,13 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 	f.mu.Unlock()
 
 	if len(rates) == 0 {
-		return fmt.Errorf("rates: all sources failed")
+		// Surface every source's cause when available. fetchErrs can be empty
+		// if all sources returned in-band-but-implausible readings (dropped
+		// above without an error); fall back to the generic message then.
+		if joined := errors.Join(fetchErrs...); joined != nil {
+			return fmt.Errorf("rates: all sources failed: %w", joined)
+		}
+		return errors.New("rates: all sources failed (all readings implausible)")
 	}
 
 	// Use the median to resist outlier manipulation. For an even number
