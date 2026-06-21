@@ -463,9 +463,16 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		default:
 			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
 		}
+		// time.NewTimer + explicit Stop rather than time.After: when ctx is
+		// cancelled (shutdown) the timer is released immediately instead of
+		// lingering until backoff (up to reconnectBackoffMax) elapses — the
+		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
+		// timer cannot be garbage-collected until it fires.
+		timer := time.NewTimer(backoff)
 		select {
-		case <-time.After(backoff):
+		case <-timer.C:
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
 		}
 		if backoff < reconnectBackoffMax {

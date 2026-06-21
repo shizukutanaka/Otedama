@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 196 — engine: replace time.After in the reconnect backoff select with a stoppable timer)
+
+A Qiita/Zenn sweep on Go timers flagged the classic `time.After`-in-`select`
+pitfall: the returned timer cannot be stopped, and pre-Go-1.23 a pending timer
+is not garbage-collected until it fires. `runReconnectLoop` used
+`case <-time.After(backoff)` alongside `case <-ctx.Done()`; on a cancelled-ctx
+shutdown the loop returned immediately but the timer lingered for up to
+`reconnectBackoffMax` (minutes) before it could be collected.
+
+Replaced with an explicit `time.NewTimer(backoff)` whose `Stop()` is called on
+the `ctx.Done()` branch, releasing the timer immediately on shutdown. Behaviour
+on the normal path is unchanged (waits the full backoff, then doubles). This was
+the only `time.After` in non-test code, so the codebase is now free of the
+pattern. Reconnect-loop tests pass under `-race`.
+
+Considered but deliberately not done: a blanket `recover()` across the ~16
+worker goroutines. A panic in a 24/7 miner crashing the whole process is a real
+concern, but the input-facing paths are already hardened (the Stratum frame
+decoder is fuzz-tested and returns errors rather than panicking; the worker hot
+loop is pure SHA-256d compute), and a broad recover sweep would mask bugs and is
+a cross-cutting policy decision better made via an ADR than a unilateral change.
+Recorded here as a known consideration rather than acted on.
+
+Reference: Zenn schottman13 "もう迷わない time.Timer の正しい使い方"; Go Wiki
+"Go 1.23 Timer Channel Changes".
+
 ### Changed (session 195 — rates: surface per-source causes when all price sources fail, via errors.Join)
 
 A Qiita/Zenn sweep on modern error handling surfaced `errors.Join` (Go 1.20+)
