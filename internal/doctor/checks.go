@@ -11,6 +11,7 @@ package doctor
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -191,7 +192,7 @@ func checkDataDir(dir string) Check {
 			}
 
 			info, err := os.Stat(dir)
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("%s does not exist (will be created on first run)", dir),
@@ -256,7 +257,7 @@ func checkWallet(dataDir string) Check {
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
-			if _, err := os.Stat(walletPath); os.IsNotExist(err) {
+			if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,

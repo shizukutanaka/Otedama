@@ -10,6 +10,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 203 — doctor: prefer errors.Is(err, os.ErrNotExist) over the non-unwrapping os.IsNotExist predicate)
+
+A Qiita/Zenn sweep on error-handling idioms surfaced the well-documented caveat
+that the legacy `os.IsNotExist(err)` predicate does **not** unwrap: it inspects
+only the top-level error, so an `fs.ErrNotExist` wrapped with `fmt.Errorf("…:
+%w", err)` is missed. `errors.Is(err, os.ErrNotExist)` walks the `Unwrap` chain
+and is the form the Go team recommends today (the `os.IsXxx` predicates predate
+`errors.Is`).
+
+This is an idiom/robustness alignment, **not a bug fix**: both converted sites
+test the error returned directly by `os.Stat` with no wrapping in between, so the
+behaviour is identical today. The value is future-proofing — if either check
+later grows an intermediate wrap, the `errors.Is` form keeps working where
+`os.IsNotExist` would silently start returning false and misclassify a
+missing-file warning as a hard failure.
+
+- `internal/doctor/checks.go` `checkDataDir`: `os.IsNotExist(err)` →
+  `errors.Is(err, os.ErrNotExist)` (data-dir "will be created on first run" warning).
+- `internal/doctor/checks.go` wallet check: same conversion for the
+  "no wallet found" warning.
+- Added the `"errors"` import; `os.ErrNotExist` (an alias for `fs.ErrNotExist`)
+  reuses the already-present `"os"` import, so no `io/fs` import is needed.
+
+`internal/lightning/wallet.go:93` uses the same pattern but is left unchanged: it
+is likewise correct today (unwrapped `os.Stat` result), and that file is under
+CODEOWNERS — any edit there requires maintainer review. Flagging it here so a
+maintainer can apply the same alignment in a funds-area-reviewed change.
+
+The existing doctor tests — including the ENOTDIR edge case that exercises the
+non-`IsNotExist` error path — all pass; `ENOTDIR` still does not match
+`os.ErrNotExist`, so it correctly falls through to the generic failure branch.
+All 24 packages green.
+
+Reference: Go `errors` package docs (`errors.Is`); the recurring Qiita/Zenn theme
+"os.IsNotExist はラップされたエラーを検出できない / errors.Is を使え".
+
 ### Changed (session 202 — adopt strings.CutPrefix for the match-then-strip prefix idiom across four packages)
 
 A Qiita/Zenn sweep on the Go 1.20 `strings.CutPrefix`/`CutSuffix` helpers found
