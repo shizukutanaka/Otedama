@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 200 — complete the slices migration: remove the last sort.* call sites from production code)
+
+Finishes the migration begun in session 199. The remaining `sort.*` calls in
+production (non-test) code all sort slices of ordered element types, so each
+collapses to a single `slices.Sort` call with no comparator at all — the cleanest
+possible form. After this change the `"sort"` package is no longer imported by any
+non-test file under `internal/`.
+
+Six call sites across four files; `"sort"` import removed from all four:
+
+- `internal/i18n/message.go` (`ID` and `Lang` are `string`-based named types):
+  - `Catalog.IDs`: `sort.Slice(ids, func(i,j) bool { return ids[i] < ids[j] })` → `slices.Sort(ids)`
+  - `Bundle.MissingTranslations`: same pattern on `[]ID` → `slices.Sort(missing)`
+  - `Bundle.Languages`: same pattern on `[]Lang` → `slices.Sort(result)`
+- `internal/hal/registry.go` `Registry.Drivers`: `sort.Strings(names)` → `slices.Sort(names)`
+- `internal/engine/stats.go` percentile computation: `sort.Float64s(cp)` → `slices.Sort(cp)`
+- `internal/rates/fetcher.go` median computation: `sort.Float64s(rates)` → `slices.Sort(rates)`
+
+`slices.Sort` is the generic, `cmp.Ordered`-constrained sort; for `string`/`float64`
+element slices it is equivalent to `sort.Strings`/`sort.Float64s` and to the
+hand-written `sort.Slice` comparators, with identical ordering (verified by the
+existing i18n catalog-diff, percentile, and rate-median tests). Behaviour unchanged,
+all 24 packages green under `-race`. Net: –6 source lines.
+
+Reference: pae26 (Qiita) "Go1.21でリリースされたslices・mapsパッケージと今までの
+実装方法を比較してありがたみを知ろう"; Go blog "Slices functions" (go.dev/blog/slices).
+
 ### Changed (session 199 — adopt Go 1.21 stdlib: slices.SortFunc / slices.SortStableFunc / slices.Sort replace sort.Slice / sort.SliceStable / sort.Strings)
 
 A continuation of the Qiita/Zenn-driven stdlib modernization sweep (sessions

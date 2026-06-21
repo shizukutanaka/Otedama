@@ -12,7 +12,7 @@ package engine
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -274,7 +274,7 @@ func (l *LatencyTracker) Quantile(q float64) float64 {
 	copy(cp, l.samples[:n])
 	l.mu.Unlock()
 
-	sort.Float64s(cp)
+	slices.Sort(cp)
 	// Nearest-rank index, clamped to a valid sample. The clamps make the
 	// q<=0 and q>=1 endpoints fall out for free: a tiny/zero/negative q
 	// underflows the index below 0 (pinned to the minimum sample), and a

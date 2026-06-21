@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -72,7 +72,7 @@ func (r *Registry) Drivers() []Driver {
 	for name := range r.drivers {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	result := make([]Driver, 0, len(names))
 	for _, name := range names {

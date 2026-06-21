@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -354,7 +354,7 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 	// of surviving sources, average the two middle values — picking a
 	// single middle element would bias toward the higher source and
 	// defeat the outlier resistance when exactly two sources remain.
-	sort.Float64s(rates)
+	slices.Sort(rates)
 	var median float64
 	if n := len(rates); n%2 == 1 {
 		median = rates[n/2]
