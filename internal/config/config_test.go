@@ -942,7 +942,6 @@ func TestValidate_ArbitrationHysteresisPct_OutOfRange(t *testing.T) {
 		{"above 1.0", 1.5},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := Config{
 				BitcoinAddress:           "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",

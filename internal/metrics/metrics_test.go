@@ -345,7 +345,6 @@ func TestNewCounter_InvalidNamePanics(t *testing.T) {
 	// in tests rather than silently corrupting the Prometheus scrape.
 	invalid := []string{"", "0starts_with_digit", "has-hyphen", "has space", "-leading-dash"}
 	for _, name := range invalid {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
@@ -361,7 +360,6 @@ func TestNewCounter_InvalidNamePanics(t *testing.T) {
 func TestNewGauge_InvalidNamePanics(t *testing.T) {
 	invalid := []string{"", "0starts_with_digit", "has-hyphen"}
 	for _, name := range invalid {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
@@ -380,7 +378,6 @@ func TestNewCounter_InvalidLabelNamePanics(t *testing.T) {
 	// entire /metrics response, so the failure must surface in tests.
 	invalid := []string{"has-hyphen", "has space", "0leadingdigit", "", "has:colon", "has.dot"}
 	for _, label := range invalid {
-		label := label
 		t.Run(label, func(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
@@ -396,7 +393,6 @@ func TestNewCounter_InvalidLabelNamePanics(t *testing.T) {
 func TestNewGauge_InvalidLabelNamePanics(t *testing.T) {
 	invalid := []string{"has-hyphen", "0leadingdigit", "has:colon"}
 	for _, label := range invalid {
-		label := label
 		t.Run(label, func(t *testing.T) {
 			defer func() {
 				if r := recover(); r == nil {
@@ -483,7 +479,6 @@ func TestRegisterCollector_OutputAppearsInWriteText(t *testing.T) {
 func TestRegisterCollector_MultipleCollectorsAllAppear(t *testing.T) {
 	r := NewRegistry()
 	for i, name := range []string{"metric_a", "metric_b", "metric_c"} {
-		i, name := i, name
 		r.RegisterCollector(func(w io.Writer) error {
 			_, err := fmt.Fprintf(w, "# HELP %s help.\n# TYPE %s gauge\n%s %d\n", name, name, name, i+1)
 			return err

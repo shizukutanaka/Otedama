@@ -151,7 +151,6 @@ func TestRegistry_ConcurrentRegisterDifferentNames(t *testing.T) {
 	// Concurrent Register with different names must not race or panic.
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

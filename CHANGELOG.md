@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 193 — tests: drop redundant per-iteration loop-variable copies now that go.mod is 1.22)
+
+A Qiita/Zenn sweep for current Go practices surfaced the Go 1.22 for-loop
+semantics change: loop variables are now scoped per-iteration (for both `range`
+and 3-clause `for i := 0; …` loops), so the long-standing `x := x` /
+`tc := tc` shadowing idiom — required pre-1.22 to capture the right value in a
+goroutine or `t.Run` closure — is now dead code. `go.mod` already declares
+`go 1.22`, so the new semantics are in force.
+
+Removed all 8 redundant copies across 4 test files:
+- `internal/metrics/metrics_test.go` (5: two `name := name`, two `label := label`,
+  one `i, name := i, name`)
+- `internal/config/config_test.go` (1: `tc := tc`)
+- `internal/logger/logger_test.go` (1: `i := i` in the concurrent default-logger test)
+- `internal/btccrypto/btccrypto_extras_test.go` (1: `i := i` in the concurrent
+  Register test)
+
+The two concurrency tests (`internal/logger` start-gated goroutines,
+`internal/btccrypto` concurrent Register) are the load-bearing cases: their
+copies guarded against the pre-1.22 capture bug, so they were re-run under
+`-race` to confirm the per-iteration semantics genuinely hold without the
+manual copy. All green, race-clean. No production code touched.
+
+Reference: ss49919201 (Zenn) "【Go 1.22】for ループの2つの仕様変更" — documents
+the per-iteration scoping (and the range-over-int change) that makes `x := x`
+redundant from Go 1.22.
+
 ### Changed (session 192 — metrics: migrate Counter to Go 1.19+ atomic.Uint64; unify the codebase's atomic-API style)
 
 A targeted audit (informed by a sweep of Qiita and Zenn for current Go best

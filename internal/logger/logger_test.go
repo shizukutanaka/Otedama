@@ -185,7 +185,6 @@ func TestDefaultLogger_ConcurrentInitNeverReturnsNil(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
-		i := i
 		go func() {
 			defer wg.Done()
 			<-startGate // wait until all goroutines are ready
