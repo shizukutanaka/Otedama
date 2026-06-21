@@ -292,9 +292,7 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 		// a non-200 response still carries a valid server Date header.
 		if r.skewSecs > 0 {
 			skewSeen = true
-			if r.skewSecs > maxSkew {
-				maxSkew = r.skewSecs
-			}
+			maxSkew = max(maxSkew, r.skewSecs)
 		}
 		if r.err != nil {
 			fetchErrs = append(fetchErrs, r.err)

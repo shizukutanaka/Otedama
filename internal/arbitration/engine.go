@@ -55,6 +55,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -113,12 +114,7 @@ type Stream struct {
 // Accepts reports whether this stream will accept work from a device of
 // the given family.
 func (s Stream) Accepts(f hal.Family) bool {
-	for _, accepted := range s.AcceptsFamilies {
-		if accepted == f {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.AcceptsFamilies, f)
 }
 
 // YieldFor returns the yield this stream offers for the specified device.
@@ -363,9 +359,7 @@ func chooseForDevice(
 	// before the policy sort so it reflects raw yield, not policy score.
 	maxRaw := candidates[0].yield
 	for _, c := range candidates[1:] {
-		if c.yield > maxRaw {
-			maxRaw = c.yield
-		}
+		maxRaw = max(maxRaw, c.yield)
 	}
 
 	// Sort candidates by policy-adjusted score, then by StreamID for

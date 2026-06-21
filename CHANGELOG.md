@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 198 — adopt Go 1.21 stdlib: slices.Contains, maps.Clone, and the min/max builtins)
+
+A Qiita/Zenn sweep on the Go 1.21 `slices`/`maps` packages and `min`/`max`
+builtins (the `modernize` analyzer's territory) prompted replacing hand-rolled
+equivalents with the standard library — clearer intent, less surface for a
+copy-paste bug, and performance-neutral or better:
+
+- `internal/arbitration/engine.go` `Stream.Accepts`: a 5-line linear-scan loop
+  over `AcceptsFamilies` → `slices.Contains(s.AcceptsFamilies, f)`. Same O(n)
+  scan over a ≤3-element slice, no allocation, but the intent ("does this set
+  contain f?") is now self-evident. Also the `maxRaw` reduction loop's inner
+  `if c.yield > maxRaw { maxRaw = c.yield }` → `maxRaw = max(maxRaw, c.yield)`.
+- `internal/metrics/metrics.go` `cloneLabels`: the manual nil-check + ranged
+  copy → `maps.Clone(in)` (identical semantics — `maps.Clone(nil)` returns
+  nil — and the runtime clone is at least as fast as a hand copy).
+- `internal/rates/fetcher.go` clock-skew aggregation: `if r.skewSecs > maxSkew
+  { maxSkew = r.skewSecs }` → `maxSkew = max(maxSkew, r.skewSecs)`.
+
+Behaviour is unchanged: `internal/arbitration` and `internal/metrics` hold at
+100% coverage, `internal/rates` at 99.3%, all green under `-race`. The pure
+arbitration engine's existing property/round-trip tests confirm `Accepts` and
+the max reduction are byte-for-byte equivalent.
+
+Reference: pae26 (Qiita) "Go1.21でリリースされたslices・mapsパッケージと今までの
+実装方法を比較してありがたみを知ろう"; urakawa_jinsei (Zenn) "modernizeパッケージで
+コードを現代化する".
+
 ### Fixed (session 197 — rates: parse external price strings strictly with strconv.ParseFloat instead of fmt.Sscanf)
 
 A Qiita/Zenn sweep on HTTP-client patterns surfaced the standard advice to

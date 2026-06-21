@@ -29,6 +29,7 @@ package metrics
 import (
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -344,15 +345,10 @@ func escapeHelp(v string) string {
 	return r.Replace(v)
 }
 
+// cloneLabels returns an independent copy of in (nil stays nil), so a caller
+// mutating its label map after registration cannot alter the stored metric.
 func cloneLabels(in map[string]string) map[string]string {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(in)
 }
 
 // formatFloat renders a float in the format Prometheus expects.
