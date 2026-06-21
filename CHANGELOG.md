@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 191 — stratum: append-based wire encoders; eliminate dead I/O error branches in the message serializers)
+
+A Socratic coverage sweep found six message `Encode` methods stuck at 69–85%
+(`SetupConnection`, `SetupConnectionError`, `OpenMiningChannel`,
+`OpenMiningChannelSuccess`, `OpenMiningChannelError`, `SubmitSharesError`). The
+uncovered lines were all the same dead branch: `if err := putXxx(w, …); err != nil`
+around writes to an in-memory `bytes.Buffer`, which never fails. The only
+genuinely reachable error — a field exceeding the 255-byte length prefix — was
+already tested. So the methods carried ~15 unreachable error paths each guard
+mandated by `errcheck`, yet impossible to hit.
+
+The codebase's *other* serializers (`NewMiningJob`, `SubmitSharesStandard`,
+`SubmitSharesSuccess`, `SetupConnectionSuccess`) already use a clean
+append/`binary.LittleEndian.Put*`-into-a-fixed-slice style with no error return
+on the write path. This change converges the two:
+
+- `internal/stratum/wire.go`: replaced the `io.Writer`-based `putStr0_255`,
+  `putB0_255`, `putU16LE`, `putU32LE` (and the `byteWriter`/`bytes.Buffer`
+  scaffolding) with append-based `appendStr0_255`, `appendB0_255`,
+  `appendU16LE`, `appendU32LE`. The string/bytes helpers return an error *only*
+  for the >255-byte length-prefix overflow; the fixed-width helpers wrap
+  `binary.LittleEndian.AppendUint*` and cannot fail.
+- The six `Encode` methods were rewritten to the append style. Output is
+  byte-identical (verified by the existing Encode→Decode round-trip, byte-order,
+  oversize-rejection, and truncation tests, plus the engine/poolproto handshake
+  integration tests, all unchanged and green).
+- Removed the now-obsolete `io.Writer`-error unit tests and the `errWriter`
+  fixture they relied on; updated the wire round-trip tests to the append API.
+
+All 10 `Encode` methods and the 4 append helpers are now genuinely 100% (the
+unreachable branches are gone, not hidden). Net −110 lines; stratum package
+holds at 98.3%. Race-clean, `go vet`/`gofmt` clean. No behaviour change — the
+wire bytes are identical; only the impossible error paths were removed.
+
 ### Docs (session 190 — spec: reconcile SPECIFICATION.md §3/§6 with the implemented config and metrics surface)
 
 Socratic audit of `docs/SPECIFICATION.md` against the code found two drift gaps where the

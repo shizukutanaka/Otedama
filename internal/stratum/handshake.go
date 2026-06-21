@@ -19,7 +19,6 @@
 package stratum
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -45,26 +44,18 @@ type SetupConnection struct {
 
 // Encode serialises the message into a payload byte slice.
 func (m SetupConnection) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	w := &byteWriter{&buf}
-	if err := w.WriteByte(byte(m.Protocol)); err != nil {
-		return nil, err
-	}
-	if err := putU16LE(w, m.MinVersion); err != nil {
-		return nil, err
-	}
-	if err := putU16LE(w, m.MaxVersion); err != nil {
-		return nil, err
-	}
-	if err := putU32LE(w, m.Flags); err != nil {
-		return nil, err
-	}
+	b := make([]byte, 0, 32)
+	b = append(b, byte(m.Protocol))
+	b = appendU16LE(b, m.MinVersion)
+	b = appendU16LE(b, m.MaxVersion)
+	b = appendU32LE(b, m.Flags)
+	var err error
 	for _, s := range []string{m.Endpoint, m.Vendor, m.HardwareVersion, m.Firmware, m.DeviceID} {
-		if err := putStr0_255(w, s); err != nil {
+		if b, err = appendStr0_255(b, s); err != nil {
 			return nil, err
 		}
 	}
-	return buf.Bytes(), nil
+	return b, nil
 }
 
 // DecodeSetupConnection parses a SetupConnection from a payload byte slice.
@@ -137,15 +128,8 @@ type SetupConnectionError struct {
 
 // Encode serialises SetupConnectionError.
 func (m SetupConnectionError) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	w := &byteWriter{&buf}
-	if err := putU32LE(w, m.Flags); err != nil {
-		return nil, err
-	}
-	if err := putStr0_255(w, m.Error); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	b := appendU32LE(make([]byte, 0, 8), m.Flags)
+	return appendStr0_255(b, m.Error)
 }
 
 // DecodeSetupConnectionError parses SetupConnectionError.
@@ -177,21 +161,13 @@ type OpenMiningChannel struct {
 
 // Encode serialises OpenMiningChannel.
 func (m OpenMiningChannel) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	w := &byteWriter{&buf}
-	if err := putU32LE(w, m.ReqID); err != nil {
+	b := appendU32LE(make([]byte, 0, 16), m.ReqID)
+	b, err := appendStr0_255(b, m.User)
+	if err != nil {
 		return nil, err
 	}
-	if err := putStr0_255(w, m.User); err != nil {
-		return nil, err
-	}
-	// NominalHashrate: IEEE 754 float32 little-endian
-	var f [4]byte
-	binary.LittleEndian.PutUint32(f[:], float32bits(m.NominalHashrate))
-	if _, err := w.Write(f[:]); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	// NominalHashrate: IEEE 754 float32 little-endian.
+	return appendU32LE(b, float32bits(m.NominalHashrate)), nil
 }
 
 // DecodeOpenMiningChannel parses OpenMiningChannel.
@@ -229,24 +205,15 @@ type OpenMiningChannelSuccess struct {
 
 // Encode serialises OpenMiningChannelSuccess.
 func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	w := &byteWriter{&buf}
-	if err := putU32LE(w, m.ReqID); err != nil {
+	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+2)
+	b = appendU32LE(b, m.ReqID)
+	b = appendU32LE(b, m.ChannelID)
+	b = append(b, m.Target[:]...)
+	b, err := appendB0_255(b, m.Extranonce)
+	if err != nil {
 		return nil, err
 	}
-	if err := putU32LE(w, m.ChannelID); err != nil {
-		return nil, err
-	}
-	if _, err := w.Write(m.Target[:]); err != nil {
-		return nil, err
-	}
-	if err := putB0_255(w, m.Extranonce); err != nil {
-		return nil, err
-	}
-	if err := putU16LE(w, m.ExtraNonce2Size); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return appendU16LE(b, m.ExtraNonce2Size), nil
 }
 
 // DecodeOpenMiningChannelSuccess parses OpenMiningChannelSuccess.
@@ -284,15 +251,8 @@ type OpenMiningChannelError struct {
 
 // Encode serialises OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
 func (m OpenMiningChannelError) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	w := &byteWriter{&buf}
-	if err := putU32LE(w, m.ReqID); err != nil {
-		return nil, err
-	}
-	if err := putStr0_255(w, m.Error); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	b := appendU32LE(make([]byte, 0, 8), m.ReqID)
+	return appendStr0_255(b, m.Error)
 }
 
 // DecodeOpenMiningChannelError parses an OpenMiningChannelError payload.

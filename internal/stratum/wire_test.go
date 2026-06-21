@@ -5,7 +5,6 @@ package stratum
 
 import (
 	"bytes"
-	"io"
 	"strings"
 	"testing"
 )
@@ -15,11 +14,11 @@ import (
 func TestStr0_255_RoundTrip(t *testing.T) {
 	cases := []string{"", "a", "hello", "otedama/3.0.0", strings.Repeat("x", 255)}
 	for _, s := range cases {
-		var buf bytes.Buffer
-		if err := putStr0_255(&buf, s); err != nil {
-			t.Fatalf("putStr0_255(%q): %v", s, err)
+		b, err := appendStr0_255(nil, s)
+		if err != nil {
+			t.Fatalf("appendStr0_255(%q): %v", s, err)
 		}
-		got, err := getStr0_255(newByteReader(buf.Bytes()))
+		got, err := getStr0_255(newByteReader(b))
 		if err != nil {
 			t.Fatalf("getStr0_255(%q): %v", s, err)
 		}
@@ -30,24 +29,23 @@ func TestStr0_255_RoundTrip(t *testing.T) {
 }
 
 func TestStr0_255_LengthPrefix(t *testing.T) {
-	var buf bytes.Buffer
-	if err := putStr0_255(&buf, "abc"); err != nil {
+	b, err := appendStr0_255(nil, "abc")
+	if err != nil {
 		t.Fatal(err)
 	}
 	// First byte is the length prefix.
-	if buf.Bytes()[0] != 3 {
-		t.Errorf("length prefix = %d, want 3", buf.Bytes()[0])
+	if b[0] != 3 {
+		t.Errorf("length prefix = %d, want 3", b[0])
 	}
-	if buf.Len() != 4 { // 1 length + 3 content
-		t.Errorf("total length = %d, want 4", buf.Len())
+	if len(b) != 4 { // 1 length + 3 content
+		t.Errorf("total length = %d, want 4", len(b))
 	}
 }
 
 func TestStr0_255_RejectsTooLong(t *testing.T) {
-	var buf bytes.Buffer
 	long := strings.Repeat("x", 256) // exceeds 255
-	if err := putStr0_255(&buf, long); err == nil {
-		t.Error("putStr0_255 should reject strings longer than 255")
+	if _, err := appendStr0_255(nil, long); err == nil {
+		t.Error("appendStr0_255 should reject strings longer than 255")
 	}
 }
 
@@ -70,11 +68,11 @@ func TestB0_255_RoundTrip(t *testing.T) {
 		bytes.Repeat([]byte{0xAB}, 255),
 	}
 	for _, b := range cases {
-		var buf bytes.Buffer
-		if err := putB0_255(&buf, b); err != nil {
-			t.Fatalf("putB0_255(%d bytes): %v", len(b), err)
+		enc, err := appendB0_255(nil, b)
+		if err != nil {
+			t.Fatalf("appendB0_255(%d bytes): %v", len(b), err)
 		}
-		got, err := getB0_255(newByteReader(buf.Bytes()))
+		got, err := getB0_255(newByteReader(enc))
 		if err != nil {
 			t.Fatalf("getB0_255: %v", err)
 		}
@@ -85,9 +83,8 @@ func TestB0_255_RoundTrip(t *testing.T) {
 }
 
 func TestB0_255_RejectsTooLong(t *testing.T) {
-	var buf bytes.Buffer
-	if err := putB0_255(&buf, bytes.Repeat([]byte{0}, 256)); err == nil {
-		t.Error("putB0_255 should reject byte slices longer than 255")
+	if _, err := appendB0_255(nil, bytes.Repeat([]byte{0}, 256)); err == nil {
+		t.Error("appendB0_255 should reject byte slices longer than 255")
 	}
 }
 
@@ -96,11 +93,7 @@ func TestB0_255_RejectsTooLong(t *testing.T) {
 func TestU16LE_RoundTrip(t *testing.T) {
 	cases := []uint16{0, 1, 255, 256, 0x1234, 0xFFFF}
 	for _, v := range cases {
-		var buf bytes.Buffer
-		if err := putU16LE(&buf, v); err != nil {
-			t.Fatalf("putU16LE(%d): %v", v, err)
-		}
-		got, err := getU16LE(newByteReader(buf.Bytes()))
+		got, err := getU16LE(newByteReader(appendU16LE(nil, v)))
 		if err != nil {
 			t.Fatalf("getU16LE: %v", err)
 		}
@@ -111,14 +104,10 @@ func TestU16LE_RoundTrip(t *testing.T) {
 }
 
 func TestU16LE_LittleEndianByteOrder(t *testing.T) {
-	var buf bytes.Buffer
-	if err := putU16LE(&buf, 0x1234); err != nil {
-		t.Fatal(err)
-	}
 	// Little-endian: low byte first.
 	want := []byte{0x34, 0x12}
-	if !bytes.Equal(buf.Bytes(), want) {
-		t.Errorf("byte order = %x, want %x", buf.Bytes(), want)
+	if got := appendU16LE(nil, 0x1234); !bytes.Equal(got, want) {
+		t.Errorf("byte order = %x, want %x", got, want)
 	}
 }
 
@@ -134,11 +123,7 @@ func TestGetU16LE_TruncatedInput(t *testing.T) {
 func TestU32LE_RoundTrip(t *testing.T) {
 	cases := []uint32{0, 1, 0xFFFF, 0x10000, 0x12345678, 0xFFFFFFFF}
 	for _, v := range cases {
-		var buf bytes.Buffer
-		if err := putU32LE(&buf, v); err != nil {
-			t.Fatalf("putU32LE(%d): %v", v, err)
-		}
-		got, err := getU32LE(newByteReader(buf.Bytes()))
+		got, err := getU32LE(newByteReader(appendU32LE(nil, v)))
 		if err != nil {
 			t.Fatalf("getU32LE: %v", err)
 		}
@@ -149,13 +134,9 @@ func TestU32LE_RoundTrip(t *testing.T) {
 }
 
 func TestU32LE_LittleEndianByteOrder(t *testing.T) {
-	var buf bytes.Buffer
-	if err := putU32LE(&buf, 0x12345678); err != nil {
-		t.Fatal(err)
-	}
 	want := []byte{0x78, 0x56, 0x34, 0x12}
-	if !bytes.Equal(buf.Bytes(), want) {
-		t.Errorf("byte order = %x, want %x", buf.Bytes(), want)
+	if got := appendU32LE(nil, 0x12345678); !bytes.Equal(got, want) {
+		t.Errorf("byte order = %x, want %x", got, want)
 	}
 }
 
@@ -163,25 +144,6 @@ func TestGetU32LE_TruncatedInput(t *testing.T) {
 	_, err := getU32LE(newByteReader([]byte{0x01, 0x02, 0x03})) // need 4
 	if err == nil {
 		t.Error("getU32LE should error on 3-byte input")
-	}
-}
-
-// ----- Write error paths (length byte) -----
-
-// errWriter always errors on Write.
-type errWriter struct{}
-
-func (errWriter) Write(_ []byte) (int, error) { return 0, io.ErrClosedPipe }
-
-func TestPutStr0_255_WriteError_OnLengthByte(t *testing.T) {
-	if err := putStr0_255(errWriter{}, "hi"); err == nil {
-		t.Error("putStr0_255 should return error when writing length byte fails")
-	}
-}
-
-func TestPutB0_255_WriteError_OnLengthByte(t *testing.T) {
-	if err := putB0_255(errWriter{}, []byte{0x01, 0x02}); err == nil {
-		t.Error("putB0_255 should return error when writing length byte fails")
 	}
 }
 
