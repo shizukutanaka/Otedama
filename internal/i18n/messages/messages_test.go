@@ -367,6 +367,30 @@ func TestJapanese_CoversAllEnglishIDs(t *testing.T) {
 	}
 }
 
+// TestAllLanguages_CoverAllEnglishIDs is the catalogue-wide completeness guard.
+// The project commits to ten human-reviewed languages (CLAUDE.md ドキュメント要件);
+// every English message ID must be translated in all nine non-English catalogues.
+// The pre-existing TestJapanese_CoversAllEnglishIDs only guarded Japanese, so a
+// contributor who added an English string and translated it to some — but not
+// all — languages would pass CI while shipping a partially-translated release.
+// This test closes that gap by asserting MissingTranslations() is empty for the
+// full built-in bundle, naming any language and the specific IDs it lacks.
+func TestAllLanguages_CoverAllEnglishIDs(t *testing.T) {
+	bundle, err := NewBundle()
+	if err != nil {
+		t.Fatalf("NewBundle: %v", err)
+	}
+	missing := bundle.MissingTranslations()
+	if len(missing) == 0 {
+		return // every non-English catalogue is complete
+	}
+	for _, spec := range allCatalogSpecs {
+		if ids := missing[spec.lang]; len(ids) > 0 {
+			t.Errorf("%s (%s) missing %d translation(s): %v", spec.name, spec.lang, len(ids), ids)
+		}
+	}
+}
+
 func TestAllLanguages_StartupReadyIsDistinct(t *testing.T) {
 	bundle, err := NewBundle()
 	if err != nil {

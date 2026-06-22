@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 206 — guard all ten languages for translation completeness, not just Japanese)
+
+A verification pass on the i18n catalogues confirmed all nine non-English
+languages are currently complete (no missing message IDs), and a full
+`go test -race ./...` run came back clean (0 data races across 24 packages). But
+the verification exposed a real *test* gap: the only completeness guard,
+`TestJapanese_CoversAllEnglishIDs`, checks **Japanese alone**. A contributor who
+added a new English string and translated it to some — but not all — of the other
+eight languages (Chinese, Korean, Spanish, French, German, Portuguese, Russian,
+Arabic) would pass CI while shipping a partially-translated release, contradicting
+the project's commitment to ten human-reviewed languages (CLAUDE.md ドキュメント要件).
+
+`TestAllLanguages_CoverAllEnglishIDs` (in `internal/i18n/messages/messages_test.go`)
+closes the gap: it builds the full built-in bundle and asserts
+`MissingTranslations()` is empty, naming any language and the specific IDs it lacks
+so the failure is directly actionable. This is a genuine invariant guard (the
+property the project explicitly values), not coverage padding — it passes today and
+will fail the moment any catalogue falls behind English.
+
+No production code changed. All 24 packages green, race-clean.
+
 ### Docs (session 205 — verify the §6 metric catalogue is in sync, record the submit-latency unit gap as G18)
 
 A documentation-accuracy verification pass cross-checked the SPECIFICATION §6
