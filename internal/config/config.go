@@ -131,6 +131,21 @@ type Config struct {
 	// Validate(). Set via OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
 	CurtailBelowBTCUSD float64 `yaml:"curtail_below_btc_usd"`
 
+	// MinYieldSatsPerSec is a per-device profitability floor in satoshis per
+	// second: the arbitration engine leaves a device idle when none of its
+	// compatible revenue streams clears this rate, rather than running it for a
+	// trickle of revenue that does not justify the power, wear, and heat.
+	//
+	// It complements CurtailBelowBTCUSD: curtailment pauses *all* hashing on a
+	// global BTC-price threshold, whereas this idles only the individual devices
+	// whose best available workload is below the floor — useful on mixed rigs
+	// where a weak device should stop while stronger ones keep earning.
+	//
+	// 0 disables the floor (default): every positive-yield stream qualifies.
+	// Negative values are rejected by Validate(). Set via
+	// OTEDAMA_MIN_YIELD_SATS_PER_SEC or config file.
+	MinYieldSatsPerSec float64 `yaml:"min_yield_sats_per_sec"`
+
 	// PowerWatts is the user's estimated total system power draw in watts.
 	// When set (> 0), Otedama computes and exposes
 	// `otedama_joules_per_terahash` (J/TH), the single efficiency metric
@@ -218,6 +233,7 @@ func Defaults() Config {
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
 		CurtailBelowBTCUSD:       0, // disabled by default
+		MinYieldSatsPerSec:       0, // disabled by default
 	}
 }
 
@@ -276,6 +292,7 @@ type Origins struct {
 	DataDir                  ValueOrigin
 	ArbitrationHysteresisPct ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
+	MinYieldSatsPerSec       ValueOrigin
 	PowerWatts               ValueOrigin
 	ElectricityPricePerKWh   ValueOrigin
 }
@@ -306,6 +323,10 @@ var numericEnvVars = []struct {
 	{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT", func(c *Config, o *Origins, v float64) {
 		c.ArbitrationHysteresisPct = v
 		o.ArbitrationHysteresisPct = OriginEnv
+	}},
+	{"OTEDAMA_MIN_YIELD_SATS_PER_SEC", func(c *Config, o *Origins, v float64) {
+		c.MinYieldSatsPerSec = v
+		o.MinYieldSatsPerSec = OriginEnv
 	}},
 	{"OTEDAMA_CURTAIL_BELOW_BTC_USD", func(c *Config, o *Origins, v float64) {
 		c.CurtailBelowBTCUSD = v
@@ -398,6 +419,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	}
 	// CurtailBelowBTCUSD: same zero-value caveat; treat non-zero file value
 	// as an explicit override.
+	// MinYieldSatsPerSec: same zero-value caveat; treat non-zero file value as
+	// an explicit override.
+	if fromFile.MinYieldSatsPerSec != 0 {
+		cfg.MinYieldSatsPerSec = fromFile.MinYieldSatsPerSec
+		o.MinYieldSatsPerSec = OriginFile
+	}
 	if fromFile.CurtailBelowBTCUSD != 0 {
 		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
 		o.CurtailBelowBTCUSD = OriginFile
@@ -540,6 +567,10 @@ func (c Config) Validate() error {
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+	}
+	if c.MinYieldSatsPerSec < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
 	}
 	if c.PowerWatts < 0 {
 		issues = append(issues, fmt.Sprintf(

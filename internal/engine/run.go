@@ -281,6 +281,7 @@ func Run(ctx context.Context, opts Options) error {
 		metrics:       m,
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
+		minYield:      opts.Config.MinYieldSatsPerSec,
 	})
 
 	// ----- Phase 7: TUI dashboard -----

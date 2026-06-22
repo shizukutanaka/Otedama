@@ -32,7 +32,8 @@
 // A correct engine preserves these invariants over every output:
 //
 //   - Every device with at least one compatible stream receives an
-//     assignment. Idle is only allowed when no stream accepts the device.
+//     assignment. Idle is only allowed when no stream accepts the device, or
+//     when no accepting stream clears the MinYieldSatsPerSec profitability floor.
 //   - No device is assigned to a stream that does not accept its Family.
 //   - Switching occurs only when the policy-adjusted yield gain exceeds the
 //     caller-supplied hysteresis margin. The gain is measured in the same
@@ -246,6 +247,20 @@ type Input struct {
 	// 0.0 means switch at any improvement; 0.1 means require 10% more.
 	// This damps rapid oscillation when streams have near-equal yields.
 	HysteresisMargin float64
+
+	// MinYieldSatsPerSec is an absolute profitability floor: a stream is a
+	// viable candidate for a device only if its confidence-adjusted yield is at
+	// least this many satoshis per second. Streams below the floor are treated
+	// as if they did not accept the device, so a device whose every compatible
+	// stream is below the floor is left idle rather than run for a trickle of
+	// revenue (which still costs power, wear, and heat).
+	//
+	// It is the per-device counterpart to the engine-level curtail_below_btc_usd
+	// switch: curtailment pauses everything on a global BTC-price threshold,
+	// whereas this idles only the individual devices that cannot clear the floor.
+	// 0 (the default) disables the floor — every positive-yield stream qualifies,
+	// exactly as before this field existed. Must be non-negative.
+	MinYieldSatsPerSec float64
 }
 
 // DeviceRef is a lightweight reference to a Device. We pass references
@@ -276,6 +291,9 @@ func Decide(in Input) (*Allocation, error) {
 	}
 	if in.HysteresisMargin < 0 {
 		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
+	}
+	if in.MinYieldSatsPerSec < 0 {
+		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
 	}
 
 	// Reject duplicate device IDs up front, since silently ignoring
@@ -309,7 +327,7 @@ func Decide(in Input) (*Allocation, error) {
 	}
 
 	for _, dev := range devices {
-		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin)
+		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
 		if a.Idle() {
 			alloc.SkippedDevice++
 		}
@@ -328,13 +346,19 @@ func chooseForDevice(
 	previous Assignment,
 	policy Policy,
 	hysteresis float64,
+	minYield float64,
 ) Assignment {
 	type candidate struct {
 		stream Stream
 		yield  float64
 	}
 
+	// belowFloor records whether at least one stream accepted this device with a
+	// positive yield that nonetheless failed the minYield floor. It lets the idle
+	// reason distinguish "nothing wanted this device" from "the work on offer was
+	// not worth running", which is actionable for an operator tuning the floor.
 	var candidates []candidate
+	var belowFloor bool
 	for _, s := range streams {
 		if !s.Accepts(dev.Identity.Family) {
 			continue
@@ -343,13 +367,21 @@ func chooseForDevice(
 		if y <= 0 {
 			continue
 		}
+		if y < minYield {
+			belowFloor = true
+			continue
+		}
 		candidates = append(candidates, candidate{stream: s, yield: y})
 	}
 
 	if len(candidates) == 0 {
+		reason := "no compatible stream accepting non-zero work"
+		if belowFloor {
+			reason = fmt.Sprintf("all compatible streams below minimum yield floor %.4g sats/s", minYield)
+		}
 		return Assignment{
 			DeviceID: dev.Identity.ID,
-			Reason:   "no compatible stream accepting non-zero work",
+			Reason:   reason,
 		}
 	}
 

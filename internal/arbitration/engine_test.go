@@ -1147,3 +1147,154 @@ func greedyTotalYield(in Input) float64 {
 	}
 	return total
 }
+
+// ----- MinYieldSatsPerSec profitability floor -----
+
+func TestDecide_RejectsNegativeMinYield(t *testing.T) {
+	_, err := Decide(Input{MinYieldSatsPerSec: -1})
+	if err == nil {
+		t.Fatal("Decide must reject negative MinYieldSatsPerSec")
+	}
+}
+
+func TestDecide_MinYieldFloor_IdlesDeviceBelowFloor(t *testing.T) {
+	// The only compatible stream yields 5 sats/s; the floor is 10, so the
+	// device must idle rather than run unprofitably.
+	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
+	mining := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 5, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:            []DeviceRef{cpu},
+		Streams:            []Stream{mining},
+		Policy:             PolicyMaximizeEarnings,
+		MinYieldSatsPerSec: 10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if !a.Idle() {
+		t.Errorf("device assigned to %q, want idle (yield 5 < floor 10)", a.Stream)
+	}
+	if alloc.SkippedDevice != 1 {
+		t.Errorf("SkippedDevice = %d, want 1", alloc.SkippedDevice)
+	}
+	if !strings.Contains(a.Reason, "floor") {
+		t.Errorf("idle reason %q must mention the floor", a.Reason)
+	}
+	if a.ForegoneSatsPerSec != 0 {
+		t.Errorf("ForegoneSatsPerSec = %v, want 0 for an idle device", a.ForegoneSatsPerSec)
+	}
+}
+
+func TestDecide_MinYieldFloor_KeepsDeviceAtOrAboveFloor(t *testing.T) {
+	// Yield exactly equal to the floor must qualify (>= is the contract).
+	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
+	mining := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 10, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:            []DeviceRef{cpu},
+		Streams:            []Stream{mining},
+		Policy:             PolicyMaximizeEarnings,
+		MinYieldSatsPerSec: 10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Idle() {
+		t.Error("device idle, want assigned (yield 10 == floor 10 qualifies)")
+	}
+}
+
+func TestDecide_MinYieldFloor_ExcludesBelowFloorStreamFromChoice(t *testing.T) {
+	// Two compatible streams: one below the floor (8), one above (50). The
+	// below-floor stream must be excluded entirely — the device runs on the
+	// above-floor stream and ForegoneSatsPerSec is 0 (the excluded stream is not
+	// a viable alternative, so it does not count as forgone revenue).
+	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
+	low := Stream{
+		ID:              "ai.cheap",
+		AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 8, Confidence: 1.0}},
+	}
+	high := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 50, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:            []DeviceRef{cpu},
+		Streams:            []Stream{low, high},
+		Policy:             PolicyMaximizeEarnings,
+		MinYieldSatsPerSec: 10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "mining.braiins" {
+		t.Errorf("assigned to %q, want mining.braiins (only above-floor stream)", a.Stream)
+	}
+	if a.ForegoneSatsPerSec != 0 {
+		t.Errorf("ForegoneSatsPerSec = %v, want 0 (below-floor stream is not a viable alternative)", a.ForegoneSatsPerSec)
+	}
+}
+
+func TestDecide_MinYieldFloor_ZeroDisablesFloor(t *testing.T) {
+	// With the floor at 0 (default), even a tiny positive yield is assigned —
+	// identical to the pre-floor behaviour.
+	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
+	mining := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+		YieldPerDevice:  map[string]Yield{"cpu-0": {SatsPerSecond: 0.0001, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{cpu},
+		Streams: []Stream{mining},
+		Policy:  PolicyMaximizeEarnings,
+		// MinYieldSatsPerSec left at zero value.
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Idle() {
+		t.Error("device idle with floor 0, want assigned")
+	}
+}
+
+func TestDecide_Property_NonIdleAssignmentsClearFloor(t *testing.T) {
+	// Invariant: with a positive floor, every non-idle assignment yields at
+	// least the floor.
+	r := rand.New(rand.NewSource(2027))
+	for trial := 0; trial < 200; trial++ {
+		in := randomInput(r)
+		in.Previous = nil
+		floor := r.Float64() * 50 // 0..50 sats/s
+		in.MinYieldSatsPerSec = floor
+
+		alloc, err := Decide(in)
+		if err != nil {
+			continue
+		}
+		for _, a := range alloc.Assignments {
+			if a.Idle() {
+				continue
+			}
+			if a.ExpectedYield < floor {
+				t.Fatalf("trial %d: device %v active at yield %.6f below floor %.6f",
+					trial, a.DeviceID, a.ExpectedYield, floor)
+			}
+		}
+	}
+}

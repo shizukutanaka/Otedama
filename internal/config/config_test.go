@@ -503,6 +503,52 @@ func TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored(t *testing.T) {
 	}
 }
 
+func TestValidate_MinYieldSatsPerSec(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, v := range []float64{0, 0.5, 10, 1000} {
+		c := base()
+		c.MinYieldSatsPerSec = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("MinYieldSatsPerSec=%g should be valid; got %v", v, err)
+		}
+	}
+	c := base()
+	c.MinYieldSatsPerSec = -1
+	err := c.Validate()
+	if err == nil {
+		t.Error("negative MinYieldSatsPerSec should fail Validate()")
+	}
+	if err != nil && !strings.Contains(err.Error(), "min_yield_sats_per_sec") {
+		t.Errorf("error should mention min_yield_sats_per_sec: %v", err)
+	}
+}
+
+func TestResolve_MinYieldSatsPerSec_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_MIN_YIELD_SATS_PER_SEC": "12.5"}
+	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.MinYieldSatsPerSec != 12.5 {
+		t.Errorf("MinYieldSatsPerSec = %g, want 12.5", cfg.MinYieldSatsPerSec)
+	}
+	if o.MinYieldSatsPerSec != OriginEnv {
+		t.Errorf("origin = %v, want env", o.MinYieldSatsPerSec)
+	}
+}
+
+func TestResolve_MinYieldSatsPerSec_FileOverride(t *testing.T) {
+	fromFile := Config{MinYieldSatsPerSec: 7}
+	cfg, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	if cfg.MinYieldSatsPerSec != 7 {
+		t.Errorf("MinYieldSatsPerSec = %g, want 7 (from file)", cfg.MinYieldSatsPerSec)
+	}
+	if o.MinYieldSatsPerSec != OriginFile {
+		t.Errorf("origin = %v, want file", o.MinYieldSatsPerSec)
+	}
+}
+
 func TestEnvWarnings_FlagsMalformedNumericVars(t *testing.T) {
 	env := map[string]string{
 		"OTEDAMA_POWER_WATTS":               "300w",   // unit suffix typo

@@ -10,6 +10,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 208 — new feature: per-device profitability floor `min_yield_sats_per_sec`)
+
+A Socratic interrogation of the product's core promise ("route each device to its
+*most valuable* workload") exposed a real gap: the arbitration engine treated
+*any* positive yield as worth running, so a device whose best available stream
+paid a trickle was still assigned — burning power, wear, and heat for revenue that
+may not justify them. Idle (or waiting for a better quote) is sometimes the more
+valuable choice, and the engine had no way to express that.
+
+**New capability:** a per-device profitability floor. A stream is a viable
+candidate for a device only if its confidence-adjusted yield clears
+`min_yield_sats_per_sec`; when none does, the device is left idle with a reason
+naming the floor. This is the per-device counterpart to the engine-wide
+`curtail_below_btc_usd` switch — curtailment pauses *all* hashing on a global
+BTC-price threshold, whereas this idles only the individual weak devices on a
+mixed rig while stronger ones keep earning. **Default `0` disables it, making the
+change byte-for-byte backward compatible.**
+
+Implemented within the existing architecture (no new packages), mirroring the
+established `arbitration_hysteresis_pct` / `curtail_below_btc_usd` plumbing
+end-to-end:
+
+- `internal/arbitration/engine.go`: new `Input.MinYieldSatsPerSec` (validated
+  ≥ 0); `chooseForDevice` filters sub-floor streams and emits a distinct idle
+  reason ("all compatible streams below minimum yield floor …") so an operator can
+  tell "nothing wanted this device" from "the work on offer wasn't worth it". The
+  package-doc invariant was updated to record the floor as a second legitimate
+  idle cause. Engine stays pure and unit-agnostic.
+- `internal/config/config.go`: `MinYieldSatsPerSec` field (`min_yield_sats_per_sec`
+  YAML), default 0, `OTEDAMA_MIN_YIELD_SATS_PER_SEC` env, file-override merge,
+  `Origins` tracking, and a ≥ 0 `Validate()` rule.
+- `internal/engine/{arbitrate,run}.go`: threaded config → arbitration loop →
+  `Decide`.
+- `cmd/otedama/config.go`: surfaced in `config show` (text + `--json` + `--origin`).
+- `config.yaml.example`, `docs/SPECIFICATION.md` §3 (now 17 documented fields).
+
+**Tests (TDD):** six arbitration tests — validation, idle-below-floor (with reason
++ `SkippedDevice` + zero `ForegoneSatsPerSec`), at/above-floor qualifies,
+below-floor stream excluded from choice and from foregone accounting, floor=0
+disables, plus a property test asserting *every non-idle assignment clears the
+floor* over 200 random inputs. Three config tests (validation, env, file origin).
+`internal/arbitration` holds **100%** coverage. All 24 packages green under
+`-race`; existing invariants (incl. "no idle when a compatible stream exists",
+which holds at floor 0) unchanged.
+
+Per the project workflow this would normally begin as a GitHub issue; recorded
+here as the maintainer-authorised requirements→design→TDD trail.
+
 ### Added (session 207 — CI guard against metric/spec drift: every registered metric must be documented in §6)
 
 Session 205 verified by hand that SPECIFICATION §6 documents all 39 registered

@@ -71,6 +71,7 @@ its default, and its validation rule:
 | `data_dir` | `OTEDAMA_DATA_DIR` | `""` → XDG/platform convention | — |
 | `arbitration_hysteresis_pct` | `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `0.05` | ∈ [0.0, 1.0) |
 | `curtail_below_btc_usd` | `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `0` (disabled) | ≥ 0 |
+| `min_yield_sats_per_sec` | `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `0` (disabled) | ≥ 0 |
 | `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
 | `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
 

@@ -67,6 +67,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	// and fractions readable.
 	fmt.Fprintf(stdout, "arbitration_hysteresis_pct: %g%s\n", cfg.ArbitrationHysteresisPct, tag(origins.ArbitrationHysteresisPct))
 	fmt.Fprintf(stdout, "curtail_below_btc_usd:      %g%s\n", cfg.CurtailBelowBTCUSD, tag(origins.CurtailBelowBTCUSD))
+	fmt.Fprintf(stdout, "min_yield_sats_per_sec:     %g%s\n", cfg.MinYieldSatsPerSec, tag(origins.MinYieldSatsPerSec))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
 	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
 	if len(cfg.Pools) == 0 {
@@ -103,6 +104,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		WorkerName               string            `json:"worker_name"`
 		ArbitrationHysteresisPct float64           `json:"arbitration_hysteresis_pct"`
 		CurtailBelowBTCUSD       float64           `json:"curtail_below_btc_usd"`
+		MinYieldSatsPerSec       float64           `json:"min_yield_sats_per_sec"`
 		PowerWatts               float64           `json:"power_watts"`
 		ElectricityPricePerKWh   float64           `json:"electricity_price_per_kwh"`
 		Pools                    []string          `json:"pools"`
@@ -117,6 +119,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		WorkerName:               cfg.Workers.Name,
 		ArbitrationHysteresisPct: cfg.ArbitrationHysteresisPct,
 		CurtailBelowBTCUSD:       cfg.CurtailBelowBTCUSD,
+		MinYieldSatsPerSec:       cfg.MinYieldSatsPerSec,
 		PowerWatts:               cfg.PowerWatts,
 		ElectricityPricePerKWh:   cfg.ElectricityPricePerKWh,
 		Pools:                    pools,
@@ -132,6 +135,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"worker_name":                origins.WorkerName.String(),
 			"arbitration_hysteresis_pct": origins.ArbitrationHysteresisPct.String(),
 			"curtail_below_btc_usd":      origins.CurtailBelowBTCUSD.String(),
+			"min_yield_sats_per_sec":     origins.MinYieldSatsPerSec.String(),
 			"power_watts":                origins.PowerWatts.String(),
 			"electricity_price_per_kwh":  origins.ElectricityPricePerKWh.String(),
 			"pools":                      origins.Pools.String(),

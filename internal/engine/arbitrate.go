@@ -30,6 +30,7 @@ type arbitrationLoopOpts struct {
 	metrics       *engineMetrics
 	log           func(level, msg string)
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
+	minYield      float64 // 0 disables the per-device profitability floor
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -86,11 +87,12 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				margin = defaultHysteresisPct
 			}
 			alloc, err := arbitration.Decide(arbitration.Input{
-				Devices:          opts.devRefs,
-				Streams:          streams,
-				Previous:         prevAlloc,
-				Policy:           arbitration.PolicyMaximizeEarnings,
-				HysteresisMargin: margin,
+				Devices:            opts.devRefs,
+				Streams:            streams,
+				Previous:           prevAlloc,
+				Policy:             arbitration.PolicyMaximizeEarnings,
+				HysteresisMargin:   margin,
+				MinYieldSatsPerSec: opts.minYield,
 			})
 			if err != nil {
 				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
