@@ -98,6 +98,13 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
 				continue
 			}
+			// Capture the previous idle count before overwriting prevAlloc, so a
+			// transition can be logged once (not every tick) for operators who
+			// watch logs rather than the otedama_devices_idle gauge.
+			prevSkipped := 0
+			if prevAlloc != nil {
+				prevSkipped = prevAlloc.SkippedDevice
+			}
 			prevAlloc = alloc
 			var foregone float64
 			for _, a := range alloc.Assignments {
@@ -112,6 +119,15 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
 			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
 			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
+			if alloc.SkippedDevice != prevSkipped {
+				if alloc.SkippedDevice > 0 {
+					opts.log("info", fmt.Sprintf(
+						"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
+						alloc.SkippedDevice))
+				} else {
+					opts.log("info", "arbitration: all devices now have a viable stream")
+				}
+			}
 			applyAllocation(alloc, opts.workers, opts.log)
 		}
 	}

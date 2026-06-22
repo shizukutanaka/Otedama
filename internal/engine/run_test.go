@@ -1658,6 +1658,63 @@ func TestRunArbitrationLoop_PublishesDevicesIdleGauge(t *testing.T) {
 	}
 }
 
+func TestRunArbitrationLoop_LogsIdleTransition(t *testing.T) {
+	// A device driven below the floor must produce exactly one "idle" log line
+	// on the transition (for log-only operators), not one per tick.
+	old := arbitrationInterval
+	arbitrationInterval = 10 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(_, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	quoteCh := make(chan provider.Quote, 1)
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{
+			{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}},
+		},
+		streamsMu: &sync.Mutex{},
+		streamMap: make(map[string]arbitration.Stream),
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log:       logf,
+		minYield:  2000,
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	quoteCh <- provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+	}
+
+	// Let several ticks run to confirm the idle line is logged once, not per tick.
+	time.Sleep(60 * time.Millisecond)
+	cancel()
+
+	mu.Lock()
+	defer mu.Unlock()
+	idleLines := 0
+	for _, m := range logs {
+		if strings.Contains(m, "device(s) now idle") {
+			idleLines++
+		}
+	}
+	if idleLines != 1 {
+		t.Errorf("idle transition logged %d time(s), want exactly 1 (logs: %v)", idleLines, logs)
+	}
+}
+
 func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

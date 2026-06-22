@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 210 — log idle-device transitions so log-only operators see the floor bite)
+
+A strengths/weaknesses review of the session 208–209 work found one remaining gap:
+the `min_yield_sats_per_sec` floor surfaced *only* through the `otedama_devices_idle`
+gauge, so an operator who tails logs rather than scraping Prometheus had no signal
+when the floor parked hardware. (The codebase's strengths — 100% core coverage,
+40 doc-synced metrics, pure arbitration core, honest §8 gap tracking — were noted
+but need no change; the deferred weaknesses G3/G5/G6/G18 remain design-gated.)
+
+The arbitration loop now logs the *transition* in idle-device count — once, when
+it changes, not every tick — mirroring how it already logs workload switches and
+stale-stream expiry:
+
+- crossing into idle: `arbitration: N device(s) now idle (no viable stream, or
+  below min_yield_sats_per_sec floor)`
+- recovering: `arbitration: all devices now have a viable stream`
+
+`internal/engine/arbitrate.go` captures the prior cycle's `SkippedDevice` before
+overwriting `prevAlloc` and logs only on change. Test
+`TestRunArbitrationLoop_LogsIdleTransition` drives a device below the floor across
+several ticks and asserts the idle line appears exactly once (proving
+transition-only, spam-free logging). All 24 packages green under `-race`.
+
 ### Added (session 209 — observability for the profitability floor: `otedama_devices_idle` gauge)
 
 Session 208 added a feature that can idle hardware (the `min_yield_sats_per_sec`
