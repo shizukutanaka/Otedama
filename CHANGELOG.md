@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 207 — CI guard against metric/spec drift: every registered metric must be documented in §6)
+
+Session 205 verified by hand that SPECIFICATION §6 documents all 39 registered
+metrics, but nothing *enforced* it — and metric/doc drift is a demonstrated
+recurring problem: gap G17 was precisely this (22 metrics live at `/metrics` but
+undocumented, caught only by a manual audit). This session makes the invariant
+CI-enforceable.
+
+`TestMetricsDocumentedInSpecification` (new file
+`internal/engine/metrics_doc_test.go`) scans `metrics.go` for the metric-name
+string literals (the first argument to every `NewGauge`/`NewCounter` is a
+compile-time `"otedama_…"` constant) and asserts each appears in
+`docs/SPECIFICATION.md` §6 as a `` `name` `` / `` `name{labels}` `` catalogue
+entry. Scanning the source literals — rather than instantiating the registry —
+deliberately also covers the lazily-created (†) series that only materialise at
+`/metrics` after a runtime event and would be missing from a freshly-built
+registry.
+
+The backtick-anchored marker (requiring a closing `` ` `` or a `{`) is precise: it
+ignores incidental prose and prevents a false pass where a short name (`up`) is
+matched inside a longer documented one (`uptime_seconds`). Verified non-vacuous by
+mutation — injecting an undocumented `otedama_*` literal makes the test fail with
+an actionable message naming the offending metric; removing it restores green.
+
+No production code changed. Adding a metric now requires a matching §6 row or CI
+fails. All 24 packages green.
+
 ### Added (session 206 — guard all ten languages for translation completeness, not just Japanese)
 
 A verification pass on the i18n catalogues confirmed all nine non-English
