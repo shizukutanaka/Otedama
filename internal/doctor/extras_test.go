@@ -970,6 +970,46 @@ func TestDefaultChecks_IncludesPowerEconomicsCheck(t *testing.T) {
 }
 
 // ============================================================================
+// checkProfitabilityFloor — min_yield_sats_per_sec advisory check
+// ============================================================================
+
+func TestCheckProfitabilityFloor_UnsetSkips(t *testing.T) {
+	r := checkProfitabilityFloor(config.Config{}).Run(context.Background())
+	if r.Status != StatusSkip {
+		t.Errorf("unset: status = %v, want Skip", r.Status)
+	}
+}
+
+func TestCheckProfitabilityFloor_SetPassesAndSurfacesValue(t *testing.T) {
+	cfg := config.Config{MinYieldSatsPerSec: 0.25}
+	r := checkProfitabilityFloor(cfg).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("set: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "0.25") {
+		t.Errorf("set: detail should echo the configured floor: %q", r.Detail)
+	}
+	// The Fix must point the operator at the observable that settles
+	// "is this idling everything?" — the otedama_devices_idle metric.
+	if !strings.Contains(r.Fix, "otedama_devices_idle") {
+		t.Errorf("set: fix should point at the otedama_devices_idle metric: %q", r.Fix)
+	}
+}
+
+func TestDefaultChecks_IncludesProfitabilityFloorCheck(t *testing.T) {
+	var found bool
+	for _, c := range DefaultChecks(config.Config{}, "") {
+		if c.Name == "Profitability floor" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("DefaultChecks does not include the 'Profitability floor' check")
+	}
+}
+
+// ============================================================================
 // checkPoolTLSCA — per-pool tls_ca_file validation
 // ============================================================================
 

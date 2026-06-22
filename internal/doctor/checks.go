@@ -42,6 +42,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
 		checkPowerEconomics(cfg),
+		checkProfitabilityFloor(cfg),
 		checkHardware(),
 		checkNetwork(),
 		checkClockSkew(),
@@ -601,6 +602,39 @@ func checkEnvVars() Check {
 				Status: StatusWarn,
 				Detail: strings.Join(warnings, "; "),
 				Fix:    "correct or unset the listed variable(s); a malformed value is ignored and the default is used",
+			}
+		},
+	}
+}
+
+// checkProfitabilityFloor surfaces the min_yield_sats_per_sec setting so
+// `doctor` confirms it understood the floor and explains its effect, rather
+// than staying silent about a setting that can leave hardware idle. The floor
+// idles any device whose best compatible stream yields below it; set high
+// enough, it idles *every* device and the miner does nothing — a silent
+// foot-gun an operator would otherwise discover only by noticing zero hashrate.
+//
+// The check is advisory: it cannot know live per-device yields (those arrive
+// from provider quotes at runtime, not config), so it does not guess a
+// "too high" threshold. Instead it points the operator at the observable that
+// settles the question — the otedama_devices_idle gauge — which reports how
+// many devices the floor actually idled each arbitration cycle.
+func checkProfitabilityFloor(cfg config.Config) Check {
+	return Check{
+		Name: "Profitability floor",
+		Run: func(_ context.Context) Result {
+			if cfg.MinYieldSatsPerSec == 0 {
+				return Result{
+					Status: StatusSkip,
+					Detail: "min_yield_sats_per_sec unset (0); every positive-yield stream qualifies",
+				}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf(
+					"min_yield_sats_per_sec = %.4g sat/s; devices whose best stream yields less will idle",
+					cfg.MinYieldSatsPerSec),
+				Fix: "if more devices idle than you expect, watch the otedama_devices_idle metric and lower the floor",
 			}
 		},
 	}

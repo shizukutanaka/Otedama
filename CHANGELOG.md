@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 211 — `doctor` surfaces the `min_yield_sats_per_sec` floor)
+
+A strengths/weaknesses review of the session 208–210 floor arc found one remaining
+blind spot: the floor now had a config field, validation, an `otedama_devices_idle`
+gauge, and idle-transition logging — but `doctor`, the pre-flight diagnostic, said
+*nothing* about it. Every other economic/power setting already has a coherence
+check (`checkPowerEconomics` for the power/cost pair, `checkPayoutScheme` for the
+variance/custody trade-off), so a setting that can silently leave hardware idle was
+the one gate the health check ignored. An operator who set the floor too high would
+run `otedama doctor`, see all-green, then wonder why nothing was mining.
+
+`checkProfitabilityFloor` (in `DefaultChecks`, ordered after the power/cost check)
+closes the gap, following the advisory `checkPayoutScheme` pattern:
+
+- `min_yield_sats_per_sec` unset (0): `Skip` — "every positive-yield stream qualifies".
+- set: `Pass`, echoing the configured floor and explaining its effect ("devices whose
+  best stream yields less will idle"), with a `Fix` pointing the operator at the
+  `otedama_devices_idle` metric — the observable that settles "is this idling
+  everything?".
+
+The check deliberately does **not** guess a "too high" threshold: live per-device
+yields arrive from provider quotes at runtime, not config, so any static ceiling
+would be speculative (and CLAUDE.md forbids speculative gates). It points at the
+runtime observable instead. Tests `TestCheckProfitabilityFloor_UnsetSkips`,
+`TestCheckProfitabilityFloor_SetPassesAndSurfacesValue` (asserts the floor value is
+echoed and the Fix names the metric), and `TestDefaultChecks_IncludesProfitabilityFloorCheck`
+cover it. All 24 packages green.
+
 ### Added (session 210 — log idle-device transitions so log-only operators see the floor bite)
 
 A strengths/weaknesses review of the session 208–209 work found one remaining gap:
