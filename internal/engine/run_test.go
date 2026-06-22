@@ -1614,6 +1614,50 @@ func TestRunArbitrationLoop_PublishesForegoneGauge(t *testing.T) {
 	}
 }
 
+func TestRunArbitrationLoop_PublishesDevicesIdleGauge(t *testing.T) {
+	// A device whose only quote (1000 sat/s) is below the minYield floor (2000)
+	// must be idled, and otedama_devices_idle must report 1. Pre-set a sentinel
+	// to prove the Set call executes rather than the gauge defaulting.
+	old := arbitrationInterval
+	arbitrationInterval = 10 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	m.devicesIdle.Set(-999) // sentinel
+
+	quoteCh := make(chan provider.Quote, 1)
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{
+			{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}},
+		},
+		streamsMu: &sync.Mutex{},
+		streamMap: make(map[string]arbitration.Stream),
+		quoteCh:   quoteCh,
+		metrics:   m,
+		log:       func(_, _ string) {},
+		minYield:  2000, // floor above the quote below
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	quoteCh <- provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+	}
+
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+
+	if got := m.devicesIdle.Value(); got != 1 {
+		t.Errorf("devices_idle gauge = %v, want 1 (cpu-0 below the 2000 sat/s floor)", got)
+	}
+}
+
 func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -52,9 +52,15 @@ type engineMetrics struct {
 	// choosing between after stale (dead-provider) streams are pruned. A
 	// drop here surfaces a provider that has stopped quoting.
 	activeStreams *metrics.Gauge
-	btcUSDRate    *metrics.Gauge
-	uptime        *metrics.Gauge
-	startTime     *metrics.Gauge
+	// devicesIdle is the number of devices left unassigned this cycle — either
+	// because no compatible stream accepts them or because no accepting stream
+	// cleared the min_yield_sats_per_sec floor. A persistent non-zero value
+	// after setting the floor means it is parking hardware; tune it down if that
+	// is not intended.
+	devicesIdle *metrics.Gauge
+	btcUSDRate  *metrics.Gauge
+	uptime      *metrics.Gauge
+	startTime   *metrics.Gauge
 
 	submitLatencyP50 *metrics.Gauge
 	submitLatencyP95 *metrics.Gauge
@@ -246,6 +252,11 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_active_streams",
 			"Number of live revenue streams in arbitration after pruning stale "+
 				"(dead-provider) quotes. A drop indicates a provider stopped quoting.",
+			nil),
+		devicesIdle: reg.NewGauge(
+			"otedama_devices_idle",
+			"Number of devices left idle this arbitration cycle (no compatible "+
+				"stream, or none clearing the min_yield_sats_per_sec floor).",
 			nil),
 		btcUSDRate: reg.NewGauge(
 			"otedama_btc_usd_rate",

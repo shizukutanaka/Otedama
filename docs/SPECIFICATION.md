@@ -206,6 +206,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_foregone_sats_per_second` | gauge | Instantaneous opportunity cost of the held allocation. |
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
+| `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |
 | `rate_sources_ok` / `rate_sources_total` | gauge | Healthy vs configured price sources. |

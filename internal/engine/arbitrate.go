@@ -111,6 +111,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
 			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
+			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
 			applyAllocation(alloc, opts.workers, opts.log)
 		}
 	}

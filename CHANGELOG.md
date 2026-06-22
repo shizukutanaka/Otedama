@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 209 — observability for the profitability floor: `otedama_devices_idle` gauge)
+
+Session 208 added a feature that can idle hardware (the `min_yield_sats_per_sec`
+floor) but shipped it blind: nothing surfaced *whether* the floor was biting. That
+is precisely the failure class of gaps G11 (a metric registered but never `Set`)
+and G17 (live-but-undocumented metrics) — a control with no feedback loop. An
+operator who sets the floor too high would silently park devices with no signal.
+
+`otedama_devices_idle` (gauge) closes the loop: the arbitration loop now publishes
+`Allocation.SkippedDevice` each cycle — the count of devices left unassigned
+because no compatible stream accepts them *or* none cleared the floor. A
+persistent non-zero value after setting the floor is the operator's cue that it is
+parking hardware.
+
+- `internal/engine/metrics.go`: new `devicesIdle` gauge field + registration.
+- `internal/engine/arbitrate.go`: `devicesIdle.Set(float64(alloc.SkippedDevice))`
+  alongside the existing per-cycle gauge publishes.
+- `docs/SPECIFICATION.md` §6: documented under Arbitration & rates (the metric/doc
+  guard from session 207 enforced this — the catalogue is now 40 metrics).
+- Test `TestRunArbitrationLoop_PublishesDevicesIdleGauge`: drives a device below a
+  2000 sat/s floor and asserts the gauge reports 1 (sentinel-overwrite proof).
+
+All 24 packages green under `-race`.
+
 ### Added (session 208 — new feature: per-device profitability floor `min_yield_sats_per_sec`)
 
 A Socratic interrogation of the product's core promise ("route each device to its
