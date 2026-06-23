@@ -140,6 +140,40 @@ func TestDashboard_RenderDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestDashboard_MiningLine_IdleDevicesShown(t *testing.T) {
+	// When the min_yield_sats_per_sec floor idles some devices, the count must
+	// appear in the MINING line so TUI-only operators see it without Prometheus.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.SetWidth(120)
+	d.render(Stats{
+		HashRate:    1e9,
+		Devices:     4,
+		DevicesIdle: 2,
+		Connected:   true,
+	})
+	out := buf.String()
+	if !strings.Contains(out, "2 idle") {
+		t.Errorf("render with DevicesIdle=2 must contain '2 idle'; output:\n%s", out)
+	}
+	// The total device count must still be present.
+	if !strings.Contains(out, "4 device(s)") {
+		t.Errorf("render must still show total device count; output:\n%s", out)
+	}
+}
+
+func TestDashboard_MiningLine_NoIdleWhenZero(t *testing.T) {
+	// With DevicesIdle = 0, the "N idle" annotation must not appear.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.SetWidth(120)
+	d.render(Stats{HashRate: 1e9, Devices: 4, Connected: true})
+	out := buf.String()
+	if strings.Contains(out, "idle") {
+		t.Errorf("render with DevicesIdle=0 must not contain 'idle'; output:\n%s", out)
+	}
+}
+
 func TestDashboard_RenderZeroState(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)

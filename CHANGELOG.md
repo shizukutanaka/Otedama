@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 216 — TUI surfaces idle-device count from min_yield_sats_per_sec floor)
+
+長所短所レビューで発見した残余の盲点: セッション 208〜215 でフロア機能弧
+（config → validation → arbitration → gauge → logging → accurate-log → doctor → property-test → metrics-guard）
+を積み上げてきたが、オペレーターが最初に目にする TUI (端末ダッシュボード) だけがフロアの効果を表示していなかった。
+Prometheus をスクレイプしない環境では、フロアによってデバイスが遊休化しても画面上は何も変わらず、
+ハッシュレート低下の原因を知る手段がなかった。
+
+`Stats.DevicesIdle int` を追加し、`miningLine` でフロアのアイドル数が 1 以上のとき
+`"N device(s), K idle"` と表示するよう変更。ゼロ時は従来通り `"N device(s)"` のみ。
+
+テスト2本:
+- `TestDashboard_MiningLine_IdleDevicesShown`: `DevicesIdle=2` で `"2 idle"` と `"4 device(s)"` が出力に含まれること
+- `TestDashboard_MiningLine_NoIdleWhenZero`: `DevicesIdle=0` で `"idle"` が出力に**含まれない**こと
+
+フロア機能弧の完成形:
+config → validation → arbitration → gauge → logging → accurate-idle-log → doctor → property-test → metrics-type-guard → **TUI**
+
+全 24 パッケージ緑。
+
 ### Fixed (session 215 — metrics: reject a name registered as both counter and gauge before it corrupts the scrape)
 
 **問い: 同じメトリクス名が counter としても gauge としても登録されたら何が起きるか？**

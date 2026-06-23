@@ -70,6 +70,14 @@ type Stats struct {
 	// price-driven pause for a broken miner (the failure mode without a
 	// Prometheus stack: green "0 H/s", connected, not stalled, no explanation).
 	Curtailed bool
+
+	// DevicesIdle is the number of devices left idle by the
+	// min_yield_sats_per_sec profitability floor in the current arbitration
+	// cycle (0 when the floor is disabled or all devices have work). When
+	// non-zero it is shown alongside the device count in the MINING line so
+	// an operator using the TUI — rather than Prometheus — still sees the
+	// floor biting without having to check logs or the otedama_devices_idle gauge.
+	DevicesIdle int
 }
 
 // ProviderStats describes a single provider's live state.
@@ -230,6 +238,11 @@ func (d *Dashboard) writeSection(sb *strings.Builder, label string, cols int) {
 func (d *Dashboard) miningLine(s Stats) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
+	if s.DevicesIdle > 0 {
+		// Show the floor-idle count inline so TUI-only operators see it
+		// without needing Prometheus or log tailing.
+		devs = fmt.Sprintf("%d device(s), %d idle", s.Devices, s.DevicesIdle)
+	}
 	shares := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
 	switch {
 	case s.Curtailed:
