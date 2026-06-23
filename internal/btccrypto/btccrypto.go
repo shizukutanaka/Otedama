@@ -47,6 +47,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -201,12 +202,10 @@ func Schemes() []string {
 	for n := range registry {
 		names = append(names, n)
 	}
-	// Sort to keep output deterministic.
-	for i := 1; i < len(names); i++ {
-		for j := i; j > 0 && names[j] < names[j-1]; j-- {
-			names[j], names[j-1] = names[j-1], names[j]
-		}
-	}
+	// Sort to keep output deterministic. slices.Sort replaces a hand-rolled
+	// insertion sort: same result, but boring and obviously correct (the
+	// slices-migration of sessions 199–200 missed this one production call site).
+	slices.Sort(names)
 	return names
 }
 

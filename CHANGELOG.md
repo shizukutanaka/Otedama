@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 218 — btccrypto: complete the slices migration missed in sessions 199–200)
+
+長所短所レビューで `internal/btccrypto/btccrypto.go` の `Schemes()` に手書きの挿入ソートが
+残っているのを発見した:
+
+```go
+// 旧実装
+for i := 1; i < len(names); i++ {
+	for j := i; j > 0 && names[j] < names[j-1]; j-- {
+		names[j], names[j-1] = names[j-1], names[j]
+	}
+}
+```
+
+セッション 199〜200 は「slices 移行完了：production コードから最後の `sort.*` 呼び出しを除去」と
+記録していたが、この箇所は `sort.*` を使わず手書きだったため検索に引っかからず見落とされていた。
+production コードで唯一残っていた手書きソートである（リポジトリ全体を再走査して確認）。
+
+`slices.Sort(names)` に置換。CLAUDE.md の Pike 原則「賢すぎるコードより退屈で明快なコード」に従う:
+同じ結果だが、自明に正しい。既存テスト `TestSchemes_DeterministicOrdering`（辞書順昇順を検証）と
+`TestSchemes_NoDuplicates` がこの契約をガードしており、変更後も緑。
+
+全 24 パッケージ緑。
+
 ### Fixed (session 217 — CLI: safeDisplay returns "(default)" for all-control-char inputs)
 
 **Q: `safeDisplay` が制御文字だけで構成された入力を処理するとき何が起きるか？**
