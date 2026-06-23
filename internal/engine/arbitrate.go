@@ -27,7 +27,7 @@ type arbitrationLoopOpts struct {
 	streamMap     map[string]arbitration.Stream
 	quoteCh       <-chan provider.Quote
 	workers       []*miner.Worker
-	metrics       *engineMetrics
+	metrics       *engineMetrics // must not be nil
 	log           func(level, msg string)
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
 	minYield      float64 // 0 disables the per-device profitability floor
@@ -78,9 +78,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
-			if opts.metrics != nil {
-				opts.metrics.activeStreams.Set(float64(len(streams)))
-			}
+			opts.metrics.activeStreams.Set(float64(len(streams)))
 
 			margin := opts.hysteresisPct
 			if margin == 0 {

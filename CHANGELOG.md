@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 214 — Socratic audit: remove misleading nil guard; strengthen AcceptsFamilies test)
+
+**問い1: `if opts.metrics != nil` ガードは何を守っているのか？**
+
+`arbitrate.go` の `opts.metrics.activeStreams.Set(...)` だけが nil ガードに包まれており、
+その直後の5箇所のメトリクス呼び出し
+(`arbitrationSwitches`, `arbitrationHolds`, `arbitrationForegoneSatsPerSec`,
+`arbitrationExpectedYieldSatsPerSec`, `devicesIdle`)
+には nil チェックがなかった。`opts.metrics == nil` ならガード済みの行は通過するが、
+その直後でパニックする。ガードが保護するものは何もない。
+
+全テストは常に非nilの metrics を渡しており、`run.go` の本番コードも必ず
+`newEngineMetrics(...)` で生成する。よって `opts.metrics` は「必ず非nil」が実際の契約。
+
+- 嘘のガードを削除し、`arbitrationLoopOpts.metrics` フィールドに `// must not be nil` を明記。
+- コードが自己矛盾なく一貫した前提を語るようになる。
+
+**問い2: `TestStreamsSlice_MergesYieldPerDeviceForSameStreamID` は `AcceptsFamilies` を検証しているか？**
+
+テストは `YieldPerDevice` のマージだけを検証し、`AcceptsFamilies` を nil のまま
+（設定せず、検証もせず）だった。`streamsSlice` がマージ時に `AcceptsFamilies` を落とすと
+`Stream.Accepts()` が全ファミリーに対して false を返し、エンジンがそのストリームに
+いかなるデバイスも割り当てなくなる — 収益ゼロへのサイレント劣化。
+
+テストの両エントリに `AcceptsFamilies: []hal.Family{hal.FamilyGPU}` を追加し、
+マージ後の stream が `Accepts(hal.FamilyGPU) == true` であることをアサートした。
+
+全 24 パッケージ緑。
+
 ### Added (session 213 — Socratic audit: pin floor semantics from both directions with a converse property test)
 
 ソクラテス式問答で「当然」と思われていた前提を2つ掘り起こした。

@@ -329,16 +329,23 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	// would return only one entry, leaving one device with no YieldPerDevice
 	// hit so it would fall back to the other device's DefaultYield — silently
 	// returning the wrong rate for heterogeneous GPU configurations.
+	//
+	// Both entries carry the same AcceptsFamilies (GPU): the merge must
+	// preserve that field from the representative entry, otherwise the
+	// engine silently stops assigning *any* device to the stream because
+	// Stream.Accepts() returns false for everything.
 	m := map[string]arbitration.Stream{
 		"ai.akash:gpu-0": {
-			ID: "ai.akash",
+			ID:              "ai.akash",
+			AcceptsFamilies: []hal.Family{hal.FamilyGPU},
 			YieldPerDevice: map[string]arbitration.Yield{
 				"gpu-0": {SatsPerSecond: 1000, Confidence: 0.9},
 			},
 			DefaultYield: arbitration.Yield{SatsPerSecond: 1000, Confidence: 0.9},
 		},
 		"ai.akash:gpu-1": {
-			ID: "ai.akash",
+			ID:              "ai.akash",
+			AcceptsFamilies: []hal.Family{hal.FamilyGPU},
 			YieldPerDevice: map[string]arbitration.Yield{
 				"gpu-1": {SatsPerSecond: 700, Confidence: 0.9},
 			},
@@ -354,6 +361,11 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	s := got[0]
 	if s.ID != "ai.akash" {
 		t.Errorf("stream ID = %q, want ai.akash", s.ID)
+	}
+	// AcceptsFamilies must survive the merge: if it were dropped the engine
+	// would route no device to this stream, silently reducing revenue.
+	if !s.Accepts(hal.FamilyGPU) {
+		t.Error("merged stream must accept GPU; AcceptsFamilies was dropped during merge")
 	}
 	if y := s.YieldFor("gpu-0"); y.SatsPerSecond != 1000 {
 		t.Errorf("gpu-0 yield = %v, want 1000", y.SatsPerSecond)
