@@ -161,6 +161,15 @@ func (r *Registry) NewCounter(name, help string, labels map[string]string) *Coun
 	if existing, ok := r.counters[key]; ok {
 		return existing
 	}
+	// Reject a name already registered as a gauge. Prometheus allows only one
+	// TYPE per metric name; emitting the same name as both a counter and a gauge
+	// produces two values under a single TYPE line, which Prometheus rejects —
+	// discarding the *entire* scrape, not just the offending series (the same
+	// severity validateLabelNames guards against). Every name is a compile-time
+	// constant, so a collision is a developer error caught at registration.
+	if gaugeNameExists(r.gauges, name) {
+		panic(fmt.Sprintf("metrics: name %q already registered as a gauge; cannot also be a counter", name))
+	}
 	c := &Counter{name: name, help: help, labels: cloneLabels(labels)}
 	r.counters[key] = c
 	return c
@@ -189,6 +198,11 @@ func (r *Registry) NewGauge(name, help string, labels map[string]string) *Gauge 
 	defer r.mu.Unlock()
 	if existing, ok := r.gauges[key]; ok {
 		return existing
+	}
+	// Reject a name already registered as a counter — see NewCounter for why a
+	// single name cannot carry two Prometheus TYPEs without corrupting the scrape.
+	if counterNameExists(r.counters, name) {
+		panic(fmt.Sprintf("metrics: name %q already registered as a counter; cannot also be a gauge", name))
 	}
 	g := &Gauge{name: name, help: help, labels: cloneLabels(labels)}
 	r.gauges[key] = g
@@ -278,6 +292,30 @@ func (r *Registry) WriteText(w io.Writer) error {
 }
 
 // ----- Helpers -----
+
+// gaugeNameExists reports whether any gauge shares the bare metric name (across
+// all label sets). The registry maps are keyed by name+labels, so a name can
+// appear under several keys; the cross-type guard must compare the bare name,
+// not the key. Registrations happen once at startup for a few dozen metrics, so
+// the linear scan is negligible.
+func gaugeNameExists(m map[string]*Gauge, name string) bool {
+	for _, g := range m {
+		if g.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// counterNameExists is the counter-map counterpart of gaugeNameExists.
+func counterNameExists(m map[string]*Counter, name string) bool {
+	for _, c := range m {
+		if c.name == name {
+			return true
+		}
+	}
+	return false
+}
 
 func metricKey(name string, labels map[string]string) string {
 	if len(labels) == 0 {

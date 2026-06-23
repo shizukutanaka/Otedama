@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 215 — metrics: reject a name registered as both counter and gauge before it corrupts the scrape)
+
+**問い: 同じメトリクス名が counter としても gauge としても登録されたら何が起きるか？**
+
+`Registry.NewCounter` と `NewGauge` は別々のマップ (`counters` / `gauges`) で重複名チェックを
+行うため、互いの存在を見ていなかった。同一名を両方の型で登録すると、`WriteText` は単一の
+`# TYPE <name> counter` 行の下に2つの値を出力する。実測で確認:
+
+```
+# HELP otedama_foo a counter
+# TYPE otedama_foo counter
+otedama_foo 5
+otedama_foo 3
+```
+
+Prometheus は単一系列に対する重複値としてこれを拒否し、**スクレイプ全体を破棄**する
+（既存の `isValidLabelName` のコメントが記述するのと同じ深刻度 — 1つの不正が全メトリクスを
+道連れにする)。Prometheus は1つのメトリクス名につき TYPE を1つしか許さないからである。
+
+このパッケージは既に「開発者エラーは登録時 panic でテストに即座に出す」方針を採っている
+（無効名・無効ラベル名はいずれも panic）。クロスタイプ衝突も同じ整合性クラスなので、同じ
+パターンでガードを追加した:
+
+- `NewCounter` は名前が既に gauge として登録済みなら panic。
+- `NewGauge` は名前が既に counter として登録済みなら panic。
+- 比較は**素のメトリクス名**で行う（レジストリのキーは name+labels だが、TYPE 衝突は名前単位）
+  ため、ラベルセットが異なる counter と gauge の衝突も検出する。
+- 補助関数 `gaugeNameExists` / `counterNameExists`（起動時の数十メトリクスに対する線形走査、
+  オーバーヘッドは無視可能）。
+
+テスト3本追加: `TestNewGauge_NameAlreadyCounterPanics`,
+`TestNewCounter_NameAlreadyGaugePanics`,
+`TestCrossType_DetectedAcrossDifferentLabelSets`（ラベル違いでも検出）。全 24 パッケージ緑。
+
 ### Fixed (session 214 — Socratic audit: remove misleading nil guard; strengthen AcceptsFamilies test)
 
 **問い1: `if opts.metrics != nil` ガードは何を守っているのか？**

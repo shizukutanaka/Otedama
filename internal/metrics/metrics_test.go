@@ -372,6 +372,45 @@ func TestNewGauge_InvalidNamePanics(t *testing.T) {
 	}
 }
 
+func TestNewGauge_NameAlreadyCounterPanics(t *testing.T) {
+	// A name registered as a counter cannot also be a gauge: Prometheus permits
+	// one TYPE per name, and emitting both corrupts the whole scrape. The
+	// collision must panic at registration, not silently corrupt /metrics.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("NewGauge did not panic for a name already registered as a counter")
+		}
+	}()
+	r := NewRegistry()
+	r.NewCounter("otedama_x", "a counter", nil)
+	r.NewGauge("otedama_x", "a gauge", nil) // must panic
+}
+
+func TestNewCounter_NameAlreadyGaugePanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("NewCounter did not panic for a name already registered as a gauge")
+		}
+	}()
+	r := NewRegistry()
+	r.NewGauge("otedama_y", "a gauge", nil)
+	r.NewCounter("otedama_y", "a counter", nil) // must panic
+}
+
+func TestCrossType_DetectedAcrossDifferentLabelSets(t *testing.T) {
+	// The guard compares the bare metric name, so it fires even when the
+	// counter and gauge would carry different label sets (the registry keys
+	// differ, but the Prometheus TYPE conflict is by name).
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("cross-type collision with differing labels was not detected")
+		}
+	}()
+	r := NewRegistry()
+	r.NewCounter("otedama_z", "c", map[string]string{"a": "1"})
+	r.NewGauge("otedama_z", "g", map[string]string{"b": "2"}) // must panic
+}
+
 func TestNewCounter_InvalidLabelNamePanics(t *testing.T) {
 	// An invalid label name must panic at registration: a single malformed
 	// label name emits a line Prometheus rejects on scrape, discarding the
