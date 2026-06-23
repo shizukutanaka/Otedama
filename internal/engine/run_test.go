@@ -1510,6 +1510,35 @@ func TestApplyAllocation_NoChange(t *testing.T) {
 	}
 }
 
+func TestApplyAllocation_IdleDevice_FloorReason(t *testing.T) {
+	// When chooseForDevice idles a device because all streams are below the
+	// min_yield floor, Assignment.Reason carries the specific explanation.
+	// applyAllocation must surface that reason in the log, not hardcode
+	// "no compatible stream" (which would be factually wrong and mislead
+	// operators trying to diagnose why hardware is sitting idle).
+	const wantSubstr = "below minimum yield floor"
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{
+				DeviceID: "cpu-0",
+				Stream:   "", // Idle()
+				Reason:   "all compatible streams below minimum yield floor 0.5 sats/s",
+			},
+		},
+	}
+	var logged []string
+	log := func(_, m string) { logged = append(logged, m) }
+
+	applyAllocation(alloc, nil, log)
+
+	if len(logged) == 0 {
+		t.Fatal("floor-idle device should emit an info log")
+	}
+	if !strings.Contains(logged[0], wantSubstr) {
+		t.Errorf("log = %q, want substr %q", logged[0], wantSubstr)
+	}
+}
+
 // ============================================================================
 // runArbitrationLoop — channel-driven exit paths
 // ============================================================================

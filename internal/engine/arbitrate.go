@@ -224,11 +224,16 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 	for _, a := range alloc.Assignments {
 		switch {
 		case a.Idle():
-			// Device has no compatible stream; pause SHA256d to save power.
+			// Device is idle: no stream accepts its family, or all compatible
+			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d.
 			for _, w := range workers {
 				w.SetWork(nil)
 			}
-			log("info", fmt.Sprintf("arbitration: %s idle (no compatible stream)", a.DeviceID))
+			reason := a.Reason
+			if reason == "" {
+				reason = "no compatible stream"
+			}
+			log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
 
 		case a.SwitchedFromID != "":
 			// Stream changed. If switching away from mining, signal workers to pause.

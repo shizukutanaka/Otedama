@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 212 — `applyAllocation` logs the actual idle reason, not always "no compatible stream")
+
+A strengths/weaknesses review of the session 208–211 floor arc found a log-accuracy
+bug: `applyAllocation` in `internal/engine/arbitrate.go` hardcoded
+`"no compatible stream"` for every idle assignment, regardless of why the device was
+left idle. `Assignment.Reason` already carries the accurate per-device explanation
+from `chooseForDevice` — either `"no compatible stream accepting non-zero work"` (no
+family match) or `"all compatible streams below minimum yield floor N sats/s"` (floor
+bite) — but the log statement ignored it.
+
+This meant an operator who set `min_yield_sats_per_sec` and then saw hardware idle
+would read "no compatible stream" in the logs and conclude the pool has no work for
+their device, when the actual cause is the floor they configured. A misleading
+diagnostic is worse than silence.
+
+**Fix:** `applyAllocation` now reads `a.Reason` and uses it in the log, falling back
+to `"no compatible stream"` only when `Reason` is empty (pre-existing `Assignment`
+values constructed without one). The comment on the idle branch is updated to reflect
+both causes.
+
+**Test:** `TestApplyAllocation_IdleDevice_FloorReason` sets `Assignment.Reason` to
+the floor-specific string and asserts the log contains `"below minimum yield floor"`.
+The existing `TestApplyAllocation_IdleDevice` (no `Reason` set) exercises the
+fallback path and still passes. All 24 packages green.
+
 ### Added (session 211 — `doctor` surfaces the `min_yield_sats_per_sec` floor)
 
 A strengths/weaknesses review of the session 208–210 floor arc found one remaining
