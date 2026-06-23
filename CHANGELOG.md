@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 213 — Socratic audit: pin floor semantics from both directions with a converse property test)
+
+ソクラテス式問答で「当然」と思われていた前提を2つ掘り起こした。
+
+**Q1: `SkippedDevice` のコメントは正確か？**
+`Allocation.SkippedDevice` の行内コメントが
+`// devices left idle because no stream accepts them` と書かれており、
+フロア (`MinYieldSatsPerSec`) によってアイドル化したデバイスを完全に無視していた。
+コードは両方の原因で `SkippedDevice++` をカウントしているが、コメントは片面しか語っていなかった。
+→ `// devices left idle: no compatible stream accepts them, or none clears the MinYieldSatsPerSec floor`
+に修正。
+
+**Q2: プロパティテストはフロア境界を両方向から検証しているか？**
+`TestDecide_Property_NonIdleAssignmentsClearFloor` が存在し、
+「アクティブな割り当てはフロアをクリアする」方向は検証されていた。
+しかしその**逆**——「フロアをクリアできるストリームが存在するなら、そのデバイスはアイドルになってはならない」——
+はどのプロパティテストも検証していなかった。`randomInput()` はフロアを常に 0 (ゼロ値) で生成しており、
+フロアを含む全プロパティテスト群がフロアを一切ランダム変化させていなかった。
+
+`TestDecide_Property_AboveFloorStreamPreventsIdle` を追加（乱数シード 2029、200 試行）:
+- `randomInput` に `MinYieldSatsPerSec ∈ [0, 50]` のランダム floor を上書き
+- `Previous = nil, HysteresisMargin = 0`（ヒステリシス無効）で純粋な greedy 挙動を確認
+- 各デバイスについて「floor をクリアする互換ストリームが存在する」かどうかを独立計算し、
+  アイドル割り当てと突き合わせる
+- どちらかが成立すれば `t.Fatalf`
+
+この2テストが揃うことで、フロアの semantics が両方向から不変条件として固定される:
+- アクティブ → floor 以上 (`NonIdleAssignmentsClearFloor`)
+- floor 以上が存在する → アクティブ (`AboveFloorStreamPreventsIdle`)
+
+全 24 パッケージ緑。
+
 ### Fixed (session 212 — `applyAllocation` logs the actual idle reason, not always "no compatible stream")
 
 A strengths/weaknesses review of the session 208–211 floor arc found a log-accuracy

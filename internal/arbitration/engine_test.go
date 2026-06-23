@@ -1298,3 +1298,51 @@ func TestDecide_Property_NonIdleAssignmentsClearFloor(t *testing.T) {
 		}
 	}
 }
+
+func TestDecide_Property_AboveFloorStreamPreventsIdle(t *testing.T) {
+	// Converse invariant of NonIdleAssignmentsClearFloor: if ANY stream accepts
+	// a device with positive effective yield that clears the floor, the engine
+	// MUST assign that device — it must not be left idle. Together the two
+	// property tests pin the floor semantics from both directions:
+	//   - active  → clears floor  (NonIdleAssignmentsClearFloor)
+	//   - eligible → not idle     (this test)
+	//
+	// The test uses no Previous allocation (hysteresis off, Previous=nil) so
+	// the engine makes a clean greedy choice unconstrained by hold logic.
+	r := rand.New(rand.NewSource(2029))
+	for trial := 0; trial < 200; trial++ {
+		in := randomInput(r)
+		in.Previous = nil
+		in.HysteresisMargin = 0
+		floor := r.Float64() * 50 // 0..50 sats/s
+		in.MinYieldSatsPerSec = floor
+
+		alloc, err := Decide(in)
+		if err != nil {
+			continue
+		}
+
+		// Build a set of eligible device IDs: those that have at least one
+		// compatible stream with effective yield > 0 and >= floor.
+		eligible := map[string]bool{}
+		for _, d := range in.Devices {
+			for _, s := range in.Streams {
+				if !s.Accepts(d.Identity.Family) {
+					continue
+				}
+				y := s.YieldFor(d.Identity.ID).Effective()
+				if y > 0 && y >= floor {
+					eligible[d.Identity.ID] = true
+					break
+				}
+			}
+		}
+
+		for _, a := range alloc.Assignments {
+			if a.Idle() && eligible[a.DeviceID] {
+				t.Fatalf("trial %d: device %v idle but has an eligible stream above floor %.4g",
+					trial, a.DeviceID, floor)
+			}
+		}
+	}
+}

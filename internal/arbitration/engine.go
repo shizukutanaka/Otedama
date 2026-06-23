@@ -221,7 +221,7 @@ type Allocation struct {
 	Assignments   []Assignment
 	TotalYield    float64
 	Policy        Policy
-	SkippedDevice int // devices left idle because no stream accepts them
+	SkippedDevice int // devices left idle: no compatible stream accepts them, or none clears the MinYieldSatsPerSec floor
 }
 
 // Input bundles the arguments to Decide.
