@@ -188,5 +188,9 @@ func safeDisplay(v string) string {
 			b.WriteRune(r)
 		}
 	}
+	// If all characters were control chars, return the placeholder.
+	if b.Len() == 0 {
+		return "(default)"
+	}
 	return b.String()
 }

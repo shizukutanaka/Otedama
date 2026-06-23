@@ -237,3 +237,14 @@ func TestSafeDisplay_PreservesASCII(t *testing.T) {
 		t.Errorf("safeDisplay(%q) = %q, want unchanged", in, got)
 	}
 }
+
+func TestSafeDisplay_AllControlCharsBecomesDefault(t *testing.T) {
+	// When the input consists ONLY of control characters, filtering
+	// them all away yields an empty string. safeDisplay must then render
+	// that as "(default)" to match the behavior of an explicitly empty input.
+	// Use only actual control characters: \x01, \x02, \x03, \x04 (no printable chars).
+	got := safeDisplay("\x01\x02\x03\x04")
+	if got != "(default)" {
+		t.Errorf("safeDisplay(all-control) = %q, want '(default)'", got)
+	}
+}

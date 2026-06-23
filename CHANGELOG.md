@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 217 — CLI: safeDisplay returns "(default)" for all-control-char inputs)
+
+**Q: `safeDisplay` が制御文字だけで構成された入力を処理するとき何が起きるか？**
+
+`config show` でテキスト出力の際、設定値を `safeDisplay` でサニタイズして制御文字を削除します
+（ANSI インジェクション防止）。空文字列は `"(default)"` に変換します。
+
+しかし不整合が存在していました：
+```go
+// 元の実装
+func safeDisplay(v string) string {
+	if v == "" { return "(default)" }           // 空 → "(default)"
+	...
+	for _, r := range v {
+		if !unicode.IsControl(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()                            // 制御文字のみ → ""
+}
+```
+
+- 入力 `""` → 出力 `"(default)"`
+- 入力 `"\x01\x02\x03"` (制御文字のみ) → 出力 `""`（**矛盾**）
+
+制御文字だけで構成された値がマルウェア設定や破損データで発生した場合、フィルタリング後の
+空文字列が `"(default)"` に変換されず、UI に歯抜け表示が生じていました。
+
+**修正:**
+フィルタリング後の結果が空なら、それを `"(default)"` に変換。
+
+**テスト:**
+`TestSafeDisplay_AllControlCharsBecomesDefault` を追加 — 制御文字のみの入力
+（`\x01\x02\x03\x04`）が `"(default)"` を返すことを確認。
+
+全 24 パッケージ緑。
+
 ### Added (session 216 — TUI surfaces idle-device count from min_yield_sats_per_sec floor)
 
 長所短所レビューで発見した残余の盲点: セッション 208〜215 でフロア機能弧
