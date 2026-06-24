@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Performance (session 223 — Qiita/Zenn 調査: metrics の WriteText で sort キーを事前計算し scrape あたりのアロケーションを約 70% 削減)
+
+QiitaとZennのGoパフォーマンス最適化記事を調査した知見を適用した
+（参照: Zenn「Golangで作る高性能アプリケーション - パフォーマンス最適化の実践ガイド (2025年版)」、
+Qiita po3rin「strings.Builder による文字列連結の最適化とベンチマーク」。共通する知見は
+**「ソート比較関数の中でキー文字列を生成すると、各比較ごとに割り当てが発生し O(n log n) 回
+実行される。decorate-sort（キーを事前に1回だけ計算）で O(n) に削減できる」**）。
+
+監査の結果、`internal/metrics.WriteText`（Prometheus exposition を生成、scrape ごとに呼ばれる
+ホットパス）の `slices.SortFunc` 比較関数が、比較のたびに `metricKey()` を **2 回**呼んでいた。
+`metricKey` はラベルキーのスライス確保と `strings.Builder` 確保を行うため、n 系列に対し
+O(n log n) 回の割り当てが scrape ごとに発生していた。
+
+- `internal/metrics/metrics.go`: `entry` 構造体に事前計算済みの `key` フィールドを追加し、
+  エントリ構築時に `metricKey` を **1 系列につき 1 回**だけ計算。比較関数は格納済みの
+  `a.key`/`b.key` を比べるだけにした（decorate-sort-undecorate）。出力順序は不変
+  （name 優先→metricKey のタイブレークという既存セマンティクスを保持）。
+- ベンチマーク（200 ラベル付き系列、`BenchmarkWriteText`）:
+  - 改善前: 約 2.03 ms/op, 3.50 MB/op, **17,800 allocs/op**
+  - 改善後: 約 1.12 ms/op, 2.87 MB/op, **5,233 allocs/op**
+  - → 約 45% 高速化・約 18% メモリ削減・**約 70% アロケーション削減**
+- テスト追加: `TestWriteText_SameNameSeriesSortedByLabel`（同名系列がラベル昇順で出力されることを
+  pin し、最適化が出力順序を変えていないことを保証）、`BenchmarkWriteText`（効果を観測可能にする）。
+
+プロダクションの出力は完全に不変（アロケーション削減と高速化のみ）。metrics パッケージ緑。
+
 ### Fixed (session 222 — Qiita/Zenn 調査: doctor の clock-skew チェックで HTTP レスポンスボディを drain し keep-alive 接続を再利用可能に)
 
 QiitaとZennのGo HTTP/IO ベストプラクティス記事を調査した知見を適用した

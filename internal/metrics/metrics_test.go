@@ -817,3 +817,51 @@ func TestRuntimeCollector_PropagatesWriterError(t *testing.T) {
 		t.Error("RuntimeCollector: expected error when writer fails, got nil")
 	}
 }
+
+// TestWriteText_SameNameSeriesSortedByLabel pins the tie-break ordering that
+// WriteText's precomputed sort key (decorate-sort) produces: series sharing a
+// metric name must be emitted in ascending metricKey order (i.e. by sorted
+// label set). This guards the optimisation that moved metricKey out of the
+// sort comparator from silently changing output order.
+func TestWriteText_SameNameSeriesSortedByLabel(t *testing.T) {
+	r := NewRegistry()
+	// Register out of order; output must still be label-sorted.
+	r.NewCounter("req", "requests", map[string]string{"code": "500"}).Inc()
+	r.NewCounter("req", "requests", map[string]string{"code": "200"}).Inc()
+	r.NewCounter("req", "requests", map[string]string{"code": "404"}).Inc()
+
+	var buf bytes.Buffer
+	if err := r.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	i200 := strings.Index(out, `code="200"`)
+	i404 := strings.Index(out, `code="404"`)
+	i500 := strings.Index(out, `code="500"`)
+	if i200 < 0 || i404 < 0 || i500 < 0 {
+		t.Fatalf("missing a series in output:\n%s", out)
+	}
+	if !(i200 < i404 && i404 < i500) {
+		t.Errorf("series not sorted by label: 200@%d 404@%d 500@%d\n%s", i200, i404, i500, out)
+	}
+}
+
+// BenchmarkWriteText exercises the /metrics exposition path with many labelled
+// series — the realistic shape Prometheus scrapes. It is the benchmark that
+// makes the decorate-sort win (metricKey computed O(n) instead of O(n log n))
+// observable; compare allocs/op before and after.
+func BenchmarkWriteText(b *testing.B) {
+	r := NewRegistry()
+	for i := 0; i < 200; i++ {
+		r.NewCounter("otedama_shares_total", "shares",
+			map[string]string{"pool": fmt.Sprintf("pool%03d", i), "result": "accepted"}).Inc()
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		if err := r.WriteText(&buf); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

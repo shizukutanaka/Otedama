@@ -235,6 +235,12 @@ func (r *Registry) WriteText(w io.Writer) error {
 		name, help, kind string
 		labels           map[string]string
 		text             string
+		// key is the precomputed sort key (metricKey output). Computing it
+		// once here — rather than inside the sort comparator — turns O(n log n)
+		// metricKey calls (each allocating a slice and a strings.Builder) into
+		// O(n) on every /metrics scrape, which Prometheus hits on a short
+		// interval. Classic decorate-sort-undecorate.
+		key string
 	}
 	var entries []entry
 
@@ -243,6 +249,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 			name: c.name, help: c.help, kind: "counter",
 			labels: c.labels,
 			text:   fmt.Sprintf("%d", c.Value()),
+			key:    metricKey(c.name, c.labels),
 		})
 	}
 	for _, g := range r.gauges {
@@ -250,6 +257,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 			name: g.name, help: g.help, kind: "gauge",
 			labels: g.labels,
 			text:   formatFloat(g.Value()),
+			key:    metricKey(g.name, g.labels),
 		})
 	}
 	// Snapshot collector list while the lock is held.
@@ -261,7 +269,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 		if n := cmp.Compare(a.name, b.name); n != 0 {
 			return n
 		}
-		return cmp.Compare(metricKey(a.name, a.labels), metricKey(b.name, b.labels))
+		return cmp.Compare(a.key, b.key)
 	})
 
 	// Emit one # HELP + # TYPE block per metric name, then all series.
