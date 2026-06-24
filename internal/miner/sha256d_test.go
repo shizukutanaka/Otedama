@@ -354,6 +354,34 @@ func TestNBitsFromTarget_SignBitPad(t *testing.T) {
 	}
 }
 
+func TestNBitsFromTarget_RoundTrip_Note_SmallTargetsLoseExponent(t *testing.T) {
+	// LIMITATION: TargetFromNBits creates a 32-byte representation by
+	// zero-padding, but NBitsFromTarget reconstructs exp from the minimum
+	// bytes needed, losing the original padding. Small nBits values (e.g.
+	// exp < 4) do not round-trip correctly.
+	//
+	// Example: 0x03000001 (exp=3, tiny target) → target → 0x01000001 (exp=1)
+	//
+	// This is by design: mining targets are always 32 bytes (to match hash
+	// size), but nBits can encode variable-length targets. Padding to 32
+	// bytes makes comparison work, but breaks round-trips for small values.
+	// In practice, Bitcoin difficulty nBits always have exp >= 4, so this
+	// never occurs. This test documents the limitation for external libraries
+	// that might use TargetFromNBits / NBitsFromTarget for other purposes.
+	const smallNBits = uint32(0x03000001) // exp=3, mant=1
+	target, err := TargetFromNBits(smallNBits)
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	got := NBitsFromTarget(target)
+	if got == smallNBits {
+		t.Error("unexpected: small target round-tripped correctly (this test documents the limitation)")
+	}
+	if got != 0x01000001 {
+		t.Errorf("NBitsFromTarget(target from 0x03000001) = 0x%08x, want 0x01000001 (exponent info lost)", got)
+	}
+}
+
 func TestTargetFromNBits_OverflowReturnsError(t *testing.T) {
 	// An nBits value that would produce > 32 bytes of magnitude.
 	// exp=33 means the target is 33 bytes, which overflows 256 bits.
