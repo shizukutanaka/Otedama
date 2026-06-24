@@ -103,5 +103,5 @@ func ValidateAddress(addr string) (AddressType, error) {
 	if t, err := ValidateBase58Address(addr); !errors.Is(err, ErrNotBase58) {
 		return t, err
 	}
-	return AddressUnknown, fmt.Errorf("btccrypto: unrecognised address format (not bech32 or base58 mainnet)")
+	return AddressUnknown, ErrUnrecognisedAddress
 }

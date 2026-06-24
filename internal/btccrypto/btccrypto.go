@@ -81,6 +81,14 @@ var (
 	// legacy base58 mainnet address (e.g. a bech32 "bc1..." address), so
 	// callers (and ValidateAddress) can fall back to another format.
 	ErrNotBase58 = errors.New("btccrypto: not a base58 address")
+
+	// ErrUnrecognisedAddress is returned by ValidateAddress when an address is
+	// well-formed in neither supported encoding (bech32/bech32m SegWit nor
+	// legacy Base58Check). It is a sentinel so callers can distinguish "this is
+	// not a recognisable address format" from any other validation error via
+	// errors.Is — e.g. to offer format-specific guidance ("did you paste a
+	// testnet address?") versus a checksum failure ("likely a typo").
+	ErrUnrecognisedAddress = errors.New("btccrypto: unrecognised address format (not bech32 or base58 mainnet)")
 )
 
 // ----- Interfaces -----

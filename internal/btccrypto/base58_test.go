@@ -151,3 +151,36 @@ func TestValidateAddress_DispatchesByFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAddress_UnrecognisedFormatIsSentinel(t *testing.T) {
+	// An address that is neither bech32 nor base58 must return the
+	// ErrUnrecognisedAddress sentinel, checkable via errors.Is, so callers can
+	// distinguish "not a recognisable format" from a checksum failure (a typo
+	// in an otherwise well-formed address) and give format-specific guidance.
+	cases := []string{
+		"garbage",                              // not a Bitcoin address at all
+		"xyz123notanaddress",                   // wrong prefix
+		"tb1qw508d6qejxtdg4y5r3zarvary0c5xw7k", // testnet bech32 (hrp "tb", rejected)
+	}
+	for _, addr := range cases {
+		_, err := ValidateAddress(addr)
+		if !errors.Is(err, ErrUnrecognisedAddress) {
+			t.Errorf("ValidateAddress(%q) error = %v, want errors.Is ErrUnrecognisedAddress", addr, err)
+		}
+	}
+}
+
+func TestValidateAddress_ChecksumFailureIsNotUnrecognised(t *testing.T) {
+	// A well-formed-but-mistyped address (correct prefix and charset, failing
+	// checksum) must NOT be reported as ErrUnrecognisedAddress: the format was
+	// recognised, the checksum was not. This is the distinction the sentinel
+	// exists to let callers make.
+	const bech32Typo = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdr" // last char flipped
+	_, err := ValidateAddress(bech32Typo)
+	if err == nil {
+		t.Fatal("expected an error for a bech32 typo")
+	}
+	if errors.Is(err, ErrUnrecognisedAddress) {
+		t.Errorf("bech32 checksum typo wrongly classified as ErrUnrecognisedAddress: %v", err)
+	}
+}

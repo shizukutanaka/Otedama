@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 220 — Qiita/Zenn 調査: ValidateAddress に sentinel error を導入し errors.Is で判別可能に)
+
+QiitaとZennのGoエラーハンドリング記事を調査した知見を適用した
+（参照: `zenn.dev/malt03`「Go言語におけるエラーハンドリングベストプラクティス」、
+HunCoding「errors.Is, errors.As, Wrapping, and Sentinel Errors」）。記事群の核心は
+**「呼び出し側がプログラムで分岐したい失敗条件は sentinel error にし、`errors.Is` で
+判別可能にする。プレーンな `fmt.Errorf` 文字列はログ用であり制御フローに使えない」**。
+
+監査の結果、`btccrypto.ValidateAddress` は bech32/base58 のどちらでもないアドレスに対して
+プレーンな `fmt.Errorf("...unrecognised address format...")` を返しており、呼び出し側が
+「フォーマット不明」と「チェックサム不一致（タイポ）」を `errors.Is` で区別できなかった。
+`ErrNotBech32`/`ErrNotBase58`/`ErrUnknownScheme` 等の既存 sentinel と非対称だった。
+
+- `internal/btccrypto`: 新 sentinel `ErrUnrecognisedAddress` を追加。`ValidateAddress` の
+  最終フォールバックをこの sentinel に置換（**エラーメッセージ文字列は従来と完全同一**なので
+  既存のログ出力・テストへの影響なし）。これで呼び出し側は
+  「testnet アドレスを貼った？」（フォーマット不明）と「タイポ」（チェックサム失敗）で
+  異なる案内を出せる。
+- テスト2件追加: `TestValidateAddress_UnrecognisedFormatIsSentinel`（garbage/誤プレフィックス/
+  testnet bech32 が `errors.Is(err, ErrUnrecognisedAddress)` を満たす）と
+  `TestValidateAddress_ChecksumFailureIsNotUnrecognised`（bech32 タイポは
+  「フォーマットは認識・チェックサム失敗」なので sentinel に**該当しない**ことを pin）。
+
+プロダクションの挙動・出力は不変（sentinel 化のみ）。全 24 パッケージ緑。
+
 ### Added (session 219 — Qiita/Zenn 調査: goroutine リーク検証テストを依存ゼロで追加)
 
 QiitaとZennのGo並行処理ベストプラクティス記事を調査し、共通して強調されている知見を取り込んだ:
