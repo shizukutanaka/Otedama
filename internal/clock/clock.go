@@ -107,3 +107,11 @@ func (c *Fake) Advance(d time.Duration) {
 	defer c.mu.Unlock()
 	c.now = c.now.Add(d)
 }
+
+// Compile-time interface satisfaction checks. A build error here means a
+// Clock implementation is missing a method — caught at go build, not only
+// go test.
+var (
+	_ Clock = System{}
+	_ Clock = (*Fake)(nil)
+)

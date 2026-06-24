@@ -40,6 +40,11 @@ func (s secp256k1Stub) SignatureFromBytes(b []byte) (Signature, error) {
 	return nil, ErrSchemeNotImplemented
 }
 
+// Compile-time check: secp256k1Stub must satisfy Scheme. If the Scheme
+// interface gains a new method, this line fails at build time — not only
+// when the test binary is compiled.
+var _ Scheme = secp256k1Stub{}
+
 func init() {
 	Register(secp256k1Stub{name: "ecdsa-secp256k1"})
 	Register(secp256k1Stub{name: "schnorr-secp256k1"})

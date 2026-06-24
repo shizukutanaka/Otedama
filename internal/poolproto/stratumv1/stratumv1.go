@@ -117,6 +117,12 @@ type session struct {
 	closeOnce sync.Once
 }
 
+// Compile-time interface satisfaction checks.
+var (
+	_ poolproto.Session            = (*session)(nil)
+	_ poolproto.PoolNoticeReceiver = (*session)(nil)
+)
+
 func newSession(conn *connection) *session {
 	return &session{
 		conn:     conn,

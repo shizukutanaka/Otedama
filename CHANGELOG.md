@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 221 — Qiita/Zenn 調査: コンパイル時インターフェース適合チェック (`var _ I = (*T)(nil)`) を全プロダクションファイルに追加)
+
+QiitaとZennのGoインターフェース設計記事を調査した知見を適用した
+（参照: Qiita `qiita.com/_ken_`「【Go】型が特定のinterfaceを満たしているかをコンパイル時に確認させる方法」、
+Zenn「GoのTyped-nilの扱い」、「Goのinterfaceをデータ構造から理解する」）。記事群の核心は
+**「`var _ Interface = (*ConcreteType)(nil)` をテストファイルではなくプロダクションファイルに
+置くことで、インターフェースが変更された際に `go build` が即座にエラーとなる。テストファイルにのみ
+置いた場合は `go test` を実行するまでドリフトに気づかない」**。
+
+監査の結果、`internal/provider/` はすでに各 Provider 実装ファイルで
+`var _ Provider = (*AkashProvider)(nil)` / `var _ Provider = (*MiningProvider)(nil)` を
+定義していたが（正しい先行事例）、以下のプロダクションファイルはテストファイル側にのみ置くか、
+あるいは全く存在しない状態だった。
+
+追加ファイルと追加チェック:
+
+- `internal/btccrypto/secp256k1.go`: `var _ Scheme = secp256k1Stub{}`
+  — `Scheme` インターフェースに新メソッドが追加された時点でビルドエラーになる。
+  従来は `btccrypto_extras_test.go` の stubScheme 向けチェックのみで
+  `secp256k1Stub` 自身のチェックが本番ファイルになかった。
+- `internal/clock/clock.go`: `var _ Clock = System{}` / `var _ Clock = (*Fake)(nil)`
+  — 従来は `clock_test.go` 内にのみ存在。
+- `internal/poolproto/stratumv1/dialer.go`: `var _ poolproto.Dialer = (*Dialer)(nil)` /
+  `var _ poolproto.Connection = (*connection)(nil)`
+- `internal/poolproto/stratumv1/stratumv1.go`: `var _ poolproto.Session = (*session)(nil)` /
+  `var _ poolproto.PoolNoticeReceiver = (*session)(nil)`
+- `internal/poolproto/stratumv2/dialer.go`: `var _ poolproto.Dialer = (*Dialer)(nil)` /
+  `var _ poolproto.Connection = (*connection)(nil)` /
+  `var _ poolproto.Session = (*session)(nil)`
+
+プロダクションの挙動・出力は不変（コンパイル時チェックのみ）。全 5 パッケージ緑。
+
 ### Added (session 220 — Qiita/Zenn 調査: ValidateAddress に sentinel error を導入し errors.Is で判別可能に)
 
 QiitaとZennのGoエラーハンドリング記事を調査した知見を適用した

@@ -258,6 +258,13 @@ func (s *session) Close() error { return s.conn.Close() }
 
 // ----- helpers -----
 
+// Compile-time interface satisfaction checks.
+var (
+	_ poolproto.Dialer     = (*Dialer)(nil)
+	_ poolproto.Connection = (*connection)(nil)
+	_ poolproto.Session    = (*session)(nil)
+)
+
 // encodable is satisfied by every Stratum V2 message type (they all
 // have an Encode method). Defined locally to avoid coupling the
 // poolproto adapter to an exported interface in internal/stratum.

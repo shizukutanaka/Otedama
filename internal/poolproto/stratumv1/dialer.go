@@ -202,3 +202,9 @@ func (c *connection) Close() error {
 	})
 	return err
 }
+
+// Compile-time interface satisfaction checks.
+var (
+	_ poolproto.Dialer     = (*Dialer)(nil)
+	_ poolproto.Connection = (*connection)(nil)
+)
