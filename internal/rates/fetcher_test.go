@@ -718,6 +718,71 @@ func TestFetcher_SourceHealth_ZeroOKButFetchedWhenAllFail(t *testing.T) {
 	}
 }
 
+func TestFetcher_SourceHealth_OneSourceOfThreeSucceeds(t *testing.T) {
+	// Critical edge case: exactly one source succeeds out of three.
+	// This is the minimum viable state before complete failure.
+	// The median is the single value (correct), but ok=1 signals
+	// severe redundancy erosion.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvGood := httptest.NewServer(makeHandler("95500"))
+	defer srvGood.Close()
+
+	f := &Fetcher{
+		fallback:   80000,
+		httpClient: &http.Client{Timeout: 100 * time.Millisecond},
+		sources: []Source{
+			{
+				Name: "good",
+				URL:  srvGood.URL,
+				extract: func(b []byte) (float64, error) {
+					var v struct {
+						Rate float64 `json:"rate"`
+					}
+					if err := json.Unmarshal(b, &v); err != nil {
+						return 0, err
+					}
+					return v.Rate, nil
+				},
+			},
+			{
+				Name:    "bad1",
+				URL:     "http://192.0.2.1:9999", // unreachable (TEST-NET-1)
+				extract: func([]byte) (float64, error) { return 0, nil },
+			},
+			{
+				Name:    "bad2",
+				URL:     "http://192.0.2.2:9999", // unreachable (TEST-NET-1)
+				extract: func([]byte) (float64, error) { return 0, nil },
+			},
+		},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch with one good source should succeed, got: %v", err)
+	}
+	ok, total, fetched := f.SourceHealth()
+	if !fetched {
+		t.Error("fetched should be true after successful Fetch")
+	}
+	if ok != 1 {
+		t.Errorf("ok = %d, want 1 (one good source out of three)", ok)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+	// Verify the rate is correct (the single good value).
+	rate, fresh := f.BTCUSDRate()
+	if rate != 95500 {
+		t.Errorf("rate = %.2f, want 95500", rate)
+	}
+	if !fresh {
+		t.Error("rate should be fresh right after fetch")
+	}
+}
+
 // TestFetcher_Fetch_CoalescesConcurrentCalls verifies the single-flight
 // contract: while one fetch is in progress, concurrent callers share its
 // result instead of each issuing their own HTTP requests. Without coalescing,
