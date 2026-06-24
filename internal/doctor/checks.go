@@ -13,6 +13,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -786,7 +787,18 @@ func checkClockSkew() Check {
 					Fix:    "check internet connectivity; re-run when online to verify clock accuracy",
 				}
 			}
-			defer resp.Body.Close()
+			// This check needs only the Date header, but the body must still be
+			// drained before Close so the underlying TCP/TLS connection can be
+			// returned to the keep-alive pool (the production fallback uses
+			// http.DefaultClient, which reuses connections). An undrained body
+			// forces the transport to abandon the connection — and under HTTP/2
+			// can emit a spurious RST_STREAM. The drain is bounded (the probe
+			// response is a tiny JSON time object) so a hostile or runaway server
+			// cannot turn cleanup into an unbounded read.
+			defer func() {
+				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 8<<10))
+				_ = resp.Body.Close()
+			}()
 
 			dateHdr := resp.Header.Get("Date")
 			if dateHdr == "" {

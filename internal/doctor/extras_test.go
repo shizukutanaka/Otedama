@@ -1328,6 +1328,56 @@ func TestCheckClockSkew_AccurateDatePasses(t *testing.T) {
 	}
 }
 
+// TestCheckClockSkew_DrainsBodyForConnectionReuse verifies that checkClockSkew
+// drains the response body before closing it, so the keep-alive connection is
+// returned to the pool and reused. The check needs only the Date header, but an
+// undrained body makes net/http abandon the connection (and under HTTP/2 emit a
+// spurious RST_STREAM). We assert reuse by counting how many connections the
+// server sees across two sequential probes over the same client: with the body
+// drained, the second probe reuses the first connection (exactly one StateNew).
+func TestCheckClockSkew_DrainsBodyForConnectionReuse(t *testing.T) {
+	var mu sync.Mutex
+	newConns := 0
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		w.WriteHeader(http.StatusOK)
+		// A non-trivial body: if checkClockSkew closes without draining it,
+		// the HTTP/1.1 keep-alive connection cannot be reused.
+		_, _ = w.Write([]byte(strings.Repeat("x", 1024)))
+	}))
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			mu.Lock()
+			newConns++
+			mu.Unlock()
+		}
+	}
+	srv.Start()
+	defer srv.Close()
+
+	origURL := clockSkewProbeURL
+	origClient := clockSkewHTTPClient
+	t.Cleanup(func() {
+		clockSkewProbeURL = origURL
+		clockSkewHTTPClient = origClient
+	})
+	clockSkewProbeURL = srv.URL
+	clockSkewHTTPClient = srv.Client()
+
+	for i := 0; i < 2; i++ {
+		if r := checkClockSkew().Run(context.Background()); r.Status != StatusPass {
+			t.Fatalf("probe %d: status = %v, want Pass (detail: %s)", i, r.Status, r.Detail)
+		}
+	}
+
+	mu.Lock()
+	got := newConns
+	mu.Unlock()
+	if got != 1 {
+		t.Errorf("server saw %d new connections across 2 probes; body not drained for keep-alive reuse (want 1)", got)
+	}
+}
+
 func TestCheckClockSkew_LargeSkewWarns(t *testing.T) {
 	const skewSecs = 180 // > clockSkewWarnSecs (120) but < clockSkewFailSecs (300)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

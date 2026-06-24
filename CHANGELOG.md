@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 222 — Qiita/Zenn 調査: doctor の clock-skew チェックで HTTP レスポンスボディを drain し keep-alive 接続を再利用可能に)
+
+QiitaとZennのGo HTTP/IO ベストプラクティス記事を調査した知見を適用した
+（参照: Zenn「Goのbyteストリーミング処理」、hsaki『Goから学ぶI/O』bufio 章、および
+2025年の HTTP/2 接続再利用に関する知見「レスポンスボディを読み切らずに Close すると
+不要な RST_STREAM/PING フレームが発生する。`io.Copy(io.Discard, resp.Body)` で読み切るべき」）。
+
+監査の結果、`internal/doctor` の `checkClockSkew` は外部エンドポイントへ HTTP GET し、
+**`Date` ヘッダのみ**を読んでボディを drain せずに `defer resp.Body.Close()` していた。
+本番フォールバックは keep-alive を行う `http.DefaultClient` のため、未 drain のボディは
+net/http に接続を破棄させ（HTTP/2 では余分な RST_STREAM を誘発し）、接続プールへ返却されない。
+
+- `internal/doctor/checks.go`: `checkClockSkew` のボディクローズを
+  `io.Copy(io.Discard, io.LimitReader(resp.Body, 8KiB))` → `Close()` に変更。drain は
+  **上限付き**（プローブ応答は小さな JSON 時刻オブジェクト）なので、悪意ある/暴走サーバが
+  クリーンアップを無制限読み込みに変えることはできない（DoS 耐性を維持）。
+- テスト追加: `TestCheckClockSkew_DrainsBodyForConnectionReuse` — 同一クライアントで
+  2 回連続プローブし、サーバが観測する新規接続数が **1**（2 回目は接続再利用）であることを
+  `ConnState` フックで検証。修正前は 2 接続となりテストは FAIL（mutation test で確認済み）。
+
+プロダクションの診断結果は不変（接続再利用の改善とリソースリーク防止のみ）。doctor パッケージ緑。
+
 ### Added (session 221 — Qiita/Zenn 調査: コンパイル時インターフェース適合チェック (`var _ I = (*T)(nil)`) を全プロダクションファイルに追加)
 
 QiitaとZennのGoインターフェース設計記事を調査した知見を適用した
