@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 219 — Qiita/Zenn 調査: goroutine リーク検証テストを依存ゼロで追加)
+
+QiitaとZennのGo並行処理ベストプラクティス記事を調査し、共通して強調されている知見を取り込んだ:
+**「goroutine は所有する context の `Done` で必ず終了すること。明示的な Stop() だけに依存すると
+親 context が先に死んだ場合にリークする」**（参照: `qiita.com/ysmreg1`「goroutine リークを防ぐ：
+終了条件と監視のチェックリスト」、`zenn.dev/y640`「goroutine リークで本番環境のメモリを
+食いつくしかけた話」、`qiita.com/tenntenn` goleak 紹介）。
+
+コミュニティ標準の `go.uber.org/goleak` は ADR-003 の依存最小方針に反するため採用せず、
+標準ライブラリの `runtime.NumGoroutine` とチャネルクローズ観測で同等の検証を行う2テストを追加:
+
+- `internal/rates`: `TestStartBackground_GoroutineTerminatesOnContextCancel` —
+  `StartBackground` が起動するバックグラウンド更新 goroutine が、ctx キャンセル後 2 秒以内に
+  baseline 数まで回収されることを検証（baseline 前後で httptest サーバの goroutine は相殺）。
+- `internal/provider`: `TestPollingProvider_ParentContextCancelTerminatesLoop` —
+  `pollingProvider` を親 context 配下で起動し、**`Stop()` を呼ばず**親 context だけをキャンセル
+  しても loop goroutine が終了し quote チャネルが close されることを検証。既存テストは全て
+  `Stop()` 経由で終了させており、実運用でエンジン context が先に死ぬ経路が未検証だった。
+
+いずれも `-race -count=3` で安定。プロダクションコードは変更なし（既存の正しい挙動を pin する
+回帰テスト）。全 24 パッケージ緑。
+
 ### Changed (session 218 — btccrypto: complete the slices migration missed in sessions 199–200)
 
 長所短所レビューで `internal/btccrypto/btccrypto.go` の `Schemes()` に手書きの挿入ソートが

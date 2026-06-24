@@ -380,6 +380,50 @@ func TestPollingLoop_RepublishesOnTicker(t *testing.T) {
 	}
 }
 
+func TestPollingProvider_ParentContextCancelTerminatesLoop(t *testing.T) {
+	// A provider is started under a parent context (in production, the engine's
+	// context). Cancelling that parent — WITHOUT calling Stop() — must make the
+	// loop goroutine exit and close the quote channel. Every other test drives
+	// shutdown via Stop(); this covers the equally important path where the
+	// owning context dies first, which is the classic goroutine-leak scenario:
+	// a goroutine that only listens for its own Stop() and ignores ctx.Done
+	// would leak here, pinning its Fetcher/devices for the life of the process.
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	p.interval = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := p.Start(ctx, []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// Drain the immediate quote so the buffer cannot mask a stalled loop.
+	select {
+	case <-p.Quotes():
+	case <-time.After(2 * time.Second):
+		t.Fatal("no initial quote; provider did not start")
+	}
+
+	// Cancel the PARENT context only — do not call Stop().
+	cancel()
+
+	// The loop's defer close(p.quoteCh) must fire, so the channel drains to a
+	// closed state (ok == false) within a bounded time. Reading drops any
+	// in-flight buffered quotes until the close is observed.
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case _, ok := <-p.Quotes():
+			if !ok {
+				return // channel closed: goroutine exited on ctx.Done as required
+			}
+			// A buffered quote; keep reading until the channel closes.
+		case <-deadline:
+			t.Fatal("quote channel was not closed after parent context cancel; loop goroutine leaked")
+		}
+	}
+}
+
 func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	// sendQuote must report failure (not block) when the context is already
 	// cancelled and the channel is full, so the publish loop exits promptly

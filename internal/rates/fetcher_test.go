@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1082,5 +1083,84 @@ outer:
 	}
 	if !found {
 		t.Errorf("expected 'periodic fetch failed' log; got: %v", msgs)
+	}
+}
+
+// TestStartBackground_GoroutineTerminatesOnContextCancel verifies that the
+// background refresh goroutine launched by StartBackground actually exits when
+// its context is cancelled — i.e. it does not leak. A goroutine that keeps
+// running after its owning context is done is the classic Go leak (it pins its
+// stack, its Fetcher, and any captured resources for the life of the process).
+//
+// The check is dependency-free: it samples runtime.NumGoroutine before and
+// after, and polls for the count to return to baseline rather than asserting a
+// single post-cancel snapshot (the goroutine unwinds asynchronously, and other
+// test/runtime goroutines come and go). This mirrors the goleak approach
+// recommended in the Go community without adding go.uber.org/goleak as a
+// dependency (ADR-003 keeps the dependency tree minimal).
+func TestStartBackground_GoroutineTerminatesOnContextCancel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "s",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+
+	// Let any goroutines from earlier tests settle before sampling the baseline.
+	waitForGoroutines := func(target int, within time.Duration) int {
+		deadline := time.Now().Add(within)
+		var n int
+		for {
+			n = runtime.NumGoroutine()
+			if n <= target || time.Now().After(deadline) {
+				return n
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	runtime.GC()
+	baseline := waitForGoroutines(0, 0) // single sample; 0 target just returns current
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Long interval so the goroutine spends its life parked in the ticker
+	// select — the only way it exits is via ctx.Done, which is exactly the
+	// path under test.
+	f.StartBackground(ctx, 10*time.Minute)
+
+	// The goroutine should now be alive: count is at least baseline+1. Poll
+	// briefly because StartBackground returns before the goroutine is scheduled.
+	grew := false
+	for i := 0; i < 100; i++ {
+		if runtime.NumGoroutine() > baseline {
+			grew = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !grew {
+		t.Fatal("StartBackground did not appear to launch a goroutine")
+	}
+
+	// Cancel and require the count to fall back to (at most) the baseline.
+	cancel()
+	final := waitForGoroutines(baseline, 2*time.Second)
+	if final > baseline {
+		t.Errorf("goroutine leak: count %d did not return to baseline %d within 2s after cancel", final, baseline)
 	}
 }
