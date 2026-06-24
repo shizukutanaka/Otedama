@@ -99,40 +99,63 @@ func TestFake_Set_ReplacesTimeEntirely(t *testing.T) {
 }
 
 func TestFake_ConcurrentReadsAreConsistent(t *testing.T) {
+	// Verify that concurrent readers always see one of the writer's discrete
+	// time values, never a partial or corrupted time.Time. This ensures the
+	// RWMutex guards the entire time.Time value, not just part of it.
 	initial := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	c := NewFake(initial)
 
-	const goroutines = 100
-	const reads = 1000
+	times := []time.Time{
+		initial,
+		initial.Add(1 * time.Second),
+		initial.Add(2 * time.Second),
+		initial.Add(3 * time.Second),
+	}
+	validSet := make(map[string]bool)
+	for _, tm := range times {
+		validSet[tm.String()] = true
+	}
+
+	const readers = 50
+	const readsPerReader = 500
 
 	var wg sync.WaitGroup
-	errCh := make(chan error, goroutines)
+	invalidCh := make(chan string, readers)
 
-	for i := 0; i < goroutines; i++ {
+	// Reader goroutines: collect time values and verify each is in the valid set
+	for i := 0; i < readers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < reads; j++ {
+			for j := 0; j < readsPerReader; j++ {
 				got := c.Now()
-				// While writers may advance time, each read must return a
-				// valid time.Time. The race detector will catch any
-				// unsynchronized access.
-				if got.IsZero() {
-					errCh <- nil // Signal unexpected zero time
+				if !validSet[got.String()] {
+					invalidCh <- got.String()
 					return
 				}
 			}
 		}()
 	}
 
-	wg.Wait()
-	close(errCh)
+	// Writer goroutine: advance through the discrete time values
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 1; i < len(times); i++ {
+			c.Set(times[i])
+			// Give readers a chance to sample this value
+			time.Sleep(time.Microsecond)
+		}
+	}()
 
-	// A reader signals a problem by sending on errCh. Receiving from a
-	// closed channel always succeeds, so check for a buffered value
-	// rather than selecting on the (now closed) channel directly.
-	if len(errCh) > 0 {
-		t.Error("concurrent read returned zero time")
+	wg.Wait()
+	close(invalidCh)
+
+	if len(invalidCh) > 0 {
+		for invalid := range invalidCh {
+			t.Logf("invalid time observed: %s", invalid)
+		}
+		t.Errorf("concurrent reader saw a time not in the writer's set")
 	}
 }
 
@@ -174,6 +197,49 @@ func TestFake_ConcurrentReadAndAdvance(t *testing.T) {
 	wg.Wait()
 	// If the race detector is enabled and reports no data races, the test
 	// passes. Explicit assertions are unnecessary.
+}
+
+func TestFake_Set_IsIdempotent(t *testing.T) {
+	// Setting the same time multiple times should be a no-op.
+	initial := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	c := NewFake(initial)
+
+	// Set multiple times to the same value
+	c.Set(initial)
+	c.Set(initial)
+	c.Set(initial)
+
+	if got := c.Now(); !got.Equal(initial) {
+		t.Errorf("after multiple Set calls with same value: Now() = %v, want %v", got, initial)
+	}
+}
+
+func TestFake_Advance_ZeroIsNoop(t *testing.T) {
+	// Advancing by zero duration should not change the time.
+	initial := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	c := NewFake(initial)
+
+	c.Advance(0)
+
+	if got := c.Now(); !got.Equal(initial) {
+		t.Errorf("after Advance(0): Now() = %v, want %v", got, initial)
+	}
+}
+
+func TestFake_Advance_LargePositiveDuration(t *testing.T) {
+	// Advancing by a large duration should work without panic or overflow.
+	// time.Duration can represent up to ~290 years.
+	initial := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
+	c := NewFake(initial)
+
+	largeAdvance := 100 * 365 * 24 * time.Hour // ~100 years
+
+	c.Advance(largeAdvance)
+
+	want := initial.Add(largeAdvance)
+	if got := c.Now(); !got.Equal(want) {
+		t.Errorf("after Advance(100 years): Now() = %v, want %v", got, want)
+	}
 }
 
 func TestFake_InterfaceCompliance(t *testing.T) {
