@@ -605,7 +605,7 @@ func TestCheckNetwork_LocalListener_Passes(t *testing.T) {
 
 	old := networkCheckEndpoint
 	networkCheckEndpoint = ln.Addr().String()
-	defer func() { networkCheckEndpoint = old }()
+	t.Cleanup(func() { networkCheckEndpoint = old })
 
 	c := checkNetwork()
 	r := c.Run(context.Background())
@@ -631,7 +631,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 	}
 	old := gpuDRMPath
 	gpuDRMPath = dir
-	defer func() { gpuDRMPath = old }()
+	t.Cleanup(func() { gpuDRMPath = old })
 
 	c := checkHardware()
 	r := c.Run(context.Background())
@@ -650,7 +650,7 @@ func TestCheckHardware_EmptyDRMDir_NoGPU(t *testing.T) {
 	dir := t.TempDir() // empty dir — no renderD* entries
 	old := gpuDRMPath
 	gpuDRMPath = dir
-	defer func() { gpuDRMPath = old }()
+	t.Cleanup(func() { gpuDRMPath = old })
 
 	c := checkHardware()
 	r := c.Run(context.Background())
