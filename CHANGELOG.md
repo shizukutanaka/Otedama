@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 224 — Qiita/Zenn/GitHub 調査: stratum wire プリミティブに `iotest.ErrReader` による I/O エラー注入テストを追加)
+
+QiitaとZennのGoテスト品質記事を調査した知見を適用した
+（参照: Zenn rinchsan「Go 1.16で追加されたiotest.ErrReaderを使ってio.Readerの
+異常系をテストする」、Qiita atotto「Goでテストを書く(テストの実装パターン集)」）。
+共通する知見は **「`io.Reader` のエラー経路は `bytes.NewReader` の短縮入力（EOF 早着）と、
+`testing/iotest.ErrReader` によるネットワーク I/O エラー（EOF 非）の 2 種類を分けてテストすべき。
+`iotest.ErrReader` で明示的エラー注入を行わないと、エラーをサイレントに飲み込む実装が見えない」**。
+
+`frame_test.go` はすでに `iotest.OneByteReader` を使用していたが、`wire_test.go` は
+`testing/iotest` を全く使っておらず、`get*` プリミティブ 4 つ全てについて
+「本物の I/O エラー」（`io.EOF`/`io.ErrUnexpectedEOF` とは別の error）でのエラー伝播が
+未検証だった。また、「ヘッダバイトは成功するが本体 Read で失敗」という分岐も未テストだった。
+
+- `internal/stratum/wire_test.go`: `testing/iotest` を import 追加。6 テスト追加:
+  - `TestGetStr0_255_IOErrorOnLengthByte` — 長さバイト読み取りが即エラー
+  - `TestGetStr0_255_IOErrorOnStringBytes` — `io.MultiReader` で長さバイトは成功、
+    文字列データ読み取りで `iotest.ErrReader` が発火 → 2 ブランチ目を検証
+  - `TestGetB0_255_IOErrorOnLengthByte` / `TestGetB0_255_IOErrorOnDataBytes` — 同様の 2 分岐
+  - `TestGetU16LE_IOError` / `TestGetU32LE_IOError` — 整数プリミティブのエラー伝播
+
+全 6 テストが PASS。プロダクションコードは変更なし（既存の正しいエラー伝播を pin）。
+stratum パッケージ緑。
+
 ### Performance (session 223 — Qiita/Zenn 調査: metrics の WriteText で sort キーを事前計算し scrape あたりのアロケーションを約 70% 削減)
 
 QiitaとZennのGoパフォーマンス最適化記事を調査した知見を適用した

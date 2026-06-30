@@ -5,8 +5,11 @@ package stratum
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 // ----- STR0_255 -----
@@ -191,5 +194,66 @@ func TestByteSliceReader_ReadByteAtEOF(t *testing.T) {
 	_, err := r.ReadByte()
 	if err == nil {
 		t.Error("ReadByte on empty reader should return error")
+	}
+}
+
+// ----- iotest.ErrReader — genuine I/O error propagation -----
+//
+// The truncation tests above feed a short but clean byte slice (EOF reached
+// early). These tests use iotest.ErrReader to inject a genuine I/O error
+// (distinct from io.EOF / io.ErrUnexpectedEOF). They verify that each
+// get* primitive propagates the error rather than swallowing or panicking.
+//
+// Pattern recommended by Zenn (rinchsan, "Go 1.16で追加されたiotest.ErrReader
+// を使ってio.Readerの異常系をテストする"): use io.MultiReader to deliver the
+// length/header byte successfully, then ErrReader to fail on the body read.
+// This exercises two distinct error branches per primitive.
+
+var errIO = errors.New("simulated I/O error")
+
+func TestGetStr0_255_IOErrorOnLengthByte(t *testing.T) {
+	// The very first Read (length byte) fails.
+	_, err := getStr0_255(iotest.ErrReader(errIO))
+	if err == nil {
+		t.Fatal("expected error when length-byte read fails")
+	}
+}
+
+func TestGetStr0_255_IOErrorOnStringBytes(t *testing.T) {
+	// Length byte (3) is delivered, then the string data read fails.
+	r := io.MultiReader(strings.NewReader("\x03"), iotest.ErrReader(errIO))
+	_, err := getStr0_255(r)
+	if err == nil {
+		t.Fatal("expected error when string-bytes read fails")
+	}
+}
+
+func TestGetB0_255_IOErrorOnLengthByte(t *testing.T) {
+	_, err := getB0_255(iotest.ErrReader(errIO))
+	if err == nil {
+		t.Fatal("expected error when length-byte read fails")
+	}
+}
+
+func TestGetB0_255_IOErrorOnDataBytes(t *testing.T) {
+	// Length byte (4) delivered, then data read fails.
+	r := io.MultiReader(bytes.NewReader([]byte{4}), iotest.ErrReader(errIO))
+	_, err := getB0_255(r)
+	if err == nil {
+		t.Fatal("expected error when data-bytes read fails")
+	}
+}
+
+func TestGetU16LE_IOError(t *testing.T) {
+	_, err := getU16LE(iotest.ErrReader(errIO))
+	if err == nil {
+		t.Fatal("expected error when U16LE read fails")
+	}
+}
+
+func TestGetU32LE_IOError(t *testing.T) {
+	_, err := getU32LE(iotest.ErrReader(errIO))
+	if err == nil {
+		t.Fatal("expected error when U32LE read fails")
 	}
 }
