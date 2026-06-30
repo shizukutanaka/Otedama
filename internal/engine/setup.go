@@ -78,8 +78,27 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 // startProviders constructs and starts the mining and Akash providers.
 // Start errors are logged (not fatal): the engine can run with a degraded
 // provider set. The caller owns provider shutdown.
-func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
+//
+// workers is the set of miner workers already started by startMinerWorkers.
+// When non-empty, a closure over workers is set on the MiningProvider's
+// HashrateFunc so each publish() call samples the live worker.Stats().HashRate
+// rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
+func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
+	if len(workers) > 0 {
+		// Capture workers by value so the closure stays valid after this
+		// function returns. Each call samples the current hashrate; no
+		// locking is needed because Worker.Stats() is itself concurrency-safe.
+		ws := workers
+		miningProvider.HashrateFunc = func(deviceID string) float64 {
+			for _, w := range ws {
+				if w.DeviceID() == deviceID {
+					return w.Stats().HashRate
+				}
+			}
+			return 0
+		}
+	}
 	akashProvider := provider.NewAkashProvider(rateFetcher)
 	if err := miningProvider.Start(ctx, devices); err != nil {
 		log("warn", fmt.Sprintf("provider: mining: %v", err))

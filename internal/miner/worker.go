@@ -163,6 +163,10 @@ func (w *Worker) SetWork(work *Work) {
 	w.mu.Unlock()
 }
 
+// DeviceID returns the HAL device identity string this worker was
+// configured with. Empty string means "unidentified device".
+func (w *Worker) DeviceID() string { return w.cfg.DeviceID }
+
 // Stats returns a snapshot of the Worker's performance counters.
 // Before Start is called, Stats returns a zero-value Stats.
 func (w *Worker) Stats() Stats {

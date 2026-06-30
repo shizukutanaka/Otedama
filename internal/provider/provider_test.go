@@ -424,6 +424,81 @@ func TestPollingProvider_ParentContextCancelTerminatesLoop(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// MiningProvider.HashrateFunc — live hashrate plumbing (KNOWN_LIMITATIONS §7)
+// ============================================================================
+
+func TestMiningProvider_Publish_UsesHashrateFuncWhenSet(t *testing.T) {
+	// HashrateFunc reports 500 TH/s for the test device. publish() must use
+	// that measured value instead of the static 10 MH/s CPU default, resulting
+	// in a SatsPerSecond ~50 million times larger than the CPU fallback.
+	const measured = 500e12 // 500 TH/s
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	p.HashrateFunc = func(id string) float64 {
+		if id == "cpu-0" {
+			return measured
+		}
+		return 0
+	}
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		// Static CPU estimate: 10 MH/s. Measured: 500 TH/s (50 000 000×).
+		// The yield must be substantially higher than the static fallback.
+		staticSats := (DefaultHashrates[hal.FamilyCPU] / 1e21) * 3.125 * 1e8 / 600.0
+		if q.Yield.SatsPerSecond < staticSats*1000 {
+			t.Errorf("HashrateFunc path: SatsPerSecond = %g, want >> %g (static CPU)", q.Yield.SatsPerSecond, staticSats)
+		}
+	default:
+		t.Error("no quote received via HashrateFunc path")
+	}
+}
+
+func TestMiningProvider_Publish_FallsBackWhenHashrateFuncReturnsZero(t *testing.T) {
+	// When HashrateFunc returns 0 (no live measurement yet), publish() must
+	// fall back to the static per-family estimate rather than emitting zero yield.
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	p.HashrateFunc = func(string) float64 { return 0 }
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		expectedSats := (DefaultHashrates[hal.FamilyCPU] / 1e21) * 3.125 * 1e8 / 600.0
+		if q.Yield.SatsPerSecond < expectedSats*0.98 || q.Yield.SatsPerSecond > expectedSats*1.02 {
+			t.Errorf("static fallback: SatsPerSecond = %g, want ~%g", q.Yield.SatsPerSecond, expectedSats)
+		}
+	default:
+		t.Error("no quote received via static fallback path")
+	}
+}
+
+func TestMiningProvider_Publish_HashrateFunc_UnknownDeviceUsesStatic(t *testing.T) {
+	// HashrateFunc returns 0 for an unrecognised device ID — publish() must
+	// fall back to the static estimate rather than producing zero yield.
+	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
+	p.HashrateFunc = func(id string) float64 { return 0 } // unknown → 0
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "asic-0", Family: hal.FamilyASIC}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if q.Yield.SatsPerSecond <= 0 {
+			t.Error("ASIC static fallback must produce positive yield when HashrateFunc returns 0")
+		}
+	default:
+		t.Error("no quote received")
+	}
+}
+
 func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	// sendQuote must report failure (not block) when the context is already
 	// cancelled and the channel is full, so the publish loop exits promptly

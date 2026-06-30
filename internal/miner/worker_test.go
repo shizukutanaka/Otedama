@@ -369,3 +369,19 @@ func TestShare_DeviceID_EmptyWhenNotSet(t *testing.T) {
 		}
 	}
 }
+
+// ----- DeviceID method -----
+
+func TestWorker_DeviceID_ReturnsConfigValue(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1, DeviceID: "gpu-0"})
+	if got := w.DeviceID(); got != "gpu-0" {
+		t.Errorf("DeviceID() = %q, want %q", got, "gpu-0")
+	}
+}
+
+func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1})
+	if got := w.DeviceID(); got != "" {
+		t.Errorf("DeviceID() = %q, want empty string", got)
+	}
+}

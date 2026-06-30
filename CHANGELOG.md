@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 225 — 製品強弱点監査: KNOWN_LIMITATIONS §7 を解消 — MiningProvider が実測ハッシュレートを yield 計算に反映)
+
+製品の長所・短所・改善点の監査を実施した。テストカバレッジ監査（全 24 パッケージで 91.6%-100%、
+機能的空白なし）と構造監査（known limitations の照合）を並行実施した結果、
+**最も即効性のある改善点として `KNOWN_LIMITATIONS.md §7`「採掘側 yield が静的ハッシュレート
+推定値に依存」を特定した**。
+
+KNOWN_LIMITATIONS.md §7 には「エンジンはすでに `worker.Stats().HashRate` でリアル測定値を
+持っているが、その値がプロバイダの見積もりに渡っていない」と明記されていた。
+今セッションでそのパイプを開通させた。
+
+- `internal/miner/worker.go`: `DeviceID() string` メソッドを追加。
+  `Worker` の設定 `WorkerConfig.DeviceID` を外部から読み出す最小限のアクセサ。
+  エンジンがワーカーをデバイス ID でマップするために使用。
+
+- `internal/provider/mining.go`: `MiningProvider` に `HashrateFunc func(deviceID string) float64`
+  フィールドを追加。`publish()` 内で `HashrateFunc` が設定済みかつ正の値を返す場合は
+  その実測値を採用し、ゼロ以下の場合（起動直後など測定前）は従来の
+  静的ファミリー推定値（ASIC=100TH/s、GPU=1.5GH/s、CPU=10MH/s）にフォールバック。
+  後方互換: `HashrateFunc` が nil のときの動作は変化なし。
+
+- `internal/engine/setup.go`: `startProviders()` に `workers []*miner.Worker` 引数を追加。
+  ワーカーが存在するとき、`miningProvider.HashrateFunc` に各 `publish()` 呼び出しで
+  `w.Stats().HashRate` をサンプルするクロージャを設定する。
+
+- `internal/engine/run.go`: `startProviders` 呼び出しに `workers` を追加。
+
+テスト追加:
+- `internal/miner/worker_test.go`: `TestWorker_DeviceID_ReturnsConfigValue` /
+  `TestWorker_DeviceID_EmptyWhenNotConfigured` の 2 テスト。
+- `internal/provider/provider_test.go`:
+  - `TestMiningProvider_Publish_UsesHashrateFuncWhenSet` — HashrateFunc が 500 TH/s を
+    返すとき、静的 CPU 推定値の 1000 倍以上の SatsPerSecond が得られることを確認。
+  - `TestMiningProvider_Publish_FallsBackWhenHashrateFuncReturnsZero` — ゼロ返しで
+    静的推定値に正しくフォールバックすることを確認。
+  - `TestMiningProvider_Publish_HashrateFunc_UnknownDeviceUsesStatic` — 不明デバイス ID
+    でもゼロ yield にならずフォールバックすることを確認。
+
+全 24 パッケージ green。新規依存なし (ADR-003 準拠)。`KNOWN_LIMITATIONS.md §7` を解消済みに更新。
+
 ### Added (session 224 — Qiita/Zenn/GitHub 調査: stratum wire プリミティブに `iotest.ErrReader` による I/O エラー注入テストを追加)
 
 QiitaとZennのGoテスト品質記事を調査した知見を適用した

@@ -248,7 +248,7 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 5: Providers -----
-	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, log)
+	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
 	defer miningProvider.Stop()
 	defer akashProvider.Stop()
 

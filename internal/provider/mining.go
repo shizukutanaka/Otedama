@@ -27,6 +27,17 @@ type MiningProvider struct {
 	poolURL string
 	rates   RateSource
 	devices []hal.Device
+
+	// HashrateFunc, if non-nil, is called with each device's ID during
+	// publish() to obtain its current measured hashrate (H/s). When it
+	// returns a value > 0, that figure is used instead of the static
+	// per-family estimate (ASIC/GPU/CPU constants), making the yield quote
+	// reflect actual hardware performance rather than a family average.
+	// Zero or negative return values cause publish() to fall back to the
+	// static estimate, preserving the pre-wiring behaviour when the engine
+	// has not yet produced a hashrate measurement (e.g. first few seconds).
+	// Setting this field after Start is called is not safe.
+	HashrateFunc func(deviceID string) float64
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
@@ -51,16 +62,12 @@ func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error 
 
 // publish calculates the current yield and sends it on the quote channel.
 // Yield per device is estimated using:
-//   - Device hashrate: a static per-family estimate (ASIC/GPU/CPU). The
-//     hal.Device interface does not yet expose live hashrate telemetry, so
-//     no measured rate is consumed here; see docs/KNOWN_LIMITATIONS.md §7.
+//   - Device hashrate: the engine's live worker.Stats().HashRate when
+//     HashrateFunc is set and returns > 0; otherwise a static per-family
+//     estimate (ASIC/GPU/CPU). See docs/KNOWN_LIMITATIONS.md §7.
 //   - Network hashrate: a compile-time constant estimate (not configurable).
 //   - Current BTC price from RateSource (freshness drives the confidence).
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
-//
-// Because both hashrate inputs are static, the mining-side yield is a stable
-// estimate rather than a live measurement; only the BTC price and its
-// freshness vary between quotes.
 func (p *MiningProvider) publish(ctx context.Context) {
 	rate, fresh := p.rates.BTCUSDRate()
 	if rate <= 0 {
@@ -83,18 +90,21 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		if !dev.Capabilities().SHA256d {
 			continue
 		}
-		// Static per-family hashrate estimate. There is no live-telemetry
-		// path today (hal.Device exposes no Stats()), so this estimate is
-		// always used; wiring in the engine's measured worker hashrate is
-		// tracked as future work (docs/KNOWN_LIMITATIONS.md §7).
+		// Prefer live measured hashrate (from the engine's worker stats)
+		// when available; fall back to the static per-family estimate.
 		var deviceHashrate float64
-		switch dev.Identity().Family {
-		case hal.FamilyASIC:
-			deviceHashrate = 100e12 // ~100 TH/s (Antminer S21)
-		case hal.FamilyGPU:
-			deviceHashrate = 1.5e9 // ~1.5 GH/s (RTX 4090 SHA256d)
-		default:
-			deviceHashrate = 10e6 // ~10 MH/s (CPU)
+		if p.HashrateFunc != nil {
+			deviceHashrate = p.HashrateFunc(dev.Identity().ID)
+		}
+		if deviceHashrate <= 0 {
+			switch dev.Identity().Family {
+			case hal.FamilyASIC:
+				deviceHashrate = 100e12 // ~100 TH/s (Antminer S21)
+			case hal.FamilyGPU:
+				deviceHashrate = 1.5e9 // ~1.5 GH/s (RTX 4090 SHA256d)
+			default:
+				deviceHashrate = 10e6 // ~10 MH/s (CPU)
+			}
 		}
 
 		// Expected BTC per second:
