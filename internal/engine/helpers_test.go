@@ -938,6 +938,62 @@ func TestUptimeAccountant_IgnoresNonPositiveAndNilCounter(t *testing.T) {
 }
 
 // ============================================================================
+// effectiveYield — gross-minus-losses yield estimate (RESEARCH_IMPROVEMENTS
+// Category 3 #12: fold downtime into a single yield number)
+// ============================================================================
+
+func TestEffectiveYield_FullUptimeMatchesExpectedYield(t *testing.T) {
+	// 100% productive fraction: effective yield equals the raw quote exactly.
+	got := effectiveYield(1000, 3600, 3600)
+	if got != 1000 {
+		t.Errorf("effectiveYield(full uptime) = %v, want 1000", got)
+	}
+}
+
+func TestEffectiveYield_HalfUptimeHalvesYield(t *testing.T) {
+	// The headline equivalence this metric exists to show: a device quoted
+	// at X sats/s but only hashing half the time nets the same as one
+	// quoted at X/2 sats/s running continuously.
+	got := effectiveYield(1000, 1800, 3600)
+	if got != 500 {
+		t.Errorf("effectiveYield(50%% uptime) = %v, want 500", got)
+	}
+}
+
+func TestEffectiveYield_ZeroUptimeReturnsZeroNotNaN(t *testing.T) {
+	// Nothing has run long enough yet (e.g. the very first tick after
+	// start) for a meaningful ratio; must not divide by zero.
+	got := effectiveYield(1000, 0, 0)
+	if got != 0 {
+		t.Errorf("effectiveYield(uptime=0) = %v, want 0", got)
+	}
+}
+
+func TestEffectiveYield_NegativeUptimeReturnsZero(t *testing.T) {
+	got := effectiveYield(1000, 0, -1)
+	if got != 0 {
+		t.Errorf("effectiveYield(negative uptime) = %v, want 0", got)
+	}
+}
+
+func TestEffectiveYield_ClampsFractionAboveOne(t *testing.T) {
+	// Guards against productiveSeconds transiently read ahead of uptime by
+	// two different tickers — the fraction must never exceed 1, which would
+	// otherwise report an effective yield higher than the raw quote.
+	got := effectiveYield(1000, 3700, 3600) // productive > uptime
+	if got != 1000 {
+		t.Errorf("effectiveYield(productive > uptime) = %v, want 1000 (clamped)", got)
+	}
+}
+
+func TestEffectiveYield_ZeroExpectedYieldIsZero(t *testing.T) {
+	got := effectiveYield(0, 3600, 3600)
+	if got != 0 {
+		t.Errorf("effectiveYield(expectedYield=0) = %v, want 0", got)
+	}
+}
+
+// ============================================================================
 // Arbitration holds metric — observing declined switches (session 131)
 // ============================================================================
 
@@ -953,6 +1009,24 @@ func TestEngineMetrics_ArbitrationHolds_AppearsInOutput(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "otedama_arbitration_holds_total 2") {
 		t.Errorf("otedama_arbitration_holds_total missing/incorrect:\n%s", buf.String())
+	}
+}
+
+// ============================================================================
+// effectiveYieldSatsPerSec gauge — registration and exposition (session 231)
+// ============================================================================
+
+func TestEngineMetrics_EffectiveYieldSatsPerSec_AppearsInOutput(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.effectiveYieldSatsPerSec.Set(effectiveYield(1000, 1800, 3600))
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(buf.String(), "otedama_effective_yield_sats_per_second 500") {
+		t.Errorf("otedama_effective_yield_sats_per_second missing/incorrect:\n%s", buf.String())
 	}
 }
 

@@ -48,6 +48,12 @@ type engineMetrics struct {
 	// provider quotes are over-optimistic or hardware is underperforming. The
 	// expectation half of the expectation-vs-realization pair.
 	arbitrationExpectedYieldSatsPerSec *metrics.Gauge
+	// effectiveYieldSatsPerSec is arbitrationExpectedYieldSatsPerSec scaled by
+	// the lifetime productive fraction (productiveSeconds / uptime) — see
+	// effectiveYield in stats.go. Unlike the instantaneous expected-yield
+	// gauge, this reflects downtime: a device quoted at X sats/s that only
+	// hashes half the time reads as X/2 here, matching what it actually nets.
+	effectiveYieldSatsPerSec *metrics.Gauge
 	// activeStreams is the number of live revenue streams arbitration is
 	// choosing between after stale (dead-provider) streams are pruned. A
 	// drop here surfaces a provider that has stopped quoting.
@@ -247,6 +253,15 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"allocation. Compare against realized earnings to judge whether provider "+
 				"quotes are accurate; combine with otedama_btc_usd_rate for an expected "+
 				"$/day.",
+			nil),
+		effectiveYieldSatsPerSec: reg.NewGauge(
+			"otedama_effective_yield_sats_per_second",
+			"Gross-minus-losses yield: otedama_arbitration_expected_yield_sats_per_second "+
+				"scaled by the lifetime productive fraction (otedama_productive_seconds_total "+
+				"/ otedama_uptime_seconds). Reliability dwarfs fee differences — a few percent "+
+				"of downtime costs more than most inter-pool fee gaps — so this single number "+
+				"captures both effects, unlike the instantaneous expected-yield gauge which "+
+				"reads unchanged during a stall.",
 			nil),
 		activeStreams: reg.NewGauge(
 			"otedama_active_streams",

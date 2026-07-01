@@ -666,6 +666,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
 				uptime.observe(time.Now(), currentHashRate > 0 && !stalled, opts.m.productiveSeconds)
+				opts.m.effectiveYieldSatsPerSec.Set(effectiveYield(
+					opts.m.arbitrationExpectedYieldSatsPerSec.Value(),
+					float64(opts.m.productiveSeconds.Value()),
+					opts.m.uptime.Value()))
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				// J/TH efficiency: only meaningful when power is configured and
 				// the miner is running (avoids division-by-zero and spurious 0).
@@ -844,6 +848,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
 				uptime.observe(time.Now(), currentHashRate > 0 && !stalled, opts.m.productiveSeconds)
+				opts.m.effectiveYieldSatsPerSec.Set(effectiveYield(
+					opts.m.arbitrationExpectedYieldSatsPerSec.Value(),
+					float64(opts.m.productiveSeconds.Value()),
+					opts.m.uptime.Value()))
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				if opts.powerWatts > 0 {
 					opts.m.powerWatts.Set(opts.powerWatts)

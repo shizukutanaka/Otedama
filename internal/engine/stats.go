@@ -217,6 +217,39 @@ func acceptanceRate(accepted, rejected uint64) float64 {
 	return float64(accepted) / float64(total)
 }
 
+// effectiveYield folds downtime into the engine's forecast yield, producing
+// a single gross-minus-losses estimate: the raw quoted rate
+// (arbitrationExpectedYieldSatsPerSec) scaled by the lifetime fraction of
+// wall-clock time actually spent hashing productively (productiveSeconds /
+// uptimeSeconds — see uptimeAccountant). This is
+// docs/RESEARCH_IMPROVEMENTS.md Category 3 item 12's remaining piece: the
+// comparisons this project is measured against stress that reliability
+// dwarfs fee differences (a 4% uptime gap costs ~4× a 1% fee gap), but the
+// instantaneous expected-yield gauge alone doesn't show that — it reads
+// unchanged whether the miner has been stalled for the last hour or not.
+// A device quoted at X sats/s that only actually hashes half the time nets
+// the same as one quoted at X/2 sats/s running continuously; this metric
+// makes that equivalence visible as a single number instead of requiring
+// every operator to write the same PromQL multiplication themselves.
+//
+// Returns 0 when uptimeSeconds <= 0 (nothing has run long enough yet for a
+// meaningful ratio) rather than dividing by zero. The fraction is clamped
+// to [0, 1] as a defensive guard against the two counters being read a
+// moment apart by different tickers, which could otherwise transiently
+// read productiveSeconds fractionally ahead of uptimeSeconds.
+func effectiveYield(expectedYieldSatsPerSec, productiveSeconds, uptimeSeconds float64) float64 {
+	if uptimeSeconds <= 0 {
+		return 0
+	}
+	fraction := productiveSeconds / uptimeSeconds
+	if fraction > 1 {
+		fraction = 1
+	} else if fraction < 0 {
+		fraction = 0
+	}
+	return expectedYieldSatsPerSec * fraction
+}
+
 // LatencyTracker records share-submission round-trip times (submit →
 // pool accept/reject) in a fixed-size ring buffer and computes
 // quantiles on demand. Submit latency is the direct driver of stale

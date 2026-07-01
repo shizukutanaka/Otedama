@@ -119,13 +119,18 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
     `PoolConfig.PayoutScheme` field (YAML: `payout_scheme`) and
     `checkPayoutScheme` doctor check surface per-pool variance/custody
     trade-offs; `Validate()` rejects unknown values.
-12. 🟡 **Effective-yield accounting > fee rate.** The comparisons stress
+12. ✅ **Effective-yield accounting > fee rate.** The comparisons stress
     *"reliability dwarfs fee differences"* — a 4% uptime gap can cost ~4× a
-    1% fee gap. ✅ First piece shipped (session 48):
+    1% fee gap. First piece shipped (session 48):
     `otedama_share_acceptance_rate` = accepted/(accepted+rejected), logged
-    and warned-on below 97%, since every rejected share is unpaid work. The
-    remaining piece is folding downtime/stall time into a single gross-minus-
-    losses yield estimate.
+    and warned-on below 97%, since every rejected share is unpaid work.
+    Second piece shipped (session 231): `otedama_effective_yield_sats_per_second`
+    = `otedama_arbitration_expected_yield_sats_per_second` × lifetime
+    productive fraction (`productive_seconds_total / uptime_seconds`) — a
+    single gauge folding downtime/stall time into the yield estimate, so a
+    device quoted at X sats/s that only hashes half the time reads as X/2
+    here rather than requiring every operator to write the same PromQL
+    multiplication themselves.
 
 ---
 

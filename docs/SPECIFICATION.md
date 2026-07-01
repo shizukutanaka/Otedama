@@ -205,6 +205,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_holds_total` | counter | Better stream existed but hysteresis held. |
 | `arbitration_foregone_sats_per_second` | gauge | Instantaneous opportunity cost of the held allocation. |
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
+| `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
 | `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |

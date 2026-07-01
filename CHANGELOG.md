@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 231 — 次のステップ: `otedama_effective_yield_sats_per_second` — ダウンタイムを織り込んだ実効利回りメトリクスを実装)
+
+session 230 に続き、リサーチバックログから次の具体的な実装可能項目を選定した。
+`docs/RESEARCH_IMPROVEMENTS.md` Category 3 #12「Effective-yield accounting > fee rate」は
+半分だけ実装済みの 🟡 項目だった：比較対象とする既存マイニングソフト評価が繰り返し
+強調する「信頼性はフィー差を凌駕する（4% のアップタイム差はフィー1%差の約4倍のコスト）」
+という知見に基づき、session 48 で `otedama_share_acceptance_rate` を実装済みだったが、
+「ダウンタイム／停止時間を単一のグロスマイナスロス利回り推定値に織り込む」という
+残りの部分は未着手だった。
+
+既存の `otedama_arbitration_expected_yield_sats_per_second`（エンジンの瞬間的な予測利回り）
+は、採掘が数時間スタール（停止）していても値が変化しない——「見た目は同じ利回り」を
+示し続けてしまう。運用者は `otedama_productive_seconds_total / otedama_uptime_seconds` を
+自分で PromQL に書けば実効稼働率を求められるが、これを利回りに掛け合わせた「実際に
+手元に残る利回り」を示す既製のメトリクスは存在しなかった。
+
+- `internal/engine/stats.go`: 純粋関数 `effectiveYield(expectedYieldSatsPerSec,
+  productiveSeconds, uptimeSeconds float64) float64` を追加。
+  `expectedYield × clamp(productiveSeconds/uptimeSeconds, 0, 1)` を計算する。
+  `uptimeSeconds <= 0` の場合は 0 を返し（ゼロ除算回避）、2つの独立したティッカーが
+  別々のタイミングで読み取ることで理論上 `productiveSeconds` が `uptimeSeconds` を
+  瞬間的に上回るケースに備えて比率を [0,1] にクランプする。
+- `internal/engine/metrics.go`: `otedama_effective_yield_sats_per_second` ゲージを新設。
+- `internal/engine/run.go`: V1/V2 両方のセッションループの統計ティックで
+  `uptime.observe(...)` 直後に新ゲージを更新するよう追加（`arbitrationExpectedYieldSatsPerSec`
+  と `productiveSeconds`/`uptime` の最新値から計算）。
+- `docs/SPECIFICATION.md` §6: 新メトリクスをカタログに追加
+  （`TestMetricsDocumentedInSpecification` の CI ガードが通ることを確認済み）。
+- `docs/RESEARCH_IMPROVEMENTS.md`: Category 3 #12 を完全に ✅ に更新。
+
+テスト追加（7件）: `effectiveYield` の 6 単体テスト
+（フル稼働で瞬間値と一致、半分稼働で半分になる、稼働ゼロで0を返しNaNにならない、
+負の稼働時間で0を返す、比率が1を超える場合にクランプされる、期待利回りが0なら0を返す）
+と、レジストリ登録・出力確認テスト 1 件。
+
+全 24 パッケージ green。`go vet`/`gofmt` clean。新規依存なし。
+
 ### Added (session 230 — 次のステップ: `docs/RESEARCH_IMPROVEMENTS.md` Category 3 #5「BIP-39 passphrase (25th word) support」を実装)
 
 これまでのセッション（225–229）は監査で見つかったバグ修正が中心だったが、本セッションは
