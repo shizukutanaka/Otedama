@@ -5,6 +5,7 @@ package miner
 
 import (
 	"encoding/hex"
+	"math"
 	"testing"
 )
 
@@ -193,6 +194,81 @@ func TestTargetFromNBits_AcceptsMinimalNonZeroMantissa(t *testing.T) {
 	var zero Hash
 	if target == zero {
 		t.Error("TargetFromNBits(0x03000001) returned a zero target for a non-zero mantissa")
+	}
+}
+
+// ----- TargetFromDifficulty -----
+
+func TestTargetFromDifficulty_OneMatchesGenesisTarget(t *testing.T) {
+	// Difficulty 1 is defined as the genesis block's target (nBits
+	// 0x1d00ffff), so the two conversions must agree exactly.
+	fromDiff, err := TargetFromDifficulty(1.0)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty(1.0): %v", err)
+	}
+	fromNBits, err := TargetFromNBits(0x1d00ffff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromDiff != fromNBits {
+		t.Errorf("TargetFromDifficulty(1.0) = %x, want genesis target %x", fromDiff, fromNBits)
+	}
+}
+
+func TestTargetFromDifficulty_FractionalIsEasierThanOne(t *testing.T) {
+	// A pool-assigned share difficulty below 1 (the common case — pools
+	// assign shares far easier than network difficulty) must produce a
+	// numerically larger (easier) target than difficulty 1.
+	easy, err := TargetFromDifficulty(0.001)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty(0.001): %v", err)
+	}
+	hard, err := TargetFromDifficulty(1.0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hard.LessOrEqual(easy) || hard == easy {
+		t.Errorf("TargetFromDifficulty(0.001) = %x should be numerically larger (easier) than TargetFromDifficulty(1.0) = %x", easy, hard)
+	}
+}
+
+func TestTargetFromDifficulty_HigherDifficultyIsHarder(t *testing.T) {
+	// Difficulty 1000 must produce a numerically smaller (harder) target
+	// than difficulty 1.
+	hard1000, err := TargetFromDifficulty(1000.0)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty(1000.0): %v", err)
+	}
+	hard1, err := TargetFromDifficulty(1.0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hard1000.LessOrEqual(hard1) || hard1000 == hard1 {
+		t.Errorf("TargetFromDifficulty(1000.0) = %x should be numerically smaller (harder) than TargetFromDifficulty(1.0) = %x", hard1000, hard1)
+	}
+}
+
+func TestTargetFromDifficulty_RejectsZero(t *testing.T) {
+	if _, err := TargetFromDifficulty(0); err == nil {
+		t.Error("TargetFromDifficulty(0) should return an error")
+	}
+}
+
+func TestTargetFromDifficulty_RejectsNegative(t *testing.T) {
+	if _, err := TargetFromDifficulty(-1.0); err == nil {
+		t.Error("TargetFromDifficulty(-1.0) should return an error")
+	}
+}
+
+func TestTargetFromDifficulty_RejectsNaN(t *testing.T) {
+	if _, err := TargetFromDifficulty(math.NaN()); err == nil {
+		t.Error("TargetFromDifficulty(NaN) should return an error")
+	}
+}
+
+func TestTargetFromDifficulty_RejectsInfinity(t *testing.T) {
+	if _, err := TargetFromDifficulty(math.Inf(1)); err == nil {
+		t.Error("TargetFromDifficulty(+Inf) should return an error")
 	}
 }
 

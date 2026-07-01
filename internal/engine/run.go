@@ -874,7 +874,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID); err != nil {
+				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
@@ -1054,6 +1054,33 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 	}
 }
 
+// v1JobTarget computes the mining target for a Stratum V1 job: the
+// pool-assigned share target when difficulty > 0, or the nBits-derived
+// block target otherwise.
+//
+// Stratum V1 difficulty arrives on its own mining.set_difficulty
+// notification, not attached to mining.notify, and applies to every
+// subsequent job until superseded. Grinding to the full nBits block target
+// instead of the (far easier) pool-assigned share target — the bug this
+// closes — means a worker essentially never produces a share the pool
+// credits, since ordinary hardware cannot solve a real block. A difficulty
+// of 0 (no set_difficulty received yet, e.g. the first job of a session)
+// falls back to the nBits target, matching pre-wiring behaviour. Extracted
+// as a pure function so the target-selection logic is unit-testable without
+// a running Worker.
+func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
+	target, err := miner.TargetFromNBits(nBits)
+	if err != nil {
+		return miner.Hash{}, err
+	}
+	if difficulty > 0 {
+		if dt, derr := miner.TargetFromDifficulty(difficulty); derr == nil {
+			target = dt
+		}
+	}
+	return target, nil
+}
+
 // applyJob converts a poolproto.Job (the protocol-agnostic job type
 // delivered by poolproto.Session.Jobs()) into a miner.Work and pushes
 // it to every worker. This is the bridge that lets the engine consume
@@ -1063,10 +1090,15 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 // to the uint32 the miner uses; an unparseable ID yields job 0, which
 // the pool will reject on submit, surfacing the problem rather than
 // silently mining a malformed job.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32) error {
-	target, err := miner.TargetFromNBits(job.NBits)
+//
+// difficulty is the Stratum V1 session's most recent mining.set_difficulty
+// value (poolproto.Job carries no difficulty field: V1 delivers it on a
+// separate notification that applies to every job until superseded, not
+// attached to mining.notify). See v1JobTarget for how it is applied.
+func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
-		return fmt.Errorf("engine: bad nBits 0x%08X in job %q: %w", job.NBits, job.JobID, err)
+		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
 	var jobID uint32
 	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {

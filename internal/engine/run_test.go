@@ -305,7 +305,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1); err != nil {
+	if err := applyJob(workers, job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -318,7 +318,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1)
+	err := applyJob([]*miner.Worker{w}, job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -330,9 +330,74 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1)
+	err := applyJob([]*miner.Worker{w}, job, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
+	}
+}
+
+// ----- applyJob / v1JobTarget: pool-assigned share difficulty overrides nBits target -----
+
+func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
+	// applyJob must accept a positive difficulty without error (SetWork is
+	// safe without Start; behavioural proof that the right target is chosen
+	// lives in TestV1JobTarget below, which tests the pure decision function).
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+		t.Fatalf("applyJob(difficulty=0.001): %v", err)
+	}
+}
+
+func TestV1JobTarget_ZeroDifficulty_FallsBackToNBitsTarget(t *testing.T) {
+	// Before any mining.set_difficulty, SuggestedDifficulty() is 0. The
+	// target must be the nBits-derived block target, matching pre-wiring
+	// behaviour.
+	const nBits = 0x1d00ffff
+	got, err := v1JobTarget(nBits, 0)
+	if err != nil {
+		t.Fatalf("v1JobTarget(difficulty=0): %v", err)
+	}
+	want, err := miner.TargetFromNBits(nBits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("target = %x, want nBits-derived target %x", got, want)
+	}
+}
+
+func TestV1JobTarget_PositiveDifficulty_UsesShareTarget(t *testing.T) {
+	// Once the pool has assigned a share difficulty, the target must be the
+	// (far easier) share target instead of the full nBits block target —
+	// otherwise a V1 worker would essentially never produce a submittable
+	// share (see docs/RESEARCH_IMPROVEMENTS.md Cat 1/2 #4 fix rationale).
+	const nBits = 0x1d00ffff // genesis (very hard) block target
+	const shareDifficulty = 0.001
+
+	got, err := v1JobTarget(nBits, shareDifficulty)
+	if err != nil {
+		t.Fatalf("v1JobTarget(difficulty=%v): %v", shareDifficulty, err)
+	}
+	wantShare, err := miner.TargetFromDifficulty(shareDifficulty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockTarget, err := miner.TargetFromNBits(nBits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != wantShare {
+		t.Errorf("target = %x, want share-difficulty target %x", got, wantShare)
+	}
+	if got == blockTarget {
+		t.Error("target equals the full block target; share difficulty was not applied")
+	}
+}
+
+func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
+	if _, err := v1JobTarget(0x00000000, 0.001); err == nil {
+		t.Error("v1JobTarget should reject invalid nBits even with a valid difficulty")
 	}
 }
 

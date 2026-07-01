@@ -413,9 +413,21 @@ endpoint against current vendor documentation. Tags as before
    target are rejected as "above target". Tag outstanding work with the
    difficulty active when issued, validate locally against that, and treat
    the resulting pool rejects as benign (exclude from the reject-rate
-   metric). Also accept *fractional* difficulty in `set_difficulty`.
-   Distinct cause from the existing stale/latency `rejectClass`.
+   metric). Distinct cause from the existing stale/latency `rejectClass`.
    (bitaxeorg/ESP-Miner #212)
+   — **Prerequisite fixed (session 226):** investigating this item surfaced a
+   more fundamental bug it presupposes — the V1 path (`applyJob`) was not
+   applying `mining.set_difficulty` to the mining target *at all*; every
+   worker ground to the full nBits block target regardless of the pool's
+   assigned share difficulty. Fixed via `miner.TargetFromDifficulty` (accepts
+   fractional difficulty, e.g. 0.001) and `engine.v1JobTarget`. Without this,
+   a V1-connected worker essentially never produced a submittable share.
+   The transition-handling nuance this item actually asks for (tagging
+   in-flight work with the difficulty active when issued, so a mid-flight
+   difficulty *increase* doesn't misclassify a still-valid old-target share
+   as a reject) remains open — the target now updates correctly on every new
+   job, but shares in flight when `set_difficulty` changes are not yet
+   re-validated against the difficulty active at issue time.
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict

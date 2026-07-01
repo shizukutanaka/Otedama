@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 226 — 製品強弱点監査: Stratum V1 が pool 割当 share difficulty を無視し、実質シェアを提出できない重大バグを修正)
+
+製品の長所・短所・改善点の監査を継続した。`docs/RESEARCH_IMPROVEMENTS.md` の
+「Category 1/2 — mining client & Stratum correctness」§4（ESP-Miner #212 由来の
+知見）を起点にコードを追跡した結果、**session 90–91 で load-bearing になった
+Stratum V1 経路 (`runSessionV1` → `applyJob`) が、pool の `mining.set_difficulty`
+を完全に無視し、常にブロック本体の nBits ターゲット（ネットワーク難易度）に対して
+採掘していた**ことが判明した。
+
+**影響:** Stratum V1 では pool 割当の shareDifficulty（通常 0.001 のような
+非常に低い値）は `mining.notify` とは別の通知で届き、ブロックそのものより
+遥かに易しいターゲットとしてシェアを判定する。`applyJob` がこれを無視して
+nBits ターゲットのみを使う場合、一般的なハードウェアは実質的に「本物のブロックを
+解く」以外の方法でシェアを見つけられず、pool は事実上シェアを一切受け取れない
+（＝実入金がゼロになる）。V2 経路の `updateWork` はすでに `shareTarget` を
+正しく優先していたため、この非対称性は V1 経路固有の欠陥だった。
+
+- `internal/miner/sha256d.go`: `TargetFromDifficulty(difficulty float64) (Hash, error)`
+  を追加。`target = diff1Target / difficulty` を `big.Float`（256bit精度）で計算し、
+  分数難易度（例: 0.001）の精度を保持したまま `TargetFromNBits` と同じ
+  リトルエンディアン `Hash` 表現を返す。`difficulty=1.0` はジェネシスブロックの
+  nBits (`0x1d00ffff`) と同一ターゲットになることを確認済み。0・負値・NaN・Inf は拒否。
+- `internal/engine/run.go`: 純粋関数 `v1JobTarget(nBits uint32, difficulty float64)
+  (miner.Hash, error)` を新設し、`applyJob` から呼び出す形にリファクタ。
+  `difficulty > 0` のとき share ターゲットを優先し、`TargetFromDifficulty` が
+  失敗する場合や `difficulty == 0`（`set_difficulty` 未受信の初回ジョブ等）は
+  従来通り nBits ターゲットにフォールバックする。`applyJob` のシグネチャに
+  `difficulty float64` を追加し、呼び出し元で `sess.SuggestedDifficulty()` を渡す。
+
+テスト追加:
+- `internal/miner/sha256d_test.go`: `TargetFromDifficulty` の 7 テスト
+  （難易度1=ジェネシス一致、分数難易度は易しい、高難易度は厳しい、
+  0/負値/NaN/Inf の拒否）。
+- `internal/engine/run_test.go`: `v1JobTarget` の 3 テスト（difficulty=0 で
+  nBits ターゲットにフォールバック、difficulty>0 で share ターゲットを使用し
+  block ターゲットと異なることを確認、不正 nBits はどちらの場合もエラー）。
+  既存の `TestApplyJob_*` 3 件は新シグネチャに追従（`difficulty=0` を渡し
+  従来の nBits 挙動を pin）。
+
+全 24 パッケージ green。新規依存なし（`math/big` は標準ライブラリ、ADR-003 準拠）。
+
 ### Fixed (session 225 — 製品強弱点監査: KNOWN_LIMITATIONS §7 を解消 — MiningProvider が実測ハッシュレートを yield 計算に反映)
 
 製品の長所・短所・改善点の監査を実施した。テストカバレッジ監査（全 24 パッケージで 91.6%-100%、
