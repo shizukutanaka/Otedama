@@ -10,6 +10,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 233 — ソクラテス式問答法で過不足の機能を再検証: `docs/RESEARCH_IMPROVEMENTS.md` の ✅ チェックが V1/V2 を混同し、V2 の `SetNewPrevHash`/`SetTarget` 未実装を過大に「対応済み」と誤認させる記載を修正)
+
+session 232 に続き、製品の核となる識別子の後半「Stratum V2 準拠」を自問自答形式で
+検証した。「Stratum V2 の Mining Protocol は本当にすべて実装されているか？」という
+問いから、`internal/stratum/messages.go` に定義されているメッセージ型
+（`SetupConnection`系、`OpenMiningChannel`系、`NewMiningJob`、`SubmitShares`系、
+計10種）を実際のプロトコル仕様と突き合わせた。
+
+`docs/RESEARCH_IMPROVEMENTS.md` の項目9「✅ Graceful handling of `SetNewPrevHash` /
+clean-jobs flag (session 97)」を検証したところ、記載されている修正内容
+（`sendJob` が `clean_jobs=true` で全ペンディングジョブを破棄する）は
+`internal/poolproto/stratumv1/stratumv1.go` にのみ存在する V1 専用の実装で、
+V2 の `SetNewPrevHash`（msg_type 0x17）に対応するメッセージ型は
+`internal/stratum/messages.go` に一切定義されていないことが判明した。
+同様に、項目2「vardiff の `SetTarget` でターゲットを `max_target` にクランプする」も
+「クランプが未実装」という体で書かれているが、実際には `SetTarget`
+（msg_type 0x1d）自体がデコードすらされていない、より根本的な欠落だった。
+
+**深刻度の確認:** `runSession` の V2 メッセージディスパッチ（`DispatchFrame`）を
+確認したところ、未知の msg_type は安全に `Unknown` へフォールバックし
+（クラッシュや接続断は発生しない）、`run.go` のセッションループも
+`NewMiningJob`/`SubmitSharesSuccess`/`SubmitSharesError` の3種類のみを
+明示的に分岐処理しているため、`SetNewPrevHash`/`SetTarget` を受信しても
+サイレントに無視されるだけで安全側に倒れている。ただし機能的には、
+プールが新ブロック検出を `SetNewPrevHash` で先行通知する運用や、
+セッション途中の vardiff 難易度変更には一切追従できない。
+
+**実装を見送った理由:** `SetNewPrevHash` を仕様通り正しく実装するには
+`NewMiningJob` の `future_job` フラグとジョブキャッシュ（プールが
+`job_id` で以前送信済みの future job を参照する仕組み）まで含む、
+単なる新規メッセージ型の追加以上の挙動変更が必要になる。実機の V2 プールで
+検証できない環境でシェアの正当性に関わるプロトコル挙動を実装するのはリスクが
+高いと判断し、session 232（ASIC 検出）と同じ方針——正直な文書化を
+「要件定義」段階の入力として残し、実装は将来の適切なレビューを経たセッションに
+委ねる——を踏襲した。
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: 項目9を V1 の `clean_jobs`（✅、正確な記述に修正）
+  と V2 の `SetNewPrevHash`（🔵、未対応と明記）に分離。項目2に `SetTarget`
+  自体が未デコードである旨の注記を追加。
+
+コード変更なし（文書のみ）。全 24 パッケージ green（影響なし、CI メトリクスガード含め
+念のため確認済み）。
+
 ### Docs (session 232 — ソクラテス式問答法で過不足の機能を検証: ASIC ハードウェア検出が製品定義に反して一切実装されていない未開示の欠落を発見)
 
 「ソクラテス式問答法で過不足の機能を考える」という指示に基づき、製品の不変の定義
