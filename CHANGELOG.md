@@ -10,6 +10,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 234 — ソクラテス式問答法で過不足の機能を再検証: `CLAUDE.md` アーキテクチャマップ自体の記述が実装から乖離していた5箇所を修正)
+
+session 232・233 に続き、今回は検証対象を製品コードから一段引いて、
+**プロジェクト自身の運用文書 `CLAUDE.md` のアーキテクチャマップ**に向けた。
+「このマップに書かれている具体的な数値・ファイル名は、実際にリポジトリを
+`ls`/`grep` すれば検証できる——本当に一致しているか？」という問いを立て、
+記載されている個々の項目を実物と突き合わせた。
+
+**発見（5件、すべて CLAUDE.md 自身の記述の陳腐化——コードのバグではない）:**
+1. `doctor/` — 「6 並行ヘルスチェック」と記載も、`internal/doctor/checks.go`
+   の `func check*` は実際には **17個**。並行実行（goroutine + WaitGroup）
+   という性質の記述自体は正確だが、個数だけ大きく乖離していた。
+2. `docs/adr/` — 「ADR-001〜005」と記載も、実際には **ADR-001〜011** の
+   11本が存在（`ls docs/adr/`で確認）。
+3. `.github/workflows/` — 「ci.yml / release.yml / fuzz.yml / benchmark.yml」
+   と記載も、実際のファイルは `ci.yml, ci-cd.yml, code-review.yml,
+   deploy.yml, release.yml, security.yml, test.yml` の7本。`fuzz.yml`/
+   `benchmark.yml` という単体ファイルはなく、fuzz/benchmark 相当の処理は
+   `ci.yml`/`test.yml` に統合されていた（機能自体は存在、ファイル構成のみ
+   刷新されドキュメントが追従していなかった）。
+4. `poolproto/` — ネストされた項目として `stratumv1/` のみ記載されていたが、
+   `stratumv2/` サブディレクトリも実在（`ls -d internal/poolproto/*/` で確認）。
+5. `clock/` — 「FakeClock でテスト可能」と記載も、実際の型名は `clock.Fake`
+   （`NewFake` で構築）。
+6. `cmd/otedama/` — サブコマンド一覧「run/version/config/service/doctor」に
+   `completion`（シェル補完生成、`main.go` の switch で実際にディスパッチ
+   されている実在のトップレベルサブコマンド）が漏れていた。
+
+一方、`i18n/messages/`「10 言語」、`provider/`「単数形」、`skills/` の
+4ファイル、`metrics/`「外部依存ゼロ」、`logger/`「atomic.Pointer」は
+いずれも実装と正確に一致していることを確認した——過不足の指摘は
+検証した箇所全てに機械的に適用したものであり、実際に乖離していた
+5箇所のみを修正している。
+
+`CLAUDE.md` はこのセッションが従うべき運用書であり、将来のセッション
+（本セッション自身を含む）が「このパスは存在しない」「この構造で正しい」
+と誤って判断する土台になり得るため、内容の正確性は他のドキュメントと
+同等以上に重要と判断し修正した。原則・禁止事項・ワークフロー等の
+方針的記述には一切手を加えていない——検証可能な事実（ファイル名・
+個数・型名）のみを対象とした。
+
+コード変更なし（`CLAUDE.md` のアーキテクチャマップのみ）。全 24 パッケージ
+green（影響なし、念のため確認済み）。
+
 ### Docs (session 233 — ソクラテス式問答法で過不足の機能を再検証: `docs/RESEARCH_IMPROVEMENTS.md` の ✅ チェックが V1/V2 を混同し、V2 の `SetNewPrevHash`/`SetTarget` 未実装を過大に「対応済み」と誤認させる記載を修正)
 
 session 232 に続き、製品の核となる識別子の後半「Stratum V2 準拠」を自問自答形式で
