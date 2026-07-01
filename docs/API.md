@@ -29,6 +29,7 @@ otedama run [flags]
 | `--log-file` | string | (empty) | Append structured logs to this file. Written even under the TUI, so it provides an audit trail the dashboard otherwise hides. Created `0600`. |
 | `--no-tui` | bool | `false` | Disable the terminal dashboard. |
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
+| `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
 | `--dry-run` | bool | `false` | Validate configuration and exit without mining. |
 
@@ -197,6 +198,7 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LOG_FORMAT` | `--log-format` | |
 | `OTEDAMA_LANGUAGE` | `--language` | |
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
+| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
 
 ---

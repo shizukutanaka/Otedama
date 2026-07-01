@@ -85,6 +85,15 @@ type Options struct {
 	// If empty, wallet initialisation is skipped.
 	WalletPassphrase string
 
+	// WalletMnemonicPassphrase is the optional BIP-39 "25th word" passphrase
+	// applied only when a NEW wallet is created (first run). It is a
+	// distinct secret from WalletPassphrase: WalletPassphrase encrypts the
+	// seed at rest, while this changes which seed the mnemonic derives to
+	// in the first place. See lightning.WithMnemonicPassphrase. Has no
+	// effect when loading an existing wallet.dat — the passphrase is
+	// already folded into the seed stored there.
+	WalletMnemonicPassphrase string
+
 	// Metrics, if set, receives runtime metrics (hashrate, shares, pool
 	// latency, arbitration switches). Nil disables metrics emission.
 	Metrics *metrics.Registry

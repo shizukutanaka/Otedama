@@ -30,14 +30,15 @@ import (
 // config without starting the engine.
 type runFlags struct {
 	config.FlagValues
-	configFile       string
-	dryRun           bool
-	noTUI            bool
-	walletPassphrase string
-	pprofEnabled     bool
-	logFile          string // --log-file: audit-trail path, written even under the TUI
-	showOrigin       bool   // --origin: annotate config show output with value sources
-	jsonOut          bool   // --json: emit config show output as JSON
+	configFile               string
+	dryRun                   bool
+	noTUI                    bool
+	walletPassphrase         string
+	walletMnemonicPassphrase string
+	pprofEnabled             bool
+	logFile                  string // --log-file: audit-trail path, written even under the TUI
+	showOrigin               bool   // --origin: annotate config show output with value sources
+	jsonOut                  bool   // --json: emit config show output as JSON
 }
 
 func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
@@ -53,6 +54,11 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	fs.BoolVar(&f.noTUI, "no-tui", false, "Disable the terminal dashboard (plain log output).")
 	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
 		"Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
+	fs.StringVar(&f.walletMnemonicPassphrase, "wallet-mnemonic-passphrase", "",
+		"Optional BIP-39 \"25th word\" passphrase, applied only when a new wallet is "+
+			"created. Distinct from --wallet-passphrase (which encrypts the seed at "+
+			"rest); this changes which seed the recovery mnemonic derives to. Not "+
+			"needed again after first run — it is already folded into wallet.dat.")
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.logFile, "log-file", "",
 		"Append structured logs to this file. Written even while the TUI is active, "+
@@ -71,25 +77,29 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	return f, nil
 }
 
-// applyRunEnvFallbacks fills walletPassphrase from OTEDAMA_WALLET_PASSPHRASE
-// when the --wallet-passphrase flag was left at its empty default.
+// applyRunEnvFallbacks fills walletPassphrase and walletMnemonicPassphrase
+// from their OTEDAMA_* environment variables when the corresponding flag
+// was left at its empty default.
 //
 // Every other run flag is a field of config.FlagValues and gets OTEDAMA_*
-// env var support for free through config.Resolve. walletPassphrase is a
-// CLI-only field of runFlags — deliberately kept out of config.Config so a
+// env var support for free through config.Resolve. Both wallet secrets are
+// CLI-only fields of runFlags — deliberately kept out of config.Config so a
 // secret never round-trips through `config show` or gets written to
-// config.yaml — so it never went through that wiring, even though
-// docs/API.md has long documented OTEDAMA_WALLET_PASSPHRASE ("preferred over
-// flag in production — flag is visible in process lists") and doctor's
-// "no wallet found" hint tells operators to set it. The variable was never
-// actually read, so following that documented, security-recommended path
-// silently did nothing.
+// config.yaml — so they need this explicit fallback instead. (For
+// walletPassphrase specifically, docs/API.md had long documented
+// OTEDAMA_WALLET_PASSPHRASE as "preferred over flag in production — flag is
+// visible in process lists" and doctor's "no wallet found" hint told
+// operators to set it, but no code ever read it until this fallback was
+// added.)
 //
 // A flag explicitly set on the command line always wins over the env var,
 // matching the "flags > env vars" precedence documented in docs/API.md.
 func applyRunEnvFallbacks(f *runFlags) {
 	if f.walletPassphrase == "" {
 		f.walletPassphrase = os.Getenv("OTEDAMA_WALLET_PASSPHRASE")
+	}
+	if f.walletMnemonicPassphrase == "" {
+		f.walletMnemonicPassphrase = os.Getenv("OTEDAMA_WALLET_MNEMONIC_PASSPHRASE")
 	}
 }
 
@@ -167,13 +177,14 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if err := engine.Run(ctx, engine.Options{
-		Config:           cfg,
-		Output:           stdout,
-		NoTUI:            f.noTUI,
-		WalletPassphrase: f.walletPassphrase,
-		Logger:           structlog.Adapter(),
-		Metrics:          metricsRegistry,
-		OnReady:          onReady,
+		Config:                   cfg,
+		Output:                   stdout,
+		NoTUI:                    f.noTUI,
+		WalletPassphrase:         f.walletPassphrase,
+		WalletMnemonicPassphrase: f.walletMnemonicPassphrase,
+		Logger:                   structlog.Adapter(),
+		Metrics:                  metricsRegistry,
+		OnReady:                  onReady,
 	}); err != nil && err != context.Canceled {
 		structlog.Error("engine", "error", err.Error())
 		plain("error", err.Error())

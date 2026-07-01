@@ -130,6 +130,116 @@ func TestWalletManager_Reload_ReturnsSameSeed(t *testing.T) {
 	}
 }
 
+// ----- WithMnemonicPassphrase (BIP-39 "25th word") -----
+//
+// docs/RESEARCH_IMPROVEMENTS.md Category 3 #5 flagged this as unverified:
+// MnemonicToSeed already accepted an optional passphrase, but the only
+// caller (createNew) hardcoded "" — the capability existed but was
+// unreachable. These tests pin the fix: the option changes the derived
+// seed, every pre-existing (no-option) call keeps its original behaviour,
+// and the passphrase only matters at creation (it's baked into the stored
+// seed, not needed again on reload).
+
+func TestNewWalletManager_WithMnemonicPassphrase_ChangesDerivedSeed(t *testing.T) {
+	wl := testWL(t)
+	const entropySeed = 0x42 // same byte for both readers: identical entropy/mnemonic
+
+	dirPlain := t.TempDir()
+	wmPlain, err := NewWalletManager(dirPlain, "unlock-pass", deterministicReader(entropySeed), wl)
+	if err != nil {
+		t.Fatalf("create (no mnemonic passphrase): %v", err)
+	}
+
+	dirWithPass := t.TempDir()
+	wmWithPass, err := NewWalletManager(dirWithPass, "unlock-pass", deterministicReader(entropySeed), wl,
+		WithMnemonicPassphrase("my 25th word"))
+	if err != nil {
+		t.Fatalf("create (with mnemonic passphrase): %v", err)
+	}
+
+	// Same entropy reader byte -> same mnemonic -> but the passphrase must
+	// still produce a different derived seed (the whole point of the
+	// BIP-39 25th-word feature).
+	if wmPlain.Mnemonic().String() != wmWithPass.Mnemonic().String() {
+		t.Fatalf("test setup invalid: mnemonics differ (%q vs %q); entropy readers were not equivalent",
+			wmPlain.Mnemonic().String(), wmWithPass.Mnemonic().String())
+	}
+	if wmPlain.Seed() == wmWithPass.Seed() {
+		t.Error("Seed() identical with and without WithMnemonicPassphrase; option had no effect")
+	}
+}
+
+func TestNewWalletManager_WithMnemonicPassphrase_MatchesDirectMnemonicToSeed(t *testing.T) {
+	// The derived seed must be exactly MnemonicToSeed(mnemonic, passphrase)
+	// — not some other transformation — so recovery tooling that knows the
+	// mnemonic and the 25th word can reproduce the seed independently.
+	wl := testWL(t)
+	dir := t.TempDir()
+	const mnemonicPassphrase = "correct horse battery staple"
+
+	wm, err := NewWalletManager(dir, "unlock-pass", deterministicReader(0x77), wl,
+		WithMnemonicPassphrase(mnemonicPassphrase))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	want := MnemonicToSeed(wm.Mnemonic(), mnemonicPassphrase)
+	if wm.Seed() != want {
+		t.Error("Seed() does not match MnemonicToSeed(mnemonic, mnemonicPassphrase)")
+	}
+}
+
+func TestNewWalletManager_NoMnemonicPassphraseOption_MatchesEmptyPassphraseDerivation(t *testing.T) {
+	// Omitting WithMnemonicPassphrase must be identical to explicitly
+	// passing WithMnemonicPassphrase("") — the empty-string default that
+	// every pre-existing caller of NewWalletManager relies on.
+	wl := testWL(t)
+	const entropySeed = 0x99
+
+	dirImplicit := t.TempDir()
+	wmImplicit, err := NewWalletManager(dirImplicit, "p", deterministicReader(entropySeed), wl)
+	if err != nil {
+		t.Fatalf("create (implicit empty): %v", err)
+	}
+
+	dirExplicit := t.TempDir()
+	wmExplicit, err := NewWalletManager(dirExplicit, "p", deterministicReader(entropySeed), wl,
+		WithMnemonicPassphrase(""))
+	if err != nil {
+		t.Fatalf("create (explicit empty): %v", err)
+	}
+
+	if wmImplicit.Seed() != wmExplicit.Seed() {
+		t.Error("omitting WithMnemonicPassphrase differs from WithMnemonicPassphrase(\"\")")
+	}
+}
+
+func TestNewWalletManager_MnemonicPassphrase_NotNeededOnReload(t *testing.T) {
+	// The mnemonic passphrase is folded into the seed at creation time and
+	// only the resulting Seed (never the mnemonic) is persisted to
+	// wallet.dat, so reloading WITHOUT the option must still recover the
+	// exact same seed that was derived WITH it at creation.
+	wl := testWL(t)
+	dir := t.TempDir()
+
+	wmCreate, err := NewWalletManager(dir, "unlock-pass", deterministicReader(0x55), wl,
+		WithMnemonicPassphrase("recovery-only secret"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	originalSeed := wmCreate.Seed()
+
+	// Reload with no WithMnemonicPassphrase option at all.
+	wmReload, err := NewWalletManager(dir, "unlock-pass", deterministicReader(0xAA), wl)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+
+	if wmReload.Seed() != originalSeed {
+		t.Error("reload without WithMnemonicPassphrase produced a different seed than creation with it")
+	}
+}
+
 // ----- Wrong passphrase -----
 
 func TestWalletManager_WrongPassphrase(t *testing.T) {

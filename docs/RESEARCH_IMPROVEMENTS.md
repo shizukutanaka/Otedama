@@ -89,8 +89,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 2. ✅ **Encrypted seed at rest** (scrypt + AES-GCM, seedstore.go).
 3. ✅ **Receive-only by design** — never holds spending keys for others.
 4. 🔵 **BOLT12 offers for payouts** — ADR-007 B1.
-5. 🟡 **BIP-39 passphrase (25th word) support** — standard hardening; verify
-   whether the current seed derivation accepts an optional passphrase.
+5. ✅ **BIP-39 passphrase (25th word) support** (session 230) — verification
+   found `MnemonicToSeed` already accepted an optional passphrase, but the
+   only caller (`createNew`) hardcoded `""`: the capability existed but was
+   unreachable. Added `lightning.WithMnemonicPassphrase` (a functional
+   option on `NewWalletManager`, so none of the ~35 existing call sites
+   needed to change) and wired `--wallet-mnemonic-passphrase` /
+   `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` through `engine.Options` down to it.
+   Distinct secret from the at-rest encryption passphrase; only consulted
+   at first-run creation, since the derived seed (not the mnemonic) is what
+   `wallet.dat` stores.
 6. ✅ **Wallet fingerprint display for verification** (session 110) —
    `doctor` now checks `wallet.dat` existence and reads `wallet.fingerprint`
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify

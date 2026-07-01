@@ -10,6 +10,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 230 — 次のステップ: `docs/RESEARCH_IMPROVEMENTS.md` Category 3 #5「BIP-39 passphrase (25th word) support」を実装)
+
+これまでのセッション（225–229）は監査で見つかったバグ修正が中心だったが、本セッションは
+「次のステップを考えて実装を続ける」という指示に基づき、既存のリサーチバックログから
+具体的に実装可能な機能を選定した。`docs/RESEARCH_IMPROVEMENTS.md` Category 3 #5 は
+「標準的なハードニング機能；現在のシード導出がオプションのパスフレーズを受け付けるか
+要検証」という 🟡（未着手）項目だった。調査の結果、`lightning.MnemonicToSeed(m, passphrase)`
+はすでに BIP-39 標準の「25番目の単語」パスフレーズをサポートしていたが、唯一の呼び出し元
+`createNew` が `""` を決め打ちで渡しており、機能自体は存在するのに到達不可能だった。
+
+このパスフレーズは `wallet.dat` を暗号化する `WalletPassphrase`（既存の
+`--wallet-passphrase`）とは全く別の秘密であることに注意——後者は「保存時の暗号化キー」、
+前者は「ニーモニックがどのシードに導出されるかを変える」BIP-39 標準機能で、間違った
+25番目の単語を入力すると（エラーにならず）別の有効に見える「おとりウォレット」が
+導出される、という BIP-39 の文書化された挙動を持つ。
+
+- `internal/lightning/wallet.go`: `WalletOption`（関数オプション型）と
+  `WithMnemonicPassphrase(string) WalletOption` を追加。`NewWalletManager` の
+  シグネチャを可変長オプション引数 `opts ...WalletOption` で拡張——既存の
+  呼び出し箇所（本体・テスト合わせて約35箇所）は一切変更不要、完全後方互換。
+  `createNew` がパスフレーズを `MnemonicToSeed` に渡すよう修正。
+  新規ウォレット作成時にのみ意味を持ち、既存ウォレットの再読み込みでは不要
+  （導出されたシードそのもの——ニーモニックではなく——が `wallet.dat` に
+  保存されるため）。
+- `internal/engine/run.go`: `Options.WalletMnemonicPassphrase` を追加。
+- `internal/engine/setup.go`: `setupWallet` が `lightning.WithMnemonicPassphrase`
+  を渡すように更新。
+- `cmd/otedama/run.go`: `--wallet-mnemonic-passphrase` フラグと
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` 環境変数（`applyRunEnvFallbacks` 経由、
+  `--wallet-passphrase` と同じ CLI 専用パターン——秘密情報は `config.yaml`/
+  `config show` を経由させない）を追加。
+- `docs/API.md`: フラグ表・環境変数表に追加。
+- `docs/RESEARCH_IMPROVEMENTS.md`: Category 3 #5 を ✅ に更新。
+
+テスト追加（10 件）:
+- `internal/lightning/wallet_test.go`: 同一エントロピーで有無比較しシードが変わることを
+  確認する `TestNewWalletManager_WithMnemonicPassphrase_ChangesDerivedSeed`、
+  直接 `MnemonicToSeed` 呼び出しと一致することを確認する
+  `..._MatchesDirectMnemonicToSeed`、オプション省略と空文字列指定が同一であることを
+  確認する `..._NoMnemonicPassphraseOption_MatchesEmptyPassphraseDerivation`、
+  作成時のみ必要でリロード時は不要であることを確認する
+  `..._MnemonicPassphrase_NotNeededOnReload`（4 テスト）。
+- `internal/lightning/coverage_test.go`: 既存 2 箇所の `createNew` 呼び出しをシグネチャ
+  変更に追従。
+- `cmd/otedama/main_test.go`: フラグ・env var の 4 テスト + 統合テスト 1 件。
+
+全 24 パッケージ green。`go vet`/`gofmt` clean。新規依存なし（既存の
+`crypto/pbkdf2`/`crypto/sha512` のみ使用、ADR-003 準拠）。
+
 ### Fixed (session 229 — 製品強弱点監査: `docs/API.md` の設定例が `pools[].priority` / `workers:` リスト形式という存在しないスキーマを記載し、コピーすると設定ファイル全体が無効化される問題、および `otedama service status` が Windows で常に失敗する問題、`docs/DEPLOYMENT.md` の実在しないメトリクス名を修正)
 
 製品の長所・短所・改善点の監査を継続。バックグラウンド監査エージェントを1体並行起動し、

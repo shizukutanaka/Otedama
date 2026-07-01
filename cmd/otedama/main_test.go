@@ -148,6 +148,20 @@ func TestRun_WalletPassphraseFlag(t *testing.T) {
 	}
 }
 
+func TestRun_WalletMnemonicPassphraseFlag(t *testing.T) {
+	var out, err bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--wallet-passphrase", "test-passphrase",
+		"--wallet-mnemonic-passphrase", "my 25th word",
+		"--dry-run",
+	}, &out, &err)
+	if code != exitOK {
+		t.Errorf("code=%d err=%s", code, err.String())
+	}
+}
+
 // ----- applyRunEnvFallbacks -----
 //
 // docs/API.md and doctor's "no wallet found" hint have long documented
@@ -187,6 +201,24 @@ func TestApplyRunEnvFallbacks_NoEnvSet_LeavesFieldEmpty(t *testing.T) {
 	applyRunEnvFallbacks(&f)
 	if f.walletPassphrase != "" {
 		t.Errorf("walletPassphrase = %q, want empty", f.walletPassphrase)
+	}
+}
+
+func TestApplyRunEnvFallbacks_WalletMnemonicPassphrase_FromEnvWhenFlagEmpty(t *testing.T) {
+	t.Setenv("OTEDAMA_WALLET_MNEMONIC_PASSPHRASE", "from-env-25th-word")
+	f := runFlags{}
+	applyRunEnvFallbacks(&f)
+	if f.walletMnemonicPassphrase != "from-env-25th-word" {
+		t.Errorf("walletMnemonicPassphrase = %q, want %q", f.walletMnemonicPassphrase, "from-env-25th-word")
+	}
+}
+
+func TestApplyRunEnvFallbacks_WalletMnemonicPassphrase_FlagWinsOverEnv(t *testing.T) {
+	t.Setenv("OTEDAMA_WALLET_MNEMONIC_PASSPHRASE", "from-env")
+	f := runFlags{walletMnemonicPassphrase: "from-flag"}
+	applyRunEnvFallbacks(&f)
+	if f.walletMnemonicPassphrase != "from-flag" {
+		t.Errorf("walletMnemonicPassphrase = %q, want %q (flag must win over env)", f.walletMnemonicPassphrase, "from-flag")
 	}
 }
 

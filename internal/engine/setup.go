@@ -123,7 +123,8 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 		return ""
 	}
 	wm, err := lightning.NewWalletManager(
-		opts.Config.DataDir, opts.WalletPassphrase, nil, wl)
+		opts.Config.DataDir, opts.WalletPassphrase, nil, wl,
+		lightning.WithMnemonicPassphrase(opts.WalletMnemonicPassphrase))
 	if err != nil {
 		log("warn", fmt.Sprintf("wallet: %v", err))
 		return ""

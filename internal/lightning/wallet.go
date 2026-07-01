@@ -55,6 +55,36 @@ const walletFile = "wallet.dat"
 // fingerprintFile stores the public fingerprint for UI use.
 const fingerprintFile = "wallet.fingerprint"
 
+// WalletOption configures optional NewWalletManager creation behaviour.
+// The zero value of every option's effect is the pre-existing behaviour,
+// so adding a new WalletOption never requires touching an existing call.
+type WalletOption func(*walletOptions)
+
+type walletOptions struct {
+	mnemonicPassphrase string
+}
+
+// WithMnemonicPassphrase sets the optional BIP-39 "25th word" passphrase
+// used when CREATING a new wallet (first run only; it has no effect when
+// loading an existing wallet.dat).
+//
+// This is a distinct secret from NewWalletManager's passphrase argument,
+// which encrypts the seed at rest. WithMnemonicPassphrase instead changes
+// which seed the mnemonic derives to in the first place (MnemonicToSeed):
+// entering the wrong mnemonic passphrase during recovery silently produces
+// a different, valid-looking seed rather than an error — the BIP-39 "decoy
+// wallet" property. Because that derivation happens once at creation and
+// only the resulting Seed (never the mnemonic) is written to wallet.dat,
+// this option does not need to be supplied again on subsequent runs: the
+// passphrase is already folded into the encrypted seed on disk.
+//
+// The empty string (the default when this option is not passed) reproduces
+// the original derivation with no additional passphrase, so every existing
+// caller is unaffected.
+func WithMnemonicPassphrase(p string) WalletOption {
+	return func(o *walletOptions) { o.mnemonicPassphrase = p }
+}
+
 // NewWalletManager initialises the wallet subsystem.
 //
 // If wallet.dat exists in dataDir, it is decrypted using passphrase
@@ -68,7 +98,9 @@ const fingerprintFile = "wallet.fingerprint"
 // wordList must be a valid 2048-word BIP-39 list. For the English list,
 // call NewEnglishWordList() from this package. Passing nil returns an
 // error.
-func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *WordList) (*WalletManager, error) {
+//
+// opts configures optional creation behaviour; see WithMnemonicPassphrase.
+func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *WordList, opts ...WalletOption) (*WalletManager, error) {
 	if dataDir == "" {
 		return nil, errors.New("lightning: dataDir must not be empty")
 	}
@@ -81,6 +113,10 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 	if reader == nil {
 		reader = rand.Reader
 	}
+	var wo walletOptions
+	for _, opt := range opts {
+		opt(&wo)
+	}
 
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return nil, fmt.Errorf("lightning: create data dir %q: %w", dataDir, err)
@@ -92,7 +128,7 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 	_, err := os.Stat(walletPath)
 	if os.IsNotExist(err) {
 		// First run: generate a new seed.
-		if err := wm.createNew(passphrase, reader); err != nil {
+		if err := wm.createNew(passphrase, wo.mnemonicPassphrase, reader); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
@@ -129,7 +165,9 @@ func (wm *WalletManager) Mnemonic() Mnemonic { return wm.mnemonic }
 func (wm *WalletManager) IsNew() bool { return wm.mnemonic != nil }
 
 // createNew generates a new seed, encrypts it, and saves it to disk.
-func (wm *WalletManager) createNew(passphrase string, reader io.Reader) error {
+// mnemonicPassphrase is the optional BIP-39 "25th word" (see
+// WithMnemonicPassphrase); pass "" for the standard derivation.
+func (wm *WalletManager) createNew(passphrase, mnemonicPassphrase string, reader io.Reader) error {
 	entropy, err := GenerateEntropy(DefaultEntropyBits, reader)
 	if err != nil {
 		return fmt.Errorf("lightning: generate entropy: %w", err)
@@ -140,7 +178,7 @@ func (wm *WalletManager) createNew(passphrase string, reader io.Reader) error {
 		return fmt.Errorf("lightning: entropy to mnemonic: %w", err)
 	}
 
-	seed := MnemonicToSeed(mnemonic, "")
+	seed := MnemonicToSeed(mnemonic, mnemonicPassphrase)
 	wm.seed = seed
 	wm.mnemonic = mnemonic
 

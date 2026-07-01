@@ -196,7 +196,7 @@ func TestCreateNew_EncryptSeedError(t *testing.T) {
 	dir := t.TempDir()
 	wm := &WalletManager{dataDir: dir, wordList: testWL(t)} // testWL from wallet_test.go
 	r := &failAfterNReader{remaining: 32}
-	if err := wm.createNew("passphrase", r); err == nil {
+	if err := wm.createNew("passphrase", "", r); err == nil {
 		t.Error("createNew: expected error when EncryptSeed reader is exhausted")
 	}
 }
@@ -232,7 +232,7 @@ func TestCreateNew_EntropyToMnemonicError(t *testing.T) {
 	wm := &WalletManager{dataDir: dir, wordList: tinyWL}
 	// 64 bytes: 32 for GenerateEntropy, remainder never consumed (fails before save)
 	r := &failAfterNReader{remaining: 64}
-	if err := wm.createNew("passphrase", r); err == nil {
+	if err := wm.createNew("passphrase", "", r); err == nil {
 		t.Error("createNew: expected error when EntropyToMnemonic fails (wordlist too small)")
 	}
 }
