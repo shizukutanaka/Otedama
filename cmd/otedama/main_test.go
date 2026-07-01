@@ -148,6 +148,83 @@ func TestRun_WalletPassphraseFlag(t *testing.T) {
 	}
 }
 
+// ----- applyRunEnvFallbacks -----
+//
+// docs/API.md and doctor's "no wallet found" hint have long documented
+// OTEDAMA_WALLET_PASSPHRASE and OTEDAMA_HTTP_ADDR as valid configuration
+// sources, but no code ever read them: walletPassphrase and httpAddr are
+// CLI-only runFlags fields, not part of config.FlagValues, so they never
+// got the OTEDAMA_* env var wiring every other flag gets for free via
+// config.Resolve. These tests pin the fix.
+
+func TestApplyRunEnvFallbacks_WalletPassphrase_FromEnvWhenFlagEmpty(t *testing.T) {
+	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "from-env")
+	f := runFlags{}
+	applyRunEnvFallbacks(&f)
+	if f.walletPassphrase != "from-env" {
+		t.Errorf("walletPassphrase = %q, want %q", f.walletPassphrase, "from-env")
+	}
+}
+
+func TestApplyRunEnvFallbacks_WalletPassphrase_FlagWinsOverEnv(t *testing.T) {
+	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "from-env")
+	f := runFlags{walletPassphrase: "from-flag"}
+	applyRunEnvFallbacks(&f)
+	if f.walletPassphrase != "from-flag" {
+		t.Errorf("walletPassphrase = %q, want %q (flag must win over env)", f.walletPassphrase, "from-flag")
+	}
+}
+
+func TestApplyRunEnvFallbacks_HTTPAddr_FromEnvWhenFlagEmpty(t *testing.T) {
+	t.Setenv("OTEDAMA_HTTP_ADDR", "127.0.0.1:9090")
+	f := runFlags{}
+	applyRunEnvFallbacks(&f)
+	if f.httpAddr != "127.0.0.1:9090" {
+		t.Errorf("httpAddr = %q, want %q", f.httpAddr, "127.0.0.1:9090")
+	}
+}
+
+func TestApplyRunEnvFallbacks_HTTPAddr_FlagWinsOverEnv(t *testing.T) {
+	t.Setenv("OTEDAMA_HTTP_ADDR", "127.0.0.1:9090")
+	f := runFlags{httpAddr: "0.0.0.0:8080"}
+	applyRunEnvFallbacks(&f)
+	if f.httpAddr != "0.0.0.0:8080" {
+		t.Errorf("httpAddr = %q, want %q (flag must win over env)", f.httpAddr, "0.0.0.0:8080")
+	}
+}
+
+func TestApplyRunEnvFallbacks_NoEnvSet_LeavesFieldsEmpty(t *testing.T) {
+	// os.Getenv returns "" for both "unset" and "set to empty string", so
+	// setting both vars to "" here exercises the same fallback branch as a
+	// genuinely unset environment while still isolating this test from any
+	// value the surrounding OS environment happens to have.
+	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "")
+	t.Setenv("OTEDAMA_HTTP_ADDR", "")
+	f := runFlags{}
+	applyRunEnvFallbacks(&f)
+	if f.walletPassphrase != "" {
+		t.Errorf("walletPassphrase = %q, want empty", f.walletPassphrase)
+	}
+	if f.httpAddr != "" {
+		t.Errorf("httpAddr = %q, want empty", f.httpAddr)
+	}
+}
+
+func TestRun_WalletPassphraseFromEnv_Integration(t *testing.T) {
+	// End-to-end through run(): the env var alone (no flag) must not be
+	// rejected or ignored by flag parsing.
+	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "test-passphrase-from-env")
+	var out, err bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--dry-run",
+	}, &out, &err)
+	if code != exitOK {
+		t.Errorf("code=%d err=%s", code, err.String())
+	}
+}
+
 func TestRun_NoTUIFlag(t *testing.T) {
 	var out, err bytes.Buffer
 	code := run([]string{

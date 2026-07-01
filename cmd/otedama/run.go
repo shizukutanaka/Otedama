@@ -72,11 +72,38 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	return f, nil
 }
 
+// applyRunEnvFallbacks fills walletPassphrase and httpAddr from their
+// documented environment variables when the corresponding flag was left at
+// its empty default.
+//
+// Every other run flag is a field of config.FlagValues and gets OTEDAMA_*
+// env var support for free through config.Resolve. walletPassphrase and
+// httpAddr are CLI-only fields of runFlags (kept out of config.Config so a
+// secret never round-trips through `config show`, and so an HTTP bind
+// address isn't persisted to config.yaml), so they never went through that
+// wiring — even though docs/API.md has long documented OTEDAMA_WALLET_PASSPHRASE
+// ("preferred over flag in production") and OTEDAMA_HTTP_ADDR as valid
+// sources, and doctor's "no wallet found" hint tells operators to set
+// OTEDAMA_WALLET_PASSPHRASE. Neither variable was ever read, so following
+// that documented, security-recommended path silently did nothing.
+//
+// A flag explicitly set on the command line always wins over the env var,
+// matching the "flags > env vars" precedence documented in docs/API.md.
+func applyRunEnvFallbacks(f *runFlags) {
+	if f.walletPassphrase == "" {
+		f.walletPassphrase = os.Getenv("OTEDAMA_WALLET_PASSPHRASE")
+	}
+	if f.httpAddr == "" {
+		f.httpAddr = os.Getenv("OTEDAMA_HTTP_ADDR")
+	}
+}
+
 func cmdRun(args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags(args, stderr)
 	if err != nil {
 		return exitUsage
 	}
+	applyRunEnvFallbacks(&f)
 
 	fromFile := loadConfigFile(f.configFile, stderr)
 	// Surface env vars that were set but could not be parsed: they are

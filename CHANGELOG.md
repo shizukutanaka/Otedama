@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 227 — 製品強弱点監査: ドキュメント記載済みの `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_HTTP_ADDR` 環境変数が実際には一切読まれていなかった問題を修正)
+
+製品の長所・短所・改善点の監査を継続した。`docs/API.md` は「設定の優先順位: フラグ >
+環境変数 (`OTEDAMA_*`) > 設定ファイル > デフォルト」と明記し、環境変数一覧に
+`OTEDAMA_WALLET_PASSPHRASE`（「本番環境ではフラグより推奨——フラグはプロセス一覧に
+露出するため」との注記付き）と `OTEDAMA_HTTP_ADDR` を掲載していた。`internal/doctor`
+の「no wallet found」ヒントも「`OTEDAMA_WALLET_PASSPHRASE` で次回起動時にウォレットを
+作成」と案内していた。
+
+しかし実際のコードを追跡すると、**この 2 つの環境変数を読むコードがどこにも存在しな
+かった**。`--bitcoin-address` `--data-dir` `--log-level` 等の他のフラグは
+`config.FlagValues`/`config.Config` の一部であり `config.Resolve` 経由で自動的に
+`OTEDAMA_*` 環境変数のサポートを得ていたが、`walletPassphrase` と `httpAddr` は
+`cmd/otedama/run.go` の `runFlags` 構造体だけが持つ CLI 専用フィールドで、この配線から
+漏れていた。結果として、ドキュメントが「本番環境で推奨」と明言するセキュリティ上の
+設定経路（環境変数——プロセス一覧に平文で見えるコマンドライン引数を避ける）が、
+サイレントに何の効果も持たない状態だった。ウォレット作成を意図してこの環境変数のみを
+設定した運用者は、フラグが未設定のままなのでウォレットが一切作成されないにもかかわらず、
+設定できたと誤認する。
+
+- `cmd/otedama/run.go`: `applyRunEnvFallbacks(f *runFlags)` を新設。
+  `walletPassphrase`/`httpAddr` がフラグ未指定（空文字）の場合のみ、それぞれ
+  `OTEDAMA_WALLET_PASSPHRASE`/`OTEDAMA_HTTP_ADDR` にフォールバックする。
+  フラグが明示指定されている場合は常にフラグが優先（ドキュメント記載の優先順位と一致）。
+  `cmdRun` の冒頭、`parseRunFlags` 直後で呼び出す。
+- `internal/doctor/checks.go`: 「no wallet found」ヒントから、対応する設定手段が
+  存在しない誤った案内（`config.yaml` にも設定可能、という記載——`wallet_passphrase`
+  は `config.Config` に一切存在しない）を削除し、実際に機能する 2 経路
+  （`--wallet-passphrase` フラグ / `OTEDAMA_WALLET_PASSPHRASE` 環境変数）のみを案内。
+
+テスト追加 (`cmd/otedama/main_test.go`):
+- `TestApplyRunEnvFallbacks_WalletPassphrase_FromEnvWhenFlagEmpty` /
+  `TestApplyRunEnvFallbacks_WalletPassphrase_FlagWinsOverEnv`
+- `TestApplyRunEnvFallbacks_HTTPAddr_FromEnvWhenFlagEmpty` /
+  `TestApplyRunEnvFallbacks_HTTPAddr_FlagWinsOverEnv`
+- `TestApplyRunEnvFallbacks_NoEnvSet_LeavesFieldsEmpty`
+- `TestRun_WalletPassphraseFromEnv_Integration`（`run()` 経由のエンドツーエンド確認）
+
+全 24 パッケージ green。`go vet`/`gofmt` clean。新規依存なし。`docs/API.md` の記載は
+変更不要（元々の記載内容が正しい仕様だったため、コード側をその仕様に合わせて修正した）。
+
 ### Fixed (session 226 — 製品強弱点監査: Stratum V1 が pool 割当 share difficulty を無視し、実質シェアを提出できない重大バグを修正)
 
 製品の長所・短所・改善点の監査を継続した。`docs/RESEARCH_IMPROVEMENTS.md` の

@@ -263,7 +263,7 @@ func checkWallet(dataDir string) Check {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,
-					Fix:    "set wallet-passphrase in config.yaml or via OTEDAMA_WALLET_PASSPHRASE to create a wallet on next run",
+					Fix:    "set --wallet-passphrase or OTEDAMA_WALLET_PASSPHRASE to create a wallet on next run",
 				}
 			} else if err != nil {
 				return Result{
