@@ -10,6 +10,77 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 229 — 製品強弱点監査: `docs/API.md` の設定例が `pools[].priority` / `workers:` リスト形式という存在しないスキーマを記載し、コピーすると設定ファイル全体が無効化される問題、および `otedama service status` が Windows で常に失敗する問題、`docs/DEPLOYMENT.md` の実在しないメトリクス名を修正)
+
+製品の長所・短所・改善点の監査を継続。バックグラウンド監査エージェントを1体並行起動し、
+`docs/API.md`・`docs/DEPLOYMENT.md`・`docs/THREAT_MODEL.md` の記載とコードを突き合わせた
+結果、session 227–228 と同系統だが独立した 3 件の齟齬を発見した。
+
+**1. `docs/API.md` のフラッグシップ設定例が実際のスキーマと一致していなかった
+（最重要 — session 228 と同じ「設定ファイル全体が無効化される」クラスのバグ）**
+
+`docs/API.md` の「Configuration file」セクションの YAML 例は:
+```yaml
+pools:
+  - url: ...
+    priority: 1        # ← PoolConfig に存在しないフィールド
+workers:
+  - name: cpu-worker   # ← Workers はリストではなく単一オブジェクト
+    device: cpu        # ← WorkerConfig に存在しないフィールド
+```
+実際に `loadConfigFile` でこの YAML をデコードすると、`priority` は未知フィールドとして
+拒否され、さらに `workers:` はリスト（`!!seq`）を単一構造体 `WorkerConfig` に代入しようと
+して型エラーになる。`dec.KnownFields(true)` の下ではどちらのエラーも文書全体のデコード
+失敗となり、`bitcoin_address` を含む全設定がデフォルト値に巻き戻る（実機で検証済み:
+修正前は `cfg.BitcoinAddress == ""`, `cfg.Pools == []` になることを確認）。
+`config.yaml.example` 自体は元から正しいスキーマ（`workers:` は単一オブジェクト、`pools`
+に `priority` なし）だったため、これは `docs/API.md` 側だけが独自に誤ったスキーマを
+記載していたことによる齟齬だった。
+
+- `docs/API.md`: 設定例を実スキーマに修正（`pools` から `priority` を削除——優先順位は
+  リスト内の並び順が決める——、`workers:` を単一オブジェクトに修正し、`device`/`threads`
+  という設定項目は存在せず SHA256d 対応デバイスは自動検出されることを明記）。
+- `cmd/otedama/config_loading_test.go`: `TestLoadConfigFile_APIMdExample_Parses` を追加
+  ——修正後の docs/API.md 記載例が実際にパースされ、`bitcoin_address`/`pools`/
+  `workers.name` すべてが正しく読み込まれることを確認する回帰テスト。
+
+**2. `otedama service status` が Windows で常に「unsupported platform」エラーになっていた**
+
+`internal/daemon/service.go` の `Install()`/`Uninstall()` は `case "windows":` を持ち
+`installWindowsService()`/`uninstallWindowsService()` を正しく呼び出すが、`Status()` には
+Windows の分岐が存在せず、`default` 節の `"unsupported platform"` エラーに落ちていた。
+`docs/API.md`/`docs/DEPLOYMENT.md` は install/uninstall/status を Windows 込みの
+3 プラットフォームで対称にサポートすると記載しており、この非対称は齟齬だった。
+
+- `internal/daemon/service.go`: `statusWindowsService()` を新設（`sc.exe query Otedama`
+  の出力を解析し `RUNNING` を検出）。`Status()` に `case "windows":` を追加。
+  `sc.exe` 自体が見つからない場合（非 Windows 環境での実行を含む）は
+  `statusLaunchd` が `launchctl` 不在時に行うのと同じ扱い——エラーではなく
+  「未インストール」として返す。
+- `internal/daemon/service_test.go`: `TestStatusWindowsService_ReturnsWithoutPanic`、
+  `TestStatusWindowsService_ScExeNotFound_ReportsNotInstalledNotError`、
+  `TestStatus_WindowsDispatch`（3 テスト）。
+
+**3. `docs/DEPLOYMENT.md` が実在しないメトリクス `otedama_pool_latency_ms` を
+メトリクス一覧とアラート例の両方に記載していた**
+
+`internal/engine/metrics.go` にはそのようなメトリクスは存在しない（実際に相当するのは
+`otedama_submit_latency_milliseconds{quantile}` または `otedama_pool_connection_state`）。
+session 207 で追加した CI ガード（`TestMetricsDocumentedInSpecification`）は
+`docs/SPECIFICATION.md` §6 と実装の整合性を検証するが、`docs/DEPLOYMENT.md` は対象外
+だったため、この齟齬は検出されずに残っていた。記載通りの `expr: otedama_pool_latency_ms
+== 0` という Prometheus アラートルールをデプロイした運用者は、存在しないメトリクスに
+対する評価が常に「データなし」となり、意図した「プール切断検知」が実質的に一度も
+発火しないサイレントな機能不全に陥る。
+
+- `docs/DEPLOYMENT.md`: メトリクス一覧から `otedama_pool_latency_ms` を削除し、実在する
+  `otedama_pool_connection_state`/`otedama_submit_latency_milliseconds{quantile}` に置換。
+  アラート例の `expr` も `otedama_pool_connection_state == 0` に修正。
+  「詳細は docs/SPECIFICATION.md §6（CI 検証済み）を参照」という注記を追加し、
+  今後 DEPLOYMENT.md 側が独自に古くなってもどちらを信頼すべきか明示。
+
+全 24 パッケージ green。`go vet`/`gofmt` clean。新規依存なし。
+
 ### Fixed (session 228 — 製品強弱点監査: `config.yaml` の `http_addr` フィールドが存在せず、記載例をそのまま使うと設定ファイル全体が無効化されるバグを修正)
 
 製品の長所・短所・改善点の監査を継続した。session 227 で `OTEDAMA_HTTP_ADDR` 環境変数を

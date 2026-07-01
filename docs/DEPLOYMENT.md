@@ -317,9 +317,16 @@ All exported metrics live under the `otedama_` prefix:
 
 - `otedama_hashrate_hashes_per_second{device}` — gauge, live hash rate
 - `otedama_shares_total{status}` — counter, shares submitted/accepted/rejected
-- `otedama_pool_latency_ms{pool}` — gauge, TCP RTT to pool
+- `otedama_pool_connection_state` — gauge, 0=disconnected, 1=connecting, 2=connected
+- `otedama_submit_latency_milliseconds{quantile}` — gauge, share submit round-trip time (p50/p95/p99)
 - `otedama_arbitration_switches_total{from,to}` — counter, workload reroutes
 - `otedama_btc_usd_rate` — gauge, current BTC/USD rate from provider consensus
+
+See docs/SPECIFICATION.md §6 for the full, CI-verified metric catalogue
+(`internal/engine.TestMetricsDocumentedInSpecification` fails the build if a
+registered metric is undocumented there). This section is a curated subset
+for dashboard/alert authors and is not itself CI-checked, so if in doubt
+trust docs/SPECIFICATION.md §6.
 
 ### Dashboards
 
@@ -338,7 +345,7 @@ Minimal alert set:
     summary: "Otedama instance {{ $labels.instance }} is down"
 
 - alert: OtedamaPoolDisconnected
-  expr: otedama_pool_latency_ms == 0
+  expr: otedama_pool_connection_state == 0
   for: 10m
   annotations:
     summary: "Otedama lost pool connection on {{ $labels.instance }}"

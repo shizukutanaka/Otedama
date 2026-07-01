@@ -154,19 +154,26 @@ language: en               # en, ja, zh, ko, es, fr, de, pt, ru, ar
 # Data directory for wallet and persistent state.
 data_dir: ~/.local/share/otedama
 
-# Mining pools (tried in order).
+# Mining pools, tried in the order listed (list position is the priority;
+# there is no separate priority field).
 pools:
   - url: stratum+v2://public.stratum.slushpool.com:3336
-    priority: 1
   - url: stratum+v2://demand.sv2.io:34254
-    priority: 2
 
-# Worker configuration.
+# Worker identification sent to pools — a single object, not a list.
+# device/threads are not config fields: Otedama auto-detects every
+# SHA256d-capable device (see internal/hal) and spawns one worker per
+# device automatically; `name` only controls how the miner identifies
+# itself to the pool.
 workers:
-  - name: cpu-worker
-    device: cpu
-    # threads defaults to runtime.NumCPU(). Set explicitly to cap CPU use.
+  name: cpu-worker
 ```
+
+The YAML decoder rejects unknown fields and a type mismatch (e.g. a list
+where a single object is expected) fails the *entire* document, not just
+the offending key — so a malformed `pools:` or `workers:` entry silently
+discards every setting in the file, including `bitcoin_address`. See
+`config.yaml.example` for the exact, decoder-verified schema.
 
 **Precedence of configuration sources** (highest wins):
 

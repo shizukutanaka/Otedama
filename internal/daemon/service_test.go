@@ -590,6 +590,51 @@ func TestUninstallWindowsService_DeleteError(t *testing.T) {
 	}
 }
 
+// ----- statusWindowsService -----
+//
+// Install/Uninstall have always dispatched "windows" through
+// installWindowsService/uninstallWindowsService; Status had no matching
+// case at all and fell straight to "unsupported platform" regardless of
+// GOOS. These tests, plus TestStatus_WindowsDispatch below, pin the fix.
+// statusWindowsService shells out to sc.exe directly (not through the
+// mockable runCmd, since it needs stdout — same as statusSystemd/
+// statusLaunchd use exec.Command directly rather than runCmd), so on a
+// non-Windows test runner sc.exe is simply not found and the not-installed
+// branch is exercised — exactly like statusLaunchd's launchctl-not-found
+// case degrades on Linux CI.
+
+func TestStatusWindowsService_ReturnsWithoutPanic(t *testing.T) {
+	m := &Manager{binaryPath: `C:\otedama.exe`}
+	st, err := m.statusWindowsService()
+	if err != nil {
+		t.Fatalf("statusWindowsService: %v", err)
+	}
+	_ = st.Installed
+	_ = st.Running
+}
+
+func TestStatusWindowsService_ScExeNotFound_ReportsNotInstalledNotError(t *testing.T) {
+	// On any non-Windows test runner (and in CI), sc.exe does not exist, so
+	// exec.Command's Output() returns an error. That must be reported as
+	// "not installed" (zero-value ServiceStatus, nil error), not surfaced as
+	// a Status() failure — the same treatment statusLaunchd gives a failed
+	// launchctl invocation.
+	m := &Manager{binaryPath: `C:\otedama.exe`}
+	st, err := m.statusWindowsService()
+	if runtime.GOOS == "windows" {
+		t.Skip("this assertion only holds where sc.exe is genuinely absent")
+	}
+	if err != nil {
+		t.Fatalf("statusWindowsService: got error %v, want nil (missing sc.exe means not-installed)", err)
+	}
+	if st.Installed {
+		t.Error("Installed = true with no sc.exe on PATH; want false")
+	}
+	if st.Running {
+		t.Error("Running = true with no sc.exe on PATH; want false")
+	}
+}
+
 // ----- Install / Uninstall / Status top-level dispatch (Linux) -----
 
 func TestInstall_Linux(t *testing.T) {
@@ -843,6 +888,19 @@ func TestStatus_DarwinDispatch(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	if _, err := m.Status(); err != nil {
 		t.Fatalf("Status (darwin): %v", err)
+	}
+}
+
+func TestStatus_WindowsDispatch(t *testing.T) {
+	// Before this fix, Status() had no "windows" case at all and returned
+	// "unsupported platform" unconditionally on Windows, even though
+	// Install/Uninstall both support it — this pins that Status now
+	// dispatches windows to statusWindowsService rather than falling to
+	// the default/error branch.
+	setGoos(t, "windows")
+	m := &Manager{binaryPath: `C:\otedama.exe`}
+	if _, err := m.Status(); err != nil {
+		t.Fatalf("Status (windows): %v", err)
 	}
 }
 

@@ -114,6 +114,51 @@ log_level: debug
 	}
 }
 
+func TestLoadConfigFile_APIMdExample_Parses(t *testing.T) {
+	// docs/API.md's flagship "Configuration file" example previously
+	// documented `pools[].priority` (PoolConfig has no such field) and a
+	// `workers:` YAML *list* (Config.Workers is a single WorkerConfig
+	// object, not a slice — decoding a sequence into it is a type error,
+	// not just an unknown-key warning). Either mistake fails the whole
+	// document via KnownFields(true)/type mismatch, discarding every
+	// other setting including bitcoin_address — verified by hand before
+	// this fix: cfg.BitcoinAddress came back "" and cfg.Pools came back
+	// empty. This test locks the corrected example to the real schema so
+	// docs/API.md cannot regress to an unparseable one again.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "api-md-example.yaml")
+	content := []byte(`
+bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+log_level: info
+log_format: text
+language: en
+data_dir: ~/.local/share/otedama
+pools:
+  - url: stratum+v2://public.stratum.slushpool.com:3336
+  - url: stratum+v2://demand.sv2.io:34254
+workers:
+  name: cpu-worker
+`)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var stderr bytes.Buffer
+	cfg := loadConfigFile(path, &stderr)
+
+	if stderr.Len() != 0 {
+		t.Errorf("docs/API.md example produced stderr output (should parse cleanly):\n%s", stderr.String())
+	}
+	if cfg.BitcoinAddress != "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" {
+		t.Errorf("bitcoin_address = %q; docs/API.md example did not parse", cfg.BitcoinAddress)
+	}
+	if len(cfg.Pools) != 2 {
+		t.Errorf("got %d pools, want 2", len(cfg.Pools))
+	}
+	if cfg.Workers.Name != "cpu-worker" {
+		t.Errorf("workers.name = %q, want cpu-worker", cfg.Workers.Name)
+	}
+}
+
 func TestLoadConfigFile_EmptyYAML_ReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.yaml")

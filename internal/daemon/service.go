@@ -122,6 +122,8 @@ func (m *Manager) Status() (ServiceStatus, error) {
 		return m.statusSystemd()
 	case "darwin":
 		return m.statusLaunchd()
+	case "windows":
+		return m.statusWindowsService()
 	default:
 		return ServiceStatus{}, fmt.Errorf("daemon: unsupported platform %q", runtime.GOOS)
 	}
@@ -315,6 +317,31 @@ func (m *Manager) installWindowsService() error {
 func (m *Manager) uninstallWindowsService() error {
 	_ = runCmd("sc.exe", "stop", "Otedama")
 	return runCmd("sc.exe", "delete", "Otedama")
+}
+
+// statusWindowsService queries the Service Control Manager for the
+// "Otedama" service's current state. Install and Uninstall have long
+// dispatched "windows" to installWindowsService/uninstallWindowsService,
+// but Status had no matching case and fell through to "unsupported
+// platform" — despite docs/API.md documenting `otedama service status` as
+// supported wherever install is. This closes that gap.
+//
+// sc.exe query exits non-zero both when the service is not registered and
+// when sc.exe itself cannot be run (e.g. this code path executing on a
+// non-Windows test runner); either way "not installed" is the correct
+// answer, matching how statusLaunchd treats a launchctl failure — a
+// missing service is Status's normal "not found" result, not an error.
+func (m *Manager) statusWindowsService() (ServiceStatus, error) {
+	out, err := exec.Command("sc.exe", "query", "Otedama").Output()
+	if err != nil {
+		return ServiceStatus{}, nil
+	}
+	running := strings.Contains(string(out), "RUNNING")
+	return ServiceStatus{
+		Installed: true,
+		Running:   running,
+		Details:   string(out),
+	}, nil
 }
 
 // ----- Helpers -----
