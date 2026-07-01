@@ -10,6 +10,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 232 — ソクラテス式問答法で過不足の機能を検証: ASIC ハードウェア検出が製品定義に反して一切実装されていない未開示の欠落を発見)
+
+「ソクラテス式問答法で過不足の機能を考える」という指示に基づき、製品の不変の定義
+（CLAUDE.md「ユーザー所有のASIC・GPU・CPUハードウェアを...四系統にリアルタイム
+裁定配分する」）を出発点に自問自答形式で検証した。
+
+**問答の要旨:**
+- 問「Otedama はフィー（手数料）を取っているか？」→ `internal/provider/*.go` を
+  検証、Otedama 自身が徴収するフィーは存在しない（pool 側 fee と Akash 側 fee の
+  みで、いずれも外部要因）。非カストディ・ノーフィーの主張は裏付けられる——過剰なし。
+- 問「CLAUDE.md の『10言語人間レビュー＋1000言語以上機械翻訳』は実装と一致するか？」
+  → `internal/i18n/messages/bundle.go` を確認、10言語（en/ja/zh/ko/es/fr/de/pt/ru/ar）
+  が正確にビルトインされている。「1000言語」はユーザー向けドキュメント翻訳の話で
+  ソフトウェア本体の範囲外——過不足なし。
+- 問「製品定義は ASIC・GPU・CPU の三系統と明記しているが、`internal/hal` は実際に
+  ASIC を検出できるか？」→ `internal/hal/*.go` を全ファイル確認した結果、
+  **ASIC 用ドライバが一つも存在しない**ことが判明。`engine/setup.go`
+  の `detectDevices()` は CPU ドライバと Linux 専用 GPU ドライバのみを登録し、
+  ASIC は `hal.FamilyASIC` という列挙値としてのみ存在（将来のための前方互換の
+  骨格）。`docs/KNOWN_LIMITATIONS.md`——「Otedama がまだ行っていないことの
+  正直で網羅的なリスト」と自称する文書——には、この欠落が一切記載されていなかった。
+  これは CLAUDE.md の誠実性原則（KNOWN_LIMITATIONS.md は網羅的であるべき）自体への
+  違反だった。
+
+**規模判断:** ASIC は CPU/GPU と異なりローカル PCI/sysfs デバイスではなく、
+すでに自分自身でプールに接続する独立したネットワーク機器であり、ファームウェアの
+制御面（HTTP/JSON、ファームウェアごとに方言あり）を扱う必要がある——
+`miner.Worker`（プロセス内で SHA-256d を計算するモデル）とは根本的に異なる
+統合形状が必要。`docs/adr/ADR-008-hardware-power-awareness-layer.md` は
+この課題を「Sub-domain 1 — ASIC firmware control surface」としてすでに
+正しくスコープ済み（v3.5 目標、5 ファームウェア方言にまたがり約150時間、
+同 ADR 内で最高の value/cost ランク）。この規模とプロトコル詳細の未検証性
+（実機で確認できない）を踏まえ、CLAUDE.md が新機能に義務付ける
+「要件定義→基本設計→詳細設計→開発→テスト→レビュー→リリース」の全段階を
+経るべき案件と判断し、本セッションでは実装ではなく**正直な文書化**（要件定義
+段階への正しい入力）に留めた。
+
+- `docs/KNOWN_LIMITATIONS.md`: 新規項目 8「ASIC hardware is not detected at all」を
+  追加。What/Impact/Why/Workaround/Target の既存フォーマットに準拠し、
+  ADR-008 sub-domain 1・v3.5 を参照。
+- `docs/RESEARCH_IMPROVEMENTS.md`: Category 1（Bitcoin mining software）に
+  項目 11 として追加、KNOWN_LIMITATIONS §8 と ADR-008 を相互参照。
+
+コード変更なし（文書のみ）。全 24 パッケージ green（影響なし、念のため確認済み）。
+
 ### Added (session 231 — 次のステップ: `otedama_effective_yield_sats_per_second` — ダウンタイムを織り込んだ実効利回りメトリクスを実装)
 
 session 230 に続き、リサーチバックログから次の具体的な実装可能項目を選定した。

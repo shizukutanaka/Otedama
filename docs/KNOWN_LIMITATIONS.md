@@ -171,6 +171,48 @@ satoshi/second numbers (which move primarily with BTC price anyway).
 
 ---
 
+## 8. ASIC hardware is not detected at all
+
+**What:** Otedama's product definition names ASIC, GPU, and CPU hardware as
+the three classes it arbitrates across. In v3.0.0-alpha.1, `internal/hal`
+registers exactly two drivers — a built-in CPU driver and a Linux-only GPU
+driver (`gpu_linux.go`/`gpu_stub.go`; see limitation §4). **No ASIC driver
+exists.** `hal.FamilyASIC` and the per-family hashrate constant used as a
+mining-yield fallback (`internal/provider/mining.go`, ≈100 TH/s) are defined,
+but nothing in the codebase ever enumerates an ASIC as a `hal.Device` — the
+family exists only as forward-compatible scaffolding.
+
+**Impact:** A user who owns an Antminer, Whatsminer, or similar standalone
+ASIC cannot have Otedama detect it, report its hashrate, or arbitrate its
+workload — Otedama only ever sees the CPU (and, on Linux, any GPU) of the
+host it runs on. For the majority of real-world Bitcoin hashrate, which is
+ASIC-dominated, this means Otedama's arbitration engine currently has
+nothing to arbitrate on the hardware class its own product definition lists
+first. This does not affect CPU/GPU mining or payout correctness; it means
+the ASIC side of the product definition is unimplemented, not degraded.
+
+**Why:** Unlike CPU/GPU, an ASIC is not a local PCI/sysfs device — it is a
+standalone network appliance running its own firmware (stock Bitmain,
+Braiins OS+, LuxOS, VNish, DCENT_OS, or similar) that already connects
+directly to a pool. Representing one as a `hal.Device` requires a different
+integration shape than `miner.Worker` (which grinds SHA-256d in-process):
+polling/controlling the appliance's own firmware control surface (HTTP/JSON,
+firmware-dependent — there is no single standardized protocol across
+vendors) rather than feeding it `Work` and reading back `Share`s over a
+channel. This is a larger architectural piece than the CPU/GPU drivers, not
+an oversight.
+
+**Workaround:** Point ASICs at a pool directly (their normal mode of
+operation) rather than through Otedama; run Otedama for CPU/GPU devices and,
+optionally, for wallet/monitoring on the same network.
+
+**Target:** v3.5, tracked by ADR-008 (hardware/power awareness layer)
+sub-domain 1 ("ASIC firmware control surface"), scoped there at ~150 hours
+across the five firmware dialects — the single highest value/cost item in
+that ADR's roadmap.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

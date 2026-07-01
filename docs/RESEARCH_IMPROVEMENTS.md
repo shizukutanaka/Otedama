@@ -46,6 +46,22 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
     from pool-side truth; a periodic reconciliation against pool stats
     (where the pool exposes them) would catch silent miscounting.
+11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
+    session 232). Otedama's own product definition names ASIC first among
+    the three hardware classes it arbitrates, but `internal/hal` registers
+    only a CPU driver and a Linux-only GPU driver — no ASIC driver exists,
+    so an owned Antminer/Whatsminer is invisible to the engine entirely.
+    ADR-008 sub-domain 1 already scopes this correctly (v3.5, ~150h across
+    five firmware dialects, highest value/cost rank in that ADR) — the gap
+    was that `docs/KNOWN_LIMITATIONS.md`'s "honest, exhaustive" inventory
+    didn't disclose it as a *current* limitation; now fixed as
+    KNOWN_LIMITATIONS §8. Implementation itself remains 🔵 (ADR-tracked,
+    v3.5) rather than attempted ad hoc: the ASIC integration shape (poll a
+    remote appliance's own firmware control surface) differs enough from
+    the in-process `miner.Worker` model that it warrants the full
+    design-review workflow CLAUDE.md mandates for new features, not a
+    single-session implementation against protocol details that can't be
+    verified against real hardware here.
 
 ---
 
