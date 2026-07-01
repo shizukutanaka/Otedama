@@ -10,6 +10,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 228 — 製品強弱点監査: `config.yaml` の `http_addr` フィールドが存在せず、記載例をそのまま使うと設定ファイル全体が無効化されるバグを修正)
+
+製品の長所・短所・改善点の監査を継続した。session 227 で `OTEDAMA_HTTP_ADDR` 環境変数を
+配線した際、根本原因（`httpAddr` が `config.Config` の一部ではなく `cmd/otedama/run.go`
+の CLI 専用フィールドだったこと）を再確認したところ、**`config.yaml.example` が
+`# http_addr: "127.0.0.1:9090"` という設定例を「HTTP endpoints」セクションに明記して
+いるにもかかわらず、`config.Config` 構造体に `http_addr` フィールドが一切存在しない**
+ことが判明した。
+
+これは単なる「設定しても効果がない」以上に深刻だった。`cmd/otedama/configfile.go` の
+YAML デコーダは `dec.KnownFields(true)` を設定しており、未知のフィールドがあると
+**ドキュメントの記載通りにコメントを外して `http_addr` を設定した瞬間、その 1 行だけで
+なく `config.yaml` ファイル全体の読み込みが失敗し、`bitcoin_address` を含む全設定が
+サイレントにデフォルト値へフォールバックする**。運用者は自分の設定ファイルが（一部どころか
+全体が）無視されていることに気づけない。
+
+- `internal/config/config.go`: `Config.HTTPAddr string \`yaml:"http_addr"\`` を追加。
+  他の文字列フィールド（`DataDir` 等）と同じ 4 層（デフォルト→ファイル→env→フラグ）
+  に完全統合。`FlagValues.HTTPAddr`、`Origins.HTTPAddr`、`Defaults()`、
+  `ResolveWithOrigins()` の 3 レイヤー分岐、`OTEDAMA_HTTP_ADDR` env 読み取りを追加。
+  これにより session 227 で `cmd/otedama/run.go` に一時的に追加した
+  `applyRunEnvFallbacks` の httpAddr 分岐は不要になり削除——env var 対応は他の全設定と
+  同じ経路（`config.Resolve`）に統一された。
+- `cmd/otedama/run.go`: `runFlags.httpAddr`（CLI 専用フィールド）を削除し、
+  `config.FlagValues.HTTPAddr` に統合。`startHTTPServer` は `runFlags` 全体ではなく
+  `httpAddr string, pprofEnabled bool` を直接受け取るシグネチャに変更（`cfg.HTTPAddr`
+  を渡す——4 層解決済みの値）。
+- `cmd/otedama/config.go`: `otedama config show`（テキスト/JSON 両方）に `http_addr`
+  フィールドと origin 表示を追加。他の設定項目と同様に確認可能に。
+
+テスト追加:
+- `internal/config/config_test.go`: `TestResolve_HTTPAddrFromFile/FromEnv/FromFlag`、
+  `TestResolve_FlagHTTPAddrOverridesEnv`、`TestResolve_HTTPAddrDefaultsToEmpty`、
+  `TestResolveWithOrigins_HTTPAddrOriginTracksLayer`（6 テスト）。
+- `cmd/otedama/config_loading_test.go`: `TestLoadConfigFile_HTTPAddrField_Parses` ——
+  `http_addr` を含む config.yaml が正しくパースされ、かつ **兄弟フィールド
+  （`bitcoin_address`/`log_level`）が巻き添えで失われないこと** を確認する回帰テスト
+  （このバグの核心を直接検証）。
+- `cmd/otedama/subcommands_test.go`: `TestConfigShow_JSON_HTTPAddrFromFlagAndOrigin`。
+  既存の `TestConfigShow_NoArgs` にも `http_addr` を追加。
+- `cmd/otedama/main_test.go`: session 227 で追加した httpAddr 関連の
+  `TestApplyRunEnvFallbacks_HTTPAddr_*` はロジック移動に伴い削除
+  （`config.TestResolve_HTTPAddr*` が同等のカバレッジを提供）。
+
+全 24 パッケージ green。`go vet`/`gofmt` clean。新規依存なし。`config.yaml.example` の
+既存記載は変更不要（元々正しい仕様だったため、コード側をその仕様に合わせて修正した）。
+
 ### Fixed (session 227 — 製品強弱点監査: ドキュメント記載済みの `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_HTTP_ADDR` 環境変数が実際には一切読まれていなかった問題を修正)
 
 製品の長所・短所・改善点の監査を継続した。`docs/API.md` は「設定の優先順位: フラグ >

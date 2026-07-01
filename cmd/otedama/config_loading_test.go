@@ -76,6 +76,44 @@ pools:
 	}
 }
 
+func TestLoadConfigFile_HTTPAddrField_Parses(t *testing.T) {
+	// config.yaml.example has long documented http_addr as a valid field,
+	// but config.Config had no such field. loadConfigFile's yaml.Decoder
+	// uses KnownFields(true), so an unrecognised key does not just get
+	// ignored — it fails the whole document, and this function's error
+	// path discards the ENTIRE config, not just the offending line. A user
+	// who uncommented the documented example would have silently lost
+	// every other setting in their file. This pins the fix: http_addr must
+	// both parse and NOT collapse the rest of the file to defaults.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "with-http-addr.yaml")
+	content := []byte(`
+bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+http_addr: "127.0.0.1:9090"
+log_level: debug
+`)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var stderr bytes.Buffer
+	cfg := loadConfigFile(path, &stderr)
+
+	if stderr.Len() != 0 {
+		t.Errorf("http_addr in config file produced stderr output (should parse cleanly):\n%s", stderr.String())
+	}
+	if cfg.HTTPAddr != "127.0.0.1:9090" {
+		t.Errorf("http_addr = %q, want 127.0.0.1:9090", cfg.HTTPAddr)
+	}
+	// The bug this pins was "unknown field -> whole document discarded",
+	// so assert a sibling field survived too, not just http_addr itself.
+	if cfg.BitcoinAddress != "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" {
+		t.Errorf("bitcoin_address = %q; sibling fields were lost alongside http_addr", cfg.BitcoinAddress)
+	}
+	if cfg.LogLevel != "debug" {
+		t.Errorf("log_level = %q; sibling fields were lost alongside http_addr", cfg.LogLevel)
+	}
+}
+
 func TestLoadConfigFile_EmptyYAML_ReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.yaml")

@@ -211,10 +211,36 @@ func TestConfigShow_NoArgs(t *testing.T) {
 		"curtail_below_btc_usd",
 		"power_watts",
 		"electricity_price_per_kwh",
+		"http_addr",
 	} {
 		if !strings.Contains(out.String(), field) {
 			t.Errorf("config show missing %q:\n%s", field, out.String())
 		}
+	}
+}
+
+func TestConfigShow_JSON_HTTPAddrFromFlagAndOrigin(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{
+		"config", "show", "--json", "--origin",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--http-addr", "127.0.0.1:9090",
+	}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("config show --json exit = %d, want 0", code)
+	}
+	var doc struct {
+		HTTPAddr string            `json:"http_addr"`
+		Origins  map[string]string `json:"origins"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("config show --json not valid JSON: %v\n%s", err, out.String())
+	}
+	if doc.HTTPAddr != "127.0.0.1:9090" {
+		t.Errorf("http_addr = %q, want 127.0.0.1:9090 (from flag)", doc.HTTPAddr)
+	}
+	if doc.Origins["http_addr"] != "flag" {
+		t.Errorf("origins.http_addr = %q, want flag", doc.Origins["http_addr"])
 	}
 }
 
@@ -590,7 +616,7 @@ func TestStartHTTPServer_InvalidAddr_WarnsAndReturnsRegistryOnly(t *testing.T) {
 	defer cancel()
 	var out, errb bytes.Buffer
 	// An invalid port (65536) forces srv.Start to fail.
-	reg, srv := startHTTPServer(ctx, runFlags{httpAddr: "127.0.0.1:99999"}, &out, &errb)
+	reg, srv := startHTTPServer(ctx, "127.0.0.1:99999", false, &out, &errb)
 	if srv != nil {
 		defer srv.Stop()
 		// On some systems the error may not be detected until Start's internal listen.

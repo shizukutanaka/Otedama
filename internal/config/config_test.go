@@ -762,6 +762,73 @@ func TestResolve_FlagDataDirOverridesEnv(t *testing.T) {
 	}
 }
 
+// ----- HTTPAddr -----
+//
+// http_addr was documented in config.yaml.example and docs/API.md as a
+// valid config-file field and OTEDAMA_HTTP_ADDR env var, but had no backing
+// Config field at all: loadConfigFile's yaml.Decoder uses KnownFields(true),
+// so a user who uncommented the documented "http_addr: ..." example would
+// get the ENTIRE config file silently discarded (an unknown-field decode
+// error), not just that one line ignored. These tests pin the fix across
+// all three layers plus the flag>env precedence rule.
+
+func TestResolve_HTTPAddrFromFile(t *testing.T) {
+	fromFile := Config{HTTPAddr: "127.0.0.1:9090"}
+	cfg := Resolve(fromFile, nil, FlagValues{})
+	if cfg.HTTPAddr != "127.0.0.1:9090" {
+		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9090 (from config file)", cfg.HTTPAddr)
+	}
+}
+
+func TestResolve_HTTPAddrFromEnv(t *testing.T) {
+	env := map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.HTTPAddr != "0.0.0.0:8080" {
+		t.Errorf("HTTPAddr = %q, want 0.0.0.0:8080 (from env)", cfg.HTTPAddr)
+	}
+}
+
+func TestResolve_HTTPAddrFromFlag(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{HTTPAddr: "127.0.0.1:9999"})
+	if cfg.HTTPAddr != "127.0.0.1:9999" {
+		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999 (from flag)", cfg.HTTPAddr)
+	}
+}
+
+func TestResolve_FlagHTTPAddrOverridesEnv(t *testing.T) {
+	env := map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}
+	cfg := Resolve(Config{}, env, FlagValues{HTTPAddr: "127.0.0.1:9999"})
+	if cfg.HTTPAddr != "127.0.0.1:9999" {
+		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999 (flag overrides env)", cfg.HTTPAddr)
+	}
+}
+
+func TestResolve_HTTPAddrDefaultsToEmpty(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{})
+	if cfg.HTTPAddr != "" {
+		t.Errorf("HTTPAddr = %q, want empty (HTTP server disabled by default)", cfg.HTTPAddr)
+	}
+}
+
+func TestResolveWithOrigins_HTTPAddrOriginTracksLayer(t *testing.T) {
+	_, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	if o.HTTPAddr != OriginDefault {
+		t.Errorf("HTTPAddr origin = %v, want default", o.HTTPAddr)
+	}
+	_, o = ResolveWithOrigins(Config{HTTPAddr: "127.0.0.1:9090"}, nil, FlagValues{})
+	if o.HTTPAddr != OriginFile {
+		t.Errorf("HTTPAddr origin = %v, want file", o.HTTPAddr)
+	}
+	_, o = ResolveWithOrigins(Config{}, map[string]string{"OTEDAMA_HTTP_ADDR": "0.0.0.0:8080"}, FlagValues{})
+	if o.HTTPAddr != OriginEnv {
+		t.Errorf("HTTPAddr origin = %v, want env", o.HTTPAddr)
+	}
+	_, o = ResolveWithOrigins(Config{}, nil, FlagValues{HTTPAddr: "127.0.0.1:9999"})
+	if o.HTTPAddr != OriginFlag {
+		t.Errorf("HTTPAddr origin = %v, want flag", o.HTTPAddr)
+	}
+}
+
 // ============================================================================
 // Validate — uncovered branches
 // ============================================================================

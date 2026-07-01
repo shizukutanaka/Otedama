@@ -151,11 +151,13 @@ func TestRun_WalletPassphraseFlag(t *testing.T) {
 // ----- applyRunEnvFallbacks -----
 //
 // docs/API.md and doctor's "no wallet found" hint have long documented
-// OTEDAMA_WALLET_PASSPHRASE and OTEDAMA_HTTP_ADDR as valid configuration
-// sources, but no code ever read them: walletPassphrase and httpAddr are
-// CLI-only runFlags fields, not part of config.FlagValues, so they never
-// got the OTEDAMA_* env var wiring every other flag gets for free via
-// config.Resolve. These tests pin the fix.
+// OTEDAMA_WALLET_PASSPHRASE as a valid configuration source, but no code
+// ever read it: walletPassphrase is a CLI-only runFlags field, not part of
+// config.FlagValues, so it never got the OTEDAMA_* env var wiring every
+// other flag gets for free via config.Resolve. These tests pin the fix.
+// (OTEDAMA_HTTP_ADDR had the same defect; it is now fixed by promoting
+// http_addr into config.Config itself — see config.TestResolve_HTTPAddr* —
+// rather than this CLI-only fallback.)
 
 func TestApplyRunEnvFallbacks_WalletPassphrase_FromEnvWhenFlagEmpty(t *testing.T) {
 	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "from-env")
@@ -175,38 +177,16 @@ func TestApplyRunEnvFallbacks_WalletPassphrase_FlagWinsOverEnv(t *testing.T) {
 	}
 }
 
-func TestApplyRunEnvFallbacks_HTTPAddr_FromEnvWhenFlagEmpty(t *testing.T) {
-	t.Setenv("OTEDAMA_HTTP_ADDR", "127.0.0.1:9090")
-	f := runFlags{}
-	applyRunEnvFallbacks(&f)
-	if f.httpAddr != "127.0.0.1:9090" {
-		t.Errorf("httpAddr = %q, want %q", f.httpAddr, "127.0.0.1:9090")
-	}
-}
-
-func TestApplyRunEnvFallbacks_HTTPAddr_FlagWinsOverEnv(t *testing.T) {
-	t.Setenv("OTEDAMA_HTTP_ADDR", "127.0.0.1:9090")
-	f := runFlags{httpAddr: "0.0.0.0:8080"}
-	applyRunEnvFallbacks(&f)
-	if f.httpAddr != "0.0.0.0:8080" {
-		t.Errorf("httpAddr = %q, want %q (flag must win over env)", f.httpAddr, "0.0.0.0:8080")
-	}
-}
-
-func TestApplyRunEnvFallbacks_NoEnvSet_LeavesFieldsEmpty(t *testing.T) {
+func TestApplyRunEnvFallbacks_NoEnvSet_LeavesFieldEmpty(t *testing.T) {
 	// os.Getenv returns "" for both "unset" and "set to empty string", so
-	// setting both vars to "" here exercises the same fallback branch as a
+	// setting the var to "" here exercises the same fallback branch as a
 	// genuinely unset environment while still isolating this test from any
 	// value the surrounding OS environment happens to have.
 	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "")
-	t.Setenv("OTEDAMA_HTTP_ADDR", "")
 	f := runFlags{}
 	applyRunEnvFallbacks(&f)
 	if f.walletPassphrase != "" {
 		t.Errorf("walletPassphrase = %q, want empty", f.walletPassphrase)
-	}
-	if f.httpAddr != "" {
-		t.Errorf("httpAddr = %q, want empty", f.httpAddr)
 	}
 }
 
@@ -401,7 +381,7 @@ func TestStartHTTPServer_NoAddrReturnsNils(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out, errb bytes.Buffer
-	reg, srv := startHTTPServer(ctx, runFlags{}, &out, &errb)
+	reg, srv := startHTTPServer(ctx, "", false, &out, &errb)
 	if reg != nil {
 		t.Error("startHTTPServer(no addr): reg should be nil")
 	}
@@ -414,7 +394,7 @@ func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out, errb bytes.Buffer
-	reg, srv := startHTTPServer(ctx, runFlags{httpAddr: "127.0.0.1:0"}, &out, &errb)
+	reg, srv := startHTTPServer(ctx, "127.0.0.1:0", false, &out, &errb)
 	if errb.Len() != 0 {
 		t.Fatalf("startHTTPServer: unexpected stderr: %s", errb.String())
 	}

@@ -70,6 +70,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "min_yield_sats_per_sec:     %g%s\n", cfg.MinYieldSatsPerSec, tag(origins.MinYieldSatsPerSec))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
 	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
+	fmt.Fprintf(stdout, "http_addr:                  %s%s\n", safeDisplay(cfg.HTTPAddr), tag(origins.HTTPAddr))
 	if len(cfg.Pools) == 0 {
 		fmt.Fprintf(stdout, "pools:           (built-in default)%s\n", tag(origins.Pools))
 	} else {
@@ -107,6 +108,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		MinYieldSatsPerSec       float64           `json:"min_yield_sats_per_sec"`
 		PowerWatts               float64           `json:"power_watts"`
 		ElectricityPricePerKWh   float64           `json:"electricity_price_per_kwh"`
+		HTTPAddr                 string            `json:"http_addr"`
 		Pools                    []string          `json:"pools"`
 		Origins                  map[string]string `json:"origins,omitempty"`
 	}{
@@ -122,6 +124,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		MinYieldSatsPerSec:       cfg.MinYieldSatsPerSec,
 		PowerWatts:               cfg.PowerWatts,
 		ElectricityPricePerKWh:   cfg.ElectricityPricePerKWh,
+		HTTPAddr:                 cfg.HTTPAddr,
 		Pools:                    pools,
 	}
 	if withOrigins {
@@ -138,6 +141,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"min_yield_sats_per_sec":     origins.MinYieldSatsPerSec.String(),
 			"power_watts":                origins.PowerWatts.String(),
 			"electricity_price_per_kwh":  origins.ElectricityPricePerKWh.String(),
+			"http_addr":                  origins.HTTPAddr.String(),
 			"pools":                      origins.Pools.String(),
 		}
 	}

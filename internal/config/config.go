@@ -169,6 +169,12 @@ type Config struct {
 	// 0 disables the cost metric (default). Negative values are rejected.
 	// Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
 	ElectricityPricePerKWh float64 `yaml:"electricity_price_per_kwh"`
+
+	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP
+	// endpoints (see internal/httpserver), for example "127.0.0.1:9090".
+	// Empty (default) disables the HTTP server entirely.
+	// Set via --http-addr, OTEDAMA_HTTP_ADDR, or config file.
+	HTTPAddr string `yaml:"http_addr"`
 }
 
 // PoolConfig describes a single mining pool connection.
@@ -232,8 +238,9 @@ func Defaults() Config {
 		LogFormat:                "text",
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
-		CurtailBelowBTCUSD:       0, // disabled by default
-		MinYieldSatsPerSec:       0, // disabled by default
+		CurtailBelowBTCUSD:       0,  // disabled by default
+		MinYieldSatsPerSec:       0,  // disabled by default
+		HTTPAddr:                 "", // HTTP server disabled by default
 	}
 }
 
@@ -252,6 +259,7 @@ type FlagValues struct {
 	LogFormat      string
 	Language       string
 	DataDir        string
+	HTTPAddr       string
 }
 
 // ValueOrigin indicates which configuration layer provided a particular value.
@@ -295,6 +303,7 @@ type Origins struct {
 	MinYieldSatsPerSec       ValueOrigin
 	PowerWatts               ValueOrigin
 	ElectricityPricePerKWh   ValueOrigin
+	HTTPAddr                 ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -437,6 +446,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.ElectricityPricePerKWh = fromFile.ElectricityPricePerKWh
 		o.ElectricityPricePerKWh = OriginFile
 	}
+	if fromFile.HTTPAddr != "" {
+		cfg.HTTPAddr = fromFile.HTTPAddr
+		o.HTTPAddr = OriginFile
+	}
 
 	// Layer 2: environment variables override config file.
 	getEnv := func(key string) string {
@@ -464,6 +477,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
 		cfg.DataDir = v
 		o.DataDir = OriginEnv
+	}
+	if v := getEnv("OTEDAMA_HTTP_ADDR"); v != "" {
+		cfg.HTTPAddr = v
+		o.HTTPAddr = OriginEnv
 	}
 	for _, spec := range numericEnvVars {
 		v := getEnv(spec.key)
@@ -497,6 +514,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if flags.DataDir != "" {
 		cfg.DataDir = flags.DataDir
 		o.DataDir = OriginFlag
+	}
+	if flags.HTTPAddr != "" {
+		cfg.HTTPAddr = flags.HTTPAddr
+		o.HTTPAddr = OriginFlag
 	}
 
 	return cfg, o

@@ -34,7 +34,6 @@ type runFlags struct {
 	dryRun           bool
 	noTUI            bool
 	walletPassphrase string
-	httpAddr         string
 	pprofEnabled     bool
 	logFile          string // --log-file: audit-trail path, written even under the TUI
 	showOrigin       bool   // --origin: annotate config show output with value sources
@@ -58,7 +57,7 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	fs.StringVar(&f.logFile, "log-file", "",
 		"Append structured logs to this file. Written even while the TUI is active, "+
 			"giving a long-running service an audit trail the dashboard otherwise hides.")
-	fs.StringVar(&f.httpAddr, "http-addr", "",
+	fs.StringVar(&f.HTTPAddr, "http-addr", "",
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
 	fs.BoolVar(&f.pprofEnabled, "pprof", false,
 		"Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
@@ -72,29 +71,25 @@ func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
 	return f, nil
 }
 
-// applyRunEnvFallbacks fills walletPassphrase and httpAddr from their
-// documented environment variables when the corresponding flag was left at
-// its empty default.
+// applyRunEnvFallbacks fills walletPassphrase from OTEDAMA_WALLET_PASSPHRASE
+// when the --wallet-passphrase flag was left at its empty default.
 //
 // Every other run flag is a field of config.FlagValues and gets OTEDAMA_*
-// env var support for free through config.Resolve. walletPassphrase and
-// httpAddr are CLI-only fields of runFlags (kept out of config.Config so a
-// secret never round-trips through `config show`, and so an HTTP bind
-// address isn't persisted to config.yaml), so they never went through that
-// wiring — even though docs/API.md has long documented OTEDAMA_WALLET_PASSPHRASE
-// ("preferred over flag in production") and OTEDAMA_HTTP_ADDR as valid
-// sources, and doctor's "no wallet found" hint tells operators to set
-// OTEDAMA_WALLET_PASSPHRASE. Neither variable was ever read, so following
-// that documented, security-recommended path silently did nothing.
+// env var support for free through config.Resolve. walletPassphrase is a
+// CLI-only field of runFlags — deliberately kept out of config.Config so a
+// secret never round-trips through `config show` or gets written to
+// config.yaml — so it never went through that wiring, even though
+// docs/API.md has long documented OTEDAMA_WALLET_PASSPHRASE ("preferred over
+// flag in production — flag is visible in process lists") and doctor's
+// "no wallet found" hint tells operators to set it. The variable was never
+// actually read, so following that documented, security-recommended path
+// silently did nothing.
 //
 // A flag explicitly set on the command line always wins over the env var,
 // matching the "flags > env vars" precedence documented in docs/API.md.
 func applyRunEnvFallbacks(f *runFlags) {
 	if f.walletPassphrase == "" {
 		f.walletPassphrase = os.Getenv("OTEDAMA_WALLET_PASSPHRASE")
-	}
-	if f.httpAddr == "" {
-		f.httpAddr = os.Getenv("OTEDAMA_HTTP_ADDR")
 	}
 }
 
@@ -159,7 +154,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	defer closeLog()
 
 	// Start HTTP health/metrics server if requested.
-	metricsRegistry, httpSrv := startHTTPServer(ctx, f, stdout, stderr)
+	metricsRegistry, httpSrv := startHTTPServer(ctx, cfg.HTTPAddr, f.pprofEnabled, stdout, stderr)
 	if httpSrv != nil {
 		defer httpSrv.Stop()
 	}
@@ -247,20 +242,21 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logge
 	}), cleanup
 }
 
-// startHTTPServer starts the health/metrics HTTP server if --http-addr
-// was provided. Returns the metrics registry and server handle (both
-// nil if no address was set, or if startup failed — a startup failure
-// is logged as a warning but does not abort the run).
-func startHTTPServer(ctx context.Context, f runFlags, stdout, stderr io.Writer) (*metrics.Registry, *httpserver.Server) {
-	if f.httpAddr == "" {
+// startHTTPServer starts the health/metrics HTTP server if httpAddr is
+// non-empty (resolved from --http-addr, OTEDAMA_HTTP_ADDR, or config.yaml's
+// http_addr via config.Resolve). Returns the metrics registry and server
+// handle (both nil if no address was set, or if startup failed — a startup
+// failure is logged as a warning but does not abort the run).
+func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, stdout, stderr io.Writer) (*metrics.Registry, *httpserver.Server) {
+	if httpAddr == "" {
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
-	srv := httpserver.New(f.httpAddr, reg, f.pprofEnabled)
+	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
 		return reg, nil
 	}
-	fmt.Fprintf(stdout, "[info] http: listening on %s\n", f.httpAddr)
+	fmt.Fprintf(stdout, "[info] http: listening on %s\n", httpAddr)
 	return reg, srv
 }
