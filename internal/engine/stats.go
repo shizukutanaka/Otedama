@@ -35,14 +35,21 @@ import (
 // stalled reflects HashrateMonitor.Stalled(); true renders the ⚠ stalled
 // indicator in the TUI so operators see the warning immediately.
 func buildStats(opts sessionOpts, hashRate float64, totalSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
-	var sharesSent, sharesFound uint64
+	var sharesFound uint64
 	for _, w := range opts.workers {
 		sharesFound += w.Stats().SharesFound
 	}
+	// sharesSent is the real otedama_shares_submitted_total counter — the
+	// number of shares actually transmitted to the pool — not a copy of
+	// sharesFound. The two diverge whenever a worker's share channel was
+	// full (see totalDropped): that share is "found" but never reaches
+	// opts.merged, so it is never submitted. See
+	// docs/KNOWN_LIMITATIONS.md §9 (session 236) for the prior approximation.
+	var sharesSent uint64
 	if opts.m != nil {
+		sharesSent = opts.m.sharesSubmitted.Value()
 		opts.m.uptime.Set(time.Since(opts.startTime).Seconds())
 	}
-	sharesSent = sharesFound // approximation
 
 	var poolLatency time.Duration
 	if latency != nil {

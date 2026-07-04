@@ -22,6 +22,7 @@ import (
 type engineMetrics struct {
 	hashrate            *metrics.Gauge
 	sharesFound         *metrics.Counter
+	sharesSubmitted     *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
@@ -212,6 +213,15 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		sharesFound: reg.NewCounter(
 			"otedama_shares_found_total",
 			"Total shares found locally by all workers.",
+			nil),
+		sharesSubmitted: reg.NewCounter(
+			"otedama_shares_submitted_total",
+			"Total shares actually transmitted to the pool (mining.submit / "+
+				"SubmitSharesStandard), incremented at send time regardless of "+
+				"the pool's eventual accept/reject response. Distinct from "+
+				"shares_found_total: a share can be found by a worker but never "+
+				"submitted if its worker's share channel was full (a rate the "+
+				"engine only currently logs, as \"dropped N found share(s)\").",
 			nil),
 		sharesAccepted: reg.NewCounter(
 			"otedama_shares_total",

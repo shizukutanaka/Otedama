@@ -2038,6 +2038,13 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if got := m.sharesRejected.Value(); got == 0 {
 		t.Error("sharesRejected == 0; SubmitSharesError handler was not exercised")
 	}
+	// sharesSubmitted counts every real V2 send, so it must be at least as
+	// large as accepted+rejected (every judged share was necessarily sent
+	// first) — the real end-to-end path for the fix pinned by
+	// TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount.
+	if got, want := m.sharesSubmitted.Value(), m.sharesAccepted.Value()+m.sharesRejected.Value(); got < want {
+		t.Errorf("sharesSubmitted = %d, want >= %d (accepted+rejected)", got, want)
+	}
 	if got := m.hashrate.Value(); got == 0 {
 		t.Error("hashrate gauge = 0; stats-tick branch did not run")
 	}

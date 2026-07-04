@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 236 — 長所短所改善点の洗い出しと実行: TUI の「shares sent」表示が「shares found」の水増しコピーだった問題を解消)
+
+session 235 に続き、`docs/KNOWN_LIMITATIONS.md` §9（TUI のプレースホルダー
+表示）の後半——「shares sent」フィールドを実データに置き換えた。
+
+`internal/engine/stats.go`の`buildStats`は`sharesSent = sharesFound`
+（コメント「approximation」）と、ワーカーが見つけたシェア数をそのまま
+コピーしていた。しかし「見つけた」シェアは、ワーカーの共有チャネルが
+満杯だった場合（`totalDropped`で既にログ記録されている既知のケース）、
+実際にはプールへ一切送信されない。つまり従来の実装では、送信に失敗した
+（または送信すらされなかった）シェアも「送信済み」として表示され得た。
+
+- `internal/engine/metrics.go`: `otedama_shares_submitted_total`カウンターを
+  新設。V2経路（`sendMsg`成功直後）とV1経路（ゴルーチンが`Submit`を
+  呼び出す直前——プールからの応答を待たず、送信試行そのものを計上）の
+  両方で実際の送信時点にインクリメント。
+- `internal/engine/stats.go`: `buildStats`が`sharesFound`のコピーではなく
+  `opts.m.sharesSubmitted.Value()`を`SharesSent`に使用するよう修正。
+  `opts.m`がnilの場合（メトリクス無効時）は0にフォールバック。
+- `docs/SPECIFICATION.md` §6: 新メトリクスをカタログに追加
+  （CI ガード `TestMetricsDocumentedInSpecification` で検証済み）。
+- `docs/KNOWN_LIMITATIONS.md`: §9の「shares sent」部分を解決済みとして
+  更新。「total sats earned」の残存する不正確さ（プロトコルがシェア当たり
+  の金銭的価値を一切運ばないため、既存の`otedama_effective_yield_sats_per_second`
+  を時間積分する方式への置き換えが必要）は引き続き未解決として記載。
+
+テスト追加（4件）:
+- `TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount` —
+  ワーカーの発見数0でも`sharesSubmitted`カウンターが3なら`SharesSent`が
+  3を返すことを確認（従来の実装では不可能だった乖離を検証）。
+- `TestBuildStats_SharesSentIsZeroWithNilMetrics` — `opts.m`がnilでも
+  パニックせず0を返すことを確認。
+- `TestEngineMetrics_AllRegisteredOnInit`に新カウンターの登録確認を追加。
+- `TestRunSessionV1_ShareSubmitAccepted`・`TestRunSession_StatsTickAndShareResponses`
+  （既存の実プール統合テスト）に`sharesSubmitted`の実地検証を追加——
+  V1・V2両経路で実際にシェアを流し、単体テストだけでなく実際のコードパスで
+  カウンターが増加することを確認。
+
+全24パッケージgreen。`go vet`/`gofmt` clean。新規依存なし。
+
 ### Fixed (session 235 — 長所短所改善点の洗い出しと実行: Stratum V1 プールパスワードが無視されるバグを修正)
 
 「長所短所改善点を洗い出して実行」の指示に基づき、これまでの監査

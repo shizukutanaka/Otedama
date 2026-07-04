@@ -340,6 +340,9 @@ func TestEngineMetrics_AllRegisteredOnInit(t *testing.T) {
 	if m.sharesFound == nil {
 		t.Error("shares_found_total not registered")
 	}
+	if m.sharesSubmitted == nil {
+		t.Error("shares_submitted_total not registered")
+	}
 	if m.sharesAccepted == nil {
 		t.Error("shares_total{status=accepted} not registered")
 	}

@@ -213,7 +213,7 @@ that ADR's roadmap.
 
 ---
 
-## 9. TUI's "total sats earned" and "shares sent" are placeholder counters
+## 9. TUI's "total sats earned" is a placeholder counter
 
 **What:** The terminal dashboard's `TotalSatsEarned` field
 (`internal/engine/run.go`, both the Stratum V1 and V2 session loops)
@@ -223,9 +223,15 @@ message (and the V1 acceptance response) carries no monetary value at all;
 the protocol only acknowledges share counts, so an accurate sats figure
 would require the same yield-rate math the arbitration engine already uses
 (see `otedama_effective_yield_sats_per_second`), not a naive per-share
-increment. Separately, the dashboard's "shares sent" field
-(`internal/engine/stats.go`) currently reuses the "shares found" count
-rather than counting actual network submissions.
+increment.
+
+~~Separately, the dashboard's "shares sent" field reused the "shares
+found" count rather than counting actual network submissions.~~ ✅
+**RESOLVED (session 236):** `otedama_shares_submitted_total` is now a real
+counter incremented at the actual send point in both the V1 (goroutine
+dispatch to `Submit`) and V2 (`sendMsg`) paths, distinct from
+`shares_found_total` — a share found by a worker but never submitted
+(its share channel was full) no longer inflates the TUI's "sent" figure.
 
 **Impact:** The TUI's headline "sats earned" number looks like real income
 but is not — it moves in lockstep with the accepted-share count, not with

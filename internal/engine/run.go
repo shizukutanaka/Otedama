@@ -780,6 +780,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if err := sendMsg(conn, stratum.MsgSubmitSharesStandard, true, &sub); err != nil {
 				return fmt.Errorf("engine: submit share: %w", err)
 			}
+			if opts.m != nil {
+				opts.m.sharesSubmitted.Inc()
+			}
 			submitTimes[seqNum] = time.Now()
 			opts.log("info", fmt.Sprintf("engine: share seq=%d nonce=0x%08X", seqNum, share.Nonce))
 		}
@@ -930,6 +933,15 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			// pool response doesn't block the job-receive path.
 			capturedShare := share
 			capturedSess := sess
+			if opts.m != nil {
+				// Counted here, not after Submit returns: "submitted" means
+				// the transmission was attempted, matching the V2 path's
+				// increment at send time rather than at response time — a
+				// slow or failing pool response is a distinct, separately
+				// tracked event (sharesAccepted/sharesRejected, or the "V1
+				// submit" warning log on a hard failure).
+				opts.m.sharesSubmitted.Inc()
+			}
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{

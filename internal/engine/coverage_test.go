@@ -61,6 +61,52 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 	}
 }
 
+// TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount pins the
+// fix for docs/KNOWN_LIMITATIONS.md's prior §9: SharesSent used to be a
+// copy of SharesFound ("approximation"). The two must now be able to
+// diverge — a share can be found by a worker but never actually
+// transmitted (e.g. its share channel was full) — so this asserts
+// SharesSent tracks otedama_shares_submitted_total independently.
+func TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	opts := sessionOpts{
+		poolURL:   "stratum+v2://pool.example.com:3336",
+		startTime: time.Now(),
+		workers:   []*miner.Worker{w},
+		m:         m,
+	}
+
+	// Worker has found 0 shares (fresh, never started), but 3 shares were
+	// actually submitted this session — a scenario SharesFound alone
+	// cannot represent, proving SharesSent is now its own signal.
+	m.sharesSubmitted.Add(3)
+
+	stats := buildStats(opts, 0, 0, nil, false)
+	if stats.SharesFound != 0 {
+		t.Errorf("SharesFound = %d, want 0 (fresh worker)", stats.SharesFound)
+	}
+	if stats.SharesSent != 3 {
+		t.Errorf("SharesSent = %d, want 3 (from otedama_shares_submitted_total, not SharesFound)", stats.SharesSent)
+	}
+}
+
+// TestBuildStats_SharesSentIsZeroWithNilMetrics covers the metrics-disabled
+// path (opts.m == nil, as used by several tests that don't care about
+// metrics): SharesSent must default to 0 rather than panic on a nil
+// engineMetrics dereference.
+func TestBuildStats_SharesSentIsZeroWithNilMetrics(t *testing.T) {
+	opts := sessionOpts{
+		poolURL:   "stratum+v2://pool.example.com:3336",
+		startTime: time.Now(),
+	}
+	stats := buildStats(opts, 0, 0, nil, false)
+	if stats.SharesSent != 0 {
+		t.Errorf("SharesSent = %d, want 0 (opts.m is nil)", stats.SharesSent)
+	}
+}
+
 func TestTotalHashes_WithRealWorker(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	// A brand-new worker has 0 hashes; the loop body must still execute.
@@ -1052,6 +1098,13 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 
 	if got := m.sharesAccepted.Value(); got != 1 {
 		t.Errorf("sharesAccepted = %d, want 1", got)
+	}
+	// sharesSubmitted increments at send time (before the goroutine even
+	// calls Submit), independent of sharesAccepted/Rejected — this is the
+	// real end-to-end path for the fix pinned by
+	// TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount.
+	if got := m.sharesSubmitted.Value(); got != 1 {
+		t.Errorf("sharesSubmitted = %d, want 1", got)
 	}
 }
 
