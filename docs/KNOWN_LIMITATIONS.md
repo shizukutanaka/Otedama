@@ -213,44 +213,33 @@ that ADR's roadmap.
 
 ---
 
-## 9. TUI's "total sats earned" is a placeholder counter
+## ~~9. TUI's "total sats earned" and "shares sent" are placeholder counters~~ ✅ RESOLVED (sessions 236–237)
 
-**What:** The terminal dashboard's `TotalSatsEarned` field
-(`internal/engine/run.go`, both the Stratum V1 and V2 session loops)
-increments by exactly `1` for every accepted share — it is a placeholder,
-not the pool's actual credited amount. Stratum V2's `SubmitSharesSuccess`
-message (and the V1 acceptance response) carries no monetary value at all;
-the protocol only acknowledges share counts, so an accurate sats figure
-would require the same yield-rate math the arbitration engine already uses
-(see `otedama_effective_yield_sats_per_second`), not a naive per-share
-increment.
+**Resolution (two parts):**
 
-~~Separately, the dashboard's "shares sent" field reused the "shares
-found" count rather than counting actual network submissions.~~ ✅
-**RESOLVED (session 236):** `otedama_shares_submitted_total` is now a real
-counter incremented at the actual send point in both the V1 (goroutine
-dispatch to `Submit`) and V2 (`sendMsg`) paths, distinct from
-`shares_found_total` — a share found by a worker but never submitted
-(its share channel was full) no longer inflates the TUI's "sent" figure.
+- **"shares sent" (session 236):** `otedama_shares_submitted_total` is now a
+  real counter incremented at the actual send point in both the V1
+  (goroutine dispatch to `Submit`) and V2 (`sendMsg`) paths, distinct from
+  `shares_found_total` — a share found by a worker but never submitted (its
+  share channel was full) no longer inflates the TUI's "sent" figure.
 
-**Impact:** The TUI's headline "sats earned" number looks like real income
-but is not — it moves in lockstep with the accepted-share count, not with
-BTC price, share difficulty, or pool payout scheme. An operator comparing
-this figure against their pool dashboard's real balance will see them
-diverge immediately and permanently.
+- **"total sats earned" (session 237):** the former `TotalSatsEarned` field
+  incremented by exactly `1` per accepted share — a placeholder unrelated to
+  real income (Stratum carries no monetary value on the wire; the pool
+  credits a share by difficulty and payout scheme, never one sat each). It
+  is replaced by a `satsAccountant` that integrates the engine's own
+  forecast rate (`otedama_arbitration_expected_yield_sats_per_second`) over
+  the wall-clock time actually spent hashing productively — so the figure now
+  tracks BTC price, share difficulty, and downtime, none of which the
+  placeholder reflected. The TUI field is renamed `EstSatsEarned` and
+  displayed as **"est. earned: ~N sats"** to make clear it is an estimate,
+  not the pool's authoritative accounting (which remains the source of truth
+  for a real balance).
 
-**How you can tell:** The number increases by exactly 1 per accepted share
-regardless of difficulty or BTC price. The pool's own dashboard (or
-`otedama_share_acceptance_rate` combined with `otedama_arbitration_expected_yield_sats_per_second`,
-both real metrics) is the trustworthy source for actual earnings today.
-
-**Workaround:** Use the pool's own web dashboard/API for real balance;
-treat the TUI's sats-earned figure as a share-count proxy, not income.
-
-**Target:** Unscheduled. The fix is to accumulate
-`otedama_effective_yield_sats_per_second` over elapsed time (the same
-metric introduced to fold downtime into the yield estimate) rather than
-counting shares, since Stratum itself never carries a monetary value.
+The estimate deliberately gates on the same productive flag as the
+uptime accounting (hashing, not stalled, not curtailed), so idle time never
+accrues phantom earnings, and it reads 0 when metrics are disabled or before
+the first arbitration quote arrives rather than fabricating a number.
 
 ---
 

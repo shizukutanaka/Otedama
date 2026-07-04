@@ -10,6 +10,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 237 — つづけて改善: TUI の「total sats earned」が承認シェア当たり +1 の無意味なプレースホルダーだった問題を解消)
+
+session 236 に続き、`docs/KNOWN_LIMITATIONS.md` §9 の残り半分——TUI の
+「total sats earned」表示を実データに基づく推定値へ置き換えた。
+
+従来の実装は両セッションループ（V1/V2）で承認シェアごとに `totalSats++`
+と加算していた。これは金銭的に無意味な値だった：Stratum プロトコルは
+シェアに金銭的価値を一切載せず（プールが難易度と払い出し方式に従って
+クレジットする、シェア当たり1 sat ではない）、この数値は BTC 価格・
+シェア難易度・ダウンタイムのいずれとも連動しなかった。
+
+- `internal/engine/stats.go`: `satsAccountant` を新設。既存の
+  `uptimeAccountant` と同じパターンで、エンジン自身の予測利回りレート
+  （`otedama_arbitration_expected_yield_sats_per_second`）を「実際に
+  ハッシュしている生産的な時間」にわたって積分する。生産的フラグ
+  （ハッシュ中・非スタール・非カーテイル）でゲートするため、アイドル時間は
+  一切加算されない。分数精度をティック間で保持。
+- `internal/engine/run.go`: 両ループの `var totalSats uint64` と
+  `totalSats++` を削除し、stats ティックで `satsAcc.observe(now, rate,
+  productive)` により積分。メトリクス無効時やクオート未着時はレート0 →
+  推定値0（偽の数値を捏造しない）。
+- `internal/tui/dashboard.go`: `Stats` の `TotalSatsEarned` フィールドを
+  `EstSatsEarned` にリネームし、表示を「total earned: N sats」から
+  **「est. earned: ~N sats」** に変更——推定値であってプールの確定値では
+  ないことを明示。
+- `docs/KNOWN_LIMITATIONS.md`: §9 を完全に解決済み（sessions 236–237）に更新。
+
+テスト追加（5件、`satsAccountant`）: 初回プライミングで加算なし、生産的
+時間にわたるレート積分、非生産区間のスキップ、ゼロレート・逆行クロックの
+スキップ、分数精度の保持。既存の `buildStats`/TUI テストは
+`EstSatsEarned` リネームに追従（値の受け渡しセマンティクスは不変）。
+
+全24パッケージgreen。`go vet`/`gofmt` clean。新規依存なし。
+
 ### Fixed (session 236 — 長所短所改善点の洗い出しと実行: TUI の「shares sent」表示が「shares found」の水増しコピーだった問題を解消)
 
 session 235 に続き、`docs/KNOWN_LIMITATIONS.md` §9（TUI のプレースホルダー

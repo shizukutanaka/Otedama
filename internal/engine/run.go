@@ -628,7 +628,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	}()
 
 	var seqNum uint32
-	var totalSats uint64
+	// estSats is the running estimated earnings shown in the TUI, produced by
+	// integrating the arbitration expected-yield rate over productive time
+	// (satsAcc). It is not a per-share tally — a share carries no sat value on
+	// the wire (KNOWN_LIMITATIONS.md §9).
+	var estSats uint64
+	var satsAcc satsAccountant
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
@@ -666,8 +671,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
+			// Accumulate estimated earnings before building the dashboard
+			// snapshot so the displayed figure reflects this tick. The rate is
+			// the arbitration expected yield (0 when metrics are disabled or no
+			// quote has arrived yet); the productive flag gates out idle/stalled
+			// time so downtime never accrues phantom earnings.
+			var expectedYieldRate float64
+			if opts.m != nil {
+				expectedYieldRate = opts.m.arbitrationExpectedYieldSatsPerSec.Value()
+			}
+			estSats = uint64(satsAcc.observe(time.Now(), expectedYieldRate, currentHashRate > 0 && !stalled))
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, stalled))
+				opts.dashboard.Update(buildStats(opts, currentHashRate, estSats, latency, stalled))
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
@@ -764,7 +779,6 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				return ctx.Err()
 			}
 			seqNum++
-			totalSats++ // approximation; real value comes from pool SubmitSharesSuccess
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
@@ -836,7 +850,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// V1 is single-channel; channel ID 0 is the conventional value.
 	const chanID = uint32(0)
 
-	var totalSats uint64
+	// estSats is the running estimated earnings shown in the TUI, integrated
+	// from the arbitration expected-yield rate over productive time (satsAcc);
+	// not a per-share tally (KNOWN_LIMITATIONS.md §9).
+	var estSats uint64
+	var satsAcc satsAccountant
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
@@ -861,8 +879,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
+			// Accumulate estimated earnings before building the dashboard
+			// snapshot (see the V2 loop for the rationale). productive gates
+			// out idle/stalled time; the rate is the arbitration expected yield.
+			var expectedYieldRate float64
+			if opts.m != nil {
+				expectedYieldRate = opts.m.arbitrationExpectedYieldSatsPerSec.Value()
+			}
+			estSats = uint64(satsAcc.observe(time.Now(), expectedYieldRate, currentHashRate > 0 && !stalled))
 			if opts.dashboard != nil {
-				opts.dashboard.Update(buildStats(opts, currentHashRate, totalSats, latency, stalled))
+				opts.dashboard.Update(buildStats(opts, currentHashRate, estSats, latency, stalled))
 			}
 			if opts.m != nil {
 				opts.m.hashrate.Set(currentHashRate)
@@ -924,7 +950,6 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if !ok {
 				return ctx.Err()
 			}
-			totalSats++
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)

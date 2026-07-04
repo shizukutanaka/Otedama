@@ -50,7 +50,11 @@ type Stats struct {
 
 	// Wallet
 	WalletFingerprint string
-	TotalSatsEarned   uint64
+	// EstSatsEarned is an ESTIMATE of cumulative earnings, integrated from
+	// the engine's forecast yield rate over productive time — not a figure
+	// from the pool. It is labelled "est." in the dashboard accordingly; the
+	// pool's own accounting is authoritative. See docs/KNOWN_LIMITATIONS.md §9.
+	EstSatsEarned uint64
 
 	// Session
 	Uptime   time.Duration
@@ -293,7 +297,7 @@ func (d *Dashboard) earningsLine(s Stats) string {
 	}
 
 	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
-	earned := dim + fmt.Sprintf("total earned: %d sats", s.TotalSatsEarned) + reset
+	earned := dim + fmt.Sprintf("est. earned: ~%d sats", s.EstSatsEarned) + reset
 	return fmt.Sprintf("  %-30s  %s", total, earned)
 }
 

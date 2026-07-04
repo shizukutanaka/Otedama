@@ -56,8 +56,8 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 	if stats.Devices != 1 {
 		t.Errorf("Devices = %d, want 1", stats.Devices)
 	}
-	if stats.TotalSatsEarned != 10 {
-		t.Errorf("TotalSatsEarned = %d, want 10", stats.TotalSatsEarned)
+	if stats.EstSatsEarned != 10 {
+		t.Errorf("EstSatsEarned = %d, want 10", stats.EstSatsEarned)
 	}
 }
 

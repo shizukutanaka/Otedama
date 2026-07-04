@@ -115,7 +115,7 @@ func TestDashboard_RenderDoesNotPanic(t *testing.T) {
 		PoolURL:           "stratum+v2://pool.example.com:3336",
 		Connected:         true,
 		PoolLatency:       15 * time.Millisecond,
-		TotalSatsEarned:   1500,
+		EstSatsEarned:     1500,
 		WalletFingerprint: "aabbccdd",
 		Uptime:            2*time.Hour + 15*time.Minute,
 		Devices:           2,

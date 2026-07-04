@@ -34,7 +34,7 @@ import (
 //
 // stalled reflects HashrateMonitor.Stalled(); true renders the ⚠ stalled
 // indicator in the TUI so operators see the warning immediately.
-func buildStats(opts sessionOpts, hashRate float64, totalSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
+func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
 	var sharesFound uint64
 	for _, w := range opts.workers {
 		sharesFound += w.Stats().SharesFound
@@ -77,7 +77,7 @@ func buildStats(opts sessionOpts, hashRate float64, totalSats uint64, latency *L
 		Connected:         true,
 		Stalled:           stalled,
 		Curtailed:         opts.isCurtailed(),
-		TotalSatsEarned:   totalSats,
+		EstSatsEarned:     estSats,
 		WalletFingerprint: opts.wallet,
 		Uptime:            time.Since(opts.startTime),
 		Devices:           opts.devices,
@@ -175,6 +175,43 @@ func (u *uptimeAccountant) observe(now time.Time, productive bool, counter *metr
 		counter.Add(whole)
 		u.accum -= float64(whole)
 	}
+}
+
+// satsAccountant estimates cumulative earnings by integrating the engine's
+// own forecast earning rate (the arbitration expected yield, in
+// sats/second) over the wall-clock time actually spent hashing
+// productively. It replaces the former "+1 per accepted share" placeholder,
+// which bore no relation to real income: a share carries no monetary value
+// on the wire — the pool credits it according to difficulty and its payout
+// scheme, never one sat each (see docs/KNOWN_LIMITATIONS.md §9).
+//
+// It gates on the same productive flag as uptimeAccountant (hashing, not
+// stalled, not curtailed), so downtime contributes nothing rather than
+// silently accruing phantom earnings. The result remains an ESTIMATE — the
+// authoritative figure is the pool's own accounting — but unlike the
+// placeholder it tracks BTC price, share difficulty, and downtime, all of
+// which move the real number.
+type satsAccountant struct {
+	lastTick time.Time
+	total    float64 // estimated sats; fractional precision retained across ticks
+}
+
+// observe adds ratePerSec × (elapsed productive seconds) to the running
+// estimate and returns the new total. The first call primes the clock and
+// adds nothing. A non-positive elapsed, a non-productive interval, or a
+// non-positive rate each contribute zero, so the estimate never runs
+// backwards or accrues during idle/stalled/curtailed periods.
+func (s *satsAccountant) observe(now time.Time, ratePerSec float64, productive bool) float64 {
+	if s.lastTick.IsZero() {
+		s.lastTick = now
+		return s.total
+	}
+	elapsed := now.Sub(s.lastTick).Seconds()
+	s.lastTick = now
+	if elapsed > 0 && productive && ratePerSec > 0 {
+		s.total += ratePerSec * elapsed
+	}
+	return s.total
 }
 
 // logStats emits the periodic hashrate + cumulative share-count log line.

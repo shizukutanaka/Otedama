@@ -231,8 +231,8 @@ func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	line := d.earningsLine(Stats{
-		HashRate:        1e9, // 1 GH/s
-		TotalSatsEarned: 1234,
+		HashRate:      1e9, // 1 GH/s
+		EstSatsEarned: 1234,
 	})
 	if !strings.Contains(line, "sats/day") {
 		t.Errorf("earningsLine missing sats/day: %q", line)

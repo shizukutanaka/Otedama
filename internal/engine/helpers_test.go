@@ -492,8 +492,8 @@ func TestBuildStats_IncludesHashRateAndWalletFingerprint(t *testing.T) {
 	if stats.Devices != 2 {
 		t.Errorf("Devices = %d, want 2", stats.Devices)
 	}
-	if stats.TotalSatsEarned != 42 {
-		t.Errorf("TotalSatsEarned = %d, want 42", stats.TotalSatsEarned)
+	if stats.EstSatsEarned != 42 {
+		t.Errorf("EstSatsEarned = %d, want 42", stats.EstSatsEarned)
 	}
 	if stats.PoolURL != "stratum+v2://pool.example.com:3336" {
 		t.Errorf("PoolURL wrong: %q", stats.PoolURL)
@@ -935,6 +935,70 @@ func TestUptimeAccountant_IgnoresNonPositiveAndNilCounter(t *testing.T) {
 	var u2 uptimeAccountant
 	u2.observe(base, true, nil)
 	u2.observe(base.Add(time.Second), true, nil)
+}
+
+// ============================================================================
+// satsAccountant — estimated-earnings integration (KNOWN_LIMITATIONS §9)
+// ============================================================================
+
+func TestSatsAccountant_PrimesOnFirstObserve(t *testing.T) {
+	var s satsAccountant
+	base := time.Now()
+	// First call primes the clock and must add nothing even at a high rate.
+	if got := s.observe(base, 1000, true); got != 0 {
+		t.Errorf("first observe = %v, want 0 (priming call adds nothing)", got)
+	}
+}
+
+func TestSatsAccountant_IntegratesRateOverProductiveTime(t *testing.T) {
+	var s satsAccountant
+	base := time.Now()
+	s.observe(base, 5, true)                            // prime
+	got := s.observe(base.Add(10*time.Second), 5, true) // 5 sats/s × 10 s = 50
+	if got != 50 {
+		t.Errorf("accumulated = %v, want 50 (5 sats/s over 10 s)", got)
+	}
+	// A second interval accumulates on top of the first.
+	got = s.observe(base.Add(20*time.Second), 5, true) // +50
+	if got != 100 {
+		t.Errorf("accumulated = %v, want 100 (two 10 s intervals)", got)
+	}
+}
+
+func TestSatsAccountant_SkipsNonProductiveInterval(t *testing.T) {
+	var s satsAccountant
+	base := time.Now()
+	s.observe(base, 5, true)                             // prime
+	got := s.observe(base.Add(10*time.Second), 5, false) // not productive → +0
+	if got != 0 {
+		t.Errorf("accumulated = %v, want 0 (non-productive interval)", got)
+	}
+}
+
+func TestSatsAccountant_SkipsNonPositiveRateAndBackwardsClock(t *testing.T) {
+	var s satsAccountant
+	base := time.Now()
+	s.observe(base, 5, true) // prime
+	if got := s.observe(base.Add(10*time.Second), 0, true); got != 0 {
+		t.Errorf("zero-rate interval accumulated %v, want 0", got)
+	}
+	if got := s.observe(base.Add(5*time.Second), 5, true); got != 0 {
+		t.Errorf("backwards-clock interval accumulated %v, want 0", got)
+	}
+}
+
+func TestSatsAccountant_RetainsFractionalPrecision(t *testing.T) {
+	var s satsAccountant
+	base := time.Now()
+	s.observe(base, 0.3, true) // prime
+	// 0.3 sats/s × 1 s = 0.3, below 1 — must not be truncated to 0 internally;
+	// three such intervals cross the integer boundary.
+	s.observe(base.Add(1*time.Second), 0.3, true)
+	s.observe(base.Add(2*time.Second), 0.3, true)
+	got := s.observe(base.Add(3*time.Second), 0.3, true)
+	if got < 0.89 || got > 0.91 {
+		t.Errorf("accumulated = %v, want ~0.9 (fractional precision retained)", got)
+	}
 }
 
 // ============================================================================
