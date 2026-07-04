@@ -213,6 +213,57 @@ that ADR's roadmap.
 
 ---
 
+## 9. TUI's "total sats earned" and "shares sent" are placeholder counters
+
+**What:** The terminal dashboard's `TotalSatsEarned` field
+(`internal/engine/run.go`, both the Stratum V1 and V2 session loops)
+increments by exactly `1` for every accepted share — it is a placeholder,
+not the pool's actual credited amount. Stratum V2's `SubmitSharesSuccess`
+message (and the V1 acceptance response) carries no monetary value at all;
+the protocol only acknowledges share counts, so an accurate sats figure
+would require the same yield-rate math the arbitration engine already uses
+(see `otedama_effective_yield_sats_per_second`), not a naive per-share
+increment. Separately, the dashboard's "shares sent" field
+(`internal/engine/stats.go`) currently reuses the "shares found" count
+rather than counting actual network submissions.
+
+**Impact:** The TUI's headline "sats earned" number looks like real income
+but is not — it moves in lockstep with the accepted-share count, not with
+BTC price, share difficulty, or pool payout scheme. An operator comparing
+this figure against their pool dashboard's real balance will see them
+diverge immediately and permanently.
+
+**How you can tell:** The number increases by exactly 1 per accepted share
+regardless of difficulty or BTC price. The pool's own dashboard (or
+`otedama_share_acceptance_rate` combined with `otedama_arbitration_expected_yield_sats_per_second`,
+both real metrics) is the trustworthy source for actual earnings today.
+
+**Workaround:** Use the pool's own web dashboard/API for real balance;
+treat the TUI's sats-earned figure as a share-count proxy, not income.
+
+**Target:** Unscheduled. The fix is to accumulate
+`otedama_effective_yield_sats_per_second` over elapsed time (the same
+metric introduced to fold downtime into the yield estimate) rather than
+counting shares, since Stratum itself never carries a monetary value.
+
+---
+
+## ~~10. Stratum V1 pool password is accepted in config but has no effect~~ ✅ RESOLVED (session 235)
+
+**Resolution:** `runSessionV1` previously constructed its
+`poolproto.Credentials` with a hardcoded `Password: "x"`, ignoring
+`PoolConfig.Password` entirely (the V1 dialer itself already correctly
+forwarded whatever password it was given into `mining.authorize` — the gap
+was one call site upstream, in the engine's session setup, not the
+protocol layer). `sessionOpts` now carries a `poolPassword` field populated
+from `cfg.Pools[poolIdx].Password` at session-loop construction time;
+`runSessionV1` uses it when non-empty and falls back to the pre-existing
+`"x"` convention when no password is configured, so unconfigured setups
+(the common case) are unaffected. Verified end-to-end against a fake V1
+pool that captures and inspects the raw `mining.authorize` wire request.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

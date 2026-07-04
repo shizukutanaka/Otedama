@@ -7,6 +7,7 @@ package engine
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -808,6 +809,90 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	// Ends with pool disconnect.
 	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
+//
+// runSessionV1 previously hardcoded the V1 mining.authorize password to
+// "x" regardless of PoolConfig.Password. These two tests capture the raw
+// mining.authorize request line from a fake pool and confirm the actual
+// second params[] element (the password) matches what sessionOpts carries.
+
+// captureAuthorizePassword runs a minimal fake V1 pool that answers
+// mining.subscribe, captures the mining.authorize request's password
+// parameter, then answers it, returning the captured value once the
+// handshake completes (or "" on timeout/parse failure).
+func captureAuthorizePassword(t *testing.T, poolPassword string) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	type rpcReq struct {
+		Method string   `json:"method"`
+		Params []string `json:"params"`
+	}
+	var captured string
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+
+		line, _ := r.ReadString('\n') // mining.authorize
+		var req rpcReq
+		if json.Unmarshal([]byte(line), &req) == nil && req.Method == "mining.authorize" && len(req.Params) == 2 {
+			captured = req.Params[1]
+		}
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+	}()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:      "stratum+tcp://" + ln.Addr().String(),
+		user:         "worker.1",
+		merged:       merged,
+		interval:     time.Minute,
+		log:          func(_, _ string) {},
+		poolPassword: poolPassword,
+	})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fake pool never completed the handshake")
+	}
+	return captured
+}
+
+func TestRunSessionV1_ConfiguredPasswordReachesMiningAuthorize(t *testing.T) {
+	got := captureAuthorizePassword(t, "s3cr3t-pool-password")
+	if got != "s3cr3t-pool-password" {
+		t.Errorf("mining.authorize password = %q, want the configured PoolConfig.Password", got)
+	}
+}
+
+func TestRunSessionV1_UnconfiguredPasswordDefaultsToX(t *testing.T) {
+	// No PoolConfig.Password set (the common case: most V1 pools accept any
+	// value) must still send the long-standing "x" convention, not an empty
+	// string — preserves pre-existing behavior for the unconfigured case.
+	got := captureAuthorizePassword(t, "")
+	if got != "x" {
+		t.Errorf("mining.authorize password = %q, want the default \"x\"", got)
 	}
 }
 

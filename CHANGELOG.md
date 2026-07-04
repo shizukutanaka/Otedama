@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 235 — 長所短所改善点の洗い出しと実行: Stratum V1 プールパスワードが無視されるバグを修正)
+
+「長所短所改善点を洗い出して実行」の指示に基づき、これまでの監査
+（sessions 232–234 のソクラテス式検証）で発見した項目のうち、安全に
+修正可能なものを実行した。
+
+**Stratum V1 プールパスワードが常に無視されるバグを修正**
+（`docs/KNOWN_LIMITATIONS.md` 旧§10、本セッションで解消）
+
+`internal/engine/run.go`の`runSessionV1`が`poolproto.Credentials`を
+`Password: "x"`固定で構築しており、`PoolConfig.Password`を一切参照して
+いなかった。V1 dialer自体は受け取ったパスワードを正しく`mining.authorize`
+へ転送するため（`internal/poolproto/stratumv1/dialer.go:139-144`）、
+問題はプロトコル層ではなくエンジン側の呼び出し1箇所だけだった。
+
+- `internal/engine/run.go`: `sessionOpts`に`poolPassword`フィールドを
+  追加し、`r.opts.Config.Pools[poolIdx].Password`から値を渡すよう修正。
+  `runSessionV1`は設定済みの値を使用し、未設定時は既存の`"x"`慣習に
+  フォールバック（後方互換）。
+
+テスト追加（2件、`internal/engine/coverage_test.go`）:
+- `TestRunSessionV1_ConfiguredPasswordReachesMiningAuthorize` — 偽プールで
+  実際の`mining.authorize`ワイヤーリクエストをキャプチャし、設定した
+  パスワードが正しく送信されることを確認。
+- `TestRunSessionV1_UnconfiguredPasswordDefaultsToX` — 未設定時に
+  従来通り`"x"`が送信されることを確認（回帰防止）。
+
+`docs/KNOWN_LIMITATIONS.md`: §10を✅解決済みに更新。
+
+全24パッケージgreen。`go vet`/`gofmt` clean。新規依存なし。
+
+**別途、`.github/workflows/deploy.yml`・`security.yml`の重大な欠陥も
+発見・修正済みだが、GitHub App の権限（`workflows`スコープ未許可）により
+このセッションではpushできず、ローカルの作業ツリーに変更のみ残っている**
+（詳細はチャットでの報告を参照。ユーザーが手動適用するか、
+Appにworkflowsパーミッションを付与後に別途コミットする必要がある）。
+
 ### Docs (session 234 — ソクラテス式問答法で過不足の機能を再検証: `CLAUDE.md` アーキテクチャマップ自体の記述が実装から乖離していた5箇所を修正)
 
 session 232・233 に続き、今回は検証対象を製品コードから一段引いて、

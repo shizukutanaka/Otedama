@@ -370,10 +370,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			return fmt.Errorf("engine: exceeded %d reconnect attempts", r.opts.MaxReconnectAttempts)
 		}
 		poolURL := pools[poolIdx]
-		var poolUser, poolTLSCAFile string
+		var poolUser, poolTLSCAFile, poolPassword string
 		if poolIdx < len(r.opts.Config.Pools) {
 			poolUser = r.opts.Config.Pools[poolIdx].User
 			poolTLSCAFile = r.opts.Config.Pools[poolIdx].TLSCAFile
+			poolPassword = r.opts.Config.Pools[poolIdx].Password
 		}
 		user := sessionUser(poolUser, addrs[addrIdx], r.opts.Config.Workers.Name)
 
@@ -394,21 +395,22 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:     poolURL,
-			user:        user,
-			workers:     r.workers,
-			merged:      r.merged,
-			interval:    statsInterval,
-			dashboard:   r.dashboard,
-			startTime:   r.startTime,
-			wallet:      r.wallet,
-			devices:     r.deviceN,
-			log:         r.log,
-			providers:   r.providers,
-			m:           r.metrics,
-			powerWatts:  r.opts.Config.PowerWatts,
-			curtailGate: r.curtailGate,
-			tlsCAFile:   poolTLSCAFile,
+			poolURL:      poolURL,
+			user:         user,
+			workers:      r.workers,
+			merged:       r.merged,
+			interval:     statsInterval,
+			dashboard:    r.dashboard,
+			startTime:    r.startTime,
+			wallet:       r.wallet,
+			devices:      r.deviceN,
+			log:          r.log,
+			providers:    r.providers,
+			m:            r.metrics,
+			powerWatts:   r.opts.Config.PowerWatts,
+			curtailGate:  r.curtailGate,
+			tlsCAFile:    poolTLSCAFile,
+			poolPassword: poolPassword,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -514,6 +516,10 @@ type sessionOpts struct {
 	// tlsCAFile is the active pool's optional PEM CA bundle path (PoolConfig
 	// .TLSCAFile), used to verify a private-CA/self-signed stratum+tls:// pool.
 	tlsCAFile string
+	// poolPassword is the active pool's configured password (PoolConfig
+	// .Password), sent in the Stratum V1 mining.authorize call. Most V1
+	// pools accept any value, but not all — see KNOWN_LIMITATIONS.md §10.
+	poolPassword string
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
@@ -785,9 +791,19 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 // protocol-agnostic poolproto.Session interface (Jobs() / Submit()) instead
 // of the Stratum V2 framing directly.
 func runSessionV1(ctx context.Context, opts sessionOpts) error {
+	// "x" is the long-standing convention for "no real password" across V1
+	// pools/miners (most accept any value, some require non-empty), so an
+	// unconfigured PoolConfig.Password keeps sending it — only a pool
+	// operator who explicitly set password: in their config gets that value
+	// instead. Previously this was hardcoded to "x" unconditionally, so a
+	// configured password silently had no effect (KNOWN_LIMITATIONS.md §10).
+	password := opts.poolPassword
+	if password == "" {
+		password = "x"
+	}
 	creds := poolproto.Credentials{
 		User:     opts.user,
-		Password: "x",
+		Password: password,
 	}
 	// For a stratum+tls:// pool with a configured CA bundle, load it so the
 	// dialer can verify a private-CA/self-signed certificate. An unreadable
