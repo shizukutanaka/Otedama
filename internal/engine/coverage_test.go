@@ -615,6 +615,115 @@ func TestRunSession_BadPoolURL(t *testing.T) {
 	}
 }
 
+// TestRunSession_V2TLSSchemeAttemptsRealTLS pins the fix for the
+// "configured v2tls:// pool silently connects in plaintext" defect
+// (docs/KNOWN_LIMITATIONS.md §2): runSession must attempt an actual TLS
+// handshake for a stratum+v2tls:// URL, never fall back to plaintext.
+// Pointed at a listener that only speaks plain TCP, a real TLS attempt
+// fails with a TLS-specific handshake error; a silent plaintext fallback
+// would instead either succeed at the TCP level or fail with a generic
+// decode error from the (never-sent) SetupConnectionSuccess response —
+// this test asserts on the former, unambiguous signal.
+func TestRunSession_V2TLSSchemeAttemptsRealTLS(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		// Plain TCP echo/no-op: a real TLS client dialing this will fail
+		// the handshake immediately (no ServerHello), never reach here in
+		// a way that matters for the assertion below.
+		buf := make([]byte, 64)
+		_, _ = c.Read(buf)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var logs []string
+	var mu sync.Mutex
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	err = runSession(ctx, sessionOpts{
+		poolURL:  "stratum+v2tls://" + ln.Addr().String(),
+		log:      logFn,
+		interval: time.Second,
+	})
+	if err == nil {
+		t.Fatal("runSession against a plaintext listener over v2tls:// should fail (TLS handshake error)")
+	}
+	if !strings.Contains(err.Error(), "TLS") {
+		t.Errorf("error = %q, want a TLS-specific dial failure (proves TLS was actually attempted, not skipped)", err.Error())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, l := range logs {
+		if strings.Contains(l, "plaintext") {
+			t.Errorf("v2tls:// session logged a plaintext warning (should only apply to the non-TLS scheme): %q", l)
+		}
+	}
+}
+
+// TestRunSession_PlainV2SchemeWarnsAboutNoEncryption pins the disclosure
+// half of the same fix: a plaintext stratum+v2:// connection must warn
+// the operator at connect time that no transport encryption is active,
+// rather than silently proceeding as if the link were secure.
+func TestRunSession_PlainV2SchemeWarnsAboutNoEncryption(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		c.Close() // close immediately; test only needs the warning log
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var logs []string
+	var mu sync.Mutex
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	_ = runSession(ctx, sessionOpts{
+		poolURL:  "stratum+v2://" + ln.Addr().String(),
+		log:      logFn,
+		interval: time.Second,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	found := false
+	for _, l := range logs {
+		if strings.Contains(l, "plaintext") && strings.Contains(l, "no transport encryption") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a plaintext/no-transport-encryption warning in logs, got: %v", logs)
+	}
+}
+
 // ============================================================================
 // run.go handshake — error paths via net.Pipe fake servers
 // ============================================================================

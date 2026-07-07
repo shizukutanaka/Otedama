@@ -20,9 +20,12 @@ quietly trusted.
 ## 1. AI inference yield is simulated, not live
 
 **What:** The `AkashProvider` (`internal/provider/ai_inference.go`)
-models Akash Network market conditions with a realistic price process.
-It does **not** yet query the live Akash REST API, submit real bids, or
-earn real inference income.
+quotes a **fixed price** — the midpoint of the configured
+`MinUSDPerHour`/`MaxUSDPerHour` range, unchanging tick to tick, with no
+randomness or time-varying process (corrected session 240; this entry
+previously overstated it as a "realistic price process/distribution",
+which the code has never implemented). It does **not** yet query the
+live Akash REST API, submit real bids, or earn real inference income.
 
 **Impact:** The inference-side yield shown in the TUI and used by the
 arbitration engine is a *simulation*. It is suitable for exercising the
@@ -43,31 +46,69 @@ ADR-010 (arbitration engine evolution) §A4 (strategic bidding).
 
 ---
 
-## 2. Noise NX handshake uses P-256, not secp256k1
+## 2. Noise NX transport encryption is not wired into any live connection; use stratum+v2tls:// for real confidentiality
 
-**What:** Otedama's Stratum V2 transport encryption
-(`internal/stratum/noise.go`) implements the Noise NX pattern. The
-Stratum V2 specification mandates secp256k1 Diffie-Hellman with
-ElligatorSwift encoding. In v3.0.0-alpha this is **stubbed with P-256**
-(NIST curve), which satisfies the same `crypto/ecdh` interface but is
-**not wire-compatible with a real Stratum V2 server's encrypted
-channel**.
+**What (revised session 240 — the previous wording of this entry
+significantly understated the gap):** `internal/stratum/noise.go`
+implements pieces of the Noise NX pattern, but three separate problems
+mean it provides no real security today, and the engine's actual pool
+connection never uses it in the first place:
 
-**Impact:** The encrypted-channel handshake will not interoperate with
-production Stratum V2 pools that require secp256k1. The plaintext
-Stratum V2 path and the Stratum V1 path are unaffected.
+1. **The engine's live connect path never calls it at all.**
+   `internal/engine/run.go`'s `runSession` — the code that actually runs
+   when you `otedama run` against a `stratum+v2://` pool — dials a plain
+   `net.Dialer` and speaks Stratum V2 in the clear. `NewHandshakeInitiator`
+   and `EncryptedConn` are fully unit-tested but have zero callers outside
+   `internal/stratum`'s own test files. A user connecting to
+   `stratum+v2://` gets no transport encryption, full stop — not a
+   downgraded/incompatible encryption, none at all. The Bitcoin payout
+   address (sent as `OpenMiningChannel.User`) travels in plaintext.
+2. **The DH primitive is P-256, not the spec-mandated secp256k1 +
+   ElligatorSwift** — even if the handshake were wired in, it would not
+   be wire-compatible with a real Stratum V2 pool's encrypted channel.
+   Adding a secp256k1 library is in tension with ADR-003 (zero runtime
+   dependencies); resolution is an open decision tracked by ADR-011.
+3. **The handshake itself has a structural gap beyond the DH primitive.**
+   `ReadMessage2`'s "x-only" fallback branch (when the responder's
+   ephemeral key doesn't parse as P-256 uncompressed/compressed) derives
+   transport keys from `mixHash` alone — no Diffie-Hellman at all — so an
+   on-path observer who sees the same public handshake messages can
+   derive the same keys. Separately, `mixKey`'s HKDF output `k` (meant to
+   become the handshake cipher key) is computed and then discarded
+   (`_ = k`), and no code anywhere authenticates a responder static key —
+   the defining property the "NX" pattern name refers to. These are not
+   "swap the DH primitive" fixes; the message flow itself needs rework,
+   contrary to what this entry previously claimed ("only the DH primitive
+   ... needs to change; the message flow is final").
 
-**Why:** secp256k1 + ElligatorSwift requires a secp256k1 library.
-Adding one is in tension with ADR-003 (zero runtime dependencies); the
-resolution (vendoring `decred/dcrd/dcrec/secp256k1` vs. a minimal
-in-tree implementation) is an open decision.
+**Impact:** `stratum+v2://` (the default V2 scheme) carries no transport
+encryption in any configuration. There is no way to get spec-compliant
+Stratum V2 Noise encryption today regardless of configuration.
 
-**Workaround:** Use pools that accept the plaintext Stratum V2 or V1
-transport during the alpha.
+**What actually IS available today (session 240):** `stratum+v2tls://`
+now performs a real, certificate-verified TLS 1.2+ handshake via Go's
+standard `crypto/tls` (`internal/stratum/tls.go`, mirroring the identical
+fix already applied to Stratum V1's `stratum+tls://` scheme). This is
+**not** the Stratum V2 spec's Noise NX — it's TLS wrapping the same
+plaintext V2 protocol — but it is real confidentiality against a
+network eavesdropper for a pool that terminates TLS, using only
+standard-library cryptography. Before this fix, `stratum+v2tls://` was
+registered as a valid URL scheme but silently downgraded to the exact
+same plaintext connection as `stratum+v2://` — a configured "TLS" pool
+gave zero transport security with no indication anything was wrong.
+Connecting over plain `stratum+v2://` now also logs an explicit warning
+at connect time (`engine: connecting over plaintext Stratum V2 — no
+transport encryption`) so an operator watching logs is told, rather than
+having to already know to check this document.
 
-**Target:** v3.1.0. Tracked by the v3.1.0 "real protocols" milestone.
-The handshake code is already structured so only the DH primitive and
-the ElligatorSwift encoding need to change; the message flow is final.
+**Workaround:** Use `stratum+v2tls://` for a TLS-terminating pool, or the
+V1 fallback (`stratum+tls://`, also real TLS) for a pool that supports
+it. Neither is spec-compliant Stratum V2 Noise encryption, but both are
+real transport security today.
+
+**Target:** v3.1.0 for spec-compliant Noise NX (secp256k1 +
+ElligatorSwift + full message-flow rework + responder authentication).
+Tracked by the v3.1.0 "real protocols" milestone and ADR-011.
 
 **Related:** for the same reason (the secp256k1 dependency is decided in
 ADR-011 but not yet added), the `internal/btccrypto` signature schemes

@@ -29,6 +29,14 @@ func cmdService(args []string, stdout, stderr io.Writer) int {
 		return cmdServiceUninstall(stdout, stderr)
 	case "status":
 		return cmdServiceStatus(stdout, stderr)
+	case "help", "--help", "-h":
+		// Without this, "otedama service --help" fell through to
+		// "unknown subcommand" on stderr with exit 64 — an explicit help
+		// request looking identical to a mistake, the same class of bug
+		// fixed for the leaf subcommands' own --help via
+		// parseSubcommandFlags.
+		fmt.Fprintln(stdout, "otedama service: expected subcommand (install|uninstall|status)")
+		return exitOK
 	default:
 		fmt.Fprintf(stderr, "otedama service: unknown subcommand %q\n", args[0])
 		return exitUsage
@@ -37,15 +45,14 @@ func cmdService(args []string, stdout, stderr io.Writer) int {
 
 func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("service install", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	configFile := fs.String("config", "", "Path to config.yaml for the service.")
 	dataDir := fs.String("data-dir", "", "Data directory for the service.")
 	bitcoinAddress := fs.String("bitcoin-address", "", "Payout address to embed in the service definition (required when no config file is specified).")
 	logLevel := fs.String("log-level", "", "Log level for the service (debug|info|warn|error).")
 	logFormat := fs.String("log-format", "", "Log format for the service (text|json).")
 	language := fs.String("language", "", "UI language for the service (en, ja, …).")
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
+	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
+		return code
 	}
 	svcFlags := daemon.ServiceFlags{
 		BitcoinAddress: *bitcoinAddress,

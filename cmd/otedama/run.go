@@ -41,9 +41,18 @@ type runFlags struct {
 	jsonOut                  bool   // --json: emit config show output as JSON
 }
 
-func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
+func parseRunFlags(args []string, stdout, stderr io.Writer) (runFlags, error) {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	out := stderr
+	if hasHelpFlag(args) {
+		// See parseSubcommandFlags: --help/-h is not a usage mistake, so
+		// its output belongs on stdout. This function returns a plain
+		// error rather than an exit code (its three call sites each need
+		// to do their own post-parse work), so the ErrHelp/exitOK
+		// decision is made by the caller checking err == flag.ErrHelp.
+		out = stdout
+	}
+	fs.SetOutput(out)
 	var f runFlags
 	fs.StringVar(&f.BitcoinAddress, "bitcoin-address", "", "Bitcoin address for mining rewards (required).")
 	fs.StringVar(&f.LogLevel, "log-level", "", "Log level (debug|info|warn|error).")
@@ -104,8 +113,11 @@ func applyRunEnvFallbacks(f *runFlags) {
 }
 
 func cmdRun(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stderr)
+	f, err := parseRunFlags(args, stdout, stderr)
 	if err != nil {
+		if err == flag.ErrHelp {
+			return exitOK
+		}
 		return exitUsage
 	}
 	applyRunEnvFallbacks(&f)

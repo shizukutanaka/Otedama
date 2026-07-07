@@ -15,13 +15,12 @@ import (
 
 func cmdDoctor(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	configFile := fs.String("config", "", "Path to config.yaml to diagnose.")
 	btcAddr := fs.String("bitcoin-address", "", "Bitcoin address to validate.")
 	dataDir := fs.String("data-dir", "", "Data directory to check.")
 	jsonOut := fs.Bool("json", false, "Emit results as a JSON object (for CI/monitoring) instead of text.")
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
+	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
+		return code
 	}
 
 	// Build effective config from the same layering used by `run`.

@@ -33,10 +33,13 @@ import (
 //
 // # Implementation status (v3.0.0-alpha)
 //
-// This provider simulates market conditions using realistic price
-// distributions. Real Akash API integration (bid submission, container
-// management) is implemented in v3.1.0. The provider interface and
-// yield calculation are stable and ready for the full integration.
+// This provider simulates market conditions as a fixed price: every
+// quote uses the midpoint of the configured [MinUSDPerHour,
+// MaxUSDPerHour] range (no randomness, no time-varying process — see
+// publish() below). Real Akash API integration (bid submission,
+// container management) is implemented in v3.1.0. The provider
+// interface and yield calculation are stable and ready for the full
+// integration.
 type AkashProvider struct {
 	pollingProvider
 	id      string
@@ -65,9 +68,10 @@ func NewAkashProvider(rates RateSource) *AkashProvider {
 func (p *AkashProvider) ID() string { return p.id }
 
 // Name identifies this provider. The "(simulated)" suffix is
-// deliberate and load-bearing: in v3.0.0-alpha this provider models
-// Akash market conditions with a realistic price process rather than
-// querying the live Akash Network REST API. The suffix ensures the
+// deliberate and load-bearing: in v3.0.0-alpha this provider quotes a
+// fixed price (the midpoint of MinUSDPerHour/MaxUSDPerHour, unchanging
+// tick to tick — see publish()) rather than querying the live Akash
+// Network REST API for real market conditions. The suffix ensures the
 // simulation is visible everywhere the provider name is shown — the
 // TUI, logs, and `config show` — so a user never mistakes simulated
 // inference yield for real income. Removing the suffix is gated on the

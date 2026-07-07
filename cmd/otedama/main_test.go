@@ -75,6 +75,65 @@ func TestRun_Help(t *testing.T) {
 	}
 }
 
+// TestSubcommandHelp_ExitsZeroOnStdout pins the fix for every leaf
+// subcommand's --help: previously each flag.FlagSet unconditionally wrote
+// its usage to stderr and every parse error (including flag.ErrHelp)
+// returned exitUsage (64), so a correct `otedama run --help` invocation
+// looked identical to a genuine mistake to any script checking $? or
+// reading stderr for real errors.
+func TestSubcommandHelp_ExitsZeroOnStdout(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"run", []string{"run", "--help"}},
+		{"run -h", []string{"run", "-h"}},
+		{"doctor", []string{"doctor", "--help"}},
+		{"version", []string{"version", "--help"}},
+		{"service install", []string{"service", "install", "--help"}},
+		{"config show", []string{"config", "show", "--help"}},
+		{"config validate", []string{"config", "validate", "--help"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errBuf bytes.Buffer
+			code := run(tc.args, &out, &errBuf)
+			if code != exitOK {
+				t.Errorf("code = %d, want exitOK (0); stderr=%q", code, errBuf.String())
+			}
+			if out.Len() == 0 {
+				t.Error("expected usage text on stdout, got nothing")
+			}
+			if errBuf.Len() != 0 {
+				t.Errorf("expected nothing on stderr for an explicit --help, got %q", errBuf.String())
+			}
+		})
+	}
+}
+
+// TestSubcommandUnknownFlag_StillExitsUsageOnStderr guards against the
+// --help fix accidentally routing genuine mistakes to stdout/exitOK too —
+// only flag.ErrHelp gets the special case; any other parse error must
+// still behave as before (stderr, exitUsage).
+func TestSubcommandUnknownFlag_StillExitsUsageOnStderr(t *testing.T) {
+	cases := [][]string{
+		{"run", "--not-a-real-flag"},
+		{"doctor", "--not-a-real-flag"},
+		{"version", "--not-a-real-flag"},
+		{"service", "install", "--not-a-real-flag"},
+	}
+	for _, args := range cases {
+		var out, errBuf bytes.Buffer
+		code := run(args, &out, &errBuf)
+		if code != exitUsage {
+			t.Errorf("%v: code = %d, want exitUsage (64)", args, code)
+		}
+		if errBuf.Len() == 0 {
+			t.Errorf("%v: expected usage error on stderr, got nothing", args)
+		}
+	}
+}
+
 func TestVersion_Plain(t *testing.T) {
 	var out, err bytes.Buffer
 	if code := run([]string{"version"}, &out, &err); code != exitOK {
@@ -402,6 +461,33 @@ func TestVersion_UnknownFlagReturnsUsage(t *testing.T) {
 	code := run([]string{"version", "--this-flag-does-not-exist"}, &out, &errb)
 	if code != exitUsage {
 		t.Errorf("version with unknown flag: code=%d, want exitUsage(%d)", code, exitUsage)
+	}
+}
+
+// ============================================================================
+// hasHelpFlag
+// ============================================================================
+
+func TestHasHelpFlag(t *testing.T) {
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"--help"}, true},
+		{[]string{"-help"}, true},
+		{[]string{"-h"}, true},
+		{[]string{"--bitcoin-address", "bc1q...", "--help"}, true},
+		{[]string{"--help", "--bitcoin-address", "bc1q..."}, true},
+		{nil, false},
+		{[]string{}, false},
+		{[]string{"--bitcoin-address", "bc1q..."}, false},
+		{[]string{"--", "--help"}, false},        // "--" ends flag scanning; --help after it is a positional arg
+		{[]string{"positional", "--help"}, true}, // a bare token is a flag's value here, not end-of-flags; scanning continues
+	}
+	for _, tc := range cases {
+		if got := hasHelpFlag(tc.args); got != tc.want {
+			t.Errorf("hasHelpFlag(%v) = %v, want %v", tc.args, got, tc.want)
+		}
 	}
 }
 

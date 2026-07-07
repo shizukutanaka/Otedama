@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"strings"
@@ -23,6 +24,11 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 		return cmdConfigShow(args[1:], stdout, stderr)
 	case "validate":
 		return cmdConfigValidate(args[1:], stdout, stderr)
+	case "help", "--help", "-h":
+		// See cmdService's identical case: an explicit help request must
+		// not look like the "unknown subcommand" error path.
+		fmt.Fprintln(stdout, "otedama config: expected subcommand (show|validate)")
+		return exitOK
 	default:
 		fmt.Fprintf(stderr, "otedama config: unknown subcommand %q\n", args[0])
 		return exitUsage
@@ -30,8 +36,11 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stderr)
+	f, err := parseRunFlags(args, stdout, stderr)
 	if err != nil {
+		if err == flag.ErrHelp {
+			return exitOK
+		}
 		return exitUsage
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)
@@ -155,8 +164,11 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 }
 
 func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stderr)
+	f, err := parseRunFlags(args, stdout, stderr)
 	if err != nil {
+		if err == flag.ErrHelp {
+			return exitOK
+		}
 		return exitUsage
 	}
 	fromFile := loadConfigFile(f.configFile, stderr)

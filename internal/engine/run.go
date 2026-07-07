@@ -29,6 +29,7 @@ package engine
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -617,10 +618,42 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	if err != nil {
 		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
 	}
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", host)
-	if err != nil {
-		return fmt.Errorf("engine: dial %s: %w", host, err)
+
+	var conn net.Conn
+	if proto == poolproto.ProtocolStratumV2TLS {
+		// A configured v2tls:// pool gets an actual, certificate-verified
+		// TLS connection — never a silent plaintext downgrade (see
+		// docs/KNOWN_LIMITATIONS.md §2). Mirrors the identical fix already
+		// applied to stratumv1's stratum+tls:// scheme.
+		var tlsCfg *tls.Config
+		if opts.tlsCAFile != "" {
+			if pem, rerr := os.ReadFile(opts.tlsCAFile); rerr != nil {
+				opts.log("warn", fmt.Sprintf("engine: cannot read tls_ca_file %q: %v; using system roots only",
+					opts.tlsCAFile, rerr))
+			} else if cfg, cerr := stratum.TLSConfigWithExtraCAs(pem); cerr != nil {
+				return fmt.Errorf("engine: %w", cerr)
+			} else {
+				tlsCfg = cfg
+			}
+		}
+		conn, err = stratum.DialTLS(ctx, host, tlsCfg)
+		if err != nil {
+			return fmt.Errorf("engine: TLS dial %s: %w", host, err)
+		}
+	} else {
+		// Plaintext Stratum V2: no transport encryption today (§2 — the
+		// Noise NX handshake exists but the engine's connect path never
+		// invokes it). Encryption for this scheme awaits the secp256k1
+		// dependency decision (ADR-011); use stratum+v2tls:// for
+		// confidentiality in the meantime.
+		opts.log("warn", "engine: connecting over plaintext Stratum V2 — no transport encryption "+
+			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
+			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
+		var d net.Dialer
+		conn, err = d.DialContext(ctx, "tcp", host)
+		if err != nil {
+			return fmt.Errorf("engine: dial %s: %w", host, err)
+		}
 	}
 	defer conn.Close()
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))

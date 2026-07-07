@@ -162,6 +162,26 @@ func TestService_UnknownSubcommand(t *testing.T) {
 	}
 }
 
+// TestService_Help_ExitsZeroOnStdout pins the fix for "otedama service
+// --help": it previously fell through to the "unknown subcommand" branch
+// (stderr, exitUsage) since "--help" matched none of install/uninstall/
+// status — an explicit help request looked exactly like a typo.
+func TestService_Help_ExitsZeroOnStdout(t *testing.T) {
+	for _, arg := range []string{"help", "--help", "-h"} {
+		var out, err bytes.Buffer
+		code := run([]string{"service", arg}, &out, &err)
+		if code != exitOK {
+			t.Errorf("service %s: exit = %d, want %d", arg, code, exitOK)
+		}
+		if out.Len() == 0 {
+			t.Errorf("service %s: expected usage text on stdout, got nothing", arg)
+		}
+		if err.Len() != 0 {
+			t.Errorf("service %s: expected nothing on stderr, got %q", arg, err.String())
+		}
+	}
+}
+
 func TestService_Status_DoesNotCrash(t *testing.T) {
 	// On a machine where Otedama is not installed as a service, status
 	// must report "not installed" without error.
@@ -408,6 +428,24 @@ func TestConfig_UnknownSubcommand(t *testing.T) {
 	code := run([]string{"config", "totally-invented"}, &out, &err)
 	if code != exitUsage {
 		t.Errorf("config unknown subcommand exit = %d, want %d", code, exitUsage)
+	}
+}
+
+// TestConfig_Help_ExitsZeroOnStdout mirrors TestService_Help_ExitsZeroOnStdout:
+// "otedama config --help" previously fell through to "unknown subcommand".
+func TestConfig_Help_ExitsZeroOnStdout(t *testing.T) {
+	for _, arg := range []string{"help", "--help", "-h"} {
+		var out, err bytes.Buffer
+		code := run([]string{"config", arg}, &out, &err)
+		if code != exitOK {
+			t.Errorf("config %s: exit = %d, want %d", arg, code, exitOK)
+		}
+		if out.Len() == 0 {
+			t.Errorf("config %s: expected usage text on stdout, got nothing", arg)
+		}
+		if err.Len() != 0 {
+			t.Errorf("config %s: expected nothing on stderr, got %q", arg, err.String())
+		}
 	}
 }
 

@@ -10,6 +10,96 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 240 — フロントエンド〜バックエンド市販レベル品質化 (3/4): CLI の --help が誤りと区別できない終了コードだった問題、および設定済みTLSプールが平文接続へ黙って劣化していた問題を解消)
+
+session 239 に続き、TUI/CLI 監査エージェントが発見した残り2種の問題を
+解消した。
+
+**1. サブコマンドの `--help` が「使い方の誤り」と区別できなかった**
+
+`otedama run --help`・`doctor --help`・`version --help`・
+`service install --help`・`config show|validate --help` はいずれも
+`flag.FlagSet`が`fs.SetOutput(stderr)`固定で、`fs.Parse`が
+`flag.ErrHelp`を返しても呼び出し元は一律`exitUsage`(64)を返していた。
+つまり正しい`--help`呼び出しが、未知のフラグを渡した本物の誤りと
+終了コード・出力先の両方で見分けが付かなかった——`$?`で判定する
+スクリプトやパイプにとっては致命的な非一貫性。
+
+対応: 新規`parseSubcommandFlags`ヘルパー（`cmd/otedama/main.go`）が
+`--help`/`-h`/`-help`の出現を検出し、その場合のみ出力先をstdoutに
+切り替えて`exitOK`を返す。それ以外のパースエラーは従来通り
+stderr・`exitUsage`。`run`・`doctor`・`version`・`service install`の
+4箇所を移行。`parseRunFlags`（`config show`/`validate`とも共有）も
+同様に修正。加えて`otedama service --help`・`otedama config --help`が
+「unknown subcommand」に落ちていた小さな不整合も同時に修正。
+
+`hasHelpFlag`実装で1件の実バグを自己発見・修正: 当初「フラグらしくない
+最初のトークンで走査終了」という発見的処理を入れていたが、これは
+`--bitcoin-address bc1q... --help`のような一般的な呼び出しで`bc1q...`
+（フラグの値であり、位置引数ではない）を誤って走査終了とみなし、
+`--help`を偽陰性で見逃す実バグだった。このコードベースの全サブコマンドは
+位置引数を取らないため、単純に全トークンを走査する方式に修正
+（リテラルな`--`のみ走査終了とする）。
+
+**2. 設定済みTLSプールが黙って平文接続へ劣化**
+
+`stratum+v2tls://`はURLスキームとしては認識・登録されていたが、
+エンジンの実接続経路（`internal/engine/run.go`の`runSession`）は
+プロトコルに関わらず常に平文`net.Dialer`で接続していた——つまり
+TLSを明示的に設定したプールへの接続が、`stratum+v2://`と全く
+区別なく平文で行われていた。CHANGELOG session 126で修正した
+V1の`stratum+tls://`と同種のバグが、V2側には手つかずで残っていた。
+
+対応: `internal/stratum/tls.go`を新設し、V1のTLS実装
+（`stratumv1/tls.go`）と同じ設計——標準ライブラリ`crypto/tls`のみ使用、
+システムルート証明書に対する検証をデフォルトで有効、設定済みの
+`tls_ca_file`があれば追加CAとして信頼——を`v2tls://`スキームに適用。
+`runSession`は`ProtocolStratumV2TLS`の場合に実際のTLSハンドシェイクを
+行うようになり、失敗時は平文へフォールバックせずエラーを返す。
+平文`stratum+v2://`接続時には、実際にトランスポート暗号化が
+存在しないことを明示する警告ログ（"no transport encryption"）を
+接続時に出すようになった。
+
+**注記**: これはStratum V2仕様が定めるNoise NXハンドシェイク
+（secp256k1 + ElligatorSwift、ADR-011待ち）とは別物——TLSで同じ
+平文V2プロトコルをラップしているに過ぎない。しかし新規依存ゼロで、
+盗聴に対する実効的な機密性を今すぐ提供する。
+
+**3. `docs/KNOWN_LIMITATIONS.md` §2 の全面的な正直化**
+
+調査の過程で、既存の§2記述自体が実態を過小評価していたことが判明した:
+- エンジンの実接続経路はNoiseハンドシェイクを一度も呼び出しておらず、
+  `stratum+v2://`は常に完全な平文——これは「DHプリミティブがP-256」
+  という説明では全く伝わらない、より根本的なギャップだった。
+- `noise.go`の`ReadMessage2`には、responderの一時鍵がP-256として
+  パースできない場合に**DHを一切行わずに**ハンドシェイクを完了させる
+  "x-only"フォールバック分岐があり、通信経路上の観測者が同じ
+  公開鍵導出のみからトランスポート鍵を計算できてしまう。`mixKey`が
+  計算したHKDF出力`k`も破棄されたまま（`_ = k`）で、responderの
+  static鍵を認証するコードもどこにも存在しない——"NX"というパターン名
+  自体の核心的性質が欠落している。
+- 従来の記述「メッセージフローは確定済み、DHプリミティブのみ変更が
+  必要」は誤りだった。
+
+§2を全面的に書き直し、これら全てを開示。`docs/RESEARCH_IMPROVEMENTS.md`
+Category 10 item 1も同様に訂正・拡充。`docs/KNOWN_LIMITATIONS.md` §1・
+`internal/provider/ai_inference.go`のdocコメントの「realistic price
+process/distribution」という表現も、実装が固定値（設定範囲の中央値、
+時間変化なし）である実態に合わせて訂正（`mining.go`側は既に正確な
+記述だったため変更なし）。
+
+テスト追加: `internal/stratum/tls_test.go`（TLS検証成功/失敗、CA束による
+自己署名プール検証のエンドツーエンド）、`internal/engine`に
+v2tls://が実際にTLSを試みることを検証するテスト（非TLSリスナーに
+対してTLS特有のエラーで失敗することを確認）と平文接続時の警告ログを
+検証するテスト、CLI側に`--help`の全サブコマンド網羅テストと
+`hasHelpFlag`の単体テスト。
+
+全24パッケージ`go test -race`でgreen。`go vet`/`gofmt` clean。
+新規依存なし（標準ライブラリ`crypto/tls`のみ）。
+
+（本セッションは4コミット予定の3/4。残り: config層・可観測性の正確性。）
+
 ### Fixed (session 239 — フロントエンド〜バックエンド市販レベル品質化 (2/4): TUI ダッシュボードが切断中に古いデータで固まり、プロバイダー状態を常に捏造していた問題を解消)
 
 session 238 に続き、TUI/CLI 監査エージェントが発見した残りの偽装データ

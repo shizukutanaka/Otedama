@@ -388,13 +388,36 @@ arXiv grounding (session 41):
 
 ## Category 10 — Cryptography / security
 
-1. 🟡 **Replace the P-256 Noise stub with real secp256k1.** Confirmed
-   canonical library: `github.com/decred/dcrd/dcrec/secp256k1/v4` — pure Go,
-   ISC (copyfree) licence, imported-by 150+, provides ECDH and Schnorr.
-   This is the concrete unblocker for KNOWN_LIMITATIONS §2. **Tension with
-   ADR-003 (zero runtime deps):** ISC is permissive and the package is pure
-   Go with no transitive deps, so vendoring it is consistent with the spirit
+1. 🟡 **Replace the P-256 Noise stub with real secp256k1 — and rework the
+   message flow, not just the DH primitive.** Confirmed canonical library:
+   `github.com/decred/dcrd/dcrec/secp256k1/v4` — pure Go, ISC (copyfree)
+   licence, imported-by 150+, provides ECDH and Schnorr. This is the
+   concrete unblocker for KNOWN_LIMITATIONS §2. **Tension with ADR-003
+   (zero runtime deps):** ISC is permissive and the package is pure Go
+   with no transitive deps, so vendoring it is consistent with the spirit
    of ADR-003 — but the decision should be recorded in a new ADR.
+   — **Session 239 correction:** this item's own title previously implied
+   a DH-primitive swap was the only remaining work, matching
+   KNOWN_LIMITATIONS §2's prior ("message flow is final") claim — both
+   were wrong. Reading `internal/stratum/noise.go` found the message flow
+   itself has two structural gaps beyond the DH primitive: `ReadMessage2`'s
+   "x-only" fallback branch completes the handshake with no
+   Diffie-Hellman at all (transport keys derive from public data alone,
+   so an on-path observer can compute them), and no code anywhere
+   authenticates a responder static key — the defining property "NX"
+   names. `mixKey`'s HKDF output is also computed and discarded (`_ = k`).
+   Separately, and more urgently for user-facing risk: `internal/engine`'s
+   live connect path (`runSession`) never called `NewHandshakeInitiator`/
+   `EncryptedConn` at all — every `stratum+v2://` connection ran fully
+   plaintext regardless of this stub's state, which this item's framing
+   ("replace the DH stub") did not surface. **Fixed in the same session**:
+   `stratum+v2tls://` (previously registered but silently downgraded to
+   plaintext — the same bug class CHANGELOG session 126 fixed for V1's
+   `stratum+tls://`) now performs real TLS via `internal/stratum/tls.go` — not
+   spec-compliant Noise, but genuine confidentiality using only
+   `crypto/tls`, available today without the secp256k1 dependency
+   decision. This item (secp256k1 + message-flow rework) remains open for
+   spec-compliant Stratum V2 Noise encryption specifically.
 2. 🔵 **ElligatorSwift encoding** for the SV2 handshake (pairs with item 1).
 3. ✅ **scrypt + AES-GCM seed encryption at rest**.
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).

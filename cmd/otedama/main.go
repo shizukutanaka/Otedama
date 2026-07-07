@@ -38,6 +38,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -51,6 +52,57 @@ const (
 	exitUsage   = 64 // usage error (EX_USAGE: unknown flag, bad subcommand)
 	exitConfig  = 78 // configuration error (EX_CONFIG: invalid field value)
 )
+
+// parseSubcommandFlags parses fs against args and returns the exit code the
+// caller should use if parsing did not succeed (ok is false); callers
+// proceed normally when ok is true.
+//
+// A bare `--help`/`-h` is not a usage mistake — it is the documented way to
+// see a subcommand's flags (the top-level `otedama help` handles this
+// correctly already; every per-subcommand flag.FlagSet did not). Every
+// FlagSet in this package previously called fs.SetOutput(stderr)
+// unconditionally, so `otedama run --help` printed its usage to stderr and
+// exited 64, identical to a genuine mistake like an unknown flag — a
+// correct invocation looked like an error to any script checking $?. This
+// routes help output to stdout with exit 0, while every other parse error
+// (unknown flag, missing value, etc.) still goes to stderr with exitUsage.
+func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Writer) (ok bool, exitCode int) {
+	out := stderr
+	if hasHelpFlag(args) {
+		out = stdout
+	}
+	fs.SetOutput(out)
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return false, exitOK
+		}
+		return false, exitUsage
+	}
+	return true, exitOK
+}
+
+// hasHelpFlag reports whether args requests help, matching the exact
+// spellings flag.FlagSet.Parse recognises (-h, -help, --help) before
+// falling through to its own ErrHelp path. It scans every token rather
+// than stopping at the first argument that doesn't look like a flag:
+// every flag these subcommands define takes a value in the space-separated
+// "--flag value" form (e.g. "--bitcoin-address bc1q..."), so the token
+// right after a flag is that flag's value, not a positional argument
+// signalling the end of flags — stopping there produced false negatives
+// for the common case of --help appearing after any flag with a value.
+// Scanning still stops at a literal "--", the unambiguous end-of-flags
+// marker, since that ends flag.Parse's own scanning too.
+func hasHelpFlag(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-h", "-help", "--help":
+			return true
+		case "--":
+			return false
+		}
+	}
+	return false
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

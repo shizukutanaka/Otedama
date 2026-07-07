@@ -14,10 +14,9 @@ import (
 
 func cmdVersion(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("version", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "Output as JSON.")
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
+	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
+		return code
 	}
 	info := version.Get()
 	if *jsonOut {
