@@ -319,6 +319,57 @@ gap is unrelated and already tracked at §2 above.
 
 ---
 
+## ~~12. TUI dashboard froze on stale "connected" data during outages; provider status was always fabricated~~ ✅ RESOLVED (session 239)
+
+**What was broken (previously undisclosed):**
+
+1. `buildStats`'s `Connected: true` is only ever produced from inside an
+   active session's stats tick — nothing called `dashboard.Update` while a
+   pool session was down (mid-reconnect backoff). The dashboard therefore
+   froze on its last "✓ connected" frame for the entire outage, showing a
+   stale hashrate/earnings snapshot that looked like mining was proceeding
+   normally when it was not. `dashboard.go`'s "✗ disconnected" render path
+   existed and worked correctly — it was simply never invoked.
+2. Every configured provider rendered `Active: true` unconditionally with
+   `SatsPerSecond: 0`, regardless of whether arbitration was actually
+   routing any device to it. A provider that was quoting but never chosen
+   (or never quoting at all) looked identical to one earning in real time.
+
+**Resolution:**
+
+- `runReconnectLoop` now pushes a `disconnectedStats` snapshot to the
+  dashboard immediately after a session ends, before backing off —
+  `Connected: false`, live figures zeroed rather than echoing stale
+  pre-disconnect values (this snapshot genuinely does not know the
+  current hashrate/shares).
+- The arbitration loop now maintains a shared, mutex-protected
+  `providerID → assigned yield` snapshot, rewritten after every `Decide()`
+  cycle from `Allocation.Assignments` (excluding idle assignments).
+  `buildStats` reads it: a provider is `Active` only if arbitration is
+  currently routing at least one device to it, and its `SatsPerSecond` is
+  the real assigned yield, not a placeholder.
+
+**Also fixed in the same pass (found via `go test -race`, not the initial
+audit):** `Dashboard.Stop()` closed its done-channel and immediately wrote
+to the terminal itself (`showCursor`/`Fprintln`) without waiting for a
+concurrently in-flight `render()` call to finish its own writes to the
+same `io.Writer` first — a genuine data race, reproducible under `-race`.
+`Stop()` now waits on a `sync.WaitGroup` the render loop signals on exit
+before touching the writer itself.
+
+**Also fixed:** section headers (`⛏ MINING`, `💰 EARNINGS`, etc.) used
+emoji, which render at visible width 2 in virtually every terminal while
+`visibleLen` (used for the fixed-repaint padding math) counts every rune
+as width 1 — under-padding those specific lines and risking stray
+characters left over from a longer previous frame. Headers are now plain
+bold text. Separately, `writeLine` never truncated content longer than
+the detected terminal width, so a narrow terminal (as low as the
+documented 40-column minimum) could wrap a line onto a second terminal
+row, breaking the "cursor home, overwrite in place" repaint model for
+every line after it; content longer than `cols` is now truncated to fit.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

@@ -314,6 +314,24 @@ arXiv grounding (collected sessions 40–41 and here):
     filters. Verdict: worth doing as one focused refactor session with the
     existing provider tests as the safety net; not urgent (no correctness
     impact today).
+12. 🟡 **`TestRunSession_StatsTickAndShareResponses` is flaky under heavy
+    CPU contention** (`internal/engine/run_test.go`; found session 239).
+    It asserts a "submit latency" log line appears within a fixed
+    real-time window, which requires the session loop's 5ms stats ticker
+    to win a `select` slot against two channels (`inCh`/`opts.merged`)
+    that are effectively always ready while the test's fake pool streams
+    shares continuously — under `go test ./...`'s full parallel load the
+    ticker case can be intermittently starved long enough to miss the
+    window even though every individual protocol step completes in
+    milliseconds in isolation. Confirmed pre-existing (same fragile
+    structure at commit `2faae1f`, before this session). Mitigated by
+    doubling the test's timeout (2s→4s), which measurably reduces but
+    does not eliminate the flake under extreme contention — further
+    timeout increases showed no additional benefit in testing. A
+    thorough fix decouples the assertion from ticker-selection fairness
+    entirely: assert on `LatencyTracker`'s recorded sample count directly
+    rather than requiring a specific log line within a fixed real-time
+    window.
 
 ---
 

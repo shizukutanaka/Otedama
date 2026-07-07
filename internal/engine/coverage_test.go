@@ -61,6 +61,91 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 	}
 }
 
+// TestBuildStats_ProviderActiveReflectsArbitrationAssignment pins the fix
+// for the hardcoded "Active: true" that made every configured provider
+// (including ones arbitration never actually routed a device to) render
+// as earning. A provider present in the shared activity snapshot — the
+// arbitration loop's real Decide() output — is Active with its assigned
+// yield; a provider absent from it (quoting, perhaps, but not chosen) is
+// not, and never fabricates a nonzero SatsPerSecond.
+func TestBuildStats_ProviderActiveReflectsArbitrationAssignment(t *testing.T) {
+	mining := provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000})
+	akash := provider.NewAkashProvider(provider.StaticRateSource{Rate: 95000})
+
+	var mu sync.Mutex
+	activity := map[string]float64{
+		mining.ID(): 0.42, // arbitration is routing a device here
+		// akash.ID() intentionally absent: not currently assigned.
+	}
+	opts := sessionOpts{
+		startTime:  time.Now(),
+		providers:  []provider.Provider{mining, akash},
+		activityMu: &mu,
+		activity:   activity,
+	}
+
+	stats := buildStats(opts, 0, 0, nil, false)
+	if len(stats.Providers) != 2 {
+		t.Fatalf("Providers len = %d, want 2", len(stats.Providers))
+	}
+	byName := map[string]tui.ProviderStats{}
+	for _, p := range stats.Providers {
+		byName[p.Name] = p
+	}
+	if got := byName[mining.Name()]; !got.Active || got.SatsPerSecond != 0.42 {
+		t.Errorf("mining provider = %+v, want Active=true SatsPerSecond=0.42", got)
+	}
+	if got := byName[akash.Name()]; got.Active || got.SatsPerSecond != 0 {
+		t.Errorf("akash provider = %+v, want Active=false SatsPerSecond=0 (not assigned)", got)
+	}
+}
+
+// TestBuildStats_ProviderInactiveWithNilActivityMap covers the case where
+// no arbitration loop is wired (activityMu nil, e.g. some test/embedding
+// contexts): providers must render inactive rather than panicking or
+// falling back to the old unconditional Active: true.
+func TestBuildStats_ProviderInactiveWithNilActivityMap(t *testing.T) {
+	mining := provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000})
+	opts := sessionOpts{
+		startTime: time.Now(),
+		providers: []provider.Provider{mining},
+	}
+	stats := buildStats(opts, 0, 0, nil, false)
+	if len(stats.Providers) != 1 {
+		t.Fatalf("Providers len = %d, want 1", len(stats.Providers))
+	}
+	if stats.Providers[0].Active {
+		t.Error("Active = true with nil activityMu, want false")
+	}
+}
+
+// TestDisconnectedStats_ReportsNotConnected pins the fix for the dashboard
+// freezing on its last "✓ connected" frame during a reconnect backoff:
+// disconnectedStats must report Connected=false (everything else zeroed,
+// since this snapshot genuinely does not know the current hashrate/shares).
+func TestDisconnectedStats_ReportsNotConnected(t *testing.T) {
+	start := time.Now().Add(-90 * time.Second)
+	stats := disconnectedStats("stratum+v2://pool.example.com:3336", "deadbeef", start, 3)
+	if stats.Connected {
+		t.Error("Connected = true, want false")
+	}
+	if stats.PoolURL != "stratum+v2://pool.example.com:3336" {
+		t.Errorf("PoolURL = %q, want the configured pool URL", stats.PoolURL)
+	}
+	if stats.WalletFingerprint != "deadbeef" {
+		t.Errorf("WalletFingerprint = %q, want deadbeef", stats.WalletFingerprint)
+	}
+	if stats.Devices != 3 {
+		t.Errorf("Devices = %d, want 3", stats.Devices)
+	}
+	if stats.Uptime < 89*time.Second {
+		t.Errorf("Uptime = %v, want >= ~90s", stats.Uptime)
+	}
+	if stats.HashRate != 0 || stats.SharesFound != 0 || stats.EstSatsEarned != 0 {
+		t.Errorf("expected zeroed live stats while disconnected, got %+v", stats)
+	}
+}
+
 // TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount pins the
 // fix for docs/KNOWN_LIMITATIONS.md's prior §9: SharesSent used to be a
 // copy of SharesFound ("approximation"). The two must now be able to
@@ -250,6 +335,85 @@ func TestRunArbitrationLoop_TickerHappyPath(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 		t.Error("runArbitrationLoop did not exit within 300ms")
 	}
+}
+
+// TestRunArbitrationLoop_PopulatesActivitySnapshot pins the fix that lets
+// the TUI show real provider status: after a Decide() cycle, the shared
+// activity map must contain exactly the providers with a non-idle
+// assignment this round, valued at their assigned yield — not every
+// provider that has ever quoted.
+func TestRunArbitrationLoop_PopulatesActivitySnapshot(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	quoteCh := make(chan provider.Quote)
+	mu := &sync.Mutex{}
+	streamMap := make(map[string]arbitration.Stream)
+
+	devRefs := []arbitration.DeviceRef{{
+		Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+		Capabilities: hal.Capabilities{SHA256d: true},
+	}}
+	// Confidence 1.0 so the assigned ExpectedYield equals SatsPerSecond
+	// exactly (Decide weights yield by confidence internally) — keeps the
+	// assertion below unambiguous.
+	streamMap["mining.stratum:cpu-0"] = arbitration.Stream{
+		ID:              "mining.stratum",
+		IsBitcoinMining: true,
+		AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+		YieldPerDevice: map[string]arbitration.Yield{
+			"cpu-0": {SatsPerSecond: 0.5, Confidence: 1.0},
+		},
+		DefaultYield: arbitration.Yield{SatsPerSecond: 0.5, Confidence: 1.0},
+	}
+
+	activityMu := &sync.Mutex{}
+	activity := make(map[string]float64)
+	opts := arbitrationLoopOpts{
+		devRefs:    devRefs,
+		streamsMu:  mu,
+		streamMap:  streamMap,
+		quoteCh:    quoteCh,
+		metrics:    newEngineMetrics(metrics.NewRegistry()),
+		log:        func(_, _ string) {},
+		activityMu: activityMu,
+		activity:   activity,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	// Poll until the first tick has landed (avoids a race on the shared map).
+	deadline := time.After(300 * time.Millisecond)
+	for {
+		activityMu.Lock()
+		yield, ok := activity["mining.stratum"]
+		n := len(activity)
+		activityMu.Unlock()
+		if ok {
+			if yield != 0.5 {
+				t.Errorf("activity[mining.stratum] = %v, want 0.5", yield)
+			}
+			if n != 1 {
+				t.Errorf("activity has %d entries, want exactly 1 (the assigned provider)", n)
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("activity map never populated within 300ms")
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+
+	<-done
 }
 
 // TestRunArbitrationLoop_TickerDecideError covers lines 62–64: Decide

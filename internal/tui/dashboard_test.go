@@ -80,6 +80,80 @@ func TestVisibleLen_BoldCyanText(t *testing.T) {
 	}
 }
 
+// ----- truncateVisible -----
+
+func TestTruncateVisible_PlainTextCutToWidth(t *testing.T) {
+	got := truncateVisible("hello world", 5)
+	if visibleLen(got) != 5 {
+		t.Errorf("visibleLen(%q) = %d, want 5", got, visibleLen(got))
+	}
+	if !strings.HasPrefix(got, "hello") {
+		t.Errorf("truncated text = %q, want to start with %q", got, "hello")
+	}
+}
+
+func TestTruncateVisible_ShorterThanWidthUnchanged(t *testing.T) {
+	got := truncateVisible("hi", 10)
+	if visibleLen(got) != 2 {
+		t.Errorf("visibleLen(%q) = %d, want 2 (unchanged)", got, visibleLen(got))
+	}
+}
+
+func TestTruncateVisible_PreservesLeadingANSIAndClosesTrailingStyle(t *testing.T) {
+	// Bold+green "MINING" cut to 3 visible chars: the color codes opened
+	// before the cut must still apply to the visible prefix, and the
+	// result must end with a reset so the style can't bleed into the rest
+	// of a frame that overwrites this line next tick.
+	s := "\x1b[1m\x1b[32mMINING\x1b[0m"
+	got := truncateVisible(s, 3)
+	if visibleLen(got) != 3 {
+		t.Errorf("visibleLen(%q) = %d, want 3", got, visibleLen(got))
+	}
+	if !strings.HasPrefix(got, "\x1b[1m\x1b[32m") {
+		t.Errorf("truncated text = %q, want leading color codes preserved", got)
+	}
+	if !strings.HasSuffix(got, reset) {
+		t.Errorf("truncated text = %q, want to end with a reset", got)
+	}
+}
+
+func TestTruncateVisible_ZeroOrNegativeWidthReturnsEmpty(t *testing.T) {
+	if got := truncateVisible("anything", 0); got != "" {
+		t.Errorf("truncateVisible(_, 0) = %q, want empty", got)
+	}
+	if got := truncateVisible("anything", -1); got != "" {
+		t.Errorf("truncateVisible(_, -1) = %q, want empty", got)
+	}
+}
+
+// ----- writeLine truncation (narrow terminals) -----
+
+func TestWriteLine_TruncatesContentLongerThanCols(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	var sb strings.Builder
+	d.writeLine(&sb, "this line is definitely longer than forty columns wide", 40)
+	line := sb.String()
+	// Strip the leading clearLine escape and trailing \r\n to isolate the
+	// content actually written, then confirm it never exceeds cols and
+	// was not left unmodified (i.e. truncation actually fired).
+	content := strings.TrimSuffix(strings.TrimPrefix(line, clearLine), "\r\n")
+	if got := visibleLen(content); got > 40 {
+		t.Errorf("visibleLen(written content) = %d, want <= 40", got)
+	}
+}
+
+func TestWriteLine_ShortContentUnaffected(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	var sb strings.Builder
+	d.writeLine(&sb, "short", 40)
+	line := sb.String()
+	if !strings.Contains(line, "short") {
+		t.Errorf("output %q should contain the untruncated content", line)
+	}
+}
+
 // ----- SatsToDisplay -----
 
 func TestSatsToDisplay(t *testing.T) {

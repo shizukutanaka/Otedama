@@ -280,6 +280,14 @@ func Run(ctx context.Context, opts Options) error {
 	streamsMu := sync.Mutex{}
 	streamMap := make(map[string]arbitration.Stream)
 
+	// Shared provider-activity snapshot: which providers arbitration is
+	// actually routing devices to right now, and at what yield. Written by
+	// runArbitrationLoop, read by buildStats via sessionOpts so the TUI's
+	// provider lines reflect real allocation instead of a hardcoded
+	// Active: true.
+	activityMu := sync.Mutex{}
+	activity := make(map[string]float64)
+
 	// Arbitration loop: re-run Decide whenever quotes change.
 	go runArbitrationLoop(ctx, arbitrationLoopOpts{
 		devRefs:       devRefs,
@@ -291,6 +299,8 @@ func Run(ctx context.Context, opts Options) error {
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 		minYield:      opts.Config.MinYieldSatsPerSec,
+		activityMu:    &activityMu,
+		activity:      activity,
 	})
 
 	// ----- Phase 7: TUI dashboard -----
@@ -322,6 +332,8 @@ func Run(ctx context.Context, opts Options) error {
 		metrics:     m,
 		log:         log,
 		curtailGate: curtailGate,
+		activityMu:  &activityMu,
+		activity:    activity,
 	})
 }
 
@@ -342,6 +354,11 @@ type reconnectOpts struct {
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised.
 	curtailGate *atomic.Bool
+	// activityMu/activity: see sessionOpts. Threaded through unchanged
+	// across reconnects since the arbitration loop (the writer) runs for
+	// the lifetime of Run(), independent of any one pool session.
+	activityMu *sync.Mutex
+	activity   map[string]float64
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
@@ -411,6 +428,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			curtailGate:  r.curtailGate,
 			tlsCAFile:    poolTLSCAFile,
 			poolPassword: poolPassword,
+			activityMu:   r.activityMu,
+			activity:     r.activity,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -424,6 +443,12 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
 		if r.opts.OnReady != nil {
 			r.opts.OnReady(false) // session ended → not ready
+		}
+		if r.dashboard != nil {
+			// The session's own stats tick stops the instant it returns, so
+			// without this push the dashboard freezes on its last
+			// "✓ connected" frame for the entire backoff/reconnect window.
+			r.dashboard.Update(disconnectedStats(poolURL, r.wallet, r.startTime, r.deviceN))
 		}
 
 		if ctx.Err() != nil {
@@ -524,6 +549,14 @@ type sessionOpts struct {
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
 	onConnected func()
+	// activityMu/activity are the shared, arbitration-loop-owned view of
+	// which providers are currently earning (see arbitrationLoopOpts).
+	// buildStats reads them to populate ProviderStats.Active/SatsPerSecond
+	// honestly instead of hardcoding Active: true. Either may be nil (no
+	// arbitration loop wired, e.g. some tests), in which case every
+	// provider renders inactive.
+	activityMu *sync.Mutex
+	activity   map[string]float64
 }
 
 // isCurtailed reports whether hashing is currently paused by the

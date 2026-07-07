@@ -345,6 +345,24 @@ func TestDashboard_DoubleStop_IsSafe(t *testing.T) {
 	}
 }
 
+// TestDashboard_StopDoesNotRaceRenderLoop pins the fix for a genuine data
+// race: Stop() used to close doneCh and immediately write to w itself
+// (showCursor/Fprintln) without waiting for a concurrently in-flight
+// render() call — started by the ticker case in renderLoop — to finish
+// its own writes to the same io.Writer first. Driving ticks right up to
+// the moment Stop is called maximizes the chance of catching the race
+// under `go test -race`.
+func TestDashboard_StopDoesNotRaceRenderLoop(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.Start()
+	for i := 0; i < 5; i++ {
+		d.Update(Stats{HashRate: float64(i) * 1e6, Devices: 1})
+		time.Sleep(2 * time.Millisecond)
+	}
+	d.Stop() // must not race renderLoop's writes to buf
+}
+
 // ============================================================================
 // FormatHashRate — boundary cases
 // ============================================================================

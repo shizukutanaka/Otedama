@@ -100,6 +100,11 @@ type Dashboard struct {
 	doneCh    chan struct{}
 	cols      int
 	lastStats Stats
+	// wg tracks the render loop goroutine so Stop can block until it has
+	// genuinely exited before Stop itself writes to w (showCursor /
+	// Fprintln below) — without this, Stop's writes could race an
+	// in-flight render() call's writes to the same io.Writer.
+	wg sync.WaitGroup
 }
 
 // NewDashboard returns a Dashboard that writes to w.
@@ -120,6 +125,7 @@ func (d *Dashboard) Start() {
 	}
 	d.hideCursor()
 	d.clearScreen()
+	d.wg.Add(1)
 	go d.renderLoop()
 }
 
@@ -134,6 +140,10 @@ func (d *Dashboard) Stop() {
 		return
 	}
 	close(d.doneCh)
+	// Wait for renderLoop to actually return before touching w ourselves:
+	// otherwise this Fprintln can race an in-flight render() call's own
+	// writes to the same (generally non-concurrency-safe) io.Writer.
+	d.wg.Wait()
 	d.showCursor()
 	fmt.Fprintln(d.w) // leave cursor on clean line
 }
@@ -159,6 +169,7 @@ func (d *Dashboard) Update(s Stats) {
 // ----- Render loop -----
 
 func (d *Dashboard) renderLoop() {
+	defer d.wg.Done()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -207,21 +218,27 @@ func (d *Dashboard) render(s Stats) {
 
 	d.writeLine(&sb, d.header(cols), cols)
 	d.writeLine(&sb, "", cols)
-	d.writeSection(&sb, "⛏  MINING", cols)
+	// Section labels are plain text, not emoji: an emoji glyph renders at
+	// visible width 2 in virtually every terminal, but visibleLen counts
+	// every rune as width 1 (correctly matching real width for the ANSI
+	// color codes and plain text used everywhere else) — the mismatch
+	// under-padded these lines specifically and could leave stray
+	// characters from a longer previous frame unoverwritten.
+	d.writeSection(&sb, "MINING", cols)
 	d.writeLine(&sb, d.miningLine(s), cols)
 	d.writeLine(&sb, d.poolLine(s), cols)
 	d.writeLine(&sb, "", cols)
-	d.writeSection(&sb, "💰  EARNINGS", cols)
+	d.writeSection(&sb, "EARNINGS", cols)
 	d.writeLine(&sb, d.earningsLine(s), cols)
 	if len(s.Providers) > 0 {
 		d.writeLine(&sb, "", cols)
-		d.writeSection(&sb, "🔀  ARBITRATION", cols)
+		d.writeSection(&sb, "ARBITRATION", cols)
 		for _, p := range s.Providers {
 			d.writeLine(&sb, d.providerLine(p), cols)
 		}
 	}
 	d.writeLine(&sb, "", cols)
-	d.writeSection(&sb, "🔒  WALLET", cols)
+	d.writeSection(&sb, "WALLET", cols)
 	d.writeLine(&sb, d.walletLine(s), cols)
 	d.writeLine(&sb, "", cols)
 	d.writeLine(&sb, d.footer(s, cols), cols)
@@ -332,6 +349,13 @@ func (d *Dashboard) footer(s Stats, cols int) string {
 
 func (d *Dashboard) writeLine(sb *strings.Builder, content string, cols int) {
 	sb.WriteString(clearLine)
+	// On a narrow terminal, content longer than cols would wrap onto a
+	// second terminal row — breaking the "cursor home, overwrite in place"
+	// repaint model this dashboard depends on, since every subsequent line
+	// would then land one row off from where the previous frame drew it.
+	if visibleLen(content) > cols {
+		content = truncateVisible(content, cols)
+	}
 	sb.WriteString(content)
 	// Pad to column width to overwrite any previous longer line.
 	pad := cols - visibleLen(content)
@@ -418,6 +442,42 @@ func visibleLen(s string) int {
 		n++
 	}
 	return n
+}
+
+// truncateVisible cuts s down to at most maxVisible visible characters,
+// copying every ANSI escape sequence encountered up to the cut point
+// verbatim (so color codes opened before the cut still apply) and
+// discarding everything after it. A trailing reset closes any style left
+// open by a truncated escape, so a cut line can never bleed its color
+// into the rest of the frame.
+func truncateVisible(s string, maxVisible int) string {
+	if maxVisible <= 0 {
+		return ""
+	}
+	var sb strings.Builder
+	n := 0
+	inEsc := false
+	for _, r := range s {
+		if inEsc {
+			sb.WriteRune(r)
+			if r >= '@' && r <= '~' && r != '[' {
+				inEsc = false
+			}
+			continue
+		}
+		if r == '\x1b' {
+			inEsc = true
+			sb.WriteRune(r)
+			continue
+		}
+		if n >= maxVisible {
+			break
+		}
+		sb.WriteRune(r)
+		n++
+	}
+	sb.WriteString(reset)
+	return sb.String()
 }
 
 // padRight pads s to width with spaces (ignoring ANSI sequences).

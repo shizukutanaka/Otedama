@@ -58,12 +58,22 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		}
 	}
 
+	// Active/SatsPerSecond come from the shared activity snapshot the
+	// arbitration loop maintains from its own Decide() output — a provider
+	// is "active" only if arbitration is actually routing at least one
+	// device to it right now, not merely because it exists or has quoted
+	// (see arbitrationLoopOpts.activity). Nil activityMu (no arbitration
+	// loop wired, e.g. some tests) renders every provider inactive rather
+	// than defaulting back to the old unconditional true.
 	var providerStats []tui.ProviderStats
 	for _, p := range opts.providers {
-		// Sample latest quote from provider — simplified.
-		ps := tui.ProviderStats{
-			Name:   p.Name(),
-			Active: true,
+		ps := tui.ProviderStats{Name: p.Name()}
+		if opts.activityMu != nil {
+			opts.activityMu.Lock()
+			yield, active := opts.activity[p.ID()]
+			opts.activityMu.Unlock()
+			ps.Active = active
+			ps.SatsPerSecond = yield
 		}
 		providerStats = append(providerStats, ps)
 	}
@@ -82,6 +92,26 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		Uptime:            time.Since(opts.startTime),
 		Devices:           opts.devices,
 		Providers:         providerStats,
+	}
+}
+
+// disconnectedStats builds the TUI snapshot shown while no pool session is
+// active (mid-reconnect backoff, or between a dropped session and the next
+// dial attempt). Connected is the only field this exists to make honest —
+// buildStats is only ever invoked from inside an active session's stats
+// tick, so without this the dashboard simply stopped receiving updates on
+// disconnect and froze on its last "✓ connected" frame instead of showing
+// the real "✗ disconnected" state (dashboard.go's poolLine already renders
+// it correctly; nothing was ever driving it). Hashrate/shares/earnings are
+// left at zero rather than echoing stale pre-disconnect values, since this
+// snapshot does not know the true current state of any of them.
+func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) tui.Stats {
+	return tui.Stats{
+		PoolURL:           poolURL,
+		Connected:         false,
+		WalletFingerprint: wallet,
+		Uptime:            time.Since(startTime),
+		Devices:           devices,
 	}
 }
 

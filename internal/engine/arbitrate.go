@@ -31,6 +31,17 @@ type arbitrationLoopOpts struct {
 	log           func(level, msg string)
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
 	minYield      float64 // 0 disables the per-device profitability floor
+
+	// activityMu/activity, when both non-nil, receive the TUI-facing
+	// provider status: after each Decide() this loop rewrites activity to
+	// exactly the providers with a live (non-idle) assignment this cycle,
+	// keyed by provider ID, valued at the summed ExpectedYield across all
+	// devices currently routed to them. A provider absent from the map is
+	// not earning anything right now, whether or not it is still quoting —
+	// "active" means arbitration actually chose it, not merely that it
+	// exists. See buildStats/stats.go for the read side.
+	activityMu *sync.Mutex
+	activity   map[string]float64
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -117,6 +128,17 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
 			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
 			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
+			if opts.activityMu != nil && opts.activity != nil {
+				opts.activityMu.Lock()
+				clear(opts.activity)
+				for _, a := range alloc.Assignments {
+					if a.Idle() {
+						continue
+					}
+					opts.activity[string(a.Stream)] += a.ExpectedYield
+				}
+				opts.activityMu.Unlock()
+			}
 			if alloc.SkippedDevice != prevSkipped {
 				if alloc.SkippedDevice > 0 {
 					opts.log("info", fmt.Sprintf(

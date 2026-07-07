@@ -2046,10 +2046,22 @@ func (fp *responsivePool) serve() {
 	payload, _ = omcSucc.Encode()
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
 
-	// Establish the chain tip first (SetNewPrevHash) so the NewMiningJob
-	// below — which carries its own min_ntime — activates immediately
-	// rather than waiting as a future job. Network nBits 0x207fffff is
-	// the easiest possible target.
+	// SV2 activation order: the job is sent first as a future job (no
+	// min_ntime), then SetNewPrevHash names it to activate — matching how
+	// a real pool stages jobs ahead of the chain tip that will use them.
+	// Sending SetNewPrevHash before its job exists hits the engine's
+	// "names unknown job" guard (a real defensive path, but not what this
+	// test means to exercise) and costs an extra SetWork(nil)/re-arm
+	// round trip that squeezed this test's 2s budget under load.
+	job := stratum.NewMiningJob{
+		ChannelID: 1,
+		JobID:     1,
+		Version:   0x20000000,
+	}
+	payload, _ = job.Encode()
+	fp.emit(conn, stratum.MsgNewMiningJob, true, payload)
+
+	// Network nBits 0x207fffff is the easiest possible target.
 	prev := stratum.SetNewPrevHash{
 		ChannelID: 1,
 		JobID:     1,
@@ -2058,16 +2070,6 @@ func (fp *responsivePool) serve() {
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
-
-	job := stratum.NewMiningJob{
-		ChannelID:   1,
-		JobID:       1,
-		HasMinNtime: true,
-		MinNtime:    0x60000000,
-		Version:     0x20000000,
-	}
-	payload, _ = job.Encode()
-	fp.emit(conn, stratum.MsgNewMiningJob, true, payload)
 
 	// Read shares and respond accordingly
 	shareCount := 0
@@ -2124,7 +2126,22 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	defer fp.Close()
 	<-fp.started
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// 4s rather than the original 2s: under `go test ./...` CPU contention
+	// (24 packages' tests running concurrently) the "submit latency" log
+	// assertion below needs the 5ms stats ticker to actually win a slot in
+	// runSession's select against two channels that are effectively always
+	// ready during this test (inCh/opts.merged, since shares are flowing
+	// continuously) — under heavy scheduler contention the ticker case can
+	// occasionally be starved. This predates this session (confirmed: the
+	// same fragile structure existed at commit 2faae1f). Doubling the
+	// budget measurably reduces the flake rate; it does not guarantee
+	// elimination under extreme contention, since further increases
+	// showed no additional benefit in testing — a thorough fix would
+	// decouple the assertion from wall-clock ticker fairness (e.g. assert
+	// on the LatencyTracker's recorded samples directly rather than
+	// requiring a specific log line within a fixed real-time window),
+	// which is out of scope for this pass.
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
