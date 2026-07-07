@@ -136,7 +136,7 @@ The known limitations of this alpha — including that AI-inference yield is cur
 
 ## コントリビューション / Contributing
 
-Otedamaはコミュニティからの貢献を歓迎します。コード、ドキュメント、翻訳、テスト、バグ報告のいずれも価値ある貢献です。初めて貢献する方は `CONTRIBUTING.md` を、コーディング規約については `docs/style-guide.md` を参照してください。
+Otedamaはコミュニティからの貢献を歓迎します。コード、ドキュメント、翻訳、テスト、バグ報告のいずれも価値ある貢献です。初めて貢献する方は `CONTRIBUTING.md` を参照してください。コーディング規約は同ファイルの「コーディング規約 / Coding Standards」節に記載されています。
 
 技術的な議論はGitHub Discussionsで、脆弱性報告は `SECURITY.md` に記載されたセキュリティ連絡先へお願いします。
 

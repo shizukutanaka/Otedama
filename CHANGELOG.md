@@ -10,6 +10,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 241 — フロントエンド〜バックエンド市販レベル品質化 (4/4・完): 世界読み取り可能なlaunchdログ、壊れたMakefileテストターゲット、複数のドキュメント参照切れを解消)
+
+session 240に続き、config層・可観測性まわりの横断的監査項目を1件ずつ
+現在のコードに対して再検証した。結果、旧スナップショット監査が
+指摘していた項目の大半——`log_format`のconfig.LogFormat配線、
+`http_addr`の4層解決、`Config.Validate()`のlog_format検証、Windows
+`service status`実装、`docs/SPECIFICATION.md` §6のCI保証付き
+メトリクスカタログ——は**この評価に至るまでの間に既に修正済み**
+だったことを確認した（過去のセッションで着手済み、または元の監査が
+古いスナップショットに基づいていたため）。以下は再検証の結果、
+実際に現存すると確認した問題のみ:
+
+**1. launchdサービスが世界読み取り可能な`/tmp`へログ出力**
+
+`internal/daemon/service.go`のlaunchd plistが`StandardOutPath`/
+`StandardErrorPath`を`/tmp/otedama.log`・`/tmp/otedama.err`固定にして
+いた——同一マシン上の他ユーザーが、稼働中のOtedamaサービスの標準出力/
+エラー出力を誰でも読める状態だった（ワーカー/プール活動の詳細を含み
+うる）。macOS標準の`~/Library/Logs`配下へ変更。ホームディレクトリが
+解決できない、またはディレクトリ作成に失敗した場合のみ`/tmp`への
+フォールバックを維持（サービスインストール自体を失敗させない）。
+
+**2. Makefileの`test-integration`・`test-e2e`ターゲットが壊れていた**
+
+- `test-integration`は`-tags=integration`を渡していたが、リポジトリ内に
+  `//go:build integration`を宣言するファイルは1つも存在せず、このタグは
+  何の効果もなかった——`make test`と全く同じテスト集合を、あたかも
+  専用の統合テストサブセットであるかのような誤解を招く名前で実行して
+  いただけだった。このコードベースの実際の慣習（`testing.Short()`で
+  遅いテストをスキップ、専用ビルドタグは使わない）に合わせて
+  `-tags=integration`を削除し、コメントで実態を説明。
+- `test-e2e`は存在しない`./test/e2e/...`を指しており、実行すれば
+  「no packages to test」で必ず失敗していた。存在しないe2eテスト一式を
+  でっち上げてターゲットを「動く」ように見せかけるのではなく、
+  ターゲット自体を削除（実際のe2eスイートが用意されたら再追加）。
+
+**3. 複数のドキュメント相互参照切れ・古い記述**
+
+- `docs/GODEBUG_NOTES.md`はリポジトリルート直下にあるが、
+  `go.mod`・`docs/SUSTAINABILITY.md`（2箇所）が`docs/GODEBUG_NOTES.md`
+  という誤ったパスで参照していた。
+- `docs/SUSTAINABILITY.md`が`godebug`ノブを旧名`tlskyber=1`のまま
+  記載——実際は`tlsmlkem=1`（Go 1.24でのX25519MLKEM768標準化に伴う
+  改名、`GODEBUG_NOTES.md`自体は既に正しく記載済み）。
+- `docs/DEPLOYMENT.md`のメトリクス一覧が`otedama_hashrate_hashes_per_second{device}`・
+  `otedama_arbitration_switches_total{from,to}`と、実際には存在しない
+  ラベルを記載していた（実装はどちらも無ラベル；per-device内訳は別名の
+  `otedama_device_shares_found_total{device}`として存在）。
+  `internal/metrics/metrics.go`パッケージ自身のdocコメント例にも同じ
+  `{device}`ラベルの誤りがあったため、あわせて修正（正しい
+  `otedama_device_shares_found_total{device}`の例を追加）。
+- `README.md`が存在しない`docs/style-guide.md`をコーディング規約の
+  参照先として案内していた——規約は既に`CONTRIBUTING.md`の
+  「コーディング規約」節に記載されているため、そちらを参照するよう修正。
+
+**調査したが変更しなかった項目（意図的）:**
+- `language`設定値の検証追加は見送り——`messages.DetectLang`は未知の
+  タグに対して常に英語へ穏当にフォールバックする設計であり（OSロケール
+  検出の一般的な慣習と同じ）、これはバグではなく意図的な挙動。検証を
+  追加すると、現在は正常に動作している設定を拒否するようになり、
+  改善ではなく退行になる。
+- `config.DefaultPoolURL`（`stratum+v2://public.stratum.slushpool.com:3336`）
+  は変更を見送り。Web検索で`stratum.slushpool.com`ドメイン自体は現在も
+  稼働中であることを確認したが、`public.`サブドメインが現在も正しいか、
+  あるいはBraiins側の別ホスト名が今は正しいかを一次情報源から確認できな
+  かった（該当ドキュメントページへの直接fetchは403で失敗）。CLAUDE.mdが
+  明示的に禁止する「存在しないURL・アドレスの記載」を避けるため、
+  裏付けの取れない置き換えは行わない——確度高く検証できる担当者による
+  確認が必要な項目として記録するに留める。
+
+テスト追加: `internal/daemon/service_paths_test.go`にlaunchd plistが
+world-readableな`/tmp`ではなく`Library/Logs`配下を指すことを検証する
+回帰テスト。
+
+全24パッケージgreen（`TestRunSession_StatsTickAndShareResponses`は
+session 239で記録済みの既知のCPU競合flakeが本セッション中に1度発生した
+が、単独実行では5/5合格を再確認済み——本セッションの変更はエンジンの
+セッションループに一切触れていないため無関係）。`go vet`/`gofmt` clean。
+新規依存なし。
+
+（これで本セッションの4コミット予定を完了。累計: SV2プロトコル修正、
+TUI/ダッシュボードの誠実化、CLI/セキュリティ/TLSの誠実化、
+config層・可観測性の正確性。`.github/workflows/`の修正は引き続き
+GitHub Appの権限不足のため対象外——別途ユーザーの許可・権限付与が
+必要。）
+
 ### Fixed (session 240 — フロントエンド〜バックエンド市販レベル品質化 (3/4): CLI の --help が誤りと区別できない終了コードだった問題、および設定済みTLSプールが平文接続へ黙って劣化していた問題を解消)
 
 session 239 に続き、TUI/CLI 監査エージェントが発見した残り2種の問題を

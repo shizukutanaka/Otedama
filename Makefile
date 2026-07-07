@@ -106,12 +106,23 @@ test-unit: ## Run unit tests only (short mode)
 	$(GO) test -race -short -timeout 2m ./...
 
 .PHONY: test-integration
-test-integration: ## Run integration tests
-	$(GO) test -race -timeout 10m -tags=integration ./...
+test-integration: ## Run the full suite including integration-style tests
+	# This codebase's slower/integration-style tests (real net.Pipe/TCP fake
+	# pools, multi-goroutine session loops) live alongside unit tests as
+	# ordinary _test.go files gated by testing.Short(), not a separate
+	# `integration` build tag or package — `make test-unit` skips them via
+	# -short; this target runs everything, them included. (A previous
+	# version of this target passed -tags=integration, which had no effect:
+	# no file in the repo has ever declared `//go:build integration`, so it
+	# silently ran the exact same set of tests as `make test` under a
+	# misleading name.)
+	$(GO) test -race -timeout 10m ./...
 
-.PHONY: test-e2e
-test-e2e: ## Run end-to-end tests
-	$(GO) test -race -timeout 15m -tags=e2e ./test/e2e/...
+# test-e2e intentionally omitted: this repo has no end-to-end test suite.
+# A previous version of this target pointed at ./test/e2e/..., a directory
+# that has never existed — `make test-e2e` failed with "no packages to
+# test" for anyone who ran it. Removed rather than fabricated a suite to
+# make the target "work"; add it back once a real e2e suite exists.
 
 .PHONY: coverage
 coverage: ## Generate test coverage report

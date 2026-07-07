@@ -17,9 +17,12 @@
 //
 // Output conforms to https://prometheus.io/docs/instrumenting/exposition_formats/
 //
-//	# HELP otedama_hashrate_hashes_per_second Current hashrate.
+//	# HELP otedama_hashrate_hashes_per_second Current aggregate hashrate.
 //	# TYPE otedama_hashrate_hashes_per_second gauge
-//	otedama_hashrate_hashes_per_second{device="cpu-0"} 10500000
+//	otedama_hashrate_hashes_per_second 10500000
+//	# HELP otedama_device_shares_found_total Per-device breakdown of shares found.
+//	# TYPE otedama_device_shares_found_total counter
+//	otedama_device_shares_found_total{device="cpu-0"} 42
 //	# HELP otedama_shares_total Total shares submitted to pool.
 //	# TYPE otedama_shares_total counter
 //	otedama_shares_total{status="accepted"} 42

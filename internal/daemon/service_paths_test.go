@@ -204,6 +204,26 @@ func TestLaunchdPlist_HasLogPaths(t *testing.T) {
 	}
 }
 
+// TestLaunchdPlist_LogsUnderLibraryLogsNotTmp pins the fix for a real
+// exposure: launchd previously logged to world-readable /tmp/otedama.log
+// and /tmp/otedama.err, so any local user on the machine could read a
+// running service's stdout/stderr (potentially including worker/pool
+// activity and error detail). Logs now go under the standard per-user
+// macOS location, ~/Library/Logs, not /tmp.
+func TestLaunchdPlist_LogsUnderLibraryLogsNotTmp(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	plist := m.launchdPlist()
+	if strings.Contains(plist, "/tmp/otedama") {
+		t.Errorf("plist still logs to world-readable /tmp:\n%s", plist)
+	}
+	if !strings.Contains(plist, filepath.Join("Library", "Logs", "otedama.log")) {
+		t.Errorf("plist missing expected Library/Logs/otedama.log path:\n%s", plist)
+	}
+	if !strings.Contains(plist, filepath.Join("Library", "Logs", "otedama.err")) {
+		t.Errorf("plist missing expected Library/Logs/otedama.err path:\n%s", plist)
+	}
+}
+
 func TestLaunchdPlist_ProgramArgumentsNonEmpty(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama", configPath: "/tmp/c.yaml"}
 	plist := m.launchdPlist()

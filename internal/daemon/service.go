@@ -296,12 +296,32 @@ func (m *Manager) launchdPlist() string {
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/otedama.log</string>
+    <string>%[3]s</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/otedama.err</string>
+    <string>%[4]s</string>
 </dict>
 </plist>
-`, launchdLabel, argEntries.String())
+`, launchdLabel, argEntries.String(), launchdLogPath("otedama.log"), launchdLogPath("otedama.err"))
+}
+
+// launchdLogPath resolves name under ~/Library/Logs — the standard macOS
+// location for a per-user application's own logs, unlike world-readable
+// /tmp (the previous location: any local user could read a running
+// otedama service's stdout/stderr, which may include worker/pool activity
+// and error detail not intended to be world-visible). Falls back to /tmp
+// only if the home directory can't be resolved or the Logs directory can't
+// be created — degrading gracefully rather than failing service install
+// entirely over a non-critical log-destination preference.
+func launchdLogPath(name string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(string(filepath.Separator), "tmp", name)
+	}
+	dir := filepath.Join(home, "Library", "Logs")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return filepath.Join(string(filepath.Separator), "tmp", name)
+	}
+	return filepath.Join(dir, name)
 }
 
 // ----- Windows service -----

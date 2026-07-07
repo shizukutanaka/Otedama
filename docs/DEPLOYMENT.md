@@ -315,11 +315,11 @@ spec:
 
 All exported metrics live under the `otedama_` prefix:
 
-- `otedama_hashrate_hashes_per_second{device}` — gauge, live hash rate
+- `otedama_hashrate_hashes_per_second` — gauge, live aggregate hash rate
 - `otedama_shares_total{status}` — counter, shares submitted/accepted/rejected
 - `otedama_pool_connection_state` — gauge, 0=disconnected, 1=connecting, 2=connected
 - `otedama_submit_latency_milliseconds{quantile}` — gauge, share submit round-trip time (p50/p95/p99)
-- `otedama_arbitration_switches_total{from,to}` — counter, workload reroutes
+- `otedama_arbitration_switches_total` — counter, workload reroutes (mining ↔ AI)
 - `otedama_btc_usd_rate` — gauge, current BTC/USD rate from provider consensus
 
 See docs/SPECIFICATION.md §6 for the full, CI-verified metric catalogue
