@@ -81,6 +81,112 @@ func TestDialer_RegisteredInRegistry(t *testing.T) {
 	}
 }
 
+// TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash drives a full handshake
+// against an in-memory fake pool and asserts the SV2 activation
+// semantics: a future job (no min_ntime) is NOT emitted on its own; the
+// SetNewPrevHash naming it triggers emission of a fully-populated
+// poolproto.Job (version, prev-hash, ntime, nBits, clean flag).
+func TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash(t *testing.T) {
+	client, server := net.Pipe()
+	d := &Dialer{
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return client, nil
+		},
+	}
+
+	// Fake pool: answer the handshake, then send future-job +
+	// SetNewPrevHash.
+	go func() {
+		dec := stratum.NewDecoder(server)
+
+		// SetupConnection → success
+		if _, err := dec.ReadFrame(); err != nil {
+			return
+		}
+		ok := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := ok.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(f)
+		if _, err := server.Write(data); err != nil {
+			return
+		}
+
+		// OpenMiningChannel → success
+		if _, err := dec.ReadFrame(); err != nil {
+			return
+		}
+		chOK := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 7}
+		payload, _ = chOK.Encode()
+		f, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, true, payload)
+		data, _ = stratum.EncodeFrame(f)
+		if _, err := server.Write(data); err != nil {
+			return
+		}
+
+		// Future job (no min_ntime): must not be emitted yet.
+		job := stratum.NewMiningJob{ChannelID: 7, JobID: 5, Version: 0x20000002}
+		for i := range job.MerkleRoot {
+			job.MerkleRoot[i] = byte(i)
+		}
+		payload, _ = job.Encode()
+		f, _ = stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
+		data, _ = stratum.EncodeFrame(f)
+		if _, err := server.Write(data); err != nil {
+			return
+		}
+
+		// SetNewPrevHash activates job 5.
+		prev := stratum.SetNewPrevHash{
+			ChannelID: 7, JobID: 5,
+			MinNtime: 0x66000000, NBits: 0x1d00ffff,
+		}
+		for i := range prev.PrevHash {
+			prev.PrevHash[i] = byte(0xB0 + i%16)
+		}
+		payload, _ = prev.Encode()
+		f, _ = stratum.WrapMessage(stratum.MsgSetNewPrevHash, true, payload)
+		data, _ = stratum.EncodeFrame(f)
+		_, _ = server.Write(data)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, err := d.Dial(ctx, "stratum+v2://fake:3336", poolproto.Credentials{User: "bc1qtest"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		if job.JobID != "5" {
+			t.Errorf("JobID = %q, want \"5\"", job.JobID)
+		}
+		if job.Version != 0x20000002 {
+			t.Errorf("Version = 0x%08X, want 0x20000002", job.Version)
+		}
+		if job.NBits != 0x1d00ffff {
+			t.Errorf("NBits = 0x%08X, want 0x1d00ffff (from SetNewPrevHash)", job.NBits)
+		}
+		if job.NTime != 0x66000000 {
+			t.Errorf("NTime = 0x%08X, want 0x66000000 (from SetNewPrevHash)", job.NTime)
+		}
+		if job.PrevHash == ([32]byte{}) {
+			t.Error("PrevHash is zero — must carry SetNewPrevHash.prev_hash")
+		}
+		if !job.CleanJobs {
+			t.Error("CleanJobs = false; a SetNewPrevHash-activated job invalidates older work")
+		}
+	case <-ctx.Done():
+		t.Fatal("no job emitted within 3s after SetNewPrevHash")
+	}
+}
+
 func TestParseJobID(t *testing.T) {
 	cases := map[string]uint32{
 		"0":     0,
@@ -310,15 +416,24 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 	const chanID = uint32(1)
 	go func() {
 		pool.doHandshake(chanID)
-		// Send a NewMiningJob after the handshake.
+		// Send a future job (no min_ntime), then the SetNewPrevHash that
+		// activates it — the SV2 pair required before a job is emittable.
+		// NBits/ntime now arrive on SetNewPrevHash, not NewMiningJob.
 		job := stratum.NewMiningJob{
+			ChannelID: chanID,
+			JobID:     100,
+			Version:   0x20000000,
+		}
+		copy(job.MerkleRoot[:], make([]byte, 32))
+		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
+
+		prev := stratum.SetNewPrevHash{
 			ChannelID: chanID,
 			JobID:     100,
 			MinNtime:  0x60000000,
 			NBits:     0x170d21b4,
 		}
-		copy(job.MerkleRoot[:], make([]byte, 32))
-		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
@@ -749,14 +864,19 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 
 	// jobsCh has a buffer of 8. Send 12 jobs without reading from Jobs() to
 	// fill the buffer, then cancel ctx so the readLoop's select fires ctx.Done().
+	// SetNewPrevHash first establishes havePrev so each job (HasMinNtime=true)
+	// emits immediately instead of waiting as a future job.
 	go func() {
 		pool.doHandshake(1)
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
 		for i := 0; i < 12; i++ {
 			job := stratum.NewMiningJob{
-				ChannelID: 1,
-				JobID:     uint32(i),
-				MinNtime:  0x60000000,
-				NBits:     0x1d00ffff,
+				ChannelID:   1,
+				JobID:       uint32(i),
+				HasMinNtime: true,
+				MinNtime:    0x60000000,
+				Version:     0x20000000,
 			}
 			copy(job.MerkleRoot[:], make([]byte, 32))
 			writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
@@ -804,8 +924,12 @@ func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
 		pool.doHandshake(1)
 		// SubmitSharesSuccess (0x1c) with 0-byte payload → DispatchFrame error.
 		pool.conn.Write([]byte{0x00, 0x00, 0x1c, 0x00, 0x00, 0x00}) //nolint:errcheck
-		// Then send a real job — readLoop should continue and deliver it.
-		job := stratum.NewMiningJob{ChannelID: 1, JobID: 77, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		// Then establish the chain tip and send a real (immediately-active)
+		// job — readLoop should continue past the malformed frame and
+		// deliver it.
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 77, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 77, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
 		copy(job.MerkleRoot[:], make([]byte, 32))
 		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
 	}()
@@ -839,7 +963,7 @@ func TestSendMsg_WriteError(t *testing.T) {
 	server.Close() // close server so client Write fails
 	defer client.Close()
 
-	err := sendMsg(client, stratum.MsgSetupConnection, &stratum.SetupConnection{
+	err := sendMsg(client, stratum.MsgSetupConnection, false, &stratum.SetupConnection{
 		Protocol: stratum.MiningProtocol, MinVersion: 2, MaxVersion: 2,
 		Endpoint: "x:1", Vendor: "test",
 	})
@@ -856,7 +980,7 @@ func (e errEncodable) Encode() ([]byte, error) { return nil, net.ErrClosed }
 func TestSendMsg_EncodeError(t *testing.T) {
 	_, client := net.Pipe()
 	defer client.Close()
-	if err := sendMsg(client, 0x01, errEncodable{}); err == nil {
+	if err := sendMsg(client, 0x01, false, errEncodable{}); err == nil {
 		t.Error("sendMsg with failing Encode should return error")
 	}
 }
@@ -872,7 +996,7 @@ func (b bigEncodable) Encode() ([]byte, error) {
 func TestSendMsg_WrapMessageError(t *testing.T) {
 	_, client := net.Pipe()
 	defer client.Close()
-	if err := sendMsg(client, 0x01, bigEncodable{}); err == nil {
+	if err := sendMsg(client, 0x01, false, bigEncodable{}); err == nil {
 		t.Error("sendMsg with oversized payload should return WrapMessage error")
 	}
 }

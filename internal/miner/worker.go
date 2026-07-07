@@ -19,17 +19,23 @@ type Work struct {
 	JobID     uint32
 	ChannelID uint32
 	Header    Header // template; Nonce field will be overwritten
-	NBits     uint32
-	Target    Hash // pre-computed from NBits for fast comparison
+	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
+	Target    Hash   // SHARE target the hash must meet (pool-assigned difficulty)
 }
 
 // Share is a found solution: a Header whose hash meets the target.
 // The Worker sends Shares on the channel passed to Start.
+//
+// Version echoes the exact block-header version that was hashed, so the
+// submission layer can report it faithfully (Stratum V2's
+// SubmitSharesStandard.version must match the hashed header, or the pool
+// recomputes a different hash and rejects the share).
 type Share struct {
 	ChannelID uint32
 	JobID     uint32
 	Nonce     uint32
 	NTime     uint32
+	Version   uint32
 	Hash      Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
@@ -237,6 +243,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					JobID:     localWork.JobID,
 					Nonce:     nonce,
 					NTime:     h.Time,
+					Version:   h.Version,
 					Hash:      hash,
 					DeviceID:  w.cfg.DeviceID,
 				}

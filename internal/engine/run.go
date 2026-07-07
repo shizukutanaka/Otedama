@@ -651,10 +651,43 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	var lastDropped uint64
 
 	// Track share-submission round-trip latency. submitTimes maps a
-	// sequence number to the time the share was sent; on accept we
-	// compute the RTT. Bounded by pruning on read.
+	// sequence number to the time the share was sent; entries are
+	// settled (and deleted) on SubmitSharesSuccess, and additionally
+	// capped at submitTimesCap below so a pool that never acknowledges
+	// cannot grow the map without bound over a long session.
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
+	const submitTimesCap = 1024
+
+	// SV2 job / chain-tip state. A block header cannot be hashed until
+	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
+	// tip (prev_hash + network nBits + ntime, via SetNewPrevHash) are
+	// known. Jobs without min_ntime are *future jobs*: they activate only
+	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
+	// invalidates every other outstanding job (they extend a stale tip).
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var active *stratum.NewMiningJob // job the workers are currently hashing
+	var prevHash [32]byte
+	var prevNBits uint32
+	var activeNTime uint32
+	havePrev := false
+
+	// startJob points the workers at job j against the current chain tip
+	// and share target. Callers must ensure havePrev is true. While
+	// curtailed (BTC/USD below threshold) the job/tip state is still
+	// tracked but the workers stay idle — hashing resumes on the next
+	// activation event after the price recovers, matching the documented
+	// "resumes on next job" semantics.
+	startJob := func(j *stratum.NewMiningJob, ntime uint32) {
+		active = j
+		activeNTime = ntime
+		if opts.isCurtailed() {
+			opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)", j.JobID))
+			return
+		}
+		updateWork(opts.workers, j, chanID, prevHash, prevNBits, ntime, shareTarget)
+		opts.log("info", fmt.Sprintf("engine: job %d version=0x%08X active", j.JobID, j.Version))
+	}
 
 	for {
 		select {
@@ -730,21 +763,65 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
 			if pm.msg.NewMiningJob != nil {
-				// While curtailed, do not arm the workers with the new job —
-				// they must stay idle until the price recovers. The pool
-				// connection is still alive, so lastJobReceivedAt is updated
-				// regardless (it tracks pool liveness, not hashing).
-				if opts.isCurtailed() {
-					opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)",
-						pm.msg.NewMiningJob.JobID))
-				} else {
-					updateWork(opts.workers, pm.msg.NewMiningJob, chanID, shareTarget)
-					opts.log("info", fmt.Sprintf("engine: job %d nBits=0x%08X",
-						pm.msg.NewMiningJob.JobID, pm.msg.NewMiningJob.NBits))
+				j := pm.msg.NewMiningJob
+				jobs[j.JobID] = j
+				switch {
+				case j.HasMinNtime && havePrev:
+					// Job for the current chain tip: mine it now. Its own
+					// min_ntime supersedes the tip's (it is never older).
+					startJob(j, j.MinNtime)
+				case !j.HasMinNtime:
+					// Future job: valid only for a chain tip we have not
+					// seen yet. Hold until SetNewPrevHash names it.
+					opts.log("info", fmt.Sprintf("engine: job %d stored (future job, awaiting prev-hash)", j.JobID))
+				default:
+					// Job claims to be currently valid but we have never
+					// received a SetNewPrevHash, so the header's prev_hash
+					// is unknown. Hashing now would produce garbage.
+					opts.log("info", fmt.Sprintf("engine: job %d held (no prev-hash yet)", j.JobID))
 				}
+				// The pool connection is alive regardless of whether the job
+				// was armed (curtailment, future job): lastJobReceivedAt
+				// tracks pool liveness, not hashing.
 				if opts.m != nil {
 					opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 				}
+			}
+			if pm.msg.SetNewPrevHash != nil {
+				p := pm.msg.SetNewPrevHash
+				prevHash = p.PrevHash
+				prevNBits = p.NBits
+				havePrev = true
+				// The new tip invalidates every job except the one it names.
+				named := jobs[p.JobID]
+				jobs = map[uint32]*stratum.NewMiningJob{}
+				if named != nil {
+					jobs[p.JobID] = named
+					ntime := p.MinNtime
+					if named.HasMinNtime && named.MinNtime > ntime {
+						ntime = named.MinNtime
+					}
+					startJob(named, ntime)
+					opts.log("info", fmt.Sprintf("engine: new prev-hash, job %d nBits=0x%08X",
+						p.JobID, p.NBits))
+				} else {
+					// Tip references a job we never received — stop hashing
+					// the stale job rather than mining a wrong header.
+					active = nil
+					for _, w := range opts.workers {
+						w.SetWork(nil)
+					}
+					opts.log("warn", fmt.Sprintf("engine: SetNewPrevHash names unknown job %d; pausing until next job", p.JobID))
+				}
+			}
+			if pm.msg.SetTarget != nil {
+				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+				if active != nil && havePrev {
+					// Re-issue the current job so workers compare against
+					// the new share target immediately.
+					startJob(active, activeNTime)
+				}
+				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
 				opts.log("info", "engine: share accepted")
@@ -789,7 +866,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				JobID:          share.JobID,
 				Nonce:          share.Nonce,
 				NTime:          share.NTime,
-				NVersion:       0x20000000,
+				// The version that was actually hashed, carried on the
+				// share itself — the pool recomputes the header hash from
+				// these fields, so any mismatch means a rejected share.
+				NVersion: share.Version,
 			}
 			if err := sendMsg(conn, stratum.MsgSubmitSharesStandard, true, &sub); err != nil {
 				return fmt.Errorf("engine: submit share: %w", err)
@@ -798,6 +878,17 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesSubmitted.Inc()
 			}
 			submitTimes[seqNum] = time.Now()
+			if len(submitTimes) > submitTimesCap {
+				// Pool is not acknowledging; drop the oldest half so the
+				// map stays bounded. Latency for dropped entries is lost,
+				// which is the honest outcome — it was never measured.
+				cutoff := seqNum - submitTimesCap/2
+				for seq := range submitTimes {
+					if seq < cutoff {
+						delete(submitTimes, seq)
+					}
+				}
+			}
 			opts.log("info", fmt.Sprintf("engine: share seq=%d nonce=0x%08X", seqNum, share.Nonce))
 		}
 	}
@@ -1089,34 +1180,49 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 	if err != nil {
 		return err
 	}
+	// A wedged/half-open socket must not block the session loop forever:
+	// fail the write, let the reconnect loop take over.
+	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	_, err = conn.Write(data)
 	return err
 }
 
-func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32, shareTarget miner.Hash) {
-	target, err := miner.TargetFromNBits(job.NBits)
-	if err != nil {
-		return
-	}
-	// Grind to the pool-assigned share target, not the block target. The
-	// share target is far easier; a hash meeting it is exactly what the
-	// pool credits, and every comparable miner submits against it. Using
-	// the block target here would mean a worker only ever emits a share on
-	// an actual block solve — effectively never, so the pool would see no
-	// shares at all. Fall back to the block target only when the pool
-	// assigned none (zero target).
-	if shareTarget != (miner.Hash{}) {
-		target = shareTarget
+// updateWork points every worker at the given job, hashed against the
+// current chain tip (prevHash + network prevNBits) at timestamp ntime,
+// comparing hashes against shareTarget — the POOL-ASSIGNED share
+// difficulty from OpenMiningChannelSuccess/SetTarget, not the network
+// target. All five header inputs (version, prev-hash, merkle root, time,
+// bits) are populated; a header missing any of them hashes to a value no
+// pool can accept.
+//
+// Grind to the pool-assigned share target, not the block target. The
+// share target is far easier; a hash meeting it is exactly what the pool
+// credits, and every comparable miner submits against it. Using the block
+// target here would mean a worker only ever emits a share on an actual
+// block solve — effectively never, so the pool would see no shares at
+// all. Fall back to the block target only when the pool assigned none
+// (zero target).
+func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	target := shareTarget
+	if target == (miner.Hash{}) {
+		t, err := miner.TargetFromNBits(prevNBits)
+		if err != nil {
+			return
+		}
+		target = t
 	}
 	w := &miner.Work{
 		JobID:     job.JobID,
 		ChannelID: chanID,
 		Header: miner.Header{
+			Version:    job.Version,
+			PrevHash:   prevHash,
 			MerkleRoot: job.MerkleRoot,
-			Time:       job.MinNtime,
-			Bits:       job.NBits,
+			Time:       ntime,
+			Bits:       prevNBits,
 		},
-		NBits:  job.NBits,
+		NBits:  prevNBits,
 		Target: target,
 	}
 	for _, wr := range workers {

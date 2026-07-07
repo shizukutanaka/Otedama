@@ -10,6 +10,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 238 — フロントエンド〜バックエンド市販レベル品質化 (1/4): Stratum V2 の採掘データパスが構造的に破綻していた問題を解消)
+
+3並列の監査エージェント（TUI/CLI、バックエンドコア、横断的観点）による
+調査の結果、**実際のV2プール接続では有効なシェアを一切生成できない**
+という、製品の中核価値提案そのものを損なう欠陥が判明した。5つの複合的な
+不具合を修正した（詳細は `docs/KNOWN_LIMITATIONS.md` §11）:
+
+1. `NewMiningJob` のワイヤーレイアウトが誤っていた——存在しない`nBits`
+   フィールドを持ち、`version`を欠いていた。実プールのフレームを
+   デコードすると、プールの`version`が`NBits`に読み込まれ、マークル
+   ルートがずれていた。
+2. `SetNewPrevHash`(0x20)・`SetTarget`(0x21) が全く実装されていなかった
+   ——定数もstructもdispatchも無く、マイナーは前ブロックハッシュ・
+   ネットワークnBits・シェア難易度更新を一切知る手段がなかった。
+3. `updateWork`はヘッダーの`MerkleRoot`/`Time`/`Bits`のみを設定し、
+   `Version`と`PrevHash`は常にゼロのままだった——ハッシュされる
+   ヘッダーは常に構造的に無効だった。
+4. ワーカーは（プール割当のシェアターゲットではなく）**ネットワーク
+   ターゲット**に対して採掘していた——`OpenMiningChannelSuccess`から
+   デコードされたシェアターゲットは捨てられていた。期待されるシェア率は
+   事実上ゼロ（ネットワーク難易度でのシェアは実質フルブロック解決）。
+5. 送信される`NVersion`は実際にハッシュした値と無関係に`0x20000000`
+   固定だった。
+
+対応: `NewMiningJob`をSV2仕様に適合（`min_ntime`を正しい`OPTION[u32]`
+に、幻の`nBits`を`version`に置換）。`SetNewPrevHash`/`SetTarget`を
+Encode/Decode込みで実装し`DispatchFrame`に接続。エンジンのセッション
+ループにSV2のアクティベーション意味論を実装——ジョブとチェーンチップの
+両方が判明して初めて採掘対象となる（`min_ntime`を持たないジョブは
+"future job"としてそれを指名する`SetNewPrevHash`を待つ）。
+`handshake()`はチャンネルの初期シェアターゲットを返し、`SetTarget`が
+それをライブ更新し、`miner.Work.Target`は常にプール割当のシェア
+ターゲット（プールが未割当の場合のみネットワークターゲットへ
+フォールバック）。`miner.Share`は実際にハッシュした`Version`を保持し、
+送信パスがそれをそのままエコーする。
+
+`internal/poolproto/stratumv2`アダプター（現在エンジンが使う実経路
+ではないが、`docs/KNOWN_LIMITATIONS.md` §3により将来の配線先）にも
+同じ修正を反映——リグレッションを防止。副次的にV1/V2両経路の
+`channel_msg`ビットの不一致も修正。
+
+`docs/RESEARCH_IMPROVEMENTS.md`: 過去に記録されていた同種のバックログ
+項目（Category 2 item 9「V2 SetNewPrevHashは別の未解決ギャップ」・
+Category 10 item 2「SetTargetクランプの前提条件が欠落」）を解決済みに
+更新——両項目が記録していたmsg_type番号（0x17・0x1d）も実際には誤りで
+あったため、正しい値（0x20・0x21）とともに訂正した。
+`docs/KNOWN_LIMITATIONS.md`: 新規§11としてこの欠陥と解決を記録
+（これまで一切開示されていなかった欠陥だったため）。
+
+テスト追加: OPTION[u32]ラウンドトリップ（存在/不在/短小/不正フラグ）、
+SetNewPrevHash/SetTargetラウンドトリップ+dispatch、実ワーカーによる
+`updateWork`のフルヘッダー投入検証、ジョブバージョンをエコーし
+プロンプトに到着することを検証するエンドツーエンドのエンジンテスト、
+future jobがSetNewPrevHash後にのみ全フィールド投入されて emit される
+ことを証明するアダプターテスト。
+
+全24パッケージgreen。`go vet`/`gofmt` clean。新規依存なし。
+
+（本セッションは4コミット予定の1/4。残り: TUIの残存する見せかけデータ
+表示の是正、CLI/セキュリティ/ドキュメントの正直性、config層・
+可観測性の正確性。`.github/workflows/`の修正はGitHub Appの
+workflows権限が無いため引き続き対象外。）
+
 ### Fixed (session 237 — つづけて改善: TUI の「total sats earned」が承認シェア当たり +1 の無意味なプレースホルダーだった問題を解消)
 
 session 236 に続き、`docs/KNOWN_LIMITATIONS.md` §9 の残り半分——TUI の

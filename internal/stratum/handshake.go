@@ -152,11 +152,17 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 
 // OpenMiningChannel requests a new mining channel on an established
 // connection. Each channel corresponds to one "mining device".
+//
+// Note: the SV2 spec's max_target (U256) field is intentionally not
+// implemented — Otedama accepts whatever share target the pool assigns
+// (OpenMiningChannelSuccess.Target, later adjusted via SetTarget), so
+// advertising a preference would be dead configuration. A previous
+// version of this struct carried a MaxTargetNBits field that Encode
+// never serialized; it was removed rather than left silently dropped.
 type OpenMiningChannel struct {
 	ReqID           uint32  // caller-assigned, echoed in response
 	User            string  // STR0_255: worker identifier (usually Bitcoin address)
 	NominalHashrate float32 // H/s, informational
-	MaxTargetNBits  uint32  // caller's preferred max target
 }
 
 // Encode serialises OpenMiningChannel.

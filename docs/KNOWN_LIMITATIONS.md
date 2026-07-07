@@ -259,6 +259,66 @@ pool that captures and inspects the raw `mining.authorize` wire request.
 
 ---
 
+## ~~11. Stratum V2 mining path could not produce a valid share~~ ✅ RESOLVED (session 238)
+
+**What was broken (previously undisclosed):** five compounding defects in
+`internal/stratum` and `internal/engine/run.go` together meant a real V2
+pool connection could never actually earn anything, despite
+KNOWN_LIMITATIONS describing the Bitcoin mining path as real:
+
+1. `NewMiningJob`'s wire layout was wrong — it carried a spurious `nBits`
+   field and omitted the block-header `version` entirely. Decoding a real
+   pool's frame would read the pool's `version` into `NBits` and shift the
+   merkle root out of place.
+2. `SetNewPrevHash` (0x20) and `SetTarget` (0x21) did not exist at all —
+   no constants, no structs, no dispatch — so the miner never learned the
+   previous block hash, the network `nBits`, or share-difficulty updates.
+3. `updateWork` populated only `MerkleRoot`/`Time`/`Bits` on the header,
+   leaving `Version` and `PrevHash` at zero. Every hashed header was
+   structurally invalid regardless of what a pool sent.
+4. Workers mined against the *network* target
+   (`TargetFromNBits(job.NBits)`) while the pool-assigned share target
+   from `OpenMiningChannelSuccess` was decoded and discarded — expected
+   share rate was effectively zero (a share is a full block solve at
+   network difficulty).
+5. Submitted `NVersion` was hardcoded `0x20000000` regardless of what was
+   actually hashed, so even a correctly-hashed share would echo the wrong
+   version back to the pool.
+
+**Resolution:** `NewMiningJob` now matches the SV2 spec (`min_ntime` is a
+proper `OPTION[u32]`, `version` replaces the phantom `nBits`).
+`SetNewPrevHash`/`SetTarget` are implemented with full Encode/Decode and
+wired into `DispatchFrame`. The engine's session loop implements the SV2
+activation semantics: a job is mined only once both the job and its chain
+tip are known (a job without `min_ntime` is a *future job* held until the
+`SetNewPrevHash` naming it arrives); `SetNewPrevHash` invalidates every
+other outstanding job; `handshake()` returns the channel's initial share
+target, `SetTarget` updates it live, and `miner.Work.Target` is always the
+pool-assigned share target (falling back to the network target only if
+the pool assigned none). `miner.Share` now carries the exact `Version` of
+the header that was hashed, and the submit path echoes it.
+
+**How it was verified:** an end-to-end engine test against a fake pool
+that drives the full activation sequence (`NewMiningJob` → `SetNewPrevHash`
+→ share arrives) and asserts the submitted share's `NVersion` matches the
+job's distinctive version; a `poolproto/stratumv2` adapter test proving a
+future job is emitted only after its `SetNewPrevHash`, with `Version`/
+`PrevHash`/`NBits`/`NTime` all populated from the right message; Encode/
+Decode round-trip tests for the new and corrected message types.
+
+**Note:** this fixes the engine's inline SV2 path (`internal/engine/run.go`,
+the one actually used today per §3 above) and mirrors the same fix into
+the `internal/poolproto/stratumv2` adapter so it does not regress once
+wired in. A related, lower-severity gap remains open and is tracked in
+`docs/RESEARCH_IMPROVEMENTS.md` Category 10 item 2: clamping the channel
+target to `max_target` on every vardiff update, which is moot for now
+since Otedama never sends a `max_target` preference to the pool in the
+first place (`OpenMiningChannel` intentionally omits it — see the field's
+removal note in `internal/stratum/handshake.go`). The Noise NX secp256k1
+gap is unrelated and already tracked at §2 above.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

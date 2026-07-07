@@ -114,15 +114,36 @@ func (fp *fakePool) serve() {
 	encoded, _ = stratum.EncodeFrame(outF)
 	conn.Write(encoded) //nolint:errcheck
 
-	// 5. Send NewMiningJob with easy target
+	// 5. Send NewMiningJob (future job: no min_ntime) followed by the
+	// SetNewPrevHash that activates it — the full SV2 activation
+	// sequence. The all-0xFF channel target from step 4 means every
+	// header hash qualifies as a share, so the CPU finds one instantly.
+	// A version distinct from the legacy hardcoded 0x20000000 so the
+	// share-echo test below can prove NVersion comes from the job.
 	job := stratum.NewMiningJob{
 		ChannelID: 1,
 		JobID:     1,
-		MinNtime:  0x60000000,
-		NBits:     0x207fffff, // maximum (easiest) target compact value
+		Version:   0x20000004,
+	}
+	for i := range job.MerkleRoot {
+		job.MerkleRoot[i] = byte(i)
 	}
 	payload, _ = job.Encode()
 	outF, _ = stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
+	encoded, _ = stratum.EncodeFrame(outF)
+	conn.Write(encoded) //nolint:errcheck
+
+	prev := stratum.SetNewPrevHash{
+		ChannelID: 1,
+		JobID:     1,
+		MinNtime:  0x60000000,
+		NBits:     0x207fffff, // network compact target (easiest, for realism)
+	}
+	for i := range prev.PrevHash {
+		prev.PrevHash[i] = byte(0xA0 + i%16)
+	}
+	payload, _ = prev.Encode()
+	outF, _ = stratum.WrapMessage(stratum.MsgSetNewPrevHash, true, payload)
 	encoded, _ = stratum.EncodeFrame(outF)
 	conn.Write(encoded) //nolint:errcheck
 
@@ -226,6 +247,60 @@ func TestEngine_HandshakeAndMine(t *testing.T) {
 	_ = foundJob
 }
 
+// TestEngine_SubmittedShareEchoesJobVersion drives the full engine
+// against the fake pool and asserts a share is actually submitted (the
+// share target from OpenMiningChannelSuccess is honored — mining at
+// network difficulty would never find one) and that its NVersion echoes
+// the job's version (0x20000004) rather than any hardcoded constant.
+func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	cfg := config.Config{
+		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		LogLevel:       "error",
+		Pools:          []config.PoolConfig{{URL: fp.URL()}},
+	}
+	go func() {
+		_ = Run(ctx, Options{
+			Config:               cfg,
+			Clock:                clock.NewFake(time.Now()),
+			Logger:               func(_, _ string) {},
+			MaxReconnectAttempts: 1,
+		})
+	}()
+
+	deadline := time.After(7 * time.Second)
+	for {
+		if shares := fp.ReceivedShares(); len(shares) > 0 {
+			s := shares[0]
+			if s.NVersion != 0x20000004 {
+				t.Errorf("submitted NVersion = 0x%08X, want 0x20000004 (the job's version)", s.NVersion)
+			}
+			if s.NTime != 0x60000000 {
+				t.Errorf("submitted NTime = 0x%08X, want 0x60000000 (SetNewPrevHash min_ntime)", s.NTime)
+			}
+			if s.JobID != 1 {
+				t.Errorf("submitted JobID = %d, want 1", s.JobID)
+			}
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("no share submitted within 7s — share target from OpenMiningChannelSuccess not honored?")
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
 func TestParseHost(t *testing.T) {
 	tests := []struct {
 		url      string
@@ -270,29 +345,65 @@ func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
 	}
 }
 
-func TestUpdateWork_SetsTargetOnAllWorkers(t *testing.T) {
-	w1 := miner.NewWorker(miner.WorkerConfig{Threads: 1})
-	w2 := miner.NewWorker(miner.WorkerConfig{Threads: 1})
-	workers := []*miner.Worker{w1, w2}
+// TestUpdateWork_PopulatesFullHeaderAndShareTarget pins the core fix for
+// the SV2 data path: updateWork must fill ALL five header inputs
+// (version, prev-hash, merkle root, time, bits) and hand the workers the
+// POOL-ASSIGNED share target, not the network target. It runs a real
+// worker against the easiest possible target and asserts the found share
+// echoes the exact version and ntime that were hashed.
+func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
 
 	job := &stratum.NewMiningJob{
 		ChannelID: 1,
 		JobID:     42,
-		MinNtime:  0x60000000,
-		NBits:     0x1d00ffff, // genesis nBits, valid value
+		Version:   0x20000004,
 	}
-	// This must not panic even without ctx/shares active.
-	// updateWork calls SetWork which is safe without Start.
-	// Zero share target → falls back to the block target (legacy path).
-	updateWork(workers, job, 1, miner.Hash{})
-	// Non-zero share target → workers grind to it instead. Behavioural
-	// proof (that shares actually flow to the pool) lives in the
-	// integration test; here we assert the path does not panic.
-	var easy miner.Hash
-	for i := range easy {
-		easy[i] = 0xFF
+	for i := range job.MerkleRoot {
+		job.MerkleRoot[i] = byte(i * 7)
 	}
-	updateWork(workers, job, 1, easy)
+	var prevHash [32]byte
+	for i := range prevHash {
+		prevHash[i] = byte(i + 1)
+	}
+	var easiest miner.Hash
+	for i := range easiest {
+		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
+	}
+
+	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+
+	select {
+	case s := <-shares:
+		if s.JobID != 42 {
+			t.Errorf("share JobID = %d, want 42", s.JobID)
+		}
+		if s.Version != 0x20000004 {
+			t.Errorf("share Version = 0x%08X, want 0x20000004 (must echo the hashed header version)", s.Version)
+		}
+		if s.NTime != 0x60000000 {
+			t.Errorf("share NTime = 0x%08X, want 0x60000000", s.NTime)
+		}
+	case <-ctx.Done():
+		t.Fatal("no share within 3s at the easiest share target — share target not honored")
+	}
+}
+
+// TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget covers the case
+// where the pool assigns no share target at all (zero value): updateWork
+// must fall back to the network target derived from prevNBits rather
+// than mining against an all-zero (impossible) target.
+func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+	var prevHash [32]byte
+
+	// Must not panic; genesis nBits is a valid (very hard) target.
+	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -1096,13 +1207,14 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetFromNBits: %v", err)
 	}
-	job := &stratum.NewMiningJob{JobID: 7, NBits: 0x207fffff}
+	job := &stratum.NewMiningJob{JobID: 7, Version: 0x20000000}
+	var prevHash [32]byte
 
 	apply := func() {
 		if opts.isCurtailed() {
 			return // mirror runSession: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, target)
+		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work
@@ -1934,12 +2046,25 @@ func (fp *responsivePool) serve() {
 	payload, _ = omcSucc.Encode()
 	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
 
-	// Send NewMiningJob with the easiest possible target (NBits = 0x207fffff)
-	job := stratum.NewMiningJob{
+	// Establish the chain tip first (SetNewPrevHash) so the NewMiningJob
+	// below — which carries its own min_ntime — activates immediately
+	// rather than waiting as a future job. Network nBits 0x207fffff is
+	// the easiest possible target.
+	prev := stratum.SetNewPrevHash{
 		ChannelID: 1,
 		JobID:     1,
 		MinNtime:  0x60000000,
 		NBits:     0x207fffff,
+	}
+	payload, _ = prev.Encode()
+	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
+
+	job := stratum.NewMiningJob{
+		ChannelID:   1,
+		JobID:       1,
+		HasMinNtime: true,
+		MinNtime:    0x60000000,
+		Version:     0x20000000,
 	}
 	payload, _ = job.Encode()
 	fp.emit(conn, stratum.MsgNewMiningJob, true, payload)

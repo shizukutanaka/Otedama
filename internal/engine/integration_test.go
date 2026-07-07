@@ -134,12 +134,13 @@ func (p *mockPool) handleConn(conn net.Conn) {
 		return
 	}
 
-	// 5. Send a single NewMiningJob so the worker has something to hash.
+	// 5. Send a NewMiningJob followed by the SetNewPrevHash that
+	// activates it (the SV2 activation pair). The all-0xFF channel
+	// target from step 4 makes every hash a share.
 	job := stratum.NewMiningJob{
 		ChannelID: 1,
 		JobID:     100,
-		MinNtime:  uint32(time.Now().Unix()),
-		NBits:     0x1d00ffff, // very easy target for testing
+		Version:   0x20000000,
 	}
 	for i := range job.MerkleRoot {
 		job.MerkleRoot[i] = byte(i)
@@ -148,6 +149,18 @@ func (p *mockPool) handleConn(conn net.Conn) {
 	p.jobs++
 	p.mu.Unlock()
 	if err := sendServerMsg(conn, stratum.MsgNewMiningJob, true, &job); err != nil {
+		return
+	}
+	prev := stratum.SetNewPrevHash{
+		ChannelID: 1,
+		JobID:     100,
+		MinNtime:  uint32(time.Now().Unix()),
+		NBits:     0x1d00ffff,
+	}
+	for i := range prev.PrevHash {
+		prev.PrevHash[i] = byte(0x10 + i)
+	}
+	if err := sendServerMsg(conn, stratum.MsgSetNewPrevHash, true, &prev); err != nil {
 		return
 	}
 

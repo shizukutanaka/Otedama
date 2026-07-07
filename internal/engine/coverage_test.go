@@ -419,18 +419,20 @@ func TestSendMsg_WrapMessageError(t *testing.T) {
 }
 
 // ============================================================================
-// run.go updateWork — invalid NBits is a no-op
+// run.go updateWork — invalid network nBits with no share target is a no-op
 // ============================================================================
 
-func TestUpdateWork_InvalidNBits_IsNoOp(t *testing.T) {
+func TestUpdateWork_InvalidPrevNBitsNoShareTarget_IsNoOp(t *testing.T) {
 	job := &stratum.NewMiningJob{
 		ChannelID: 1,
 		JobID:     99,
-		MinNtime:  0x60000000,
-		NBits:     0x00000000, // invalid → TargetFromNBits errors → early return
+		Version:   0x20000000,
 	}
-	// Must not panic; does nothing.
-	updateWork(nil, job, 1, miner.Hash{})
+	var prevHash [32]byte
+	// No share target (zero) forces the network-target fallback; an
+	// invalid prevNBits (0x00000000) makes TargetFromNBits error →
+	// early return. Must not panic; does nothing.
+	updateWork(nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{})
 }
 
 // ============================================================================
@@ -552,7 +554,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 		// an OpenMiningChannelError which is recognised but sets neither
 		// SetupConnectionSuccess nor SetupConnectionError.
 		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
-		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
 		payload, _ := job.Encode()
 		f, _ := stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
 		data, _ := stratum.EncodeFrame(f)

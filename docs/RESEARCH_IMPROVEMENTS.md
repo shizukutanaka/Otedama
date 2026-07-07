@@ -93,25 +93,27 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
    the oldest was dropped; up to 7 stale jobs could remain queued.
-   — 🔵 **V2 `SetNewPrevHash` (msg_type 0x17) is a separate, still-open
-   gap** (found via Socratic review, session 233): this bullet's title
-   previously implied both were handled, but the session-97 fix is V1-only
-   (`sendJob` lives exclusively in `internal/poolproto/stratumv1`).
-   `internal/stratum/messages.go` defines no `SetNewPrevHash` message type
-   at all — an unrecognised msg_type safely falls through to
-   `DispatchFrame`'s `Unknown` case (no crash, confirmed by reading
-   `runSession`'s dispatch, which only branches on `NewMiningJob`/
-   `SubmitSharesSuccess`/`SubmitSharesError`), but a V2 pool that signals a
-   new block via `SetNewPrevHash` ahead of (or instead of relying solely
-   on) the next `NewMiningJob` has no effect on Otedama today. Implementing
-   this correctly per spec also implies `NewMiningJob`'s `future_job` flag
-   and a small job cache (a pool may reference a previously-sent future job
-   by `job_id` rather than resending it) — real behavior, not just a new
-   struct, and not verifiable against a live V2 pool in this environment.
-   Scoping this properly (and, likely, item 2 below alongside it, since
-   both touch the same job-application path) is left as a tracked backlog
-   item rather than an under-verified same-session implementation of
-   protocol semantics that touch share correctness.
+   — ✅ **V2 `SetNewPrevHash` implemented** (session 238; this bullet's
+   note about the msg_type was itself wrong — the real SV2 value is
+   `0x20`, not `0x17`). `internal/stratum/messages.go` now defines
+   `SetNewPrevHash`/`SetTarget` with full Encode/Decode, wired into
+   `DispatchFrame`. The engine's session loop implements the future-job
+   cache this item anticipated: `NewMiningJob` without `min_ntime` (the
+   OPTION[u32] encoding — SV2's `future_job` concept) is held in a
+   `map[uint32]*NewMiningJob` until the `SetNewPrevHash` naming its
+   `job_id` arrives, at which point it activates against the new chain
+   tip; any other cached job is discarded (a stale tip). This closed a
+   correctness defect well beyond "no effect today": before this fix
+   `internal/engine/run.go`'s `updateWork` never set `Header.Version` or
+   `Header.PrevHash` at all (always zero), so every hashed header was
+   structurally invalid regardless of whether `SetNewPrevHash` existed.
+   Also fixed in the same pass: `updateWork` mined against the *network*
+   target (`TargetFromNBits(job.NBits)`) while the pool-assigned share
+   target from `OpenMiningChannelSuccess`/`SetTarget` was decoded and
+   discarded — expected share rate was effectively zero — and submitted
+   shares carried a hardcoded `NVersion` regardless of what was actually
+   hashed. `docs/SPECIFICATION.md`/`docs/KNOWN_LIMITATIONS.md` should be
+   checked for matching entries to update in a documentation follow-up.
 10. ✅ **Protocol-version negotiation logging** (session 98). `runSession`
     logs `"engine: transport protocol: stratum-v1|stratum-v2|..."` at
     session start so operators can confirm which transport was negotiated.
@@ -450,12 +452,17 @@ endpoint against current vendor documentation. Tags as before
    `max_target`. In the V2 channel/job path clamp the effective target into
    `[min, max_target]` at channel open and on each `SetTarget`; add a
    boundary test. (stratum-mining/stratum release v1.5.0)
-   — Prerequisite confirmed missing (session 233): `SetTarget` (msg_type
-   0x1d) has no message type defined in `internal/stratum/messages.go` at
-   all — mid-session vardiff target updates are not decoded, let alone
-   clamped. See item 9 above for the related `SetNewPrevHash` gap; both sit
-   on the same "V2 job-application path is intentionally minimal" surface
-   and are natural to design together.
+   — ✅ **`SetTarget` prerequisite implemented** (session 238; the msg_type
+   noted here was also wrong — the real SV2 value is `0x21`, not `0x1d`).
+   `internal/stratum/messages.go` now decodes `SetTarget{ChannelID,
+   MaxTarget}`; the engine's session loop updates the live share target
+   and re-issues the active job so workers compare against it immediately.
+   The clamp-to-`[min, max_target]` behavior this item originally asked
+   for is not yet implemented — Otedama accepts whatever target the pool
+   sends outright, since `OpenMiningChannel`'s `max_target` preference
+   field is intentionally not sent (see the dead-field note removed from
+   `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
+   message is no longer silently unrecognised, which was the blocking gap.
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
