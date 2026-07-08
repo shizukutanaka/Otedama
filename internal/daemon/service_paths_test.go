@@ -130,6 +130,19 @@ func TestSystemdUnit_HasSecurityHardening(t *testing.T) {
 	}
 }
 
+// TestSystemdUnit_ReadWritePathsMatchesDataDir pins the fix for a real bug:
+// ProtectHome=read-only blocks writes anywhere under $HOME, including the
+// wallet.dat the service must create at startup, unless the unit also
+// carves out an explicit ReadWritePaths= exception for the configured data
+// directory.
+func TestSystemdUnit_ReadWritePathsMatchesDataDir(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama", dataDir: "/home/alice/.local/share/otedama"}
+	unit := m.systemdUnit()
+	if !strings.Contains(unit, "ReadWritePaths=/home/alice/.local/share/otedama") {
+		t.Errorf("systemd unit missing ReadWritePaths for the configured data dir:\n%s", unit)
+	}
+}
+
 func TestSystemdUnit_HasRestartPolicy(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	unit := m.systemdUnit()

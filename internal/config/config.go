@@ -35,6 +35,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -521,7 +523,57 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		o.HTTPAddr = OriginFlag
 	}
 
+	// Layer 4: OS-appropriate default when no higher-priority layer set an
+	// explicit DataDir. This is what actually implements the per-platform
+	// paths documented on Config.DataDir's doc comment; without it, a user
+	// who never passes --data-dir/OTEDAMA_DATA_DIR/data_dir gets an empty
+	// DataDir, which silently disables Lightning wallet initialisation
+	// (engine.setupWallet treats "" as "no data dir configured" and skips
+	// it entirely — see docs/KNOWN_LIMITATIONS.md). o.DataDir intentionally
+	// stays OriginDefault (its zero value) in this case.
+	if cfg.DataDir == "" {
+		cfg.DataDir = DefaultDataDir()
+	}
+
 	return cfg, o
+}
+
+// DefaultDataDir returns the OS-appropriate default directory for
+// Otedama's persistent data (Lightning wallet, known pool keys, usage
+// statistics), used when DataDir is not explicitly configured via flag,
+// env, or config file:
+//
+//	Linux:   $XDG_DATA_HOME/otedama or $HOME/.local/share/otedama
+//	macOS:   $HOME/Library/Application Support/Otedama
+//	Windows: %APPDATA%\Otedama
+//
+// Returns "" if the platform's base directory cannot be determined (for
+// example, no home directory and no APPDATA), in which case the caller
+// must treat data persistence — including the Lightning wallet — as
+// unavailable until a data dir is configured explicitly.
+func DefaultDataDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Otedama")
+		}
+		return ""
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(home, "Library", "Application Support", "Otedama")
+	default: // linux and other Unix-likes
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			return filepath.Join(xdg, "otedama")
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(home, ".local", "share", "otedama")
+	}
 }
 
 // Validate checks that the Config is self-consistent and ready for use.

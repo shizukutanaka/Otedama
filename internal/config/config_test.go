@@ -4,6 +4,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -743,6 +744,43 @@ func TestResolve_DataDirFromFlag(t *testing.T) {
 	cfg := Resolve(Config{}, nil, FlagValues{DataDir: "/tmp/mydata"})
 	if cfg.DataDir != "/tmp/mydata" {
 		t.Errorf("DataDir = %q, want /tmp/mydata (from flag)", cfg.DataDir)
+	}
+}
+
+// TestResolve_DataDirDefaultsToOSPath pins the fix for a real bug: with no
+// file/env/flag value, DataDir used to resolve to "", which
+// engine.setupWallet treats as "no data dir configured" and silently skips
+// Lightning wallet initialisation entirely — even when a passphrase was
+// given. DataDir must now fall back to DefaultDataDir()'s OS-appropriate
+// path so the documented "auto-detect" behavior (Config.DataDir's doc
+// comment) is real, not aspirational.
+func TestResolve_DataDirDefaultsToOSPath(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{})
+	want := DefaultDataDir()
+	if want == "" {
+		t.Skip("DefaultDataDir() returned empty in this environment (no home dir); nothing to assert")
+	}
+	if cfg.DataDir != want {
+		t.Errorf("DataDir = %q, want %q (OS default, no layer set an explicit value)", cfg.DataDir, want)
+	}
+}
+
+// TestResolveWithOrigins_DataDirDefaultOriginStaysDefault ensures the
+// synthesized OS-default path is not misreported as coming from the file,
+// env, or flag layer.
+func TestResolveWithOrigins_DataDirDefaultOriginStaysDefault(t *testing.T) {
+	_, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	if o.DataDir != OriginDefault {
+		t.Errorf("DataDir origin = %v, want OriginDefault", o.DataDir)
+	}
+}
+
+func TestDefaultDataDir_NonEmptyWithHomeDir(t *testing.T) {
+	if _, err := os.UserHomeDir(); err != nil {
+		t.Skip("no home directory in this environment")
+	}
+	if got := DefaultDataDir(); got == "" {
+		t.Error("DefaultDataDir() = \"\", want a non-empty OS-appropriate path")
 	}
 }
 

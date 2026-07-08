@@ -38,8 +38,8 @@ a new ADR that supersedes the old one; do not edit the old one.
 | [004](ADR-004-terminal-ui-custom-ansi.md) | Custom ANSI TUI instead of BubbleTea | Accepted |
 | [005](ADR-005-prometheus-format-no-client.md) | Prometheus exposition without the official client library | Accepted |
 | [006](ADR-006-protocol-abstraction.md) | Abstract every cryptographic scheme and wire protocol behind interfaces | Accepted |
-| [007](ADR-007-lightning-capability-expansion.md) | Lightning capability expansion (BOLT12, external/embedded node, swaps) | Accepted |
-| [008](ADR-008-hardware-power-awareness-layer.md) | Hardware & power-awareness layer (DVFS, tariffs, solar) | Accepted |
-| [009](ADR-009-pool-decentralization-integration.md) | Pool-decentralisation integration (JDC, DATUM, solo) | Accepted |
-| [010](ADR-010-arbitration-engine-evolution.md) | Arbitration-engine evolution (forecasting, bandits, change detection) | Accepted |
+| [007](ADR-007-lightning-capability-expansion.md) | Lightning capability expansion (BOLT12, external/embedded node, swaps) | Proposed |
+| [008](ADR-008-hardware-power-awareness-layer.md) | Hardware & power-awareness layer (DVFS, tariffs, solar) | Proposed |
+| [009](ADR-009-pool-decentralization-integration.md) | Pool-decentralisation integration (JDC, DATUM, solo) | Proposed |
+| [010](ADR-010-arbitration-engine-evolution.md) | Arbitration-engine evolution (forecasting, bandits, change detection) | Proposed |
 | [011](ADR-011-secp256k1-for-stratum-v2-noise.md) | secp256k1 for the Stratum V2 Noise handshake (4th dependency) | Accepted |

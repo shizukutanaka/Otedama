@@ -18,8 +18,11 @@
 //
 // # Output formats
 //
+// Both formats are stock log/slog output (slog.NewTextHandler /
+// slog.NewJSONHandler with no ReplaceAttr customization):
+//
 //	Text (default, for humans in terminals):
-//	  2026-04-24T10:15:30Z [INFO ] engine: worker started dev=cpu-0
+//	  time=2026-04-24T10:15:30.000Z level=INFO msg="engine: worker started" dev=cpu-0
 //
 //	JSON (for machines, --log-format=json):
 //	  {"time":"2026-04-24T10:15:30Z","level":"INFO","msg":"engine: worker started","dev":"cpu-0"}

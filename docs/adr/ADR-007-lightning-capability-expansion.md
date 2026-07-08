@@ -9,7 +9,7 @@
 
 ## Context
 
-Otedama v3.0.0-alpha.1 uses Lightning as a **passive receive endpoint**: the wallet holds a BIP-39 seed and ChaCha20-Poly1305-encrypted state, signs proofs for BOLT12 offer registration with the pool, but does not run a Lightning node itself. Payouts arrive at the user's externally-run node (Phoenixd, CLN, lnd, Alby Hub) or, with OCEAN's TIDES system, accumulate as on-chain payouts.
+Otedama v3.0.0-alpha.1 uses Lightning as a **passive receive endpoint**: the wallet holds a BIP-39 seed encrypted at rest with AES-256-GCM (`internal/lightning/seedstore.go`), and does not run a Lightning node itself. It does not sign or register BOLT12 offer proofs today — `WalletManager`'s entire public surface is seed/mnemonic storage and retrieval (see `docs/KNOWN_LIMITATIONS.md` §6); BOLT12 offer registration is one of the capabilities this ADR proposes adding. Payouts arrive at the user's externally-run node (Phoenixd, CLN, lnd, Alby Hub) or, with OCEAN's TIDES system, accumulate as on-chain payouts.
 
 This is the right starting point — minimal attack surface, no liveness requirements, no channel-management complexity. But it leaves Otedama unable to participate in three significant 2027–2028 capabilities:
 

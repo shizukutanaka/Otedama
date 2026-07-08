@@ -45,8 +45,13 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 # Run as a non-root user (distroless 'nonroot' is uid 65532).
 USER nonroot:nonroot
 
-# Data directory for wallet and config.
-VOLUME ["/home/nonroot/.config/otedama"]
+# Data directory for the Lightning wallet and other persistent state.
+# Matches the mount path used throughout docs/DEPLOYMENT.md's Docker/
+# Compose/Kubernetes examples; pass --data-dir/OTEDAMA_DATA_DIR=/var/lib/otedama
+# (or bind-mount this path) so the wallet actually lands on the volume
+# rather than the OS-default path config.DefaultDataDir() would otherwise
+# resolve to inside the container ($HOME/.local/share/otedama).
+VOLUME ["/var/lib/otedama"]
 
 # Otedama has no listening ports of its own; it dials out to the pool.
 EXPOSE 0

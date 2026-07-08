@@ -56,7 +56,7 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 21 | AEAD used for wallet encryption | `internal/lightning/wallet.go` | ChaCha20-Poly1305 or AES-GCM |
+| 21 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
 | 22 | Key derivation uses scrypt | `internal/lightning/seed.go` | `scrypt.Key(..., N=32768, r=8, p=1, keyLen=32)` |
 | 23 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
 | 24 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |

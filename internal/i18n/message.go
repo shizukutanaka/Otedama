@@ -15,8 +15,11 @@
 // foundation rather than bolting it on later. All user-facing strings
 // flow through this package. The ten priority languages (English,
 // Japanese, Chinese, Korean, Spanish, French, German, Portuguese,
-// Russian, Arabic) receive human-reviewed translations; other languages
-// are supplied by machine translation as a best-effort fallback.
+// Russian, Arabic) receive human-reviewed translations. Requesting any
+// other language falls back to English (Bundle.Render: exact tag match,
+// then base-tag match, then English) — there is no machine-translation
+// call anywhere in this package today; a "1,000+ languages via machine
+// translation" fallback has been discussed but is not implemented.
 //
 // # Architecture
 //

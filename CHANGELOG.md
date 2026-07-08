@@ -10,6 +10,101 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 246 — つづけて: DataDirの「自動検出」が未実装で、明示指定しない全ユーザーのLightningウォレットが黙って初期化されていなかった実バグを修正。ChaCha20-Poly1305/AES-GCMの取り違えが7箇所のドキュメントに拡散していた問題、systemdのProtectHomeがウォレット書き込みを阻害する矛盾、Docker/K8sのデータディレクトリ未設定、ADRステータス誤記、release.ymlのライセンス/製品説明の誤りを是正)
+
+session 245に続き、2並列のバックグラウンド監査エージェント
+（internal/arbitration+btccrypto+miner+poolproto+ADR+API.md+
+DEPLOYMENT.md+GODEBUG_NOTES.md担当、およびinternal/daemon+clock+logger+
+i18n+DEPLOYMENT.md+CIワークフロー+ROADMAP担当）の調査結果を1件ずつ自ら
+検証し、実在が確認できたものを修正した。
+
+**最重要（資金安全に直結）: `Config.DataDir`の「XDG/platform規約から
+自動解決される」というdocコメントは、実装が存在しない空約束だった。**
+`internal/config/config.go`の`DataDir`は、未設定時に空文字列のまま
+`ResolveWithOrigins`を通過していた——docコメントは3プラットフォーム分の
+自動解決先を具体的に記述していたが、それを実装するコードはどこにも
+存在しなかった。結果として`--data-dir`/`OTEDAMA_DATA_DIR`/`data_dir`を
+一度も明示しなかった全ユーザー（`docs/DEPLOYMENT.md`のDocker実行例を
+含む）で、`engine.setupWallet`が`opts.Config.DataDir == ""`を検知して
+Lightningウォレット初期化を黙ってスキップしていた——パスフレーズを
+指定していても、ログの警告以外に一切の通知なしに。新設の
+`config.DefaultDataDir()`（Linux: `$XDG_DATA_HOME/otedama`または
+`$HOME/.local/share/otedama`、macOS: `$HOME/Library/Application
+Support/Otedama`、Windows: `%APPDATA%\Otedama`）を`ResolveWithOrigins`
+の最終レイヤーとして配線し、docコメントが元々約束していた挙動を実際に
+実装した。`internal/doctor/checks.go`が独自に持っていたLinux専用の
+重複フォールバックも同じ関数を使うよう統合（macOS/Windowsでも
+doctorが正しいパスを報告するようになった副次効果込み）。回帰防止テスト
+`TestResolve_DataDirDefaultsToOSPath`等を追加。
+
+**同じ根の問題（資金安全）: systemdの`ProtectHome=read-only`が
+ウォレット書き込みを阻害する状態だった。** `internal/daemon/service.go`
+が生成するsystemdユニットは`ProtectHome=read-only`を無条件に設定して
+おり、`$HOME`配下（`docs/DEPLOYMENT.md`が推奨する`--data-dir`の既定値
+そのもの）への書き込みを一切禁止していた——`ReadWritePaths=`による
+例外なしでは、サービスとして起動したOtedamaは`wallet.dat`を永続化
+できない。`systemdUnit()`が設定済み（または上記`DefaultDataDir()`から
+解決した）データディレクトリに対して`ReadWritePaths=`を自動追加する
+よう修正。回帰テスト`TestSystemdUnit_ReadWritePathsMatchesDataDir`を
+追加。
+
+**Docker/Kubernetesのデプロイ例が同じ穴を持っていた:**
+`docs/DEPLOYMENT.md`のdocker run・docker-compose・Kubernetes
+Deploymentのいずれも`OTEDAMA_DATA_DIR`を設定しておらず、ボリューム
+マウント先（`/var/lib/otedama`）とアプリが実際に書き込む場所が食い違って
+いた。全ての例に`OTEDAMA_DATA_DIR=/var/lib/otedama`を追加。
+`Dockerfile`の`VOLUME`ディレクティブも`/home/nonroot/.config/otedama`
+から`/var/lib/otedama`へ統一（3箇所で別々のパスを指していた）。
+
+**ウォレット暗号方式の取り違え（ChaCha20-Poly1305 vs AES-GCM）が
+7箇所のドキュメントに拡散していた。** `internal/lightning/seedstore.go`
+のウォレット暗号化は一貫してAES-256-GCMだが（Noise NX輸送層の
+ChaCha20-Poly1305と混同）、`docs/API.md`のウォレットファイル形式節
+（scryptパラメータのオンディスク保存・32バイトsalt・独立した16バイト
+tagフィールドという、実装と異なる記述も含む）、`docs/THREAT_MODEL.md`、
+`docs/MIGRATING-FROM-V2.md`、`docs/AUDIT_CHECKLIST.md`、
+`docs/adr/ADR-007`、`GODEBUG_NOTES.md`のfips140節（「ウォレット暗号化が
+壊れる」という誤った理由付け——実際に影響するのはNoise NX輸送層）、
+そしてv3.0.0-alpha.1リリース時点のCHANGELOG自体、の計7箇所全てを
+実装に合わせて修正した。
+
+**その他の是正:**
+
+- `docs/adr/README.md`のADRインデックス表がADR-007/008/009/010を
+  「Accepted」と表示していたが、各ADR自身のヘッダは全て「Proposed」
+  だった（未承認の提案4件を既決定であるかのように見せていた）。表を
+  修正。ADR-007本文も、Lightningウォレットが「BOLT12 offer登録の証明に
+  署名する」という現在形の記述を含んでいたが、これは提案内容であり
+  実装済みではない（`docs/KNOWN_LIMITATIONS.md` §6と矛盾）ため修正。
+- `GODEBUG_NOTES.md`が`go.mod`の`godebug`ブロック（`panicnil=0`,
+  `randautoseed=1`, `tlsmlkem=1`の3項目）のうち`tlsmlkem`しか
+  文書化しておらず、残り2項目は逆に「まだ必要ない」仮想knobとして
+  記載されていた。Active knobs節へ統合。
+- `internal/logger/logger.go`のパッケージdocが示すテキスト形式の出力例
+  （`[INFO ]`ブラケット形式）が、実際の`slog.NewTextHandler`出力
+  （`time=... level=INFO msg="..."`形式）と一致していなかった。修正。
+- `internal/i18n/message.go`が「10言語以外は機械翻訳でフォールバック」
+  と記述していたが、`Bundle.Render`の実際のフォールバックは
+  完全一致→ベースタグ一致→英語の3段階のみで、機械翻訳呼び出しは
+  コード中に一切存在しない。正確な記述へ修正。
+- `docs/KNOWN_LIMITATIONS.md` §4が「Windows/macOS GPU検出はv3.7」と
+  記載していたが、`ROADMAP.md`の確定マイルストーンでは同機能が
+  v3.3.0（2027 Q1）。ROADMAP.mdを正としてKNOWN_LIMITATIONS側を修正。
+- `.github/workflows/release.yml`のfpmパッケージングジョブが
+  `--license "MIT"`（実際はApache-2.0）、
+  `--description "Otedama - P2P Mining Pool Software"`（CLAUDE.mdが
+  明示的に禁止する「独自プール運営」の描写に該当）、および存在しない
+  `docs/DEPLOYMENT_GUIDE.md`への`master`ブランチリンクを含んでいた。
+  この3点を修正。同ジョブおよび`deploy.yml`が参照する
+  `scripts/`・ルート`config.yaml`・Kubernetes/Helmチャートは実在せず
+  （前者は毎回のpush/PRでCIを赤くする非機能ジョブ）、これは機械的な
+  修正の範囲を超えメンテナの意思決定を要するため、
+  `docs/KNOWN_LIMITATIONS.md` §13として新規に開示した。
+- `NOTICE`が`go.mod`の間接依存`golang.org/x/sys`を欠いていたため追加。
+
+全24パッケージgreen（`go clean -testcache && go test ./...`で確認）。
+`go vet`/`gofmt` clean。新規直接依存なし。
+
 ### Fixed (session 245 — つづけて: 存在しないプラグインアーキテクチャ・ZKP認証・Web管理UIをSECURITY.md/CONTRIBUTING.mdが既実装であるかのように記述していた問題、config.goの古い注釈、SPECIFICATION.mdの欠落フィールド、存在しないインストールURLを是正)
 
 2並列のバックグラウンド監査エージェント（internal/provider残り+config+
@@ -6056,7 +6151,7 @@ First alpha release of the v3.0 strategic reset. Otedama is now a non-custodial,
 
 ### Added
 
-- **Non-custodial Lightning wallet.** BIP-39 seed generated locally, encrypted on disk with scrypt + ChaCha20-Poly1305 using a user-supplied passphrase. Seed never leaves the machine.
+- **Non-custodial Lightning wallet.** BIP-39 seed generated locally, encrypted on disk with scrypt + AES-256-GCM (corrected session 245; this entry originally said ChaCha20-Poly1305, which the wallet's `seedstore.go` has never used — ChaCha20-Poly1305 is used elsewhere, in the Stratum V2 Noise NX transport) using a user-supplied passphrase. Seed never leaves the machine.
 - **Stratum V2 client.** Full protocol implementation (framing, 10+ message types, Noise NX handshake) in `internal/stratum/`. Compatible with any V2 pool; tested against mock and planned against Braiins, DEMAND, OCEAN.
 - **Compute arbitration engine.** Pure-function `internal/arbitration/` decides in real time whether each device should run Bitcoin mining or AI inference (via Akash Network), based on live yield quotes. Hysteresis (default 5%) prevents flapping.
 - **Hardware abstraction layer.** CPU always; Linux GPU detection via `/sys/class/drm` (no CGO, no CUDA SDK dependency).

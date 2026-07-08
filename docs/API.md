@@ -313,14 +313,18 @@ Path: `{data-dir}/wallet.dat`
 Permissions: `0600` (owner read/write only). Violation detected by
 `otedama doctor`.
 
-Format: length-prefixed binary blob containing:
+Format (`internal/lightning/seedstore.go`: `EncryptedSeed.Marshal`), a flat
+concatenation with no internal length prefixes:
 
 1. Version byte (`0x01`).
-2. scrypt parameters (N, r, p as u32).
-3. 32-byte salt.
-4. 12-byte AES-GCM nonce.
-5. Ciphertext: ChaCha20-Poly1305 encrypted BIP-39 seed (64 bytes).
-6. 16-byte GCM authentication tag.
+2. 16-byte scrypt salt.
+3. 12-byte AES-GCM nonce.
+4. Ciphertext: AES-256-GCM encrypted BIP-39 seed (64 bytes plaintext);
+   the GCM authentication tag is appended by `cipher.AEAD.Seal` as part
+   of this ciphertext, not stored as a separate field.
+
+The scrypt parameters (N=2^17, r=8, p=1) are fixed constants in code,
+not serialized to disk.
 
 The mnemonic is derived from the seed and is never stored on disk.
 **The mnemonic is only displayed once, on first run.**

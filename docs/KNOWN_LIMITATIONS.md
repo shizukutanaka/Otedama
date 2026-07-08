@@ -168,9 +168,11 @@ simulated AI-inference stream) during the alpha. There is no
 workaround for GPU mining; it requires a compute-dispatch driver that
 does not exist yet.
 
-**Target:** v3.7 (Windows/macOS GPU detection). GPU SHA256d mining
-dispatch has no committed target; it is not on the current roadmap.
-Tracked by ADR-008 (hardware/power) sub-domain 2.
+**Target:** v3.3.0, 2027 Q1 (Windows/macOS GPU detection — corrected
+session 245; this previously said v3.7, contradicting ROADMAP.md's
+"Observability and ops" milestone, which is the authoritative target).
+GPU SHA256d mining dispatch has no committed target; it is not on the
+current roadmap. Tracked by ADR-008 (hardware/power) sub-domain 2.
 
 ---
 
@@ -435,6 +437,49 @@ the detected terminal width, so a narrow terminal (as low as the
 documented 40-column minimum) could wrap a line onto a second terminal
 row, breaking the "cursor home, overwrite in place" repaint model for
 every line after it; content longer than `cols` is now truncated to fit.
+
+---
+
+## 13. Two release-time CI workflows are non-functional (`deploy.yml`, part of `release.yml`)
+
+**What:** `.github/workflows/deploy.yml` runs an `npm ci`/`npm test` job
+on every push to `main`/`develop` and every PR to `main` — but this is a
+Go project with no `package.json` anywhere in the repository, so that
+job fails immediately every time it runs. Its later `deploy-staging`/
+`deploy-production` jobs run `helm upgrade --install … ./kubernetes/helm/otedama`,
+but no `kubernetes/` or `helm/` directory exists in the repo (CLAUDE.md's
+architecture map explicitly documents that `k8s/` does not exist and is
+represented only by the YAML examples in `docs/DEPLOYMENT.md`).
+Separately, `release.yml`'s `build-packages` job (`.deb`/`.rpm` via
+`fpm`) references `scripts/post-install.sh`, `scripts/pre-remove.sh`,
+`scripts/otedama.service`, and a root-level `config.yaml` — none of
+which exist (`scripts/` is not a directory in this repo; there is no
+root `config.yaml`, only `config.yaml.example`). This job would also
+fail if it ran (it currently only runs on a `v*` tag push).
+
+**Impact:** `deploy.yml` makes CI status red on ordinary development
+pushes/PRs for a reason unrelated to code quality — a false-negative
+signal. `release.yml`'s packaging job would break an actual tagged
+release if `.deb`/`.rpm` distribution were attempted today.
+
+**Corrected this session (245):** `release.yml`'s smaller factual
+errors were fixed in place (license string was `MIT`, contradicting
+the project's actual Apache-2.0 license; product description read
+"P2P Mining Pool Software", which CLAUDE.md explicitly forbids as a
+centralized-component description of software that only *connects to*
+existing pools; the release-notes deployment-guide link pointed at a
+nonexistent `docs/DEPLOYMENT_GUIDE.md` on a nonexistent `master`
+branch). The missing-assets problem in both files was not fixed — it
+requires a maintainer decision (author the missing `scripts/`/`config.yaml`
+assets and a real Kubernetes/Helm deployment target, or remove the
+non-functional jobs) rather than a mechanical correction.
+
+**Workaround:** Ignore `deploy.yml`'s CI status; it does not reflect
+code health. Do not attempt `.deb`/`.rpm` packaging via `release.yml`
+until the missing assets are added.
+
+**Target:** No committed target; tracked here pending a maintainer
+decision on deployment strategy.
 
 ---
 

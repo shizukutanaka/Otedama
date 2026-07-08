@@ -47,7 +47,7 @@ If any of those is a hard requirement, **stay on v2.x**. The
 
 ### Security
 - **Noise encryption:** Stratum V2 handshake on every pool connection.
-- **Wallet:** BIP-39 seed encrypted with scrypt + ChaCha20-Poly1305.
+- **Wallet:** BIP-39 seed encrypted with scrypt + AES-256-GCM.
 - **CI:** SHA-pinned GitHub Actions, Dependabot, nightly fuzz, cosign
   signing.
 

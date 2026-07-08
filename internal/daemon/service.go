@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/shizukutanaka/Otedama/internal/config"
 )
 
 // goos is a var so tests can set it to "darwin", "windows", etc. to exercise
@@ -192,6 +194,22 @@ func (m *Manager) statusSystemd() (ServiceStatus, error) {
 
 func (m *Manager) systemdUnit() string {
 	args := m.serviceArgs()
+	// ProtectHome=read-only blocks writes anywhere under /home, including
+	// the wallet.dat the service must create/update at startup. Without an
+	// explicit exception, a data dir under $HOME (the documented default —
+	// see config.DefaultDataDir) makes the Lightning wallet permanently
+	// read-only and the process would fail to persist it. effectiveDataDir
+	// mirrors what `otedama run` itself resolves at startup when
+	// --data-dir/OTEDAMA_DATA_DIR/data_dir was not set at install time, so
+	// the unit's carve-out matches the path actually used.
+	effectiveDataDir := m.dataDir
+	if effectiveDataDir == "" {
+		effectiveDataDir = config.DefaultDataDir()
+	}
+	readWritePaths := ""
+	if effectiveDataDir != "" {
+		readWritePaths = fmt.Sprintf("ReadWritePaths=%s\n", quoteToken(effectiveDataDir))
+	}
 	return fmt.Sprintf(`[Unit]
 Description=Otedama — non-custodial compute arbitration
 After=network-online.target
@@ -210,10 +228,10 @@ SyslogIdentifier=otedama
 NoNewPrivileges=true
 ProtectHome=read-only
 PrivateTmp=true
-
+%s
 [Install]
 WantedBy=default.target
-`, quoteToken(m.binaryPath), args)
+`, quoteToken(m.binaryPath), args, readWritePaths)
 }
 
 // ----- macOS / launchd -----

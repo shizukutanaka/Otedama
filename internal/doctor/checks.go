@@ -185,12 +185,13 @@ func checkDataDir(dir string) Check {
 		Name: "Data directory",
 		Run: func(_ context.Context) Result {
 			if dir == "" {
-				// Use the default location.
-				home, err := os.UserHomeDir()
-				if err != nil {
+				// Mirrors config.ResolveWithOrigins's OS-appropriate default
+				// (Linux XDG, macOS Application Support, Windows %APPDATA%)
+				// so doctor reports on the same path the engine actually uses.
+				dir = config.DefaultDataDir()
+				if dir == "" {
 					return Result{Status: StatusSkip, Detail: "no home directory"}
 				}
-				dir = filepath.Join(home, ".local", "share", "otedama")
 			}
 
 			info, err := os.Stat(dir)
@@ -251,11 +252,10 @@ func checkWallet(dataDir string) Check {
 		Run: func(_ context.Context) Result {
 			dir := dataDir
 			if dir == "" {
-				home, err := os.UserHomeDir()
-				if err != nil {
+				dir = config.DefaultDataDir()
+				if dir == "" {
 					return Result{Status: StatusSkip, Detail: "no home directory; cannot locate wallet"}
 				}
-				dir = filepath.Join(home, ".local", "share", "otedama")
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
