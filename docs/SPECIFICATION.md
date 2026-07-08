@@ -74,6 +74,7 @@ its default, and its validation rule:
 | `min_yield_sats_per_sec` | `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `0` (disabled) | ≥ 0 |
 | `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
 | `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
+| `http_addr` | `OTEDAMA_HTTP_ADDR` | `""` (HTTP server disabled) | also settable via `--http-addr`; when set, serves `/metrics`, `/healthz`, `/readyz` |
 
 The path to the config file itself is resolved from `--config`, then
 `OTEDAMA_CONFIG`, then the platform default (`~/.config/otedama/config.yaml`).
@@ -245,6 +246,7 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |
 | G6 | GPU detection is Linux-only. | Open — KNOWN_LIMITATIONS §4. |
 | G18 | `otedama_submit_latency_milliseconds` is the only time-valued metric expressed in milliseconds; the other eight (`uptime_seconds`, `start_time_seconds`, `clock_skew_seconds`, `btc_rate_age_seconds`, `last_job_received_seconds`, `last_reject_seconds`, `estimated_share_interval_seconds`, `productive_seconds_total`) use seconds. Prometheus naming guidance mandates base units (seconds), so the conventional name would be `otedama_submit_latency_seconds` with values in seconds. The stored value is genuinely milliseconds (`run.go` records `Sub(sent).Microseconds()/1000` and `Since(sendTime).Milliseconds()`), so the current name is *accurate* but non-idiomatic and inconsistent with the rest of the catalogue. | Open — **breaking rename**: any operator dashboard/alert keyed on the metric name or its ms scale would break. Recorded for a maintainer decision rather than changed unilaterally (options: rename to `_seconds` + divide by 1000 in one release; or expose a parallel `_seconds` series and deprecate the ms one). |
+| G19 | Despite G16's "complete schema table" fix (session 190), `http_addr` (`OTEDAMA_HTTP_ADDR` / `--http-addr`) — settable, validated, and printed by `config show` since before that session — was never added to the §3.1 table. | **Fixed (session 244)**: added the missing `http_addr` row (env var, default, and the endpoints it gates). |
 
 This spec is updated alongside the code; new gaps are added here as they are
 found and removed in the same change that closes them.

@@ -10,6 +10,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 245 — つづけて: 存在しないプラグインアーキテクチャ・ZKP認証・Web管理UIをSECURITY.md/CONTRIBUTING.mdが既実装であるかのように記述していた問題、config.goの古い注釈、SPECIFICATION.mdの欠落フィールド、存在しないインストールURLを是正)
+
+2並列のバックグラウンド監査エージェント（internal/provider残り+config+
+metrics+httpserver+rates+i18n担当、および主要ドキュメント+cmd/otedama
+担当）による調査結果を1件ずつ自ら検証した上で、実在が確認できたものを
+修正した。
+
+**最重要: `CONTRIBUTING.md`と`SECURITY.md`が、存在しない・明示的に
+却下された機能を「提供している」かのように記述していた。**
+
+- `CONTRIBUTING.md`の「プラグインの貢献」節と`SECURITY.md`の該当箇所は
+  「Otedamaはプラグインアーキテクチャを提供しており…」「Otedama
+  Compatible認証」を既存の仕組みとして説明していたが、`ROADMAP.md`の
+  「削除されたマイルストーン」表は「Otedama Marketplace」（プラグイン
+  エコシステム）を「プラグインエコシステムの需要証明なし」の理由で
+  明示的に削除・却下済みと記録している。リポジトリ全体の`.go`ファイル
+  検索でも`plugin`は一件もヒットしない。両ファイルとも、プラグイン
+  システムは存在せず新規収益源はコアへのPRで追加する旨の記述へ書き換えた。
+- `SECURITY.md`は「Otedamaは…代わりにZKPベース認証を採用しています」と
+  現在完了形で記述していたが、`internal/auth/`は`CLAUDE.md`の
+  アーキテクチャマップで「存在しないパス（作成禁止）」かつ「ZKP認証は
+  v4.0スコープ」と明記されている。v4.0で計画中・現時点では未実装である
+  旨を明記するよう修正。
+- `SECURITY.md`のスコープ節は「公式Web管理インターフェース」を対象範囲に
+  含めていたが、`CLAUDE.md`は`web/`について「Web管理UIは計画なし」と
+  明記しており、該当コードは存在しない。スコープから削除し、理由を注記。
+- `CONTRIBUTING.md`のレビュープロセス節は「`internal/security/`、
+  `internal/lightning/`、`internal/auth/`への変更は二人のメンテナに
+  よる二重レビュー」としていたが、前2者は`CLAUDE.md`のアーキテクチャ
+  マップに存在しないパス。実際にCODEOWNERS必須レビュー対象となっている
+  `internal/lightning/`と`internal/stratum/`のNoise NX関連ファイルへ
+  修正。
+
+**その他の是正:**
+
+- `internal/config/config.go`の`PoolConfig.Password`のdocコメントが
+  「Stratum V1フォールバックパス（v3.0.0-alphaでは未配線）に予約されて
+  おり現在未使用」と記述していたが、実際には`engine.runSessionV1`が
+  `mining.authorize`呼び出しで実際に送信しており、
+  `docs/KNOWN_LIMITATIONS.md` §10で`✅ RESOLVED (session 235)`と記録
+  済みの既知の修正済み事項だった。正確な記述へ更新。
+- `docs/SPECIFICATION.md` §3.1のスキーマ表はG16（session 190）で
+  「完全なスキーマ表」に書き直されたと記録されていたが、`http_addr`
+  （`--http-addr`/`OTEDAMA_HTTP_ADDR`、`config show`で表示、
+  `internal/httpserver`のエンドポイント群を制御）が欠落していた。行を
+  追加し、新規ギャップG19として記録。
+- `docs/MIGRATING-FROM-V2.md`のv3インストール手順が
+  `https://otedama.io/install.sh`という、リポジトリ内のどこにも実在が
+  確認できないドメインを案内していた（`README.md`の正規インストール
+  コマンドは`github.com/.../releases/latest/download/install.sh`）。
+  CLAUDE.mdが明示的に禁止する「存在しないURLの記載」に該当するため、
+  README.mdと同じ実在するURLへ修正。
+
+全24パッケージgreen（`go clean -testcache && go test ./...`で再確認）。
+`go vet`/`gofmt` clean。新規依存なし。
+
 ### Fixed (session 244 — つづけて: session 243のGPU修正で生じた矛盾をinternal/providerのdocコメントで是正)
 
 session 243でGPUの`SHA256d`能力を`false`へ修正したことに伴い残っていた、

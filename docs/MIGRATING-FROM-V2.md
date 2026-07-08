@@ -82,7 +82,7 @@ under `[payout]`. Copy the address — you will paste it into v3.
 ### 4. Install v3
 
 ```bash
-curl -sSL https://otedama.io/install.sh | bash
+curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
 ```
 
 Or download from [releases][releases] and verify the signature.

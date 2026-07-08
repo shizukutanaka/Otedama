@@ -190,10 +190,11 @@ type PoolConfig struct {
 	// if non-empty, it overrides that entirely.
 	User string `yaml:"user"`
 
-	// Password is the pool password. The Stratum V2 transport has no
-	// password concept, so this field is reserved for the Stratum V1
-	// fallback path (not yet wired in v3.0.0-alpha) and is currently
-	// unused. Most V1 pools accept any value (often "x").
+	// Password is the pool password, sent in the Stratum V1
+	// mining.authorize call (engine.runSessionV1; resolved session 235 —
+	// see docs/KNOWN_LIMITATIONS.md §10). The Stratum V2 transport has
+	// no password concept, so this field only applies to V1 connections.
+	// Most V1 pools accept any value (often "x").
 	Password string `yaml:"password"`
 
 	// PayoutScheme is the pool's reward distribution method, used by
