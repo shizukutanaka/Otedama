@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 244 — つづけて: session 243のGPU修正で生じた矛盾をinternal/providerのdocコメントで是正)
+
+session 243でGPUの`SHA256d`能力を`false`へ修正したことに伴い残っていた、
+`internal/provider`パッケージ内の2箇所の記述矛盾を是正した。
+
+`internal/provider/provider.go`のパッケージdocは「RTX 4090 GPU Bitcoin
+mining: ~60 sats/s」という数値を実データであるかのように収益比較表へ
+記載していたが、GPUの`Capabilities.SHA256d`が常に`false`である今、この
+コードパスは到達不能であり、GPUがBitcoinマイニングとAI推論の間で
+ルーティングされることは実際には起こり得ない。表を「CPU採掘 vs
+GPU（simulated）AI推論」の実際に到達可能な2値へ差し替え、GPUは採掘には
+一切ルーティングされない旨を明記した。
+
+`internal/provider/ai_inference.go`は「Real Akash API integration ...
+is implemented in v3.1.0」と現在完了形で記述していたが、`ROADMAP.md`は
+v3.1.0を2026 Q3ターゲットの未達成マイルストーンとして記載しており、
+同ファイル内`Name()`のコメントも正しく「gated on ... landing」と条件
+表現していた。「is planned for v3.1.0; it is not implemented today」
+へ修正し、内部矛盾を解消した。
+
+全パッケージ`go build`/`go vet`/`go test`green、`gofmt` clean。
+
 ### Fixed (session 243 — つづけて: GPUがCPUマイニングを二重採用していた実バグ、および未着手アーキテクチャを既実装であるかのように記述していた複数のドキュメントを是正)
 
 session 242までの4コミット連続の市販レベル品質パスに続き、これまで

@@ -37,9 +37,9 @@ import (
 // quote uses the midpoint of the configured [MinUSDPerHour,
 // MaxUSDPerHour] range (no randomness, no time-varying process — see
 // publish() below). Real Akash API integration (bid submission,
-// container management) is implemented in v3.1.0. The provider
-// interface and yield calculation are stable and ready for the full
-// integration.
+// container management) is planned for v3.1.0 (see ROADMAP.md); it is
+// not implemented today. The provider interface and yield calculation
+// are stable and ready for the full integration.
 type AkashProvider struct {
 	pollingProvider
 	id      string

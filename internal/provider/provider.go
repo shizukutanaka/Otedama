@@ -30,12 +30,22 @@
 //
 // # Revenue comparison (2026-04 estimates)
 //
-//	RTX 4090 CPU  Bitcoin mining: ~0.07 sats/s  ($0.000064/day)
-//	RTX 4090 GPU  Bitcoin mining: ~60   sats/s  ($0.05/day)
-//	RTX 4090 GPU  AI inference:   ~14k  sats/s  ($12/day)
+// Corrected (session 243): GPUs cannot mine Bitcoin in this codebase today
+// — internal/hal reports Capabilities.SHA256d = false for every GPU because
+// no CUDA/ROCm/Vulkan compute dispatch is implemented anywhere (see
+// docs/KNOWN_LIMITATIONS.md §4). This table previously listed a "RTX 4090
+// GPU Bitcoin mining" figure as if that were a real, reachable code path;
+// it is not. The two real-today numbers are:
 //
-// The arbitration engine's value is entirely in routing the GPU to
-// whichever source is highest at any given moment.
+//	CPU  Bitcoin mining (any host): ~0.07 sats/s  ($0.000064/day)
+//	RTX 4090 GPU  AI inference (simulated): ~14k  sats/s  ($12/day)
+//
+// A GPU is therefore never routed between mining and AI inference — it can
+// only ever go to the (simulated) AI-inference stream or idle. The
+// arbitration engine's live routing decision today is CPU-only: whether the
+// CPU itself is worth dedicating to mining versus idling under the
+// profitability floor. Once a GPU compute-dispatch driver lands, this
+// comment should be updated with a real three-way comparison.
 package provider
 
 import (
