@@ -141,20 +141,36 @@ continue to use the existing inline `handshake` path.
 
 ---
 
-## 4. GPU detection is Linux-only
+## 4. GPU detection is Linux-only, and detected GPUs cannot mine
 
 **What:** Hardware detection of GPUs (`internal/hal`) reads Linux DRM
 sysfs (`/sys/class/drm`). On Windows and macOS, the GPU driver is a
-no-op stub that detects no GPUs.
+no-op stub that detects no GPUs. Separately, on any platform: no
+CUDA, ROCm, or Vulkan compute dispatch is implemented anywhere in this
+codebase, so a detected GPU always reports `Capabilities.SHA256d =
+false` (corrected session 243 — this field was previously hardcoded
+`true`, which caused `engine.startMinerWorkers` to spawn a second,
+full-thread-count CPU-only mining pool mislabeled under the GPU's
+device ID for every detected GPU: 2x thread oversubscription, and
+every share that pool found was misattributed to the GPU in
+`otedama_device_shares_found_total` and the live hashrate sampling
+used by the arbitration engine).
 
-**Impact:** On non-Linux hosts, only CPU devices are detected. Mining
-and (simulated) inference still run on the CPU, but discrete GPUs are
-invisible to the arbitration engine.
+**Impact:** On non-Linux hosts, only CPU devices are detected. Where a
+GPU is detected (Linux only), it is visible to the arbitration engine
+and eligible for the simulated AI-inference stream (§1) via its
+`GeneralCompute` capability, but it contributes zero Bitcoin-mining
+hashrate — mining always runs on the CPU only, regardless of platform
+or GPU presence.
 
-**Workaround:** Run on Linux for full GPU detection during the alpha.
+**Workaround:** Run on Linux for GPU detection (needed only for the
+simulated AI-inference stream) during the alpha. There is no
+workaround for GPU mining; it requires a compute-dispatch driver that
+does not exist yet.
 
-**Target:** v3.7 (Windows/macOS GPU detection). Tracked by ADR-008
-(hardware/power) sub-domain 2.
+**Target:** v3.7 (Windows/macOS GPU detection). GPU SHA256d mining
+dispatch has no committed target; it is not on the current roadmap.
+Tracked by ADR-008 (hardware/power) sub-domain 2.
 
 ---
 
@@ -179,9 +195,16 @@ section of ROADMAP.md.
 ## 6. Lightning is receive-only; no embedded node
 
 **What:** The Lightning capability (`internal/lightning`) holds a
-BIP-39 seed (now the complete, integrity-checked 2048-word list — see
-CHANGELOG session 32) and can register BOLT12-style payout proofs, but
-does not run a Lightning node, manage channels, or send payments.
+BIP-39 seed (the complete, integrity-checked 2048-word list — see
+CHANGELOG session 32) at rest, encrypted with a user passphrase. That is
+the entire capability today: `WalletManager`'s public surface is
+seed/mnemonic storage and retrieval (`Seed`, `Fingerprint`, `Mnemonic`,
+`ChangePassphrase`) — nothing more. It does not run a Lightning node,
+manage channels, send payments, or register payout proofs of any kind
+(corrected session 243: this entry previously claimed it "can register
+BOLT12-style payout proofs," which no code anywhere in the repository
+implements — confirmed by a repo-wide search finding zero references to
+BOLT12 or payout proofs outside this one now-corrected sentence).
 
 **Impact:** Payouts must terminate at a node you run elsewhere
 (Phoenixd, Core Lightning, lnd, Alby Hub) or accumulate as on-chain
@@ -203,7 +226,11 @@ by device ID and calls `worker.Stats().HashRate`. Each `publish()` call samples 
 live hashrate; when the engine has not yet produced a measurement (e.g. the first few
 seconds after start) the return value is 0 and `publish()` falls back to the static
 per-family estimate (ASIC ≈ 100 TH/s, GPU ≈ 1.5 GH/s, CPU ≈ 10 MH/s) rather than
-emitting zero yield.
+emitting zero yield. Note (session 243): `publish()` skips any device whose
+`Capabilities().SHA256d` is false before reaching this fallback, and no GPU
+device in this codebase ever reports `SHA256d: true` (§4 above) — the GPU
+branch of the static estimate is therefore unreachable today and exists only
+as forward-compatible scaffolding for a future GPU SHA256d driver.
 
 The remaining static input — the compile-time network-hashrate constant (≈ 1000 EH/s) —
 is addressed by a live difficulty feed, which remains a v3.1.0 item. That does not affect

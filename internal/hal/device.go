@@ -11,10 +11,25 @@
 //
 // # Design
 //
-// Device is an interface, not a concrete type. Production drivers
-// (internal/hal/asic, internal/hal/cuda, internal/hal/rocm, internal/hal/cpu)
-// implement Device. Tests use mock implementations without touching physical
-// hardware.
+// Device is an interface, not a concrete type. Tests use mock
+// implementations without touching physical hardware.
+//
+// Corrected (session 243): this comment previously described production
+// drivers living in separate subpackages — internal/hal/asic,
+// internal/hal/cuda, internal/hal/rocm, internal/hal/cpu — none of which
+// have ever existed; that was aspirational architecture, not the shipped
+// layout. The real drivers, as of this alpha:
+//
+//   - GPULinuxDriver (this package, gpu_linux.go — Linux-only, sysfs DRM
+//     enumeration; a build-tagged no-op stub on other platforms). It
+//     detects GPU presence/vendor/model but reports
+//     Capabilities.SHA256d = false: no CUDA/ROCm/Vulkan compute dispatch
+//     is implemented anywhere in this codebase, so nothing can actually
+//     mine on a detected GPU today.
+//   - cpuDriver (internal/engine, not this package — registered directly
+//     by engine.detectDevices). Always enumerates exactly one CPU device
+//     with real SHA256d support via the pure-Go miner package.
+//   - No ASIC driver exists at all (docs/KNOWN_LIMITATIONS.md §8).
 //
 // Detectors discover available devices at runtime. The default detector
 // iterates over registered drivers and asks each to enumerate its devices.
@@ -157,15 +172,16 @@ type Device interface {
 // Driver enumerates Devices of a particular Family.
 //
 // A Driver represents the software responsible for interacting with one
-// family of hardware. For example, the CUDA driver enumerates NVIDIA GPUs,
-// the ROCm driver enumerates AMD GPUs, and the asic driver enumerates
-// connected ASICs via their network interfaces.
+// family of hardware. Today that means GPULinuxDriver (this package) for
+// GPU presence detection and cpuDriver (internal/engine) for the CPU —
+// see the package doc above for the full, current list; no ASIC or GPU
+// compute-dispatch driver exists yet.
 //
 // Drivers are registered with a Registry and invoked by the default
 // Detector. User code typically does not call Driver.Enumerate directly.
 type Driver interface {
-	// Name returns the unique name of this driver, e.g. "cuda", "rocm",
-	// "asic", "cpu". The name is used for logging and must be stable
+	// Name returns the unique name of this driver, e.g. "cpu",
+	// "gpu_linux". The name is used for logging and must be stable
 	// across versions.
 	Name() string
 
@@ -191,8 +207,9 @@ type Detector interface {
 	//
 	// Detect invokes each driver's Enumerate method. If a driver returns
 	// an error, Detect logs it and continues with the remaining drivers.
-	// This partial-success behavior ensures that, for example, a missing
-	// CUDA library does not prevent CPU detection from succeeding.
+	// This partial-success behavior ensures that, for example, a GPU
+	// driver failure (missing /sys/class/drm, permission error) does not
+	// prevent CPU detection from succeeding.
 	//
 	// If ctx is canceled during detection, Detect returns the devices
 	// found so far along with ctx.Err().

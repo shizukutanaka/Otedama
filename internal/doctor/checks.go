@@ -704,9 +704,16 @@ func checkHardware() Check {
 					if gpus > 0 {
 						detail += fmt.Sprintf(", %d GPU(s) detected", gpus)
 					} else {
+						// Corrected session 243: a GPU does not increase
+						// Bitcoin-mining hashrate today — no CUDA/ROCm/Vulkan
+						// compute dispatch exists anywhere in this codebase
+						// (internal/hal/gpu_linux.go reports SHA256d: false),
+						// so this is informational, not a warning. A detected
+						// GPU only makes the device eligible for the
+						// simulated AI-inference quote stream
+						// (docs/KNOWN_LIMITATIONS.md).
 						detail += ", no GPU detected"
-						status = StatusWarn
-						fix = "installing a GPU increases hashrate ~150x; without it earnings will be tiny"
+						fix = "hashrate today comes entirely from the CPU; a GPU would not increase it (no compute dispatch is implemented yet — see docs/KNOWN_LIMITATIONS.md)"
 					}
 				}
 			}

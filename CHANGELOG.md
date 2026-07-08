@@ -10,6 +10,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 243 — つづけて: GPUがCPUマイニングを二重採用していた実バグ、および未着手アーキテクチャを既実装であるかのように記述していた複数のドキュメントを是正)
+
+session 242までの4コミット連続の市販レベル品質パスに続き、これまで
+未監査だったパッケージ（`internal/hal`、`internal/lightning`、
+`internal/doctor`、および主要ドキュメント群）を対象に独立監査を実施し、
+このセッション最大の実バグを含む複数の問題を検出・修正した。
+
+**最重要: GPUデバイスがSHA256dマイニング能力を誤って`true`と申告し、
+CPUスレッドの二重採用と統計の誤帰属を引き起こしていた
+（`internal/hal/gpu_linux.go`）。** `parseGPUDevice`が構築する
+`Capabilities.SHA256d`が常に`true`にハードコードされていたため、
+`engine.startMinerWorkers`（SHA256d対応デバイス1台につき
+`runtime.NumCPU()`スレッドの`miner.Worker`プールを起動）が、検出された
+GPU1台ごとに実CPUデバイス用プールとは別の、CPU専用の完全な採掘プールを
+「GPU用」として追加起動していた。結果として（1）CPUスレッドの2倍
+オーバーサブスクリプション、（2）そのプールが発見したシェアが全て
+`otedama_device_shares_found_total`および裁定エンジンのライブ
+ハッシュレートサンプリングにおいてGPUのデバイスIDへ誤帰属——という、
+実際にはCPU由来の数値をGPU由来として静かに報告する状態が生じていた。
+`SHA256d: false`へ修正（本コードベースにはCUDA/ROCm/Vulkanの
+computeディスパッチが一切実装されていないため、これは本来常に`false`
+であるべき値だった）。回帰防止テスト
+`TestParseGPUDevice_SHA256dIsFalse`を追加。
+
+このバグの発覚を受け、GPU採掘不可という事実と矛盾していた3件の
+ドキュメント/コードコメントを是正した。`internal/doctor`の
+`otedama doctor`はGPU未検出時に`StatusWarn`で
+「GPUを追加するとハッシュレートが約150倍になる」という具体的な数値
+まで示していたが、この数値はどのcompute実装にも裏付けられておらず、
+かつGPU検出はマイニングとは無関係（simulated Akash推論ストリームの
+利用可否のみに影響）と判明したため、`StatusPass`＋正確な説明文へ変更
+（`checks.go`、対応テスト`extras_test.go`、パッケージdocの出力例を
+含む）。`docs/TROUBLESHOOTING.md`の「GPUを追加すればSHA256dが約150倍
+速い」という助言も同様に誤りであったため、GPU追加では現状ハッシュレート
+が一切向上しない事実を明記する記述に置き換えた。
+
+`internal/hal/device.go`のパッケージdocコメントは、実在しない
+`internal/hal/asic`・`internal/hal/cuda`・`internal/hal/rocm`・
+`internal/hal/cpu`という個別ドライバサブパッケージが存在するかのように
+記述していた（`CLAUDE.md`のアーキテクチャマップと矛盾）。実際に存在する
+唯一の2ドライバ（`GPULinuxDriver`とASICドライバ皆無、CPUは
+`internal/engine`内の`cpuDriver`）に基づいて全面的に書き直した。
+
+`internal/lightning/seed.go`のパッケージdocは「BIP-39英単語リストは
+将来のプロダクションビルドで組み込まれる予定」という趣旨の記述を
+含んでいたが、実際には`english_wordlist.go`にSHA-256整合性チェック
+付きで既に同梱され、`engine.setupWallet`から`NewEnglishWordList()`
+経由で本番稼働時に使用されていることを確認した上で、記述を正確な
+現状描写へ修正した。
+
+`docs/KNOWN_LIMITATIONS.md` §6（Lightning）は「BOLT12形式の支払い証明を
+登録できる」という記述を含んでいたが、リポジトリ全体を検索しても
+BOLT12・支払い証明を実装するコードは一切存在しないことを確認し、
+該当記述を削除した上でWalletManagerの実際の公開面（シード保管のみ）を
+明記した。§4（GPU検出）は上記のSHA256d修正を反映し、GPU検出とマイニング
+ハッシュレートが無関係である事実を明記するよう拡充した。§7の解決済み
+エントリにも、GPU用の静的ハッシュレート推定値が現状到達不能なコード
+パスであることを追記した。
+
+`docs/architecture.md`は目標アーキテクチャ（gRPC/RESTのAPI層、
+`internal/providers/`複数形パッケージ、`asic.Driver`/`cuda.Driver`/
+`rocm.Driver`/`cpu.Driver`、LDK完全統合など）をv3.0.0-alpha.1の実装
+であるかのように記述しており、`README.md`・`CONTRIBUTING.md`双方から
+コントリビューター必読資料としてリンクされていた。全面書き直しは
+このセッションの範囲として不釣り合いに大きいため、冒頭に本書が目標
+アーキテクチャであることと`CLAUDE.md`/`docs/KNOWN_LIMITATIONS.md`が
+現状の正とすることを明示する注記（日英併記）を追加し、主要な乖離点を
+列挙した。`README.md`のアーキテクチャ概要段落（収益源コネクタ層として
+Stratum V2クライアント・AI推論プロバイダ・レンダリングネットワーク
+アダプタ・BOINC互換クライアントの4系統が並列に存在すると記述していた
+箇所）も、実装済みの2系統（実採掘・simulated AI推論）のみを正確に
+記述するよう書き換えた。
+
+全24パッケージgreen。`go vet`/`gofmt` clean。新規依存なし。
+
 ### Fixed (session 242 — つづけて: `TestRunSession_StatsTickAndShareResponses` の既知flakyテストを根本修正)
 
 session 239〜241で「既知の残存事項」として記録・緩和（タイムアウト

@@ -15,8 +15,20 @@
 // CGO adds build complexity, cross-compilation difficulty, and a larger
 // dependency surface. The sysfs approach identifies GPUs reliably enough
 // for Otedama's purposes: family classification (NVIDIA/AMD) and a
-// human-readable model name. The actual compute dispatch (CUDA, ROCm,
-// Vulkan compute) is implemented in the provider layer, not here.
+// human-readable model name.
+//
+// # No GPU compute dispatch exists yet
+//
+// Detecting a GPU here does not mean Otedama can mine Bitcoin on it: no
+// CUDA, ROCm, or Vulkan compute dispatch is implemented anywhere in this
+// codebase (checked repo-wide, session 243). A detected GPU's
+// Capabilities.SHA256d is therefore false, so
+// internal/engine.startMinerWorkers correctly skips it rather than
+// spawning a CPU-only miner.Worker mislabeled under the GPU's device ID
+// (the bug this comment replaces — SHA256d was previously hardcoded
+// true). GeneralCompute stays true: it only gates the already-disclosed
+// simulated Akash inference quotes (docs/KNOWN_LIMITATIONS.md §1), which
+// spawn no worker threads and so carry none of this risk.
 package hal
 
 import (
@@ -103,8 +115,21 @@ func parseGPUDevice(renderNode, devicePath string, logFn func(string)) Device {
 		return nil
 	}
 	caps := Capabilities{
-		SHA256d:        true, // all GPUs can run SHA256d
-		GeneralCompute: true, // GPU implies general compute capability
+		// SHA256d is deliberately false: no CUDA/ROCm/Vulkan compute
+		// dispatch exists anywhere in this codebase (see the package doc
+		// above). Before this fix it was hardcoded true, so
+		// engine.startMinerWorkers — which spawns one full
+		// runtime.NumCPU()-thread miner.Worker per SHA256d-capable device
+		// — spawned a SECOND complete CPU-only hashing pool for every
+		// detected GPU, on top of the real CPU device's own pool. Net
+		// effect: 2x thread oversubscription, and every share that pool
+		// found got attributed to the GPU's device ID in
+		// otedama_device_shares_found_total and the arbitration engine's
+		// live hashrate sampling — both silently reporting CPU-speed
+		// numbers as if they came from the GPU. See
+		// docs/KNOWN_LIMITATIONS.md for the current disclosure.
+		SHA256d:        false,
+		GeneralCompute: true, // GPU implies general compute capability (used by the simulated Akash provider; spawns no worker threads, so this flag alone causes no oversubscription)
 	}
 	return &linuxGPUDevice{id: id, caps: caps}
 }

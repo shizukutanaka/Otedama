@@ -15,13 +15,12 @@
 //	[✓] Configuration file: /home/alice/.config/otedama/config.yaml
 //	[✓] Bitcoin address: bc1qar0···5mdq (valid Bech32)
 //	[✓] Data directory: /home/alice/.local/share/otedama (writable, 0700)
-//	[✓] Hardware: 8-core CPU (10.5 MH/s estimated)
+//	[✓] Hardware: 8-core CPU, no GPU detected
 //	[✓] Pool reachability: stratum+v2://slushpool.com:3336 (42ms)
-//	[!] GPU: none detected (hashrate will be 150x lower than GPU+CPU)
 //	[✓] Lightning wallet: initialized, fingerprint a3f2b1c4
 //	[✓] Network: IPv4 OK, IPv6 not tested
 //
-//	Summary: 7 passed, 0 failed, 1 warning
+//	Summary: 7 passed, 0 failed, 0 warnings
 //
 // # Design
 //

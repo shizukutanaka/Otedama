@@ -34,12 +34,16 @@
 // # BIP-39 Compliance
 //
 // Mnemonic generation and reconstruction follow BIP-39 strictly. The
-// implementation does not yet bundle the 2,048-word English list; it
-// accepts the list via WordList to keep this package dependency-free
-// at the cost of slightly more setup in callers. A production build
-// will wire in the official BIP-39 English list from the bitcoin/bips
-// repository; this package's code paths are already validated against
-// the specification's published test vectors.
+// package itself stays dependency-free by accepting the list via
+// WordList rather than hardcoding one directly into this file — but the
+// official 2,048-word English list IS bundled in this package
+// (english_wordlist.go, integrity-checked by SHA-256 at init) and is
+// what production wallet setup actually uses (see
+// NewEnglishWordList(), called from engine.setupWallet). A caller that
+// wants a different BIP-39 language (Japanese, etc.) supplies its own
+// list through the same WordList constructor. This package's code
+// paths are validated against the specification's published test
+// vectors.
 package lightning
 
 import (

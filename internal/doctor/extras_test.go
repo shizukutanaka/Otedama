@@ -654,8 +654,10 @@ func TestCheckHardware_EmptyDRMDir_NoGPU(t *testing.T) {
 
 	c := checkHardware()
 	r := c.Run(context.Background())
-	if r.Status != StatusWarn {
-		t.Errorf("no-GPU status = %v, want Warn", r.Status)
+	// Corrected session 243: no GPU is informational (Pass), not a Warn — a
+	// GPU does not increase Bitcoin-mining hashrate today (see checkHardware).
+	if r.Status != StatusPass {
+		t.Errorf("no-GPU status = %v, want Pass", r.Status)
 	}
 	if !strings.Contains(r.Detail, "no GPU") {
 		t.Errorf("detail should say 'no GPU': %q", r.Detail)

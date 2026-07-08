@@ -138,6 +138,41 @@ func TestParseGPUDevice_WithValidSysfs(t *testing.T) {
 	}
 }
 
+// TestParseGPUDevice_SHA256dIsFalse pins the fix for a real correctness
+// bug (session 243): SHA256d was previously hardcoded true for every
+// detected GPU despite no CUDA/ROCm/Vulkan compute dispatch existing
+// anywhere in this codebase. That caused
+// internal/engine.startMinerWorkers — which spawns one full
+// runtime.NumCPU()-thread miner.Worker per SHA256d-capable device — to
+// spawn a second complete CPU-only hashing pool for every GPU, doubling
+// thread oversubscription and attributing CPU-mined shares to the GPU's
+// device ID. GeneralCompute must stay true: it gates only the
+// already-disclosed simulated Akash inference path, which spawns no
+// worker threads.
+func TestParseGPUDevice_SHA256dIsFalse(t *testing.T) {
+	root := t.TempDir()
+	devicePath := filepath.Join(root, "device")
+	if err := os.MkdirAll(devicePath, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+		t.Fatalf("write vendor: %v", err)
+	}
+
+	dev := parseGPUDevice("renderD128", devicePath, nil)
+	if dev == nil {
+		t.Fatal("parseGPUDevice returned nil for valid input")
+	}
+	caps := dev.Capabilities()
+	if caps.SHA256d {
+		t.Error("Capabilities.SHA256d = true, want false — no GPU compute dispatch exists in this codebase; " +
+			"a true value causes engine.startMinerWorkers to spawn a mislabeled second CPU hashing pool per GPU")
+	}
+	if !caps.GeneralCompute {
+		t.Error("Capabilities.GeneralCompute = false, want true — this flag alone is safe (gates only the simulated Akash path, no worker threads)")
+	}
+}
+
 func TestParseGPUDevice_MissingVendorFile(t *testing.T) {
 	// If the vendor file is missing, readSysFile returns empty string,
 	// inferVendorName returns a fallback, and we still produce a device
