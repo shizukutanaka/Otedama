@@ -2117,6 +2117,25 @@ func (fp *responsivePool) serve() {
 // uptime, J/TH, and latency-quantile logging) and the SubmitSharesSuccess /
 // SubmitSharesError inCh handlers. It calls runSession directly with a very
 // short stats interval so the ticker fires many times during the test.
+//
+// This test used to race a fixed real-time window (originally 2s, later
+// widened to 4s): it waited for runSession to return, then checked whether
+// a "submit latency" log line had appeared anywhere in that window. That
+// line is written only from inside the stats-ticker branch, which must win
+// a select slot against two channels (inCh/opts.merged) that are
+// effectively always ready once shares start flowing — under `go test
+// ./...` CPU contention the ticker case could occasionally be starved long
+// enough to miss even a several-second window, despite every individual
+// protocol step completing in milliseconds in isolation (confirmed
+// pre-existing: the same fragile structure existed at commit 2faae1f, and
+// is tracked at RESEARCH_IMPROVEMENTS.md Category 7 item 12). Padding the
+// timeout further showed diminishing returns in testing.
+//
+// The fix: actively poll the deterministic signal (the submitLatencyP95
+// gauge becoming nonzero) with a generous but bounded retry loop, instead
+// of passively hoping a fixed window catches it. The test now succeeds as
+// soon as the condition is actually true rather than racing a guess at how
+// long that might take under unknown contention.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -2126,22 +2145,11 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	defer fp.Close()
 	<-fp.started
 
-	// 4s rather than the original 2s: under `go test ./...` CPU contention
-	// (24 packages' tests running concurrently) the "submit latency" log
-	// assertion below needs the 5ms stats ticker to actually win a slot in
-	// runSession's select against two channels that are effectively always
-	// ready during this test (inCh/opts.merged, since shares are flowing
-	// continuously) — under heavy scheduler contention the ticker case can
-	// occasionally be starved. This predates this session (confirmed: the
-	// same fragile structure existed at commit 2faae1f). Doubling the
-	// budget measurably reduces the flake rate; it does not guarantee
-	// elimination under extreme contention, since further increases
-	// showed no additional benefit in testing — a thorough fix would
-	// decouple the assertion from wall-clock ticker fairness (e.g. assert
-	// on the LatencyTracker's recorded samples directly rather than
-	// requiring a specific log line within a fixed real-time window),
-	// which is out of scope for this pass.
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	// Generous outer bound: this is a ceiling on total test time, not the
+	// budget the assertions race against (the polling loop below ends the
+	// session as soon as its condition is met, well before this fires in
+	// the normal case).
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
@@ -2151,28 +2159,44 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
 
-	var logs []string
-	var logMu sync.Mutex
-	log := func(level, msg string) {
-		logMu.Lock()
-		logs = append(logs, level+": "+msg)
-		logMu.Unlock()
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		// powerWatts > 0 exercises the J/TH branch inside the stats tick.
+		_ = runSession(ctx, sessionOpts{
+			poolURL:    fp.URL(),
+			user:       "bc1qtest000000000000000000000000000000000",
+			workers:    []*miner.Worker{w},
+			merged:     merged,
+			interval:   5 * time.Millisecond,
+			m:          m,
+			powerWatts: 100.0,
+			log:        func(_, _ string) {},
+		})
+	}()
+
+	// Poll for the deterministic signal that the stats-ticker branch has
+	// actually executed with a recorded latency sample, rather than
+	// waiting a fixed duration and hoping. 10s ceiling is itself generous;
+	// in the unstarved case this resolves within milliseconds.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	latencyObserved := false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.submitLatencyP95.Value() > 0 {
+				latencyObserved = true
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
 	}
-
-	// powerWatts > 0 exercises the J/TH branch inside the stats tick.
-	_ = runSession(ctx, sessionOpts{
-		poolURL:    fp.URL(),
-		user:       "bc1qtest000000000000000000000000000000000",
-		workers:    []*miner.Worker{w},
-		merged:     merged,
-		interval:   5 * time.Millisecond,
-		m:          m,
-		powerWatts: 100.0,
-		log:        log,
-	})
-
-	logMu.Lock()
-	defer logMu.Unlock()
+	cancel() // end the session now that we have what we need (or gave up)
+	<-runDone
 
 	if got := m.sharesAccepted.Value(); got == 0 {
 		t.Error("sharesAccepted == 0; SubmitSharesSuccess handler was not exercised")
@@ -2190,18 +2214,8 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if got := m.hashrate.Value(); got == 0 {
 		t.Error("hashrate gauge = 0; stats-tick branch did not run")
 	}
-	// The latency-logging branch fires once latency is recorded (after the first
-	// SubmitSharesSuccess) and a subsequent stats tick runs.
-	foundLatency := false
-	for _, l := range logs {
-		if strings.Contains(l, "submit latency") {
-			foundLatency = true
-			break
-		}
-	}
-	if !foundLatency {
-		t.Logf("all logs: %v", logs)
-		t.Error("submit-latency log not emitted; latency-quantile stats-tick path not covered")
+	if !latencyObserved {
+		t.Error("submitLatencyP95 never became nonzero within 10s; latency-quantile stats-tick path not covered")
 	}
 }
 

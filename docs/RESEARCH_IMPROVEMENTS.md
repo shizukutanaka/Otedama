@@ -314,24 +314,26 @@ arXiv grounding (collected sessions 40–41 and here):
     filters. Verdict: worth doing as one focused refactor session with the
     existing provider tests as the safety net; not urgent (no correctness
     impact today).
-12. 🟡 **`TestRunSession_StatsTickAndShareResponses` is flaky under heavy
-    CPU contention** (`internal/engine/run_test.go`; found session 239).
-    It asserts a "submit latency" log line appears within a fixed
-    real-time window, which requires the session loop's 5ms stats ticker
-    to win a `select` slot against two channels (`inCh`/`opts.merged`)
-    that are effectively always ready while the test's fake pool streams
-    shares continuously — under `go test ./...`'s full parallel load the
-    ticker case can be intermittently starved long enough to miss the
-    window even though every individual protocol step completes in
-    milliseconds in isolation. Confirmed pre-existing (same fragile
-    structure at commit `2faae1f`, before this session). Mitigated by
-    doubling the test's timeout (2s→4s), which measurably reduces but
-    does not eliminate the flake under extreme contention — further
-    timeout increases showed no additional benefit in testing. A
-    thorough fix decouples the assertion from ticker-selection fairness
-    entirely: assert on `LatencyTracker`'s recorded sample count directly
-    rather than requiring a specific log line within a fixed real-time
-    window.
+12. ✅ **`TestRunSession_StatsTickAndShareResponses` flakiness under heavy
+    CPU contention — resolved** (`internal/engine/run_test.go`; found
+    session 239, fixed session 242). It used to assert a "submit latency"
+    log line appeared within a fixed real-time window, which required the
+    session loop's 5ms stats ticker to win a `select` slot against two
+    channels (`inCh`/`opts.merged`) that are effectively always ready
+    while the test's fake pool streams shares continuously — under
+    `go test ./...`'s full parallel load the ticker case could be
+    intermittently starved long enough to miss even a doubled (2s→4s)
+    window. Confirmed pre-existing (same fragile structure at commit
+    `2faae1f`, before session 239). The thorough fix flagged at the time
+    — decouple the assertion from ticker-selection fairness entirely —
+    is now implemented: `runSession` runs in a goroutine while the test
+    actively polls the deterministic `submitLatencyP95` gauge (rather
+    than a specific log line) every 5ms up to a generous 10s ceiling,
+    cancelling the session as soon as the condition is observed rather
+    than waiting a fixed duration and hoping. Net effect: the test now
+    resolves in ~20ms in the unstarved case (down from a fixed 4-6.9s
+    every run) and held clean across multiple full-suite runs plus
+    `go test -race` where the log-line version had intermittently failed.
 
 ---
 
