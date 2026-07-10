@@ -8,9 +8,13 @@
 //	                 as the server goroutine is alive. Used by container
 //	                 orchestrators (Kubernetes, systemd) to restart on hang.
 //
-//	GET /readyz      Readiness probe. Returns 200 OK only if the engine
-//	                 has reached the "ready" state (pool connected, at
-//	                 least one worker hashing). Returns 503 otherwise.
+//	GET /readyz      Readiness probe. Returns 200 OK once the engine has
+//	                 an established pool session (SetupConnection/
+//	                 OpenMiningChannel completed, or V1's equivalent
+//	                 handshake) — not merely a started process, but also
+//	                 not gated on a job having been received or a hash
+//	                 actually produced yet. Returns 503 otherwise. See
+//	                 engine.Run's OnReady wiring (internal/engine/run.go).
 //
 //	GET /metrics     Prometheus text exposition format. Scrape this with
 //	                 Prometheus / Grafana Agent / OTel Collector to get

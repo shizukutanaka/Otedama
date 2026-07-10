@@ -173,6 +173,16 @@ func (w *Worker) SetWork(work *Work) {
 // configured with. Empty string means "unidentified device".
 func (w *Worker) DeviceID() string { return w.cfg.DeviceID }
 
+// HasWork reports whether the worker currently has a job assigned
+// (SetWork was last called with a non-nil Work). Used by callers and
+// tests that need to observe pause/resume state from outside the
+// package without reaching into the unexported work field directly.
+func (w *Worker) HasWork() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.work != nil
+}
+
 // Stats returns a snapshot of the Worker's performance counters.
 // Before Start is called, Stats returns a zero-value Stats.
 func (w *Worker) Stats() Stats {

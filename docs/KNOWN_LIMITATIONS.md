@@ -440,46 +440,107 @@ every line after it; content longer than `cols` is now truncated to fit.
 
 ---
 
-## 13. Two release-time CI workflows are non-functional (`deploy.yml`, part of `release.yml`)
+## 13. Several CI workflows are non-functional or misdescribed (`deploy.yml`, `ci.yml`, `ci-cd.yml`, `security.yml`, `code-review.yml`, part of `release.yml`)
 
-**What:** `.github/workflows/deploy.yml` runs an `npm ci`/`npm test` job
-on every push to `main`/`develop` and every PR to `main` — but this is a
-Go project with no `package.json` anywhere in the repository, so that
-job fails immediately every time it runs. Its later `deploy-staging`/
-`deploy-production` jobs run `helm upgrade --install … ./kubernetes/helm/otedama`,
-but no `kubernetes/` or `helm/` directory exists in the repo (CLAUDE.md's
-architecture map explicitly documents that `k8s/` does not exist and is
-represented only by the YAML examples in `docs/DEPLOYMENT.md`).
-Separately, `release.yml`'s `build-packages` job (`.deb`/`.rpm` via
-`fpm`) references `scripts/post-install.sh`, `scripts/pre-remove.sh`,
-`scripts/otedama.service`, and a root-level `config.yaml` — none of
-which exist (`scripts/` is not a directory in this repo; there is no
-root `config.yaml`, only `config.yaml.example`). This job would also
-fail if it ran (it currently only runs on a `v*` tag push).
+**What:** Six of the seven `.github/workflows/*.yml` files have real
+problems, ranging from "fails deterministically" to "silently a
+no-op":
 
-**Impact:** `deploy.yml` makes CI status red on ordinary development
-pushes/PRs for a reason unrelated to code quality — a false-negative
-signal. `release.yml`'s packaging job would break an actual tagged
-release if `.deb`/`.rpm` distribution were attempted today.
+- **`deploy.yml`** runs an `npm ci`/`npm test` job on every push to
+  `main`/`develop` and every PR to `main` — but this is a Go project
+  with no `package.json` anywhere in the repository, so that job fails
+  immediately every time it runs. Its later `deploy-staging`/
+  `deploy-production` jobs run `helm upgrade --install … ./kubernetes/helm/otedama`,
+  but no `kubernetes/` or `helm/` directory exists in the repo
+  (CLAUDE.md's architecture map explicitly documents that `k8s/` does
+  not exist and is represented only by the YAML examples in
+  `docs/DEPLOYMENT.md`).
+- **`release.yml`**'s `build-packages` job (`.deb`/`.rpm` via `fpm`)
+  references `scripts/post-install.sh`, `scripts/pre-remove.sh`,
+  `scripts/otedama.service`, and a root-level `config.yaml` — none of
+  which exist (`scripts/` is not a directory in this repo; there is no
+  root `config.yaml`, only `config.yaml.example`). This job would also
+  fail if it ran (it currently only runs on a `v*` tag push).
+- **`ci.yml`**'s `docker-verify`/`docker-verify-windows` jobs run
+  `scripts/verify-docker.sh`/`.ps1` (same nonexistent `scripts/`
+  directory) and poll `http://localhost:8082/health` — but the actual
+  server only exposes `/healthz`/`/readyz` (`internal/httpserver`), and
+  the containers are started with no `--bitcoin-address`/`--http-addr`,
+  so (per the Dockerfile's default `CMD ["run", "--help"]`) they just
+  print help and exit — nothing is ever listening on 8082 regardless
+  of the path. A separate `docker-verify-cgo0-postgres` job spins up a
+  real `postgres:15` service and passes
+  `OTEDAMA_DATABASE_DRIVER`/`OTEDAMA_DATABASE_CONNECTION_STRING` env
+  vars — Otedama has no database layer and no such config fields exist
+  anywhere in `internal/config`; this job tests a feature that does
+  not exist. `ci.yml` also has its own `deploy-staging`/
+  `deploy-production` jobs applying `k8s/*.yaml`, the same nonexistent/
+  forbidden path as `deploy.yml`.
+- **`ci-cd.yml`** is a second, largely duplicate "CI/CD Pipeline"
+  (same workflow name as `ci.yml`) that appears to be superseded dead
+  weight: it hardcodes `GO_VERSION: '1.21'` and a `go: ['1.20', '1.21']`
+  matrix, both below `go.mod`'s `go 1.22` minimum (so those legs cannot
+  even satisfy the module declaration), and it applies
+  `k8s/deployment.yaml` — the same nonexistent path again.
+- **`security.yml`**'s `security-tests` job runs
+  `go test -tags=security ./tests/security/...` and
+  `go test -tags=load -run TestDDoSProtection ./tests/load/...` —
+  there is no `tests/` directory anywhere in the repo; both steps fail
+  with "matched no packages." (Its `compliance-check` job's hardcoded-IP
+  grep, a second deterministic failure in the same file caused by
+  legitimate loopback/example addresses in this codebase's own flag
+  help text and doctor checks, was fixed session 247 — see below.)
+- **`code-review.yml`** is written entirely around a Node.js/npm
+  toolchain (ESLint via reviewdog, `npx complexity-report`,
+  `npx size-limit`, a `scripts/code-review/generate-comment.js` that
+  doesn't exist) gated behind a `has_node` check that is always false
+  for this Go-only repo — except its "Setup Node.js" step runs
+  unconditionally. Net effect: the workflow never reviews any Go code
+  (no golangci-lint/gosec-based inline comments); it only ever posts a
+  static "no Node.js project detected" comment.
+- **CLAUDE.md's own architecture map** describes `test.yml` as
+  `test.yml (fuzz+benchmark)`, but the file's actual jobs are `test`,
+  `lint`, `security`, `build`, `integration`, `benchmark` — there is no
+  fuzz job. A real fuzz target exists (`internal/stratum/frame_fuzz_test.go`,
+  `make fuzz`), but no workflow invokes it.
 
-**Corrected this session (245):** `release.yml`'s smaller factual
-errors were fixed in place (license string was `MIT`, contradicting
-the project's actual Apache-2.0 license; product description read
-"P2P Mining Pool Software", which CLAUDE.md explicitly forbids as a
-centralized-component description of software that only *connects to*
-existing pools; the release-notes deployment-guide link pointed at a
-nonexistent `docs/DEPLOYMENT_GUIDE.md` on a nonexistent `master`
-branch). The missing-assets problem in both files was not fixed — it
-requires a maintainer decision (author the missing `scripts/`/`config.yaml`
-assets and a real Kubernetes/Helm deployment target, or remove the
-non-functional jobs) rather than a mechanical correction.
+**Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
+status red on ordinary development pushes/PRs for reasons unrelated to
+code quality — false-negative signals an operator or contributor could
+mistake for a real regression. `release.yml`'s packaging job and
+`security.yml`'s `security-tests` job would fail if actually triggered.
+`code-review.yml` gives the appearance of automated Go code review
+while doing none. The `test.yml`/CLAUDE.md mismatch means fuzzing —
+required by CLAUDE.md's own testing policy for parser/protocol code —
+is not actually running in CI despite the architecture map implying it
+is.
 
-**Workaround:** Ignore `deploy.yml`'s CI status; it does not reflect
-code health. Do not attempt `.deb`/`.rpm` packaging via `release.yml`
-until the missing assets are added.
+**Corrected so far:** `release.yml`'s smaller factual errors (session
+245: wrong `MIT` license string vs. the project's actual Apache-2.0;
+a "P2P Mining Pool Software" description CLAUDE.md explicitly forbids
+as mischaracterizing Otedama as a pool operator; a broken deployment-
+guide link) and `security.yml`'s `compliance-check` hardcoded-IP check
+(session 247: changed from a hard failure to a non-fatal `::warning::`,
+since the pattern matches this repo's own legitimate loopback/example
+addresses — `127.0.0.1` in flag help text, `1.1.1.1` in doctor's DNS
+reachability check — not just genuine leaks).
+
+**Not fixed:** everything else above requires a maintainer decision
+(author the missing `scripts/`/`config.yaml`/`tests/security`/
+`tests/load` assets and a real Kubernetes/Helm deployment target vs.
+remove the non-functional jobs entirely; decide whether `ci-cd.yml` is
+still needed or should be deleted; decide whether to replace
+`code-review.yml` with a Go-native reviewdog/golangci-lint pipeline;
+decide whether to add a scheduled fuzz job to `test.yml` or correct
+CLAUDE.md's description) rather than a mechanical correction.
+
+**Workaround:** Ignore `deploy.yml`/`ci-cd.yml` CI status; neither
+reflects code health. Do not attempt `.deb`/`.rpm` packaging via
+`release.yml`, rely on `code-review.yml`'s output as a Go code review,
+or assume fuzz testing runs in CI until these are addressed.
 
 **Target:** No committed target; tracked here pending a maintainer
-decision on deployment strategy.
+decision on CI/CD strategy.
 
 ---
 

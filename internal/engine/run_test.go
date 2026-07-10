@@ -1603,6 +1603,35 @@ func TestApplyAllocation_IdleDevice(t *testing.T) {
 	}
 }
 
+// TestApplyAllocation_OnlyPausesTargetDevice pins the fix for a real bug:
+// applyAllocation used to call SetWork(nil) on every worker regardless of
+// which device an assignment named, so idling or AI-switching one device
+// silently paused mining on every other SHA256d device too. Only the CPU
+// driver reports SHA256d today (GPU is always false), so this was latent
+// in production, but the fix must be verifiable independent of hardware
+// availability.
+func TestApplyAllocation_OnlyPausesTargetDevice(t *testing.T) {
+	target := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	bystander := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-1"})
+	work := &miner.Work{JobID: 1}
+	target.SetWork(work)
+	bystander.SetWork(work)
+
+	alloc := &arbitration.Allocation{
+		Assignments: []arbitration.Assignment{
+			{DeviceID: "cpu-0", Stream: ""}, // empty Stream → Idle()
+		},
+	}
+	applyAllocation(alloc, []*miner.Worker{target, bystander}, func(_, _ string) {})
+
+	if target.HasWork() {
+		t.Error("target device cpu-0 should have been paused (SetWork(nil))")
+	}
+	if !bystander.HasWork() {
+		t.Error("bystander device cpu-1 should NOT have been paused by cpu-0's idle assignment")
+	}
+}
+
 func TestApplyAllocation_MiningToAI(t *testing.T) {
 	alloc := &arbitration.Allocation{
 		Assignments: []arbitration.Assignment{

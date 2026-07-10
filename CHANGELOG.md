@@ -10,6 +10,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 247 — 続けて実装: 裁定エンジンがデバイス個別にワーカーを一時停止すべきところ全ワーカーを止めていた実バグ（複数SHA256dデバイス環境で潜在的）を修正。README.mdの「主要機能」節が存在しないZKP認証・プラグイン・Web管理UI・OpenTelemetry・署名済みバイナリ配布を実装済みと記述していた問題、「組み込みの推奨プール一覧」という実在しないフォールバック挙動の記述、CI設定ファイル群の広範な機能不全を是正・開示)
+
+session 246に続き、2並列のバックグラウンド監査エージェント
+（internal/engine+tui+stratum+metrics+httpserver担当、および残りの
+CIワークフロー+Makefile+LICENSE+config.yaml.example+ルートドキュメント
+担当）の調査結果を1件ずつ自ら検証し、実在が確認できたものを修正した。
+
+**最重要（複数SHA256dデバイス環境で発現する実バグ）:
+`applyAllocation`がデバイスを一つだけpauseすべき場面で、渡された
+ワーカー全てを`SetWork(nil)`していた。** `internal/engine/arbitrate.go`
+の`applyAllocation`は、ある1台のデバイスがidle化またはAI推論へ切替
+された際、`workers`スライスの**全要素**に対して`SetWork(nil)`を呼んで
+いた——`arbitration.Assignment.DeviceID`と`miner.Worker.DeviceID()`が
+共に利用可能であるにもかかわらず、フィルタせずに全ワーカーを止めて
+いた。現状は潜在的なバグに留まる（本番で唯一SHA256d対応を申告する
+HALドライバはCPU1台のみで、GPUは常に`SHA256d: false`——session 243で
+修正済み——なので`startMinerWorkers`は今日1ワーカーしか生成しない）が、
+将来ASICドライバ等で2台目のSHA256d対応デバイスが追加された瞬間、
+1台のidle化・AI切替が無関係な他デバイスのマイニングまで無言で止める
+状態だった。`w.DeviceID() == a.DeviceID`でフィルタする`pauseDevice`
+ヘルパーへ修正。`miner.Worker`に新規`HasWork()`アクセサを追加し
+（外部パッケージから一時停止状態を観測できないテスト上の制約を解消）、
+2ワーカーで対象デバイスのみが止まることを検証する回帰テスト
+`TestApplyAllocation_OnlyPausesTargetDevice`を追加。
+
+**README.mdの「主要機能」節が、存在しない機能6件を実装済みであるかの
+ように列挙していた。** ZKPベース認証（KYC代替、v4.0スコープで未実装）、
+プラグイン拡張アーキテクチャ（`ROADMAP.md`の削除済みマイルストーンで
+明示的に却下——session 245で`CONTRIBUTING.md`/`SECURITY.md`の同種記述を
+既に修正済み）、Web管理インターフェース（`CLAUDE.md`が明示的に計画なし
+とする`web/`）、OpenTelemetry分散トレーシング（`go.mod`に該当依存
+なし）、クロスプラットフォーム署名付きバイナリ配布（cosign未配線、
+session 245で`docs/DEPLOYMENT.md`について既に開示済みの同じ事実）、
+四系統リアルタイム裁定エンジン（実装済みは採掘・simulated AI推論の
+2系統のみ）。Overview節・Requirements節・Quick Start節も含め、実装
+済み機能のみを正確に記述するよう書き換えた。
+
+**「組み込みのStratum V2対応プール一覧（Braiins、DEMAND、OCEAN、
+Luxor）」という記述が、README.mdと`internal/config/config.go`の
+`Pools`フィールドdocコメント双方に存在したが、実際のフォールバックは
+`config.DefaultPoolURL`という単一のハードコード値
+（Slushpool）のみだった。** `internal/engine/setup.go`の
+`defaultPoolURL`/`poolURLs`を確認し、両ドキュメントを実装に合わせて
+修正した。
+
+**その他の是正:**
+
+- `internal/httpserver/server.go`の`/readyz`パッケージdocが「プール
+  接続済み、かつ最低1ワーカーがハッシュ計算中」を条件と記述していたが、
+  実際のゲート条件（`engine.Run`の`OnReady`配線）は「プールセッション
+  確立」のみで、ジョブ受信やハッシュ実行は問わない。`run.go`自身の
+  正確な既存コメントに合わせて修正。
+- `internal/stratum/noise_pool.go`の`hmacSHA256Pooled`（sync.Poolに
+  よるアロケーション削減）が、正しさ検証・ベンチマーク済みにも
+  かかわらず`hkdf2`/`hkdf3`（`noise.go`）から実際には呼ばれていない
+  デッドコードだった。`noise.go`/`noise_pool.go`は資金に関わる
+  CODEOWNERS必須レビュー対象のため、実配線はこのセッションでは行わず、
+  docコメントを「実装・テスト済みだが未配線」という正確な現状描写へ
+  修正するに留めた。
+- `.github/workflows/security.yml`の`compliance-check`ジョブが、この
+  リポジトリ自身の正当なloopback/例示アドレス（フラグヘルプ文中の
+  `127.0.0.1`、doctorのDNS到達性チェックの`1.1.1.1`等）に対して
+  ハードコードIP検出grepが常にヒットし、決定的に失敗する状態だった。
+  ハード失敗から`::warning::`への降格に変更。
+- `docs/KNOWN_LIMITATIONS.md` §13を拡張し、`ci.yml`（存在しない
+  `scripts/`参照、誤った`/health`パス、実在しないPostgres統合ジョブ、
+  禁止されている`k8s/`参照）、`ci-cd.yml`（`ci.yml`とほぼ重複する
+  陳腐化したワークフロー、`go.mod`の最低要求を満たさないGoバージョン
+  マトリクス）、`security.yml`の`security-tests`ジョブ（存在しない
+  `tests/`ディレクトリを参照）、`code-review.yml`（Node.js/npm前提の
+  ワークフローで、このGo専用リポジトリでは常に実質no-op）、および
+  `CLAUDE.md`のアーキテクチャマップが`test.yml`を「(fuzz+benchmark)」
+  と説明しているが実際にはfuzzジョブが存在しない、という新規発見分を
+  開示した。いずれも機械的な修正の範囲を超えメンテナの意思決定を
+  要するため、修正はせず開示のみに留めた。
+
+全24パッケージgreen（`go clean -testcache && go test ./...`で確認）。
+`go vet`/`gofmt` clean。新規依存なし。
+
 ### Fixed (session 246 — つづけて: DataDirの「自動検出」が未実装で、明示指定しない全ユーザーのLightningウォレットが黙って初期化されていなかった実バグを修正。ChaCha20-Poly1305/AES-GCMの取り違えが7箇所のドキュメントに拡散していた問題、systemdのProtectHomeがウォレット書き込みを阻害する矛盾、Docker/K8sのデータディレクトリ未設定、ADRステータス誤記、release.ymlのライセンス/製品説明の誤りを是正)
 
 session 245に続き、2並列のバックグラウンド監査エージェント

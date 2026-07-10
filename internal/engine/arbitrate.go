@@ -238,17 +238,34 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 }
 
 // applyAllocation applies a Decide result to the miner workers: pausing
-// SHA256d work when a device is idled or switched to AI inference, and
-// logging every change of assignment.
+// SHA256d work on the specific device that was idled or switched to AI
+// inference, and logging every change of assignment.
 func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string)) {
+	// pauseDevice stops only the worker whose DeviceID matches the
+	// assignment being processed. Correctness bug fixed session 247:
+	// this previously called SetWork(nil) on every element of workers,
+	// so idling or AI-switching one device silently paused mining on
+	// every other SHA256d device too. Currently latent — the only
+	// production HAL driver reporting SHA256d:true is the single CPU
+	// device (GPU always reports false, see internal/hal/gpu_linux.go),
+	// so startMinerWorkers never produces more than one worker today —
+	// but the moment a second SHA256d-capable device exists (e.g. an
+	// ASIC driver), this would silently stop unrelated devices from
+	// mining.
+	pauseDevice := func(deviceID string) {
+		for _, w := range workers {
+			if w.DeviceID() == deviceID {
+				w.SetWork(nil)
+				return
+			}
+		}
+	}
 	for _, a := range alloc.Assignments {
 		switch {
 		case a.Idle():
 			// Device is idle: no stream accepts its family, or all compatible
 			// streams are below the min_yield_sats_per_sec floor. Pause SHA256d.
-			for _, w := range workers {
-				w.SetWork(nil)
-			}
+			pauseDevice(a.DeviceID)
 			reason := a.Reason
 			if reason == "" {
 				reason = "no compatible stream"
@@ -262,10 +279,8 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			nowAI := strings.HasPrefix(string(a.Stream), "ai.")
 			switch {
 			case !wasAI && nowAI:
-				// Mining → AI: pause SHA256d workers.
-				for _, w := range workers {
-					w.SetWork(nil)
-				}
+				// Mining → AI: pause this device's SHA256d worker.
+				pauseDevice(a.DeviceID)
 				log("info", fmt.Sprintf("arbitration: %s → AI inference (%.0f sat/s)",
 					a.DeviceID, a.ExpectedYield))
 			case wasAI && !nowAI:

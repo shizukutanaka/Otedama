@@ -80,9 +80,11 @@ type Config struct {
 	// preference. Otedama connects to the first and uses subsequent
 	// entries for failover.
 	//
-	// If empty, Otedama uses its built-in list of recommended Stratum V2
-	// pools (Braiins, DEMAND, OCEAN, Luxor). This default prioritizes
-	// decentralization and non-custodial payouts.
+	// If empty, Otedama falls back to the single built-in default pool,
+	// DefaultPoolURL — not a curated list. There is no built-in
+	// multi-pool recommendation list today; users who want failover
+	// across specific pools (e.g. Braiins, DEMAND, OCEAN, Luxor) must
+	// list them explicitly here.
 	Pools []PoolConfig `yaml:"pools"`
 
 	// Workers controls how Otedama names itself to pools. If empty,
