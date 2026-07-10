@@ -40,6 +40,7 @@ finding was re-verified against the code before any change.
 | S | TUI | `internal/tui` |
 | T | i18n | `internal/i18n` |
 | U | Clock / version | `internal/clock`, `internal/version` |
+| V | Docs / CI infra | `docs/*`, `README.md`, `CLAUDE.md`, `.github/workflows/*` (added session 247) |
 
 ---
 
@@ -484,3 +485,73 @@ concrete defects beyond what the spec gap table already tracks.
 All 24 packages build, vet, and test green (`-race` clean on the touched
 packages). Flagged Noise/engine items are funds-critical and left for maintainer
 review; remaining deferred items are tracked above.
+
+---
+
+## Sessions 243–247 update — excess-vs-deficiency triage
+
+Same taxonomy, same disposition legend. This round split findings into two
+kinds instead of one: **excess** (E-tag below — documentation, comments, or
+config describing a capability that does not exist in code) and
+**deficiency** (D-tag below — code that is genuinely missing, stubbed, or
+architecturally incomplete). Every row was independently re-verified against
+source (grep + Read) before being marked, by two parallel background audits
+per session plus manual verification. Intended as the entry point for any
+future session (Opus or Sonnet) picking this codebase back up: read this
+table first, then follow the "Ref" column into `docs/KNOWN_LIMITATIONS.md`
+or the cited file for full detail.
+
+**Excess = fix by deleting/correcting a claim. Deficiency = fix by writing
+code, or requires a product/infra decision before code can be written.**
+
+### Excess — fixed sessions 243–247
+
+| Cat | Finding | Ref |
+|---|---|---|
+| R | ✅ `hal.Capabilities.SHA256d` hardcoded `true` for every GPU → CPU thread oversubscription + share misattribution. | `internal/hal/gpu_linux.go`; KNOWN_LIMITATIONS §4 |
+| R | ✅ Package doc for `internal/hal` described nonexistent `hal/asic`, `hal/cuda`, `hal/rocm`, `hal/cpu` driver subpackages. | `internal/hal/device.go` |
+| V | ✅ `CONTRIBUTING.md`/`SECURITY.md`/`README.md` described a plugin architecture as shipped; `ROADMAP.md`'s own "Removed Milestones" table rejects it (no proven demand). | `docs/KNOWN_LIMITATIONS.md` §13 area |
+| V | ✅ `SECURITY.md`/`README.md` described ZKP-based auth as adopted (present tense); `internal/auth/` is v4.0-scoped and does not exist. | CLAUDE.md architecture map |
+| V | ✅ `SECURITY.md` listed an "official web management interface" in scope; no `web/`, none planned per CLAUDE.md. | — |
+| V | ✅ `README.md` claimed OpenTelemetry tracing, signed binary distribution (cosign), a 4-stream arbitration engine — only 2 streams (mining, simulated AI) exist; cosign is v3.1.0-planned only. | `README.md` Core Features section |
+| V | ✅ `README.md` + `internal/config/config.go` `Pools` doc both claimed a "built-in recommended pool list (Braiins/DEMAND/OCEAN/Luxor)"; actual fallback is one hardcoded constant, `config.DefaultPoolURL` (Slushpool). | `internal/engine/setup.go` `defaultPoolURL` |
+| V | ✅ `docs/architecture.md` described a target architecture (gRPC/REST API layer, `internal/providers/` plural, full LDK integration) as current. | Disclaimer added at top of file |
+| J | ✅ `docs/KNOWN_LIMITATIONS.md` §6 claimed the wallet "can register BOLT12-style payout proofs" — zero such code anywhere in repo. | — |
+| V | ✅ `docs/adr/README.md` index marked ADR-007/008/009/010 "Accepted"; each ADR's own header says "Proposed". | — |
+| J,V | ✅ Wallet cipher misdescribed as ChaCha20-Poly1305 in 7 files (`docs/API.md`, `docs/THREAT_MODEL.md`, `docs/MIGRATING-FROM-V2.md`, `docs/AUDIT_CHECKLIST.md`, `docs/adr/ADR-007`, `GODEBUG_NOTES.md`, original CHANGELOG entry) — real cipher is AES-256-GCM (`internal/lightning/seedstore.go`); ChaCha20-Poly1305 is the Noise NX transport's cipher. | — |
+| N,V | ✅ `internal/doctor` warned "GPU increases hashrate ~150x"; `docs/TROUBLESHOOTING.md` advised "attach a GPU" for mining speed — both false now that R's SHA256d fix landed (GPU never mined in the first place; the claim was already fiction). | — |
+| K | ✅ `Config.DataDir` doc promised OS-appropriate auto-resolution; no code implemented it — see Deficiency-turned-fix D-prior below (this is the doc-vs-code gap that *caused* the real bug, listed here for the "excess claim" half of it). | `internal/config/config.go` `DefaultDataDir` |
+
+### Deficiency — fixed sessions 243–247 (real code was missing/wrong)
+
+| Cat | Finding | Ref |
+|---|---|---|
+| K,J | ✅ **Fund-safety.** `DefaultDataDir()` did not exist; `DataDir` stayed `""` with no flag/env/file value, and `engine.setupWallet` silently skips wallet init on empty `DataDir` — every user who never passed `--data-dir` got no wallet, no error. Implemented `config.DefaultDataDir()` (XDG/macOS/Windows) and wired into `ResolveWithOrigins`. | `internal/config/config.go`; test `TestResolve_DataDirDefaultsToOSPath` |
+| M,J | ✅ **Fund-safety, same root.** Generated systemd unit set `ProtectHome=read-only` with no `ReadWritePaths=` exception, blocking `wallet.dat` writes under `$HOME`. Added conditional `ReadWritePaths=`. | `internal/daemon/service.go` `systemdUnit`; test `TestSystemdUnit_ReadWritePathsMatchesDataDir` |
+| E,F | ✅ `applyAllocation` called `SetWork(nil)` on **every** worker instead of the one named by `Assignment.DeviceID` — latent (only 1 SHA256d device exists today) but would silently stop unrelated devices mining once a 2nd SHA256d device exists (e.g. future ASIC driver). Fixed with `pauseDevice` filtered by `w.DeviceID()`. | `internal/engine/arbitrate.go`; test `TestApplyAllocation_OnlyPausesTargetDevice` |
+| Q | ✅ `/readyz` doc overstated its gate ("pool connected, at least one worker hashing"); real gate is only "pool session established" — no job/hash requirement. | `internal/httpserver/server.go` |
+| C | 🚩 `hmacSHA256Pooled` (GC-pressure optimization) is implemented + correctness-tested + benchmarked but **not wired** into `hkdf2`/`hkdf3` in the live handshake — noise.go/noise_pool.go are CODEOWNERS-gated funds-critical, so the wiring itself was deliberately left for reviewed follow-up; only the doc comment was corrected. | `internal/stratum/noise_pool.go` |
+| L | ✅ `internal/doctor` checks.go duplicated a Linux-only data-dir fallback instead of reusing the (now-existing) shared resolver — also silently wrong on macOS/Windows. Unified onto `config.DefaultDataDir()`. | `internal/doctor/checks.go` |
+
+### Deficiency — NOT fixed, flagged for maintainer decision (this is the actionable backlog)
+
+| Cat | Finding | Priority | Ref |
+|---|---|---|---|
+| I | 🚩 `internal/btccrypto` secp256k1 Verify/PublicKeyFromBytes/SignatureFromBytes are namespace-reserving stubs returning `ErrSchemeNotImplemented`; ADR-006 ("Accepted") describes them as "concrete implementations" — doc contradicts code. Real dependency (`decred/dcrd/dcrec/secp256k1`) not yet in `go.mod` (ADR-011, Accepted-but-pending). | **High** — core Bitcoin signing is unimplemented | KNOWN_LIMITATIONS §5 |
+| C | 🚩 Noise NX not wired into any live connection except `stratum+v2tls://`; default `stratum+v2://` is plaintext. | **High** — funds/privacy adjacent | KNOWN_LIMITATIONS §2 |
+| D | ⏸ `poolproto` package doc and `stratumv1.go` describe DATUM as a present-tense supported protocol ("Otedama can speak... DATUM"); reality: `ProtocolDATUM` is a URL-scheme constant only, no `Dialer` registered, no `internal/poolproto/datum` package exists. Not yet disclosed in KNOWN_LIMITATIONS. | Medium | found session 246, unfixed |
+| V | ⏸ `.github/workflows/deploy.yml` — non-Go npm/Helm pipeline fails on every push/PR; references forbidden/nonexistent `kubernetes/helm/`. | High (false-negative CI signal on every push) | KNOWN_LIMITATIONS §13 |
+| V | ⏸ `.github/workflows/ci-cd.yml` — near-duplicate of `ci.yml`, Go version matrix (1.20/1.21) below `go.mod`'s `go 1.22` minimum, references forbidden `k8s/`. | Medium (likely just delete) | KNOWN_LIMITATIONS §13 |
+| V | ⏸ `.github/workflows/ci.yml` `docker-verify*` jobs reference nonexistent `scripts/`, poll `/health` (real path is `/healthz`), never pass `--bitcoin-address`/`--http-addr` so the container just prints help and exits regardless of path fix; `docker-verify-cgo0-postgres` tests a nonexistent Postgres/database layer; deploy jobs apply forbidden `k8s/*.yaml`. | High (819-line file, multiple broken jobs) | KNOWN_LIMITATIONS §13 |
+| V | ⏸ `.github/workflows/release.yml` `build-packages` job references nonexistent `scripts/post-install.sh`, `scripts/pre-remove.sh`, `scripts/otedama.service`, root `config.yaml`. | Medium | KNOWN_LIMITATIONS §13 |
+| V | ⏸ `.github/workflows/code-review.yml` is entirely Node.js/npm-oriented; always a no-op for this Go-only repo (posts a static "no Node.js project" comment, never runs Go lint/review). | Medium | KNOWN_LIMITATIONS §13 |
+| V | ⏸ `.github/workflows/security.yml` `security-tests` job references nonexistent `tests/security/`, `tests/load/` directories — fails deterministically if triggered. | Medium | KNOWN_LIMITATIONS §13 |
+| V | 🚩 `.github/workflows/security.yml` `compliance-check`'s hardcoded-IP grep fails deterministically against this repo's own legitimate `127.0.0.1`/`1.1.1.1` addresses (flag help text, doctor's DNS check). **A proposed downgrade to non-fatal `::warning::` was blocked by the safety classifier session 247 as an unauthorized weakening of a security gate — needs explicit user sign-off before any fix, mechanical or otherwise.** | High-but-blocked | KNOWN_LIMITATIONS §13 |
+| V | ⏸ CLAUDE.md's own architecture map labels `test.yml` `(fuzz+benchmark)`; actual jobs are `test/lint/security/build/integration/benchmark` — no fuzz job, though `internal/stratum/frame_fuzz_test.go` and `make fuzz` exist locally and are simply never invoked by CI. | Medium | — |
+
+### Reading order for a fresh session
+
+1. `docs/KNOWN_LIMITATIONS.md` — user-facing, exhaustive, per-item impact/workaround/target.
+2. This table — triage view, points at exactly which file/line to open next.
+3. `docs/SPECIFICATION.md`'s gap table (`G1`–`G19`) — spec-vs-code discrepancies specifically.
+4. `ROADMAP.md` — confirmed vs. removed milestones, so a fix doesn't reintroduce something already rejected (e.g. plugin architecture, multi-currency).

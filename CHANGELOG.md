@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 248 — 過不足を選別しリスト化: `docs/CATEGORY_AUDIT.md`にsession 243〜247の全知見を「過剰（実装を超えた記述）」「不足（コード自体が未完成）」に選別した引き継ぎ表を追加)
+
+ユーザーから「過不足を選別しリスト化。Opus, Sonnetが理解できる文章で」
+という依頼を受け、チャット応答としてではなく、将来のセッション（Opus・
+Sonnetいずれでも）がリポジトリを開いた直後に読める形でリポジトリ本体に
+保存した。新規ファイルは作成せず、既存の`docs/CATEGORY_AUDIT.md`
+（session 67由来、カテゴリ別knowledge-baseとして同種の目的で既に運用
+されている文書）を拡張する形を取った——CLAUDE.mdのClaude Code専用指示
+「ファイル作成前に類似内容のファイルが既存しないか確認し、存在する場合は
+統合を提案する」に従った判断。
+
+追加した節は「Sessions 243–247 update — excess-vs-deficiency triage」。
+同ファイル既存のdisposition legend（✅/🚩/⏸/❎）とカテゴリ分類（A〜U）を
+そのまま踏襲し、新規カテゴリV（Docs / CI infra）を追加した上で、以下
+3表を収録した。
+
+1. **Excess — fixed sessions 243–247**: 存在しない機能を実装済みと記述
+   していた13件（プラグインアーキテクチャ、ZKP認証、Web管理UI、GPU
+   マイニング能力、組み込みプール一覧、ADRステータス、ウォレット暗号
+   方式の取り違え等）——全て是正済み。
+2. **Deficiency — fixed sessions 243–247**: コード自体に実バグ・未実装
+   があり今回実装で埋めた6件（DataDir自動解決、systemd ReadWritePaths、
+   applyAllocationのデバイス別pause、/readyzのdoc是正等）。
+3. **Deficiency — NOT fixed, flagged for maintainer decision**:
+   実装未着手でメンテナ判断待ちの10件（btccrypto secp256k1スタブ、
+   Noise NX未配線、DATUM過大記述、CI設定ファイル7本の機能不全、
+   security.ymlのcompliance-check降格——これはsession 247で提案したが
+   セーフティ分類器にブロックされ未承認のまま——、CLAUDE.mdのtest.yml
+   記述矛盾）に優先度目安を付けて整理した。
+
+末尾に「Reading order for a fresh session」を追加し、
+`docs/KNOWN_LIMITATIONS.md`→本表→`docs/SPECIFICATION.md`のギャップ表
+→`ROADMAP.md`という参照順序を明記した（削除済み機能の再実装を防ぐ
+ため）。
+
+コード変更なし。`docs/CATEGORY_AUDIT.md`のみ71行追加。
+
 ### Fixed (session 247 — 続けて実装: 裁定エンジンがデバイス個別にワーカーを一時停止すべきところ全ワーカーを止めていた実バグ（複数SHA256dデバイス環境で潜在的）を修正。README.mdの「主要機能」節が存在しないZKP認証・プラグイン・Web管理UI・OpenTelemetry・署名済みバイナリ配布を実装済みと記述していた問題、「組み込みの推奨プール一覧」という実在しないフォールバック挙動の記述、CI設定ファイル群の広範な機能不全を是正・開示)
 
 session 246に続き、2並列のバックグラウンド監査エージェント
