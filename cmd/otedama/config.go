@@ -36,7 +36,7 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stdout, stderr)
+	f, err := parseRunFlags("config show", args, stdout, stderr)
 	if err != nil {
 		if err == flag.ErrHelp {
 			return exitOK
@@ -164,7 +164,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 }
 
 func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stdout, stderr)
+	f, err := parseRunFlags("config validate", args, stdout, stderr)
 	if err != nil {
 		if err == flag.ErrHelp {
 			return exitOK

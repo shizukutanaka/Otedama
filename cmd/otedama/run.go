@@ -41,8 +41,15 @@ type runFlags struct {
 	jsonOut                  bool   // --json: emit config show output as JSON
 }
 
-func parseRunFlags(args []string, stdout, stderr io.Writer) (runFlags, error) {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+// parseRunFlags builds the flag set shared by `run`, `config show`, and
+// `config validate` (all three need the same config-resolution inputs).
+// name is used only for the FlagSet's own identity, which Go's flag
+// package prints as "Usage of <name>:" on --help/parse-error — passing
+// the caller's actual command name (e.g. "config validate", not always
+// "run") keeps that header accurate regardless of which subcommand is
+// asking for help.
+func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFlags, error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	out := stderr
 	if hasHelpFlag(args) {
 		// See parseSubcommandFlags: --help/-h is not a usage mistake, so
@@ -59,23 +66,23 @@ func parseRunFlags(args []string, stdout, stderr io.Writer) (runFlags, error) {
 	fs.StringVar(&f.Language, "language", "", "UI language as BCP 47 tag (e.g., ja, en, zh-CN).")
 	fs.StringVar(&f.DataDir, "data-dir", "", "Directory for persistent data.")
 	fs.StringVar(&f.configFile, "config", "", "Path to config.yaml (optional).")
-	fs.BoolVar(&f.dryRun, "dry-run", false, "Validate configuration and exit without starting.")
-	fs.BoolVar(&f.noTUI, "no-tui", false, "Disable the terminal dashboard (plain log output).")
+	fs.BoolVar(&f.dryRun, "dry-run", false, "(run only) Validate configuration and exit without starting.")
+	fs.BoolVar(&f.noTUI, "no-tui", false, "(run only) Disable the terminal dashboard (plain log output).")
 	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
-		"Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
+		"(run only) Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
 	fs.StringVar(&f.walletMnemonicPassphrase, "wallet-mnemonic-passphrase", "",
-		"Optional BIP-39 \"25th word\" passphrase, applied only when a new wallet is "+
+		"(run only) Optional BIP-39 \"25th word\" passphrase, applied only when a new wallet is "+
 			"created. Distinct from --wallet-passphrase (which encrypts the seed at "+
 			"rest); this changes which seed the recovery mnemonic derives to. Not "+
 			"needed again after first run — it is already folded into wallet.dat.")
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.logFile, "log-file", "",
-		"Append structured logs to this file. Written even while the TUI is active, "+
+		"(run only) Append structured logs to this file. Written even while the TUI is active, "+
 			"giving a long-running service an audit trail the dashboard otherwise hides.")
 	fs.StringVar(&f.HTTPAddr, "http-addr", "",
 		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
 	fs.BoolVar(&f.pprofEnabled, "pprof", false,
-		"Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
+		"(run only) Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
 	fs.BoolVar(&f.showOrigin, "origin", false,
 		"(config show only) Annotate each value with the layer that set it (default/file/env/flag).")
 	fs.BoolVar(&f.jsonOut, "json", false,
@@ -113,7 +120,7 @@ func applyRunEnvFallbacks(f *runFlags) {
 }
 
 func cmdRun(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stdout, stderr)
+	f, err := parseRunFlags("run", args, stdout, stderr)
 	if err != nil {
 		if err == flag.ErrHelp {
 			return exitOK
@@ -121,6 +128,25 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	applyRunEnvFallbacks(&f)
+
+	// Auto-disable the TUI when stdout is not an interactive terminal
+	// (redirected to a file/pipe, or captured by a service manager like
+	// systemd's journal or launchd's file-based stdout redirection — see
+	// docs/DEPLOYMENT.md and internal/daemon). Left on, the dashboard
+	// writes a continuous stream of raw ANSI escape codes to whatever
+	// stdout was redirected to: an unreadable, ever-growing file, or (for
+	// `otedama service install`, whose generated unit always runs
+	// unattended) a journald/log stream containing nothing but cursor-
+	// control noise instead of the structured logs an operator actually
+	// needs. This only ever narrows TUI use toward the safe default
+	// (plain, readable output); --no-tui still works as an explicit
+	// override, and there is no flag to force the TUI on when stdout is
+	// not a terminal, since that would only ever reproduce this bug.
+	if !f.noTUI {
+		if out, ok := stdout.(*os.File); ok && !isTerminal(out) {
+			f.noTUI = true
+		}
+	}
 
 	fromFile := loadConfigFile(f.configFile, stderr)
 	// Surface env vars that were set but could not be parsed: they are
@@ -207,10 +233,21 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-// buildLogger constructs the structured logger for a run. When the TUI
-// dashboard is active (default), log output is discarded so it does not
-// corrupt the dashboard. With --no-tui, logs go to stdout in the
-// configured format (text or JSON).
+// isTerminal reports whether f is connected to an interactive terminal,
+// as opposed to a redirected file, a pipe, or a service manager's log
+// capture (systemd's journal, launchd's file-based stdout redirection).
+// Stdlib-only: os.ModeCharDevice is set on a file's Stat() when the
+// underlying descriptor is a character device, which a real terminal is
+// and a regular file/pipe is not, on every platform Go supports — no
+// golang.org/x/term dependency needed for this check.
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
 // buildLogger constructs the structured logger for a run and returns a cleanup
 // function the caller must defer (it closes the --log-file, if one was opened).
 //

@@ -14,9 +14,19 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// The terminal width is detected at startup via TIOCGWINSZ (Unix) or
-// GetConsoleScreenBufferInfo (Windows); if detection fails, 80 columns
-// are assumed.
+// # Terminal width (not yet auto-detected)
+//
+// SetWidth lets a caller inject the real terminal width (intended
+// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
+// but no caller in this codebase actually calls it in production —
+// engine.Run's dashboard always runs at the NewDashboard default of 80
+// columns, regardless of the real terminal size. See
+// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
+// of the real width: every
+// line is truncated to fit whatever width is configured, and the most
+// important field on each line (pool connection status, in particular)
+// is sized from a dynamic budget rather than a fixed offset, so it
+// cannot be silently cut off even at the documented 40-column minimum.
 //
 // # Thread safety
 //
@@ -225,8 +235,8 @@ func (d *Dashboard) render(s Stats) {
 	// under-padded these lines specifically and could leave stray
 	// characters from a longer previous frame unoverwritten.
 	d.writeSection(&sb, "MINING", cols)
-	d.writeLine(&sb, d.miningLine(s), cols)
-	d.writeLine(&sb, d.poolLine(s), cols)
+	d.writeLine(&sb, d.miningLine(s, cols), cols)
+	d.writeLine(&sb, d.poolLine(s, cols), cols)
 	d.writeLine(&sb, "", cols)
 	d.writeSection(&sb, "EARNINGS", cols)
 	d.writeLine(&sb, d.earningsLine(s), cols)
@@ -256,7 +266,7 @@ func (d *Dashboard) writeSection(sb *strings.Builder, label string, cols int) {
 	d.writeLine(sb, line, cols)
 }
 
-func (d *Dashboard) miningLine(s Stats) string {
+func (d *Dashboard) miningLine(s Stats, cols int) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	if s.DevicesIdle > 0 {
@@ -264,42 +274,69 @@ func (d *Dashboard) miningLine(s Stats) string {
 		// without needing Prometheus or log tailing.
 		devs = fmt.Sprintf("%d device(s), %d idle", s.Devices, s.DevicesIdle)
 	}
-	shares := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
+	sharesFull := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
 	switch {
 	case s.Curtailed:
 		// Deliberate price-driven pause: zero hashrate is expected, not a
 		// fault. Cyan "paused" badge (informational, not the yellow ⚠ used for
 		// stalls) so the operator knows the miner is healthy and waiting for the
 		// price to recover rather than broken.
-		return fmt.Sprintf("  %s%-14s ⏸ paused (price below threshold)%s  %s%s%s",
-			cyan, rate, reset,
-			dim, shares, reset)
+		prefix := fmt.Sprintf("  %s%-14s ⏸ paused (price below threshold)%s  ", cyan, rate, reset)
+		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
+		return prefix + dim + shares + reset
 	case s.Stalled:
 		// Yellow hashrate + stall badge so the operator sees the warning
 		// immediately without needing to check Prometheus.
-		return fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  %s%s%s",
-			yellow, rate, reset,
-			dim+devs+reset,
-			dim, shares, reset)
+		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  ", yellow, rate, reset, dim+devs+reset)
+		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
+		return prefix + dim + shares + reset
 	default:
-		return fmt.Sprintf("  %s%-14s%s  %-20s  %s%s%s",
-			green, rate, reset,
-			dim+devs+reset,
-			dim, shares, reset)
+		prefix := fmt.Sprintf("  %s%-14s%s  %-20s  ", green, rate, reset, dim+devs+reset)
+		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
+		return prefix + dim + shares + reset
 	}
 }
 
-func (d *Dashboard) poolLine(s Stats) string {
-	status := red + "✗ disconnected" + reset
+func (d *Dashboard) poolLine(s Stats, cols int) string {
+	statusPlain := "✗ disconnected"
+	status := red + statusPlain + reset
 	if s.Connected {
 		lat := ""
 		if s.PoolLatency > 0 {
 			lat = fmt.Sprintf(" (%dms)", s.PoolLatency.Milliseconds())
 		}
+		statusPlain = "✓ connected" + lat
 		status = green + "✓ connected" + reset + dim + lat + reset
 	}
-	url := dim + shortenURL(s.PoolURL, 40) + reset
-	return fmt.Sprintf("  Pool: %-30s  %s", url, status)
+	const prefix = "  Pool: "
+	// Reserve enough room for the connection status plus a 2-space gap
+	// so it can never be truncated off-screen by writeLine's right-side
+	// cut — connection status is the single most important thing this
+	// line conveys. The URL gets whatever budget remains, with a floor
+	// so a very narrow terminal still shows a recognizable fragment
+	// rather than nothing.
+	urlBudget := cols - len(prefix) - len(statusPlain) - 2
+	if urlBudget < 8 {
+		urlBudget = 8
+	}
+	url := dim + shortenURL(s.PoolURL, urlBudget) + reset
+	return fmt.Sprintf("%s%-*s  %s", prefix, urlBudget, url, status)
+}
+
+// truncateToBudget shortens a plain (no-ANSI) string to fit budget visible
+// columns, appending "..." when it must cut. A non-positive budget yields
+// an empty string rather than a negative-length panic.
+func truncateToBudget(s string, budget int) string {
+	if budget <= 0 {
+		return ""
+	}
+	if len(s) <= budget {
+		return s
+	}
+	if budget < 4 {
+		return s[:budget]
+	}
+	return s[:budget-3] + "..."
 }
 
 func (d *Dashboard) earningsLine(s Stats) string {

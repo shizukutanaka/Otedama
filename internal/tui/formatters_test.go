@@ -117,7 +117,7 @@ func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 	line := d.poolLine(Stats{
 		PoolURL:   "stratum+v2://example.com:3336",
 		Connected: false,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "disconnected") {
 		t.Errorf("disconnected pool line missing 'disconnected': %q", line)
 	}
@@ -130,12 +130,38 @@ func TestDashboard_PoolLineWhenConnected(t *testing.T) {
 		PoolURL:     "stratum+v2://example.com:3336",
 		Connected:   true,
 		PoolLatency: 42 * time.Millisecond,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "connected") {
 		t.Errorf("connected line missing 'connected': %q", line)
 	}
 	if !strings.Contains(line, "42ms") {
 		t.Errorf("connected line missing latency '42ms': %q", line)
+	}
+}
+
+// TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth pins the fix
+// for a real bug: poolLine used to reserve a hardcoded 40-column budget
+// for the pool URL regardless of the actual terminal width, so at the
+// documented 40-column minimum (SetWidth's floor) the "  Pool: " prefix
+// plus the URL alone already exceeded the whole line width — writeLine's
+// right-side truncation then cut the line before the connection status
+// (the single most important thing this line conveys) was ever reached.
+// poolLine must now size the URL budget from cols so status is never lost.
+func TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	const cols = 40 // documented minimum, see SetWidth
+	line := d.poolLine(Stats{
+		PoolURL:   "stratum+v2://a-very-long-pool-hostname.example.com:3336",
+		Connected: true,
+	}, cols)
+	// Simulate writeLine's own truncation, since poolLine's output alone
+	// (before writeLine) is what must already fit.
+	if visibleLen(line) > cols {
+		line = truncateVisible(line, cols)
+	}
+	if !strings.Contains(line, "connected") {
+		t.Errorf("connection status truncated away at %d cols: %q", cols, line)
 	}
 }
 
@@ -162,7 +188,7 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 2.5e6, Devices: 3, SharesFound: 42, SharesSent: 40,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "2.50 MH/s") {
 		t.Errorf("miningLine missing hashrate: %q", line)
 	}
@@ -179,7 +205,7 @@ func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 0, Devices: 1, Stalled: true,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "stalled") {
 		t.Errorf("miningLine with Stalled=true missing stall indicator: %q", line)
 	}
@@ -190,7 +216,7 @@ func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 1e9, Devices: 2, Stalled: false,
-	})
+	}, d.cols)
 	if strings.Contains(line, "stalled") {
 		t.Errorf("miningLine with Stalled=false should not show stall indicator: %q", line)
 	}
@@ -201,7 +227,7 @@ func TestDashboard_MiningLine_CurtailedShowsPausedNotStalled(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 0, Devices: 1, Curtailed: true,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "paused") {
 		t.Errorf("miningLine with Curtailed=true missing paused indicator: %q", line)
 	}
@@ -218,7 +244,7 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 0, Devices: 1, Curtailed: true, Stalled: true,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "paused") {
 		t.Errorf("curtailed+stalled miningLine should show paused: %q", line)
 	}

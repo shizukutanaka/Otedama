@@ -570,6 +570,44 @@ release target.
 
 ---
 
+## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+
+**What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
+real terminal width, but no production call site ever calls it —
+`engine.Run` constructs the dashboard via `tui.NewDashboard` and never
+calls `SetWidth`, so every real invocation renders at the constructor's
+hardcoded default of 80 columns regardless of the actual terminal
+size (confirmed: `SetWidth` is called only from `internal/tui`'s own
+test files).
+
+**Impact:** On a narrower real terminal, output can wrap onto a second
+terminal row, which breaks the dashboard's "cursor home, overwrite in
+place" repaint model (each subsequent frame then draws one row off
+from where the previous one landed). On a wider terminal, screen space
+is simply unused. Separately (fixed session 249): before this session,
+the pool connection-status text and share-count text on the two
+busiest lines were truncated using fixed-width budgets independent of
+the actual configured width, so at the documented 40-column minimum
+they could be cut off entirely even once real width detection lands;
+both lines now size their variable-length fields from the actual
+`cols` value, so this specific failure mode is closed regardless of
+whether width detection itself is ever wired in.
+
+**Workaround:** Keep the terminal at or above 80 columns for correct
+rendering, or use `--no-tui` for plain log output, which has no width
+assumptions.
+
+**Target:** No committed target. Wiring in real detection needs either
+`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
+dependency stance would need a documented exception, as the package
+doc's own "Design" section already assumed this was solved) or raw
+per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
+GetConsoleScreenBufferInfo, both already reachable as an indirect
+dependency via `golang.org/x/crypto`) — a maintainer decision between
+the two is needed before implementation.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

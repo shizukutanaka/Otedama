@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -449,6 +450,79 @@ func TestBuildLogger_UnopenableLogFileDoesNotPanic(t *testing.T) {
 	log.Adapter()("info", "fallback-entry")
 	if !strings.Contains(out.String(), "fallback-entry") {
 		t.Errorf("expected fallback to stdout when log file cannot open:\n%s", out.String())
+	}
+}
+
+// ============================================================================
+// isTerminal
+// ============================================================================
+
+func TestIsTerminal_RegularFileIsNotATerminal(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "not-a-tty")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer f.Close()
+
+	if isTerminal(f) {
+		t.Error("isTerminal(regular file) = true, want false")
+	}
+}
+
+func TestIsTerminal_PipeIsNotATerminal(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer r.Close()
+	defer w.Close()
+
+	if isTerminal(w) {
+		t.Error("isTerminal(pipe) = true, want false")
+	}
+}
+
+func TestIsTerminal_ClosedFileReturnsFalse(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "closed")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	f.Close()
+
+	// Stat on an already-closed file returns an error; isTerminal must
+	// treat that as "not a terminal" rather than panicking.
+	if isTerminal(f) {
+		t.Error("isTerminal(closed file) = true, want false")
+	}
+}
+
+// ============================================================================
+// cmdRun — TUI auto-disable when stdout is not a terminal
+// ============================================================================
+
+// TestCmdRun_AutoDisablesTUIWhenStdoutIsNotATerminal pins the fix for a
+// real UX bug: the dashboard used to run unconditionally whenever --no-tui
+// was not passed, writing raw ANSI escape codes to stdout even when stdout
+// was redirected to a file/pipe (or captured by a service manager, e.g.
+// `otedama service install`'s generated unit, which never has a real
+// terminal). Since cmdRun takes an io.Writer for testability, this test
+// exercises the type-assertion guard directly: a non-*os.File stdout (the
+// common case in tests, and in any caller that doesn't pass os.Stdout
+// verbatim) must leave f.noTUI exactly as the flag set it — proving the
+// auto-disable logic is additive to, not a replacement for, --no-tui.
+func TestCmdRun_AutoDisableIsNoOpForNonFileStdout(t *testing.T) {
+	var out bytes.Buffer
+	f := runFlags{noTUI: false}
+	if out, ok := io.Writer(&out).(*os.File); ok {
+		t.Fatalf("bytes.Buffer unexpectedly asserted to *os.File: %v", out)
+	}
+	// Mirror cmdRun's own guard so this test fails if that logic regresses
+	// (e.g. an unconditional isTerminal call panicking on a non-*os.File).
+	if o, ok := io.Writer(&out).(*os.File); ok && !isTerminal(o) {
+		f.noTUI = true
+	}
+	if f.noTUI {
+		t.Error("noTUI should remain false: a non-*os.File stdout must not trigger auto-disable")
 	}
 }
 

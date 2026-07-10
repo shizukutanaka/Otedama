@@ -10,6 +10,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 250 — フロントエンド〜バックエンドまで市販レベルの品質になるように: TUIがリダイレクト時にANSIエスケープを垂れ流す実バグ・`otedama service install`のログが恒久的に読めない実バグ・40カラムでプール接続状態が切り詰められる実バグ・`config show/validate --help`の誤ったヘッダーと無関係なフラグ列挙を修正)
+
+これまでの直近セッションはバックエンドのdoc正確性が中心だったため、
+ユーザーの指示通り「フロントエンド」（このCLI製品にWeb UIは存在しない
+——TUIダッシュボードと`cmd/otedama`のCLI UXそのもの）を専門に監査する
+バックグラウンドエージェントを走らせ、実バイナリをビルドして実際に
+実行した上で検証済みの実UXバグ4件を修正した。
+
+**最重要: TUIがstdoutのリダイレクト先を判別せず、常時raw ANSI
+エスケープコードを書き込んでいた。** `internal/tui/dashboard.go`の
+`Start()`/`render()`はTTY判定を一切行わず、`internal/engine/run.go`は
+`--no-tui`が指定されない限り常にダッシュボードを起動していた。
+`otedama run --bitcoin-address bc1q... > out.log`のように出力を
+リダイレクトすると、生成されるファイルは2行の起動ログの後、
+`\x1b[2J\x1b[H`等の再描画フレームが1秒ごとに永遠に続く、読めない
+バイナリファイルになっていた（実際にビルドして確認済み）。
+`cmd/otedama/run.go`に標準ライブラリのみを使った`isTerminal`
+（`os.ModeCharDevice`によるTTY判定、`golang.org/x/term`等の新規依存
+不要）を追加し、stdoutがターミナルでない場合は自動的に`--no-tui`
+相当の挙動へフォールバックするようにした。`--no-tui`明示指定は
+従来通り機能し、逆にTTYでない時にTUIを強制するフラグは存在しない
+（そのようなフラグは同じバグを再現するだけのため）。
+
+**同じ根本原因の第二の実害: `otedama service install`
+（ドキュメント化された第一級のワークフロー）が導入するサービスは、
+恒久的に使い物にならないログしか生成しなかった。** systemd/launchdは
+サービスの標準出力をパイプ/ファイルとして捕捉する——TTYではない。
+従来はTUIが有効なまま起動し、`--log-file`も渡されないため、
+`journalctl`/launchdログにはANSI再描画ノイズだけが溜まり続け、
+構造化ロガー自体は`logger.Discard()`で完全に破棄されていた。この状態
+を修正するCLIフラグは存在せず、生成されたunitファイルを手動編集する
+以外に回避策がなかった。上記のTTY判定修正の副産物として、
+systemd/launchd管理下のstdoutは非TTYと正しく判定されるため、
+`buildLogger`のプレーンモード分岐へ自動的に切り替わり、追加フラグ
+なしで`journalctl`に実際の構造化ログが届くようになった。
+
+**TUIの`poolLine`/`miningLine`が、実際の`cols`と無関係な固定幅
+（プールURL40文字・シェア欄20文字）で切り詰めを行っていた。**
+ドキュメント上の最小サポート幅である40カラムでは、`writeLine`の
+右側切り詰めが発生する前に、プール接続状態（"✓ connected"/
+"✗ disconnected"——この行が伝える最も重要な情報）自体が切り詰め
+範囲に入ってしまい、画面から消える可能性があった。両関数を`cols`
+引数を受け取るよう変更し、可変長フィールドの予算を実際の幅から
+動的に計算するよう修正（接続状態は常に切り詰められない位置に配置）。
+回帰テスト`TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth`
+を追加。パッケージdocの「TIOCGWINSZ/GetConsoleScreenBufferInfoで幅を
+検出する」という記述は、`SetWidth`が本番コードから一度も呼ばれておらず
+常に既定の80カラム固定であるという実態と矛盾していたため是正し、
+`docs/KNOWN_LIMITATIONS.md`に新規§15として開示した（実装自体は
+新規依存関係の判断が必要なためメンテナ判断待ち）。
+
+**`config show --help`・`config validate --help`が、共有`flag.FlagSet`
+の固定名により`Usage of run:`という誤ったヘッダーを表示し、15個の
+`run`用フラグを無関係なものも含めて全て列挙していた（うち`--dry-run`・
+`--no-tui`・`--pprof`・`--wallet-passphrase`・
+`--wallet-mnemonic-passphrase`・`--log-file`の6個はconfig
+show/validateに対して完全にno-op）。** `parseRunFlags`に`name`引数を
+追加し、3箇所の呼び出し元がそれぞれ実際のコマンド名を渡すよう修正。
+run専用フラグのヘルプ文には既存の`(config show only)`と同じ規約で
+`(run only)`を付記した。
+
+全24パッケージgreen（`go clean -testcache && go test ./...`で確認）。
+`go vet`/`gofmt` clean。新規依存なし（TTY判定は標準ライブラリの
+`os.ModeCharDevice`のみ使用）。`docs/CATEGORY_AUDIT.md`にsession 250の
+フロントエンド監査結果（是正済み5件、保留2件——実端末幅検出と
+サブコマンドのtypo許容——優先度付き）を追記した。
+
 ### Fixed (session 249 — フロントエンド〜バックエンドまで市販レベルの品質になるように: 自作トリアージ表の最優先2件（ADR-006のstub誤記、DATUM過大記述）を是正)
 
 `docs/CATEGORY_AUDIT.md`のsession 248トリアージ表で洗い出した

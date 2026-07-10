@@ -555,3 +555,26 @@ code, or requires a product/infra decision before code can be written.**
 2. This table — triage view, points at exactly which file/line to open next.
 3. `docs/SPECIFICATION.md`'s gap table (`G1`–`G19`) — spec-vs-code discrepancies specifically.
 4. `ROADMAP.md` — confirmed vs. removed milestones, so a fix doesn't reintroduce something already rejected (e.g. plugin architecture, multi-currency).
+
+---
+
+## Session 250 update — "frontend" (TUI + CLI) real-UX audit
+
+Everything above (sessions 243–248) was mostly doc-vs-code accuracy work.
+This round specifically targeted user-facing quality in `internal/tui/`
+(category S) and `cmd/otedama/` (category L) — what a real operator
+actually experiences — rather than doc claims. All confirmed by building
+the binary and driving real invocations, not just reading source.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S,E | TUI wrote raw ANSI escape codes to stdout unconditionally — redirecting output (`> log.txt`, `\| tee`, any non-interactive capture) produced an unreadable, ever-growing stream of cursor-control noise instead of logs. No TTY detection existed anywhere in the codebase. | ✅ Fixed: `cmd/otedama/run.go` `isTerminal` (stdlib-only, `os.ModeCharDevice`) auto-disables the TUI when stdout is not a terminal; `--no-tui` still works as an explicit override. Tests: `TestIsTerminal_*`. |
+| M,S | `otedama service install` (a first-class, documented workflow) produces a unit that runs with the TUI on and no `--log-file` — since a service never has a controlling terminal, this meant `journalctl`/launchd logs filled with ANSI noise forever while the structured logger was silently discarded (`logger.Discard()`). No flag existed to fix this short of hand-editing the generated unit. | ✅ Fixed as a side effect of the TTY-detection fix above: systemd/launchd capture stdout as a non-TTY pipe, so `isTerminal` now auto-flips to `--no-tui` behavior for every service-managed run, and `buildLogger` falls through to its plain-stdout branch — real structured logs now reach `journalctl`/the launchd log file with zero additional flags needed. |
+| S | `poolLine`/`miningLine` truncated the pool URL and share-count fields using **fixed** budgets (hardcoded 40 / 20 chars) independent of the actual configured `cols`. At the documented 40-column minimum, the connection-status text ("✓ connected"/"✗ disconnected") — the single most important field on the line — could be truncated away entirely by `writeLine`'s right-side cut before it was ever reached. | ✅ Fixed: both functions now take `cols` and compute the variable-length field's budget from it (`cols - fixed-overhead`), with status placed so it is never the part that gets cut. Test: `TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth`. |
+| S | Package doc claimed terminal width is "detected at startup via TIOCGWINSZ (Unix) or GetConsoleScreenBufferInfo (Windows)"; `SetWidth` exists but is called only from test files — every real invocation renders at the hardcoded 80-column default regardless of actual terminal size. | ⏸ Deferred (doc corrected to state the gap honestly; disclosed as KNOWN_LIMITATIONS §15). Needs a maintainer decision: add `golang.org/x/term` as a new direct dependency (exception to ADR-003's zero-dependency stance) vs. hand-roll per-platform syscalls via the already-indirect `golang.org/x/sys`. |
+| L | `config show --help` / `config validate --help` printed `Usage of run:` (the shared `flag.FlagSet`'s hardcoded name) and dumped all 15 `run` flags, more than a third of which are no-ops for those two subcommands (`--dry-run`, `--no-tui`, `--pprof`, `--wallet-passphrase`, `--wallet-mnemonic-passphrase`, `--log-file`). | ✅ Fixed: `parseRunFlags` now takes a `name` parameter (each of the 3 call sites passes its real command name), and every run-only flag's help text is prefixed `(run only)`, matching the existing `(config show only)` convention already used for `--origin`/`--json`. |
+| L | No typo tolerance / "did you mean" for subcommands (`otedama rnu` → generic "unknown subcommand" + full usage dump). | ⏸ Deferred — real but low-severity; the existing fallback (full usage block) is a reasonable floor. Not fixed this session. |
+
+Categories checked and found clean this round: config-validation error messages (consistently field-labeled and actionable), `doctor` output (every finding pairs with a `→ fix:` hint), documented exit-code contract (0/1/64/78, verified live), `run --help` flag descriptions (all accurate), explicit `--help` routing to stdout/exit 0 across all subcommands, flag-naming consistency across `run`/`service install`/`doctor`.
+
+All 24 packages build, vet, and test green.
