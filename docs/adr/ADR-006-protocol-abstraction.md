@@ -149,6 +149,28 @@ solo-maintained at ~10 hours per week; we don't have that budget.
   1% of total CPU, this ADR is revisited and we may inline the hot
   paths while keeping the cold ones abstract.
 
+## Erratum (added session 248, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, this ADR's original text
+is left unchanged, but one factual claim in it has since proven
+inaccurate and needs a pointer to the correction rather than a silent
+edit: the Cryptography subsection above says "ECDSA-secp256k1 and
+Schnorr-secp256k1 are concrete implementations registered at init
+time." As of this writing they are **namespace-reserving stubs**
+(`internal/btccrypto/secp256k1.go`) whose `Verify`,
+`PublicKeyFromBytes`, and `SignatureFromBytes` all return
+`ErrSchemeNotImplemented` — the real secp256k1 dependency ADR-011
+decided on (`decred/dcrd/dcrec/secp256k1/v4`) has not yet been added
+to `go.mod`. Current state is tracked in
+`docs/KNOWN_LIMITATIONS.md` §5. Note this has zero production impact
+today: no call site in the codebase invokes `Lookup`,
+`SchemeForAddressType`, `Verify`, or `Sign` yet (`internal/doctor` and
+`internal/config` only use the address-classification helpers,
+`ValidateAddress`/`ClassifyAddress`, which do not touch the stub
+schemes) — the stub exists purely as forward-compatible scaffolding
+for signing functionality (e.g. Lightning payout authorization) that
+does not exist yet either.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model (depends on this for future

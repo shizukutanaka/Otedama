@@ -38,8 +38,10 @@
 // # What this file does NOT do
 //
 //   - TLS: the stratum+tls:// scheme uses tls.Dial in a sibling file.
-//   - DATUM: OCEAN's variant uses different message types and lives
-//     in package datum, not here.
+//   - DATUM: OCEAN's variant uses different message types. No package
+//     datum exists yet — this is planned (docs/adr/ADR-009, status
+//     Proposed), not implemented; poolproto.ProtocolDATUM is a
+//     reserved URL-scheme constant with no Dialer registered.
 //   - Job Declaration Protocol: SV2 only; not relevant to V1.
 package stratumv1
 

@@ -544,6 +544,32 @@ decision on CI/CD strategy.
 
 ---
 
+## 14. DATUM is a reserved URL scheme, not an implemented protocol
+
+**What:** `internal/poolproto`'s `ProtocolDATUM` constant and the
+`datum://` URL scheme are recognized by `FromURL`/`StripScheme`, and
+prior to session 248 the package doc comment and
+`internal/poolproto/stratumv1/stratumv1.go`'s "what this file does
+NOT do" note both described DATUM in present-tense, "Otedama can
+speak..." language. In reality, no `Dialer` is registered for
+`ProtocolDATUM` anywhere in the codebase (only `stratumv1` and
+`stratumv2` call `poolproto.Register` in `init()`), and no
+`internal/poolproto/datum` package exists.
+
+**Impact:** `poolproto.DialURL("datum://pool.example.com:3334")`
+returns `ErrUnknownProtocol`. Users who configure an OCEAN pool via
+its DATUM endpoint cannot connect through Otedama; OCEAN must be used
+via its SV1-transport-compatible endpoint instead, if it offers one.
+
+**Workaround:** Configure OCEAN (or any DATUM-only pool) via a
+Stratum V1 or V2 endpoint if the pool operator provides one.
+
+**Target:** Tracked by `docs/adr/ADR-009` (status: Proposed — pool
+decentralization integration, covering JDC/DATUM/solo). No committed
+release target.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

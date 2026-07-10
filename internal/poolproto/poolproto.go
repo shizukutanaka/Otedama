@@ -3,14 +3,19 @@
 // Package poolproto abstracts the wire protocol used to talk to a
 // mining pool. Its purpose is to insulate engine/, miner/, and the
 // arbitration loop from the specific protocol implementation, so that
-// Otedama can speak any of:
+// adding a new protocol does not require touching the rest of the
+// codebase.
 //
-//   - Stratum V1 (legacy JSON-RPC over TCP, optionally TLS)
-//   - Stratum V2 (binary framing with Noise NX encryption)
-//   - DATUM (OCEAN's protocol, layered on SV1 transport)
-//   - Future protocols not yet specified
-//
-// without touching the rest of the codebase.
+// Two protocols are actually implemented today, each with a
+// registered Dialer: Stratum V1 (legacy JSON-RPC over TCP, optionally
+// TLS — package stratumv1) and Stratum V2 (binary framing with Noise
+// NX encryption — package stratumv2). DATUM (OCEAN's protocol,
+// layered on SV1 transport) has a reserved URL scheme constant
+// (ProtocolDATUM) and is planned (see docs/adr/ADR-009, status
+// Proposed) but has no Dialer registered anywhere and no
+// implementation package — DialURL("datum://...") returns
+// ErrUnknownProtocol today. See docs/KNOWN_LIMITATIONS.md for the
+// current implementation-status summary.
 //
 // # Why this exists (the 10-year case)
 //

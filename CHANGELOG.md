@@ -10,6 +10,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 249 — フロントエンド〜バックエンドまで市販レベルの品質になるように: 自作トリアージ表の最優先2件（ADR-006のstub誤記、DATUM過大記述）を是正)
+
+`docs/CATEGORY_AUDIT.md`のsession 248トリアージ表で洗い出した
+「Deficiency — NOT fixed」の中から、コード変更なしで即座に是正できる
+2件を処理した。
+
+`docs/adr/ADR-006`（Accepted、`docs/adr/README.md`の不変更新ルールの
+対象）は「ECDSA-secp256k1とSchnorr-secp256k1はinit時に登録される
+concrete implementationsである」と記述していたが、実際は
+`internal/btccrypto/secp256k1.go`の`Verify`/`PublicKeyFromBytes`/
+`SignatureFromBytes`全てが`ErrSchemeNotImplemented`を返すnamespace-
+reservingスタブである。ADRは不変のため本文は書き換えず、末尾に
+「Erratum」節を新設し正確な現状（ADR-011が選定した
+`decred/dcrd/dcrec/secp256k1/v4`は`go.mod`未追加）と、現時点で
+`Lookup`/`SchemeForAddressType`/`Verify`/`Sign`を呼ぶ本番コードは
+一件も存在しない（`internal/doctor`・`internal/config`は
+`ValidateAddress`/`ClassifyAddress`のみ使用）という実害ゼロの事実を
+明記した。
+
+`internal/poolproto`のパッケージdocと`internal/poolproto/stratumv1/
+stratumv1.go`が、DATUM（OCEANのプロトコル）を現在形で「Otedamaが
+話せる」プロトコルの一つとして記述していたが、実際には
+`ProtocolDATUM`はURLスキーム定数として予約されているのみで、
+`Dialer`は`stratumv1`と`stratumv2`にしか登録されておらず、
+`internal/poolproto/datum`パッケージは存在しない。
+`DialURL("datum://...")`は`ErrUnknownProtocol`を返す。両ファイルの
+docコメントを正確な現状描写へ修正し、`docs/KNOWN_LIMITATIONS.md`に
+新規§14として開示した（`docs/adr/ADR-009`、Proposedステータスが
+追跡先）。
+
+全24パッケージgreen。`go vet`/`gofmt` clean。コード動作の変更なし
+（docコメントとADR/KNOWN_LIMITATIONSのみ）。
+
 ### Docs (session 248 — 過不足を選別しリスト化: `docs/CATEGORY_AUDIT.md`にsession 243〜247の全知見を「過剰（実装を超えた記述）」「不足（コード自体が未完成）」に選別した引き継ぎ表を追加)
 
 ユーザーから「過不足を選別しリスト化。Opus, Sonnetが理解できる文章で」
