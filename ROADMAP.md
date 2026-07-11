@@ -16,14 +16,14 @@ This roadmap intentionally lists only technical milestones one solo maintainer c
 
 - **secp256k1 + Schnorr (BIP-340)** を `internal/btccrypto/` に統合。現在 P-256 alpha のNoise NXハンドシェイクを実機 secp256k1 + ElligatorSwift に置き換え。
 - **engine → poolproto 統合** `engine.Run` の pool 接続を `poolproto.DialURL` 経由に切り替え。現状 `stratum.NewDecoder` + raw TCP に直結しており、SV1 transport 等が使えない。この統合が dual-protocol 対応の前提条件。
-- **Akash Network REST API** 実装。現在 simulated quotes を返している `internal/provider/ai_inference.go` を実APIに接続。
+- **Akash Network API** 実装。現在 simulated quotes を返している `internal/provider/ai_inference.go` を実APIに接続。**注記 (session 251, 検証済み)**: `akash-network/akash-api` は 2026-01-05 に deprecated/archived。後継の `akash-network/chain-sdk`（protobuf 定義、Go 参照クライアントあり）をターゲットとすること。また入札は provider daemon の on-chain "Bidengine" が行うため、REST 一発の bid submission ではなく bid-price policy を on-chain 設定へ渡すモデルになる（ADR-010 A4 参照）。ADR-003 の zero-dependency 方針との兼ね合いで、SDK 全体の vendoring ではなく必要な market/provider protobuf のみ生成する選択肢を評価する。
 - ~~**完全な BIP-39 English wordlist**~~ ✅ **完了 (session 32)**: 公式2048語リストを SHA-256 検証付きで埋め込み済み。Ledger/Trezor/Electrum と互換。
 - **govulncheck + osv-scanner** を CI ゲートに昇格（現在 informational）。
 - **Sigstore keyless signing** を release.yml に統合（cosign v3.x、Rekor v2 互換）。
 
 ### v3.2.0 — Stratum V2 maturity (target: 2026 Q4)
 
-研究調査で「SV2 SRI は alpha、production-quality Go 実装は存在しない」と判明。Otedamaが実用レベル の Go SV2 実装を提供する。
+研究調査で「production-quality な Go SV2 実装は存在しない」と判明。Otedamaが実用レベルの Go SV2 実装を提供する。**更新 (session 251, 検証済み)**: SRI (stratum-mining/stratum) は既に alpha を脱し v1.11.0 (2026-07-08)、ほぼ月次リリース。「SRI は alpha」という当初の前提は陳腐化。Go 実装が無い点は依然として有効なので Otedama の位置付けは変わらないが、SV2 適合性テストの interop リファレンスとして特定の SRI タグを pin すること。
 
 - **`internal/poolproto/` 抽象化レイヤ** を engine/ から完全分離。SV1/SV2/DATUM 切替可能に。
 - **Stratum V1 互換** の追加。研究調査の通り、>99%のプールはSV1のままなので、ユーザー基盤拡大のため必須。
@@ -41,7 +41,7 @@ This roadmap intentionally lists only technical milestones one solo maintainer c
 ### v3.5.0 — Hardening and crypto refresh (target: 2027 Q3)
 
 - **`golang.org/x/crypto` の crypto/* 標準ライブラリ化** 完了に追従。研究レポート時点でGo 1.24-1.26で進行中。
-- **`crypto/mldsa` (ML-DSA, Go 1.27標準)** の `internal/btccrypto/` への opt-in 統合。**まだdefault schemeにはしない**。Bitcoin BIP-360 自体が未活性化のため。
+- **`crypto/mldsa` (ML-DSA)** の `internal/btccrypto/` への opt-in 統合。**まだdefault schemeにはしない**。**訂正 (session 251, 検証済み)**: BIP-360 は Status: Draft のままで、実体は "Pay-to-Merkle-Root (P2MR)"（key-path spend を除いた Taproot 類似 output）であり、**PQ署名を規定していない**——BIP-360 本文が「PQ署名は別提案で行う」と明記している。したがって「BIP-360 活性化」と「ML-DSA/P2MR default」を結び付けるのは誤りで、Otedama の ML-DSA scaffolding は BIP-360 の後続の**未執筆の別 BIP** に gate される。§5 の不確実性はこの分だけ広がる。
 - **SLSA Level 3** 達成 (`slsa-framework/slsa-github-generator`)。
 - **CycloneDX 1.6 + SPDX 3.0.1** 両方の SBOM をリリース毎に発行。
 
@@ -79,9 +79,9 @@ BOLT12 受信器から、外部ノード制御 → 埋め込み LDK Node sidecar
 
 2026年5月7日のStratum V2 Working Group expansion (Foundry, AntPool, F2Pool, Spiderpool, Block Inc., MARA, DMND参画 = 全hashrateの70%) に対応。**~480 solo-hours over v3.5–v3.7**。ADR-002 "Stratum V2 only"の論理的深化 — minerが**実際に**block templateを構築する。
 
-- **v3.5**: Bitcoin node integration (Core RPC + Knots), template construction policy (default = accept everything; no editorializing).
+- **v3.5**: Bitcoin node integration, template construction policy (default = accept everything; no editorializing). **注記 (session 251, 検証済み)**: Bitcoin Core v30.0 が experimental な IPC Mining Interface（`bitcoin -m node -ipcbind=unix`、`-DENABLE_IPC` build option、Cap'n Proto over unix socket、SV2 等の mining client 向けに template 要求・block 提出を提供）をリリース。legacy `getblocktemplate` RPC ではなくこの IPC interface をターゲットにすること（別 `bitcoin-node` multiprocess binary を要する点は ADR-009 に記録）。
 - **v3.6**: Stratum V2 Job Declaration Client (JDC) — Braiins Pool / DMND / SRI community pool で動作。Template-aware Prometheus metrics (fee_capture_ratio で 7.4% uplift を実測可能化)。
-- **v3.7**: DATUM client (OCEAN-compatible, C→Go reimpl)、Solo mining mode (regtest + 大規模hashrate用)。
+- **v3.7**: DATUM client (OCEAN-compatible, C→Go reimpl)、Solo mining mode (regtest + 大規模hashrate用)。**確認 (session 251)**: DATUM Gateway は MIT ライセンス・public BETA・**Stratum V1 transport（version-rolling / ASICBoost 付き）で SV2 非対応**。よって `datum://` は新規バイナリプロトコルではなく `poolproto/stratumv1` を再利用した SV1-transport dialer として実装するのが正しい（MIT なので参照 gateway の wire format を直接参照可能）。
 
 ### Combined trajectory
 

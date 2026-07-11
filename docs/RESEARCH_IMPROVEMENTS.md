@@ -743,6 +743,158 @@ Four verified items that *update* earlier entries with newer reality.
 
 ---
 
+## July 2026 research pass — session 251 increment (ecosystem re-verification)
+
+Three parallel research agents re-checked the mining, AI-compute, and
+Go/security/Lightning ecosystems against 2025–2026 primary sources. Every
+item below is tagged **[FETCHED]** (the cited URL was actually retrieved and
+read) or **[SNIPPET]** (real indexed URL, but only the search summary was
+available — the source page returned HTTP 403 to the fetcher, so treat as a
+lead to re-verify, NOT as established fact). This split is deliberate:
+CLAUDE.md forbids recording unverified URLs/claims as fact, and a fabricated
+`https://otedama.io` URL was found and removed from this repo earlier this
+month, so the discipline matters.
+
+### Dependency & toolchain hygiene
+
+1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+   The `go-yaml/yaml` source repo was archived by its author; the YAML org
+   took over at import path `go.yaml.in/yaml`, where v3 is frozen to
+   security-fixes-only and active work is in v4. This makes the dependency
+   fail CLAUDE.md's own §外部依存 criterion 3 ("meaningful maintenance within
+   the last year"), and dates ADR-003's "maintained by go-yaml project,
+   stable since 2020" rationale. No CVE against v3.0.1 was found — the issue
+   is maintenance status, not an active vuln. **Action:** plan migration to
+   `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
+   ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
+2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+   (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
+   GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
+   are all in the `ssh`/`openpgp` subpackages; Otedama imports only
+   `chacha20poly1305`, `scrypt`, and `ecdh`, so `govulncheck` should report
+   zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
+   as routine hygiene and re-run govulncheck to document the zero-reachable
+   result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
+3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+   that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
+   cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
+   toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
+   section — which calls that behavior "load-bearing for correct CPU mining
+   throttling under cgroup constraints" — describes a benefit not actually
+   compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
+   own quarterly-toolchain policy. (go.dev/doc/go1.25)
+4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
+   `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
+   `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the
+   dependency cannot be dropped. If PQ scaffolding ever needs ML-KEM, use
+   stdlib `crypto/mlkem`. (pkg.go.dev/golang.org/x/crypto/chacha20poly1305,
+   .../scrypt; pkg.go.dev/crypto/mlkem)
+
+### Stratum V2 / Bitcoin (corrects roadmap/limitations wording)
+
+5. 🟡 **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+   BIP-340 nor ElligatorSwift.** Its Schnorr subpackage is EC-Schnorr-DCRv0
+   (Decred-custom), not BIP-340, and no ellswift package exists. SV2 mandates
+   `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (BIP324 64-byte ellswift
+   x-only encoding + 2-level PKI server auth). So ADR-011's Option A alone does
+   not complete v3.1.0 — the Noise path additionally needs BIP-340 Schnorr
+   (e.g. btcec/v2's `schnorr`) and a **hand-ported ElligatorSwift (no audited
+   Go implementation exists)**, materially raising the estimate. **Action:**
+   record this in an ADR-011 Erratum. (pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4;
+   raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
+6. 🟡 **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+   signatures.** It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
+   the key-path spend removed — and explicitly defers PQ signatures to "a
+   separate proposal." So coupling "BIP-360 activation" with "ML-DSA / P2MR
+   default" (as ROADMAP/KNOWN_LIMITATIONS §5 currently do) is wrong: activation
+   alone would not give the network ML-DSA, which is gated on a later,
+   not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
+   / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
+7. 🟡 **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+   Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
+   `-DENABLE_IPC`), it lets SV2/other mining software request templates and
+   submit blocks over a unix socket — a cleaner target than legacy
+   getblocktemplate for ROADMAP Track D node integration. **Action:** note the
+   v30 IPC interface (Cap'n Proto / multiprocess `bitcoin-node` binary) in
+   ADR-009 / ROADMAP Track D. (raw.githubusercontent.com/bitcoin/bitcoin/v30.0/doc/release-notes.md)
+8. ✅ **[FETCHED] DATUM confirmed MIT / BETA / SV1-transport-only.** The DATUM
+   Gateway README states MIT license, public beta, requires a full node, and
+   miners connect via Stratum V1 with version-rolling — it does NOT support
+   SV2. This confirms KNOWN_LIMITATIONS §14's planned approach (implement
+   `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
+   a stray snippet claiming GPL-3.0 — the README says MIT.
+   (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
+9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+   ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
+   update the rationale text and pin a specific SRI tag as the interop
+   reference for Go SV2 conformance tests.
+   (github.com/stratum-mining/stratum/releases.atom)
+
+### AI-compute / arbitration engine
+
+10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+    successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
+    work, if scoped against akash-api, would build on an archived protobuf
+    module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
+    against ADR-003 (generating only the needed market/provider protobufs may
+    be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
+    github.com/akash-network/chain-sdk)
+11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+    "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
+    Akash bidding") currently models a per-order REST sealed-bid submission;
+    the real auction is on-chain and mediated by the provider daemon's bid
+    configuration. **Action:** re-frame A4 to output a *bid-price policy fed to
+    the provider daemon's on-chain config*, not a per-order REST submission.
+    (github.com/akash-network/provider) — note: this supersedes the session-52
+    #3 "JWT on GetStatus" framing insofar as the *bidding* mechanism is
+    on-chain; JWT (AEP-64) still applies to the provider *status/lease* REST
+    surface.
+12. ✅ **[FETCHED] Render / io.net have no open provider-side bidding API and
+    are custodial/centrally-priced.** Render intermediates payouts in RNDR
+    (burn-and-mint); io.net centrally determines pricing with staking-based
+    supplier onboarding. Neither fits Otedama's non-custodial, per-order
+    abstraction (conflicts with ADR-001 + CLAUDE.md禁止事項). **Action:** state
+    in `internal/provider/` package docs that Akash-shaped (on-chain bid +
+    non-custodial payout) is the supported model and Render/io.net are out of
+    scope, so they aren't naively added later.
+    (github.com/rendernetwork/RNPs/blob/main/RNP-005.md; github.com/api-evangelist/io-net)
+13. 🔵 **[FETCHED title-match] ADR-010's bandit direction holds; add a
+    2024-25 citation.** The Mellor & Shapiro 2013 paper ADR-010 cites (Thompson
+    Sampling + Bayesian change-point) is real (arxiv.org/pdf/1302.3721); recent
+    sliding-window / discounted Thompson Sampling results
+    (arxiv.org/pdf/2409.05181, .../2305.10718) corroborate the "don't overbuild
+    past Holt-Winters + change-point" stance. **Action:** cite one 2024-25
+    result alongside the 2013 reference in ADR-010; no design change.
+14. 🟡 **[SNIPPET — do NOT act until primary-verified] GPU compute spot prices
+    described as jump-prone with no volatility clustering**, arguing change-point
+    detection (ADR-010 A8) should be prioritized alongside the forecaster (A1)
+    rather than after it. Sources are real but 403'd the fetcher
+    (variant.fund, SSRN 6926798). Recorded as a lead only.
+
+### Lightning
+
+15. 🔵 **[FETCHED] LDK Node v0.7.0 (2025-12-03) adds experimental splicing +
+    async payments; BOLT12 already shipped.** Depends on rust-lightning v0.2,
+    MSRV rustc 1.85. **Action:** target the v3.7 embedded sidecar at LDK Node
+    ≥ v0.7.0 and record in ADR-007 that it is a Rust subprocess/FFI sidecar
+    (not in-Go). (github.com/lightningdevkit/ldk-node/releases;
+    lightningdevkit.org/blog/bolt12-has-arrived/)
+
+### Could not verify (recorded honestly per CLAUDE.md "調査が必要")
+
+- **2025–26 mining academic papers:** arXiv/SSRN return 403 to the fetcher in
+  this environment; no specific recent paper independently confirmed this pass.
+- **BTC/USD feed breaking changes (`internal/rates/fetcher.go`):** no verifiable
+  break found; exchange/CoinGecko docs 403 the fetcher. A [SNIPPET]-level lead
+  suggests CoinGecko's keyless `simple/price` may now effectively need a demo
+  key — if true, the median's third leg could silently degrade to two sources
+  (exactly what `SourceHealth()` was built to expose). Verify from primary docs
+  before acting.
+- **Video sources:** none retrievable in a verifiable form in this environment;
+  not recorded.
+
+---
+
 ## Highest-leverage next actions (cross-category synthesis)
 
 Ranked by impact on the path to a real v3.1.0:

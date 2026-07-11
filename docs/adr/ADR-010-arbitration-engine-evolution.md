@@ -130,9 +130,11 @@ if the device count ever grows large enough to warrant it.
 
 ### Feature A4 — Strategic Akash bidding (v3.6, ~20h)
 
-**Problem:** Akash inference market is a reverse first-price sealed-bid auction. Otedama (as a provider) currently submits naive bids. Equilibrium bid in symmetric IPV reverse FPA = expected second-lowest cost.
+**Problem:** Otedama (as a provider) should bid its Akash inference capacity strategically rather than naively. Equilibrium bid in a symmetric IPV reverse first-price auction ≈ expected second-lowest cost.
 
 **Mechanism:** `bid = max(electricity_cost, opportunity_cost_mining) × (1 + margin)`. The work is bid-formulation logic, not auction theory.
+
+**Re-framing (session 251, primary-source verified — supersedes the "Otedama submits sealed bids over REST" mental model):** On Akash, bidding is performed **on-chain by the provider daemon's "Bidengine"**, which queries open orders on-chain and places bids based on the provider's on-chain configuration (source: github.com/akash-network/provider). Otedama does **not** itself submit a per-order REST sealed bid. So A4's output is a **bid-price *policy* fed into the provider daemon's on-chain bid configuration**, not a live per-order submission — the "reverse first-price sealed-bid auction" framing describes the on-chain market Otedama influences via that policy, not an API Otedama calls per order. (Also note: the provider status/lease REST surface uses JWT auth per AEP-64 / Mainnet 14 — see RESEARCH_IMPROVEMENTS session-52 #3 — but that governs status/lease calls, not the bidding mechanism, which is on-chain.) When this feature is built, target `akash-network/chain-sdk`, not the now-archived `akash-network/akash-api`.
 
 **Cost:** ~20h.
 
@@ -321,7 +323,19 @@ Every feature is pure local computation on user's own observations and devices. 
   Allocation" (arXiv:2105.04373) — logarithmic-regret budget allocation
   across arms, the regret-optimal target for A3 at scale.
 - Mellor & Shapiro, "Thompson Sampling in Switching Environments with
-  Bayesian Online Change Detection," 2013 — basis for A8.
+  Bayesian Online Change Detection," 2013 (arXiv:1302.3721) — basis for A8.
+- (Added session 251, corroborating the non-stationary-bandit direction
+  with current literature, verified by title match; arXiv PDFs 403'd the
+  fetcher so bodies not read line-by-line): Sliding-Window Thompson
+  Sampling for Non-Stationary Settings (arXiv:2409.05181) and Discounted
+  Thompson Sampling for Non-Stationary Bandit Problems (arXiv:2305.10718)
+  — 2024–25 results that keep A1's Holt-Winters + A8 change-point stance
+  state-of-practice rather than a decade-old reference. No design change.
+  A separate [unverified — source pages 403'd] characterization of GPU
+  compute spot prices as "jump-prone with no volatility clustering"
+  (variant.fund; SSRN 6926798) would, *if confirmed from primary source*,
+  argue for prioritizing A8 (change-point) alongside A1 rather than after
+  it — recorded as a lead, not acted on.
 
 ---
 

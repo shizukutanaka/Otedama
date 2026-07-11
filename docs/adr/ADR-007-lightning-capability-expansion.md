@@ -107,6 +107,8 @@ Architecture:
 
 **Cost:** ~180h. Bulk is integration: pre-built binary distribution per platform, UniFFI binding generation, IPC layer, supervision logic, log forwarding.
 
+**Version target (session 251, primary-source verified):** target **LDK Node ≥ v0.7.0** (released 2025-12-03), which adds experimental channel splicing and async payments (on `rust-lightning` v0.2, MSRV rustc 1.85); BOLT12 shipped earlier. This makes B5 (auto-splice) reachable at the sidecar's own release rather than blocked on a separate splicing branch — see B5's dependency note, which predates this. (Source: github.com/lightningdevkit/ldk-node/releases)
+
 **Value/cost rank:** ★★★ — unlocks B5/B8/B9 but is the single biggest investment.
 
 **Non-custodial check:** ✅ Sidecar runs on user's machine, with user's seed.

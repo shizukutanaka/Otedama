@@ -181,16 +181,30 @@ current roadmap. Tracked by ADR-008 (hardware/power) sub-domain 2.
 **What:** `internal/btccrypto` registers ML-DSA and SPHINCS+ scheme
 identifiers as TODO scaffolding. They are not implemented.
 
-**Impact:** None today. Bitcoin's post-quantum signature support
-(BIP-360 / P2MR) is not yet active on the network, so there is nothing
-to interoperate with. The scaffolding exists so the scheme-registry
+**Impact:** None today. There is nothing on the Bitcoin network to
+interoperate with. The scaffolding exists so the scheme-registry
 abstraction (ADR-006) is exercised and ready.
+
+**Corrected (session 251, primary-source verified):** this entry and
+the roadmap previously coupled the ML-DSA scaffolding to "BIP-360
+activation." That coupling is wrong. BIP-360 is **Status: Draft**
+(assigned 2024-12-18) and is titled **"Pay-to-Merkle-Root (P2MR)"** — a
+Taproot-like output with the key-path spend removed. Its own text
+explicitly states post-quantum signatures are deferred to a *separate,
+not-yet-written* proposal: "…may require the introduction of
+post-quantum signatures… we intend to offer a separate proposal for
+this purpose." So BIP-360 activation alone would **not** give the
+network ML-DSA — Otedama's ML-DSA scaffolding is gated on a later BIP
+that does not yet exist, which *widens* the timing uncertainty here
+rather than bounding it. (Source:
+raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
 
 **Workaround:** Not applicable.
 
-**Target:** v4.0, conditional on BIP-360 activation (which has ±2-year
-timing uncertainty). Tracked by ADR-006 and the conditional-milestones
-section of ROADMAP.md.
+**Target:** v4.0 or later, gated on a future (not-yet-published) PQ
+signature BIP downstream of BIP-360 — an even more uncertain timeline
+than "BIP-360 activation" implied. Tracked by ADR-006 and the
+conditional-milestones section of ROADMAP.md.
 
 ---
 
@@ -217,6 +231,13 @@ splice during the alpha.
 
 **Target:** External-node control v3.6; embedded LDK Node sidecar v3.7
 (opt-in). Tracked by ADR-007 (Lightning capability expansion).
+**Note (session 251, verified):** LDK Node v0.7.0 (2025-12-03) is the
+current release and adds experimental channel splicing and async
+payments (on rust-lightning v0.2, MSRV rustc 1.85); BOLT12 shipped
+earlier. So the v3.7 sidecar can target LDK Node ≥ v0.7.0 — but note it
+is a Rust component (subprocess/FFI sidecar, not in-Go), which is the
+correct integration shape for a zero-Rust-dependency Go binary.
+(Source: github.com/lightningdevkit/ldk-node/releases)
 
 ---
 
@@ -563,6 +584,17 @@ via its SV1-transport-compatible endpoint instead, if it offers one.
 
 **Workaround:** Configure OCEAN (or any DATUM-only pool) via a
 Stratum V1 or V2 endpoint if the pool operator provides one.
+
+**Design note (session 251, primary-source verified):** the DATUM
+Gateway (OCEAN-xyz/datum_gateway) is **MIT-licensed**, a public
+**BETA**, requires a full Bitcoin node, and miners connect to it over
+**Stratum V1 with version-rolling (ASICBoost) — it does NOT support
+Stratum V2**. This confirms the planned implementation shape: `datum://`
+should be an **SV1-transport dialer reusing `poolproto/stratumv1`**, not
+a new binary protocol, and the MIT license means the reference
+gateway's wire format can be studied directly. (Disregard a stray
+third-party claim of GPL-3.0 — the gateway README says MIT. Source:
+raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
 
 **Target:** Tracked by `docs/adr/ADR-009` (status: Proposed — pool
 decentralization integration, covering JDC/DATUM/solo). No committed

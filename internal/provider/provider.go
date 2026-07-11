@@ -28,6 +28,28 @@
 //  3. Honour context cancellation: when ctx is cancelled, the quote
 //     channel must be closed and all goroutines must exit.
 //
+// # Which external markets fit this interface
+//
+// This interface assumes an Akash-shaped market: the user is a provider
+// whose payout is non-custodial (settles to the user's own wallet /
+// on-chain address) and whose price is discovered per-order (on-chain
+// bidding for Akash — see docs/adr/ADR-010 Feature A4). Verified during
+// the session-251 research pass, the obvious "add more GPU markets"
+// candidates do NOT fit and are deliberately out of scope:
+//
+//   - Render Network intermediates payouts centrally in RNDR tokens
+//     (burn-and-mint), and
+//   - io.net centrally determines pricing with staking-based supplier
+//     onboarding — neither exposes an open provider-side bidding/pricing
+//     API.
+//
+// Both are custodial and centrally-priced, which conflicts with ADR-001
+// (non-custodial) and CLAUDE.md's prohibition on custodial/centralized
+// components. They are recorded here so a future contributor does not
+// naively add them as Provider implementations: doing so would require a
+// custodial integration this interface is specifically shaped to avoid.
+// (Sources: github.com/rendernetwork/RNPs RNP-005; github.com/api-evangelist/io-net)
+//
 // # Revenue comparison (2026-04 estimates)
 //
 // Corrected (session 243): GPUs cannot mine Bitcoin in this codebase today

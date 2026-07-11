@@ -10,6 +10,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 251 — 関連最新論文・情報を調べて改善点を洗い出す: 2025–2026年の一次ソースでエコシステムを再検証し、陳腐化・誤記していたロードマップ／ADR／KNOWN_LIMITATIONS の記述を是正)
+
+3並列の調査エージェントが①Stratum V2/マイニング、②Akash/AI計算市場、
+③Go/セキュリティ/Lightning の各エコシステムを2025–2026年の一次ソースに
+対して再検証した。全発見を「一次ソースを実際に取得・確認済み（FETCHED）」と
+「検索スニペットのみ・未検証（SNIPPET）」に峻別し、後者はリポジトリに事実
+として書き込まず「要検証」ラベルでのみ記録した（CLAUDE.mdのURL捏造禁止規定
+に準拠。同種の捏造URL `https://otedama.io` を今月除去済み）。
+
+**ドキュメント是正（検証済み事実のみ、コード変更は`internal/provider`の
+パッケージdocコメント1件のみ）:**
+
+- **ROADMAP v3.1.0**: Akashターゲットを、2026-01-05にdeprecated/archived
+  された`akash-network/akash-api`から後継の`akash-network/chain-sdk`へ
+  訂正。入札がprovider daemonのon-chain "Bidengine"で行われる（REST一発の
+  bid submissionではない）事実を注記。
+- **ROADMAP v3.2.0**: 「SV2 SRIはalpha」という前提を、SRIがv1.11.0
+  (2026-07-08)・月次リリースに達している現状に更新（Go実装が無い点は依然
+  有効なのでOtedamaの位置付けは不変）。
+- **ROADMAP v3.5.0 / KNOWN_LIMITATIONS §5**: 「BIP-360活性化条件でML-DSA」
+  という結び付けを訂正。BIP-360はStatus: Draftのままで実体は
+  "Pay-to-Merkle-Root (P2MR)"であり、PQ署名は「別提案で行う」と本文が明記
+  ——活性化してもML-DSAは来ず、後続の未執筆BIPにgateされる。
+- **ROADMAP Track D**: Bitcoin Core v30.0の実験的IPC Mining Interface
+  （unix socket、`-DENABLE_IPC`）をノード統合のターゲットとして注記。
+- **ROADMAP v3.7 / KNOWN_LIMITATIONS §14**: DATUM GatewayがMIT・BETA・
+  SV1トランスポート（SV2非対応）であることを一次ソースで確認し、
+  `datum://`を`poolproto/stratumv1`再利用のSV1-transport dialerとして
+  実装する方針が正しいと裏付け。
+- **KNOWN_LIMITATIONS §6 / ADR-007**: LDK Node v0.7.0 (2025-12-03、
+  splicing+async payments実験対応、rustc 1.85)をv3.7組み込みサイドカーの
+  下限として記録。
+- **ADR-011（Accepted=不変 → Erratum追記）**: decred secp256k1 v4.4.1が
+  curve演算のみ提供し、SchnorrはEC-Schnorr-DCRv0（BIP-340ではない）で
+  ElligatorSwiftも無いこと、SV2が要求するellswiftには監査済みGo実装が
+  存在せず手書き移植が必要でv3.1.0見積もりが上振れすることを記録。
+- **ADR-010（Proposed）**: Feature A4を「REST sealed-bid送信」から
+  「on-chain Bidengineへ渡すbid-price policy」モデルへ再フレーム。
+  2024-25年の非定常Thompson Sampling文献を引用追加（本文は403のため
+  タイトル一致まで）。
+- **ADR-003（Accepted=不変 → Erratum追記）**: `gopkg.in/yaml.v3`が
+  2025-04-01にアーカイブ済みで、CLAUDE.md自身の依存基準3「直近1年以内の
+  メンテナンス」に違反すること、後継`go.yaml.in/yaml/v3`への移行推奨を記録。
+- **`internal/provider/provider.go`**: Render/io.netが中央集権価格・
+  カストディアル型でproviderインターフェース（非カストディ・per-order）の
+  スコープ外である旨をパッケージdocに追記（将来ナイーブに追加されるのを防ぐ）。
+- **GODEBUG_NOTES.md**: `containermaxprocs`（コンテナ対応GOMAXPROCS）が
+  Go 1.25導入だが現`toolchain go1.24.0`では未享受＝Kubernetesミナーで
+  未だ効いていない現状を明記。
+
+**依存関係・ツールチェーン更新は環境制約により保留:** `x/crypto`の
+v0.54.0バンプ、`toolchain`のgo1.25.xバンプ、yaml.v3→go.yaml.in移行の3件は
+検証済みだが、この実行環境のモジュールプロキシがchecksum DB
+（`sum.golang.org`）へのlookupをForbiddenで拒否するため`go get`が実施
+できない。RESEARCH_IMPROVEMENTS session-251にitem 1/2/3として「実施保留
+（環境制約）」で記録。x/cryptoのCVEは全て未使用の`ssh`/`openpgp`配下で
+到達不能のため、保留による実害はない。
+
+`docs/RESEARCH_IMPROVEMENTS.md`にsession-251 incrementとして全15発見を
+FETCHED/SNIPPET区分・URL付きで記録。build/vet/gofmt clean、全24パッケージ
+green（コード変更はdocコメント1件のみ）。
+
 ### Fixed (session 250 — フロントエンド〜バックエンドまで市販レベルの品質になるように: TUIがリダイレクト時にANSIエスケープを垂れ流す実バグ・`otedama service install`のログが恒久的に読めない実バグ・40カラムでプール接続状態が切り詰められる実バグ・`config show/validate --help`の誤ったヘッダーと無関係なフラグ列挙を修正)
 
 これまでの直近セッションはバックエンドのdoc正確性が中心だったため、
