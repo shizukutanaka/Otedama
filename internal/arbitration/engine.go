@@ -189,12 +189,15 @@ type Assignment struct {
 	SwitchedFromID StreamID
 	Reason         string // human-readable explanation for logging
 
-	// Held is true when a strictly higher-scoring stream was available but the
-	// device was kept on its previous one because the gain did not exceed the
-	// hysteresis margin. It distinguishes "deliberately declined a better
-	// option" (yield left on the table to avoid flapping) from "stayed because
-	// the current stream is still the best", which lets operators see whether
-	// the hysteresis margin is costing them and tune it.
+	// Held is true when a different, same-or-higher-scoring stream was
+	// available but the device was kept on its previous one because the gain
+	// (if any) did not strictly exceed the hysteresis margin — this includes
+	// the exact-tie case, where a different stream scored identically and no
+	// yield was actually left on the table, not just the case where a
+	// strictly better stream was suppressed. It distinguishes "a candidate
+	// other than the incumbent was in play" from "stayed because the current
+	// stream is unambiguously the best", which lets operators see whether the
+	// hysteresis margin is costing them and tune it.
 	Held bool
 
 	// ForegoneSatsPerSec is the raw revenue (satoshis/second) sacrificed by
