@@ -853,10 +853,46 @@ func TestOpenMiningChannel_Encode_LongUser(t *testing.T) {
 	}
 }
 
-func TestOpenMiningChannelSuccess_Encode_LongExtranonce(t *testing.T) {
-	m := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: make([]byte, 256)}
-	if _, err := m.Encode(); err == nil {
-		t.Error("Encode should reject Extranonce > 255 bytes")
+// TestOpenMiningChannelSuccess_Encode_ExtranonceB0_32Boundary pins the SV2
+// B0_32 cap on the encode side: 32 bytes is the largest conformant
+// extranonce, 33 must be rejected. (This tightened from the earlier 255-byte
+// bound when the field was corrected from B0_255 to its spec type, B0_32.)
+func TestOpenMiningChannelSuccess_Encode_ExtranonceB0_32Boundary(t *testing.T) {
+	ok := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: make([]byte, 32)}
+	if _, err := ok.Encode(); err != nil {
+		t.Errorf("Encode should accept a 32-byte extranonce (B0_32 max): %v", err)
+	}
+	tooLong := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: make([]byte, 33)}
+	if _, err := tooLong.Encode(); err == nil {
+		t.Error("Encode should reject a 33-byte extranonce (exceeds B0_32 max of 32)")
+	}
+}
+
+// TestOpenMiningChannelSuccess_Decode_LenientExtranonce documents a
+// deliberate Postel's-law asymmetry: while Encode enforces the 32-byte
+// B0_32 cap, Decode intentionally tolerates a longer (spec-violating but
+// still bounded) extranonce from a non-conformant pool rather than dropping
+// an otherwise-working connection. A hand-built frame with a 40-byte
+// extranonce must decode successfully.
+func TestOpenMiningChannelSuccess_Decode_LenientExtranonce(t *testing.T) {
+	var payload []byte
+	payload = appendU32LE(payload, 7)              // ReqID
+	payload = appendU32LE(payload, 9)              // ChannelID
+	payload = append(payload, make([]byte, 32)...) // Target (U256)
+	payload = append(payload, 40)                  // extranonce length prefix = 40 (> B0_32 max)
+	payload = append(payload, make([]byte, 40)...) // 40 extranonce bytes
+	payload = appendU16LE(payload, 4)              // ExtraNonce2Size
+
+	m, err := DecodeOpenMiningChannelSuccess(payload)
+	if err != nil {
+		t.Fatalf("Decode should tolerate a 40-byte extranonce (lenient decode): %v", err)
+	}
+	if len(m.Extranonce) != 40 {
+		t.Errorf("decoded Extranonce = %d bytes, want 40", len(m.Extranonce))
+	}
+	if m.ReqID != 7 || m.ChannelID != 9 || m.ExtraNonce2Size != 4 {
+		t.Errorf("surrounding fields mis-decoded: ReqID=%d ChannelID=%d ExtraNonce2Size=%d",
+			m.ReqID, m.ChannelID, m.ExtraNonce2Size)
 	}
 }
 

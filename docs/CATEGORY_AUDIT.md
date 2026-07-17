@@ -578,3 +578,30 @@ the binary and driving real invocations, not just reading source.
 Categories checked and found clean this round: config-validation error messages (consistently field-labeled and actionable), `doctor` output (every finding pairs with a `→ fix:` hint), documented exit-code contract (0/1/64/78, verified live), `run --help` flag descriptions (all accurate), explicit `--help` routing to stdout/exit 0 across all subcommands, flag-naming consistency across `run`/`service install`/`doctor`.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 252 update — miner + stratum wire-level correctness audit
+
+Independent audit of `internal/miner` and `internal/stratum` wire code
+(excluding `noise*`, which is CODEOWNERS-gated and covered separately),
+looking specifically for hot-path correctness and protocol-fidelity bugs.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| A | `WorkerConfig.NonceStep` field doc said "Zero is replaced with 1" but `NewWorker` resolves it to `Threads` — a trap where a future maintainer "fixing" the code to match the doc would make all `Threads` goroutines redundantly grind the identical nonce sequence, silently losing `(Threads-1)/Threads` of hash rate. Code was correct; doc was wrong. | ✅ Fixed (doc corrected to match implementation). |
+| B | `OpenMiningChannelSuccess.Extranonce` is SV2 type B0_32 (max 32 bytes) but was encoded/decoded with the B0_255 (max 255) helpers — a spec-fidelity gap, not a memory-safety bug (B0_255 is still bounded/allocation-safe). | ✅ Fixed on the encode side (new `appendB0_32` caps at 32); decode intentionally left lenient (Postel's law — accepts a longer non-conformant value rather than dropping a working connection), documented at both the field and the decode call site, and pinned by two new tests. |
+
+Verified clean by direct reading (not just doc-checking): SHA-256d
+correctness (genesis-block vector), nonce-space partitioning across
+threads, `Hash.LessOrEqual` big-endian-value target comparison, `SetWork`
+torn-read safety (whole-pointer swap under mutex, immutable `*Work`
+snapshot in `grind`), atomic stats counters (no double-count / lost
+update), STR0_255/B0_255 length-prefix bounds (no overflow, proper
+truncation handling), U24 frame-length validated against `MaxFrameSize`
+*before* allocation, `Encode`/`Decode` round-trips for every production
+SV2 message (including `NewMiningJob`'s optional `min_ntime` branch), and
+decode-error propagation (live reader terminates the session on error
+rather than feeding zero-value job data to the miner).
+
+All 24 packages build, vet, and test green.

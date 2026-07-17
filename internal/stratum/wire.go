@@ -78,6 +78,25 @@ func getB0_255(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
+// appendB0_32 appends a B0_32 (1-byte-length-prefixed byte slice, capped at
+// 32 bytes) to dst and returns the extended slice. It returns an error only
+// when v exceeds the 32-byte maximum the SV2 B0_32 type permits — a lower
+// cap than B0_255's, sharing the same 1-byte length-prefix encoding.
+//
+// There is deliberately no matching getB0_32 reader: Otedama follows
+// Postel's law on this field — strict on encode (a value we generate must
+// be spec-conformant), lenient on decode (getB0_255 accepts a 33..255-byte
+// extranonce from a non-conformant pool rather than dropping the connection
+// over a field length that is still bounded and allocation-safe). See the
+// Extranonce field comment in handshake.go.
+func appendB0_32(dst, v []byte) ([]byte, error) {
+	if len(v) > 32 {
+		return nil, fmt.Errorf("stratum: byte slice too long for B0_32 (%d > 32)", len(v))
+	}
+	dst = append(dst, byte(len(v)))
+	return append(dst, v...), nil
+}
+
 // appendU16LE appends a uint16 in little-endian order.
 func appendU16LE(b []byte, v uint16) []byte {
 	return binary.LittleEndian.AppendUint16(b, v)

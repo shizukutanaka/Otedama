@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 252 — このプロダクトの長所短所改善点を洗い出して実行: miner/stratumワイヤーコードの独立監査で見つかった2件を是正——NonceStep docの「1に置換」という将来の保守者向けの罠、およびExtranonceのB0_32仕様不適合)
+
+`internal/miner` と `internal/stratum`（noise*除く）のワイヤーレベル
+コードを独立監査した。中核ロジック（SHA-256d、nonce空間分割、target
+バイトオーダー比較、SetWorkのtorn-read防止、フレーム境界・長さプレフィックス
+の安全性、メッセージround-trip、decodeエラー伝播）はいずれも健全と確認。
+検証済みの実所見2件を修正した。
+
+- **`internal/miner/worker.go`: `WorkerConfig.NonceStep`のdocが実装と
+  矛盾していた（将来の保守者への罠）。** docは「Zero is replaced with 1」
+  と記述していたが、`NewWorker`は実際には`Threads`に解決する（`grind`は
+  スレッドiをオフセットiから開始しstepずつ進めるため、step==Threadsで
+  nonce空間が完全に分割される）。もし将来の保守者がdocに合わせて実装を
+  「1」に"修正"すると、全Threadsゴルーチンが同一のnonce列(0,1,2,...)を
+  重複走査し、ハッシュレートの(Threads-1)/Threadsを無音で失う（8コアで
+  約1/8に低下）。コードは正しくdocだけが誤りだったため、doc側を実装に
+  合わせて是正。
+
+- **`internal/stratum` の `OpenMiningChannelSuccess.Extranonce` が SV2
+  仕様のB0_32（最大32バイト）ではなくB0_255（最大255バイト）で
+  エンコード/デコードされていた。** メモリ安全性の問題ではない（B0_255
+  でも境界・確保は安全）が仕様適合性の欠陥。**Encode側**を新規
+  `appendB0_32`（`wire.go`、32バイト超を拒否）へ変更し厳格化。
+  **Decode側は意図的にB0_255のまま維持**——Postel's law（送信は厳格・
+  受信は寛容）に従い、33..255バイトの非適合extranonceを送るプールとの
+  接続を、実害なしに切断しないようにする。この非対称性は
+  `handshake.go`の`Extranonce`フィールドdocとdecode呼び出し箇所の両方に
+  明記した。回帰テストとして、Encode側の32バイト受理/33バイト拒否境界を
+  pinする`TestOpenMiningChannelSuccess_Encode_ExtranonceB0_32Boundary`と、
+  Decode側が40バイトextranonceを寛容に受理することを設計として記録する
+  `TestOpenMiningChannelSuccess_Decode_LenientExtranonce`を追加。
+  （旧テスト`TestOpenMiningChannelSuccess_Encode_LongExtranonce`は255
+  バイト境界を前提としていたため置換。）
+
+`internal/stratum`は資金に関わる領域だが、本変更の挙動変更はEncode側の
+上限厳格化（255→32、Otedamaが本番でこのメッセージをEncodeするのはテスト用
+fake poolのみ）に限られ、本番の受信経路であるDecode側の挙動は不変。
+全24パッケージgreen（`go clean -testcache && go test ./...`で確認）。
+`go vet`/`gofmt` clean。新規依存なし。
+
 ### Docs (session 251 — 関連最新論文・情報を調べて改善点を洗い出す: 2025–2026年の一次ソースでエコシステムを再検証し、陳腐化・誤記していたロードマップ／ADR／KNOWN_LIMITATIONS の記述を是正)
 
 3並列の調査エージェントが①Stratum V2/マイニング、②Akash/AI計算市場、

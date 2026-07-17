@@ -50,7 +50,13 @@ type WorkerConfig struct {
 
 	// NonceStep is the number of nonces each thread skips ahead per
 	// iteration, interleaving the nonce space across threads. Zero is
-	// replaced with 1.
+	// replaced with Threads (see NewWorker) — not 1 — so that with the
+	// default configuration every thread's nonce sequence is disjoint
+	// (thread i visits i, i+Threads, i+2*Threads, ...) rather than every
+	// thread rescanning the same sequential nonces from a different
+	// starting offset, which would silently discard most of the
+	// available hash rate (each of Threads goroutines redundantly
+	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
 
 	// DeviceID is the HAL identity of the hardware device this worker

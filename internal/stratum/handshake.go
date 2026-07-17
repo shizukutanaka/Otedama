@@ -202,10 +202,17 @@ func DecodeOpenMiningChannel(payload []byte) (OpenMiningChannel, error) {
 // OpenMiningChannelSuccess is sent by the pool to confirm the channel
 // and provide the initial difficulty target.
 type OpenMiningChannelSuccess struct {
-	ReqID           uint32   // echoes OpenMiningChannel.ReqID
-	ChannelID       uint32   // assigned by pool
-	Target          [32]byte // B0_32: initial target hash
-	Extranonce      []byte   // B0_32 (variable); may be empty
+	ReqID     uint32   // echoes OpenMiningChannel.ReqID
+	ChannelID uint32   // assigned by pool
+	Target    [32]byte // U256 (fixed 32 bytes, no length prefix): initial target hash
+	// Extranonce is B0_32 per the SV2 spec (1-byte length prefix, max 32
+	// bytes). Postel's law applies here: Encode is strict (appendB0_32
+	// rejects >32 bytes, since a value Otedama generates must be
+	// conformant), but Decode stays lenient (getB0_255 below) — a
+	// non-conformant pool sending a 33..255-byte extranonce is still
+	// bounded and allocation-safe, so we accept and use it rather than
+	// dropping an otherwise-working connection over a spec-length nit.
+	Extranonce      []byte
 	ExtraNonce2Size uint16
 }
 
@@ -215,7 +222,7 @@ func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
 	b = appendU32LE(b, m.ReqID)
 	b = appendU32LE(b, m.ChannelID)
 	b = append(b, m.Target[:]...)
-	b, err := appendB0_255(b, m.Extranonce)
+	b, err := appendB0_32(b, m.Extranonce)
 	if err != nil {
 		return nil, err
 	}
@@ -236,6 +243,9 @@ func DecodeOpenMiningChannelSuccess(payload []byte) (OpenMiningChannelSuccess, e
 	if _, err := io.ReadFull(r, m.Target[:]); err != nil {
 		return m, fmt.Errorf("stratum: OpenMiningChannelSuccess.Target: %w", err)
 	}
+	// Extranonce is spec'd B0_32, but we read it with getB0_255 on purpose
+	// (lenient decode; see the field comment above). A conformant pool
+	// never exceeds 32 bytes anyway.
 	if m.Extranonce, err = getB0_255(r); err != nil {
 		return m, err
 	}
