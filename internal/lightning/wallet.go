@@ -22,9 +22,14 @@
 //
 // # Usage
 //
-//	wm, err := NewWalletManager(dataDir, passphrase, rand.Reader)
+//	wl, err := NewEnglishWordList()
 //	if err != nil { ... }
-//	seed, err := wm.Seed()
+//	wm, err := NewWalletManager(dataDir, passphrase, nil, wl)
+//	if err != nil { ... }
+//	seed := wm.Seed() // Seed() returns a single value, not (seed, err)
+//
+// (The third argument is the entropy reader; nil selects crypto/rand.
+// The fourth is the BIP-39 word list — required, not optional.)
 //
 // If wallet.dat does not exist, NewWalletManager generates a new seed,
 // saves it, and returns the Mnemonic for the user to back up. On
