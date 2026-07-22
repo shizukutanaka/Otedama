@@ -555,6 +555,7 @@ code, or requires a product/infra decision before code can be written.**
 2. This table — triage view, points at exactly which file/line to open next.
 3. `docs/SPECIFICATION.md`'s gap table (`G1`–`G19`) — spec-vs-code discrepancies specifically.
 4. `ROADMAP.md` — confirmed vs. removed milestones, so a fix doesn't reintroduce something already rejected (e.g. plugin architecture, multi-currency).
+5. `skills/quality-pass-opus.md` / `skills/quality-pass-sonnet.md` (added session 253) — model-specific continuation playbooks: verified strengths/weaknesses, a prioritized improvement queue with blockers, the verification loop, and the working discipline this whole pass has followed. A fresh Opus or Sonnet session can read just its own file to start.
 
 ---
 

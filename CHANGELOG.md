@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 253 — 長所短所改善案を洗い出す・Opus/Sonnet用の指示書を作成: 過去チャット履歴を持たない新セッションが同じ品質規律で継続するための恒久プレイブックをskills/配下に追加)
+
+250+セッションの品質パスの知見（検証済みの長所・短所・改善案、作業規律）が
+KNOWN_LIMITATIONS / CATEGORY_AUDIT / RESEARCH_IMPROVEMENTS / CHANGELOG に分散
+していたため、**将来のOpus/Sonnetセッションがチャット履歴なしで作業を継続
+できる単一の入口**をリポジトリ本体に恒久保存した（session 248でCATEGORY_AUDIT
+を拡張したのと同じ方針: 将来セッションはチャット履歴を読めない）。
+
+配置はCLAUDE.mdの「スキルベースの反復作業はskills/配下に定義します」に従い、
+既存4スキル（tdd/code-review/security-audit/release-procedure）と同じ
+`# Skill:`ヘッダ・日本語本文形式とした。モデル別に2ファイルへ分割し、
+それぞれ単独で読める自己完結形式（新セッションは自分のファイル1つだけ読めば
+開始できる）:
+
+- **`skills/quality-pass-opus.md`**: Opus向け。共通規律（読む順序・検証済み
+  長所短所表・検証ループ・記録場所・git規律・禁止事項・完了の定義）に加え、
+  深い推論を要するタスクキュー——hmacSHA256Pooled配線判断、Noise NX/ellswift
+  実装計画（受け入れ基準=sv2-spec 04章、bitcoin-core ellswift.cベクタで
+  クロステスト）、tlsmlkemピンの設計判断起案（独断変更禁止）、資金クリティカル
+  領域の継続監査、実Akash統合設計（chain-sdk）。
+- **`skills/quality-pass-sonnet.md`**: Sonnet向け。同じ共通規律に加え、手順が
+  明確なタスクキュー——skills/のstale記述是正（メンテナ確認後）、依存3件更新
+  （モジュール取得可能な環境で）、doc相互参照検査、回帰テスト追加、
+  一次ソース検証つきリサーチ（FETCHED/SNIPPET峻別）。
+
+両ファイルとも、本パスで実証済みの事実のみを記載（憶測・未検証情報は書かない）。
+`docs/CATEGORY_AUDIT.md`の"Reading order for a fresh session"に両ファイルへの
+参照を1項目追加。
+
+本セッション中、両指示書を書くための現状調査で `skills/code-review.md` と
+`skills/security-audit.md` が存在しないパス（`internal/security/`・
+`internal/auth/`）や却下済み機能（`internal/plugin/`）・未実装のLDK決済を
+現行事実として記述している残存欠陥（session 245でCONTRIBUTING.mdから除去した
+同一クラス）を発見したが、この是正はメンテナ確認を要する挙動含みの判断のため
+今回は行わず、両指示書の短所表とタスクキューに「発見・未是正」として記録するに
+留めた。
+
+doc/スキルのみの変更。全24パッケージ build/vet/test green、gofmt clean。
+
 ### Fixed (session 252 — このプロダクトの長所短所改善点を洗い出して実行: miner/stratumワイヤーコードの独立監査で見つかった2件を是正——NonceStep docの「1に置換」という将来の保守者向けの罠、およびExtranonceのB0_32仕様不適合)
 
 `internal/miner` と `internal/stratum`（noise*除く）のワイヤーレベル
