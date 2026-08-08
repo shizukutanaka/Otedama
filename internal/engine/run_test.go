@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
+	"github.com/shizukutanaka/Otedama/internal/lightning"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
@@ -1385,6 +1387,137 @@ func TestSetupWallet_NewWalletReturnsFingerprint(t *testing.T) {
 	}
 	if !foundFP {
 		t.Errorf("new wallet should log fingerprint; got %v", logs)
+	}
+}
+
+// TestSetupWallet_NewWalletPrintsRecoveryPhrase pins the single most
+// important non-custodial guarantee: the user actually receives their
+// BIP-39 recovery phrase. The mnemonic is never written to disk and
+// cannot be derived back from the stored seed, so if this output is
+// missing the wallet is unbackupable and the funds are lost with the
+// disk. Before session 253 the engine logged "back up your recovery
+// phrase" without ever printing the phrase.
+func TestSetupWallet_NewWalletPrintsRecoveryPhrase(t *testing.T) {
+	var out bytes.Buffer
+	opts := Options{
+		WalletPassphrase: "correct-horse-battery-staple-engine-test",
+		Config:           config.Config{DataDir: t.TempDir()},
+		Output:           &out,
+	}
+	fp := setupWallet(opts, func(_, _ string) {})
+	if fp == "" {
+		t.Fatal("setupWallet returned an empty fingerprint for a new wallet")
+	}
+
+	got := out.String()
+	if got == "" {
+		t.Fatal("new wallet printed no recovery phrase: the user can never back up this wallet")
+	}
+	if !strings.Contains(got, fp) {
+		t.Errorf("recovery-phrase output should include the fingerprint %q for cross-checking; got:\n%s", fp, got)
+	}
+	// The phrase must be visibly marked as one-time, or a user may assume
+	// they can retrieve it later (they cannot).
+	if !strings.Contains(got, "SHOWN ONCE") {
+		t.Errorf("recovery-phrase output should warn that it is shown once; got:\n%s", got)
+	}
+	// DefaultEntropyBits (256) yields a 24-word mnemonic. Count the words
+	// on the phrase line rather than the whole block, which also contains
+	// prose.
+	var phraseLine string
+	for _, line := range strings.Split(got, "\n") {
+		f := strings.Fields(line)
+		if len(f) == 24 {
+			phraseLine = line
+			break
+		}
+	}
+	if phraseLine == "" {
+		t.Errorf("expected a 24-word BIP-39 phrase line in the output; got:\n%s", got)
+	}
+}
+
+// TestSetupWallet_ExistingWalletDoesNotReprintPhrase pins the other half
+// of the contract: the phrase is shown on creation only. Reprinting it on
+// every start would widen the window for shoulder-surfing and terminal
+// scrollback capture, and WalletManager cannot produce it anyway once the
+// wallet exists (Mnemonic() returns nil when IsNew() is false).
+func TestSetupWallet_ExistingWalletDoesNotReprintPhrase(t *testing.T) {
+	dir := t.TempDir()
+	pass := "correct-horse-battery-staple-engine-test"
+	nop := func(_, _ string) {}
+
+	var first bytes.Buffer
+	fp1 := setupWallet(Options{
+		WalletPassphrase: pass,
+		Config:           config.Config{DataDir: dir},
+		Output:           &first,
+	}, nop)
+	if first.Len() == 0 {
+		t.Fatal("precondition failed: first run printed no phrase")
+	}
+
+	var second bytes.Buffer
+	fp2 := setupWallet(Options{
+		WalletPassphrase: pass,
+		Config:           config.Config{DataDir: dir},
+		Output:           &second,
+	}, nop)
+	if second.Len() != 0 {
+		t.Errorf("second run reprinted the recovery phrase; got:\n%s", second.String())
+	}
+	if fp1 != fp2 {
+		t.Errorf("same wallet should yield a stable fingerprint: %q then %q", fp1, fp2)
+	}
+}
+
+// TestSetupWallet_MnemonicNeverReachesLogger pins the invariant stated in
+// internal/lightning/seed.go — the seed is "Never transmitted, logged, or
+// embedded in metrics". A mnemonic reconstructs the seed trivially, so it
+// must go to the interactive Output only, never to the structured logger,
+// which may be rotated, shipped, or aggregated off-box.
+func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
+	var out bytes.Buffer
+	var logs []string
+	setupWallet(Options{
+		WalletPassphrase: "correct-horse-battery-staple-engine-test",
+		Config:           config.Config{DataDir: t.TempDir()},
+		Output:           &out,
+	}, func(_, m string) { logs = append(logs, m) })
+
+	var phraseLine string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if len(strings.Fields(line)) == 24 {
+			phraseLine = line
+			break
+		}
+	}
+	if phraseLine == "" {
+		t.Fatal("precondition failed: no 24-word phrase was printed")
+	}
+
+	joined := strings.Join(logs, "\n")
+	for _, word := range strings.Fields(phraseLine) {
+		// Match whole words only: BIP-39 words are common English and
+		// could otherwise collide with substrings of ordinary log prose.
+		for _, logWord := range strings.Fields(joined) {
+			if logWord == word {
+				t.Fatalf("mnemonic word %q leaked into the structured logger; logs:\n%s", word, joined)
+			}
+		}
+	}
+}
+
+// TestPrintRecoveryPhrase_NoOutputCases covers the guards: a nil writer
+// (an embedder that never set Options.Output) and an empty mnemonic (an
+// existing wallet) must both be silent rather than panic.
+func TestPrintRecoveryPhrase_NoOutputCases(t *testing.T) {
+	printRecoveryPhrase(nil, lightning.Mnemonic{"abandon", "ability"}, "deadbeef")
+
+	var out bytes.Buffer
+	printRecoveryPhrase(&out, nil, "deadbeef")
+	if out.Len() != 0 {
+		t.Errorf("empty mnemonic should print nothing; got %q", out.String())
 	}
 }
 

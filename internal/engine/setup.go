@@ -13,6 +13,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"runtime"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -132,9 +133,67 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	fingerprint := wm.Fingerprint()
 	if wm.IsNew() {
 		log("info", "wallet: new wallet created — back up your recovery phrase")
+		printRecoveryPhrase(opts.Output, wm.Mnemonic(), fingerprint)
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
+}
+
+// printRecoveryPhrase writes the one-time BIP-39 recovery phrase to w.
+//
+// This is the only point at which the user can ever obtain their mnemonic.
+// lightning.WalletManager derives it during first-run creation and
+// deliberately never persists it: wallet.dat stores only the derived seed,
+// and BIP-39 derivation is one-way (PBKDF2-HMAC-SHA512, BIP-39 §"From
+// mnemonic to seed"), so the phrase cannot be reconstructed from disk
+// afterwards. If it is not shown here, the user's funds become
+// unrecoverable the moment wallet.dat is lost — which would make the
+// product's non-custodial guarantee (CLAUDE.md) untrue in practice.
+//
+// Added session 253: four places already promised this output —
+// docs/API.md ("The mnemonic is only displayed once, on first run"),
+// docs/DEPLOYMENT.md ("The mnemonic printed on first run is the canonical
+// backup"), docs/AUDIT_CHECKLIST.md item 18 ("Displayed once on stdout"),
+// and WalletManager.Mnemonic's own "Callers must present it to the user
+// immediately" — but no production code called Mnemonic(), verified by a
+// repo-wide search finding zero non-test call sites. The engine printed
+// the instruction to "back up your recovery phrase" without ever printing
+// the phrase.
+//
+// It writes to w (engine Options.Output, defaulted to os.Stdout) rather
+// than through the structured logger on purpose. internal/lightning/seed.go
+// states the seed is "Never transmitted, logged, or embedded in metrics",
+// and a mnemonic reconstructs that seed trivially, so it must not enter a
+// log sink that may be rotated, shipped, or aggregated. Writing here also
+// guarantees delivery regardless of logger configuration: with the TUI
+// active and no --log-file, the logger is logger.Discard(), so a logged
+// phrase would vanish entirely. setupWallet runs in engine.Run's Phase 1,
+// long before the TUI starts in Phase 7, so this output cannot be
+// overwritten by dashboard repaints.
+//
+// A nil writer or empty mnemonic (an existing wallet) prints nothing.
+func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint string) {
+	if w == nil || len(mnemonic) == 0 {
+		return
+	}
+	fmt.Fprintf(w, `
+========================================================================
+  WALLET RECOVERY PHRASE — SHOWN ONCE, NEVER AGAIN
+========================================================================
+
+  %s
+
+  Fingerprint: %s
+
+  Write these %d words on paper, in order, and store them somewhere
+  safe and offline. They are the ONLY way to recover your funds if
+  wallet.dat is lost or the disk fails.
+
+  This phrase is not saved to disk and is not written to any log.
+  Otedama cannot show it to you again.
+========================================================================
+
+`, mnemonic.String(), fingerprint, len(mnemonic))
 }
 
 // defaultPoolURL returns the first configured pool URL, or the built-in
