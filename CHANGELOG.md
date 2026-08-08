@@ -10,6 +10,91 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
+
+**第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
+非カストディとは「ユーザー**だけ**が資金を復元できる」ことを意味する。したがって
+「シードが端末外に出ない」だけでは要件を満たさず、**ユーザーが復元手段（BIP-39
+mnemonic）を実際に受け取れること**が成立要件になる。受け取れなければ端末故障が
+そのまま資金の永久喪失であり、約束は履行されていない。この観点でコードを検証し、
+**中核的な実装欠落**を発見した。
+
+**発見（検証済み）.** `internal/lightning/wallet.go` の `Mnemonic()` は doc で
+「Callers **must** present it to the user immediately」と明記しているにもかかわらず、
+`grep -rn "\.Mnemonic()" --include="*.go" .`（テスト除く）の結果は **0件**——
+本番コードから一度も呼ばれていなかった。唯一の生成経路である
+`internal/engine/setup.go` の `setupWallet()` は新規作成時に
+`"wallet: new wallet created — back up your recovery phrase"` とログするのみで、
+**バックアップすべきフレーズ本体を一度も出力していなかった**。さらに、既定では
+TUIが有効で `--log-file` 未指定時のロガーは `logger.Discard()` になるため、
+**この指示文すら画面にも記録にも残らない**場合があった。
+
+mnemonicはディスクに保存されず（設計通り・非カストディ不変条件）、BIP-39の
+seed導出は一方向（PBKDF2-HMAC-SHA512）であるため、**初回起動を逃すと恒久的に
+取得不能**。結果としてユーザーはウォレットのバックアップが物理的に不可能であり、
+ディスク障害＝資金の永久喪失だった。
+
+**単なる機能不足ではなく「実装を超える主張」の最重大事例.** ドキュメント4箇所が
+この出力を**既に約束していた**——`docs/API.md`「The mnemonic is only displayed
+once, on first run」、`docs/DEPLOYMENT.md`「The mnemonic printed on first run is
+the canonical backup」（かつ「紙に書け」と指示）、`docs/AUDIT_CHECKLIST.md` 項目18
+「Displayed once on stdout, never logged」（＝**実装済みとして監査項目化**）、
+および `Mnemonic()` 自身のdoc。本リポジトリが250+セッションかけて潰してきた
+欠陥クラスの中で、**対象が資金の復元可能性**である点において最も重大だった。
+なお、この欠落を検出するテストも存在しなかった
+（`grep -rn "Mnemonic" internal/engine/*_test.go` → 0件）。
+
+**是正.** `internal/engine/setup.go` に `printRecoveryPhrase` を追加し、
+`setupWallet` の `wm.IsNew()` 分岐から呼ぶようにした。設計上の要点:
+
+- **ロガーではなく `Options.Output`（既定 `os.Stdout`）へ直接書く。**
+  `internal/lightning/seed.go` の不変条件「Never transmitted, logged, or
+  embedded in metrics」に従い、seedを自明に再構成できるmnemonicをログsink
+  （ローテート・集約・外部転送されうる）に入れない。同時に、TUI有効時に
+  `logger.Discard()` でフレーズが消滅する事故も構造的に防ぐ。
+- **描画競合なし.** `setupWallet` は `engine.Run` の Phase 1、TUI起動は
+  Phase 7 であり、提示がダッシュボード再描画で上書きされることはない。
+- 出力は「一度きり・再表示不可」の明示、24語、fingerprint（`doctor` の表示と
+  突き合わせ可能）、紙・オフラインでの保管指示を含む。
+- `w == nil` または空mnemonic（既存ウォレット）では何も出力しない。
+
+**回帰テスト4件**（`internal/engine/run_test.go`。いずれも修正を外すと失敗する
+ことを確認済み——空振りテストでないことを検証した）:
+`TestSetupWallet_NewWalletPrintsRecoveryPhrase`（24語＋fingerprint＋一度きり
+警告が出る）、`TestSetupWallet_ExistingWalletDoesNotReprintPhrase`（2回目の
+起動では再表示しない＝ショルダーサーフィン/スクロールバック露出の窓を広げない）、
+`TestSetupWallet_MnemonicNeverReachesLogger`（24語のいずれもstructured logger
+に漏れない＝seed.goの不変条件を固定）、`TestPrintRecoveryPhrase_NoOutputCases`
+（nil writer・空mnemonicでpanicせず無出力）。
+
+ドキュメント側は書き換えていない——**既存の記述が初めて真になった**ためである。
+
+### Docs (session 254 — 併せて実施: skills/の陳腐化記述の是正と、未充足機能のKNOWN_LIMITATIONS記録)
+
+- **`skills/code-review.md` / `skills/security-audit.md` の存在しないパス記述を
+  是正.** 両ファイルが二重レビュー対象・深度監査対象として `internal/security/`・
+  `internal/auth/`・`internal/plugin/` を挙げていたが、いずれもCLAUDE.mdの
+  アーキテクチャマップで「存在しないパス（作成禁止）」と明記されたもの
+  （ZKP認証はv4.0スコープ、プラグイン機構はROADMAPで却下済み）。session 245 で
+  CONTRIBUTING.md から除去した同一欠陥クラスの残存だった。実CODEOWNERS対象
+  （`internal/lightning/`、`internal/stratum/noise*.go`）へ是正し、
+  `internal/lightning/` の記述も現状の実装範囲（BIP-39シードの暗号化保管のみ、
+  LDK決済は未実装）に合わせた。上記のリカバリフレーズ提示を監査重点に追加。
+- **`docs/KNOWN_LIMITATIONS.md` に §16 を追加**: `wallet` サブコマンドが存在せず、
+  (a) 書き取ったリカバリフレーズの正しさを検証する手段がない（転記ミスは無音で、
+  復旧試行時＝手遅れの時点でしか判明しない）、(b) 実装済みでテストもある
+  `ChangePassphrase` に本番導線がない、の2点を記録。CLIサブコマンド追加は
+  CLAUDE.mdのアーキテクチャマップに関わるためメンテナ判断とし、最小案
+  （mnemonicはargvではなくstdinから読む——プロセスリスト経由の漏洩回避）を併記。
+
+**補足（正直な記録）.** 本セッションでは第一原理監査を多エージェントworkflowでも
+並行実行したが、検証フェーズの全エージェントが週次APIレート上限
+（`You've hit your weekly limit`）で失敗し、gapが1件も主張されないまま
+`no-surviving-gaps` を返した。これは**発見の反証ではなく未実行**である。
+上記の発見は手動検証（7点の独立した証拠）に基づく。
+
+全24パッケージ build/vet/test green、gofmt clean、新規依存なし。
+
 ### Docs (session 253 — 長所短所改善案を洗い出す・Opus/Sonnet用の指示書を作成: 過去チャット履歴を持たない新セッションが同じ品質規律で継続するための恒久プレイブックをskills/配下に追加)
 
 250+セッションの品質パスの知見（検証済みの長所・短所・改善案、作業規律）が

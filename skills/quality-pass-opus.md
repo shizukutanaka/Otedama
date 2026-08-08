@@ -36,7 +36,8 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 | secp256k1がスタブ（decred v4はBIP-340でもellswiftでもない — EC-Schnorr-DCRv0） | 依存追加が環境制約で不可 + v3.1.0スコープ |
 | 依存陳腐化: yaml.v3アーカイブ済（後継go.yaml.in）、x/crypto 31版遅れ（CVEはssh/openpgp配下で到達不能）、toolchain 1.24（containermaxprocs未享受） | 実行環境がsum.golang.orgをForbiddenで拒否 |
 | Akash統合はシミュレーション。実APIは廃止akash-apiでなく`chain-sdk`、入札はon-chain Bidengine | v3.1.0・設計判断（ADR-010 A4再フレーム済み） |
-| skills/code-review.md・security-audit.mdに存在しないパス（`internal/security/`・`internal/auth/`）、却下済み`internal/plugin/`、未実装LDK決済の記述が残存（session 253発見） | 是正編集が未承認のまま。着手前にメンテナ確認 |
+| ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
+| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
 | DATUM未実装／ASIC検出なし／TUI 80カラム固定／CIにfuzzなし | KNOWN_LIMITATIONS §14/§8/§15/§13 |
 
 ## 2. Opus優先タスクキュー（深い推論を要するもの）

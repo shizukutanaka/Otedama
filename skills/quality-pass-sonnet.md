@@ -32,20 +32,23 @@ doc-vs-code整合性の維持**である。
 |---|---|
 | CI全Goジョブ赤（Go 1.23.x/1.21ピン vs go.modの`tlsmlkem`=Go 1.24 knob） | `.github/workflows/`へのpush権限なし |
 | 依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ・CVE到達不能／toolchain 1.24でcontainermaxprocs未享受） | 実行環境がsum.golang.orgを拒否しgo get不可 |
-| skills/code-review.md・security-audit.mdに存在しないパス・却下済み機能・未実装LDK決済の記述残存（session 253発見） | 是正編集が未承認。着手前にメンテナ確認 |
+| ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
+| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
 | Noise NX未配線／secp256k1スタブ／Akashシミュレーション／DATUM未実装 | CODEOWNERS or v3.1.0+スコープ（Opus側タスク） |
 | TUI 80カラム固定／ASIC検出なし／CIにfuzzなし | KNOWN_LIMITATIONS §15/§8/§13 |
 
 ## 2. Sonnet優先タスクキュー（手順が明確なもの）
 
-1. **skills/のstale記述是正**（メンテナ承認後）: `skills/code-review.md`
-   （二重レビュー対象に存在しない`internal/security/`・`internal/auth/`を列挙）
-   と `skills/security-audit.md`（同様 + 却下済み`internal/plugin/`のサンドボックス
-   節 + `internal/lightning/`の「LDK API使用方法レビュー・実ネットワーク決済
-   テスト必須」という未実装機能前提の記述）を、CONTRIBUTING.md session 245
-   修正文（実CODEOWNERS対象＝`internal/lightning/`と`internal/stratum/noise*`）
-   と整合させる。**着手前にこの是正の可否をユーザー/メンテナに確認すること**
-   （session 253で編集が保留された経緯あり）。
+1. ~~**skills/のstale記述是正**~~ ✅ **session 254で完了。**
+   `skills/code-review.md`・`skills/security-audit.md` が挙げていた存在しない
+   パス（`internal/security/`・`internal/auth/`）、却下済み`internal/plugin/`、
+   未実装LDK決済前提の記述を、実CODEOWNERS対象（`internal/lightning/`と
+   `internal/stratum/noise*.go`）と現状の実装範囲へ是正済み。
+   **教訓（次セッションへ）**: 同じ「実装を超える主張」クラスは、docsが
+   *約束している* 挙動をコードが持たない形でも現れる——session 254 は
+   リカバリフレーズ提示がまさにそれだった（docs 4箇所が「表示される」と
+   明記、実装は0件）。**docの主張を見つけたら、その挙動を実際に実行する
+   本番コード経路をgrepで確認する**こと。
 2. **依存3件更新**（モジュール取得可能な環境でのみ）: 順に
    `go get golang.org/x/crypto@latest` → toolchainをgo1.25.xへ →
    `gopkg.in/yaml.v3`を`go.yaml.in/yaml/v3`へ移行（import書換は
