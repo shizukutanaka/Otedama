@@ -10,6 +10,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 256 — sv2-spec を一次資料として逐条照合: **Stratum V2ハンドシェイクがワイヤ仕様と一致していなかった**——session 238は「意味」を直したが「バイト列」は未検証だった)
+
+**発見の経路.** session 255（V1）に続き、V2側を同じ問いで検証した。§11（session 238）は
+V2経路の**意味論**——どのメッセージがジョブを有効化するか、どのターゲットで採掘するか、
+どのversionを返すか——を修復した。しかしそのテストは全て
+「Otedamaのencoderが出したものをOtedamaのdecoderが読める」というラウンドトリップであり、
+**自己整合性は証明するが仕様適合は証明しない**。
+`stratum-mining/sv2-spec`（03-Protocol-Overview.md / 05-Mining-Protocol.md /
+08-Message-Types.md）を取得し、フィールド単位で照合した結果、5件の逸脱を発見した。
+うち2件はハンドシェイクを成立させない。
+
+**発見した欠陥（5件、いずれも仕様表と逐語照合済み）.**
+
+1. **`SetupConnection` に `endpoint_port`（U16）が無かった.** 仕様の並びは
+   `endpoint_host` → `endpoint_port` → vendor → hardware_version → firmware →
+   device_id。Otedamaはポートフィールドを持たず、呼び出し側は `"host:port"` 全体を
+   hostとして渡していた。適合プールはvendor文字列の2バイトをポートとして読み、
+   **以降の全フィールドがずれる**。最初のメッセージで接続が破綻する。
+2. **`OpenStandardMiningChannel` に `max_target`（U256）が無かった.** SV2は
+   固定レイアウトのバイナリであり、JSONの任意キーのようにフィールドを省略できない。
+   コメントは「preferenceを送っても死んだ設定になるので意図的に省略」と正当化していたが、
+   プール側は**32バイト足りないメッセージ**を受け取るだけである。「制約なし」は
+   沈黙ではなく**最大値のtarget**で表現する（`MaxTargetUnconstrained`）。
+3. **`OpenStandardMiningChannel.Success` の末尾を `extranonce2_size`（U16）として
+   デコードしていた**（仕様は `group_channel_id`（U32））。SV2の標準チャネルに
+   extranonce2は存在しない（coinbaseはプールが構築する）——V1の概念の誤った持ち込み。
+   実プールの `group_channel_id` の半分を読み、2バイトが未消費で残っていた。
+4. **`SubmitShares.Error` の msg_type が `0x1e`——仕様では Reserved.** 正しくは `0x1d`。
+   実プールのシェア却下は**未知フレームとして黙って捨てられていた**。却下は計上されず、
+   `rejectClass` による理由分類も、受理率警告も発火しない。
+   **100%却下されている採掘機が、自身のログとメトリクス上は「何も起きていない」ように見える**。
+5. **`SubmitShares.Success.new_shares_sum` が U32**（仕様は U64）。デコード値は切り詰められ、
+   エンコードは4バイト短いメッセージを生成していた。
+
+加えて、エンジンは `SetTarget` を**現在採掘中のジョブにも適用**していた。仕様
+（05-Mining-Protocol.md §5.3.21）はターゲット変更の適用範囲を「以後のジョブ」と
+「既受信の *future job*（min_ntime が空のもの）」に限定し、**min_ntime を伴って
+届いたジョブには適用しない**と明記する。適用してしまうと、同一シェアに対する
+プール側と採掘側の判定がずれる（緩すぎれば low-difficulty 却下、厳しすぎれば
+プールが支払ったはずのシェアを提出しない）。
+
+**是正.**
+
+- `internal/stratum/handshake.go`: `SetupConnection.EndpointHost`/`EndpointPort` に分離
+  （`SplitEndpoint` ヘルパー追加）、`OpenMiningChannel.MaxTarget` を追加（ゼロ値は
+  `MaxTargetUnconstrained`＝全0xFFとしてエンコード。全ゼロのmax_targetは
+  「ハッシュ0以外受け付けない」という誰も意図しない意味になるため）、
+  `OpenMiningChannelSuccess` を `ExtranoncePrefix` + `GroupChannelID`（U32）に是正。
+- `internal/stratum/messages.go`: `MsgSubmitSharesError` を `0x1d` へ、
+  `SubmitSharesSuccess.NewSharesSummed` を U64 へ（ペイロード20バイト）。
+- `internal/engine/run.go` / `internal/poolproto/stratumv2/dialer.go`: host/port分離に追随。
+- `internal/engine/run.go`: `SetTarget` の適用範囲を仕様どおりに限定。
+- `internal/poolproto/stratumv2/dialer.go`: 提出のシーケンス番号を採番（従来は常に0）。
+  SV2の `SubmitShares.Success` は「受理した最後のシーケンス番号」で**範囲**を確認応答するため、
+  全て0では確認応答から何も学べない（仕様は番号管理をクライアントの責務と明記）。
+
+**この欠陥クラスを今後入れないための構造.** `internal/stratum/conformance_test.go` を新設し、
+ラウンドトリップではなく**絶対レイアウト**——ペイロード総バイト数と各フィールドのオフセット、
+および全メッセージのmsg_type番号——を検証する。`SetTarget` の2件のスコープテストは、
+**修正前の実装に対して実際に失敗することを確認**してから採用した（空振りテストの排除）。
+
+**未検証として明示.** 本セッションの是正は仕様書に基づくものであり、実際の
+Braiins/DEMAND等のライブエンドポイントとの相互接続試験ではない（本実行環境からは到達不能）。
+「Stratum V2が実プールで動作する」と主張する前に、相互接続試験が誠実な次段階である。
+KNOWN_LIMITATIONS §18 に記載。
+
 ### Fixed (session 255 — 一次資料（cpuminer / node-stratum-pool）と実ブロックデータで検証: **Stratum V1採掘経路は有効なシェアを1つも生成できなかった**——session 238がV2で潰した欠陥クラスのV1版)
 
 **発見の経路.** `docs/KNOWN_LIMITATIONS.md` §2 は「V2のNoise NXが未配線である以上、

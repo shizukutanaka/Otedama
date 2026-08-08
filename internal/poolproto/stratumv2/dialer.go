@@ -84,11 +84,13 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	dec := stratum.NewDecoder(conn.raw)
 
 	// SetupConnection.
+	endpointHost, endpointPort := stratum.SplitEndpoint(conn.remoteAddr)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        conn.remoteAddr,
+		EndpointHost:    endpointHost,
+		EndpointPort:    endpointPort,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -179,6 +181,13 @@ type session struct {
 	jobsCh chan poolproto.Job
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
+
+	// seq numbers submissions within the channel. SV2's
+	// SubmitShares.Success acknowledges a *range* by reporting the last
+	// sequence number it accepted, so a client that sends 0 every time
+	// learns nothing from the acknowledgement — the spec puts the burden
+	// of keeping these useful on the client.
+	seq atomic.Uint32
 
 	startOnce sync.Once
 }
@@ -281,7 +290,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	jobID := parseJobID(sub.JobID)
 	ss := stratum.SubmitSharesStandard{
 		ChannelID:      s.chanID,
-		SequenceNumber: 0,
+		SequenceNumber: s.seq.Add(1) - 1, // first submission is sequence 0
 		JobID:          jobID,
 		Nonce:          sub.Nonce,
 		NTime:          sub.NTime,

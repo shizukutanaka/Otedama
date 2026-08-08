@@ -400,13 +400,17 @@ Decode round-trip tests for the new and corrected message types.
 **Note:** this fixes the engine's inline SV2 path (`internal/engine/run.go`,
 the one actually used today per §3 above) and mirrors the same fix into
 the `internal/poolproto/stratumv2` adapter so it does not regress once
-wired in. A related, lower-severity gap remains open and is tracked in
-`docs/RESEARCH_IMPROVEMENTS.md` Category 10 item 2: clamping the channel
-target to `max_target` on every vardiff update, which is moot for now
-since Otedama never sends a `max_target` preference to the pool in the
-first place (`OpenMiningChannel` intentionally omits it — see the field's
-removal note in `internal/stratum/handshake.go`). The Noise NX secp256k1
-gap is unrelated and already tracked at §2 above.
+wired in. The Noise NX secp256k1 gap is unrelated and already tracked at
+§2 above.
+
+**Follow-up (session 256):** session 238 fixed what the messages *mean*;
+it did not check what they *look like on the wire*. §18 below records five
+field-level deviations from the specification found afterwards — including
+two that stop the handshake outright — and the `max_target` question this
+note previously called moot: `OpenMiningChannel` now sends the field
+(it is mandatory), so the clamp discussed in
+`docs/RESEARCH_IMPROVEMENTS.md` Category 10 item 2 is no longer moot,
+though it is still not implemented.
 
 ---
 
@@ -795,6 +799,74 @@ things V1 miners commonly also do remain unimplemented and are unaffected
 by this work: version rolling (`mining.configure`/ASICBoost) and ntime
 rolling. Otedama submits the job's own version and ntime, which is valid —
 it simply searches the nonce and extranonce2 space only.
+
+---
+
+## ~~18. The Stratum V2 handshake did not match the wire specification~~ ✅ RESOLVED (session 256)
+
+**What was broken (previously undisclosed):** §11 above corrected the
+*semantics* of the V2 path — which message activates a job, which target to
+grind, which version to echo — and its tests passed because both sides of
+every test were Otedama's own encoder and decoder. Round-tripping proves
+self-consistency, not conformance. Checked field by field against
+`stratum-mining/sv2-spec`, five deviations turned up, two of which stop a
+real pool connection at the handshake:
+
+1. **`SetupConnection` omitted `endpoint_port` (U16).** The spec's field
+   order is `endpoint_host` then `endpoint_port`, then vendor, hardware
+   version, firmware, device ID. Otedama sent no port at all and passed the
+   whole `"host:port"` string as the host, so a conformant pool read two
+   bytes of the vendor string as the port and everything after it was
+   garbage. The connection cannot get past its first message.
+2. **`OpenStandardMiningChannel` omitted `max_target` (U256).** SV2 is
+   fixed-layout binary — a field cannot be left out the way an optional
+   JSON key can. The code comment justified the omission as avoiding "dead
+   configuration", but the pool is simply left 32 bytes short of a complete
+   message. "No preference" is expressed by the largest possible target,
+   not by silence.
+3. **`OpenStandardMiningChannel.Success` decoded an `extranonce2_size`
+   (U16) where the spec has `group_channel_id` (U32).** There is no
+   extranonce2 in Stratum V2 standard channels — the pool builds the
+   coinbase — so the field was a Stratum V1 concept carried across by
+   mistake. Half of a real pool's `group_channel_id` was read as that
+   field, leaving two bytes unconsumed.
+4. **`SubmitShares.Error` used msg_type `0x1e`, which is Reserved.** The
+   real value is `0x1d`. Every share rejection from a real pool arrived as
+   an unrecognised frame and was silently dropped: rejects would never be
+   counted, the reject-reason classifier could never run, and the
+   acceptance-rate warning could never fire — a miner rejecting 100% of its
+   shares would have looked, from its own logs and metrics, like a miner
+   with nothing to report.
+5. **`SubmitShares.Success.new_shares_sum` was a U32; the spec says U64.**
+   The decoded figure was truncated and the encoded message was four bytes
+   short.
+
+Separately, the engine applied a new `SetTarget` to the job it was already
+mining. The spec scopes a target change to future jobs and to
+already-received *future* jobs (those with an empty `min_ntime`), and
+explicitly not to a job that arrived with `min_ntime` set — re-targeting
+one of those makes the pool and the miner judge the same share
+differently.
+
+**Resolution:** all five wire defects fixed in `internal/stratum`
+(`handshake.go`, `messages.go`), both callers updated to split host and
+port, and `SetTarget` scoping corrected in `internal/engine/run.go`. The
+`poolproto/stratumv2` adapter additionally now numbers its submissions
+instead of sending sequence 0 forever — SV2 acknowledges a *range* of
+submissions by reporting the last sequence number accepted, which is
+meaningless if every submission claims to be number 0.
+
+**How this class of defect is kept out from now on:**
+`internal/stratum/conformance_test.go` asserts *absolute* layout — total
+payload length and the byte offset of each field — plus the message-type
+numbers, rather than only that encode and decode agree with each other.
+The two `SetTarget` scope tests were confirmed to fail against the previous
+behaviour before the fix was kept.
+
+**Still unverified against a real pool:** these fixes come from the
+specification, not from a session against live Braiins/DEMAND endpoints,
+which this environment cannot reach. Interop testing remains the honest
+next step before claiming Stratum V2 works end to end.
 
 ---
 

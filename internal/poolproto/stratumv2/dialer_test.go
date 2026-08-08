@@ -270,9 +270,9 @@ func (p *poolSide) doHandshake(channelID uint32) {
 	// Send OpenMiningChannelSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgOpenMiningChannelSuccess, false,
 		stratum.OpenMiningChannelSuccess{
-			ReqID:           1,
-			ChannelID:       channelID,
-			ExtraNonce2Size: 4,
+			ReqID:          1,
+			ChannelID:      channelID,
+			GroupChannelID: 4,
 		})
 }
 
@@ -684,7 +684,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringSetup(t *testing.T) {
 		pool.dec.ReadFrame() //nolint:errcheck
 		// Send OpenMiningChannelSuccess instead of SetupConnectionSuccess/Error.
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
-			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4})
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, GroupChannelID: 4})
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
@@ -965,7 +965,7 @@ func TestSendMsg_WriteError(t *testing.T) {
 
 	err := sendMsg(client, stratum.MsgSetupConnection, false, &stratum.SetupConnection{
 		Protocol: stratum.MiningProtocol, MinVersion: 2, MaxVersion: 2,
-		Endpoint: "x:1", Vendor: "test",
+		EndpointHost: "x:1", Vendor: "test",
 	})
 	if err == nil {
 		t.Error("sendMsg to closed conn should return error")

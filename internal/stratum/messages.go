@@ -19,7 +19,7 @@
 //	0x15  NewMiningJob           (server → client, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
-//	0x1e  SubmitSharesError      (server → client, channel_msg)
+//	0x1d  SubmitSharesError      (server → client, channel_msg)
 //
 // # Encoding conventions (from spec chapter 3)
 //
@@ -52,9 +52,16 @@ const (
 	MsgNewMiningJob             uint8 = 0x15
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
-	MsgSubmitSharesError        uint8 = 0x1e
-	MsgSetNewPrevHash           uint8 = 0x20
-	MsgSetTarget                uint8 = 0x21
+	// MsgSubmitSharesError is 0x1d. It was 0x1e here until session 256 —
+	// 0x1e is Reserved in the spec's message-type table, so a real pool's
+	// share rejection arrived as an unknown frame and was dropped: every
+	// rejected share looked like silence, and the reject-reason
+	// classification path could never fire. (0x1b is SubmitSharesExtended
+	// and 0x1f NewExtendedMiningJob, neither of which a standard channel
+	// uses.)
+	MsgSubmitSharesError uint8 = 0x1d
+	MsgSetNewPrevHash    uint8 = 0x20
+	MsgSetTarget         uint8 = 0x21
 )
 
 // Protocol identifies which sub-protocol is being negotiated.
@@ -278,40 +285,52 @@ func DecodeSubmitSharesStandard(payload []byte) (SubmitSharesStandard, error) {
 // ------------------------------------------------------------------
 
 // SubmitSharesSuccess acknowledges accepted shares.
+//
+// Wire layout: channel_id U32, last_sequence_number U32,
+// new_submits_accepted_count U32, new_shares_sum U64 — 20 bytes.
+// NewSharesSummed was a U32 here until session 256, which both truncated
+// the pool's figure and produced a 16-byte message on encode.
 type SubmitSharesSuccess struct {
 	ChannelID          uint32
 	LastSequenceNumber uint32
 	NewSubmitsAccepted uint32
-	NewSharesSummed    uint32
+	// NewSharesSummed is the sum of the difficulty of the shares
+	// acknowledged in this batch. U64 because it accumulates over a
+	// channel's lifetime.
+	NewSharesSummed uint64
 }
+
+// submitSharesSuccessLen is the exact encoded size of SubmitSharesSuccess.
+const submitSharesSuccessLen = 4 + 4 + 4 + 8
 
 // Encode serialises SubmitSharesSuccess. It is the symmetric inverse of
 // DecodeSubmitSharesSuccess, used by the server side (and tests that stand
 // in for a pool) to acknowledge accepted shares.
 func (m SubmitSharesSuccess) Encode() ([]byte, error) {
-	buf := make([]byte, 16)
+	buf := make([]byte, submitSharesSuccessLen)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
 	binary.LittleEndian.PutUint32(buf[4:8], m.LastSequenceNumber)
 	binary.LittleEndian.PutUint32(buf[8:12], m.NewSubmitsAccepted)
-	binary.LittleEndian.PutUint32(buf[12:16], m.NewSharesSummed)
+	binary.LittleEndian.PutUint64(buf[12:20], m.NewSharesSummed)
 	return buf, nil
 }
 
 // DecodeSubmitSharesSuccess parses a SubmitSharesSuccess payload.
 func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
-	if len(payload) < 16 {
-		return SubmitSharesSuccess{}, fmt.Errorf("stratum: SubmitSharesSuccess: short payload (%d < 16)", len(payload))
+	if len(payload) < submitSharesSuccessLen {
+		return SubmitSharesSuccess{}, fmt.Errorf("stratum: SubmitSharesSuccess: short payload (%d < %d)",
+			len(payload), submitSharesSuccessLen)
 	}
 	return SubmitSharesSuccess{
 		ChannelID:          binary.LittleEndian.Uint32(payload[0:4]),
 		LastSequenceNumber: binary.LittleEndian.Uint32(payload[4:8]),
 		NewSubmitsAccepted: binary.LittleEndian.Uint32(payload[8:12]),
-		NewSharesSummed:    binary.LittleEndian.Uint32(payload[12:16]),
+		NewSharesSummed:    binary.LittleEndian.Uint64(payload[12:20]),
 	}, nil
 }
 
 // ------------------------------------------------------------------
-// SubmitSharesError (server → client, msg_type 0x1e, channel_msg)
+// SubmitSharesError (server → client, msg_type 0x1d, channel_msg)
 // ------------------------------------------------------------------
 
 // SubmitSharesError is returned when the pool rejects a share.

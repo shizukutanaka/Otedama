@@ -103,9 +103,9 @@ func (fp *fakePool) serve() {
 
 	// 4. Send OpenMiningChannelSuccess
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 		// All-0xFF target = easiest possible, so the CPU will find shares.
 	}
 	for i := range omcSucc.Target {
@@ -2247,9 +2247,9 @@ func (fp *responsivePool) serve() {
 
 	// Send OpenMiningChannelSuccess with all-0xFF target (trivially easy)
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 	}
 	for i := range omcSucc.Target {
 		omcSucc.Target[i] = 0xFF
@@ -2513,5 +2513,143 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// ----- SetTarget scope (sv2-spec 05-Mining-Protocol.md §5.3.21) -----
+
+// setTargetPool is a fake SV2 pool that drives one activation sequence and
+// then sends a SetTarget, so a test can observe which jobs the new target
+// reaches. jobHasMinNtime selects the two cases the spec distinguishes:
+// a job that arrived as a *future* job (empty min_ntime, activated by
+// SetNewPrevHash) takes the new target, while a job that arrived with
+// min_ntime set keeps the target it was issued with.
+func setTargetPool(t *testing.T, jobHasMinNtime bool, newTarget [32]byte) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	send := func(conn net.Conn, msgType uint8, isChannel bool, enc interface{ Encode() ([]byte, error) }) {
+		payload, err := enc.Encode()
+		if err != nil {
+			t.Errorf("encode 0x%02X: %v", msgType, err)
+			return
+		}
+		f, err := stratum.WrapMessage(msgType, isChannel, payload)
+		if err != nil {
+			t.Errorf("wrap 0x%02X: %v", msgType, err)
+			return
+		}
+		b, err := stratum.EncodeFrame(f)
+		if err != nil {
+			t.Errorf("frame 0x%02X: %v", msgType, err)
+			return
+		}
+		_, _ = conn.Write(b)
+	}
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+
+		if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		send(conn, stratum.MsgSetupConnectionSuccess, false, stratum.SetupConnectionSuccess{UsedVersion: 2})
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+		if err != nil {
+			t.Errorf("decode OpenMiningChannel: %v", err)
+			return
+		}
+		var initialTarget [32]byte
+		initialTarget[30] = 0x0F // distinctive, and hard enough that no share is found
+		send(conn, stratum.MsgOpenMiningChannelSuccess, false, stratum.OpenMiningChannelSuccess{
+			ReqID: omc.ReqID, ChannelID: 1, Target: initialTarget,
+		})
+
+		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000004}
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		if jobHasMinNtime {
+			// Activate a first (future) job so the chain tip is known, then
+			// deliver the job under test with min_ntime already set.
+			send(conn, stratum.MsgNewMiningJob, true, job)
+			send(conn, stratum.MsgSetNewPrevHash, true, prev)
+			send(conn, stratum.MsgNewMiningJob, true, stratum.NewMiningJob{
+				ChannelID: 1, JobID: 2, Version: 0x20000004,
+				HasMinNtime: true, MinNtime: 0x60000001,
+			})
+		} else {
+			send(conn, stratum.MsgNewMiningJob, true, job)
+			send(conn, stratum.MsgSetNewPrevHash, true, prev)
+		}
+		send(conn, stratum.MsgSetTarget, true, stratum.SetTarget{ChannelID: 1, MaxTarget: newTarget})
+
+		// Hold the connection open so the engine keeps processing.
+		time.Sleep(2 * time.Second)
+	}()
+
+	return ln.Addr().String()
+}
+
+func runSetTargetSession(t *testing.T, addr string) *miner.Worker {
+	t.Helper()
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1}) // never Started: SetWork alone is observable
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	merged := make(chan miner.Share)
+	defer close(merged)
+	_ = runSession(ctx, sessionOpts{
+		poolURL:  "stratum+v2://" + addr,
+		user:     "bc1qexample",
+		workers:  []*miner.Worker{w},
+		merged:   merged,
+		interval: time.Second,
+		log:      func(_, _ string) {},
+	})
+	return w
+}
+
+func TestSetTarget_AppliesToAnActivatedFutureJob(t *testing.T) {
+	var newTarget [32]byte
+	newTarget[29] = 0x7E // distinct from the channel's initial target
+	w := runSetTargetSession(t, setTargetPool(t, false, newTarget))
+
+	work := w.CurrentWork()
+	if work == nil {
+		t.Fatal("no work was ever assigned")
+	}
+	if work.Target != miner.Hash(newTarget) {
+		t.Errorf("Target = %x, want the SetTarget value %x:\n"+
+			"a job received with an empty min_ntime takes the new target", work.Target, newTarget)
+	}
+}
+
+func TestSetTarget_DoesNotRetargetAJobThatArrivedActive(t *testing.T) {
+	var newTarget [32]byte
+	newTarget[29] = 0x7E
+	w := runSetTargetSession(t, setTargetPool(t, true, newTarget))
+
+	work := w.CurrentWork()
+	if work == nil {
+		t.Fatal("no work was ever assigned")
+	}
+	if work.JobID != 2 {
+		t.Fatalf("worker is on job %d, want the min_ntime job 2", work.JobID)
+	}
+	if work.Target == miner.Hash(newTarget) {
+		t.Error("job 2 was re-targeted: the spec fixes the target of a job " +
+			"received with min_ntime set, so the pool and the miner would " +
+			"judge the same share differently")
 	}
 }

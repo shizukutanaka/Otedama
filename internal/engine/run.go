@@ -882,12 +882,21 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.SetTarget != nil {
 				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
-				if active != nil && havePrev {
-					// Re-issue the current job so workers compare against
-					// the new share target immediately.
+				// A new target applies to jobs received from now on, and to
+				// already-received *future* jobs (those that arrived with an
+				// empty min_ntime). It explicitly does NOT apply to a job
+				// that arrived with min_ntime set: the spec fixes that job's
+				// target for its lifetime, so re-targeting it would make the
+				// pool and the miner judge the same share differently — too
+				// easy a target produces low-difficulty rejections, too hard
+				// a one silently withholds shares the pool would have paid
+				// for. (sv2-spec 05-Mining-Protocol.md §5.3.21.)
+				if active != nil && havePrev && !active.HasMinNtime {
 					startJob(active, activeNTime)
+					opts.log("info", "engine: share target updated by pool; active future job re-targeted")
+				} else {
+					opts.log("info", "engine: share target updated by pool; applies from the next job")
 				}
-				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
 				opts.log("info", "engine: share accepted")
@@ -1178,11 +1187,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // did not assign one; the caller falls back to the block target.
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
+	endpointHost, endpointPort := stratum.SplitEndpoint(host)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        host,
+		EndpointHost:    endpointHost,
+		EndpointPort:    endpointPort,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",

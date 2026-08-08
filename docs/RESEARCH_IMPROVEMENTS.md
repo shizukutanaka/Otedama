@@ -534,11 +534,20 @@ endpoint against current vendor documentation. Tags as before
    MaxTarget}`; the engine's session loop updates the live share target
    and re-issues the active job so workers compare against it immediately.
    The clamp-to-`[min, max_target]` behavior this item originally asked
-   for is not yet implemented — Otedama accepts whatever target the pool
-   sends outright, since `OpenMiningChannel`'s `max_target` preference
-   field is intentionally not sent (see the dead-field note removed from
-   `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
-   message is no longer silently unrecognised, which was the blocking gap.
+   for is still not implemented — Otedama accepts whatever target the pool
+   sends outright — but the two reasons previously given for that are gone:
+   the message is no longer silently unrecognised (session 238), and
+   `OpenMiningChannel` now actually sends `max_target` (session 256; the
+   field is mandatory in the fixed binary layout, so omitting it was a
+   malformed message rather than a declined preference). What remains is
+   the clamp itself, plus deciding what value Otedama should advertise —
+   today it sends "unconstrained" (all 0xFF).
+
+   Related, and fixed in session 256: the engine applied a `SetTarget` to
+   the job it was already mining. §5.3.21 scopes a target change to future
+   jobs and to already-received *future* jobs (empty `min_ntime`) only —
+   a job that arrived with `min_ntime` set keeps its target, or pool and
+   miner grade the same share differently.
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization

@@ -642,3 +642,44 @@ and ntime rolling.
 
 All 24 packages build, vet, and test green; `-race` green on the changed
 packages.
+
+---
+
+## Session 256 update — Stratum V2 wire-format conformance audit
+
+Follow-on from session 255's V1 audit, applying the same question to V2:
+does what we put on the wire match the specification? Session 238 fixed
+the V2 path's semantics, but its tests were round trips through Otedama's
+own codec — a property that stays green no matter how far the layout
+drifts from the spec. Checked field by field against
+`stratum-mining/sv2-spec` (03-Protocol-Overview.md, 05-Mining-Protocol.md,
+08-Message-Types.md). Narrative in `docs/KNOWN_LIMITATIONS.md` §18.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| B | `SetupConnection` omitted `endpoint_port` (U16) and callers passed `"host:port"` as the host. Every field after it shifts, so a conformant pool cannot parse the first message of the connection. | ✅ Fixed (`EndpointHost`/`EndpointPort` + `SplitEndpoint`; both callers updated). |
+| B | `OpenStandardMiningChannel` omitted the mandatory `max_target` (U256) — 32 bytes short of a complete message. The omission was documented as deliberate ("dead configuration"), which mistakes a fixed binary layout for an optional JSON key. | ✅ Fixed (`MaxTarget`, zero value encoded as `MaxTargetUnconstrained` = all 0xFF, since an all-zero max_target asks for an impossible target). |
+| B | `OpenStandardMiningChannel.Success` decoded a U16 `extranonce2_size` — a Stratum V1 concept absent from V2 — where the spec has `group_channel_id` (U32). | ✅ Fixed (`ExtranoncePrefix` + `GroupChannelID`). |
+| B | `SubmitShares.Error` used msg_type `0x1e`, which the spec marks Reserved; the real value is `0x1d`. Pool rejections arrived as unknown frames and were dropped, so rejects were never counted and the reject-reason classifier could never run. | ✅ Fixed (0x1d, with the reasoning recorded at the constant). |
+| B | `SubmitShares.Success.new_shares_sum` was U32; the spec says U64. Decoded values truncated, encoded messages four bytes short. | ✅ Fixed (U64, 20-byte payload). |
+| E | The engine applied a new `SetTarget` to the job already being mined. §5.3.21 scopes it to future jobs and to already-received *future* jobs (empty `min_ntime`) only — re-targeting an active job makes pool and miner judge the same share differently. | ✅ Fixed (re-target only when the active job arrived as a future job; two tests, both confirmed failing against the previous behaviour first). |
+| D | The `poolproto/stratumv2` adapter sent `sequence_number: 0` on every submission. SV2 acknowledges a *range* via `last_sequence_number`, and the spec makes numbering the client's responsibility. | ✅ Fixed (per-channel counter). |
+
+Verified conformant by direct comparison, not assumed: the frame header
+layout (extension_type U16 / msg_type U8 / msg_length U24), the
+channel_msg bit being bit 15 with channel_id as the first four payload
+bytes, `SetupConnection.Success`/`.Error`, `SetNewPrevHash`,
+`NewMiningJob` (including the `min_ntime` OPTION encoding and the absence
+of an nBits field), `SetTarget`, `SubmitSharesStandard`, and every
+remaining msg_type number.
+
+Structural change to keep this class out: `internal/stratum/conformance_test.go`
+asserts absolute layout — payload length and per-field offsets — plus the
+msg_type table, instead of only encode/decode agreement.
+
+Not claimed: interop against a live SV2 pool. These fixes come from the
+specification; this environment cannot reach Braiins/DEMAND endpoints, so
+interop testing remains the honest next step (§18).
+
+All 24 packages build, vet, and test green; `-race` green on the changed
+packages.
