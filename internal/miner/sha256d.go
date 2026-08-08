@@ -25,6 +25,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 )
 
@@ -86,8 +87,9 @@ type Hash [32]byte
 func (h Hash) String() string { return hex.EncodeToString(h[:]) }
 
 // LessOrEqual reports whether h is numerically less than or equal to other.
-// Both hashes are treated as big-endian 256-bit unsigned integers,
-// which is Bitcoin's convention for comparing hash values to targets.
+// Both values use the Hash type's little-endian byte order — the
+// most-significant byte is at index 31 (matching raw SHA256d output and
+// TargetFromNBits) — so the comparison walks from index 31 down to 0.
 func (h Hash) LessOrEqual(other Hash) bool {
 	for i := 31; i >= 0; i-- {
 		if h[i] < other[i] {
@@ -139,6 +141,14 @@ func TargetFromNBits(nBits uint32) (Hash, error) {
 	}
 	if exp < 3 {
 		return Hash{}, fmt.Errorf("miner: nBits 0x%08X exponent %d is below minimum 3", nBits, exp)
+	}
+	// A zero mantissa yields an all-zero target, which no hash can ever meet
+	// (hash <= 0 is effectively impossible). Such a job would make the worker
+	// grind forever finding nothing, with no error — a silent dead end. A
+	// legitimate pool never sends this; reject it like any other malformed
+	// nBits so applyJob/updateWork surface it instead of mining into the void.
+	if mant == 0 {
+		return Hash{}, fmt.Errorf("miner: nBits 0x%08X has zero mantissa (target would be zero; no hash can meet it)", nBits)
 	}
 
 	// Build a *big.Int: mantissa * 2^(8*(exp-3))
@@ -192,6 +202,48 @@ func NBitsFromTarget(target Hash) uint32 {
 		mant = uint32(b[0])<<16 | uint32(b[1])<<8 | uint32(b[2])
 	}
 	return uint32(exp)<<24 | mant
+}
+
+// diff1Target is the Bitcoin "difficulty 1" target — the target nBits
+// 0x1d00ffff encodes (mantissa 0xffff, exponent 0x1d), which is also the
+// genesis block's target. Every Stratum share difficulty is defined
+// relative to this same constant.
+var diff1Target = new(big.Int).Lsh(big.NewInt(0xffff), 208) // 8*(0x1d-3)
+
+// TargetFromDifficulty converts a Stratum V1 pool-assigned share difficulty
+// into a 32-byte target in the same little-endian byte order TargetFromNBits
+// produces (MSB at index 31), so the two are directly comparable via
+// Hash.LessOrEqual and interchangeable as a Work.Target.
+//
+// Stratum V1 difficulty is fractional in practice: pools assign shares far
+// easier than network difficulty (e.g. 0.001) so low-hashrate miners submit
+// a share every few seconds instead of waiting for an actual block solve.
+// The conversion is target = diff1Target / difficulty, computed with
+// big.Float to preserve that fractional precision before truncating to an
+// integer target — a plain integer division would round tiny difficulties
+// (which produce a target close to diff1Target) to nothing useful, or a
+// naive float64 division would lose precision at the low bits of diff1Target.
+func TargetFromDifficulty(difficulty float64) (Hash, error) {
+	if !(difficulty > 0) || math.IsInf(difficulty, 0) {
+		return Hash{}, fmt.Errorf("miner: invalid difficulty %v", difficulty)
+	}
+	q := new(big.Float).SetPrec(256).SetInt(diff1Target)
+	q.Quo(q, big.NewFloat(difficulty))
+	target, _ := q.Int(nil)
+	if target.Sign() <= 0 {
+		return Hash{}, fmt.Errorf("miner: difficulty %v produces a non-positive target", difficulty)
+	}
+	b := target.Bytes()
+	if len(b) > 32 {
+		return Hash{}, fmt.Errorf("miner: difficulty %v target overflows 256 bits", difficulty)
+	}
+	var be Hash
+	copy(be[32-len(b):], b)
+	var out Hash
+	for i := 0; i < 32; i++ {
+		out[i] = be[31-i]
+	}
+	return out, nil
 }
 
 // MeetsTarget reports whether the given hash value meets the difficulty

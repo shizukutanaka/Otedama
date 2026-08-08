@@ -55,6 +55,20 @@ func TestSystemdUnitPath_CreatesDirectory(t *testing.T) {
 	}
 }
 
+func TestSystemdUnitPath_ErrorsWhenHomeUnset(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd paths are Linux-specific")
+	}
+	// os.UserHomeDir() fails on Unix when $HOME is empty (e.g. a minimal
+	// container or a systemd context with no HOME). systemdUnitPath must
+	// surface that error rather than building a path under "".
+	t.Setenv("HOME", "")
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	if _, err := m.systemdUnitPath(); err == nil {
+		t.Error("systemdUnitPath should return an error when $HOME is unset")
+	}
+}
+
 // ============================================================================
 // launchdPlistPath
 // ============================================================================
@@ -82,6 +96,20 @@ func TestLaunchdPlistPath_UsesLibraryLaunchAgents(t *testing.T) {
 	}
 }
 
+func TestLaunchdPlistPath_ErrorsWhenHomeUnset(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.UserHomeDir reads USERPROFILE on Windows, not HOME")
+	}
+	// The method is not OS-gated (only its caller is), so its $HOME error
+	// path is exercisable on any Unix. A missing HOME must produce an error,
+	// not a path rooted at "/Library/LaunchAgents".
+	t.Setenv("HOME", "")
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	if _, err := m.launchdPlistPath(); err == nil {
+		t.Error("launchdPlistPath should return an error when $HOME is unset")
+	}
+}
+
 // ============================================================================
 // systemdUnit content — security hardening assertions
 // ============================================================================
@@ -99,6 +127,19 @@ func TestSystemdUnit_HasSecurityHardening(t *testing.T) {
 		if !strings.Contains(unit, line) {
 			t.Errorf("systemd unit missing security line: %q", line)
 		}
+	}
+}
+
+// TestSystemdUnit_ReadWritePathsMatchesDataDir pins the fix for a real bug:
+// ProtectHome=read-only blocks writes anywhere under $HOME, including the
+// wallet.dat the service must create at startup, unless the unit also
+// carves out an explicit ReadWritePaths= exception for the configured data
+// directory.
+func TestSystemdUnit_ReadWritePathsMatchesDataDir(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama", dataDir: "/home/alice/.local/share/otedama"}
+	unit := m.systemdUnit()
+	if !strings.Contains(unit, "ReadWritePaths=/home/alice/.local/share/otedama") {
+		t.Errorf("systemd unit missing ReadWritePaths for the configured data dir:\n%s", unit)
 	}
 }
 
@@ -176,6 +217,26 @@ func TestLaunchdPlist_HasLogPaths(t *testing.T) {
 	}
 }
 
+// TestLaunchdPlist_LogsUnderLibraryLogsNotTmp pins the fix for a real
+// exposure: launchd previously logged to world-readable /tmp/otedama.log
+// and /tmp/otedama.err, so any local user on the machine could read a
+// running service's stdout/stderr (potentially including worker/pool
+// activity and error detail). Logs now go under the standard per-user
+// macOS location, ~/Library/Logs, not /tmp.
+func TestLaunchdPlist_LogsUnderLibraryLogsNotTmp(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	plist := m.launchdPlist()
+	if strings.Contains(plist, "/tmp/otedama") {
+		t.Errorf("plist still logs to world-readable /tmp:\n%s", plist)
+	}
+	if !strings.Contains(plist, filepath.Join("Library", "Logs", "otedama.log")) {
+		t.Errorf("plist missing expected Library/Logs/otedama.log path:\n%s", plist)
+	}
+	if !strings.Contains(plist, filepath.Join("Library", "Logs", "otedama.err")) {
+		t.Errorf("plist missing expected Library/Logs/otedama.err path:\n%s", plist)
+	}
+}
+
 func TestLaunchdPlist_ProgramArgumentsNonEmpty(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama", configPath: "/tmp/c.yaml"}
 	plist := m.launchdPlist()
@@ -235,7 +296,7 @@ func TestNewManager_ResolvesSymlinks(t *testing.T) {
 	// should be the canonical (non-symlink) path. We cannot easily mock
 	// os.Executable, so we just verify that the path is absolute and
 	// refers to an existing file.
-	m, err := NewManager("/tmp/cfg.yaml", "/tmp/data")
+	m, err := NewManager("/tmp/cfg.yaml", "/tmp/data", ServiceFlags{})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -279,7 +340,7 @@ func TestWindowsService_NotLinuxOrDarwin(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("only meaningful on Windows")
 	}
-	m, err := NewManager("", "")
+	m, err := NewManager("", "", ServiceFlags{})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}

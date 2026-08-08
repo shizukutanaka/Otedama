@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -72,7 +72,7 @@ func (r *Registry) Drivers() []Driver {
 	for name := range r.drivers {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	result := make([]Driver, 0, len(names))
 	for _, name := range names {
@@ -170,18 +170,27 @@ func (d *detector) Detect(ctx context.Context) ([]Device, error) {
 	}()
 
 	var all []Device
-	for res := range resultsCh {
-		if res.err != nil && d.logger != nil {
-			d.logger(res.driver, "enumerate failed", res.err)
-		}
-		for _, dev := range res.devices {
-			if err := dev.Identity().Validate(); err != nil {
-				if d.logger != nil {
-					d.logger(res.driver, "device rejected due to invalid identity", err)
-				}
-				continue
+loop:
+	for {
+		select {
+		case res, ok := <-resultsCh:
+			if !ok {
+				break loop
 			}
-			all = append(all, dev)
+			if res.err != nil && d.logger != nil {
+				d.logger(res.driver, "enumerate failed", res.err)
+			}
+			for _, dev := range res.devices {
+				if err := dev.Identity().Validate(); err != nil {
+					if d.logger != nil {
+						d.logger(res.driver, "device rejected due to invalid identity", err)
+					}
+					continue
+				}
+				all = append(all, dev)
+			}
+		case <-ctx.Done():
+			break loop
 		}
 	}
 

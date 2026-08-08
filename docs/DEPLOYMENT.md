@@ -145,15 +145,11 @@ Pull the official image (built from `Dockerfile`):
 docker pull ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
 ```
 
-Images are built on distroless base (~15MB) and signed with cosign.
-Verify before running:
-
-```bash
-cosign verify \
-  --certificate-identity-regexp 'https://github.com/shizukutanaka/Otedama/.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
-```
+Images are built on a distroless base. Cosign/Sigstore image signing is
+**not yet implemented** — it is a planned v3.1.0 item
+(`ROADMAP.md` "Real protocols"; no current workflow signs images). Do not
+rely on `cosign verify` until that ships; verify provenance via the
+GitHub Actions build log in the meantime.
 
 ### Run
 
@@ -164,9 +160,16 @@ docker run -d \
   -v otedama-data:/var/lib/otedama \
   -p 127.0.0.1:9090:9090 \
   -e OTEDAMA_BITCOIN_ADDRESS=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
+  -e OTEDAMA_DATA_DIR=/var/lib/otedama \
   ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1 \
   run --http-addr=0.0.0.0:9090
 ```
+
+`OTEDAMA_DATA_DIR` must point at the mounted volume — without it, Otedama
+falls back to its OS-default data directory (`config.DefaultDataDir()`),
+which inside the container is not the volume you mounted, so the
+Lightning wallet would be written to the container's writable layer and
+lost on recreate.
 
 ### docker-compose.yaml
 
@@ -181,6 +184,7 @@ services:
     environment:
       OTEDAMA_BITCOIN_ADDRESS: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
       OTEDAMA_LOG_FORMAT: json
+      OTEDAMA_DATA_DIR: /var/lib/otedama
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -240,6 +244,8 @@ spec:
             secretKeyRef:
               name: otedama-secrets
               key: wallet-passphrase
+        - name: OTEDAMA_DATA_DIR
+          value: /var/lib/otedama
         ports:
         - name: metrics
           containerPort: 9090
@@ -315,11 +321,18 @@ spec:
 
 All exported metrics live under the `otedama_` prefix:
 
-- `otedama_hashrate_hashes_per_second{device}` — gauge, live hash rate
+- `otedama_hashrate_hashes_per_second` — gauge, live aggregate hash rate
 - `otedama_shares_total{status}` — counter, shares submitted/accepted/rejected
-- `otedama_pool_latency_ms{pool}` — gauge, TCP RTT to pool
-- `otedama_arbitration_switches_total{from,to}` — counter, workload reroutes
+- `otedama_pool_connection_state` — gauge, 0=disconnected, 1=connecting, 2=connected
+- `otedama_submit_latency_milliseconds{quantile}` — gauge, share submit round-trip time (p50/p95/p99)
+- `otedama_arbitration_switches_total` — counter, workload reroutes (mining ↔ AI)
 - `otedama_btc_usd_rate` — gauge, current BTC/USD rate from provider consensus
+
+See docs/SPECIFICATION.md §6 for the full, CI-verified metric catalogue
+(`internal/engine.TestMetricsDocumentedInSpecification` fails the build if a
+registered metric is undocumented there). This section is a curated subset
+for dashboard/alert authors and is not itself CI-checked, so if in doubt
+trust docs/SPECIFICATION.md §6.
 
 ### Dashboards
 
@@ -338,7 +351,7 @@ Minimal alert set:
     summary: "Otedama instance {{ $labels.instance }} is down"
 
 - alert: OtedamaPoolDisconnected
-  expr: otedama_pool_latency_ms == 0
+  expr: otedama_pool_connection_state == 0
   for: 10m
   annotations:
     summary: "Otedama lost pool connection on {{ $labels.instance }}"

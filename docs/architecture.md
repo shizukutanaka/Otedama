@@ -4,6 +4,19 @@
 
 This document provides a detailed technical architecture of Otedama v3.0, explaining the rationale behind design decisions, the division of responsibilities among components, primary data flows, and justifications for technology choices.
 
+> **本書の位置づけについて（session 243で追記）**
+>
+> 以下の記述は目標アーキテクチャであり、v3.0.0-alpha.1の実装状況を大きく上回っています。現時点の正確な実装範囲は `CLAUDE.md` のアーキテクチャマップと `docs/KNOWN_LIMITATIONS.md` を正とします。主な乖離点は次のとおりです。
+>
+> - パッケージ名は `internal/providers/`（複数形）ではなく `internal/provider/`（単数形）。`providers/mining/`・`providers/ai/`・`providers/render/`・`providers/scientific/` という個別サブパッケージは存在しない。
+> - 収益源は実装済み2系統のみ：Stratum V2/V1経由の実ビットコイン採掘と、Akashを模したシミュレーション価格によるAI推論見積もり。分散レンダリング（Render Network）と科学計算（BOINC互換）は`CLAUDE.md`が明示するv4.0スコープで、コードは一切存在しない。
+> - HALには`asic.Driver`・`cuda.Driver`・`rocm.Driver`・`cpu.Driver`という個別ドライバは存在しない。実際は`GPULinuxDriver`（Linux sysfs DRM検出のみ、コンピュートディスパッチなし）と`internal/engine`内の`cpuDriver`のみ。ASICドライバは存在しない。
+> - `internal/lightning/`はBIP-39シードの生成・暗号化保管のみを提供する。LDK統合、チャネル管理、自動決済、LSP連携は実装されていない。
+> - `internal/observability/`というパッケージは存在しない。メトリクス・ログはそれぞれ`internal/metrics/`・`internal/logger/`・`internal/httpserver/`に分散しており、分散トレーシング（OpenTelemetry）は実装されていない。
+> - gRPC/RESTの「API層」は存在しない。外部からの制御は`internal/httpserver/`が提供する`/healthz`・`/readyz`・`/metrics`のみ。
+>
+> **On this document's status (added session 243):** the description below is a target architecture that substantially exceeds what v3.0.0-alpha.1 actually implements. `CLAUDE.md`'s architecture map and `docs/KNOWN_LIMITATIONS.md` are authoritative for current-state scope. Key divergences: the package is `internal/provider/` (singular), not `internal/providers/`, with no `mining/`/`ai/`/`render/`/`scientific/` subpackages; only two revenue streams are implemented (real Stratum V2/V1 Bitcoin mining, and simulated-price AI inference quoting), while distributed rendering and BOINC-style scientific computing are explicitly v4.0-scoped in `CLAUDE.md` and have zero code; HAL has no `asic.Driver`/`cuda.Driver`/`rocm.Driver`/`cpu.Driver` — only `GPULinuxDriver` (Linux sysfs GPU detection, no compute dispatch) and an internal `cpuDriver`, with no ASIC driver at all; `internal/lightning/` only generates and stores an encrypted BIP-39 seed (no LDK, no channels, no automated payments); there is no `internal/observability/` package (metrics/logging live in `internal/metrics/`, `internal/logger/`, `internal/httpserver/`, and there is no distributed tracing); and there is no gRPC/REST API layer — external control is limited to `internal/httpserver/`'s `/healthz`, `/readyz`, and `/metrics`.
+
 ## アーキテクチャ原則 / Architectural Principles
 
 Otedamaのアーキテクチャは、本プロジェクトの三つの設計原則に基づいています。John Carmackの「測定可能なパフォーマンスを設計時点から組み込む」原則、Robert C. Martinの「境界と依存方向を明示する」クリーンアーキテクチャ、Rob Pikeの「少数の直交する抽象で全体を構成する」簡潔性です。これらの原則は標語ではなく、以降の全ての構成要素に具体的に反映されています。

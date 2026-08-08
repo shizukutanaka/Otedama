@@ -78,6 +78,18 @@ func TestShortenURL_VeryShort(t *testing.T) {
 	}
 }
 
+func TestShortenURL_MaxLenTooSmall(t *testing.T) {
+	// maxLen < 4 would produce a negative slice index (maxLen-3 < 0).
+	// shortenURL must return the original URL rather than panic.
+	url := "https://pool.example.com"
+	for _, max := range []int{0, 1, 2, 3} {
+		got := shortenURL(url, max)
+		if got != url {
+			t.Errorf("shortenURL(url, %d) = %q, want original url", max, got)
+		}
+	}
+}
+
 // ============================================================================
 // defaultSatsPerHash
 // ============================================================================
@@ -105,7 +117,7 @@ func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 	line := d.poolLine(Stats{
 		PoolURL:   "stratum+v2://example.com:3336",
 		Connected: false,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "disconnected") {
 		t.Errorf("disconnected pool line missing 'disconnected': %q", line)
 	}
@@ -118,12 +130,38 @@ func TestDashboard_PoolLineWhenConnected(t *testing.T) {
 		PoolURL:     "stratum+v2://example.com:3336",
 		Connected:   true,
 		PoolLatency: 42 * time.Millisecond,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "connected") {
 		t.Errorf("connected line missing 'connected': %q", line)
 	}
 	if !strings.Contains(line, "42ms") {
 		t.Errorf("connected line missing latency '42ms': %q", line)
+	}
+}
+
+// TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth pins the fix
+// for a real bug: poolLine used to reserve a hardcoded 40-column budget
+// for the pool URL regardless of the actual terminal width, so at the
+// documented 40-column minimum (SetWidth's floor) the "  Pool: " prefix
+// plus the URL alone already exceeded the whole line width — writeLine's
+// right-side truncation then cut the line before the connection status
+// (the single most important thing this line conveys) was ever reached.
+// poolLine must now size the URL budget from cols so status is never lost.
+func TestDashboard_PoolLine_ConnectionStatusSurvivesNarrowWidth(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	const cols = 40 // documented minimum, see SetWidth
+	line := d.poolLine(Stats{
+		PoolURL:   "stratum+v2://a-very-long-pool-hostname.example.com:3336",
+		Connected: true,
+	}, cols)
+	// Simulate writeLine's own truncation, since poolLine's output alone
+	// (before writeLine) is what must already fit.
+	if visibleLen(line) > cols {
+		line = truncateVisible(line, cols)
+	}
+	if !strings.Contains(line, "connected") {
+		t.Errorf("connection status truncated away at %d cols: %q", cols, line)
 	}
 }
 
@@ -150,7 +188,7 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 2.5e6, Devices: 3, SharesFound: 42, SharesSent: 40,
-	})
+	}, d.cols)
 	if !strings.Contains(line, "2.50 MH/s") {
 		t.Errorf("miningLine missing hashrate: %q", line)
 	}
@@ -162,12 +200,65 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	}
 }
 
+func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 0, Devices: 1, Stalled: true,
+	}, d.cols)
+	if !strings.Contains(line, "stalled") {
+		t.Errorf("miningLine with Stalled=true missing stall indicator: %q", line)
+	}
+}
+
+func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 1e9, Devices: 2, Stalled: false,
+	}, d.cols)
+	if strings.Contains(line, "stalled") {
+		t.Errorf("miningLine with Stalled=false should not show stall indicator: %q", line)
+	}
+}
+
+func TestDashboard_MiningLine_CurtailedShowsPausedNotStalled(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 0, Devices: 1, Curtailed: true,
+	}, d.cols)
+	if !strings.Contains(line, "paused") {
+		t.Errorf("miningLine with Curtailed=true missing paused indicator: %q", line)
+	}
+	// A deliberate pause must NOT be rendered as a fault stall.
+	if strings.Contains(line, "stalled") {
+		t.Errorf("curtailed miningLine must not show 'stalled' (it is not a fault): %q", line)
+	}
+}
+
+func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
+	// If both flags were ever set, curtailment (deliberate) is the explanation
+	// shown — never the misleading fault badge.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.miningLine(Stats{
+		HashRate: 0, Devices: 1, Curtailed: true, Stalled: true,
+	}, d.cols)
+	if !strings.Contains(line, "paused") {
+		t.Errorf("curtailed+stalled miningLine should show paused: %q", line)
+	}
+	if strings.Contains(line, "stalled") {
+		t.Errorf("curtailed+stalled miningLine must not show stalled: %q", line)
+	}
+}
+
 func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	line := d.earningsLine(Stats{
-		HashRate:        1e9, // 1 GH/s
-		TotalSatsEarned: 1234,
+		HashRate:      1e9, // 1 GH/s
+		EstSatsEarned: 1234,
 	})
 	if !strings.Contains(line, "sats/day") {
 		t.Errorf("earningsLine missing sats/day: %q", line)
@@ -280,6 +371,24 @@ func TestDashboard_DoubleStop_IsSafe(t *testing.T) {
 	}
 }
 
+// TestDashboard_StopDoesNotRaceRenderLoop pins the fix for a genuine data
+// race: Stop() used to close doneCh and immediately write to w itself
+// (showCursor/Fprintln) without waiting for a concurrently in-flight
+// render() call — started by the ticker case in renderLoop — to finish
+// its own writes to the same io.Writer first. Driving ticks right up to
+// the moment Stop is called maximizes the chance of catching the race
+// under `go test -race`.
+func TestDashboard_StopDoesNotRaceRenderLoop(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.Start()
+	for i := 0; i < 5; i++ {
+		d.Update(Stats{HashRate: float64(i) * 1e6, Devices: 1})
+		time.Sleep(2 * time.Millisecond)
+	}
+	d.Stop() // must not race renderLoop's writes to buf
+}
+
 // ============================================================================
 // FormatHashRate — boundary cases
 // ============================================================================
@@ -373,6 +482,16 @@ func TestVisibleLen_MultipleEscapeSequences(t *testing.T) {
 	want := len("ERROR: something went wrong")
 	if got := visibleLen(s); got != want {
 		t.Errorf("visibleLen = %d, want %d; input: %q", got, want, s)
+	}
+}
+
+func TestVisibleLen_NonColorCSITerminator(t *testing.T) {
+	// A non-'m' CSI sequence (here "\x1b[2J", clear-screen) must terminate
+	// at its final byte 'J' so the trailing visible text is still counted.
+	// The old logic only reset on 'm' and would swallow "DONE".
+	s := "\x1b[2JDONE"
+	if got := visibleLen(s); got != len("DONE") {
+		t.Errorf("visibleLen(%q) = %d, want %d", s, got, len("DONE"))
 	}
 }
 

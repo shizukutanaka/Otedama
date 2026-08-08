@@ -111,6 +111,31 @@ output, level filtering, structured attributes. No external dep.
 malicious, or larger. A strict rule is simpler than case-by-case
 judgement.
 
+## Erratum (added session 251, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the text above stands, but
+one fact in the dependency rationale (list item 2: "`gopkg.in/yaml.v3` —
+Maintained by go-yaml project, stable since 2020") is now out of date and
+needs a correction pointer rather than a silent edit.
+
+The `go-yaml/yaml` source repository was **archived by its author on
+2025-04-01** and is now unmaintained. The YAML organization took over as
+the successor at import path **`go.yaml.in/yaml`**, where **v1/v2/v3 are
+frozen to security-fixes-only** and active development is in **v4**
+(`go.yaml.in/yaml/v4`). Sources: github.com/go-yaml/yaml,
+github.com/yaml/go-yaml, pkg.go.dev/go.yaml.in/yaml/v4.
+
+Consequence for policy: this dependency now **fails CLAUDE.md's own
+§外部依存 criterion 3** ("meaningful maintenance activity within the last
+year"). No CVE against `v3.0.1` was found — the concern is maintenance
+status, not an active vulnerability. **Recommended action (deferred to a
+change that can fetch modules):** migrate to the near-drop-in,
+YAML-org-maintained `go.yaml.in/yaml/v3` and record the selection
+rationale in `go.mod`. Migration was scoped but not performed in session
+251 because this environment's module proxy denies the checksum-database
+lookup (`sum.golang.org` returns Forbidden), so `go get` cannot verify the
+new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model

@@ -22,6 +22,11 @@ This product includes software developed by third parties:
     BSD 3-Clause License
     https://pkg.go.dev/golang.org/x/crypto
 
+  golang.org/x/sys (indirect, via golang.org/x/crypto)
+    Copyright 2009 The Go Authors
+    BSD 3-Clause License
+    https://pkg.go.dev/golang.org/x/sys
+
   gopkg.in/yaml.v3
     Copyright 2011-2019 Canonical Ltd
     MIT License and Apache 2.0

@@ -34,6 +34,8 @@ go 1.22
 toolchain go1.24.0
 
 godebug (
+    panicnil=0
+    randautoseed=1
     tlsmlkem=1
 )
 ```
@@ -61,6 +63,21 @@ As of 2026-04-30:
   renamed `tlsmlkem` in Go 1.24 when the construction was
   standardized; our `toolchain go1.24.0` therefore requires the new
   name (the old name is an "unknown godebug" build error on 1.24).
+
+- **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
+  a synthetic non-nil error from `panic(nil)`, rather than reverting
+  to the pre-1.21 "recover() sees nil" behavior. Otedama's own code
+  never calls `panic(nil)`, and no known transitive dependency does
+  either, so this pin has no observable effect today — it is set
+  explicitly so a future dependency change cannot silently flip our
+  effective behavior on a `go` directive bump.
+
+- **`randautoseed=1`** — keep Go 1.20+'s auto-seeding of `math/rand`
+  from a cryptographically random source (rather than the historical
+  fixed seed 1). Otedama does not rely on `math/rand`'s determinism
+  for anything security-relevant (`crypto/rand` is used there;
+  `math/rand/v2` only for non-security uses), so this pin also has no
+  observable effect today — same visibility rationale as `panicnil`.
 
 ## Knobs we may need in the next 10 years
 
@@ -104,13 +121,6 @@ not need to know.
 - Otedama impact: theoretical only.
 - Removal risk: medium-term (Go 1.27+).
 
-### `randautoseed` — controls automatic math/rand seeding
-
-Go 1.20+ auto-seeds `math/rand` from a cryptographically random
-source. Code that relied on the old fixed seed (1) is broken. We
-do not — we use `crypto/rand` for anything security-relevant and
-`math/rand/v2` for non-security uses. No knob needed.
-
 ### `containermaxprocs` — `GOMAXPROCS` from container limits
 
 Go 1.25 introduced container-aware `GOMAXPROCS` defaults so that
@@ -119,23 +129,21 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- Otedama impact: positive — fixes a class of "miner saturates
-  noisy-neighbor pod limit" reports we expect from Kubernetes
-  users.
+- **Not yet in effect (verified session 251):** `go.mod` still pins
+  `toolchain go1.24.0`, which predates this feature — so the
+  container-aware default is **not compiled into current builds**.
+  A Kubernetes miner today still sees the host's full core count. This
+  benefit only materializes once the `toolchain` line is bumped to
+  go1.25.x (per the quarterly-toolchain policy above; go1.24.0 is now
+  over a year old). The bump was scoped but not performed in session
+  251 because this environment's module proxy denies the Go toolchain
+  download (`sum.golang.org` Forbidden). Tracked in
+  RESEARCH_IMPROVEMENTS session-251 item 3.
+- Otedama impact: positive once the toolchain bump lands — fixes a
+  class of "miner saturates noisy-neighbor pod limit" reports we
+  expect from Kubernetes users.
 - Removal risk: very low — this is a fix, not a deprecation. The
   knob to revert (`containermaxprocs=0`) will exist for years.
-
-### `panicnil` — `panic(nil)` panics non-nil error
-
-Go 1.21 changed `recover()` to return a synthetic non-nil error
-when code does `panic(nil)`. Some libraries that detect "panic
-happened but value was nil" need adjustment. Otedama's code never
-calls `panic(nil)`; we may need this only if a transitive
-dependency does (none known).
-
-- Added: Go 1.21 (Aug 2023).
-- Otedama impact: none.
-- Removal risk: low.
 
 ### `winreadlinkvolume` — Windows symlink target paths
 
@@ -150,10 +158,14 @@ does, document the knob here.
 ### `fips140` — FIPS 140-3 compliance mode
 
 Go 1.24 introduced `fips140=on` which restricts crypto algorithms
-to the validated subset. Otedama uses ChaCha20-Poly1305 (not FIPS-
-listed); enabling FIPS would break our wallet encryption. **Do
-not enable.** Document for users who ask: Otedama is not FIPS-
-compliant by design — see `docs/THREAT_MODEL.md` for the rationale.
+to the validated subset. Otedama's Stratum V2 Noise NX transport
+(`internal/stratum/noise.go`) uses ChaCha20-Poly1305 (not FIPS-
+listed); enabling FIPS would break it. (The wallet's own encryption,
+`internal/lightning/seedstore.go`, uses AES-256-GCM, which *is*
+FIPS-140 validated — this knob is about the Noise transport, not
+wallet-at-rest encryption.) **Do not enable.** Document for users
+who ask: Otedama is not FIPS-compliant by design — see
+`docs/THREAT_MODEL.md` for the rationale.
 
 - Added: Go 1.24.
 - Otedama impact: opting in would break us.

@@ -35,8 +35,21 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 )
+
+// DefaultPoolURL is the built-in fallback Stratum V2 pool, used when the
+// user has configured no pools of their own. It is the single source of
+// truth for that endpoint: the engine (defaultPoolURL/poolURLs), the CLI
+// startup banner, and the doctor reachability check all reference this
+// constant rather than repeating the literal, so the default can never
+// drift out of sync between subsystems.
+const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
 
 // Config is the complete runtime configuration for Otedama.
 //
@@ -53,13 +66,25 @@ type Config struct {
 	// time; malformed addresses cause Load to return an error.
 	BitcoinAddress string `yaml:"bitcoin_address"`
 
+	// BitcoinAddresses is an optional ordered list of additional payout
+	// addresses used for failover. If the active address cannot be used
+	// to establish a mining session (e.g. a pool rejects it), Otedama
+	// rotates to the next address in this list. BitcoinAddress is always
+	// tried first; these follow in order. All entries are validated like
+	// BitcoinAddress. Earnings only ever go to whichever address actually
+	// establishes a session, so a network outage never silently redirects
+	// payouts.
+	BitcoinAddresses []string `yaml:"bitcoin_addresses"`
+
 	// Pools is the list of mining pools to connect to, in order of
 	// preference. Otedama connects to the first and uses subsequent
 	// entries for failover.
 	//
-	// If empty, Otedama uses its built-in list of recommended Stratum V2
-	// pools (Braiins, DEMAND, OCEAN, Luxor). This default prioritizes
-	// decentralization and non-custodial payouts.
+	// If empty, Otedama falls back to the single built-in default pool,
+	// DefaultPoolURL — not a curated list. There is no built-in
+	// multi-pool recommendation list today; users who want failover
+	// across specific pools (e.g. Braiins, DEMAND, OCEAN, Luxor) must
+	// list them explicitly here.
 	Pools []PoolConfig `yaml:"pools"`
 
 	// Workers controls how Otedama names itself to pools. If empty,
@@ -68,7 +93,8 @@ type Config struct {
 
 	// Language is the IETF BCP 47 language tag for UI messages and logs,
 	// for example "en", "ja", "zh-CN". If empty, Otedama detects the
-	// language from the operating system.
+	// language from the POSIX locale environment (LC_ALL, LC_MESSAGES,
+	// LANG), falling back to English.
 	Language string `yaml:"language"`
 
 	// LogLevel is one of "debug", "info", "warn", "error". If empty,
@@ -87,6 +113,72 @@ type Config struct {
 	//   macOS:   $HOME/Library/Application Support/Otedama
 	//   Windows: %APPDATA%\Otedama
 	DataDir string `yaml:"data_dir"`
+
+	// ArbitrationHysteresisPct is the minimum fractional yield improvement
+	// required to switch a device from its current workload (mining → AI or
+	// vice versa). A value of 0.05 means a switch only happens when the new
+	// workload earns at least 5% more. Higher values reduce oscillation on
+	// noisy price feeds; lower values react faster to price changes.
+	//
+	// Valid range: [0.0, 1.0). The default 0.05 (5%) is a safe operating
+	// point that prevents thrashing without meaningfully delaying profitable
+	// switches. Set via OTEDAMA_ARBITRATION_HYSTERESIS_PCT or config file.
+	ArbitrationHysteresisPct float64 `yaml:"arbitration_hysteresis_pct"`
+
+	// CurtailBelowBTCUSD pauses all hashing workers when the BTC/USD rate
+	// falls below this threshold. Workers resume automatically when the rate
+	// recovers (on the next pool notify, up to ~60 s). This is the
+	// electricity-tariff curtailment hook: set it to your break-even price
+	// so Otedama stops mining when it becomes unprofitable.
+	//
+	// 0 disables the feature (default). Negative values are rejected by
+	// Validate(). Set via OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
+	CurtailBelowBTCUSD float64 `yaml:"curtail_below_btc_usd"`
+
+	// MinYieldSatsPerSec is a per-device profitability floor in satoshis per
+	// second: the arbitration engine leaves a device idle when none of its
+	// compatible revenue streams clears this rate, rather than running it for a
+	// trickle of revenue that does not justify the power, wear, and heat.
+	//
+	// It complements CurtailBelowBTCUSD: curtailment pauses *all* hashing on a
+	// global BTC-price threshold, whereas this idles only the individual devices
+	// whose best available workload is below the floor — useful on mixed rigs
+	// where a weak device should stop while stronger ones keep earning.
+	//
+	// 0 disables the floor (default): every positive-yield stream qualifies.
+	// Negative values are rejected by Validate(). Set via
+	// OTEDAMA_MIN_YIELD_SATS_PER_SEC or config file.
+	MinYieldSatsPerSec float64 `yaml:"min_yield_sats_per_sec"`
+
+	// PowerWatts is the user's estimated total system power draw in watts.
+	// When set (> 0), Otedama computes and exposes
+	// `otedama_joules_per_terahash` (J/TH), the single efficiency metric
+	// miners optimise for. J/TH = PowerWatts × 1e12 / HashesPerSecond.
+	// Power measurement from hardware sensors is not yet available; this
+	// field lets users enter their measured TDP or wall-meter reading.
+	//
+	// 0 disables the metric (default). Negative values are rejected.
+	// Set via OTEDAMA_POWER_WATTS or config file.
+	PowerWatts float64 `yaml:"power_watts"`
+
+	// ElectricityPricePerKWh is the user's electricity price in USD per
+	// kilowatt-hour. Together with PowerWatts it lets Otedama expose
+	// `otedama_power_cost_usd_per_hour` (= PowerWatts/1000 × price), the cost
+	// half of the profitability picture: combined with the BTC/USD rate and
+	// the revenue metrics, an operator can see net profit, not just gross
+	// yield or efficiency. This is the economic dimension the engine otherwise
+	// lacks — "valuable" workload selection is measured in gross sats, but what
+	// the operator keeps is revenue minus power cost.
+	//
+	// 0 disables the cost metric (default). Negative values are rejected.
+	// Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
+	ElectricityPricePerKWh float64 `yaml:"electricity_price_per_kwh"`
+
+	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP
+	// endpoints (see internal/httpserver), for example "127.0.0.1:9090".
+	// Empty (default) disables the HTTP server entirely.
+	// Set via --http-addr, OTEDAMA_HTTP_ADDR, or config file.
+	HTTPAddr string `yaml:"http_addr"`
 }
 
 // PoolConfig describes a single mining pool connection.
@@ -96,13 +188,37 @@ type PoolConfig struct {
 	// protocol version.
 	URL string `yaml:"url"`
 
-	// User is the username or wallet identifier sent during authentication.
-	// If empty, Otedama uses the BitcoinAddress as the user.
+	// User is the Stratum user_identity sent when opening the mining
+	// channel. If empty, Otedama uses the active payout address (suffixed
+	// with the worker name as "address.worker" when Workers.Name is set);
+	// if non-empty, it overrides that entirely.
 	User string `yaml:"user"`
 
-	// Password is the pool password. Most pools accept any value (often "x");
-	// some use it for difficulty hints. If empty, "x" is sent.
+	// Password is the pool password, sent in the Stratum V1
+	// mining.authorize call (engine.runSessionV1; resolved session 235 —
+	// see docs/KNOWN_LIMITATIONS.md §10). The Stratum V2 transport has
+	// no password concept, so this field only applies to V1 connections.
+	// Most V1 pools accept any value (often "x").
 	Password string `yaml:"password"`
+
+	// PayoutScheme is the pool's reward distribution method, used by
+	// `doctor` to surface its variance/custody trade-offs. Valid values:
+	// "fpps" (Full Pay Per Share — smooth payouts, pool absorbs variance),
+	// "pplns" (Pay Per Last N Shares — lower fee, miner absorbs variance),
+	// "tides" (Transparent Index of Distinct Extended Shares, OCEAN —
+	// non-custodial coinbase payouts, best alignment with Otedama's stance),
+	// "solo" (full block reward or nothing). Empty means unknown/unset.
+	// This field has no effect on the mining protocol.
+	PayoutScheme string `yaml:"payout_scheme"`
+
+	// TLSCAFile is an optional path to a PEM file of certificate authorities
+	// to trust for this pool's stratum+tls:// connection, in addition to the
+	// system root store. Use it for a pool that presents a private-CA or
+	// self-signed certificate, so the connection can be verified rather than
+	// either failing or being run in the clear. Empty means "system roots
+	// only". It has no effect on non-TLS schemes. Certificate verification is
+	// always performed; this never disables it.
+	TLSCAFile string `yaml:"tls_ca_file"`
 }
 
 // WorkerConfig controls how Otedama identifies itself to pools.
@@ -119,13 +235,17 @@ type WorkerConfig struct {
 // variables, and config files are overlaid.
 func Defaults() Config {
 	return Config{
-		BitcoinAddress: "",
-		Pools:          nil, // resolved from built-in recommendations at startup
-		Workers:        WorkerConfig{},
-		Language:       "", // resolved from OS locale at startup
-		LogLevel:       "info",
-		LogFormat:      "text",
-		DataDir:        "", // resolved from XDG/platform conventions at startup
+		BitcoinAddress:           "",
+		Pools:                    nil, // resolved from built-in recommendations at startup
+		Workers:                  WorkerConfig{},
+		Language:                 "", // resolved from POSIX locale env at startup
+		LogLevel:                 "info",
+		LogFormat:                "text",
+		DataDir:                  "", // resolved from XDG/platform conventions at startup
+		ArbitrationHysteresisPct: 0.05,
+		CurtailBelowBTCUSD:       0,  // disabled by default
+		MinYieldSatsPerSec:       0,  // disabled by default
+		HTTPAddr:                 "", // HTTP server disabled by default
 	}
 }
 
@@ -134,13 +254,61 @@ func Defaults() Config {
 // A FlagValues with all-empty fields means "no flags were provided";
 // such a FlagValues does not override any other layer. This is the
 // invariant that makes the precedence model work cleanly.
+//
+// Config-file loading is the caller's responsibility (before calling
+// Resolve). FlagValues intentionally does not carry a config-file path
+// because Resolve receives an already-decoded Config value, not a path.
 type FlagValues struct {
 	BitcoinAddress string
 	LogLevel       string
 	LogFormat      string
 	Language       string
 	DataDir        string
-	ConfigFile     string
+	HTTPAddr       string
+}
+
+// ValueOrigin indicates which configuration layer provided a particular value.
+type ValueOrigin uint8
+
+const (
+	OriginDefault ValueOrigin = iota // built-in default (lowest priority)
+	OriginFile                       // YAML configuration file
+	OriginEnv                        // environment variable
+	OriginFlag                       // command-line flag (highest priority)
+)
+
+// String returns the human-readable label used in "config show --origin" output.
+func (o ValueOrigin) String() string {
+	switch o {
+	case OriginFile:
+		return "file"
+	case OriginEnv:
+		return "env"
+	case OriginFlag:
+		return "flag"
+	default:
+		return "default"
+	}
+}
+
+// Origins records which layer provided each Config field.
+// A field set to OriginDefault means no higher-priority layer overrode the
+// built-in value.
+type Origins struct {
+	BitcoinAddress           ValueOrigin
+	BitcoinAddresses         ValueOrigin
+	Pools                    ValueOrigin
+	WorkerName               ValueOrigin
+	Language                 ValueOrigin
+	LogLevel                 ValueOrigin
+	LogFormat                ValueOrigin
+	DataDir                  ValueOrigin
+	ArbitrationHysteresisPct ValueOrigin
+	CurtailBelowBTCUSD       ValueOrigin
+	MinYieldSatsPerSec       ValueOrigin
+	PowerWatts               ValueOrigin
+	ElectricityPricePerKWh   ValueOrigin
+	HTTPAddr                 ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -153,29 +321,139 @@ type FlagValues struct {
 // Resolve does not perform validation of the resulting Config; call
 // Config.Validate separately once all layers have been combined.
 func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
+	cfg, _ := ResolveWithOrigins(fromFile, env, flags)
+	return cfg
+}
+
+// numericEnvVars is the single source of truth for the OTEDAMA_* float
+// environment variables: the key and how to apply a parsed value. Both
+// ResolveWithOrigins (which applies them) and EnvWarnings (which reports
+// malformed ones) iterate this slice, so the set parsed and the set validated
+// can never drift apart.
+var numericEnvVars = []struct {
+	key   string
+	apply func(cfg *Config, o *Origins, v float64)
+}{
+	{"OTEDAMA_ARBITRATION_HYSTERESIS_PCT", func(c *Config, o *Origins, v float64) {
+		c.ArbitrationHysteresisPct = v
+		o.ArbitrationHysteresisPct = OriginEnv
+	}},
+	{"OTEDAMA_MIN_YIELD_SATS_PER_SEC", func(c *Config, o *Origins, v float64) {
+		c.MinYieldSatsPerSec = v
+		o.MinYieldSatsPerSec = OriginEnv
+	}},
+	{"OTEDAMA_CURTAIL_BELOW_BTC_USD", func(c *Config, o *Origins, v float64) {
+		c.CurtailBelowBTCUSD = v
+		o.CurtailBelowBTCUSD = OriginEnv
+	}},
+	{"OTEDAMA_POWER_WATTS", func(c *Config, o *Origins, v float64) {
+		c.PowerWatts = v
+		o.PowerWatts = OriginEnv
+	}},
+	{"OTEDAMA_ELECTRICITY_PRICE_PER_KWH", func(c *Config, o *Origins, v float64) {
+		c.ElectricityPricePerKWh = v
+		o.ElectricityPricePerKWh = OriginEnv
+	}},
+}
+
+// EnvWarnings returns human-readable warnings for environment variables that
+// are set but cannot be applied — currently, numeric OTEDAMA_* variables whose
+// value does not parse as a float. Such a variable is silently ignored during
+// resolution (the prior layer's value stands), so without this an operator's
+// typo (e.g. OTEDAMA_POWER_WATTS=300w, or a comma decimal "300,5") would vanish
+// with no feedback. If env is nil the process environment is consulted, exactly
+// as ResolveWithOrigins does. The CLI prints these to stderr before running.
+func EnvWarnings(env map[string]string) []string {
+	getEnv := func(key string) string {
+		if env != nil {
+			return env[key]
+		}
+		return os.Getenv(key)
+	}
+	var warnings []string
+	for _, spec := range numericEnvVars {
+		v := getEnv(spec.key)
+		if v == "" {
+			continue
+		}
+		if _, err := strconv.ParseFloat(v, 64); err != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v))
+		}
+	}
+	return warnings
+}
+
+// ResolveWithOrigins is identical to Resolve but also returns an Origins
+// value indicating which layer provided each Config field. This powers
+// "otedama config show --origin".
+func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues) (Config, Origins) {
 	cfg := Defaults()
+	var o Origins
 
 	// Layer 1: config file overrides defaults where set.
 	if fromFile.BitcoinAddress != "" {
 		cfg.BitcoinAddress = fromFile.BitcoinAddress
+		o.BitcoinAddress = OriginFile
+	}
+	if len(fromFile.BitcoinAddresses) > 0 {
+		cfg.BitcoinAddresses = fromFile.BitcoinAddresses
+		o.BitcoinAddresses = OriginFile
 	}
 	if len(fromFile.Pools) > 0 {
 		cfg.Pools = fromFile.Pools
+		o.Pools = OriginFile
 	}
 	if fromFile.Workers.Name != "" {
 		cfg.Workers.Name = fromFile.Workers.Name
+		o.WorkerName = OriginFile
 	}
 	if fromFile.Language != "" {
 		cfg.Language = fromFile.Language
+		o.Language = OriginFile
 	}
 	if fromFile.LogLevel != "" {
 		cfg.LogLevel = fromFile.LogLevel
+		o.LogLevel = OriginFile
 	}
 	if fromFile.LogFormat != "" {
 		cfg.LogFormat = fromFile.LogFormat
+		o.LogFormat = OriginFile
 	}
 	if fromFile.DataDir != "" {
 		cfg.DataDir = fromFile.DataDir
+		o.DataDir = OriginFile
+	}
+	// ArbitrationHysteresisPct: 0.0 in the file is indistinguishable from
+	// "unset" at the Go level, so we treat any non-default file value as an
+	// explicit override. Users who genuinely want 0.0 must use the env var.
+	if fromFile.ArbitrationHysteresisPct != 0 {
+		cfg.ArbitrationHysteresisPct = fromFile.ArbitrationHysteresisPct
+		o.ArbitrationHysteresisPct = OriginFile
+	}
+	// CurtailBelowBTCUSD: same zero-value caveat; treat non-zero file value
+	// as an explicit override.
+	// MinYieldSatsPerSec: same zero-value caveat; treat non-zero file value as
+	// an explicit override.
+	if fromFile.MinYieldSatsPerSec != 0 {
+		cfg.MinYieldSatsPerSec = fromFile.MinYieldSatsPerSec
+		o.MinYieldSatsPerSec = OriginFile
+	}
+	if fromFile.CurtailBelowBTCUSD != 0 {
+		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
+		o.CurtailBelowBTCUSD = OriginFile
+	}
+	if fromFile.PowerWatts != 0 {
+		cfg.PowerWatts = fromFile.PowerWatts
+		o.PowerWatts = OriginFile
+	}
+	if fromFile.ElectricityPricePerKWh != 0 {
+		cfg.ElectricityPricePerKWh = fromFile.ElectricityPricePerKWh
+		o.ElectricityPricePerKWh = OriginFile
+	}
+	if fromFile.HTTPAddr != "" {
+		cfg.HTTPAddr = fromFile.HTTPAddr
+		o.HTTPAddr = OriginFile
 	}
 
 	// Layer 2: environment variables override config file.
@@ -187,38 +465,117 @@ func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
 	}
 	if v := getEnv("OTEDAMA_BITCOIN_ADDRESS"); v != "" {
 		cfg.BitcoinAddress = v
+		o.BitcoinAddress = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
+		o.LogLevel = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_LOG_FORMAT"); v != "" {
 		cfg.LogFormat = v
+		o.LogFormat = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_LANGUAGE"); v != "" {
 		cfg.Language = v
+		o.Language = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
 		cfg.DataDir = v
+		o.DataDir = OriginEnv
+	}
+	if v := getEnv("OTEDAMA_HTTP_ADDR"); v != "" {
+		cfg.HTTPAddr = v
+		o.HTTPAddr = OriginEnv
+	}
+	for _, spec := range numericEnvVars {
+		v := getEnv(spec.key)
+		if v == "" {
+			continue
+		}
+		// A malformed value is left for EnvWarnings to surface; here it is
+		// simply not applied (the default/file/earlier-layer value stands).
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			spec.apply(&cfg, &o, f)
+		}
 	}
 
 	// Layer 3: flags override environment variables.
 	if flags.BitcoinAddress != "" {
 		cfg.BitcoinAddress = flags.BitcoinAddress
+		o.BitcoinAddress = OriginFlag
 	}
 	if flags.LogLevel != "" {
 		cfg.LogLevel = flags.LogLevel
+		o.LogLevel = OriginFlag
 	}
 	if flags.LogFormat != "" {
 		cfg.LogFormat = flags.LogFormat
+		o.LogFormat = OriginFlag
 	}
 	if flags.Language != "" {
 		cfg.Language = flags.Language
+		o.Language = OriginFlag
 	}
 	if flags.DataDir != "" {
 		cfg.DataDir = flags.DataDir
+		o.DataDir = OriginFlag
+	}
+	if flags.HTTPAddr != "" {
+		cfg.HTTPAddr = flags.HTTPAddr
+		o.HTTPAddr = OriginFlag
 	}
 
-	return cfg
+	// Layer 4: OS-appropriate default when no higher-priority layer set an
+	// explicit DataDir. This is what actually implements the per-platform
+	// paths documented on Config.DataDir's doc comment; without it, a user
+	// who never passes --data-dir/OTEDAMA_DATA_DIR/data_dir gets an empty
+	// DataDir, which silently disables Lightning wallet initialisation
+	// (engine.setupWallet treats "" as "no data dir configured" and skips
+	// it entirely — see docs/KNOWN_LIMITATIONS.md). o.DataDir intentionally
+	// stays OriginDefault (its zero value) in this case.
+	if cfg.DataDir == "" {
+		cfg.DataDir = DefaultDataDir()
+	}
+
+	return cfg, o
+}
+
+// DefaultDataDir returns the OS-appropriate default directory for
+// Otedama's persistent data (Lightning wallet, known pool keys, usage
+// statistics), used when DataDir is not explicitly configured via flag,
+// env, or config file:
+//
+//	Linux:   $XDG_DATA_HOME/otedama or $HOME/.local/share/otedama
+//	macOS:   $HOME/Library/Application Support/Otedama
+//	Windows: %APPDATA%\Otedama
+//
+// Returns "" if the platform's base directory cannot be determined (for
+// example, no home directory and no APPDATA), in which case the caller
+// must treat data persistence — including the Lightning wallet — as
+// unavailable until a data dir is configured explicitly.
+func DefaultDataDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Otedama")
+		}
+		return ""
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(home, "Library", "Application Support", "Otedama")
+	default: // linux and other Unix-likes
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			return filepath.Join(xdg, "otedama")
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(home, ".local", "share", "otedama")
+	}
 }
 
 // Validate checks that the Config is self-consistent and ready for use.
@@ -229,10 +586,21 @@ func Resolve(fromFile Config, env map[string]string, flags FlagValues) Config {
 func (c Config) Validate() error {
 	var issues []string
 
-	if c.BitcoinAddress == "" {
+	if c.BitcoinAddress == "" && len(c.BitcoinAddresses) == 0 {
 		issues = append(issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
-	} else if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
-		issues = append(issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
+	} else if c.BitcoinAddress != "" {
+		if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
+			issues = append(issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
+		}
+	}
+	// Validate every failover address too, so a typo in a backup is caught
+	// at config time rather than only when failover actually reaches it.
+	for i, a := range c.BitcoinAddresses {
+		if a == "" {
+			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] is empty", i))
+		} else if err := validateBitcoinAddress(a); err != nil {
+			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] invalid: %v", i, err))
+		}
 	}
 
 	switch c.LogLevel {
@@ -245,12 +613,48 @@ func (c Config) Validate() error {
 		issues = append(issues, fmt.Sprintf("log_level %q is not one of debug, info, warn, error", c.LogLevel))
 	}
 
+	switch c.LogFormat {
+	case "text", "json":
+		// ok
+	case "":
+		// empty is unreachable post-Resolve (defaults supply "text").
+	default:
+		issues = append(issues, fmt.Sprintf("log_format %q is not one of text, json", c.LogFormat))
+	}
+
 	for i, p := range c.Pools {
 		if p.URL == "" {
 			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
 		} else if err := validatePoolURL(p.URL); err != nil {
 			issues = append(issues, fmt.Sprintf("pools[%d].url invalid: %v", i, err))
 		}
+		switch p.PayoutScheme {
+		case "", "fpps", "pplns", "tides", "solo":
+			// valid
+		default:
+			issues = append(issues, fmt.Sprintf("pools[%d].payout_scheme %q is not one of fpps, pplns, tides, solo", i, p.PayoutScheme))
+		}
+	}
+
+	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
+		issues = append(issues, fmt.Sprintf(
+			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+	}
+	if c.CurtailBelowBTCUSD < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+	}
+	if c.MinYieldSatsPerSec < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+	}
+	if c.PowerWatts < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+	}
+	if c.ElectricityPricePerKWh < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
 	}
 
 	if len(issues) == 0 {
@@ -275,22 +679,26 @@ func validateBitcoinAddress(addr string) error {
 	// enabled via a separate configuration option (not yet wired in v3.0.0-alpha).
 	switch {
 	case strings.HasPrefix(addr, "1"):
-		return nil
 	case strings.HasPrefix(addr, "3"):
-		return nil
 	case strings.HasPrefix(addr, "bc1"):
-		return nil
 	default:
 		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}
+	// Verify the address checksum (bech32/bech32m for bc1…, Base58Check for
+	// 1…/3…) so a transcription error that stays inside the character set —
+	// which would otherwise pass the prefix/length check and silently
+	// misdirect earnings — is rejected at config load, before mining begins.
+	if _, err := btccrypto.ValidateAddress(addr); err != nil {
+		return fmt.Errorf("checksum verification failed (likely a typo in the address): %w", err)
+	}
+	return nil
 }
 
 // validatePoolURL checks that a pool URL has an acceptable scheme.
 func validatePoolURL(raw string) error {
 	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
 	for _, s := range validSchemes {
-		if strings.HasPrefix(raw, s) {
-			rest := raw[len(s):]
+		if rest, ok := strings.CutPrefix(raw, s); ok {
 			if rest == "" {
 				return fmt.Errorf("URL has no host after scheme")
 			}

@@ -10,7 +10,6 @@
 package stratum
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -21,21 +20,17 @@ import (
 // Low-level encoding primitives
 // ------------------------------------------------------------------
 
-// putStr0_255 writes a STR0_255 (1-byte-length-prefixed UTF-8 string)
-// into w. Returns an error if s is longer than 255 bytes.
-func putStr0_255(w io.Writer, s string) error {
-	b := []byte(s)
-	if len(b) > 255 {
-		return fmt.Errorf("stratum: string too long (%d > 255 bytes)", len(b))
+// appendStr0_255 appends a STR0_255 (1-byte-length-prefixed UTF-8 string)
+// to b and returns the extended slice. It returns an error only when s
+// exceeds the 255-byte maximum the length prefix can represent; appending to
+// a slice cannot otherwise fail (the io.Writer-returning predecessor's write
+// errors were unreachable because every caller targets an in-memory buffer).
+func appendStr0_255(b []byte, s string) ([]byte, error) {
+	if len(s) > 255 {
+		return nil, fmt.Errorf("stratum: string too long (%d > 255 bytes)", len(s))
 	}
-	if _, err := w.Write([]byte{byte(len(b))}); err != nil {
-		return err
-	}
-	if len(b) > 0 {
-		_, err := w.Write(b)
-		return err
-	}
-	return nil
+	b = append(b, byte(len(s)))
+	return append(b, s...), nil
 }
 
 // getStr0_255 reads a STR0_255 from r.
@@ -55,19 +50,15 @@ func getStr0_255(r io.Reader) (string, error) {
 	return string(buf), nil
 }
 
-// putB0_255 writes a B0_255 (1-byte-length-prefixed byte slice) into w.
-func putB0_255(w io.Writer, b []byte) error {
-	if len(b) > 255 {
-		return fmt.Errorf("stratum: byte slice too long (%d > 255)", len(b))
+// appendB0_255 appends a B0_255 (1-byte-length-prefixed byte slice) to dst and
+// returns the extended slice. It returns an error only when v exceeds the
+// 255-byte maximum the length prefix can represent.
+func appendB0_255(dst, v []byte) ([]byte, error) {
+	if len(v) > 255 {
+		return nil, fmt.Errorf("stratum: byte slice too long (%d > 255)", len(v))
 	}
-	if _, err := w.Write([]byte{byte(len(b))}); err != nil {
-		return err
-	}
-	if len(b) > 0 {
-		_, err := w.Write(b)
-		return err
-	}
-	return nil
+	dst = append(dst, byte(len(v)))
+	return append(dst, v...), nil
 }
 
 // getB0_255 reads a B0_255 from r.
@@ -87,12 +78,28 @@ func getB0_255(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
-// putU16LE writes a uint16 in little-endian order.
-func putU16LE(w io.Writer, v uint16) error {
-	var b [2]byte
-	binary.LittleEndian.PutUint16(b[:], v)
-	_, err := w.Write(b[:])
-	return err
+// appendB0_32 appends a B0_32 (1-byte-length-prefixed byte slice, capped at
+// 32 bytes) to dst and returns the extended slice. It returns an error only
+// when v exceeds the 32-byte maximum the SV2 B0_32 type permits — a lower
+// cap than B0_255's, sharing the same 1-byte length-prefix encoding.
+//
+// There is deliberately no matching getB0_32 reader: Otedama follows
+// Postel's law on this field — strict on encode (a value we generate must
+// be spec-conformant), lenient on decode (getB0_255 accepts a 33..255-byte
+// extranonce from a non-conformant pool rather than dropping the connection
+// over a field length that is still bounded and allocation-safe). See the
+// Extranonce field comment in handshake.go.
+func appendB0_32(dst, v []byte) ([]byte, error) {
+	if len(v) > 32 {
+		return nil, fmt.Errorf("stratum: byte slice too long for B0_32 (%d > 32)", len(v))
+	}
+	dst = append(dst, byte(len(v)))
+	return append(dst, v...), nil
+}
+
+// appendU16LE appends a uint16 in little-endian order.
+func appendU16LE(b []byte, v uint16) []byte {
+	return binary.LittleEndian.AppendUint16(b, v)
 }
 
 // getU16LE reads a uint16 in little-endian order.
@@ -104,12 +111,9 @@ func getU16LE(r io.Reader) (uint16, error) {
 	return binary.LittleEndian.Uint16(b[:]), nil
 }
 
-// putU32LE writes a uint32 in little-endian order.
-func putU32LE(w io.Writer, v uint32) error {
-	var b [4]byte
-	binary.LittleEndian.PutUint32(b[:], v)
-	_, err := w.Write(b[:])
-	return err
+// appendU32LE appends a uint32 in little-endian order.
+func appendU32LE(b []byte, v uint32) []byte {
+	return binary.LittleEndian.AppendUint32(b, v)
 }
 
 // getU32LE reads a uint32 in little-endian order.
@@ -124,13 +128,6 @@ func getU32LE(r io.Reader) (uint32, error) {
 // ------------------------------------------------------------------
 // Internal helpers
 // ------------------------------------------------------------------
-
-// byteWriter wraps a bytes.Buffer to satisfy io.Writer with WriteByte.
-type byteWriter struct{ *bytes.Buffer }
-
-func (bw *byteWriter) WriteByte(c byte) error {
-	return bw.Buffer.WriteByte(c)
-}
 
 // newByteReader wraps a []byte as a *byteSliceReader. The concrete
 // type (rather than io.Reader) is returned so callers can use the

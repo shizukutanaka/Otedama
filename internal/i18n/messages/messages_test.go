@@ -4,11 +4,34 @@
 package messages
 
 import (
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/shizukutanaka/Otedama/internal/i18n"
 )
+
+// placeholderRE matches a text/template field reference like {{.url}} or
+// {{ .count }} and captures the field name.
+var placeholderRE = regexp.MustCompile(`{{\s*\.(\w+)\s*}}`)
+
+// placeholders returns the sorted, de-duplicated set of {{.field}} names
+// referenced in a message string.
+func placeholders(msg string) []string {
+	matches := placeholderRE.FindAllStringSubmatch(msg, -1)
+	set := make(map[string]struct{}, len(matches))
+	for _, m := range matches {
+		set[m[1]] = struct{}{}
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 var allCatalogSpecs = []struct {
 	name string
@@ -64,6 +87,70 @@ func TestAllCatalogs_CoverAllEnglishIDs(t *testing.T) {
 			for _, id := range en.IDs() {
 				if _, ok := catIDs[id]; !ok {
 					t.Errorf("%s missing ID %q", tc.name, id)
+				}
+			}
+		})
+	}
+}
+
+// TestAllCatalogs_PlaceholdersMatchEnglish enforces the package's documented
+// promise of "no format-specifier mismatches between languages": every
+// translation must reference exactly the same {{.field}} placeholders as the
+// English source for that ID. A translation that drops a placeholder loses
+// information at runtime; one that adds/misspells a placeholder renders an
+// empty "<no value>" because the caller only supplies the English fields.
+func TestAllCatalogs_PlaceholdersMatchEnglish(t *testing.T) {
+	en, err := English()
+	if err != nil {
+		t.Fatalf("English() failed: %v", err)
+	}
+	want := make(map[i18n.ID][]string)
+	for _, id := range en.IDs() {
+		msg, _ := en.Lookup(id)
+		want[id] = placeholders(msg)
+	}
+
+	for _, tc := range allCatalogSpecs {
+		if tc.lang == i18n.LangEnglish {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := tc.fn()
+			if err != nil {
+				t.Fatalf("%s() failed: %v", tc.name, err)
+			}
+			for id, wantPH := range want {
+				msg, ok := c.Lookup(id)
+				if !ok {
+					continue // covered by TestAllCatalogs_CoverAllEnglishIDs
+				}
+				got := placeholders(msg)
+				if strings.Join(got, ",") != strings.Join(wantPH, ",") {
+					t.Errorf("%s: ID %q placeholders %v, want %v (message: %q)",
+						tc.name, id, got, wantPH, msg)
+				}
+			}
+		})
+	}
+}
+
+// TestAllCatalogs_TemplatesParse ensures every message is a syntactically
+// valid text/template, so RenderWith never fails to parse at runtime (a
+// malformed brace like "{{.url}" only surfaces when that language renders).
+func TestAllCatalogs_TemplatesParse(t *testing.T) {
+	for _, tc := range allCatalogSpecs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := tc.fn()
+			if err != nil {
+				t.Fatalf("%s() failed: %v", tc.name, err)
+			}
+			for _, id := range c.IDs() {
+				msg, _ := c.Lookup(id)
+				if _, err := template.New("").Parse(msg); err != nil {
+					t.Errorf("%s: ID %q is not a valid template: %v (message: %q)",
+						tc.name, id, err, msg)
 				}
 			}
 		})
@@ -216,6 +303,57 @@ func TestDetectLang_Unknown(t *testing.T) {
 	}
 }
 
+func TestDetectLangFromEnv_POSIXPrecedenceAndNormalization(t *testing.T) {
+	// LC_ALL > LC_MESSAGES > LANG, and POSIX locale strings
+	// ("ja_JP.UTF-8@mod") must normalise to a BCP-47 tag before matching.
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"none set → english", map[string]string{}, "en"},
+		{"LANG only", map[string]string{"LANG": "ja_JP.UTF-8"}, "ja"},
+		{"LC_MESSAGES overrides LANG", map[string]string{"LANG": "en_US.UTF-8", "LC_MESSAGES": "ko_KR.UTF-8"}, "ko"},
+		{"LC_ALL overrides all", map[string]string{"LANG": "en_US", "LC_MESSAGES": "ko_KR", "LC_ALL": "zh_CN.UTF-8"}, "zh"},
+		{"codeset and modifier stripped", map[string]string{"LANG": "fr_FR.ISO8859-1@euro"}, "fr"},
+		{"neutral C → english", map[string]string{"LANG": "C"}, "en"},
+		{"neutral POSIX → english", map[string]string{"LANG": "POSIX"}, "en"},
+		{"C.UTF-8 → english", map[string]string{"LANG": "C.UTF-8"}, "en"},
+		{"bare language tag", map[string]string{"LANG": "de"}, "de"},
+		{"unsupported language → english", map[string]string{"LANG": "xx_YY.UTF-8"}, "en"},
+		{"empty values skipped, fall through", map[string]string{"LC_ALL": "", "LANG": "ru_RU.UTF-8"}, "ru"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(k string) string { return tt.env[k] }
+			if got := DetectLangFromEnv(getenv); string(got) != tt.want {
+				t.Errorf("DetectLangFromEnv(%v) = %q, want %q", tt.env, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectLang_CaseInsensitive(t *testing.T) {
+	// BCP-47 (RFC 5646 §2.1.1) tags are case-insensitive. An OS locale or
+	// --language flag reporting an upper- or mixed-case tag must resolve to
+	// the same language as its canonical lower-case form, not fall back to
+	// English.
+	tests := []struct{ in, want string }{
+		{"JA", "ja"},
+		{"EN", "en"},
+		{"JA-JP", "ja"},
+		{"ja-jp", "ja"},
+		{"Zh-Cn", "zh"},
+		{"PT-br", "pt"},
+		{"KO", "ko"},
+	}
+	for _, tt := range tests {
+		if got := DetectLang(tt.in); string(got) != tt.want {
+			t.Errorf("DetectLang(%q) = %q, want %q (BCP-47 is case-insensitive)", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestJapanese_CoversAllEnglishIDs(t *testing.T) {
 	en, _ := English()
 	ja, _ := Japanese()
@@ -226,6 +364,30 @@ func TestJapanese_CoversAllEnglishIDs(t *testing.T) {
 	missing := bundle.MissingTranslations()
 	if jaMissing := missing[i18n.LangJapanese]; len(jaMissing) > 0 {
 		t.Errorf("Japanese missing %d IDs: %v", len(jaMissing), jaMissing)
+	}
+}
+
+// TestAllLanguages_CoverAllEnglishIDs is the catalogue-wide completeness guard.
+// The project commits to ten human-reviewed languages (CLAUDE.md ドキュメント要件);
+// every English message ID must be translated in all nine non-English catalogues.
+// The pre-existing TestJapanese_CoversAllEnglishIDs only guarded Japanese, so a
+// contributor who added an English string and translated it to some — but not
+// all — languages would pass CI while shipping a partially-translated release.
+// This test closes that gap by asserting MissingTranslations() is empty for the
+// full built-in bundle, naming any language and the specific IDs it lacks.
+func TestAllLanguages_CoverAllEnglishIDs(t *testing.T) {
+	bundle, err := NewBundle()
+	if err != nil {
+		t.Fatalf("NewBundle: %v", err)
+	}
+	missing := bundle.MissingTranslations()
+	if len(missing) == 0 {
+		return // every non-English catalogue is complete
+	}
+	for _, spec := range allCatalogSpecs {
+		if ids := missing[spec.lang]; len(ids) > 0 {
+			t.Errorf("%s (%s) missing %d translation(s): %v", spec.name, spec.lang, len(ids), ids)
+		}
 	}
 }
 

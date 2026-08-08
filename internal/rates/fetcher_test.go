@@ -6,9 +6,15 @@ package rates
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -49,9 +55,7 @@ func TestFetcher_FetchFromFakeServer(t *testing.T) {
 				if err := json.Unmarshal(b, &v); err != nil {
 					return 0, err
 				}
-				var rate float64
-				_, err := parseFloat(v.Data.Amount, &rate)
-				return rate, err
+				return strconv.ParseFloat(v.Data.Amount, 64)
 			},
 		}},
 	}
@@ -114,6 +118,147 @@ func TestFetcher_UsesMedianAcrossSources(t *testing.T) {
 	}
 }
 
+func TestFetcher_MedianOfTwoSourcesAverages(t *testing.T) {
+	// With an even number of surviving sources the median must be the
+	// average of the two middle values, not the upper one — otherwise the
+	// result is biased toward the higher source and loses outlier
+	// resistance. This is the common case when one of three sources fails.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srv1 := httptest.NewServer(makeHandler("90000"))
+	srv2 := httptest.NewServer(makeHandler("100000"))
+	defer srv1.Close()
+	defer srv2.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv1.Client(),
+		sources:    []Source{makeSource("s1", srv1.URL), makeSource("s2", srv2.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	// Median of [90000, 100000] = 95000 (the average), not 100000.
+	if rate != 95000 {
+		t.Errorf("median of two sources = %v, want 95000 (average)", rate)
+	}
+}
+
+func TestFetcher_ImplausibleReadingExcludedFromMedian(t *testing.T) {
+	// Three sources, one returning a unit-mangled value (price in BTC ≈ 0.95
+	// instead of USD). It must be dropped before the median so it cannot pull
+	// the result, leaving the median of the two honest sources.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvA := httptest.NewServer(makeHandler("95000"))
+	srvB := httptest.NewServer(makeHandler("95200"))
+	srvBad := httptest.NewServer(makeHandler("0.95")) // implausible
+	defer srvA.Close()
+	defer srvB.Close()
+	defer srvBad.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvA.Client(),
+		sources: []Source{
+			makeSource("a", srvA.URL),
+			makeSource("b", srvB.URL),
+			makeSource("bad", srvBad.URL),
+		},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	// Median of the two in-band readings [95000, 95200] = 95100; the 0.95
+	// reading must have been dropped (a plain median of all three would be 95000).
+	if rate != 95100 {
+		t.Errorf("rate = %v, want 95100 (implausible 0.95 reading must be excluded)", rate)
+	}
+}
+
+func TestFetcher_TwoSourcesOneImplausibleKeepsGoodOne(t *testing.T) {
+	// The vulnerable two-source case: one honest, one wildly wrong. The band
+	// rescues it — without filtering, the average would be dragged halfway.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvGood := httptest.NewServer(makeHandler("95000"))
+	srvBad := httptest.NewServer(makeHandler("950000000")) // ~1e9, out of band
+	defer srvGood.Close()
+	defer srvBad.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvGood.Client(),
+		sources:    []Source{makeSource("good", srvGood.URL), makeSource("bad", srvBad.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	if rate != 95000 {
+		t.Errorf("rate = %v, want 95000 (out-of-band source must be dropped, not averaged)", rate)
+	}
+}
+
 func TestFetcher_AllSourcesFailReturnsFallback(t *testing.T) {
 	f := &Fetcher{
 		fallback:   80000,
@@ -138,6 +283,34 @@ func TestFetcher_AllSourcesFailReturnsFallback(t *testing.T) {
 	}
 }
 
+func TestFetcher_AllSourcesFailJoinsPerSourceCauses(t *testing.T) {
+	// When every source fails, the returned error must carry each source's
+	// concrete cause via errors.Join — inspectable with errors.Is — instead of
+	// a blind "all sources failed" that discards why each one failed.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	errA := errors.New("source A parse failure")
+	errB := errors.New("source B parse failure")
+	f := &Fetcher{
+		fallback:   80000,
+		httpClient: srv.Client(),
+		sources: []Source{
+			{Name: "a", URL: srv.URL, extract: func([]byte) (float64, error) { return 0, errA }},
+			{Name: "b", URL: srv.URL, extract: func([]byte) (float64, error) { return 0, errB }},
+		},
+	}
+	err := f.Fetch(context.Background())
+	if err == nil {
+		t.Fatal("expected error when all sources fail")
+	}
+	if !errors.Is(err, errA) || !errors.Is(err, errB) {
+		t.Errorf("aggregated error must surface both source causes via errors.Join; got: %v", err)
+	}
+}
+
 func TestFetcher_RateIsStaleAfterCacheDuration(t *testing.T) {
 	f := NewFetcher(50000)
 	// Simulate a cached rate that is older than CacheDuration.
@@ -155,6 +328,839 @@ func TestFetcher_RateIsStaleAfterCacheDuration(t *testing.T) {
 	}
 }
 
+func TestFetcher_StartBackground_LogsInitialFetchError(t *testing.T) {
+	// A server that returns 503 causes all sources to fail; the swallowed
+	// error must reach the log callback installed via SetLogger.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	logged := make(chan string, 1)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "fake-503",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case logged <- msg:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	f.StartBackground(ctx, 10*time.Minute) // long interval; only initial fetch matters
+
+	select {
+	case msg := <-logged:
+		if !strings.Contains(msg, "initial fetch failed") {
+			t.Errorf("log message = %q, want to contain 'initial fetch failed'", msg)
+		}
+	case <-time.After(3 * time.Second):
+		t.Error("timeout: SetLogger callback never received error from StartBackground")
+	}
+}
+
+func TestFetcher_SetLogger_NilIsSilent(t *testing.T) {
+	// No logger set — StartBackground must not panic when the fetch fails.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "boom",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	// Intentionally do NOT call SetLogger.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	f.StartBackground(ctx, 10*time.Minute)
+	<-ctx.Done() // let the goroutine run and exit; must not panic
+}
+
+func TestFetcher_ClockSkewSeconds_ZeroBeforeAnyFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	if skew := f.ClockSkewSeconds(); skew != 0 {
+		t.Errorf("ClockSkewSeconds before any fetch = %v, want 0", skew)
+	}
+}
+
+func TestFetcher_ClockSkewSeconds_DetectsAccurateDate(t *testing.T) {
+	// Server returns a Date header matching "now". Skew must be < 2 s even
+	// accounting for test execution time.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "accurate-date",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if skew := f.ClockSkewSeconds(); skew >= 2 {
+		t.Errorf("ClockSkewSeconds = %.2f, want < 2 for an accurate server Date header", skew)
+	}
+}
+
+func TestFetcher_ClockSkewSeconds_DetectsLargeSkew(t *testing.T) {
+	// Server returns a Date header 300 s in the past.  Observed skew must be
+	// roughly 300 s (allow ±5 s for test-execution jitter).
+	const fakeOffsetSecs = 300
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		past := time.Now().Add(-fakeOffsetSecs * time.Second).UTC()
+		w.Header().Set("Date", past.Format(http.TimeFormat))
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "stale-date",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	skew := f.ClockSkewSeconds()
+	if skew < fakeOffsetSecs-5 || skew > fakeOffsetSecs+5 {
+		t.Errorf("ClockSkewSeconds = %.2f, want ~%d (±5 s jitter)", skew, fakeOffsetSecs)
+	}
+}
+
+// stripDateTransport wraps an http.RoundTripper and removes the Date header
+// from every response, simulating an HTTP server that omits the Date header
+// (or a proxy that strips it). Used to test the "no skew observation" path.
+type stripDateTransport struct{ inner http.RoundTripper }
+
+func (t *stripDateTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.inner.RoundTrip(req)
+	if resp != nil {
+		resp.Header.Del("Date")
+	}
+	return resp, err
+}
+
+func TestFetcher_ClockSkewSeconds_MissingDateHeaderYieldsZero(t *testing.T) {
+	// Simulate a server whose Date header is stripped in transit.
+	// ClockSkewSeconds must remain 0 — no observation, not a spurious value.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	inner := srv.Client().Transport
+	if inner == nil {
+		inner = http.DefaultTransport
+	}
+	stripped := &http.Client{Transport: &stripDateTransport{inner: inner}}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: stripped,
+		sources: []Source{{
+			Name: "no-date",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	if skew := f.ClockSkewSeconds(); skew != 0 {
+		t.Errorf("ClockSkewSeconds with stripped Date header = %v, want 0", skew)
+	}
+}
+
+func TestFetcher_ClockSkewSeconds_WarnLoggedWhenThresholdExceeded(t *testing.T) {
+	// Server returns a Date header far in the future (well beyond
+	// clockSkewWarnThreshold). The logger callback must receive a warning.
+	const bigOffset = 300
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		future := time.Now().Add(bigOffset * time.Second).UTC()
+		w.Header().Set("Date", future.Format(http.TimeFormat))
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	warned := make(chan string, 1)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "big-skew",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case warned <- msg:
+		default:
+		}
+	})
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	select {
+	case msg := <-warned:
+		if !strings.Contains(msg, "WARNING") || !strings.Contains(msg, "clock") {
+			t.Errorf("expected clock-skew WARNING in log, got: %q", msg)
+		}
+	default:
+		t.Error("expected a clock-skew warning log; none received")
+	}
+}
+
+func TestFetcher_RateAge_FalseBeforeAnyFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	age, ever := f.RateAge()
+	if ever {
+		t.Error("RateAge everFetched should be false before any fetch")
+	}
+	if age != 0 {
+		t.Errorf("RateAge age before fetch = %v, want 0", age)
+	}
+}
+
+func TestFetcher_RateAge_RisesAfterFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	// Simulate a successful fetch 90 seconds ago.
+	f.mu.Lock()
+	f.rate = 95000
+	f.fetchedAt = time.Now().Add(-90 * time.Second)
+	f.mu.Unlock()
+
+	age, ever := f.RateAge()
+	if !ever {
+		t.Fatal("RateAge everFetched should be true after a fetch")
+	}
+	if age < 89*time.Second || age > 92*time.Second {
+		t.Errorf("RateAge = %v, want ~90s", age)
+	}
+}
+
+func TestFetcher_RateAge_SmallAfterRealFetch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "s",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	age, ever := f.RateAge()
+	if !ever {
+		t.Fatal("RateAge everFetched should be true after Fetch")
+	}
+	if age > 5*time.Second {
+		t.Errorf("RateAge right after fetch = %v, want < 5s", age)
+	}
+}
+
+func TestFetcher_SourceHealth_FalseBeforeAnyFetch(t *testing.T) {
+	f := NewFetcher(95000)
+	ok, total, fetched := f.SourceHealth()
+	if fetched {
+		t.Error("SourceHealth fetched should be false before any fetch")
+	}
+	if ok != 0 {
+		t.Errorf("ok before fetch = %d, want 0", ok)
+	}
+	if total != len(defaultSources) {
+		t.Errorf("total = %d, want %d (configured sources)", total, len(defaultSources))
+	}
+}
+
+func TestFetcher_SourceHealth_CountsInBandSources(t *testing.T) {
+	// Three sources: two return good readings, one returns an implausible value
+	// that is dropped by the band. ok must be 2, total 3 — the redundancy is
+	// degraded even though the fetch succeeds.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvA := httptest.NewServer(makeHandler("95000"))
+	srvB := httptest.NewServer(makeHandler("95200"))
+	srvBad := httptest.NewServer(makeHandler("0.95")) // out of band
+	defer srvA.Close()
+	defer srvB.Close()
+	defer srvBad.Close()
+
+	mk := func(name, url string) Source {
+		return Source{Name: name, URL: url, extract: func(b []byte) (float64, error) {
+			var v struct {
+				Rate float64 `json:"rate"`
+			}
+			if err := json.Unmarshal(b, &v); err != nil {
+				return 0, err
+			}
+			return v.Rate, nil
+		}}
+	}
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvA.Client(),
+		sources:    []Source{mk("a", srvA.URL), mk("b", srvB.URL), mk("bad", srvBad.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	ok, total, fetched := f.SourceHealth()
+	if !fetched {
+		t.Fatal("fetched should be true after Fetch")
+	}
+	if ok != 2 {
+		t.Errorf("ok = %d, want 2 (implausible source dropped)", ok)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+}
+
+func TestFetcher_SourceHealth_ZeroOKButFetchedWhenAllFail(t *testing.T) {
+	// All sources fail: fetched becomes true, ok is 0. This distinguishes
+	// "feed has collapsed" (fetched=true, ok=0) from "never fetched" (fetched=false).
+	f := &Fetcher{
+		fallback:   80000,
+		httpClient: &http.Client{Timeout: 100 * time.Millisecond},
+		sources: []Source{{
+			Name:    "bad",
+			URL:     "http://192.0.2.1:9999", // unreachable (TEST-NET-1)
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Error("Fetch with unreachable source should return error")
+	}
+	ok, total, fetched := f.SourceHealth()
+	if !fetched {
+		t.Error("fetched should be true even when all sources fail")
+	}
+	if ok != 0 {
+		t.Errorf("ok = %d, want 0 (all failed)", ok)
+	}
+	if total != 1 {
+		t.Errorf("total = %d, want 1", total)
+	}
+}
+
+func TestFetcher_SourceHealth_OneSourceOfThreeSucceeds(t *testing.T) {
+	// Critical edge case: exactly one source succeeds out of three.
+	// This is the minimum viable state before complete failure.
+	// The median is the single value (correct), but ok=1 signals
+	// severe redundancy erosion.
+	makeHandler := func(rate string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"rate": %s}`, rate)
+		})
+	}
+	srvGood := httptest.NewServer(makeHandler("95500"))
+	defer srvGood.Close()
+
+	f := &Fetcher{
+		fallback:   80000,
+		httpClient: &http.Client{Timeout: 100 * time.Millisecond},
+		sources: []Source{
+			{
+				Name: "good",
+				URL:  srvGood.URL,
+				extract: func(b []byte) (float64, error) {
+					var v struct {
+						Rate float64 `json:"rate"`
+					}
+					if err := json.Unmarshal(b, &v); err != nil {
+						return 0, err
+					}
+					return v.Rate, nil
+				},
+			},
+			{
+				Name:    "bad1",
+				URL:     "http://192.0.2.1:9999", // unreachable (TEST-NET-1)
+				extract: func([]byte) (float64, error) { return 0, nil },
+			},
+			{
+				Name:    "bad2",
+				URL:     "http://192.0.2.2:9999", // unreachable (TEST-NET-1)
+				extract: func([]byte) (float64, error) { return 0, nil },
+			},
+		},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch with one good source should succeed, got: %v", err)
+	}
+	ok, total, fetched := f.SourceHealth()
+	if !fetched {
+		t.Error("fetched should be true after successful Fetch")
+	}
+	if ok != 1 {
+		t.Errorf("ok = %d, want 1 (one good source out of three)", ok)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+	// Verify the rate is correct (the single good value).
+	rate, fresh := f.BTCUSDRate()
+	if rate != 95500 {
+		t.Errorf("rate = %.2f, want 95500", rate)
+	}
+	if !fresh {
+		t.Error("rate should be fresh right after fetch")
+	}
+}
+
+// TestFetcher_Fetch_CoalescesConcurrentCalls verifies the single-flight
+// contract: while one fetch is in progress, concurrent callers share its
+// result instead of each issuing their own HTTP requests. Without coalescing,
+// N concurrent Fetch calls would produce N hits per source — the failure mode
+// that risks an HTTP 429 ban from rate-limited price APIs.
+func TestFetcher_Fetch_CoalescesConcurrentCalls(t *testing.T) {
+	var hits int32
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		<-release // block so all callers pile up on the one in-flight fetch
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "s",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+
+	const callers = 8
+	var wg sync.WaitGroup
+	errs := make([]error, callers)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = f.Fetch(context.Background())
+		}(i)
+	}
+
+	// Give the goroutines time to all enter Fetch and coalesce onto one leader,
+	// then release the single in-flight HTTP request.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("caller %d: Fetch returned error: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("server saw %d requests, want 1 (concurrent fetches must coalesce)", got)
+	}
+	if rate, _ := f.BTCUSDRate(); rate != 95000 {
+		t.Errorf("rate = %v, want 95000", rate)
+	}
+}
+
+// TestFetcher_Fetch_CoalescedCallerHonorsOwnContext verifies that a caller
+// which coalesces onto an in-flight fetch is released when its own context is
+// cancelled, rather than being pinned to the leader's lifetime.
+func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
+	// The leader's request takes ~200ms; a fixed delay (rather than an
+	// indefinite block) keeps the server's in-flight request bounded so the
+	// deferred srv.Close() cannot deadlock.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "s",
+			URL:     srv.URL,
+			extract: func(b []byte) (float64, error) { return 95000, nil },
+		}},
+	}
+
+	// Leader starts a fetch that will block on the server for ~200ms.
+	leaderDone := make(chan struct{})
+	go func() {
+		_ = f.Fetch(context.Background())
+		close(leaderDone)
+	}()
+	time.Sleep(50 * time.Millisecond) // let the leader claim the in-flight slot
+
+	// A second caller with a short-deadline context must not block for the
+	// leader's full duration; it should return its own context error promptly.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := f.Fetch(ctx)
+	if err == nil {
+		t.Fatal("coalesced caller with cancelled context should return an error")
+	}
+	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
+		t.Errorf("coalesced caller blocked %v, expected prompt (~30ms) context cancellation", elapsed)
+	}
+
+	<-leaderDone // let the leader finish before the deferred srv.Close()
+}
+
+// parseFloat is the strict numeric parser used by the rates package: it
+// mirrors strconv.ParseFloat so test fixtures exercise the same semantics as
+// the production extract functions (rejects trailing garbage like "95000foo").
 func parseFloat(s string, out *float64) (int, error) {
-	return fmt.Sscanf(s, "%f", out)
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	*out = v
+	return 1, nil
+}
+
+// ============================================================================
+// session 168 — cover previously uncovered branches in fetcher.go
+// ============================================================================
+
+// errBodyReader is a body that always errors on Read, used to trigger the
+// io.ReadAll error path in fetchOne (fetcher.go:389-391).
+type errBodyReader struct{}
+
+func (errBodyReader) Read([]byte) (int, error) { return 0, fmt.Errorf("injected read error") }
+func (errBodyReader) Close() error             { return nil }
+
+// errBodyTransport returns a 200 OK response whose body always errors.
+type errBodyTransport struct{}
+
+func (errBodyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       errBodyReader{},
+	}, nil
+}
+
+func TestCoinGeckoExtract_JSONError(t *testing.T) {
+	// defaultSources[2] is CoinGecko. Its extract func must return an error
+	// when given non-JSON bytes (fetcher.go:82-84).
+	_, err := defaultSources[2].extract([]byte("not-valid-json"))
+	if err == nil {
+		t.Error("CoinGecko extract with invalid JSON should return error")
+	}
+}
+
+func TestCoinbaseExtract_RejectsTrailingGarbageInAmount(t *testing.T) {
+	// strconv.ParseFloat rejects trailing non-numeric bytes — unlike the old
+	// fmt.Sscanf("%f"), which silently accepted "95000foo" as 95000. This
+	// regression-catches a return to the lax parser. defaultSources[0] is
+	// Coinbase.
+	body := []byte(`{"data":{"amount":"95000foo"}}`)
+	if _, err := defaultSources[0].extract(body); err == nil {
+		t.Error("Coinbase extract must reject an amount with trailing garbage")
+	}
+}
+
+func TestKrakenExtract_RejectsTrailingGarbageInPrice(t *testing.T) {
+	// Symmetric guard for the Kraken extractor (defaultSources[1]).
+	body := []byte(`{"result":{"XXBTZUSD":{"c":["95000xyz","1"]}}}`)
+	if _, err := defaultSources[1].extract(body); err == nil {
+		t.Error("Kraken extract must reject a price with trailing garbage")
+	}
+}
+
+func TestFetchOne_BadURL(t *testing.T) {
+	// "://bad" is not a valid URL; http.NewRequestWithContext returns an error
+	// immediately, covering fetcher.go:363-365.
+	f := NewFetcher(50000)
+	ctx := context.Background()
+	_, _, err := f.fetchOne(ctx, Source{Name: "bad-url", URL: "://bad", extract: nil})
+	if err == nil {
+		t.Error("fetchOne with malformed URL must return an error")
+	}
+}
+
+func TestFetchOne_BodyReadError(t *testing.T) {
+	// The transport returns a 200 OK with a body that errors immediately on Read.
+	// This covers the io.ReadAll error branch at fetcher.go:389-391.
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: &http.Client{Transport: errBodyTransport{}},
+		sources:    nil,
+	}
+	ctx := context.Background()
+	src := Source{
+		Name:    "err-body",
+		URL:     "http://example.com/price",
+		extract: func([]byte) (float64, error) { return 0, nil },
+	}
+	_, _, err := f.fetchOne(ctx, src)
+	if err == nil {
+		t.Error("fetchOne with an erroring body must return an error")
+	}
+}
+
+func TestStartBackground_ZeroIntervalUsesDefault(t *testing.T) {
+	// Passing interval=0 should fall through the guard at fetcher.go:403-405
+	// and use CacheDuration instead. We verify it does not panic and eventually
+	// calls Fetch (the log callback will receive the initial-fetch error).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	logged := make(chan string, 1)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "boom",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case logged <- msg:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	f.StartBackground(ctx, 0) // zero interval → CacheDuration branch (lines 403-405)
+
+	select {
+	case msg := <-logged:
+		if !strings.Contains(msg, "initial fetch failed") {
+			t.Errorf("expected 'initial fetch failed', got: %q", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("timeout: expected a log message from StartBackground with interval=0")
+	}
+}
+
+func TestStartBackground_PeriodicFetchFails(t *testing.T) {
+	// A short ticker interval causes the ticker.C case (fetcher.go:417-419) to
+	// fire quickly. The server returns 500 so Fetch fails and the periodic-error
+	// log path is exercised.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	logged := make(chan string, 8)
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name:    "unavailable",
+			URL:     srv.URL,
+			extract: func([]byte) (float64, error) { return 0, nil },
+		}},
+	}
+	f.SetLogger(func(msg string) {
+		select {
+		case logged <- msg:
+		default:
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Use a very short interval so the ticker fires quickly (lines 417-419).
+	f.StartBackground(ctx, 50*time.Millisecond)
+
+	// Collect at least two log messages: one initial-fetch error and one
+	// periodic-fetch error.
+	var msgs []string
+	deadline := time.After(2 * time.Second)
+outer:
+	for len(msgs) < 2 {
+		select {
+		case m := <-logged:
+			msgs = append(msgs, m)
+		case <-deadline:
+			break outer
+		}
+	}
+	if len(msgs) < 2 {
+		t.Errorf("expected ≥2 log messages (initial + periodic); got %d: %v", len(msgs), msgs)
+	}
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m, "periodic fetch failed") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'periodic fetch failed' log; got: %v", msgs)
+	}
+}
+
+// TestStartBackground_GoroutineTerminatesOnContextCancel verifies that the
+// background refresh goroutine launched by StartBackground actually exits when
+// its context is cancelled — i.e. it does not leak. A goroutine that keeps
+// running after its owning context is done is the classic Go leak (it pins its
+// stack, its Fetcher, and any captured resources for the life of the process).
+//
+// The check is dependency-free: it samples runtime.NumGoroutine before and
+// after, and polls for the count to return to baseline rather than asserting a
+// single post-cancel snapshot (the goroutine unwinds asynchronously, and other
+// test/runtime goroutines come and go). This mirrors the goleak approach
+// recommended in the Go community without adding go.uber.org/goleak as a
+// dependency (ADR-003 keeps the dependency tree minimal).
+func TestStartBackground_GoroutineTerminatesOnContextCancel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"rate": 95000}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "s",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Rate float64 `json:"rate"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return v.Rate, nil
+			},
+		}},
+	}
+
+	// Let any goroutines from earlier tests settle before sampling the baseline.
+	waitForGoroutines := func(target int, within time.Duration) int {
+		deadline := time.Now().Add(within)
+		var n int
+		for {
+			n = runtime.NumGoroutine()
+			if n <= target || time.Now().After(deadline) {
+				return n
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	runtime.GC()
+	baseline := waitForGoroutines(0, 0) // single sample; 0 target just returns current
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Long interval so the goroutine spends its life parked in the ticker
+	// select — the only way it exits is via ctx.Done, which is exactly the
+	// path under test.
+	f.StartBackground(ctx, 10*time.Minute)
+
+	// The goroutine should now be alive: count is at least baseline+1. Poll
+	// briefly because StartBackground returns before the goroutine is scheduled.
+	grew := false
+	for i := 0; i < 100; i++ {
+		if runtime.NumGoroutine() > baseline {
+			grew = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !grew {
+		t.Fatal("StartBackground did not appear to launch a goroutine")
+	}
+
+	// Cancel and require the count to fall back to (at most) the baseline.
+	cancel()
+	final := waitForGoroutines(baseline, 2*time.Second)
+	if final > baseline {
+		t.Errorf("goroutine leak: count %d did not return to baseline %d within 2s after cancel", final, baseline)
+	}
 }

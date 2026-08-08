@@ -47,7 +47,7 @@ If any of those is a hard requirement, **stay on v2.x**. The
 
 ### Security
 - **Noise encryption:** Stratum V2 handshake on every pool connection.
-- **Wallet:** BIP-39 seed encrypted with scrypt + ChaCha20-Poly1305.
+- **Wallet:** BIP-39 seed encrypted with scrypt + AES-256-GCM.
 - **CI:** SHA-pinned GitHub Actions, Dependabot, nightly fuzz, cosign
   signing.
 
@@ -82,7 +82,7 @@ under `[payout]`. Copy the address — you will paste it into v3.
 ### 4. Install v3
 
 ```bash
-curl -sSL https://otedama.io/install.sh | bash
+curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
 ```
 
 Or download from [releases][releases] and verify the signature.

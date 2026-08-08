@@ -94,7 +94,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		Firmware:        "main",
 		DeviceID:        "cpu",
 	}
-	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, &sc); err != nil {
+	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, false, &sc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send SetupConnection: %w", err)
 	}
 	f, err := dec.ReadFrame()
@@ -118,7 +118,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
 	}
-	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, &omc); err != nil {
+	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
 	}
 	f, err = dec.ReadFrame()
@@ -194,6 +194,34 @@ func (s *session) start(ctx context.Context) {
 
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
+	// SV2 job/tip state, mirroring the engine's inline loop: a job is
+	// emittable only once both NewMiningJob (merkle root + version) and
+	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
+	// (no min_ntime) wait for the SetNewPrevHash that names them.
+	pending := make(map[uint32]*stratum.NewMiningJob)
+	var prevHash [32]byte
+	var prevNBits uint32
+	havePrev := false
+
+	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
+		job := poolproto.Job{
+			JobID:      fmt.Sprintf("%d", j.JobID),
+			Version:    j.Version,
+			PrevHash:   prevHash,
+			MerkleRoot: j.MerkleRoot,
+			NTime:      ntime,
+			NBits:      prevNBits,
+			CleanJobs:  clean,
+			ReceivedAt: time.Now(),
+		}
+		select {
+		case s.jobsCh <- job:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
 	for {
 		if ctx.Err() != nil || s.conn.closed.Load() {
 			return
@@ -207,19 +235,36 @@ func (s *session) readLoop(ctx context.Context) {
 			continue // skip undecodable frame, keep reading
 		}
 		if msg.NewMiningJob != nil {
-			job := poolproto.Job{
-				JobID:      fmt.Sprintf("%d", msg.NewMiningJob.JobID),
-				MerkleRoot: msg.NewMiningJob.MerkleRoot,
-				NTime:      msg.NewMiningJob.MinNtime,
-				NBits:      msg.NewMiningJob.NBits,
-				ReceivedAt: time.Now(),
+			j := msg.NewMiningJob
+			pending[j.JobID] = j
+			if j.HasMinNtime && havePrev {
+				if !emit(j, j.MinNtime, false) {
+					return
+				}
 			}
-			select {
-			case s.jobsCh <- job:
-			case <-ctx.Done():
-				return
+			// Future job (or no tip yet): held until SetNewPrevHash.
+		}
+		if msg.SetNewPrevHash != nil {
+			p := msg.SetNewPrevHash
+			prevHash = p.PrevHash
+			prevNBits = p.NBits
+			havePrev = true
+			named := pending[p.JobID]
+			pending = map[uint32]*stratum.NewMiningJob{}
+			if named != nil {
+				pending[p.JobID] = named
+				ntime := p.MinNtime
+				if named.HasMinNtime && named.MinNtime > ntime {
+					ntime = named.MinNtime
+				}
+				if !emit(named, ntime, true) {
+					return
+				}
 			}
 		}
+		// Note: SetTarget (share difficulty) has no carrier on
+		// poolproto.Job; the engine's inline V2 loop handles it. This
+		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
 	}
 }
 
@@ -242,7 +287,10 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		NTime:          sub.NTime,
 		NVersion:       sub.Version,
 	}
-	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, &ss); err != nil {
+	// SubmitSharesStandard is a channel message: the channel_msg bit must
+	// be set in the frame header (the engine's inline path already does
+	// this; the two paths previously disagreed).
+	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
 		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: submit share: %w", err)
 	}
 	return poolproto.ShareResult{Accepted: true}, nil
@@ -258,6 +306,13 @@ func (s *session) Close() error { return s.conn.Close() }
 
 // ----- helpers -----
 
+// Compile-time interface satisfaction checks.
+var (
+	_ poolproto.Dialer     = (*Dialer)(nil)
+	_ poolproto.Connection = (*connection)(nil)
+	_ poolproto.Session    = (*session)(nil)
+)
+
 // encodable is satisfied by every Stratum V2 message type (they all
 // have an Encode method). Defined locally to avoid coupling the
 // poolproto adapter to an exported interface in internal/stratum.
@@ -265,13 +320,16 @@ type encodable interface {
 	Encode() ([]byte, error)
 }
 
-// sendMsg encodes, frames, and writes a Stratum V2 message.
-func sendMsg(w net.Conn, msgType uint8, enc encodable) error {
+// sendMsg encodes, frames, and writes a Stratum V2 message. isChannel
+// sets the frame header's channel_msg bit — required for channel-scoped
+// messages (SubmitSharesStandard etc.), absent for connection-scoped
+// ones (SetupConnection, OpenMiningChannel).
+func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	payload, err := enc.Encode()
 	if err != nil {
 		return err
 	}
-	f, err := stratum.WrapMessage(msgType, false, payload)
+	f, err := stratum.WrapMessage(msgType, isChannel, payload)
 	if err != nil {
 		return err
 	}

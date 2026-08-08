@@ -368,3 +368,64 @@ func TestCipherState_DecryptSkippingNonceFails(t *testing.T) {
 		t.Error("decrypt should fail when receiver's nonce doesn't match sender's")
 	}
 }
+
+// ============================================================================
+// EncryptedConn — framing correctness (length arithmetic)
+// ============================================================================
+
+// TestEncryptedConn_ReadReassemblesAcrossSmallBuffers verifies that a frame
+// whose plaintext is larger than the caller's Read buffer is delivered in
+// full across successive Reads, rather than having the excess silently
+// dropped. The Stratum decoder reads a 6-byte header first, so a real frame
+// always exceeds the first Read buffer.
+func TestEncryptedConn_ReadReassemblesAcrossSmallBuffers(t *testing.T) {
+	var key [32]byte
+	var buf bytes.Buffer
+
+	sender := NewEncryptedConn(&buf, &CipherState{key: key}, &CipherState{key: key})
+	msg := make([]byte, 1000)
+	for i := range msg {
+		msg[i] = byte(i)
+	}
+	if _, err := sender.Write(msg); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	receiver := NewEncryptedConn(&buf, &CipherState{key: key}, &CipherState{key: key})
+	got := make([]byte, 0, len(msg))
+	tmp := make([]byte, 6) // small, header-sized reads
+	for len(got) < len(msg) {
+		n, err := receiver.Read(tmp)
+		if err != nil {
+			t.Fatalf("Read after %d bytes: %v", len(got), err)
+		}
+		got = append(got, tmp[:n]...)
+	}
+	if !bytes.Equal(got, msg) {
+		t.Errorf("reassembled plaintext mismatch: got %d bytes, want %d", len(got), len(msg))
+	}
+}
+
+// TestEncryptedConn_WriteRejectsOversize verifies that a message whose
+// ciphertext would overflow the u16 length prefix is rejected with an error
+// rather than silently truncating the prefix (which would desync the stream).
+func TestEncryptedConn_WriteRejectsOversize(t *testing.T) {
+	var key [32]byte
+	var buf bytes.Buffer
+	conn := NewEncryptedConn(&buf, &CipherState{key: key}, &CipherState{key: key})
+
+	// 65520 plaintext + 16-byte tag = 65536 > 65535 (the u16 max).
+	big := make([]byte, 65520)
+	if _, err := conn.Write(big); err == nil {
+		t.Error("Write of an oversize message should return an error, not truncate")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("nothing should be written on the oversize-error path; wrote %d bytes", buf.Len())
+	}
+
+	// The largest plaintext that still fits (65519 + 16 = 65535) must succeed.
+	atLimit := make([]byte, 65519)
+	if _, err := conn.Write(atLimit); err != nil {
+		t.Errorf("Write at the size limit should succeed: %v", err)
+	}
+}

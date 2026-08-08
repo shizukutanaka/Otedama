@@ -26,8 +26,10 @@ otedama run [flags]
 | `--language` | string | `en` | UI language. BCP 47 tag (e.g. `ja`, `zh-CN`). |
 | `--log-level` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. |
 | `--log-format` | string | `text` | Log output format: `text` or `json`. |
+| `--log-file` | string | (empty) | Append structured logs to this file. Written even under the TUI, so it provides an audit trail the dashboard otherwise hides. Created `0600`. |
 | `--no-tui` | bool | `false` | Disable the terminal dashboard. |
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
+| `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
 | `--dry-run` | bool | `false` | Validate configuration and exit without mining. |
 
@@ -84,8 +86,10 @@ JSON output fields:
 
 Inspect or validate the effective configuration.
 
-- `otedama config show [--config path]` — Print the merged configuration
-  (defaults + file + env + flags).
+- `otedama config show [--config path] [--origin] [--json]` — Print the merged
+  configuration (defaults + file + env + flags). `--origin` annotates each value
+  with the layer that set it; `--json` emits a JSON object (resolved values, plus
+  an `origins` map when combined with `--origin`) for deploy/config-management scripts.
 - `otedama config validate [flags]` — Check validity and exit with
   exit code 78 on problems. Takes the same flags as `otedama run`.
 
@@ -104,13 +108,20 @@ Install, remove, or query the auto-start service.
 Run self-diagnostic checks and print a report.
 
 ```
-otedama doctor [--config path] [--bitcoin-address addr] [--data-dir path]
+otedama doctor [--config path] [--bitcoin-address addr] [--data-dir path] [--json]
 ```
+
+`--json` emits a single JSON object instead of the text report — suitable for CI
+gating or monitoring agents. Shape: `{"summary":{"passed","failed","warnings",
+"skipped"}, "duration_ms", "exit_code", "checks":[{"name","status","detail","fix",
+"elapsed_ms"}]}`, where `status` is one of `pass|warn|fail|skip`.
 
 **Exit codes:**
 - `0` — All checks passed.
 - `1` — At least one check emitted a warning.
 - `2` — At least one check failed.
+
+The same exit code is mirrored in the JSON `exit_code` field.
 
 Suitable as a container healthcheck command:
 ```yaml
@@ -144,19 +155,26 @@ language: en               # en, ja, zh, ko, es, fr, de, pt, ru, ar
 # Data directory for wallet and persistent state.
 data_dir: ~/.local/share/otedama
 
-# Mining pools (tried in order).
+# Mining pools, tried in the order listed (list position is the priority;
+# there is no separate priority field).
 pools:
   - url: stratum+v2://public.stratum.slushpool.com:3336
-    priority: 1
   - url: stratum+v2://demand.sv2.io:34254
-    priority: 2
 
-# Worker configuration.
+# Worker identification sent to pools — a single object, not a list.
+# device/threads are not config fields: Otedama auto-detects every
+# SHA256d-capable device (see internal/hal) and spawns one worker per
+# device automatically; `name` only controls how the miner identifies
+# itself to the pool.
 workers:
-  - name: cpu-worker
-    device: cpu
-    # threads defaults to runtime.NumCPU(). Set explicitly to cap CPU use.
+  name: cpu-worker
 ```
+
+The YAML decoder rejects unknown fields and a type mismatch (e.g. a list
+where a single object is expected) fails the *entire* document, not just
+the offending key — so a malformed `pools:` or `workers:` entry silently
+discards every setting in the file, including `bitcoin_address`. See
+`config.yaml.example` for the exact, decoder-verified schema.
 
 **Precedence of configuration sources** (highest wins):
 
@@ -180,6 +198,7 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LOG_FORMAT` | `--log-format` | |
 | `OTEDAMA_LANGUAGE` | `--language` | |
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
+| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
 
 ---
@@ -208,19 +227,78 @@ Use case: load balancer removes a not-yet-ready instance from rotation.
 ### `GET /metrics`
 
 Prometheus text exposition format (version 0.0.4). All metrics are
-prefixed `otedama_`.
+prefixed `otedama_`. Metrics are created at startup; counters and the
+lazily-created per-label series (reject reasons, per-device shares, payout
+addresses) appear once their first event occurs.
+
+**Mining & shares**
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `otedama_hashrate_hashes_per_second` | gauge | — | Live aggregate hash rate. |
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
+| `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
+| `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
+| `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
+| `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |
+| `otedama_share_acceptance_rate` | gauge | — | Accepted / judged (1.0 = all accepted). |
+| `otedama_reject_rate` | gauge | — | Rejected / judged (complement of acceptance; >0.03 investigate). |
+| `otedama_stale_rate` | gauge | — | Stale-rejected / judged (network-latency signal). |
+| `otedama_submit_latency_milliseconds` | gauge | `quantile={0.5,0.95,0.99}` | Submit→accept round-trip latency. |
+
+**Pool & connection**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
 | `otedama_pool_connect_attempts_total` | counter | — | Pool dial attempts, including reconnects. |
 | `otedama_pool_connect_failures_total` | counter | — | Pool dial failures. |
+| `otedama_pool_connection_state` | gauge | — | 0=disconnected, 1=connecting, 2=connected. |
+| `otedama_pool_active_index` | gauge | — | 0-based index of the active pool in the failover list. |
+| `otedama_pool_difficulty` | gauge | — | Current share difficulty (`mining.set_difficulty`). |
+| `otedama_estimated_share_interval_seconds` | gauge | — | Expected seconds between shares (difficulty × 2³² / hashrate). |
+| `otedama_last_job_received_seconds` | gauge | — | Unix timestamp of the most recent pool job (stale-connection detector). |
+
+**Arbitration**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
 | `otedama_arbitration_switches_total` | counter | — | Workload reroutes by the arbitration engine. |
+| `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
+| `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
+| `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
+| `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
+
+**Economics & power**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
 | `otedama_btc_usd_rate` | gauge | — | Current BTC/USD rate (median of 3 sources). |
+| `otedama_btc_rate_age_seconds` | gauge | — | Seconds since the rate was last successfully fetched (silent-staleness detector). |
+| `otedama_rate_sources_ok` | gauge | — | Price sources returning a usable in-band reading in the last fetch. `ok < total` = degraded redundancy. |
+| `otedama_rate_sources_total` | gauge | — | Price sources configured (denominator for `_ok`). |
+| `otedama_power_watts` | gauge | — | Configured system power draw (0 = unset). |
+| `otedama_joules_per_terahash` | gauge | — | Energy efficiency: watts × 1e12 / hashrate. |
+| `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |
+
+**Payout (non-custodial transparency)**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `otedama_payout_active_index` | gauge | — | 0-based index of the active payout address in the failover list. |
+| `otedama_payout_info` | gauge | `address=<masked>` | Active payout destination; the series valued 1 is the address currently receiving rewards. |
+
+**Health & liveness**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `otedama_up` | gauge | — | 1 if healthy (hashing, or intentionally curtailed), 0 if stalled. |
+| `otedama_curtailed` | gauge | — | 1 if hashing is paused by `curtail_below_btc_usd`, else 0. |
+| `otedama_productive_seconds_total` | counter | — | Cumulative seconds the miner actually produced hashrate (effective-uptime numerator). |
+| `otedama_clock_skew_seconds` | gauge | — | Max \|local − server\| clock offset from rate-source HTTP Date headers (alert >120). |
 | `otedama_uptime_seconds` | gauge | — | Seconds since engine start. |
 | `otedama_start_time_seconds` | gauge | — | Unix timestamp at which engine started. |
+| `otedama_build_info` | gauge | `version,commit,goversion` | Constant 1; build metadata carried as labels. |
 
 ### `GET /`
 
@@ -235,14 +313,18 @@ Path: `{data-dir}/wallet.dat`
 Permissions: `0600` (owner read/write only). Violation detected by
 `otedama doctor`.
 
-Format: length-prefixed binary blob containing:
+Format (`internal/lightning/seedstore.go`: `EncryptedSeed.Marshal`), a flat
+concatenation with no internal length prefixes:
 
 1. Version byte (`0x01`).
-2. scrypt parameters (N, r, p as u32).
-3. 32-byte salt.
-4. 12-byte AES-GCM nonce.
-5. Ciphertext: ChaCha20-Poly1305 encrypted BIP-39 seed (64 bytes).
-6. 16-byte GCM authentication tag.
+2. 16-byte scrypt salt.
+3. 12-byte AES-GCM nonce.
+4. Ciphertext: AES-256-GCM encrypted BIP-39 seed (64 bytes plaintext);
+   the GCM authentication tag is appended by `cipher.AEAD.Seal` as part
+   of this ciphertext, not stored as a separate field.
+
+The scrypt parameters (N=2^17, r=8, p=1) are fixed constants in code,
+not serialized to disk.
 
 The mnemonic is derived from the seed and is never stored on disk.
 **The mnemonic is only displayed once, on first run.**

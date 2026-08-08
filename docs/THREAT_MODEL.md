@@ -92,8 +92,9 @@ favor any provider) but stale values may cause suboptimal arbitration.
 
 **Threat:** An attacker modifies the wallet file on disk.
 
-**Mitigation:** Wallet file is encrypted with ChaCha20-Poly1305.
-Tampering is detected by AEAD authentication failure at decrypt time.
+**Mitigation:** Wallet file is encrypted with AES-256-GCM
+(`internal/lightning/seedstore.go`). Tampering is detected by AEAD
+authentication failure at decrypt time.
 The file is written atomically (tempfile + rename) so a crash during
 write cannot corrupt the existing file.
 

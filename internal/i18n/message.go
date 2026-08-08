@@ -15,8 +15,11 @@
 // foundation rather than bolting it on later. All user-facing strings
 // flow through this package. The ten priority languages (English,
 // Japanese, Chinese, Korean, Spanish, French, German, Portuguese,
-// Russian, Arabic) receive human-reviewed translations; other languages
-// are supplied by machine translation as a best-effort fallback.
+// Russian, Arabic) receive human-reviewed translations. Requesting any
+// other language falls back to English (Bundle.Render: exact tag match,
+// then base-tag match, then English) — there is no machine-translation
+// call anywhere in this package today; a "1,000+ languages via machine
+// translation" fallback has been discussed but is not implemented.
 //
 // # Architecture
 //
@@ -40,7 +43,7 @@ package i18n
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/template"
 )
@@ -218,7 +221,7 @@ func (c *Catalog) IDs() []ID {
 	for id := range c.messages {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	slices.Sort(ids)
 	return ids
 }
 
@@ -368,7 +371,7 @@ func (b *Bundle) MissingTranslations() map[Lang][]ID {
 		// Omit languages with no missing translations; the caller can
 		// treat absence from the map as "complete".
 		if len(missing) > 0 {
-			sort.Slice(missing, func(i, j int) bool { return missing[i] < missing[j] })
+			slices.Sort(missing)
 			result[lang] = missing
 		}
 	}
@@ -385,6 +388,6 @@ func (b *Bundle) Languages() []Lang {
 			result = append(result, lang)
 		}
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	slices.Sort(result)
 	return append([]Lang{LangEnglish}, result...)
 }

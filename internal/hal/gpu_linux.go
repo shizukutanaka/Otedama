@@ -15,8 +15,20 @@
 // CGO adds build complexity, cross-compilation difficulty, and a larger
 // dependency surface. The sysfs approach identifies GPUs reliably enough
 // for Otedama's purposes: family classification (NVIDIA/AMD) and a
-// human-readable model name. The actual compute dispatch (CUDA, ROCm,
-// Vulkan compute) is implemented in the provider layer, not here.
+// human-readable model name.
+//
+// # No GPU compute dispatch exists yet
+//
+// Detecting a GPU here does not mean Otedama can mine Bitcoin on it: no
+// CUDA, ROCm, or Vulkan compute dispatch is implemented anywhere in this
+// codebase (checked repo-wide, session 243). A detected GPU's
+// Capabilities.SHA256d is therefore false, so
+// internal/engine.startMinerWorkers correctly skips it rather than
+// spawning a CPU-only miner.Worker mislabeled under the GPU's device ID
+// (the bug this comment replaces — SHA256d was previously hardcoded
+// true). GeneralCompute stays true: it only gates the already-disclosed
+// simulated Akash inference quotes (docs/KNOWN_LIMITATIONS.md §1), which
+// spawn no worker threads and so carry none of this risk.
 package hal
 
 import (
@@ -30,16 +42,24 @@ import (
 // GPULinuxDriver enumerates GPU devices via the Linux DRM sysfs interface.
 // It discovers all render nodes (/sys/class/drm/renderD*) and classifies
 // each by vendor using the PCI vendor ID.
-type GPULinuxDriver struct{}
+//
+// LogFn is an optional callback that receives a message for each render node
+// that is skipped due to identity-validation failure. Nil = silent.
+type GPULinuxDriver struct {
+	LogFn func(string)
+}
 
 func (d *GPULinuxDriver) Name() string { return "gpu_linux" }
+
+// drmBasePath is the sysfs DRM directory scanned for render devices;
+// overridable in tests so the loop can be exercised without real GPU hardware.
+var drmBasePath = "/sys/class/drm"
 
 // Enumerate returns all GPU devices visible via DRM. If the DRM sysfs
 // tree is absent or empty, Enumerate returns an empty slice with no
 // error, so that the partial-failure policy in Detector applies.
 func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
-	const drmBase = "/sys/class/drm"
-	entries, err := os.ReadDir(drmBase)
+	entries, err := os.ReadDir(drmBasePath)
 	if err != nil {
 		// DRM not available — not an error, just no GPUs detected.
 		return nil, nil
@@ -54,7 +74,7 @@ func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 		if !strings.HasPrefix(name, "renderD") {
 			continue
 		}
-		devPath := filepath.Join(drmBase, name, "device")
+		devPath := filepath.Join(drmBasePath, name, "device")
 
 		// Resolve the canonical device path to deduplicate multi-node GPUs.
 		canonical, err := filepath.EvalSymlinks(devPath)
@@ -66,7 +86,7 @@ func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 		}
 		seen[canonical] = true
 
-		dev := parseGPUDevice(name, canonical)
+		dev := parseGPUDevice(name, canonical, d.LogFn)
 		if dev != nil {
 			devices = append(devices, dev)
 		}
@@ -75,8 +95,9 @@ func (d *GPULinuxDriver) Enumerate(_ context.Context) ([]Device, error) {
 }
 
 // parseGPUDevice reads the PCI vendor/device IDs and the device name
-// from sysfs and constructs a Device.
-func parseGPUDevice(renderNode, devicePath string) Device {
+// from sysfs and constructs a Device. logFn, if non-nil, is called when
+// the constructed identity fails validation and the device is skipped.
+func parseGPUDevice(renderNode, devicePath string, logFn func(string)) Device {
 	vendor := readSysFile(filepath.Join(devicePath, "vendor"))
 	model := inferModel(devicePath, vendor)
 	vendorName := inferVendorName(vendor)
@@ -88,11 +109,27 @@ func parseGPUDevice(renderNode, devicePath string) Device {
 		Model:  model,
 	}
 	if err := id.Validate(); err != nil {
+		if logFn != nil {
+			logFn(fmt.Sprintf("hal: gpu_linux: render node %s skipped: %v", renderNode, err))
+		}
 		return nil
 	}
 	caps := Capabilities{
-		SHA256d:        true, // all GPUs can run SHA256d
-		GeneralCompute: true, // GPU implies general compute capability
+		// SHA256d is deliberately false: no CUDA/ROCm/Vulkan compute
+		// dispatch exists anywhere in this codebase (see the package doc
+		// above). Before this fix it was hardcoded true, so
+		// engine.startMinerWorkers — which spawns one full
+		// runtime.NumCPU()-thread miner.Worker per SHA256d-capable device
+		// — spawned a SECOND complete CPU-only hashing pool for every
+		// detected GPU, on top of the real CPU device's own pool. Net
+		// effect: 2x thread oversubscription, and every share that pool
+		// found got attributed to the GPU's device ID in
+		// otedama_device_shares_found_total and the arbitration engine's
+		// live hashrate sampling — both silently reporting CPU-speed
+		// numbers as if they came from the GPU. See
+		// docs/KNOWN_LIMITATIONS.md for the current disclosure.
+		SHA256d:        false,
+		GeneralCompute: true, // GPU implies general compute capability (used by the simulated Akash provider; spawns no worker threads, so this flag alone causes no oversubscription)
 	}
 	return &linuxGPUDevice{id: id, caps: caps}
 }
@@ -117,8 +154,7 @@ func inferModel(devicePath, vendorID string) string {
 	// Try uevent for DRIVER, which sometimes contains the model.
 	uevent := readSysFile(filepath.Join(devicePath, "uevent"))
 	for _, line := range strings.Split(uevent, "\n") {
-		if strings.HasPrefix(line, "PCI_ID=") {
-			pciID := strings.TrimPrefix(line, "PCI_ID=")
+		if pciID, ok := strings.CutPrefix(line, "PCI_ID="); ok {
 			vendor := inferVendorName(vendorID)
 			return fmt.Sprintf("%s GPU (%s)", vendor, pciID)
 		}

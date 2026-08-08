@@ -7,18 +7,22 @@
 //
 // The official Go client library is excellent but adds ~10MB to the
 // binary and a transitive dependency on dozens of packages. For the
-// metrics Otedama needs — counters, gauges, a handful of histograms —
-// the Prometheus text exposition format is a few hundred lines of
-// straightforward code. Going dependency-free keeps supply-chain risk
-// minimal and the binary small.
+// metrics Otedama needs — counters and gauges — the Prometheus text
+// exposition format is a few hundred lines of straightforward code.
+// (Latency distributions are reported as gauge quantiles rather than a
+// native histogram type, which keeps the registry minimal.) Going
+// dependency-free keeps supply-chain risk minimal and the binary small.
 //
 // # Exposition format
 //
 // Output conforms to https://prometheus.io/docs/instrumenting/exposition_formats/
 //
-//	# HELP otedama_hashrate_hashes_per_second Current hashrate.
+//	# HELP otedama_hashrate_hashes_per_second Current aggregate hashrate.
 //	# TYPE otedama_hashrate_hashes_per_second gauge
-//	otedama_hashrate_hashes_per_second{device="cpu-0"} 10500000
+//	otedama_hashrate_hashes_per_second 10500000
+//	# HELP otedama_device_shares_found_total Per-device breakdown of shares found.
+//	# TYPE otedama_device_shares_found_total counter
+//	otedama_device_shares_found_total{device="cpu-0"} 42
 //	# HELP otedama_shares_total Total shares submitted to pool.
 //	# TYPE otedama_shares_total counter
 //	otedama_shares_total{status="accepted"} 42
@@ -26,20 +30,30 @@
 package metrics
 
 import (
+	"cmp"
 	"fmt"
 	"io"
-	"sort"
+	"maps"
+	"math"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 )
 
+// CollectFunc is a function invoked during WriteText to emit dynamic metrics.
+// It writes lines in Prometheus text exposition format directly to w.
+// Useful for metrics whose values change between scrapes and are most
+// efficiently gathered in one call (e.g. runtime.ReadMemStats).
+type CollectFunc func(w io.Writer) error
+
 // Registry holds all registered metrics.
 // Safe for concurrent use.
 type Registry struct {
-	mu       sync.RWMutex
-	counters map[string]*Counter
-	gauges   map[string]*Gauge
+	mu         sync.RWMutex
+	counters   map[string]*Counter
+	gauges     map[string]*Gauge
+	collectors []CollectFunc
 }
 
 // NewRegistry returns an empty metrics registry.
@@ -50,12 +64,22 @@ func NewRegistry() *Registry {
 	}
 }
 
+// RegisterCollector adds fn to the registry. WriteText calls all registered
+// collectors (in registration order) after writing the static counters and
+// gauges. fn must write valid Prometheus text lines and may not call any
+// Registry method (deadlock). Safe to call concurrently.
+func (r *Registry) RegisterCollector(fn CollectFunc) {
+	r.mu.Lock()
+	r.collectors = append(r.collectors, fn)
+	r.mu.Unlock()
+}
+
 // Counter is a monotonically increasing value (e.g. total shares submitted).
 type Counter struct {
 	name   string
 	help   string
 	labels map[string]string
-	value  uint64
+	value  atomic.Uint64
 }
 
 // Gauge is an instantaneous value (e.g. current hashrate).
@@ -68,15 +92,86 @@ type Gauge struct {
 	value float64
 }
 
+// isValidMetricName reports whether name conforms to the Prometheus metric
+// naming rule: [a-zA-Z_:][a-zA-Z0-9_:]* — no hyphens, no leading digits.
+// Every name in Otedama is a compile-time constant, so an invalid name is a
+// developer error that surfaces immediately in tests.
+func isValidMetricName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r == '_' || r == ':':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isValidLabelName reports whether name conforms to the Prometheus label
+// naming rule: [a-zA-Z_][a-zA-Z0-9_]* — note this is stricter than a metric
+// name (no colon is permitted in a label name). Like metric names, every label
+// name in Otedama is a compile-time constant, so an invalid one is a developer
+// error. Validating it at registration matters because a single malformed label
+// name emits a line Prometheus rejects on scrape, which discards the *entire*
+// /metrics response — so one bad label would silently break all metrics, not
+// just its own series.
+func isValidLabelName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r == '_':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// validateLabelNames panics if any key in labels is not a valid Prometheus
+// label name. metricName is included in the panic message to locate the
+// offending registration.
+func validateLabelNames(metricName string, labels map[string]string) {
+	for k := range labels {
+		if !isValidLabelName(k) {
+			panic(fmt.Sprintf("metrics: invalid label name %q on metric %q (must match [a-zA-Z_][a-zA-Z0-9_]*)", k, metricName))
+		}
+	}
+}
+
 // ----- Counter API -----
 
 // NewCounter registers a new Counter. Duplicate name+labels returns the existing one.
+// Panics if name does not satisfy [a-zA-Z_:][a-zA-Z0-9_:]*.
 func (r *Registry) NewCounter(name, help string, labels map[string]string) *Counter {
+	if !isValidMetricName(name) {
+		panic(fmt.Sprintf("metrics: invalid metric name %q (must match [a-zA-Z_:][a-zA-Z0-9_:]*)", name))
+	}
+	validateLabelNames(name, labels)
 	key := metricKey(name, labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if existing, ok := r.counters[key]; ok {
 		return existing
+	}
+	// Reject a name already registered as a gauge. Prometheus allows only one
+	// TYPE per metric name; emitting the same name as both a counter and a gauge
+	// produces two values under a single TYPE line, which Prometheus rejects —
+	// discarding the *entire* scrape, not just the offending series (the same
+	// severity validateLabelNames guards against). Every name is a compile-time
+	// constant, so a collision is a developer error caught at registration.
+	if gaugeNameExists(r.gauges, name) {
+		panic(fmt.Sprintf("metrics: name %q already registered as a gauge; cannot also be a counter", name))
 	}
 	c := &Counter{name: name, help: help, labels: cloneLabels(labels)}
 	r.counters[key] = c
@@ -84,23 +179,33 @@ func (r *Registry) NewCounter(name, help string, labels map[string]string) *Coun
 }
 
 // Inc increments the counter by 1.
-func (c *Counter) Inc() { atomic.AddUint64(&c.value, 1) }
+func (c *Counter) Inc() { c.value.Add(1) }
 
-// Add adds delta to the counter. Panics if delta is negative.
-func (c *Counter) Add(delta uint64) { atomic.AddUint64(&c.value, delta) }
+// Add adds delta to the counter.
+func (c *Counter) Add(delta uint64) { c.value.Add(delta) }
 
 // Value returns the current counter value.
-func (c *Counter) Value() uint64 { return atomic.LoadUint64(&c.value) }
+func (c *Counter) Value() uint64 { return c.value.Load() }
 
 // ----- Gauge API -----
 
 // NewGauge registers a new Gauge.
+// Panics if name does not satisfy [a-zA-Z_:][a-zA-Z0-9_:]*.
 func (r *Registry) NewGauge(name, help string, labels map[string]string) *Gauge {
+	if !isValidMetricName(name) {
+		panic(fmt.Sprintf("metrics: invalid metric name %q (must match [a-zA-Z_:][a-zA-Z0-9_:]*)", name))
+	}
+	validateLabelNames(name, labels)
 	key := metricKey(name, labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if existing, ok := r.gauges[key]; ok {
 		return existing
+	}
+	// Reject a name already registered as a counter — see NewCounter for why a
+	// single name cannot carry two Prometheus TYPEs without corrupting the scrape.
+	if counterNameExists(r.counters, name) {
+		panic(fmt.Sprintf("metrics: name %q already registered as a counter; cannot also be a gauge", name))
 	}
 	g := &Gauge{name: name, help: help, labels: cloneLabels(labels)}
 	r.gauges[key] = g
@@ -124,7 +229,8 @@ func (g *Gauge) Value() float64 {
 // ----- Exposition -----
 
 // WriteText writes the Prometheus text exposition format to w.
-// Metrics are sorted by name for stable diffing in tests.
+// Static counters and gauges are written first (sorted by name for stable
+// diffing), then all registered CollectFuncs are called in registration order.
 func (r *Registry) WriteText(w io.Writer) error {
 	r.mu.RLock()
 	// Collect and sort.
@@ -132,6 +238,12 @@ func (r *Registry) WriteText(w io.Writer) error {
 		name, help, kind string
 		labels           map[string]string
 		text             string
+		// key is the precomputed sort key (metricKey output). Computing it
+		// once here — rather than inside the sort comparator — turns O(n log n)
+		// metricKey calls (each allocating a slice and a strings.Builder) into
+		// O(n) on every /metrics scrape, which Prometheus hits on a short
+		// interval. Classic decorate-sort-undecorate.
+		key string
 	}
 	var entries []entry
 
@@ -140,6 +252,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 			name: c.name, help: c.help, kind: "counter",
 			labels: c.labels,
 			text:   fmt.Sprintf("%d", c.Value()),
+			key:    metricKey(c.name, c.labels),
 		})
 	}
 	for _, g := range r.gauges {
@@ -147,16 +260,19 @@ func (r *Registry) WriteText(w io.Writer) error {
 			name: g.name, help: g.help, kind: "gauge",
 			labels: g.labels,
 			text:   formatFloat(g.Value()),
+			key:    metricKey(g.name, g.labels),
 		})
 	}
+	// Snapshot collector list while the lock is held.
+	fns := make([]CollectFunc, len(r.collectors))
+	copy(fns, r.collectors)
 	r.mu.RUnlock()
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].name != entries[j].name {
-			return entries[i].name < entries[j].name
+	slices.SortFunc(entries, func(a, b entry) int {
+		if n := cmp.Compare(a.name, b.name); n != 0 {
+			return n
 		}
-		return metricKey(entries[i].name, entries[i].labels) <
-			metricKey(entries[j].name, entries[j].labels)
+		return cmp.Compare(a.key, b.key)
 	})
 
 	// Emit one # HELP + # TYPE block per metric name, then all series.
@@ -164,7 +280,7 @@ func (r *Registry) WriteText(w io.Writer) error {
 	for _, e := range entries {
 		if !seen[e.name] {
 			seen[e.name] = true
-			if _, err := fmt.Fprintf(w, "# HELP %s %s\n", e.name, e.help); err != nil {
+			if _, err := fmt.Fprintf(w, "# HELP %s %s\n", e.name, escapeHelp(e.help)); err != nil {
 				return err
 			}
 			if _, err := fmt.Fprintf(w, "# TYPE %s %s\n", e.name, e.kind); err != nil {
@@ -176,10 +292,41 @@ func (r *Registry) WriteText(w io.Writer) error {
 			return err
 		}
 	}
+
+	// Call dynamic collectors.
+	for _, fn := range fns {
+		if err := fn(w); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // ----- Helpers -----
+
+// gaugeNameExists reports whether any gauge shares the bare metric name (across
+// all label sets). The registry maps are keyed by name+labels, so a name can
+// appear under several keys; the cross-type guard must compare the bare name,
+// not the key. Registrations happen once at startup for a few dozen metrics, so
+// the linear scan is negligible.
+func gaugeNameExists(m map[string]*Gauge, name string) bool {
+	for _, g := range m {
+		if g.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// counterNameExists is the counter-map counterpart of gaugeNameExists.
+func counterNameExists(m map[string]*Counter, name string) bool {
+	for _, c := range m {
+		if c.name == name {
+			return true
+		}
+	}
+	return false
+}
 
 func metricKey(name string, labels map[string]string) string {
 	if len(labels) == 0 {
@@ -189,7 +336,7 @@ func metricKey(name string, labels map[string]string) string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var sb strings.Builder
 	sb.WriteString(name)
 	for _, k := range keys {
@@ -209,7 +356,7 @@ func renderLabels(labels map[string]string) string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var sb strings.Builder
 	sb.WriteByte('{')
 	for i, k := range keys {
@@ -235,26 +382,36 @@ func escapeLabel(v string) string {
 	return r.Replace(v)
 }
 
+// escapeHelp escapes a HELP string per the Prometheus text exposition
+// format: only backslash and newline are escaped (the double-quote is not
+// special in HELP lines, unlike label values). Without this, a help string
+// containing a newline would split the HELP line and corrupt the scrape.
+func escapeHelp(v string) string {
+	r := strings.NewReplacer(
+		`\`, `\\`,
+		"\n", `\n`,
+	)
+	return r.Replace(v)
+}
+
+// cloneLabels returns an independent copy of in (nil stays nil), so a caller
+// mutating its label map after registration cannot alter the stored metric.
 func cloneLabels(in map[string]string) map[string]string {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(in)
 }
 
 // formatFloat renders a float in the format Prometheus expects.
 // Uses %g but converts special values to the Prometheus-canonical strings.
+// Inf/NaN are detected with math.IsInf/IsNaN rather than magnitude thresholds:
+// a threshold like v > 1e308 also matches large *finite* values (anything in
+// (1e308, MaxFloat64]), which would be mis-rendered as "+Inf".
 func formatFloat(v float64) string {
 	switch {
-	case v != v: // NaN
+	case math.IsNaN(v):
 		return "NaN"
-	case v > 1e308:
+	case math.IsInf(v, 1):
 		return "+Inf"
-	case v < -1e308:
+	case math.IsInf(v, -1):
 		return "-Inf"
 	}
 	return fmt.Sprintf("%g", v)

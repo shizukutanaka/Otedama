@@ -53,6 +53,8 @@ const (
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
 	MsgSubmitSharesError        uint8 = 0x1e
+	MsgSetNewPrevHash           uint8 = 0x20
+	MsgSetTarget                uint8 = 0x21
 )
 
 // Protocol identifies which sub-protocol is being negotiated.
@@ -69,37 +71,164 @@ const (
 
 // NewMiningJob carries a new block template for the miner to work on.
 // It is a channel_msg: the first four bytes of the payload are channel_id.
+//
+// Wire layout (Stratum V2 Mining Protocol, msg_type 0x15):
+//
+//	channel_id  U32
+//	job_id      U32
+//	min_ntime   OPTION[u32]  (1-byte 0/1 count, then the u32 if present)
+//	version     U32          (block-header version the miner must hash)
+//	merkle_root B32          (32 bytes)
+//
+// An ABSENT min_ntime marks a *future job*: it must not be mined until a
+// SetNewPrevHash arrives naming this job_id (which supplies the ntime).
+// A PRESENT min_ntime marks a job valid against the already-known
+// prev-hash. Note there is deliberately no nBits here — the network
+// target always arrives via SetNewPrevHash, and the share target via
+// SetTarget / OpenMiningChannelSuccess.
 type NewMiningJob struct {
-	ChannelID  uint32
-	JobID      uint32
-	MinNtime   uint32   // nTime lower bound
-	NBits      uint32   // compact target
-	MerkleRoot [32]byte // B0_32
+	ChannelID   uint32
+	JobID       uint32
+	HasMinNtime bool   // whether the OPTION[u32] min_ntime is present
+	MinNtime    uint32 // nTime lower bound; meaningful only if HasMinNtime
+	Version     uint32 // block-header version
+	MerkleRoot  [32]byte
 }
 
 // Encode serialises NewMiningJob (includes channel_id prefix).
 func (m NewMiningJob) Encode() ([]byte, error) {
-	buf := make([]byte, 4+4+4+4+32)
-	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
-	binary.LittleEndian.PutUint32(buf[4:8], m.JobID)
-	binary.LittleEndian.PutUint32(buf[8:12], m.MinNtime)
-	binary.LittleEndian.PutUint32(buf[12:16], m.NBits)
-	copy(buf[16:48], m.MerkleRoot[:])
+	size := 4 + 4 + 1 + 4 + 32
+	if m.HasMinNtime {
+		size += 4
+	}
+	buf := make([]byte, 0, size)
+	var u32 [4]byte
+	binary.LittleEndian.PutUint32(u32[:], m.ChannelID)
+	buf = append(buf, u32[:]...)
+	binary.LittleEndian.PutUint32(u32[:], m.JobID)
+	buf = append(buf, u32[:]...)
+	if m.HasMinNtime {
+		buf = append(buf, 1)
+		binary.LittleEndian.PutUint32(u32[:], m.MinNtime)
+		buf = append(buf, u32[:]...)
+	} else {
+		buf = append(buf, 0)
+	}
+	binary.LittleEndian.PutUint32(u32[:], m.Version)
+	buf = append(buf, u32[:]...)
+	buf = append(buf, m.MerkleRoot[:]...)
 	return buf, nil
 }
 
 // DecodeNewMiningJob parses a NewMiningJob payload (channel_id included).
 func DecodeNewMiningJob(payload []byte) (NewMiningJob, error) {
-	const need = 4 + 4 + 4 + 4 + 32
-	if len(payload) < need {
-		return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: short payload (%d < %d)", len(payload), need)
+	// Minimum size: absent min_ntime → 4+4+1+4+32.
+	const minNeed = 4 + 4 + 1 + 4 + 32
+	if len(payload) < minNeed {
+		return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: short payload (%d < %d)", len(payload), minNeed)
 	}
 	var m NewMiningJob
 	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
 	m.JobID = binary.LittleEndian.Uint32(payload[4:8])
-	m.MinNtime = binary.LittleEndian.Uint32(payload[8:12])
-	m.NBits = binary.LittleEndian.Uint32(payload[12:16])
-	copy(m.MerkleRoot[:], payload[16:48])
+	off := 8
+	switch payload[off] {
+	case 0:
+		off++
+	case 1:
+		off++
+		if len(payload) < off+4+4+32 {
+			return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: short payload for present min_ntime (%d)", len(payload))
+		}
+		m.HasMinNtime = true
+		m.MinNtime = binary.LittleEndian.Uint32(payload[off : off+4])
+		off += 4
+	default:
+		return NewMiningJob{}, fmt.Errorf("stratum: NewMiningJob: invalid OPTION count %d for min_ntime", payload[off])
+	}
+	m.Version = binary.LittleEndian.Uint32(payload[off : off+4])
+	off += 4
+	copy(m.MerkleRoot[:], payload[off:off+32])
+	return m, nil
+}
+
+// ------------------------------------------------------------------
+// SetNewPrevHash (server → client, msg_type 0x20, channel_msg)
+// ------------------------------------------------------------------
+
+// SetNewPrevHash announces the new chain tip after a block is found.
+// It activates the future job named by JobID and invalidates all other
+// outstanding jobs on the channel. Until the first SetNewPrevHash
+// arrives, the miner does not know prev_hash or the network nBits and
+// MUST NOT hash anything.
+//
+// Wire layout: channel_id U32, job_id U32, prev_hash U256,
+// min_ntime U32, nbits U32.
+type SetNewPrevHash struct {
+	ChannelID uint32
+	JobID     uint32   // the job this prev-hash activates
+	PrevHash  [32]byte // U256, little-endian (header wire order)
+	MinNtime  uint32
+	NBits     uint32 // network compact target
+}
+
+// Encode serialises SetNewPrevHash (includes channel_id prefix).
+func (m SetNewPrevHash) Encode() ([]byte, error) {
+	buf := make([]byte, 4+4+32+4+4)
+	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
+	binary.LittleEndian.PutUint32(buf[4:8], m.JobID)
+	copy(buf[8:40], m.PrevHash[:])
+	binary.LittleEndian.PutUint32(buf[40:44], m.MinNtime)
+	binary.LittleEndian.PutUint32(buf[44:48], m.NBits)
+	return buf, nil
+}
+
+// DecodeSetNewPrevHash parses a SetNewPrevHash payload.
+func DecodeSetNewPrevHash(payload []byte) (SetNewPrevHash, error) {
+	const need = 4 + 4 + 32 + 4 + 4
+	if len(payload) < need {
+		return SetNewPrevHash{}, fmt.Errorf("stratum: SetNewPrevHash: short payload (%d < %d)", len(payload), need)
+	}
+	var m SetNewPrevHash
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	m.JobID = binary.LittleEndian.Uint32(payload[4:8])
+	copy(m.PrevHash[:], payload[8:40])
+	m.MinNtime = binary.LittleEndian.Uint32(payload[40:44])
+	m.NBits = binary.LittleEndian.Uint32(payload[44:48])
+	return m, nil
+}
+
+// ------------------------------------------------------------------
+// SetTarget (server → client, msg_type 0x21, channel_msg)
+// ------------------------------------------------------------------
+
+// SetTarget updates the channel's share target: any header hash
+// numerically ≤ MaxTarget is a valid share. This is the pool-controlled
+// difficulty knob; it replaces the initial target delivered in
+// OpenMiningChannelSuccess.
+//
+// Wire layout: channel_id U32, maximum_target U256.
+type SetTarget struct {
+	ChannelID uint32
+	MaxTarget [32]byte // U256, same byte order as miner.Hash (LE, MSB at [31])
+}
+
+// Encode serialises SetTarget (includes channel_id prefix).
+func (m SetTarget) Encode() ([]byte, error) {
+	buf := make([]byte, 4+32)
+	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
+	copy(buf[4:36], m.MaxTarget[:])
+	return buf, nil
+}
+
+// DecodeSetTarget parses a SetTarget payload.
+func DecodeSetTarget(payload []byte) (SetTarget, error) {
+	const need = 4 + 32
+	if len(payload) < need {
+		return SetTarget{}, fmt.Errorf("stratum: SetTarget: short payload (%d < %d)", len(payload), need)
+	}
+	var m SetTarget
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	copy(m.MaxTarget[:], payload[4:36])
 	return m, nil
 }
 
@@ -192,6 +321,13 @@ type SubmitSharesError struct {
 	Error          string // STR0_255
 }
 
+// Encode serialises SubmitSharesError (symmetric inverse of DecodeSubmitSharesError).
+func (m SubmitSharesError) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 16), m.ChannelID)
+	b = appendU32LE(b, m.SequenceNumber)
+	return appendStr0_255(b, m.Error)
+}
+
 // DecodeSubmitSharesError parses a SubmitSharesError payload.
 func DecodeSubmitSharesError(payload []byte) (SubmitSharesError, error) {
 	if len(payload) < 8 {
@@ -247,6 +383,8 @@ type Message struct {
 	OpenMiningChannelSuccess *OpenMiningChannelSuccess
 	OpenMiningChannelError   *OpenMiningChannelError
 	NewMiningJob             *NewMiningJob
+	SetNewPrevHash           *SetNewPrevHash
+	SetTarget                *SetTarget
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
@@ -310,6 +448,18 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.NewMiningJob = &v
+	case MsgSetNewPrevHash:
+		v, err := DecodeSetNewPrevHash(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.SetNewPrevHash = &v
+	case MsgSetTarget:
+		v, err := DecodeSetTarget(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.SetTarget = &v
 	case MsgSubmitSharesStandard:
 		v, err := DecodeSubmitSharesStandard(f.Payload)
 		if err != nil {

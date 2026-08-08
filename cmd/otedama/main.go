@@ -7,47 +7,102 @@
 //	otedama run --bitcoin-address bc1q...
 //	otedama run --bitcoin-address bc1q... --wallet-passphrase "your passphrase"
 //	otedama version [--json]
-//	otedama config show
+//	otedama config show [--origin]
 //	otedama config validate --bitcoin-address bc1q...
-//	otedama service install [--config path] [--data-dir path]
+//	otedama service install [--config path] [--data-dir path] [--bitcoin-address addr]
 //	otedama service uninstall
 //	otedama service status
+//	otedama doctor [--bitcoin-address bc1q...]
+//
+// # Exit codes
+//
+// The exit code indicates the outcome category, following sysexits.h conventions:
+//
+//	0  — success
+//	1  — runtime error (engine failure, I/O error, network unreachable)
+//	64 — usage error (unknown subcommand, unknown flag, missing required argument)
+//	78 — configuration error (invalid bitcoin address, unrecognised log level, etc.)
+//
+// The doctor subcommand uses a narrower three-value scale:
+//
+//	0 — all checks passed
+//	1 — at least one check warned (advisory, not fatal)
+//	2 — at least one check failed (action required)
+//
+// For shell scripting the coarsest check is [ $? -eq 0 ]; any non-zero exit
+// indicates that operator attention is needed.
+//
+// Each subcommand lives in its own file (run.go, config.go, service.go,
+// doctor.go, version.go, completion.go); this file holds only the entry
+// point and the top-level dispatcher.
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-	"time"
-	"unicode"
-
-	"gopkg.in/yaml.v3"
-
-	"github.com/shizukutanaka/Otedama/internal/config"
-	"github.com/shizukutanaka/Otedama/internal/daemon"
-	"github.com/shizukutanaka/Otedama/internal/doctor"
-	"github.com/shizukutanaka/Otedama/internal/engine"
-	"github.com/shizukutanaka/Otedama/internal/httpserver"
-	"github.com/shizukutanaka/Otedama/internal/i18n"
-	"github.com/shizukutanaka/Otedama/internal/i18n/messages"
-	"github.com/shizukutanaka/Otedama/internal/logger"
-	"github.com/shizukutanaka/Otedama/internal/metrics"
-	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
-// Exit codes (sysexits.h conventions).
+// Exit codes following sysexits.h conventions.
+// See the package-level godoc for the complete contract.
 const (
-	exitOK      = 0
-	exitUsage   = 64
-	exitConfig  = 78
-	exitRuntime = 1
+	exitOK      = 0  // success
+	exitRuntime = 1  // runtime error (engine, network, I/O)
+	exitUsage   = 64 // usage error (EX_USAGE: unknown flag, bad subcommand)
+	exitConfig  = 78 // configuration error (EX_CONFIG: invalid field value)
 )
+
+// parseSubcommandFlags parses fs against args and returns the exit code the
+// caller should use if parsing did not succeed (ok is false); callers
+// proceed normally when ok is true.
+//
+// A bare `--help`/`-h` is not a usage mistake — it is the documented way to
+// see a subcommand's flags (the top-level `otedama help` handles this
+// correctly already; every per-subcommand flag.FlagSet did not). Every
+// FlagSet in this package previously called fs.SetOutput(stderr)
+// unconditionally, so `otedama run --help` printed its usage to stderr and
+// exited 64, identical to a genuine mistake like an unknown flag — a
+// correct invocation looked like an error to any script checking $?. This
+// routes help output to stdout with exit 0, while every other parse error
+// (unknown flag, missing value, etc.) still goes to stderr with exitUsage.
+func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Writer) (ok bool, exitCode int) {
+	out := stderr
+	if hasHelpFlag(args) {
+		out = stdout
+	}
+	fs.SetOutput(out)
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return false, exitOK
+		}
+		return false, exitUsage
+	}
+	return true, exitOK
+}
+
+// hasHelpFlag reports whether args requests help, matching the exact
+// spellings flag.FlagSet.Parse recognises (-h, -help, --help) before
+// falling through to its own ErrHelp path. It scans every token rather
+// than stopping at the first argument that doesn't look like a flag:
+// every flag these subcommands define takes a value in the space-separated
+// "--flag value" form (e.g. "--bitcoin-address bc1q..."), so the token
+// right after a flag is that flag's value, not a positional argument
+// signalling the end of flags — stopping there produced false negatives
+// for the common case of --help appearing after any flag with a value.
+// Scanning still stops at a literal "--", the unambiguous end-of-flags
+// marker, since that ends flag.Parse's own scanning too.
+func hasHelpFlag(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-h", "-help", "--help":
+			return true
+		case "--":
+			return false
+		}
+	}
+	return false
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -69,6 +124,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdService(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "completion":
+		return cmdCompletion(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printUsage(stdout)
 		return exitOK
@@ -86,12 +143,13 @@ Usage:
   otedama <command> [flags]
 
 Commands:
-  run       Start mining and/or other compute workloads.
-  version   Print version information and exit.
-  config    Inspect or validate the effective configuration.
-  service   Install/uninstall as a background service.
-  doctor    Run self-diagnostic checks.
-  help      Print this help and exit.
+  run        Start mining and/or other compute workloads.
+  version    Print version information and exit.
+  config     Inspect or validate the effective configuration.
+  service    Install/uninstall as a background service.
+  doctor     Run self-diagnostic checks.
+  completion Generate a shell-completion script (bash|zsh|fish).
+  help       Print this help and exit.
 
 Getting started (zero-configuration):
   otedama run --bitcoin-address bc1q...
@@ -99,406 +157,13 @@ Getting started (zero-configuration):
 With Lightning wallet:
   otedama run --bitcoin-address bc1q... --wallet-passphrase "strong passphrase"
 
-Run 'otedama <command> --help' for flags.
+Exit codes:
+  0   success
+  1   runtime error (engine, network, I/O failure)
+  64  usage error  (unknown flag or subcommand)
+  78  config error (invalid address, bad log level, etc.)
+  doctor uses 0=pass, 1=warn, 2=fail instead of the above.
+
+Run 'otedama <command> --help' for per-command flags.
 `)
-}
-
-// ----- version -----
-
-func cmdVersion(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("version", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	jsonOut := fs.Bool("json", false, "Output as JSON.")
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
-	}
-	info := version.Get()
-	if *jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(info)
-	} else {
-		fmt.Fprintln(stdout, info.String())
-	}
-	return exitOK
-}
-
-// ----- config -----
-
-func cmdConfig(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "otedama config: expected subcommand (show|validate)")
-		return exitUsage
-	}
-	switch args[0] {
-	case "show":
-		return cmdConfigShow(args[1:], stdout, stderr)
-	case "validate":
-		return cmdConfigValidate(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "otedama config: unknown subcommand %q\n", args[0])
-		return exitUsage
-	}
-}
-
-// runFlags holds all parsed flags for the run subcommand.
-type runFlags struct {
-	config.FlagValues
-	configFile       string
-	dryRun           bool
-	noTUI            bool
-	walletPassphrase string
-	logFormat        string
-	httpAddr         string
-}
-
-func parseRunFlags(args []string, stderr io.Writer) (runFlags, error) {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var f runFlags
-	fs.StringVar(&f.BitcoinAddress, "bitcoin-address", "", "Bitcoin address for mining rewards (required).")
-	fs.StringVar(&f.LogLevel, "log-level", "", "Log level (debug|info|warn|error).")
-	fs.StringVar(&f.Language, "language", "", "UI language as BCP 47 tag (e.g., ja, en, zh-CN).")
-	fs.StringVar(&f.DataDir, "data-dir", "", "Directory for persistent data.")
-	fs.StringVar(&f.configFile, "config", "", "Path to config.yaml (optional).")
-	fs.BoolVar(&f.dryRun, "dry-run", false, "Validate configuration and exit without starting.")
-	fs.BoolVar(&f.noTUI, "no-tui", false, "Disable the terminal dashboard (plain log output).")
-	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
-		"Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
-	fs.StringVar(&f.logFormat, "log-format", "text", "Log output format: text or json.")
-	fs.StringVar(&f.httpAddr, "http-addr", "",
-		"Address for HTTP metrics/health endpoints (e.g. 127.0.0.1:9090). Empty disables.")
-	if err := fs.Parse(args); err != nil {
-		return runFlags{}, err
-	}
-	return f, nil
-}
-
-func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stderr)
-	if err != nil {
-		return exitUsage
-	}
-	fromFile := loadConfigFile(f.configFile, stderr)
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
-	fmt.Fprintf(stdout, "bitcoin_address: %s\n", safeDisplay(cfg.BitcoinAddress))
-	fmt.Fprintf(stdout, "log_level:       %s\n", cfg.LogLevel)
-	fmt.Fprintf(stdout, "language:        %s\n", safeDisplay(cfg.Language))
-	fmt.Fprintf(stdout, "data_dir:        %s\n", safeDisplay(cfg.DataDir))
-	fmt.Fprintf(stdout, "pools:           %d configured\n", len(cfg.Pools))
-	return exitOK
-}
-
-func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stderr)
-	if err != nil {
-		return exitUsage
-	}
-	fromFile := loadConfigFile(f.configFile, stderr)
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(stderr, "%s\n", err)
-		return exitConfig
-	}
-	fmt.Fprintln(stdout, "configuration is valid")
-	return exitOK
-}
-
-// ----- run -----
-
-func cmdRun(args []string, stdout, stderr io.Writer) int {
-	f, err := parseRunFlags(args, stderr)
-	if err != nil {
-		return exitUsage
-	}
-
-	fromFile := loadConfigFile(f.configFile, stderr)
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(stderr, "%s\n", err)
-		return exitConfig
-	}
-
-	// Initialise i18n bundle.
-	bundle, _ := messages.NewBundle()
-	lang := messages.DetectLang(cfg.Language)
-
-	logln := func(level string, id i18n.ID, data map[string]any) {
-		msg, _ := bundle.RenderWith(lang, id, data)
-		fmt.Fprintf(stdout, "[%s] %s\n", level, msg)
-	}
-	plain := func(level, text string) {
-		fmt.Fprintf(stdout, "[%s] %s\n", level, text)
-	}
-
-	if f.dryRun {
-		fmt.Fprintln(stdout, "dry-run: configuration is valid; would start run")
-		return exitOK
-	}
-
-	logln("info", messages.StartupReady, nil)
-
-	poolURL := "stratum+v2://public.stratum.slushpool.com:3336"
-	if len(cfg.Pools) > 0 {
-		poolURL = cfg.Pools[0].URL
-	}
-	logln("info", messages.StartupPoolConnecting, map[string]any{"url": poolURL})
-
-	ctx, cancel := signal.NotifyContext(
-		context.Background(),
-		os.Interrupt, syscall.SIGTERM,
-	)
-	defer cancel()
-
-	// Build the structured logger.
-	structlog := buildLogger(f, cfg, stdout)
-
-	// Start HTTP health/metrics server if requested.
-	metricsRegistry, httpSrv := startHTTPServer(ctx, f, stdout, stderr)
-	if httpSrv != nil {
-		defer httpSrv.Stop()
-	}
-
-	// Bridge engine readiness to HTTP /readyz.
-	onReady := func(ready bool) {
-		if httpSrv != nil {
-			httpSrv.SetReady(ready)
-		}
-	}
-
-	if err := engine.Run(ctx, engine.Options{
-		Config:           cfg,
-		Output:           stdout,
-		NoTUI:            f.noTUI,
-		WalletPassphrase: f.walletPassphrase,
-		Logger:           structlog.Adapter(),
-		Metrics:          metricsRegistry,
-		OnReady:          onReady,
-	}); err != nil && err != context.Canceled {
-		structlog.Error("engine", "error", err.Error())
-		plain("error", err.Error())
-		return exitRuntime
-	}
-
-	logln("info", messages.StatusShuttingDown, nil)
-	return exitOK
-}
-
-// buildLogger constructs the structured logger for a run. When the TUI
-// dashboard is active (default), log output is discarded so it does not
-// corrupt the dashboard. With --no-tui, logs go to stdout in the
-// configured format (text or JSON).
-func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) *logger.Logger {
-	if !f.noTUI {
-		return logger.Discard()
-	}
-	format := logger.FormatText
-	if f.logFormat == "json" {
-		format = logger.FormatJSON
-	}
-	return logger.New(logger.Config{
-		Level:  logger.ParseLevel(cfg.LogLevel),
-		Format: format,
-		Writer: stdout,
-	})
-}
-
-// startHTTPServer starts the health/metrics HTTP server if --http-addr
-// was provided. Returns the metrics registry and server handle (both
-// nil if no address was set, or if startup failed — a startup failure
-// is logged as a warning but does not abort the run).
-func startHTTPServer(ctx context.Context, f runFlags, stdout, stderr io.Writer) (*metrics.Registry, *httpserver.Server) {
-	if f.httpAddr == "" {
-		return nil, nil
-	}
-	reg := metrics.NewRegistry()
-	srv := httpserver.New(f.httpAddr, reg)
-	if err := srv.Start(ctx); err != nil {
-		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
-		return reg, nil
-	}
-	fmt.Fprintf(stdout, "[info] http: listening on %s\n", f.httpAddr)
-	return reg, srv
-}
-
-// ----- service -----
-
-func cmdService(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "otedama service: expected subcommand (install|uninstall|status)")
-		return exitUsage
-	}
-	switch args[0] {
-	case "install":
-		return cmdServiceInstall(args[1:], stdout, stderr)
-	case "uninstall":
-		return cmdServiceUninstall(stdout, stderr)
-	case "status":
-		return cmdServiceStatus(stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "otedama service: unknown subcommand %q\n", args[0])
-		return exitUsage
-	}
-}
-
-func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("service install", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	configFile := fs.String("config", "", "Path to config.yaml for the service.")
-	dataDir := fs.String("data-dir", "", "Data directory for the service.")
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
-	}
-	mgr, err := daemon.NewManager(*configFile, *dataDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "service: %v\n", err)
-		return exitRuntime
-	}
-	if err := mgr.Install(); err != nil {
-		fmt.Fprintf(stderr, "service install failed: %v\n", err)
-		return exitRuntime
-	}
-	fmt.Fprintln(stdout, "Otedama service installed and started.")
-	fmt.Fprintln(stdout, "It will start automatically on login.")
-	return exitOK
-}
-
-func cmdServiceUninstall(stdout, stderr io.Writer) int {
-	mgr, err := daemon.NewManager("", "")
-	if err != nil {
-		fmt.Fprintf(stderr, "service: %v\n", err)
-		return exitRuntime
-	}
-	if err := mgr.Uninstall(); err != nil {
-		fmt.Fprintf(stderr, "service uninstall failed: %v\n", err)
-		return exitRuntime
-	}
-	fmt.Fprintln(stdout, "Otedama service uninstalled.")
-	return exitOK
-}
-
-func cmdServiceStatus(stdout, stderr io.Writer) int {
-	mgr, err := daemon.NewManager("", "")
-	if err != nil {
-		fmt.Fprintf(stderr, "service: %v\n", err)
-		return exitRuntime
-	}
-	status, err := mgr.Status()
-	if err != nil {
-		fmt.Fprintf(stderr, "service status: %v\n", err)
-		return exitRuntime
-	}
-	if status.Installed {
-		state := "stopped"
-		if status.Running {
-			state = "running"
-		}
-		fmt.Fprintf(stdout, "Otedama service: installed, %s\n", state)
-	} else {
-		fmt.Fprintln(stdout, "Otedama service: not installed")
-		fmt.Fprintln(stdout, "Run 'otedama service install' to install.")
-	}
-	return exitOK
-}
-
-// ----- YAML config loading -----
-
-func loadConfigFile(path string, stderr io.Writer) config.Config {
-	if path == "" {
-		path = defaultConfigPath()
-	}
-	if path == "" {
-		return config.Config{}
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			fmt.Fprintf(stderr, "warning: cannot open config file %q: %v\n", path, err)
-		}
-		return config.Config{}
-	}
-	defer f.Close()
-	var cfg config.Config
-	dec := yaml.NewDecoder(f)
-	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil {
-		// An empty or comments-only file yields io.EOF (no YAML document);
-		// that is not a parse error — it means "use defaults".
-		if err == io.EOF {
-			return config.Config{}
-		}
-		fmt.Fprintf(stderr, "warning: cannot parse config file %q: %v\n", path, err)
-		return config.Config{}
-	}
-	return cfg
-}
-
-func defaultConfigPath() string {
-	if p := os.Getenv("OTEDAMA_CONFIG"); p != "" {
-		return p
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return home + "/.config/otedama/config.yaml"
-}
-
-// ----- helpers -----
-
-func safeDisplay(v string) string {
-	if v == "" {
-		return "(default)"
-	}
-	// Strip control characters (ESC, newlines, DEL, …) so a malicious
-	// config value cannot inject ANSI escape sequences or forge log lines
-	// when echoed to a terminal. Printable text is returned unchanged.
-	if !strings.ContainsFunc(v, unicode.IsControl) {
-		return v
-	}
-	var b strings.Builder
-	b.Grow(len(v))
-	for _, r := range v {
-		if !unicode.IsControl(r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
-func maskAddress(addr string) string {
-	if len(addr) <= 10 {
-		return addr
-	}
-	return addr[:6] + strings.Repeat("·", 3) + addr[len(addr)-4:]
-}
-
-// ----- doctor subcommand -----
-
-func cmdDoctor(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	configFile := fs.String("config", "", "Path to config.yaml to diagnose.")
-	btcAddr := fs.String("bitcoin-address", "", "Bitcoin address to validate.")
-	dataDir := fs.String("data-dir", "", "Data directory to check.")
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
-	}
-
-	// Build effective config from the same layering used by `run`.
-	flags := config.FlagValues{
-		BitcoinAddress: *btcAddr,
-		DataDir:        *dataDir,
-		ConfigFile:     *configFile,
-	}
-	fromFile := loadConfigFile(*configFile, stderr)
-	cfg := config.Resolve(fromFile, nil, flags)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	runner := &doctor.Runner{Checks: doctor.DefaultChecks(cfg, *configFile)}
-	report := runner.Run(ctx)
-	report.Print(stdout)
-	return report.ExitCode()
 }

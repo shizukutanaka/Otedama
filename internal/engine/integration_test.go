@@ -134,12 +134,13 @@ func (p *mockPool) handleConn(conn net.Conn) {
 		return
 	}
 
-	// 5. Send a single NewMiningJob so the worker has something to hash.
+	// 5. Send a NewMiningJob followed by the SetNewPrevHash that
+	// activates it (the SV2 activation pair). The all-0xFF channel
+	// target from step 4 makes every hash a share.
 	job := stratum.NewMiningJob{
 		ChannelID: 1,
 		JobID:     100,
-		MinNtime:  uint32(time.Now().Unix()),
-		NBits:     0x1d00ffff, // very easy target for testing
+		Version:   0x20000000,
 	}
 	for i := range job.MerkleRoot {
 		job.MerkleRoot[i] = byte(i)
@@ -148,6 +149,18 @@ func (p *mockPool) handleConn(conn net.Conn) {
 	p.jobs++
 	p.mu.Unlock()
 	if err := sendServerMsg(conn, stratum.MsgNewMiningJob, true, &job); err != nil {
+		return
+	}
+	prev := stratum.SetNewPrevHash{
+		ChannelID: 1,
+		JobID:     100,
+		MinNtime:  uint32(time.Now().Unix()),
+		NBits:     0x1d00ffff,
+	}
+	for i := range prev.PrevHash {
+		prev.PrevHash[i] = byte(0x10 + i)
+	}
+	if err := sendServerMsg(conn, stratum.MsgSetNewPrevHash, true, &prev); err != nil {
 		return
 	}
 
@@ -256,6 +269,16 @@ func TestEngine_Integration_HandshakeSucceeds(t *testing.T) {
 		t.Errorf("OnReady(true) never called; states=%v", readyStates)
 	}
 
+	// Shares must actually reach the pool. The pool assigned an easy share
+	// target (0xFF…FF) in OpenMiningChannelSuccess, so every hash is a valid
+	// share — provided the engine grinds to that share target. If it instead
+	// used the block target (NBits 0x1d00ffff, ~4e9 hashes/share), no share
+	// could land in this window. This is the regression guard for the
+	// share-target fix.
+	if got := pool.SharesReceived(); got < 1 {
+		t.Errorf("pool received %d shares, want >= 1 (engine must grind to the assigned share target)", got)
+	}
+
 	cancel()
 	select {
 	case <-done:
@@ -330,6 +353,9 @@ func TestEngineMetrics_AllRegisteredOnInit(t *testing.T) {
 	if m.sharesFound == nil {
 		t.Error("shares_found_total not registered")
 	}
+	if m.sharesSubmitted == nil {
+		t.Error("shares_submitted_total not registered")
+	}
 	if m.sharesAccepted == nil {
 		t.Error("shares_total{status=accepted} not registered")
 	}
@@ -353,6 +379,12 @@ func TestEngineMetrics_AllRegisteredOnInit(t *testing.T) {
 	}
 	if m.startTime == nil {
 		t.Error("start_time_seconds gauge not registered")
+	}
+	if m.rejectRate == nil {
+		t.Error("reject_rate gauge not registered")
+	}
+	if m.staleRate == nil {
+		t.Error("stale_rate gauge not registered")
 	}
 }
 
@@ -446,6 +478,66 @@ func TestEngineMetrics_RejectReasonLazyCreateAndReuse(t *testing.T) {
 	}
 }
 
+func TestEngineMetrics_TouchLastReject_LazyCreateAndUpdate(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	before := time.Now().Unix() - 1
+	m.touchLastReject("stale", time.Now().Unix())
+	after := time.Now().Unix() + 1
+
+	m.lastRejectByReasonMu.Lock()
+	g, ok := m.lastRejectByReason["stale"]
+	m.lastRejectByReasonMu.Unlock()
+	if !ok || g == nil {
+		t.Fatal("touchLastReject(stale) did not create a gauge")
+	}
+	val := int64(g.Value())
+	if val < before || val > after {
+		t.Errorf("last_reject_seconds value = %d, want in [%d, %d]", val, before, after)
+	}
+}
+
+func TestEngineMetrics_TouchLastReject_ReusesGauge(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	m.touchLastReject("duplicate", 1000)
+	m.lastRejectByReasonMu.Lock()
+	g1 := m.lastRejectByReason["duplicate"]
+	m.lastRejectByReasonMu.Unlock()
+
+	m.touchLastReject("duplicate", 2000)
+	m.lastRejectByReasonMu.Lock()
+	g2 := m.lastRejectByReason["duplicate"]
+	m.lastRejectByReasonMu.Unlock()
+
+	if g1 != g2 {
+		t.Error("touchLastReject created a second gauge for the same category")
+	}
+	if got := int64(g2.Value()); got != 2000 {
+		t.Errorf("gauge value = %d, want 2000 (updated)", got)
+	}
+}
+
+func TestEngineMetrics_TouchLastReject_AppearsInOutput(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.touchLastReject("hardware", 1750000000)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "otedama_last_reject_seconds") {
+		t.Error("last_reject_seconds metric missing from /metrics output")
+	}
+	if !strings.Contains(out, `reason="hardware"`) {
+		t.Errorf("reason label missing from output:\n%s", out)
+	}
+}
+
 func TestEngineMetrics_RejectReasonAppearsInOutput(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -475,5 +567,175 @@ func TestEngineMetrics_ShareAcceptanceRateRegistered(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "otedama_share_acceptance_rate") {
 		t.Error("acceptance-rate gauge missing from /metrics output")
+	}
+}
+
+func TestEngineMetrics_UpdateShareRates_NoSharesJudged(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// With nothing judged yet, acceptance is 1.0 (nothing lost) and the
+	// reject/stale rates are 0 — no division-by-zero.
+	rate, judged := m.updateShareRates()
+	if rate != 1.0 {
+		t.Errorf("acceptance rate with no shares = %v, want 1.0", rate)
+	}
+	if judged != 0 {
+		t.Errorf("judged with no shares = %d, want 0", judged)
+	}
+	if got := m.rejectRate.Value(); got != 0 {
+		t.Errorf("rejectRate with no shares = %v, want 0", got)
+	}
+	if got := m.staleRate.Value(); got != 0 {
+		t.Errorf("staleRate with no shares = %v, want 0", got)
+	}
+}
+
+func TestEngineMetrics_UpdateShareRates_ComputesRejectAndStale(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// 90 accepted, 10 rejected (6 of them stale) → 100 judged.
+	for range 90 {
+		m.sharesAccepted.Inc()
+	}
+	for range 10 {
+		m.sharesRejected.Inc()
+	}
+	for range 6 {
+		m.rejectReason("stale").Inc()
+	}
+
+	rate, judged := m.updateShareRates()
+	if judged != 100 {
+		t.Fatalf("judged = %d, want 100", judged)
+	}
+	if rate != 0.90 {
+		t.Errorf("acceptance rate = %v, want 0.90", rate)
+	}
+	if got := m.rejectRate.Value(); got != 0.10 {
+		t.Errorf("rejectRate = %v, want 0.10", got)
+	}
+	if got := m.staleRate.Value(); got != 0.06 {
+		t.Errorf("staleRate = %v, want 0.06", got)
+	}
+}
+
+func TestEngineMetrics_UpdateShareRates_Reconciliation(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// Found 100 locally; pool has judged 95 (90 accepted + 5 rejected).
+	// 5 are unaccounted (in-flight or lost).
+	for range 100 {
+		m.sharesFound.Inc()
+	}
+	for range 90 {
+		m.sharesAccepted.Inc()
+	}
+	for range 5 {
+		m.sharesRejected.Inc()
+	}
+	m.updateShareRates()
+	if got := m.sharesUnaccounted.Value(); got != 5 {
+		t.Errorf("sharesUnaccounted = %v, want 5", got)
+	}
+
+	// Once the pool judges the rest (and more, simulating a tick race),
+	// unaccounted clamps at 0 rather than going negative.
+	for range 10 {
+		m.sharesAccepted.Inc() // 105 judged > 100 found
+	}
+	m.updateShareRates()
+	if got := m.sharesUnaccounted.Value(); got != 0 {
+		t.Errorf("sharesUnaccounted = %v, want 0 (clamped, not negative)", got)
+	}
+}
+
+func TestEngineMetrics_RejectAndStaleRateAppearInOutput(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.updateShareRates() // ensure the gauges are emitted (set to 0)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"otedama_reject_rate", "otedama_stale_rate"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("metric %q missing from /metrics output", want)
+		}
+	}
+}
+
+func TestEngineMetrics_ObservabilityBundleAppearsInOutput(t *testing.T) {
+	// Session-54 observability bundle: build_info (constant 1 with labels),
+	// up, and the pool connection-state / active-index gauges.
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.up.Set(1)
+	m.poolConnectionState.Set(2)
+	m.poolActiveIndex.Set(1)
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"otedama_build_info",
+		"otedama_up",
+		"otedama_pool_connection_state",
+		"otedama_pool_active_index",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("metric %q missing from /metrics output", want)
+		}
+	}
+	// build_info follows the _info convention: a constant-1 series whose
+	// version/commit/goversion live in labels.
+	if !strings.Contains(out, `version=`) || !strings.Contains(out, `goversion=`) {
+		t.Errorf("build_info should carry version/goversion labels:\n%s", out)
+	}
+	if !strings.Contains(out, "otedama_build_info{") {
+		t.Errorf("build_info should be a labeled series:\n%s", out)
+	}
+}
+
+// TestEngineRun_NotReadyWithoutPoolConnect verifies the session-61 fix:
+// /readyz (via OnReady) must NOT report ready until an actual pool session
+// is established. With an unreachable pool, OnReady(true) must never fire.
+func TestEngineRun_NotReadyWithoutPoolConnect(t *testing.T) {
+	var mu sync.Mutex
+	var states []bool
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_ = Run(ctx, Options{
+		Config: config.Config{
+			BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+			// Port 1 is reserved; the dial is refused immediately, so no
+			// session ever establishes.
+			Pools: []config.PoolConfig{{URL: "stratum+v2://127.0.0.1:1"}},
+		},
+		NoTUI:                true,
+		MaxReconnectAttempts: 1,
+		OnReady: func(ready bool) {
+			mu.Lock()
+			states = append(states, ready)
+			mu.Unlock()
+		},
+		Logger: func(_, _ string) {},
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, r := range states {
+		if r {
+			t.Errorf("OnReady(true) fired without an established pool session; states=%v", states)
+		}
 	}
 }

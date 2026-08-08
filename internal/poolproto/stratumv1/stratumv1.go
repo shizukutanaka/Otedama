@@ -38,8 +38,10 @@
 // # What this file does NOT do
 //
 //   - TLS: the stratum+tls:// scheme uses tls.Dial in a sibling file.
-//   - DATUM: OCEAN's variant uses different message types and lives
-//     in package datum, not here.
+//   - DATUM: OCEAN's variant uses different message types. No package
+//     datum exists yet — this is planned (docs/adr/ADR-009, status
+//     Proposed), not implemented; poolproto.ProtocolDATUM is a
+//     reserved URL-scheme constant with no Dialer registered.
 //   - Job Declaration Protocol: SV2 only; not relevant to V1.
 package stratumv1
 
@@ -61,6 +63,14 @@ import (
 )
 
 // ----- session -----
+
+// maxLineBytes caps a single newline-delimited JSON-RPC line from the pool.
+// Real Stratum V1 messages (mining.notify, set_difficulty, share responses)
+// are well under 1 KiB; 64 KiB is generous. The cap matters because the pool
+// is untrusted input: bufio.Reader.ReadBytes would otherwise accumulate an
+// unbounded line (a stream with no newline) into memory until OOM. readLine
+// enforces this limit via ReadSlice, which never grows past the buffer.
+const maxLineBytes = 64 << 10 // 64 KiB
 
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
@@ -89,6 +99,17 @@ type session struct {
 	// difficulty is the most recent set_difficulty value.
 	difficulty atomic.Uint64 // float64 bits
 
+	// noticeCh delivers pool-sent client.show_message notices to the caller.
+	// Buffered so the read loop never blocks on a slow consumer; closed when
+	// the session ends. The caller may type-assert the Session to
+	// poolproto.PoolNoticeReceiver and range over PoolNotices().
+	noticeCh chan string
+
+	// lastReconnect records the most recent pool-directed reconnect
+	// (client.reconnect), nil until one is seen. Read race-free; useful
+	// for diagnostics and tests.
+	lastReconnect atomic.Pointer[reconnectDirective]
+
 	// extranonce1, extranonce2Size are negotiated at subscribe time.
 	extranonce1     string
 	extranonce2Size int
@@ -98,12 +119,19 @@ type session struct {
 	closeOnce sync.Once
 }
 
+// Compile-time interface satisfaction checks.
+var (
+	_ poolproto.Session            = (*session)(nil)
+	_ poolproto.PoolNoticeReceiver = (*session)(nil)
+)
+
 func newSession(conn *connection) *session {
 	return &session{
-		conn:    conn,
-		reader:  bufio.NewReaderSize(conn.raw, 64<<10), // 64 KiB max line
-		jobsCh:  make(chan poolproto.Job, 8),
-		pending: map[uint64]chan rpcResponse{},
+		conn:     conn,
+		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
+		jobsCh:   make(chan poolproto.Job, 8),
+		noticeCh: make(chan string, 8),
+		pending:  map[uint64]chan rpcResponse{},
 	}
 }
 
@@ -118,6 +146,13 @@ func (s *session) start(ctx context.Context) {
 // It runs until the connection closes or the context is cancelled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
+	defer close(s.noticeCh)
+	// When the loop exits for any reason (EOF, network error, or ctx cancel),
+	// cancel all in-flight call() invocations so they return immediately
+	// instead of blocking until the caller's context expires. This mirrors
+	// what Close() does but without closing the network connection (which
+	// is already closed or will be closed by the caller).
+	defer s.cancelPending()
 	for {
 		// Cooperative cancellation check.
 		select {
@@ -129,13 +164,45 @@ func (s *session) readLoop(ctx context.Context) {
 		// Apply a generous read deadline so a wedged pool doesn't hang
 		// us forever.
 		_ = s.conn.raw.SetReadDeadline(time.Now().Add(5 * time.Minute))
-		line, err := s.reader.ReadBytes('\n')
+		line, err := s.readLine()
 		if err != nil {
-			// EOF or network error: terminate cleanly.
+			// EOF, network error, or an oversized line: terminate cleanly.
 			return
 		}
 		s.dispatch(line)
 	}
+}
+
+// readLine reads one newline-terminated line, enforcing maxLineBytes as a hard
+// ceiling. ReadSlice returns bufio.ErrBufferFull (not more data) once the
+// buffer fills without a delimiter, so a pool that streams bytes with no
+// newline can never grow our memory — unlike ReadBytes, which would accumulate
+// the whole line. The returned slice is copied out of the bufio buffer because
+// ReadSlice aliases it (invalidated by the next read); the copy keeps dispatch's
+// previous "owns its line" contract and matches ReadBytes's old allocation cost.
+func (s *session) readLine() ([]byte, error) {
+	line, err := s.reader.ReadSlice('\n')
+	if errors.Is(err, bufio.ErrBufferFull) {
+		return nil, fmt.Errorf("stratumv1: line exceeds %d bytes; terminating session (misbehaving pool)", maxLineBytes)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]byte, len(line))
+	copy(out, line)
+	return out, nil
+}
+
+// cancelPending closes all in-flight call() channels so those callers
+// receive "session closed before response" immediately. Safe to call
+// from both readLoop and Close() — the mutex ensures no double-close.
+func (s *session) cancelPending() {
+	s.pendingMu.Lock()
+	for id, ch := range s.pending {
+		close(ch)
+		delete(s.pending, id)
+	}
+	s.pendingMu.Unlock()
 }
 
 // dispatch parses one JSON-RPC line and routes it.
@@ -169,22 +236,7 @@ func (s *session) dispatch(line []byte) {
 		if err != nil {
 			return
 		}
-		// Non-blocking send: if the worker is too slow, drop the
-		// oldest job (the new one is always more current).
-		select {
-		case s.jobsCh <- job:
-		default:
-			// Drop oldest, push newest. Keeps the channel from
-			// staling on slow consumers.
-			select {
-			case <-s.jobsCh:
-			default:
-			}
-			select {
-			case s.jobsCh <- job:
-			default:
-			}
-		}
+		s.sendJob(job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -195,13 +247,82 @@ func (s *session) dispatch(line []byte) {
 			s.extranonce1 = en1
 			s.extranonce2Size = sz
 		}
-		// Other notifications (mining.set_version_mask, etc.) are ignored;
-		// silent ignore is forward-compatible.
+	case "client.show_message":
+		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
+		// Surface it via PoolNotices(); if the caller is not draining the
+		// channel, drop the oldest notice to avoid blocking the read loop.
+		if notice, ok := parseShowMessage(msg.Params); ok && notice != "" {
+			select {
+			case s.noticeCh <- notice:
+			default:
+				select {
+				case <-s.noticeCh:
+				default:
+				}
+				select {
+				case s.noticeCh <- notice:
+				default:
+				}
+			}
+		}
+	case "client.reconnect", "mining.reconnect":
+		// The pool is asking us to move to another node (load balancing,
+		// maintenance, failover). Record the directive, then end the
+		// session cleanly: closing the connection makes the read loop
+		// return and Jobs() close, which is exactly the signal the
+		// reconnect machinery uses to re-dial the configured pool list.
+		// We deliberately do NOT follow the pool-supplied Host:Port — see
+		// reconnectDirective for the rationale.
+		if d, ok := parseReconnect(msg.Params); ok {
+			s.lastReconnect.Store(&d)
+		}
+		go s.Close()
+		// Other notifications (mining.set_version_mask, etc.) are
+		// silently ignored; forward-compatible with pool extensions.
 	}
 }
 
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
+
+// PoolNotices returns the channel of pool-sent operator notices
+// (client.show_message). The channel is closed when the session ends.
+// Implements poolproto.PoolNoticeReceiver.
+func (s *session) PoolNotices() <-chan string { return s.noticeCh }
+
+// sendJob enqueues a new job, respecting the clean_jobs flag.
+// When clean_jobs=true the pool signals a new block has been found;
+// all pending jobs must be discarded immediately — submitting them would
+// produce stale (rejected) shares, which is the #1 reject cause after
+// network latency. When clean_jobs=false, only the oldest job is dropped
+// if the worker cannot keep up (the new job is always more current).
+func (s *session) sendJob(job poolproto.Job) {
+	if job.CleanJobs {
+		// Purge all pending jobs before queueing the new block's work.
+		for {
+			select {
+			case <-s.jobsCh:
+			default:
+				goto send // channel empty
+			}
+		}
+	}
+send:
+	select {
+	case s.jobsCh <- job:
+	default:
+		// Channel still full (clean_jobs=false, slow worker):
+		// drop oldest, push newest.
+		select {
+		case <-s.jobsCh:
+		default:
+		}
+		select {
+		case s.jobsCh <- job:
+		default:
+		}
+	}
+}
 
 // Submit sends a share via mining.submit and returns the pool's verdict.
 // Stratum V1 submission format: ["worker", "job_id", "extranonce2",
@@ -256,13 +377,7 @@ func (s *session) Close() error {
 		if s.ctxCancel != nil {
 			s.ctxCancel()
 		}
-		// Cancel any pending calls so callers don't block forever.
-		s.pendingMu.Lock()
-		for id, ch := range s.pending {
-			close(ch)
-			delete(s.pending, id)
-		}
-		s.pendingMu.Unlock()
+		s.cancelPending()
 		err = s.conn.Close()
 	})
 	return err
@@ -351,6 +466,9 @@ func init() {
 
 // Compile-time assertion that *Dialer satisfies poolproto.Dialer.
 var _ poolproto.Dialer = (*Dialer)(nil)
+
+// Compile-time assertion that *session satisfies poolproto.PoolNoticeReceiver.
+var _ poolproto.PoolNoticeReceiver = (*session)(nil)
 
 // We deliberately keep io.Reader satisfied via bufio.Reader.
 var _ io.Reader = (*bufio.Reader)(nil)

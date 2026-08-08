@@ -8,9 +8,13 @@
 //	                 as the server goroutine is alive. Used by container
 //	                 orchestrators (Kubernetes, systemd) to restart on hang.
 //
-//	GET /readyz      Readiness probe. Returns 200 OK only if the engine
-//	                 has reached the "ready" state (pool connected, at
-//	                 least one worker hashing). Returns 503 otherwise.
+//	GET /readyz      Readiness probe. Returns 200 OK once the engine has
+//	                 an established pool session (SetupConnection/
+//	                 OpenMiningChannel completed, or V1's equivalent
+//	                 handshake) — not merely a started process, but also
+//	                 not gated on a job having been received or a hash
+//	                 actually produced yet. Returns 503 otherwise. See
+//	                 engine.Run's OnReady wiring (internal/engine/run.go).
 //
 //	GET /metrics     Prometheus text exposition format. Scrape this with
 //	                 Prometheus / Grafana Agent / OTel Collector to get
@@ -35,6 +39,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	// pprof registers its handlers via its init(); we do NOT blank-import it
+	// because that would register on http.DefaultServeMux. Instead we call
+	// the pprof handler functions explicitly so they land on our custom mux.
+	// The import is here to make the usage visible to linters.
+	"net/http/pprof" //nolint:gosec
 	"sync/atomic"
 	"time"
 
@@ -52,6 +61,10 @@ type Server struct {
 
 	httpSrv *http.Server
 
+	// boundAddr is the actual address the listener bound to, set in Start.
+	// Differs from addr when port 0 was requested.
+	boundAddr atomic.Pointer[string]
+
 	// serveErr holds the error returned by the background Serve
 	// goroutine, if any (other than the expected ErrServerClosed).
 	// Readable via ServeError() for observability.
@@ -60,7 +73,12 @@ type Server struct {
 
 // New creates an HTTP server that exposes metrics from the given registry.
 // The server is not started until Start is called.
-func New(addr string, registry *metrics.Registry) *Server {
+//
+// If enablePprof is true the standard Go pprof profiling endpoints are
+// mounted at /debug/pprof/. Only enable this on localhost or a private
+// network: pprof exposes goroutine stacks, heap contents, and CPU profiles
+// — do not expose it publicly without authentication.
+func New(addr string, registry *metrics.Registry, enablePprof bool) *Server {
 	s := &Server{
 		addr:     addr,
 		registry: registry,
@@ -70,6 +88,9 @@ func New(addr string, registry *metrics.Registry) *Server {
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 	mux.HandleFunc("/metrics", s.handleMetrics)
+	if enablePprof {
+		registerPprofHandlers(mux)
+	}
 	mux.HandleFunc("/", s.handleIndex)
 
 	s.httpSrv = &http.Server{
@@ -90,6 +111,8 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("httpserver: listen on %s: %w", s.addr, err)
 	}
+	bound := ln.Addr().String()
+	s.boundAddr.Store(&bound)
 
 	// Serve in background.
 	go func() {
@@ -124,9 +147,13 @@ func (s *Server) SetReady(ready bool) {
 }
 
 // Addr returns the actual bind address (useful when port 0 was requested
-// and the OS chose an ephemeral port).
+// and the OS chose an ephemeral port). Returns the configured address
+// before Start is called.
 func (s *Server) Addr() string {
-	return s.httpSrv.Addr
+	if p := s.boundAddr.Load(); p != nil {
+		return *p
+	}
+	return s.addr
 }
 
 // ServeError returns the error from the background Serve goroutine, if
@@ -176,6 +203,21 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = io.WriteString(w, indexHTML)
+}
+
+// registerPprofHandlers mounts the stdlib pprof profiling endpoints on mux.
+// It must only be called when the caller has verified that the server is
+// not internet-facing: pprof can leak sensitive runtime data.
+func registerPprofHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// Named profiles: heap, goroutine, allocs, block, mutex, threadcreate.
+	for _, name := range []string{"heap", "goroutine", "allocs", "block", "mutex", "threadcreate"} {
+		mux.Handle("/debug/pprof/"+name, pprof.Handler(name))
+	}
 }
 
 // indexHTML is a minimal landing page listing available endpoints.

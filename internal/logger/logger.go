@@ -18,18 +18,21 @@
 //
 // # Output formats
 //
+// Both formats are stock log/slog output (slog.NewTextHandler /
+// slog.NewJSONHandler with no ReplaceAttr customization):
+//
 //	Text (default, for humans in terminals):
-//	  2026-04-24T10:15:30Z [INFO ] engine: worker started dev=cpu-0
+//	  time=2026-04-24T10:15:30.000Z level=INFO msg="engine: worker started" dev=cpu-0
 //
 //	JSON (for machines, --log-format=json):
 //	  {"time":"2026-04-24T10:15:30Z","level":"INFO","msg":"engine: worker started","dev":"cpu-0"}
 //
 // # TUI coexistence
 //
-// When the TUI dashboard is active, log output is silently dropped to
-// stdout (which the TUI controls) to avoid mangling the display.
-// Logs still reach a log file if --log-file is set. This gives users
-// both a pretty dashboard and an audit trail.
+// When the TUI dashboard is active it owns stdout, so console log output is
+// suppressed to avoid mangling the display. Logs still reach a file when
+// --log-file is set (the run command writes there even under the TUI), giving
+// users both a pretty dashboard and an audit trail.
 package logger
 
 import (
@@ -192,7 +195,14 @@ func defaultLogger() *Logger {
 	if l := defaultPtr.Load(); l != nil {
 		return l
 	}
-	// Lazily initialise on first call.
+	return defaultLoggerSlow()
+}
+
+// defaultLoggerSlow handles the cold path: allocate a logger, try to
+// store it, and fall back to whatever another goroutine already stored
+// if the CAS races. Extracted so the CAS-loser branch is unit-testable
+// without relying on non-deterministic goroutine scheduling.
+func defaultLoggerSlow() *Logger {
 	l := New(Config{Level: LevelInfo, Format: FormatText})
 	if !defaultPtr.CompareAndSwap(nil, l) {
 		// Another goroutine beat us to it; use that one.
@@ -202,7 +212,7 @@ func defaultLogger() *Logger {
 }
 
 // SetDefault overrides the default logger returned by FromContext when
-// no logger is attached to the context. Intended for use in main().
+// no logger has been attached to the context. Intended for use in main().
 //
 // Passing nil is a no-op: it never clobbers the current logger with
 // nil, because downstream callers assume the default is always usable.

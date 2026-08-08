@@ -26,11 +26,12 @@ The single highest-leverage observation: **the cost of building these foundation
 
 **Otedamaの判断:**
 - `go 1.22` をベースライン、`toolchain go1.24.0` を最低toolchain pin（FIPS 140-3 + tool directive機能取得）。
-- `go.mod` の `godebug` directive で `tlskyber=1`, `panicnil=0`, `randautoseed=1` を明示固定。
+- `go.mod` の `godebug` directive で `tlsmlkem=1`, `panicnil=0`, `randautoseed=1` を明示固定
+  （`tlsmlkem`はGo 1.24でのX25519Kyber768標準化に伴い、旧`tlskyber`から改名された値）。
 - `GOEXPERIMENT` 機能（`greenteagc`, `jsonv2`等）はproductionで使用しない。
 - `GODEBUG_NOTES.md` に依存knobの一覧と廃止予定日を記録。
 
-**実装状況:** 完了（`go.mod`、`docs/GODEBUG_NOTES.md`）。
+**実装状況:** 完了（`go.mod`、`GODEBUG_NOTES.md`）。
 
 ### 2. Stratum V2のエコシステム不確実性 / SV2 Ecosystem Uncertainty
 
@@ -186,7 +187,7 @@ Otedamaが採用する戦略:
 - `GOVERNANCE.md` — 昇格パスとgreater stake holder 管理
 - `docs/THREAT_MODEL.md` — STRIDE 脅威モデル
 - `docs/AUDIT_CHECKLIST.md` — 30 項目監査チェックリスト
-- `docs/GODEBUG_NOTES.md` — Go behavior pinning
+- `GODEBUG_NOTES.md` — Go behavior pinning
 - `docs/adr/ADR-001` 〜 `ADR-005` — 主要設計判断
 
 本書は **6ヶ月毎に再評価** します。研究結論や Otedama の状況に変化があれば、対応する判断と実装状況を改訂します。

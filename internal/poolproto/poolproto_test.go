@@ -299,6 +299,54 @@ func TestDialURL_NegotiateFailureClosesConnection(t *testing.T) {
 	}
 }
 
+// fakeSession is a minimal Session for exercising DialURL's success path.
+type fakeSession struct{}
+
+func (fakeSession) Close() error     { return nil }
+func (fakeSession) Jobs() <-chan Job { return nil }
+func (fakeSession) Submit(context.Context, ShareSubmission) (ShareResult, error) {
+	return ShareResult{}, nil
+}
+func (fakeSession) SuggestedDifficulty() float64 { return 1.0 }
+
+// succeedingDialer dials and negotiates successfully, returning a Session.
+type succeedingDialer struct {
+	closeCalled bool
+	session     Session
+}
+
+func (d *succeedingDialer) Protocol() ProtocolID { return ProtocolStratumV2 }
+
+func (d *succeedingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+	return &fakeConn{onClose: func() { d.closeCalled = true }}, nil
+}
+
+func (d *succeedingDialer) Negotiate(_ context.Context, _ Connection) (Session, error) {
+	return d.session, nil
+}
+
+func TestDialURL_SuccessReturnsSessionAndKeepsConnectionOpen(t *testing.T) {
+	withTestRegistry(t)
+
+	want := fakeSession{}
+	d := &succeedingDialer{session: want}
+	Register(d)
+
+	sess, err := DialURL(context.Background(),
+		"stratum+v2://pool.example.com:3336", Credentials{})
+	if err != nil {
+		t.Fatalf("DialURL on a fully-succeeding dialer returned error: %v", err)
+	}
+	if sess != want {
+		t.Errorf("DialURL returned %v, want the negotiated session %v", sess, want)
+	}
+	// On success the Connection must NOT be closed — it is owned by the live
+	// Session and closing it would break the session immediately.
+	if d.closeCalled {
+		t.Error("DialURL closed the Connection on the success path (would kill the live session)")
+	}
+}
+
 // ============================================================================
 // Credentials — zero value usability
 // ============================================================================

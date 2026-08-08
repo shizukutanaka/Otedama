@@ -47,6 +47,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -69,6 +71,24 @@ var (
 	// implementation. ML-DSA and SPHINCS+ return this until BIP-360
 	// activates and Go's stdlib ships crypto/mldsa.
 	ErrSchemeNotImplemented = errors.New("btccrypto: scheme registered but implementation pending")
+
+	// ErrNotBech32 is returned by ValidateBech32Address when the input is not
+	// a bech32 mainnet address (e.g. a legacy base58 "1.../3..." address), so
+	// callers can fall back to their own legacy-format handling.
+	ErrNotBech32 = errors.New("btccrypto: not a bech32 address")
+
+	// ErrNotBase58 is returned by ValidateBase58Address when the input is not a
+	// legacy base58 mainnet address (e.g. a bech32 "bc1..." address), so
+	// callers (and ValidateAddress) can fall back to another format.
+	ErrNotBase58 = errors.New("btccrypto: not a base58 address")
+
+	// ErrUnrecognisedAddress is returned by ValidateAddress when an address is
+	// well-formed in neither supported encoding (bech32/bech32m SegWit nor
+	// legacy Base58Check). It is a sentinel so callers can distinguish "this is
+	// not a recognisable address format" from any other validation error via
+	// errors.Is — e.g. to offer format-specific guidance ("did you paste a
+	// testnet address?") versus a checksum failure ("likely a typo").
+	ErrUnrecognisedAddress = errors.New("btccrypto: unrecognised address format (not bech32 or base58 mainnet)")
 )
 
 // ----- Interfaces -----
@@ -190,12 +210,10 @@ func Schemes() []string {
 	for n := range registry {
 		names = append(names, n)
 	}
-	// Sort to keep output deterministic.
-	for i := 1; i < len(names); i++ {
-		for j := i; j > 0 && names[j] < names[j-1]; j-- {
-			names[j], names[j-1] = names[j-1], names[j]
-		}
-	}
+	// Sort to keep output deterministic. slices.Sort replaces a hand-rolled
+	// insertion sort: same result, but boring and obviously correct (the
+	// slices-migration of sessions 199–200 missed this one production call site).
+	slices.Sort(names)
 	return names
 }
 
@@ -277,6 +295,49 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 		return nil, fmt.Errorf("%w: P2MR (BIP-360) not yet implemented", ErrSchemeNotImplemented)
 	default:
 		return nil, fmt.Errorf("%w: unknown address type %v", ErrUnknownScheme, t)
+	}
+}
+
+// ClassifyAddress maps a mainnet Bitcoin address string to its AddressType
+// using the address prefix and (for SegWit) length. This is a lightweight
+// classifier — it does NOT verify the bech32/base58 checksum. To verify that a
+// SegWit address is well-formed (catching a mistyped payout address), call
+// ValidateBech32Address. ClassifyAddress's own purpose is only to recognise
+// which signature scheme an address will need, so callers can branch via
+// SchemeForAddressType without a full decode.
+//
+// Prefix mapping (BIP-173 / BIP-350):
+//
+//	"1..."   → P2PKH        (base58, ECDSA)
+//	"3..."   → P2SH         (base58, ECDSA)
+//	"bc1q..." → P2WPKH (42 chars) or P2WSH (62 chars) — witness v0, ECDSA
+//	"bc1p..." → P2TR        — witness v1, Schnorr (bech32m)
+//
+// The witness version lives in the first character after "bc1": 'q' encodes
+// version 0 (SegWit v0), 'p' encodes version 1 (Taproot). bech32m P2TR
+// addresses are therefore recognised distinctly from bech32 v0 addresses —
+// which is exactly the breadth a 2026 payout configuration needs. Returns
+// AddressUnknown for anything that does not match (including testnet/signet
+// prefixes, which Otedama does not configure).
+func ClassifyAddress(addr string) AddressType {
+	switch {
+	case strings.HasPrefix(addr, "bc1p"):
+		// Witness v1: Taproot. (bech32m-encoded.)
+		return AddressP2TR
+	case strings.HasPrefix(addr, "bc1q"):
+		// Witness v0: distinguish key-hash (P2WPKH) from script-hash (P2WSH)
+		// by encoded length. A 20-byte program yields a 42-char address; a
+		// 32-byte program yields a 62-char address.
+		if len(addr) >= 60 {
+			return AddressP2WSH
+		}
+		return AddressP2WPKH
+	case strings.HasPrefix(addr, "1"):
+		return AddressP2PKH
+	case strings.HasPrefix(addr, "3"):
+		return AddressP2SH
+	default:
+		return AddressUnknown
 	}
 }
 

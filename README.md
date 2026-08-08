@@ -16,9 +16,9 @@
 
 ## 概要 / Overview
 
-Otedamaは、ユーザーが所有するASIC・GPU・CPUハードウェアを、複数の収益源（ビットコイン採掘・AI推論提供・分散レンダリング・科学計算委託）にリアルタイム裁定配分するソフトウェアスイートです。Stratum V2プロトコル準拠、Lightning Networkによる非カストディ決済、ZKPベースの匿名認証を標準実装し、既存マイニングプールの中央集権的リスクと規制摩擦の両方を回避します。
+Otedamaは、ユーザーが所有するASIC・GPU・CPUハードウェアを、複数の収益源にリアルタイム裁定配分することを目指すソフトウェアスイートです。v3.0.0-alpha.1時点で実装済みなのは、Stratum V2/V1準拠の実ビットコイン採掘と、Akashネットワークを模したシミュレーション価格によるAI推論見積もりの2系統のみです。分散レンダリングと科学計算委託はv4.0スコープの計画機能で未実装です。Lightning関連コードは現時点でBIP-39シードの暗号化保管のみを提供し、決済処理自体は行いません。ZKPベースの匿名認証も同じくv4.0スコープの計画機能で未実装です。それでも、既存マイニングプールが抱える中央集権的リスクを回避する非カストディ設計そのものは、今日から機能します。
 
-Otedama is a software suite that automatically arbitrates user-owned ASIC, GPU, and CPU hardware across multiple revenue streams—Bitcoin mining, AI inference provision, distributed rendering, and scientific computing—in real time. It ships with native Stratum V2 support, non-custodial Lightning Network payouts, and ZKP-based anonymous authentication, avoiding both the centralization risks and the regulatory friction of conventional mining pools.
+Otedama is a software suite designed to arbitrate user-owned ASIC, GPU, and CPU hardware across multiple revenue streams in real time. As of v3.0.0-alpha.1, only two streams are actually implemented: real Bitcoin mining over Stratum V2/V1, and simulated-price AI inference quoting modeled on the Akash Network. Distributed rendering and scientific computing are planned v4.0-scope features and are not implemented. The Lightning-related code today only encrypts and stores a BIP-39 seed at rest; it does not process payments. ZKP-based anonymous authentication is likewise planned for v4.0 and not implemented today. What works today is the non-custodial design itself, which avoids the centralization risk of conventional mining pools from day one.
 
 ## なぜOtedamaか / Why Otedama
 
@@ -32,13 +32,15 @@ Otedamaの設計は三つの原則に従います。John Carmackのパフォー�
 
 ## 主要機能 / Core Features
 
-Otedama v3.0は以下の機能を中核として提供します。Stratum V2完全対応のマイニングクライアント（Braiins Pool、DEMAND、OCEAN、Luxorを初期サポート）、Lightning Network非カストディ決済層（LDK統合）、四系統リアルタイム裁定エンジン、ASIC・GPU・CPU自動検出と最適化、ZKPベース認証（KYC代替として設計）、プラグイン拡張アーキテクチャ、Web管理インターフェース（オプション、デフォルト無効）、Prometheus互換のメトリクスエクスポート、OpenTelemetry分散トレーシング、クロスプラットフォーム署名付きバイナリ配布（Windows、macOS、Linux x86_64/ARM64、FreeBSD）。
+Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通りです。Stratum V2/V1対応のマイニングクライアント（実際に採掘します。複数プールを明示設定すれば優先順位付きフェイルオーバーが機能し、未設定時は組み込みの既定プール1つにフォールバック）。Lightning関連コードによるBIP-39シードの暗号化保管（決済処理そのものは未実装）。2系統（実採掘・simulated AI推論）のリアルタイム裁定エンジン。CPU自動検出（実マイニング対応）およびLinux限定のGPU検出（プレゼンス検出のみで、compute dispatchは未実装のためGPUでのマイニング・推論は不可）。Prometheus互換のメトリクスエクスポート（`/metrics`・`/healthz`・`/readyz`）。
+
+以下は現時点で未実装、またはv4.0以降の計画のみの機能です：ASIC検出、ZKPベース認証、プラグインアーキテクチャ、Web管理インターフェース、OpenTelemetry分散トレーシング、署名付きバイナリ配布、分散レンダリング、科学計算委託。詳細は `docs/KNOWN_LIMITATIONS.md` を参照してください。
 
 ## クイックスタート / Quick Start
 
 ### 必要環境 / Requirements
 
-Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、対象ハードウェア（任意のASIC、CUDA 12以上のNVIDIA GPU、ROCm 6以上のAMD GPU、AVX2対応のx86_64 CPU、またはNEON対応のARM64 CPU）のうち一つ以上。
+Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
 
 ### インストール / Installation
 
@@ -62,9 +64,9 @@ otedama run --bitcoin-address bc1q...
 otedama run --config /path/to/config.yaml
 ```
 
-初回起動時、Otedamaはローカルハードウェアを自動検出し、組み込みのStratum V2対応プール一覧から最初の応答可能なプールに接続します。`--wallet-passphrase` を渡すと初回起動時に Lightning Wallet も自動生成されます。設定不要で稼働する設計を目指していますが、Bitcoin アドレスの指定だけは省略できません（非カストディ設計のため）。
+初回起動時、Otedamaはローカルハードウェアを自動検出し、設定されたプールへの接続を試みます（プール未設定時は組み込みの既定プール1つにフォールバック——「主要機能」節で述べた通り、これは複数プールの推奨リストではありません）。`--wallet-passphrase` を渡すと初回起動時に Lightning Wallet も自動生成されます（BIP-39シードの暗号化保管のみで、決済処理は行いません）。設定不要で稼働する設計を目指していますが、Bitcoin アドレスの指定だけは省略できません（非カストディ設計のため）。
 
-On first launch, Otedama auto-detects local hardware, then connects to the first responsive pool from its built-in Stratum V2 list. If you pass `--wallet-passphrase`, a Lightning wallet is generated at first run. The product aims for zero-config operation, but the Bitcoin address must always be supplied (this is inherent to the non-custodial design).
+On first launch, Otedama auto-detects local hardware and attempts to connect to your configured pool(s), falling back to a single built-in default pool if none are configured (not a curated multi-pool list — see "Core Features" above). If you pass `--wallet-passphrase`, a Lightning wallet is generated at first run (this only encrypts and stores a BIP-39 seed at rest; it does not process payments). The product aims for zero-config operation, but the Bitcoin address must always be supplied (this is inherent to the non-custodial design).
 
 ## コマンド一覧 / Command Reference
 
@@ -110,7 +112,7 @@ Pick a pool by **net BTC retained**, not the headline fee rate. A 4% uptime gap 
 
 ## アーキテクチャ / Architecture
 
-Otedamaは以下の主要レイヤーで構成されます。ハードウェア抽象化層（HAL）が物理デバイスの統一インターフェースを提供し、その上に収益源コネクタ層（Stratum V2クライアント、AI推論プロバイダ、レンダリングネットワークアダプタ、BOINC互換クライアント）が並列に存在します。裁定エンジン層は各収益源の期待収益を継続的に評価し、配分決定を下します。決済層はLightning Networkを介した非カストディ決済を処理します。観測性層（メトリクス・トレース・ログ）とプラグインフレームワークが全体を支えます。
+Otedamaは以下の主要レイヤーで構成されます。ハードウェア抽象化層（HAL）が物理デバイスの統一インターフェースを提供し、その上に収益源コネクタ層が存在します。現時点（v3.0.0-alpha.1）で実装済みなのは、Stratum V2/V1クライアントによる実際のビットコイン採掘と、Akashネットワークを模したシミュレーション価格による実験的なAI推論見積もりの2系統のみです。レンダリングネットワークアダプタとBOINC互換クライアントは`CLAUDE.md`のロードマップ上でv4.0スコープとして明示されており、未着手です。裁定エンジン層は各収益源の期待収益を継続的に評価し、配分決定を下します。Lightning関連コードは現時点ではBIP-39シードの暗号化保管のみを提供し、決済・チャネル管理・支払いルーティングは実装していません（詳細は`docs/KNOWN_LIMITATIONS.md`）。観測性層（メトリクス・ログ）が全体を支えます。
 
 詳細なアーキテクチャ設計は `docs/architecture.md` を参照してください。
 
@@ -136,7 +138,7 @@ The known limitations of this alpha — including that AI-inference yield is cur
 
 ## コントリビューション / Contributing
 
-Otedamaはコミュニティからの貢献を歓迎します。コード、ドキュメント、翻訳、テスト、バグ報告のいずれも価値ある貢献です。初めて貢献する方は `CONTRIBUTING.md` を、コーディング規約については `docs/style-guide.md` を参照してください。
+Otedamaはコミュニティからの貢献を歓迎します。コード、ドキュメント、翻訳、テスト、バグ報告のいずれも価値ある貢献です。初めて貢献する方は `CONTRIBUTING.md` を参照してください。コーディング規約は同ファイルの「コーディング規約 / Coding Standards」節に記載されています。
 
 技術的な議論はGitHub Discussionsで、脆弱性報告は `SECURITY.md` に記載されたセキュリティ連絡先へお願いします。
 

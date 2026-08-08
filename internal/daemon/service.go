@@ -28,7 +28,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/shizukutanaka/Otedama/internal/config"
 )
+
+// goos is a var so tests can set it to "darwin", "windows", etc. to exercise
+// platform-specific branches without running on a different OS. Production
+// code never changes it; default is the real runtime.GOOS.
+var goos = runtime.GOOS
 
 // ServiceStatus describes the current state of the Otedama service.
 type ServiceStatus struct {
@@ -38,18 +45,33 @@ type ServiceStatus struct {
 	Details   string
 }
 
+// ServiceFlags holds optional run-time flags to embed in the installed service
+// definition. Flags left empty are omitted from the service command line;
+// those settings fall back to the config file or built-in defaults at
+// service startup (the same precedence as a direct `otedama run` invocation).
+//
+// At minimum, set BitcoinAddress when no config file is specified — without
+// at least one payout address the service will fail to start (exit 78).
+type ServiceFlags struct {
+	BitcoinAddress string // --bitcoin-address
+	LogLevel       string // --log-level  (debug|info|warn|error)
+	LogFormat      string // --log-format (text|json)
+	Language       string // --language   (en, ja, …)
+}
+
 // Manager installs, uninstalls, starts, stops, and queries the Otedama
 // background service for the current platform.
 type Manager struct {
-	binaryPath string // absolute path to the otedama executable
-	configPath string // path to config.yaml to pass to the service
-	dataDir    string // data directory for the service instance
+	binaryPath   string // absolute path to the otedama executable
+	configPath   string // path to config.yaml to pass to the service
+	dataDir      string // data directory for the service instance
+	serviceFlags ServiceFlags
 }
 
 // NewManager creates a Manager using the current executable as the
 // service binary. It returns an error if the current executable path
 // cannot be determined.
-func NewManager(configPath, dataDir string) (*Manager, error) {
+func NewManager(configPath, dataDir string, flags ServiceFlags) (*Manager, error) {
 	binary, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("daemon: cannot determine executable path: %w", err)
@@ -60,15 +82,16 @@ func NewManager(configPath, dataDir string) (*Manager, error) {
 		return nil, fmt.Errorf("daemon: resolve symlink: %w", err)
 	}
 	return &Manager{
-		binaryPath: binary,
-		configPath: configPath,
-		dataDir:    dataDir,
+		binaryPath:   binary,
+		configPath:   configPath,
+		dataDir:      dataDir,
+		serviceFlags: flags,
 	}, nil
 }
 
 // Install writes the service definition and enables auto-start.
 func (m *Manager) Install() error {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return m.installSystemd()
 	case "darwin":
@@ -82,7 +105,7 @@ func (m *Manager) Install() error {
 
 // Uninstall removes the service definition and disables auto-start.
 func (m *Manager) Uninstall() error {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return m.uninstallSystemd()
 	case "darwin":
@@ -96,11 +119,13 @@ func (m *Manager) Uninstall() error {
 
 // Status returns the current service state.
 func (m *Manager) Status() (ServiceStatus, error) {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return m.statusSystemd()
 	case "darwin":
 		return m.statusLaunchd()
+	case "windows":
+		return m.statusWindowsService()
 	default:
 		return ServiceStatus{}, fmt.Errorf("daemon: unsupported platform %q", runtime.GOOS)
 	}
@@ -169,6 +194,22 @@ func (m *Manager) statusSystemd() (ServiceStatus, error) {
 
 func (m *Manager) systemdUnit() string {
 	args := m.serviceArgs()
+	// ProtectHome=read-only blocks writes anywhere under /home, including
+	// the wallet.dat the service must create/update at startup. Without an
+	// explicit exception, a data dir under $HOME (the documented default —
+	// see config.DefaultDataDir) makes the Lightning wallet permanently
+	// read-only and the process would fail to persist it. effectiveDataDir
+	// mirrors what `otedama run` itself resolves at startup when
+	// --data-dir/OTEDAMA_DATA_DIR/data_dir was not set at install time, so
+	// the unit's carve-out matches the path actually used.
+	effectiveDataDir := m.dataDir
+	if effectiveDataDir == "" {
+		effectiveDataDir = config.DefaultDataDir()
+	}
+	readWritePaths := ""
+	if effectiveDataDir != "" {
+		readWritePaths = fmt.Sprintf("ReadWritePaths=%s\n", quoteToken(effectiveDataDir))
+	}
 	return fmt.Sprintf(`[Unit]
 Description=Otedama — non-custodial compute arbitration
 After=network-online.target
@@ -187,10 +228,10 @@ SyslogIdentifier=otedama
 NoNewPrivileges=true
 ProtectHome=read-only
 PrivateTmp=true
-
+%s
 [Install]
 WantedBy=default.target
-`, m.binaryPath, args)
+`, quoteToken(m.binaryPath), args, readWritePaths)
 }
 
 // ----- macOS / launchd -----
@@ -246,14 +287,17 @@ func (m *Manager) statusLaunchd() (ServiceStatus, error) {
 }
 
 func (m *Manager) launchdPlist() string {
-	// Build the ProgramArguments array.
-	args := strings.Split(m.binaryPath+" "+m.serviceArgs(), " ")
+	// Build the ProgramArguments array from the canonical argv slice so a
+	// path or value containing spaces is emitted as a single <string>
+	// rather than split across entries. Each value is XML-escaped because
+	// it may contain characters that are significant in XML (e.g. '&').
+	argv := append([]string{m.binaryPath}, m.serviceArgv()...)
 	var argEntries strings.Builder
-	for _, a := range args {
+	for _, a := range argv {
 		if a == "" {
 			continue
 		}
-		fmt.Fprintf(&argEntries, "\t\t<string>%s</string>\n", a)
+		fmt.Fprintf(&argEntries, "\t\t<string>%s</string>\n", xmlEscape(a))
 	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -270,12 +314,32 @@ func (m *Manager) launchdPlist() string {
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/otedama.log</string>
+    <string>%[3]s</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/otedama.err</string>
+    <string>%[4]s</string>
 </dict>
 </plist>
-`, launchdLabel, argEntries.String())
+`, launchdLabel, argEntries.String(), launchdLogPath("otedama.log"), launchdLogPath("otedama.err"))
+}
+
+// launchdLogPath resolves name under ~/Library/Logs — the standard macOS
+// location for a per-user application's own logs, unlike world-readable
+// /tmp (the previous location: any local user could read a running
+// otedama service's stdout/stderr, which may include worker/pool activity
+// and error detail not intended to be world-visible). Falls back to /tmp
+// only if the home directory can't be resolved or the Logs directory can't
+// be created — degrading gracefully rather than failing service install
+// entirely over a non-critical log-destination preference.
+func launchdLogPath(name string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(string(filepath.Separator), "tmp", name)
+	}
+	dir := filepath.Join(home, "Library", "Logs")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return filepath.Join(string(filepath.Separator), "tmp", name)
+	}
+	return filepath.Join(dir, name)
 }
 
 // ----- Windows service -----
@@ -293,21 +357,104 @@ func (m *Manager) uninstallWindowsService() error {
 	return runCmd("sc.exe", "delete", "Otedama")
 }
 
-// ----- Helpers -----
-
-// serviceArgs builds the command-line arguments for the service process.
-func (m *Manager) serviceArgs() string {
-	args := "run"
-	if m.configPath != "" {
-		args += fmt.Sprintf(" --config %q", m.configPath)
+// statusWindowsService queries the Service Control Manager for the
+// "Otedama" service's current state. Install and Uninstall have long
+// dispatched "windows" to installWindowsService/uninstallWindowsService,
+// but Status had no matching case and fell through to "unsupported
+// platform" — despite docs/API.md documenting `otedama service status` as
+// supported wherever install is. This closes that gap.
+//
+// sc.exe query exits non-zero both when the service is not registered and
+// when sc.exe itself cannot be run (e.g. this code path executing on a
+// non-Windows test runner); either way "not installed" is the correct
+// answer, matching how statusLaunchd treats a launchctl failure — a
+// missing service is Status's normal "not found" result, not an error.
+func (m *Manager) statusWindowsService() (ServiceStatus, error) {
+	out, err := exec.Command("sc.exe", "query", "Otedama").Output()
+	if err != nil {
+		return ServiceStatus{}, nil
 	}
-	if m.dataDir != "" {
-		args += fmt.Sprintf(" --data-dir %q", m.dataDir)
-	}
-	return args
+	running := strings.Contains(string(out), "RUNNING")
+	return ServiceStatus{
+		Installed: true,
+		Running:   running,
+		Details:   string(out),
+	}, nil
 }
 
-func runCmd(name string, args ...string) error {
+// ----- Helpers -----
+
+// serviceArgv returns the service command-line arguments as a slice, with
+// no shell quoting. This is the canonical form: serviceArgs joins it into a
+// single string for systemd ExecStart= and Windows sc.exe binPath= (both of
+// which parse their own quoting), and launchdPlist consumes the slice
+// directly — emitting each element as its own <string> — so a path or value
+// containing spaces (e.g. "/Users/John Doe/config.yaml") survives intact
+// instead of being split into separate arguments.
+func (m *Manager) serviceArgv() []string {
+	argv := []string{"run"}
+	if m.configPath != "" {
+		argv = append(argv, "--config", m.configPath)
+	}
+	if m.dataDir != "" {
+		argv = append(argv, "--data-dir", m.dataDir)
+	}
+	if m.serviceFlags.BitcoinAddress != "" {
+		argv = append(argv, "--bitcoin-address", m.serviceFlags.BitcoinAddress)
+	}
+	if m.serviceFlags.LogLevel != "" {
+		argv = append(argv, "--log-level", m.serviceFlags.LogLevel)
+	}
+	if m.serviceFlags.LogFormat != "" {
+		argv = append(argv, "--log-format", m.serviceFlags.LogFormat)
+	}
+	if m.serviceFlags.Language != "" {
+		argv = append(argv, "--language", m.serviceFlags.Language)
+	}
+	return argv
+}
+
+// serviceArgs joins serviceArgv into a single command-line string, quoting
+// only the elements that need it. Used by systemd (ExecStart=) and Windows
+// (sc.exe binPath=), which parse their own quoting; launchd uses serviceArgv
+// directly.
+func (m *Manager) serviceArgs() string {
+	argv := m.serviceArgv()
+	parts := make([]string, len(argv))
+	for i, a := range argv {
+		parts[i] = quoteToken(a)
+	}
+	return strings.Join(parts, " ")
+}
+
+// quoteToken wraps s in Go-style double quotes (which both systemd ExecStart=
+// and Windows sc.exe binPath= accept, with C-style escapes) when it contains
+// whitespace or a quote; otherwise it returns s unchanged. This is what lets a
+// binary path or flag value containing a space — e.g. an executable under
+// "/home/John Doe/bin/otedama" — survive as a single argument instead of being
+// split by the service manager's own command-line parser.
+func quoteToken(s string) string {
+	if strings.ContainsAny(s, " \t\"") {
+		return fmt.Sprintf("%q", s)
+	}
+	return s
+}
+
+// xmlEscape escapes the five XML special characters so an argument value
+// (e.g. a filesystem path) is safe to embed inside a plist <string> element.
+func xmlEscape(s string) string {
+	return strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&apos;",
+	).Replace(s)
+}
+
+// runCmd is a var so tests can replace it with a stub that avoids real
+// OS service calls (systemctl, launchctl, sc.exe).
+var runCmd = func(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s %v: %w: %s", name, args, err, out)

@@ -22,6 +22,16 @@
 #
 bitcoin_address: ""
 
+# Optional failover payout addresses. If the address above cannot be used
+# to establish a mining session on any configured pool (e.g. a pool rejects
+# it), Otedama rotates to the next address here, in order. Earnings only go
+# to whichever address actually connects, and a working address is never
+# abandoned for a transient pool/network problem — so an outage can never
+# silently redirect your payouts. All entries are validated like the above.
+# bitcoin_addresses:
+#   - "bc1q...backup1..."
+#   - "3...backup2..."
+
 # ── Pools ────────────────────────────────────────────────────────────────────
 #
 # List of mining pools in order of preference. Otedama connects to the
@@ -42,6 +52,21 @@ pools:
     user: ""
     # password is optional; most pools accept any value.
     password: "x"
+    # payout_scheme (optional) documents the pool's reward method so
+    # `otedama doctor` can surface its trade-offs. It has NO effect on mining.
+    # One of:
+    #   fpps   — Full Pay Per Share: smooth payouts, pool absorbs variance
+    #   pplns  — Pay Per Last N Shares: lower fee, miner absorbs variance
+    #   tides  — OCEAN's non-custodial coinbase payout (best fit for Otedama)
+    #   solo   — full block reward or nothing
+    # payout_scheme: "tides"
+    #
+    # tls_ca_file (optional) is a path to a PEM bundle of extra certificate
+    # authorities to trust for this pool's stratum+tls:// certificate, for a
+    # pool presenting a private-CA or self-signed cert. System roots are always
+    # used as well, and certificate verification is never disabled. No effect
+    # on non-TLS schemes.
+    # tls_ca_file: "/etc/otedama/pool-ca.pem"
 
   # Failover: list pools in priority order. Otedama tries the first;
   # if a connection fails or drops, it rotates to the next immediately,
@@ -105,3 +130,42 @@ data_dir: ""
 #   json   — Structured JSON (recommended for log aggregation tools)
 #
 log_format: "text"
+
+# ── Profitability & power ─────────────────────────────────────────────────────
+#
+# curtail_below_btc_usd pauses ALL hashing when the BTC/USD rate falls below
+# this threshold (USD), so you stop mining at a loss during a price crash;
+# hashing resumes automatically once the price recovers. It acts only on a
+# fresh, trusted price — never on the startup fallback or a stale rate — so it
+# cannot pause or resume mining on a price it does not trust.
+# 0 (default) disables curtailment.
+# curtail_below_btc_usd: 0
+
+# min_yield_sats_per_sec is a per-device profitability floor (satoshis/second):
+# the arbitration engine leaves a device idle when none of its compatible
+# revenue streams clears this rate, instead of running it for a trickle of
+# revenue that does not justify the power, wear, and heat. It complements
+# curtail_below_btc_usd — that pauses ALL hashing on a global BTC price, while
+# this idles only the individual weak devices on a mixed rig.
+# 0 (default) disables the floor: every positive-yield stream qualifies.
+# min_yield_sats_per_sec: 0
+
+# power_watts is your rig's measured total power draw, in watts. Setting it
+# enables the energy-efficiency metric otedama_joules_per_terahash.
+# 0 (default) leaves the efficiency/cost metrics off.
+# power_watts: 0
+
+# electricity_price_per_kwh is your electricity cost in USD per kWh. Combined
+# with power_watts it enables otedama_power_cost_usd_per_hour — the cost side of
+# net profit. 0 (default) leaves it unset.
+# electricity_price_per_kwh: 0
+
+# ── Arbitration ───────────────────────────────────────────────────────────────
+#
+# arbitration_hysteresis_pct is the minimum fractional yield improvement a
+# competing revenue stream must beat the current assignment by before Otedama
+# switches to it. It damps rapid flapping between near-equal streams. Range
+# [0.0, 1.0); 0.05 (default) requires a 5% improvement to switch. A value of 0
+# switches on any improvement; higher values leave more yield on the table for
+# greater stability (see otedama_arbitration_holds_total / _foregone_sats_per_second).
+# arbitration_hysteresis_pct: 0.05

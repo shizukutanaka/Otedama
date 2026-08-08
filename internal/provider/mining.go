@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -19,85 +18,55 @@ import (
 //   - The pool sends a new job with different nBits (difficulty change).
 //   - The device's measured hashrate changes by more than 5%.
 //   - MinQuoteInterval has elapsed without an update.
+//
+// The start/stop/loop/send lifecycle lives in the embedded pollingProvider;
+// only the Bitcoin-specific yield calculation (publish) is defined here.
 type MiningProvider struct {
-	id       string
-	poolURL  string
-	rates    RateSource
-	quoteCh  chan Quote
-	devices  []hal.Device
-	mu       sync.Mutex
-	lastRate float64
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
+	pollingProvider
+	id      string
+	poolURL string
+	rates   RateSource
+	devices []hal.Device
+
+	// HashrateFunc, if non-nil, is called with each device's ID during
+	// publish() to obtain its current measured hashrate (H/s). When it
+	// returns a value > 0, that figure is used instead of the static
+	// per-family estimate (ASIC/GPU/CPU constants), making the yield quote
+	// reflect actual hardware performance rather than a family average.
+	// Zero or negative return values cause publish() to fall back to the
+	// static estimate, preserving the pre-wiring behaviour when the engine
+	// has not yet produced a hashrate measurement (e.g. first few seconds).
+	// Setting this field after Start is called is not safe.
+	HashrateFunc func(deviceID string) float64
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
 func NewMiningProvider(poolURL string, rates RateSource) *MiningProvider {
 	return &MiningProvider{
+		pollingProvider: pollingProvider{
+			quoteCh:  make(chan Quote, 16),
+			interval: 30 * time.Second,
+		},
 		id:      "mining.stratum",
 		poolURL: poolURL,
 		rates:   rates,
-		quoteCh: make(chan Quote, 16),
 	}
 }
 
-func (p *MiningProvider) ID() string           { return p.id }
-func (p *MiningProvider) Name() string         { return fmt.Sprintf("Bitcoin Mining (%s)", p.poolURL) }
-func (p *MiningProvider) Quotes() <-chan Quote { return p.quoteCh }
+func (p *MiningProvider) ID() string   { return p.id }
+func (p *MiningProvider) Name() string { return fmt.Sprintf("Bitcoin Mining (%s)", p.poolURL) }
 
 func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.cancel != nil {
-		return fmt.Errorf("provider: mining provider already started")
-	}
-	p.devices = devices
-	inner, cancel := context.WithCancel(ctx)
-	p.cancel = cancel
-
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer close(p.quoteCh)
-		p.loop(inner)
-	}()
-	return nil
-}
-
-func (p *MiningProvider) Stop() {
-	p.mu.Lock()
-	cancel := p.cancel
-	p.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		p.wg.Wait()
-	}
-}
-
-// loop periodically fetches the current BTC/USD rate and network stats
-// to produce a live yield estimate.
-func (p *MiningProvider) loop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	// Publish an initial quote immediately.
-	p.publish(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			p.publish(ctx)
-		}
-	}
+	return p.launch(ctx, "mining provider", func() { p.devices = devices }, p.publish)
 }
 
 // publish calculates the current yield and sends it on the quote channel.
 // Yield per device is estimated using:
-//   - Device hashrate (from last Stats() reading or a default estimate)
-//   - Network hashrate (hardcoded estimate updated periodically by config)
-//   - Current BTC price from RateSource
+//   - Device hashrate: the engine's live worker.Stats().HashRate when
+//     HashrateFunc is set and returns > 0; otherwise a static per-family
+//     estimate (ASIC/GPU/CPU). See docs/KNOWN_LIMITATIONS.md §7.
+//   - Network hashrate: a compile-time constant estimate (not configurable).
+//   - Current BTC price from RateSource (freshness drives the confidence).
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
 func (p *MiningProvider) publish(ctx context.Context) {
 	rate, fresh := p.rates.BTCUSDRate()
@@ -109,7 +78,8 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		confidence = 0.95
 	}
 
-	// Network hashrate estimate: ~1000 EH/s in 2026
+	// Network hashrate estimate: ~1000 EH/s in 2026. This is a compile-time
+	// constant, not yet driven by config or a live difficulty feed.
 	const networkHashrate = 1e21 // H/s
 	const blockRewardBTC = 3.125
 	const blockTimeSec = 600.0
@@ -120,15 +90,21 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		if !dev.Capabilities().SHA256d {
 			continue
 		}
-		// Estimate device hashrate from family if no runtime data yet.
+		// Prefer live measured hashrate (from the engine's worker stats)
+		// when available; fall back to the static per-family estimate.
 		var deviceHashrate float64
-		switch dev.Identity().Family {
-		case hal.FamilyASIC:
-			deviceHashrate = 100e12 // ~100 TH/s (Antminer S21)
-		case hal.FamilyGPU:
-			deviceHashrate = 1.5e9 // ~1.5 GH/s (RTX 4090 SHA256d)
-		default:
-			deviceHashrate = 10e6 // ~10 MH/s (CPU)
+		if p.HashrateFunc != nil {
+			deviceHashrate = p.HashrateFunc(dev.Identity().ID)
+		}
+		if deviceHashrate <= 0 {
+			switch dev.Identity().Family {
+			case hal.FamilyASIC:
+				deviceHashrate = 100e12 // ~100 TH/s (Antminer S21)
+			case hal.FamilyGPU:
+				deviceHashrate = 1.5e9 // ~1.5 GH/s (RTX 4090 SHA256d)
+			default:
+				deviceHashrate = 10e6 // ~10 MH/s (CPU)
+			}
 		}
 
 		// Expected BTC per second:
@@ -151,21 +127,8 @@ func (p *MiningProvider) publish(ctx context.Context) {
 			},
 		}
 		_ = rate // used for future USD display
-		select {
-		case p.quoteCh <- q:
-		case <-ctx.Done():
+		if !p.sendQuote(ctx, q) {
 			return
-		default:
-			// Channel full — drop oldest, send newest.
-			select {
-			case <-p.quoteCh:
-			default:
-			}
-			select {
-			case p.quoteCh <- q:
-			case <-ctx.Done():
-				return
-			}
 		}
 	}
 }

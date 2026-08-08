@@ -34,8 +34,12 @@ is ever found.
 1. Switch to a pool that accepts low-difficulty shares, or use a
    pool with a difficulty-tuning mode. Braiins pool and demand.sv2.io
    both auto-tune.
-2. Attach a GPU. GPUs are ~150x faster than CPUs for SHA-256d and
-   make per-day earnings measurable.
+2. There is no GPU speedup available today: Otedama detects GPUs
+   (`otedama doctor`) but implements no CUDA/ROCm/Vulkan compute
+   dispatch, so a GPU does not increase SHA-256d hashrate (see
+   `docs/KNOWN_LIMITATIONS.md`). At current difficulty, CPU-only
+   mining earnings are near-zero regardless of pool settings; this is
+   a hardware/economics limit, not a configuration problem.
 3. For high-latency connections (satellite, cellular), choose a pool
    geographically close to you. Check `otedama doctor`'s pool
    latency reading; anything above 200ms is likely to cause stale

@@ -36,6 +36,38 @@ func makeEasyWork() *Work {
 
 // ----- Worker lifecycle -----
 
+func TestWorker_StatsBeforeStart(t *testing.T) {
+	// Before Start is called, Stats must return a zero-value Stats so
+	// callers see zero uptime and hashrate rather than a garbage negative
+	// duration (time.Now() − 0 = a large positive number).
+	w := NewWorker(WorkerConfig{Threads: 1})
+	s := w.Stats()
+	if s.Uptime != 0 {
+		t.Errorf("Stats().Uptime before Start = %v, want 0", s.Uptime)
+	}
+	if s.HashRate != 0 {
+		t.Errorf("Stats().HashRate before Start = %v, want 0", s.HashRate)
+	}
+	if s.HashesTotal != 0 || s.SharesFound != 0 || s.SharesDropped != 0 {
+		t.Error("Stats() before Start returned non-zero counters")
+	}
+}
+
+func TestWorker_StartTwicePanics(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_ = w.Start(ctx)
+	defer w.Stop()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("second Start should panic")
+		}
+	}()
+	_ = w.Start(ctx) // must panic
+}
+
 func TestWorker_StartAndStop(t *testing.T) {
 	w := NewWorker(WorkerConfig{Threads: 1})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -249,5 +281,107 @@ func BenchmarkWorkerGrind_SingleThread(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		h.Nonce = uint32(i)
 		_ = HashHeader(h)
+	}
+}
+
+func TestNewWorker_ZeroThreads_DefaultsToCPUCount(t *testing.T) {
+	// cfg.Threads == 0 triggers the default to runtime.NumCPU().
+	w := NewWorker(WorkerConfig{Threads: 0})
+	if w.cfg.Threads <= 0 {
+		t.Errorf("Threads after default = %d, want > 0", w.cfg.Threads)
+	}
+}
+
+// ----- DeviceID propagation -----
+
+func TestShare_DeviceID_PropagatedFromConfig(t *testing.T) {
+	// Create a worker with a DeviceID, plant a trivial target so it finds a
+	// share immediately, and verify the share carries the DeviceID.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	w := NewWorker(WorkerConfig{
+		Threads:  1,
+		DeviceID: "test-device-42",
+	})
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	// Use the genesis block difficulty: NBits=0x1d00ffff gives a target
+	// that a CPU can satisfy quickly in tests.
+	target, err := TargetFromNBits(0x207fffff) // extremely easy for tests
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	w.SetWork(&Work{
+		JobID:  1,
+		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x207fffff},
+		Target: target,
+	})
+
+	for {
+		select {
+		case share, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed before finding a share")
+			}
+			if share.DeviceID != "test-device-42" {
+				t.Errorf("share.DeviceID = %q, want %q", share.DeviceID, "test-device-42")
+			}
+			return
+		case <-ctx.Done():
+			t.Fatal("timeout: no share found within 3s")
+		}
+	}
+}
+
+func TestShare_DeviceID_EmptyWhenNotSet(t *testing.T) {
+	// A worker created without DeviceID must emit shares with empty DeviceID.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	w := NewWorker(WorkerConfig{Threads: 1}) // no DeviceID
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	target, err := TargetFromNBits(0x207fffff)
+	if err != nil {
+		t.Fatalf("TargetFromNBits: %v", err)
+	}
+	w.SetWork(&Work{
+		JobID:  1,
+		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x207fffff},
+		Target: target,
+	})
+
+	for {
+		select {
+		case share, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed before finding a share")
+			}
+			if share.DeviceID != "" {
+				t.Errorf("share.DeviceID = %q, want empty (no DeviceID in config)", share.DeviceID)
+			}
+			return
+		case <-ctx.Done():
+			t.Fatal("timeout: no share found within 3s")
+		}
+	}
+}
+
+// ----- DeviceID method -----
+
+func TestWorker_DeviceID_ReturnsConfigValue(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1, DeviceID: "gpu-0"})
+	if got := w.DeviceID(); got != "gpu-0" {
+		t.Errorf("DeviceID() = %q, want %q", got, "gpu-0")
+	}
+}
+
+func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1})
+	if got := w.DeviceID(); got != "" {
+		t.Errorf("DeviceID() = %q, want empty string", got)
 	}
 }

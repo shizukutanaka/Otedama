@@ -57,26 +57,44 @@ func TestAkashProvider_StopCleansUpGoroutine(t *testing.T) {
 		},
 	})
 
-	// Quotes channel must close after Stop.
+	// Save the channel reference before Stop; Stop() recreates quoteCh so
+	// p.Quotes() after Stop returns a fresh open channel, not the closed one.
+	quotes := p.Quotes()
 	p.Stop()
 
-	select {
-	case _, ok := <-p.Quotes():
-		// Either channel is closed or we get a final buffered quote.
-		if ok {
-			// Drain and continue.
-			select {
-			case _, ok := <-p.Quotes():
-				if ok {
-					t.Error("Quotes channel still producing after Stop")
-				}
-			case <-time.After(1 * time.Second):
-				t.Error("Quotes channel did not close within 1s after Stop")
+	// The original channel (saved above) must be closed by the goroutine's
+	// defer close; draining buffered items first.
+	deadline := time.After(1 * time.Second)
+	for {
+		select {
+		case _, ok := <-quotes:
+			if !ok {
+				return // channel closed — goroutine exited cleanly
 			}
+		case <-deadline:
+			t.Error("Quotes channel did not close within 1s after Stop")
+			return
 		}
-	case <-time.After(1 * time.Second):
-		t.Error("Quotes channel did not close within 1s after Stop")
 	}
+}
+
+func TestAkashProvider_StopClearsStateForRestart(t *testing.T) {
+	// After Stop(), p.cancel must be nil'd so Start() can be called again.
+	// Previously Stop() left p.cancel set, causing Start() to return
+	// "already started" on every call after the first.
+	p := NewAkashProvider(StaticRateSource{Rate: 95000})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := p.Start(ctx, nil); err != nil {
+		t.Fatalf("first Start failed: %v", err)
+	}
+	p.Stop()
+
+	if err := p.Start(ctx, nil); err != nil {
+		t.Fatalf("Start after Stop returned error: %v", err)
+	}
+	p.Stop()
 }
 
 // ============================================================================
@@ -283,6 +301,44 @@ func BenchmarkAkashProvider_Publish(b *testing.B) {
 		case <-p.Quotes():
 		default:
 		}
+	}
+}
+
+// ============================================================================
+// AkashProvider.publish — uncovered branch coverage
+// ============================================================================
+
+func TestAkashProvider_Publish_ZeroRateUseFallback(t *testing.T) {
+	// BTCUSDRate() returns 0 → publish must fall back to 95000 and produce
+	// a positive yield.
+	p := NewAkashProvider(StaticRateSource{Rate: 0})
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if q.Yield.SatsPerSecond <= 0 {
+			t.Error("zero-rate fallback should still produce positive yield")
+		}
+	default:
+		t.Error("no quote received with zero-rate fallback")
+	}
+}
+
+func TestAkashProvider_Publish_DropsOldestWhenFull(t *testing.T) {
+	p := NewAkashProvider(StaticRateSource{Rate: 95000})
+	// Pre-fill the channel to capacity.
+	for len(p.quoteCh) < cap(p.quoteCh) {
+		p.quoteCh <- Quote{ProviderID: "fill"}
+	}
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p.publish(context.Background())
+	if len(p.quoteCh) == 0 {
+		t.Error("channel empty after Akash drop-oldest publish")
 	}
 }
 

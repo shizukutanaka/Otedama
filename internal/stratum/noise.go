@@ -255,7 +255,20 @@ type EncryptedConn struct {
 	rw   io.ReadWriter
 	send *CipherState
 	recv *CipherState
+
+	// readbuf holds plaintext decrypted from the most recent frame that
+	// did not fit in a caller's Read buffer. It is drained by subsequent
+	// Read calls before the next frame is read, so no plaintext is lost
+	// when the caller reads with a buffer smaller than a frame (e.g. the
+	// 6-byte header reads the Stratum decoder issues).
+	readbuf []byte
 }
+
+// maxNoiseFrame is the largest ciphertext a single Noise transport
+// message may carry: the 2-byte length prefix is a u16, so a frame is
+// bounded to 65535 bytes (Noise spec §3). Plaintext is therefore bounded
+// to 65535 minus the 16-byte Poly1305 tag.
+const maxNoiseFrame = 65535
 
 // NewEncryptedConn wraps rw with the given cipher states.
 func NewEncryptedConn(rw io.ReadWriter, send, recv *CipherState) *EncryptedConn {
@@ -263,10 +276,17 @@ func NewEncryptedConn(rw io.ReadWriter, send, recv *CipherState) *EncryptedConn 
 }
 
 // Write encrypts p and writes it as a length-prefixed frame.
+//
+// The ciphertext (plaintext + 16-byte tag) must fit the u16 length
+// prefix; a payload that would overflow it is rejected rather than
+// silently truncated, which would desynchronise the stream.
 func (c *EncryptedConn) Write(p []byte) (int, error) {
 	ct, err := c.send.Encrypt(nil, p)
 	if err != nil {
 		return 0, err
+	}
+	if len(ct) > maxNoiseFrame {
+		return 0, fmt.Errorf("noise: message too large: %d-byte ciphertext exceeds %d (plaintext %d)", len(ct), maxNoiseFrame, len(p))
 	}
 	var lenBuf [2]byte
 	binary.LittleEndian.PutUint16(lenBuf[:], uint16(len(ct)))
@@ -279,24 +299,31 @@ func (c *EncryptedConn) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Read reads a length-prefixed frame, decrypts it, and returns the plaintext.
+// Read returns decrypted plaintext. It first drains any plaintext left
+// over from a previous frame, then reads, length-checks, and decrypts the
+// next length-prefixed frame. Plaintext that does not fit in p is retained
+// for the next call so none is dropped.
 func (c *EncryptedConn) Read(p []byte) (int, error) {
-	var lenBuf [2]byte
-	if _, err := io.ReadFull(c.rw, lenBuf[:]); err != nil {
-		return 0, err
+	if len(c.readbuf) == 0 {
+		var lenBuf [2]byte
+		if _, err := io.ReadFull(c.rw, lenBuf[:]); err != nil {
+			return 0, err
+		}
+		// ctLen is read from a u16, so it is inherently <= maxNoiseFrame;
+		// make([]byte, ctLen) therefore cannot be coerced into a huge
+		// allocation from the wire.
+		ctLen := int(binary.LittleEndian.Uint16(lenBuf[:]))
+		ct := make([]byte, ctLen)
+		if _, err := io.ReadFull(c.rw, ct); err != nil {
+			return 0, err
+		}
+		pt, err := c.recv.Decrypt(nil, ct)
+		if err != nil {
+			return 0, fmt.Errorf("noise: decrypt failed: %w", err)
+		}
+		c.readbuf = pt
 	}
-	ctLen := int(binary.LittleEndian.Uint16(lenBuf[:]))
-	if ctLen > 65535 {
-		return 0, errors.New("noise: frame too large")
-	}
-	ct := make([]byte, ctLen)
-	if _, err := io.ReadFull(c.rw, ct); err != nil {
-		return 0, err
-	}
-	pt, err := c.recv.Decrypt(nil, ct)
-	if err != nil {
-		return 0, fmt.Errorf("noise: decrypt failed: %w", err)
-	}
-	n := copy(p, pt)
+	n := copy(p, c.readbuf)
+	c.readbuf = c.readbuf[n:]
 	return n, nil
 }

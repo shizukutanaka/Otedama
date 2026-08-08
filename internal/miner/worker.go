@@ -19,18 +19,27 @@ type Work struct {
 	JobID     uint32
 	ChannelID uint32
 	Header    Header // template; Nonce field will be overwritten
-	NBits     uint32
-	Target    Hash // pre-computed from NBits for fast comparison
+	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
+	Target    Hash   // SHARE target the hash must meet (pool-assigned difficulty)
 }
 
 // Share is a found solution: a Header whose hash meets the target.
 // The Worker sends Shares on the channel passed to Start.
+//
+// Version echoes the exact block-header version that was hashed, so the
+// submission layer can report it faithfully (Stratum V2's
+// SubmitSharesStandard.version must match the hashed header, or the pool
+// recomputes a different hash and rejects the share).
 type Share struct {
 	ChannelID uint32
 	JobID     uint32
 	Nonce     uint32
 	NTime     uint32
+	Version   uint32
 	Hash      Hash
+	// DeviceID is the HAL identity of the device whose worker found this
+	// share. Set from WorkerConfig.DeviceID; empty when not configured.
+	DeviceID string
 }
 
 // WorkerConfig controls the behaviour of a Worker.
@@ -41,8 +50,20 @@ type WorkerConfig struct {
 
 	// NonceStep is the number of nonces each thread skips ahead per
 	// iteration, interleaving the nonce space across threads. Zero is
-	// replaced with 1.
+	// replaced with Threads (see NewWorker) — not 1 — so that with the
+	// default configuration every thread's nonce sequence is disjoint
+	// (thread i visits i, i+Threads, i+2*Threads, ...) rather than every
+	// thread rescanning the same sequential nonces from a different
+	// starting offset, which would silently discard most of the
+	// available hash rate (each of Threads goroutines redundantly
+	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
+
+	// DeviceID is the HAL identity of the hardware device this worker
+	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
+	// emits so the engine can attribute shares per device.
+	// Empty string means "unidentified device".
+	DeviceID string
 }
 
 // DefaultWorkerConfig returns a WorkerConfig that uses all available
@@ -56,10 +77,11 @@ func DefaultWorkerConfig() WorkerConfig {
 
 // Stats carries live performance counters from a running Worker.
 type Stats struct {
-	HashesTotal uint64        // total hashes computed since Start
-	SharesFound uint64        // valid shares found
-	Uptime      time.Duration // time since Start was called
-	HashRate    float64       // hashes per second (rolling average)
+	HashesTotal   uint64        // total hashes computed since Start
+	SharesFound   uint64        // valid shares found
+	SharesDropped uint64        // valid shares discarded because the consumer was full
+	Uptime        time.Duration // time since Start was called
+	HashRate      float64       // hashes per second (lifetime average: HashesTotal/Uptime)
 }
 
 // Worker runs SHA-256d hashing across multiple goroutines and delivers
@@ -76,7 +98,9 @@ type Worker struct {
 	// Atomic counters for stats.
 	hashCount  atomic.Uint64
 	shareCount atomic.Uint64
-	startTime  atomic.Int64 // UnixNano
+	dropCount  atomic.Uint64 // shares dropped because the share channel was full
+	startTime  atomic.Int64  // UnixNano
+	started    atomic.Bool   // guards Start against a second call
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -98,8 +122,12 @@ func NewWorker(cfg WorkerConfig) *Worker {
 // returned channel, which is closed when the Worker stops.
 //
 // ctx cancellation stops all goroutines and closes the share channel.
-// Start may only be called once; subsequent calls panic.
+// Start may only be called once; a second call panics immediately (rather
+// than corrupting the share channel and panicking later).
 func (w *Worker) Start(ctx context.Context) <-chan Share {
+	if !w.started.CompareAndSwap(false, true) {
+		panic("miner: Worker.Start called more than once")
+	}
 	shares := make(chan Share, w.cfg.Threads*4)
 	innerCtx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
@@ -147,8 +175,26 @@ func (w *Worker) SetWork(work *Work) {
 	w.mu.Unlock()
 }
 
+// DeviceID returns the HAL device identity string this worker was
+// configured with. Empty string means "unidentified device".
+func (w *Worker) DeviceID() string { return w.cfg.DeviceID }
+
+// HasWork reports whether the worker currently has a job assigned
+// (SetWork was last called with a non-nil Work). Used by callers and
+// tests that need to observe pause/resume state from outside the
+// package without reaching into the unexported work field directly.
+func (w *Worker) HasWork() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.work != nil
+}
+
 // Stats returns a snapshot of the Worker's performance counters.
+// Before Start is called, Stats returns a zero-value Stats.
 func (w *Worker) Stats() Stats {
+	if w.startTime.Load() == 0 {
+		return Stats{}
+	}
 	uptime := time.Duration(time.Now().UnixNano() - w.startTime.Load())
 	hashes := w.hashCount.Load()
 	var rate float64
@@ -156,10 +202,11 @@ func (w *Worker) Stats() Stats {
 		rate = float64(hashes) / uptime.Seconds()
 	}
 	return Stats{
-		HashesTotal: hashes,
-		SharesFound: w.shareCount.Load(),
-		Uptime:      uptime,
-		HashRate:    rate,
+		HashesTotal:   hashes,
+		SharesFound:   w.shareCount.Load(),
+		SharesDropped: w.dropCount.Load(),
+		Uptime:        uptime,
+		HashRate:      rate,
 	}
 }
 
@@ -212,15 +259,19 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					JobID:     localWork.JobID,
 					Nonce:     nonce,
 					NTime:     h.Time,
+					Version:   h.Version,
 					Hash:      hash,
+					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share
 				// is dropped rather than blocking the miner. A larger
-				// buffer (Threads*4) makes this unlikely in practice.
+				// buffer (Threads*4) makes this unlikely in practice;
+				// dropCount makes the rare drop observable instead of silent.
 				select {
 				case shares <- share:
 				default:
+					w.dropCount.Add(1)
 				}
 			}
 

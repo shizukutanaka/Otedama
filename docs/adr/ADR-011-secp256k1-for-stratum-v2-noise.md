@@ -126,3 +126,37 @@ dependency rather than an erosion of the policy.
    with a real V2 pool in a live test.
 4. Update ADR-003's dependency list and THREAT_MODEL assumptions in the
    same change that adds the import.
+
+## Erratum (added session 251, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the decision above stands,
+but a July-2026 re-verification against primary sources surfaced two
+scope facts the original text underestimated, recorded here so the
+v3.1.0 estimate is honest:
+
+1. **`decred/dcrd/dcrec/secp256k1/v4` (now v4.4.1, 2026-02-24) provides
+   the curve arithmetic but neither BIP-340 Schnorr nor ElligatorSwift.**
+   Its `schnorr` subpackage implements **EC-Schnorr-DCRv0** (a
+   Decred-custom scheme), not BIP-340, and there is no `ellswift`
+   package. (Source:
+   pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4)
+2. **The SV2 security spec mandates the full
+   `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` suite** — the 64-byte
+   ElligatorSwift x-only encoding defined in BIP324, plus "server
+   authentication with a simple 2-level PKI," plus ChaCha20-Poly1305.
+   (Source:
+   raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
+
+Consequences for Follow-up items 1–2 above: choosing decred/v4 for the
+ECDH is still sound, but the handshake additionally needs (a) a BIP-340
+Schnorr implementation — e.g. `btcec/v2`'s `schnorr` package — if
+BIP-340 signing is wanted, and (b) a **hand-ported ElligatorSwift**,
+because **no audited Go implementation of ellswift exists** (reference
+implementations are C in bitcoin-core/secp256k1 and Rust in
+`noise_sv2`). That hand-rolled primitive is exactly the residual
+DIY-crypto risk this ADR's own reasoning warns about, so v3.1.0's Noise
+work should budget for it explicitly and cross-test against
+bitcoin-core's `examples/ellswift.c` vectors. Also note the "2-level
+PKI server authentication" clause is the concrete missing piece behind
+KNOWN_LIMITATIONS §2's "no code authenticates a responder static key" —
+the message flow, not just the DH primitive, must change.

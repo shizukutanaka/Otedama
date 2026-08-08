@@ -3,14 +3,19 @@
 // Package poolproto abstracts the wire protocol used to talk to a
 // mining pool. Its purpose is to insulate engine/, miner/, and the
 // arbitration loop from the specific protocol implementation, so that
-// Otedama can speak any of:
+// adding a new protocol does not require touching the rest of the
+// codebase.
 //
-//   - Stratum V1 (legacy JSON-RPC over TCP, optionally TLS)
-//   - Stratum V2 (binary framing with Noise NX encryption)
-//   - DATUM (OCEAN's protocol, layered on SV1 transport)
-//   - Future protocols not yet specified
-//
-// without touching the rest of the codebase.
+// Two protocols are actually implemented today, each with a
+// registered Dialer: Stratum V1 (legacy JSON-RPC over TCP, optionally
+// TLS — package stratumv1) and Stratum V2 (binary framing with Noise
+// NX encryption — package stratumv2). DATUM (OCEAN's protocol,
+// layered on SV1 transport) has a reserved URL scheme constant
+// (ProtocolDATUM) and is planned (see docs/adr/ADR-009, status
+// Proposed) but has no Dialer registered anywhere and no
+// implementation package — DialURL("datum://...") returns
+// ErrUnknownProtocol today. See docs/KNOWN_LIMITATIONS.md for the
+// current implementation-status summary.
 //
 // # Why this exists (the 10-year case)
 //
@@ -20,10 +25,15 @@
 //     speak it natively. OCEAN runs DATUM (an SV1-transport variant).
 //     Foundry and AntPool (combined ~50% of hashrate) still primarily
 //     SV1.
-//   - SV2 Reference Implementation (SRI) is at v1.5 with protocol
-//     crates marked beta and roles marked alpha.
-//   - Bitcoin Core 30 (Oct 2025) shipped the SV2 Template Provider IPC
-//     experimentally.
+//   - SV2 Reference Implementation (SRI) has moved past its early-alpha
+//     phase: v1.11.0 (2026-07-08), roughly monthly release cadence
+//     (verified session 251; supersedes this comment's earlier "v1.5,
+//     alpha" snapshot). No production-quality Go SV2 implementation
+//     exists yet, which is still the gap this package addresses.
+//   - Bitcoin Core 30 shipped an experimental IPC Mining Interface
+//     (unix socket, -DENABLE_IPC) letting SV2/other mining software
+//     request templates and submit blocks — a cleaner target than
+//     legacy getblocktemplate for future node integration.
 //   - Job Declaration Protocol production support is limited to
 //     Braiins and DEMAND.
 //
@@ -215,6 +225,22 @@ type Session interface {
 	SuggestedDifficulty() float64
 }
 
+// PoolNoticeReceiver is an optional extension to Session implemented by
+// protocols that deliver human-readable operator notices (e.g.
+// client.show_message in Stratum V1). Callers should type-assert a
+// Session to this interface; protocols that do not implement it have no
+// notice channel.
+//
+// The returned channel is closed when the Session ends. A nil channel
+// means no notices will ever be delivered.
+type PoolNoticeReceiver interface {
+	// PoolNotices returns a channel on which pool-sent notices are delivered.
+	// Messages are non-empty UTF-8 strings. The channel is buffered; a slow
+	// consumer causes notices to be dropped silently rather than blocking
+	// the read loop.
+	PoolNotices() <-chan string
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.
@@ -243,6 +269,13 @@ type Credentials struct {
 	// PoolPubKey is the pool's static public key (SV2 Noise NX). For
 	// pinning. Empty disables pinning (SV1, or trust-on-first-use).
 	PoolPubKey []byte
+
+	// TLSRootCAsPEM is an optional PEM bundle of additional certificate
+	// authorities to trust for a stratum+tls:// connection, on top of the
+	// system root store. It lets a private-CA or self-signed pool be verified
+	// instead of failing. Empty means "system roots only". It never disables
+	// verification.
+	TLSRootCAsPEM []byte
 }
 
 // ----- Registry -----

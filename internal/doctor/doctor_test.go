@@ -6,11 +6,13 @@ package doctor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
@@ -106,6 +108,26 @@ func TestCheckBitcoinAddress_Invalid(t *testing.T) {
 	r := c.Run(context.Background())
 	if r.Status != StatusFail {
 		t.Errorf("invalid address status = %v, want Fail", r.Status)
+	}
+}
+
+func TestCheckBitcoinAddress_SurfacesType(t *testing.T) {
+	// The PASS detail must name the detected address type so the operator
+	// can confirm doctor understood it — including bech32m Taproot (bc1p).
+	cases := map[string]string{
+		"bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq":                     "P2WPKH",
+		"bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr": "P2TR",
+		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa":                             "P2PKH",
+	}
+	for addr, wantType := range cases {
+		r := checkBitcoinAddress(addr).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Errorf("%s: status = %v, want Pass", addr, r.Status)
+			continue
+		}
+		if !strings.Contains(r.Detail, wantType) {
+			t.Errorf("%s: detail = %q, want to contain %q", addr, r.Detail, wantType)
+		}
 	}
 }
 
@@ -228,6 +250,70 @@ func TestReport_Print_OutputFormat(t *testing.T) {
 	}
 }
 
+func TestStatus_String(t *testing.T) {
+	cases := map[Status]string{
+		StatusPass: "pass",
+		StatusWarn: "warn",
+		StatusFail: "fail",
+		StatusSkip: "skip",
+		Status(99): "unknown",
+	}
+	for s, want := range cases {
+		if got := s.String(); got != want {
+			t.Errorf("Status(%d).String() = %q, want %q", int(s), got, want)
+		}
+	}
+}
+
+func TestReport_WriteJSON(t *testing.T) {
+	r := &Report{
+		Results: []Result{
+			{Name: "Config", Status: StatusPass, Detail: "loaded", Elapsed: 2 * time.Millisecond},
+			{Name: "Address", Status: StatusFail, Detail: "missing", Fix: "pass --bitcoin-address"},
+			{Name: "GPU", Status: StatusWarn, Detail: "none"},
+			{Name: "Wallet", Status: StatusSkip, Detail: "n/a"},
+		},
+		Duration: 5 * time.Millisecond,
+	}
+	var buf bytes.Buffer
+	if err := r.WriteJSON(&buf); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var doc struct {
+		Summary struct {
+			Passed, Failed, Warnings, Skipped int
+		}
+		DurationMS int64 `json:"duration_ms"`
+		ExitCode   int   `json:"exit_code"`
+		Checks     []struct {
+			Name, Status, Detail, Fix string
+			ElapsedMS                 int64 `json:"elapsed_ms"`
+		}
+	}
+	if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+	if doc.Summary.Passed != 1 || doc.Summary.Failed != 1 || doc.Summary.Warnings != 1 || doc.Summary.Skipped != 1 {
+		t.Errorf("summary = %+v, want 1 each", doc.Summary)
+	}
+	// A failure must drive exit_code 2 (mirrors ExitCode()).
+	if doc.ExitCode != 2 {
+		t.Errorf("exit_code = %d, want 2", doc.ExitCode)
+	}
+	if len(doc.Checks) != 4 {
+		t.Fatalf("checks length = %d, want 4", len(doc.Checks))
+	}
+	// Status strings must be the lowercase machine names.
+	if doc.Checks[0].Status != "pass" || doc.Checks[1].Status != "fail" {
+		t.Errorf("status strings wrong: %q, %q", doc.Checks[0].Status, doc.Checks[1].Status)
+	}
+	// fix is omitempty: the passing check must not carry one.
+	if doc.Checks[0].Fix != "" {
+		t.Errorf("passing check should have empty fix, got %q", doc.Checks[0].Fix)
+	}
+}
+
 // ----- Runner -----
 
 func TestRunner_ExecutesAllChecks(t *testing.T) {
@@ -269,6 +355,7 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 		"Bitcoin address",
 		"Data directory",
 		"Pool reachability",
+		"Pool endpoint diversity",
 		"Hardware",
 		"Network",
 	}
@@ -276,27 +363,5 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 		if !names[name] {
 			t.Errorf("DefaultChecks missing %q", name)
 		}
-	}
-}
-
-// ----- SortedResults -----
-
-func TestSortedResults_Alphabetical(t *testing.T) {
-	r := &Report{
-		Results: []Result{
-			{Name: "Zebra", Status: StatusPass},
-			{Name: "Apple", Status: StatusPass},
-			{Name: "Mango", Status: StatusPass},
-		},
-	}
-	sorted := SortedResults(r)
-	for i, want := range []string{"Apple", "Mango", "Zebra"} {
-		if sorted[i].Name != want {
-			t.Errorf("sorted[%d] = %q, want %q", i, sorted[i].Name, want)
-		}
-	}
-	// Original must be unchanged.
-	if r.Results[0].Name != "Zebra" {
-		t.Error("SortedResults mutated the original")
 	}
 }

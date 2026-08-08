@@ -7,7 +7,12 @@
 // the metric-registration boilerplate live in separate files.
 package engine
 
-import "github.com/shizukutanaka/Otedama/internal/metrics"
+import (
+	"sync"
+
+	"github.com/shizukutanaka/Otedama/internal/metrics"
+	"github.com/shizukutanaka/Otedama/internal/version"
+)
 
 // ----- Engine metrics -----
 //
@@ -17,14 +22,52 @@ import "github.com/shizukutanaka/Otedama/internal/metrics"
 type engineMetrics struct {
 	hashrate            *metrics.Gauge
 	sharesFound         *metrics.Counter
+	sharesSubmitted     *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
 	arbitrationSwitches *metrics.Counter
-	btcUSDRate          *metrics.Gauge
-	uptime              *metrics.Gauge
-	startTime           *metrics.Gauge
+	// arbitrationHolds counts decisions where a strictly better stream existed
+	// but hysteresis kept the device on its current one. Together with
+	// arbitrationSwitches it makes the hysteresis margin tunable: many holds
+	// mean yield is being left on the table; zero holds mean the margin never
+	// binds. (The "road not taken" — decisions the engine declined.)
+	arbitrationHolds *metrics.Counter
+	// arbitrationForegoneSatsPerSec is the instantaneous opportunity cost of the
+	// current allocation: summed across devices, the raw sats/second sacrificed
+	// versus routing purely by yield. It is the *magnitude* companion to
+	// arbitrationHolds (a count): non-zero whenever hysteresis holds a device or
+	// a non-earnings policy prefers a lower-yield stream, letting an operator see
+	// what stability/policy preferences cost per second and tune accordingly.
+	arbitrationForegoneSatsPerSec *metrics.Gauge
+	// arbitrationExpectedYieldSatsPerSec is the engine's own forecast of the
+	// current earning rate: the summed ExpectedYield of the chosen allocation
+	// (alloc.TotalYield) from the latest Decide. Publishing the forecast is what
+	// makes it accountable — an operator can compare this expectation against
+	// realized earnings (accepted shares × difficulty value) to detect when
+	// provider quotes are over-optimistic or hardware is underperforming. The
+	// expectation half of the expectation-vs-realization pair.
+	arbitrationExpectedYieldSatsPerSec *metrics.Gauge
+	// effectiveYieldSatsPerSec is arbitrationExpectedYieldSatsPerSec scaled by
+	// the lifetime productive fraction (productiveSeconds / uptime) — see
+	// effectiveYield in stats.go. Unlike the instantaneous expected-yield
+	// gauge, this reflects downtime: a device quoted at X sats/s that only
+	// hashes half the time reads as X/2 here, matching what it actually nets.
+	effectiveYieldSatsPerSec *metrics.Gauge
+	// activeStreams is the number of live revenue streams arbitration is
+	// choosing between after stale (dead-provider) streams are pruned. A
+	// drop here surfaces a provider that has stopped quoting.
+	activeStreams *metrics.Gauge
+	// devicesIdle is the number of devices left unassigned this cycle — either
+	// because no compatible stream accepts them or because no accepting stream
+	// cleared the min_yield_sats_per_sec floor. A persistent non-zero value
+	// after setting the floor means it is parking hardware; tune it down if that
+	// is not intended.
+	devicesIdle *metrics.Gauge
+	btcUSDRate  *metrics.Gauge
+	uptime      *metrics.Gauge
+	startTime   *metrics.Gauge
 
 	submitLatencyP50 *metrics.Gauge
 	submitLatencyP95 *metrics.Gauge
@@ -32,14 +75,137 @@ type engineMetrics struct {
 
 	shareAcceptanceRate *metrics.Gauge
 
+	// sharesUnaccounted is shares found locally but not yet judged by the pool
+	// (found − accepted − rejected, clamped at 0). Small values are normal
+	// in-flight latency; a sustained/growing value means found shares are not
+	// reaching the pool — the local-vs-pool reconciliation signal.
+	sharesUnaccounted *metrics.Gauge
+
+	// productiveSeconds accumulates wall-clock seconds the miner actually
+	// produced hashrate (not stalled, not curtailed). Effective uptime =
+	// productive_seconds_total / uptime_seconds — the reliability number that
+	// dominates yield more than fee differences do.
+	productiveSeconds *metrics.Counter
+
+	// rejectRate is the complement of shareAcceptanceRate: rejected /
+	// (accepted + rejected). Having it as an explicit gauge lets operators
+	// build simple threshold alerts without PromQL arithmetic. Maps to the
+	// <0.5% excellent … >3% act-now thresholds from D-Central's guide.
+	rejectRate *metrics.Gauge
+	// staleRate is the fraction of total judged shares that were rejected
+	// with a "stale" reason (network-latency driven). Separating it from
+	// the overall reject rate makes it easy to distinguish latency problems
+	// from hardware errors in Grafana without parsing label sets.
+	staleRate *metrics.Gauge
+
+	// up reflects whether the miner is currently producing hashrate
+	// (1) or has stalled (0); a scrape can alert on a wedged miner.
+	up *metrics.Gauge
+	// curtailed is 1 when hashing has been paused due to the
+	// curtail_below_btc_usd threshold; 0 otherwise. Distinct from
+	// otedama_up (which reflects the miner stalling, not a deliberate pause).
+	curtailed *metrics.Gauge
+	// powerWatts is the user-configured system power draw in watts.
+	// 0 when not configured (power_watts = 0).
+	powerWatts *metrics.Gauge
+	// joulesPerTerahash = powerWatts × 1e12 / hashrate. Only meaningful
+	// when powerWatts > 0; set to 0 otherwise.
+	joulesPerTerahash *metrics.Gauge
+	// powerCostUSDPerHour = powerWatts/1000 × electricity_price_per_kwh, the
+	// cost half of profitability. Constant for a run; set once at startup when
+	// both power and price are configured.
+	powerCostUSDPerHour *metrics.Gauge
+	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
+	// poolActiveIndex is the 0-based index of the active pool in the
+	// configured failover list, so failover is observable.
+	poolConnectionState *metrics.Gauge
+	poolActiveIndex     *metrics.Gauge
+	// payoutActiveIndex is the 0-based index of the active payout address
+	// in the configured failover list, so address failover is observable.
+	payoutActiveIndex *metrics.Gauge
+	// buildInfo is the standard `_info` metric: constant 1, with the
+	// version/commit/goversion carried as labels for fleet tracking.
+	buildInfo *metrics.Gauge
+
+	// lastJobReceivedAt is a Unix-timestamp gauge updated on every
+	// mining.notify / NewMiningJob message from the pool.  A scrape can
+	// alert when the value is older than, say, 2× the pool's expected
+	// notify interval (typically 30–60 s), which reliably surfaces stale
+	// pool connections that look "connected" but deliver no work.
+	lastJobReceivedAt *metrics.Gauge
+
+	// clockSkewSeconds is the maximum absolute offset (in seconds) observed
+	// between the local system clock and the wall-clock reported by BTC/USD
+	// rate-source HTTPS servers via their HTTP Date response headers. Reuses
+	// existing HTTPS traffic — no NTP dependency, no new endpoints. Alert
+	// when >120 s: TLS certificate validation, mining nTime fields, and
+	// rate-freshness judgements all break at that magnitude.
+	clockSkewSeconds *metrics.Gauge
+
+	// btcRateAgeSeconds is how long ago the BTC/USD rate was last successfully
+	// fetched. 0 until the first success. Unlike otedama_btc_usd_rate (which
+	// keeps showing the last good value indefinitely when sources fail), this
+	// rises monotonically during an outage — making "silent staleness" of the
+	// price feed alertable (e.g. age > 2× the 5-min refresh interval).
+	btcRateAgeSeconds *metrics.Gauge
+
+	// rateSourcesOK / rateSourcesTotal expose the *redundancy health* behind the
+	// BTC/USD median, not just the value it produces. ok is how many sources
+	// returned a usable in-band reading in the last fetch; total is how many are
+	// configured. The rate gauge reads identically whether backed by 3 sources
+	// or 1, so ok < total is the only signal of silent redundancy erosion before
+	// the feed fails outright (ok == 0).
+	rateSourcesOK    *metrics.Gauge
+	rateSourcesTotal *metrics.Gauge
+
+	// poolDifficulty is the current share difficulty assigned by the pool via
+	// mining.set_difficulty. 0 until the first set_difficulty is received. A
+	// drop signals the pool is giving the miner easier work (lost var-diff
+	// trust, or insufficient hashrate); a sustained high value with near-zero
+	// shares_found reveals a misconfigured or malicious pool.
+	poolDifficulty *metrics.Gauge
+	// estimatedShareIntervalSeconds = poolDifficulty × 2^32 / hashrate.
+	// The expected wall-clock seconds between consecutive found shares at the
+	// current pool difficulty and hashrate. 0 when either input is unknown.
+	// Use to distinguish "hardware is slow" from "difficulty is too high".
+	estimatedShareIntervalSeconds *metrics.Gauge
+
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
 	reg            *metrics.Registry
 	rejectByReason map[string]*metrics.Counter
+
+	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
+	// one per reject category, created lazily on first rejection of that type.
+	// The gauge value is the Unix timestamp of the most recent rejection in that
+	// category, so operators can tell whether a high reject count represents an
+	// ongoing problem (last_reject == now) or a past event that has cleared
+	// (last_reject is hours old). Pairs with rejectByReason counts to distinguish
+	// "count rose a while ago, has since recovered" from "still happening now".
+	lastRejectByReasonMu sync.Mutex
+	lastRejectByReason   map[string]*metrics.Gauge
+
+	// sharesFoundPerDevice tracks shares found per device
+	// (otedama_device_shares_found_total{device="cpu-0"}).
+	// Created lazily when the first share from each device arrives;
+	// the device set is bounded to detected hardware so cardinality is safe.
+	sharesFoundPerDeviceMu sync.Mutex
+	sharesFoundPerDevice   map[string]*metrics.Counter
+
+	// payoutInfo exposes the active payout destination as
+	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
+	// masked address currently receiving rewards. It lets an operator confirm,
+	// via /metrics, that a non-custodial instance is paying to the address they
+	// expect even after payout-address failover. Masked (first6…last4) like the
+	// logs; the address set is bounded to the configured failover list.
+	payoutInfoMu       sync.Mutex
+	payoutInfo         map[string]*metrics.Gauge
+	payoutActiveMasked string
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
-	return &engineMetrics{
+	info := version.Get()
+	m := &engineMetrics{
 		hashrate: reg.NewGauge(
 			"otedama_hashrate_hashes_per_second",
 			"Current aggregate hashrate in hashes per second.",
@@ -47,6 +213,15 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		sharesFound: reg.NewCounter(
 			"otedama_shares_found_total",
 			"Total shares found locally by all workers.",
+			nil),
+		sharesSubmitted: reg.NewCounter(
+			"otedama_shares_submitted_total",
+			"Total shares actually transmitted to the pool (mining.submit / "+
+				"SubmitSharesStandard), incremented at send time regardless of "+
+				"the pool's eventual accept/reject response. Distinct from "+
+				"shares_found_total: a share can be found by a worker but never "+
+				"submitted if its worker's share channel was full (a rate the "+
+				"engine only currently logs, as \"dropped N found share(s)\").",
 			nil),
 		sharesAccepted: reg.NewCounter(
 			"otedama_shares_total",
@@ -67,6 +242,46 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		arbitrationSwitches: reg.NewCounter(
 			"otedama_arbitration_switches_total",
 			"Total arbitration workload switches (mining ↔ AI).",
+			nil),
+		arbitrationHolds: reg.NewCounter(
+			"otedama_arbitration_holds_total",
+			"Total decisions where a higher-yielding stream existed but hysteresis "+
+				"kept the current one. Rising vs switches indicates the hysteresis "+
+				"margin may be too high (yield left on the table).",
+			nil),
+		arbitrationForegoneSatsPerSec: reg.NewGauge(
+			"otedama_arbitration_foregone_sats_per_second",
+			"Instantaneous opportunity cost of the current allocation: raw sats/s "+
+				"sacrificed versus routing purely by yield, summed across devices. "+
+				"Non-zero when hysteresis holds a device or a non-earnings policy "+
+				"prefers a lower-yield stream. The magnitude companion to "+
+				"otedama_arbitration_holds_total.",
+			nil),
+		arbitrationExpectedYieldSatsPerSec: reg.NewGauge(
+			"otedama_arbitration_expected_yield_sats_per_second",
+			"The engine's forecast earning rate: summed ExpectedYield of the chosen "+
+				"allocation. Compare against realized earnings to judge whether provider "+
+				"quotes are accurate; combine with otedama_btc_usd_rate for an expected "+
+				"$/day.",
+			nil),
+		effectiveYieldSatsPerSec: reg.NewGauge(
+			"otedama_effective_yield_sats_per_second",
+			"Gross-minus-losses yield: otedama_arbitration_expected_yield_sats_per_second "+
+				"scaled by the lifetime productive fraction (otedama_productive_seconds_total "+
+				"/ otedama_uptime_seconds). Reliability dwarfs fee differences — a few percent "+
+				"of downtime costs more than most inter-pool fee gaps — so this single number "+
+				"captures both effects, unlike the instantaneous expected-yield gauge which "+
+				"reads unchanged during a stall.",
+			nil),
+		activeStreams: reg.NewGauge(
+			"otedama_active_streams",
+			"Number of live revenue streams in arbitration after pruning stale "+
+				"(dead-provider) quotes. A drop indicates a provider stopped quoting.",
+			nil),
+		devicesIdle: reg.NewGauge(
+			"otedama_devices_idle",
+			"Number of devices left idle this arbitration cycle (no compatible "+
+				"stream, or none clearing the min_yield_sats_per_sec floor).",
 			nil),
 		btcUSDRate: reg.NewGauge(
 			"otedama_btc_usd_rate",
@@ -98,10 +313,132 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_share_acceptance_rate",
 			"Accepted shares / total judged shares (1.0 = all accepted).",
 			nil),
+		sharesUnaccounted: reg.NewGauge(
+			"otedama_shares_unaccounted",
+			"Shares found locally but not yet judged by the pool (found − accepted − "+
+				"rejected, clamped at 0). A sustained or growing value means found shares "+
+				"are not reaching the pool (submission failures or drops).",
+			nil),
+		productiveSeconds: reg.NewCounter(
+			"otedama_productive_seconds_total",
+			"Cumulative wall-clock seconds the miner actually produced hashrate "+
+				"(not stalled, not curtailed). Effective uptime = this / otedama_uptime_seconds.",
+			nil),
+		rejectRate: reg.NewGauge(
+			"otedama_reject_rate",
+			"Rejected shares / total judged shares (complement of acceptance_rate). "+
+				"<0.005 excellent, >0.03 investigate immediately.",
+			nil),
+		staleRate: reg.NewGauge(
+			"otedama_stale_rate",
+			"Stale-rejected shares / total judged shares. "+
+				"High values indicate network latency or a pool that is too far away.",
+			nil),
 
-		reg:            reg,
-		rejectByReason: make(map[string]*metrics.Counter),
+		up: reg.NewGauge(
+			"otedama_up",
+			"1 if the miner is healthy (hashing, or intentionally paused by "+
+				"curtailment), 0 if it has stalled when it should be hashing. "+
+				"Use otedama_curtailed to distinguish a deliberate pause.",
+			nil),
+		curtailed: reg.NewGauge(
+			"otedama_curtailed",
+			"1 if hashing is paused because BTC/USD is below curtail_below_btc_usd threshold, else 0.",
+			nil),
+		powerWatts: reg.NewGauge(
+			"otedama_power_watts",
+			"Configured total system power draw in watts (from power_watts config). 0 when not set.",
+			nil),
+		joulesPerTerahash: reg.NewGauge(
+			"otedama_joules_per_terahash",
+			"Energy efficiency: watts × 1e12 / hashrate. 0 when power_watts is not configured.",
+			nil),
+		powerCostUSDPerHour: reg.NewGauge(
+			"otedama_power_cost_usd_per_hour",
+			"Estimated electricity cost: power_watts/1000 × electricity_price_per_kwh. "+
+				"Combine with the BTC/USD rate and revenue to see net profit. "+
+				"0 when power_watts or electricity_price_per_kwh is unset.",
+			nil),
+		poolConnectionState: reg.NewGauge(
+			"otedama_pool_connection_state",
+			"Pool connection state: 0=disconnected, 1=connecting, 2=connected.",
+			nil),
+		poolActiveIndex: reg.NewGauge(
+			"otedama_pool_active_index",
+			"0-based index of the active pool in the configured failover list.",
+			nil),
+		payoutActiveIndex: reg.NewGauge(
+			"otedama_payout_active_index",
+			"0-based index of the active payout address in the failover list.",
+			nil),
+		buildInfo: reg.NewGauge(
+			"otedama_build_info",
+			"Build information (constant 1); version/commit/goversion are labels.",
+			map[string]string{
+				"version":   info.Version,
+				"commit":    info.Commit,
+				"goversion": info.GoVersion,
+			}),
+
+		lastJobReceivedAt: reg.NewGauge(
+			"otedama_last_job_received_seconds",
+			"Unix timestamp of the most recent mining job received from the pool. "+
+				"Alert when this is older than 2× the pool's expected notify interval "+
+				"(~30–60 s) to detect a stale connection that looks connected but delivers no work.",
+			nil),
+
+		clockSkewSeconds: reg.NewGauge(
+			"otedama_clock_skew_seconds",
+			"Maximum absolute offset (s) between the local system clock and the "+
+				"wall-clock reported by BTC/USD rate-source servers via HTTP Date "+
+				"headers. 0 until the first successful fetch. Alert when >120: TLS "+
+				"certificate validation, mining nTime, and rate freshness break.",
+			nil),
+
+		btcRateAgeSeconds: reg.NewGauge(
+			"otedama_btc_rate_age_seconds",
+			"Seconds since the BTC/USD rate was last successfully fetched. 0 until "+
+				"the first success. Rises during a price-source outage even while "+
+				"otedama_btc_usd_rate still shows the last good value; alert when this "+
+				"exceeds ~2× the refresh interval to catch silent staleness.",
+			nil),
+		rateSourcesOK: reg.NewGauge(
+			"otedama_rate_sources_ok",
+			"Number of BTC/USD price sources that returned a usable in-band reading "+
+				"in the last fetch. Compare with otedama_rate_sources_total: ok < total "+
+				"means the median is running on degraded redundancy (alert before ok=0).",
+			nil),
+		rateSourcesTotal: reg.NewGauge(
+			"otedama_rate_sources_total",
+			"Number of BTC/USD price sources configured. The denominator for "+
+				"otedama_rate_sources_ok.",
+			nil),
+
+		poolDifficulty: reg.NewGauge(
+			"otedama_pool_difficulty",
+			"Current share difficulty assigned by the pool (mining.set_difficulty). "+
+				"0 until the first assignment. A sudden drop indicates lost var-diff "+
+				"trust; a high value with near-zero shares_found indicates difficulty "+
+				"is above what the local hashrate can serve within a reasonable interval.",
+			nil),
+		estimatedShareIntervalSeconds: reg.NewGauge(
+			"otedama_estimated_share_interval_seconds",
+			"Expected wall-clock seconds between consecutive shares: "+
+				"pool_difficulty × 2^32 / hashrate. 0 when difficulty or hashrate "+
+				"is unknown. Use to distinguish 'hardware is slow' from 'difficulty "+
+				"is too high' when shares_found drops.",
+			nil),
+
+		reg:                  reg,
+		rejectByReason:       make(map[string]*metrics.Counter),
+		lastRejectByReason:   make(map[string]*metrics.Gauge),
+		sharesFoundPerDevice: make(map[string]*metrics.Counter),
+		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
+	// build_info is a constant series; its value carries no information,
+	// only its label set does (standard Prometheus `_info` convention).
+	m.buildInfo.Set(1)
+	return m
 }
 
 // rejectReason returns (creating on first use) the counter for rejected
@@ -120,4 +457,125 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// touchLastReject records the current Unix timestamp as the most recent
+// rejection time for category, exposed as
+// otedama_last_reject_seconds{reason="..."}. The gauge is created lazily on
+// first rejection of that category; subsequent calls update the value.
+// Safe for concurrent use.
+func (m *engineMetrics) touchLastReject(category string, now int64) {
+	m.lastRejectByReasonMu.Lock()
+	g, ok := m.lastRejectByReason[category]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_last_reject_seconds",
+			"Unix timestamp of the most recent share rejection of this category. "+
+				"Pairs with otedama_shares_rejected_by_reason_total to distinguish "+
+				"an ongoing rejection problem (value near now) from a past one "+
+				"that has since cleared (value hours old).",
+			map[string]string{"reason": category})
+		m.lastRejectByReason[category] = g
+	}
+	m.lastRejectByReasonMu.Unlock()
+	g.Set(float64(now))
+}
+
+// incSharesFoundForDevice increments the per-device shares-found counter
+// (otedama_device_shares_found_total{device="cpu-0"}).
+// Safe for concurrent use; counters are created lazily on first call for
+// a given deviceID. If deviceID is empty, the call is a no-op.
+func (m *engineMetrics) incSharesFoundForDevice(deviceID string) {
+	if deviceID == "" {
+		return
+	}
+	m.sharesFoundPerDeviceMu.Lock()
+	c, ok := m.sharesFoundPerDevice[deviceID]
+	if !ok {
+		c = m.reg.NewCounter(
+			"otedama_device_shares_found_total",
+			"Total shares found by this device. "+
+				"Per-device breakdown of otedama_shares_found_total.",
+			map[string]string{"device": deviceID},
+		)
+		m.sharesFoundPerDevice[deviceID] = c
+	}
+	m.sharesFoundPerDeviceMu.Unlock()
+	c.Inc()
+}
+
+// setActivePayout marks masked as the active payout destination:
+// otedama_payout_info{address="<masked>"} = 1, with the previously-active
+// series set to 0 so exactly one series reads 1 at a time. Gauges are created
+// lazily per masked address (bounded to the configured failover list) and the
+// no-op fast path avoids churn when the active address is unchanged. Safe for
+// concurrent use. An empty masked string is ignored.
+func (m *engineMetrics) setActivePayout(masked string) {
+	if masked == "" {
+		return
+	}
+	m.payoutInfoMu.Lock()
+	defer m.payoutInfoMu.Unlock()
+	if masked == m.payoutActiveMasked {
+		return
+	}
+	if prev := m.payoutActiveMasked; prev != "" {
+		if g, ok := m.payoutInfo[prev]; ok {
+			g.Set(0)
+		}
+	}
+	g, ok := m.payoutInfo[masked]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_payout_info",
+			"Active payout destination (masked). The series valued 1 is the address "+
+				"currently receiving rewards; tracks payout-address failover.",
+			map[string]string{"address": masked},
+		)
+		m.payoutInfo[masked] = g
+	}
+	g.Set(1)
+	m.payoutActiveMasked = masked
+}
+
+// updateShareRates recomputes the acceptance/reject/stale rate gauges from
+// the current share counters. Returns the acceptance rate and the number of
+// judged shares so the caller can decide whether to log a warning. Safe to
+// call with no shares judged yet (returns rate=1.0, judged=0).
+//
+// It also reconciles local discovery against the pool's numbers: shares found
+// locally but not yet judged by the pool are exposed as otedama_shares_unaccounted.
+// A few in-flight shares are normal (submit→accept latency); a sustained or
+// growing value means found shares are not reaching the pool — submission
+// failures or drops that would otherwise be invisible (the "trust the pool's
+// numbers" reconciliation, RESEARCH_IMPROVEMENTS Category 1 item 10).
+func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
+	accepted := m.sharesAccepted.Value()
+	rejected := m.sharesRejected.Value()
+	judged = accepted + rejected
+	rate = acceptanceRate(accepted, rejected)
+	m.shareAcceptanceRate.Set(rate)
+
+	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
+	// can briefly report more judged than we have locally counted if a stats
+	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
+	found := m.sharesFound.Value()
+	var unaccounted uint64
+	if found > judged {
+		unaccounted = found - judged
+	}
+	m.sharesUnaccounted.Set(float64(unaccounted))
+
+	if judged == 0 {
+		m.rejectRate.Set(0)
+		m.staleRate.Set(0)
+		return rate, judged
+	}
+	m.rejectRate.Set(float64(rejected) / float64(judged))
+	var stale uint64
+	if c, ok := m.rejectByReason["stale"]; ok {
+		stale = c.Value()
+	}
+	m.staleRate.Set(float64(stale) / float64(judged))
+	return rate, judged
 }

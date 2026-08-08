@@ -80,6 +80,80 @@ func TestVisibleLen_BoldCyanText(t *testing.T) {
 	}
 }
 
+// ----- truncateVisible -----
+
+func TestTruncateVisible_PlainTextCutToWidth(t *testing.T) {
+	got := truncateVisible("hello world", 5)
+	if visibleLen(got) != 5 {
+		t.Errorf("visibleLen(%q) = %d, want 5", got, visibleLen(got))
+	}
+	if !strings.HasPrefix(got, "hello") {
+		t.Errorf("truncated text = %q, want to start with %q", got, "hello")
+	}
+}
+
+func TestTruncateVisible_ShorterThanWidthUnchanged(t *testing.T) {
+	got := truncateVisible("hi", 10)
+	if visibleLen(got) != 2 {
+		t.Errorf("visibleLen(%q) = %d, want 2 (unchanged)", got, visibleLen(got))
+	}
+}
+
+func TestTruncateVisible_PreservesLeadingANSIAndClosesTrailingStyle(t *testing.T) {
+	// Bold+green "MINING" cut to 3 visible chars: the color codes opened
+	// before the cut must still apply to the visible prefix, and the
+	// result must end with a reset so the style can't bleed into the rest
+	// of a frame that overwrites this line next tick.
+	s := "\x1b[1m\x1b[32mMINING\x1b[0m"
+	got := truncateVisible(s, 3)
+	if visibleLen(got) != 3 {
+		t.Errorf("visibleLen(%q) = %d, want 3", got, visibleLen(got))
+	}
+	if !strings.HasPrefix(got, "\x1b[1m\x1b[32m") {
+		t.Errorf("truncated text = %q, want leading color codes preserved", got)
+	}
+	if !strings.HasSuffix(got, reset) {
+		t.Errorf("truncated text = %q, want to end with a reset", got)
+	}
+}
+
+func TestTruncateVisible_ZeroOrNegativeWidthReturnsEmpty(t *testing.T) {
+	if got := truncateVisible("anything", 0); got != "" {
+		t.Errorf("truncateVisible(_, 0) = %q, want empty", got)
+	}
+	if got := truncateVisible("anything", -1); got != "" {
+		t.Errorf("truncateVisible(_, -1) = %q, want empty", got)
+	}
+}
+
+// ----- writeLine truncation (narrow terminals) -----
+
+func TestWriteLine_TruncatesContentLongerThanCols(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	var sb strings.Builder
+	d.writeLine(&sb, "this line is definitely longer than forty columns wide", 40)
+	line := sb.String()
+	// Strip the leading clearLine escape and trailing \r\n to isolate the
+	// content actually written, then confirm it never exceeds cols and
+	// was not left unmodified (i.e. truncation actually fired).
+	content := strings.TrimSuffix(strings.TrimPrefix(line, clearLine), "\r\n")
+	if got := visibleLen(content); got > 40 {
+		t.Errorf("visibleLen(written content) = %d, want <= 40", got)
+	}
+}
+
+func TestWriteLine_ShortContentUnaffected(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	var sb strings.Builder
+	d.writeLine(&sb, "short", 40)
+	line := sb.String()
+	if !strings.Contains(line, "short") {
+		t.Errorf("output %q should contain the untruncated content", line)
+	}
+}
+
 // ----- SatsToDisplay -----
 
 func TestSatsToDisplay(t *testing.T) {
@@ -115,7 +189,7 @@ func TestDashboard_RenderDoesNotPanic(t *testing.T) {
 		PoolURL:           "stratum+v2://pool.example.com:3336",
 		Connected:         true,
 		PoolLatency:       15 * time.Millisecond,
-		TotalSatsEarned:   1500,
+		EstSatsEarned:     1500,
 		WalletFingerprint: "aabbccdd",
 		Uptime:            2*time.Hour + 15*time.Minute,
 		Devices:           2,
@@ -137,6 +211,40 @@ func TestDashboard_RenderDoesNotPanic(t *testing.T) {
 	}
 	if !strings.Contains(output, "aabbccdd") {
 		t.Errorf("output missing wallet fingerprint; got %q", output)
+	}
+}
+
+func TestDashboard_MiningLine_IdleDevicesShown(t *testing.T) {
+	// When the min_yield_sats_per_sec floor idles some devices, the count must
+	// appear in the MINING line so TUI-only operators see it without Prometheus.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.SetWidth(120)
+	d.render(Stats{
+		HashRate:    1e9,
+		Devices:     4,
+		DevicesIdle: 2,
+		Connected:   true,
+	})
+	out := buf.String()
+	if !strings.Contains(out, "2 idle") {
+		t.Errorf("render with DevicesIdle=2 must contain '2 idle'; output:\n%s", out)
+	}
+	// The total device count must still be present.
+	if !strings.Contains(out, "4 device(s)") {
+		t.Errorf("render must still show total device count; output:\n%s", out)
+	}
+}
+
+func TestDashboard_MiningLine_NoIdleWhenZero(t *testing.T) {
+	// With DevicesIdle = 0, the "N idle" annotation must not appear.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.SetWidth(120)
+	d.render(Stats{HashRate: 1e9, Devices: 4, Connected: true})
+	out := buf.String()
+	if strings.Contains(out, "idle") {
+		t.Errorf("render with DevicesIdle=0 must not contain 'idle'; output:\n%s", out)
 	}
 }
 
@@ -193,5 +301,47 @@ func TestDashboard_ShortenURL(t *testing.T) {
 				t.Errorf("shortened URL must end with '...': %q", got)
 			}
 		}
+	}
+}
+
+// ----- Dashboard.footer — gap clamp (session 166) -----
+
+func TestDashboard_Footer_GapClampedAtMinimum(t *testing.T) {
+	// 1_000_000 h produces "  uptime: 1000000h 0m 0s" (24 visible chars).
+	// At the minimum valid width of 40 cols: gap = 40 - 24 - 14 - 2 = 0,
+	// which triggers the gap < 1 clamp branch.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.SetWidth(40)
+	d.render(Stats{Uptime: 1_000_000 * time.Hour})
+	if !strings.Contains(buf.String(), "uptime:") {
+		t.Error("footer must contain 'uptime:' even when gap is clamped to 1")
+	}
+}
+
+// ----- Dashboard.renderLoop — updateCh and ticker branches (session 166) -----
+
+func TestDashboard_RenderLoop_UpdateAndTick(t *testing.T) {
+	if testing.Short() {
+		t.Skip("renderLoop timing test requires ~1.1 s; skipped in short mode")
+	}
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.Start()
+
+	// Deliver stats updates so renderLoop drains updateCh (lines 156-159).
+	for i := 0; i < 3; i++ {
+		d.Update(Stats{HashRate: 1.5e6, Connected: true, Devices: 1})
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait for the ticker (time.Second interval) to fire at least once,
+	// triggering the ticker case (lines 160-164) which calls d.render.
+	time.Sleep(1100 * time.Millisecond)
+
+	d.Stop()
+
+	if !strings.Contains(buf.String(), "1.50 MH/s") {
+		t.Error("expected rendered hashrate in output after ticker fired")
 	}
 }

@@ -12,14 +12,22 @@ import (
 // hashPool reuses sha256.New hashers across handshake operations.
 //
 // During a Noise handshake, hkdf2 and hkdf3 call hmacSHA256 multiple
-// times, each of which previously created two new sha256 hashers.
-// A single handshake allocated ~12 hasher objects, all discarded
-// immediately. For hot reconnect scenarios (flaky networks, mobile
-// miners, small pool failover), this was measurable GC pressure.
+// times, each of which creates two new sha256 hashers. A single
+// handshake allocates ~12 hasher objects, all discarded immediately.
+// For hot reconnect scenarios (flaky networks, mobile miners, small
+// pool failover), this is measurable GC pressure.
 //
 // sync.Pool reduces the allocation rate to near-zero for steady-state
 // operation. The pool is keyed on the hasher interface so the same
 // pool can be used for the inner and outer hash in HMAC.
+//
+// Status: hmacSHA256Pooled is implemented, correctness-tested, and
+// benchmarked (see noise_pool_test.go), but hkdf2/hkdf3 in noise.go
+// still call the unpooled hmacSHA256 — this pooling is not yet wired
+// into the live handshake path. noise.go and noise_pool.go together
+// fall under CLAUDE.md's CODEOWNERS-gated funds-critical review
+// requirement, so wiring hmacSHA256Pooled into hkdf2/hkdf3 is left as
+// a deliberate, reviewed follow-up rather than made here.
 var hashPool = sync.Pool{
 	New: func() any {
 		return sha256.New()

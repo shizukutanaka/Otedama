@@ -352,3 +352,46 @@ func TestDetector_NilRegistryUsesEmpty(t *testing.T) {
 		t.Errorf("Detect on nil-registry detector returned %d devices, want 0", len(devices))
 	}
 }
+
+// blockingDriver ignores context and blocks in Enumerate until its block
+// channel is closed or receives a value. Used to verify ctx-aware drain loop.
+type blockingDriver struct {
+	name  string
+	block chan struct{}
+}
+
+func (b *blockingDriver) Name() string { return b.name }
+func (b *blockingDriver) Enumerate(_ context.Context) ([]Device, error) {
+	<-b.block
+	return nil, nil
+}
+
+func TestDetector_ContextCancellationInterruptsDrainLoop(t *testing.T) {
+	// A driver that ignores context blocks the old for-range drain loop
+	// even after ctx is cancelled. The fix switches to a select-based loop
+	// that exits immediately on ctx.Done().
+	block := make(chan struct{})
+
+	r := NewRegistry()
+	if err := r.Register(&blockingDriver{name: "blocker", block: block}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	d := NewDetector(r, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.Detect(ctx) //nolint:errcheck
+	}()
+
+	select {
+	case <-done:
+		// Detect returned promptly after context expiry.
+	case <-time.After(500 * time.Millisecond):
+		t.Error("Detect did not return within 500ms after context cancellation")
+	}
+	close(block) // unblock the goroutine to prevent test-goroutine leak
+}

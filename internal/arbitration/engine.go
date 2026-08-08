@@ -32,22 +32,32 @@
 // A correct engine preserves these invariants over every output:
 //
 //   - Every device with at least one compatible stream receives an
-//     assignment. Idle is only allowed when no stream accepts the device.
+//     assignment. Idle is only allowed when no stream accepts the device, or
+//     when no accepting stream clears the MinYieldSatsPerSec profitability floor.
 //   - No device is assigned to a stream that does not accept its Family.
-//   - Switching occurs only when the yield gain exceeds the switching
-//     cost (including the caller-supplied hysteresis margin).
-//   - Total yield of the allocation is >= any allocation produced by a
-//     greedy per-device max-yield rule (ignoring switching costs).
+//   - Switching occurs only when the policy-adjusted yield gain exceeds the
+//     caller-supplied hysteresis margin. The gain is measured in the same
+//     policy-adjusted metric used for selection, so hysteresis never
+//     overrides the active policy's notion of "better" (e.g. a higher raw
+//     yield with worse privacy is not a switch trigger under MaximizePrivacy).
+//   - Under PolicyMaximizeEarnings with no hysteresis, total yield equals
+//     the optimal per-device greedy maximum. Other policies deliberately
+//     accept lower raw yield in exchange for BTC-native payment, privacy,
+//     or environmental preference; raw TotalYield may therefore be less than
+//     the greedy maximum under those policies.
+//   - TotalYield equals the sum of ExpectedYield across all Assignments.
+//   - ForegoneSatsPerSec is always >= 0 for every Assignment.
 //
 // These invariants are verified by property-based tests, which exercise
 // the engine against many random inputs.
 package arbitration
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
 )
@@ -105,12 +115,7 @@ type Stream struct {
 // Accepts reports whether this stream will accept work from a device of
 // the given family.
 func (s Stream) Accepts(f hal.Family) bool {
-	for _, accepted := range s.AcceptsFamilies {
-		if accepted == f {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.AcceptsFamilies, f)
 }
 
 // YieldFor returns the yield this stream offers for the specified device.
@@ -183,6 +188,27 @@ type Assignment struct {
 	ExpectedYield  float64 // effective yield at the time of decision
 	SwitchedFromID StreamID
 	Reason         string // human-readable explanation for logging
+
+	// Held is true when a different, same-or-higher-scoring stream was
+	// available but the device was kept on its previous one because the gain
+	// (if any) did not strictly exceed the hysteresis margin — this includes
+	// the exact-tie case, where a different stream scored identically and no
+	// yield was actually left on the table, not just the case where a
+	// strictly better stream was suppressed. It distinguishes "a candidate
+	// other than the incumbent was in play" from "stayed because the current
+	// stream is unambiguously the best", which lets operators see whether the
+	// hysteresis margin is costing them and tune it.
+	Held bool
+
+	// ForegoneSatsPerSec is the raw revenue (satoshis/second) sacrificed by
+	// this assignment relative to pure yield maximization: the highest raw
+	// effective yield among all streams compatible with this device, minus the
+	// yield of the stream actually assigned. It is always >= 0 and quantifies
+	// the *magnitude* of every deliberate deviation from max-earnings —
+	// hysteresis holds and non-earnings policies (privacy/environment/BTC) both
+	// surface here. Zero under PolicyMaximizeEarnings with no hold. Where Held
+	// counts that a better option was declined, this measures how much it cost.
+	ForegoneSatsPerSec float64
 }
 
 // Idle reports whether this assignment leaves the device idle.
@@ -198,7 +224,7 @@ type Allocation struct {
 	Assignments   []Assignment
 	TotalYield    float64
 	Policy        Policy
-	SkippedDevice int // devices left idle because no stream accepts them
+	SkippedDevice int // devices left idle: no compatible stream accepts them, or none clears the MinYieldSatsPerSec floor
 }
 
 // Input bundles the arguments to Decide.
@@ -224,6 +250,20 @@ type Input struct {
 	// 0.0 means switch at any improvement; 0.1 means require 10% more.
 	// This damps rapid oscillation when streams have near-equal yields.
 	HysteresisMargin float64
+
+	// MinYieldSatsPerSec is an absolute profitability floor: a stream is a
+	// viable candidate for a device only if its confidence-adjusted yield is at
+	// least this many satoshis per second. Streams below the floor are treated
+	// as if they did not accept the device, so a device whose every compatible
+	// stream is below the floor is left idle rather than run for a trickle of
+	// revenue (which still costs power, wear, and heat).
+	//
+	// It is the per-device counterpart to the engine-level curtail_below_btc_usd
+	// switch: curtailment pauses everything on a global BTC-price threshold,
+	// whereas this idles only the individual devices that cannot clear the floor.
+	// 0 (the default) disables the floor — every positive-yield stream qualifies,
+	// exactly as before this field existed. Must be non-negative.
+	MinYieldSatsPerSec float64
 }
 
 // DeviceRef is a lightweight reference to a Device. We pass references
@@ -255,6 +295,9 @@ func Decide(in Input) (*Allocation, error) {
 	if in.HysteresisMargin < 0 {
 		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
 	}
+	if in.MinYieldSatsPerSec < 0 {
+		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
+	}
 
 	// Reject duplicate device IDs up front, since silently ignoring
 	// duplicates could cause subtle allocation bugs.
@@ -269,8 +312,8 @@ func Decide(in Input) (*Allocation, error) {
 	// Sort devices by ID for deterministic output order.
 	devices := make([]DeviceRef, len(in.Devices))
 	copy(devices, in.Devices)
-	sort.Slice(devices, func(i, j int) bool {
-		return devices[i].Identity.ID < devices[j].Identity.ID
+	slices.SortFunc(devices, func(a, b DeviceRef) int {
+		return cmp.Compare(a.Identity.ID, b.Identity.ID)
 	})
 
 	// Previous assignments, for hysteresis and switch detection.
@@ -287,7 +330,7 @@ func Decide(in Input) (*Allocation, error) {
 	}
 
 	for _, dev := range devices {
-		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin)
+		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
 		if a.Idle() {
 			alloc.SkippedDevice++
 		}
@@ -306,13 +349,19 @@ func chooseForDevice(
 	previous Assignment,
 	policy Policy,
 	hysteresis float64,
+	minYield float64,
 ) Assignment {
 	type candidate struct {
 		stream Stream
 		yield  float64
 	}
 
+	// belowFloor records whether at least one stream accepted this device with a
+	// positive yield that nonetheless failed the minYield floor. It lets the idle
+	// reason distinguish "nothing wanted this device" from "the work on offer was
+	// not worth running", which is actionable for an operator tuning the floor.
 	var candidates []candidate
+	var belowFloor bool
 	for _, s := range streams {
 		if !s.Accepts(dev.Identity.Family) {
 			continue
@@ -321,42 +370,80 @@ func chooseForDevice(
 		if y <= 0 {
 			continue
 		}
+		if y < minYield {
+			belowFloor = true
+			continue
+		}
 		candidates = append(candidates, candidate{stream: s, yield: y})
 	}
 
 	if len(candidates) == 0 {
+		reason := "no compatible stream accepting non-zero work"
+		if belowFloor {
+			reason = fmt.Sprintf("all compatible streams below minimum yield floor %.4g sats/s", minYield)
+		}
 		return Assignment{
 			DeviceID: dev.Identity.ID,
-			Reason:   "no compatible stream accepting non-zero work",
+			Reason:   reason,
 		}
 	}
 
-	// Sort candidates by policy-adjusted score, then by StreamID for
+	// maxRaw is the highest raw effective yield among compatible streams,
+	// independent of policy. It is the reference point for ForegoneSatsPerSec:
+	// the most this device could earn if routed purely by yield. Computed
+	// before the policy sort so it reflects raw yield, not policy score.
+	maxRaw := candidates[0].yield
+	for _, c := range candidates[1:] {
+		maxRaw = max(maxRaw, c.yield)
+	}
+
+	// Sort candidates by policy-adjusted score (descending), then by StreamID for
 	// determinism.
-	sort.SliceStable(candidates, func(i, j int) bool {
-		si := policyScore(candidates[i].stream, candidates[i].yield, policy)
-		sj := policyScore(candidates[j].stream, candidates[j].yield, policy)
-		if si != sj {
-			return si > sj
+	slices.SortStableFunc(candidates, func(a, b candidate) int {
+		sa := policyScore(a.stream, a.yield, policy)
+		sb := policyScore(b.stream, b.yield, policy)
+		if sa != sb {
+			return cmp.Compare(sb, sa) // descending: higher score first
 		}
-		return candidates[i].stream.ID < candidates[j].stream.ID
+		return cmp.Compare(a.stream.ID, b.stream.ID)
 	})
 
 	best := candidates[0]
+	bestScore := policyScore(best.stream, best.yield, policy)
 
 	// Hysteresis: if we currently have a previous assignment on a still-
-	// available stream, keep it unless the best candidate beats it by
-	// the hysteresis margin.
+	// available stream, keep it unless the best candidate beats it by the
+	// hysteresis margin. The comparison is made in the *policy-adjusted*
+	// score space (the same metric used for selection above), not raw yield,
+	// so the "only switch on a meaningful improvement" guarantee is
+	// consistent with what "better" means under the active policy. Under
+	// PolicyMaximizeEarnings the score equals the raw yield, so this is
+	// identical to a plain yield comparison; under privacy/environment/BTC
+	// policies a higher raw yield with a worse rating is correctly treated
+	// as a marginal (or non-existent) gain rather than a reason to switch.
 	if previous.Stream != "" {
 		for _, c := range candidates {
 			if c.stream.ID == previous.Stream {
-				threshold := c.yield * (1.0 + hysteresis)
-				if best.yield <= threshold {
+				incScore := policyScore(c.stream, c.yield, policy)
+				threshold := incScore * (1.0 + hysteresis)
+				if bestScore <= threshold {
+					// Held only counts when a *different*, higher-scoring stream
+					// was suppressed — not when the incumbent is itself the best
+					// (in which case nothing was declined).
+					held := best.stream.ID != c.stream.ID
+					var reason string
+					if held {
+						reason = fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100)
+					} else {
+						reason = "incumbent is best; stayed"
+					}
 					return Assignment{
-						DeviceID:      dev.Identity.ID,
-						Stream:        c.stream.ID,
-						ExpectedYield: c.yield,
-						Reason:        fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (best.yield-c.yield)/math.Max(c.yield, 1e-9)*100, hysteresis*100),
+						DeviceID:           dev.Identity.ID,
+						Stream:             c.stream.ID,
+						ExpectedYield:      c.yield,
+						Reason:             reason,
+						Held:               held,
+						ForegoneSatsPerSec: maxRaw - c.yield,
 					}
 				}
 				break
@@ -365,10 +452,11 @@ func chooseForDevice(
 	}
 
 	a := Assignment{
-		DeviceID:      dev.Identity.ID,
-		Stream:        best.stream.ID,
-		ExpectedYield: best.yield,
-		Reason:        fmt.Sprintf("best yield under policy %s", policy),
+		DeviceID:           dev.Identity.ID,
+		Stream:             best.stream.ID,
+		ExpectedYield:      best.yield,
+		Reason:             fmt.Sprintf("best yield under policy %s", policy),
+		ForegoneSatsPerSec: maxRaw - best.yield,
 	}
 	if previous.Stream != "" && previous.Stream != best.stream.ID {
 		a.SwitchedFromID = previous.Stream
@@ -376,24 +464,37 @@ func chooseForDevice(
 	return a
 }
 
+// Scoring constants for policyScore. Extracted so the documented intent and
+// the arithmetic share a single source of truth (the previous inline comment
+// claimed "~10% yield" per rating point while the code applied 1%).
+const (
+	// btcStackBonus is the score multiplier applied to BTC-native streams
+	// under PolicyStackBTC, approximating the conversion friction avoided by
+	// being paid directly in Bitcoin. A 5% edge lets a BTC stream win a near
+	// tie without overriding a materially higher-yielding alternative.
+	btcStackBonus = 1.05
+
+	// ratingBonusPerPoint is the score bonus per privacy / environmental
+	// rating point. Ratings run 0..10, so at 0.01 the maximum rating of 10
+	// yields a 10% score premium total — enough to prefer a well-rated stream
+	// over a marginally higher-yielding one, but not enough to ignore revenue.
+	ratingBonusPerPoint = 0.01
+)
+
 // policyScore assigns a comparison score that reflects the active policy.
 // Higher scores are preferred. When scores are equal, sort falls back to
 // yield, then StreamID.
 func policyScore(s Stream, yield float64, p Policy) float64 {
 	switch p {
 	case PolicyStackBTC:
-		// BTC-native streams get a yield bonus equivalent to skipping
-		// conversion friction. The 5% factor is a rough heuristic.
 		if s.IsBitcoinMining {
-			return yield * 1.05
+			return yield * btcStackBonus
 		}
 		return yield
 	case PolicyMaximizePrivacy:
-		// Each privacy rating point is worth ~10% yield. This prefers
-		// private streams without completely ignoring revenue.
-		return yield * (1.0 + float64(s.PrivacyRating)*0.01)
+		return yield * (1.0 + float64(s.PrivacyRating)*ratingBonusPerPoint)
 	case PolicyEnvironmentFriendly:
-		return yield * (1.0 + float64(s.EnvironmentalRating)*0.01)
+		return yield * (1.0 + float64(s.EnvironmentalRating)*ratingBonusPerPoint)
 	case PolicyMaximizeEarnings:
 		fallthrough
 	default:

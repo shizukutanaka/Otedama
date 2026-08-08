@@ -6,6 +6,7 @@ package btccrypto
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -74,15 +75,9 @@ func TestHash256_BitcoinGenesisBlockHeader(t *testing.T) {
 	}
 }
 
-func TestHash256_OutputIsAlways32Bytes(t *testing.T) {
-	for _, n := range []int{0, 1, 32, 80, 1000} {
-		input := make([]byte, n)
-		got := Hash256(input)
-		if len(got) != 32 {
-			t.Errorf("Hash256(%d bytes) returned %d bytes, want 32", n, len(got))
-		}
-	}
-}
+// (No output-length tests for Hash256/TaggedHash: both return [32]byte,
+// so the type system already guarantees the length — a runtime check can
+// never fail.)
 
 // ============================================================================
 // TaggedHash — BIP-340 test vectors
@@ -129,13 +124,6 @@ func TestTaggedHash_Structure(t *testing.T) {
 	}
 }
 
-func TestTaggedHash_OutputIs32Bytes(t *testing.T) {
-	got := TaggedHash("any", []byte("test"))
-	if len(got) != 32 {
-		t.Errorf("TaggedHash output = %d bytes, want 32", len(got))
-	}
-}
-
 // ============================================================================
 // Scheme registry — concurrent safety
 // ============================================================================
@@ -163,7 +151,6 @@ func TestRegistry_ConcurrentRegisterDifferentNames(t *testing.T) {
 	// Concurrent Register with different names must not race or panic.
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -269,5 +256,130 @@ func TestSchemes_ContainsBuiltins(t *testing.T) {
 		if !found {
 			t.Errorf("Schemes() missing builtin %q; got %v", want, got)
 		}
+	}
+}
+
+// ============================================================================
+// ClassifyAddress — prefix/length-based address-type recognition
+// ============================================================================
+
+func TestClassifyAddress_KnownPrefixes(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want AddressType
+	}{
+		// Real-world mainnet example addresses (well-known, e.g. genesis /
+		// docs samples) chosen only for their prefix+length shape.
+		{"P2PKH legacy", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", AddressP2PKH},
+		{"P2SH", "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", AddressP2SH},
+		{"P2WPKH v0", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", AddressP2WPKH},
+		{"P2WSH v0", "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3", AddressP2WSH},
+		{"P2TR taproot", "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr", AddressP2TR},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyAddress(tt.addr); got != tt.want {
+				t.Errorf("ClassifyAddress(%q) = %v, want %v", tt.addr, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyAddress_TaprootDistinctFromV0(t *testing.T) {
+	// bc1p must classify as Taproot (Schnorr), bc1q as v0 (ECDSA). This is
+	// the bech32m-vs-bech32 breadth check (RESEARCH_IMPROVEMENTS Cat 3 #10).
+	v1 := ClassifyAddress("bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr")
+	v0 := ClassifyAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+	if v1 != AddressP2TR {
+		t.Errorf("bc1p classified as %v, want P2TR", v1)
+	}
+	if v0 == AddressP2TR {
+		t.Error("bc1q must NOT classify as P2TR")
+	}
+
+	// The classified types must dispatch to the right signature schemes.
+	trScheme, err := SchemeForAddressType(v1)
+	if err != nil {
+		t.Fatalf("SchemeForAddressType(P2TR): %v", err)
+	}
+	if !strings.Contains(trScheme.Name(), "schnorr") {
+		t.Errorf("P2TR scheme = %q, want schnorr", trScheme.Name())
+	}
+	v0Scheme, err := SchemeForAddressType(v0)
+	if err != nil {
+		t.Fatalf("SchemeForAddressType(v0): %v", err)
+	}
+	if !strings.Contains(v0Scheme.Name(), "ecdsa") {
+		t.Errorf("v0 scheme = %q, want ecdsa", v0Scheme.Name())
+	}
+}
+
+func TestClassifyAddress_UnknownReturnsUnknown(t *testing.T) {
+	for _, addr := range []string{
+		"",
+		"tb1qxyz",    // testnet bech32
+		"2N1234",     // testnet P2SH
+		"xpub6abc",   // not an address
+		"0xdeadbeef", // ethereum-style
+	} {
+		if got := ClassifyAddress(addr); got != AddressUnknown {
+			t.Errorf("ClassifyAddress(%q) = %v, want AddressUnknown", addr, got)
+		}
+	}
+}
+
+// ============================================================================
+// secp256k1 stubs — Verify, PublicKeyFromBytes, SignatureFromBytes (session 165)
+// ============================================================================
+
+func TestSecp256k1Stub_Verify_ReturnsNotImplemented(t *testing.T) {
+	for _, name := range []string{"ecdsa-secp256k1", "schnorr-secp256k1"} {
+		s, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if err := s.Verify(nil, nil, nil); !errors.Is(err, ErrSchemeNotImplemented) {
+			t.Errorf("%s.Verify: got %v, want ErrSchemeNotImplemented", name, err)
+		}
+	}
+}
+
+func TestSecp256k1Stub_PublicKeyFromBytes_ReturnsNotImplemented(t *testing.T) {
+	for _, name := range []string{"ecdsa-secp256k1", "schnorr-secp256k1"} {
+		s, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if _, err := s.PublicKeyFromBytes(nil); !errors.Is(err, ErrSchemeNotImplemented) {
+			t.Errorf("%s.PublicKeyFromBytes: got %v, want ErrSchemeNotImplemented", name, err)
+		}
+	}
+}
+
+func TestSecp256k1Stub_SignatureFromBytes_ReturnsNotImplemented(t *testing.T) {
+	for _, name := range []string{"ecdsa-secp256k1", "schnorr-secp256k1"} {
+		s, err := Lookup(name)
+		if err != nil {
+			t.Fatalf("Lookup(%q): %v", name, err)
+		}
+		if _, err := s.SignatureFromBytes(nil); !errors.Is(err, ErrSchemeNotImplemented) {
+			t.Errorf("%s.SignatureFromBytes: got %v, want ErrSchemeNotImplemented", name, err)
+		}
+	}
+}
+
+// ============================================================================
+// ValidateBech32Address — program length < 2 boundary (session 165)
+// ============================================================================
+
+func TestValidateBech32Address_WitnessProgramTooShort(t *testing.T) {
+	// A 1-byte witness program is below the minimum of 2 bytes required by
+	// the spec. testEncodeBech32 constructs a syntactically valid (correct-
+	// checksum) bech32 address so the validation reaches the length check.
+	addr := testEncodeBech32(t, 0, []byte{0x00})
+	_, err := ValidateBech32Address(addr)
+	if err == nil {
+		t.Errorf("1-byte witness program should be rejected: %q", addr)
 	}
 }
