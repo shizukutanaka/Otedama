@@ -1133,6 +1133,98 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	}
 }
 
+// TestRunSessionV1_SubmitEchoesPoolJobIDAndWorker is the engine-side half of
+// the V1 share-validity fix: whatever the pool called the job comes back
+// verbatim in mining.submit, and the submission is attributed to the
+// authorised worker. Before this was wired, the engine reformatted a
+// numeric job ID it had parsed out of the string (so "6a4f" became "0") and
+// the V1 session sent a hardcoded worker name — either alone is enough for
+// a pool to reject every share.
+func TestRunSessionV1_SubmitEchoesPoolJobIDAndWorker(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	submits := make(chan []any, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"6a4f",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"20000000","1d00ffff","68d36c5e",true]}`+"\n")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			var msg struct {
+				ID     uint64 `json:"id"`
+				Method string `json:"method"`
+				Params []any  `json:"params"`
+			}
+			if json.Unmarshal([]byte(line), &msg) != nil || msg.Method != "mining.submit" {
+				continue
+			}
+			select {
+			case submits <- msg.Params:
+			default:
+			}
+			fmt.Fprintf(conn, `{"id":%d,"result":true,"error":null}`+"\n", msg.ID)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share, 1)
+	// The share the worker would have found on the pool's job: JobKey carries
+	// the pool's own identifier.
+	merged <- miner.Share{JobKey: "6a4f", Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "bc1qexample.worker1",
+			merged:   merged,
+			interval: time.Second,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	select {
+	case params := <-submits:
+		if len(params) != 5 {
+			t.Fatalf("mining.submit had %d params, want 5: %v", len(params), params)
+		}
+		if params[0] != "bc1qexample.worker1" {
+			t.Errorf("submit worker = %v, want the authorised user", params[0])
+		}
+		if params[1] != "6a4f" {
+			t.Errorf("submit job_id = %v, want 6a4f (the pool's own id)", params[1])
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("pool never received a mining.submit")
+	}
+	cancel()
+	<-done
+}
+
 // ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
 //
 // runSessionV1 previously hardcoded the V1 mining.authorize password to
@@ -2034,9 +2126,10 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	}
 }
 
-// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
-// continue.
+// TestRunSessionV1_ApplyJobError covers the applyJob error branch: a job
+// whose nBits cannot yield a valid target is warned about and skipped. (A
+// non-numeric job ID is *not* an error — see
+// TestApplyJob_NonNumericJobID_IsMinedAndEchoedVerbatim.)
 func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -2057,12 +2150,13 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// nBits with a zero mantissa yields an all-zero target no hash can
+		// ever meet → applyJob returns a "bad target" error.
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
-				`"not-a-number",`+
+				`"6a4f",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"","",[],"00000002","1d000000","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 
@@ -2090,8 +2184,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, "bad target") {
+		t.Errorf("expected applyJob 'bad target' warn; got: %v", logLines)
 	}
 }
 

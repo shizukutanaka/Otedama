@@ -6,6 +6,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -80,21 +81,42 @@ func TestParseNotify_RealisticPayload(t *testing.T) {
 		true
 	]`)
 
-	job, err := parseNotify(raw)
+	n, err := parseNotify(raw)
 	if err != nil {
 		t.Fatalf("parseNotify: %v", err)
 	}
-	if job.JobID != "60" {
-		t.Errorf("JobID = %q, want 60", job.JobID)
+	if n.JobID != "60" {
+		t.Errorf("JobID = %q, want 60", n.JobID)
 	}
-	if job.Version != 0x00000002 {
-		t.Errorf("Version = 0x%08x, want 0x00000002", job.Version)
+	if n.Version != 0x00000002 {
+		t.Errorf("Version = 0x%08x, want 0x00000002", n.Version)
 	}
-	if job.NBits != 0x1d00ffff {
-		t.Errorf("NBits = 0x%08x, want 0x1d00ffff", job.NBits)
+	if n.NBits != 0x1d00ffff {
+		t.Errorf("NBits = 0x%08x, want 0x1d00ffff", n.NBits)
 	}
-	if !job.CleanJobs {
+	if n.NTime != 0x68d36c5e {
+		t.Errorf("NTime = 0x%08x, want 0x68d36c5e", n.NTime)
+	}
+	if !n.CleanJobs {
 		t.Error("CleanJobs = false, want true")
+	}
+	// prevhash arrives word-swapped; the notification carries it in header
+	// order (see work.go), i.e. each 4-byte word byte-reversed in place.
+	const wantPrev = "f8b6164d19e2f65a2aae448f787fe66d61e57a48c0c6771b1e920b4400000000"
+	if got := hex.EncodeToString(n.PrevHash[:]); got != wantPrev {
+		t.Errorf("PrevHash = %s, want %s", got, wantPrev)
+	}
+	// The coinbase halves must survive decoding: they are spliced around the
+	// extranonce to rebuild the transaction the merkle root commits to.
+	if len(n.Coinb1) != 42 || len(n.Coinb2) != 85 {
+		t.Errorf("coinb1/coinb2 decoded to %d/%d bytes, want 42/85", len(n.Coinb1), len(n.Coinb2))
+	}
+
+	// The job the engine mines carries the merkle root this notification
+	// implies, computed from the coinbase — never a zero root.
+	job := n.buildJob([]byte{0xde, 0xad}, []byte{0, 0, 0, 1})
+	if job.MerkleRoot == ([32]byte{}) {
+		t.Error("MerkleRoot is zero; the coinbase was never folded")
 	}
 	if job.ReceivedAt.IsZero() {
 		t.Error("ReceivedAt is zero")
@@ -117,11 +139,11 @@ func TestParseNotify_CleanJobsAsInt(t *testing.T) {
 		"01", "ff", [], "00000002", "1d00ffff", "68d36c5e",
 		1
 	]`)
-	job, err := parseNotify(raw)
+	n, err := parseNotify(raw)
 	if err != nil {
 		t.Fatalf("parseNotify: %v", err)
 	}
-	if !job.CleanJobs {
+	if !n.CleanJobs {
 		t.Error("CleanJobs from int 1 should be true")
 	}
 }
@@ -866,8 +888,8 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if sess.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
+	if got := hex.EncodeToString(sess.extranonce1); got != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", got)
 	}
 	if sess.extranonce2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
@@ -1524,11 +1546,15 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if sv1.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
+	if got := hex.EncodeToString(sv1.extranonce1); got != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", got)
 	}
 	if sv1.extranonce2Size != 8 {
 		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	}
+	// mining.submit must repeat the authorised worker name verbatim.
+	if got := sv1.WorkerName(); got != "worker.1" {
+		t.Errorf("WorkerName() = %q, want worker.1", got)
 	}
 }
 

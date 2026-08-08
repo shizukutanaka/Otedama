@@ -385,3 +385,39 @@ func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
 		t.Errorf("DeviceID() = %q, want empty string", got)
 	}
 }
+
+// TestWorker_ShareCarriesJobKey: a found share must name the job the pool
+// knows. Stratum V1 job IDs are arbitrary strings, so Work.JobKey — not the
+// numeric JobID — is what the submission echoes.
+func TestWorker_ShareCarriesJobKey(t *testing.T) {
+	w := NewWorker(WorkerConfig{Threads: 1})
+	// A max target makes the first hash a share, so the test never depends
+	// on how fast this machine hashes.
+	var everything Hash
+	for i := range everything {
+		everything[i] = 0xff
+	}
+	w.SetWork(&Work{
+		JobID:  7,
+		JobKey: "6a4f",
+		Target: everything,
+		Header: Header{Version: 0x20000000, Bits: 0x1d00ffff},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	select {
+	case share := <-shares:
+		if share.JobKey != "6a4f" {
+			t.Errorf("Share.JobKey = %q, want 6a4f", share.JobKey)
+		}
+		if share.JobID != 7 {
+			t.Errorf("Share.JobID = %d, want 7", share.JobID)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no share found against a maximal target")
+	}
+	cancel()
+	w.Stop()
+}

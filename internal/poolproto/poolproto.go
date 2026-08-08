@@ -145,13 +145,18 @@ type Job struct {
 	// Version is the block-header version field.
 	Version uint32
 
-	// PrevHash is the previous block hash, big-endian.
+	// PrevHash is the previous block hash in the byte order a serialised
+	// block header uses (the reverse of the order block explorers
+	// display). Implementations normalise to this: Stratum V2's U256
+	// already arrives that way, while Stratum V1's mining.notify uses a
+	// word-swapped variant that stratumv1 converts on receipt.
 	PrevHash [32]byte
 
-	// MerkleRoot is the merkle root constructed by the pool.
-	// (For Job-Declaration-Protocol use cases the miner constructs
-	// this; that variant is exposed through a separate JDPSession
-	// when implementations exist — currently reserved.)
+	// MerkleRoot is the block's merkle root, in the same header byte
+	// order as PrevHash. Who computes it depends on the protocol:
+	// Stratum V2 pools send a finished root, whereas Stratum V1 sends the
+	// coinbase halves and a merkle branch for the miner to fold (done in
+	// package stratumv1 so callers see a uniform Job either way).
 	MerkleRoot [32]byte
 
 	// NTime is the block timestamp in seconds.

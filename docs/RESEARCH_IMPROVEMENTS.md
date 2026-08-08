@@ -114,7 +114,40 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    shares carried a hardcoded `NVersion` regardless of what was actually
    hashed. `docs/SPECIFICATION.md`/`docs/KNOWN_LIMITATIONS.md` should be
    checked for matching entries to update in a documentation follow-up.
-10. ✅ **Protocol-version negotiation logging** (session 98). `runSession`
+10. ✅ **Miner-side coinbase and merkle-root construction for V1**
+    (session 255). Stratum V1 differs from V2 in *who* builds the merkle
+    root: V2 pools send a finished root, V1 pools send the coinbase halves
+    plus a merkle branch and expect the miner to assemble
+    `coinb1 ‖ extranonce1 ‖ extranonce2 ‖ coinb2`, hash it, and fold the
+    branch. Otedama did none of this — every V1 job carried a zero merkle
+    root, dropped the header's version and prev-hash, and submitted a
+    hardcoded worker name with an unrelated extranonce2, so the V1 path
+    could not produce a share any pool would credit. Fixed in
+    `internal/poolproto/stratumv1/work.go`; see KNOWN_LIMITATIONS §17.
+
+    **Sources (FETCHED, verbatim).** V1 has no specification document, so
+    both ends of the wire were read directly:
+    pooler/cpuminer `util.c: stratum_notify` + `cpu-miner.c:
+    stratum_gen_work` / `submit_upstream_work` (client side — coinbase
+    concatenation order, the merkle fold, extranonce2 increment, the
+    `le32dec`-into-big-endian-words prev-hash convention, and
+    `mining.submit`'s first parameter being `rpc_user`), and
+    zone117x/node-stratum-pool `blockTemplate.js` +
+    `lib/util.js: reverseByteOrder` (pool side — how `previousblockhash`
+    becomes the notify field). The two compose to the full-32-byte
+    reversal a block header uses, which is what makes the round trip
+    checkable against real blocks (genesis coinbase → genesis merkle root;
+    block 125552's prev-hash → its real block hash).
+
+11. 🟡 **Version rolling (`mining.configure` / ASICBoost) and ntime rolling
+    are still unimplemented on the V1 path.** Otedama submits the job's own
+    version and ntime, which is valid but limits the search space to nonce
+    plus extranonce2. Overt version rolling is what modern ASIC firmware
+    negotiates by default; it matters for hardware fast enough to exhaust
+    2^32 nonces between jobs, i.e. the ASIC support already tracked in
+    ADR-008. Disclosed in KNOWN_LIMITATIONS §17 rather than left silent.
+
+12. ✅ **Protocol-version negotiation logging** (session 98). `runSession`
     logs `"engine: transport protocol: stratum-v1|stratum-v2|..."` at
     session start so operators can confirm which transport was negotiated.
 

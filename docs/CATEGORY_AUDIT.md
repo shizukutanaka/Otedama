@@ -606,3 +606,39 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 255 update — Stratum V1 mining-path correctness audit
+
+Audit of the whole Stratum V1 chain — `internal/poolproto/stratumv1`
+(dispatch, parsing, submission) and the engine's `applyJob`/V1 submit path
+— asking one question end-to-end: *does the header we hash match the
+header the pool reconstructs from our submission?* It does not, in five
+independent ways. Full narrative in `docs/KNOWN_LIMITATIONS.md` §17;
+byte-order provenance in `internal/poolproto/stratumv1/work.go`'s package
+doc.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| D | `parseNotify` discarded coinb1/coinb2/merkle_branch, so `Job.MerkleRoot` was always zero. V1 does not send a merkle root — the miner assembles the coinbase and folds the branch. The code comment asserted the opposite ("the pool does"). | ✅ Fixed (`work.go`: `buildCoinbase`, `merkleRoot`; verified against the genesis coinbase → genesis merkle root). |
+| D | The mining.notify prev-hash byte order (words reversed) was never converted. | ✅ Fixed (`headerPrevHash`, verified by round-tripping block 125552 through the pool-side and client-side transforms into its real block hash). |
+| D | `mining.submit` sent the hardcoded worker name `"otedama"` instead of the `mining.authorize` name, and a zero extranonce2 unrelated to any coinbase. | ✅ Fixed (session records the authorised name and the per-job extranonce2; `TestSubmit_ReconstructsTheHashedHeader` replays pool-side validation). |
+| D | `extranonce1`/`extranonce2_size` were written by the read loop and read by `Submit` with no synchronisation — a data race on the values defining the coinbase. | ✅ Fixed (all negotiated state behind `stateMu`; `go test -race` green). |
+| D | Malformed notifications were mined with zeroed fields (bad hex silently left version/nbits/ntime at 0). | ✅ Fixed (field-length validation, whole notification rejected — matching cpuminer's `stratum_notify`). |
+| E | `applyJob` populated only merkle root / time / bits, dropping the version and prev-hash `parseNotify` had correctly decoded — the identical defect fixed for Stratum V2 in session 238 (§11 item 3). | ✅ Fixed (all five header inputs; `TestApplyJob_PopulatesEveryHeaderField`). |
+| E | Job IDs round-tripped through `uint32` (`Sscanf("%d")` → `Sprintf("%d")`), rejecting the arbitrary strings real V1 pools use and mangling ids with leading zeros. | ✅ Fixed (`miner.Work.JobKey`/`Share.JobKey` carry the pool's own string; V2 keeps its numeric IDs). |
+
+Not defects, verified by reading rather than assumed: the `clean_jobs`
+purge semantics in `sendJob` (new-block jobs correctly discard queued
+work), the JSON-RPC id correlation and `cancelPending` teardown, the
+64 KiB line cap via `ReadSlice` (unbounded-line OOM already prevented),
+`client.reconnect` deliberately not following pool-supplied endpoints, and
+`v1JobTarget`'s share-target-over-block-target choice (session 226).
+
+Explicitly still unimplemented on the V1 path, now disclosed in §17
+rather than left silent: version rolling (`mining.configure`/ASICBoost)
+and ntime rolling.
+
+All 24 packages build, vet, and test green; `-race` green on the changed
+packages.

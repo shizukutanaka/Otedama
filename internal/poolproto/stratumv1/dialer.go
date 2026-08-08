@@ -11,6 +11,7 @@ package stratumv1
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"sync"
@@ -126,13 +127,25 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: subscribe rejected: %v", poolproto.ErrHandshakeFailed, resp.errResult)
 	}
-	en1, en2Size, err := parseSubscribeResult(resp.result)
+	en1Hex, en2Size, err := parseSubscribeResult(resp.result)
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: %v", poolproto.ErrHandshakeFailed, err)
 	}
-	sess.extranonce1 = en1
-	sess.extranonce2Size = en2Size
+	// extranonce1 is raw coinbase bytes on the wire, hex-encoded for JSON.
+	// It is spliced into every coinbase transaction we build, so a value
+	// that isn't valid hex would silently corrupt every merkle root —
+	// fail the handshake instead and let the reconnect loop try elsewhere.
+	en1, err := hex.DecodeString(en1Hex)
+	if err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%w: extranonce1 %q is not hex: %v", poolproto.ErrHandshakeFailed, en1Hex, err)
+	}
+	if en2Size < 0 {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%w: negative extranonce2_size %d", poolproto.ErrHandshakeFailed, en2Size)
+	}
+	sess.setExtranonce(en1, en2Size)
 
 	// Step 2: mining.authorize — authenticate the worker.
 	user := conn.creds.User
@@ -154,6 +167,8 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
 	}
+	// Every mining.submit must repeat this exact name (see Submit).
+	sess.setWorkerName(user)
 
 	// Step 3 (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)

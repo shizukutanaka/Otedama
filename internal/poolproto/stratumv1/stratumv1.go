@@ -54,7 +54,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,6 +98,34 @@ type session struct {
 	// difficulty is the most recent set_difficulty value.
 	difficulty atomic.Uint64 // float64 bits
 
+	// stateMu guards the negotiated session state below. It is written by
+	// Negotiate (subscribe/authorize results) and by the read loop
+	// (mining.set_extranonce, and the per-job extranonce2 bookkeeping),
+	// and read by Submit, which runs on the caller's goroutine — so none
+	// of it may be touched without the lock.
+	stateMu sync.Mutex
+
+	// extranonce1 is the pool-assigned per-connection coinbase prefix, and
+	// extranonce2Size the number of bytes the pool leaves for the miner to
+	// fill. Both are negotiated at subscribe time and may be replaced
+	// mid-session by mining.set_extranonce.
+	extranonce1     []byte
+	extranonce2Size int
+
+	// workerName is the name mining.authorize succeeded with. Stratum V1
+	// requires mining.submit to repeat it verbatim: a pool matches the
+	// submission against its authorised workers and rejects anything else.
+	workerName string
+
+	// en2Counter is the source of each job's extranonce2 value, and
+	// en2ByJob remembers the value used for a job so Submit can echo the
+	// exact one that went into the merkle root. en2Order bounds the map:
+	// a long session sees thousands of jobs, and only the recent ones can
+	// still yield a share.
+	en2Counter uint64
+	en2ByJob   map[string][]byte
+	en2Order   []string
+
 	// noticeCh delivers pool-sent client.show_message notices to the caller.
 	// Buffered so the read loop never blocks on a slow consumer; closed when
 	// the session ends. The caller may type-assert the Session to
@@ -109,10 +136,6 @@ type session struct {
 	// (client.reconnect), nil until one is seen. Read race-free; useful
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
-
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
-	extranonce1     string
-	extranonce2Size int
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -132,7 +155,70 @@ func newSession(conn *connection) *session {
 		jobsCh:   make(chan poolproto.Job, 8),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
+		en2ByJob: map[string][]byte{},
 	}
+}
+
+// en2HistoryLimit caps how many jobs' extranonce2 values are remembered.
+// A share is only worth submitting against a recent job — anything older is
+// stale and rejected — so a small window is enough, and bounding it keeps a
+// long-lived session from accumulating one entry per job forever.
+const en2HistoryLimit = 32
+
+// nextJob assembles the job the workers will mine from a decoded
+// mining.notify, choosing this job's extranonce2 and recording it so
+// Submit can echo the same value back. Stratum V1 has the miner build the
+// coinbase, so the merkle root is computed here, not sent by the pool.
+func (s *session) nextJob(n notification) poolproto.Job {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
+	en2 := extraNonce2(s.en2Counter, s.extranonce2Size)
+	s.en2Counter++
+
+	if s.en2ByJob == nil {
+		s.en2ByJob = map[string][]byte{}
+	}
+	if _, seen := s.en2ByJob[n.JobID]; !seen {
+		s.en2Order = append(s.en2Order, n.JobID)
+		for len(s.en2Order) > en2HistoryLimit {
+			delete(s.en2ByJob, s.en2Order[0])
+			s.en2Order = s.en2Order[1:]
+		}
+	}
+	s.en2ByJob[n.JobID] = en2
+
+	return n.buildJob(s.extranonce1, en2)
+}
+
+// extraNonceForJob returns the extranonce2 that was folded into the given
+// job's merkle root. A job we no longer remember (evicted, or a job ID the
+// pool never sent) falls back to a zero extranonce2 of the negotiated
+// size: that is the best guess available, and the pool rejects the share
+// as stale either way.
+func (s *session) extraNonceForJob(jobID string) []byte {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if en2, ok := s.en2ByJob[jobID]; ok {
+		return en2
+	}
+	return make([]byte, s.extranonce2Size)
+}
+
+// setExtranonce records the extranonce1/extranonce2_size pair negotiated at
+// subscribe time or pushed later by mining.set_extranonce.
+func (s *session) setExtranonce(extranonce1 []byte, size int) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.extranonce1 = extranonce1
+	s.extranonce2Size = size
+}
+
+// setWorkerName records the worker name mining.authorize succeeded with.
+func (s *session) setWorkerName(name string) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.workerName = name
 }
 
 // start launches the read loop. Idempotent.
@@ -232,20 +318,24 @@ func (s *session) dispatch(line []byte) {
 	// Notification or request from pool.
 	switch msg.Method {
 	case "mining.notify":
-		job, err := parseNotify(msg.Params)
+		n, err := parseNotify(msg.Params)
 		if err != nil {
 			return
 		}
-		s.sendJob(job)
+		s.sendJob(s.nextJob(n))
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
 		}
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
+		// A non-hex extranonce1 would corrupt every subsequent coinbase,
+		// so an undecodable update is ignored and the previous (working)
+		// value kept.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			if b, err := hex.DecodeString(en1); err == nil {
+				s.setExtranonce(b, sz)
+			}
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -325,23 +415,33 @@ send:
 }
 
 // Submit sends a share via mining.submit and returns the pool's verdict.
-// Stratum V1 submission format: ["worker", "job_id", "extranonce2",
-// "ntime", "nonce"], all hex strings.
+// Stratum V1 submission format: [worker_name, job_id, extranonce2, ntime,
+// nonce] — the last three as hex strings.
+//
+// Two of those parameters must match state established elsewhere, or the
+// pool recomputes a different block header and rejects the share:
+//
+//   - worker_name is the name mining.authorize succeeded with. A pool
+//     matches the submission against its authorised workers; anything
+//     else is an unauthorised-worker rejection, not a bad share.
+//   - extranonce2 is the value that went into this job's coinbase when
+//     the merkle root was computed (see nextJob). A caller that already
+//     knows it may pass it in ShareSubmission.ExtraNonce; otherwise the
+//     session supplies the one it recorded for the job.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	if s.conn.closed.Load() {
 		return poolproto.ShareResult{}, errors.New("stratumv1: session closed")
 	}
 	id := s.nextID.Add(1)
 
-	en2 := hex.EncodeToString(sub.ExtraNonce)
-	if en2 == "" {
-		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+	en2Bytes := sub.ExtraNonce
+	if len(en2Bytes) == 0 {
+		en2Bytes = s.extraNonceForJob(sub.JobID)
 	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		s.WorkerName(),
 		sub.JobID,
-		en2,
+		hex.EncodeToString(en2Bytes),
 		fmt.Sprintf("%08x", sub.NTime),
 		fmt.Sprintf("%08x", sub.Nonce),
 	}
@@ -368,6 +468,15 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 // SuggestedDifficulty returns the current target difficulty.
 func (s *session) SuggestedDifficulty() float64 {
 	return uint64ToFloat64(s.difficulty.Load())
+}
+
+// WorkerName returns the worker name this session authorised with, which
+// is also what every mining.submit repeats. Exposed for diagnostics and
+// tests; empty before Negotiate completes.
+func (s *session) WorkerName() string {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	return s.workerName
 }
 
 // Close terminates the session and underlying connection. Idempotent.

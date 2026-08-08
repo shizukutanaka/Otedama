@@ -725,6 +725,79 @@ change-passphrase` (wiring the existing, already-tested
 
 ---
 
+## ~~17. Stratum V1 mining path could not produce a valid share~~ ✅ RESOLVED (session 255)
+
+**What was broken (previously undisclosed):** the Stratum V1 path — the
+fallback this document recommends for pools that do not speak V2, and the
+protocol >99% of Bitcoin pools actually run — had the same class of defect
+that §11 above fixed for Stratum V2, in five compounding parts. A V1
+connection completed its handshake, received jobs, and submitted shares
+that no pool could ever credit:
+
+1. **The merkle root was never computed.** V1 does not send a finished
+   merkle root: it sends the two halves of the coinbase transaction plus a
+   merkle branch, and the *miner* assembles `coinb1 ‖ extranonce1 ‖
+   extranonce2 ‖ coinb2`, hashes it, and folds the branch. `parseNotify`
+   discarded all three fields ("Otedama doesn't reconstruct the coinbase in
+   the V1 path (the pool does)" — which is not how V1 works), so every job
+   carried an all-zero merkle root.
+2. **The header's version and previous-block hash were dropped.**
+   `parseNotify` decoded both correctly, then `applyJob` built
+   `miner.Header` from only merkle root, time and bits — the identical
+   omission §11 item 3 describes for V2.
+3. **The previous-block hash byte order was never converted.** V1 sends it
+   with its eight 4-byte words in reverse order; using those bytes as-is
+   yields a header committing to a block that does not exist.
+4. **Non-numeric job IDs were refused outright.** `applyJob` parsed the
+   job ID with `fmt.Sscanf("%d")` and returned an error when that failed,
+   and the submit path rebuilt the string with `fmt.Sprintf("%d")`. Real
+   V1 job IDs are arbitrary strings (`"6a4f"`, ids with leading zeros), so
+   on most pools every job was rejected before mining started, and on the
+   rest the submitted ID was not the one the pool issued.
+5. **`mining.submit` sent a hardcoded worker name.** Every submission went
+   up as worker `"otedama"` regardless of the name `mining.authorize`
+   succeeded with, which a pool answers with an unauthorised-worker
+   rejection. The extranonce2 was likewise a zero placeholder unrelated to
+   any coinbase, so even a correct header would not have been
+   reconstructible pool-side.
+
+Separately, `extranonce1`/`extranonce2_size` were written by the read-loop
+goroutine (`mining.set_extranonce`) and read by `Submit` on the caller's
+goroutine with no synchronisation — a data race on the values that define
+the coinbase.
+
+**Resolution:** the miner-side header construction V1 requires now exists
+in `internal/poolproto/stratumv1/work.go` (coinbase assembly, merkle fold,
+prev-hash word swap, extranonce2 generation), each piece pure and unit
+tested. The session picks a fresh extranonce2 per job, records it, folds it
+into the merkle root, and echoes that exact value on submission, together
+with the authorised worker name and the pool's own job ID string — carried
+end-to-end as `miner.Work.JobKey`/`miner.Share.JobKey` rather than squeezed
+through a uint32. All negotiated state moved behind a mutex. Malformed
+notifications are now rejected whole (matching cpuminer's field-length
+validation) instead of mined with zeroed fields.
+
+**How the byte orders were established:** Stratum V1 has no specification
+document, so the rules were taken verbatim from the canonical
+implementation on each side of the wire — pooler/cpuminer
+(`stratum_notify`, `stratum_gen_work`) for the client and
+zone117x/node-stratum-pool (`blockTemplate.js`, `util.reverseByteOrder`)
+for the pool — and cross-checked against real block data:
+`TestMerkleRoot_GenesisCoinbase_EmptyBranch` folds the genesis coinbase
+into the genesis merkle root, and `TestHeaderPrevHash_Block125552` runs
+block 125552's previous-hash through the pool-side transform and back
+through the client-side one, then hashes the assembled header and compares
+it to that block's real hash. `TestSubmit_ReconstructsTheHashedHeader`
+replays the pool's own share validation against a live session.
+
+**Scope note:** this fixes header *construction* and *submission*. Two
+things V1 miners commonly also do remain unimplemented and are unaffected
+by this work: version rolling (`mining.configure`/ASICBoost) and ntime
+rolling. Otedama submits the job's own version and ntime, which is valid —
+it simply searches the nonce and extranonce2 space only.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

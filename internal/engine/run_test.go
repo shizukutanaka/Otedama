@@ -425,15 +425,64 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+// Stratum V1 job IDs are arbitrary strings — "6a4f", "1a3b0c", ids with
+// leading zeros — so a non-numeric ID is the normal case, not an error. It
+// must be mined and carried through to submission verbatim; rejecting it
+// (as this path once did) means refusing to mine on most pools.
+func TestApplyJob_NonNumericJobID_IsMinedAndEchoedVerbatim(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
-		JobID: "not-a-number",
+		JobID: "6a4f",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0); err != nil {
+		t.Fatalf("applyJob(non-numeric job ID): %v", err)
+	}
+	work := w.CurrentWork()
+	if work == nil {
+		t.Fatal("no work was assigned")
+	}
+	if work.JobKey != "6a4f" {
+		t.Errorf("Work.JobKey = %q, want the pool's job ID 6a4f", work.JobKey)
+	}
+}
+
+// Every header input the pool supplies must reach the worker. A header
+// missing version, prev-hash or merkle root hashes to a value no pool can
+// accept — the V2 path had the identical defect (KNOWN_LIMITATIONS §11).
+func TestApplyJob_PopulatesEveryHeaderField(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	var prevHash, merkleRoot [32]byte
+	prevHash[0], merkleRoot[0] = 0xaa, 0xbb
+	job := poolproto.Job{
+		JobID:      "1",
+		Version:    0x20000004,
+		PrevHash:   prevHash,
+		MerkleRoot: merkleRoot,
+		NTime:      0x68d36c5e,
+		NBits:      0x1d00ffff,
+	}
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	work := w.CurrentWork()
+	if work == nil {
+		t.Fatal("no work was assigned")
+	}
+	if work.Header.Version != job.Version {
+		t.Errorf("Header.Version = 0x%08x, want 0x%08x", work.Header.Version, job.Version)
+	}
+	if work.Header.PrevHash != job.PrevHash {
+		t.Errorf("Header.PrevHash = %x, want %x", work.Header.PrevHash, job.PrevHash)
+	}
+	if work.Header.MerkleRoot != job.MerkleRoot {
+		t.Errorf("Header.MerkleRoot = %x, want %x", work.Header.MerkleRoot, job.MerkleRoot)
+	}
+	if work.Header.Time != job.NTime {
+		t.Errorf("Header.Time = 0x%08x, want 0x%08x", work.Header.Time, job.NTime)
+	}
+	if work.Header.Bits != job.NBits {
+		t.Errorf("Header.Bits = 0x%08x, want 0x%08x", work.Header.Bits, job.NBits)
 	}
 }
 

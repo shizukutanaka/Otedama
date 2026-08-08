@@ -1126,8 +1126,14 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			go func() {
 				sendTime := time.Now()
+				// JobKey is the pool's own job ID string, carried through
+				// the worker untouched: V1 job IDs are not numbers, so
+				// reformatting the numeric JobID here would submit an ID
+				// the pool never issued. ExtraNonce is left empty on
+				// purpose — the V1 session knows which extranonce2 went
+				// into this job's merkle root and fills it in.
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
+					JobID: capturedShare.JobKey,
 					Nonce: capturedShare.Nonce,
 					NTime: capturedShare.NTime,
 				})
@@ -1328,10 +1334,18 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
-// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is parsed back
-// to the uint32 the miner uses; an unparseable ID yields job 0, which
-// the pool will reject on submit, surfacing the problem rather than
-// silently mining a malformed job.
+// (docs/KNOWN_LIMITATIONS.md §3).
+//
+// All five header inputs are populated — version, prev-hash, merkle root,
+// time, bits — because a header missing any of them hashes to a value no
+// pool can accept. (The same defect was fixed on the Stratum V2 path in
+// session 238; see KNOWN_LIMITATIONS §11.)
+//
+// The job's identifier travels as Work.JobKey, the pool's own string, and
+// is echoed verbatim on submission. Stratum V1 job IDs are arbitrary
+// strings — "6a4f", "1a3b0c", ids with leading zeros — so the numeric
+// Work.JobID that Stratum V2 uses is only a best-effort convenience here
+// (0 when the ID is not decimal) and nothing submits it.
 //
 // difficulty is the Stratum V1 session's most recent mining.set_difficulty
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
@@ -1343,13 +1357,16 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
 	var jobID uint32
-	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
+	if n, serr := fmt.Sscanf(job.JobID, "%d", &jobID); n != 1 || serr != nil {
+		jobID = 0
 	}
 	w := &miner.Work{
 		JobID:     jobID,
+		JobKey:    job.JobID,
 		ChannelID: chanID,
 		Header: miner.Header{
+			Version:    job.Version,
+			PrevHash:   job.PrevHash,
 			MerkleRoot: job.MerkleRoot,
 			Time:       job.NTime,
 			Bits:       job.NBits,

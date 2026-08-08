@@ -21,6 +21,13 @@ type Work struct {
 	Header    Header // template; Nonce field will be overwritten
 	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
 	Target    Hash   // SHARE target the hash must meet (pool-assigned difficulty)
+
+	// JobKey is the pool's own job identifier, opaque to the miner and
+	// echoed back verbatim on submission. Stratum V2 numbers its jobs, so
+	// JobID above is authoritative there and JobKey stays empty; Stratum
+	// V1 job IDs are arbitrary strings ("6a4f", "1a3b0c", …) that survive
+	// no numeric round trip, so the V1 path carries them here.
+	JobKey string
 }
 
 // Share is a found solution: a Header whose hash meets the target.
@@ -37,6 +44,9 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// JobKey is the pool's own job identifier, copied from the Work this
+	// share was found on. See Work.JobKey — empty on the Stratum V2 path.
+	JobKey string
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -189,6 +199,18 @@ func (w *Worker) HasWork() bool {
 	return w.work != nil
 }
 
+// CurrentWork returns the job the worker is hashing, or nil when idle.
+// The returned *Work is the same value SetWork was given and must be
+// treated as read-only: the grind loop reads it concurrently. Provided so
+// callers and tests can inspect the assigned work — in particular that
+// every block-header field was populated — without reaching into the
+// package's unexported state.
+func (w *Worker) CurrentWork() *Work {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.work
+}
+
 // Stats returns a snapshot of the Worker's performance counters.
 // Before Start is called, Stats returns a zero-value Stats.
 func (w *Worker) Stats() Stats {
@@ -257,6 +279,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				share := Share{
 					ChannelID: localWork.ChannelID,
 					JobID:     localWork.JobID,
+					JobKey:    localWork.JobKey,
 					Nonce:     nonce,
 					NTime:     h.Time,
 					Version:   h.Version,

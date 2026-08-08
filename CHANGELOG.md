@@ -10,6 +10,95 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 255 — 一次資料（cpuminer / node-stratum-pool）と実ブロックデータで検証: **Stratum V1採掘経路は有効なシェアを1つも生成できなかった**——session 238がV2で潰した欠陥クラスのV1版)
+
+**発見の経路.** `docs/KNOWN_LIMITATIONS.md` §2 は「V2のNoise NXが未配線である以上、
+機密性が必要なら**V1フォールバック**（`stratum+tls://`）を使え」とユーザーに案内し、
+§11 は「V2採掘経路は session 238 で修復済み」と記録している。ではその推奨先である
+V1経路自体は検証されたのか——という問いから `internal/poolproto/stratumv1` と
+`internal/engine/run.go` の `applyJob` を精読し、**V1経路が構造的にシェアを
+生成できない**ことを確認した。V1はBitcoinプール全体の99%超が話すプロトコルであり、
+影響範囲はV2より広い。
+
+**発見した欠陥（5件＋データ競合1件、いずれもコード直読で確認）.**
+
+1. **マークルルートが一度も計算されていなかった.** V1はマークルルートを送らない。
+   coinbaseの前半・後半とマークルブランチを送り、**採掘側が**
+   `coinb1 ‖ extranonce1 ‖ extranonce2 ‖ coinb2` を組み立ててSHA256dし、
+   ブランチを畳み込む。`parseNotify` はこの3フィールド（p[2]/p[3]/p[4]）を
+   破棄しており、コメントには「Otedama doesn't reconstruct the coinbase in the
+   V1 path (the pool does)」——**V1の仕様理解自体が誤っていた**。結果、
+   全ジョブのマークルルートが全ゼロだった。
+2. **ヘッダのversionとprev-hashが落ちていた.** `parseNotify` は両方を正しく
+   デコードしていたが、`applyJob` が `miner.Header` に merkle root / time / bits
+   しか詰めていなかった。§11 項目3（V2の `updateWork`）と同一の欠落。
+3. **prev-hashのバイト順変換が無かった.** V1のprevhashは32バイトを4バイト語
+   8個単位で逆順に並べた形式で届く。そのまま使うと存在しないブロックに
+   コミットするヘッダになる。
+4. **非数値のjob IDを一律に拒否していた.** `applyJob` は `fmt.Sscanf("%d")`
+   失敗時にエラーを返し、submit側は `fmt.Sprintf("%d")` で文字列を再構成して
+   いた。実在のV1 job IDは `"6a4f"` のような任意文字列であり、多くのプールでは
+   **採掘開始前に全ジョブが弾かれ**、数値IDのプールでも先頭ゼロが失われた。
+5. **`mining.submit` のワーカー名がハードコードだった.** `mining.authorize` で
+   認証した名前に関係なく常に `"otedama"` を送っていた（プールは
+   unauthorized worker として拒否する）。extranonce2 もcoinbaseと無関係な
+   ゼロ埋めで、仮にヘッダが正しくてもプール側で再構成できなかった。
+
+加えて `extranonce1`/`extranonce2_size` は読み取りループ（`mining.set_extranonce`）
+が書き、`Submit` が呼び出し側goroutineから読む**データ競合**だった。
+
+**バイト順の確定方法（推測を排した根拠）.** Stratum V1に規格文書は存在しないため、
+ワイヤの両端の正典実装を一次資料として取得し、逐語的に突き合わせた。
+クライアント側は pooler/cpuminer（`util.c: stratum_notify` はprevhash等を
+無変換で `hex2bin` し、`cpu-miner.c: stratum_gen_work` が `le32dec` で語を読み、
+SHA-256コアがビッグエンディアン語として直列化する——正味「語内バイト反転、
+語順は保存」。パディング語 `data[20]=0x80000000` / `data[31]=0x00000280` が
+ビッグエンディアン解釈の裏付けになる）。プール側は zone117x/node-stratum-pool
+（`blockTemplate.js: prevHashReversed = util.reverseByteOrder(previousblockhash)`、
+`reverseByteOrder` は各語をバイト反転してから全体を反転）。両者を合成すると
+表示形式の完全32バイト反転＝ブロックヘッダのprev-hashフィールドに一致し、
+独立した2実装が整合することを確認した。
+
+**検証（実ブロックデータによる自己証明的テスト）.**
+
+- `TestMerkleRoot_GenesisCoinbase_EmptyBranch`: genesisブロックのcoinbase生トランザクションを
+  任意点で4分割して再結合し、SHA256dがgenesisのマークルルートに一致することを確認
+  （genesisは単一トランザクションなので coinbase hash ＝ merkle root。定数が
+  1バイトでも誤っていれば一致しない）。
+- `TestHeaderPrevHash_Block125552`: ブロック125552の表示形式prev-hashに
+  **プール側の変換**を適用してmining.notify形式を作り、**クライアント側の変換**で
+  戻し、80バイトヘッダを組み立ててハッシュし、実在のブロックハッシュと比較。
+  どちらの向きが誤っていても一致しない。
+- `TestSubmit_ReconstructsTheHashedHeader`: 偽プールに対し、提出された
+  extranonce2からプールと同じ手順でマークルルートを再構成し、採掘したジョブの
+  マークルルートと一致することを確認（＝プール側検証の再現）。
+  worker名・job ID・ntime・nonceも同時に検証。
+- `TestJobs_RotateExtranonce2`: 同一coinbaseの2ジョブが異なるヘッダになること
+  （extranonce2固定なら2つ目のジョブのシェアは全て重複提出になる）。
+
+**是正の設計.**
+
+- 新規 `internal/poolproto/stratumv1/work.go`: coinbase組み立て・マークル畳み込み・
+  prev-hash語スワップ・extranonce2生成。全て純関数。バイト順規則の出典を
+  パッケージdocに明記。`internal/miner` には依存しない（プロトコル層は
+  miner層の下位）。
+- `parseNotify` は `poolproto.Job` ではなく生の `notification` を返し、セッションが
+  extranonce1と当該ジョブのextranonce2を与えて `buildJob` する（プロトコル固有の
+  知識をプロトコルパッケージ内に閉じ込める）。フィールド長検証を追加し、
+  不正なnotifyはゼロ値で採掘せず丸ごと拒否（cpuminerと同じ方針）。
+- セッションはジョブごとにextranonce2を採番・記録し（上限32件のFIFOで有界）、
+  `Submit` が同じ値を送出。ワーカー名は `mining.authorize` 成功時の値を保持。
+  交渉済み状態は全て `stateMu` の下に移し競合を解消。
+- `miner.Work.JobKey` / `miner.Share.JobKey` を追加し、プールのjob ID文字列を
+  そのまま往復させる（V2は数値IDのままで空）。`applyJob` は5フィールド全てを
+  ヘッダに詰め、非数値job IDをエラーにしない。
+- `miner.Worker.CurrentWork()` を追加（`HasWork()` と同じ趣旨の読み取り専用
+  アクセサ。ヘッダ全フィールドが充填されたことを外部から検証可能にする）。
+
+**未実装として明示（今回の対象外）.** version rolling（`mining.configure`/ASICBoost）
+とntime rollingは引き続き非対応。ジョブのversion/ntimeをそのまま提出するため
+正当だが、探索空間はnonceとextranonce2に限られる。KNOWN_LIMITATIONS §17に記載。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
