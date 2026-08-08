@@ -683,3 +683,30 @@ interop testing remains the honest next step (§18).
 
 All 24 packages build, vet, and test green; `-race` green on the changed
 packages.
+
+---
+
+## Session 257 update — BIP-39 seed-derivation audit against the specification
+
+Audit of `internal/lightning`'s BIP-39 implementation against
+bitcoin/bips bip-0039.mediawiki and the official English test vectors
+(trezor/python-mnemonic `vectors.json` — the set BIP-39 points to). This
+is the code that decides whether the recovery phrase Otedama prints can
+actually restore the wallet somewhere else, which is the whole content of
+the non-custodial promise.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| J | The package doc claimed validation "against the specification's published test vectors"; three vectors were actually used (one seed, two entropy-to-mnemonic). The 24-word length that `DefaultEntropyBits = 256` actually produces had no official seed vector at all. | ✅ Fixed (test-only): all 16 official English vectors, each exercising entropy→mnemonic, mnemonic→entropy, and mnemonic→seed. Every vector was cross-checked against an independent Python implementation before being committed, so a transcription error cannot masquerade as a pass. |
+| J | **`MnemonicToSeed` does not NFKD-normalise its inputs**, which BIP-39 requires for both the mnemonic sentence and the `"mnemonic" + passphrase` salt. The sentence side is harmless (ASCII wordlist; NFKD maps U+3000 to a plain space, so the ASCII join is equivalent for Japanese). The passphrase side is not: a non-ASCII passphrase — reachable today via `--wallet-mnemonic-passphrase` — yields a seed no conformant wallet reproduces, so the printed recovery phrase restores a *different* wallet elsewhere, silently. | 🚩 Flagged for maintainer review (CODEOWNERS, funds-critical). Both fixes are behaviour changes: normalise (needs `golang.org/x/text`, against ADR-003) or reject non-ASCII passphrases (dependency-free, rejects input accepted today). Documented in KNOWN_LIMITATIONS §19 and in the doc comments on `MnemonicToSeed` / `WithMnemonicPassphrase`; `--wallet-mnemonic-passphrase --help` now warns. No behaviour changed this session. |
+
+Verified conformant by direct comparison against the spec, not assumed:
+the checksum construction (first ENT/32 bits of SHA-256(entropy)), the
+11-bit word indexing, the accepted entropy lengths and the word counts
+they imply, the PBKDF2 parameters (2048 iterations, HMAC-SHA512, 64-byte
+output, `"mnemonic"` salt prefix), the checksum verification on the
+mnemonic-to-entropy path, and the embedded wordlist's identity with the
+official list (implied by the vectors passing, in addition to the existing
+SHA-256 integrity check at init).
+
+All 24 packages build, vet, and test green.

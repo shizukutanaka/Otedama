@@ -74,7 +74,10 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 		"(run only) Optional BIP-39 \"25th word\" passphrase, applied only when a new wallet is "+
 			"created. Distinct from --wallet-passphrase (which encrypts the seed at "+
 			"rest); this changes which seed the recovery mnemonic derives to. Not "+
-			"needed again after first run — it is already folded into wallet.dat.")
+			"needed again after first run — it is already folded into wallet.dat. "+
+			"Use ASCII characters only: a non-ASCII passphrase is not NFKD-normalised, "+
+			"so the recovery phrase would restore a different wallet in other BIP-39 "+
+			"software (docs/KNOWN_LIMITATIONS.md §19).")
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.logFile, "log-file", "",
 		"(run only) Append structured logs to this file. Written even while the TUI is active, "+

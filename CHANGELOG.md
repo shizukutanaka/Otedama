@@ -10,6 +10,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed / Flagged (session 257 — BIP-39を一次資料（bip-0039.mediawiki + 公式テストベクタ）と照合: **公式ベクタ全16件による検証を追加**し、**非ASCIIパスフレーズでNFKD正規化を欠く**funds-critical gapを発見・記録)
+
+**発見の経路.** session 255（V1）・256（V2）で「ワイヤに出るバイト列は仕様と一致するか」を
+問うた。同じ問いを資金復元経路に向けた——**Otedamaが印字したリカバリフレーズは、
+本当に他のBIP-39ウォレットで同じ資金を復元するか**。これは非カストディの約束そのものであり、
+`internal/lightning` はCODEOWNERS必須レビュー領域である。
+
+**発見1（検証不足）.** パッケージdocは「validated against the specification's published
+test vectors」と主張していたが、実際に使われていた公式ベクタは3件のみ
+（seed 1件、entropy→mnemonic 2件）。**`DefaultEntropyBits = 256` が実際に生成する
+24語フレーズについては、公式のseedベクタが1件も無かった**。
+
+**是正（テストのみ・挙動不変）.** `internal/lightning/bip39_vectors_test.go` を新設し、
+公式English全16ベクタで entropy→mnemonic / mnemonic→entropy / mnemonic→seed の
+3変換を検証。各ベクタはコミット前に**独立実装（Python hashlib の PBKDF2-HMAC-SHA512 と
+自作 entropy→mnemonic エンコーダ）で照合済み**——ベクタ表の転記ミスがテスト通過に
+化けることを防ぐため。同時に、埋め込みwordlistが公式リストであることも確認された
+（1語でも違えばいずれかのベクタのmnemonicが一致しない。init時のSHA-256検査とは独立の根拠）。
+
+**発見2（🚩 funds-critical、メンテナ判断待ち）.** BIP-39は
+`PBKDF2(password = mnemonic sentence in UTF-8 NFKD, salt = "mnemonic" + passphrase in UTF-8 NFKD,
+2048, HMAC-SHA512, 64バイト)` と規定する。`MnemonicToSeed` はPBKDF2のパラメータは
+完全に正しいが、**どちらの入力もNFKD正規化していない**。
+
+- **mnemonic文側は実害なし**: 同梱English listはASCII（NFKDは恒等）、BIP-39は
+  wordlist自体がNFKDエンコードであることを要求、さらに日本語慣習の表意文字空間
+  U+3000 はNFKDで通常空白に写像されるため、ASCII空白での連結は等価。
+- **パスフレーズ側は実害あり**: `--wallet-mnemonic-passphrase` /
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` は任意文字列を受け取る。入力された非ASCII文字は
+  ほぼ常にNFC（`é`=U+00E9、`パ`=U+30D1）であり、NFKDはこれらを分解する。結果、
+  **同じフレーズ＋同じパスフレーズから、適合ウォレットとは異なるseedが導出される**。
+
+**影響.** 非ASCIIパスフレーズで作成したウォレットは、印字されたリカバリフレーズを
+Electrumやハードウェアウォレットに入力しても、**別の（一見正常な）ウォレットが
+静かに復元される**——意図せず「decoy wallet」状態に陥る。エラーは原理的に出せない
+（相手側は誤ったseedを導出したことを知り得ない）。既に受領した資金はOtedama自身の
+`wallet.dat` で引き続き使用可能なので、即時喪失ではなく**可搬性の欠陥**だが、
+リカバリフレーズの存在理由はまさにその可搬性である。ASCIIパスフレーズおよび
+既定（パスフレーズ無し）は完全に適合しており影響なし。
+
+**挙動を変更しなかった理由.** `internal/lightning` はCODEOWNERS必須レビューの
+funds-critical領域であり、考えうる2つの修正はいずれも挙動変更でメンテナ判断を要する:
+(1) `golang.org/x/text/unicode/norm` でNFKD正規化——完全適合だがADR-003（実行時依存ゼロ）に反する、
+(2) 非ASCIIパスフレーズをウォレット作成時に明示エラーで拒否——依存追加なしで
+非可搬ウォレットの生成を防ぐが、現在受理している入力を拒否する。
+本セッションでは**記録と警告のみ**を行い、実装は判断待ちとした。
+
+**記録した箇所（doc変更のみ・挙動不変）.** KNOWN_LIMITATIONS §19（🚩）、
+CATEGORY_AUDIT session 257、`MnemonicToSeed` / `WithMnemonicPassphrase` の
+doc comment、および `--wallet-mnemonic-passphrase` の `--help` 文言
+（「ASCIIのみ使用のこと」と理由を明示）。パッケージdocの
+「follow BIP-39 strictly」という主張も、既知の逸脱を明記する形に是正した。
+
 ### Fixed (session 256 — sv2-spec を一次資料として逐条照合: **Stratum V2ハンドシェイクがワイヤ仕様と一致していなかった**——session 238は「意味」を直したが「バイト列」は未検証だった)
 
 **発見の経路.** session 255（V1）に続き、V2側を同じ問いで検証した。§11（session 238）は

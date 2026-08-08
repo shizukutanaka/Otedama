@@ -86,6 +86,12 @@ type walletOptions struct {
 // The empty string (the default when this option is not passed) reproduces
 // the original derivation with no additional passphrase, so every existing
 // caller is unaffected.
+//
+// Keep the passphrase ASCII. MnemonicToSeed does not NFKD-normalise it as
+// BIP-39 requires, so a non-ASCII passphrase produces a seed no other
+// BIP-39 wallet will reproduce from the same recovery phrase — the phrase
+// would then restore a different, valid-looking wallet elsewhere. See
+// MnemonicToSeed's normalisation note and docs/KNOWN_LIMITATIONS.md §19.
 func WithMnemonicPassphrase(p string) WalletOption {
 	return func(o *walletOptions) { o.mnemonicPassphrase = p }
 }

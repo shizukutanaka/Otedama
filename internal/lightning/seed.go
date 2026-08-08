@@ -33,17 +33,25 @@
 //
 // # BIP-39 Compliance
 //
-// Mnemonic generation and reconstruction follow BIP-39 strictly. The
-// package itself stays dependency-free by accepting the list via
-// WordList rather than hardcoding one directly into this file — but the
-// official 2,048-word English list IS bundled in this package
-// (english_wordlist.go, integrity-checked by SHA-256 at init) and is
-// what production wallet setup actually uses (see
-// NewEnglishWordList(), called from engine.setupWallet). A caller that
-// wants a different BIP-39 language (Japanese, etc.) supplies its own
-// list through the same WordList constructor. This package's code
-// paths are validated against the specification's published test
-// vectors.
+// Mnemonic generation and reconstruction follow BIP-39, verified against
+// the complete official English test-vector set (bip39_vectors_test.go:
+// entropy to mnemonic, mnemonic back to entropy, and mnemonic to seed for
+// all 16 vectors). The package itself stays dependency-free by accepting
+// the list via WordList rather than hardcoding one directly into this
+// file — but the official 2,048-word English list IS bundled in this
+// package (english_wordlist.go, integrity-checked by SHA-256 at init) and
+// is what production wallet setup actually uses (see NewEnglishWordList(),
+// called from engine.setupWallet). A caller that wants a different BIP-39
+// language (Japanese, etc.) supplies its own list through the same
+// WordList constructor.
+//
+// One deviation is known and is NOT covered by those vectors, which are
+// pure ASCII: BIP-39 requires the mnemonic sentence and the salt
+// ("mnemonic" + passphrase) to be UTF-8 NFKD-normalised before PBKDF2, and
+// MnemonicToSeed normalises neither. For the sentence this is harmless in
+// practice (see MnemonicToSeed); for a non-ASCII *passphrase* it changes
+// the derived seed, so such a wallet is not portable to other BIP-39
+// implementations. Tracked in docs/KNOWN_LIMITATIONS.md §19.
 package lightning
 
 import (
@@ -292,6 +300,31 @@ type Seed [64]byte
 // looking seed (a so-called decoy wallet), which is a documented BIP-39
 // behavior. Otedama surfaces this clearly in the user-facing UI to
 // avoid confusion.
+//
+// # Normalisation (known deviation)
+//
+// BIP-39 specifies both PBKDF2 inputs "in UTF-8 NFKD": the mnemonic
+// sentence as the password, and "mnemonic" + passphrase as the salt. This
+// function applies no normalisation to either.
+//
+//   - Mnemonic sentence: no practical effect. The bundled English list is
+//     ASCII, which NFKD leaves unchanged, and BIP-39 requires every
+//     wordlist to be NFKD-encoded in the first place — so a caller-supplied
+//     list is already normalised. Joining with an ASCII space rather than
+//     the ideographic space (U+3000) conventionally used for Japanese is
+//     likewise safe, because NFKD maps U+3000 to a plain space.
+//   - Passphrase: this one matters. A passphrase containing non-ASCII
+//     characters is almost always in NFC as typed (é as U+00E9, パ as
+//     U+30D1), and NFKD decomposes those. The seed derived here therefore
+//     differs from the seed every conformant wallet derives from the same
+//     phrase and passphrase — silently, since the other wallet produces a
+//     valid-looking wallet rather than an error.
+//
+// An ASCII-only passphrase (and the empty passphrase, the default) is
+// unaffected: NFKD is the identity on ASCII. Resolving this needs a
+// maintainer decision — normalise (a new dependency, against ADR-003) or
+// reject non-ASCII passphrases — so it is recorded rather than changed
+// here: docs/KNOWN_LIMITATIONS.md §19.
 func MnemonicToSeed(m Mnemonic, passphrase string) Seed {
 	salt := "mnemonic" + passphrase
 	password := []byte(m.String())
