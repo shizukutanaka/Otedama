@@ -10,6 +10,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 258 — BIP-350 公式テストベクタ全件でアドレス検証を照合: **bech32m の存在理由そのもののケースが1件も検証されていなかった**)
+
+**発見の経路.** session 257 では「印字したリカバリフレーズが他のウォレットで
+同じ資金を復元するか」を BIP-39 の公式ベクタで検証した。同じ資金経路の反対側 —
+**採掘報酬の宛先アドレスがタイプミスから守られているか** — を BIP-350 で検証した。
+
+**発見（検証不足）.** `internal/btccrypto/bech32.go` の実装自体は BIP-173/350 の
+参照アルゴリズム（polymod・hrpExpand・convertBits の canonical padding 規則・
+version 別チェックサム定数の選択）を忠実に写しており、**逐条照合で defect は無かった**。
+しかし既存テストで使われていた公式ベクタは **valid 5 件のみ**で、
+仕様が列挙する invalid ベクタは 1 件も無かった。特に欠けていたのが
+**交差ペア**（v1 アドレスを bech32 で、v0 アドレスを bech32m でチェックサム）——
+**BIP-350 が書かれた理由そのもの**のケースである。2 つの定数を 1 つに「簡潔化」する
+変更を入れても、既存テストは全て green のままだった。
+
+**追加（テストのみ・挙動変更なし）.** `internal/btccrypto/bip350_vectors_test.go` を新設:
+
+- **valid mainnet ベクタ全件** → 期待 `AddressType`（v0/20→P2WPKH、v0/32→P2WSH、
+  v1/32→P2TR）を返すこと。`ValidateAddress`（config 検証の入口）でも同じ判定に
+  なること（legacy base58 経路に落ちないこと）。
+- **invalid ベクタ全件** → BIP 記載の理由をテスト名に付して拒否確認。
+  bech32/bech32m 取り違え 3 件、チェックサム内不正文字、witness version 17、
+  1 バイト・41 バイトプログラム、v0 の 16 バイト（BIP-141 違反）、
+  4 ビット超ゼロパディング、空データ部。加えて `ValidateAddress` が
+  `ErrUnrecognisedAddress`（＝形式不明）ではなく**アドレスとして不正**と報告すること
+  ——タイプミスしたユーザーに「チェックサムが合わない」と伝わるかは UX 上重要。
+- **交差ペア専用テスト** `TestBIP350_ChecksumConstantIsVersionDependent`。
+
+**空振り防止.** `bech32.go` の version 別定数選択を一時的に固定値へ書き換えると
+新テスト 5 件中 3 件が失敗することを確認してから採用した（session 256 の
+SetTarget テストと同じ手順）。ベクタ自体も、コミット前に BIP 参照デコーダの
+独立実装（Python）で valid/invalid 判定が仕様記載と一致することを確認済み。
+
+**意図的な逸脱 4 件を明文化（❎ 検証済みの設計判断）.** BIP-350 上は valid だが
+Otedama が拒否するものを、理由と「見直す条件」つきでテストに固定した:
+
+1. **witness v1 で 32 バイト以外のプログラム** — BIP-350 的には valid な*アドレス*だが、
+   BIP-341 は Taproot を 32 バイト v1 に限定するため現状**使用不能な出力**であり、
+   採掘報酬を送れば取り出せなくなる。**Otedama の厳格さは資金保護として正しい**。
+   将来のソフトフォークで意味が与えられたら見直す。
+2. **witness version 2–16** — コンセンサス上の意味が未定義。
+3. **testnet (`tb1`)** — Otedama に testnet モードは無く、常に設定ミス。
+4. 非 `bc` HRP は `ErrNotBech32` を返し、dispatcher が legacy base58 経路を試せるようにする。
+
+**今後の UX 課題として記録（欠陥ではない）.** `bc1` プレフィックス自体の大文字小文字が
+混在するアドレス（例 `Bc1q…`）は、mixed-case 判定より前のプレフィックス判定で落ちるため
+「形式不明」と報告される。拒否されること自体は正しく、エラー文言のみの差異。
+
 ### Fixed / Flagged (session 257 — BIP-39を一次資料（bip-0039.mediawiki + 公式テストベクタ）と照合: **公式ベクタ全16件による検証を追加**し、**非ASCIIパスフレーズでNFKD正規化を欠く**funds-critical gapを発見・記録)
 
 **発見の経路.** session 255（V1）・256（V2）で「ワイヤに出るバイト列は仕様と一致するか」を

@@ -710,3 +710,35 @@ official list (implied by the vectors passing, in addition to the existing
 SHA-256 integrity check at init).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 258 update — bech32/bech32m address-validation audit against BIP-350
+
+Audit of `internal/btccrypto`'s segwit address validation against
+bitcoin/bips bip-0350.mediawiki and its complete test-vector set. This is
+the last gate between a mistyped payout address and months of mining at a
+destination that cannot pay out — the same class of check session 257
+applied to BIP-39, on the other end of the same money path.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| I | The package documents BIP-173/350 conformance, and the existing tests are thorough about *structure*, but only 5 official vectors were used — all of them valid addresses. None of the specification's invalid vectors were present, including the crossed checksum pair (a v1 address checksummed as bech32, a v0 address checksummed as bech32m) that is the entire reason BIP-350 was written. An implementation that collapsed the two constants into one would have kept every existing test green. | ✅ Fixed (test-only): `bip350_vectors_test.go` runs every mainnet vector from the specification — valid with expected address type, invalid with the BIP's own stated reason — plus a dedicated crossed-pair test. Confirmed non-vacuous: removing the version-dependent constant selection from `bech32.go` fails 3 of the 5 new tests. Every vector was cross-checked against an independent implementation of the BIP reference decoder before being committed. |
+| I | Otedama rejects four address shapes the specification calls valid, previously visible only as scattered code comments. | ❎ Verified as deliberate, now pinned by test with the rationale and the condition for revisiting: **(1) witness v1 with a non-32-byte program** — valid per BIP-350, but BIP-341 defines Taproot only for 32-byte v1 programs, so such an output is currently unspendable and income sent there would be stranded; rejecting is protective. **(2) witness v2–16** — no consensus meaning yet. **(3) testnet `tb1`** — Otedama has no testnet mode, so it is always a misconfiguration. **(4)** non-`bc` HRPs generally, which return `ErrNotBech32` so the dispatcher can try the legacy base58 path. |
+
+Verified conformant by direct comparison against the specification, not
+assumed: the polymod generator constants and BCH residue computation, the
+HRP expansion, `convertBits`'s canonical-padding rule (reject ≥5 leftover
+bits or any non-zero pad), the bech32/bech32m constant selection keyed on
+witness version, the 90-character ceiling, mixed-case rejection, the
+witness-version ceiling of 16, and the 2–40 byte witness-program range
+with the BIP-141 v0 refinement (20 or 32 only).
+
+One behaviour worth noting for future UX work rather than as a defect: a
+*mixed-case* bech32 address whose case differs in the `bc1` prefix itself
+(e.g. `Bc1q…`) fails the prefix test before the mixed-case test and is
+reported as `ErrNotBech32`, so the operator is eventually told the address
+format is unrecognised rather than that the case is mixed. The address is
+correctly rejected either way; only the wording of the error differs.
+
+All 24 packages build, vet, and test green.
