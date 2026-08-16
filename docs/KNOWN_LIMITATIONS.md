@@ -256,9 +256,38 @@ branch of the static estimate is therefore unreachable today and exists only
 as forward-compatible scaffolding for a future GPU SHA256d driver.
 
 The remaining static input — the compile-time network-hashrate constant (≈ 1000 EH/s) —
-is addressed by a live difficulty feed, which remains a v3.1.0 item. That does not affect
-the relative arbitration accuracy on a given machine; it affects only the absolute
-satoshi/second numbers (which move primarily with BTC price anyway).
+is addressed by a live difficulty feed, which remains a v3.1.0 item.
+
+**Corrected session 259 — this entry previously understated that gap.** It claimed the
+constant "does not affect the relative arbitration accuracy on a given machine; it affects
+only the absolute satoshi/second numbers (which move primarily with BTC price anyway)".
+Two things are wrong with that:
+
+- The satoshi figure does **not** move with BTC price. The quote is denominated in
+  satoshis, and the price only sets the quote's `Confidence`
+  (`TestMiningYield_IsIndependentOfBTCPrice` pins this). What moves with price is the USD
+  value of that constant satoshi rate.
+- The constant scales the mining side of the comparison **only**. Arbitration weighs
+  mining (sats/sec) against inference (quoted in USD and converted), so a network-hashrate
+  constant that has drifted away from the real network biases *that* comparison — which is
+  the decision the product exists to make. The original claim holds only in the narrower
+  case of comparing two devices' mining yield against each other on the same machine,
+  where the constant cancels.
+
+Concretely: the constant implies a network difficulty of ≈ 140 T (H × 600 / 2^32). If the
+real network moves to 280 T while the constant stays put, every mining quote is overstated
+2× against the inference quote it competes with. Until the live feed lands, an operator
+comparing markets should treat the mining figure as an estimate anchored to a 2026
+snapshot, not a live measurement.
+
+**Related, found in the same pass:** `MiningProvider`'s own doc comment claimed the yield
+was "estimated from the pool's reported difficulty" and refreshed on nBits changes and on
+5% hashrate moves. None of those existed — the pool's difficulty never reaches
+`internal/provider` at all, and quotes are published on a plain 30-second ticker. The
+comment has been corrected to describe the constant-driven model that is actually
+implemented, and `internal/provider/mining_yield_test.go` now pins the revenue formula
+itself (previously no test checked the yield's magnitude — only that it was greater than
+zero, which a yield wrong by 2^32 would satisfy).
 
 ---
 

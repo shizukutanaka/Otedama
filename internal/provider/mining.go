@@ -13,11 +13,26 @@ import (
 
 // MiningProvider publishes Bitcoin mining yield estimates for Stratum V2 pools.
 //
-// Yield is estimated from the pool's reported difficulty and the device's
-// historical hashrate. The estimate is updated whenever:
-//   - The pool sends a new job with different nBits (difficulty change).
-//   - The device's measured hashrate changes by more than 5%.
-//   - MinQuoteInterval has elapsed without an update.
+// # What the estimate is made of (corrected session 259)
+//
+// One input is live: the device's measured hashrate, sampled through
+// HashrateFunc on every publish. Everything else is a compile-time
+// constant — the network hashrate, the block subsidy, and the block
+// interval (see publish). The expected revenue is then
+//
+//	sats/sec = deviceHashrate × subsidySats / (networkHashrate × blockTime)
+//
+// which is the standard revenue-per-hash model: your share of the network's
+// hashrate times the subsidy the network pays out per second.
+//
+// Quotes are republished on a fixed ticker (MinQuoteInterval, 30s). There is
+// no event-driven path: this comment previously claimed the estimate was
+// derived from "the pool's reported difficulty" and refreshed whenever nBits
+// changed or the measured hashrate moved by more than 5%. None of those
+// existed — the pool's difficulty never reaches this package (the engine has
+// it, but does not forward it), and pollingProvider.loop is a plain ticker.
+// The practical consequence is that a change in *network* difficulty does not
+// move this estimate at all; see docs/KNOWN_LIMITATIONS.md §7.
 //
 // The start/stop/loop/send lifecycle lives in the embedded pollingProvider;
 // only the Bitcoin-specific yield calculation (publish) is defined here.
@@ -66,8 +81,12 @@ func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error 
 //     HashrateFunc is set and returns > 0; otherwise a static per-family
 //     estimate (ASIC/GPU/CPU). See docs/KNOWN_LIMITATIONS.md §7.
 //   - Network hashrate: a compile-time constant estimate (not configurable).
-//   - Current BTC price from RateSource (freshness drives the confidence).
-//   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
+//   - Standard block time (600s) and reward (3.125 BTC post-4th halving).
+//
+// The BTC/USD rate is read but does not enter the satoshi figure — the yield
+// is denominated in sats, so the price only sets Confidence (a stale price
+// makes this quote less comparable against the USD-denominated inference
+// quote the arbitration engine weighs it against).
 func (p *MiningProvider) publish(ctx context.Context) {
 	rate, fresh := p.rates.BTCUSDRate()
 	if rate <= 0 {

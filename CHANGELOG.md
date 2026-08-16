@@ -10,6 +10,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 259 — 標準的な採掘収益モデルと照合: **裁定エンジンの入力である採掘収益推定の doc が、存在しない挙動を主張していた**)
+
+**発見の経路.** session 255–258 は「資金を動かすコード」（2つの Stratum 経路、seed 導出、
+アドレス検証）を一次資料と照合してきた。今回はその経路が**向けられる先を決める数値** —
+`internal/provider/mining.go` が裁定エンジンに供給する Bitcoin 採掘収益推定 — を監査した。
+これは製品の看板機能が比較する2つの量の一方であり、誤りは表示バグではなく
+**恒久的に誤った配分**を意味する。
+
+**計算式自体は正しい（検証済み）.** 標準的な収益モデル
+`E[revenue] = deviceHashrate × subsidy / (difficulty × 2^32)` に対し、
+`publish()` が*ネットワークハッシュレート*経由で計算するのに対しテストは
+*ネットワーク難易度*経由で導出し、両者が一致することを確認した。
+ブロック補助金 3.125 BTC は第4回半減期（2024年4月）後の値として正しく、
+ネットワークハッシュレート定数が含意する難易度は約 140 T で 2026 年の桁として妥当。
+
+**発見1（doc が実装を超える主張）.** `MiningProvider` の doc コメントは、
+**存在しないイベント駆動の推定器**を記述していた:
+
+- 「pool の報告する difficulty から推定」——`internal/provider` に difficulty は
+  **一度も到達しない**（当該パッケージを nBits/difficulty で grep するとコメントのみ）。
+  実際に使われるのはコンパイル時定数のネットワークハッシュレート。
+- 「pool が異なる nBits の新ジョブを送ったとき更新」——そのようなトリガは存在しない。
+- 「デバイスの実測ハッシュレートが5%以上変化したとき更新」——そのようなロジックも存在しない。
+
+実際は `pollingProvider.loop` の**30秒固定ティッカー**のみ。live な入力は
+`HashrateFunc` 経由のデバイスハッシュレート1つだけ（session 225）。
+→ 実装どおりの記述に是正し、BTC/USD レートの実際の役割（`Confidence` を決めるのみで
+satoshi 値には入らない）も明記した。
+
+**発見2（検証の欠落）.** 収益の**桁**を検証するテストが1つも無かった。既存テストは
+`SatsPerSecond > 0` と分岐の確認のみで、**2^32 倍ずれても（hashes-per-difficulty の
+項の脱落）、2倍ずれても（半減期定数の陳腐化）全て通過**する状態だった。
+→ `internal/provider/mining_yield_test.go` を新設し、収益モデル・ハッシュレートに対する
+線形性・プール手数料の控除・satoshi 建て（BTC 価格に依存しないこと）・
+含意される難易度の妥当帯域を固定。**空振り防止**として、補助金を半減期前の 6.25 BTC に
+戻すとモデルテストが `ratio 2` で失敗することを確認済み。
+
+**発見3（KNOWN_LIMITATIONS §7 自身の過小評価）.** §7 は陳腐化しうるネットワーク
+ハッシュレート定数について「does not affect the relative arbitration accuracy on a given
+machine; it affects only the absolute satoshi/second numbers (which move primarily with
+BTC price anyway)」と記していたが、**両方とも誤り**:
+
+- satoshi 値は BTC 価格で**まったく動かない**（sats 建てであり、価格は `Confidence`
+  にしか影響しない。`TestMiningYield_IsIndependentOfBTCPrice` で固定）。
+- 定数は比較の**採掘側だけ**をスケールするため、裁定エンジンが行う
+  **mining 対 inference の比較そのもの**を歪める。元の主張が成り立つのは
+  「同一マシン上で2台のデバイスの採掘収益を比較する」狭い場合のみ（定数が相殺される）。
+
+→ 具体的な失敗形（実ネットワークが 280 T へ動いても定数が 140 T のままなら、
+全ての採掘見積が inference に対して2倍過大になる）とともに是正した。
+
+**挙動は変更していない.** 定数を除去する live difficulty feed は §7 のとおり
+v3.1.0 のロードマップ項目のまま。
+
 ### Added (session 258 — BIP-350 公式テストベクタ全件でアドレス検証を照合: **bech32m の存在理由そのもののケースが1件も検証されていなかった**)
 
 **発見の経路.** session 257 では「印字したリカバリフレーズが他のウォレットで

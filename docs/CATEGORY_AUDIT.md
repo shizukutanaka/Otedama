@@ -742,3 +742,40 @@ format is unrecognised rather than that the case is mixed. The address is
 correctly rejected either way; only the wording of the error differs.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 259 update — mining yield model audit (the arbitration engine's input)
+
+Sessions 255–258 verified the code that moves money (the two Stratum paths,
+the seed derivation, the address validation). This audits the number those
+paths are pointed at by: the Bitcoin mining yield estimate that
+`internal/provider/mining.go` feeds to the arbitration engine. It is one of
+the two quantities the product's namesake feature compares, so an error
+here is not a display bug — it is a permanently wrong allocation.
+
+The formula itself is correct, checked against the standard revenue model
+(`E[revenue] = deviceHashrate × subsidy / (difficulty × 2^32)`) by deriving
+the expectation through network *difficulty* while `publish()` computes it
+through network *hashrate*, and confirming both land on the same value. The
+block subsidy constant (3.125 BTC) is correct post-4th-halving, and the
+network-hashrate constant implies a network difficulty of ≈ 140 T, which is
+the right order for 2026.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| G | `MiningProvider`'s doc comment described an event-driven estimator that does not exist: "estimated from the pool's reported difficulty", refreshed "whenever the pool sends a new job with different nBits" or "the device's measured hashrate changes by more than 5%". The pool's difficulty never reaches `internal/provider` (grep for nBits/difficulty in that package finds only comments), and `pollingProvider.loop` is a plain 30-second ticker with no event path. One live input exists — the device hashrate, via `HashrateFunc` (session 225). | ✅ Fixed (doc-only): the comment now states the constant-driven model actually implemented, names the BTC/USD rate's real role (it sets `Confidence`, and does not enter the satoshi figure), and points at KNOWN_LIMITATIONS §7 for the consequence. |
+| G | No test checked the yield's **magnitude**. The existing suite asserts `SatsPerSecond > 0` and exercises which branch runs; a yield wrong by 2^32 (a dropped hashes-per-difficulty term) or by 2× (a stale halving constant) passed all of it. | ✅ Fixed (test-only): `mining_yield_test.go` pins the revenue model, the linear scaling in hashrate, the pool-fee deduction, the satoshi denomination's independence from BTC price, and the plausibility band of the implied network difficulty. Confirmed non-vacuous: reverting the subsidy to the pre-2024 6.25 BTC fails the model test with "ratio 2". |
+| G | KNOWN_LIMITATIONS §7 downplayed the stale network-hashrate constant: "does not affect the relative arbitration accuracy on a given machine; it affects only the absolute satoshi/second numbers (which move primarily with BTC price anyway)". Both halves are wrong. The satoshi figure does not move with BTC price at all (it is denominated in sats). And the constant scales the mining side only, so it biases exactly the mining-vs-inference comparison the arbitration engine exists to make; the original claim holds only for comparing two devices' mining yield against each other, where the constant cancels. | ✅ Fixed (doc-only): §7 now states what the constant does and does not affect, with the concrete failure mode (a network that doubles while the constant stays put overstates every mining quote 2× against inference). |
+
+Verified correct by direct comparison against the model, not assumed: the
+revenue formula's algebraic equivalence to the revenue-per-hash form, the
+2^32 hashes-per-difficulty constant's consistency with the engine's
+expected-share-interval metric (`engine/stats.go`), the 600-second block
+interval, the post-halving subsidy, the 1% pool-fee deduction into
+`NetSatsPerSecond`, and `effectiveYield`'s productive-fraction clamp.
+
+No behaviour changed. The live difficulty feed that would remove the
+constant remains a v3.1.0 roadmap item (§7).
+
+All 24 packages build, vet, and test green.
