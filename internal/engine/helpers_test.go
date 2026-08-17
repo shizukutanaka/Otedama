@@ -252,8 +252,17 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	if !ok {
 		t.Fatal("YieldPerDevice[cpu-0] missing")
 	}
-	if y.SatsPerSecond != 0.1 {
-		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.1", y.SatsPerSecond)
+	// The translated yield must be the NET rate (0.099), not the gross 0.1:
+	// the arbitration engine compares markets on what the user receives, and
+	// this fixture's 1% gap is exactly the pool fee. This assertion used to
+	// require the gross figure, pinning the defect fixed in session 261.
+	if y.SatsPerSecond != 0.099 {
+		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want the net 0.099 "+
+			"(gross was 0.1; comparing gross across markets with different fees "+
+			"misallocates hardware)", y.SatsPerSecond)
+	}
+	if s.DefaultYield.SatsPerSecond != 0.099 {
+		t.Errorf("DefaultYield.SatsPerSecond = %v, want the net 0.099", s.DefaultYield.SatsPerSecond)
 	}
 }
 
@@ -1198,4 +1207,90 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// ============================================================================
+// comparableYield — the fee-adjusted figure markets are compared on (session 261)
+// ============================================================================
+
+// TestComparableYield_UsesNetNotGross is the unit-level statement of the fix:
+// the arbitration engine must see revenue after the provider's fee.
+func TestComparableYield_UsesNetNotGross(t *testing.T) {
+	got := comparableYield(provider.Yield{
+		SatsPerSecond:    1.0,
+		NetSatsPerSecond: 0.8, // a 20% marketplace fee
+		Confidence:       0.9,
+	})
+	if got.SatsPerSecond != 0.8 {
+		t.Errorf("SatsPerSecond = %v, want the net 0.8", got.SatsPerSecond)
+	}
+	if got.Confidence != 0.9 {
+		t.Errorf("Confidence = %v, want 0.9 (carried through unchanged)", got.Confidence)
+	}
+}
+
+// TestComparableYield_FallsBackToGrossWhenNetUnset guards the robustness case:
+// a quote that never set NetSatsPerSecond must not be treated as worthless,
+// which would be a worse failure than comparing gross.
+func TestComparableYield_FallsBackToGrossWhenNetUnset(t *testing.T) {
+	got := comparableYield(provider.Yield{SatsPerSecond: 1.5, Confidence: 1})
+	if got.SatsPerSecond != 1.5 {
+		t.Errorf("SatsPerSecond = %v, want the gross 1.5 as fallback", got.SatsPerSecond)
+	}
+	// A negative net is equally unusable and must take the same fallback.
+	got = comparableYield(provider.Yield{SatsPerSecond: 1.5, NetSatsPerSecond: -1, Confidence: 1})
+	if got.SatsPerSecond != 1.5 {
+		t.Errorf("with a negative net, SatsPerSecond = %v, want the gross 1.5", got.SatsPerSecond)
+	}
+}
+
+// TestArbitration_ChoosesTheMarketThatPaysMoreNet is the behavioural proof.
+// It builds the case the fee asymmetry creates: inference quotes a HIGHER
+// gross rate than mining but a LOWER net rate, because Akash takes 20% where
+// the pool takes 1%. Deciding on gross picks inference and hands the user
+// less money; deciding on net picks mining. This is the misallocation the
+// engine made until session 261.
+func TestArbitration_ChoosesTheMarketThatPaysMoreNet(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	const dev = "gpu-0"
+	// Mining: 1.00 gross, 0.99 net (1% pool fee).
+	updateStream(&mu, m, provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         dev,
+		AcceptedFamilies: []hal.Family{hal.FamilyGPU},
+		Yield:            provider.Yield{SatsPerSecond: 1.00, NetSatsPerSecond: 0.99, Confidence: 1},
+	})
+	// Inference: 1.10 gross — higher — but 0.88 net (20% platform fee).
+	updateStream(&mu, m, provider.Quote{
+		ProviderID:       "ai.akash",
+		DeviceID:         dev,
+		AcceptedFamilies: []hal.Family{hal.FamilyGPU},
+		Yield:            provider.Yield{SatsPerSecond: 1.10, NetSatsPerSecond: 0.88, Confidence: 1},
+	})
+
+	alloc, err := arbitration.Decide(arbitration.Input{
+		Devices: []arbitration.DeviceRef{{
+			Identity: hal.Identity{ID: dev, Family: hal.FamilyGPU},
+		}},
+		Streams: streamsSlice(m),
+		Policy:  arbitration.PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if len(alloc.Assignments) != 1 {
+		t.Fatalf("got %d assignments, want 1", len(alloc.Assignments))
+	}
+	got := alloc.Assignments[0]
+	if got.Stream != "mining.stratum" {
+		t.Errorf("assigned %q, want mining.stratum: it nets 0.99 sats/s against "+
+			"inference's 0.88, even though inference quotes the higher gross rate "+
+			"(1.10 vs 1.00). Choosing on gross costs the user real revenue.",
+			got.Stream)
+	}
+	if got.ExpectedYield != 0.99 {
+		t.Errorf("ExpectedYield = %v, want the net 0.99", got.ExpectedYield)
+	}
 }

@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 261 — **裁定エンジンが手数料控除前(gross)の収益で配分を決めていた**——259/260 が両入力を検証した先で見つかった実欠陥)
+
+**発見の経路.** session 259 は採掘側、260 は推論側の収益クォートを検証した。
+今回はエンジンが**それらをどう使うか**を監査し、両セッションが露出させるべく準備していた
+欠陥を発見した。
+
+**発見（実挙動の欠陥）.** `internal/engine/arbitrate.go` の `updateStream` は
+`q.Yield.SatsPerSecond`——**gross（手数料控除前）**——を `arbitration.Yield` に渡していた。
+つまり**すべての配分判断が、ユーザーが受け取らない収益で比較されていた**。
+
+2つの市場の手数料は20倍違う: 採掘は1%のプール手数料、Akash は20%のプラットフォーム手数料。
+gross 同士の比較は推論を採掘に対して **0.99/0.80 ≈ 1.24倍 過大評価**する——
+**より少なく支払う市場へデバイスを送るのに十分な差**である。
+
+`provider.Yield.Effective()` は正しい値（net × confidence）を最初から計算しており、
+その doc は「which is what the arbitration engine uses for comparison」と明言していたが、
+**本番コードから一度も呼ばれていなかった**。
+
+**皮肉な点.** README はユーザーに対し「表面的な手数料率ではなく**実際にウォレットに届く
+BTC (net yield)** で比較せよ」と助言している。エンジン自身がその助言に従っていなかった。
+
+**是正.** `comparableYield` ヘルパーを新設し、クォートを net の値に変換して
+`YieldPerDevice` と `DefaultYield` の両方に適用。`NetSatsPerSecond` が未設定（0以下）の
+場合は gross にフォールバックする——プロバイダ契約では「手数料が無ければ net = gross」だが、
+手組みのクォートでは未設定になりうるため、無価値として扱う方が元の欠陥より悪い失敗になる。
+
+**テストが欠陥を固定していた.** 既存テストは gross が伝播することを主張していた
+（net 0.099 のクォートに対し `YieldPerDevice[cpu-0].SatsPerSecond = 0.1` を期待）。
+理由つきで net を要求する形に是正し、さらに
+`TestArbitration_ChoosesTheMarketThatPaysMoreNet` を追加——推論が gross では高く
+（1.10 対 1.00）net では低い（0.88 対 0.99）ケースで、エンジンが採掘を選ぶことを検証する。
+**空振り防止**として、修正前の1行に戻すとデバイスが `ai.akash`（少なく支払う市場）へ
+送られることを確認済み。
+
+**doc の是正.** `arbitration.Yield.SatsPerSecond` は「expected revenue rate」としか
+書かれておらず、市場間比較を目的とするパッケージで net/gross の別を呼び出し側の
+想像に委ねていた。呼び出し側が自市場の手数料控除後を渡す義務、エンジン自身は
+手数料モデルを持たないこと、Otedama の変換の所在を明記した。
+`provider.Yield.Effective()` の doc も「エンジンが呼ぶもの」という主張から、
+同値に至る2経路の説明へ改めた。
+
 ### Fixed (session 260 — 裁定比較の反対側を検算: **doc の GPU 収益比較表が、コード自身の定数に対して約780倍過大**だった)
 
 **発見の経路.** session 259 は裁定判断の採掘側を検証した。比較のもう一方 —

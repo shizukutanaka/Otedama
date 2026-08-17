@@ -75,9 +75,16 @@ type StreamID string
 // converting their native units (USD/hour, AKT/block, etc.) to this
 // common unit before quoting.
 type Yield struct {
-	// SatsPerSecond is the expected revenue rate. It must be non-negative;
-	// a zero yield means the stream does not currently accept the device
-	// but is not permanently unavailable.
+	// SatsPerSecond is the expected revenue rate, **net of whatever fees the
+	// caller's market charges**. Callers quote the figure the user actually
+	// receives: comparing one market's gross rate against another's is
+	// meaningless when their fees differ, and Otedama's two differ by a
+	// factor of twenty (a 1% pool fee against a 20% marketplace fee). The
+	// engine has no fee model of its own and cannot make that adjustment for
+	// you — see engine.comparableYield for the translation Otedama applies.
+	//
+	// It must be non-negative; a zero yield means the stream does not
+	// currently accept the device but is not permanently unavailable.
 	SatsPerSecond float64
 
 	// Confidence is a caller-supplied reliability score in [0, 1].

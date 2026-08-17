@@ -104,8 +104,16 @@ type Yield struct {
 	Confidence float64
 }
 
-// Effective returns the confidence-weighted net yield, which is what
-// the arbitration engine uses for comparison.
+// Effective returns the confidence-weighted net yield: the figure markets
+// are compared on.
+//
+// The engine reaches the same value by a different route — it copies
+// NetSatsPerSecond and Confidence into an arbitration.Yield (see
+// engine.comparableYield) and lets the arbitration package apply the
+// confidence weighting, so the comparison stays inside that package's own
+// scoring. This method is the direct form, used where a provider quote needs
+// to be ranked without building a Stream. Both compute net × confidence; if
+// you change one, change the other.
 func (y Yield) Effective() float64 {
 	if y.NetSatsPerSecond <= 0 || y.Confidence <= 0 {
 		return 0

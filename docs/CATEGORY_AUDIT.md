@@ -810,3 +810,29 @@ markets' price exposure.
 No behaviour changed.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 261 update — the arbitration decision compared gross revenue
+
+Sessions 259 and 260 verified the two yield quotes the arbitration engine
+weighs. This audits what the engine does with them, and found the defect
+those two sessions were set up to expose.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| E/F | **`internal/engine/arbitrate.go`'s `updateStream` passed `q.Yield.SatsPerSecond` — the gross, pre-fee rate — into `arbitration.Yield`, so every allocation decision compared revenue the user never receives.** The two markets' fees are twenty times apart: mining deducts a 1% pool fee, Akash deducts 20%. Comparing gross to gross overstates inference against mining by 0.99/0.80 ≈ 1.24×, which is more than enough to route a device to the market that pays it less. `provider.Yield.Effective()` had computed the correct figure (net × confidence) since it was written, and its own doc comment asserted "which is what the arbitration engine uses for comparison" — but no production code ever called it. | ✅ Fixed: new `comparableYield` helper translates a quote into the net figure (falling back to gross when `NetSatsPerSecond` is unset, so a hand-built quote is not silently valued at zero), used for both `YieldPerDevice` and `DefaultYield`. |
+| E | An existing test asserted the *gross* figure was propagated (`YieldPerDevice[cpu-0].SatsPerSecond = 0.1` from a quote whose net was 0.099) — it pinned the defect in place. | ✅ Fixed: the assertion now requires the net figure and says why, and `TestArbitration_ChoosesTheMarketThatPaysMoreNet` proves the behaviour end to end with a case where inference quotes the higher gross (1.10 vs 1.00) but the lower net (0.88 vs 0.99). Confirmed non-vacuous: restoring the pre-fix line routes the device to `ai.akash`, the market that pays less. |
+| V | The project's own README tells users to choose a pool by "**net BTC retained**, not the headline fee rate" — advice the engine was not following. | ✅ Fixed by the above; the code now applies the comparison the documentation recommends. |
+| F | `arbitration.Yield.SatsPerSecond`'s doc described the field only as "the expected revenue rate", leaving net-vs-gross to the caller's imagination in a package whose entire purpose is cross-market comparison. | ✅ Fixed (doc): the field now states that callers must quote net of their market's fees, that the engine has no fee model of its own, and where Otedama's translation lives. `provider.Yield.Effective()`'s doc now describes the two equivalent routes to the same value instead of claiming to be the one the engine calls. |
+
+Verified correct by reading, not assumed: the confidence weighting
+(`Yield.Effective` in both packages multiplies rate by confidence and
+treats zero confidence as zero yield), the hysteresis comparison being made
+in policy-adjusted score space rather than raw yield, the `MinYieldSatsPerSec`
+floor's boundary (a stream exactly at the floor qualifies), `ForegoneSatsPerSec`
+being measured against the highest raw yield among floor-clearing candidates
+(a floor-excluded stream can never be that maximum, so the doc holds), and
+the deterministic device ordering.
+
+All 24 packages build, vet, and test green.

@@ -170,6 +170,36 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 	return pruned
 }
 
+// comparableYield converts a provider quote's yield into the figure the
+// arbitration engine compares markets on: revenue **after** the provider's
+// fee, which is what the user actually receives.
+//
+// This mattered more than it looks (fixed session 261). Until now this
+// translation passed `q.Yield.SatsPerSecond` — the *gross*, pre-fee rate —
+// so every allocation decision compared revenue nobody collects. The two
+// markets' fees are not close: mining deducts a 1% pool fee, Akash deducts
+// 20%. Comparing gross to gross therefore overstates inference against
+// mining by 0.99/0.80 ≈ 1.24×, enough to route a device to the market that
+// pays it less. `provider.Yield.Effective()` had computed the right figure
+// (net × confidence) all along and its doc said the arbitration engine used
+// it — but nothing in production ever called it.
+//
+// A quote that leaves NetSatsPerSecond at zero falls back to the gross rate.
+// The provider contract says net "equals SatsPerSecond" when there is no
+// explicit fee, but a hand-built quote can leave it unset, and silently
+// treating such a stream as worthless would be a worse failure than the bug
+// this replaces.
+func comparableYield(y provider.Yield) arbitration.Yield {
+	sats := y.NetSatsPerSecond
+	if sats <= 0 {
+		sats = y.SatsPerSecond
+	}
+	return arbitration.Yield{
+		SatsPerSecond: sats,
+		Confidence:    y.Confidence,
+	}
+}
+
 // updateStream folds one provider quote into the live streams map,
 // keyed by "providerID:deviceID". It returns the key it wrote, so the caller
 // can track per-stream freshness for staleness pruning.
@@ -184,15 +214,9 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 		existing.YieldPerDevice = make(map[string]arbitration.Yield)
 	}
 	if q.DeviceID != "" {
-		existing.YieldPerDevice[q.DeviceID] = arbitration.Yield{
-			SatsPerSecond: q.Yield.SatsPerSecond,
-			Confidence:    q.Yield.Confidence,
-		}
+		existing.YieldPerDevice[q.DeviceID] = comparableYield(q.Yield)
 	}
-	existing.DefaultYield = arbitration.Yield{
-		SatsPerSecond: q.Yield.SatsPerSecond,
-		Confidence:    q.Yield.Confidence,
-	}
+	existing.DefaultYield = comparableYield(q.Yield)
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
 	m[key] = existing
 	return key
