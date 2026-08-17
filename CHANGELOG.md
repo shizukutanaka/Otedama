@@ -10,6 +10,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 263 — XDG 仕様と同等実装に照合: **相対パスの `XDG_DATA_HOME` がそのまま使われ、暗号化ウォレットシードの置き場所がカレントディレクトリ依存になっていた**)
+
+**発見の経路.** 4層設定モデル（デフォルト→ファイル→env→フラグ）を監査し、そこが生成する
+2つのファイルシステムパス——データディレクトリと設定ファイルの位置——の出所に絞った。
+どちらも XDG Base Directory Specification が契約を定める環境変数から導かれるが、
+**どちらもその契約を緩く扱っていた**。
+
+**発見（実挙動の欠陥）.** `config.DefaultDataDir` は `$XDG_DATA_HOME`（および `%APPDATA%`、
+`$HOME`）の中身を検査せずそのまま使っていた。XDG 仕様はこれらが絶対パスであることを要求し、
+**同等の Go 実装は2つとも強制している**:
+
+- 標準ライブラリ `os.UserCacheDir`/`os.UserConfigDir` は
+  `"path in $XDG_CACHE_HOME is relative"` をエラーとして返す。
+- adrg/xdg（Go における事実上の XDG ライブラリ）は `filepath.IsAbs` で非絶対パスを
+  静かに落とし、次の候補へフォールバックする。
+
+Otedama はどちらもしていなかったため、`XDG_DATA_HOME=relative/share` は
+データディレクトリ `relative/share/otedama` を生む——**プロセスのカレントディレクトリ基準**で
+解決される。このディレクトリには `wallet.dat`、すなわち AES-GCM で暗号化された BIP-39
+シードが置かれる。同じインストールが、起動した場所によって別のウォレットを持つことになる。
+
+**同じ相対パスが systemd ユニットにも流れていた.** `internal/daemon` が生成する
+`ReadWritePaths=<相対パス>` について `systemd.exec(5)` は *"The paths must be absolute."*
+と定める——ユニットはロードすらされない。
+
+**ドキュメントが第3の経路を作っていた.** `docs/API.md` は設定ファイル例に
+`data_dir: ~/.local/share/otedama` を載せていた。**コードベースのどこにも `~` 展開は存在せず**
+（リポジトリ全体を確認）、YAML も展開しない。つまりドキュメント通りに書くと、カレント
+ディレクトリ配下に文字通り `~` という名前のディレクトリが作られ、そこに暗号化シードが置かれる。
+
+**是正.**
+1. `DefaultDataDir` は各変数を `filepath.IsAbs` が受理する場合にのみ使い、それ以外は次の候補へ
+   フォールバックする（stdlib のハードエラーではなく adrg/xdg 側の挙動を採用——
+   `XDG_DATA_HOME` のゴミ値で `$HOME` が健全なのにウォレットを無効化すべきではない）。
+2. 明示指定（`--data-dir`/`OTEDAMA_DATA_DIR`/`data_dir`）の相対パスは `Config.Validate` が
+   要件を名指しして拒否する。サービス起動時ではなく設定読み込み時に失敗する。
+3. `docs/API.md` の例を絶対パスに直し、`~` が展開されないことを明記
+   （`config.yaml.example` は `data_dir: ""` で元から正しかった）。
+
+**併せて是正した非対称性.** `defaultConfigPath` は `XDG_CONFIG_HOME` を**完全に無視**していた
+——`DefaultDataDir` が `XDG_DATA_HOME` を尊重する一方で。XDG ディレクトリを移設した運用者は、
+データディレクトリだけが移動し、設定ファイルは**黙って見つからなくなる**（設定ファイルの不在は
+エラーではなく「デフォルトを使う」という正常系のため、警告すら出ない）。絶対パスの
+`XDG_CONFIG_HOME` を尊重するよう修正。`$HOME/.config/otedama/config.yaml` へのフォールバックは
+全プラットフォームで不変なので、既存インストールのファイルが見つからなくなることはない。
+文字列結合も `filepath.Join` に置き換えた。
+
+**テストの空白.** `DefaultDataDir` の XDG 分岐には**テストが1件も無かった**——既存テストは
+`$HOME` フォールバックのみを通っていた。絶対・相対の両ケース、および設定パス側の対応する
+3ケースを追加。
+
+**空振りでないことを確認済み.** `filepath.IsAbs` ガードを外すと `DefaultDataDir` は
+`"relative/share/otedama"` を返しテストがその値を名指しで失敗する。検証を外すと `Validate` は
+`./data` に対し nil を返す。`XDG_CONFIG_HOME` 分岐を外すと設定パスのテストが失敗する。
+
+読んで確認した（仮定していない）点: 層の順序と origin 追跡、float フィールドのゼロ値の扱い、
+`EnvWarnings` が `ResolveWithOrigins` の解析対象と同一集合を見ていること（共有テーブル1つなので
+乖離しえない）、プール URL のスキーム検査、`Validate` が全問題を集約して返すこと。
+
+全 24 パッケージが build・vet・test green。
+
+**一次資料 / 比較対象**: Go 標準ライブラリ `os.UserCacheDir`/`os.UserConfigDir`
+（`$(go env GOROOT)/src/os/file.go`、XDG Base Directory Specification を引用のうえ
+相対パスをエラーとする）; adrg/xdg `internal/pathutil`; systemd `man/systemd.exec.xml`
+の `ReadWritePaths=` 節。
+
 ### Docs / Tests (session 262 — 関連ソフトウェアとカーネル ABI を基準に GPU 検出を監査: **実装は正しいが、「なぜ一般的な流儀と違うのか」がどこにも書かれていなかった**——善意のリグレッションを招く形の欠落)
 
 **発見の経路.** ユーザーが加えた「関連ソフトウェア」という視点で、`internal/hal/gpu_linux.go`

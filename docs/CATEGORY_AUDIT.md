@@ -866,3 +866,36 @@ thermal sysfs at all — ADR-008 scopes that as future work (v3.6, ~90h) and
 makes no claim to the contrary.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 263 update — configuration paths against the XDG specification and comparable software
+
+Audit of the four-layer configuration model in `internal/config`, focused on
+where the two filesystem paths it produces — the data directory and the
+config-file location — come from. Both derive from environment variables
+whose contract is set by the XDG Base Directory Specification, and both
+handled that contract loosely.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `DefaultDataDir` used `$XDG_DATA_HOME` (and `%APPDATA%`, and `$HOME`) verbatim, whatever it contained. XDG requires these to be absolute, and both comparable Go implementations enforce it: the standard library's `os.UserCacheDir`/`os.UserConfigDir` return `"path in $XDG_CACHE_HOME is relative"`, and adrg/xdg — the de-facto Go XDG library — filters non-absolute candidates with `filepath.IsAbs` and falls back. Otedama did neither, so `XDG_DATA_HOME=relative/share` yielded the data dir `relative/share/otedama`, resolved against the process working directory. That directory holds `wallet.dat`, the AES-GCM-encrypted BIP-39 seed. | ✅ Fixed: each variable is used only when `filepath.IsAbs` accepts it, otherwise it falls through to the next candidate — matching adrg/xdg's fall-back behaviour rather than the stdlib's hard error, since a junk `XDG_DATA_HOME` should not disable the wallet when `$HOME` is fine. |
+| S | The same relative path reached `internal/daemon`'s systemd unit as `ReadWritePaths=<relative>`. `systemd.exec(5)` on `ReadWritePaths=`: *"The paths must be absolute."* The unit would not load at all. | ✅ Fixed upstream by the above; explicit `--data-dir`/`OTEDAMA_DATA_DIR`/`data_dir` values are now rejected by `Config.Validate` with a message naming the requirement, so the remaining route to a relative path fails at config load instead of at service start. |
+| S | `docs/API.md` gave `data_dir: ~/.local/share/otedama` as the example config-file value. Nothing in the codebase expands `~` (verified repo-wide) and YAML does not either, so following the documentation created a literal directory named `~` under the working directory and put the encrypted seed in it. | ✅ Fixed: the example uses an absolute path and states that neither Otedama nor YAML expands `~`. `config.yaml.example` was already correct (`data_dir: ""`). |
+| R | `defaultConfigPath` ignored `XDG_CONFIG_HOME` entirely while `DefaultDataDir` honoured `XDG_DATA_HOME`. An operator who relocates their XDG directories therefore had the data dir move and the config file quietly not be found — silently, because an absent config file is a normal "use defaults" outcome, not an error. | ✅ Fixed: `XDG_CONFIG_HOME` is honoured when absolute. The `$HOME/.config/otedama/config.yaml` fallback is unchanged on every platform, so no existing installation's file stops being found. Also replaced string concatenation with `filepath.Join`. |
+| R | `DefaultDataDir`'s XDG branch had no test at all — every existing test exercised only the `$HOME` fallback. | ✅ Fixed: both the absolute and the relative case are now pinned, along with the config-path equivalents. |
+
+Non-vacuousness confirmed the usual way: with the `filepath.IsAbs` guard
+removed, `DefaultDataDir` returns `"relative/share/otedama"` and the test
+fails naming that value; with the validation removed, `Validate` returns nil
+for `./data`; with the `XDG_CONFIG_HOME` branch removed, the config path test
+fails.
+
+Verified correct by reading, not assumed: the layer ordering
+(defaults → file → env → flags) and its origin tracking, the zero-value
+caveat on float fields, `EnvWarnings` covering exactly the set
+`ResolveWithOrigins` parses (one shared table, so they cannot drift), the
+pool-URL scheme check, and `Validate` accumulating all issues rather than
+returning the first.
+
+All 24 packages build, vet, and test green.

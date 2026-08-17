@@ -5,6 +5,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -1186,5 +1188,92 @@ func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
 	}
 	if o.ElectricityPricePerKWh != OriginFile {
 		t.Errorf("ElectricityPricePerKWh origin = %v, want file", o.ElectricityPricePerKWh)
+	}
+}
+
+// ============================================================================
+// Data-dir base directories must be absolute (session 263).
+//
+// The XDG Base Directory Specification requires absolute paths in these
+// variables, and the two comparable Go implementations both refuse a relative
+// one — os.UserCacheDir/os.UserConfigDir return "path in $XDG_CACHE_HOME is
+// relative", and adrg/xdg filters non-absolute candidates out with
+// filepath.IsAbs. Otedama used to take the value as-is. That matters more here
+// than in a general-purpose library: this directory holds wallet.dat, the
+// encrypted BIP-39 seed, so a working-directory-relative path means the same
+// installation keeps different wallets depending on where it was started.
+// ============================================================================
+
+// TestDefaultDataDir_IgnoresRelativeXDGDataHome pins the fix. A relative
+// XDG_DATA_HOME must be treated as unset, falling through to $HOME.
+func TestDefaultDataDir_IgnoresRelativeXDGDataHome(t *testing.T) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		t.Skip("XDG_DATA_HOME is only consulted on Linux and other Unix-likes")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory in this environment")
+	}
+	t.Setenv("XDG_DATA_HOME", "relative/share")
+
+	got := DefaultDataDir()
+	if !filepath.IsAbs(got) && got != "" {
+		t.Errorf("DefaultDataDir() = %q, which is neither absolute nor empty; "+
+			"a relative XDG_DATA_HOME must not be used verbatim", got)
+	}
+	if want := filepath.Join(home, ".local", "share", "otedama"); got != want {
+		t.Errorf("DefaultDataDir() = %q, want %q (relative XDG_DATA_HOME ignored, $HOME used)", got, want)
+	}
+}
+
+// TestDefaultDataDir_UsesAbsoluteXDGDataHome is the positive counterpart: a
+// well-formed XDG_DATA_HOME is still honoured, so the fix narrows nothing
+// legitimate. This branch had no test at all before session 263.
+func TestDefaultDataDir_UsesAbsoluteXDGDataHome(t *testing.T) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		t.Skip("XDG_DATA_HOME is only consulted on Linux and other Unix-likes")
+	}
+	base := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", base)
+
+	if got, want := DefaultDataDir(), filepath.Join(base, "otedama"); got != want {
+		t.Errorf("DefaultDataDir() = %q, want %q", got, want)
+	}
+}
+
+// TestValidate_RejectsRelativeDataDir covers the other route to a relative
+// data dir: an explicit --data-dir/OTEDAMA_DATA_DIR/data_dir. Accepting it
+// quietly puts the encrypted seed somewhere that depends on the launch
+// directory, and makes `otedama service install` write a relative
+// ReadWritePaths= that systemd refuses to load ("The paths must be
+// absolute", systemd.exec(5)).
+func TestValidate_RejectsRelativeDataDir(t *testing.T) {
+	cfg := Resolve(Config{}, nil, FlagValues{
+		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		DataDir:        "./data",
+	})
+	if cfg.DataDir != "./data" {
+		t.Fatalf("precondition: DataDir = %q, want ./data", cfg.DataDir)
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil for a relative data_dir; want an error")
+	}
+	if !strings.Contains(err.Error(), "data_dir") || !strings.Contains(err.Error(), "absolute") {
+		t.Errorf("Validate() error = %v, want it to name data_dir and the absolute-path requirement", err)
+	}
+}
+
+// TestValidate_AcceptsAbsoluteDataDirAndEmpty guards the two non-error cases:
+// a normal absolute path, and "" — which means no base directory could be
+// determined at all, a disclosed degraded mode rather than a config error.
+func TestValidate_AcceptsAbsoluteDataDirAndEmpty(t *testing.T) {
+	for _, dir := range []string{"/var/lib/otedama", ""} {
+		cfg := Defaults()
+		cfg.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		cfg.DataDir = dir
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() with DataDir=%q = %v, want nil", dir, err)
+		}
 	}
 }

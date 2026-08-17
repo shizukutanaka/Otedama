@@ -22,7 +22,7 @@ otedama run [flags]
 |------|------|---------|-------------|
 | `--bitcoin-address` | string | (required) | Bitcoin address for mining rewards. Bech32 (`bc1...`) or legacy (`1.../3...`). |
 | `--config` | string | `~/.config/otedama/config.yaml` | Path to YAML configuration file. Optional. |
-| `--data-dir` | string | `~/.local/share/otedama` | Directory for wallet and persistent state. |
+| `--data-dir` | string | `$XDG_DATA_HOME/otedama`, else `$HOME/.local/share/otedama` | Directory for wallet and persistent state. Must be absolute — it holds the encrypted wallet seed, so a relative path would follow the working directory. Neither Otedama nor YAML expands `~`. |
 | `--language` | string | `en` | UI language. BCP 47 tag (e.g. `ja`, `zh-CN`). |
 | `--log-level` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. |
 | `--log-format` | string | `text` | Log output format: `text` or `json`. |
@@ -137,7 +137,9 @@ Location (in order of precedence):
 
 1. `--config` command-line flag.
 2. `OTEDAMA_CONFIG` environment variable.
-3. `~/.config/otedama/config.yaml`.
+3. `$XDG_CONFIG_HOME/otedama/config.yaml`, when that variable holds an
+   absolute path.
+4. `$HOME/.config/otedama/config.yaml` — the fallback on every platform.
 
 Format: YAML. See `config.yaml.example` for a fully-commented template.
 
@@ -153,7 +155,11 @@ log_format: text           # text | json
 language: en               # en, ja, zh, ko, es, fr, de, pt, ru, ar
 
 # Data directory for wallet and persistent state.
-data_dir: ~/.local/share/otedama
+# Must be an absolute path. YAML does not expand `~`, and Otedama does not
+# either, so `~/.local/share/otedama` here would mean a literal directory
+# named "~" — it is rejected at config load. Leave empty ("") to get the
+# platform default instead of writing the path out.
+data_dir: /home/alice/.local/share/otedama
 
 # Mining pools, tried in the order listed (list position is the priority;
 # there is no separate priority field).

@@ -331,3 +331,53 @@ func TestSafeDisplay_AllControlCharsBecomesDefault(t *testing.T) {
 		t.Errorf("safeDisplay(all-control) = %q, want '(default)'", got)
 	}
 }
+
+// TestDefaultConfigPath_HonoursXDGConfigHome pins the session-263 fix. Before
+// it, XDG_CONFIG_HOME was ignored entirely while config.DefaultDataDir
+// honoured XDG_DATA_HOME — so relocating XDG directories moved the data dir
+// but left the config file unfound, silently, because a missing config file
+// is a normal "use defaults" outcome rather than an error.
+func TestDefaultConfigPath_HonoursXDGConfigHome(t *testing.T) {
+	t.Setenv("OTEDAMA_CONFIG", "")
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+
+	got := defaultConfigPath()
+	want := filepath.Join(base, "otedama", "config.yaml")
+	if got != want {
+		t.Errorf("defaultConfigPath() = %q, want %q", got, want)
+	}
+}
+
+// TestDefaultConfigPath_IgnoresRelativeXDGConfigHome mirrors the data-dir
+// rule: the XDG Base Directory Specification requires absolute paths, and a
+// relative one would resolve against the working directory, so it must be
+// treated as unset rather than used verbatim.
+func TestDefaultConfigPath_IgnoresRelativeXDGConfigHome(t *testing.T) {
+	t.Setenv("OTEDAMA_CONFIG", "")
+	t.Setenv("XDG_CONFIG_HOME", "relative/config")
+
+	got := defaultConfigPath()
+	if got != "" && !filepath.IsAbs(got) {
+		t.Errorf("defaultConfigPath() = %q, which is neither absolute nor empty", got)
+	}
+	if strings.Contains(got, "relative/config") {
+		t.Errorf("defaultConfigPath() = %q, want the relative XDG_CONFIG_HOME ignored", got)
+	}
+}
+
+// TestDefaultConfigPath_FallsBackToHomeConfig guards the unchanged path: with
+// no XDG_CONFIG_HOME, the location stays $HOME/.config/otedama/config.yaml on
+// every platform, so no existing installation's file stops being found.
+func TestDefaultConfigPath_FallsBackToHomeConfig(t *testing.T) {
+	t.Setenv("OTEDAMA_CONFIG", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory in this environment")
+	}
+
+	if got, want := defaultConfigPath(), filepath.Join(home, ".config", "otedama", "config.yaml"); got != want {
+		t.Errorf("defaultConfigPath() = %q, want %q", got, want)
+	}
+}

@@ -553,25 +553,46 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 // example, no home directory and no APPDATA), in which case the caller
 // must treat data persistence — including the Lightning wallet — as
 // unavailable until a data dir is configured explicitly.
+//
+// # Only absolute base directories are accepted (fixed session 263)
+//
+// Every environment variable consulted here (XDG_DATA_HOME, APPDATA, HOME)
+// is used only when it holds an absolute path; a relative value is ignored
+// as if unset, falling through to the next candidate. This matches what the
+// XDG Base Directory Specification requires and what comparable
+// implementations do: Go's own os.UserCacheDir/os.UserConfigDir return an
+// error for "path in $XDG_CACHE_HOME is relative", and adrg/xdg — the
+// de-facto Go XDG library — silently drops non-absolute candidates
+// (filepath.IsAbs filter in internal/pathutil) and falls back.
+//
+// Otedama previously used the value as-is, which is worse here than in a
+// general-purpose library, because this directory holds wallet.dat — the
+// AES-GCM-encrypted BIP-39 seed. A relative path resolves against the
+// process working directory, so the same installation would keep separate
+// wallets depending on where it was started from, and `otedama service
+// install` would emit `ReadWritePaths=<relative>` into the systemd unit,
+// which systemd rejects outright ("The paths must be absolute",
+// systemd.exec(5)) — an unloadable unit rather than a working service.
 func DefaultDataDir() string {
+	// filepath.IsAbs("") is false, so these checks subsume the "unset" case.
 	switch runtime.GOOS {
 	case "windows":
-		if appData := os.Getenv("APPDATA"); appData != "" {
+		if appData := os.Getenv("APPDATA"); filepath.IsAbs(appData) {
 			return filepath.Join(appData, "Otedama")
 		}
 		return ""
 	case "darwin":
 		home, err := os.UserHomeDir()
-		if err != nil {
+		if err != nil || !filepath.IsAbs(home) {
 			return ""
 		}
 		return filepath.Join(home, "Library", "Application Support", "Otedama")
 	default: // linux and other Unix-likes
-		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+		if xdg := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(xdg) {
 			return filepath.Join(xdg, "otedama")
 		}
 		home, err := os.UserHomeDir()
-		if err != nil {
+		if err != nil || !filepath.IsAbs(home) {
 			return ""
 		}
 		return filepath.Join(home, ".local", "share", "otedama")
@@ -634,6 +655,21 @@ func (c Config) Validate() error {
 		default:
 			issues = append(issues, fmt.Sprintf("pools[%d].payout_scheme %q is not one of fpps, pplns, tides, solo", i, p.PayoutScheme))
 		}
+	}
+
+	// An explicitly configured data_dir must be absolute. DefaultDataDir
+	// already guarantees this for the fallback path; the remaining way to get
+	// a relative one is --data-dir/OTEDAMA_DATA_DIR/data_dir. It is rejected
+	// rather than accepted quietly because this directory holds the encrypted
+	// wallet seed: a relative path resolves against the process working
+	// directory, so the wallet's location silently depends on where Otedama
+	// was launched from, and the systemd unit written by `otedama service
+	// install` would carry a relative ReadWritePaths=, which systemd refuses
+	// to load. Empty is not an error here — it means "no data dir could be
+	// determined", which disables persistence with its own disclosure.
+	if c.DataDir != "" && !filepath.IsAbs(c.DataDir) {
+		issues = append(issues, fmt.Sprintf(
+			"data_dir %q must be an absolute path (it holds the encrypted wallet seed; a relative path would depend on the working directory)", c.DataDir))
 	}
 
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
