@@ -10,6 +10,40 @@
 // system access to /sys/class/drm, which is available on all modern
 // Linux kernels (5.4+) without any special permissions.
 //
+// # Why render nodes and not card nodes (documented session 262)
+//
+// This driver enumerates /sys/class/drm/renderD*, not card*. That is a
+// deliberate narrowing, and it differs from what general-purpose hardware
+// inventories do — jaypipes/ghw, the usual Go reference for this, scans
+// card* and filters connector entries by rejecting names containing "-".
+// The distinction is load-bearing here, so it is worth stating rather than
+// leaving for someone to "fix" toward the more common pattern:
+//
+//   - The kernel always creates a primary node: "The primary node is always
+//     created and called card<num>". A render node exists only when the
+//     driver asks for one — "If a driver supports render nodes, it must
+//     advertise it via the DRIVER_RENDER DRM driver capability"
+//     (Documentation/gpu/drm-uapi.rst).
+//   - So card* answers "is there a DRM device here", which includes
+//     display-only hardware a compute scheduler must never consider: the
+//     BMC display chips on servers (ast, mgag200), simpledrm/efifb
+//     framebuffers, and similar. renderD* answers "will this device accept
+//     render clients", which is the question Otedama is actually asking.
+//   - Every GPU that could plausibly do compute advertises DRIVER_RENDER:
+//     amdgpu, i915/xe, and nouveau in-tree, and NVIDIA's proprietary stack
+//     sets it unconditionally in nvidia-drm's drm_driver
+//     (DRIVER_GEM | DRIVER_RENDER, verified in NVIDIA/open-gpu-kernel-modules,
+//     kernel-open/nvidia-drm/nvidia-drm-drv.c). Narrowing to render nodes
+//     therefore costs no real GPU.
+//
+// A side benefit: connector directories are named after the card they hang
+// off (card0-HDMI-A-1), so the "renderD" prefix excludes them for free —
+// the trap a card* scan has to guard against explicitly.
+//
+// The consequence to be aware of: a DRM device whose driver does not
+// advertise DRIVER_RENDER is invisible to Otedama by design, not by
+// oversight (docs/KNOWN_LIMITATIONS.md §4).
+//
 // # Why not CGO/OpenCL?
 //
 // CGO adds build complexity, cross-compilation difficulty, and a larger
@@ -151,7 +185,12 @@ func inferVendorName(vendorID string) string {
 // inferModel reads the product name from sysfs, falling back to the
 // PCI device ID if no name is available.
 func inferModel(devicePath, vendorID string) string {
-	// Try uevent for DRIVER, which sometimes contains the model.
+	// The PCI uevent carries PCI_ID=<vendor>:<device> (alongside DRIVER,
+	// PCI_SLOT_NAME and friends). Nothing in sysfs gives a marketing name
+	// without a PCI ID database, so the vendor plus that pair is the most
+	// specific honest label available. (This comment used to say it read
+	// DRIVER "which sometimes contains the model" — DRIVER holds the module
+	// name, "amdgpu" or "nvidia", and the code has always parsed PCI_ID.)
 	uevent := readSysFile(filepath.Join(devicePath, "uevent"))
 	for _, line := range strings.Split(uevent, "\n") {
 		if pciID, ok := strings.CutPrefix(line, "PCI_ID="); ok {

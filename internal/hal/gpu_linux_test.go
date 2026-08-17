@@ -474,3 +474,107 @@ func TestGPULinuxDriver_Enumerate_DeduplicatesCanonicalPaths(t *testing.T) {
 		t.Errorf("expected 1 deduplicated GPU, got %d", len(devs))
 	}
 }
+
+// ============================================================================
+// Render-node scope — the deliberate narrowing documented in the package doc
+// (session 262). These pin the *intent*, so that a change toward the more
+// common card*-scanning pattern fails loudly instead of quietly starting to
+// report server display chips as GPUs.
+// ============================================================================
+
+// TestEnumerate_IgnoresDisplayOnlyDeviceWithNoRenderNode covers the case the
+// render-node choice exists for: a DRM device whose driver does not advertise
+// DRIVER_RENDER (a BMC display chip such as ast/mgag200, or a simpledrm
+// framebuffer) gets a card node but no render node. The kernel guarantees the
+// card node is always created, so scanning card* would surface this device as
+// a GPU and offer it to the arbitration engine as compute capacity.
+func TestEnumerate_IgnoresDisplayOnlyDeviceWithNoRenderNode(t *testing.T) {
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = root
+	defer func() { drmBasePath = orig }()
+
+	// card0: a display-only device — card node present, no matching renderD.
+	displayOnly := filepath.Join(root, "card0", "device")
+	if err := os.MkdirAll(displayOnly, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 0x1a03 = ASPEED, the usual server BMC display chip.
+	if err := os.WriteFile(filepath.Join(displayOnly, "vendor"), []byte("0x1a03\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(devs) != 0 {
+		t.Errorf("detected %d device(s) from a card node with no render node; want 0. "+
+			"A driver without DRIVER_RENDER accepts no render clients, so it is not "+
+			"compute capacity — see the package doc before widening this scan.", len(devs))
+	}
+}
+
+// TestEnumerate_IgnoresConnectorSubdirectories checks the free win the
+// renderD prefix gives: connector directories are named after their card
+// (card0-HDMI-A-1, card0-DP-2), so they can never be mistaken for devices.
+// A card* scan has to filter these explicitly.
+func TestEnumerate_IgnoresConnectorSubdirectories(t *testing.T) {
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = root
+	defer func() { drmBasePath = orig }()
+
+	for _, name := range []string{"card0", "card0-HDMI-A-1", "card0-DP-2", "version"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(devs) != 0 {
+		t.Errorf("detected %d device(s) from connector/metadata entries; want 0", len(devs))
+	}
+}
+
+// TestEnumerate_RenderCapableGPUIsDetectedAlongsideItsCardNode is the
+// positive counterpart: a real GPU exposes both nodes, and it must be
+// reported exactly once, from the render node.
+func TestEnumerate_RenderCapableGPUIsDetectedAlongsideItsCardNode(t *testing.T) {
+	root := t.TempDir()
+	orig := drmBasePath
+	drmBasePath = root
+	defer func() { drmBasePath = orig }()
+
+	for _, node := range []string{"card1", "renderD128"} {
+		devDir := filepath.Join(root, node, "device")
+		if err := os.MkdirAll(devDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	d := &GPULinuxDriver{}
+	devs, err := d.Enumerate(context.Background())
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(devs) != 1 {
+		t.Fatalf("detected %d device(s), want exactly 1 (the render node; the card "+
+			"node of the same GPU must not double-count)", len(devs))
+	}
+	if got := devs[0].Identity().ID; got != "gpu-renderD128" {
+		t.Errorf("device ID = %q, want gpu-renderD128", got)
+	}
+	if got := devs[0].Identity().Vendor; got != "NVIDIA" {
+		t.Errorf("vendor = %q, want NVIDIA (nvidia-drm sets DRIVER_RENDER, so NVIDIA "+
+			"GPUs do appear as render nodes)", got)
+	}
+}

@@ -836,3 +836,33 @@ being measured against the highest raw yield among floor-clearing candidates
 the deterministic device ordering.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 262 update — Linux GPU detection against the kernel ABI and comparable software
+
+Audit of `internal/hal/gpu_linux.go` against the kernel's own DRM UAPI
+documentation and against how comparable software enumerates GPUs. The
+implementation is correct; what was missing was any record of *why* it
+differs from the common pattern, which is the kind of gap that invites a
+well-meant regression.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| R | Otedama scans `/sys/class/drm/renderD*`; jaypipes/ghw — the usual Go reference for hardware inventory — scans `card*` and filters connector entries by rejecting names containing `-`. Nothing in the code explained the divergence, so "align with ghw" looks like a cleanup. It is not: per `Documentation/gpu/drm-uapi.rst`, "The primary node is always created and called card<num>" while a render node exists only if the driver "advertise[s] it via the DRIVER_RENDER DRM driver capability". Scanning `card*` would therefore surface display-only DRM devices — server BMC chips (ast, mgag200), simpledrm/efifb framebuffers — to the arbitration engine as compute capacity. | ✅ Fixed (doc + tests): the package doc states the choice, its kernel-ABI basis, and the consequence. Three tests pin the intent — a card node with no render node yields no device, connector directories yield none, and a GPU exposing both nodes is counted once from the render node. Confirmed non-vacuous: switching the prefix to `card` fails all three, and the connector case then reports **3** devices for one GPU, which is exactly the trap a `card*` scan must guard against. |
+| R | The narrowing costs no real GPU, but that had never been checked against the vendor that matters most. | ❎ Verified: NVIDIA's proprietary stack sets `DRIVER_GEM \| DRIVER_RENDER` unconditionally in `nvidia-drm`'s `drm_driver` (NVIDIA/open-gpu-kernel-modules, `kernel-open/nvidia-drm/nvidia-drm-drv.c`), so NVIDIA GPUs do appear as render nodes. amdgpu, i915/xe and nouveau advertise it in-tree. |
+| R | `inferModel`'s comment said it tries "uevent for DRIVER, which sometimes contains the model". The code has always parsed `PCI_ID=`, and `DRIVER` holds the module name (`amdgpu`, `nvidia`) — never a model. | ✅ Fixed (doc): the comment now describes what is read and why a PCI vendor:device pair is the most specific honest label available without a PCI ID database. |
+| R | KNOWN_LIMITATIONS §4 said detection "reads Linux DRM sysfs (`/sys/class/drm`)", which implies every DRM device. | ✅ Fixed: §4 now says render nodes specifically, and states that display-only devices are excluded by design rather than missed. |
+
+Verified correct by reading, not assumed: the PCI `vendor` attribute path
+(`renderD*/device/vendor` resolves into the PCI device directory, where
+`vendor`/`device`/`uevent` live), the symlink-canonicalisation dedup, the
+vendor-ID table (0x10de/0x1002/0x8086), `SHA256d: false` with its
+oversubscription rationale (session 243), and `Enumerate` treating an
+absent DRM tree as "no GPUs" rather than an error.
+
+Not a defect, recorded for context: `internal/hal` reads no power or
+thermal sysfs at all — ADR-008 scopes that as future work (v3.6, ~90h) and
+makes no claim to the contrary.
+
+All 24 packages build, vet, and test green.

@@ -144,8 +144,17 @@ continue to use the existing inline `handshake` path.
 ## 4. GPU detection is Linux-only, and detected GPUs cannot mine
 
 **What:** Hardware detection of GPUs (`internal/hal`) reads Linux DRM
-sysfs (`/sys/class/drm`). On Windows and macOS, the GPU driver is a
-no-op stub that detects no GPUs. Separately, on any platform: no
+sysfs — specifically the **render nodes** (`/sys/class/drm/renderD*`), not
+the card nodes. The kernel always creates a card node for any DRM device
+but creates a render node only for drivers that advertise `DRIVER_RENDER`,
+so this narrowing is what separates a GPU that accepts compute clients from
+display-only hardware such as a server's BMC chip or a simpledrm
+framebuffer. Every GPU that could plausibly do compute advertises it
+(amdgpu, i915/xe, nouveau, and NVIDIA's nvidia-drm), so nothing usable is
+missed; a DRM device without render support is excluded by design
+(clarified session 262, with the reasoning and its sources in
+`internal/hal/gpu_linux.go`'s package doc). On Windows and macOS, the GPU
+driver is a no-op stub that detects no GPUs. Separately, on any platform: no
 CUDA, ROCm, or Vulkan compute dispatch is implemented anywhere in this
 codebase, so a detected GPU always reports `Capabilities.SHA256d =
 false` (corrected session 243 — this field was previously hardcoded

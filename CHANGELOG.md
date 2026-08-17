@@ -10,6 +10,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs / Tests (session 262 — 関連ソフトウェアとカーネル ABI を基準に GPU 検出を監査: **実装は正しいが、「なぜ一般的な流儀と違うのか」がどこにも書かれていなかった**——善意のリグレッションを招く形の欠落)
+
+**発見の経路.** ユーザーが加えた「関連ソフトウェア」という視点で、`internal/hal/gpu_linux.go`
+の Linux GPU 検出を (a) カーネル自身の DRM UAPI ドキュメントと (b) 同種の他ソフトウェアが
+どう列挙しているか、の両方に照らして監査した。
+
+**発見.** Otedama は `/sys/class/drm/renderD*` を走査する。一方 Go でのハードウェア
+インベントリの定番である jaypipes/ghw は `card*` を走査し、名前に `-` を含むものを
+コネクタとして弾く。**この差の理由がコード上のどこにも書かれていない**ため、
+「ghw に合わせる」は無害なクリーンアップに見える。実際には違う:
+
+- `Documentation/gpu/drm-uapi.rst` いわく "The primary node is always created and called
+  card<num>"、対してレンダーノードはドライバが "advertise it via the DRIVER_RENDER DRM
+  driver capability" した場合にのみ作られる。
+- つまり `card*` は「ここに DRM デバイスがあるか」に答える——サーバの BMC 表示チップ
+  (ast, mgag200)、simpledrm/efifb フレームバッファなど、**計算資源として裁定エンジンに
+  差し出してはならないもの**を含む。`renderD*` は「このデバイスはレンダークライアントを
+  受け付けるか」に答える。Otedama が実際に問うているのは後者である。
+- この絞り込みで実在の GPU を取りこぼさないことを、最も重要なベンダで確認した:
+  NVIDIA のプロプライエタリスタックは `nvidia-drm` の `drm_driver` に
+  `DRIVER_GEM | DRIVER_RENDER` を無条件で設定している
+  (NVIDIA/open-gpu-kernel-modules, `kernel-open/nvidia-drm/nvidia-drm-drv.c`)。
+  amdgpu・i915/xe・nouveau は in-tree で advertise 済み。
+
+**是正（ドキュメント）.** パッケージ doc に「なぜ card ノードではなくレンダーノードか」の
+節を追加し、根拠（カーネル ABI の引用、NVIDIA ドライバの実装）と帰結
+（DRIVER_RENDER を持たない DRM デバイスは**設計上**不可視であって見落としではない）を明記。
+`docs/KNOWN_LIMITATIONS.md` §4 も「DRM sysfs (`/sys/class/drm`) を読む」——全 DRM デバイスを
+含意する書き方——から、レンダーノード限定である旨と表示専用デバイスの意図的除外に改めた。
+
+**併せて是正した誤コメント.** `inferModel` のコメントは「uevent の DRIVER を試す。これは
+model を含むことがある」と書いていたが、コードは**一貫して `PCI_ID=` を読んでいた**。
+`DRIVER` が持つのはモジュール名 (`amdgpu`, `nvidia`) であって model ではない。
+実際に読むものと、PCI ID データベース無しでは vendor:device の対が最も具体的で誠実な
+ラベルである理由に書き換えた。
+
+**意図を固定するテスト 3 件を追加** (`internal/hal/gpu_linux_test.go`):
+card ノードのみのデバイス（BMC 表示チップ相当）は 0 件、コネクタディレクトリ
+(`card0-HDMI-A-1` 等) は 0 件、両ノードを持つ実 GPU はレンダーノード由来で**ちょうど 1 件**。
+
+**空振りでないことを確認済み.** 走査プレフィックスを一時的に `card` に書き換えると 3 件とも
+失敗し、コネクタのテストは 1 台の GPU に対し **3 デバイス**を報告する——`card*` 走査が
+明示的に防がねばならない罠そのものである。
+
+**欠陥ではないが記録.** `internal/hal` は電力・温度 sysfs を一切読まない。ADR-008 が
+v3.6（約90時間）の将来作業として範囲を定めており、それに反する主張はどこにもない。
+
+読んで確認した（仮定していない）点: PCI `vendor` 属性のパス解決、シンボリックリンク正規化に
+よる重複排除、vendor ID 表 (0x10de/0x1002/0x8086)、`SHA256d: false` とその
+オーバーサブスクリプション根拠（session 243）、DRM ツリー不在をエラーではなく
+「GPU なし」として扱う挙動。
+
+全 24 パッケージが build・vet・test green。
+
+**一次資料**: torvalds/linux `Documentation/gpu/drm-uapi.rst`;
+NVIDIA/open-gpu-kernel-modules `kernel-open/nvidia-drm/nvidia-drm-drv.c`;
+jaypipes/ghw `pkg/gpu/gpu_linux.go`（比較対象の関連ソフトウェア）。
+
 ### Fixed (session 261 — **裁定エンジンが手数料控除前(gross)の収益で配分を決めていた**——259/260 が両入力を検証した先で見つかった実欠陥)
 
 **発見の経路.** session 259 は採掘側、260 は推論側の収益クォートを検証した。
