@@ -21,15 +21,36 @@ import (
 // wallet with no platform holding funds. This aligns with Otedama's
 // non-custodial philosophy.
 //
-// # Yield vs Bitcoin Mining
+// # Yield vs Bitcoin Mining (recomputed session 259–260)
 //
-// GPU revenue comparison (RTX 4090, April 2026 estimates):
+// GPU revenue comparison, derived from this codebase's own constants
+// rather than quoted from elsewhere — MiningProvider's 1.5 GH/s RTX 4090
+// SHA256d estimate and ~1000 EH/s network hashrate, this provider's
+// default $0.30–0.60/hour band, at $95,000/BTC:
 //
-//	Bitcoin mining:  ~$0.05/day  (SV2, 1% pool fee)
-//	AI inference:    ~$8-14/day  (Akash, LLM/image models)
+//	Bitcoin mining (SHA256d):  ~$0.00006/day  (0.07 sats/day, 1% pool fee)
+//	AI inference:              ~$9-14/day     (Akash, 20% platform fee)
 //
-// The arbitration engine will route GPUs to Akash when AI demand is
-// high and back to Bitcoin mining during low-demand periods.
+// This comment previously put the mining figure at "~$0.05/day", which
+// overstates what the model above yields by roughly 780×. A GPU is about
+// five orders of magnitude off ASIC efficiency at SHA256d, so the gap is
+// not close: the ratio here is ~170,000:1 in favour of inference, and no
+// plausible AI price makes SHA256d GPU mining the better use of a GPU.
+// The earlier wording ("route GPUs to Akash when AI demand is high and
+// back to Bitcoin mining during low-demand periods") described a two-way
+// switch the numbers rule out. It is doubly moot today because no GPU
+// device in this codebase reports SHA256d capability at all, so the GPU
+// mining branch is unreachable (docs/KNOWN_LIMITATIONS.md §4, §7).
+//
+// # What actually drives the arbitration
+//
+// The two quotes respond to BTC price in opposite directions, and that —
+// not modelled "AI demand" — is the live signal today. Mining revenue is
+// denominated in satoshis and does not move with price at all. Inference
+// revenue is denominated in USD, so its satoshi value moves *inversely*:
+// when BTC appreciates, the same $/hour buys fewer sats. Arbitration
+// therefore drifts toward mining as BTC rises and toward inference as it
+// falls. Both directions are pinned by tests in inference_yield_test.go.
 //
 // # Implementation status (v3.0.0-alpha)
 //

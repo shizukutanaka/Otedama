@@ -779,3 +779,34 @@ No behaviour changed. The live difficulty feed that would remove the
 constant remains a v3.1.0 roadmap item (§7).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 260 update — AI inference yield and the cross-market comparison
+
+Completes session 259. That session pinned the mining side of the
+arbitration decision; this one pins the inference side and, more
+importantly, the comparison between them — which is the decision the
+product exists to make and which neither provider's tests covered.
+
+The conversion is correct: `SatsPerSecond(usdPerHour, btcUSD)` is
+`(USD/h ÷ USD/BTC) × 1e8 ÷ 3600`, a plain unit change, verified against an
+independent computation. The 20% Akash fee is applied to
+`NetSatsPerSecond`. The zero-yield/zero-confidence quote when no GPU is
+present matches the provider-interface contract (publish rather than go
+silent, so arbitration can route away).
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| G | `AkashProvider`'s package doc carried a "GPU revenue comparison" table putting Bitcoin SHA256d mining at **~$0.05/day** for an RTX 4090. Recomputed from this codebase's own constants (MiningProvider's 1.5 GH/s GPU estimate, ~1000 EH/s network, 3.125 BTC subsidy, $95k/BTC) the figure is **$0.000064/day** — 0.07 sats/day. The doc overstated it by ~780×, which made the inference:mining gap look like a few hundred to one instead of the real ~170,000:1. | ✅ Fixed (doc-only): the table is now derived from the constants, with the derivation named so it can be rechecked. |
+| G | Following from that number, the doc's strategy claim — "route GPUs to Akash when AI demand is high and back to Bitcoin mining during low-demand periods" — described a two-way switch the arithmetic rules out: no plausible AI price makes SHA256d GPU mining the better use of a GPU. It is doubly moot because no GPU device reports SHA256d capability, so that branch is unreachable (§4, §7). | ✅ Fixed (doc-only): replaced with what actually moves the allocation — the two quotes' *opposite* sensitivity to BTC price. Mining is sats-denominated and price-flat; inference is USD-denominated so its satoshi value moves inversely. Arbitration drifts toward mining as BTC rises. That is the only live signal today, since the inference price itself is a fixed midpoint (§1). |
+| G | Neither provider had a test on the *comparison*, only on each quote in isolation, and the inference quote's magnitude was unchecked. | ✅ Fixed (test-only): `inference_yield_test.go` pins the conversion, the platform fee, the inverse price sensitivity (10× price rise ⇒ one-tenth the sats), the no-GPU contract, and the cross-market ratio's order of magnitude with a pointer to update the doc table if it moves deliberately. Confirmed non-vacuous: changing the conversion's 3600 to 60 fails it with "ratio 60". |
+
+Verified correct by direct computation, not assumed: the USD→sats unit
+conversion, the midpoint pricing of the configured band, the fee deduction,
+the GPU-only device filter, and the directional asymmetry between the two
+markets' price exposure.
+
+No behaviour changed.
+
+All 24 packages build, vet, and test green.
