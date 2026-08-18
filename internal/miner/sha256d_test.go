@@ -467,3 +467,124 @@ func TestTargetFromNBits_OverflowReturnsError(t *testing.T) {
 		t.Error("TargetFromNBits with overflow exponent should return error")
 	}
 }
+
+// ============================================================================
+// headerHasher — the midstate fast path (session 264)
+// ============================================================================
+
+// TestHeaderHasher_MatchesHashHeader is the whole safety argument for the
+// midstate optimisation: the fast path must be indistinguishable from the
+// plain one. HashHeader stays the obvious reference implementation and this
+// pins the fast path against it, so a hashing change can never quietly make
+// the miner compute something that is not SHA-256d.
+func TestHeaderHasher_MatchesHashHeader(t *testing.T) {
+	headers := []Header{
+		{}, // all zero
+		{Version: 0x20000000, Time: 1700000000, Bits: 0x1703098c},
+		genesisHeader(),
+	}
+	// A header whose 64-byte boundary falls inside the merkle root, which is
+	// where an off-by-one in the split would show up: bytes 60..67 straddle
+	// it (merkle root bytes 24..31).
+	var straddle Header
+	for i := range straddle.PrevHash {
+		straddle.PrevHash[i] = byte(i + 1)
+	}
+	for i := range straddle.MerkleRoot {
+		straddle.MerkleRoot[i] = byte(0xA0 + i)
+	}
+	straddle.Version = 0xDEADBEEF
+	straddle.Time = 0xCAFEBABE
+	straddle.Bits = 0x1d00ffff
+	headers = append(headers, straddle)
+
+	nonces := []uint32{0, 1, 2, 0x7fffffff, 0x80000000, 0xfffffffe, 0xffffffff, 2083236893}
+
+	for hi, h := range headers {
+		hh, err := newHeaderHasher(h)
+		if err != nil {
+			t.Fatalf("header %d: newHeaderHasher: %v", hi, err)
+		}
+		for _, n := range nonces {
+			h.Nonce = n
+			want := HashHeader(h)
+			got := hh.hash(n)
+			if got != want {
+				t.Errorf("header %d nonce %d: midstate = %s, HashHeader = %s", hi, n, got, want)
+			}
+		}
+	}
+}
+
+// TestHeaderHasher_IsReusableAcrossManyNonces checks the stateful part: the
+// digest is restored from the saved midstate on every call, so a long run of
+// nonces must not drift. A missing restore would make only the first hash
+// correct.
+func TestHeaderHasher_IsReusableAcrossManyNonces(t *testing.T) {
+	h := Header{Version: 0x20000000, Time: 1700000000, Bits: 0x1703098c}
+	hh, err := newHeaderHasher(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := uint32(0); n < 2000; n++ {
+		h.Nonce = n
+		if got, want := hh.hash(n), HashHeader(h); got != want {
+			t.Fatalf("nonce %d: midstate = %s, HashHeader = %s", n, got, want)
+		}
+	}
+	// And going backwards, to rule out any dependence on call order.
+	for n := uint32(2000); n > 0; n-- {
+		h.Nonce = n - 1
+		if got, want := hh.hash(n-1), HashHeader(h); got != want {
+			t.Fatalf("descending nonce %d: midstate = %s, HashHeader = %s", n-1, got, want)
+		}
+	}
+}
+
+// TestHeaderHasher_SolvesTheGenesisBlock is the end-to-end proof against real
+// consensus data: the fast path must reproduce the known genesis hash for the
+// known genesis nonce.
+func TestHeaderHasher_SolvesTheGenesisBlock(t *testing.T) {
+	g := genesisHeader()
+	hh, err := newHeaderHasher(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := hh.hash(g.Nonce)
+	if want := HashHeader(g); got != want {
+		t.Fatalf("genesis via midstate = %s, want %s", got, want)
+	}
+	// And it must actually meet the genesis target.
+	target, err := TargetFromNBits(g.Bits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.LessOrEqual(target) {
+		t.Error("the genesis hash computed via the midstate path does not meet the genesis target")
+	}
+}
+
+func BenchmarkHeaderHasher_Midstate(b *testing.B) {
+	h := Header{Version: 0x20000000, Time: 1700000000, Bits: 0x1703098c}
+	hh, err := newHeaderHasher(h)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = hh.hash(uint32(i))
+	}
+}
+
+// genesisHeader returns Bitcoin's genesis block header, decoded from the
+// canonical 80-byte serialisation used by TestSHA256d_GenesisBlock.
+func genesisHeader() Header {
+	const hexStr = "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c"
+	raw, err := hex.DecodeString(hexStr)
+	if err != nil {
+		panic(err)
+	}
+	var b [HeaderSize]byte
+	copy(b[:], raw)
+	return ParseHeader(b)
+}

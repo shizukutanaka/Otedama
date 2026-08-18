@@ -2386,10 +2386,18 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 		})
 	}()
 
-	// Poll for the deterministic signal that the stats-ticker branch has
-	// actually executed with a recorded latency sample, rather than
-	// waiting a fixed duration and hoping. 10s ceiling is itself generous;
-	// in the unstarved case this resolves within milliseconds.
+	// Poll for the deterministic signals that the stats-ticker branch has
+	// actually executed — a recorded latency sample and a published
+	// hashrate — rather than waiting a fixed duration and hoping. 10s
+	// ceiling is itself generous; in the unstarved case this resolves within
+	// milliseconds.
+	//
+	// The hashrate is polled rather than merely asserted after the fact
+	// because miner.Worker flushes its hash counter once per batch of 1024
+	// nonces, not once per hash (session 264 — the per-hash atomic cost
+	// 30.5 ns under contention). The gauge is therefore legitimately 0 for
+	// the first fraction of a millisecond of grinding, and cancelling the
+	// session the instant a latency sample appeared could catch it there.
 	deadline := time.After(10 * time.Second)
 	poll := time.NewTicker(5 * time.Millisecond)
 	defer poll.Stop()
@@ -2400,7 +2408,9 @@ waitLoop:
 		case <-poll.C:
 			if m.submitLatencyP95.Value() > 0 {
 				latencyObserved = true
-				break waitLoop
+				if m.hashrate.Value() > 0 {
+					break waitLoop
+				}
 			}
 		case <-deadline:
 			break waitLoop

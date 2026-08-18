@@ -201,16 +201,30 @@ func TestWorker_StatsAfterWork(t *testing.T) {
 	shares := w.Start(ctx)
 	w.SetWork(makeEasyWork())
 
-	// Wait for at least one share so counters are non-zero.
+	// Wait for at least one share so the share counter is non-zero.
 	select {
 	case <-shares:
 	case <-ctx.Done():
 		t.Fatal("no share before deadline")
 	}
 
-	stats := w.Stats()
+	// The hash counter is flushed to the shared atomic once per batch rather
+	// than once per hash (session 264 — the per-hash Add cost 30.5 ns under
+	// 4-thread contention, ~11% of a hash, purely cache-line bouncing). An
+	// easy target yields its first share within the opening nonces of a
+	// batch, so at that instant the count is legitimately still 0. Poll for
+	// the invariant that matters — the worker accounts for its hashes —
+	// rather than for it having happened by one particular moment.
+	var stats Stats
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); {
+		stats = w.Stats()
+		if stats.HashesTotal > 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if stats.HashesTotal == 0 {
-		t.Error("HashesTotal is 0 after running worker")
+		t.Error("HashesTotal is still 0 a second after the worker started producing shares")
 	}
 	if stats.SharesFound == 0 {
 		t.Error("SharesFound is 0 after receiving share")
@@ -264,24 +278,84 @@ func TestHashRateString(t *testing.T) {
 
 // ----- Benchmark: inner loop throughput -----
 
+// BenchmarkWorkerGrind_SingleThread measures the hashing cost the way the
+// worker actually pays it.
+//
+// It used to call HashHeader in a loop of its own and describe that as "the
+// baseline for performance regression detection". It was not: it never
+// executed grind, so it could not have detected a regression in the loop it
+// claimed to guard — and it did not move at all when grind switched to the
+// midstate path, which is a 33% change. It now drives a real Worker and
+// derives the per-hash cost from the counter the worker itself maintains.
+//
+// The target is unreachable, so no share is ever found and the share channel
+// never fills: this measures grinding, not share handling.
 func BenchmarkWorkerGrind_SingleThread(b *testing.B) {
-	// Measure how many hashes/second a single goroutine achieves.
-	// This establishes the baseline for performance regression detection.
-	work := &Work{
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	go func() {
+		for range shares {
+		}
+	}()
+	w.SetWork(&Work{
 		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x1d00ffff},
-		Target: func() Hash {
-			t, _ := TargetFromNBits(0x1d00ffff)
-			return t
-		}(),
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
+		Target: Hash{}, // all zero: nothing can meet it
+	})
 
-	h := work.Header
-	for i := 0; i < b.N; i++ {
-		h.Nonce = uint32(i)
-		_ = HashHeader(h)
+	// Let the worker pick the job up and reach steady state before the
+	// window that is measured.
+	time.Sleep(50 * time.Millisecond)
+
+	start := w.Stats().HashesTotal
+	t0 := time.Now()
+	time.Sleep(300 * time.Millisecond)
+	hashes := w.Stats().HashesTotal - start
+	elapsed := time.Since(t0)
+
+	if hashes == 0 {
+		b.Fatal("the worker produced no hashes; the benchmark is measuring nothing")
 	}
+	b.ReportMetric(float64(hashes)/elapsed.Seconds(), "hash/s")
+	b.ReportMetric(float64(elapsed.Nanoseconds())/float64(hashes), "ns/hash")
+	// b.N is deliberately not used: this is a fixed-window throughput probe,
+	// so the ns/op column is meaningless here. Read the custom metrics.
+}
+
+// BenchmarkWorkerGrind_AllThreads measures the same thing at the thread count
+// the product actually uses (DefaultWorkerConfig spawns runtime.NumCPU()
+// threads). It is a separate benchmark because the two answer different
+// questions: the single-thread number is the per-hash cost, this one also
+// captures whatever the threads do to each other. The per-hash hashCount
+// atomic used to cost 30.5 ns under 4-thread contention — visible only here.
+func BenchmarkWorkerGrind_AllThreads(b *testing.B) {
+	cfg := DefaultWorkerConfig()
+	w := NewWorker(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	go func() {
+		for range shares {
+		}
+	}()
+	w.SetWork(&Work{
+		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x1d00ffff},
+		Target: Hash{},
+	})
+
+	time.Sleep(50 * time.Millisecond)
+	start := w.Stats().HashesTotal
+	t0 := time.Now()
+	time.Sleep(300 * time.Millisecond)
+	hashes := w.Stats().HashesTotal - start
+	elapsed := time.Since(t0)
+
+	if hashes == 0 {
+		b.Fatal("the worker produced no hashes; the benchmark is measuring nothing")
+	}
+	b.ReportMetric(float64(hashes)/elapsed.Seconds(), "hash/s")
+	b.ReportMetric(float64(cfg.Threads), "threads")
 }
 
 func TestNewWorker_ZeroThreads_DefaultsToCPUCount(t *testing.T) {

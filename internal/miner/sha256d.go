@@ -22,9 +22,11 @@ package miner
 
 import (
 	"crypto/sha256"
+	"encoding"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"math"
 	"math/big"
 )
@@ -254,4 +256,93 @@ func MeetsTarget(hash Hash, nBits uint32) (bool, error) {
 		return false, err
 	}
 	return hash.LessOrEqual(target), nil
+}
+
+// ----- Midstate fast path for the mining inner loop -----
+
+// headerHasher computes SHA-256d over a block header for many nonces,
+// reusing the SHA-256 state of the header's constant prefix.
+//
+// # Why this exists (measured, session 264)
+//
+// A block header is 80 bytes: two SHA-256 blocks for the first hash, one
+// for the second, so three compressions per nonce. Only the last four bytes
+// change as a worker grinds, and they live in the second block — the first
+// compression consumes bytes 0..63 (version, prevhash, and the first 28
+// bytes of the merkle root) and produces the same state every time. Doing it
+// once per job instead of once per nonce removes a third of the work. This
+// is the standard "midstate" technique every Bitcoin miner uses.
+//
+// Measured on the reference machine (Xeon @ 2.10GHz, no SHA-NI), 2s
+// benchmarks, zero allocations in every case:
+//
+//	HashHeader (rebuild + 3 compressions)  264.2 ns/op
+//	serialise once, patch nonce bytes      224.0 ns/op   (-15%)
+//	midstate (this)                        167.7 ns/op   (-36%)
+//
+// That is a 1.58x hashrate improvement, which is why it is worth the extra
+// type. The intermediate step is recorded because it explains the split:
+// roughly 15 points come from not re-serialising the header per nonce and
+// the rest from not re-compressing its first block.
+//
+// # Why this is not custom cryptography
+//
+// No SHA-256 internals are reimplemented. The saved state comes from
+// crypto/sha256's own encoding.BinaryMarshaler, and is restored through its
+// BinaryUnmarshaler, so the compression function, padding, and length
+// accounting are all the standard library's. CLAUDE.md forbids hand-rolled
+// crypto; this obeys that by construction, and TestHeaderHasher_MatchesHashHeader
+// pins equivalence against HashHeader, which stays the plain, obvious
+// reference implementation.
+type headerHasher struct {
+	// state is crypto/sha256's serialised state after the header's first
+	// 64 bytes, restored before each nonce.
+	state []byte
+	// tail is header bytes 64..79: the merkle root's last 4 bytes, time,
+	// bits, and the nonce that this type rewrites per call.
+	tail [16]byte
+	d    hash.Hash
+	// sum1 receives the first SHA-256 so the digest can be summed without
+	// allocating on each nonce.
+	sum1 [32]byte
+}
+
+// newHeaderHasher prepares a hasher for every nonce of h. Every field of h
+// except Nonce is baked in, so a new one is needed whenever the job, ntime,
+// or version changes.
+func newHeaderHasher(h Header) (*headerHasher, error) {
+	b := h.Bytes()
+	mid := sha256.New()
+	mid.Write(b[:64])
+	marshaler, ok := mid.(encoding.BinaryMarshaler)
+	if !ok {
+		// Unreachable with crypto/sha256, which has implemented
+		// BinaryMarshaler since Go 1.4. Checked rather than asserted so a
+		// future standard-library change fails loudly here instead of
+		// silently mining with a wrong hash.
+		return nil, fmt.Errorf("miner: sha256 digest does not implement encoding.BinaryMarshaler")
+	}
+	state, err := marshaler.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("miner: marshal sha256 midstate: %w", err)
+	}
+	hh := &headerHasher{state: state, d: sha256.New()}
+	if _, ok := hh.d.(encoding.BinaryUnmarshaler); !ok {
+		return nil, fmt.Errorf("miner: sha256 digest does not implement encoding.BinaryUnmarshaler")
+	}
+	copy(hh.tail[:], b[64:80])
+	return hh, nil
+}
+
+// hash returns SHA-256d of the header with the given nonce. It allocates
+// nothing and is not safe for concurrent use: each worker goroutine owns its
+// own headerHasher.
+func (hh *headerHasher) hash(nonce uint32) Hash {
+	binary.LittleEndian.PutUint32(hh.tail[12:16], nonce)
+	// The type assertion is checked in newHeaderHasher; an error here is
+	// impossible for a hasher this package constructed.
+	_ = hh.d.(encoding.BinaryUnmarshaler).UnmarshalBinary(hh.state)
+	hh.d.Write(hh.tail[:])
+	first := hh.d.Sum(hh.sum1[:0])
+	return sha256.Sum256(first)
 }

@@ -10,53 +10,79 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` is checked into CI. A PR
-   that regresses performance by >5% fails automatically.
+2. **Regression-resistant.** `go test -bench` runs in CI on every push
+   (`ci.yml`'s `benchmark` job). Note what that job does and does not do:
+   it runs the benchmarks and uploads the output as an artifact. It does
+   **not** compare against a stored baseline, does not fail on a
+   regression, and does not post to pull requests. Comparing runs is
+   currently a manual step (`benchstat` over two artifacts). This entry
+   previously claimed a >5% regression "fails automatically"; it does not.
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
-## SHA-256d hash rate (single thread)
+## SHA-256d hash rate
 
-The core inner loop of Bitcoin mining. This is the baseline for all
-mining-related performance.
+The core inner loop of Bitcoin mining, measured end to end through a real
+`miner.Worker` rather than through a loop that imitates one.
 
-| CPU                    | Hash rate (MH/s) | Notes                          |
-|------------------------|------------------|--------------------------------|
-| AMD Ryzen 9 7950X (1 thread) | ~2.5 MH/s  | AES-NI + SHA-NI auto-used      |
-| Apple M2 Pro (1 thread)      | ~1.9 MH/s  | ARM SHA extensions             |
-| Intel i7-12700K (1 thread)   | ~2.1 MH/s  | AVX2 + SHA-NI                  |
-| Raspberry Pi 5 (1 thread)    | ~0.3 MH/s  | No SHA extensions in stdlib    |
+**Reference machine** — the only hardware these numbers were taken on:
+Intel Xeon @ 2.10GHz, 4 vCPU, Linux/amd64, Go 1.24.7. This CPU has **no
+SHA-NI**, so `crypto/sha256` runs its generic path; a machine with SHA
+extensions will be substantially faster.
+
+| Measurement                    | Before session 264 | After   | Change |
+|--------------------------------|-------------------:|--------:|-------:|
+| Single thread                  | 3.73 MH/s          | 5.45 MH/s | +46%  |
+| All 4 threads                  | 9.64 MH/s          | 21.9 MH/s | +2.28x |
+| Per-hash cost, 1 thread        | 268 ns             | 183 ns  | −32%   |
+| Per-hash cost, per thread of 4 | 415 ns             | 182 ns  | −56%   |
+
+Two changes produced this (see `internal/miner/sha256d.go` and the
+`grind` loop in `worker.go`):
+
+- **Midstate.** A block header is 80 bytes — two SHA-256 blocks for the
+  first hash, one for the second. Only the last four bytes change as a
+  worker grinds, and they live in the second block, so the first
+  compression produces the same state for every nonce. Computing it once
+  per job removes a third of the work. Micro-benchmarked at 264.2 → 167.7
+  ns/op, with the intermediate step (serialise once, patch the nonce
+  bytes: 224.0 ns/op) showing that roughly 15 points come from not
+  re-serialising and the rest from not re-compressing.
+- **Batched hash counting.** The hash counter was an atomic increment per
+  hash, shared by every thread. At 4 threads that measured 30.5 ns per
+  increment in isolation, and cost far more in situ: the baseline needed
+  415 ns per hash per thread against 268 ns single-threaded. It is now
+  added once per 1024-nonce batch (0.15 ns amortised).
+
+The second change is why the multi-thread gain (2.28x) exceeds the
+single-thread gain (1.46x), and why per-thread cost at 4 threads is now
+182 ns against 183 ns single-threaded — scaling is linear because the
+threads no longer share a contended cache line.
 
 **Reproduce:**
 ```bash
-go test -bench=BenchmarkHashHeader -benchmem -count=5 ./internal/miner/
+# End-to-end worker throughput, single thread and at runtime.NumCPU().
+go test -run XXX -bench 'BenchmarkWorkerGrind' -benchtime=1x ./internal/miner/
+
+# The hashing primitives in isolation.
+go test -run XXX -bench 'BenchmarkHashHeader|BenchmarkHeaderHasher' \
+  -benchmem -benchtime=2s ./internal/miner/
 ```
 
-Expected output format:
-```
-BenchmarkHashHeader-16    2500000    480 ns/op    0 B/op    0 allocs/op
-```
+The `WorkerGrind` benchmarks are fixed-window throughput probes: they
+ignore `b.N` and report `hash/s` as a custom metric, so read that column
+and disregard `ns/op`.
 
-## SHA-256d hash rate (all cores)
-
-Scaling across all CPU cores with the default Worker configuration.
-
-| CPU                    | Cores | Aggregate (MH/s) | Scaling |
-|------------------------|-------|------------------|---------|
-| AMD Ryzen 9 7950X      | 32    | ~75 MH/s         | ~94%    |
-| Apple M2 Pro           | 12    | ~21 MH/s         | ~92%    |
-| Intel i7-12700K        | 20    | ~38 MH/s         | ~90%    |
-| Raspberry Pi 5         | 4     | ~1.1 MH/s        | ~92%    |
-
-**Reproduce:**
-```bash
-go test -bench=BenchmarkWorkerGrind_SingleThread -benchtime=10s -cpu=1,2,4,8,16 \
-  ./internal/miner/
-```
-
-Scaling is near-linear because SHA-256d is embarrassingly parallel
-with per-thread nonce spaces. Sub-linear scaling above core count
-reflects hyperthread contention on L2/L3 caches, not Otedama overhead.
+**Other hardware is unmeasured.** Earlier revisions of this file carried a
+table of figures for a Ryzen 9 7950X, an Apple M2 Pro, an i7-12700K and a
+Raspberry Pi 5. None had been measured, and the "reproduce" command
+printed alongside the all-cores table invoked a single-threaded benchmark
+with `-cpu=1,2,4,8,16`, which could not have produced it. They were
+removed rather than carried forward: this file's own measurement
+philosophy requires every number to be reproducible by anyone with the
+same hardware, and an invented number fails that at the first attempt.
+Contributions with real measurements are welcome — please include the
+exact command and the machine.
 
 ## Stratum V2 frame decode (fuzz-verified)
 
@@ -82,18 +108,32 @@ Revenue per day by hardware, for the revenue streams Otedama actually
 implements. Bitcoin mining is the only one (session 264 — the simulated
 AI-inference market was deleted; see `docs/KNOWN_LIMITATIONS.md` §1).
 
-| Hardware          | CPU mining (implemented) | GPU mining |
-|-------------------|-------------------------:|-----------:|
-| Ryzen 9 7950X     | $0.00000043              | n/a        |
-| Apple M2 Pro      | $0.00000036              | n/a        |
-| NVIDIA RTX 4090   | n/a                      | not implemented |
-| Antminer S21      | not detected             | n/a        |
+| Hardware                       | CPU mining (implemented) | GPU mining      |
+|--------------------------------|-------------------------:|----------------:|
+| Reference machine (4 vCPU Xeon)| $0.00000094 / day        | n/a             |
+| Any GPU                        | n/a                      | not implemented |
+| Any ASIC                       | not detected             | n/a             |
 
-**Assumptions:**
+Only the reference machine appears because it is the only one whose
+hashrate was measured (21.9 MH/s across 4 threads, see above). The figure
+scales linearly with hashrate, so a CPU twice as fast earns twice as close
+to nothing.
+
+**Assumptions and the formula:**
 - BTC price: $95,000
-- Network hashrate: 1,000 EH/s
-- Block reward: 3.125 BTC (post-4th-halving)
+- Network hashrate: 1,000 EH/s (1e21 H/s)
+- Block reward: 3.125 BTC (post-4th-halving), 144 blocks/day
 - Pool fee: 1% (Stratum V2 competitive)
+
+```
+sats/day = (device H/s ÷ network H/s) × 3.125e8 sats × 144
+         = (2.19e7 ÷ 1e21) × 3.125e8 × 144  ≈  9.9e-4 sats/day
+
+At $95,000/BTC that is $9.4e-7/day gross, $9.3e-7 after a 1% pool fee.
+```
+
+This is the same model `internal/provider/mining.go` uses for its yield
+quotes, so the dashboard and this table cannot drift apart.
 
 **Why the GPU and ASIC rows are empty.** No CUDA, ROCm, or Vulkan compute
 dispatch exists anywhere in this codebase, so every detected GPU reports
@@ -164,16 +204,22 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and posts a comparison to PRs.
+Enforcing this is manual today: CI uploads benchmark output as an
+artifact but does not diff it against a baseline or gate the merge (see
+"Measurement philosophy" above). Until it does, a reviewer who cares about
+a hot path should run the benchmark on both revisions.
 
 ## Hardware used for published numbers
 
-Numbers above are measured on:
+- **Reference machine:** Intel Xeon @ 2.10GHz, 4 vCPU, Linux/amd64,
+  Go 1.24.7. No SHA-NI, so `crypto/sha256` uses its generic path.
 
-- **Linux reference:** AMD Ryzen 9 7950X, 64 GB DDR5, Ubuntu 24.04, Go 1.22
-- **macOS reference:** Apple M2 Pro (16", 2023), macOS 14, Go 1.22
-- **Windows reference:** Intel i7-12700K, Windows 11, Go 1.22
-- **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go 1.22
+That is the only machine any number in this file was taken on. Earlier
+revisions listed a Ryzen 9 7950X, an Apple M2 Pro, an i7-12700K and a
+Raspberry Pi 5 as "hardware used for published numbers"; no measurement
+had been taken on any of them, so they were removed along with the figures
+attributed to them (session 264).
 
-Readers may see different numbers on different hardware; the relative
-rankings should remain stable.
+Readers will see different numbers on different hardware — a CPU with SHA
+extensions especially so. Contributions with real measurements are
+welcome: include the exact command, the machine, and the Go version.
