@@ -689,41 +689,43 @@ release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED on Linux (session 264)
 
-**What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
-real terminal width, but no production call site ever calls it —
-`engine.Run` constructs the dashboard via `tui.NewDashboard` and never
-calls `SetWidth`, so every real invocation renders at the constructor's
-hardcoded default of 80 columns regardless of the actual terminal
-size (confirmed: `SetWidth` is called only from `internal/tui`'s own
-test files).
+**What it was:** `NewDashboard` set 80 columns and `SetWidth` — the injection
+point for a real width — was called by nothing outside tests, so the
+dashboard ran at 80 columns whatever the terminal actually was.
 
-**Impact:** On a narrower real terminal, output can wrap onto a second
-terminal row, which breaks the dashboard's "cursor home, overwrite in
-place" repaint model (each subsequent frame then draws one row off
-from where the previous one landed). On a wider terminal, screen space
-is simply unused. Separately (fixed session 249): before this session,
-the pool connection-status text and share-count text on the two
-busiest lines were truncated using fixed-width budgets independent of
-the actual configured width, so at the documented 40-column minimum
-they could be cut off entirely even once real width detection lands;
-both lines now size their variable-length fields from the actual
-`cols` value, so this specific failure mode is closed regardless of
-whether width detection itself is ever wired in.
+**Why it mattered beyond looks.** The repaint moves the cursor home and
+overwrites a fixed number of lines. On a terminal narrower than 80, every
+line wraps, each wrap consumes an extra screen row, and the offsets stop
+lining up: the dashboard degrades into overlapping fragments rather than
+merely looking cramped. On a wider terminal the cost was only unused space.
 
-**Workaround:** Keep the terminal at or above 80 columns for correct
-rendering, or use `--no-tui` for plain log output, which has no width
-assumptions.
+**Resolved:** on Linux the width is read from the writer's file descriptor
+with the `TIOCGWINSZ` ioctl (`internal/tui/width_linux.go`) and re-read once
+per render tick, so a mid-session resize is followed within a second without
+a `SIGWINCH` handler. A reported width below the 40-column design floor is
+clamped to it. Tests drive a real pseudo-terminal rather than a stub, since
+the struct layout and the offset of `ws_col` are exactly what a stub cannot
+check — getting that offset wrong would silently report the row count.
 
-**Target:** No committed target. Wiring in real detection needs either
-`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
-dependency stance would need a documented exception, as the package
-doc's own "Design" section already assumed this was solved) or raw
-per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
-GetConsoleScreenBufferInfo, both already reachable as an indirect
-dependency via `golang.org/x/crypto`) — a maintainer decision between
-the two is needed before implementation.
+Fixing this also removed a latent data race: `cols` was a plain `int` written
+by `SetWidth` and read by the render loop. It is now `atomic.Int32`.
+
+**Still open — other platforms.** macOS, the BSDs, and Windows keep the
+80-column default. The BSD family uses a different `TIOCGWINSZ` value and
+reaches ioctl through libc trampolines rather than `syscall.Syscall`;
+Windows needs `GetConsoleScreenBufferInfo`. Writing either without being
+able to run it would be guessing, so `terminalWidth` returns "unknown"
+there and the dashboard behaves exactly as it did before. This mirrors the
+existing Linux-only scope of GPU detection (§4).
+
+**Workaround on those platforms:** none needed at 80 columns or wider; below
+that, widen the terminal or run with `--no-tui`.
+
+**Target for macOS/Windows:** no committed date. The natural moment is when
+someone can test on the platform; the detection is one function behind a
+build tag, so adding a platform is a single file.
 
 ---
 

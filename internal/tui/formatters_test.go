@@ -100,7 +100,7 @@ func TestDashboard_PoolLineWhenDisconnected(t *testing.T) {
 	line := d.poolLine(Stats{
 		PoolURL:   "stratum+v2://example.com:3336",
 		Connected: false,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if !strings.Contains(line, "disconnected") {
 		t.Errorf("disconnected pool line missing 'disconnected': %q", line)
 	}
@@ -113,7 +113,7 @@ func TestDashboard_PoolLineWhenConnected(t *testing.T) {
 		PoolURL:     "stratum+v2://example.com:3336",
 		Connected:   true,
 		PoolLatency: 42 * time.Millisecond,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if !strings.Contains(line, "connected") {
 		t.Errorf("connected line missing 'connected': %q", line)
 	}
@@ -171,7 +171,7 @@ func TestDashboard_MiningLine_IncludesRateAndDevices(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 2.5e6, Devices: 3, SharesFound: 42, SharesSent: 40,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if !strings.Contains(line, "2.50 MH/s") {
 		t.Errorf("miningLine missing hashrate: %q", line)
 	}
@@ -188,7 +188,7 @@ func TestDashboard_MiningLine_StalledIndicator(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 0, Devices: 1, Stalled: true,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if !strings.Contains(line, "stalled") {
 		t.Errorf("miningLine with Stalled=true missing stall indicator: %q", line)
 	}
@@ -199,7 +199,7 @@ func TestDashboard_MiningLine_NoStalledIndicatorWhenFalse(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 1e9, Devices: 2, Stalled: false,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if strings.Contains(line, "stalled") {
 		t.Errorf("miningLine with Stalled=false should not show stall indicator: %q", line)
 	}
@@ -210,7 +210,7 @@ func TestDashboard_MiningLine_CurtailedShowsPausedNotStalled(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 0, Devices: 1, Curtailed: true,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if !strings.Contains(line, "paused") {
 		t.Errorf("miningLine with Curtailed=true missing paused indicator: %q", line)
 	}
@@ -227,7 +227,7 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 	d := NewDashboard(&buf)
 	line := d.miningLine(Stats{
 		HashRate: 0, Devices: 1, Curtailed: true, Stalled: true,
-	}, d.cols)
+	}, int(d.cols.Load()))
 	if !strings.Contains(line, "paused") {
 		t.Errorf("curtailed+stalled miningLine should show paused: %q", line)
 	}

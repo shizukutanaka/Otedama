@@ -258,12 +258,12 @@ func TestDashboard_SetWidth_MinimumEnforced(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	d.SetWidth(10) // below minimum 40 — should be ignored
-	if d.cols != 80 {
-		t.Errorf("cols = %d after invalid SetWidth(10), want 80", d.cols)
+	if int(d.cols.Load()) != 80 {
+		t.Errorf("cols = %d after invalid SetWidth(10), want 80", int(d.cols.Load()))
 	}
 	d.SetWidth(100) // valid
-	if d.cols != 100 {
-		t.Errorf("cols = %d after SetWidth(100), want 100", d.cols)
+	if int(d.cols.Load()) != 100 {
+		t.Errorf("cols = %d after SetWidth(100), want 100", int(d.cols.Load()))
 	}
 }
 

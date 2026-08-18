@@ -14,19 +14,25 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// # Terminal width (not yet auto-detected)
+// # Terminal width
 //
-// SetWidth lets a caller inject the real terminal width (intended
-// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
-// but no caller in this codebase actually calls it in production —
-// engine.Run's dashboard always runs at the NewDashboard default of 80
-// columns, regardless of the real terminal size. See
-// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
-// of the real width: every
-// line is truncated to fit whatever width is configured, and the most
-// important field on each line (pool connection status, in particular)
-// is sized from a dynamic budget rather than a fixed offset, so it
-// cannot be silently cut off even at the documented 40-column minimum.
+// On Linux the dashboard reads the real terminal width from the writer's
+// file descriptor (TIOCGWINSZ, see width_linux.go) and re-reads it once per
+// render tick, so a resize is followed within a second. On other platforms,
+// and whenever output is redirected to a file or a pipe, the width is
+// unknown and the dashboard stays at defaultCols.
+//
+// This matters for correctness, not only for looks: the repaint moves the
+// cursor home and overwrites a fixed number of lines, so on a terminal
+// narrower than the assumed width every line wraps, each wrap eats an extra
+// screen row, and the offsets stop lining up — the dashboard degrades into
+// overlapping fragments. Before this was detected, any terminal under 80
+// columns produced that (docs/KNOWN_LIMITATIONS.md §15).
+//
+// What holds at any width: every line is truncated to fit, and the most
+// important field on each line (pool connection status, in particular) is
+// sized from a dynamic budget rather than a fixed offset, so it cannot be
+// silently cut off even at the minCols floor.
 //
 // # Thread safety
 //
@@ -108,8 +114,17 @@ type Dashboard struct {
 	started   atomic.Bool
 	updateCh  chan Stats
 	doneCh    chan struct{}
-	cols      int
 	lastStats Stats
+	// cols is read by the render loop and written by SetWidth and by the
+	// per-tick width refresh, so it is atomic. It was a plain int before
+	// terminal detection existed, which made SetWidth a data race with
+	// render() — unreported only because nothing called SetWidth outside
+	// tests.
+	cols atomic.Int32
+	// widthFn reports the current terminal width, or 0 when it cannot be
+	// determined. Replaced in tests; in production it queries the writer's
+	// file descriptor.
+	widthFn func() int
 	// wg tracks the render loop goroutine so Stop can block until it has
 	// genuinely exited before Stop itself writes to w (showCursor /
 	// Fprintln below) — without this, Stop's writes could race an
@@ -117,13 +132,48 @@ type Dashboard struct {
 	wg sync.WaitGroup
 }
 
+// defaultCols is the width used until the real terminal width is known, and
+// the width kept forever when it cannot be (output redirected to a file, or
+// a platform without detection). 80 is the conventional floor no terminal is
+// narrower than by default.
+const defaultCols = 80
+
+// minCols is the narrowest width the layout is designed for. Every line
+// budgets its most important field dynamically down to this width; below it
+// the dashboard would be unreadable whatever it did, so a reported width
+// under this is clamped rather than honoured.
+const minCols = 40
+
 // NewDashboard returns a Dashboard that writes to w.
+//
+// If w is backed by a file descriptor — os.Stdout in production — the
+// dashboard tracks that terminal's width, re-reading it once per render tick
+// so a resize is picked up within a second without a SIGWINCH handler.
+// Polling an ioctl at 1 Hz costs less than the signal plumbing would, and it
+// cannot miss a resize that arrives while the handler is being installed.
 func NewDashboard(w io.Writer) *Dashboard {
-	return &Dashboard{
+	d := &Dashboard{
 		w:        w,
 		updateCh: make(chan Stats, 8),
 		doneCh:   make(chan struct{}),
-		cols:     80,
+	}
+	d.cols.Store(defaultCols)
+	if f, ok := w.(interface{ Fd() uintptr }); ok {
+		d.widthFn = func() int { return terminalWidth(f.Fd()) }
+	}
+	d.refreshWidth()
+	return d
+}
+
+// refreshWidth re-reads the terminal width, keeping the current value when
+// the width is unknown (not a terminal, or an unsupported platform) so
+// redirected output stays at a stable, sensible width instead of collapsing.
+func (d *Dashboard) refreshWidth() {
+	if d.widthFn == nil {
+		return
+	}
+	if n := d.widthFn(); n > 0 {
+		d.cols.Store(int32(max(n, minCols)))
 	}
 }
 
@@ -191,6 +241,7 @@ func (d *Dashboard) renderLoop() {
 			d.lastStats = s
 			d.mu.Unlock()
 		case <-ticker.C:
+			d.refreshWidth()
 			d.mu.Lock()
 			s := d.lastStats
 			d.mu.Unlock()
@@ -221,7 +272,7 @@ const (
 
 func (d *Dashboard) render(s Stats) {
 	var sb strings.Builder
-	cols := d.cols
+	cols := int(d.cols.Load())
 
 	// Move to home position (no flicker).
 	sb.WriteString(cursorHome)
@@ -549,8 +600,8 @@ func shortenURL(url string, maxLen int) string {
 // SetWidth allows callers to inject the terminal width.
 // If never called, defaults to 80 columns.
 func (d *Dashboard) SetWidth(cols int) {
-	if cols >= 40 {
-		d.cols = cols
+	if cols >= minCols {
+		d.cols.Store(int32(cols))
 	}
 }
 
