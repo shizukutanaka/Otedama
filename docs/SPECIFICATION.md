@@ -15,7 +15,8 @@ discrepancies between intended and actual behaviour, with their status.
 
 Otedama is a non-custodial, Stratum-V2-first software suite that arbitrates
 user-owned ASIC/GPU/CPU hardware across Bitcoin mining (real) and AI-inference
-provision (currently simulated — see KNOWN_LIMITATIONS §1). Bitcoin only
+provision (not implemented — the simulated placeholder was deleted;
+see KNOWN_LIMITATIONS §1). Bitcoin only
 (SHA-256d); no custody of others' funds; no token issuance. (CLAUDE.md.)
 
 ## 2. Command-line interface
@@ -217,10 +218,21 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 
 ## 7. Known limitations
 
-Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
-simulated; (2) Noise NX uses P-256, not secp256k1; (3) engine does not yet
-route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
-(5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
+Authoritative list in `docs/KNOWN_LIMITATIONS.md`. Still open as of session
+264: Noise NX uses P-256 rather than secp256k1 (§2); GPU detection is
+Linux-only and no compute dispatch exists, so a detected GPU is given no
+work (§4); Lightning is receive-only, with no embedded node (§6); ASIC
+hardware is not detected at all (§8); several CI workflows are
+non-functional (§13); `datum://` is a reserved scheme with no dialer (§14);
+and wallet passphrase rotation has no CLI path (§16, second half).
+
+Resolved since the earlier revision of this list: the simulated
+AI-inference yield was deleted rather than disclosed (§1), the post-quantum
+scaffolding was removed as unreachable (§5), the engine now routes through
+`poolproto` (§3), the TUI detects the real terminal width on Linux (§15),
+`otedama wallet verify` closes the backup-verification gap (§16, first
+half), and a non-ASCII BIP-39 passphrase is refused rather than silently
+producing a non-portable wallet (§19).
 
 ---
 

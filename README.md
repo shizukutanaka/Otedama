@@ -32,7 +32,7 @@ Otedamaの設計は三つの原則に従います。John Carmackのパフォー�
 
 ## 主要機能 / Core Features
 
-Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通りです。Stratum V2/V1対応のマイニングクライアント（実際に採掘します。複数プールを明示設定すれば優先順位付きフェイルオーバーが機能し、未設定時は組み込みの既定プール1つにフォールバック）。Lightning関連コードによるBIP-39シードの暗号化保管（決済処理そのものは未実装）。2系統（実採掘・simulated AI推論）のリアルタイム裁定エンジン。CPU自動検出（実マイニング対応）およびLinux限定のGPU検出（プレゼンス検出のみで、compute dispatchは未実装のためGPUでのマイニング・推論は不可）。Prometheus互換のメトリクスエクスポート（`/metrics`・`/healthz`・`/readyz`）。
+Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通りです。Stratum V2/V1対応のマイニングクライアント（実際に採掘します。複数プールを明示設定すれば優先順位付きフェイルオーバーが機能し、未設定時は組み込みの既定プール1つにフォールバック）。Lightning関連コードによるBIP-39シードの暗号化保管（決済処理そのものは未実装）。裁定エンジン（現時点の収益源は実採掘の1系統のみなので、実質的な判断は「このデバイスを動かす価値があるか」——`min_yield_sats_per_sec` の採算下限を超えるか、`curtail_below_btc_usd` で停止中か——である）。CPU自動検出（実マイニング対応）およびLinux限定のGPU検出（プレゼンス検出のみで、compute dispatchは未実装のためGPUでのマイニング・推論は不可）。Prometheus互換のメトリクスエクスポート（`/metrics`・`/healthz`・`/readyz`）。
 
 以下は現時点で未実装、またはv4.0以降の計画のみの機能です：ASIC検出、ZKPベース認証、プラグインアーキテクチャ、Web管理インターフェース、OpenTelemetry分散トレーシング、署名付きバイナリ配布、分散レンダリング、科学計算委託。詳細は `docs/KNOWN_LIMITATIONS.md` を参照してください。
 
@@ -132,9 +132,9 @@ Otedama v3.0は2026年4月に戦略的リセットを実施した新世代バー
 
 ロードマップの詳細は `ROADMAP.md` を、進捗状況は GitHub Projects を参照してください。
 
-**アルファ段階の既知の制約は [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md) に正直に列挙しています。** AI推論収益が現在シミュレーションであること、Noise NX が暫定的に P-256 を使用していること等、「設計上の意図」と「未実装」の区別を明記しています。利用前に必ず確認してください。
+**アルファ段階の既知の制約は [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md) に正直に列挙しています。** GPUでのcompute dispatchが未実装であること、ASICを検出しないこと、Noise NX が暫定的に P-256 を使用していること等、「設計上の意図」と「未実装」の区別を明記しています。利用前に必ず確認してください。
 
-The known limitations of this alpha — including that AI-inference yield is currently *simulated*, and that the Noise NX handshake temporarily uses P-256 — are listed honestly in [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md). Please read it before relying on Otedama.
+The known limitations of this alpha — including that no GPU compute dispatch exists, that ASIC hardware is not detected, and that the Noise NX handshake temporarily uses P-256 — are listed honestly in [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md). Please read it before relying on Otedama.
 
 ## コントリビューション / Contributing
 

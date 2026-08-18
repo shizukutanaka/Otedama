@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 264 — 整合性の最終掃き出し: 削除した機能への参照が残っていた箇所を是正)
+
+シミュレーション市場と量子耐性スキャフォールディングの削除に伴い、それらを現在形で記述していた
+残存箇所を更新した。
+
+- `README.md` 日英: 「2系統（実採掘・simulated AI推論）のリアルタイム裁定エンジン」→
+  収益源が1系統である現在、裁定エンジンの実質的な判断は「このデバイスを動かす価値があるか」
+  （`min_yield_sats_per_sec` の下限、`curtail_below_btc_usd` による停止）である旨に。
+  「既知の制約」の例示も、削除済みの項目ではなく実際に残っている制約（GPU compute dispatch 未実装、
+  ASIC未検出、Noise NX の P-256）に差し替え。
+- `docs/SPECIFICATION.md` §7 の既知制約リストを、解決済み6項目と未解決7項目に分けて全面更新。
+- `docs/architecture.md` の状態注記: 「実装済みの収益源は2系統」→1系統。
+- `docs/KNOWN_LIMITATIONS.md` の「実物とシミュレーションの境界を自分で確認する方法」節は、
+  区別すべきシミュレーションが無くなったため、**今日ユーザーが実際に確認できること**
+  （収益レートの出所、`otedama wallet verify` によるバックアップ確認）の節に書き換えた。
+- `docs/CATEGORY_AUDIT.md` に session 264 のエントリを追加。削除**しなかった**もの
+  （`ProtocolDATUM`）とその理由も記録した——`AddressP2MR` と違い `poolproto.FromURL` から
+  到達可能で、ADR-009 が具体的な実装形（`poolproto/stratumv1` を再利用するSV1トランスポート
+  ダイアラー、MITライセンスの参照実装で確認済み）を記録している。証拠ではなく原則で削除するのは、
+  逆方向の同じ誤りである。
+
+**session 264 の到達点**: 記録された19件の制約のうち13件が解決済み（1件は部分解決）。
+未解決の各項目は、ADRと目標を持つ適切にスコープされた機能（§4 GPU compute、§6 Lightningノード、
+§8 ASICファームウェア制御、§14 DATUM）、CODEOWNERSレビュー待ちの変更（§2 Noise NX、
+§16 パスフレーズ更新）、またはこの環境の制約（§13——`.github/` はここからpushできない）の
+いずれかである。
+
 ### Removed (session 264 — ②削除の最終掃き出し: **到達不能な量子耐性スキャフォールディング**——`CLAUDE.md` が現段階での着手を禁じている領域)
 
 **削除したもの.** `internal/btccrypto` の `AddressP2MR` 定数、その `String()` 分岐、

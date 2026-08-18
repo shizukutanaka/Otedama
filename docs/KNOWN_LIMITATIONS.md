@@ -978,15 +978,25 @@ would break some vector's mnemonic.
 
 ---
 
-## How to verify the real vs. simulated boundary yourself
+## How to verify what is real yourself
 
-- **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to
-  a real Stratum pool and submits real shares.
-- **Inference (simulated):** any provider whose name ends in
-  "(simulated)" is modelled, not live.
-- **Self-check:** `otedama doctor` runs diagnostic checks; `otedama
-  config show` prints the effective configuration including provider
-  names.
+There is no longer a simulated revenue stream to tell apart: the one that
+existed was deleted in session 264 (§1), so every figure the product shows
+comes from something it actually does.
+
+- **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to a
+  real Stratum pool and submits real shares. It is the only revenue stream.
+- **The earnings rate** in the dashboard is the sum of the streams
+  arbitration is routing devices to right now — zero when nothing is
+  allocated, rather than a would-be rate. `otedama_arbitration_expected_
+  yield_sats_per_second` is the same number.
+- **Your backup:** `otedama wallet verify` confirms the recovery phrase you
+  wrote down reproduces the stored wallet. This is the one check that
+  cannot be done later — BIP-39 derivation is one-way, so do it while you
+  still hold both the phrase and a working wallet.
+- **Self-check:** `otedama doctor` runs diagnostic checks; `otedama config
+  show --origin` prints the effective configuration and which layer set
+  each value.
 
 If you find a behaviour that is simplified or stubbed but **not** listed
 here, that is a documentation bug — please open an issue. Honesty about

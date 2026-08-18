@@ -899,3 +899,45 @@ pool-URL scheme check, and `Validate` accumulating all issues rather than
 returning the first.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 264 — the Musk algorithm applied to the product definition
+
+A different exercise from the primary-source audits above. The user asked
+for the product to be *finished* using Musk's five-step algorithm — question
+every requirement, delete what you can, simplify, accelerate, automate —
+and steps 1 and 2 turned out to be where the value was.
+
+**Step 1, questioning the requirement.** The product definition claims
+real-time arbitration across four workload streams. Rendering and scientific
+computing are v4.0 scope with no code. AI inference was listed as
+implemented, but `AkashProvider` returned the midpoint of a hardcoded
+USD/hour band. One of the four existed.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | The simulated market's quote flowed into the TUI's headline sats/day figure and `otedama_arbitration_expected_yield_sats_per_second`. The `(simulated)` suffix marked the provider *name*, not the number a user reads; on a GPU host the fabricated component outweighed real mining revenue by ~5 orders of magnitude. | ✅ Deleted. A disclaimer beside a wrong number is not a right number. `Provider`, `RateSource`, the polling lifecycle and multi-stream arbitration all survive for a real integration. |
+| S | `tui.earningsLine` added a local `HashRate × defaultSatsPerHash()` estimate to the sum of every active provider's yield — and the mining provider is one of those providers, so **real mining revenue was counted twice**. The local estimate was a third copy of the yield model carrying a network hashrate frozen at 1e21. The comment said "Add AI inference yield from active providers"; the code added all of them. | ✅ Fixed: one source, the allocation arbitration actually made. The old tests asserted only `Contains(line, "sats/day")`, which passed with the double count; replaced with exact-value tests. |
+| S | `BENCHMARKS.md` published "GPU AI (Akash) $12.00/day", "Apple M2 Pro ~$8.00 (via NPU)", and the conclusion that "the arbitration engine's entire value is in routing GPUs to AI inference". No code path could reach any of it. | ✅ Rewritten to the streams that exist, with the GPU and ASIC rows explicitly empty and the reason given. |
+| S | `docs/architecture.md` named a **Strawberry API** ("並行開発中のプロジェクト") as the primary AI-inference integration. No such API exists — a direct violation of CLAUDE.md's prohibition on documenting non-existent APIs. | ✅ Removed, replaced with the selection criteria actually used. |
+| S | The non-custodial guarantee was **unexercisable**: the recovery phrase is printed once and never re-derivable, so a transcription error was silent until a recovery attempt. | ✅ Added `otedama wallet verify` — stdin only, constant-time seed comparison, never creates a wallet, distinguishes an invalid mnemonic from a valid one belonging to another wallet. `internal/lightning` untouched. |
+| S | A non-ASCII BIP-39 passphrase produced a wallet no other tool could restore from the printed phrase (§19, 🚩). Two fixes had been recorded pending a maintainer decision. | ✅ Decided: refuse, not normalise. Normalising buys conformance with a dependency ADR-003 forbids; hand-rolling NFKD is the from-scratch standard-algorithm implementation CLAUDE.md forbids for funds-critical code. Rejected at creation only, so no existing wallet is locked out. |
+| R | The TUI repaint assumes a fixed 80 columns; below that every line wraps and the cursor-home offsets desynchronise into overlapping fragments. `SetWidth` existed but was called by nothing outside tests. | ✅ Fixed on Linux via TIOCGWINSZ, polled per render tick. Tests drive a real pseudo-terminal, since the struct layout and `ws_col` offset are exactly what a stub cannot check. Also removed a latent data race on `cols`. |
+| R | `AddressP2MR` plus a "2028–2032 BIP-360" timeline: unreachable (the bech32 parser rejects witness versions 2–16), dated against an unwritten BIP, and in an area CLAUDE.md prohibits starting. | ✅ Deleted; ADR-006 amended rather than rewritten. The seam that makes a future scheme cheap — `Scheme`, `SchemeForAddressType` — is what remains. |
+| R | `otedama completion --help` exited 64, indistinguishable from a real usage error, because `completion` defines no FlagSet and so never reached `parseSubcommandFlags`. | ✅ Fixed. Found by a new test that enforces the sync `completion.go`'s own header comment asks for, replacing one that asserted a hardcoded command-list literal. |
+
+**Net:** thirteen of the nineteen recorded limitations are now resolved (one
+partially). Every one still open is either a properly scoped feature with an
+ADR and a target (§4 GPU compute, §6 Lightning node, §8 ASIC firmware
+control, §14 DATUM), a CODEOWNERS-gated change awaiting review (§2 Noise NX,
+§16 passphrase rotation), or blocked by this environment (§13, `.github/`
+is not pushable here).
+
+**What did not get deleted, and why.** `ProtocolDATUM` stays: unlike
+`AddressP2MR` it is reachable through `poolproto.FromURL`, and ADR-009
+records a concrete implementation shape (an SV1-transport dialer reusing
+`poolproto/stratumv1`, confirmed from the MIT-licensed reference gateway).
+It is a designed extension point, not a speculation. Deleting on principle
+rather than on evidence would have been the same mistake in the opposite
+direction.
