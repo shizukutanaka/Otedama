@@ -43,6 +43,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"unicode"
 )
 
 // WalletManager handles the secure creation and retrieval of the
@@ -87,11 +88,13 @@ type walletOptions struct {
 // the original derivation with no additional passphrase, so every existing
 // caller is unaffected.
 //
-// Keep the passphrase ASCII. MnemonicToSeed does not NFKD-normalise it as
-// BIP-39 requires, so a non-ASCII passphrase produces a seed no other
-// BIP-39 wallet will reproduce from the same recovery phrase — the phrase
-// would then restore a different, valid-looking wallet elsewhere. See
-// MnemonicToSeed's normalisation note and docs/KNOWN_LIMITATIONS.md §19.
+// The passphrase must be ASCII. MnemonicToSeed does not NFKD-normalise it as
+// BIP-39 requires, so a non-ASCII passphrase would produce a seed no other
+// BIP-39 wallet reproduces from the same recovery phrase — the phrase would
+// restore a different, valid-looking wallet elsewhere. Rather than derive
+// that silently, wallet creation rejects it with ErrNonPortablePassphrase;
+// see checkMnemonicPassphraseIsPortable for why refusing was chosen over
+// normalising, and docs/KNOWN_LIMITATIONS.md §19.
 func WithMnemonicPassphrase(p string) WalletOption {
 	return func(o *walletOptions) { o.mnemonicPassphrase = p }
 }
@@ -175,10 +178,67 @@ func (wm *WalletManager) Mnemonic() Mnemonic { return wm.mnemonic }
 // (wallet.dat did not previously exist).
 func (wm *WalletManager) IsNew() bool { return wm.mnemonic != nil }
 
+// ErrNonPortablePassphrase is returned when wallet creation is asked for a
+// BIP-39 mnemonic passphrase Otedama cannot derive conformantly. Callers can
+// test for it with errors.Is.
+var ErrNonPortablePassphrase = errors.New("lightning: BIP-39 passphrase must be ASCII")
+
+// checkMnemonicPassphraseIsPortable refuses a mnemonic passphrase whose seed
+// Otedama would derive differently from every other BIP-39 wallet.
+//
+// # Why refuse rather than normalise (decided session 264)
+//
+// BIP-39 specifies the PBKDF2 salt as "mnemonic" + the passphrase in UTF-8
+// NFKD. MnemonicToSeed performs the PBKDF2 exactly as specified but does not
+// normalise, and a non-ASCII passphrase as typed is almost always NFC — "é"
+// as U+00E9, "パ" as U+30D1 — which NFKD decomposes. Otedama would therefore
+// derive a different seed than any conformant wallet derives from the same
+// recovery phrase and passphrase: the printed phrase would silently restore
+// a *different, valid-looking* wallet in Electrum or on a hardware wallet.
+// No error is possible in principle there, because the other wallet cannot
+// know it derived the wrong seed.
+//
+// Two fixes were recorded for a maintainer decision (docs/KNOWN_LIMITATIONS.md
+// §19): normalise via golang.org/x/text/unicode/norm, or refuse. Refusing was
+// chosen. Normalising is what a BIP-39 implementation is *supposed* to do,
+// but it buys conformance with a runtime dependency that ADR-003 exists to
+// prevent, and the alternative — hand-rolling NFKD — is exactly the kind of
+// from-scratch implementation of a standard algorithm CLAUDE.md forbids for
+// funds-critical code. Accepting input that cannot be handled correctly is
+// the requirement to drop, not the constraint to work around.
+//
+// NFKD is the identity on ASCII, so an ASCII passphrase — including the empty
+// default, which is the common case — is fully conformant, and this check
+// admits exactly the inputs Otedama derives correctly.
+//
+// It applies only to *creating* a wallet. loadExisting never consults the
+// mnemonic passphrase (only the seed is stored, and it is not re-derived), so
+// a wallet already created with a non-ASCII passphrase keeps opening
+// normally, and `otedama wallet verify` still derives with whatever
+// passphrase it is given so such a wallet can still be checked.
+func checkMnemonicPassphraseIsPortable(p string) error {
+	for i, r := range p {
+		if r > unicode.MaxASCII {
+			return fmt.Errorf(
+				"%w: the character %q at byte %d is outside ASCII. BIP-39 requires the "+
+					"passphrase in Unicode NFKD form, which Otedama does not normalise, so this "+
+					"passphrase would produce a wallet no other BIP-39 tool can restore from the "+
+					"recovery phrase. Use an ASCII passphrase, or none at all "+
+					"(see docs/KNOWN_LIMITATIONS.md §19)",
+				ErrNonPortablePassphrase, r, i)
+		}
+	}
+	return nil
+}
+
 // createNew generates a new seed, encrypts it, and saves it to disk.
 // mnemonicPassphrase is the optional BIP-39 "25th word" (see
 // WithMnemonicPassphrase); pass "" for the standard derivation.
 func (wm *WalletManager) createNew(passphrase, mnemonicPassphrase string, reader io.Reader) error {
+	if err := checkMnemonicPassphraseIsPortable(mnemonicPassphrase); err != nil {
+		return err
+	}
+
 	entropy, err := GenerateEntropy(DefaultEntropyBits, reader)
 	if err != nil {
 		return fmt.Errorf("lightning: generate entropy: %w", err)

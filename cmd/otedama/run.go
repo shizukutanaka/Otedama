@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/engine"
@@ -75,9 +76,9 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 			"created. Distinct from --wallet-passphrase (which encrypts the seed at "+
 			"rest); this changes which seed the recovery mnemonic derives to. Not "+
 			"needed again after first run — it is already folded into wallet.dat. "+
-			"Use ASCII characters only: a non-ASCII passphrase is not NFKD-normalised, "+
-			"so the recovery phrase would restore a different wallet in other BIP-39 "+
-			"software (docs/KNOWN_LIMITATIONS.md §19).")
+			"Must be ASCII: a non-ASCII passphrase is not NFKD-normalised, so the "+
+			"recovery phrase would restore a different wallet in other BIP-39 software, "+
+			"and is rejected with exit 78 (docs/KNOWN_LIMITATIONS.md §19).")
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.logFile, "log-file", "",
 		"(run only) Append structured logs to this file. Written even while the TUI is active, "+
@@ -160,6 +161,18 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	}
 	cfg := config.Resolve(fromFile, nil, f.FlagValues)
 	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return exitConfig
+	}
+
+	// Reject a non-portable BIP-39 passphrase here, not only in
+	// lightning.NewWalletManager. The library rejects it too — that is where
+	// the invariant belongs — but engine.setupWallet logs wallet failures at
+	// warn level and continues without a wallet, and with the TUI active and
+	// no --log-file the logger is a discard sink, so the user would see a
+	// silent no-wallet run instead of the reason. Failing here makes it an
+	// ordinary config error with an exit code and a message on stderr.
+	if err := checkWalletMnemonicPassphrase(f.walletMnemonicPassphrase); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return exitConfig
 	}
@@ -322,4 +335,29 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 	}
 	fmt.Fprintf(stdout, "[info] http: listening on %s\n", httpAddr)
 	return reg, srv
+}
+
+// checkWalletMnemonicPassphrase mirrors lightning's portability rule at the
+// CLI boundary so the failure is visible. See
+// lightning.checkMnemonicPassphraseIsPortable for why a non-ASCII BIP-39
+// passphrase is refused rather than normalised, and
+// docs/KNOWN_LIMITATIONS.md §19.
+//
+// It duplicates a rule rather than calling into lightning because the check
+// there is unexported and guards wallet *creation*, while this one guards
+// *user input* and must run before anything starts. Both admit exactly the
+// ASCII strings, on which NFKD is the identity; the lightning test suite pins
+// that rule, and this one is pinned separately in run_test.go.
+func checkWalletMnemonicPassphrase(p string) error {
+	for i, r := range p {
+		if r > unicode.MaxASCII {
+			return fmt.Errorf(
+				"--wallet-mnemonic-passphrase contains %q at byte %d, which is outside ASCII.\n"+
+					"BIP-39 requires the passphrase in Unicode NFKD form, which Otedama does not\n"+
+					"normalise, so this passphrase would create a wallet whose recovery phrase no\n"+
+					"other BIP-39 tool can restore. Use an ASCII passphrase, or none at all\n"+
+					"(see docs/KNOWN_LIMITATIONS.md §19).", r, i)
+		}
+	}
+	return nil
 }

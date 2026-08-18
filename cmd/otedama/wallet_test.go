@@ -283,3 +283,69 @@ func TestCmdWallet_HelpGoesToStdoutAndExitsZero(t *testing.T) {
 		t.Errorf("help wrote to stderr: %q", stderr.String())
 	}
 }
+
+// ============================================================================
+// --wallet-mnemonic-passphrase portability (session 264, KNOWN_LIMITATIONS §19)
+// ============================================================================
+
+// TestCheckWalletMnemonicPassphrase_RejectsNonASCII pins the CLI-level half of
+// the rule. lightning.NewWalletManager rejects it too, but engine.setupWallet
+// logs wallet failures at warn level and carries on without a wallet — and
+// with the TUI active and no --log-file the logger is a discard sink, so
+// relying on the library alone would give the user a silent no-wallet run
+// instead of a reason.
+func TestCheckWalletMnemonicPassphrase_RejectsNonASCII(t *testing.T) {
+	for _, p := range []string{"caf\u00e9", "\u30d1\u30b9\u30ef\u30fc\u30c9", "two\u00a0words", "\U0001f434"} {
+		err := checkWalletMnemonicPassphrase(p)
+		if err == nil {
+			t.Errorf("passphrase %q accepted; want rejection", p)
+			continue
+		}
+		if !strings.Contains(err.Error(), "NFKD") || !strings.Contains(err.Error(), "§19") {
+			t.Errorf("error for %q = %q, want the NFKD reason and the docs pointer", p, err)
+		}
+	}
+}
+
+func TestCheckWalletMnemonicPassphrase_AcceptsASCIIAndEmpty(t *testing.T) {
+	for _, p := range []string{"", "correct horse battery staple", "~!@#$%^&*()_+ 123"} {
+		if err := checkWalletMnemonicPassphrase(p); err != nil {
+			t.Errorf("passphrase %q rejected: %v", p, err)
+		}
+	}
+}
+
+// TestRun_NonASCIIMnemonicPassphraseIsAConfigError checks the wiring: the
+// check must run at config time and exit with the config code, so a script
+// can tell it apart from a runtime failure.
+//
+// --dry-run is what makes this a test rather than a hang. The check sits
+// before the dry-run early return, so a correct implementation still rejects;
+// but if the check were removed, dry-run returns exitOK immediately instead of
+// starting the engine and blocking until a signal that never comes. A
+// regression should fail this in milliseconds, not wedge the suite.
+func TestRun_NonASCIIMnemonicPassphraseIsAConfigError(t *testing.T) {
+	t.Setenv("OTEDAMA_CONFIG", filepath.Join(t.TempDir(), "no-such-config.yaml"))
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--wallet-passphrase", "encryption passphrase",
+		"--wallet-mnemonic-passphrase", "\u30d1\u30b9\u30ef\u30fc\u30c9",
+		"--data-dir", t.TempDir(),
+		"--no-tui",
+		"--dry-run",
+	}, &stdout, &stderr)
+
+	if code != exitConfig {
+		t.Fatalf("exit = %d, want %d (config error)\nstdout: %s\nstderr: %s",
+			code, exitConfig, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "wallet-mnemonic-passphrase") {
+		t.Errorf("stderr = %q, want it to name the flag", stderr.String())
+	}
+	// The rejection must beat the dry-run success message, not follow it.
+	if strings.Contains(stdout.String(), "configuration is valid") {
+		t.Errorf("dry-run reported success for a rejected passphrase: %q", stdout.String())
+	}
+}

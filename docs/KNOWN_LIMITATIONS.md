@@ -914,75 +914,62 @@ next step before claiming Stratum V2 works end to end.
 
 ---
 
-## 19. A non-ASCII BIP-39 passphrase produces a wallet other software cannot restore 🚩
+## ~~19. A non-ASCII BIP-39 passphrase produces a wallet other software cannot restore~~ ✅ RESOLVED (session 264 — by refusing the input)
 
-**What:** BIP-39 derives the seed with
+**What it was:** BIP-39 derives the seed with
 `PBKDF2(password = mnemonic sentence in UTF-8 NFKD, salt = "mnemonic" +
 passphrase in UTF-8 NFKD, 2048 iterations, HMAC-SHA512, 64 bytes)`.
 `lightning.MnemonicToSeed` performs the PBKDF2 exactly as specified but
-normalises neither input.
+normalises neither input, and a non-ASCII passphrase as typed is almost
+always NFC — `é` as U+00E9, `パ` as U+30D1 — which NFKD decomposes. Otedama
+therefore derived a different seed than any conformant wallet derives from
+the same phrase and passphrase: the printed recovery phrase would silently
+restore a *different, valid-looking* wallet in Electrum or on a hardware
+wallet. No error was possible in principle, because the other wallet cannot
+know it derived the wrong seed.
 
-For the mnemonic sentence this has no practical effect: the bundled
-English wordlist is ASCII (NFKD is the identity on ASCII), BIP-39 requires
-every wordlist to be NFKD-encoded anyway, and joining Japanese words with
-an ASCII space instead of the conventional ideographic space (U+3000) is
-equivalent because NFKD maps U+3000 to a plain space.
+(For the mnemonic sentence itself this never mattered: the bundled English
+wordlist is ASCII, NFKD is the identity on ASCII, BIP-39 requires every
+wordlist to be NFKD-encoded anyway, and joining Japanese words with an ASCII
+space rather than U+3000 is equivalent because NFKD maps U+3000 to a plain
+space.)
 
-For the **passphrase** it matters. `--wallet-mnemonic-passphrase` (or
-`OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`) takes an arbitrary string, and a
-non-ASCII passphrase as typed is almost always NFC — `é` as U+00E9, `パ`
-as U+30D1 — which NFKD decomposes. Otedama therefore derives a different
-seed than any conformant wallet derives from the same phrase and
-passphrase.
+**Decision taken: refuse, not normalise.** Two fixes were recorded for a
+maintainer decision. Normalising via `golang.org/x/text/unicode/norm` is what
+a BIP-39 implementation is *supposed* to do, but it buys conformance with a
+runtime dependency that ADR-003 exists to prevent, and the alternative —
+hand-rolling NFKD — is exactly the from-scratch implementation of a standard
+algorithm that CLAUDE.md forbids for funds-critical code. Accepting input
+that cannot be handled correctly was the requirement to drop, not the
+constraint to work around.
 
-**Impact:** the recovery phrase Otedama prints is only portable if the
-BIP-39 passphrase is ASCII (including the default: no passphrase at all,
-which is the common case and is unaffected). With a non-ASCII passphrase,
-typing the phrase and passphrase into Electrum, a hardware wallet, or any
-other BIP-39 tool silently produces a *different, valid-looking* wallet —
-the "decoy wallet" failure mode, arrived at unintentionally. Nothing warns
-the user, and no error is possible in principle: the other wallet cannot
-know it derived the wrong seed. Funds already received remain spendable
-through Otedama's own `wallet.dat`, so this is a portability defect rather
-than an immediate loss, but portability is precisely what the recovery
-phrase exists for.
+**What now happens:** creating a wallet with a non-ASCII BIP-39 passphrase
+fails with `lightning.ErrNonPortablePassphrase`, naming the offending
+character and its byte offset — the usual cause is one invisible character,
+a non-breaking space pasted from a web page. `otedama run` performs the same
+check at config time and exits 78, because `engine.setupWallet` logs wallet
+failures at warn level and continues without a wallet, and with the TUI
+active and no `--log-file` the logger is a discard sink; relying on the
+library alone would have produced a silent no-wallet run instead of a reason.
 
-**How you can tell:** you are affected only if you passed
-`--wallet-mnemonic-passphrase` (or set the environment variable) with a
-value containing any character outside ASCII when the wallet was first
-created. The flag's `--help` text now says so.
+**Nobody is locked out.** The check applies only to wallet *creation*.
+`loadExisting` never consults the mnemonic passphrase — only the seed is
+stored, and it is not re-derived — so a wallet already created with a
+non-ASCII passphrase keeps opening normally, and `otedama wallet verify`
+still derives with whatever passphrase it is given, so such a wallet can
+still be checked. Both properties are pinned by tests.
 
-**Workaround:** use an ASCII-only BIP-39 passphrase. An empty passphrase
-(the default) is fully conformant. If you already created a wallet with a
-non-ASCII passphrase and want portability, create a new wallet in a fresh
-`--data-dir` with an ASCII passphrase and mine to that instead.
+**Still true, and now the only supported shape:** an ASCII passphrase —
+including the empty default, which is the common case — is fully
+conformant, because NFKD is the identity on ASCII. If you already created a
+wallet with a non-ASCII passphrase and want portability, create a new wallet
+in a fresh `--data-dir` with an ASCII passphrase and mine to that instead.
 
-**Why this is flagged rather than fixed:** `internal/lightning` is
-CODEOWNERS-gated funds-critical code, and both plausible fixes are
-behaviour changes that need a maintainer decision:
-
-1. **Normalise** — apply NFKD via `golang.org/x/text/unicode/norm`. Fully
-   conformant, but adds a runtime dependency, which ADR-003 (zero runtime
-   dependencies) exists to prevent. It also changes the seed derived from
-   an existing non-ASCII passphrase, so it needs a migration note (existing
-   wallets keep working: only the seed is stored, and it is not re-derived).
-2. **Reject** — refuse a non-ASCII passphrase at wallet creation with an
-   explanatory error. Dependency-free and prevents a non-portable wallet
-   from ever being created, but rejects input that is accepted today.
-
-Option 2 is the smaller change and preserves ADR-003; option 1 is what a
-BIP-39 implementation is supposed to do. Recorded here, in
-`docs/CATEGORY_AUDIT.md` (session 257, 🚩), and in the doc comments on
-`MnemonicToSeed` / `WithMnemonicPassphrase` pending that decision.
-
-**What was verified at the same time (session 257):** the rest of the
-BIP-39 path is now checked against the complete official English
-test-vector set — entropy to mnemonic, mnemonic back to entropy, and
-mnemonic to seed for all 16 vectors
-(`internal/lightning/bip39_vectors_test.go`). Before this the package
-claimed to be "validated against the specification's published test
-vectors" on the strength of three of them. The embedded wordlist is
-confirmed to be the official one by the same run: a single wrong word
+**What was verified alongside (session 257):** the rest of the BIP-39 path
+is checked against the complete official English test-vector set — entropy
+to mnemonic, mnemonic back to entropy, and mnemonic to seed for all 16
+vectors (`internal/lightning/bip39_vectors_test.go`). The embedded wordlist
+is confirmed to be the official one by the same run: a single wrong word
 would break some vector's mnemonic.
 
 ---

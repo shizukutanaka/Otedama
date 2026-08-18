@@ -5,8 +5,10 @@ package lightning
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -360,5 +362,119 @@ func TestNewWalletManager_RejectsEmptyPassphrase(t *testing.T) {
 func TestNewWalletManager_RejectsNilWordList(t *testing.T) {
 	if _, err := NewWalletManager(t.TempDir(), "p", nil, nil); err == nil {
 		t.Error("nil WordList accepted")
+	}
+}
+
+// ============================================================================
+// Non-portable BIP-39 passphrase rejection (session 264, resolves
+// docs/KNOWN_LIMITATIONS.md §19)
+// ============================================================================
+
+// TestCreateNew_RejectsNonASCIIMnemonicPassphrase pins the decision to refuse
+// input Otedama cannot derive conformantly. Without it, the recovery phrase
+// printed at creation would silently restore a *different* wallet in any
+// other BIP-39 tool — a failure no other wallet can detect, because it has no
+// way to know it derived the wrong seed.
+func TestCreateNew_RejectsNonASCIIMnemonicPassphrase(t *testing.T) {
+	wl, err := NewEnglishWordList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name       string
+		passphrase string
+	}{
+		{"precomposed latin", "caf\u00e9"},
+		{"katakana", "\u30d1\u30b9\u30ef\u30fc\u30c9"},
+		{"emoji", "correct horse \U0001f434"},
+		{"non-breaking space", "two\u00a0words"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			_, err := NewWalletManager(dir, "encryption passphrase", nil, wl,
+				WithMnemonicPassphrase(tc.passphrase))
+			if err == nil {
+				t.Fatal("wallet creation accepted a non-ASCII BIP-39 passphrase")
+			}
+			if !errors.Is(err, ErrNonPortablePassphrase) {
+				t.Errorf("err = %v, want ErrNonPortablePassphrase", err)
+			}
+			// The rejection must happen before anything is written: a
+			// half-created wallet would be worse than either outcome.
+			if _, statErr := os.Stat(filepath.Join(dir, walletFile)); !os.IsNotExist(statErr) {
+				t.Error("a wallet file was written despite the rejection")
+			}
+		})
+	}
+}
+
+// TestCreateNew_AcceptsASCIIAndEmptyMnemonicPassphrase is the other half: NFKD
+// is the identity on ASCII, so these are exactly the inputs Otedama derives
+// conformantly, and the check must not narrow further than that. The empty
+// passphrase is the common case and must keep working.
+func TestCreateNew_AcceptsASCIIAndEmptyMnemonicPassphrase(t *testing.T) {
+	wl, err := NewEnglishWordList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, passphrase := range []string{"", "correct horse battery staple", "~!@#$%^&*()_+ 123"} {
+		wm, err := NewWalletManager(t.TempDir(), "encryption passphrase", nil, wl,
+			WithMnemonicPassphrase(passphrase))
+		if err != nil {
+			t.Errorf("passphrase %q rejected: %v", passphrase, err)
+			continue
+		}
+		if !wm.IsNew() {
+			t.Errorf("passphrase %q: expected a newly created wallet", passphrase)
+		}
+	}
+}
+
+// TestLoadExisting_IgnoresTheMnemonicPassphraseEntirely is why rejecting at
+// creation cannot lock anyone out. A wallet created before this check existed
+// with a non-ASCII passphrase must keep opening, because loading decrypts the
+// stored seed and never re-derives it. The test builds that situation the only
+// way still possible — create with an ASCII passphrase, then reopen passing a
+// non-ASCII one — and asserts the option is not consulted on the load path.
+func TestLoadExisting_IgnoresTheMnemonicPassphraseEntirely(t *testing.T) {
+	wl, err := NewEnglishWordList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	created, err := NewWalletManager(dir, "encryption passphrase", nil, wl,
+		WithMnemonicPassphrase("ascii at creation"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	want := created.Fingerprint()
+
+	reopened, err := NewWalletManager(dir, "encryption passphrase", nil, wl,
+		WithMnemonicPassphrase("\u30d1\u30b9\u30ef\u30fc\u30c9"))
+	if err != nil {
+		t.Fatalf("reopening an existing wallet must not consult the mnemonic passphrase, got: %v", err)
+	}
+	if got := reopened.Fingerprint(); got != want {
+		t.Errorf("fingerprint after reopen = %s, want %s", got, want)
+	}
+	if reopened.IsNew() {
+		t.Error("reopening reported a new wallet")
+	}
+}
+
+// TestCheckMnemonicPassphraseIsPortable_ErrorNamesTheOffendingCharacter keeps
+// the message actionable: a user who pasted a passphrase with one invisible
+// non-ASCII character (a non-breaking space from a web page is the usual way)
+// needs to be told which character and where, not merely "not ASCII".
+func TestCheckMnemonicPassphraseIsPortable_ErrorNamesTheOffendingCharacter(t *testing.T) {
+	err := checkMnemonicPassphraseIsPortable("two\u00a0words")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	msg := err.Error()
+	for _, want := range []string{"\\u00a0", "byte 3", "NFKD", "§19"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q does not mention %q", msg, want)
+		}
 	}
 }
