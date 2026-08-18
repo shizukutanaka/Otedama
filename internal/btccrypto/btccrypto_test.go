@@ -114,32 +114,12 @@ func TestAddressType_StringForKnownTypes(t *testing.T) {
 		{AddressP2WPKH, "P2WPKH"},
 		{AddressP2WSH, "P2WSH"},
 		{AddressP2TR, "P2TR"},
-		{AddressP2MR, "P2MR"},
 		{AddressUnknown, "unknown"},
 		{AddressType(99), "unknown"},
 	} {
 		if got := tt.typ.String(); got != tt.want {
 			t.Errorf("(%d).String() = %q, want %q", tt.typ, got, tt.want)
 		}
-	}
-}
-
-func TestSchemeForAddressType_P2MRReturnsNotImplemented(t *testing.T) {
-	// This is the single most important test in this file. When
-	// BIP-360 activates years from now, the maintainer must change
-	// this test — and that change is the signal that they have
-	// also implemented the ML-DSA scheme. If this test mysteriously
-	// passes (returns a Scheme for P2MR) without the implementation
-	// being added, something is very wrong.
-	_, err := SchemeForAddressType(AddressP2MR)
-	if err == nil {
-		t.Fatal("AddressP2MR returned a Scheme; ML-DSA implementation is not done yet.")
-	}
-	if !errors.Is(err, ErrSchemeNotImplemented) {
-		t.Errorf("err is not ErrSchemeNotImplemented: %v", err)
-	}
-	if !strings.Contains(err.Error(), "BIP-360") {
-		t.Errorf("error message should reference BIP-360 for searchability: %v", err)
 	}
 }
 

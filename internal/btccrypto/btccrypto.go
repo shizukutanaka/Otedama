@@ -1,46 +1,61 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Otedama contributors. See NOTICE for details.
-// Package btccrypto abstracts the signature schemes Otedama uses so
-// that the inevitable post-quantum transition (BIP-360, expected
-// 2028–2032) becomes a drop-in implementation change rather than a
-// codebase-wide rewrite.
+// Package btccrypto validates Bitcoin payout addresses and holds the seam
+// through which signature schemes are selected, so that adding one later is
+// a local change rather than a codebase-wide rewrite.
 //
 // # Why this exists
 //
-// Bitcoin's signature landscape is moving:
-//
-//   - 2009–2021: ECDSA over secp256k1 only (P2PKH, P2SH).
-//   - 2021–:     Schnorr over secp256k1 added (P2TR, BIP-340).
-//   - 2028–2032: BIP-360 introduces P2MR (Post-quantum Multi-Resistant)
-//     outputs combining secp256k1 + ML-DSA (Dilithium) +
-//     SPHINCS+. Activation timing has ±2-year uncertainty.
-//   - 2032+:     Eventual sunsetting of pure-secp256k1 outputs once
-//     cryptographically-relevant quantum computers arrive.
-//
-// Otedama's mining, payout, and wallet code must keep working through
-// all of these transitions without touching call sites in stratum/,
-// lightning/, or engine/. This package is the seam.
+// Bitcoin's signature landscape has moved once already — ECDSA over
+// secp256k1 for P2PKH and P2SH, then Schnorr over secp256k1 for P2TR
+// (BIP-340) — and Otedama's mining, payout, and wallet code should keep
+// working across the next such change without touching call sites in
+// stratum/, lightning/, or engine/. Scheme and SchemeForAddressType are
+// that seam.
 //
 // # Design
 //
-//   - Scheme is an interface; any signature algorithm that implements
-//     it (Sign, Verify, PublicKeyFromBytes) can be plugged in.
-//   - Schemes() returns the registered set; Otedama chooses one based
-//     on the address type it sees.
-//   - The default registry includes ECDSA+secp256k1 and Schnorr,
-//     currently as namespace-reserving stubs pending the secp256k1
-//     dependency (ADR-011); ML-DSA/SPHINCS+ are likewise scaffolded so
-//     each addition is small when the day comes.
+//   - Scheme is an interface; any signature algorithm that implements it
+//     (Sign, Verify, PublicKeyFromBytes) can be plugged in.
+//   - Schemes() returns the registered set; SchemeForAddressType maps a
+//     parsed address to the scheme that spends it.
+//   - The registry holds ECDSA+secp256k1 and Schnorr as
+//     namespace-reserving stubs pending the secp256k1 dependency
+//     (ADR-011).
+//
+// # No post-quantum scaffolding (removed session 264)
+//
+// This package used to carry an AddressP2MR constant, a "2028–2032:
+// BIP-360 introduces P2MR" timeline, and a SchemeForAddressType case
+// returning "not yet implemented" for it. All of it was removed:
+//
+//   - Nothing could produce the value. No address parser in this package
+//     returns AddressP2MR — bech32.go rejects witness versions 2–16
+//     outright — so the constant was unreachable and its guard clause
+//     guarded against a value that could not exist.
+//   - The timeline was wrong, by this repository's own research.
+//     BIP-360 is Status: Draft, is titled "Pay-to-Merkle-Root", and its
+//     own text defers post-quantum signatures to a separate proposal that
+//     has not been written. A dated forecast for an unwritten BIP is a
+//     guess presented as a schedule.
+//   - CLAUDE.md prohibits starting quantum-resistance work at this stage.
+//     Scaffolding for it is starting it, in the way that costs most and
+//     delivers least: the code carries the maintenance and the reader's
+//     attention without carrying any capability.
+//
+// The seam that makes a future addition cheap is Scheme and
+// SchemeForAddressType, and both remain. Adding a scheme is a Register
+// call and a switch case whenever there is something real to register.
 //
 // # What this package does NOT do
 //
-//   - It is not a crypto implementation. All real signing/verifying
-//     will delegate to audited libraries (decred/dcrd/dcrec/secp256k1/v4
-//     once ADR-011 lands, crypto/mldsa from std once Go ships it).
+//   - It is not a crypto implementation. All real signing/verifying will
+//     delegate to audited libraries (decred/dcrd/dcrec/secp256k1/v4 once
+//     ADR-011 lands).
 //   - It is not a key-management or wallet layer; that is in
 //     internal/lightning/.
-//   - It is not Stratum-protocol-aware; protocol code calls into
-//     this package, never the reverse.
+//   - It is not Stratum-protocol-aware; protocol code calls into this
+//     package, never the reverse.
 package btccrypto
 
 import (
@@ -66,10 +81,9 @@ var (
 	// or does not verify.
 	ErrInvalidSignature = errors.New("btccrypto: invalid signature")
 
-	// ErrSchemeNotImplemented is returned by stub schemes that exist
-	// to reserve the namespace but are not yet wired to a real
-	// implementation. ML-DSA and SPHINCS+ return this until BIP-360
-	// activates and Go's stdlib ships crypto/mldsa.
+	// ErrSchemeNotImplemented is returned by stub schemes that exist to
+	// reserve the namespace but are not yet wired to a real implementation:
+	// today, the secp256k1 ECDSA and Schnorr stubs, pending ADR-011.
 	ErrSchemeNotImplemented = errors.New("btccrypto: scheme registered but implementation pending")
 
 	// ErrNotBech32 is returned by ValidateBech32Address when the input is not
@@ -97,8 +111,8 @@ var (
 // return scheme-aware byte serialisations.
 type PublicKey interface {
 	// Bytes returns the canonical serialisation for this scheme:
-	// 33 bytes (compressed sec1) for ECDSA-secp256k1; 32 bytes
-	// (x-only) for Schnorr-secp256k1; ML-DSA-65 ≈1952 bytes; etc.
+	// 33 bytes (compressed sec1) for ECDSA-secp256k1, 32 bytes (x-only)
+	// for Schnorr-secp256k1. A scheme added later defines its own size.
 	Bytes() []byte
 
 	// Scheme reports which Scheme produced this key.
@@ -108,8 +122,7 @@ type PublicKey interface {
 // Signature is an opaque, scheme-specific signature.
 type Signature interface {
 	// Bytes returns the canonical serialisation. The size is
-	// scheme-dependent: 64–72 bytes (DER ECDSA), 64 bytes (Schnorr),
-	// ML-DSA-65 ≈3293 bytes, SPHINCS+-128f ≈17088 bytes.
+	// scheme-dependent: 64–72 bytes (DER ECDSA), 64 bytes (Schnorr).
 	Bytes() []byte
 
 	// Scheme reports which Scheme produced this signature.
@@ -242,12 +255,6 @@ const (
 
 	// AddressP2TR is a Taproot v1 SegWit "bc1p..." address. Uses Schnorr.
 	AddressP2TR
-
-	// AddressP2MR is the future BIP-360 Post-quantum Multi-Resistant
-	// address. Activation expected 2028–2032. Reserved here so call
-	// sites can already branch on it; the actual ML-DSA/SPHINCS+
-	// implementation arrives in a later release.
-	AddressP2MR
 )
 
 // String returns a human-readable label.
@@ -263,36 +270,27 @@ func (t AddressType) String() string {
 		return "P2WSH"
 	case AddressP2TR:
 		return "P2TR"
-	case AddressP2MR:
-		return "P2MR"
 	default:
 		return "unknown"
 	}
 }
 
-// SchemeForAddressType returns the canonical Scheme used to spend
-// outputs of the given AddressType. Returns ErrSchemeNotImplemented
-// if the address type is reserved for a future Bitcoin upgrade that
-// Otedama does not yet implement.
+// SchemeForAddressType returns the canonical Scheme used to spend outputs
+// of the given AddressType.
 //
-// This indirection is the heart of the abstraction: when BIP-360
-// activates, this function gains a case for AddressP2MR returning
-// the ML-DSA scheme, and every call site (block-template parsing,
-// payout verification, doctor checks) immediately works on the new
-// address type without further changes.
+// This indirection is the seam described in the package doc: when a new
+// output type gains support, this function gains a case, and every call
+// site (block-template parsing, payout verification, doctor checks) works
+// on the new address type without further changes. An unrecognised type
+// returns ErrUnknownScheme rather than a default scheme, so a call site
+// that somehow reaches one fails loudly instead of signing with the wrong
+// algorithm.
 func SchemeForAddressType(t AddressType) (Scheme, error) {
 	switch t {
 	case AddressP2PKH, AddressP2SH, AddressP2WPKH, AddressP2WSH:
 		return Lookup("ecdsa-secp256k1")
 	case AddressP2TR:
 		return Lookup("schnorr-secp256k1")
-	case AddressP2MR:
-		// Once stdlib ships crypto/mldsa (Go 1.27+ expected) and
-		// BIP-360 activates, return Lookup("mldsa65-sphincs128f").
-		// Until then, we deliberately error so call sites that
-		// might encounter a P2MR address fail loudly rather than
-		// silently mishandling it.
-		return nil, fmt.Errorf("%w: P2MR (BIP-360) not yet implemented", ErrSchemeNotImplemented)
 	default:
 		return nil, fmt.Errorf("%w: unknown address type %v", ErrUnknownScheme, t)
 	}

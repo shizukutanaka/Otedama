@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Removed (session 264 — ②削除の最終掃き出し: **到達不能な量子耐性スキャフォールディング**——`CLAUDE.md` が現段階での着手を禁じている領域)
+
+**削除したもの.** `internal/btccrypto` の `AddressP2MR` 定数、その `String()` 分岐、
+`SchemeForAddressType` の "not yet implemented" 分岐、およびパッケージdocの
+「2028–2032: BIP-360 が P2MR を導入…secp256k1 + ML-DSA (Dilithium) + SPHINCS+」という年表。
+
+**3つの理由.**
+
+1. **どの経路もその値を生成できない.** このパッケージのどの address parser も
+   `AddressP2MR` を返さない——`bech32.go` は witness version 2–16 を明示的に拒否する。
+   定数は到達不能で、そのガード節は**存在しえない値を守っていた**。
+2. **年表はこのリポジトリ自身の調査で否定済み.** session 251 が一次資料から確認したとおり、
+   BIP-360 は Status: Draft、表題は "Pay-to-Merkle-Root (P2MR)" であり、**本文がPQ署名を
+   別提案に委ねている**——その別提案はまだ執筆されていない。未執筆のBIPに日付を付けた予測は、
+   予定表の顔をした推測である。
+3. **`CLAUDE.md` は現段階での量子耐性への着手を禁じている.** スキャフォールディングは、
+   最もコストが高く最も価値が低い形での着手である——コードは保守と読み手の注意を負担するが、
+   能力は何一つ負担しない。ML-DSA や SPHINCS+ のスキームは**一度も登録されていなかった**
+   （登録済みは secp256k1 のスタブ2つのみ）。
+
+**残したもの、そしてそれで十分な理由.** 将来の追加を安くする実体は `Scheme` と
+`SchemeForAddressType` という継ぎ目であり、両方とも残っている。署名スキームの追加は
+`Register` 呼び出し1つと switch 分岐1つ——登録すべき実体ができたときに。
+継ぎ目は到達不能な定数の方ではなかった。
+
+**ADRは書き換えず追記した.** ADR-006 は決定の記録なので、履歴を書き換えるのではなく
+「session 264 追記」として、この決定自体は不変であること、および session 251 以降
+偽と判明した2つの前提（BIP-360 の活性化時期、P2MR分岐の必要性）を明記した。
+
+`internal/btccrypto` のカバレッジ 99.4%。
+
 ### Fixed (session 264 — 最後の🚩資金クリティカル項目を解決: **正しく扱えない入力は受け付けない**——非ASCIIのBIP-39パスフレーズを拒否)
 
 **問題（KNOWN_LIMITATIONS §19）.** BIP-39は PBKDF2 のソルトを

@@ -1,7 +1,38 @@
 # ADR-006: Abstract every cryptographic scheme and wire protocol behind interfaces
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-08-18 (session 264)
+
 **Date:** 2026-04-27
+
+## Amendment (session 264): the post-quantum scaffolding was removed; the seam was kept
+
+The decision this ADR records — abstract schemes behind interfaces so a
+future signature algorithm is a local change — stands unchanged. What was
+removed is the *speculative placeholder* built on top of it: the
+`AddressP2MR` constant, its `String()` case, and the `SchemeForAddressType`
+case returning "not yet implemented".
+
+Two premises below have since been falsified by primary-source research
+(session 251) and should be read with that in mind:
+
+- **"Post-quantum signature support (BIP-360 / P2MR) … the realistic
+  window is 2028–2032."** BIP-360 is Status: Draft, is titled
+  "Pay-to-Merkle-Root (P2MR)", and its own text defers post-quantum
+  signatures to a separate proposal that has not been written. BIP-360
+  activation would not give the network ML-DSA, so no date can be attached
+  to it from here.
+- **"Adding P2MR support after BIP-360 activation is a single commit: add
+  `case AddressP2MR: return Lookup("mldsa65-sphincs128f")`."** This remains
+  true in shape and is the point of the ADR — but it is equally true
+  without the placeholder, which is why the placeholder was removable. No
+  ML-DSA or SPHINCS+ scheme was ever registered; only the two secp256k1
+  stubs are. Nothing could produce `AddressP2MR` either: the bech32 parser
+  rejects witness versions 2–16, so the constant was unreachable.
+
+CLAUDE.md prohibits starting quantum-resistance work at this stage, and
+scaffolding is starting it in the way that costs most and delivers least.
+The seam (`Scheme`, `SchemeForAddressType`) is what makes the future
+addition cheap, and it is intact.
 
 ## Context
 

@@ -193,35 +193,39 @@ current roadmap. Tracked by ADR-008 (hardware/power) sub-domain 2.
 
 ---
 
-## 5. Post-quantum signature schemes are scaffolded, not active
+## ~~5. Post-quantum signature schemes are scaffolded, not active~~ ✅ RESOLVED (session 264 — by deletion)
 
-**What:** `internal/btccrypto` registers ML-DSA and SPHINCS+ scheme
-identifiers as TODO scaffolding. They are not implemented.
+**What it was:** `internal/btccrypto` carried an `AddressP2MR` constant, a
+`String()` case for it, a `SchemeForAddressType` case returning
+"not yet implemented", and a package-doc timeline stating
+"2028–2032: BIP-360 introduces P2MR … combining secp256k1 + ML-DSA
+(Dilithium) + SPHINCS+".
 
-**Impact:** None today. There is nothing on the Bitcoin network to
-interoperate with. The scaffolding exists so the scheme-registry
-abstraction (ADR-006) is exercised and ready.
+**Removed, for three reasons:**
 
-**Corrected (session 251, primary-source verified):** this entry and
-the roadmap previously coupled the ML-DSA scaffolding to "BIP-360
-activation." That coupling is wrong. BIP-360 is **Status: Draft**
-(assigned 2024-12-18) and is titled **"Pay-to-Merkle-Root (P2MR)"** — a
-Taproot-like output with the key-path spend removed. Its own text
-explicitly states post-quantum signatures are deferred to a *separate,
-not-yet-written* proposal: "…may require the introduction of
-post-quantum signatures… we intend to offer a separate proposal for
-this purpose." So BIP-360 activation alone would **not** give the
-network ML-DSA — Otedama's ML-DSA scaffolding is gated on a later BIP
-that does not yet exist, which *widens* the timing uncertainty here
-rather than bounding it. (Source:
-raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
+- **Nothing could produce the value.** No address parser in the package
+  returns `AddressP2MR` — `bech32.go` rejects witness versions 2–16
+  outright — so the constant was unreachable and its guard clause guarded
+  against a value that could not exist.
+- **The timeline was wrong by this repository's own research.** Session 251
+  established from the primary source that BIP-360 is Status: Draft, is
+  titled "Pay-to-Merkle-Root (P2MR)", and defers post-quantum signatures to
+  a separate proposal that has not been written. A dated forecast for an
+  unwritten BIP is a guess presented as a schedule.
+- **CLAUDE.md prohibits starting quantum-resistance work at this stage.**
+  Scaffolding is starting it in the way that costs most and delivers least:
+  the code carried maintenance and reader attention without carrying any
+  capability. No ML-DSA or SPHINCS+ scheme was ever registered — only the
+  two secp256k1 stubs are.
 
-**Workaround:** Not applicable.
+**What remains, and why it is enough:** `Scheme` and `SchemeForAddressType`
+are the actual seam, and both stayed. Adding a signature scheme is a
+`Register` call and one switch case, whenever there is something real to
+register. The seam was never the unreachable constant.
 
-**Target:** v4.0 or later, gated on a future (not-yet-published) PQ
-signature BIP downstream of BIP-360 — an even more uncertain timeline
-than "BIP-360 activation" implied. Tracked by ADR-006 and the
-conditional-milestones section of ROADMAP.md.
+**Target for actual post-quantum support:** v4.0 or later, gated on a
+future PQ signature BIP downstream of BIP-360 that does not yet exist.
+Tracked by ADR-006 and the conditional-milestones section of ROADMAP.md.
 
 ---
 

@@ -41,7 +41,7 @@ This roadmap intentionally lists only technical milestones one solo maintainer c
 ### v3.5.0 — Hardening and crypto refresh (target: 2027 Q3)
 
 - **`golang.org/x/crypto` の crypto/* 標準ライブラリ化** 完了に追従。研究レポート時点でGo 1.24-1.26で進行中。
-- **`crypto/mldsa` (ML-DSA)** の `internal/btccrypto/` への opt-in 統合。**まだdefault schemeにはしない**。**訂正 (session 251, 検証済み)**: BIP-360 は Status: Draft のままで、実体は "Pay-to-Merkle-Root (P2MR)"（key-path spend を除いた Taproot 類似 output）であり、**PQ署名を規定していない**——BIP-360 本文が「PQ署名は別提案で行う」と明記している。したがって「BIP-360 活性化」と「ML-DSA/P2MR default」を結び付けるのは誤りで、Otedama の ML-DSA scaffolding は BIP-360 の後続の**未執筆の別 BIP** に gate される。§5 の不確実性はこの分だけ広がる。
+- **`crypto/mldsa` (ML-DSA)** の `internal/btccrypto/` への opt-in 統合。**まだdefault schemeにはしない**。**訂正 (session 251, 検証済み)**: BIP-360 は Status: Draft のままで、実体は "Pay-to-Merkle-Root (P2MR)"（key-path spend を除いた Taproot 類似 output）であり、**PQ署名を規定していない**——BIP-360 本文が「PQ署名は別提案で行う」と明記している。したがって「BIP-360 活性化」と「ML-DSA/P2MR default」を結び付けるのは誤りで、Otedama の ML-DSA scaffolding は BIP-360 の後続の**未執筆の別 BIP** に gate される。§5 の不確実性はこの分だけ広がる。**追記 (session 264)**: `internal/btccrypto` にあった `AddressP2MR` 定数と "not yet implemented" 分岐は削除した——どの address parser も返せない到達不能な値であり、`CLAUDE.md` は現段階での量子耐性への着手を禁じている。将来の追加を安くする実体は `Scheme` と `SchemeForAddressType` の継ぎ目であり、そちらは残っている（KNOWN_LIMITATIONS §5、ADR-006 の追記）。
 - **SLSA Level 3** 達成 (`slsa-framework/slsa-github-generator`)。
 - **CycloneDX 1.6 + SPDX 3.0.1** 両方の SBOM をリリース毎に発行。
 

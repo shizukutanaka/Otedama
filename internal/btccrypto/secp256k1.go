@@ -13,8 +13,9 @@
 // docs/adr/ADR-011 (adopt github.com/decred/dcrd/dcrec/secp256k1/v4),
 // and the related transport stub is tracked in
 // docs/KNOWN_LIMITATIONS.md §2. Using a stub here — rather than DIY
-// secp256k1 — is the same honesty-over-silent-approximation stance the
-// ML-DSA/SPHINCS+ scaffolding takes (see ErrSchemeNotImplemented).
+// secp256k1 — is honesty over silent approximation: a call site gets
+// ErrSchemeNotImplemented instead of a hand-rolled curve implementation
+// that looks like it works.
 package btccrypto
 
 // secp256k1Stub reserves a secp256k1-based scheme name. Verify, parse,

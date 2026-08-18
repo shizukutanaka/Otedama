@@ -24,7 +24,6 @@ func TestAddressType_AllStringsDistinct(t *testing.T) {
 		AddressP2WPKH,
 		AddressP2WSH,
 		AddressP2TR,
-		AddressP2MR,
 	} {
 		s := addr.String()
 		if s == "" {
