@@ -27,7 +27,7 @@ Otedama/
 ├── cmd/otedama/            # CLI エントリポイント（run/version/config/service/doctor/wallet/completion）
 ├── internal/
 │   ├── arbitration/        # 純粋関数の裁定エンジン（副作用なし）
-│   ├── btccrypto/          # Bitcoin暗号抽象化(secp256k1/Schnorr/ML-DSA scaffold)
+│   ├── btccrypto/          # アドレス検証と署名スキームの継ぎ目(secp256k1/Schnorr スタブ)
 │   ├── clock/              # time 抽象化（clock.Fake でテスト可能）
 │   ├── config/             # 4 層設定（デフォルト→ファイル→env→フラグ）
 │   ├── daemon/             # systemd/launchd/Windows サービス管理
@@ -43,14 +43,14 @@ Otedama/
 │   ├── poolproto/          # プール接続プロトコル抽象化(SV1/SV2/DATUM)
 │   │   ├── stratumv1/      # Stratum V1 具体実装(JSON-RPC over TCP)
 │   │   └── stratumv2/      # Stratum V2 dialer 具体実装
-│   ├── provider/           # MiningProvider, AkashProvider（単数形。providers/ は誤り）
+│   ├── provider/           # MiningProvider のみ（単数形。providers/ は誤り）
 │   ├── rates/              # BTC/USD 価格（Coinbase/Kraken/CoinGecko 中央値）
 │   ├── stratum/            # Stratum V2 フレーム・メッセージ・Noise NX
 │   ├── tui/                # ANSI ダッシュボード（外部依存ゼロ）
 │   └── version/            # ビルドメタデータ（ldflags 注入）
 ├── docs/adr/               # ADR-001〜011
 ├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md
-└── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml
+└── .github/workflows/      # ci.yml / test.yml / security.yml / release.yml（session 264 で ci-cd.yml・code-review.yml・deploy.yml を削除。残る3ファイルの死んだジョブは KNOWN_LIMITATIONS §13 に手順を記載）
 
 # 存在しないパス（作成禁止）:
 # cmd/otedamad/           → デーモンモードは service サブコマンドで代替
@@ -118,4 +118,6 @@ Claude Codeが本プロジェクトで作業する際は、以下の追加ルー
 
 本書の変更はOtedama Foundation理事会（設立後）または現在のメンテナの合意により行います。全ての変更はGit履歴で追跡され、変更理由を明示します。
 
-最終更新: 2026年4月
+最終更新: 2026年8月（session 264 — アーキテクチャマップの事実修正のみ。CLI に wallet を追加、
+btccrypto の ML-DSA scaffold と provider の AkashProvider を削除済みに反映、
+.github/workflows の実在ファイルに更新。方針・禁止事項・設計原則は無変更。）
