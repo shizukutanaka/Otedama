@@ -339,11 +339,26 @@ func truncateToBudget(s string, budget int) string {
 	return s[:budget-3] + "..."
 }
 
+// earningsLine renders the dashboard's headline rate and the running estimate
+// of what has been earned so far.
+//
+// The rate has exactly one source: the yield of the streams arbitration is
+// actually routing devices to right now. It previously had two, added
+// together — a local hashrate × defaultSatsPerHash() estimate *plus* every
+// active provider's quoted yield. Since the mining provider is itself one of
+// those providers, real mining revenue was counted twice, and the local
+// estimate was a third copy of the mining yield model carrying a frozen 1e21
+// network-hashrate constant, so the two halves disagreed by however far
+// difficulty had moved since that constant was written. (The other addend
+// used to be a simulated AI-inference market, now deleted — see the
+// internal/provider package doc.)
+//
+// Summing the allocation means an idle device contributes nothing, a
+// curtailed miner shows zero rather than its would-be rate, and the figure
+// tracks the same number the engine exports as
+// otedama_arbitration_expected_yield_sats_per_second.
 func (d *Dashboard) earningsLine(s Stats) string {
-	satsPerSec := s.HashRate * defaultSatsPerHash()
-	satsPerDay := satsPerSec * 86400
-
-	// Add AI inference yield from active providers.
+	satsPerDay := 0.0
 	for _, p := range s.Providers {
 		if p.Active {
 			satsPerDay += p.SatsPerSecond * 86400
@@ -444,15 +459,6 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm %ds", m, s)
 	}
 	return fmt.Sprintf("%ds", s)
-}
-
-// defaultSatsPerHash returns the estimated sats earned per hash for
-// a CPU device on mainnet (extremely small number; used for display).
-func defaultSatsPerHash() float64 {
-	const networkHashrate = 1e21
-	const blockReward = 3.125e8 // in sats
-	const blockTime = 600.0
-	return blockReward / (networkHashrate * blockTime)
 }
 
 // visibleLen returns the visible character count of a string, excluding

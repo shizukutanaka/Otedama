@@ -147,7 +147,7 @@ func TestParseGPUDevice_WithValidSysfs(t *testing.T) {
 // spawn a second complete CPU-only hashing pool for every GPU, doubling
 // thread oversubscription and attributing CPU-mined shares to the GPU's
 // device ID. GeneralCompute must stay true: it gates only the
-// already-disclosed simulated Akash inference path, which spawns no
+// GeneralCompute flag, which no shipped provider consumes and which spawns no
 // worker threads.
 func TestParseGPUDevice_SHA256dIsFalse(t *testing.T) {
 	root := t.TempDir()
@@ -169,7 +169,7 @@ func TestParseGPUDevice_SHA256dIsFalse(t *testing.T) {
 			"a true value causes engine.startMinerWorkers to spawn a mislabeled second CPU hashing pool per GPU")
 	}
 	if !caps.GeneralCompute {
-		t.Error("Capabilities.GeneralCompute = false, want true — this flag alone is safe (gates only the simulated Akash path, no worker threads)")
+		t.Error("Capabilities.GeneralCompute = false, want true — an accurate hardware statement; no shipped provider consumes it, so it spawns no worker threads)")
 	}
 }
 

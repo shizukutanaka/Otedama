@@ -28,14 +28,43 @@
 //  3. Honour context cancellation: when ctx is cancelled, the quote
 //     channel must be closed and all goroutines must exit.
 //
+// # Exactly one market is implemented: Bitcoin mining
+//
+// MiningProvider is the only Provider in the product. That is a deliberate
+// state, not an oversight, and it is worth stating plainly because the
+// arbitration engine is built for many streams and reads as if several
+// existed.
+//
+// A simulated AI-inference provider (AkashProvider) used to be wired in by
+// default. It quoted a constant — the midpoint of a hardcoded USD/hour band
+// — and no code anywhere could turn that quote into money: there is no Akash
+// API client, no bid submission, no container management, and no GPU compute
+// dispatch (docs/KNOWN_LIMITATIONS.md §4). It was deleted rather than kept
+// behind a disclaimer, for three reasons:
+//
+//   - Its quote entered the TUI's headline "sats/day" figure and the
+//     otedama_arbitration_expected_yield_sats_per_second gauge, so the
+//     product's most prominent number was dominated by income that did not
+//     exist. On a GPU host the fabricated component outweighed real mining
+//     revenue by roughly five orders of magnitude.
+//   - CLAUDE.md prohibits speculative features ahead of a production
+//     implementation, and a market that reports a constant is exactly that.
+//   - Keeping it "for when the real one lands" preserved nothing: a real
+//     integration is written against a live API and shares no code with a
+//     constant.
+//
+// What survives is everything the real integration will actually need — this
+// interface, RateSource, the polling lifecycle, and an arbitration engine
+// that already routes across an arbitrary number of streams and is tested
+// with several.
+//
 // # Which external markets fit this interface
 //
-// This interface assumes an Akash-shaped market: the user is a provider
-// whose payout is non-custodial (settles to the user's own wallet /
-// on-chain address) and whose price is discovered per-order (on-chain
-// bidding for Akash — see docs/adr/ADR-010 Feature A4). Verified during
-// the session-251 research pass, the obvious "add more GPU markets"
-// candidates do NOT fit and are deliberately out of scope:
+// The interface assumes a market where the user is a provider whose payout
+// is non-custodial (settles to the user's own wallet / on-chain address) and
+// whose price is discovered per-order. Verified during the session-251
+// research pass, the obvious "add more GPU markets" candidates do NOT fit
+// and are deliberately out of scope:
 //
 //   - Render Network intermediates payouts centrally in RNDR tokens
 //     (burn-and-mint), and
@@ -50,24 +79,15 @@
 // custodial integration this interface is specifically shaped to avoid.
 // (Sources: github.com/rendernetwork/RNPs RNP-005; github.com/api-evangelist/io-net)
 //
-// # Revenue comparison (2026-04 estimates)
+// # What the arbitration engine decides today
 //
-// Corrected (session 243): GPUs cannot mine Bitcoin in this codebase today
-// — internal/hal reports Capabilities.SHA256d = false for every GPU because
-// no CUDA/ROCm/Vulkan compute dispatch is implemented anywhere (see
-// docs/KNOWN_LIMITATIONS.md §4). This table previously listed a "RTX 4090
-// GPU Bitcoin mining" figure as if that were a real, reachable code path;
-// it is not. The two real-today numbers are:
-//
-//	CPU  Bitcoin mining (any host): ~0.07 sats/s  ($0.000064/day)
-//	RTX 4090 GPU  AI inference (simulated): ~14k  sats/s  ($12/day)
-//
-// A GPU is therefore never routed between mining and AI inference — it can
-// only ever go to the (simulated) AI-inference stream or idle. The
-// arbitration engine's live routing decision today is CPU-only: whether the
-// CPU itself is worth dedicating to mining versus idling under the
-// profitability floor. Once a GPU compute-dispatch driver lands, this
-// comment should be updated with a real three-way comparison.
+// With one market, the live decision is not "which stream pays more" but
+// "is this device worth running at all": whether each device's mining yield
+// clears the min_yield_sats_per_sec floor, and whether the BTC/USD
+// curtailment threshold has paused hashing. GPUs report
+// Capabilities.SHA256d = false (no compute dispatch exists), so they are
+// compatible with no stream and stay idle — which is the truth about what
+// Otedama can do with a GPU today.
 package provider
 
 import (
@@ -180,4 +200,16 @@ func SatsPerSecond(usdPerHour, btcUSDRate float64) float64 {
 	}
 	// 1 BTC = 1e8 sats; 1 hour = 3600 seconds
 	return (usdPerHour / btcUSDRate) * 1e8 / 3600
+}
+
+// ----- Static rate source (for tests and offline operation) -----
+
+// StaticRateSource returns a fixed BTC/USD rate. Useful in tests and for
+// configurations that do not want live price fetching.
+type StaticRateSource struct {
+	Rate float64
+}
+
+func (s StaticRateSource) BTCUSDRate() (float64, bool) {
+	return s.Rate, true
 }

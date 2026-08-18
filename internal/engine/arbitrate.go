@@ -174,15 +174,18 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 // arbitration engine compares markets on: revenue **after** the provider's
 // fee, which is what the user actually receives.
 //
-// This mattered more than it looks (fixed session 261). Until now this
+// This mattered more than it looks (fixed session 261). Until then this
 // translation passed `q.Yield.SatsPerSecond` — the *gross*, pre-fee rate —
-// so every allocation decision compared revenue nobody collects. The two
-// markets' fees are not close: mining deducts a 1% pool fee, Akash deducts
-// 20%. Comparing gross to gross therefore overstates inference against
-// mining by 0.99/0.80 ≈ 1.24×, enough to route a device to the market that
-// pays it less. `provider.Yield.Effective()` had computed the right figure
+// so every allocation decision compared revenue nobody collects. Fees across
+// markets are not close to each other: a mining pool deducts ~1%, a GPU
+// compute marketplace ~20%, so comparing gross to gross overstates the
+// high-fee market by ~1.24× — enough to route a device to whichever pays it
+// less. `provider.Yield.Effective()` had computed the right figure
 // (net × confidence) all along and its doc said the arbitration engine used
-// it — but nothing in production ever called it.
+// it — but nothing in production ever called it. Only one market ships
+// today, so the comparison has a single candidate; the conversion stays
+// because the fee is still what separates the quoted rate from the rate the
+// user is paid.
 //
 // A quote that leaves NetSatsPerSecond at zero falls back to the gross rate.
 // The provider contract says net "equals SatsPerSecond" when there is no

@@ -12,9 +12,11 @@ import (
 
 // pollingProvider is the shared lifecycle machinery for providers that
 // publish yield quotes on a buffered channel at a fixed interval. Concrete
-// providers (MiningProvider, AkashProvider) embed it and supply their own
-// publish function; the start/stop/loop/send plumbing lives here so it is
-// written and tested once rather than duplicated per market.
+// providers embed it and supply their own publish function; the
+// start/stop/loop/send plumbing lives here so it is written and tested once
+// rather than duplicated per market. MiningProvider is the only market
+// implemented today; this exists so the second one costs a publish function
+// rather than a lifecycle.
 //
 // The embedded fields are promoted to the concrete provider, so existing
 // references like p.quoteCh continue to work unchanged.

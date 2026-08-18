@@ -9,7 +9,7 @@ This document provides a detailed technical architecture of Otedama v3.0, explai
 > 以下の記述は目標アーキテクチャであり、v3.0.0-alpha.1の実装状況を大きく上回っています。現時点の正確な実装範囲は `CLAUDE.md` のアーキテクチャマップと `docs/KNOWN_LIMITATIONS.md` を正とします。主な乖離点は次のとおりです。
 >
 > - パッケージ名は `internal/providers/`（複数形）ではなく `internal/provider/`（単数形）。`providers/mining/`・`providers/ai/`・`providers/render/`・`providers/scientific/` という個別サブパッケージは存在しない。
-> - 収益源は実装済み2系統のみ：Stratum V2/V1経由の実ビットコイン採掘と、Akashを模したシミュレーション価格によるAI推論見積もり。分散レンダリング（Render Network）と科学計算（BOINC互換）は`CLAUDE.md`が明示するv4.0スコープで、コードは一切存在しない。
+> - 収益源は実装済み1系統のみ：Stratum V2/V1経由の実ビットコイン採掘。Akashを模したシミュレーション価格のAI推論見積もりはsession 264で削除済み（実収入に変換する経路が存在せず、TUIの収益表示を汚染していたため — `docs/KNOWN_LIMITATIONS.md` §1）。分散レンダリング（Render Network）と科学計算（BOINC互換）は`CLAUDE.md`が明示するv4.0スコープで、コードは一切存在しない。
 > - HALには`asic.Driver`・`cuda.Driver`・`rocm.Driver`・`cpu.Driver`という個別ドライバは存在しない。実際は`GPULinuxDriver`（Linux sysfs DRM検出のみ、コンピュートディスパッチなし）と`internal/engine`内の`cpuDriver`のみ。ASICドライバは存在しない。
 > - `internal/lightning/`はBIP-39シードの生成・暗号化保管のみを提供する。LDK統合、チャネル管理、自動決済、LSP連携は実装されていない。
 > - `internal/observability/`というパッケージは存在しない。メトリクス・ログはそれぞれ`internal/metrics/`・`internal/logger/`・`internal/httpserver/`に分散しており、分散トレーシング（OpenTelemetry）は実装されていない。
@@ -43,7 +43,7 @@ HALの設計で特に注意を要するのは、同一物理デバイスの複�
 
 ビットコイン採掘プロバイダ（`providers/mining/`）はStratum V2プロトコルを主軸に実装されます。Stratum Reference Implementation（SRI）のGoバインディングを統合利用し、自前実装を避けることでセキュリティリスクとメンテナンス負担を削減します。Job Negotiation、Template Negotiation、Encrypted Stratumの各サブプロトコルに対応し、Braiins Pool、DEMAND、OCEAN、Luxor、F2Pool、ViaBTCへの接続を初期サポートします。
 
-AI推論プロバイダ（`providers/ai/`）は、ユーザーのGPUを外部のAI推論需要者に提供する経路を提供します。Strawberry API（並行開発中のプロジェクト）を主軸として統合し、補助的にAkash、Render、io.netへの直接接続も実装します。Llama、Mistral、Stable Diffusion、Whisper等の主要モデルの推論ワークロードを受け付け、結果を依頼者に返送します。決済はLightning Networkを介して自動的にユーザーに届けられます。
+AI推論プロバイダは未実装です（本節は設計意図の記述であり、現状の記述ではありません）。統合先の候補は`internal/provider`のパッケージdocに記録した基準——ユーザーがプロバイダ側であり、支払いが非カストディで、価格が注文ごとに発見される市場——で選定します。この基準によりRender Network（RNDRトークンによる中央仲介）とio.net（中央価格決定）は対象外です。以前ここには「Strawberry API（並行開発中のプロジェクト）を主軸として統合」と書かれていましたが、そのようなAPIは実在せず、`CLAUDE.md`が禁じる「存在しないAPIの記載」に該当したため削除しました（session 264）。
 
 分散レンダリングプロバイダ（`providers/render/`）は、Render Networkへの接続を実装します。3DCGレンダリング（Blender Cycles互換）、動画エンコーディング、物理シミュレーション等のワークロードを受け付けます。科学計算プロバイダ（`providers/scientific/`）は、BOINC互換クライアントとして動作し、Folding@Home、World Community Grid、SETI@home等の科学プロジェクトへの貢献と、それに対する報酬（プロジェクトによっては仮想通貨またはポイント）の受取を自動化します。
 

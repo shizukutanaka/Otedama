@@ -195,7 +195,7 @@ func TestDashboard_RenderDoesNotPanic(t *testing.T) {
 		Devices:           2,
 		Providers: []ProviderStats{
 			{Name: "Bitcoin Mining", SatsPerSecond: 0.001, Active: true},
-			{Name: "AI Inference (Akash)", SatsPerSecond: 1.46, Active: false},
+			{Name: "Bitcoin Mining", SatsPerSecond: 1.46, Active: true},
 		},
 	}
 

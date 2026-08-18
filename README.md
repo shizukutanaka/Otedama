@@ -16,9 +16,9 @@
 
 ## 概要 / Overview
 
-Otedamaは、ユーザーが所有するASIC・GPU・CPUハードウェアを、複数の収益源にリアルタイム裁定配分することを目指すソフトウェアスイートです。v3.0.0-alpha.1時点で実装済みなのは、Stratum V2/V1準拠の実ビットコイン採掘と、Akashネットワークを模したシミュレーション価格によるAI推論見積もりの2系統のみです。分散レンダリングと科学計算委託はv4.0スコープの計画機能で未実装です。Lightning関連コードは現時点でBIP-39シードの暗号化保管のみを提供し、決済処理自体は行いません。ZKPベースの匿名認証も同じくv4.0スコープの計画機能で未実装です。それでも、既存マイニングプールが抱える中央集権的リスクを回避する非カストディ設計そのものは、今日から機能します。
+Otedamaは、ユーザーが所有するASIC・GPU・CPUハードウェアを、複数の収益源にリアルタイム裁定配分することを目指すソフトウェアスイートです。v3.0.0-alpha.1時点で実装済みの収益源は、Stratum V2/V1準拠の実ビットコイン採掘の1系統のみです。AI推論の見積もりはシミュレーション価格を返すだけで実収入に変換できる経路が存在しなかったため、session 264で削除しました（`docs/KNOWN_LIMITATIONS.md` §1）。分散レンダリングと科学計算委託はv4.0スコープの計画機能で未実装です。Lightning関連コードは現時点でBIP-39シードの暗号化保管のみを提供し、決済処理自体は行いません。ZKPベースの匿名認証も同じくv4.0スコープの計画機能で未実装です。それでも、既存マイニングプールが抱える中央集権的リスクを回避する非カストディ設計そのものは、今日から機能します。
 
-Otedama is a software suite designed to arbitrate user-owned ASIC, GPU, and CPU hardware across multiple revenue streams in real time. As of v3.0.0-alpha.1, only two streams are actually implemented: real Bitcoin mining over Stratum V2/V1, and simulated-price AI inference quoting modeled on the Akash Network. Distributed rendering and scientific computing are planned v4.0-scope features and are not implemented. The Lightning-related code today only encrypts and stores a BIP-39 seed at rest; it does not process payments. ZKP-based anonymous authentication is likewise planned for v4.0 and not implemented today. What works today is the non-custodial design itself, which avoids the centralization risk of conventional mining pools from day one.
+Otedama is a software suite designed to arbitrate user-owned ASIC, GPU, and CPU hardware across multiple revenue streams in real time. As of v3.0.0-alpha.1, exactly one stream is implemented: real Bitcoin mining over Stratum V2/V1. A simulated-price AI-inference quote used to be the second; it was deleted in session 264 because no code path could turn its constant quote into income, while it did feed the dashboard's headline earnings figure (`docs/KNOWN_LIMITATIONS.md` §1). Distributed rendering and scientific computing are planned v4.0-scope features and are not implemented. The Lightning-related code today only encrypts and stores a BIP-39 seed at rest; it does not process payments. ZKP-based anonymous authentication is likewise planned for v4.0 and not implemented today. What works today is the non-custodial design itself, which avoids the centralization risk of conventional mining pools from day one.
 
 ## なぜOtedamaか / Why Otedama
 
@@ -112,7 +112,7 @@ Pick a pool by **net BTC retained**, not the headline fee rate. A 4% uptime gap 
 
 ## アーキテクチャ / Architecture
 
-Otedamaは以下の主要レイヤーで構成されます。ハードウェア抽象化層（HAL）が物理デバイスの統一インターフェースを提供し、その上に収益源コネクタ層が存在します。現時点（v3.0.0-alpha.1）で実装済みなのは、Stratum V2/V1クライアントによる実際のビットコイン採掘と、Akashネットワークを模したシミュレーション価格による実験的なAI推論見積もりの2系統のみです。レンダリングネットワークアダプタとBOINC互換クライアントは`CLAUDE.md`のロードマップ上でv4.0スコープとして明示されており、未着手です。裁定エンジン層は各収益源の期待収益を継続的に評価し、配分決定を下します。Lightning関連コードは現時点ではBIP-39シードの暗号化保管のみを提供し、決済・チャネル管理・支払いルーティングは実装していません（詳細は`docs/KNOWN_LIMITATIONS.md`）。観測性層（メトリクス・ログ）が全体を支えます。
+Otedamaは以下の主要レイヤーで構成されます。ハードウェア抽象化層（HAL）が物理デバイスの統一インターフェースを提供し、その上に収益源コネクタ層が存在します。現時点（v3.0.0-alpha.1）で実装済みなのは、Stratum V2/V1クライアントによる実際のビットコイン採掘の1系統のみです。レンダリングネットワークアダプタとBOINC互換クライアントは`CLAUDE.md`のロードマップ上でv4.0スコープとして明示されており、未着手です。裁定エンジン層は各収益源の期待収益を継続的に評価し、配分決定を下します。Lightning関連コードは現時点ではBIP-39シードの暗号化保管のみを提供し、決済・チャネル管理・支払いルーティングは実装していません（詳細は`docs/KNOWN_LIMITATIONS.md`）。観測性層（メトリクス・ログ）が全体を支えます。
 
 詳細なアーキテクチャ設計は `docs/architecture.md` を参照してください。
 

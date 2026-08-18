@@ -76,15 +76,22 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 	return workers, mergeShares(ctx, shareChans), nil
 }
 
-// startProviders constructs and starts the mining and Akash providers.
-// Start errors are logged (not fatal): the engine can run with a degraded
-// provider set. The caller owns provider shutdown.
+// startProviders constructs and starts the yield providers. Start errors are
+// logged (not fatal): the engine can run with a degraded provider set. The
+// caller owns provider shutdown.
+//
+// Bitcoin mining is the only market today. A simulated AI-inference provider
+// was started here until it was deleted — it quoted a constant that no code
+// could turn into money, while feeding the TUI's headline earnings figure and
+// the expected-yield gauge (see the internal/provider package doc). The
+// signature keeps its slice-free shape on purpose: adding a second market
+// should be a visible change here, not a silent append.
 //
 // workers is the set of miner workers already started by startMinerWorkers.
 // When non-empty, a closure over workers is set on the MiningProvider's
 // HashrateFunc so each publish() call samples the live worker.Stats().HashRate
 // rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
-func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
+func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) *provider.MiningProvider {
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
 	if len(workers) > 0 {
 		// Capture workers by value so the closure stays valid after this
@@ -100,14 +107,10 @@ func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider
 			return 0
 		}
 	}
-	akashProvider := provider.NewAkashProvider(rateFetcher)
 	if err := miningProvider.Start(ctx, devices); err != nil {
 		log("warn", fmt.Sprintf("provider: mining: %v", err))
 	}
-	if err := akashProvider.Start(ctx, devices); err != nil {
-		log("warn", fmt.Sprintf("provider: akash: %v", err))
-	}
-	return miningProvider, akashProvider
+	return miningProvider
 }
 
 // setupWallet initialises the optional Lightning wallet. Returns the

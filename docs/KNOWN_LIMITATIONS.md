@@ -17,32 +17,40 @@ quietly trusted.
 
 ---
 
-## 1. AI inference yield is simulated, not live
+## ~~1. AI inference yield is simulated, not live~~ ✅ RESOLVED (session 264 — by deletion)
 
-**What:** The `AkashProvider` (`internal/provider/ai_inference.go`)
-quotes a **fixed price** — the midpoint of the configured
-`MinUSDPerHour`/`MaxUSDPerHour` range, unchanging tick to tick, with no
-randomness or time-varying process (corrected session 240; this entry
-previously overstated it as a "realistic price process/distribution",
-which the code has never implemented). It does **not** yet query the
-live Akash REST API, submit real bids, or earn real inference income.
+**What it was:** `AkashProvider` (`internal/provider/ai_inference.go`)
+quoted a fixed price — the midpoint of a hardcoded `MinUSDPerHour`/
+`MaxUSDPerHour` band, unchanging tick to tick. It never queried the Akash
+REST API, submitted a bid, or earned anything. It was nonetheless started
+by default and its quote flowed into the arbitration engine, the TUI's
+headline "sats/day" figure, and
+`otedama_arbitration_expected_yield_sats_per_second`.
 
-**Impact:** The inference-side yield shown in the TUI and used by the
-arbitration engine is a *simulation*. It is suitable for exercising the
-arbitration logic and for development, but the numbers are not real
-income and must not be relied upon for financial decisions.
+**Why it was deleted rather than disclosed.** The "(simulated)" suffix on
+the provider's display name did its job in the provider list, but the
+number the user actually reads — the big yellow sats/day figure — carried
+no such marking, and on a host with a GPU the fabricated component
+outweighed real mining revenue by roughly five orders of magnitude. A
+disclaimer next to a wrong number is not the same as a right number.
+CLAUDE.md also prohibits speculative features ahead of a production
+implementation, and a market that reports a constant is exactly that.
+Nothing of value was preserved by keeping it: a real integration is
+written against a live API and shares no code with a constant.
 
-**How you can tell:** The provider's name is rendered everywhere as
-**"AI Inference (Akash Network, simulated)"** — in the TUI, in logs,
-and in `otedama config show`. The "(simulated)" suffix is removed only
-when the real integration lands.
+**What survives for the real integration:** the `Provider` interface,
+`RateSource`, the polling lifecycle in `internal/provider/polling.go`, and
+an arbitration engine that already routes across an arbitrary number of
+streams and is tested with several.
 
-**Workaround:** None needed for mining-only operation; the Bitcoin
-mining path (Stratum V2) is real. If you only want real income today,
-run mining and treat the inference figures as illustrative.
+**Consequence today:** Bitcoin mining is the only market. A detected GPU is
+compatible with no revenue stream and stays idle, which is the truth about
+what Otedama can do with a GPU (see §4). The dashboard's earnings rate is
+now the sum of what arbitration is actually routing devices to, so it is
+zero when nothing is allocated rather than showing a would-be rate.
 
-**Target:** v3.1.0 (real Akash REST API). Tracked by ROADMAP v3.1.0 and
-ADR-010 (arbitration engine evolution) §A4 (strategic bidding).
+**Target for a real AI-inference market:** v3.1.0. Tracked by ROADMAP
+v3.1.0 and ADR-010 (arbitration engine evolution) §A4 (strategic bidding).
 
 ---
 

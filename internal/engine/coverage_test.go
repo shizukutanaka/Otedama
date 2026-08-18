@@ -70,16 +70,22 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 // not, and never fabricates a nonzero SatsPerSecond.
 func TestBuildStats_ProviderActiveReflectsArbitrationAssignment(t *testing.T) {
 	mining := provider.NewMiningProvider("stratum+v2://pool:3336", provider.StaticRateSource{Rate: 95000})
-	akash := provider.NewAkashProvider(provider.StaticRateSource{Rate: 95000})
+	// A second, unrouted provider. It is a local stub rather than a shipped
+	// market on purpose: Bitcoin mining is the only market in the product
+	// (the simulated AI-inference one was deleted), but the behaviour under
+	// test — a provider that quotes without being routed to renders inactive
+	// — is exactly what a real second market will need, so the test should
+	// not disappear along with the simulation.
+	unrouted := &stubProvider{id: "test.unrouted", name: "Unrouted Market"}
 
 	var mu sync.Mutex
 	activity := map[string]float64{
 		mining.ID(): 0.42, // arbitration is routing a device here
-		// akash.ID() intentionally absent: not currently assigned.
+		// unrouted.ID() intentionally absent: not currently assigned.
 	}
 	opts := sessionOpts{
 		startTime:  time.Now(),
-		providers:  []provider.Provider{mining, akash},
+		providers:  []provider.Provider{mining, unrouted},
 		activityMu: &mu,
 		activity:   activity,
 	}
@@ -95,8 +101,30 @@ func TestBuildStats_ProviderActiveReflectsArbitrationAssignment(t *testing.T) {
 	if got := byName[mining.Name()]; !got.Active || got.SatsPerSecond != 0.42 {
 		t.Errorf("mining provider = %+v, want Active=true SatsPerSecond=0.42", got)
 	}
-	if got := byName[akash.Name()]; got.Active || got.SatsPerSecond != 0 {
-		t.Errorf("akash provider = %+v, want Active=false SatsPerSecond=0 (not assigned)", got)
+	if got := byName[unrouted.Name()]; got.Active || got.SatsPerSecond != 0 {
+		t.Errorf("unrouted provider = %+v, want Active=false SatsPerSecond=0 (not assigned)", got)
+	}
+}
+
+// stubProvider is an inert Provider used where a test needs a second market
+// to exist without one being implemented.
+type stubProvider struct {
+	id   string
+	name string
+	ch   chan provider.Quote
+}
+
+func (s *stubProvider) ID() string   { return s.id }
+func (s *stubProvider) Name() string { return s.name }
+func (s *stubProvider) Start(context.Context, []hal.Device) error {
+	s.ch = make(chan provider.Quote)
+	return nil
+}
+func (s *stubProvider) Quotes() <-chan provider.Quote { return s.ch }
+func (s *stubProvider) Stop() {
+	if s.ch != nil {
+		close(s.ch)
+		s.ch = nil
 	}
 }
 

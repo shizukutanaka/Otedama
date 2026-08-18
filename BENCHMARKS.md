@@ -78,27 +78,41 @@ go test -bench=BenchmarkDecoder_ReadFrame ./internal/stratum/
 
 ## Economic comparison (2026-04-24 market data)
 
-Revenue per day by hardware and revenue stream, assuming 100% uptime
-and current network conditions.
+Revenue per day by hardware, for the revenue streams Otedama actually
+implements. Bitcoin mining is the only one (session 264 — the simulated
+AI-inference market was deleted; see `docs/KNOWN_LIMITATIONS.md` §1).
 
-| Hardware          | CPU mining    | GPU mining     | GPU AI (Akash) |
-|-------------------|--------------:|---------------:|---------------:|
-| Ryzen 9 7950X     | $0.00000043   | n/a            | n/a            |
-| NVIDIA RTX 4090   | n/a           | $0.000064      | $12.00         |
-| Antminer S21      | n/a           | n/a            | n/a (SHA-256d only) |
-| Apple M2 Pro      | $0.00000036   | ~$0.000040     | ~$8.00 (via NPU) |
+| Hardware          | CPU mining (implemented) | GPU mining |
+|-------------------|-------------------------:|-----------:|
+| Ryzen 9 7950X     | $0.00000043              | n/a        |
+| Apple M2 Pro      | $0.00000036              | n/a        |
+| NVIDIA RTX 4090   | n/a                      | not implemented |
+| Antminer S21      | not detected             | n/a        |
 
 **Assumptions:**
 - BTC price: $95,000
 - Network hashrate: 1,000 EH/s
 - Block reward: 3.125 BTC (post-4th-halving)
 - Pool fee: 1% (Stratum V2 competitive)
-- Akash platform fee: 20%
-- AI inference demand: mid-range ($0.45/GPU-hour)
 
-**Interpretation:** Mining CPU is effectively zero revenue. The
-arbitration engine's entire value is in routing GPUs to AI inference,
-which is ~187,000× more profitable than GPU mining at current prices.
+**Why the GPU and ASIC rows are empty.** No CUDA, ROCm, or Vulkan compute
+dispatch exists anywhere in this codebase, so every detected GPU reports
+`Capabilities.SHA256d = false` and is never given work
+(`docs/KNOWN_LIMITATIONS.md` §4). ASIC hardware is not detected at all
+(§8). This table previously carried a "GPU AI (Akash)" column showing
+$12.00/day and an "Apple M2 Pro ~$8.00 (via NPU)" figure, and concluded
+that "the arbitration engine's entire value is in routing GPUs to AI
+inference". None of those numbers were reachable by any code path: they
+came from a provider that quoted a hardcoded constant, and no component
+could convert that quote into income.
+
+**Interpretation.** CPU mining is effectively zero revenue — that is a
+fact about SHA-256d on general-purpose silicon, not about Otedama. What
+the arbitration engine decides today is therefore not "which market pays
+more" but "is this device worth running at all": whether each device
+clears `min_yield_sats_per_sec`, and whether the `curtail_below_btc_usd`
+threshold has paused hashing. Real multi-stream arbitration becomes
+measurable when a second market with real income lands (ROADMAP v3.1.0).
 
 ## Startup time
 

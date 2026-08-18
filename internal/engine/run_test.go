@@ -1814,12 +1814,12 @@ func TestApplyAllocation_OnlyPausesTargetDevice(t *testing.T) {
 	}
 }
 
-func TestApplyAllocation_MiningToAI(t *testing.T) {
+func TestApplyAllocation_MiningToOtherStream(t *testing.T) {
 	alloc := &arbitration.Allocation{
 		Assignments: []arbitration.Assignment{
 			{
 				DeviceID:       "gpu-0",
-				Stream:         "ai.akash",
+				Stream:         "test.secondary",
 				SwitchedFromID: "mining.stratum",
 			},
 		},
@@ -1831,20 +1831,20 @@ func TestApplyAllocation_MiningToAI(t *testing.T) {
 	applyAllocation(alloc, []*miner.Worker{w}, log)
 
 	if len(logged) == 0 {
-		t.Error("mining→AI switch should emit a log")
+		t.Fatal("switching a device away from mining should emit a log")
 	}
-	if !strings.Contains(logged[0], "AI") && !strings.Contains(logged[0], "ai") {
-		t.Errorf("mining→AI log = %q, want AI mention", logged[0])
+	if !strings.Contains(logged[0], "test.secondary") {
+		t.Errorf("switch log = %q, want it to name the stream the device moved to", logged[0])
 	}
 }
 
-func TestApplyAllocation_AIToMining(t *testing.T) {
+func TestApplyAllocation_OtherStreamToMining(t *testing.T) {
 	alloc := &arbitration.Allocation{
 		Assignments: []arbitration.Assignment{
 			{
 				DeviceID:       "gpu-0",
 				Stream:         "mining.stratum",
-				SwitchedFromID: "ai.akash",
+				SwitchedFromID: "test.secondary",
 			},
 		},
 	}

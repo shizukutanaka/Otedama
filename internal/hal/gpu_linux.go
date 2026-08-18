@@ -60,9 +60,10 @@
 // internal/engine.startMinerWorkers correctly skips it rather than
 // spawning a CPU-only miner.Worker mislabeled under the GPU's device ID
 // (the bug this comment replaces — SHA256d was previously hardcoded
-// true). GeneralCompute stays true: it only gates the already-disclosed
-// simulated Akash inference quotes (docs/KNOWN_LIMITATIONS.md §1), which
-// spawn no worker threads and so carry none of this risk.
+// true). GeneralCompute stays true because it is an accurate statement
+// about the hardware, but no shipped provider consumes it today: the
+// simulated AI-inference market that used to has been deleted, so a
+// detected GPU is compatible with no revenue stream and stays idle.
 package hal
 
 import (
@@ -163,7 +164,7 @@ func parseGPUDevice(renderNode, devicePath string, logFn func(string)) Device {
 		// numbers as if they came from the GPU. See
 		// docs/KNOWN_LIMITATIONS.md for the current disclosure.
 		SHA256d:        false,
-		GeneralCompute: true, // GPU implies general compute capability (used by the simulated Akash provider; spawns no worker threads, so this flag alone causes no oversubscription)
+		GeneralCompute: true, // an accurate statement about the hardware; no shipped provider consumes it today, so it spawns no workers and causes no oversubscription
 	}
 	return &linuxGPUDevice{id: id, caps: caps}
 }

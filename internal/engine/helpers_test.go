@@ -183,8 +183,8 @@ func TestMergeQuotes_CombinesMultipleSources(t *testing.T) {
 	src2 := make(chan provider.Quote, 2)
 	src1 <- provider.Quote{ProviderID: "mining.stratum"}
 	src1 <- provider.Quote{ProviderID: "mining.stratum"}
-	src2 <- provider.Quote{ProviderID: "ai.akash"}
-	src2 <- provider.Quote{ProviderID: "ai.akash"}
+	src2 <- provider.Quote{ProviderID: "test.secondary"}
+	src2 <- provider.Quote{ProviderID: "test.secondary"}
 	close(src1)
 	close(src2)
 
@@ -196,8 +196,8 @@ func TestMergeQuotes_CombinesMultipleSources(t *testing.T) {
 	if ids["mining.stratum"] != 2 {
 		t.Errorf("mining.stratum count = %d, want 2", ids["mining.stratum"])
 	}
-	if ids["ai.akash"] != 2 {
-		t.Errorf("ai.akash count = %d, want 2", ids["ai.akash"])
+	if ids["test.secondary"] != 2 {
+		t.Errorf("test.secondary count = %d, want 2", ids["test.secondary"])
 	}
 }
 
@@ -266,16 +266,16 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	}
 }
 
-func TestUpdateStream_AIAkashIsNotBitcoinMining(t *testing.T) {
+func TestUpdateStream_NonMiningStreamIsNotBitcoinMining(t *testing.T) {
 	var mu sync.Mutex
 	m := make(map[string]arbitration.Stream)
 	updateStream(&mu, m, provider.Quote{
-		ProviderID: "ai.akash",
+		ProviderID: "test.secondary",
 		DeviceID:   "gpu-0",
 	})
 	for _, s := range m {
 		if s.IsBitcoinMining {
-			t.Errorf("ai.akash should NOT set IsBitcoinMining=true; got %+v", s)
+			t.Errorf("a non-mining stream should NOT set IsBitcoinMining=true; got %+v", s)
 		}
 	}
 }
@@ -310,7 +310,7 @@ func TestStreamsSlice_DeduplicatesByID(t *testing.T) {
 	m := map[string]arbitration.Stream{
 		"mining.stratum:cpu-0": {ID: "mining.stratum"},
 		"mining.stratum:gpu-0": {ID: "mining.stratum"}, // duplicate ID, different device
-		"ai.akash:gpu-0":       {ID: "ai.akash"},
+		"test.secondary:gpu-0": {ID: "test.secondary"},
 	}
 	got := streamsSlice(m)
 	if len(got) != 2 {
@@ -320,7 +320,7 @@ func TestStreamsSlice_DeduplicatesByID(t *testing.T) {
 	for _, s := range got {
 		ids[s.ID] = true
 	}
-	if !ids["mining.stratum"] || !ids["ai.akash"] {
+	if !ids["mining.stratum"] || !ids["test.secondary"] {
 		t.Errorf("missing stream IDs; got %v", ids)
 	}
 }
@@ -334,7 +334,7 @@ func TestStreamsSlice_EmptyInput(t *testing.T) {
 
 func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	// A provider with two GPU devices (gpu-0, gpu-1) produces two separate
-	// map entries, both sharing StreamID "ai.akash". The old first-seen pick
+	// map entries, both sharing StreamID "test.secondary". The old first-seen pick
 	// would return only one entry, leaving one device with no YieldPerDevice
 	// hit so it would fall back to the other device's DefaultYield — silently
 	// returning the wrong rate for heterogeneous GPU configurations.
@@ -344,16 +344,16 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	// engine silently stops assigning *any* device to the stream because
 	// Stream.Accepts() returns false for everything.
 	m := map[string]arbitration.Stream{
-		"ai.akash:gpu-0": {
-			ID:              "ai.akash",
+		"test.secondary:gpu-0": {
+			ID:              "test.secondary",
 			AcceptsFamilies: []hal.Family{hal.FamilyGPU},
 			YieldPerDevice: map[string]arbitration.Yield{
 				"gpu-0": {SatsPerSecond: 1000, Confidence: 0.9},
 			},
 			DefaultYield: arbitration.Yield{SatsPerSecond: 1000, Confidence: 0.9},
 		},
-		"ai.akash:gpu-1": {
-			ID:              "ai.akash",
+		"test.secondary:gpu-1": {
+			ID:              "test.secondary",
 			AcceptsFamilies: []hal.Family{hal.FamilyGPU},
 			YieldPerDevice: map[string]arbitration.Yield{
 				"gpu-1": {SatsPerSecond: 700, Confidence: 0.9},
@@ -368,8 +368,8 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	}
 
 	s := got[0]
-	if s.ID != "ai.akash" {
-		t.Errorf("stream ID = %q, want ai.akash", s.ID)
+	if s.ID != "test.secondary" {
+		t.Errorf("stream ID = %q, want test.secondary", s.ID)
 	}
 	// AcceptsFamilies must survive the merge: if it were dropped the engine
 	// would route no device to this stream, silently reducing revenue.
@@ -388,8 +388,8 @@ func TestStreamsSlice_MultiDeviceMergeDoesNotMutateInput(t *testing.T) {
 	// The merge must not alias its YieldPerDevice maps back into m;
 	// otherwise a later updateStream call would mutate the returned slice.
 	m := map[string]arbitration.Stream{
-		"ai.akash:gpu-0": {
-			ID: "ai.akash",
+		"test.secondary:gpu-0": {
+			ID: "test.secondary",
 			YieldPerDevice: map[string]arbitration.Yield{
 				"gpu-0": {SatsPerSecond: 500},
 			},
@@ -404,7 +404,7 @@ func TestStreamsSlice_MultiDeviceMergeDoesNotMutateInput(t *testing.T) {
 	// Mutating the returned stream's YieldPerDevice must not reach m.
 	got[0].YieldPerDevice["gpu-0"] = arbitration.Yield{SatsPerSecond: 9999}
 
-	orig := m["ai.akash:gpu-0"].YieldPerDevice["gpu-0"]
+	orig := m["test.secondary:gpu-0"].YieldPerDevice["gpu-0"]
 	if orig.SatsPerSecond == 9999 {
 		t.Error("streamsSlice must deep-copy YieldPerDevice; mutating the result should not affect the input map")
 	}
@@ -420,11 +420,11 @@ func TestApplyAllocation_LogsOnStreamChange(t *testing.T) {
 		lines = append(lines, level+":"+msg)
 	}
 
-	// Build an allocation that says: switch from mining to ai.akash.
+	// Build an allocation that says: switch from mining to test.secondary.
 	alloc := &arbitration.Allocation{
 		Assignments: []arbitration.Assignment{{
 			DeviceID:       "gpu-0",
-			Stream:         "ai.akash",
+			Stream:         "test.secondary",
 			SwitchedFromID: "mining.stratum",
 			ExpectedYield:  14000,
 		}},
@@ -433,8 +433,8 @@ func TestApplyAllocation_LogsOnStreamChange(t *testing.T) {
 	applyAllocation(alloc, workers, log)
 
 	joined := fmt.Sprint(lines)
-	if !strings.Contains(joined, "ai.akash") && !strings.Contains(joined, "AI") {
-		t.Errorf("log must mention stream change to ai.akash; got: %v", lines)
+	if !strings.Contains(joined, "test.secondary") && !strings.Contains(joined, "AI") {
+		t.Errorf("log must mention stream change to test.secondary; got: %v", lines)
 	}
 }
 
@@ -808,22 +808,22 @@ func TestEngineMetrics_JoulesPerTerahash_AppearsInWriteText(t *testing.T) {
 func TestPruneStaleStreams_RemovesExpiredKeepsFresh(t *testing.T) {
 	now := time.Now()
 	m := map[string]arbitration.Stream{
-		"ai.akash:gpu-0":       {ID: "ai.akash"},
+		"test.secondary:gpu-0": {ID: "test.secondary"},
 		"mining.stratum:cpu-0": {ID: "mining.stratum"},
 	}
 	seen := map[string]time.Time{
-		"ai.akash:gpu-0":       now.Add(-5 * time.Minute),  // stale (> 3m)
+		"test.secondary:gpu-0": now.Add(-5 * time.Minute),  // stale (> 3m)
 		"mining.stratum:cpu-0": now.Add(-30 * time.Second), // fresh
 	}
 	pruned := pruneStaleStreams(m, seen, now, streamStaleTimeout)
 
-	if len(pruned) != 1 || pruned[0] != "ai.akash:gpu-0" {
-		t.Fatalf("pruned = %v, want [ai.akash:gpu-0]", pruned)
+	if len(pruned) != 1 || pruned[0] != "test.secondary:gpu-0" {
+		t.Fatalf("pruned = %v, want [test.secondary:gpu-0]", pruned)
 	}
-	if _, ok := m["ai.akash:gpu-0"]; ok {
+	if _, ok := m["test.secondary:gpu-0"]; ok {
 		t.Error("stale stream still present in map")
 	}
-	if _, ok := seen["ai.akash:gpu-0"]; ok {
+	if _, ok := seen["test.secondary:gpu-0"]; ok {
 		t.Error("stale stream still present in seen map")
 	}
 	if _, ok := m["mining.stratum:cpu-0"]; !ok {
@@ -1245,11 +1245,12 @@ func TestComparableYield_FallsBackToGrossWhenNetUnset(t *testing.T) {
 }
 
 // TestArbitration_ChoosesTheMarketThatPaysMoreNet is the behavioural proof.
-// It builds the case the fee asymmetry creates: inference quotes a HIGHER
-// gross rate than mining but a LOWER net rate, because Akash takes 20% where
-// the pool takes 1%. Deciding on gross picks inference and hands the user
-// less money; deciding on net picks mining. This is the misallocation the
-// engine made until session 261.
+// It builds the case a fee asymmetry creates: the second market quotes a
+// HIGHER gross rate than mining but a LOWER net rate, because it takes 20%
+// where the pool takes 1%. Deciding on gross picks it and hands the user less
+// money; deciding on net picks mining. This is the misallocation the engine
+// made until session 261. Only mining ships today, so the second stream here
+// is synthetic — the rule it pins is what any real second market will meet.
 func TestArbitration_ChoosesTheMarketThatPaysMoreNet(t *testing.T) {
 	var mu sync.Mutex
 	m := make(map[string]arbitration.Stream)
@@ -1264,7 +1265,7 @@ func TestArbitration_ChoosesTheMarketThatPaysMoreNet(t *testing.T) {
 	})
 	// Inference: 1.10 gross — higher — but 0.88 net (20% platform fee).
 	updateStream(&mu, m, provider.Quote{
-		ProviderID:       "ai.akash",
+		ProviderID:       "test.secondary",
 		DeviceID:         dev,
 		AcceptedFamilies: []hal.Family{hal.FamilyGPU},
 		Yield:            provider.Yield{SatsPerSecond: 1.10, NetSatsPerSecond: 0.88, Confidence: 1},

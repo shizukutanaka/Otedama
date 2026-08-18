@@ -11,9 +11,9 @@
 // # Session architecture
 //
 //	┌─────────────┐   quotes  ┌──────────────┐  allocation ┌──────────────┐
-//	│  Mining     ├──────────►│              ├────────────►│   Workers    │
-//	│  Provider   │           │  Arbitration │             │  (CPU/GPU)   │
-//	│  AI/Akash   ├──────────►│   Engine     │             └──────┬───────┘
+//	│   Mining    ├──────────►│  Arbitration ├────────────►│   Workers    │
+//	│  Provider   │           │    Engine    │             │    (CPU)     │
+//	│(only market)│           │              │             └──────┬───────┘
 //	└─────────────┘           └──────────────┘                    │shares
 //	                                                                ▼
 //	┌─────────────┐                                       ┌──────────────┐
@@ -258,15 +258,11 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 5: Providers -----
-	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
+	miningProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
 	defer miningProvider.Stop()
-	defer akashProvider.Stop()
 
 	// ----- Phase 6: Arbitration engine -----
-	quoteCh := mergeQuotes(ctx,
-		miningProvider.Quotes(),
-		akashProvider.Quotes(),
-	)
+	quoteCh := mergeQuotes(ctx, miningProvider.Quotes())
 
 	// Build device refs for the arbitration engine.
 	devRefs := make([]arbitration.DeviceRef, len(devices))
@@ -329,7 +325,7 @@ func Run(ctx context.Context, opts Options) error {
 		startTime:   startTime,
 		wallet:      walletFingerprint,
 		deviceN:     len(devices),
-		providers:   []provider.Provider{miningProvider, akashProvider},
+		providers:   []provider.Provider{miningProvider},
 		metrics:     m,
 		log:         log,
 		curtailGate: curtailGate,

@@ -91,23 +91,6 @@ func TestShortenURL_MaxLenTooSmall(t *testing.T) {
 }
 
 // ============================================================================
-// defaultSatsPerHash
-// ============================================================================
-
-func TestDefaultSatsPerHash_IsPositiveAndTiny(t *testing.T) {
-	// This value represents the expected sats earned per hash at current
-	// network difficulty. It should be positive but vanishingly small
-	// (CPU mining earns virtually nothing in 2026).
-	v := defaultSatsPerHash()
-	if v <= 0 {
-		t.Errorf("defaultSatsPerHash() = %v, want > 0", v)
-	}
-	if v >= 1e-10 {
-		t.Errorf("defaultSatsPerHash() = %v, should be tiny (< 1e-10)", v)
-	}
-}
-
-// ============================================================================
 // Dashboard section rendering — each section produces non-empty output
 // ============================================================================
 
@@ -253,41 +236,65 @@ func TestDashboard_MiningLine_CurtailedTakesPriorityOverStalled(t *testing.T) {
 	}
 }
 
-func TestDashboard_EarningsLine_PositiveRate(t *testing.T) {
+func TestDashboard_EarningsLine_ShowsCumulativeEstimate(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	line := d.earningsLine(Stats{
-		HashRate:      1e9, // 1 GH/s
-		EstSatsEarned: 1234,
-	})
+	line := d.earningsLine(Stats{HashRate: 1e9, EstSatsEarned: 1234})
 	if !strings.Contains(line, "sats/day") {
 		t.Errorf("earningsLine missing sats/day: %q", line)
 	}
 	if !strings.Contains(line, "1234") {
-		t.Errorf("earningsLine missing total: %q", line)
+		t.Errorf("earningsLine missing cumulative estimate: %q", line)
 	}
 }
 
-func TestDashboard_EarningsLine_IncludesProviders(t *testing.T) {
+// TestDashboard_EarningsLine_RateIsTheAllocationOnly pins the headline rate to
+// a single source: the yield of the streams arbitration is actually routing to.
+// It is an exact-value test on purpose — the previous implementation ADDED a
+// local hashrate x defaultSatsPerHash() estimate to this sum, so the mining
+// provider's own quote was counted twice, and any "does it contain sats/day"
+// assertion passed happily either way.
+func TestDashboard_EarningsLine_RateIsTheAllocationOnly(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	line := d.earningsLine(Stats{
-		HashRate: 1e6,
+		HashRate: 1e15, // large enough that any hashrate-derived addend would show
 		Providers: []ProviderStats{
-			{Name: "akash", SatsPerSecond: 1000, Active: true},
+			{Name: "Bitcoin Mining", SatsPerSecond: 1, Active: true},
 		},
 	})
-	// Active AI inference should boost the sats/day significantly.
-	if !strings.Contains(line, "sats/day") {
-		t.Errorf("earningsLine missing sats/day: %q", line)
+	// 1 sat/s over a day is exactly 86400 sats. A second copy of the mining
+	// yield, from whatever model, would push this above 86400.
+	if !strings.Contains(line, "86400 sats/day") {
+		t.Errorf("earningsLine = %q, want exactly 86400 sats/day "+
+			"(1 sat/s allocated, counted once)", line)
+	}
+}
+
+// TestDashboard_EarningsLine_IdleProvidersContributeNothing covers the other
+// half of "the rate is the allocation": a provider that has quoted but is not
+// being routed to must not appear in the headline figure. With hashing
+// curtailed or every device below the profitability floor, the honest rate is
+// zero.
+func TestDashboard_EarningsLine_IdleProvidersContributeNothing(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.earningsLine(Stats{
+		HashRate: 1e15,
+		Providers: []ProviderStats{
+			{Name: "Bitcoin Mining", SatsPerSecond: 500, Active: false},
+		},
+	})
+	if !strings.Contains(line, "0 sats/day") {
+		t.Errorf("earningsLine = %q, want 0 sats/day when nothing is allocated", line)
 	}
 }
 
 func TestDashboard_ProviderLine_ActiveVsIdle(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	active := d.providerLine(ProviderStats{Name: "akash", SatsPerSecond: 100, Active: true})
-	idle := d.providerLine(ProviderStats{Name: "akash", SatsPerSecond: 0, Active: false})
+	active := d.providerLine(ProviderStats{Name: "Bitcoin Mining", SatsPerSecond: 100, Active: true})
+	idle := d.providerLine(ProviderStats{Name: "Bitcoin Mining", SatsPerSecond: 0, Active: false})
 
 	if !strings.Contains(active, "active") {
 		t.Errorf("active provider line missing 'active': %q", active)
