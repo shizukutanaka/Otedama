@@ -941,3 +941,36 @@ records a concrete implementation shape (an SV1-transport dialer reusing
 It is a designed extension point, not a speculation. Deleting on principle
 rather than on evidence would have been the same mistake in the opposite
 direction.
+
+### Session 264, second pass — finishing steps 3 and the reachable parts of 4/5
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | `lightning.WalletManager.ChangePassphrase` was implemented, atomic, and tested, but **no production code called it**, so a user whose passphrase might have been exposed could not rotate it without writing their own Go program against an internal package. | ✅ Wired as `otedama wallet change-passphrase`, again without touching `internal/lightning`. The command adds what a library function cannot: it refuses to create a wallet, requires the new passphrase twice, and re-opens the rewritten file to prove the fingerprint is unchanged — rotation must re-encrypt the *same* seed, or the user's written-down phrase silently stops describing their wallet. §16 is now fully closed. |
+| R | The mining hot path recomputed the SHA-256 of the header's constant first 64 bytes for every nonce, and re-serialised all 80 bytes on top of that. | ✅ Midstate via `crypto/sha256`'s own `BinaryMarshaler`/`BinaryUnmarshaler` — no SHA internals reimplemented, so the hand-rolled-crypto ban holds by construction. 264.2 → 167.7 ns/op. |
+| R | `hashCount` was an atomic increment **per hash**, shared across every worker thread — a single cache line bounced between cores millions of times a second. | ✅ Batched to one add per 1024 nonces. Measured 30.5 ns/op at 4 threads versus 0.15 ns batched. |
+| R | Combined, measured end to end through a real `Worker`: **1.46x** single-thread, **2.28x** at 4 threads. Per-thread cost at 4 threads went 415 ns → 182 ns, against 183 ns single-threaded — scaling is now linear. | ✅ |
+| S | `BenchmarkWorkerGrind_SingleThread` described itself as "the baseline for performance regression detection" but **never called `grind`** — it ran its own `HashHeader` loop, and did not move at all for a 33% change in the real loop. | ✅ Replaced with a fixed-window probe that drives a real `Worker` and derives ns/hash from the worker's own counter, plus a companion at `runtime.NumCPU()` threads where contention is visible. |
+| S | `BENCHMARKS.md` published single-thread and all-core hash rates for a Ryzen 9 7950X, an Apple M2 Pro, an i7-12700K, and a Raspberry Pi 5. **None had been measured.** The all-cores table's own "reproduce" command passed `-cpu=1,2,4,8,16` to a single-threaded benchmark, which cannot produce it. | ✅ Replaced with the one machine every number in the file was actually taken on, with before/after and the exact commands. The same file's measurement philosophy demands reproducibility by anyone with the same hardware; an invented number fails that at the first attempt. |
+| S | The same file claimed "a PR that regresses performance by >5% fails automatically" and "CI runs benchmarks on every push to main and posts a comparison to PRs". `ci.yml`'s `benchmark` job runs the benchmarks and uploads an artifact — no baseline, no gate, no PR comment. | ✅ Corrected to what the job does, with the manual `benchstat` step named. |
+
+**Two bugs the new tests caught in the code being added**, both worth
+recording because they are the kind that ship silently:
+
+- `readLine` built a fresh `bufio.Scanner` per call. A Scanner buffers
+  ahead, so the first read swallowed the confirmation line and
+  `change-passphrase` failed with "no input was given" *after* the user had
+  typed everything correctly. One scanner, two reads.
+- The first version of `TestRun_NonASCIIMnemonicPassphraseIsAConfigError`
+  omitted `--dry-run`, so removing the check under test made it start the
+  engine and hang rather than fail — a regression would have wedged the
+  suite instead of reporting. It now fails in milliseconds.
+
+**Observable semantics that changed, and where that surfaced.** Batching the
+hash counter makes it visible only at batch boundaries (~180 µs of
+grinding). Two existing tests assumed instantaneous visibility — one sampled
+`HashesTotal` at the instant of the first share, the other used the hashrate
+gauge as a proxy for "the stats-tick branch ran". Both now poll for the
+invariant rather than for a coincidence. In production the stats tick is
+seconds, so the lag is immaterial; it is recorded here because a future
+reader will otherwise wonder why those tests poll.
