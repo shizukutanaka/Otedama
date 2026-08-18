@@ -69,6 +69,8 @@ func cmdWallet(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "verify":
 		return cmdWalletVerify(args[1:], stdout, stderr, os.Stdin)
+	case "change-passphrase":
+		return cmdWalletChangePassphrase(args[1:], stdout, stderr, os.Stdin)
 	case "help", "--help", "-h":
 		printWalletUsage(stdout)
 		return exitOK
@@ -86,8 +88,9 @@ Usage:
   otedama wallet <command> [flags]
 
 Commands:
-  verify     Check a written-down recovery phrase against the stored wallet.
-  help       Print this help and exit.
+  verify             Check a written-down recovery phrase against the stored wallet.
+  change-passphrase  Re-encrypt the wallet under a new passphrase.
+  help               Print this help and exit.
 
 otedama wallet verify [--config path] [--data-dir path]
 
@@ -107,6 +110,25 @@ Exit codes:
   1   it does not, or the wallet could not be opened
   64  usage error
   78  config error (no data dir, no wallet, missing passphrase)
+
+otedama wallet change-passphrase [--config path] [--data-dir path]
+
+  Re-encrypts wallet.dat under a new passphrase. The seed itself does not
+  change, so your recovery phrase stays valid and the wallet fingerprint
+  stays the same — the command prints it before and after so you can see
+  that for yourself.
+
+  The current passphrase must be in OTEDAMA_WALLET_PASSPHRASE. The new one
+  is read from standard input, twice, and the two must match.
+
+  Your terminal will echo what you type. To avoid that, pipe the new
+  passphrase in twice, one per line, from a source you then discard.
+
+Exit codes:
+  0   the wallet was re-encrypted
+  1   the current passphrase was wrong, or the rewrite failed
+  64  usage error
+  78  config error (no data dir, no wallet, missing or mismatched passphrase)
 `)
 }
 
@@ -226,4 +248,149 @@ func readMnemonic(r io.Reader) (lightning.Mnemonic, error) {
 		words[i] = strings.ToLower(f)
 	}
 	return words, nil
+}
+
+// cmdWalletChangePassphrase re-encrypts wallet.dat under a new passphrase.
+//
+// # Why this is a thin wrapper
+//
+// lightning.WalletManager.ChangePassphrase already verifies the old
+// passphrase by round-trip decrypt and writes through the same atomic path
+// as creation — temp file in the same directory, write, Sync, Close (error
+// checked), chmod 0600, rename — and is covered by that package's tests. It
+// simply had no caller in production code, so a user whose passphrase might
+// have been exposed could not rotate it without writing their own Go program
+// against an internal package (docs/KNOWN_LIMITATIONS.md §16).
+//
+// So this adds no cryptography and no file handling of its own. What it adds
+// is the operator-facing safety that a library function cannot: refusing to
+// create a wallet when none exists, requiring the new passphrase twice, and
+// proving to the user that the rotation did not change their seed.
+//
+// # The fingerprint check is the point, not decoration
+//
+// Changing the passphrase must re-encrypt the *same* seed. If the fingerprint
+// changed, the recovery phrase the user wrote down would no longer describe
+// the wallet on disk — silently, and discovered only during a recovery
+// attempt. The command reads the fingerprint before and after, prints both,
+// and treats a difference as a failure rather than reporting success. This
+// should be unreachable; it is checked because the cost of being wrong here
+// is the user's funds.
+func cmdWalletChangePassphrase(args []string, stdout, stderr io.Writer, stdin io.Reader) int {
+	fs := flag.NewFlagSet("wallet change-passphrase", flag.ContinueOnError)
+	configFile := fs.String("config", "", "Path to config.yaml.")
+	dataDir := fs.String("data-dir", "", "Data directory holding wallet.dat.")
+	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
+		return code
+	}
+
+	cfg := config.Resolve(loadConfigFile(*configFile, stderr), nil, config.FlagValues{DataDir: *dataDir})
+	if cfg.DataDir == "" {
+		fmt.Fprintln(stderr, "otedama wallet change-passphrase: no data directory could be determined; pass --data-dir")
+		return exitConfig
+	}
+	walletPath := filepath.Join(cfg.DataDir, walletDatFile)
+	if _, err := os.Stat(walletPath); err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: no wallet at %s: %v\n", walletPath, err)
+		fmt.Fprintln(stderr, "There is nothing to re-encrypt.")
+		return exitConfig
+	}
+
+	oldPassphrase := os.Getenv("OTEDAMA_WALLET_PASSPHRASE")
+	if oldPassphrase == "" {
+		fmt.Fprintln(stderr, "otedama wallet change-passphrase: OTEDAMA_WALLET_PASSPHRASE is not set.")
+		fmt.Fprintln(stderr, "It must hold the CURRENT passphrase, and is read from the environment "+
+			"rather than a flag so it does not appear in process lists.")
+		return exitConfig
+	}
+
+	fmt.Fprintln(stdout, "Enter the NEW passphrase, then press Enter. You will be asked to repeat it.")
+	fmt.Fprintln(stdout, "(It will be echoed by your terminal.)")
+	lines := bufio.NewScanner(stdin)
+	newPassphrase, err := readLine(lines)
+	if err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: %v\n", err)
+		return exitConfig
+	}
+	if newPassphrase == "" {
+		fmt.Fprintln(stderr, "otedama wallet change-passphrase: the new passphrase must not be empty.")
+		return exitConfig
+	}
+	fmt.Fprintln(stdout, "Repeat the NEW passphrase.")
+	confirm, err := readLine(lines)
+	if err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: %v\n", err)
+		return exitConfig
+	}
+	// Compared in constant time: both are secrets, and this comparison runs
+	// before either has been used for anything.
+	if subtle.ConstantTimeCompare([]byte(newPassphrase), []byte(confirm)) != 1 {
+		fmt.Fprintln(stderr, "otedama wallet change-passphrase: the two entries do not match; nothing was changed.")
+		return exitConfig
+	}
+
+	wordList, err := lightning.NewEnglishWordList()
+	if err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: wordlist: %v\n", err)
+		return exitRuntime
+	}
+	wm, err := lightning.NewWalletManager(cfg.DataDir, oldPassphrase, nil, wordList)
+	if err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: cannot open %s: %v\n", walletPath, err)
+		fmt.Fprintln(stderr, "Nothing was changed.")
+		return exitRuntime
+	}
+	before := wm.Fingerprint()
+
+	if err := wm.ChangePassphrase(oldPassphrase, newPassphrase, nil); err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: %v\n", err)
+		fmt.Fprintln(stderr, "The wallet is unchanged: it is replaced by an atomic rename only "+
+			"after the new file is fully written, so a failure here leaves the old file in place.")
+		return exitRuntime
+	}
+
+	// Re-open under the new passphrase. This proves three things at once: the
+	// new file decrypts, it decrypts with the passphrase the user just chose,
+	// and it holds the same seed.
+	reopened, err := lightning.NewWalletManager(cfg.DataDir, newPassphrase, nil, wordList)
+	if err != nil {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: the wallet was rewritten but "+
+			"will not re-open under the new passphrase: %v\n", err)
+		fmt.Fprintln(stderr, "Restore from your recovery phrase before doing anything else.")
+		return exitRuntime
+	}
+	after := reopened.Fingerprint()
+	if before != after {
+		fmt.Fprintf(stderr, "otedama wallet change-passphrase: the seed changed (%s -> %s). "+
+			"This must never happen; your recovery phrase describes %s.\n", before, after, before)
+		return exitRuntime
+	}
+
+	fmt.Fprintf(stdout, "\nDone — wallet.dat is now encrypted with the new passphrase.\n\n")
+	fmt.Fprintf(stdout, "  fingerprint before: %s\n", before)
+	fmt.Fprintf(stdout, "  fingerprint after:  %s  (unchanged, as it must be)\n\n", after)
+	fmt.Fprintln(stdout, "Your recovery phrase is unaffected — it describes the seed, not the")
+	fmt.Fprintln(stdout, "passphrase. Update OTEDAMA_WALLET_PASSPHRASE wherever it is set, including")
+	fmt.Fprintln(stdout, "any service unit installed by `otedama service install`.")
+	return exitOK
+}
+
+// readLine reads one line from sc and returns it with the trailing newline
+// removed. Unlike readMnemonic it does not split, lower-case, or otherwise
+// touch the content: a passphrase's spaces and capitals are part of it.
+//
+// It takes a *bufio.Scanner rather than an io.Reader because the caller reads
+// two lines. A Scanner buffers ahead, so constructing a fresh one per line
+// loses whatever the previous one had already pulled in — with a piped
+// passphrase and its confirmation arriving together, the second read saw EOF
+// and the command failed with "no input was given" after the user had typed
+// everything correctly. One scanner, two reads.
+func readLine(sc *bufio.Scanner) (string, error) {
+	if !sc.Scan() {
+		if err := sc.Err(); err != nil {
+			return "", fmt.Errorf("reading input: %w", err)
+		}
+		return "", fmt.Errorf("no input was given")
+	}
+	return sc.Text(), nil
 }

@@ -145,6 +145,39 @@ otedama wallet verify
 otedama wallet verify < phrase.txt && shred -u phrase.txt
 ```
 
+```
+otedama wallet change-passphrase [--config path] [--data-dir path]
+```
+
+Re-encrypts `wallet.dat` under a new passphrase. The seed does not change,
+so the recovery phrase stays valid and the wallet fingerprint stays the
+same — the command prints it before and after, and treats a difference as
+a failure rather than reporting success.
+
+The current passphrase must be in `OTEDAMA_WALLET_PASSPHRASE`. The new one
+is read from standard input twice and the two must match, because a typo
+here would otherwise lock you out of your own wallet.
+
+Nothing is written unless the current passphrase decrypts the existing
+wallet, and the replacement is an atomic rename after the new file is
+fully written and synced — a failure at any point leaves the old file in
+place. The command refuses to run when no wallet exists rather than
+creating one.
+
+**Exit codes:**
+- `0` — the wallet was re-encrypted.
+- `1` — the current passphrase was wrong, or the rewrite failed.
+- `64` — usage error.
+- `78` — config error (no data dir, no wallet, missing or mismatched passphrase).
+
+```bash
+export OTEDAMA_WALLET_PASSPHRASE='current passphrase'
+otedama wallet change-passphrase        # prompts twice for the new one
+```
+
+After rotating, update `OTEDAMA_WALLET_PASSPHRASE` everywhere it is set,
+including any service unit installed by `otedama service install`.
+
 ### `otedama doctor`
 
 Run self-diagnostic checks and print a report.

@@ -14,6 +14,7 @@
 //	otedama service status
 //	otedama doctor [--bitcoin-address bc1q...]
 //	otedama wallet verify [--data-dir path]
+//	otedama wallet change-passphrase [--data-dir path]
 //
 // # Exit codes
 //
@@ -151,7 +152,7 @@ Commands:
   config     Inspect or validate the effective configuration.
   service    Install/uninstall as a background service.
   doctor     Run self-diagnostic checks.
-  wallet     Verify a recovery phrase against the stored wallet.
+  wallet     Verify a recovery phrase, or rotate the wallet passphrase.
   completion Generate a shell-completion script (bash|zsh|fish).
   help       Print this help and exit.
 
