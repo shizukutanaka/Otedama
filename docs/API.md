@@ -103,6 +103,48 @@ Install, remove, or query the auto-start service.
 - `otedama service uninstall` — Remove and stop the service.
 - `otedama service status` — Print installation and running state.
 
+### `otedama wallet`
+
+Operations on the local Lightning wallet that are not part of a mining run.
+
+```
+otedama wallet verify [--config path] [--data-dir path]
+```
+
+Checks a written-down recovery phrase against the stored wallet. Otedama
+prints the BIP-39 phrase exactly once, at wallet creation, and never
+persists it — so this is the only way to confirm the backup was
+transcribed correctly, and it has to be done while you still hold both
+the phrase and a working wallet.
+
+The phrase is read from **standard input**, never from a flag: command-line
+arguments are visible to every process on the machine and land in shell
+history. The wallet encryption passphrase comes from
+`OTEDAMA_WALLET_PASSPHRASE` for the same reason. If the wallet was created
+with a BIP-39 "25th word", set `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` too —
+without it the seed will not match.
+
+Nothing is written. The command refuses to run when no wallet exists rather
+than creating one, and never echoes the phrase back.
+
+Seeds are compared in constant time; the 8-hex-character fingerprint that is
+printed is public and matches what `otedama doctor` reports.
+
+**Exit codes:**
+- `0` — the phrase reproduces the stored wallet.
+- `1` — it does not, or the phrase is not a valid BIP-39 mnemonic.
+- `64` — usage error.
+- `78` — config error (no data dir, no wallet, missing passphrase).
+
+```bash
+# Interactive; your terminal will echo the phrase as you type it.
+export OTEDAMA_WALLET_PASSPHRASE='your passphrase'
+otedama wallet verify
+
+# Non-interactive, from a file you then delete.
+otedama wallet verify < phrase.txt && shred -u phrase.txt
+```
+
 ### `otedama doctor`
 
 Run self-diagnostic checks and print a report.

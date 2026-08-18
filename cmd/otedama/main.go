@@ -13,6 +13,7 @@
 //	otedama service uninstall
 //	otedama service status
 //	otedama doctor [--bitcoin-address bc1q...]
+//	otedama wallet verify [--data-dir path]
 //
 // # Exit codes
 //
@@ -33,8 +34,8 @@
 // indicates that operator attention is needed.
 //
 // Each subcommand lives in its own file (run.go, config.go, service.go,
-// doctor.go, version.go, completion.go); this file holds only the entry
-// point and the top-level dispatcher.
+// doctor.go, wallet.go, version.go, completion.go); this file holds only the
+// entry point and the top-level dispatcher.
 package main
 
 import (
@@ -124,6 +125,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdService(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "wallet":
+		return cmdWallet(args[1:], stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -148,6 +151,7 @@ Commands:
   config     Inspect or validate the effective configuration.
   service    Install/uninstall as a background service.
   doctor     Run self-diagnostic checks.
+  wallet     Verify a recovery phrase against the stored wallet.
   completion Generate a shell-completion script (bash|zsh|fish).
   help       Print this help and exit.
 

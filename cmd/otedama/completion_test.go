@@ -14,7 +14,7 @@ func TestCompletion_EmitsPerShellScript(t *testing.T) {
 		shell    string
 		mustHave []string
 	}{
-		{"bash", []string{"complete -F _otedama otedama", "run version config service doctor help completion"}},
+		{"bash", []string{"complete -F _otedama otedama"}},
 		{"zsh", []string{"#compdef otedama", "compdef _otedama otedama"}},
 		{"fish", []string{"__fish_use_subcommand", "complete -c otedama"}},
 	}
@@ -30,6 +30,44 @@ func TestCompletion_EmitsPerShellScript(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestCompletion_ListsEveryDispatchedSubcommand enforces the sync that
+// completion.go's own header comment asks for ("Keep the command lists below
+// in sync with the dispatch"). The previous test asserted one hardcoded
+// command-list string, which meant adding a subcommand broke the test for the
+// wrong reason — the literal, not the omission — and updating the literal
+// silently satisfied it whether or not the other two shells were updated too.
+//
+// This checks both directions per shell: every name the dispatcher accepts is
+// offered by every completion script.
+func TestCompletion_ListsEveryDispatchedSubcommand(t *testing.T) {
+	// Every name main.run dispatches, excluding the aliases (--version, -v,
+	// --help, -h) which are flags rather than completion candidates.
+	subcommands := []string{"run", "version", "config", "service", "doctor", "wallet", "completion", "help"}
+
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		t.Run(shell, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			if code := cmdCompletion([]string{shell}, &out, &errb); code != exitOK {
+				t.Fatalf("completion %s exit=%d (stderr: %s)", shell, code, errb.String())
+			}
+			for _, name := range subcommands {
+				if !strings.Contains(out.String(), name) {
+					t.Errorf("%s completion does not offer %q", shell, name)
+				}
+			}
+		})
+	}
+
+	// And the other direction: each name really is dispatched, so the
+	// completion scripts are not advertising commands that do not exist.
+	for _, name := range subcommands {
+		var out, errb bytes.Buffer
+		if code := run([]string{name, "--help"}, &out, &errb); code == exitUsage {
+			t.Errorf("completion offers %q but the dispatcher rejects it", name)
+		}
 	}
 }
 

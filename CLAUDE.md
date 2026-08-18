@@ -24,7 +24,7 @@ Otedamaの設計はJohn Carmack、Robert C. Martin、Rob Pikeの三者の原則�
 
 ```
 Otedama/
-├── cmd/otedama/            # CLI エントリポイント（run/version/config/service/doctor/completion）
+├── cmd/otedama/            # CLI エントリポイント（run/version/config/service/doctor/wallet/completion）
 ├── internal/
 │   ├── arbitration/        # 純粋関数の裁定エンジン（副作用なし）
 │   ├── btccrypto/          # Bitcoin暗号抽象化(secp256k1/Schnorr/ML-DSA scaffold)

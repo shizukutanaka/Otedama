@@ -727,51 +727,47 @@ the two is needed before implementation.
 
 ---
 
-## 16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI
+## 16. `otedama wallet verify` exists; `change-passphrase` is still unreachable — PARTIALLY RESOLVED (session 264)
 
-**What:** The CLI dispatches only `run`, `version`, `config`, `service`,
-`doctor`, `completion`, and `help` (`cmd/otedama/main.go`). There is no
-`otedama wallet ...` command. Two consequences:
+**Resolved half — backup verification.** `otedama wallet verify` reads a
+recovery phrase from stdin, derives its seed, and compares it in constant
+time against the seed in `wallet.dat`. Exit 0 on match, 1 on mismatch. The
+phrase never comes from argv (visible in `ps` and shell history) and is
+never echoed back, logged, or written; the command refuses to run when no
+wallet exists rather than letting `lightning.NewWalletManager` take its
+create-a-new-wallet path. See `docs/API.md` and `cmd/otedama/wallet.go`.
 
-- **No way to verify a backup.** After writing down the 24-word recovery
-  phrase printed on first run (implemented session 253 — see
-  `engine.printRecoveryPhrase`), a user has no way to check that what
-  they wrote down is correct. The standard practice for a non-custodial
-  wallet is a verify step — re-enter the phrase, derive the seed, and
-  confirm the fingerprint matches the stored wallet — precisely because
-  a transcription error is silent and is only discovered during a
-  recovery attempt, when it is too late. `doctor` reports whether
-  `wallet.dat` exists and prints its fingerprint, but never accepts a
-  mnemonic to compare against.
-- **`ChangePassphrase` is implemented but unreachable.**
-  `lightning.WalletManager.ChangePassphrase` (internal/lightning/wallet.go)
-  correctly verifies the old passphrase and atomically re-encrypts the
-  seed, and is covered by tests — but no production code calls it, so a
-  user whose passphrase may have been exposed cannot rotate it without
-  writing their own Go program against the internal package.
+This closes the gap that mattered: Otedama prints the phrase exactly once
+and cannot re-derive it later, so a transcription error was silent and
+surfaced only during a recovery attempt, when it is too late. Verification
+now happens while the user still holds both the phrase and a working
+wallet, which is the only moment it can.
 
-**Impact:** A user can follow every documented instruction and still hold
-an unusable backup, discovering it only when their disk has already
-failed. Because BIP-39 derivation is one-way, Otedama cannot re-derive
-the phrase to check it later — verification must happen while the user
-still has both the phrase and the working wallet. This is a gap in the
-*usability* of the non-custodial guarantee rather than in its
-cryptography: the seed never leaves the device (that part holds), but
-the user's ability to prove they can recover it is missing.
+The command also reports the two failure causes distinctly, because they
+need different fixes: an invalid BIP-39 mnemonic (misspelled or dropped
+word — caught by the checksum) versus a valid mnemonic that is not this
+wallet's (wrong word order, or a BIP-39 "25th word" missing from
+`OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`).
 
-**Workaround:** Immediately after first run, confirm that the printed
-fingerprint matches what `otedama doctor` reports, and store the phrase
-and a copy of `wallet.dat` separately. There is no in-product way to
-confirm the transcription itself. To rotate a passphrase, create a new
-wallet in a fresh `--data-dir` and mine to it instead.
+**Remaining half — `ChangePassphrase` is implemented but unreachable.**
+`lightning.WalletManager.ChangePassphrase` (internal/lightning/wallet.go)
+correctly verifies the old passphrase and atomically re-encrypts the seed,
+and is covered by tests — but no production code calls it, so a user whose
+passphrase may have been exposed still cannot rotate it without writing
+their own Go program against the internal package.
 
-**Target:** No committed target. Adding a subcommand touches the CLI
-architecture map in CLAUDE.md, so it needs a maintainer decision rather
-than a mechanical fix. A minimal `otedama wallet verify` (read a mnemonic
-from stdin — never argv, which leaks via process lists — derive the seed,
-compare fingerprints, print match/mismatch) and `otedama wallet
-change-passphrase` (wiring the existing, already-tested
-`ChangePassphrase`) would close both halves without new dependencies.
+**Impact of what remains:** confined to passphrase rotation. The
+non-custodial guarantee itself is now exercisable end to end: create,
+back up, verify.
+
+**Workaround for rotation:** create a new wallet in a fresh `--data-dir`
+and mine to it instead.
+
+**Target:** `otedama wallet change-passphrase` wiring the existing,
+already-tested method. Deliberately not bundled with `verify`: verify is
+read-only and can be shipped on its own evidence, whereas rotation
+rewrites `wallet.dat` and belongs with a maintainer review of the
+atomic-replace path, which `internal/lightning` requires under CODEOWNERS.
 
 ---
 
