@@ -91,6 +91,7 @@ linters-settings:
     disabled-checks:
       - unnamedResult   # named returns are sometimes clearer
       - whyNoLint       # we prefer succinct disable comments
+      - hugeParam       # structs <1KB are idiomatic to pass by value in Go; flagging them is noise
 
   gofumpt:
     module-path: github.com/shizukutanaka/Otedama
