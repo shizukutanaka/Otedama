@@ -193,7 +193,7 @@ func TestFetchOne_IncludesUserAgent(t *testing.T) {
 	}
 	// Per implementation: "Otedama/3.0.0-alpha (non-custodial mining)"
 	if gotUA == "Go-http-client/1.1" {
-		t.Errorf("User-Agent is default Go UA %q; should be customised", gotUA)
+		t.Errorf("User-Agent is default Go UA %q; should be customized", gotUA)
 	}
 }
 

@@ -49,7 +49,7 @@ func putHasher(h hash.Hash) {
 	hashPool.Put(h)
 }
 
-// hmacSHA256Pooled is an allocation-minimising version of hmacSHA256.
+// hmacSHA256Pooled is an allocation-minimizing version of hmacSHA256.
 // The result is a freshly allocated 32-byte slice; the hashers are
 // pooled.
 func hmacSHA256Pooled(key, data []byte) []byte {

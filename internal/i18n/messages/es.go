@@ -10,8 +10,8 @@ func Spanish() (*i18n.Catalog, error) {
 	return i18n.NewCatalog(i18n.LangSpanish, map[i18n.ID]string{
 		StartupReady:          "Otedama está listo. La minería comenzará en breve.",
 		StartupWalletCreated:  "Se ha creado una nueva cartera Lightning. Tu semilla de recuperación está almacenada de forma segura en este dispositivo.",
-		StartupHardwareFound:  "Se detectaron {{.count}} dispositivos de minería: {{.summary}}",
-		StartupHardwareNone:   "No se detectaron dispositivos de minería. Otedama requiere un ASIC, GPU o CPU compatible.",
+		StartupHardwareFound:  "Se detector {{.count}} dispositivos de minería: {{.summary}}",
+		StartupHardwareNone:   "No se detector dispositivos de minería. Otedama requiere un ASIC, GPU o CPU compatible.",
 		StartupPoolConnecting: "Conectando al pool {{.url}}...",
 		StartupPoolConnected:  "Conectado al pool {{.url}}.",
 
@@ -22,7 +22,7 @@ func Spanish() (*i18n.Catalog, error) {
 		ErrorHardwareFailure: "El dispositivo {{.id}} reportó un fallo de hardware y ha sido deshabilitado.",
 
 		StatusMining:          "Minando en {{.devices}} dispositivo(s). Tasa de hash actual: {{.hashrate}}.",
-		StatusIdle:            "Inactivo. No hay trabajo disponible del pool en este momento.",
+		StatusIdle:            "Inactivo. No hay trabajo disponible del pool en este memento.",
 		StatusPaymentReceived: "Recibido {{.amount}} del pool {{.pool}}.",
 		StatusShuttingDown:    "Apagando de forma segura. Tu cartera permanece a salvo en este dispositivo.",
 	})

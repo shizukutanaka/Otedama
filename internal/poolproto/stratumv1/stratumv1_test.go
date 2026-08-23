@@ -989,7 +989,7 @@ func TestSession_Close_CancelsPendingCalls(t *testing.T) {
 			t.Error("pending channel should be closed (not deliver a value) after Close")
 		}
 	case <-time.After(500 * time.Millisecond):
-		t.Error("pending call not cancelled within 500ms")
+		t.Error("pending call not canceled within 500ms")
 	}
 }
 

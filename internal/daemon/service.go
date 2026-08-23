@@ -142,7 +142,7 @@ func (m *Manager) systemdUnitPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, ".config", "systemd", "user")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, systemdUnitName), nil
@@ -155,7 +155,7 @@ func (m *Manager) installSystemd() error {
 	}
 
 	unit := m.systemdUnit()
-	if err := os.WriteFile(path, []byte(unit), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("daemon: write systemd unit: %w", err)
 	}
 	// Reload daemon and enable the unit.
@@ -244,7 +244,7 @@ func (m *Manager) launchdPlistPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, "Library", "LaunchAgents")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, launchdLabel+".plist"), nil
@@ -256,7 +256,7 @@ func (m *Manager) installLaunchd() error {
 		return err
 	}
 	plist := m.launchdPlist()
-	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(plist), 0o644); err != nil {
 		return fmt.Errorf("daemon: write plist: %w", err)
 	}
 	return runCmd("launchctl", "load", "-w", path)
@@ -336,7 +336,7 @@ func launchdLogPath(name string) string {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	dir := filepath.Join(home, "Library", "Logs")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	return filepath.Join(dir, name)

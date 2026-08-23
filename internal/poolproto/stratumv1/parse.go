@@ -135,7 +135,7 @@ func parseShowMessage(raw json.RawMessage) (string, bool) {
 // V1 client.reconnect params: [hostname, port, wait] — all optional.
 // A pool sends this to gracefully move a miner to another node (load
 // balancing / maintenance / failover). Otedama deliberately records but
-// does NOT follow the pool-supplied Host:Port: honouring an arbitrary
+// does NOT follow the pool-supplied Host:Port: honoring an arbitrary
 // endpoint from an unauthenticated notification is a redirection vector,
 // and the reconnect loop already owns the operator-configured pool list.
 // Wait is advisory (seconds to pause before reconnecting).

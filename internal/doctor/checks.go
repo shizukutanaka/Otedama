@@ -124,7 +124,7 @@ func checkBitcoinAddress(addr string) Check {
 
 // addressKind returns a short human-readable label for the payout address
 // type so `doctor` confirms it understood the address — in particular that a
-// bech32m Taproot (bc1p…) address is recognised, not just bech32 v0 (bc1q…).
+// bech32m Taproot (bc1p…) address is recognized, not just bech32 v0 (bc1q…).
 func addressKind(addr string) string {
 	switch btccrypto.ClassifyAddress(strings.TrimSpace(addr)) {
 	case btccrypto.AddressP2PKH:
@@ -138,7 +138,7 @@ func addressKind(addr string) string {
 	case btccrypto.AddressP2TR:
 		return "P2TR Taproot"
 	default:
-		return "unrecognised type"
+		return "unrecognized type"
 	}
 }
 
@@ -218,7 +218,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -242,7 +242,7 @@ const (
 	walletFingerprintFile = "wallet.fingerprint"
 )
 
-// checkWallet verifies that the Lightning wallet is initialised and surfaces
+// checkWallet verifies that the Lightning wallet is initialized and surfaces
 // its public fingerprint so operators can cross-check against a hardware
 // wallet without exposing the seed. The fingerprint is a best-effort
 // convenience — its absence is non-fatal (it regenerates on next run).
@@ -364,7 +364,7 @@ func checkPoolDiversity(cfg config.Config) Check {
 
 // poolIPResolver resolves a host (or host:port) to its IP addresses.
 // Overridable in tests so checkPoolEndpointDiversity does not hit real DNS.
-// Defaults to the system resolver, honouring the check's context deadline.
+// Defaults to the system resolver, honoring the check's context deadline.
 var poolIPResolver = func(ctx context.Context, host string) ([]string, error) {
 	h := host
 	if hh, _, err := net.SplitHostPort(host); err == nil {
@@ -504,12 +504,12 @@ func checkPoolTLSCA(cfg config.Config) Check {
 					continue
 				}
 				configured++
-				// tls_ca_file is only honoured for stratum+tls:// (V1 over TLS);
+				// tls_ca_file is only honored for stratum+tls:// (V1 over TLS);
 				// for any other scheme it is silently ignored at runtime.
 				if !strings.HasPrefix(p.URL, "stratum+tls://") {
 					return Result{
 						Status: StatusWarn,
-						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
+						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honors it; it will be ignored",
 							stripScheme(p.URL)),
 						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
 					}
@@ -772,7 +772,7 @@ func checkClockSkew() Check {
 			reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, nil)
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, clockSkewProbeURL, http.NoBody)
 			if err != nil {
 				return Result{
 					Status: StatusWarn,
@@ -831,7 +831,7 @@ func checkClockSkew() Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (threshold %.0f s)", skew, clockSkewFailSecs),
 					Fix: fmt.Sprintf(
-						"synchronise your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
+						"synchronize your system clock (e.g. `timedatectl set-ntp true` on Linux, "+
 							"`w32tm /resync` on Windows). Skew >%.0f s breaks TLS certificate "+
 							"validation and mining nTime checks.", clockSkewFailSecs),
 				}
@@ -839,7 +839,7 @@ func checkClockSkew() Check {
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("local clock is %.0f s off server time (warn threshold %.0f s)", skew, clockSkewWarnSecs),
-					Fix:    "synchronise your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
+					Fix:    "synchronize your system clock; skew above 120 s may cause TLS errors or stale rate judgements",
 				}
 			default:
 				return Result{

@@ -19,7 +19,7 @@ import (
 func TestLoadConfigFile_MalformedYAML_WarnsAndReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
-	if err := os.WriteFile(path, []byte("this is: : not : valid yaml"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("this is: : not : valid yaml"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -50,7 +50,7 @@ pools:
   - url: stratum+v2://pool1.example.com:3336
   - url: stratum+v2://pool2.example.com:3336
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -79,7 +79,7 @@ pools:
 func TestLoadConfigFile_HTTPAddrField_Parses(t *testing.T) {
 	// config.yaml.example has long documented http_addr as a valid field,
 	// but config.Config had no such field. loadConfigFile's yaml.Decoder
-	// uses KnownFields(true), so an unrecognised key does not just get
+	// uses KnownFields(true), so an unrecognized key does not just get
 	// ignored — it fails the whole document, and this function's error
 	// path discards the ENTIRE config, not just the offending line. A user
 	// who uncommented the documented example would have silently lost
@@ -92,7 +92,7 @@ bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
 http_addr: "127.0.0.1:9090"
 log_level: debug
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -139,7 +139,7 @@ pools:
 workers:
   name: cpu-worker
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -162,7 +162,7 @@ workers:
 func TestLoadConfigFile_EmptyYAML_ReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.yaml")
-	if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -183,7 +183,7 @@ func TestLoadConfigFile_CommentsOnly_ReturnsEmpty(t *testing.T) {
 # This is a comment-only file.
 # Another comment.
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -237,13 +237,13 @@ func TestLoadConfigFile_UnreadableFile_WarnsOrReturnsEmpty(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "unreadable.yaml")
-	if err := os.WriteFile(path, []byte("bitcoin_address: bc1q..."), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("bitcoin_address: bc1q..."), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if err := os.Chmod(path, 0000); err != nil {
+	if err := os.Chmod(path, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	defer os.Chmod(path, 0644) // restore so cleanup works
+	defer os.Chmod(path, 0o644) // restore so cleanup works
 
 	var stderr bytes.Buffer
 	cfg := loadConfigFile(path, &stderr)
@@ -302,7 +302,7 @@ func TestSafeDisplay_EmptyReturnsNotSet(t *testing.T) {
 
 func TestSafeDisplay_StripsControlCharacters(t *testing.T) {
 	// Terminal escape sequences in config values could inject ANSI
-	// (log injection attack). safeDisplay must neutralise them.
+	// (log injection attack). safeDisplay must neutralize them.
 	in := "valid\x1b[31mred\x1b[0m"
 	out := safeDisplay(in)
 	// The raw ESC byte must not appear in output.

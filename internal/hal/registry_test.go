@@ -368,7 +368,7 @@ func (b *blockingDriver) Enumerate(_ context.Context) ([]Device, error) {
 
 func TestDetector_ContextCancellationInterruptsDrainLoop(t *testing.T) {
 	// A driver that ignores context blocks the old for-range drain loop
-	// even after ctx is cancelled. The fix switches to a select-based loop
+	// even after ctx is canceled. The fix switches to a select-based loop
 	// that exits immediately on ctx.Done().
 	block := make(chan struct{})
 

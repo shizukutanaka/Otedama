@@ -23,9 +23,11 @@ func (f *fakeScheme) Name() string { return f.name }
 func (f *fakeScheme) Verify(_ PublicKey, _ []byte, _ Signature) error {
 	return nil
 }
+
 func (f *fakeScheme) PublicKeyFromBytes(_ []byte) (PublicKey, error) {
 	return nil, ErrInvalidPublicKey
 }
+
 func (f *fakeScheme) SignatureFromBytes(_ []byte) (Signature, error) {
 	return nil, ErrInvalidSignature
 }

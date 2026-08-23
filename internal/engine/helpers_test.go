@@ -592,7 +592,7 @@ func TestDetectDevices_ReturnsBuiltinCPU(t *testing.T) {
 }
 
 func TestDetectDevices_CancelledContextSurfacesRealCause(t *testing.T) {
-	// With a cancelled context, hal.Detector.Detect races between delivering
+	// With a canceled context, hal.Detector.Detect races between delivering
 	// the (fast, synchronous) CPU result and observing ctx.Done(), so the
 	// outcome varies run-to-run. The invariant that must hold every time:
 	// detectDevices either returns devices, or an error that surfaces the
@@ -608,7 +608,7 @@ func TestDetectDevices_CancelledContextSurfacesRealCause(t *testing.T) {
 				t.Fatalf("iter %d: error must wrap context.Canceled, got %v", i, err)
 			}
 			if strings.Contains(err.Error(), "no devices detected") {
-				t.Fatalf("iter %d: cancelled detection misreported as 'no devices detected': %v", i, err)
+				t.Fatalf("iter %d: canceled detection misreported as 'no devices detected': %v", i, err)
 			}
 		case len(devices) == 0:
 			t.Fatalf("iter %d: nil error with zero devices", i)

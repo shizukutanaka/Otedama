@@ -119,9 +119,9 @@ var knownSchemes = []struct {
 	{"datum://", ProtocolDATUM},
 }
 
-// StripScheme removes a recognised pool URL scheme prefix and returns
+// StripScheme removes a recognized pool URL scheme prefix and returns
 // the remaining host[:port] portion. It returns ErrUnknownProtocol if
-// the scheme is not recognised. This is the canonical way to get the
+// the scheme is not recognized. This is the canonical way to get the
 // dial target from a pool URL, replacing ad-hoc per-package parsing.
 func StripScheme(url string) (host string, err error) {
 	for _, s := range knownSchemes {

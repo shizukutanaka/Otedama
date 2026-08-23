@@ -55,7 +55,7 @@ func TestStatus_SymbolsAreDistinct(t *testing.T) {
 
 func TestStatus_SymbolUnknownValue(t *testing.T) {
 	// Unknown Status values must not panic and should return a
-	// recognisable fallback.
+	// recognizable fallback.
 	s := Status(99)
 	if sym := s.symbol(); sym == "" {
 		t.Error("unknown Status returned empty symbol")
@@ -468,7 +468,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 	// A file that exists but whose config fails Validate (no bitcoin address).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
@@ -485,7 +485,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
@@ -580,16 +580,16 @@ func TestCheckPoolReachability_NoPoolsUsesDefault(t *testing.T) {
 }
 
 // ============================================================================
-// checkNetwork — fail path via pre-cancelled context
+// checkNetwork — fail path via pre-canceled context
 // ============================================================================
 
 func TestCheckNetwork_CancelledContext_Fails(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancelled before the check even starts
+	cancel() // canceled before the check even starts
 	c := checkNetwork()
 	r := c.Run(ctx)
 	if r.Status != StatusFail {
-		t.Errorf("cancelled-context network check: status = %v, want Fail", r.Status)
+		t.Errorf("canceled-context network check: status = %v, want Fail", r.Status)
 	}
 	if r.Fix == "" {
 		t.Error("Fail result must provide a Fix hint")
@@ -625,7 +625,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 	dir := t.TempDir()
 	// Simulate two render nodes.
 	for _, name := range []string{"renderD128", "renderD129", "card0"} {
-		if err := os.MkdirAll(filepath.Join(dir, name), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", name, err)
 		}
 	}
@@ -708,11 +708,11 @@ func TestCheckWallet_NoWallet_EmitsWarn(t *testing.T) {
 
 func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "a1b2c3d4"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -727,7 +727,7 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 
 func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	c := checkWallet(dir)
@@ -752,11 +752,11 @@ func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
 
 func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "deadbeef"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -1034,7 +1034,7 @@ func writePEMCert(t *testing.T) string {
 		t.Fatalf("createcert: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "ca.pem")
-	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	return path
@@ -1072,7 +1072,7 @@ func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 
 func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.pem")
-	if err := os.WriteFile(path, []byte("not a certificate"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("not a certificate"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{Pools: []config.PoolConfig{
@@ -1540,20 +1540,20 @@ func TestDefaultChecks_IncludesEnvVarsCheck(t *testing.T) {
 }
 
 // ============================================================================
-// addressKind — default ("unrecognised type") branch (session 162)
+// addressKind — default ("unrecognized type") branch (session 162)
 // ============================================================================
 
 // TestAddressKind_UnknownAddress covers the default branch of addressKind:
-// any address that ClassifyAddress does not recognise (not starting with
-// "bc1p", "bc1q", "1", or "3") returns "unrecognised type".
+// any address that ClassifyAddress does not recognize (not starting with
+// "bc1p", "bc1q", "1", or "3") returns "unrecognized type".
 func TestAddressKind_UnknownAddress(t *testing.T) {
 	got := addressKind("garbage-address-format")
-	if got != "unrecognised type" {
-		t.Errorf("addressKind(garbage) = %q, want \"unrecognised type\"", got)
+	if got != "unrecognized type" {
+		t.Errorf("addressKind(garbage) = %q, want \"unrecognized type\"", got)
 	}
 }
 
-// TestAddressKind_KnownP2WPKH verifies the P2WPKH branch is correctly labelled
+// TestAddressKind_KnownP2WPKH verifies the P2WPKH branch is correctly labeled
 // (regression: ensures the switch-case isn't accidentally removed).
 func TestAddressKind_KnownP2WPKH(t *testing.T) {
 	got := addressKind("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
@@ -1676,7 +1676,7 @@ func TestCheckWallet_NoHome_Skips(t *testing.T) {
 }
 
 // TestCheckPoolEndpointDiversity_EmptyHostSkipped covers checks.go:397-398 —
-// a pool URL with no recognised scheme yields an empty host from stripScheme,
+// a pool URL with no recognized scheme yields an empty host from stripScheme,
 // which is skipped (continue). With only one resolvable host, the check
 // returns Skip ("could not resolve enough pool endpoints").
 func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
@@ -1688,7 +1688,7 @@ func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{
 			{URL: "stratum+tcp://good.example.com:3333"},
-			{URL: "http://bad.example.com"}, // unrecognised scheme → host "" → skipped
+			{URL: "http://bad.example.com"}, // unrecognized scheme → host "" → skipped
 		},
 	}
 	r := checkPoolEndpointDiversity(cfg).Run(context.Background())
@@ -1698,7 +1698,7 @@ func TestCheckPoolEndpointDiversity_EmptyHostSkipped(t *testing.T) {
 }
 
 // TestCheckPayoutScheme_EmptyHostUsesURL covers checks.go:620-622 —
-// a pool URL with no recognised scheme makes stripScheme return "", so the
+// a pool URL with no recognized scheme makes stripScheme return "", so the
 // check falls back to using the raw URL string as the host label.
 func TestCheckPayoutScheme_EmptyHostUsesURL(t *testing.T) {
 	const rawURL = "noscheme-host:3333"

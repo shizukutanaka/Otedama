@@ -150,11 +150,11 @@ func TestWalletManager_WalletFileNotWorldReadable(t *testing.T) {
 		info, _ := e.Info()
 		mode := info.Mode().Perm()
 		// Other (world) must have no permissions.
-		if mode&0007 != 0 {
+		if mode&0o007 != 0 {
 			t.Errorf("wallet file %s world-accessible: %04o", e.Name(), mode)
 		}
 		// Group must have no permissions.
-		if mode&0070 != 0 {
+		if mode&0o070 != 0 {
 			t.Errorf("wallet file %s group-accessible: %04o", e.Name(), mode)
 		}
 	}
@@ -354,7 +354,7 @@ func TestWalletManager_CorruptedWalletFileFailsClean(t *testing.T) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		if err := os.WriteFile(path, []byte("not a valid wallet"), 0600); err != nil {
+		if err := os.WriteFile(path, []byte("not a valid wallet"), 0o600); err != nil {
 			t.Fatalf("corrupt: %v", err)
 		}
 	}
@@ -370,7 +370,7 @@ func TestWalletManager_EmptyWalletFileFailsClean(t *testing.T) {
 	wl, _ := NewEnglishWordList()
 
 	// Write an empty wallet file manually.
-	if err := os.WriteFile(filepath.Join(dir, "wallet.dat"), nil, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "wallet.dat"), nil, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 

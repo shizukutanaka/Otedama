@@ -136,7 +136,7 @@ func TestWalletManager_Reload_ReturnsSameSeed(t *testing.T) {
 // MnemonicToSeed already accepted an optional passphrase, but the only
 // caller (createNew) hardcoded "" — the capability existed but was
 // unreachable. These tests pin the fix: the option changes the derived
-// seed, every pre-existing (no-option) call keeps its original behaviour,
+// seed, every pre-existing (no-option) call keeps its original behavior,
 // and the passphrase only matters at creation (it's baked into the stored
 // seed, not needed again on reload).
 
@@ -277,7 +277,7 @@ func TestWalletManager_WalletFileHasRestrictivePermissions(t *testing.T) {
 		t.Fatalf("stat wallet.dat: %v", err)
 	}
 	// Owner read/write only (0600); no group or other access.
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("wallet.dat permissions = %04o, want 0600", perm)
 	}
 }

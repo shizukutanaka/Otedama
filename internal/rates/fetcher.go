@@ -237,7 +237,7 @@ func (f *Fetcher) Fetch(ctx context.Context) error {
 	if call := f.inflight; call != nil {
 		f.inflightMu.Unlock()
 		// A fetch is already running; wait for it (or for our own context to be
-		// cancelled, so a coalesced caller is never pinned to the leader's
+		// canceled, so a coalesced caller is never pinned to the leader's
 		// lifetime) and adopt its result.
 		select {
 		case <-call.done:
@@ -372,8 +372,8 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 // fetchOne performs a single HTTP GET against src and returns the parsed
 // BTC/USD rate, the absolute clock skew observed from the HTTP Date response
 // header (0 if absent or unparseable), and any error.
-func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate float64, skewSecs float64, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
+func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate, skewSecs float64, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, http.NoBody)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -412,7 +412,7 @@ func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate float64, skewS
 
 // StartBackground launches a goroutine that refreshes the rate every
 // interval. It performs an initial fetch immediately.
-// The goroutine exits when ctx is cancelled.
+// The goroutine exits when ctx is canceled.
 func (f *Fetcher) StartBackground(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = CacheDuration

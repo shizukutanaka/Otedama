@@ -161,7 +161,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		return exitConfig
 	}
 
-	// Initialise i18n bundle.
+	// Initialize i18n bundle.
 	bundle, _ := messages.NewBundle()
 	lang := messages.DetectLang(cfg.Language)
 	if cfg.Language == "" {
@@ -269,7 +269,7 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logge
 	if f.logFile != "" {
 		// 0600: logs can include pool URLs and worker names; match the
 		// restrictive posture used for the wallet and data directory.
-		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
 		} else {

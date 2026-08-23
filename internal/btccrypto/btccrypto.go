@@ -85,7 +85,7 @@ var (
 	// ErrUnrecognisedAddress is returned by ValidateAddress when an address is
 	// well-formed in neither supported encoding (bech32/bech32m SegWit nor
 	// legacy Base58Check). It is a sentinel so callers can distinguish "this is
-	// not a recognisable address format" from any other validation error via
+	// not a recognizable address format" from any other validation error via
 	// errors.Is — e.g. to offer format-specific guidance ("did you paste a
 	// testnet address?") versus a checksum failure ("likely a typo").
 	ErrUnrecognisedAddress = errors.New("btccrypto: unrecognized address format (not bech32 or base58 mainnet)")
@@ -94,9 +94,9 @@ var (
 // ----- Interfaces -----
 
 // PublicKey is an opaque, scheme-specific public key. Methods on it
-// return scheme-aware byte serialisations.
+// return scheme-aware byte serializations.
 type PublicKey interface {
-	// Bytes returns the canonical serialisation for this scheme:
+	// Bytes returns the canonical serialization for this scheme:
 	// 33 bytes (compressed sec1) for ECDSA-secp256k1; 32 bytes
 	// (x-only) for Schnorr-secp256k1; ML-DSA-65 ≈1952 bytes; etc.
 	Bytes() []byte
@@ -107,7 +107,7 @@ type PublicKey interface {
 
 // Signature is an opaque, scheme-specific signature.
 type Signature interface {
-	// Bytes returns the canonical serialisation. The size is
+	// Bytes returns the canonical serialization. The size is
 	// scheme-dependent: 64–72 bytes (DER ECDSA), 64 bytes (Schnorr),
 	// ML-DSA-65 ≈3293 bytes, SPHINCS+-128f ≈17088 bytes.
 	Bytes() []byte
@@ -131,12 +131,12 @@ type Scheme interface {
 	// callers using a typed cast are responsible for that.
 	Verify(pub PublicKey, msg []byte, sig Signature) error
 
-	// PublicKeyFromBytes parses a serialised public key. It returns
+	// PublicKeyFromBytes parses a serialized public key. It returns
 	// ErrInvalidPublicKey if the bytes are not a well-formed public
 	// key for this scheme.
 	PublicKeyFromBytes(b []byte) (PublicKey, error)
 
-	// SignatureFromBytes parses a serialised signature.
+	// SignatureFromBytes parses a serialized signature.
 	SignatureFromBytes(b []byte) (Signature, error)
 }
 
@@ -302,7 +302,7 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 // using the address prefix and (for SegWit) length. This is a lightweight
 // classifier — it does NOT verify the bech32/base58 checksum. To verify that a
 // SegWit address is well-formed (catching a mistyped payout address), call
-// ValidateBech32Address. ClassifyAddress's own purpose is only to recognise
+// ValidateBech32Address. ClassifyAddress's own purpose is only to recognize
 // which signature scheme an address will need, so callers can branch via
 // SchemeForAddressType without a full decode.
 //
@@ -315,7 +315,7 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 //
 // The witness version lives in the first character after "bc1": 'q' encodes
 // version 0 (SegWit v0), 'p' encodes version 1 (Taproot). bech32m P2TR
-// addresses are therefore recognised distinctly from bech32 v0 addresses —
+// addresses are therefore recognized distinctly from bech32 v0 addresses —
 // which is exactly the breadth a 2026 payout configuration needs. Returns
 // AddressUnknown for anything that does not match (including testnet/signet
 // prefixes, which Otedama does not configure).

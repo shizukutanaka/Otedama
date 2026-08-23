@@ -57,7 +57,7 @@ const defaultHysteresisPct = 0.05
 const streamStaleTimeout = 3 * time.Minute
 
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is cancelled or
+// or whenever a fresh quote arrives. Blocks until ctx is canceled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
@@ -212,7 +212,7 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
-			// updateStream always initialises YieldPerDevice before inserting
+			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y

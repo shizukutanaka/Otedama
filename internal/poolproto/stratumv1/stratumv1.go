@@ -6,7 +6,7 @@
 // # Why V1 still matters in 2026
 //
 // Stratum V1 is a 14-year-old plaintext JSON-RPC-over-TCP protocol with
-// no standardisation document, no encryption, and no authentication of
+// no standardization document, no encryption, and no authentication of
 // the pool to the miner. It is also what >99% of Bitcoin mining pools
 // speak in 2026, and it will remain operational well beyond Otedama's
 // 10-year horizon because pool translation proxies make every SV2 pool
@@ -114,7 +114,7 @@ type session struct {
 	extranonce1     string
 	extranonce2Size int
 
-	// ctx controls the read-loop lifetime; cancelled on Close.
+	// ctx controls the read-loop lifetime; canceled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
 }
@@ -143,7 +143,7 @@ func (s *session) start(ctx context.Context) {
 }
 
 // readLoop is the single goroutine that reads and dispatches V1 messages.
-// It runs until the connection closes or the context is cancelled.
+// It runs until the connection closes or the context is canceled.
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
 	defer close(s.noticeCh)

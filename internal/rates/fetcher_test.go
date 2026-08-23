@@ -849,7 +849,7 @@ func TestFetcher_Fetch_CoalescesConcurrentCalls(t *testing.T) {
 
 // TestFetcher_Fetch_CoalescedCallerHonorsOwnContext verifies that a caller
 // which coalesces onto an in-flight fetch is released when its own context is
-// cancelled, rather than being pinned to the leader's lifetime.
+// canceled, rather than being pinned to the leader's lifetime.
 func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 	// The leader's request takes ~200ms; a fixed delay (rather than an
 	// indefinite block) keeps the server's in-flight request bounded so the
@@ -885,7 +885,7 @@ func TestFetcher_Fetch_CoalescedCallerHonorsOwnContext(t *testing.T) {
 	start := time.Now()
 	err := f.Fetch(ctx)
 	if err == nil {
-		t.Fatal("coalesced caller with cancelled context should return an error")
+		t.Fatal("coalesced caller with canceled context should return an error")
 	}
 	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
 		t.Errorf("coalesced caller blocked %v, expected prompt (~30ms) context cancellation", elapsed)
@@ -1088,7 +1088,7 @@ outer:
 
 // TestStartBackground_GoroutineTerminatesOnContextCancel verifies that the
 // background refresh goroutine launched by StartBackground actually exits when
-// its context is cancelled — i.e. it does not leak. A goroutine that keeps
+// its context is canceled — i.e. it does not leak. A goroutine that keeps
 // running after its owning context is done is the classic Go leak (it pins its
 // stack, its Fetcher, and any captured resources for the life of the process).
 //

@@ -155,7 +155,7 @@ func TestValidateAddress_DispatchesByFormat(t *testing.T) {
 func TestValidateAddress_UnrecognisedFormatIsSentinel(t *testing.T) {
 	// An address that is neither bech32 nor base58 must return the
 	// ErrUnrecognisedAddress sentinel, checkable via errors.Is, so callers can
-	// distinguish "not a recognisable format" from a checksum failure (a typo
+	// distinguish "not a recognizable format" from a checksum failure (a typo
 	// in an otherwise well-formed address) and give format-specific guidance.
 	cases := []string{
 		"garbage",                              // not a Bitcoin address at all
@@ -173,7 +173,7 @@ func TestValidateAddress_UnrecognisedFormatIsSentinel(t *testing.T) {
 func TestValidateAddress_ChecksumFailureIsNotUnrecognised(t *testing.T) {
 	// A well-formed-but-mistyped address (correct prefix and charset, failing
 	// checksum) must NOT be reported as ErrUnrecognisedAddress: the format was
-	// recognised, the checksum was not. This is the distinction the sentinel
+	// recognized, the checksum was not. This is the distinction the sentinel
 	// exists to let callers make.
 	const bech32Typo = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdr" // last char flipped
 	_, err := ValidateAddress(bech32Typo)

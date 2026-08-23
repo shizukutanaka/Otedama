@@ -69,7 +69,7 @@ func TestSHA256d_KnownVector(t *testing.T) {
 	}
 }
 
-// ----- Header serialisation -----
+// ----- Header serialization -----
 
 func TestHeader_Bytes_Roundtrip(t *testing.T) {
 	orig := Header{

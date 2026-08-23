@@ -42,7 +42,7 @@ type SetupConnection struct {
 	DeviceID        string // STR0_255
 }
 
-// Encode serialises the message into a payload byte slice.
+// Encode serializes the message into a payload byte slice.
 func (m SetupConnection) Encode() ([]byte, error) {
 	b := make([]byte, 0, 32)
 	b = append(b, byte(m.Protocol))
@@ -97,7 +97,7 @@ type SetupConnectionSuccess struct {
 	Flags       uint32
 }
 
-// Encode serialises SetupConnectionSuccess.
+// Encode serializes SetupConnectionSuccess.
 func (m SetupConnectionSuccess) Encode() ([]byte, error) {
 	buf := make([]byte, 6)
 	binary.LittleEndian.PutUint16(buf[0:2], m.UsedVersion)
@@ -126,7 +126,7 @@ type SetupConnectionError struct {
 	Error string // STR0_255: human-readable reason
 }
 
-// Encode serialises SetupConnectionError.
+// Encode serializes SetupConnectionError.
 func (m SetupConnectionError) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 8), m.Flags)
 	return appendStr0_255(b, m.Error)
@@ -165,7 +165,7 @@ type OpenMiningChannel struct {
 	NominalHashrate float32 // H/s, informational
 }
 
-// Encode serialises OpenMiningChannel.
+// Encode serializes OpenMiningChannel.
 func (m OpenMiningChannel) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 16), m.ReqID)
 	b, err := appendStr0_255(b, m.User)
@@ -216,7 +216,7 @@ type OpenMiningChannelSuccess struct {
 	ExtraNonce2Size uint16
 }
 
-// Encode serialises OpenMiningChannelSuccess.
+// Encode serializes OpenMiningChannelSuccess.
 func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
 	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+2)
 	b = appendU32LE(b, m.ReqID)
@@ -265,7 +265,7 @@ type OpenMiningChannelError struct {
 	Error string // STR0_255
 }
 
-// Encode serialises OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
+// Encode serializes OpenMiningChannelError (symmetric inverse of DecodeOpenMiningChannelError).
 func (m OpenMiningChannelError) Encode() ([]byte, error) {
 	b := appendU32LE(make([]byte, 0, 8), m.ReqID)
 	return appendStr0_255(b, m.Error)

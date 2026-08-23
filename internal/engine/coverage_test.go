@@ -824,7 +824,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 		serverConn.Read(buf) //nolint:errcheck
 		// Send a valid SetupConnectionSuccess but then a second one instead of
 		// the expected OpenMiningChannel flow — here we deliberately send
-		// an OpenMiningChannelError which is recognised but sets neither
+		// an OpenMiningChannelError which is recognized but sets neither
 		// SetupConnectionSuccess nor SetupConnectionError.
 		// Use a minimal valid NewMiningJob payload (it's in the unexpected msg branch).
 		job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}

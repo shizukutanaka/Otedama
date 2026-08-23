@@ -36,9 +36,9 @@ const HeaderSize = 80
 // little-endian wire format.
 //
 // Fields are stored in the order they appear on the wire so that
-// asBytes() can be a simple slice (not a marshalling call).
+// asBytes() can be a simple slice (not a marshaling call).
 //
-// Offsets (from Bitcoin's serialisation format):
+// Offsets (from Bitcoin's serialization format):
 //
 //	[0:4]   Version   uint32 LE
 //	[4:36]  PrevHash  [32]byte (LE, so already reversed vs RPC)
@@ -55,7 +55,7 @@ type Header struct {
 	Nonce      uint32
 }
 
-// Bytes serialises the header to its canonical 80-byte wire representation.
+// Bytes serializes the header to its canonical 80-byte wire representation.
 func (h Header) Bytes() [HeaderSize]byte {
 	var b [HeaderSize]byte
 	binary.LittleEndian.PutUint32(b[0:4], h.Version)
@@ -109,7 +109,7 @@ func SHA256d(data []byte) Hash {
 	return sha256.Sum256(first[:])
 }
 
-// HashHeader computes SHA256d of the 80-byte serialised header.
+// HashHeader computes SHA256d of the 80-byte serialized header.
 // This is the core inner loop of Bitcoin mining.
 func HashHeader(h Header) Hash {
 	b := h.Bytes()

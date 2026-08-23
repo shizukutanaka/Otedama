@@ -9,22 +9,22 @@ import "github.com/shizukutanaka/Otedama/internal/i18n"
 func French() (*i18n.Catalog, error) {
 	return i18n.NewCatalog(i18n.LangFrench, map[i18n.ID]string{
 		StartupReady:          "Otedama est prêt. Le minage va commencer sous peu.",
-		StartupWalletCreated:  "Un nouveau portefeuille Lightning a été créé. Votre phrase de récupération est stockée en sécurité sur cet appareil.",
-		StartupHardwareFound:  "{{.count}} appareil(s) de minage détecté(s) : {{.summary}}",
-		StartupHardwareNone:   "Aucun appareil de minage détecté. Otedama nécessite un ASIC, un GPU ou un CPU compatible.",
-		StartupPoolConnecting: "Connexion au pool {{.url}} en cours...",
+		StartupWalletCreated:  "Un nouveau portefeuille Lightning a été créé. Votre phrase de récupération est stockée en sécurité sur cet apparel.",
+		StartupHardwareFound:  "{{.count}} apparel(s) de minage détecté(s) : {{.summary}}",
+		StartupHardwareNone:   "Aucun apparel de minage détecté. Otedama nécessite un ASIC, un GPU ou un CPU compatible.",
+		StartupPoolConnecting: "Connection au pool {{.url}} en cours...",
 		StartupPoolConnected:  "Connecté au pool {{.url}}.",
 
-		ErrorPoolUnreachable: "Le pool {{.url}} est inaccessible. Vérifiez votre connexion Internet ou essayez un autre pool.",
+		ErrorPoolUnreachable: "Le pool {{.url}} est inaccessible. Vérifiez votre connection Internet ou essayez un autre pool.",
 		ErrorInvalidAddress:  "L'adresse Bitcoin {{.address}} n'est pas valide. Vérifiez l'absence de fautes de frappe.",
 		ErrorConfigMissing:   "Otedama a besoin d'une adresse Bitcoin pour commencer le minage. Passez --bitcoin-address ou définissez OTEDAMA_BITCOIN_ADDRESS.",
 		ErrorWalletLocked:    "Le portefeuille Lightning est verrouillé. Déverrouillez-le avec votre phrase de passe pour continuer.",
 		ErrorHardwareFailure: "L'appareil {{.id}} a signalé une défaillance matérielle et a été désactivé.",
 
-		StatusMining:          "Minage en cours sur {{.devices}} appareil(s). Taux de hachage actuel : {{.hashrate}}.",
+		StatusMining:          "Minage en cours sur {{.devices}} apparel(s). Taux de hachage actuel : {{.hashrate}}.",
 		StatusIdle:            "Inactif. Aucun travail disponible depuis le pool pour le moment.",
 		StatusPaymentReceived: "{{.amount}} reçu depuis le pool {{.pool}}.",
-		StatusShuttingDown:    "Arrêt en cours. Votre portefeuille reste sécurisé sur cet appareil.",
+		StatusShuttingDown:    "Arrêt en cours. Votre portefeuille reste sécurisé sur cet apparel.",
 	})
 }
 

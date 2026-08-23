@@ -382,7 +382,7 @@ func TestPollingLoop_RepublishesOnTicker(t *testing.T) {
 
 func TestPollingProvider_ParentContextCancelTerminatesLoop(t *testing.T) {
 	// A provider is started under a parent context (in production, the engine's
-	// context). Cancelling that parent — WITHOUT calling Stop() — must make the
+	// context). Canceling that parent — WITHOUT calling Stop() — must make the
 	// loop goroutine exit and close the quote channel. Every other test drives
 	// shutdown via Stop(); this covers the equally important path where the
 	// owning context dies first, which is the classic goroutine-leak scenario:
@@ -501,7 +501,7 @@ func TestMiningProvider_Publish_HashrateFunc_UnknownDeviceUsesStatic(t *testing.
 
 func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	// sendQuote must report failure (not block) when the context is already
-	// cancelled and the channel is full, so the publish loop exits promptly
+	// canceled and the channel is full, so the publish loop exits promptly
 	// on shutdown. With a full channel the buffered send blocks, so the
 	// ready ctx.Done() case is selected and sendQuote returns false.
 	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
@@ -511,6 +511,6 @@ func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if p.sendQuote(ctx, Quote{ProviderID: "new"}) {
-		t.Error("sendQuote returned true on a cancelled context; should report failure")
+		t.Error("sendQuote returned true on a canceled context; should report failure")
 	}
 }

@@ -254,7 +254,7 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 		miner.HashRateString(hashRate), shares))
 }
 
-// rejectClass categorises a pool's share-rejection reason. The category
+// rejectClass categorizes a pool's share-rejection reason. The category
 // string is short and stable, suitable as a metric label; the diagnosis
 // is the human-readable hint for logs. Both derive from the same
 // classification (community field taxonomy, e.g. D-Central's guide):

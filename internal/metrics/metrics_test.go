@@ -846,7 +846,7 @@ func TestWriteText_SameNameSeriesSortedByLabel(t *testing.T) {
 	}
 }
 
-// BenchmarkWriteText exercises the /metrics exposition path with many labelled
+// BenchmarkWriteText exercises the /metrics exposition path with many labeled
 // series — the realistic shape Prometheus scrapes. It is the benchmark that
 // makes the decorate-sort win (metricKey computed O(n) instead of O(n log n))
 // observable; compare allocs/op before and after.
