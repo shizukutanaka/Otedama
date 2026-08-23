@@ -42,7 +42,7 @@ type Share struct {
 	DeviceID string
 }
 
-// WorkerConfig controls the behaviour of a Worker.
+// WorkerConfig controls the behavior of a Worker.
 type WorkerConfig struct {
 	// Threads is the number of goroutines to spawn. Zero or negative
 	// values are replaced with runtime.NumCPU().

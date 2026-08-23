@@ -1722,7 +1722,7 @@ func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) 
 }
 
 // ============================================================================
-// sendJob — clean_jobs purge and normal queueing behaviour
+// sendJob — clean_jobs purge and normal queueing behavior
 // ============================================================================
 
 // makeTestSession returns a bare *session with a jobsCh of capacity cap.

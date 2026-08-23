@@ -34,7 +34,7 @@ type MiningProvider struct {
 	// per-family estimate (ASIC/GPU/CPU constants), making the yield quote
 	// reflect actual hardware performance rather than a family average.
 	// Zero or negative return values cause publish() to fall back to the
-	// static estimate, preserving the pre-wiring behaviour when the engine
+	// static estimate, preserving the pre-wiring behavior when the engine
 	// has not yet produced a hashrate measurement (e.g. first few seconds).
 	// Setting this field after Start is called is not safe.
 	HashrateFunc func(deviceID string) float64

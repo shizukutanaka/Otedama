@@ -186,7 +186,7 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-// safeDisplay sanitises a config value for terminal output. It strips
+// safeDisplay sanitizes a config value for terminal output. It strips
 // control characters (ESC, newlines, DEL, …) so a malicious config value
 // cannot inject ANSI escape sequences or forge log lines when echoed to a
 // terminal, and renders the empty string as "(default)".

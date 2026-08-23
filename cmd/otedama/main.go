@@ -21,7 +21,7 @@
 //	0  — success
 //	1  — runtime error (engine failure, I/O error, network unreachable)
 //	64 — usage error (unknown subcommand, unknown flag, missing required argument)
-//	78 — configuration error (invalid bitcoin address, unrecognised log level, etc.)
+//	78 — configuration error (invalid bitcoin address, unrecognized log level, etc.)
 //
 // The doctor subcommand uses a narrower three-value scale:
 //
@@ -82,13 +82,13 @@ func parseSubcommandFlags(fs *flag.FlagSet, args []string, stdout, stderr io.Wri
 }
 
 // hasHelpFlag reports whether args requests help, matching the exact
-// spellings flag.FlagSet.Parse recognises (-h, -help, --help) before
+// spellings flag.FlagSet.Parse recognizes (-h, -help, --help) before
 // falling through to its own ErrHelp path. It scans every token rather
 // than stopping at the first argument that doesn't look like a flag:
 // every flag these subcommands define takes a value in the space-separated
 // "--flag value" form (e.g. "--bitcoin-address bc1q..."), so the token
 // right after a flag is that flag's value, not a positional argument
-// signalling the end of flags — stopping there produced false negatives
+// signaling the end of flags — stopping there produced false negatives
 // for the common case of --help appearing after any flag with a value.
 // Scanning still stops at a literal "--", the unambiguous end-of-flags
 // marker, since that ends flag.Parse's own scanning too.

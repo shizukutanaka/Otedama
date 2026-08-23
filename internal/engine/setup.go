@@ -208,7 +208,7 @@ func defaultPoolURL(cfg config.Config) string {
 // poolURLs returns the ordered list of pool URLs to try, for failover.
 // The order is the user's configured priority; the engine rotates to
 // the next pool when the current one fails (matching the multi-pool
-// failover behaviour of cgminer/bfgminer/Braiins). Falls back to the
+// failover behavior of cgminer/bfgminer/Braiins). Falls back to the
 // built-in default when no pools are configured.
 func poolURLs(cfg config.Config) []string {
 	if len(cfg.Pools) == 0 {

@@ -472,7 +472,7 @@ type rateStats interface {
 // skew into their respective gauges. The rate gauge uses the fetcher's fallback
 // before the first successful fetch, so it is never left at zero. The skew
 // gauge is updated whenever the fetcher has seen at least one HTTP Date header
-// from a source (0 until then, signalling "not yet observed").
+// from a source (0 until then, signaling "not yet observed").
 func publishBTCRate(m *engineMetrics, f rateStats) {
 	if rate, _ := f.BTCUSDRate(); rate > 0 {
 		m.btcUSDRate.Set(rate)

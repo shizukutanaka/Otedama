@@ -906,7 +906,7 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 }
 
 // ============================================================================
-// readLoop — unrecognised frame causes continue (not return)
+// readLoop — unrecognized frame causes continue (not return)
 // ============================================================================
 
 func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {

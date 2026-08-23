@@ -88,7 +88,7 @@ var (
 	// not a recognisable address format" from any other validation error via
 	// errors.Is — e.g. to offer format-specific guidance ("did you paste a
 	// testnet address?") versus a checksum failure ("likely a typo").
-	ErrUnrecognisedAddress = errors.New("btccrypto: unrecognised address format (not bech32 or base58 mainnet)")
+	ErrUnrecognisedAddress = errors.New("btccrypto: unrecognized address format (not bech32 or base58 mainnet)")
 )
 
 // ----- Interfaces -----

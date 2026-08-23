@@ -231,7 +231,7 @@ func (f *Fetcher) RateAge() (age time.Duration, everFetched bool) {
 // diagnostic fetch would double the request rate and risk an HTTP 429 ban
 // (CoinGecko's free tier rejects bursts aggressively). A coalesced caller
 // receiving the shared result observes the leader's context outcome, which is
-// the intended behaviour: every caller wants the same current rate.
+// the intended behavior: every caller wants the same current rate.
 func (f *Fetcher) Fetch(ctx context.Context) error {
 	f.inflightMu.Lock()
 	if call := f.inflight; call != nil {

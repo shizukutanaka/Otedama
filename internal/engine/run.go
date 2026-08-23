@@ -1307,7 +1307,7 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 // closes — means a worker essentially never produces a share the pool
 // credits, since ordinary hardware cannot solve a real block. A difficulty
 // of 0 (no set_difficulty received yet, e.g. the first job of a session)
-// falls back to the nBits target, matching pre-wiring behaviour. Extracted
+// falls back to the nBits target, matching pre-wiring behavior. Extracted
 // as a pure function so the target-selection logic is unit-testable without
 // a running Worker.
 func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {

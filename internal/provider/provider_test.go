@@ -480,7 +480,7 @@ func TestMiningProvider_Publish_FallsBackWhenHashrateFuncReturnsZero(t *testing.
 }
 
 func TestMiningProvider_Publish_HashrateFunc_UnknownDeviceUsesStatic(t *testing.T) {
-	// HashrateFunc returns 0 for an unrecognised device ID — publish() must
+	// HashrateFunc returns 0 for an unrecognized device ID — publish() must
 	// fall back to the static estimate rather than producing zero yield.
 	p := NewMiningProvider("stratum+v2://pool.example:3336", StaticRateSource{Rate: 95000})
 	p.HashrateFunc = func(id string) float64 { return 0 } // unknown → 0

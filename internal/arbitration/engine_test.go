@@ -1251,7 +1251,7 @@ func TestDecide_MinYieldFloor_ExcludesBelowFloorStreamFromChoice(t *testing.T) {
 
 func TestDecide_MinYieldFloor_ZeroDisablesFloor(t *testing.T) {
 	// With the floor at 0 (default), even a tiny positive yield is assigned —
-	// identical to the pre-floor behaviour.
+	// identical to the pre-floor behavior.
 	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
 	mining := Stream{
 		ID:              "mining.braiins",
