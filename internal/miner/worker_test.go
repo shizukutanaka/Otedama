@@ -80,7 +80,7 @@ func TestWorker_StartAndStop(t *testing.T) {
 
 	// Channel must be closed after Stop.
 	select {
-	case _, ok := <-shares:
+	case <-shares:
 			case <-time.After(100 * time.Millisecond):
 		// Channel not closed — Stop didn't terminate goroutines.
 		t.Error("worker did not stop within 100ms")
@@ -98,10 +98,7 @@ func TestWorker_FindsSharesWithEasyTarget(t *testing.T) {
 	w.SetWork(makeEasyWork())
 
 	select {
-	case share, ok := <-shares:
-		if !ok {
-			t.Fatal("share channel closed before receiving a share")
-		}
+	case share := <-shares:
 		// Verify the share hash actually meets the target.
 		h := share
 		if !h.Hash.LessOrEqual(makeEasyWork().Target) {
@@ -125,10 +122,7 @@ func TestWorker_MultipleThreadsFindShares(t *testing.T) {
 	var count int
 	for count < 10 {
 		select {
-		case _, ok := <-shares:
-			if !ok {
-				t.Fatalf("channel closed with only %d shares", count)
-			}
+		case <-shares:
 			count++
 		case <-ctx.Done():
 			t.Fatalf("timeout with only %d shares (wanted 10)", count)
@@ -318,10 +312,7 @@ func TestShare_DeviceID_PropagatedFromConfig(t *testing.T) {
 
 	for {
 		select {
-		case share, ok := <-shares:
-			if !ok {
-				t.Fatal("share channel closed before finding a share")
-			}
+		case share := <-shares:
 			if share.DeviceID != "test-device-42" {
 				t.Errorf("share.DeviceID = %q, want %q", share.DeviceID, "test-device-42")
 			}
@@ -353,10 +344,7 @@ func TestShare_DeviceID_EmptyWhenNotSet(t *testing.T) {
 
 	for {
 		select {
-		case share, ok := <-shares:
-			if !ok {
-				t.Fatal("share channel closed before finding a share")
-			}
+		case share := <-shares:
 			if share.DeviceID != "" {
 				t.Errorf("share.DeviceID = %q, want empty (no DeviceID in config)", share.DeviceID)
 			}

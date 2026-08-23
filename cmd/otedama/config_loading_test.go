@@ -201,10 +201,6 @@ func TestLoadConfigFile_EmptyPath_UsesDefault(t *testing.T) {
 
 	// Should not crash. Should not write to stderr just because the
 	// default config doesn't exist.
-	if strings.Contains(stderr.String(), "cannot open") {
-		// Acceptable only if message is about non-default path.
-		// But "cannot open" should only appear if path was given.
-	}
 	_ = cfg
 }
 

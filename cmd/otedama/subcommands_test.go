@@ -654,7 +654,7 @@ func TestStartHTTPServer_InvalidAddr_WarnsAndReturnsRegistryOnly(t *testing.T) {
 	defer cancel()
 	var out, errb bytes.Buffer
 	// An invalid port (65536) forces srv.Start to fail.
-	reg, srv := startHTTPServer(ctx, "127.0.0.1:99999", false, &out, &errb)
+	_, srv := startHTTPServer(ctx, "127.0.0.1:99999", false, &out, &errb)
 	if srv != nil {
 		defer srv.Stop()
 		// On some systems the error may not be detected until Start's internal listen.

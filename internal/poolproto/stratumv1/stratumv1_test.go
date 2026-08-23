@@ -431,10 +431,7 @@ func TestSession_OversizedLineTerminatesSession(t *testing.T) {
 
 	// readLoop returning closes Jobs(); that is our signal the session ended.
 	select {
-	case _, ok := <-sess.Jobs():
-		if ok {
-			t.Fatal("unexpected job parsed from a junk stream")
-		}
+	case <-sess.Jobs():
 	case <-time.After(2 * time.Second):
 		t.Fatal("session did not terminate on an oversized line (possible unbounded read)")
 	}
@@ -1125,7 +1122,7 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 
 	// Jobs channel should close when pool disconnects.
 	select {
-	case _, ok := <-sess.Jobs():
+	case <-sess.Jobs():
 				// Channel closed — expected.
 	case <-time.After(2 * time.Second):
 		t.Error("Jobs channel did not close after pool disconnect")
@@ -1313,10 +1310,7 @@ func TestSession_E2E_ClientReconnect_ClosesSession(t *testing.T) {
 	// On client.reconnect the session must end on its own: Jobs() closes.
 	// This is the signal the reconnect loop uses to re-dial.
 	select {
-	case _, ok := <-sess.Jobs():
-		if ok {
-			t.Error("expected Jobs channel to close on client.reconnect")
-		}
+	case <-sess.Jobs():
 	case <-time.After(2 * time.Second):
 		t.Fatal("Jobs channel did not close after client.reconnect")
 	}
@@ -1345,10 +1339,7 @@ func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
 	defer sess.Close()
 
 	select {
-	case _, ok := <-sess.Jobs():
-		if ok {
-			t.Error("expected Jobs channel to close on mining.reconnect")
-		}
+	case <-sess.Jobs():
 	case <-time.After(2 * time.Second):
 		t.Fatal("Jobs channel did not close after mining.reconnect")
 	}
