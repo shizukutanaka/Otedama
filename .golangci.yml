@@ -102,7 +102,10 @@ linters-settings:
   errorlint:
     errorf: true
     asserts: true
-    comparison: true
+    # comparison: false — sentinel errors (e.g. flag.ErrHelp, io.EOF) are
+    # idiomatic to compare with == in stdlib Go; enabling comparison here
+    # produces false positives on every sentinel check.
+    comparison: false
 
   gosec:
     excludes:
@@ -138,6 +141,12 @@ issues:
         - goconst       # repeated literals are clearer in tests
         - unparam       # test helpers often have unused returns
         - gocyclo       # long table-driven tests
+
+    # goconst: short CLI literals ("--help", "(default)") are clearer inline
+    # than as package-level constants; constantising them hurts readability
+    # for no real gain.
+    - linters:
+        - goconst
 
     # The CPU worker's main loop is inherently complex.
     - path: internal/miner/worker\.go
