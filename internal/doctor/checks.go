@@ -25,7 +25,21 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
+
+// stripSchemePool resolves the dial target from a pool URL using the
+// canonical scheme stripper in internal/poolproto, keeping doctor in
+// sync with the engine about which schemes are recognised (issue #3).
+// An unrecognised scheme maps to "" to preserve the previous
+// stripScheme semantics expected by the checks below.
+func stripSchemePool(url string) string {
+	host, err := poolproto.StripScheme(url)
+	if err != nil {
+		return ""
+	}
+	return host
+}
 
 // DefaultChecks returns the built-in check set for a config.
 // Additional checks can be appended by callers before running.
@@ -301,7 +315,7 @@ func checkPoolReachability(cfg config.Config) Check {
 			} else {
 				url = config.DefaultPoolURL
 			}
-			host := stripScheme(url)
+			host := stripSchemePool(url)
 			if host == "" {
 				return Result{
 					Status: StatusFail,
@@ -396,7 +410,7 @@ func checkPoolEndpointDiversity(cfg config.Config) Check {
 			ipToPools := map[string][]string{}
 			resolved := 0
 			for _, p := range cfg.Pools {
-				host := stripScheme(p.URL)
+				host := stripSchemePool(p.URL)
 				if host == "" {
 					continue
 				}
@@ -469,7 +483,7 @@ func checkPoolEncryption(cfg config.Config) Check {
 			var plaintext []string
 			for _, p := range cfg.Pools {
 				if strings.HasPrefix(p.URL, "stratum+tcp://") {
-					plaintext = append(plaintext, stripScheme(p.URL))
+					plaintext = append(plaintext, stripSchemePool(p.URL))
 				}
 			}
 			if len(plaintext) > 0 {
@@ -510,7 +524,7 @@ func checkPoolTLSCA(cfg config.Config) Check {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
-							stripScheme(p.URL)),
+							stripSchemePool(p.URL)),
 						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
 					}
 				}
@@ -652,7 +666,7 @@ func checkPayoutScheme(cfg config.Config) Check {
 			var lines []string
 			anyUnknown := false
 			for _, p := range cfg.Pools {
-				host := stripScheme(p.URL)
+				host := stripSchemePool(p.URL)
 				if host == "" {
 					host = p.URL
 				}
@@ -901,18 +915,6 @@ func maskAddress(s string) string {
 		return s
 	}
 	return s[:6] + strings.Repeat("·", 3) + s[len(s)-4:]
-}
-
-func stripScheme(url string) string {
-	for _, p := range []string{
-		"stratum+v2tls://", "stratum+v2://",
-		"stratum+tls://", "stratum+tcp://",
-	} {
-		if rest, ok := strings.CutPrefix(url, p); ok {
-			return rest
-		}
-	}
-	return ""
 }
 
 // (Report.Results is already deterministic: Runner.Run writes results
