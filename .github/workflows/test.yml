@@ -7,7 +7,7 @@ on:
     branches: [ main, master ]
 
 env:
-  GO_VERSION: 1.23.x
+  GO_VERSION: 1.24.x
   GIT_TERMINAL_PROMPT: 0
   GOPROXY: https://proxy.golang.org,direct
   GOSUMDB: sum.golang.org
@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: [1.23.x]
+        go: [1.24.x]
     
     steps:
     - name: Checkout code
@@ -74,7 +74,7 @@ jobs:
         file: ./coverage.out
         flags: unittests
         name: codecov-umbrella
-      if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+      if: matrix.os == 'ubuntu-latest' && matrix.go == '1.24.x'
 
   lint:
     name: Lint
