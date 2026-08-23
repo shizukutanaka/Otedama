@@ -111,6 +111,16 @@ linters-settings:
       # G601 (implicit memory aliasing in for loop) — we've audited
       # every loop body for correctness.
       - G601
+      # G115 (int->uint conversions in bit/byte packing) — all are
+      # intentional, range-checked crypto/encoding math (bech32, BIP39
+      # seed bits, hash mantissa, stratum frame/msg word packing). Values
+      # are always non-negative and within range; suppressing avoids
+      # noisy false positives without changing behaviour.
+      - G115
+      # G306 (WriteFile mode 0644) — systemd unit / launchd plist files
+      # MUST be world-readable for the service manager to load them; 0600
+      # would break daemon install. False positive for this use case.
+      - G306
 
 # Issue filtering.
 issues:

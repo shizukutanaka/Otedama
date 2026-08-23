@@ -204,9 +204,6 @@ func TestLoadConfigFile_EmptyPath_UsesDefault(t *testing.T) {
 	if strings.Contains(stderr.String(), "cannot open") {
 		// Acceptable only if message is about non-default path.
 		// But "cannot open" should only appear if path was given.
-		if strings.Contains(stderr.String(), "warning") {
-			// Permissive — just warn.
-		}
 	}
 	_ = cfg
 }

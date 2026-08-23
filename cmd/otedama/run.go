@@ -204,7 +204,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	// Start HTTP health/metrics server if requested.
 	metricsRegistry, httpSrv := startHTTPServer(ctx, cfg.HTTPAddr, f.pprofEnabled, stdout, stderr)
 	if httpSrv != nil {
-		defer httpSrv.Stop()
+		defer func() { _ = httpSrv.Stop() }()
 	}
 
 	// Bridge engine readiness to HTTP /readyz.

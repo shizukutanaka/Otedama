@@ -660,14 +660,6 @@ func TestStartHTTPServer_InvalidAddr_WarnsAndReturnsRegistryOnly(t *testing.T) {
 		// On some systems the error may not be detected until Start's internal listen.
 		// Accept srv non-nil only if it actually started.
 	}
-	if errb.Len() == 0 && srv == nil {
-		// If srv is nil and no error, that means the start failed but no warning was printed.
-		// This is acceptable only if reg is non-nil (the implementation returns reg on failure).
-	}
-	if reg == nil && srv == nil {
-		// Both nil means no addr was set — but we did set an addr. At minimum reg must be set.
-		// Skip assertion if the address happened to be valid on this platform.
-	}
 	// The key assertion: if srv fails to start, stderr must contain "warning".
 	// This covers the error path in startHTTPServer.
 	if errb.Len() > 0 && !strings.Contains(errb.String(), "warning") {

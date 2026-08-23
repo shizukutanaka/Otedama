@@ -1126,10 +1126,7 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 	// Jobs channel should close when pool disconnects.
 	select {
 	case _, ok := <-sess.Jobs():
-		if ok {
-			// Got a job before close — acceptable.
-		}
-		// Channel closed — expected.
+				// Channel closed — expected.
 	case <-time.After(2 * time.Second):
 		t.Error("Jobs channel did not close after pool disconnect")
 	}

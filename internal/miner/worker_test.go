@@ -81,10 +81,7 @@ func TestWorker_StartAndStop(t *testing.T) {
 	// Channel must be closed after Stop.
 	select {
 	case _, ok := <-shares:
-		if ok {
-			// A share arrived before stop — that's fine, just drain.
-		}
-	case <-time.After(100 * time.Millisecond):
+			case <-time.After(100 * time.Millisecond):
 		// Channel not closed — Stop didn't terminate goroutines.
 		t.Error("worker did not stop within 100ms")
 	}
