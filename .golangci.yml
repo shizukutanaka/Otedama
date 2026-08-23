@@ -142,10 +142,11 @@ issues:
         - unparam       # test helpers often have unused returns
         - gocyclo       # long table-driven tests
 
-    # goconst: short CLI literals ("--help", "(default)") are clearer inline
+    # goconst: short CLI literals ("--help", "(default)") read clearer inline
     # than as package-level constants; constantising them hurts readability
-    # for no real gain.
-    - linters:
+    # for no real gain. Relax for the cmd/otedama entrypoint package.
+    - path: cmd/otedama/.*\.go
+      linters:
         - goconst
 
     # The CPU worker's main loop is inherently complex.
