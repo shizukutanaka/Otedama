@@ -16,7 +16,10 @@ network handling, wallet persistence).
   and its HTTP endpoints.
 - Connections to Stratum V2 pools.
 - Connections to price feeds (Coinbase, Kraken, CoinGecko).
-- Connections to AI inference providers (Akash Network, future).
+- Connections to AI inference providers — future only. No such connection
+  exists today: the simulated provider was deleted in session 264 and the
+  product opens no AI-market network connection of any kind, so this row
+  currently contributes no attack surface.
 - Interactions with the operating system (systemd, launchd, filesystem).
 
 ### Out of scope

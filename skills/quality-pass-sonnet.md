@@ -33,9 +33,9 @@ doc-vs-code整合性の維持**である。
 | CI全Goジョブ赤（Go 1.23.x/1.21ピン vs go.modの`tlsmlkem`=Go 1.24 knob） | `.github/workflows/`へのpush権限なし |
 | 依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ・CVE到達不能／toolchain 1.24でcontainermaxprocs未享受） | 実行環境がsum.golang.orgを拒否しgo get不可 |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
-| Noise NX未配線／secp256k1スタブ／Akashシミュレーション／DATUM未実装 | CODEOWNERS or v3.1.0+スコープ（Opus側タスク） |
-| TUI 80カラム固定／ASIC検出なし／CIにfuzzなし | KNOWN_LIMITATIONS §15/§8/§13 |
+| ~~`wallet`サブコマンドがない~~ ✅ session 264で解決（`wallet verify` / `wallet change-passphrase`） | — |
+| Noise NX未配線／secp256k1スタブ／DATUM未実装（Akashシミュレーションはsession 264で削除済み） | CODEOWNERS or v3.1.0+スコープ（Opus側タスク） |
+| ASIC検出なし（TUI 80カラム固定はsession 264でLinux解決。CIはdeploy/ci-cd/code-reviewの3ファイル削除済み、残る死んだジョブは§13に手順記載） | KNOWN_LIMITATIONS §8/§15/§13 |
 
 ## 2. Sonnet優先タスクキュー（手順が明確なもの）
 

@@ -575,6 +575,18 @@ exactly, so a maintainer can apply it in one pass:
   `fpm`, referencing `scripts/post-install.sh`, `scripts/pre-remove.sh`,
   `scripts/otedama.service`, and a root `config.yaml`, none of which
   exist). Nothing depends on it, so no `needs:` edit is required.
+- **Every Go job in all three surviving files** — update the Go pins to
+  1.24.x. `ci.yml` sets `GO_VERSION: '1.23.x'` and a
+  `go: ['1.22.x', '1.23.x']` test matrix, `release.yml` pins 1.23.x, and
+  `security.yml` pins 1.21 — while `go.mod` carries
+  `godebug tlsmlkem=1`, a setting that exists only from Go 1.24
+  (`GODEBUG_NOTES.md`; it was `tlskyber` on the 1.23 draft). A pre-1.24
+  toolchain rejects the unknown godebug key at module parse, so **every
+  Go job in the surviving workflows fails deterministically before
+  compiling a line**, today, independent of the dead jobs above. This is
+  the highest-impact item in this section and, like the rest, needs a
+  maintainer push — the session-264 GitHub App could delete workflow
+  files but not modify them.
 
 With those applied, all four remaining workflows parse as YAML, every
 `needs:` names a job in the same file, and no reference to

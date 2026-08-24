@@ -31,14 +31,16 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 
 | 短所 | ブロック要因 |
 |---|---|
-| CI全Goジョブ赤: workflowはGo 1.23.x/1.21ピン、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードは1.24.7でgreen | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） |
+| CI全Goジョブ赤: 残存workflowはGo 1.23.x（ci.yml/release.yml）・1.21（security.yml）ピンで、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードは1.24.7でgreen | GitHub Appはworkflowファイルの**削除は可能・変更は不可**（session 264で両方向を実証。deploy/ci-cd/code-reviewの3ファイルは削除で解決、Goピン修正はメンテナのpushが必要——§13に手順記載） |
 | Noise NX未配線（既定`stratum+v2://`は平文） | CODEOWNERS + 監査済みellswift Go実装が世に存在しない（ADR-011 Erratum） |
 | secp256k1がスタブ（decred v4はBIP-340でもellswiftでもない — EC-Schnorr-DCRv0） | 依存追加が環境制約で不可 + v3.1.0スコープ |
 | 依存陳腐化: yaml.v3アーカイブ済（後継go.yaml.in）、x/crypto 31版遅れ（CVEはssh/openpgp配下で到達不能）、toolchain 1.24（containermaxprocs未享受） | 実行環境がsum.golang.orgをForbiddenで拒否 |
-| Akash統合はシミュレーション。実APIは廃止akash-apiでなく`chain-sdk`、入札はon-chain Bidengine | v3.1.0・設計判断（ADR-010 A4再フレーム済み） |
+| ~~Akash統合はシミュレーション~~ ✅ session 264で**削除により解決**（定数クォートがTUI見出し数値を汚染していた。実統合の設計知見——実APIは廃止akash-apiでなく`chain-sdk`、入札はon-chain Bidengine——はv3.1.0タスクとして有効） | — |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
-| DATUM未実装／ASIC検出なし／TUI 80カラム固定／CIにfuzzなし | KNOWN_LIMITATIONS §14/§8/§15/§13 |
+| ~~`wallet`サブコマンドがない~~ ✅ session 264で解決: `otedama wallet verify`（バックアップ検証）と `wallet change-passphrase`（既存`ChangePassphrase`の配線）を追加。`internal/lightning`は無変更 | — |
+| DATUM未実装／ASIC検出なし | KNOWN_LIMITATIONS §14/§8（ADR-009/ADR-008でスコープ済み） |
+| ~~TUI 80カラム固定~~ ✅ session 264でLinuxは解決（TIOCGWINSZ、実PTYテスト）。macOS/Windowsはスタブのまま | §15 |
+| CI: deploy.yml/ci-cd.yml/code-review.ymlは**削除済み**（session 264）。残る3ファイルの死んだジョブは§13に手順記載——**GitHub Appはworkflowファイルの削除は可能・変更は不可**（`workflows`権限なし。session 264で両方向を実証） | §13 |
 
 ## 2. Opus優先タスクキュー（深い推論を要するもの）
 
@@ -59,7 +61,7 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
    `internal/stratum/noise.go`のハンドシェイク状態機械（mixKey出力破棄・
    responder静的鍵未認証はKNOWN_LIMITATIONS §2に既知として記録済み — 新規発見
    のみ価値がある）、`internal/engine/run.go`のセッション状態機械の異常系。
-5. **実Akash統合の設計**（chain-sdkベース、ADR-003の依存方針との整合検討）。
+5. **実AI推論市場統合の設計**（chain-sdkベース、ADR-003の依存方針との整合検討）。シミュレーションプロバイダはsession 264で削除済み——`Provider`インターフェース・`RateSource`・`polling.go`・複数ストリーム対応の裁定エンジンが統合の受け皿として残っている。
 
 ## 3. 作業規律（違反すると過去250セッションの資産を毀損する）
 
