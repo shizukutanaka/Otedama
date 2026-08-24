@@ -575,18 +575,25 @@ exactly, so a maintainer can apply it in one pass:
   `fpm`, referencing `scripts/post-install.sh`, `scripts/pre-remove.sh`,
   `scripts/otedama.service`, and a root `config.yaml`, none of which
   exist). Nothing depends on it, so no `needs:` edit is required.
-- **Every Go job in all three surviving files** — update the Go pins to
-  1.24.x. `ci.yml` sets `GO_VERSION: '1.23.x'` and a
-  `go: ['1.22.x', '1.23.x']` test matrix, `release.yml` pins 1.23.x, and
-  `security.yml` pins 1.21 — while `go.mod` carries
-  `godebug tlsmlkem=1`, a setting that exists only from Go 1.24
-  (`GODEBUG_NOTES.md`; it was `tlskyber` on the 1.23 draft). A pre-1.24
-  toolchain rejects the unknown godebug key at module parse, so **every
-  Go job in the surviving workflows fails deterministically before
-  compiling a line**, today, independent of the dead jobs above. This is
-  the highest-impact item in this section and, like the rest, needs a
-  maintainer push — the session-264 GitHub App could delete workflow
-  files but not modify them.
+- **The Go version pins, probably** — `ci.yml` sets
+  `GO_VERSION: '1.23.x'` with a `go: ['1.22.x', '1.23.x']` test matrix,
+  `release.yml` pins 1.23.x, and `security.yml` pins 1.21, while `go.mod`
+  carries `godebug tlsmlkem=1`, a key that exists only from Go 1.24.
+  Go's own `doc/godebug.md` is explicit on both halves of the hazard:
+  *"It is an error to list a `godebug` with an unrecognized setting"* and
+  *"Toolchains older than Go 1.23 reject all `godebug` lines, since they
+  do not understand `godebug` at all."* So Go 1.23 rejects the
+  `tlsmlkem` key and Go 1.21/1.22 reject the whole block.
+
+  **What is not established is whether that actually reddens CI**, and
+  this entry previously asserted that it did. `go.mod` also carries
+  `toolchain go1.24.0`, and with the default `GOTOOLCHAIN=auto` a
+  go command older than the required toolchain downloads and switches to
+  it before doing the rest of the work — which would make the pins
+  harmless. Confirming this needs a Go 1.23 toolchain and outbound access
+  to the module proxy, neither of which the session that wrote this had.
+  Treat the pins as a suspected cause, not a diagnosed one: the first
+  green or red run on a branch settles it in one observation.
 
 With those applied, all four remaining workflows parse as YAML, every
 `needs:` names a job in the same file, and no reference to

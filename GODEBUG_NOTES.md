@@ -55,6 +55,31 @@ bumped quarterly to track the latest stable Go.
 
 As of 2026-04-30:
 
+- **`tlsmlkem=1`** — **load-bearing, not decorative. Do not delete it as a
+  redundant restatement of a default (measured, session 264).** Because
+  `go.mod` declares `go 1.22`, GODEBUG defaults follow Go-1.22-era
+  behaviour, and this key did not exist then, so its default resolves to
+  *off*. Removing the line was measured with `go version -m` on the built
+  binary: `DefaultGODEBUG` flips from `tlsmlkem=1` to `tlsmlkem=0`. That
+  would silently disable post-quantum key exchange on every
+  `stratum+v2tls://` pool connection and every price-feed HTTPS request,
+  with nothing failing and no log line to notice.
+
+  There is a cleaner way to get the same result, recorded here rather
+  than applied because it changes more than one thing: declaring
+  `go 1.24` makes `tlsmlkem=1` the native default, so the pin becomes
+  unnecessary. It also moves fourteen other settings from Go-1.22-era to
+  Go-1.24-era defaults, several of them security hardening — `tls3des`
+  1→0, `x509negativeserial` 1→0, `rsa1024min` 0→1, `x509rsacrt` 0→1 —
+  and one with real runtime consequences, `asynctimerchan` 1→0, which
+  changes `time.Timer` channel semantics that this codebase's tickers and
+  reconnect loop depend on. Measured under that directive, all 24
+  packages build, vet, and test green, and the race suite passes; that is
+  one machine and a handful of runs, not a substitute for a maintainer's
+  review of a language-version bump.
+
+  The original intent below still holds:
+
 - **`tlsmlkem=1`** — explicitly enable hybrid post-quantum TLS key
   exchange (X25519MLKEM768) for outbound connections to price feeds.
   Default on Go 1.24+, but pinning here makes the choice visible to
