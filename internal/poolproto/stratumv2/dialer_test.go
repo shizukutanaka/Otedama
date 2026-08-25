@@ -5,7 +5,15 @@ package stratumv2
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"math"
+	"math/big"
 	"net"
 	"testing"
 	"time"
@@ -1018,4 +1026,149 @@ func TestFloat64FromBits(t *testing.T) {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
 	}
+}
+
+// TestDialer_TLSSchemeActuallyDialsTLS pins the session-264 fix. useTLS used
+// to change only what Protocol() reported, while Dial always used a bare
+// net.Dialer — so a caller asking for stratum+v2tls:// got a plaintext socket
+// with every label claiming TLS. The product never reached it (the engine
+// dials V2 itself), which is exactly why it survived: nothing exercised it.
+//
+// A real TLS server is used rather than a stub, because what broke here was
+// the absence of a handshake, and only a handshake can prove its presence.
+func TestDialer_TLSSchemeActuallyDialsTLS(t *testing.T) {
+	cert, pemCA := selfSignedCert(t)
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	handshaken := make(chan error, 1)
+	go func() {
+		c, aerr := ln.Accept()
+		if aerr != nil {
+			handshaken <- aerr
+			return
+		}
+		defer c.Close()
+		handshaken <- c.(*tls.Conn).HandshakeContext(context.Background())
+	}()
+
+	d := &Dialer{useTLS: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := d.Dial(ctx, "stratum+v2tls://"+ln.Addr().String(),
+		poolproto.Credentials{User: "bc1qexample", TLSRootCAsPEM: pemCA})
+	if err != nil {
+		t.Fatalf("Dial over stratum+v2tls://: %v", err)
+	}
+	defer conn.Close()
+
+	select {
+	case err := <-handshaken:
+		if err != nil {
+			t.Fatalf("server side did not complete a TLS handshake: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("no TLS handshake reached the server; the dialer is still using plain TCP")
+	}
+}
+
+// TestDialer_TLSVerificationIsNotDisabled guards the other direction: dialing
+// the same server without its CA must fail. A "fix" that reached the server by
+// skipping verification would pass the test above and be worse than the bug.
+func TestDialer_TLSVerificationIsNotDisabled(t *testing.T) {
+	cert, _ := selfSignedCert(t)
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, aerr := ln.Accept()
+		if aerr == nil {
+			_ = c.(*tls.Conn).HandshakeContext(context.Background())
+			c.Close()
+		}
+	}()
+
+	d := &Dialer{useTLS: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := d.Dial(ctx, "stratum+v2tls://"+ln.Addr().String(), poolproto.Credentials{})
+	if err == nil {
+		conn.Close()
+		t.Fatal("dialed an untrusted self-signed certificate successfully; verification is off")
+	}
+}
+
+// TestDialer_PlaintextSchemeStaysPlaintext confirms the non-TLS registration
+// is unchanged — stratum+v2:// is not encrypted, and the fix must not have
+// silently promoted it (KNOWN_LIMITATIONS §2).
+func TestDialer_PlaintextSchemeStaysPlaintext(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		if c, aerr := ln.Accept(); aerr == nil {
+			c.Close()
+		}
+	}()
+
+	d := &Dialer{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := d.Dial(ctx, "stratum+v2://"+ln.Addr().String(), poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("plaintext dial failed: %v", err)
+	}
+	conn.Close()
+	if d.Protocol() != poolproto.ProtocolStratumV2 {
+		t.Errorf("Protocol() = %v, want %v", d.Protocol(), poolproto.ProtocolStratumV2)
+	}
+}
+
+// selfSignedCert returns a certificate for 127.0.0.1 and the PEM bundle that
+// trusts it.
+func selfSignedCert(t *testing.T) (tls.Certificate, []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "otedama-test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	cert, err := tls.X509KeyPair(pemCert, pemKey(t, key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cert, pemCert
+}
+
+func pemKey(t *testing.T, key *ecdsa.PrivateKey) []byte {
+	t.Helper()
+	der, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
 }

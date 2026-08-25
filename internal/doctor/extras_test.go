@@ -854,10 +854,23 @@ func TestCheckFailoverAddresses_TypoFailsChecksum(t *testing.T) {
 // checkPoolEncryption — plaintext stratum warning
 // ============================================================================
 
-func TestCheckPoolEncryption_NoPoolsSkips(t *testing.T) {
+// TestCheckPoolEncryption_DefaultPoolWarnsBecauseItIsPlaintext replaces a test
+// that asserted Skip with the detail "using built-in default pool (encrypted)".
+// The built-in default is a stratum+v2:// URL, which is not encrypted: the
+// engine dials it with a bare net.Dialer and logs "connecting over plaintext
+// Stratum V2 — no transport encryption" as it does so. Skipping the check for
+// the one configuration every unconfigured user runs, and calling it encrypted
+// while skipping, was the worst case of the defect.
+func TestCheckPoolEncryption_DefaultPoolWarnsBecauseItIsPlaintext(t *testing.T) {
 	r := checkPoolEncryption(config.Config{}).Run(context.Background())
-	if r.Status != StatusSkip {
-		t.Errorf("no pools: status = %v, want Skip", r.Status)
+	if r.Status != StatusWarn {
+		t.Fatalf("default pool: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if strings.Contains(r.Detail, "(encrypted)") {
+		t.Errorf("detail still calls the default pool encrypted: %q", r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Warn must include a Fix hint")
 	}
 }
 
@@ -877,17 +890,61 @@ func TestCheckPoolEncryption_PlaintextWarns(t *testing.T) {
 	}
 }
 
-func TestCheckPoolEncryption_EncryptedSchemesPass(t *testing.T) {
-	for _, url := range []string{
-		"stratum+tls://pool.example.com:3334",
-		"stratum+v2://pool.example.com:34254",
-		"stratum+v2tls://pool.example.com:34254",
+// TestCheckPoolEncryption_ClassifiesEachSchemeByItsRealDialPath pins the truth
+// table against what the engine actually does, not against the scheme name.
+// The previous version of this test asserted that stratum+v2:// passes, which
+// enshrined the defect: Noise NX is implemented in internal/stratum but no live
+// path invokes it (KNOWN_LIMITATIONS §2), so that scheme carries the payout
+// address in the clear.
+func TestCheckPoolEncryption_ClassifiesEachSchemeByItsRealDialPath(t *testing.T) {
+	for _, tc := range []struct {
+		url       string
+		encrypted bool
+		why       string
+	}{
+		{"stratum+tls://pool.example.com:3334", true, "poolproto/stratumv1 dials through tls.Dialer"},
+		{"stratum+v2tls://pool.example.com:34254", true, "engine dials through stratum.DialTLS"},
+		{"stratum+tcp://pool.example.com:3333", false, "plain TCP, no encryption"},
+		{"stratum+v2://pool.example.com:34254", false, "engine dials with a bare net.Dialer; Noise NX is unwired (§2)"},
 	} {
-		cfg := config.Config{Pools: []config.PoolConfig{{URL: url}}}
+		cfg := config.Config{Pools: []config.PoolConfig{{URL: tc.url}}}
 		r := checkPoolEncryption(cfg).Run(context.Background())
-		if r.Status != StatusPass {
-			t.Errorf("%s: status = %v, want Pass (detail: %s)", url, r.Status, r.Detail)
+		want := StatusPass
+		if !tc.encrypted {
+			want = StatusWarn
 		}
+		if r.Status != want {
+			t.Errorf("%s: status = %v, want %v (%s) — detail: %s", tc.url, r.Status, want, tc.why, r.Detail)
+		}
+		if got := schemeIsEncrypted(tc.url); got != tc.encrypted {
+			t.Errorf("schemeIsEncrypted(%s) = %v, want %v (%s)", tc.url, got, tc.encrypted, tc.why)
+		}
+	}
+}
+
+// TestCheckPoolEncryption_FixDoesNotRecommendAPlaintextScheme is the other half
+// of the defect and arguably the sharper one: the old Fix text told a user with
+// a plaintext stratum+tcp:// pool to switch to "stratum+v2:// (encrypted)" —
+// steering them from one unencrypted transport to another while stating that it
+// solved the problem.
+func TestCheckPoolEncryption_FixDoesNotRecommendAPlaintextScheme(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{{URL: "stratum+tcp://pool.example.com:3333"}}}
+	r := checkPoolEncryption(cfg).Run(context.Background())
+	if r.Fix == "" {
+		t.Fatal("Warn must include a Fix hint")
+	}
+	if strings.Contains(r.Fix, "stratum+v2:// (encrypted)") {
+		t.Errorf("Fix still recommends stratum+v2:// as encrypted: %q", r.Fix)
+	}
+	for _, want := range []string{"stratum+v2tls://", "stratum+tls://"} {
+		if !strings.Contains(r.Fix, want) {
+			t.Errorf("Fix should offer %s: %q", want, r.Fix)
+		}
+	}
+	// It must also say plainly that stratum+v2:// is not a solution, since
+	// that is the scheme a reader is most likely to reach for.
+	if !strings.Contains(r.Fix, "NOT encrypted") {
+		t.Errorf("Fix should state that stratum+v2:// is not encrypted: %q", r.Fix)
 	}
 }
 

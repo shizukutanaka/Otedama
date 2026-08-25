@@ -458,31 +458,88 @@ var gpuDRMPath = "/sys/class/drm"
 // redirect every payout to their own address — a well-known stratum-hijacking
 // attack. The encrypted transports (stratum+tls:// V1-over-TLS, stratum+v2://
 // which carries an AEAD Noise session, and stratum+v2tls://) defeat it.
+// schemeIsEncrypted reports whether a pool URL scheme gets transport
+// encryption on the path the engine actually dials.
+//
+// # Why this table, and why it is not "anything but stratum+tcp://"
+//
+// Until session 264 this check treated every scheme except
+// stratum+tcp:// as encrypted. That was wrong about stratum+v2://, which
+// is the built-in default, so `otedama doctor` reported PASS — "all N
+// pool(s) use an encrypted transport" — for connections that carry the
+// user's payout address in the clear, and its Fix text recommended
+// switching *to* stratum+v2:// to solve exactly that problem.
+//
+// The engine's own connect path is the authority, and it already says so
+// out loud: engine.runSession logs "connecting over plaintext Stratum V2
+// — no transport encryption" before dialing that scheme with a bare
+// net.Dialer. Noise NX exists in internal/stratum but no live path
+// invokes it (docs/KNOWN_LIMITATIONS.md §2). Doctor and the runtime
+// disagreed, and doctor — the tool a user runs to check their posture
+// before mining — was the one that was wrong.
+//
+// Verified against the dial sites rather than the scheme names:
+//
+//	stratum+tcp://    poolproto/stratumv1, plain TCP          not encrypted
+//	stratum+tls://    poolproto/stratumv1 tls.Dialer          encrypted
+//	stratum+v2://     engine net.Dialer (+ its warning log)   not encrypted
+//	stratum+v2tls://  engine stratum.DialTLS                  encrypted
+//
+// When Noise NX is wired into the stratum+v2:// path, move it to the
+// encrypted side here and drop the note from §2.
+func schemeIsEncrypted(url string) bool {
+	switch {
+	case strings.HasPrefix(url, "stratum+v2tls://"):
+		return true
+	case strings.HasPrefix(url, "stratum+tls://"):
+		return true
+	default:
+		// stratum+tcp:// and stratum+v2:// both travel in the clear.
+		return false
+	}
+}
+
 func checkPoolEncryption(cfg config.Config) Check {
 	return Check{
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
-			if len(cfg.Pools) == 0 {
-				// The built-in default pool uses an encrypted (stratum+v2://) URL.
-				return Result{Status: StatusSkip, Detail: "using built-in default pool (encrypted)"}
+			pools := cfg.Pools
+			usingDefault := len(pools) == 0
+			if usingDefault {
+				// The built-in default is a stratum+v2:// URL, which is
+				// plaintext. Reporting on it is the point: it is what a user
+				// who has configured nothing is about to connect over.
+				pools = []config.PoolConfig{{URL: config.DefaultPoolURL}}
 			}
+
 			var plaintext []string
-			for _, p := range cfg.Pools {
-				if strings.HasPrefix(p.URL, "stratum+tcp://") {
+			for _, p := range pools {
+				if !schemeIsEncrypted(p.URL) {
 					plaintext = append(plaintext, stripScheme(p.URL))
 				}
 			}
+
+			const fix = "use stratum+v2tls:// (Stratum V2 over TLS) or stratum+tls:// " +
+				"(V1 over TLS). stratum+v2:// is NOT encrypted today — Noise NX is " +
+				"implemented but not wired into the connect path (KNOWN_LIMITATIONS §2)."
+
 			if len(plaintext) > 0 {
+				which := fmt.Sprintf("%d of %d pool(s) use", len(plaintext), len(pools))
+				if usingDefault {
+					which = "the built-in default pool uses"
+				}
 				return Result{
 					Status: StatusWarn,
-					Detail: fmt.Sprintf("%d pool(s) use plaintext stratum+tcp:// (%s) — a network attacker can rewrite your payout address and steal earnings",
-						len(plaintext), strings.Join(plaintext, ", ")),
-					Fix: "switch to stratum+tls:// (V1 over TLS), stratum+v2:// (encrypted), or stratum+v2tls://",
+					Detail: fmt.Sprintf(
+						"%s an unencrypted transport (%s) — a network attacker can read and "+
+							"rewrite your payout address and steal earnings",
+						which, strings.Join(plaintext, ", ")),
+					Fix: fix,
 				}
 			}
 			return Result{
 				Status: StatusPass,
-				Detail: fmt.Sprintf("all %d pool(s) use an encrypted transport", len(cfg.Pools)),
+				Detail: fmt.Sprintf("all %d pool(s) use an encrypted transport (TLS)", len(pools)),
 			}
 		},
 	}

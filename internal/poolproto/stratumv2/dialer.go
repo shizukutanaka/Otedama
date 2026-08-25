@@ -15,6 +15,7 @@ package stratumv2
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"math"
 	"net"
@@ -33,10 +34,30 @@ func init() {
 
 // Dialer establishes Stratum V2 connections. Two instances are
 // registered: plaintext (stratum+v2://) and TLS (stratum+v2tls://).
+//
+// # useTLS actually dials TLS (fixed session 264)
+//
+// Until session 264 useTLS only changed what Protocol() returned: Dial
+// always used a bare net.Dialer, so a caller reaching this package for
+// stratum+v2tls:// got a plaintext socket while every label said TLS. The
+// product never hit it — engine.runSession dials Stratum V2 itself and only
+// routes V1 through poolproto.DialURL — so this was a loaded gun rather than
+// a live hole, and it would have gone off the moment V2 was moved onto the
+// abstraction. It now mirrors the stratumv1 dialer: an explicit test config
+// wins, otherwise one is built from any per-pool CA bundle in the
+// credentials, otherwise nil for system roots. Verification is never
+// disabled.
+//
+// Note this is transport TLS, not Stratum V2's own Noise NX encryption,
+// which remains unwired (docs/KNOWN_LIMITATIONS.md §2).
 type Dialer struct {
 	useTLS bool
 
-	// dialFn is overridable in tests; nil uses a real TCP dial.
+	// tlsConfig overrides the TLS settings used when useTLS is true. nil
+	// means "build one from the credentials", matching stratumv1.
+	tlsConfig *tls.Config
+
+	// dialFn is overridable in tests; nil uses a real TCP (or TLS) dial.
 	dialFn func(ctx context.Context, address string) (net.Conn, error)
 }
 
@@ -56,9 +77,27 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}
 	dialFn := d.dialFn
 	if dialFn == nil {
-		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-			var dialer net.Dialer
-			return dialer.DialContext(ctx, "tcp", address)
+		if d.useTLS {
+			cfg := d.tlsConfig
+			if cfg == nil {
+				if len(creds.TLSRootCAsPEM) == 0 {
+					cfg = nil // system roots only
+				} else {
+					c, cerr := stratum.TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)
+					if cerr != nil {
+						return nil, fmt.Errorf("stratumv2: %w", cerr)
+					}
+					cfg = c
+				}
+			}
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				return stratum.DialTLS(ctx, address, cfg)
+			}
+		} else {
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "tcp", address)
+			}
 		}
 	}
 	raw, err := dialFn(ctx, address)

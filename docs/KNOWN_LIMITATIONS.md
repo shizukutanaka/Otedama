@@ -114,6 +114,33 @@ V1 fallback (`stratum+tls://`, also real TLS) for a pool that supports
 it. Neither is spec-compliant Stratum V2 Noise encryption, but both are
 real transport security today.
 
+**Two places said otherwise until session 264, and both are fixed:**
+
+- **`otedama doctor` reported this as encrypted.** `checkPoolEncryption`
+  classified every scheme except `stratum+tcp://` as encrypted, so a user
+  running the diagnostic specifically to check their posture was told
+  PASS — *"all N pool(s) use an encrypted transport"* — for connections
+  carrying their payout address in the clear. With no pools configured it
+  skipped the check with the detail *"using built-in default pool
+  (encrypted)"*, which is the configuration every unconfigured user runs.
+  Worse, its Fix text for a genuinely plaintext `stratum+tcp://` pool
+  advised switching to *"stratum+v2:// (encrypted)"* — steering the user
+  from one unencrypted transport to another while claiming it solved the
+  problem. The check now classifies by the path the engine actually dials
+  (`stratum+tls://` → `tls.Dialer`; `stratum+v2tls://` → `stratum.DialTLS`;
+  `stratum+tcp://` and `stratum+v2://` → plain TCP) and warns on the
+  default pool instead of skipping it. The runtime had been honest all
+  along — `engine.runSession` logs the plaintext warning quoted above —
+  so doctor and the engine simply disagreed, and doctor was wrong.
+- **`poolproto/stratumv2`'s TLS dialer did not dial TLS.** Its `useTLS`
+  field changed only what `Protocol()` returned; `Dial` always used a bare
+  `net.Dialer`. Nothing in the product reached it — the engine dials
+  Stratum V2 itself and routes only V1 through `poolproto.DialURL` — so it
+  was a loaded gun rather than a live hole, and it would have fired the
+  moment V2 moved onto the abstraction. It now mirrors the V1 dialer, with
+  certificate verification always on, and tests drive a real TLS server
+  because the thing that was missing was a handshake.
+
 **Target:** v3.1.0 for spec-compliant Noise NX (secp256k1 +
 ElligatorSwift + full message-flow rework + responder authentication).
 Tracked by the v3.1.0 "real protocols" milestone and ADR-011.

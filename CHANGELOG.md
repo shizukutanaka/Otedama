@@ -10,6 +10,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 264 — **`otedama doctor` が「暗号化されていない接続」を「暗号化済み」と報告していた**——本セッション最大の欠陥)
+
+**発見の経路.** 今セッションで唯一未監査だった `internal/doctor`（製品の自己診断、17チェック）を
+実行して各チェックの出力を読んだところ、`Pool connection encryption` が組み込み既定プール
+（`stratum+v2://`）について **skip / detail「using built-in default pool (encrypted)」** を
+返していた。しかし `docs/KNOWN_LIMITATIONS.md` §2 は「Noise NX はどのライブ接続にも配線されて
+いない」と明記している。**doctor と §2 が矛盾していた。**
+
+**コードで真偽を確定.** スキーム名ではなく**エンジンが実際に dial する経路**を読んだ:
+
+| スキーム | 実際の経路 | 暗号化 |
+|---|---|---|
+| `stratum+tcp://` | poolproto/stratumv1、平文TCP | **なし** |
+| `stratum+tls://` | poolproto/stratumv1 の `tls.Dialer` | あり |
+| `stratum+v2://` | エンジンの素の `net.Dialer` | **なし** |
+| `stratum+v2tls://` | エンジンの `stratum.DialTLS` | あり |
+
+**欠陥の実害.** `checkPoolEncryption` は `stratum+tcp://` 以外の全スキームを暗号化済みと分類
+していた。したがって:
+
+1. `stratum+v2://` プールを設定したユーザーは **PASS「all N pool(s) use an encrypted transport」**
+   を受け取る——支払いアドレスが平文で流れる接続に対して。§2 いわく
+   「The Bitcoin payout address (sent as `OpenMiningChannel.User`) travels in plaintext」。
+2. 何も設定していないユーザー（＝既定プール）に対しては、チェック自体を skip し、
+   detail で「(encrypted)」と述べていた。**最も多いはずの構成が最も無検査だった。**
+3. 最も鋭いのは Fix テキスト: 本物の平文 `stratum+tcp://` プールに対して
+   **「stratum+v2:// (encrypted) に切り替えよ」**と助言していた——ある平文トランスポートから
+   別の平文トランスポートへ誘導し、それで問題が解決したと述べていた。
+
+**皮肉な点.** エンジン自身は正直だった。`engine.runSession` は dial 前に
+「connecting over plaintext Stratum V2 — no transport encryption」と warn を出す。
+**接続前に安全性を確認するために走らせる doctor の方が間違っていた。**
+
+**是正.** 分類をスキーム名ではなく実 dial 経路に基づかせ、既定プールは skip ではなく warn に。
+Fix テキストは `stratum+v2tls://` / `stratum+tls://` を提示し、
+**「stratum+v2:// は今日は暗号化されていない」と明示**する。
+
+**既存テストが欠陥を固定していた.** `TestCheckPoolEncryption_EncryptedSchemesPass` は
+`stratum+v2://` が Pass であることを主張し、`..._NoPoolsSkips` は既定プールの skip を主張して
+いた。実 dial 経路に基づく真偽表と、Fix が平文スキームを推奨しないことを検証するテストに置換。
+
+**同じ欠陥クラスの潜在版も是正.** `poolproto/stratumv2` の `Dialer.useTLS` は `Protocol()` の
+戻り値を変えるだけで、**`Dial` は常に素の `net.Dialer`** だった——`stratum+v2tls://` を求めた
+呼び出し側が、全てのラベルがTLSと言う中で平文ソケットを受け取る。製品は到達していない
+（エンジンは V2 を自前で dial し、poolproto 経由は V1 のみ）ため実害はなかったが、
+V2 を抽象化に載せた瞬間に暴発する。V1 ダイアラーと同じ構造に揃え、証明書検証は常時有効。
+**テストは実TLSサーバを立てる**——欠けていたのはハンドシェイクそのものであり、
+スタブではその存在を証明できないため。CA 無しでの接続が失敗することも固定した
+（検証を切って「通す」修正は元のバグより悪いため）。
+
+**空振り確認**: doctor 側・ダイアラー側とも、修正を戻すと各2件のテストが失敗する。
+
 ### Performance (session 264 — ③最適化をプロファイリングで裏付けて実施: **採掘ホットパスを 2.28倍高速化**——`CLAUDE.md` が最優先とする Carmack 原則の唯一の正しい適用形)
 
 **測定してから変更した.** `CLAUDE.md` は「パフォーマンス最優先」を掲げつつ、
