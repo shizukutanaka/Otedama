@@ -1864,3 +1864,67 @@ func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
 		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
 	}
 }
+
+// ============================================================================
+// checkDataDir — the "writable" claim (session 264)
+// ============================================================================
+
+// TestCheckDataDir_UnwritableDirectoryFails pins the fix for a claim that was
+// never checked: the Pass detail reads "(exists, writable)", but the check only
+// ran os.Stat and inspected mode bits, neither of which establishes that this
+// process can write. The directory holds wallet.dat, so being wrong here
+// surfaces at wallet-write time — the moment doctor exists to get ahead of.
+//
+// Running as root defeats mode-bit enforcement, so the test skips there rather
+// than asserting something the kernel will not honour.
+func TestCheckDataDir_UnwritableDirectoryFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: mode bits do not restrict writes, so this cannot be exercised")
+	}
+	dir := filepath.Join(t.TempDir(), "readonly")
+	if err := os.Mkdir(dir, 0o500); err != nil { // r-x------ : no write, even for the owner
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) }) //nolint:errcheck // best-effort so TempDir cleanup works
+
+	r := checkDataDir(dir).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("unwritable data dir: status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "not writable") {
+		t.Errorf("detail should say the directory is not writable: %q", r.Detail)
+	}
+}
+
+// TestCheckDataDir_WritableDirectoryPassesAndLeavesNothingBehind covers the
+// other half. A diagnostic may probe, but it must not litter: the probe file
+// has to be gone whether or not the check passed.
+func TestCheckDataDir_WritableDirectoryPassesAndLeavesNothingBehind(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	r := checkDataDir(dir).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Fatalf("writable data dir: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("the writability probe left files behind: %v", names)
+	}
+}
+
+func TestProbeWritable_ReportsTheError(t *testing.T) {
+	if err := probeWritable(filepath.Join(t.TempDir(), "does-not-exist")); err == nil {
+		t.Error("probeWritable on a missing directory = nil, want an error")
+	}
+}

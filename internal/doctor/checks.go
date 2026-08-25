@@ -226,12 +226,47 @@ func checkDataDir(dir string) Check {
 					}
 				}
 			}
+			// Actually try to write. Until session 264 this check reported
+			// "(exists, writable)" on the strength of os.Stat plus a
+			// permission-bit inspection, neither of which establishes that
+			// *this process* can write: ownership, ACLs, a read-only mount, or
+			// an immutable flag all leave the mode bits looking fine. The
+			// directory holds wallet.dat, so a wrong answer here surfaces at
+			// wallet-write time — exactly the moment `doctor` exists to get
+			// ahead of. The probe is a temp file removed immediately, in a
+			// directory the product owns.
+			if err := probeWritable(dir); err != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("%s exists but is not writable: %v", dir, err),
+					Fix:    "check ownership and mount options; Otedama must be able to create wallet.dat here",
+				}
+			}
+
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%s (exists, writable)", dir),
 			}
 		},
 	}
+}
+
+// probeWritable reports whether the current process can create a file in dir,
+// by doing it. Nothing else answers the question: mode bits describe intent,
+// not the effect of ownership, ACLs, a read-only mount, or an immutable flag.
+// The probe file is removed before returning, including on the error paths.
+func probeWritable(dir string) error {
+	f, err := os.CreateTemp(dir, ".otedama-writable-probe-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	closeErr := f.Close()
+	rmErr := os.Remove(name)
+	if closeErr != nil {
+		return closeErr
+	}
+	return rmErr
 }
 
 // walletDatFile and walletFingerprintFile mirror the constants in

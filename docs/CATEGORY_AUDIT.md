@@ -974,3 +974,24 @@ gauge as a proxy for "the stats-tick branch ran". Both now poll for the
 invariant rather than for a coincidence. In production the stats tick is
 seconds, so the lag is immaterial; it is recorded here because a future
 reader will otherwise wonder why those tests poll.
+
+### Session 264, third pass — auditing the self-diagnostic itself
+
+`internal/doctor` was the one major package the session had not read. The
+method was simply to run it and read every line it printed, then check each
+positive claim against the code that would have to be true for it.
+
+| Cat | Finding | Disposition |
+|---|---|---|
+| S | **`checkPoolEncryption` reported unencrypted connections as encrypted.** It classified every scheme except `stratum+tcp://` as encrypted, so a `stratum+v2://` pool got PASS — "all N pool(s) use an encrypted transport" — while the payout address travelled in the clear (§2). With nothing configured it *skipped*, with the detail "using built-in default pool (encrypted)" — the configuration every unconfigured user runs was the least checked. Sharpest of all, the Fix text for a genuinely plaintext pool advised switching to "stratum+v2:// (encrypted)", steering the user from one unencrypted transport to another. | ✅ Fixed: classification now follows the path the engine actually dials, verified at the dial sites (`stratum+tls://` → `tls.Dialer`, `stratum+v2tls://` → `stratum.DialTLS`, `stratum+tcp://` and `stratum+v2://` → plain TCP). The default pool warns instead of skipping, and the Fix states outright that `stratum+v2://` is not encrypted. Two existing tests pinned the defect and were replaced. |
+| S | **`poolproto/stratumv2`'s TLS dialer did not dial TLS.** `useTLS` changed only `Protocol()`'s return value; `Dial` always used a bare `net.Dialer`. Unreachable from the product — the engine dials V2 itself — which is exactly why it survived. | ✅ Fixed to mirror the V1 dialer, verification always on. Tests drive a real TLS server, because the missing thing was a handshake; a companion test fails the dial without the CA, since a fix that connected by skipping verification would be worse than the bug. |
+| S | **`checkDataDir` claimed "(exists, writable)" without testing writability** — `os.Stat` plus mode bits, neither of which accounts for ownership, ACLs, a read-only mount, or an immutable flag. This directory holds `wallet.dat`. | ✅ Fixed with a real create-and-remove probe. The unwritable case skips under root (mode bits do not bind there) and was verified to pass by running the compiled test as a non-root user. |
+
+**The pattern across all three:** each was a *positive* claim — "encrypted",
+"writable" — asserted from something weaker than the claim. Negative and
+skip results in the same package held up fine; it is the reassurances that
+had not been earned. The engine, meanwhile, was honest throughout:
+`runSession` logs "connecting over plaintext Stratum V2 — no transport
+encryption" before dialing. Doctor and the runtime disagreed, and the tool
+whose entire job is to tell the user the truth about their setup was the one
+that was wrong.
