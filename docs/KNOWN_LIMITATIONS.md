@@ -156,6 +156,62 @@ same ADR-011 implementation step that replaces the Noise P-256 stub.
 
 ---
 
+## 20. The built-in default pool endpoint has never been verified as reachable, and it is plaintext
+
+**What:** With no pools configured, Otedama connects to
+`config.DefaultPoolURL` = `stratum+v2://public.stratum.slushpool.com:3336`.
+That literal was single-sourced in session 78 (it had been copy-pasted
+across four call sites), but single-sourcing a value is not the same as
+checking it, and **no session has confirmed that this host resolves or
+that this port answers.** Sessions run without outbound DNS or TCP to
+pools, so it cannot be confirmed from here either; `otedama doctor`'s
+pool-reachability check reports a DNS failure in that environment
+regardless of whether the name is real.
+
+This matters more than a stale constant usually would, for two reasons.
+It is the endpoint every zero-configuration user reaches — the
+`otedama run --bitcoin-address bc1q...` path the README leads with — so if
+the name is dead, the product's first-run experience fails for everyone
+who has not chosen a pool. And CLAUDE.md prohibits shipping URLs that do
+not exist, which makes "unverified" a status worth stating rather than
+leaving implied.
+
+**Separately, and independently of whether it resolves: the default is
+plaintext.** `stratum+v2://` gets no transport encryption (§2), so the
+default configuration is one `otedama doctor` now warns about (fixed
+session 264 — it previously reported this same URL as "encrypted"). A
+default that the product's own diagnostic flags is a design question, not
+just a documentation one: either the default should be a TLS endpoint, or
+the zero-config path should require an explicit pool choice. Both are
+maintainer decisions, and picking a TLS host and port without being able
+to verify them would be inventing an endpoint — exactly what the rule
+above forbids.
+
+**Impact:** unknown. If the host is live, none. If it is not, every
+unconfigured user gets a connection failure on first run, with a correct
+and specific error from the reachability check.
+
+**How you can tell:** `otedama doctor` on a machine with normal network
+access. Its "Pool reachability" check dials the configured pool — the
+default one when you have configured none — and reports the result. That
+is a one-command answer, and it is why this entry is a disclosure rather
+than a fix.
+
+**Workaround:** configure a pool you have chosen and verified, ideally a
+`stratum+v2tls://` or `stratum+tls://` endpoint so the payout address is
+not exposed:
+
+```yaml
+pools:
+  - url: stratum+v2tls://your-chosen-pool.example:port
+```
+
+**Target:** none set. Verifying the endpoint needs one run on a networked
+machine; changing the default needs a maintainer decision on the two
+options above.
+
+---
+
 ## ~~3. Engine connects to pools directly; poolproto not yet wired in~~ ✅ RESOLVED (session 91)
 
 **Resolution:** `internal/engine/run.go` now dispatches Stratum V1 URLs

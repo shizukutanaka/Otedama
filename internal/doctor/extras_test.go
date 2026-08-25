@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // ============================================================================
@@ -1926,5 +1927,63 @@ func TestCheckDataDir_WritableDirectoryPassesAndLeavesNothingBehind(t *testing.T
 func TestProbeWritable_ReportsTheError(t *testing.T) {
 	if err := probeWritable(filepath.Join(t.TempDir(), "does-not-exist")); err == nil {
 		t.Error("probeWritable on a missing directory = nil, want an error")
+	}
+}
+
+// TestSchemeIsEncrypted_UnknownSchemesAreNotBlessed pins the fail-safe
+// direction of the classification added in session 264. A scheme this function
+// has never heard of must come back "not encrypted", so it produces a warning
+// rather than a reassurance.
+//
+// The direction matters more than the individual answers. Getting an encrypted
+// scheme wrong costs the user a false warning; getting an unencrypted one wrong
+// tells them their payout address is protected when it is not — which is the
+// defect this whole function exists to undo.
+func TestSchemeIsEncrypted_UnknownSchemesAreNotBlessed(t *testing.T) {
+	for _, url := range []string{
+		"stratum+v3quantum://pool.example.com:1234", // a scheme from the future
+		"datum://pool.example.com:3334",             // known to poolproto, SV1 transport
+		"https://pool.example.com",                  // not a stratum scheme at all
+		"pool.example.com:3333",                     // no scheme
+		"",                                          // empty
+	} {
+		if schemeIsEncrypted(url) {
+			t.Errorf("schemeIsEncrypted(%q) = true; an unrecognised scheme must never be "+
+				"reported as encrypted", url)
+		}
+	}
+}
+
+// TestSchemeIsEncrypted_StaysInStepWithPoolproto guards the drift recorded as
+// Issue #3: scheme knowledge lives in poolproto.knownSchemes (canonical),
+// config.validatePoolURL, doctor.stripScheme, and now schemeIsEncrypted. The
+// packages deliberately do not import each other, so nothing makes them agree.
+//
+// What this catches: a scheme being renamed or removed upstream, which would
+// leave doctor classifying a string poolproto no longer recognises.
+//
+// What it cannot catch: a scheme being *added* upstream — poolproto's list is
+// unexported, so there is nothing to enumerate. That direction is at least
+// fail-safe by the test above: an unrecognised scheme warns rather than
+// reassures. Closing it properly is the consolidation Issue #3 defers to a
+// maintainer's layering decision.
+func TestSchemeIsEncrypted_StaysInStepWithPoolproto(t *testing.T) {
+	for _, tc := range []struct {
+		url       string
+		encrypted bool
+	}{
+		{"stratum+v2tls://pool.example.com:34254", true},
+		{"stratum+tls://pool.example.com:3334", true},
+		{"stratum+v2://pool.example.com:34254", false},
+		{"stratum+tcp://pool.example.com:3333", false},
+		{"datum://pool.example.com:3334", false},
+	} {
+		if poolproto.FromURL(tc.url) == poolproto.ProtocolUnknown {
+			t.Errorf("poolproto no longer recognises %q, but doctor still classifies it — "+
+				"the scheme lists have drifted (Issue #3)", tc.url)
+		}
+		if got := schemeIsEncrypted(tc.url); got != tc.encrypted {
+			t.Errorf("schemeIsEncrypted(%q) = %v, want %v", tc.url, got, tc.encrypted)
+		}
 	}
 }
