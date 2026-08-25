@@ -6,7 +6,20 @@
 //
 //	GET /healthz     Liveness probe. Returns 200 OK with "ok" body as long
 //	                 as the server goroutine is alive. Used by container
-//	                 orchestrators (Kubernetes, systemd) to restart on hang.
+//	                 orchestrators (Kubernetes, systemd) to restart a process
+//	                 whose HTTP server has frozen or which has died.
+//
+//	                 It deliberately does not report on mining. A process
+//	                 connected to its pool but no longer hashing answers this
+//	                 with 200, because the question it answers is whether the
+//	                 server is serving. The wedged-miner signal is the
+//	                 otedama_up gauge on /metrics — 0 once the stall monitor
+//	                 trips, and already excluding deliberate curtailment
+//	                 pauses (see engine.updateLiveness). Wiring a stall into
+//	                 this probe would turn a fault into a restart loop for
+//	                 anything the restart cannot fix, so it is left to the
+//	                 operator's alerting policy; docs/DEPLOYMENT.md carries an
+//	                 OtedamaStalled example.
 //
 //	GET /readyz      Readiness probe. Returns 200 OK once the engine has
 //	                 an established pool session (SetupConnection/

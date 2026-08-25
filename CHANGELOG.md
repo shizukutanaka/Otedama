@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 264 — 同じレンズを `internal/httpserver` に向けた: **ハッシュを止めたマイナーは、プローブにもアラートにも一切かからなかった**)
+
+**監査の結果、コードは正しかった.** `/readyz` は正直である——`SetReady(true)` はプール
+セッション確立後にのみ呼ばれ、セッション終了で false に戻る。`/healthz` も、そのdocが述べる
+スコープ（「サーバのgoroutineが生きている限り」）においては真である。
+
+**しかし運用の全体像に穴があった.** 製品は `otedama_up` というゲージを持つ——
+「1 if the miner is healthy (hashing, or intentionally paused by curtailment), **0 if it has
+stalled when it should be hashing**」。stall モニタはカーテイルメント（意図的な停止）を
+除外済みで、まさに「wedged miner をスクレイプでアラートする」ために作られている。ところが:
+
+- `docs/DEPLOYMENT.md` の「Minimal alert set」に **`otedama_up` が無い**。
+  あるのは `up{job="otedama"}`——Prometheus 自身のスクレイプ可否という**別のメトリクス**。
+- k8s マニフェストの livenessProbe は `/healthz`。これは200を返し続ける。
+- `otedama_up` は DEPLOYMENT.md 全体に**一度も登場しない**。
+
+つまり **プールに接続したままハッシュを止めたマイナーは、プローブにもアラートにもかからず、
+ただ無収入になる**。`up` と `otedama_up` という紛らわしい名前の並存が、おそらく欠落の原因である。
+
+**是正（挙動変更なし、運用ドキュメントのみ）:**
+
+- `OtedamaStalled`（`otedama_up == 0`, for 10m）をアラートセットに追加し、
+  **`up` と `otedama_up` の違いこそがこのアラートの存在理由である**ことを明記。
+- `otedama_up` と `otedama_curtailed` を curated メトリクス一覧に追加。
+- `docs/API.md` の `/healthz` の用途説明「container orchestrator restarts a frozen process」
+  ——**まさに検出できないケースを約束しているように読める**——を、
+  HTTPサーバの凍結・プロセス死を対象とすること、wedged miner の信号は `otedama_up` であることに
+  書き換え。パッケージdocにも同じ注記を入れた。
+- `/readyz` の「engine has fully started」も是正。実際の意味は「プールセッション確立済み」で、
+  完全に起動していてもセッションが無ければ 503 を返すため、元の記述は弱いだけでなく誤りだった。
+
+**stall を `/healthz` に配線しなかった理由**: 再起動で直らない事象を再起動ループに変えるため。
+慣例どおりの liveness セマンティクスを保ち、運用者のアラートポリシーに委ねる方針をコードの
+コメントにも残した。
+
 ### Security (session 264 — **`otedama doctor` が「暗号化されていない接続」を「暗号化済み」と報告していた**——本セッション最大の欠陥)
 
 **発見の経路.** 今セッションで唯一未監査だった `internal/doctor`（製品の自己診断、17チェック）を

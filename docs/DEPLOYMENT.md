@@ -327,6 +327,12 @@ All exported metrics live under the `otedama_` prefix:
 - `otedama_submit_latency_milliseconds{quantile}` — gauge, share submit round-trip time (p50/p95/p99)
 - `otedama_arbitration_switches_total` — counter, workload reroutes (mining ↔ AI)
 - `otedama_btc_usd_rate` — gauge, current BTC/USD rate from provider consensus
+- `otedama_up` — gauge, **1** if the miner is healthy (hashing, or paused on
+  purpose by curtailment), **0** if it has stalled when it should be hashing.
+  This is the wedged-miner signal, and it is not the same thing as
+  Prometheus's own `up` — see the alert below.
+- `otedama_curtailed` — gauge, 1 while hashing is deliberately paused by
+  `curtail_below_btc_usd`. Use it to tell an intentional pause from a fault.
 
 See docs/SPECIFICATION.md §6 for the full, CI-verified metric catalogue
 (`internal/engine.TestMetricsDocumentedInSpecification` fails the build if a
@@ -343,12 +349,32 @@ A reference Grafana dashboard lives at
 
 Minimal alert set:
 
+**`up` and `otedama_up` are different metrics, and the difference is the
+whole point of the second alert.** `up{job="otedama"}` is Prometheus's own
+scrape result: 1 when the endpoint answered. `otedama_up` is Otedama's
+verdict on itself: 0 when the miner has stopped producing hashes while it
+should be hashing. A wedged miner still answers scrapes, so `up` stays 1 —
+and `/healthz` still returns 200, because it reports that the HTTP server is
+alive, not that mining is happening. Without `OtedamaStalled` below, a miner
+that silently stops hashing while still connected to its pool triggers
+nothing at all; it simply earns zero.
+
 ```yaml
 - alert: OtedamaDown
   expr: up{job="otedama"} == 0
   for: 5m
   annotations:
-    summary: "Otedama instance {{ $labels.instance }} is down"
+    summary: "Otedama instance {{ $labels.instance }} is not answering scrapes"
+
+- alert: OtedamaStalled
+  expr: otedama_up == 0
+  for: 10m
+  annotations:
+    summary: "Otedama on {{ $labels.instance }} has stopped hashing"
+    description: >-
+      The process is up and answering, but the miner has produced no hashrate
+      for long enough to trip the stall monitor. otedama_up already excludes
+      deliberate curtailment pauses, so this is a fault, not a policy pause.
 
 - alert: OtedamaPoolDisconnected
   expr: otedama_pool_connection_state == 0

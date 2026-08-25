@@ -294,16 +294,35 @@ bind to `127.0.0.1` or a private network.
 Liveness probe. Always returns 200 OK with body `ok\n` as long as the
 HTTP server goroutine is alive.
 
-Use case: container orchestrator restarts a frozen process.
+Use case: a container orchestrator restarts a process whose HTTP server has
+frozen or whose process has died.
+
+**It does not detect a wedged miner.** A process that is connected to its
+pool but has stopped hashing still answers this endpoint with 200, because
+what it reports is that the server is serving — not that mining is
+happening. The signal for that is the `otedama_up` gauge on `/metrics`,
+which is 0 when the stall monitor has tripped and already excludes
+deliberate curtailment pauses. Alert on it; see the `OtedamaStalled` example
+in `docs/DEPLOYMENT.md`. (Corrected session 264 — this section previously
+said "restarts a frozen process" without qualification, which reads as a
+promise to catch exactly the case it cannot.)
 
 ### `GET /readyz`
 
 Readiness probe. Returns:
 
-- `200 OK` + body `ready\n` — engine has fully started.
-- `503 Service Unavailable` + body `not ready\n` — still starting, or shutting down.
+- `200 OK` + body `ready\n` — a pool session is established
+  (SetupConnection/OpenMiningChannel completed, or V1's equivalent
+  handshake). Not gated on a job having arrived or a hash having been
+  produced yet.
+- `503 Service Unavailable` + body `not ready\n` — no pool session: still
+  starting, mid-reconnect, or shutting down.
 
-Use case: load balancer removes a not-yet-ready instance from rotation.
+Use case: a load balancer or orchestrator removes an instance that has no
+pool session from rotation.
+
+(Corrected session 264 — this said "engine has fully started", which is both
+weaker and wrong: a fully started engine with no pool session returns 503.)
 
 ### `GET /metrics`
 
