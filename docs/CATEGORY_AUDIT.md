@@ -1071,6 +1071,14 @@ ended in confirmation, not refutation.
 6. **ADR-011 ellswift decision**, unblocking §2 — the only weakness whose
    blocker is external to this repository.
 
+> **Superseded by session 266** — see the ranking at the end of that
+> entry. Two of these six needed no work at all: item 1 was done (the
+> answer was that the host does not resolve, §20), and item 6 turned out
+> to have been recorded as an ADR-011 erratum back in session 251. Leaving
+> a ranked list to rot is the specific failure this audit called out in
+> `RESEARCH_IMPROVEMENTS.md`, so it gets a pointer rather than a quiet
+> edit.
+
 ### 完成宣言 — the completion claim, and its definition
 
 "Complete" here does not mean feature-complete against the four-stream
@@ -1295,3 +1303,45 @@ next reader to find a positive statement in this repository that does not
 trace to evidence should treat this section as precedent for how to
 handle it — name it, measure it, and write down which half of your own
 account turned out to be wrong.
+
+### 改善点 — re-ranked after session 266
+
+Supersedes the session-265 list. Items 1 and 6 there are closed; the rest
+carry forward with what this session learned about them.
+
+1. **Decide what the zero-configuration path should do** — now the highest
+   item, because it is no longer a preference but a broken first run: the
+   built-in default host does not resolve (§20), so `otedama run
+   --bitcoin-address bc1q...` cannot mine. Two options, both cheap: point
+   the default at a verified endpoint from the pool's own documentation,
+   or remove the default so the product asks for an explicit choice and
+   fails with that instruction. The second needs no external information
+   and cannot go stale. Maintainer decision; the product now warns clearly
+   either way.
+2. **Apply the §13 workflow surgery**, including dropping `GOTOOLCHAIN:
+   local` (or lifting the pins to 1.24.x), fixing `release.yml`'s `-X
+   main.Version` — which silently names symbols this binary does not have,
+   so released builds carry no version — and its "P2P Mining Pool
+   Software" description. Maintainer push; the App used by these sessions
+   may delete a workflow file but not modify one.
+3. **Publish `checksums.txt` from the release workflow** (§21). Needs no
+   key material, is a handful of lines, and turns `install.sh` from a
+   command that always aborts into one that verifies what it downloads.
+   Signing with keyless cosign is the natural next step, not a
+   prerequisite.
+4. **Add `govulncheck` and SHA-pin every action** (§21). Three documents
+   claimed both were already done, and ADR-011 offered the first as a
+   mitigation for taking a fourth dependency.
+5. **Decide `go 1.22` → `go 1.24`** — measured green here, evidence in
+   `GODEBUG_NOTES.md`; it changes fourteen runtime defaults, so it is a
+   maintainer call, not a cleanup.
+6. **Wire Noise NX, or keep telling users to use TLS.** Unchanged in
+   substance and still externally blocked: no audited Go ElligatorSwift
+   exists (ADR-011 erratum). Until then `stratum+v2tls://` is the honest
+   answer, and the seven stranded symbols in `internal/stratum/noise.go`
+   sit in the unreachable-code baseline as a standing reminder.
+7. **Widen i18n beyond the fifteen startup messages** when there is
+   translation capacity. Mechanism ready; scope is the constraint.
+
+Nothing on this list is blocked on discovery any more. Every item names
+either a decision someone has to make or a push someone has to perform.
