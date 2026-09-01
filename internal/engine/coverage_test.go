@@ -2279,3 +2279,57 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
 	}
 }
+
+// ============================================================================
+// newRateFetcher — the price feed's failure log must reach the engine log
+// ============================================================================
+
+// TestNewRateFetcher_ForwardsFailuresToTheEngineLog pins the wiring that was
+// missing until session 266.
+//
+// rates.Fetcher has always had a SetLogger hook for the events an operator
+// most needs to hear about — every source failing, an implausible reading, a
+// clock skew large enough to invalidate TLS validation — and nothing installed
+// it, so all of them went to a nil function. The fetcher then served its
+// hardcoded fallback rate, which looks exactly like a working price feed.
+// curtail_below_btc_usd decides whether to keep mining from that number.
+//
+// The test drives a real fetcher with an already-cancelled context: every HTTP
+// request fails immediately, so StartBackground's "initial fetch failed" path
+// runs deterministically without touching the network.
+func TestNewRateFetcher_ForwardsFailuresToTheEngineLog(t *testing.T) {
+	var mu sync.Mutex
+	var got []string
+	f := newRateFetcher(95000, func(level, msg string) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, level+": "+msg)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // fail every fetch immediately; no network involved
+	f.StartBackground(ctx, time.Hour)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) == 0 {
+		t.Fatal("price-feed failure produced no log line: the fetcher's logger is not wired to the engine log")
+	}
+	if !strings.Contains(got[0], "rates:") {
+		t.Errorf("unexpected log line %q, want the fetcher's own message", got[0])
+	}
+	if !strings.HasPrefix(got[0], "warn:") {
+		t.Errorf("price-feed failures should be logged at warn level, got %q", got[0])
+	}
+}

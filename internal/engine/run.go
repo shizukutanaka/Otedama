@@ -45,7 +45,6 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/provider"
-	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
@@ -202,7 +201,7 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 4: Price feed -----
-	rateFetcher := rates.NewFetcher(95000) // $95k fallback
+	rateFetcher := newRateFetcher(95000, log) // $95k fallback
 	rateFetcher.StartBackground(ctx, 5*time.Minute)
 
 	// curtailGate is the single source of truth for whether hashing is

@@ -1195,6 +1195,51 @@ Two more product defects fell out of reading them: `install.sh` documented
 not do what it says and every invocation died on a file the release
 workflow never publishes (§21).
 
+### Automating the pattern instead of finding it a fourth time
+
+Musk's fifth step is automate, and it applies last for a reason: only after
+the same defect has been seen three times is its shape clear enough to
+encode. `cmd/otedama/unreachable_test.go` now parses every Go file under
+`internal/` and `cmd/` and reports exported functions and methods that
+tests reference and production code never calls, against a baseline of the
+33 that exist today. It fails when the set grows, and also when a baseline
+entry goes stale — an exemption that outlives its subject would hide the
+next instance.
+
+Two checks that it earns its place, both run:
+
+- Removing the `RegisterCollector` line added earlier this session makes
+  the guard fail with `metrics.RuntimeCollector is exported, exercised by
+  tests, and called by no non-test code` — it catches the real bug, found
+  by hand hours earlier, in 0.12 s.
+- Adding a baseline entry for a function that does not exist fails with
+  `knownTestOnlyFuncs lists "clock.NoSuchFunction", which no longer
+  exists`.
+
+The baseline is not a list of defects. It separates deliberate test seams
+(`clock.NewFake`) from stranded capability (every exported symbol in
+`internal/stratum/noise.go` — seven of them, which is §2 stated
+mechanically rather than in prose), and each entry carries its reason. It
+also surfaced two symbols the earlier hand-written scan missed,
+`HandshakeState.Transport` and `EncryptedConn.Read`, because it
+understands methods.
+
+What it cannot see: interface satisfaction, reflection, and functions
+called only from another dead function. It is a smoke detector, not a
+proof. That limit is worth stating because the failure this session kept
+finding was confidence in checks nobody had tested.
+
+One more defect fell out of the same scan before the guard was written.
+`rates.Fetcher` has always exposed `SetLogger` for its failure events —
+every price source failing, an implausible reading, a clock skew large
+enough to invalidate TLS validation — and nothing installed it, so all of
+them went to a nil function while the fetcher quietly served its hardcoded
+$95,000 fallback. An operator without a Prometheus dashboard saw a
+plausible price and no sign it was stale, and `curtail_below_btc_usd`
+decides whether to keep mining from that number. The engine now builds the
+fetcher through `newRateFetcher`, which attaches the log before returning,
+so the wiring cannot be omitted — only deliberately bypassed.
+
 ### The ADRs, and a third instance of one pattern
 
 `docs/adr/README.md` makes accepted ADRs immutable, so each correction

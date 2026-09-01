@@ -19,6 +19,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
@@ -466,6 +467,29 @@ type rateStats interface {
 	ClockSkewSeconds() float64
 	RateAge() (age time.Duration, everFetched bool)
 	SourceHealth() (ok, total int, fetched bool)
+}
+
+// newRateFetcher builds the price-feed fetcher with its failure log already
+// attached.
+//
+// The attachment is the point of the constructor. rates.Fetcher has always
+// carried a SetLogger hook for fetch failures — initial failure, periodic
+// failure, an implausible reading, a clock skew large enough to invalidate
+// TLS validation and nTime — and until session 266 nothing called it, so every
+// one of those messages went to a nil function. The fetcher then fell back to
+// its hardcoded rate and looked healthy: the gauges moved, but an operator
+// without a Prometheus dashboard saw a plausible BTC price with no hint that
+// it was hours stale or that the median had degraded from three sources to
+// one. `curtail_below_btc_usd` decides whether to stop mining from this
+// number.
+//
+// Constructing the fetcher through here rather than calling rates.NewFetcher
+// directly means the wiring cannot be forgotten again by omission — only by
+// deliberately bypassing this function.
+func newRateFetcher(fallback float64, log func(level, msg string)) *rates.Fetcher {
+	f := rates.NewFetcher(fallback)
+	f.SetLogger(func(msg string) { log("warn", msg) })
+	return f
 }
 
 // publishBTCRate copies the fetcher's current BTC/USD rate and observed clock
