@@ -156,25 +156,61 @@ same ADR-011 implementation step that replaces the Noise P-256 stub.
 
 ---
 
-## 20. The built-in default pool endpoint has never been verified as reachable, and it is plaintext
+## 20. The built-in default pool host does not resolve, and the default transport is plaintext
+
+**Status change (session 266): measured, not merely suspected.** The
+entry below was written as "never verified". It has now been verified,
+and the answer is the bad one: **the host has no address record.**
 
 **What:** With no pools configured, Otedama connects to
 `config.DefaultPoolURL` = `stratum+v2://public.stratum.slushpool.com:3336`.
 That literal was single-sourced in session 78 (it had been copy-pasted
 across four call sites), but single-sourcing a value is not the same as
-checking it, and **no session has confirmed that this host resolves or
-that this port answers.** Sessions run without outbound DNS or TCP to
-pools, so it cannot be confirmed from here either; `otedama doctor`'s
-pool-reachability check reports a DNS failure in that environment
-regardless of whether the name is real.
+checking it.
 
-This matters more than a stale constant usually would, for two reasons.
-It is the endpoint every zero-configuration user reaches — the
-`otedama run --bitcoin-address bc1q...` path the README leads with — so if
-the name is dead, the product's first-run experience fails for everyone
-who has not chosen a pool. And CLAUDE.md prohibits shipping URLs that do
-not exist, which makes "unverified" a status worth stating rather than
-leaving implied.
+**The measurement (session 266).** Earlier sessions recorded that they
+had no outbound DNS, so the check was deferred. That was true of those
+environments and not of this one — which is itself the lesson: the
+assumption was never re-tested. In this session's container, resolution
+through `8.8.8.8` works, and the same resolver in the same run answers:
+
+| host | result |
+|---|---|
+| `github.com` | resolves (140.82.113.4) |
+| `api.coinbase.com` | resolves |
+| `slushpool.com` | resolves |
+| `braiins.com` | resolves |
+| `stratum.slushpool.com` | resolves (172.65.65.63) |
+| `stratum.braiins.com` | resolves (172.65.65.63 — same address) |
+| **`public.stratum.slushpool.com`** | **no address (getaddrinfo EAI_NODATA)** |
+| `demand.sv2.io` (used as an example in docs) | **no address (EAI_NONAME)** |
+
+`otedama doctor` on this machine reports it directly:
+`Pool reachability | public.stratum.slushpool.com:3336: dial tcp: lookup
+public.stratum.slushpool.com on 8.8.8.8:53: no such host`, while the
+Network check fails with a *timeout* (`1.1.1.1:53`) — a different failure
+mode, which is how you can tell the pool result is a DNS answer and not
+this sandbox's egress restrictions. Four control hosts resolving in the
+same run rules out "DNS is broken here".
+
+That `stratum.slushpool.com` and `stratum.braiins.com` resolve to one
+address is consistent with the `public.stratum.` name having been retired
+after the Slush Pool → Braiins Pool rename, but **this entry does not
+name a replacement**: the pool's documentation is not reachable from this
+environment (`academy.braiins.com` is blocked by the egress proxy), and
+guessing a host and port would recreate the defect. What port a Stratum
+V2 endpoint listens on, and under which hostname, has to come from the
+pool's own documentation.
+
+**Impact:** no longer unknown. Every user who has not configured a pool
+— the `otedama run --bitcoin-address bc1q...` path the README leads with
+— fails on first run with a DNS error. The error is correct and specific,
+and the doctor check names it, but the zero-configuration path does not
+mine.
+
+CLAUDE.md prohibits shipping URLs that do not exist. This constant is now
+a known instance of that, disclosed here and in the `DefaultPoolURL`
+doc comment, pending the maintainer decision below.
 
 **Separately, and independently of whether it resolves: the default is
 plaintext.** `stratum+v2://` gets no transport encryption (§2), so the
@@ -187,15 +223,10 @@ maintainer decisions, and picking a TLS host and port without being able
 to verify them would be inventing an endpoint — exactly what the rule
 above forbids.
 
-**Impact:** unknown. If the host is live, none. If it is not, every
-unconfigured user gets a connection failure on first run, with a correct
-and specific error from the reachability check.
-
 **How you can tell:** `otedama doctor` on a machine with normal network
 access. Its "Pool reachability" check dials the configured pool — the
-default one when you have configured none — and reports the result. That
-is a one-command answer, and it is why this entry is a disclosure rather
-than a fix.
+default one when you have configured none — and reports the result. It
+takes one command to reproduce the table above.
 
 **Workaround:** configure a pool you have chosen and verified, ideally a
 `stratum+v2tls://` or `stratum+tls://` endpoint so the payout address is
@@ -206,9 +237,14 @@ pools:
   - url: stratum+v2tls://your-chosen-pool.example:port
 ```
 
-**Target:** none set. Verifying the endpoint needs one run on a networked
-machine; changing the default needs a maintainer decision on the two
-options above.
+**Target:** the verification step is done. What remains is a maintainer
+decision between the two options above — point the default at a
+documented, verified endpoint (preferably a TLS one), or remove the
+default so that `otedama run` requires an explicitly chosen pool and
+fails with that instruction instead of a DNS error. The second needs no
+external information and cannot go stale; the first is friendlier on
+first run but puts the project back in the business of shipping someone
+else's hostname.
 
 ---
 
@@ -598,7 +634,7 @@ every line after it; content longer than `cols` is now truncated to fit.
 
 ---
 
-## 13. CI workflows — PARTIALLY RESOLVED (session 264): three dead files deleted; dead jobs in three others still need a maintainer push
+## 13. CI workflows — PARTIALLY RESOLVED (session 264): three dead files deleted; the four that remain still need a maintainer push
 
 **What it was:** six of seven `.github/workflows/*.yml` files had real
 problems, from "fails deterministically on every push" to "silently a
@@ -625,7 +661,7 @@ No job in any of them described work this repository does:
   `has_node` check that is always false here. It never reviewed a line of
   Go; it only posted "no Node.js project detected".
 
-### Still open — dead jobs inside `ci.yml`, `security.yml`, `release.yml`
+### Still open — dead jobs inside `ci.yml`, `security.yml`, `release.yml`, and a toolchain setting in `ci.yml`/`test.yml`
 
 These were prepared and verified in session 264 but **could not be
 pushed**: the GitHub App used by that session may delete a workflow file
@@ -658,25 +694,75 @@ exactly, so a maintainer can apply it in one pass:
   `fpm`, referencing `scripts/post-install.sh`, `scripts/pre-remove.sh`,
   `scripts/otedama.service`, and a root `config.yaml`, none of which
   exist). Nothing depends on it, so no `needs:` edit is required.
-- **The Go version pins, probably** — `ci.yml` sets
-  `GO_VERSION: '1.23.x'` with a `go: ['1.22.x', '1.23.x']` test matrix,
+- **The Go version pins — mechanism now measured (session 266), one
+  link still inferred.** `ci.yml` sets `GO_VERSION: '1.23.x'` with a
+  `go: ['1.22.x', '1.23.x']` test matrix, `test.yml` sets 1.23.x,
   `release.yml` pins 1.23.x, and `security.yml` pins 1.21, while `go.mod`
   carries `godebug tlsmlkem=1`, a key that exists only from Go 1.24.
-  Go's own `doc/godebug.md` is explicit on both halves of the hazard:
-  *"It is an error to list a `godebug` with an unrecognized setting"* and
-  *"Toolchains older than Go 1.23 reject all `godebug` lines, since they
-  do not understand `godebug` at all."* So Go 1.23 rejects the
-  `tlsmlkem` key and Go 1.21/1.22 reject the whole block.
 
-  **What is not established is whether that actually reddens CI**, and
-  this entry previously asserted that it did. `go.mod` also carries
-  `toolchain go1.24.0`, and with the default `GOTOOLCHAIN=auto` a
-  go command older than the required toolchain downloads and switches to
-  it before doing the rest of the work — which would make the pins
-  harmless. Confirming this needs a Go 1.23 toolchain and outbound access
-  to the module proxy, neither of which the session that wrote this had.
-  Treat the pins as a suspected cause, not a diagnosed one: the first
-  green or red run on a branch settles it in one observation.
+  Session 264 wrote this up as a suspicion because `GOTOOLCHAIN=auto`
+  might switch to `toolchain go1.24.0` and rescue the older pins. Session
+  265's plan then went the other way and asserted the pins fail
+  deterministically. **Both were written without measuring. The
+  measurement, run against throwaway modules with the local Go 1.24.7,
+  says the second was wrong about the mechanism:**
+
+  ```
+  # go 1.22 + toolchain go1.99.0, GOTOOLCHAIN=local  → builds fine.
+  #   The toolchain line alone does NOT fail the build; it is a
+  #   preference, and GOTOOLCHAIN=local simply declines to act on it.
+  # go 1.99 (the go line itself), GOTOOLCHAIN=local   → refused:
+  #   go.mod requires go >= 1.99 (running go 1.24.7; GOTOOLCHAIN=local)
+  # unknown godebug key, GOTOOLCHAIN=local            → refused:
+  #   go: error loading go.mod:
+  #   go.mod:6: unknown godebug "bogusknobthatdoesnotexist"
+  ```
+
+  So the hazard is **the godebug key, not the toolchain line**, and it
+  bites at `go.mod` load — before any build, test or vet step. Go's
+  `doc/godebug.md` states the rest: *"It is an error to list a `godebug`
+  with an unrecognized setting"*, and toolchains older than Go 1.23
+  reject `godebug` lines outright. `tlsmlkem` arrived in Go 1.24, so a
+  1.23 toolchain does not recognise it.
+
+  **What that implies per workflow**, and the one inferred link:
+
+  - `ci.yml` and `test.yml` both set **`GOTOOLCHAIN: local`**
+    (`ci.yml:22`, `test.yml:14`). That switch is what removes the rescue:
+    with it, a 1.23 runner stays on 1.23, reaches the `godebug` block,
+    and fails to load `go.mod`. Every Go step in those two files is
+    downstream of that.
+  - `security.yml` (1.21) and `release.yml` (1.23.x) do **not** set
+    `GOTOOLCHAIN`, so the default `auto` applies and the `toolchain
+    go1.24.0` line moves them to a toolchain that understands the key.
+
+  The inferred link is that Go 1.23 specifically does not know
+  `tlsmlkem` — taken from Go's release history, not measured here, since
+  no 1.23 toolchain is available in this environment. Everything else
+  above is a measurement. Fixing it is one line per file: drop
+  `GOTOOLCHAIN: local`, or raise the pins to 1.24.x. Do not delete the
+  `godebug` block to make the pins work — `GODEBUG_NOTES.md` records the
+  measurement showing that removing `tlsmlkem=1` silently turns off
+  hybrid post-quantum TLS.
+
+- **`release.yml` produces unversioned binaries** (found session 266).
+  Its build step passes `-X main.Version=...`, `-X main.BuildTime=...`
+  and `-X main.GitCommit=...`, but the variables the linker needs to
+  write are in `internal/version`, not `package main` — `cmd/otedama`
+  declares no `Version` symbol at all. `-X` on a nonexistent symbol is
+  silently ignored, so released binaries report the built-in defaults
+  from `internal/version/version.go` instead of the tag. The `Makefile`
+  uses the correct paths; the workflow does not. Correct form:
+  `-X github.com/shizukutanaka/Otedama/internal/version.Version=...`
+  (and likewise for the other two, matching the variable names in that
+  file).
+
+- **`release.yml` describes the product as a pool.** Its `fpm`
+  invocation sets `--description "Otedama - P2P Mining Pool Software"`.
+  Otedama is a non-custodial miner that connects to pools; it does not
+  run one. That string is what `.deb`/`.rpm` users would see — though
+  the `build-packages` job that contains it is the job this section
+  already recommends deleting.
 
 With those applied, all four remaining workflows parse as YAML, every
 `needs:` names a job in the same file, and no reference to
@@ -1034,6 +1120,91 @@ to mnemonic, mnemonic back to entropy, and mnemonic to seed for all 16
 vectors (`internal/lightning/bip39_vectors_test.go`). The embedded wordlist
 is confirmed to be the official one by the same run: a single wrong word
 would break some vector's mnemonic.
+
+---
+
+## 21. Supply-chain hardening the documentation claimed is not in place: no SHA-pinned actions, no signed releases, no `govulncheck`
+
+**What:** three supply-chain controls were described as done, in three
+different documents, and none of them exists. Found in session 266 by
+running the commands those documents told an auditor to run.
+
+| Control | Claimed in | Actual |
+|---|---|---|
+| Every `uses:` pinned to a 40-character SHA | `docs/AUDIT_CHECKLIST.md` item 11, `docs/SUSTAINABILITY.md` §5, `docs/solo-operations.md` "リスク3" ("ci.yml で実施済み") | **Zero pinned.** `grep -rn 'uses:' .github/workflows/` returns tags and branches only — `actions/checkout@v4`, `actions/setup-go@v5`, `securego/gosec@master`, `aquasecurity/trivy-action@master`, `trufflesecurity/trufflehog@main`, `returntocorp/semgrep-action@v1` |
+| Release artefacts signed with cosign | `AUDIT_CHECKLIST` item 13, `SUSTAINABILITY` §5 | **No cosign anywhere.** The string does not appear in the repository; `release.yml` uploads unsigned tarballs |
+| `govulncheck` on every PR / weekly | `AUDIT_CHECKLIST` CI-gate summary, `solo-operations` "リスク1" ("週次で自動実行済み") | **Not in any workflow.** Nor is `staticcheck`, which the same summary listed |
+
+**Why it matters more than the individual gaps.** Two of the documents
+making these claims cite the March 2025 `tj-actions/changed-files`
+compromise as the reason SHA pinning is mandatory — and then assert the
+pinning is done. A branch reference like `@master` on `securego/gosec`
+and `aquasecurity/trivy-action` is exactly the shape of that incident.
+The project was not merely unpinned; it was unpinned while telling
+auditors it was pinned, which is the state in which nobody checks.
+
+**Impact:** a compromised upstream action tag or branch executes in CI
+with the workflow's token. Releases cannot be verified by a downstream
+consumer. Dependency vulnerabilities are caught only when someone runs
+`govulncheck` by hand.
+
+**Blocker:** all three fixes are edits to `.github/workflows/`, which the
+GitHub App used by these sessions may delete but not modify (§13). The
+Dependabot config, which *is* in place and does cover
+`github-actions`, will keep pinned SHAs current once they are set — the
+`# v4.2.2` trailer convention makes the diffs readable.
+
+**What to do:** pin every `uses:` to a SHA with the tag in a trailing
+comment; add a `cosign sign-blob` step to `release.yml` alongside
+checksum generation; add `govulncheck ./...` to `ci.yml`. None of the
+three needs new infrastructure.
+
+**How you can tell:** run the three commands in the table. This entry
+exists because the documents that told you to run them predicted the
+wrong answers.
+
+---
+
+## 22. There is no way to limit how many CPU threads Otedama mines with
+
+**What:** the miner starts one thread per logical CPU and offers no
+control over that number. `miner.DefaultWorkerConfig` sets
+`Threads: runtime.NumCPU()` (`internal/miner/worker.go`), `NewWorker`
+replaces any non-positive value with `runtime.NumCPU()` again, and
+nothing between the CLI and that struct exposes the field: there is no
+`--worker-threads` flag, no `threads:` config key, and no environment
+variable. `docs/API.md` states this correctly for the config file;
+`docs/TROUBLESHOOTING.md` did not — until session 266 it answered
+"Otedama uses 100% CPU" with a flag that does not exist, so the one
+question this limitation actually generates was answered with a command
+that fails.
+
+**Impact:** on a desktop or laptop, mining competes with everything else
+for every core. A user who wants to mine with half their machine has no
+in-product way to say so.
+
+**Workaround (measured, not assumed):** constrain the process from
+outside. `runtime.NumCPU()` reports the CPUs available to the process,
+so a CPU affinity mask sets the thread count directly. On the reference
+machine (4 vCPU, Go 1.24.7): unrestricted printed 4, `taskset -c 0`
+printed 1, `taskset -c 0-1` printed 2.
+
+```bash
+taskset -c 0-3 otedama run --bitcoin-address bc1q...
+```
+
+For an installed service, use a systemd drop-in
+(`systemctl --user edit otedama`, `CPUAffinity=0-3`) rather than editing
+the unit — `otedama service install` regenerates the unit file and would
+overwrite the edit, while a drop-in survives. macOS has no `taskset`
+equivalent; Windows has affinity via Task Manager or `start /affinity`.
+
+**Target:** none set. Adding a thread-count flag is a feature, and
+CLAUDE.md requires features to start from a requirements discussion
+rather than appearing in a documentation session. The argument for it is
+that the OS-level workaround is per-platform and undiscoverable; the
+argument against is that a flag duplicates something the OS already does
+correctly. Recorded here so the decision is made deliberately.
 
 ---
 

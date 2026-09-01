@@ -5,6 +5,14 @@
 全要素を定義する実務文書である。研究が示す冷酷な現実から出発し、
 具体的な自動化・法務・収益・メンタルヘルスの各層で何を構築するかを規定する。
 
+**読み方（session 266 で明記）。** 本書はほぼ全体が**提案**であって実装記録ではない。
+以前は一部の項目が「設定済み」「実施済み」と書かれていたが、実際には未実施であった
+（SHA ピン留め、cosign 署名、govulncheck の週次実行、Renovate、CI での fuzz — 5件全て）。
+それらは本セッションで実状に直した。**本書に現れる YAML・JSON・シェルは全て「こう書くべき」
+という案であり、リポジトリに存在するファイルの引用ではない。** 実際に存在するものだけを
+知りたい場合は `.github/` を直接読むこと。未実施項目のブロッカーは
+`docs/KNOWN_LIMITATIONS.md` §21 にまとめてある。
+
 ---
 
 ## 現実から始める：ソロメンテナの統計
@@ -230,12 +238,13 @@ jobs:
           publish_results: true
 ```
 
-**Scorecard で監視する項目（OpenSSF Security Scorecard）：**
-- Dependency-Update-Tool（Renovabot設定済み → 自動高スコア）
-- Signed-Releases（cosign設定済み → 自動高スコア）
-- Branch-Protection（mainブランチのPR必須ルール → 設定必要）
-- Token-Permissions（最小権限原則 → 全workflowで設定必要）
-- Fuzzing（go test -fuzz → CIで継続実行 → 設定済み）
+**Scorecard で監視する項目（OpenSSF Security Scorecard）** — 括弧内は session 266 時点の実状：
+- Dependency-Update-Tool（**Dependabot は設定済み**。Renovate は未導入）
+- Signed-Releases（**未設定**。cosign はリポジトリに存在しない）
+- Branch-Protection（設定必要）
+- Token-Permissions（設定必要）
+- Fuzzing（**部分的**。fuzz target は `internal/stratum/frame_fuzz_test.go` に2本あるが、
+  CI で `-fuzz` を回すジョブは無く、通常の seed corpus テストとしてしか実行されていない）
 
 ### 2.3 インシデント対応の事前設計
 
@@ -272,6 +281,10 @@ jobs:
 ## 第3層：法的・財務的コンプライアンス
 
 ### 3.1 日本における法的位置づけ
+
+> **本節は法的助言ではない。** 以下は記載時点での制度理解の要約であり、
+> リポジトリ内のコードからは検証できない。実際の判断は資格を持つ専門家に確認すること。
+> 引用している制度・判断（CAESP 登録要件、CARF、SEC の見解など）は年月とともに変わる。
 
 **Otedamaは以下の理由でCAESP登録不要である：**
 
@@ -348,22 +361,24 @@ Otedamaの収益モデルはLightning Networkを直接活用する：
 推奨収益チャンネル（優先順）：
 
 1. Lightning Network tipjar
-   - README冒頭に `⚡ Lightning: shizukutanaka@getalby.com` を掲載
+   - README に Lightning アドレスを1行掲載する
    - 受取即時、手数料ほぼゼロ、KYCなし
-   - Bitcoinで直接受取 → 非課税期間の活用可能性
+   - 具体的なアドレスは本書に書かない。CLAUDE.md は検証できないアドレスの記載を
+     禁じており、リポジトリ内の文書からは受取先の実在を確かめようがない。
+     掲載するアドレスはメンテナ本人が README に直接置く
 
 2. GitHub Sponsors
-   - 月額 $1/$5/$10/$50 のティアを設定
-   - Stripe経由、手数料6%程度
+   - 月額ティアを設定
+   - Stripe 経由、手数料あり
    - 法人スポンサーへのアピール用
 
-3. オプション：Otedama Cloudホスティング（Phase 4以降）
-   - 上級ユーザーがインフラを自分で建てる手間を避けるため
-   - 月額 $5/月程度のManaged Lightningノードサービス
-   - Cloudflare Workers + Workers KV で運用コストほぼゼロ
-
-4. Bug bounty からの収益
+3. Bug bounty からの収益
    - Immunefi または独自バグバウンティ（Phase 2以降）
+
+採らない選択肢：**Otedama Cloud / Managed Lightning ノードのホスティング**。
+以前ここに Phase 4 の収益源として挙がっていたが、カストディアルな運用主体を作ることになり、
+CLAUDE.md 禁止事項第四（中央集権的コンポーネント）に抵触する。SUSTAINABILITY.md も Cloud を
+「拒否する機能」に数えており、2文書が矛盾していた。矛盾は Cloud を落とす側で解消した。
 ```
 
 **日本での税務処理：**
@@ -446,23 +461,26 @@ jobs:
 
 ## 第5層：インフラコストをゼロに近づける
 
-### 5.1 Cloudflare Workers + KV による実質無料運用
+### 5.1 サーバーを持たないことでゼロにする
 
-Otedamaのサーバーサイドコンポーネントは
-Cloudflare Workersで実行し、実質無料に近い運用を実現する。
-Workers の無料ティアは100,000リクエスト/日、
-KVは1GBストレージまで無料である。
+**Otedama にサーバーサイドコンポーネントは無い。** ユーザーの端末で動くバイナリが1つあるだけで、
+バックエンド API もデータベースも存在しない。これは節約策ではなく製品定義（非カストディ）の
+帰結であり、インフラコストが小さいのはその副産物である。
+
+以前ここには Cloudflare Workers + KV に「プール推薦エンドポイント」を置く案が書かれていたが、
+それは Otedama が運用する中央集権コンポーネントであり、CLAUDE.md 禁止事項第四に抵触する。
+同じ節の 5.2 が「サーバーメトリクスは不要（サーバーが無いため）」と書いていたので、
+本書は自分自身と矛盾していた。矛盾はサーバーを持たない側で解消した。
 
 ```
 配置先の決定：
-  - CI/CD: GitHub Actions（月2,000分無料）
+  - CI/CD: GitHub Actions（無料枠）
   - バイナリホスティング: GitHub Releases（無料）
   - ドキュメント: GitHub Pages（無料）
-  - API（プール推薦エンドポイント等）: Cloudflare Workers（無料ティア）
-  - DB: Cloudflare KV（無料ティア）
-  - メール（Issueアラート）: Cloudflare Email Routing（無料）
+  - バックエンド API: 無し（意図的）
+  - DB: 無し（意図的）
   - ドメイン: 年約$10-15
-  - 合計月額: ≒ $0-2
+  - 合計月額: ドメイン代のみ
 ```
 
 ### 5.2 監視の最小化
@@ -559,18 +577,23 @@ Otedamaがその罠に入らないために：
 
 ### 7.1 CODEOWNERS の設計
 
+実ファイル `.github/CODEOWNERS` の資金クリティカル部分は次の通り
+（以前ここに載っていた例は `/internal/security/` と `/internal/auth/` を挙げていたが、
+CLAUDE.md がどちらも「作成禁止パス」と明記しており、存在しないディレクトリを守る
+CODEOWNERS 行は何も守らない）：
+
 ```
-# .github/CODEOWNERS
 # Global fallback: メンテナが全PRをレビュー
-*                           @shizukutanaka
+*                             @shizukutanaka
 
-# セキュリティ領域：メンテナ必須（将来は2名以上）
-/internal/security/         @shizukutanaka
-/internal/lightning/        @shizukutanaka
-/internal/auth/             @shizukutanaka
+# 資金クリティカル：メンテナ必須（将来は2名以上）
+/internal/lightning/          @shizukutanaka
+/internal/btccrypto/          @shizukutanaka
+/internal/poolproto/          @shizukutanaka
+/internal/stratum/noise*      @shizukutanaka
 
-# ドキュメント：コミュニティコントリビューターで対応可
-/docs/                      @shizukutanaka
+# ドキュメント
+/docs/                        @shizukutanaka
 ```
 
 ### 7.2 コアコントリビューター昇格基準
@@ -594,7 +617,7 @@ Otedamaがその罠に入らないために：
 
 ```
 メンテナが長期離脱した場合の連絡先と手順を
-.github/MAINTAINERS.md に記載する：
+リポジトリ直下の MAINTAINERS.md に記載する（`.github/` 配下ではない）：
 
 緊急連絡先: [プライベートな連絡先 - GitHub Discussionsで公開]
 
@@ -647,36 +670,49 @@ Otedamaがその罠に入らないために：
 LDKに重大な脆弱性が発見された場合、
 ユーザーの資金が危険にさらされる。
 
-対策：
-- `govulncheck` は週次で自動実行済み
-- LDKのセキュリティアドバイザリをGitHub Watch経由で監視
-- ユーザーへの緊急通知はGitHub Discussions + READMEのバナー
+前提の訂正（session 266）：**Otedama は LDK に依存していない。** ウォレットは BIP-39 シード生成と
+AES-256-GCM + scrypt による保管のみで、Lightning ノードは実装されていない（§6）。
+したがって本項のリスクは現時点では発生しない。**受取専用ウォレットを超えて Lightning ノードを
+組み込む判断をした時点で**、以下が必要になる。
+
+対策（ノード導入時）：
+- `govulncheck` を週次で自動実行する（**現在どのワークフローでも実行されていない** — §21）
+- 採用したライブラリのセキュリティアドバイザリを GitHub Watch 経由で監視
+- ユーザーへの緊急通知は GitHub Discussions + README のバナー
 
 ### リスク2：Stratum V2プールの誤動作
 
 ユーザーが接続するプールが不正なWork Templateを送信した場合、
 ユーザーのハッシュレートが無効なブロック生成に使われる可能性がある。
 
-対策：
-- PoolのCA証明書の検証（stratum+v2tls://のみデフォルト）
-- Job Negotiation Protocolの実装（ユーザー自身がtemplate選択）
-- 推奨プール一覧はコードに埋め込まずCDN経由で更新可能にする
+対策（現状と、その先）：
+- **TLS スキームでの証明書検証は実装済み**（`stratum+v2tls://` と `stratum+tls://`。検証を無効化する
+  経路は存在しない）。ただし**既定はそれではない**：`config.DefaultPoolURL` は `stratum+v2://` の
+  平文であり、しかもそのホストは現在解決しない（§20）。「stratum+v2tls:// のみデフォルト」と
+  書いていたのは誤りで、session 266 に訂正した
+- Job Declaration/Negotiation（ユーザー自身が template を構築）は**未実装**。ADR-009 の Track D、
+  ROADMAP の v3.6 スコープ（§14）
+- 推奨プール一覧は**持たない**。以前ここには「CDN 経由で更新可能にする」と書いてあったが、
+  それは Otedama が運用する中央集権コンポーネントであり、CLAUDE.md 禁止事項第四に抵触する。
+  プールはユーザーが選び、設定に書く。組み込みの既定は1つだけで、推奨リストではない
 
 ### リスク3：供給チェーン攻撃
 
 前述のtj-actions事件のように、使用するGitHub Actionsへの攻撃。
 
 対策：
-- 全ActionをSHAピン留め（ci.ymlで実施済み）
-- `Dependabot for Actions` を有効化して自動更新
-- SBOMを全リリースに同梱
+- 全 Action を SHA ピン留め — **未実施**。`.github/workflows/` の `uses:` は現在すべてタグまたは
+  ブランチ参照であり、本節が挙げた tj-actions 型の攻撃に対して無防備である（§21）。
+  以前ここには「ci.yml で実施済み」と書いてあったが、そのファイルを読めば1行目から反証される
+- `Dependabot for Actions` を有効化して自動更新 — **実施済み**（`.github/dependabot.yml`）
+- SBOM を全リリースに同梱 — 未実施
 
 ### リスク4：規制変更
 
-日本のCARP施行（2026年1月）や将来の暗号資産規制強化。
+日本の CARF 対応（2026年1月）や将来の暗号資産規制強化。
 
 対策：
-- OtedamaはCryptasset Exchange Service Providerではないことを
+- Otedama は暗号資産交換業者（CAESP: Crypto Asset Exchange Service Provider）ではないことを
   README、CLAUDE.md、法務メモに明記
 - 規制変更のモニタリング（FSAのメールマガジン登録）
 - 重大な規制変更があった場合は即座にリリースノートで案内

@@ -43,7 +43,11 @@ The single highest-leverage observation: **the cost of building these foundation
 - **JDPは延期**: 3つのメジャープールが対応するまで実装しない（2026/Q2時点でBraiinsとDEMANDのみ）。
 - **SRI を cgo/FFI 経由で組み込まない**: pure-Go cross-compilationを失う。Go native実装を3-6エンジニアヶ月で書く。
 
-**実装状況:** `internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ。
+**実装状況（session 266 で更新）:** 抽象化 `internal/poolproto/poolproto.go` に加え、**SV1
+（`internal/poolproto/stratumv1/`）と SV2 dialer（`internal/poolproto/stratumv2/`）は実装済み**。
+本行は長らく「v3.2.0 スコープ」と書かれていたが、SV1 のマイニング経路は session 255、SV2 の
+ワイヤ形式は session 256 に一次仕様と突き合わせて修正済みで、記述が実装より2世代遅れていた。
+未了なのは Noise NX の実接続への配線（§2）と DATUM（§14）。
 
 ### 3. Bitcoin エコシステム longevity / Bitcoin Ecosystem Longevity
 
@@ -52,23 +56,32 @@ The single highest-leverage observation: **the cost of building these foundation
 **Otedamaの判断:**
 - block subsidy は **計算式で導出** (`50e8 >> (height/210000)`)、**ハードコードしない**（既に対応済み）。
 - アドレスパーサは witness-version dispatch で**全 prefix 対応**、Bech32m/Bech32 polymod 厳密に区別（混同で資金喪失するため）。
-- coinbase は常に `getblocktemplate` 出力から構築、ハンドメイド consensus rule なし → CTV/CSFS/OP_CAT/BIP-360 全てコード変更なしで吸収。
-- `bitcoind` と `bitcoinknotsd` どちらでも動く（mining RPCは同一）。
+- ハンドメイドの consensus rule を持たない → CTV/CSFS/OP_CAT/BIP-360 をコード変更なしで吸収。
+- 自ノードに接続する形態を将来採る場合、coinbase は `getblocktemplate` 出力から構築し、
+  `bitcoind` と Knots のどちらでも動くようにする（**将来の判断**）。
 
-**実装状況:** 既存設計と整合（v3.0.0-alphaの設計から方針的に外れていない）。
+**実装状況（session 266 で訂正）:** subsidy の計算式導出は方針として維持。
+ただし **Otedama は現在 Bitcoin ノードに接続しない** — Stratum クライアントであり、coinbase の
+断片はプールから受け取る。`getblocktemplate` を呼ぶコードは存在せず（`internal/poolproto/poolproto.go`
+に将来計画としての言及があるのみ）、以前の「coinbase は常に `getblocktemplate` 出力から構築」は
+現在の実装の記述としては誤りだったため、将来形に直した。ノード直結は ADR-009 の Track D スコープ。
 
 ### 4. 暗号ライブラリ stability / Crypto Library Stability
 
 **研究結論:** `golang.org/x/crypto` は Go 1.24/1.25/1.26 を通じて **stdlib に段階移行中**。`crypto/sha3`, `crypto/mlkem`, `crypto/hkdf`, `crypto/pbkdf2`, `crypto/ecdh` は既に std。secp256k1 は **stdlib 入り見送り** (Go core team は NIST曲線のみサポート)。Go ecosystem winner: **`github.com/decred/dcrd/dcrec/secp256k1/v4`** (pure Go, constant-time, ISC license, btcd v2/lnd で使用)。**ChaCha20-Poly1305 は post-quantum 安全** (Grover半減でも 128-bit security、2050年まで)。
 
 **Otedamaの判断:**
-- `decred/dcrd/dcrec/secp256k1/v4` を `internal/btccrypto/` interface 経由で使用（v3.1.0で実装）。
-- XChaCha20-Poly1305 (192-bit nonce) を at-rest encryption に採用 (10年でnonce衝突リスクを排除)。
-- 新規 password 派生は Argon2id、scrypt は BIP-38 互換専用。
-- BIP-39 wordlist は `//go:embed` + `init()` での SHA-256 アサート。drift したら起動拒否。
-- **2028-2030 で post-quantum レイヤ書き換え準備**: `internal/btccrypto/` の Scheme registryに `crypto/mldsa` (Go 1.27+ 想定) のskeleton配置。
+- `decred/dcrd/dcrec/secp256k1/v4` を `internal/btccrypto/` interface 経由で使用する（**将来の判断**。
+  現在 `go.mod` にこの依存は無い）。
+- BIP-39 wordlist は埋め込み + `init()` での SHA-256 アサート。drift したら起動拒否。
 
-**実装状況:** `internal/btccrypto/` 抽象化済み（v3.0.0-alpha.1）、実暗号swapはv3.1.0スコープ。
+**実装状況（session 266 で訂正）:** `internal/btccrypto/` は抽象化のみで、実暗号 swap は未着手。
+**at-rest 暗号化の現物は AES-256-GCM + scrypt**（`internal/lightning/seedstore.go`、N=1<<17, r=8, p=1）
+であり、本節が以前挙げていた XChaCha20-Poly1305 と Argon2id は**採用されていない**。
+「新規 password 派生は Argon2id」は判断としても未決であり、実装済みと読める書き方だったため削除した。
+`crypto/mldsa` skeleton の記述も削除した — その scaffold は session 264 に削除済みで、かつ
+CLAUDE.md は現段階での量子耐性着手を明確に禁止している（v4.0 での検討事項）。
+本節の残りは**方針であって実装ではない**。
 
 ### 5. サプライチェーン10年 / Supply Chain over 10 Years
 
@@ -84,7 +97,13 @@ The single highest-leverage observation: **the cost of building these foundation
 - OSS-Fuzz 統合申請（無料、Google運用）。
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
-**実装状況:** SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
+**実装状況（session 266 で訂正）:** **実装済みは Dependabot のみ**（`.github/dependabot.yml`、
+gomod/actions/docker の週次）。**SHA pinning は1件も無く**（`.github/workflows/` の `uses:` は全て
+タグまたはブランチ — `actions/checkout@v4`、`securego/gosec@master` 等）、**cosign 署名も存在しない**
+（`cosign` の文字列がリポジトリ内に1件も無い）。すなわちリリース成果物は未署名である。
+本行は「実装済み」と書いていたが、上の「判断」欄が SHA pinning 必須の根拠として挙げている
+tj-actions 事件そのものに対して無防備なままだった。詳細と手当てのブロッカーは
+`docs/KNOWN_LIMITATIONS.md` §21。SLSA L3 と SBOM dual-format は依然 v3.5.0 スコープ。
 
 ### 6. Solo Maintainer の現実 / Solo Maintainer Reality
 
@@ -154,9 +173,14 @@ The single highest-leverage observation: **the cost of building these foundation
 - **AI-assisted code clause (CONTRIBUTING.md):** 貢献者がAI出力に責任、meaningful review必須、10行超のverbatim AI output禁止、Copilot duplication-filter strict mode + GPL/AGPL/LGPL blocklist 必須、AI支援コミットは `Co-authored-by:` tag。
 - SECURITY.md: **Project Zero 90+30 model** (90日default + 30日grace + active exploitationで7日)、GitHub Private Vulnerability Reporting で受付。
 - LEGAL.md: OFAC/EAR 自己compliance期待を文書化。
-- 商標 free search を USPTO TESS / EUIPO eSearch / 主要 package registry で実施済み。`otedama.org`/`otedama.dev` 確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
+- 商標 free search と ドメイン確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
+  （**本リポジトリからは検証できない事項**なので、実施済みか否かをここでは主張しない。
+  以前は `otedama.org`/`otedama.dev` を「確保」と書いていたが、それを裏づける成果物は
+  リポジトリに無い。）
 
-**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は本セッションで CONTRIBUTING.md に追加。SECURITY.md と LEGAL.md は v3.1.0 スコープ。
+**実装状況（session 266 で訂正）:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は
+CONTRIBUTING.md にあり。**SECURITY.md は既に存在する**（v3.1.0 スコープと書いていたのは誤り）。
+LEGAL.md は未作成で v3.1.0 スコープのまま。
 
 ---
 
@@ -179,14 +203,20 @@ Otedamaが採用する戦略:
 
 ## 改訂と参照 / Revisions and References
 
-**初版:** 2026年4月下旬。外部研究レポート (`SUSTAINABILITY_RESEARCH_2026Q1.md`、Anthropic調査) の結論を Otedama-specific 判断と統合。
+**初版:** 2026年4月下旬。外部研究レポートの結論を Otedama-specific 判断と統合したもの。
+そのレポート本体は本リポジトリにコミットされていない（以前ここは
+`SUSTAINABILITY_RESEARCH_2026Q1.md` を参照していたが、**その file は存在しない**）。
+したがって本書の「研究結論」欄は**本リポジトリ内では検証できない**。検証できるのは
+「Otedamaの判断」と「実装状況」の各欄であり、session 266 はそこだけを実装と突き合わせた。
 
 **参照ドキュメント:**
 - `ROADMAP.md` — 本書の判断を時系列マイルストーンに具体化
 - `MAINTAINERS.md` — bus-factor 改善の現状
 - `GOVERNANCE.md` — 昇格パスとgreater stake holder 管理
 - `docs/THREAT_MODEL.md` — STRIDE 脅威モデル
-- `docs/AUDIT_CHECKLIST.md` — 30 項目監査チェックリスト
+- `docs/AUDIT_CHECKLIST.md` — 監査チェックリスト（32行。session 266 から各行が
+  PASS/FAIL の実測状態を持つ）
+- `docs/KNOWN_LIMITATIONS.md` — 製品がしないことの一覧（各項目に原因・影響・回避策・ブロッカー）
 - `GODEBUG_NOTES.md` — Go behavior pinning
 - `docs/adr/ADR-001` 〜 `ADR-005` — 主要設計判断
 

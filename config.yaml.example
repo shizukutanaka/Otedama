@@ -37,8 +37,16 @@ bitcoin_address: ""
 # List of mining pools in order of preference. Otedama connects to the
 # first and fails over to subsequent entries if the connection drops.
 #
-# If this list is empty, Otedama uses its built-in recommended pool list
-# (Stratum V2 pools prioritised, 0% fee where available).
+# If this list is empty, Otedama falls back to ONE built-in default
+# endpoint (config.DefaultPoolURL) — there is no curated or recommended
+# pool list, and no fee-based ordering. As of session 266 that default
+# host does not resolve, so configuring this list is not optional in
+# practice; see docs/KNOWN_LIMITATIONS.md §20.
+#
+# The hostnames below are placeholders. Take the hostname, port and
+# scheme from your pool's own documentation — Otedama cannot verify
+# somebody else's endpoint for you, and a wrong port simply fails to
+# connect.
 #
 # Supported URL schemes:
 #   stratum+v2://       Stratum V2 unencrypted  (LAN or trusted networks only)
@@ -47,7 +55,7 @@ bitcoin_address: ""
 #   stratum+tcp://      Stratum V1 plain        (not recommended)
 #
 pools:
-  - url: "stratum+v2tls://public.stratum.slushpool.com:3336"
+  - url: "stratum+v2tls://your-pool.example:3336"
     # user is optional; defaults to bitcoin_address.
     user: ""
     # password is optional; most pools accept any value.
@@ -72,7 +80,7 @@ pools:
   # if a connection fails or drops, it rotates to the next immediately,
   # and only applies reconnect backoff once every pool has been tried.
   # Uncomment to add a backup:
-  # - url: "stratum+v2tls://demand.fun:3336"
+  # - url: "stratum+v2tls://your-backup-pool.example:3336"
   #   password: "x"
 
 # ── Workers ──────────────────────────────────────────────────────────────────

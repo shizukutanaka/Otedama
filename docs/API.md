@@ -238,9 +238,16 @@ data_dir: /home/alice/.local/share/otedama
 
 # Mining pools, tried in the order listed (list position is the priority;
 # there is no separate priority field).
+#
+# The hostnames below are placeholders, not recommendations: take the
+# hostname, port and scheme from your pool's own documentation. Prefer a
+# TLS scheme (stratum+v2tls:// or stratum+tls://) — stratum+v2:// is sent
+# in the clear (see docs/KNOWN_LIMITATIONS.md §2). Otedama's built-in
+# default endpoint no longer resolves, which is precisely why this file
+# shows you how to set your own; see §20.
 pools:
-  - url: stratum+v2://public.stratum.slushpool.com:3336
-  - url: stratum+v2://demand.sv2.io:34254
+  - url: stratum+v2tls://your-pool.example:3336
+  - url: stratum+tls://your-backup-pool.example:3334
 
 # Worker identification sent to pools — a single object, not a list.
 # device/threads are not config fields: Otedama auto-detects every

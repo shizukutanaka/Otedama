@@ -10,6 +10,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed / Docs (session 266 — **自分が設けた反証条件で自分の主張を反証した**: 未監査5文書の全文読了、既定プールの実測、§13 診断の訂正)
+
+**発端.** session 265 は完成宣言に反証条件を付けた——「証拠まで辿れない肯定的記述が1つでもあれば
+宣言は破れる」。その時点で最も危ういのは**自分の主張**だった。同セッションは
+「未監査ドキュメント4本はクリーン」と書いたが、根拠は既知の陳腐化語（Akash / simulated /
+80カラム / wallet不在）への grep であって、読んではいなかった。本セッションは5文書
+（1,360行）を全文読み、**主張は反証された**。既に知っている誤りの grep では、知らない誤りは出ない。
+
+**文書の訂正（全て実装と突き合わせて確認）**
+
+- `docs/TROUBLESHOOTING.md` — 存在しない `--worker-threads` を使う手順を削除し、実際に効く
+  `taskset`（実測: 4→`-c 0`で1→`-c 0-1`で2）と systemd drop-in に置換。
+  `otedama --log-level=debug doctor` は実バイナリで exit 64（"unknown subcommand"）を確認し、
+  `doctor --json` と `run --log-level debug` に修正。「service が idle クラスに自動束縛」は
+  unit にも plist にも該当指定が無いため削除。「/metrics はハンドシェイク後に出る」は
+  `engine.Run` の最初に全メトリクスを登録する事実に合わせて書き換え。doctor の latency は
+  1回の TCP connect であって variance ではないと明記。1日あたり収益を BENCHMARKS.md の実測
+  （$0.00000094/日）に統一。launchd の話に付いていた ADR-001 参照を削除。
+- `docs/AUDIT_CHECKLIST.md` — **監査人を誤誘導する状態だったので全面改稿**。全32行に
+  実測ステータス（PASS/FAIL/未検証）を付与。SHA ピン留め・cosign 署名・staticcheck・
+  govulncheck・nightly fuzz・PRベンチ比較は**いずれも存在しない**ので FAIL と明記し §21 に接続。
+  scrypt の参照ファイル（`seed.go`→`seedstore.go`）と N（32768→131072）を訂正。
+  Noise NX の行に「実装済みだが実接続に未配線（§2）」を付した。実際にリンクされる外部モジュールを
+  `go list -deps` で数え直し（x/crypto, x/sys, yaml.v3 の3つ）。番号重複を解消。
+- `docs/SUSTAINABILITY.md` — 「実装状況」欄6件を実状へ。SV1/SV2 は実装済み（v3.2.0スコープではない）、
+  at-rest は XChaCha20+Argon2id ではなく AES-256-GCM+scrypt、SHA pinning/cosign は未実施、
+  SECURITY.md は既存、`getblocktemplate` を呼ぶコードは無い、参照していた研究レポート file は不在。
+- `docs/solo-operations.md` — 「設定済み/実施済み」5件を未実施と明記。既定が `stratum+v2tls://` と
+  いう記述を §20 の事実に修正。検証不能な Lightning 受取アドレスを削除。**Otedama Cloud と
+  CDN 配信プール推薦を削除**（CLAUDE.md 禁止事項第四に抵触。SUSTAINABILITY.md が Cloud を
+  「拒否する機能」に挙げており文書間で矛盾していた）。CODEOWNERS 例を実ファイルに合わせ、
+  作成禁止パス（`internal/security/`, `internal/auth/`）への言及を除去。法制度の節に
+  「法的助言ではない」を明記。
+- `docs/competitive-analysis.md` — 「Otedamaの設計への翻訳」を実装済み／スコープ済みに分割。
+  i18n の過大主張（「UI・エラー・ドキュメントの全てが対応言語」）を実範囲（15ID・起動ログのみ）に。
+  ZKP・LDK・`x/text`・SRI golden vector・FreeBSD ビルドはいずれも未実装/未提供と明記。
+  当初の実装順序は**書き換えずに結果を併記**した（外れた予測を履歴から消さないため）。
+
+**文書ではなかった発見が2件**
+
+- **既定プールのホストが解決しない（§20 が推測から実測へ）。** 従来のセッションは「外向き DNS が
+  無いので確認できない」と記録していたが、その前提自体が再検査されていなかった。本環境では
+  DNS は正常に動き、同一実行内で `github.com` / `slushpool.com` / `braiins.com` /
+  `stratum.slushpool.com` / `stratum.braiins.com` が解決する一方、
+  **`public.stratum.slushpool.com` はアドレスを返さない**（`otedama doctor` も
+  "no such host" を報告。対照的に Network チェックは *timeout* で落ちており、失敗の種類が違う）。
+  つまり**プール未設定のユーザーは初回実行で必ず失敗する**。置き換え先は**あえて推測しない** —
+  プール側ドキュメントは本環境から到達不能（egress ブロック）で、ホストとポートの捏造は
+  本作業が除去している欠陥そのものだから。`config.DefaultPoolURL` の doc コメント、
+  `config.yaml.example`、`docs/API.md` の例をプレースホルダに置換し、判断を §20 に記録。
+- **書こうとしていた §13 の診断が間違っていた。** 本セッションの計画は「`GOTOOLCHAIN: local` に
+  よって `toolchain go1.24.0` 行が決定的に失敗する」と断定していた。使い捨てモジュールで実測すると
+  `toolchain go1.99.0` + `GOTOOLCHAIN=local` は**普通にビルドが通る**（toolchain 行は選好であり、
+  local はそれに従わないだけ）。実際の引き金は `godebug tlsmlkem=1` で、認識できないキーは
+  `go.mod` ロード時点でエラーになる（`unknown godebug "..."` を実測）。`GOTOOLCHAIN: local` は
+  「救済してくれる自動切替を塞ぐ」という形で効いている。§13 を実測コマンドつきに書き直し、
+  唯一測れていない環（Go 1.23 が `tlsmlkem` を知らないこと）はリリース履歴由来だと明示した。
+  併せて `release.yml` の `-X main.Version=`（`internal/version` が正しく、現状バージョンは
+  バイナリに入らない）と `--description "P2P Mining Pool Software"`（Otedama はプールではない）を
+  §13 の手術リストに追加。
+
+**新設**: `docs/KNOWN_LIMITATIONS.md` §21（主張されていたが存在しないサプライチェーン統制:
+SHA ピン留め・cosign・govulncheck）、§22（採掘スレッド数を製品内から制御できない。回避策は実測済み。
+フラグ新設は CLAUDE.md の七段階に従い Issue 起点とするため本セッションでは行わない）。
+
+**コード挙動の変更なし**（変更は doc コメント2箇所と設定例のプレースホルダのみ。
+全24パッケージ build/vet/test green、race clean）。
+
 ### Docs (session 265 — マスク思考法×ソクラテス問答法: **長所・短所・改善点を証拠付きで総括し、「完成」の定義と充足を明文化**)
 
 **方法.** session 264 のマスク5段階の上に、ソクラテス的問答——**全ての肯定的主張に

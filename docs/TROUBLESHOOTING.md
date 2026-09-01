@@ -22,18 +22,22 @@ is ever found.
 1. **Difficulty too high for your hardware.** Each pool sets a minimum
    share difficulty. If your hashrate produces shares slower than the
    pool's minimum, you appear idle.
-2. **CPU-only mining in 2026.** A single CPU produces roughly
-   $0.0000004 per day at current Bitcoin difficulty. Shares may take
-   days to appear even if everything is working.
+2. **CPU-only mining in 2026.** The reference machine in
+   `BENCHMARKS.md` (4 vCPU Xeon 2.10GHz, no SHA-NI) produces about
+   $0.00000094 per day at current Bitcoin difficulty — the arithmetic
+   and its inputs are in that file. Shares may take days to appear even
+   when everything is working.
 3. **Stale jobs.** If your network latency to the pool exceeds the
    pool's stale threshold (usually 1-2 seconds), shares are rejected
    as "too late."
 
 ### Fix
 
-1. Switch to a pool that accepts low-difficulty shares, or use a
-   pool with a difficulty-tuning mode. Braiins pool and demand.sv2.io
-   both auto-tune.
+1. Switch to a pool that accepts low-difficulty shares, or one that
+   tunes share difficulty to the connected miner (commonly called
+   vardiff). Whether a given pool does this, and down to what minimum,
+   is the pool's property and not something Otedama can report — check
+   the pool's own documentation before switching.
 2. There is no GPU speedup available today: Otedama detects GPUs
    (`otedama doctor`) but implements no CUDA/ROCm/Vulkan compute
    dispatch, so a GPU does not increase SHA-256d hashrate (see
@@ -89,26 +93,53 @@ Desktop freezes or slows dramatically while Otedama runs.
 
 ### Cause
 
-Otedama's CPU worker uses all available cores by default, and Go's
-scheduler does not yield to other processes the way OS processes do.
+Otedama starts one mining thread per logical CPU and keeps every one of
+them busy: `miner.DefaultWorkerConfig` sets `Threads: runtime.NumCPU()`
+(`internal/miner/worker.go`), and nothing lowers it. Hashing is a tight
+loop with no idle time, so the scheduler has nothing to hand your
+desktop between hashes.
 
 ### Fix
 
-Limit the number of mining threads:
+**There is no flag or config field for the thread count** — see
+`docs/KNOWN_LIMITATIONS.md` §22. Constrain the process from outside
+instead.
+
+**Linux — restrict which CPUs the process may run on:**
 
 ```bash
-otedama run --bitcoin-address bc1q... --worker-threads 4
+taskset -c 0-3 otedama run --bitcoin-address bc1q...
 ```
 
-Or set a CPU limit at the OS level:
+`runtime.NumCPU()` reports the CPUs available to the process, so the
+affinity mask sets the thread count directly. Measured on the reference
+machine (4 vCPU, Go 1.24.7): unrestricted reports 4, `taskset -c 0`
+reports 1, `taskset -c 0-1` reports 2.
 
-- **systemd (Linux):** `CPUQuota=50%` in the service unit.
-- **launchd (macOS):** no direct quota; use `nice`.
-- **Windows:** Task Manager > Details > right-click otedama.exe > Set
-  affinity.
+**Linux, installed as a service — use a systemd drop-in, not an edit:**
 
-For laptops, consider the `service` option which binds Otedama to an
-idle scheduling class automatically.
+```bash
+systemctl --user edit otedama          # opens override.conf
+# [Service]
+# CPUAffinity=0-3
+systemctl --user restart otedama
+```
+
+Edit the unit file itself and `otedama service install` will overwrite
+your change the next time it runs — it regenerates
+`~/.config/systemd/user/otedama.service` from a template
+(`internal/daemon/service.go`). A drop-in lives in a separate
+`otedama.service.d/` directory and survives. `CPUQuota=` works here too,
+but only if the cpu controller is delegated to your user manager; if the
+quota appears to do nothing, that delegation is why, and `CPUAffinity=`
+is the reliable option.
+
+**macOS:** there is no `taskset` equivalent. `nice` lowers priority but
+does not reduce the thread count, so it helps interactivity and not much
+else.
+
+**Windows:** Task Manager > Details > right-click otedama.exe > Set
+affinity, or launch with `start /affinity`.
 
 ---
 
@@ -129,8 +160,11 @@ Logs show repeated `engine: connecting to ...` messages.
 
 ### Fix
 
-1. Check `otedama doctor` output for pool latency variance. Anything
-   above 500ms average suggests a routing issue.
+1. Check the "Pool reachability" line in `otedama doctor` output. It
+   reports the time of a single TCP connect to the pool, not a variance
+   or an average over samples — run it a few times if you want a sense
+   of the spread. Anything consistently above 500ms suggests a routing
+   issue.
 2. Use a pool closer to you geographically.
 3. If behind a corporate firewall, see if your admin can whitelist
    the pool address.
@@ -149,14 +183,21 @@ not require manual intervention.
 
 ### Cause
 
-The metrics registry has been created but the engine has not yet
-emitted any metrics. At startup, this is normal — first metrics
-appear after the first successful pool handshake (~2-5 seconds).
+The engine is not running. Metric registration is the first thing
+`engine.Run` does — before the wallet, hardware detection, or any pool
+connection (`internal/engine/run.go`) — so a live engine serves the full
+set of counters and gauges immediately, with zero values until work
+starts. An endpoint that returns only comments means the HTTP server is
+up but the engine never got past startup, or exited.
 
 ### Fix
 
-Wait for 10 seconds after starting and retry. If still empty, check
-logs for `engine:` entries — the engine loop may not have started.
+Check the log for `engine:` entries. `engine: detected N device(s)` means
+registration already happened and the endpoint should be populated; no
+`engine:` lines at all means startup failed earlier — the error is on
+stderr. Note that zero-valued metrics are not an empty endpoint: a
+freshly started miner legitimately reports
+`otedama_shares_total{status="accepted"} 0`.
 
 ---
 
@@ -186,8 +227,12 @@ surprising on personal machines.
 macOS LaunchAgents run when the user is logged in via the GUI. If
 you SSH in without a GUI login, the agent does not start. Log in
 via the desktop at least once, or switch to a system-level
-LaunchDaemon (requires root and changes the security model — see
-ADR-001).
+LaunchDaemon. Otedama does not install a LaunchDaemon and no ADR
+covers that choice: `otedama service install` writes a per-user
+LaunchAgent to `~/Library/LaunchAgents`
+(`internal/daemon/service.go`). Running as root changes the security
+model — the wallet would be created and owned by root — so that is a
+decision to make deliberately, not a supported configuration.
 
 ---
 
@@ -215,10 +260,16 @@ If this still fails, ensure `go env GOPROXY` includes `https://proxy.golang.org`
 
 ## Still stuck?
 
-1. Re-run `otedama doctor` with the highest log level:
+1. Collect machine-readable diagnostics and a debug-level run log:
    ```bash
-   otedama --log-level=debug doctor
+   otedama doctor --json
+   otedama run --bitcoin-address bc1q... --log-level debug
    ```
+   `--log-level` belongs to `run`, not to `doctor`, and Otedama has no
+   global flags before the subcommand: the first argument must be the
+   subcommand name, so `otedama --log-level=debug doctor` exits 64 with
+   "unknown subcommand". `doctor` takes `--json` for a structured
+   report.
 2. Search existing issues:
    https://github.com/shizukutanaka/Otedama/issues
 3. Open a new issue using the bug-report template. Include:

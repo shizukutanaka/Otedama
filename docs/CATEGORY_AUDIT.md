@@ -1088,3 +1088,88 @@ the point at which further questioning stops changing the answer, which
 is as close to "complete" as an honest alpha gets. What would falsify the
 claim: a positive statement in the repo that a reader cannot trace to
 evidence. That is now the standing test for every future change.
+
+---
+
+## Session 266 — the falsification test, applied to my own claim (and it failed)
+
+Session 265 ended by naming what would break its completion claim:
+
+> What would falsify the claim: a positive statement in the repo that a
+> reader cannot trace to evidence.
+
+The most exposed such statement in that session was its own. It reported
+that four unaudited documents were "clean" — a conclusion drawn from
+greps for a handful of stale terms (`Akash`, `simulated`, `80 columns`,
+absent `wallet` subcommand), not from reading them. Session 266 read all
+five documents end to end (1,360 lines) and the claim did not survive.
+**A grep for the errors you already know about cannot find the errors you
+do not.**
+
+### What reading found
+
+| Document | Unearned or wrong statements |
+|---|---|
+| `TROUBLESHOOTING.md` | A fix built on `--worker-threads`, a flag that exists nowhere else in the repository; `otedama --log-level=debug doctor`, which exits 64 because the dispatcher requires the subcommand first (verified against the built binary); "`service` binds Otedama to an idle scheduling class" — no such directive is in the unit or the plist; "/metrics is empty until the pool handshake" — registration is the first thing `engine.Run` does; doctor's latency described as a *variance* when it is one TCP connect; a per-day earnings figure 2.4× off the one measured in `BENCHMARKS.md`; a LaunchDaemon question pointed at ADR-001, which is about the wallet |
+| `AUDIT_CHECKLIST.md` | Told auditors every action was SHA-pinned (none are), releases were cosign-signed (no cosign in the repo), and `staticcheck`/`govulncheck`/nightly fuzzing ran in CI (none do); pointed at the wrong file for scrypt and quoted N as 32768 when it is 131072; presented the Noise NX handshake as pool authentication without saying it is wired to nothing |
+| `SUSTAINABILITY.md` | "SV1/SV2 is v3.2.0 scope" two sessions after both shipped; at-rest encryption described as XChaCha20-Poly1305 + Argon2id when it is AES-256-GCM + scrypt; SHA pinning and cosign "implemented in v3.0.0-alpha"; `SECURITY.md` listed as future work while sitting in the repo root; a source document referenced by filename that does not exist |
+| `solo-operations.md` | Five separate "設定済み/実施済み" claims that were not; a Lightning receiving address no reader can verify; an Otedama Cloud service and a CDN-served pool list, both centralised components CLAUDE.md prohibits and one of which `SUSTAINABILITY.md` lists as explicitly rejected; a CODEOWNERS example guarding two directories CLAUDE.md forbids creating |
+| `competitive-analysis.md` | The i18n over-claim in its strongest form ("UI messages, error messages and documentation all display in the supported language") against 15 message IDs on one startup log path; ZKP, LDK, `x/text`, SRI golden vectors and FreeBSD builds all described as present |
+
+Every one of these is now corrected in place, with the correction naming
+what was wrong rather than quietly replacing it.
+
+### Two findings that were not documentation
+
+**The default pool host does not resolve.** §20 had been open since
+session 265 as "never verified — needs one run on a networked machine".
+Earlier sessions recorded that they had no outbound DNS; nobody re-tested
+that assumption. This session's container resolves DNS fine, and
+`public.stratum.slushpool.com` returns no address while `github.com`,
+`slushpool.com`, `braiins.com`, `stratum.slushpool.com` and
+`stratum.braiins.com` all resolve through the same resolver in the same
+run. So the zero-configuration path — the one the README leads with —
+fails on first run for every user. §20 is now a measurement, and the
+replacement endpoint is deliberately *not* guessed: the pool's own
+documentation is unreachable from here, and inventing a host and port is
+the defect this whole exercise exists to remove.
+
+**The §13 diagnosis I was about to write was wrong.** The plan for this
+session asserted that `GOTOOLCHAIN: local` in `ci.yml`/`test.yml` makes
+the `toolchain go1.24.0` line fail deterministically. Building a
+throwaway module with `toolchain go1.99.0` under `GOTOOLCHAIN=local`
+**succeeded** — the toolchain line is a preference, and `local` merely
+declines to act on it. The real trigger is the `godebug tlsmlkem=1` key,
+which errors at `go.mod` load on any toolchain that does not recognise
+it; `GOTOOLCHAIN: local` matters only because it removes the auto-switch
+that would otherwise hide the problem. §13 now carries the measured
+commands and marks the one remaining link (that Go 1.23 lacks `tlsmlkem`)
+as taken from Go's release history rather than measured here.
+
+That second finding is the more useful one. The session's whole method is
+"demand evidence for positive claims", and the claim it caught was the
+one I was about to publish under my own name. The measurement took two
+minutes; writing it unmeasured would have replaced someone else's
+confident error with mine.
+
+### 完成宣言の再評価
+
+The definition stands: *the product does exactly what it claims, and
+everything it does not do is disclosed with a reason, evidence, and a
+target.* The claim made under it in session 265 does not — it was true of
+the code and false of the documentation, because the documentation had
+been checked by a method too weak to falsify it.
+
+Restated for session 266: **twenty-two recorded limitations, thirteen
+resolved and one partially; every open item names its blocker; and every
+document in `docs/` has now been read in full at least once against the
+implementation, not grepped.** Two new entries (§21 supply-chain controls
+that were claimed but absent, §22 no thread-count control) exist because
+reading produced them.
+
+The falsification test is unchanged and now has a demonstrated failure
+mode to go with it: **a claim verified by grep is not verified.** The
+next reader to find a positive statement in this repository that does not
+trace to evidence should treat this section as precedent for how to
+handle it — name it, measure it, and write down which half of your own
+account turned out to be wrong.

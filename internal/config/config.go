@@ -49,6 +49,24 @@ import (
 // startup banner, and the doctor reachability check all reference this
 // constant rather than repeating the literal, so the default can never
 // drift out of sync between subsystems.
+//
+// This host does not currently resolve. Measured in session 266 from a
+// machine with working DNS (github.com, slushpool.com, braiins.com and
+// api.coinbase.com all resolved through the same resolver in the same
+// run): getaddrinfo returns EAI_NODATA for public.stratum.slushpool.com,
+// and `otedama doctor` reports
+// "Pool reachability ... lookup public.stratum.slushpool.com: no such
+// host". A user who configures no pool therefore cannot mine. Note that
+// stratum.slushpool.com and stratum.braiins.com both do resolve (to the
+// same address), which is consistent with the "public.stratum" name
+// having been retired rather than DNS being at fault.
+//
+// The replacement is deliberately not guessed here: picking a host and
+// port without a primary source would reintroduce exactly the defect
+// this comment records. Choosing it — and deciding whether an
+// unreachable default should be replaced at all, or removed so that a
+// pool must be configured explicitly — is a maintainer decision tracked
+// in docs/KNOWN_LIMITATIONS.md §20.
 const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
 
 // Config is the complete runtime configuration for Otedama.
