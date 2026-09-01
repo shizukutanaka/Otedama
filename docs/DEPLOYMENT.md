@@ -378,6 +378,13 @@ All exported metrics live under the `otedama_` prefix:
 - `otedama_curtailed` — gauge, 1 while hashing is deliberately paused by
   `curtail_below_btc_usd`. Use it to tell an intentional pause from a fault.
 
+Standard Go runtime metrics (`go_goroutines`, `go_memstats_*`, `go_gc_*`,
+`go_info`) are exported alongside these under the same names
+`prometheus/client_golang` uses, so a stock Go dashboard works against
+Otedama unmodified. They were wired up in session 266 — before that the
+collector existed but nothing registered it, and `/metrics` carried none of
+them.
+
 See docs/SPECIFICATION.md §6 for the full, CI-verified metric catalogue
 (`internal/engine.TestMetricsDocumentedInSpecification` fails the build if a
 registered metric is undocumented there). This section is a curated subset

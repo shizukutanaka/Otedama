@@ -118,3 +118,32 @@ we can adopt OTel incrementally if it becomes the unambiguous winner.
 - `internal/metrics/metrics.go` — Implementation
 - `internal/metrics/metrics_test.go` — Format conformance tests
 - `internal/httpserver/server.go` — `/metrics` HTTP handler
+
+## Erratum (added session 266, does not alter the accepted decision)
+
+Per `docs/adr/README.md`'s immutability rule, the text above stands. Two
+of its stated consequences are no longer accurate:
+
+1. **"No automatic Go runtime metrics … we have to write these ourselves
+   if needed."** They were written — `internal/metrics/runtime.go`'s
+   `RuntimeCollector()` emits twelve `go_*` series (`go_goroutines`,
+   `go_info{version}`, `go_memstats_*`, `go_gc_*`) using only stdlib
+   `runtime`, with names matching `prometheus/client_golang` so existing
+   dashboards work unmodified. **They were also not registered by anything
+   outside their own unit tests until session 266**, so `/metrics` served
+   none of them while `RESEARCH_IMPROVEMENTS.md` recorded the work as
+   shipped. `cmd/otedama`'s `startHTTPServer` now registers the collector
+   once per process, and `TestStartHTTPServer_WithAddrStartsServer`
+   asserts on the exposition output rather than on the registration call,
+   so removing the wiring fails the suite. The advice to add a sidecar
+   exporter is no longer needed for basic Go runtime visibility.
+
+2. **"No labels normalization … we trust the caller."** The registry now
+   validates both metric names (`isValidMetricName`) and label names
+   (`isValidLabelName`, which is stricter — no colons) at registration and
+   panics on violation, because a malformed name makes Prometheus discard
+   the entire scrape rather than the offending series. Every name is a
+   compile-time constant, so the panic is a developer-time error.
+
+The decision itself — emit the text exposition format directly rather
+than importing `client_golang` — is unaffected and still holds.

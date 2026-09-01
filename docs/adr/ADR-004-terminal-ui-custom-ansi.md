@@ -119,3 +119,15 @@ implementation suffices.
 - `internal/tui/dashboard.go` — Implementation
 - `internal/tui/dashboard_test.go` — Pure-function unit tests
 - `internal/tui/formatters_test.go` — Format helper tests
+
+## Erratum (added session 266, does not alter the accepted decision)
+
+The consequence **"No automatic resize handling. If the terminal is
+resized smaller than expected, lines wrap"** was addressed in session 264
+on Linux. `internal/tui/width_linux.go` reads the real terminal width via
+the `TIOCGWINSZ` ioctl and the dashboard re-reads it on every render tick,
+so a mid-session resize is picked up without a restart; other platforms
+fall back to the previous fixed width (`width_other.go`). This does not
+introduce terminfo or a dependency, so the decision above is unchanged —
+the ioctl is a direct syscall, and it is the only use of `unsafe` in the
+repository. Tests drive it against a real PTY (`/dev/ptmx`).

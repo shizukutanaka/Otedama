@@ -141,3 +141,22 @@ new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
 - ADR-001 — Non-custodial wallet model
 - CLAUDE.md § "Permitted dependencies"
 - `go.mod` — enforces this decision mechanically
+
+## Erratum 2 (added session 266, does not alter the accepted decision)
+
+The dependency list above names two external modules plus stdlib. The
+binary actually links **three**: `golang.org/x/crypto`, `gopkg.in/yaml.v3`
+and **`golang.org/x/sys`**, the last an indirect dependency pulled in by
+`x/crypto` and genuinely compiled in. `go mod graph` additionally lists
+`x/net`, `x/term`, `x/text` and `check.v1`, which are *not* linked — they
+come from the dependencies' own `go.mod` files. The command that answers
+the question this ADR actually cares about is:
+
+```
+go list -deps ./cmd/otedama | grep -E '^[a-z0-9.-]+\.[a-z]{2,}/' | grep -v Otedama
+```
+
+which returns exactly those three. Documents that quoted "two
+dependencies" (`docs/AUDIT_CHECKLIST.md`, `docs/MIGRATING-FROM-V2.md`,
+`docs/THREAT_MODEL.md`) were corrected in the same session. The policy is
+unchanged; the count in the headline was simply short by one.

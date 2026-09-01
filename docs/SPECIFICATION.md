@@ -158,10 +158,18 @@ buffers partial reads so no plaintext is dropped (session 53).
 
 ## 6. Metrics (`/metrics`, Prometheus text format, no client dependency)
 
-All metrics carry the `otedama_` prefix (omitted below). Metrics registered at
-startup always appear; lazily-created series (marked †) appear only after the
-first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
-`/healthz`, `/readyz`, `/`.
+All product metrics carry the `otedama_` prefix (omitted below). Metrics
+registered at startup always appear; lazily-created series (marked †) appear
+only after the first relevant event, with a bounded label set. HTTP endpoints:
+`/metrics`, `/healthz`, `/readyz`, `/`.
+
+`/metrics` also exposes twelve standard Go runtime series — `go_goroutines`,
+`go_info{version}`, `go_memstats_*`, `go_gc_*` — under the names
+`prometheus/client_golang` uses, so existing Grafana panels work unmodified.
+They are produced by `metrics.RuntimeCollector()`, documented in that
+package's godoc, and are outside the `otedama_` catalogue below (and outside
+the CI check that enforces it). They were registered by nothing until session
+266; see ADR-005's erratum.
 
 **Shares & rejects**
 

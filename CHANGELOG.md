@@ -104,6 +104,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - 「アルファ段階の既知の制約」の要約を、利用前に効く3点（`stratum+v2://` は平文／既定プールが
   解決しない／GPU・ASIC は採掘に使えない）に差し替え。
 
+**ADR 群と、そこから出た3件目の「作ったが配線していない」**
+
+ADR は本リポジトリの規約により変更不可（`docs/adr/README.md`）なので、全て**追記の Erratum** で訂正した。
+
+- **ADR-005 Erratum** — 「Go ランタイムメトリクスは無い」は解消済みのはずだったが、
+  `metrics.RuntimeCollector()` は**自身のテスト以外どこからも登録されていなかった**。
+  つまり `/metrics` に `go_*` 系列が1本も出ていない状態で、RESEARCH_IMPROVEMENTS #21 は
+  「✅ 実装済み」と記録していた。`cmd/otedama` の `startHTTPServer` で**プロセスに1回だけ**登録
+  （`engine.Run` ではない理由: `RegisterCollector` は無条件 append で、同一レジストリに対する
+  2回目の Run が全系列を二重化し Prometheus がスクレイプ全体を破棄するため）。
+  テストは登録呼び出しではなく **exposition 出力**を検査するので、配線を外すと落ちる（実証済み）。
+  実バイナリで確認: `go_goroutines 21` / `go_info{version="go1.24.7"} 1` を含む12系列が出力される。
+  「作って、テストして、配線していない」は本リポジトリで**3例目**（§2 Noise、§16 パスフレーズ更新に続く）。
+  同 Erratum でラベル名検証の追加（`isValidLabelName`）も反映。
+- **ADR-004 Erratum** — 「端末リサイズに追従しない」は session 264 に Linux で解消済み
+  （`TIOCGWINSZ`、レンダリング毎に再取得）。
+- **ADR-003 Erratum 2** — 依存は2つではなく**3つ**（`x/sys` が実際にリンクされる）。
+  `go mod graph` が挙げる `x/net`/`x/term`/`x/text`/`check.v1` はリンクされないので、
+  この ADR が問うている数を出すコマンドを明記した。
+- **ADR-011 Erratum 2** — 供給網の緩和策として挙げていた「govulncheck は既に CI にある」が**偽**（§21）。
+  4つ目の依存を受け入れる論拠の一部だったので、依存追加と同じ変更で CI に入れるべきだと明記。
+- **ADR-001 Erratum** — 「Lightning ウォレットは AI 推論収益の受取専用」— その市場は session 264 に
+  削除済みで、**現在ウォレットには収入源が無い**（採掘収益は設定した Bitcoin アドレスに直接支払われる）。
+  プール例示（`demand.sv2.io` 等）も、Otedama がプールを選定しないという事実に合わせて訂正。
+  非カストディの判断自体は無変更。
+
 **残り5文書も読んだ（自分の「全部読んだ」主張が過大だったため）**
 
 CATEGORY_AUDIT に書いた「docs/ の全文書を読了済み」は、書いた時点で5本が未読だった。

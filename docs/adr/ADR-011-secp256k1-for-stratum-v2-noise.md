@@ -160,3 +160,21 @@ bitcoin-core's `examples/ellswift.c` vectors. Also note the "2-level
 PKI server authentication" clause is the concrete missing piece behind
 KNOWN_LIMITATIONS §2's "no code authenticates a responder static key" —
 the message flow, not just the DH primitive, must change.
+
+## Erratum 2 (added session 266, does not alter the accepted decision)
+
+One of this ADR's supply-chain mitigations reads: *"Run `govulncheck` in
+CI against the new dependency (already in the pipeline)."* **It is not in
+the pipeline.** `govulncheck` appears in no workflow under
+`.github/workflows/`, and neither does `staticcheck`; nor is any GitHub
+Action pinned by SHA, nor any release signed — see
+`docs/KNOWN_LIMITATIONS.md` §21, which was opened in the same session
+after the commands in `docs/AUDIT_CHECKLIST.md` were actually run rather
+than assumed.
+
+This matters specifically for this ADR because the mitigation was offered
+as part of the argument for accepting a fourth dependency. The argument
+still holds — a hand-rolled secp256k1 remains the worse option — but the
+mitigation has to be *built* alongside the dependency, not assumed to be
+waiting for it. Whoever implements the follow-up work should treat
+"add `govulncheck ./...` to CI" as part of the same change.

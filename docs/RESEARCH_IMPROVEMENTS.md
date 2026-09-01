@@ -736,7 +736,19 @@ endpoint against current vendor documentation. Tags as before
     (Cat 9 #3); joining them is a small extension to the hand-rolled
     exposition writer (no client_golang dep — keeps ADR-003/005).
 21. ✅ **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
-    metrics.** `CollectFunc`/`RegisterCollector` hook added to `internal/metrics`
+    metrics.** — **but the collector was not registered until session 266.**
+    It was written, unit-tested, and then called by nothing outside its own
+    tests, so `/metrics` served no `go_*` series at all while this entry
+    recorded the work as done. `cmd/otedama`'s `startHTTPServer` now
+    registers it once per process (once, not in `engine.Run`, because
+    `RegisterCollector` appends unconditionally and a duplicate registration
+    would double every series and make Prometheus reject the scrape), and
+    the test asserts on exposition output rather than on the call. Written
+    and tested is not shipped; this is the third instance of that pattern
+    found in this repository, after the Noise handshake (§2) and
+    `wallet change-passphrase` (§16). Original entry follows.
+
+    `CollectFunc`/`RegisterCollector` hook added to `internal/metrics`
     registry; `RuntimeCollector()` emits 12 standard `go_*` metrics
     (`go_goroutines`, `go_info{version}`, `go_memstats_*`, `go_gc_*`) using only
     stdlib `runtime` — no new dependency (ADR-003/005 preserved). Names match

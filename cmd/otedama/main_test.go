@@ -632,6 +632,23 @@ func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
 	if !strings.Contains(out.String(), "http:") {
 		t.Errorf("startHTTPServer: expected log line; got %q", out.String())
 	}
+
+	// The registry must carry the Go runtime collector. It existed, was unit
+	// tested, and was registered by nothing outside those tests, so /metrics
+	// served no go_* series at all while the docs said it did — the same
+	// "built, verified, unreachable" shape as the Noise handshake. Asserting
+	// on the exposition output rather than on a registration call means the
+	// test fails if the wiring is removed *or* if the collector stops
+	// producing.
+	var exposition bytes.Buffer
+	if err := reg.WriteText(&exposition); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	for _, want := range []string{"go_goroutines", "go_info", "go_memstats_alloc_bytes"} {
+		if !strings.Contains(exposition.String(), want) {
+			t.Errorf("/metrics registry is missing %q; Go runtime metrics are not wired up", want)
+		}
+	}
 }
 
 // ============================================================================

@@ -346,6 +346,21 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	// Go runtime metrics (go_goroutines, go_memstats_*, go_gc_*). The
+	// collector was written and unit-tested in session 107, and then never
+	// registered by anything outside its own tests — so /metrics carried none
+	// of it, while the docs said it shipped. Registering it here rather than
+	// in engine.Run keeps it exactly once per process: RegisterCollector
+	// appends unconditionally, and engine.Run can legitimately run against a
+	// caller-supplied registry more than once in tests, which would duplicate
+	// every go_* series and make Prometheus reject the whole scrape.
+	//
+	// These names are deliberately the ones prometheus/client_golang emits, so
+	// existing Grafana panels work unmodified. They carry no otedama_ prefix
+	// and so are outside the SPECIFICATION §6 catalogue that
+	// TestMetricsDocumentedInSpecification enforces; they are documented in
+	// internal/metrics/runtime.go's godoc instead.
+	reg.RegisterCollector(metrics.RuntimeCollector())
 	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)

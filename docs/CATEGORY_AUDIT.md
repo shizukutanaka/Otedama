@@ -1195,6 +1195,55 @@ Two more product defects fell out of reading them: `install.sh` documented
 not do what it says and every invocation died on a file the release
 workflow never publishes (§21).
 
+### The ADRs, and a third instance of one pattern
+
+`docs/adr/README.md` makes accepted ADRs immutable, so each correction
+below is an appended erratum, not an edit. Reading them produced one more
+code defect and four factual corrections:
+
+- **ADR-005** listed "no automatic Go runtime metrics" as a known cost of
+  writing the exposition format by hand. Session 107 had answered it:
+  `metrics.RuntimeCollector()` emits the twelve standard `go_*` series
+  under `client_golang`'s own names. **Nothing outside its unit tests ever
+  registered it**, so `/metrics` carried none of them while
+  `RESEARCH_IMPROVEMENTS.md` recorded the work as shipped. Now registered
+  once per process in `startHTTPServer` — deliberately not in
+  `engine.Run`, whose registry can legitimately be reused across calls,
+  which would duplicate every series and make Prometheus discard the whole
+  scrape. The test asserts on exposition output rather than on the
+  registration call, and was checked by removing the wiring. Confirmed on
+  the real binary: `go_goroutines 21`, `go_info{version="go1.24.7"} 1`.
+
+  **This is the third time this repository has held code that was
+  written, tested, and reachable by nothing**: the Noise NX handshake
+  (§2), `wallet change-passphrase` before session 264 (§16), and now the
+  runtime collector. Unit tests prove a function works; they say nothing
+  about whether the product calls it. Every one of the three was found by
+  reading a document's claim and then looking for the call site — which
+  is worth naming as a technique, because a test suite at 91%+ coverage
+  reported all three as covered.
+
+- **ADR-001** — the Lightning wallet's stated purpose ("receiving
+  small-value AI-inference earnings") describes a market deleted in
+  session 264, so the wallet currently has no earning source at all;
+  mining income goes straight to the configured address. The
+  non-custodial decision is untouched.
+- **ADR-003** — the headline dependency count is short by one: `x/sys` is
+  genuinely linked. The erratum records the command that answers the
+  question the ADR is actually asking.
+- **ADR-004** — "no automatic resize handling" was fixed on Linux in
+  session 264.
+- **ADR-011** — offered "govulncheck already runs in CI" as a
+  supply-chain mitigation for accepting a fourth dependency. It does not
+  run anywhere (§21), which makes it work to be built alongside that
+  dependency rather than a safety net waiting for it.
+
+ADR-002 ("Stratum V2 only", contradicted by the V1 support that shipped)
+needed nothing: ADR-006 already records the change and the index already
+marks 002 as partially superseded. ADR-011's ElligatorSwift erratum — one
+of the improvements this audit listed as outstanding last session — turns
+out to have been recorded in session 251 already.
+
 The falsification test is unchanged and now has a demonstrated failure
 mode to go with it: **a claim verified by grep is not verified.** The
 next reader to find a positive statement in this repository that does not

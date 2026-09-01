@@ -100,3 +100,33 @@ does not benefit solo home miners, which is our target audience.
 - SECURITY.md — Threat model details
 - `internal/lightning/wallet.go` — Seed encryption implementation
 - `internal/doctor/` — Bitcoin address validation
+
+## Erratum (added session 266, does not alter the accepted decision)
+
+Two statements in the Decision section describe a product state that no
+longer holds. The decision — Otedama never holds user funds — is
+unaffected and is still enforced by every part of the design.
+
+1. **"Uses Stratum V2 pools that support non-custodial payouts (Braiins
+   pool, demand.sv2.io, etc.)."** Otedama does not select or endorse
+   pools. The user configures them, and the only built-in value is a
+   single fallback endpoint whose host does not currently resolve
+   (`docs/KNOWN_LIMITATIONS.md` §20 — `demand.sv2.io` does not resolve
+   either). Non-custodial payout is a property of the *address* the user
+   supplies, which the pool pays directly; it does not depend on the pool
+   being on any list.
+
+2. **"The Lightning wallet is only for receiving small-value
+   AI-inference earnings (from providers like Akash)."** That market was
+   simulated, could not be converted into income by any code path, and
+   was deleted in session 264 (§1). The wallet therefore has **no earning
+   source today**: it generates and encrypts a BIP-39 seed at rest, and
+   nothing pays into it. Mining income goes directly to the configured
+   Bitcoin address and never touches it. This makes the wallet optional
+   in practice — `--wallet-passphrase` is what creates one — and makes
+   `otedama wallet verify` (session 264) the main thing you can usefully
+   do with it: confirm the paper backup restores the seed before relying
+   on it later.
+
+Neither correction weakens the custody story; the second narrows what the
+wallet is *for* until a real second market exists.
