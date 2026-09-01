@@ -194,17 +194,35 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "[%s] %s\n", level, text)
 	}
 
+	poolURL := config.DefaultPoolURL
+	if len(cfg.Pools) > 0 {
+		poolURL = cfg.Pools[0].URL
+	} else {
+		// Without this line the startup banner announces the built-in
+		// default exactly the way it announces a pool the user chose, so a
+		// first-run user has no way to tell that nothing was configured —
+		// and the reconnect loop then retries a host that does not resolve
+		// (docs/KNOWN_LIMITATIONS.md §20), backing off to a minute between
+		// attempts, forever. The failure was legible; what was missing was
+		// the fact that a choice had never been made.
+		//
+		// This sits before the --dry-run return on purpose. A dry run
+		// answers "is my configuration going to work", and "you have not
+		// chosen a pool, and the fallback is dead" is the most important
+		// thing that path can say — reporting only "configuration is valid"
+		// would be true of the schema and misleading about the outcome.
+		plain("warn", "no pool configured; falling back to the built-in default. "+
+			"That endpoint does not currently resolve, so mining will not start: "+
+			"set pools: in config.yaml to an endpoint from your pool's own "+
+			"documentation. Run `otedama doctor` for the full diagnosis.")
+	}
+
 	if f.dryRun {
 		fmt.Fprintln(stdout, "dry-run: configuration is valid; would start run")
 		return exitOK
 	}
 
 	logln("info", messages.StartupReady, nil)
-
-	poolURL := config.DefaultPoolURL
-	if len(cfg.Pools) > 0 {
-		poolURL = cfg.Pools[0].URL
-	}
 	logln("info", messages.StartupPoolConnecting, map[string]any{"url": poolURL})
 
 	ctx, cancel := signal.NotifyContext(

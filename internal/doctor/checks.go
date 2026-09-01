@@ -331,10 +331,11 @@ func checkPoolReachability(cfg config.Config) Check {
 		Name: "Pool reachability",
 		Run: func(ctx context.Context) Result {
 			var url string
-			if len(cfg.Pools) > 0 {
-				url = cfg.Pools[0].URL
-			} else {
+			usingDefault := len(cfg.Pools) == 0
+			if usingDefault {
 				url = config.DefaultPoolURL
+			} else {
+				url = cfg.Pools[0].URL
 			}
 			host := stripScheme(url)
 			if host == "" {
@@ -348,10 +349,26 @@ func checkPoolReachability(cfg config.Config) Check {
 			start := time.Now()
 			conn, err := d.DialContext(ctx, "tcp", host)
 			if err != nil {
+				// A failure against a pool the user chose and a failure
+				// against the built-in default are different problems with
+				// different fixes, and the generic advice ("check your
+				// internet connection") sends the second one down the wrong
+				// path. The default host does not resolve — measured in
+				// session 266 against public resolvers, with four control
+				// hostnames answering in the same run — so for a user who
+				// configured nothing, the network is not the suspect and
+				// retrying will not help. Say what to do instead.
+				fix := "check internet connection or try a different pool"
+				if usingDefault {
+					fix = "configure a pool: no pools are set, so this dialled the " +
+						"built-in default, which does not currently resolve. Add a " +
+						"pools: entry to config.yaml with an endpoint from your " +
+						"pool's own documentation (see docs/KNOWN_LIMITATIONS.md §20)"
+				}
 				return Result{
 					Status: StatusFail,
 					Detail: fmt.Sprintf("%s: %v", host, err),
-					Fix:    "check internet connection or try a different pool",
+					Fix:    fix,
 				}
 			}
 			_ = conn.Close()

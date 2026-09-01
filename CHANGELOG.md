@@ -71,12 +71,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   バイナリに入らない）と `--description "P2P Mining Pool Software"`（Otedama はプールではない）を
   §13 の手術リストに追加。
 
+**§20 に対する製品側の手当て（既定値そのものは変更していない）**
+
+既定プールを差し替えるか撤廃するかは §20 に残る設計判断だが、**どちらの失敗経路も
+利用者に推測させない**状態にした。
+
+- `otedama run` はプール未設定時に、他の何よりも先に（`--dry-run` でも）警告する:
+  「no pool configured; falling back to the built-in default. That endpoint does not
+  currently resolve, so mining will not start: set `pools:` in config.yaml …」。
+  従来は起動バナーが**ユーザーが選んだプールと全く同じ書式**で既定値を表示し、その後
+  再接続ループが死んだホストを最大64秒間隔で無限に叩き続けていた。
+- `otedama doctor` の "Pool reachability" 失敗時の Fix を二分岐にした。ユーザーが選んだプールが
+  落ちている場合は従来通り「check internet connection or try a different pool」、
+  既定プールの場合は「configure a pool: no pools are set …」。従来は共通メッセージだったため、
+  回線が正常なユーザーに回線を疑わせていた。両分岐はテストで固定（片方に戻すとテストが落ちる）。
+- 受け入れテスト `TestZeroConfigurationStartup`（旗艦コマンドの受け入れ試験）は、
+  「dry-run」の文字列があれば通る状態だった。**採掘できない構成でも合格していた**ので、
+  未設定プールの警告を要求するよう強化した。
+
 **新設**: `docs/KNOWN_LIMITATIONS.md` §21（主張されていたが存在しないサプライチェーン統制:
 SHA ピン留め・cosign・govulncheck）、§22（採掘スレッド数を製品内から制御できない。回避策は実測済み。
 フラグ新設は CLAUDE.md の七段階に従い Issue 起点とするため本セッションでは行わない）。
 
-**コード挙動の変更なし**（変更は doc コメント2箇所と設定例のプレースホルダのみ。
-全24パッケージ build/vet/test green、race clean）。
+**挙動の変更は診断メッセージのみ**（既定値・接続動作・暗号処理はいずれも不変）。
+全24パッケージ build/vet/test green、`-race` でも24 green。新規テストは
+「修正を戻すと落ちる」ことを確認済み。
 
 ### Docs (session 265 — マスク思考法×ソクラテス問答法: **長所・短所・改善点を証拠付きで総括し、「完成」の定義と充足を明文化**)
 

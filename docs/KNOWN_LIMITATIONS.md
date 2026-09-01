@@ -228,6 +228,25 @@ access. Its "Pool reachability" check dials the configured pool — the
 default one when you have configured none — and reports the result. It
 takes one command to reproduce the table above.
 
+**What the product now says about it (session 266).** The default was not
+changed — that is the decision below — but neither failure path leaves a
+user guessing any more:
+
+- `otedama run` with no pool configured prints, before it does anything
+  else (including on `--dry-run`): *"no pool configured; falling back to
+  the built-in default. That endpoint does not currently resolve, so
+  mining will not start: set `pools:` in config.yaml …"*. Previously the
+  startup banner announced the built-in default in exactly the same words
+  it used for a pool the user had chosen, and the reconnect loop then
+  retried a dead host forever at up to 64-second intervals.
+- `otedama doctor`'s "Pool reachability" failure now gives different
+  advice for the two cases. A pool you chose that is down still gets
+  "check internet connection or try a different pool"; the built-in
+  default gets "configure a pool: no pools are set …". The old shared
+  message told a user whose connection was fine to go check their
+  connection. Both branches are pinned by tests, so collapsing them back
+  into one string fails the suite.
+
 **Workaround:** configure a pool you have chosen and verified, ideally a
 `stratum+v2tls://` or `stratum+tls://` endpoint so the payout address is
 not exposed:

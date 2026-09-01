@@ -567,16 +567,59 @@ func TestIsLikelyBitcoinAddress_Bech32InvalidCharInValidLengthAddress(t *testing
 
 func TestCheckPoolReachability_NoPoolsUsesDefault(t *testing.T) {
 	// With an empty Pools slice the check falls back to config.DefaultPoolURL.
-	// In a network-isolated test environment the dial will fail, but the
-	// important thing is that the default-URL branch was taken (coverage).
+	//
+	// This test used to accept either Pass or Fail and assert nothing else,
+	// which made it unfalsifiable: no change to the check could break it.
+	// What matters for a user who has configured nothing is the *advice*.
+	// The built-in default does not resolve (docs/KNOWN_LIMITATIONS.md §20),
+	// so "check your internet connection" is the wrong instruction — their
+	// connection is fine and no amount of retrying will help. The fix has to
+	// tell them to configure a pool.
 	cfg := config.Config{} // no Pools
 	c := checkPoolReachability(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	r := c.Run(ctx)
-	// Fail or Pass are both valid depending on network; Fail is expected in CI.
-	if r.Status != StatusFail && r.Status != StatusPass {
-		t.Errorf("no-pools checkPoolReachability status = %v, want Fail or Pass", r.Status)
+
+	if r.Status == StatusPass {
+		// The default endpoint answered. That contradicts §20 and is worth
+		// knowing, but it is not this test's failure.
+		t.Skip("built-in default pool is reachable from here; see KNOWN_LIMITATIONS §20")
+	}
+	if r.Status != StatusFail {
+		t.Fatalf("no-pools reachability status = %v, want Fail or Pass", r.Status)
+	}
+	if !strings.Contains(r.Fix, "configure a pool") {
+		t.Errorf("no-pools failure must tell the user to configure a pool, got fix: %q", r.Fix)
+	}
+	if strings.Contains(r.Fix, "check internet connection") {
+		t.Errorf("no-pools failure must not blame the network: %q", r.Fix)
+	}
+}
+
+func TestCheckPoolReachability_ConfiguredPoolKeepsGenericFix(t *testing.T) {
+	// The guard for the branch above: a pool the user chose that happens to
+	// be down is an ordinary connectivity problem, and must NOT be answered
+	// with "no pools are set". If someone later simplifies the two Fix
+	// strings into one, exactly one of these two tests fails.
+	cfg := config.Config{
+		Pools: []config.PoolConfig{
+			// RFC 5737 TEST-NET-1 — non-routable, no DNS lookup, fails fast.
+			{URL: "stratum+v2://192.0.2.1:9999"},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	r := checkPoolReachability(cfg).Run(ctx)
+
+	if r.Status != StatusFail {
+		t.Fatalf("unroutable configured pool status = %v, want Fail", r.Status)
+	}
+	if strings.Contains(r.Fix, "no pools are set") {
+		t.Errorf("configured-pool failure must not claim no pools are set: %q", r.Fix)
+	}
+	if !strings.Contains(r.Fix, "check internet connection") {
+		t.Errorf("configured-pool failure should keep the connectivity advice: %q", r.Fix)
 	}
 }
 

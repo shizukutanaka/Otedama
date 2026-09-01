@@ -193,6 +193,38 @@ func TestZeroConfigurationStartup(t *testing.T) {
 	if !strings.Contains(out.String(), "dry-run") {
 		t.Errorf("dry-run output missing text:\n%s", out.String())
 	}
+	// The zero-configuration path has no pool, so it falls back to
+	// config.DefaultPoolURL — an endpoint that does not resolve
+	// (docs/KNOWN_LIMITATIONS.md §20). "configuration is valid" is true of
+	// the schema and misleading about the outcome, so the same run must also
+	// say that no pool was chosen. Without this assertion the acceptance test
+	// for the flagship command passes while that command cannot mine.
+	if !strings.Contains(out.String(), "no pool configured") {
+		t.Errorf("zero-config run must warn that no pool is configured:\n%s", out.String())
+	}
+}
+
+// TestRun_ConfiguredPoolDoesNotWarnAboutMissingPool guards the other half:
+// the warning above is about an absent choice, not about pools in general,
+// so a user who configured one must never see it.
+func TestRun_ConfiguredPoolDoesNotWarnAboutMissingPool(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	// RFC 5737 TEST-NET-1: syntactically valid, never dialled on this path.
+	body := "bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\n" +
+		"pools:\n  - url: \"stratum+v2tls://192.0.2.1:3336\"\n"
+	if e := os.WriteFile(cfgPath, []byte(body), 0600); e != nil {
+		t.Fatalf("write config: %v", e)
+	}
+
+	var out, err bytes.Buffer
+	code := run([]string{"run", "--config", cfgPath, "--dry-run"}, &out, &err)
+	if code != exitOK {
+		t.Fatalf("dry-run with a configured pool failed code=%d err=%s", code, err.String())
+	}
+	if strings.Contains(out.String(), "no pool configured") {
+		t.Errorf("configured pool must not trigger the missing-pool warning:\n%s", out.String())
+	}
 }
 
 func TestRun_WalletPassphraseFlag(t *testing.T) {
