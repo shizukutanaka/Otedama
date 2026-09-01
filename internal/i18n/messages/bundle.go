@@ -1,6 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Otedama contributors. See NOTICE for details.
 
+// Package messages holds Otedama's built-in message catalogs.
+//
+// # What "10 languages" covers, exactly (stated session 265)
+//
+// The catalogs span ten languages (en, ja, zh, ko, es, fr, de, pt, ru, ar)
+// and fifteen message IDs — the startup, error, and status lines that
+// engine startup renders through cmd/otedama's logln (run.go). That is the
+// whole surface: the TUI dashboard, `otedama doctor`'s reports, the
+// `wallet` subcommands, and the structured logs are English-only today.
+// "Supports 10 languages" is true of this catalog and implies nothing
+// beyond it.
+//
+// What the tests enforce is likewise exactly this much: every language
+// covers every English ID, placeholders match, templates parse, and no
+// message is empty (messages_test.go). Whether a translation reads well to
+// a native speaker — CLAUDE.md's "human-reviewed" bar — is not something a
+// test in this repository can establish, so no test claims to.
+//
+// Widening the surface (doctor, wallet, TUI) means adding IDs here and
+// routing those outputs through the bundle; adding a language means one
+// more catalog function and the completeness tests take care of the rest.
+// Machine-filling either direction would dilute real translations, which
+// is the same defect as coverage padding and is treated the same way.
 package messages
 
 import (

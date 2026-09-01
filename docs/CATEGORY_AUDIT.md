@@ -995,3 +995,96 @@ had not been earned. The engine, meanwhile, was honest throughout:
 encryption" before dialing. Doctor and the runtime disagreed, and the tool
 whose entire job is to tell the user the truth about their setup was the one
 that was wrong.
+
+---
+
+## Session 265 — 長所・短所・改善点の総括（マスク思考法 × ソクラテス問答法）
+
+Session 264 applied Musk's algorithm end to end. This session layers the
+Socratic half on top — **for every positive claim, ask what evidence earns
+it** — sweeps the areas no session had examined, and writes down the
+resulting assessment with the evidence attached. The sweep's own result is
+part of the assessment: in the remaining unaudited areas, the questioning
+ended in confirmation, not refutation.
+
+### What the final sweep established (read-only, this session)
+
+- **i18n earns its claim, within a scope now stated.** Ten languages exist
+  as real, hand-written translations of 15 message IDs
+  (`internal/i18n/messages/`), with tests enforcing completeness,
+  placeholder parity, template parsing, non-empty messages, and the
+  ten-language count (`messages_test.go:53-218`). The consuming surface is
+  engine startup via `cmd/otedama/run.go` logln only; the TUI, doctor, and
+  wallet subcommands are English-only. The package doc now says exactly
+  this, including what the tests can and cannot establish ("human-reviewed"
+  is not machine-checkable and no test claims it).
+- **arbitration meets CLAUDE.md's property-test requirement**: five
+  property tests over the allocation invariants
+  (`internal/arbitration/engine_test.go:749,786,810,882,1276`).
+- **The four never-audited documents are clean**: TROUBLESHOOTING,
+  AUDIT_CHECKLIST, solo-operations, SUSTAINABILITY carry zero references to
+  the deleted simulated market, the fixed 80-column TUI, or the
+  once-missing wallet subcommand.
+
+### 長所 — strengths, each with the evidence that earns it
+
+| Strength | Evidence |
+|---|---|
+| The non-custodial promise is exercisable end to end: create → back up → **verify** → **rotate**, with the seed provably unchanged across rotation | `otedama wallet verify` / `change-passphrase` (session 264); real-binary round-trips with fingerprint held constant; `internal/lightning` untouched |
+| Protocol paths are pinned to primary sources, not to their own docs | SV1 against cpuminer/node-stratum-pool (session 255), SV2 wire format against sv2-spec (256), BIP-39 against all 16 official vectors (257), bech32/bech32m against the full BIP-350 set including deliberate deviations (258) |
+| The mining hot path is measured, then optimized: 2.28× at 4 threads, linear thread scaling | midstate via crypto/sha256's own marshalable state + per-batch counting; end-to-end worker benchmarks, before/after in BENCHMARKS.md (session 264) |
+| The self-diagnostic's positive claims are now backed by the checks behind them | encryption classified by real dial sites; "writable" established by writing; both non-vacuously tested (session 264, third pass) |
+| Honest telemetry: the headline earnings figure has one source (the actual allocation), `otedama_up` distinguishes a stall from curtailment, and the metric catalogue is CI-enforced | `tui.earningsLine` (session 264); `TestMetricsDocumentedInSpecification`, which even guards the `up` ⊂ `uptime_seconds` false match |
+| Failure honesty as a habit: the runtime says "plaintext, no transport encryption" out loud, doctor warns on the default pool, and limitations are disclosed with reasons and targets | `engine.runSession` warn log; KNOWN_LIMITATIONS throughout |
+| i18n and arbitration hold up under questioning | this session's sweep, above |
+
+### 短所 — weaknesses, each tied to its disclosure and blocker
+
+| Weakness | Where disclosed | Blocker |
+|---|---|---|
+| No spec-compliant Stratum V2 Noise encryption; `stratum+v2://` is plaintext | §2 | No audited secp256k1+ElligatorSwift Go implementation exists anywhere; ADR-011 |
+| GPUs are detected but can do no work | §4 | CUDA/ROCm/Vulkan dispatch vs. the no-CGO policy; v4.0-scoped |
+| "lightning" stores an encrypted seed; it runs no Lightning node | §6 | LDK integration, scoped |
+| ASICs — the hardware that actually mines Bitcoin — are not detected | §8 | ~150h across five firmware dialects, ADR-008 |
+| Three surviving CI workflows still carry dead jobs and pre-1.24 Go pins | §13 | The GitHub App can delete workflow files but not modify them (both directions demonstrated in session 264) |
+| `datum://` is recognised but has no dialer | §14 | ADR-009, planned shape documented |
+| The built-in default pool endpoint is unverified and plaintext | §20 | One `otedama doctor` run on a networked machine settles reachability; the default's design is a maintainer call |
+| i18n covers 15 messages at startup, not the whole UI | `messages/bundle.go` package doc | Content work, deliberately not machine-filled |
+| Scheme knowledge exists in four places; additions can't be cross-checked automatically | Issue #3 | Layering decision; the addition direction is fail-safe (unknown ⇒ warn, tested) |
+
+### 改善点 — ranked, with effort and owner
+
+1. **Run `otedama doctor` once on a networked machine** — settles §20's
+   reachability question same-day. Maintainer, minutes.
+2. **Apply the §13 workflow surgery** (dead jobs + the two `needs:` edits)
+   and lift the Go pins to 1.24.x. Maintainer push; exact steps in §13.
+3. **Decide `go 1.22` → `go 1.24`** — drops the tlsmlkem pin, adopts
+   current security defaults; measured green here (suite + race), evidence
+   in GODEBUG_NOTES.md. Maintainer decision: it changes 14 runtime
+   defaults.
+4. **Decide the default pool's shape** — a TLS endpoint, or explicit
+   choice on the zero-config path. Choosing a TLS host/port from here
+   would mean inventing an endpoint, so this stays a maintainer call.
+5. **Widen i18n to doctor/wallet output** when there is translation
+   capacity; the mechanism is ready (add IDs, route output through the
+   bundle).
+6. **ADR-011 ellswift decision**, unblocking §2 — the only weakness whose
+   blocker is external to this repository.
+
+### 完成宣言 — the completion claim, and its definition
+
+"Complete" here does not mean feature-complete against the four-stream
+product definition; three of the four streams are explicitly future scope.
+The definition used, consistently since session 264:
+
+> **The product does exactly what it claims, and everything it does not do
+> is disclosed with a reason, evidence, and a target.**
+
+Status against that definition: of the twenty recorded limitations,
+thirteen are resolved and one partially; every open item above names its
+blocker, and none of the blockers is "nobody looked". The Socratic sweep
+of the last unexamined areas produced confirmations, not refutations —
+the point at which further questioning stops changing the answer, which
+is as close to "complete" as an honest alpha gets. What would falsify the
+claim: a positive statement in the repo that a reader cannot trace to
+evidence. That is now the standing test for every future change.
