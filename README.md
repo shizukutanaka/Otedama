@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Alpha](https://img.shields.io/badge/Status-Alpha-orange)](CHANGELOG.md)
 
 **遊休計算資源を、非カストディで最大収益化する自律型ソフトウェア層。**
@@ -40,7 +40,12 @@ Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通り�
 
 ### 必要環境 / Requirements
 
-Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
+Go 1.24以上（`go.mod` は `go 1.22` を宣言していますが `godebug tlsmlkem=1` を含み、このキーは
+Go 1.24 で追加されたため、それより古いツールチェーンは `GOTOOLCHAIN` を既定の `auto` にして
+`toolchain go1.24.0` へ自動切替させる必要があります。`GOTOOLCHAIN=local` の古いツールチェーンでは
+`go.mod` の読み込み時点で失敗します）、Linux・macOS・Windows のいずれか
+（FreeBSD 向けにはクロスコンパイルが通ることのみ確認済みで、リリースバイナリは提供しておらず、
+実機テストもしていません）、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
 
 ### インストール / Installation
 
@@ -64,9 +69,25 @@ otedama run --bitcoin-address bc1q...
 otedama run --config /path/to/config.yaml
 ```
 
-初回起動時、Otedamaはローカルハードウェアを自動検出し、設定されたプールへの接続を試みます（プール未設定時は組み込みの既定プール1つにフォールバック——「主要機能」節で述べた通り、これは複数プールの推奨リストではありません）。`--wallet-passphrase` を渡すと初回起動時に Lightning Wallet も自動生成されます（BIP-39シードの暗号化保管のみで、決済処理は行いません）。設定不要で稼働する設計を目指していますが、Bitcoin アドレスの指定だけは省略できません（非カストディ設計のため）。
+> **プールの設定は現時点で必須です。** 組み込みの既定プールのホストは現在 DNS で解決しません
+> （session 266 に実測。`docs/KNOWN_LIMITATIONS.md` §20）。したがって上の一行だけでは採掘は
+> 始まりません——`otedama run` はその旨を起動時に警告し、`otedama doctor` は設定すべき内容を
+> 示します。プールのホスト名・ポート・スキームは、利用するプール自身のドキュメントから取得して
+> `config.yaml` の `pools:` に記載してください（`config.yaml.example` に雛形があります）。
+> 可能なら `stratum+v2tls://` か `stratum+tls://` を選んでください。`stratum+v2://` は平文で、
+> 支払先アドレスがネットワーク上で読み取り・書き換え可能です（§2）。
+>
+> **A pool must be configured.** The built-in default host does not currently resolve (measured in
+> session 266 — see `docs/KNOWN_LIMITATIONS.md` §20), so the one-liner above will not mine on its
+> own: `otedama run` warns about this at startup and `otedama doctor` says what to set. Take the
+> hostname, port and scheme from your pool's own documentation and put them in `pools:` in
+> `config.yaml` (`config.yaml.example` has the shape). Prefer `stratum+v2tls://` or
+> `stratum+tls://` — `stratum+v2://` is plaintext, which exposes your payout address to rewriting
+> in transit (§2).
 
-On first launch, Otedama auto-detects local hardware and attempts to connect to your configured pool(s), falling back to a single built-in default pool if none are configured (not a curated multi-pool list — see "Core Features" above). If you pass `--wallet-passphrase`, a Lightning wallet is generated at first run (this only encrypts and stores a BIP-39 seed at rest; it does not process payments). The product aims for zero-config operation, but the Bitcoin address must always be supplied (this is inherent to the non-custodial design).
+初回起動時、Otedamaはローカルハードウェアを自動検出し、設定されたプールへの接続を試みます（プール未設定時は組み込みの既定プール1つにフォールバックしますが、上記の通りそのホストは解決しません——またこれは複数プールの推奨リストでもありません）。`--wallet-passphrase` を渡すと初回起動時に Lightning Wallet も自動生成されます（BIP-39シードの暗号化保管のみで、決済処理は行いません）。設定不要で稼働する設計を目指していますが、現時点で省略できないのは Bitcoin アドレス（非カストディ設計のため）とプール設定（上記のため）の2つです。
+
+On first launch, Otedama auto-detects local hardware and attempts to connect to your configured pool(s), falling back to a single built-in default pool if none are configured — a fallback whose host does not resolve today, and not a curated multi-pool list either (see "Core Features" above). If you pass `--wallet-passphrase`, a Lightning wallet is generated at first run (this only encrypts and stores a BIP-39 seed at rest; it does not process payments). The product aims for zero-config operation; today two things cannot be omitted — the Bitcoin address (inherent to the non-custodial design) and the pool (for the reason above).
 
 ## コマンド一覧 / Command Reference
 
@@ -84,6 +105,9 @@ otedama <command> [flags]
 | `service uninstall` | サービス登録を解除 / Uninstall the background service |
 | `service status` | サービス状態を表示 / Show background service status |
 | `doctor` | 自己診断チェックを実行 / Run self-diagnostic checks |
+| `wallet verify` | 復元フレーズが実際にこのウォレットを復元するか照合 / Check that a recovery phrase really restores this wallet |
+| `wallet change-passphrase` | ウォレットのパスフレーズを変更 / Rotate the wallet passphrase |
+| `completion` | シェル補完スクリプトを出力 (bash/zsh/fish) / Emit a shell-completion script |
 | `help` | ヘルプを表示 / Print help |
 
 各コマンドの詳細フラグは `otedama <command> --help` で確認できます。
@@ -132,9 +156,9 @@ Otedama v3.0は2026年4月に戦略的リセットを実施した新世代バー
 
 ロードマップの詳細は `ROADMAP.md` を、進捗状況は GitHub Projects を参照してください。
 
-**アルファ段階の既知の制約は [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md) に正直に列挙しています。** GPUでのcompute dispatchが未実装であること、ASICを検出しないこと、Noise NX が暫定的に P-256 を使用していること等、「設計上の意図」と「未実装」の区別を明記しています。利用前に必ず確認してください。
+**アルファ段階の既知の制約は [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md) に正直に列挙しています。** 特に利用前に知っておくべき3点：**`stratum+v2://` は平文です**（Noise NX の実装は存在しますが、どの実接続にも配線されていません。暗号化が必要なら `stratum+v2tls://` を使ってください——§2）、**組み込みの既定プールのホストは現在解決しません**（プール設定が必須。§20）、**GPU は検出のみで採掘には使えず、ASIC は検出されません**（§4・§8）。全22項目で「設計上の意図」と「未実装」を区別しています。
 
-The known limitations of this alpha — including that no GPU compute dispatch exists, that ASIC hardware is not detected, and that the Noise NX handshake temporarily uses P-256 — are listed honestly in [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md). Please read it before relying on Otedama.
+The known limitations of this alpha are listed honestly in [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md). Three are worth knowing before you start: **`stratum+v2://` is plaintext** — the Noise NX handshake exists but is wired into no live connection, so use `stratum+v2tls://` if you need confidentiality (§2); **the built-in default pool host does not resolve**, so configuring a pool is mandatory (§20); and **GPUs are detected but cannot mine, while ASICs are not detected at all** (§4, §8). Please read it before relying on Otedama.
 
 ## コントリビューション / Contributing
 

@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -116,5 +117,32 @@ func TestJoinOr_TwoItemsUsesOr(t *testing.T) {
 	got := joinOr([]string{"bash", "zsh"})
 	if !strings.Contains(got, "bash") || !strings.Contains(got, "zsh") || !strings.Contains(got, "or") {
 		t.Errorf("joinOr([bash,zsh]) = %q, want 'bash or zsh' form", got)
+	}
+}
+
+// TestREADME_DocumentsEveryDispatchedSubcommand extends the same sync rule to
+// the document users actually read first.
+//
+// `wallet` and `completion` were dispatched, completed by all three shells,
+// and covered by the test above — and absent from README's command table for
+// two sessions, because nothing connected the table to the dispatcher. A user
+// reading only the README could not learn that `otedama wallet verify` exists,
+// which is the one command that answers "is my backup any good?".
+//
+// The README is deliberately read from disk rather than embedded: the point is
+// to fail when the file drifts, not when a copy of it does.
+func TestREADME_DocumentsEveryDispatchedSubcommand(t *testing.T) {
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Skip("README.md not found (run from repo root)")
+	}
+	text := string(readme)
+
+	// Same list as the completion test, minus `help` (documented as prose
+	// rather than a table row) — every user-facing command that does work.
+	for _, name := range []string{"run", "version", "config", "service", "doctor", "wallet", "completion"} {
+		if !strings.Contains(text, "`"+name) {
+			t.Errorf("README does not document the %q subcommand", name)
+		}
 	}
 }

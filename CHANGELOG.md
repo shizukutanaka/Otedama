@@ -89,6 +89,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   「dry-run」の文字列があれば通る状態だった。**採掘できない構成でも合格していた**ので、
   未設定プールの警告を要求するよう強化した。
 
+**README の訂正**
+
+- クイックスタートに「**プールの設定は現時点で必須**」を明記（既定プールが解決しないため、
+  `otedama run --bitcoin-address bc1q...` の一行では採掘が始まらない）。TLS スキームを選ぶ理由も併記。
+- 必要環境を「Go 1.22以上」から実状（Go 1.24 以上、または `GOTOOLCHAIN=auto` による自動切替）へ。
+  バッジも 1.24+ に更新。FreeBSD は「クロスコンパイルが通ることのみ確認、リリースバイナリなし、
+  実機テストなし」と明記（`GOOS=freebsd` のビルドは実際に通ることを確認した上での記述）。
+- コマンド表に `wallet verify` / `wallet change-passphrase` / `completion` を追加。
+  **これらは session 264 から動作していたのに README に載っていなかった** — 補完スクリプトと
+  ディスパッチャの同期はテストが強制していたが、README は誰も見ていなかった。
+  `TestREADME_DocumentsEveryDispatchedSubcommand` を追加して同じ規律を README にも適用した
+  （README を実ファイルから読むので、ドリフトした時に落ちる）。
+- 「アルファ段階の既知の制約」の要約を、利用前に効く3点（`stratum+v2://` は平文／既定プールが
+  解決しない／GPU・ASIC は採掘に使えない）に差し替え。
+
 **新設**: `docs/KNOWN_LIMITATIONS.md` §21（主張されていたが存在しないサプライチェーン統制:
 SHA ピン留め・cosign・govulncheck）、§22（採掘スレッド数を製品内から制御できない。回避策は実測済み。
 フラグ新設は CLAUDE.md の七段階に従い Issue 起点とするため本セッションでは行わない）。
