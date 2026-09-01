@@ -1154,6 +1154,21 @@ running the commands those documents told an auditor to run.
 | Release artefacts signed with cosign | `AUDIT_CHECKLIST` item 13, `SUSTAINABILITY` §5 | **No cosign anywhere.** The string does not appear in the repository; `release.yml` uploads unsigned tarballs |
 | `govulncheck` on every PR / weekly | `AUDIT_CHECKLIST` CI-gate summary, `solo-operations` "リスク1" ("週次で自動実行済み") | **Not in any workflow.** Nor is `staticcheck`, which the same summary listed |
 
+**A fourth, found the same way (session 266): the release publishes
+nothing to verify against.** `install.sh` — the one-line installer the
+README leads with — downloads `checksums.txt`, verifies the archive's
+SHA-256 against it, and optionally checks a `cosign` signature over it.
+That script is correct. But `release.yml` uploads only the per-platform
+tarballs: no `checksums.txt`, no `.sig`, no certificate. The script
+downloads `checksums.txt` *before* it consults `--skip-verify` and dies
+on a failed download, so **the documented install command aborts — and
+`--skip-verify` does not rescue it**, because the fatal step happens
+first. The one-liner in `README.md` and `docs/MIGRATING-FROM-V2.md`
+therefore cannot install anything until the release publishes checksums. `docs/THREAT_MODEL.md`
+cited this same script as the mitigation for "malicious code in the
+binary itself". Publishing a checksums file needs no key material and is
+the smallest useful fix.
+
 **Why it matters more than the individual gaps.** Two of the documents
 making these claims cite the March 2025 `tj-actions/changed-files`
 compromise as the reason SHA pinning is mandatory — and then assert the

@@ -174,9 +174,11 @@ tj-actions 事件そのものに対して無防備なままだった。詳細と
 - SECURITY.md: **Project Zero 90+30 model** (90日default + 30日grace + active exploitationで7日)、GitHub Private Vulnerability Reporting で受付。
 - LEGAL.md: OFAC/EAR 自己compliance期待を文書化。
 - 商標 free search と ドメイン確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
-  （**本リポジトリからは検証できない事項**なので、実施済みか否かをここでは主張しない。
-  以前は `otedama.org`/`otedama.dev` を「確保」と書いていたが、それを裏づける成果物は
-  リポジトリに無い。）
+  （以前は `otedama.org`/`otedama.dev` を「確保」と書いていた。session 266 に DNS を引くと
+  **`otedama.dev` は解決せず**、`otedama.org` は解決するが**それが本プロジェクトのものかは
+  リポジトリからは確認できない**。また `install.sh` の使用例が指していた `otedama.io` も
+  解決しなかったため、GitHub の raw URL に差し替えた。ドメイン保有はリポジトリ内の成果物では
+  裏づけられない種類の主張なので、以後ここでは実施済みと書かない。）
 
 **実装状況（session 266 で訂正）:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は
 CONTRIBUTING.md にあり。**SECURITY.md は既に存在する**（v3.1.0 スコープと書いていたのは誤り）。

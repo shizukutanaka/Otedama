@@ -1162,10 +1162,38 @@ been checked by a method too weak to falsify it.
 
 Restated for session 266: **twenty-two recorded limitations, thirteen
 resolved and one partially; every open item names its blocker; and every
-document in `docs/` has now been read in full at least once against the
-implementation, not grepped.** Two new entries (§21 supply-chain controls
-that were claimed but absent, §22 no thread-count control) exist because
-reading produced them.
+`.md` file in `docs/`, plus `README.md` and `install.sh`, has now been
+read end to end in this session against the implementation.** Two new
+entries (§21 supply-chain controls that were claimed but absent, §22 no
+thread-count control) exist because reading produced them.
+
+**That sentence was itself over-claimed when first written**, and is
+recorded here rather than quietly fixed. The first draft said every
+document in `docs/` "has now been read in full at least once" — at the
+time, five of the fourteen were still unread, and the very next one opened
+(`architecture.md`) said Otedama integrates the Stratum Reference
+Implementation's Go bindings "to avoid a self-implementation", when every
+line of Stratum in this repository is self-implemented and
+`SUSTAINABILITY.md` §2 records the decision that made it so. An auditor
+who believed that sentence would not have audited `internal/stratum` at
+all. The remaining four were then read, and produced the corrections
+below.
+
+**What the last five documents contained**
+
+| Document | Corrected |
+|---|---|
+| `architecture.md` | Claimed twice (connector layer, technology rationale) that Stratum comes from SRI Go bindings rather than this repository, and cited "SRI, LDK and BOINC Go bindings are available" as a reason Go was chosen — none of the three is used or present in `go.mod`. Its session-243 disclaimer box listed six divergences and covered none of these, nor the plugin framework, nor `pkg/` paths CLAUDE.md forbids |
+| `SPECIFICATION.md` | Command table omitted `wallet`; `pools[].url` default described as "built-in recommendations"; §7 still listed passphrase rotation as an open gap two sessions after it shipped; Noise described as "optional encryption" rather than unreachable |
+| `MIGRATING-FROM-V2.md` | Offered two reasons to migrate that v3 does not deliver (Noise encryption on every connection; routing GPUs to AI inference) and one reason *not* to migrate that was false (no Stratum V1 support — v3 has it). Claimed SHA-pinned actions, nightly fuzz and cosign signing; described config fields (`pools[].priority`, a `workers[]` list) that do not exist |
+| `THREAT_MODEL.md` | The most consequential of the session: its Spoofing mitigation said the Noise NX handshake authenticates the pool and that downgrade attacks are "structurally impossible" because V1 is unsupported. Both halves false, on the document auditors read to decide what to test. Also: scrypt N understated 4×, a nightly fuzz job that does not exist, SHA-pinning and `govulncheck` that do not exist, and cosign-signed releases that do not exist |
+| `RESEARCH_IMPROVEMENTS.md` | Well-disciplined on sourcing (it tags every citation FETCHED or SNIPPET), but its status markers had drifted: engine→poolproto wiring still "planned" 175 sessions after shipping, a ✅ on "gitleaks in CI" for a tool that is not in the repository, a duplication item about a file deleted in session 264, and a "highest-leverage next actions" list of five items where four were done or void |
+
+Two more product defects fell out of reading them: `install.sh` documented
+`https://otedama.io/install.sh`, a host that does not resolve, and fetched
+`checksums.txt` **before** consulting `--skip-verify`, so the flag could
+not do what it says and every invocation died on a file the release
+workflow never publishes (§21).
 
 The falsification test is unchanged and now has a demonstrated failure
 mode to go with it: **a claim verified by grep is not verified.** The

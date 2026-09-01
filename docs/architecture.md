@@ -13,7 +13,10 @@ This document provides a detailed technical architecture of Otedama v3.0, explai
 > - HALには`asic.Driver`・`cuda.Driver`・`rocm.Driver`・`cpu.Driver`という個別ドライバは存在しない。実際は`GPULinuxDriver`（Linux sysfs DRM検出のみ、コンピュートディスパッチなし）と`internal/engine`内の`cpuDriver`のみ。ASICドライバは存在しない。
 > - `internal/lightning/`はBIP-39シードの生成・暗号化保管のみを提供する。LDK統合、チャネル管理、自動決済、LSP連携は実装されていない。
 > - `internal/observability/`というパッケージは存在しない。メトリクス・ログはそれぞれ`internal/metrics/`・`internal/logger/`・`internal/httpserver/`に分散しており、分散トレーシング（OpenTelemetry）は実装されていない。
-> - gRPC/RESTの「API層」は存在しない。外部からの制御は`internal/httpserver/`が提供する`/healthz`・`/readyz`・`/metrics`のみ。
+> - gRPC/RESTの「API層」は存在しない。外部からの制御は`internal/httpserver/`が提供する`/healthz`・`/readyz`・`/metrics`のみ。`internal/api/`・`internal/auth/`・`pkg/api/`・`pkg/plugin/`はいずれも存在せず、`pkg/`は`CLAUDE.md`が作成を禁じている。
+> - **Stratumは自前実装である（session 266 で追記）。** 本書の「収益源コネクタ層」と「技術選択の根拠」は、Stratum Reference Implementation（SRI）のGoバインディングを統合利用し自前実装を避ける、と繰り返し述べていた。**実際には逆の判断が採られている**：`internal/stratum/`（フレーム・メッセージ・Noise）と`internal/poolproto/stratumv1|stratumv2/`はすべて自前のGo実装で、外部Stratumライブラリへの依存は`go.mod`に無い。`docs/SUSTAINABILITY.md` §2がその根拠を記録している——production品質のGo実装は存在せず、SRI（Rust）をcgo/FFIで抱えるとpure-Goクロスコンパイルを失うため、Go nativeで書く、という判断。監査上これは重要な差分である：Stratumのパース経路は**このリポジトリの監査対象**であって、上流ライブラリの信頼で済ませられる領域ではない。
+> - プラグインフレームワーク（`internal/plugin/`）は存在しない。共有ライブラリの動的ロードもWASMも実装されておらず、`README.md`もプラグインアーキテクチャを未実装として挙げている。
+> - LDKは統合されていない（`go.mod`にも無い）。「技術選択の根拠」がLDK採用の理由を述べているのは目標であって現状ではない。
 >
 > **On this document's status (added session 243):** the description below is a target architecture that substantially exceeds what v3.0.0-alpha.1 actually implements. `CLAUDE.md`'s architecture map and `docs/KNOWN_LIMITATIONS.md` are authoritative for current-state scope. Key divergences: the package is `internal/provider/` (singular), not `internal/providers/`, with no `mining/`/`ai/`/`render/`/`scientific/` subpackages; only one revenue stream is implemented (real Stratum V2/V1 Bitcoin mining; the simulated-price AI-inference quote was deleted in session 264), while distributed rendering and BOINC-style scientific computing are explicitly v4.0-scoped in `CLAUDE.md` and have zero code; HAL has no `asic.Driver`/`cuda.Driver`/`rocm.Driver`/`cpu.Driver` — only `GPULinuxDriver` (Linux sysfs GPU detection, no compute dispatch) and an internal `cpuDriver`, with no ASIC driver at all; `internal/lightning/` only generates and stores an encrypted BIP-39 seed (no LDK, no channels, no automated payments); there is no `internal/observability/` package (metrics/logging live in `internal/metrics/`, `internal/logger/`, `internal/httpserver/`, and there is no distributed tracing); and there is no gRPC/REST API layer — external control is limited to `internal/httpserver/`'s `/healthz`, `/readyz`, and `/metrics`.
 
@@ -41,7 +44,7 @@ HALの設計で特に注意を要するのは、同一物理デバイスの複�
 
 収益源コネクタ層は、外部サービスとの通信を担う四系統のアダプタで構成されます。各アダプタは`internal/providers/`配下の独立したパッケージとして実装され、共通の`Provider`インターフェースに準拠します。`Provider`インターフェースは`Connect(context.Context) error`、`ExpectedYield(HardwareProfile) (YieldEstimate, error)`、`Submit(Work, Result) (Receipt, error)`、`Disconnect() error`のメソッドを持ちます。
 
-ビットコイン採掘プロバイダ（`providers/mining/`）はStratum V2プロトコルを主軸に実装されます。Stratum Reference Implementation（SRI）のGoバインディングを統合利用し、自前実装を避けることでセキュリティリスクとメンテナンス負担を削減します。Job Negotiation、Template Negotiation、Encrypted Stratumの各サブプロトコルに対応し、Braiins Pool、DEMAND、OCEAN、Luxor、F2Pool、ViaBTCへの接続を初期サポートします。
+ビットコイン採掘プロバイダはStratum V2プロトコルを主軸に実装されます。**プロトコル実装は自前のGo実装です**（session 266 で訂正。以前ここには「SRIのGoバインディングを統合利用し、自前実装を避ける」と書かれていましたが、採られた判断は逆で、`internal/stratum/` と `internal/poolproto/stratumv1|stratumv2/` がすべて自前実装です。理由は `docs/SUSTAINABILITY.md` §2 と ADR-003 を参照）。Job Negotiation と Template Negotiation は未実装で v3.6 スコープ（§14）、Encrypted Stratum（Noise NX）は実装済みだがどの実接続にも配線されていません（§2）。接続先はユーザーが設定します——特定プールへの「初期サポート」という概念はなく、組み込みの既定値は1つだけです（§20）。
 
 AI推論プロバイダは未実装です（本節は設計意図の記述であり、現状の記述ではありません）。統合先の候補は`internal/provider`のパッケージdocに記録した基準——ユーザーがプロバイダ側であり、支払いが非カストディで、価格が注文ごとに発見される市場——で選定します。この基準によりRender Network（RNDRトークンによる中央仲介）とio.net（中央価格決定）は対象外です。以前ここには「Strawberry API（並行開発中のプロジェクト）を主軸として統合」と書かれていましたが、そのようなAPIは実在せず、`CLAUDE.md`が禁じる「存在しないAPIの記載」に該当したため削除しました（session 264）。
 
@@ -93,11 +96,11 @@ Otedamaの主要なデータフローは三種類です。第一は**ワーク�
 
 ## 技術選択の根拠 / Technology Choice Rationale
 
-Goを主要言語として選択した理由は四つです。第一に、並行処理の記述が明示的で、Otedamaのような多数のゴルーチンを扱うシステムに適しています。第二に、クロスプラットフォームの静的バイナリ生成が容易で、ユーザーへの配布が単純化されます。第三に、Stratum Reference Implementation、LDK、BOINC等の主要依存ライブラリのGoバインディングが入手可能です。第四に、強い型付けとシンプルな文法により、コミュニティからの貢献の品質が一定以上に保たれやすくなります。
+Goを主要言語として選択した理由は四つです。第一に、並行処理の記述が明示的で、Otedamaのような多数のゴルーチンを扱うシステムに適しています。第二に、クロスプラットフォームの静的バイナリ生成が容易で、ユーザーへの配布が単純化されます。第三に、標準ライブラリと `golang.org/x/crypto` だけで暗号・ネットワーク・並行処理の要件が満たせ、実際にリンクされる外部モジュールは3つに収まっています（session 266 で訂正。以前ここは「SRI・LDK・BOINC等のGoバインディングが入手可能」を理由に挙げていましたが、**その3つはいずれもGoバインディングを使っておらず、`go.mod` にも存在しません**。SRI相当は自前実装、LDKとBOINCは未着手です）。第四に、強い型付けとシンプルな文法により、コミュニティからの貢献の品質が一定以上に保たれやすくなります。
 
 Lightning Development Kit（LDK）をLightning Network実装として選択した理由は、プラガブルなアーキテクチャ、強固なセキュリティ監査履歴、活発なメンテナンス、非カストディ設計との適合性です。代替候補としてLNDやCore Lightningも検討しましたが、Otedamaのユースケース（個人デバイス上での動作、ヘッドレス運用、最小依存）にはLDKが最適と判断しました。
 
-Stratum V2の自前実装ではなくStratum Reference Implementation（SRI）を選択した理由は、プロトコルの複雑性、暗号化の慎重な実装要件、そして標準化された相互運用性の確保です。自前実装は魅力的ですが、Otedamaの差別化は裁定エンジンにあり、Stratum層の車輪の再発明は戦略的に正当化できません。
+**Stratum V2は自前実装を選択しました**（session 266 で訂正。以前の本段落は逆——SRIを選び自前実装を避けた、と書かれていました）。判断の根拠は `docs/SUSTAINABILITY.md` §2 に記録されています：production品質のGo実装が存在せず、SRI（Rust）をcgo/FFI経由で抱えるとpure-Goのクロスコンパイルという配布上の最大の利点を失うため、Go nativeで書く。代償は明示的に引き受けています——**プロトコルのパースと暗号の正しさはこのプロジェクトの責任**であり、上流に委ねられません。だからこそフレーム解析にはfuzz targetがあり（`internal/stratum/frame_fuzz_test.go`）、ワイヤ形式は仕様書と突き合わせて検証されています（session 256）。この判断を見直すべき条件も明確です：監査済みでpure-GoのStratum V2実装が現れたら、`internal/poolproto` の抽象化はその差し替えのために存在します。
 
 ## 将来の進化 / Future Evolution
 

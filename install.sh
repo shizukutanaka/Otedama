@@ -3,10 +3,14 @@
 # Otedama one-line installer.
 #
 # Usage:
-#   curl -sSL https://otedama.io/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash
 #
 # Or with explicit options:
-#   curl -sSL https://otedama.io/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
+#
+# (These lines named https://otedama.io/install.sh until session 266.
+# That host does not resolve, so the documented command could not run at
+# all. The repository URL is the one that exists.)
 #
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
@@ -124,15 +128,29 @@ log "downloading ${ARCHIVE}..."
 curl -sSfL "${BASE_URL}/${ARCHIVE}" -o "${TMPDIR}/${ARCHIVE}" \
     || die "download failed"
 
-log "downloading checksums..."
-curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" \
-    || die "checksums download failed"
-
 # ---------- SHA-256 verification ----------
+#
+# The checksums download sits inside the verification branch on purpose.
+# It used to run unconditionally, one step earlier, and abort the whole
+# install if the file was missing — which made --skip-verify a flag that
+# could not do what it says, since the fatal step happened before the
+# flag was ever consulted. That is not hypothetical: the release workflow
+# publishes no checksums.txt today (docs/KNOWN_LIMITATIONS.md §21), so
+# every invocation of this script, with or without the flag, died at that
+# line.
+#
+# Failing without the flag is still the correct behaviour: if the
+# checksums cannot be fetched, there is nothing to verify against, and a
+# silent unverified install is exactly what this script exists to
+# prevent. --skip-verify remains an explicit, logged opt-out.
 
 if [[ "$SKIP_VERIFY" == "1" ]]; then
-    log "SKIPPING checksum verification (--skip-verify)"
+    log "SKIPPING checksum verification (--skip-verify) — the download is UNVERIFIED"
 else
+    log "downloading checksums..."
+    curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" \
+        || die "checksums download failed (no checksums.txt in this release; re-run with --skip-verify to install without verification, at your own risk)"
+
     log "verifying SHA-256..."
     cd "$TMPDIR"
     if command -v sha256sum >/dev/null 2>&1; then

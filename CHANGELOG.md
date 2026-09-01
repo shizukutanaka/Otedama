@@ -104,6 +104,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - 「アルファ段階の既知の制約」の要約を、利用前に効く3点（`stratum+v2://` は平文／既定プールが
   解決しない／GPU・ASIC は採掘に使えない）に差し替え。
 
+**残り5文書も読んだ（自分の「全部読んだ」主張が過大だったため）**
+
+CATEGORY_AUDIT に書いた「docs/ の全文書を読了済み」は、書いた時点で5本が未読だった。
+読み直した結果、さらに以下が出た。
+
+- `docs/architecture.md` — **Stratum は SRI の Go バインディングを統合利用し自前実装を避ける**、と
+  2箇所（収益源コネクタ層・技術選択の根拠）で述べていた。実際は全て自前実装であり、
+  `SUSTAINABILITY.md` §2 がその判断（監査済み Go 実装が無く、Rust の SRI を cgo で抱えると
+  pure-Go クロスコンパイルを失う）を記録している。**監査者がこの記述を信じれば
+  `internal/stratum` を監査対象から外す**ため、本セッションで最も影響の大きい訂正。
+  「Go を選んだ理由」の「SRI・LDK・BOINC の Go バインディングが入手可能」も3つとも不使用。
+  session 243 の但し書きボックスは6項目を挙げていたがこれらを含んでおらず、プラグイン
+  フレームワークと `pkg/` 系パスも未記載だったので追記。
+- `docs/SPECIFICATION.md` — コマンド表に `wallet` が無い、`pools[].url` の既定を
+  「built-in recommendations」と記載、§7 がパスフレーズ更新を未実装として掲載（2セッション前に実装済み）、
+  Noise を「optional encryption」と記載（実接続から到達不能）。
+- `docs/MIGRATING-FROM-V2.md` — **移行すべき理由**として存在しない2つ（全接続での Noise 暗号化、
+  GPU を AI 推論へルーティング）を挙げ、**移行すべきでない理由**として偽の1つ
+  （v3 に Stratum V1 が無い — 実際はある）を挙げていた。SHA ピン留め・nightly fuzz・cosign 署名の
+  主張、存在しない設定フィールド（`pools[].priority`、リスト形式の `workers[]`）も訂正。
+  バイナリサイズは実測に置換（14.3 MB / `-s -w` で 9.8 MB）。
+- `docs/THREAT_MODEL.md` — **本セッション最重要**。Spoofing の緩和策が「Noise NX がプールを認証する」
+  「V1 フォールバックが無いのでダウングレード攻撃は構造的に不可能」と記載。**両方とも偽**
+  （Noise は未配線、V1 は実装済み）。監査者が最初に読む文書で、`stratum+v2://` の
+  支払先アドレス平文送信という最大のリスクが「緩和済み」に見えていた。他に scrypt N の4倍過小記載、
+  存在しない nightly fuzz ジョブ、SHA ピン留め・govulncheck・cosign 署名の主張を訂正。
+- `docs/RESEARCH_IMPROVEMENTS.md` — 出典管理は優秀（全引用に FETCHED/SNIPPET タグ）だが
+  ステータスが陳腐化。engine→poolproto 配線が session 91 完了後175セッション「planned」のまま、
+  存在しない gitleaks に ✅、session 264 で削除したファイルについての重複解消項目、
+  「最重要の次アクション」5件中4件が完了済みか消滅済み。
+
+**さらに2件の実欠陥**
+
+- `install.sh` の使用例が **解決しないホスト** `https://otedama.io/install.sh` を指していた
+  （`otedama.dev` も解決せず、`otedama.org` は解決するが本プロジェクトのものか確認不能）。
+  GitHub の raw URL に修正。
+- `install.sh` は `--skip-verify` を見る**前**に `checksums.txt` を取得して失敗時に die していた。
+  リリースはチェックサムを公開していないので、**フラグの有無にかかわらず全実行が中断**していた。
+  取得を検証ブランチの内側へ移動し、フラグが文書どおり機能するようにした（検証なしは明示的に警告）。
+  チェックサムが取れない時に検証なしで進めない既定の挙動自体は正しいので維持。
+- `docs/DEPLOYMENT.md` — compose のヘルスチェックが `otedama doctor` だった。doctor は
+  **警告1件で exit 1**（正常な構成でも警告は出る）なので、健全なマイナーを恒久的に unhealthy に
+  する。HTTP エンドポイントを使う旨に修正。Windows の「Event Log を見よ」も、Otedama が
+  Event Log に書かないため `--log-file` の案内に修正。RasPi の `CPUQuota=80%` も drop-in 手順へ。
+
 **新設**: `docs/KNOWN_LIMITATIONS.md` §21（主張されていたが存在しないサプライチェーン統制:
 SHA ピン留め・cosign・govulncheck）、§22（採掘スレッド数を製品内から制御できない。回避策は実測済み。
 フラグ新設は CLAUDE.md の七段階に従い Issue 起点とするため本セッションでは行わない）。

@@ -14,7 +14,9 @@ network handling, wallet persistence).
 
 - The `otedama` binary, its configuration files, its wallet file,
   and its HTTP endpoints.
-- Connections to Stratum V2 pools.
+- Connections to mining pools over Stratum V2 **and Stratum V1** — all
+  four schemes Otedama dials (`stratum+v2tls://`, `stratum+tls://`,
+  `stratum+v2://`, `stratum+tcp://`), two of which are plaintext.
 - Connections to price feeds (Coinbase, Kraken, CoinGecko).
 - Connections to AI inference providers — future only. No such connection
   exists today: the simulated provider was deleted in session 264 and the
@@ -66,14 +68,38 @@ privileges. No user-space software resists that threat.
 
 **Threat:** An attacker impersonates the pool to steal shares.
 
-**Mitigation:** Stratum V2 Noise NX handshake authenticates the pool
-to the miner via a static public key. `internal/stratum/noise.go`
-implements the handshake. Falling back to V1 is not supported, so
-downgrade attacks are structurally impossible.
+**Mitigation — TLS schemes only.** `stratum+v2tls://` and
+`stratum+tls://` authenticate the pool with ordinary TLS certificate
+verification, which is never disabled and uses system roots plus any
+`tls_ca_file` the user configures. **`stratum+v2://` and `stratum+tcp://`
+authenticate the pool not at all.**
 
-**Residual risk:** In v3.0.0-alpha, the Noise DH uses P-256 instead of
-the spec-mandated secp256k1. This does not weaken authentication but
-makes the alpha technically non-conforming. Tracked for v3.1.0.
+**This section previously claimed the opposite** (corrected session 266).
+It said the Noise NX handshake authenticates the pool via a static public
+key, and that "falling back to V1 is not supported, so downgrade attacks
+are structurally impossible". Both halves were wrong, and an auditor
+acting on them would have skipped the most important question about this
+product:
+
+- `internal/stratum/noise.go` implements the handshake, but **no dial
+  site calls it** (`docs/KNOWN_LIMITATIONS.md` §2). The engine's
+  `stratum+v2://` path uses a plain `net.Dialer`. There is no pool
+  authentication on that path, and the payout address
+  (`OpenMiningChannel.User`) crosses the network in the clear, where an
+  active adversary can rewrite it. That is asset #3 in the list above,
+  and its compromise is described there as "a silent theft".
+- Stratum V1 **is** supported (`internal/poolproto/stratumv1`), so the
+  structural argument against downgrade does not hold either. What
+  protects against downgrade is the user's scheme choice: Otedama dials
+  exactly the scheme configured and never negotiates upward or downward
+  from it.
+
+**Residual risk:** every user on a non-TLS scheme is exposed to pool
+impersonation and payout-address rewriting. The mitigation available
+today is to configure a TLS scheme. Within the unreachable Noise code the
+DH primitive is P-256 rather than the spec-mandated secp256k1 +
+ElligatorSwift (ADR-011), which is why wiring it up is not a small
+change.
 
 ---
 
@@ -102,18 +128,25 @@ The file is written atomically (tempfile + rename) so a crash during
 write cannot corrupt the existing file.
 
 **Residual risk:** Root can delete the file (no Otedama-side
-mitigation). The encryption's key derivation uses scrypt (N=32768);
-a determined offline attacker with a modern GPU cluster can brute-force
-weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
+mitigation). The key derivation uses scrypt with **N=2¹⁷ = 131072**,
+r=8, p=1 (this section said N=32768, a quarter of the real cost
+parameter — corrected session 266 from `internal/lightning/seedstore.go`);
+a determined offline attacker can still brute-force a weak passphrase.
+Use a strong passphrase; see CONTRIBUTING.md.
 
 ---
 
 **Threat:** A malicious pool sends a crafted frame that causes buffer
 overflow, panic, or memory exhaustion.
 
-**Mitigation:** `MaxFrameSize` caps any single frame. The fuzz tests
-`FuzzDecodeHeader` and `FuzzDecoder_ReadFrame` run nightly with
-automatic crasher reporting.
+**Mitigation:** `MaxFrameSize` caps any single frame, and the declared
+length is checked before the payload buffer is allocated. The fuzz
+targets `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame` exist
+(`internal/stratum/frame_fuzz_test.go`) and run as seed-corpus tests on
+every `go test`. **They do not run as fuzzing in CI** — this section
+claimed a nightly fuzz job with automatic crasher reporting, and no such
+job exists (§21, corrected session 266). New inputs are explored only
+when someone runs `go test -fuzz` by hand.
 
 **Residual risk:** Go panic safety provides strong guarantees, but
 a panic in the decode path still terminates the miner (DoS, below).
@@ -123,14 +156,23 @@ a panic in the decode path still terminates the miner (DoS, below).
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
-**Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
-pinned by SHA. Dependabot auto-updates with review. govulncheck runs
-in CI. See ADR-003.
+**Mitigation:** a deliberately tiny dependency surface — three external
+modules are linked (`golang.org/x/crypto`, `golang.org/x/sys`,
+`gopkg.in/yaml.v3`) plus the standard library; `go mod verify` passes;
+Dependabot is configured for Go modules, Actions and Docker. See ADR-003.
 
-**Residual risk:** Compromise of the Go toolchain, the Go proxy, or
-one of the two direct dependencies remains possible. We have no
-mitigation other than early detection.
+**Corrected session 266:** this section also claimed "All GitHub Actions
+pinned by SHA" and "govulncheck runs in CI". **Neither is true.** Every
+`uses:` in `.github/workflows/` is a tag or a branch — including
+`securego/gosec@master` and `aquasecurity/trivy-action@master`, which are
+mutable references of exactly the kind the March 2025 `tj-actions`
+compromise abused — and `govulncheck` appears in no workflow. See §21.
+
+**Residual risk:** materially higher than this document previously
+implied. A compromised upstream action executes in CI with the workflow's
+token; dependency vulnerabilities are found only when a human runs
+`govulncheck`; and compromise of the Go toolchain or proxy remains
+unmitigated beyond early detection.
 
 ---
 
@@ -203,10 +245,14 @@ Stratum") demonstrated the StraTap and ISP-Log attacks, showing that
 share submissions and their timing leak earnings even when the content
 is opaque, and that encryption alone does not close the channel.
 
-**Mitigation:** Otedama's Noise NX encryption (when secp256k1 lands,
-see KNOWN_LIMITATIONS §2) protects payload confidentiality and
-integrity, which defeats the *content*-reading attacks (BiteCoin-style
-share hijacking) from the same paper. The paper's own countermeasure
+**Mitigation:** TLS on `stratum+v2tls://` / `stratum+tls://` protects
+payload confidentiality and integrity today, which defeats the
+*content*-reading attacks (BiteCoin-style share hijacking) from the same
+paper. Noise NX would do the same on `stratum+v2://` once it is wired in
+and moved to secp256k1 (§2) — until then that scheme has no
+confidentiality at all, so on it the paper's content attacks are not
+merely a side channel but directly available. The paper's own
+countermeasure
 to the timing channel — the "mining cookie" (a per-miner secret folded
 into the puzzle so an observer cannot reconstruct or correlate shares)
 — is the right model for a future hardening pass.
@@ -264,13 +310,25 @@ OS-level bugs (kernel CVEs), which are out of scope for Otedama.
 
 **Threat:** Malicious code in the binary itself.
 
-**Mitigation:** Release artifacts are cosign-signed. The `install.sh`
-script verifies SHA-256 and, when cosign is installed, verifies the
-signature. Reproducible builds via `-trimpath` and fixed `-ldflags`.
+**Mitigation — intended, and not currently in place.** `install.sh` is
+written to download `checksums.txt`, verify the archive's SHA-256 against
+it, and (when `cosign` is present) verify a signature over the checksums
+file. That script is correct.
 
-**Residual risk:** The signing key can be stolen. GitHub's OIDC-based
-keyless signing via Sigstore reduces this to "compromise of the
-GitHub Actions runtime," which is actively monitored.
+**What is missing is the other end.** `release.yml` publishes the
+per-platform tarballs and nothing else: no `checksums.txt`, no
+`checksums.txt.sig`, no certificate. So the verification path has nothing
+to verify against — and because the script treats a failed checksums
+download as fatal, the documented one-line install would abort rather
+than silently skip verification. Corrected session 266; recorded in §21.
+Reproducible builds via `-trimpath` and fixed `-ldflags` are likewise not
+what the release workflow does (it passes `-s -w` plus `-X` flags that
+name symbols this binary does not have — §13).
+
+**Residual risk:** users cannot verify what they downloaded, and there is
+no signing key to steal because nothing is signed. Publishing checksums
+is the smallest useful step and needs no key material; keyless Sigstore
+signing via GitHub OIDC is the next one.
 
 ## Assumptions
 

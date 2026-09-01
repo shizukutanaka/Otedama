@@ -15,7 +15,7 @@ deployment, see `TROUBLESHOOTING.md`.
 | Cloud VM          | systemd + EnvironmentFile         | One Otedama per VM; no sharding needed |
 | Kubernetes        | Deployment + liveness probes      | Scrape `/metrics` with Prometheus |
 | Docker Compose    | `docker run --restart unless-stopped` | Volume-mount data dir |
-| Embedded (RasPi)  | `otedama service install`         | `CPUQuota=80%` to leave OS headroom |
+| Embedded (RasPi)  | `otedama service install`         | Add `CPUQuota=`/`CPUAffinity=` via a drop-in (below) to leave OS headroom |
 
 ---
 
@@ -43,6 +43,30 @@ lingering so the service survives logout:
 ```bash
 sudo loginctl enable-linger alice
 ```
+
+### Limiting CPU use (drop-in, not an edit)
+
+The unit contains no CPU limit: Otedama mines with one thread per logical
+CPU and has no in-product setting for that (`docs/KNOWN_LIMITATIONS.md`
+§22). Add the limit as a drop-in — editing `otedama.service` directly
+loses the change the next time `otedama service install` regenerates it,
+while `otedama.service.d/override.conf` survives:
+
+```bash
+systemctl --user edit otedama     # writes otedama.service.d/override.conf
+```
+
+```ini
+[Service]
+CPUAffinity=0-2
+# CPUQuota=80%
+```
+
+`CPUAffinity=` reduces the thread count directly, because Go sizes the
+worker pool from the CPUs available to the process. `CPUQuota=` throttles
+instead of reducing threads, and in a **user** manager it takes effect
+only if the cpu controller is delegated — if the quota appears to do
+nothing, that is why.
 
 ### System service (not recommended)
 
@@ -127,10 +151,14 @@ otedama service install --config C:\ProgramData\Otedama\config.yaml
 Otedama registers itself under the service name `Otedama` with
 `DisplayName=Otedama Mining Service` and `start=auto`.
 
-To view logs:
+To view logs: **Otedama does not write to the Windows Event Log.** It
+logs to stdout/stderr, and a service registered with `sc.exe` does not
+route those anywhere by itself, so `Get-EventLog -Source Otedama` (which
+this section used to recommend) returns nothing. Point the log at a file
+instead, with `--log-file`, and read that:
 
 ```powershell
-Get-EventLog -LogName Application -Source Otedama -Newest 50
+Get-Content -Tail 50 -Wait C:\ProgramData\Otedama\otedama.log
 ```
 
 ---
@@ -146,10 +174,17 @@ docker pull ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
 ```
 
 Images are built on a distroless base. Cosign/Sigstore image signing is
-**not yet implemented** — it is a planned v3.1.0 item
-(`ROADMAP.md` "Real protocols"; no current workflow signs images). Do not
-rely on `cosign verify` until that ships; verify provenance via the
-GitHub Actions build log in the meantime.
+**not implemented** — no workflow signs images or binaries (§21). Do not
+rely on `cosign verify`; verify provenance via the GitHub Actions build
+log in the meantime.
+
+**Whether this tag has actually been published could not be verified**
+from the environment that last reviewed this file (`ghcr.io` is blocked
+by its egress proxy). `ci.yml` contains `docker/build-push-action` steps
+targeting `ghcr.io`, but several of that workflow's jobs do not currently
+succeed (§13), so treat the pull command as the intended form rather than
+a confirmed-working one, and check the repository's package listing
+before depending on it.
 
 ### Run
 
@@ -189,15 +224,24 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - otedama-data:/var/lib/otedama
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/otedama", "doctor"]
-      interval: 5m
-      timeout: 30s
-      retries: 3
-
 volumes:
   otedama-data:
 ```
+
+**On health checks.** This file used to run `otedama doctor` as the
+container health check. Do not: `doctor` exits **1 on any warning** and 2
+on any failure, and a correct deployment routinely warns (no config file,
+a single pool with no failover, a plaintext scheme). Docker treats every
+non-zero exit as unhealthy, so the check would mark a perfectly healthy
+miner unhealthy and restart policies would act on it. `doctor` is an
+operator-facing diagnostic with a three-value scale, not a liveness
+probe.
+
+Use the HTTP endpoints instead — `/healthz` for liveness and `/readyz`
+for "connected to a pool" — which is what the Kubernetes manifest below
+does. The distroless image ships no shell or `curl`, so an in-container
+`CMD` health check has nothing to run; probe from outside the container,
+or from the orchestrator.
 
 ---
 
@@ -431,8 +475,13 @@ recoverable from mnemonic. A lost mnemonic AND wallet.dat is not.
 
 For production deployments:
 
-- [ ] Binary SHA-256 verified against published checksums.
-- [ ] Binary cosign signature verified.
+- [ ] Binary SHA-256 verified against published checksums — **not
+      possible today**: `release.yml` publishes no `checksums.txt`, which
+      also means the documented `install.sh` one-liner aborts rather than
+      installing (§21). Build from source, or record the hash of what you
+      downloaded so you can at least detect later substitution.
+- [ ] Binary cosign signature verified — **not possible today**: nothing
+      is signed (§21).
 - [ ] Running as a dedicated, non-root user.
 - [ ] Wallet passphrase passed via secret store (not `--wallet-passphrase` on command line).
 - [ ] Data directory permissions are 0700.

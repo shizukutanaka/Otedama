@@ -32,7 +32,9 @@ otedama <command> [flags]
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
 | `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
-| `doctor` | Run self-diagnostic checks. |
+| `doctor [--json]` | Run self-diagnostic checks. `--json` emits a machine-readable report; there is no `--log-level` on this subcommand, and no global flags precede the subcommand name. |
+| `wallet verify` | Read a recovery phrase from stdin (never echoed) and report whether it reproduces the stored wallet's seed, compared in constant time. Refuses when no wallet exists. |
+| `wallet change-passphrase` | Re-encrypt the stored seed under a new passphrase. The fingerprint before and after must match, or the change is rejected. |
 | `completion bash\|zsh\|fish` | Emit a shell-completion script. |
 | `help` / `--help` / `-h` | Print usage. |
 
@@ -60,7 +62,7 @@ its default, and its validation rule:
 |---|---|---|---|
 | `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | plausible mainnet address (see §3.3) |
 | `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a plausible mainnet address |
-| `pools[].url` | — (file only) | built-in recommendations | supported scheme + non-empty host (§3.3) |
+| `pools[].url` | — (file only) | one built-in fallback endpoint (`config.DefaultPoolURL`) — not a curated list, and its host does not currently resolve (KNOWN_LIMITATIONS §20) | supported scheme + non-empty host (§3.3) |
 | `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
@@ -142,9 +144,15 @@ msg_type, u24 msg_length). The declared length is checked against
 malicious peer cannot trigger a large allocation by announcing a huge frame.
 (The u24 length is structurally incapable of overflowing a 64-bit `int`, the
 project's only supported word size, so no separate overflow guard is needed.)
-Optional
-Noise NX transport encryption (ChaCha20-Poly1305, SHA-256); the DH primitive
-is **P-256 in this alpha**, not secp256k1 (KNOWN_LIMITATIONS §2). The
+Noise NX transport encryption (ChaCha20-Poly1305, SHA-256) is implemented in
+this package but **is not reachable from any live connection**: the engine's
+`stratum+v2://` path dials a plain `net.Dialer` and speaks Stratum V2 in the
+clear, so a `stratum+v2://` session has no transport encryption at all — the
+payout address travels in plaintext (KNOWN_LIMITATIONS §2). `stratum+v2tls://`
+and `stratum+tls://` do get real TLS, from a different code path, with
+certificate verification never disabled. Within the unreachable Noise code the
+DH primitive is **P-256**, not the spec-mandated secp256k1 + ElligatorSwift
+(ADR-011). The
 encrypted-frame codec is u16-length-prefixed, rejects oversize writes, and
 buffers partial reads so no plaintext is dropped (session 53).
 
@@ -219,20 +227,25 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 ## 7. Known limitations
 
 Authoritative list in `docs/KNOWN_LIMITATIONS.md`. Still open as of session
-264: Noise NX uses P-256 rather than secp256k1 (§2); GPU detection is
-Linux-only and no compute dispatch exists, so a detected GPU is given no
-work (§4); Lightning is receive-only, with no embedded node (§6); ASIC
-hardware is not detected at all (§8); several CI workflows are
-non-functional (§13); `datum://` is a reserved scheme with no dialer (§14);
-and wallet passphrase rotation has no CLI path (§16, second half).
+266: Noise NX is wired into no live connection, so `stratum+v2://` is
+plaintext (§2); GPU detection is Linux-only and no compute dispatch exists,
+so a detected GPU is given no work (§4); Lightning is receive-only, with no
+embedded node (§6); ASIC hardware is not detected at all (§8); several CI
+workflows are non-functional (§13); `datum://` is a reserved scheme with no
+dialer (§14); the built-in default pool host does not resolve, so a pool
+must be configured (§20); CI has no SHA-pinned actions, signed releases, or
+`govulncheck` (§21); and the mining thread count cannot be set from inside
+the product (§22).
 
 Resolved since the earlier revision of this list: the simulated
 AI-inference yield was deleted rather than disclosed (§1), the post-quantum
 scaffolding was removed as unreachable (§5), the engine now routes through
 `poolproto` (§3), the TUI detects the real terminal width on Linux (§15),
-`otedama wallet verify` closes the backup-verification gap (§16, first
-half), and a non-ASCII BIP-39 passphrase is refused rather than silently
-producing a non-portable wallet (§19).
+**both halves of §16 are closed** — `otedama wallet verify` for backup
+verification and `otedama wallet change-passphrase` for rotation, the latter
+of which an earlier revision of this section still listed as open — and a
+non-ASCII BIP-39 passphrase is refused rather than silently producing a
+non-portable wallet (§19).
 
 ---
 

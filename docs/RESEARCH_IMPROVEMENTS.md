@@ -87,8 +87,9 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
-   `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
+8. ✅ **engine→poolproto wiring** — done in session 91; KNOWN_LIMITATIONS §3
+   is resolved. (This entry still read "the dialers aren't imported yet" in
+   session 266, ~175 sessions after they were.)
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
@@ -235,8 +236,17 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 
 ## Category 5 — AI inference / compute markets
 
-1. 🟡 **Real Akash REST integration** — currently simulated
-   (KNOWN_LIMITATIONS §1). The single biggest placeholder.
+1. 🔵 **A real compute-market integration** — **nothing is simulated any
+   more.** The simulated Akash-shaped provider was deleted outright in
+   session 264 rather than disclosed, because a constant quote no code
+   could turn into income was feeding the dashboard's headline earnings
+   figure (KNOWN_LIMITATIONS §1, resolved by deletion). So this is no
+   longer "the biggest placeholder" — there is no placeholder. It is a
+   green-field integration, gated on the criteria in the
+   `internal/provider` package doc (the user is the provider; payment is
+   non-custodial; price is discovered per order) and on items 10–12 of
+   the session-251 pass below, which found the API surface it would
+   target has since been deprecated and re-homed.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
 3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
    stop routing GPUs to it (parallels HashrateMonitor for mining).
@@ -249,9 +259,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
-   conversion path and that simulated vs real yield is never mixed in
-   accounting.
+8. 🔵 **Inference revenue is denominated/settled correctly** — verify the
+   USD→BTC conversion path before any second market ships. The "simulated
+   vs real yield must never be mixed" half of this item was settled by
+   deleting the simulated side (session 264); the rule to preserve is that
+   a quote may only enter the arbitration engine if it is convertible into
+   money the user can actually receive.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 
@@ -299,8 +312,12 @@ arXiv grounding (collected sessions 40–41 and here):
 
 ## Category 7 — Go CLI / systems tools
 
-1. ✅ **Subcommand structure** (run/version/config/service/doctor) with
-   per-command `--help`; all 11 covered by tests.
+1. ✅ **Subcommand structure**
+   (run/version/config/service/doctor/wallet/completion/help) with
+   per-command `--help`, covered by tests that enforce the dispatcher,
+   the three completion scripts and the README command table all listing
+   the same set. (`wallet` and `completion` were missing from this line
+   until session 266 — the same drift the README test now prevents.)
 2. ✅ **Background-service install** (launchd/systemd/Task Scheduler).
 3. ✅ **Structured logging** (text/JSON via slog-style adapter).
 4. ✅ **`doctor` self-diagnostics**.
@@ -325,9 +342,16 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
-11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
-    recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
-    ad hoc"). `MiningProvider` and `AkashProvider`
+11. ✅ **Deduplicate the two `Provider` implementations — resolved by
+    deletion (session 264).** `AkashProvider` and
+    `internal/provider/ai_inference.go` no longer exist, so the duplication
+    this item described is gone and no shared base type was needed. The
+    analysis below is kept because it remains the design note for the day a
+    second real market arrives: the three load-bearing behaviours it names
+    are still true of `MiningProvider`, and are still what any future
+    refactor must preserve. Original text follows.
+
+    ⬜ (historical) `MiningProvider` and `AkashProvider`
     (`internal/provider/{mining,ai_inference}.go`) share substantial
     boilerplate: `Stop()` is **byte-identical** (cancel → `wg.Wait()` → nil
     the cancel → re-create the buffered `quoteCh`); `loop()` is identical
@@ -455,14 +479,28 @@ arXiv grounding (session 41):
    spec-compliant Stratum V2 Noise encryption specifically.
 2. 🔵 **ElligatorSwift encoding** for the SV2 handshake (pairs with item 1).
 3. ✅ **scrypt + AES-GCM seed encryption at rest**.
-4. ✅ **gitleaks in CI** (per CLAUDE.md I4).
+4. 🟡 **Secret scanning in CI — partially, and not gitleaks.** This item
+   was marked ✅ "gitleaks in CI"; session 266 found **no gitleaks
+   anywhere in the repository**. What does run is
+   `trufflesecurity/trufflehog` in `security.yml` (pinned to `@main`, an
+   unpinned branch reference — §21). GitHub's own secret scanning also
+   applies at the platform level. Either finish the claim (add gitleaks,
+   or restate it as TruffleHog) or drop it; do not leave a ✅ on a tool
+   that is not there.
 5. ✅ **Traffic-analysis side channel documented** in THREAT_MODEL
    (arXiv:1703.06545, session 40).
 6. 🟡 **Traffic shaping / "mining cookie"** to blunt the timing side channel —
    the paper's own countermeasure; future hardening.
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
-8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
-   conditional on BIP-360.
+8. ❌ **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — **removed, not
+   planned.** The scaffolding was deleted in session 264 because nothing
+   could reach it, and item 6 of the session-251 pass below established why
+   the premise was wrong anyway: BIP-360 is a draft that specifies **no**
+   post-quantum signatures and explicitly defers them to a later proposal,
+   so "conditional on BIP-360" gated the work on an event that would not
+   deliver it. CLAUDE.md also prohibits starting post-quantum work at this
+   stage (v4.0 consideration). Nothing to do here until there is a BIP to
+   implement.
 9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
    handshake and seed paths (use `crypto/subtle`).
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
@@ -941,23 +979,26 @@ month, so the discipline matters.
 
 Ranked by impact on the path to a real v3.1.0:
 
-1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
-   channel; library identified, licence compatible. Needs an ADR for the
-   dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — makes the V2 dialer and job
-   bridge (already built and tested) actually load-bearing; removes the
-   dead-code state.
-3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
-   — small, high-value observability win that directly reflects miner
-   profitability and needs no new dependency.
-4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
-   placeholder; larger effort, external API.
-5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable.
+**This list is superseded** (noted session 266). Four of its five items are
+done or void: engine→poolproto wiring shipped in session 91, reject
+classification and the reject-rate gauges in sessions 44–45/101,
+submit-latency and pool-state metrics in sessions 46/91–93, and the
+"remove the simulated placeholder" item was answered by deleting the
+placeholder in session 264. Only item 1 survives:
 
-Items 3 and 5 are the cheapest real-code wins with no dependency or
-external-API risk, and are the natural next implementation targets after the
-research-only passes.
+1. **secp256k1 + ElligatorSwift (Cat 10 #1 / Cat 2 #3)** — the unblocker for
+   a spec-compliant SV2 encrypted channel, and still open. Session 251 item
+   5 raised its cost materially: the identified library provides neither
+   BIP-340 Schnorr nor ElligatorSwift, and **no audited Go ElligatorSwift
+   implementation exists**, so this is a hand-port of security-critical
+   code, not a dependency swap. Meanwhile `stratum+v2tls://` gives real
+   confidentiality today.
+
+For the current ranking of what to do next, see the most recent session
+entry in `docs/CATEGORY_AUDIT.md`; for what is open and why, the numbered
+entries in `docs/KNOWN_LIMITATIONS.md`. A list of "next actions" that
+outlives the actions is worse than no list, because it keeps directing
+attention at finished work.
 
 ---
 

@@ -55,9 +55,17 @@ git clone https://github.com/shizukutanaka/Otedama.git
 cd Otedama
 make build
 
-# または、リリースバイナリをダウンロード
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
+# または、インストーラスクリプト（下記の注意を読んでから）
+curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash
 ```
+
+> **インストーラは現在そのままでは完走しません（session 266 に実測）。** `install.sh` は
+> `checksums.txt` を取得してSHA-256を照合しますが、`release.yml` はチェックサムを一切公開して
+> いないため、取得に失敗して中断します（`docs/KNOWN_LIMITATIONS.md` §21）。検証を明示的に
+> 放棄する `--skip-verify` を付ければインストールできますが、**その場合ダウンロード物は未検証**
+> です。確実なのは上の `make build`（ソースからのビルド）です。
+> なお、このURLは以前 `releases/latest/download/install.sh` を指していましたが、
+> リリースに `install.sh` はアップロードされていないため 404 になります。
 
 ### 最小設定での起動 / Running with Minimal Configuration
 
