@@ -123,6 +123,16 @@ test with a known contention flake — green five consecutive times, and
 binary still refuses a run without a pool (exit 78) and accepts one with
 a pool.
 
+One test in `internal/engine` — `TestRunSession_StatsTickAndShareResponses`,
+which polls metric gauges while a fake pool streams shares — is known to be
+sensitive to machine contention (RESEARCH_IMPROVEMENTS Cat 7 #12). It failed
+twice while this bump was being verified, both times with a coverage run and
+a benchmark competing for the same four vCPUs, which made "did asynctimerchan
+do this?" a fair question. It was measured rather than assumed: **six clean
+full-suite runs under `go 1.24` and six under `go 1.22`, zero failures of
+that test in either direction.** No evidence the timer-semantics change
+affects it; the sensitivity to load is the pre-existing one, unchanged.
+
 That is one machine. It is not a substitute for review, but it is the
 evidence a reviewer would otherwise have to gather themselves.
 

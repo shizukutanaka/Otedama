@@ -1026,6 +1026,14 @@ ended in confirmation, not refutation.
   the deleted simulated market, the fixed 80-column TUI, or the
   once-missing wallet subcommand.
 
+> **Superseded by session 266's re-inventory** (at the end of this file).
+> Part of the basis for the two tables below turned out to be documentation
+> that session 266 proved false — "ten languages", "SHA-pinned actions",
+> "cosign-signed releases", "Noise NX authenticates the pool" were all
+> written down and none was implemented. Counting strengths from wrong
+> documents multiplies the error. The tables are kept as the record of what
+> was believed; the replacement cites measurements and test names instead.
+
 ### 長所 — strengths, each with the evidence that earns it
 
 | Strength | Evidence |
@@ -1498,3 +1506,52 @@ rather than one:
 4. A boundary that makes a claim true is a place to look — the sentence
    scoped to `docs/` was accurate, and `skills/` behind it held a release
    gate that could not be satisfied.
+
+---
+
+## Session 266 — 長所・短所の再棚卸し（session 265 の表を差し替える）
+
+session 265 も長所・短所を表にした。**その表は差し替えなければならない**——根拠の一部が、
+本セッションで偽と判明した文書だったからである。「10言語対応」「SHA ピン留め済み」
+「cosign 署名済み」「Noise NX がプールを認証する」はいずれも当時の文書に書かれており、
+実装には存在しなかった。**誤った文書を根拠に長所を数えると、長所の数だけ嘘が増える。**
+
+以下は本セッション終了時点の状態で、**各行に測定・テスト名・`§`番号のいずれか**を付す。
+付けられないものは書かない。
+
+### 長所 — それを主張してよい根拠つき
+
+| 長所 | 根拠（測定・テスト・ファイル） |
+|---|---|
+| **非カストディの往復が実際に行使できる** | シード生成→暗号化保管→`wallet verify`（定数時間比較・非エコー）→`wallet change-passphrase`（fingerprint 不変を検証、原子的置換）。実バイナリで確認済み。CLI が無いままだった期間は §16 に記録 |
+| **プロトコル実装が一次資料と突き合わされている** | SV1 のコインベース/マークル構築は cpuminer と node-stratum-pool を読んで実装し実ブロックで検証（§17）／SV2 ワイヤ形式は `sv2-spec` と照合し `conformance_test.go` が絶対オフセットを固定（§18）／BIP-39 は公式16ベクタ全て／bech32m は BIP-350 ベクタ全て |
+| **採掘ホットパスが測定で最適化されている** | 本日再測定: 単スレッド **5.56 MH/s**、4スレッド **23.5 MH/s**（`BenchmarkWorkerGrind_*`、SHA-NI 無しの 4vCPU Xeon）。midstate キャッシュは `crypto/sha256` の `BinaryMarshaler` を使い自前暗号を書いていない |
+| **依存が実測で3モジュール** | `go list -deps ./cmd/otedama` → `x/crypto` / `x/sys` / `yaml.v3` のみ。Prometheus 露出・TUI・CLI・HTTP は全て標準ライブラリ実装（ADR-003/004/005） |
+| **テスト密度と実行の健全性** | test:impl = **36,829 : 20,660 = 1.78**、24パッケージ全 green、`-race` でも全 green、最低カバレッジ **91.4%**（`internal/lightning`）、100% が7パッケージ |
+| **主張が CI/テストで強制される仕組みがある** | メトリクス目録（`TestMetricsDocumentedInSpecification`）／補完スクリプトとディスパッチャ／**README のコマンド表**（本セッション追加）／**到達不能コードのベースライン**（同）／**doctor が消えた既定に言及しない**（同）。いずれも「文書と実装のズレ」を落とす |
+| **裁定エンジンにプロパティテストがある** | `internal/arbitration/engine_test.go` の配分不変条件5本（CLAUDE.md のプロパティテスト要求を満たす唯一の領域） |
+| **パーサにファズ target がある** | `internal/stratum/frame_fuzz_test.go` 2本。ただし CI で `-fuzz` は回っていない（§21） |
+| **しないことが番号つきで開示されている** | `docs/KNOWN_LIMITATIONS.md` **23項目、うち14が解決済み**。各項目に原因・影響・回避策・ブロッカー。本セッションで §20 が「解決（削除による）」に、§21・§22 が新設 |
+| **危険な設定がツールチェーンの既定に戻された** | `go.mod` は `go 1.24`・ピン無し。`DefaultGODEBUG` は空（測定）。「消すと PQ TLS が無言で切れる1行」という罠が消えた |
+
+### 短所 — 各行に §番号とブロッカー
+
+| 短所 | 影響と、なぜ残っているか |
+|---|---|
+| **`stratum+v2://` は平文**（§2） | 支払先アドレスが読み書き可能な状態で流れる。資金を扱う製品として本セッション時点で最大の弱点。Noise NX は実装済みだがどの接続経路にも配線されておらず、配線には監査済み Go ElligatorSwift が要る——**世界に存在しない**（ADR-011 追記）。当面の正解は `stratum+v2tls://` |
+| **プール設定が必須になった**（§20 の代償） | 既定が死んでいたので撤廃した。初回体験は「一行で動く」から「一行＋プール設定」に後退した。復活させるには一次資料で検証した TLS エンドポイントが要る |
+| **収益源は実質1系統** | 製品定義は4系統だが実装は採掘のみ。AI 推論はシミュレーション価格だったため削除（§1）。GPU は検出のみで計算に使えず（§4）、ASIC は検出すらしない（§8）。**裁定エンジンの判断は事実上「このデバイスを回す価値があるか」に縮んでいる** |
+| **Lightning は受取専用**（§6） | ノード・チャネル・支払いルーティングは無い。ADR-001 が語っていた「AI 推論収益の受け皿」も、その市場ごと消えたため**現在このウォレットには収入源が無い** |
+| **CI が機能していない**（§13） | 死んだジョブと `GOTOOLCHAIN: local` により Go ジョブが決定的に落ちる。修正済み `release.yml` は §13 に貼るだけの状態だが、**このセッションの権限では書き込めない（403 を2系統で実証）** |
+| **供給網の統制が無い**（§21） | Action の SHA ピン留め0件、リリース署名0件、`govulncheck` 0件、チェックサム未公開のため **`install.sh` は必ず中断する**。3つの文書が「実施済み」と書いていた |
+| **採掘スレッド数を製品内から制御できない**（§22） | `runtime.NumCPU()` 固定。回避策は OS 側（`taskset` / systemd drop-in、実測済み）。フラグ追加は CLAUDE.md の七段階に従い Issue 起点 |
+| **多言語は起動ログ15メッセージのみ** | 10言語カタログは実在し完全性テストもあるが、TUI・doctor・wallet は英語のみ。拡張は翻訳体制（人間レビュー）待ちで、機械補完は水増し禁止に抵触 |
+| **bus factor 1** | CODEOWNERS の資金クリティカル領域も所有者1名。`MAINTAINERS.md`・`solo-operations.md` が認めている既知の状態で、`code-review.md` の「独立した二人以上」は本セッションに訂正した |
+| **ツール周りの経年劣化** | `.golangci.yml` は v1 形式で golangci-lint v2 が読めない（CI は v1.55.2 固定なので CI だけは無事）。`gopkg.in/yaml.v3` は上流アーカイブ済みで CLAUDE.md の依存基準3を満たさない（ADR-003 追記、移行は module proxy 到達性待ち） |
+
+### この表自体の検証方法
+
+各行の根拠は再実行できる。`go test -cover ./...`、`go test -bench 'BenchmarkWorkerGrind'`、
+`go list -deps ./cmd/otedama`、`grep -c "^## " docs/KNOWN_LIMITATIONS.md`、そして
+`otedama doctor --json`。**次にこの表を更新する者は、引用ではなくコマンドから始めること**——
+session 265 の表が差し替えになったのは、当時の文書を信頼したからである。
