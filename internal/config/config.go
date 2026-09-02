@@ -43,31 +43,39 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 )
 
-// DefaultPoolURL is the built-in fallback Stratum V2 pool, used when the
-// user has configured no pools of their own. It is the single source of
-// truth for that endpoint: the engine (defaultPoolURL/poolURLs), the CLI
-// startup banner, and the doctor reachability check all reference this
-// constant rather than repeating the literal, so the default can never
-// drift out of sync between subsystems.
+// There is deliberately no built-in default pool.
 //
-// This host does not currently resolve. Measured in session 266 from a
-// machine with working DNS (github.com, slushpool.com, braiins.com and
-// api.coinbase.com all resolved through the same resolver in the same
-// run): getaddrinfo returns EAI_NODATA for public.stratum.slushpool.com,
-// and `otedama doctor` reports
-// "Pool reachability ... lookup public.stratum.slushpool.com: no such
-// host". A user who configures no pool therefore cannot mine. Note that
-// stratum.slushpool.com and stratum.braiins.com both do resolve (to the
-// same address), which is consistent with the "public.stratum" name
-// having been retired rather than DNS being at fault.
+// Until session 266 this file exported
 //
-// The replacement is deliberately not guessed here: picking a host and
-// port without a primary source would reintroduce exactly the defect
-// this comment records. Choosing it — and deciding whether an
-// unreachable default should be replaced at all, or removed so that a
-// pool must be configured explicitly — is a maintainer decision tracked
-// in docs/KNOWN_LIMITATIONS.md §20.
-const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
+//	const DefaultPoolURL = "stratum+v2://public.stratum.slushpool.com:3336"
+//
+// as the fallback for a user who had configured nothing, and the engine,
+// the startup banner and two doctor checks all referenced it. That host
+// does not resolve. Measured from a machine with working DNS —
+// github.com, slushpool.com, braiins.com and api.coinbase.com all
+// answered through the same resolver in the same run — getaddrinfo
+// returns EAI_NODATA for public.stratum.slushpool.com, while
+// stratum.slushpool.com and stratum.braiins.com resolve to one address,
+// which is what a retired "public.stratum" name looks like.
+//
+// So the fallback could not mine, and could not have been mining for
+// anyone: the zero-configuration path ended in an endless reconnect loop
+// against a name with no address. Nobody can have been relying on it,
+// which is exactly why removing it breaks nothing and keeping it helped
+// nobody.
+//
+// A replacement was not guessed. Choosing a host and port for someone
+// else's pool without a primary source is how the dead constant got here
+// in the first place, and CLAUDE.md prohibits shipping endpoints that do
+// not exist. The product now asks: `otedama run` refuses to start
+// without a configured pool and says what to set, `otedama doctor` fails
+// the pool checks with the same instruction, and config.yaml.example
+// shows the shape. That is a worse first run than a working default and
+// a much better one than a silent, permanent failure.
+//
+// If a default is ever reintroduced, it needs a verified endpoint from
+// the pool's own documentation and a TLS scheme (see §2 — stratum+v2://
+// is plaintext), plus a test that fails when the host stops resolving.
 
 // Config is the complete runtime configuration for Otedama.
 //
@@ -98,11 +106,11 @@ type Config struct {
 	// preference. Otedama connects to the first and uses subsequent
 	// entries for failover.
 	//
-	// If empty, Otedama falls back to the single built-in default pool,
-	// DefaultPoolURL — not a curated list. There is no built-in
-	// multi-pool recommendation list today; users who want failover
-	// across specific pools (e.g. Braiins, DEMAND, OCEAN, Luxor) must
-	// list them explicitly here.
+	// At least one entry is required: there is no built-in default (see
+	// the note above about the one that used to exist) and no curated
+	// list. `otedama run` exits 78 with the snippet to add when this is
+	// empty. Users who want failover across specific pools must list them
+	// explicitly here, in priority order.
 	Pools []PoolConfig `yaml:"pools"`
 
 	// Workers controls how Otedama names itself to pools. If empty,

@@ -92,7 +92,7 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 // HashrateFunc so each publish() call samples the live worker.Stats().HashRate
 // rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
 func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) *provider.MiningProvider {
-	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
+	miningProvider := provider.NewMiningProvider(primaryPoolURL(cfg), rateFetcher)
 	if len(workers) > 0 {
 		// Capture workers by value so the closure stays valid after this
 		// function returns. Each call samples the current hashrate; no
@@ -199,23 +199,27 @@ func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint s
 `, mnemonic.String(), fingerprint, len(mnemonic))
 }
 
-// defaultPoolURL returns the first configured pool URL, or the built-in
-// default when none is configured.
-func defaultPoolURL(cfg config.Config) string {
+// primaryPoolURL returns the first configured pool URL, or "" when none is
+// configured. There is no built-in fallback: see the note where
+// config.DefaultPoolURL used to be.
+func primaryPoolURL(cfg config.Config) string {
 	if len(cfg.Pools) > 0 {
 		return cfg.Pools[0].URL
 	}
-	return config.DefaultPoolURL
+	return ""
 }
 
 // poolURLs returns the ordered list of pool URLs to try, for failover.
 // The order is the user's configured priority; the engine rotates to
 // the next pool when the current one fails (matching the multi-pool
-// failover behaviour of cgminer/bfgminer/Braiins). Falls back to the
-// built-in default when no pools are configured.
+// failover behaviour of cgminer/bfgminer/Braiins).
+//
+// It returns nil when no pool is configured. Callers must treat that as an
+// error rather than substituting a default: Run refuses to start, which is
+// the whole point of removing the built-in fallback.
 func poolURLs(cfg config.Config) []string {
 	if len(cfg.Pools) == 0 {
-		return []string{config.DefaultPoolURL}
+		return nil
 	}
 	urls := make([]string, 0, len(cfg.Pools))
 	for _, p := range cfg.Pools {

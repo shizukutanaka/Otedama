@@ -242,9 +242,9 @@ data_dir: /home/alice/.local/share/otedama
 # The hostnames below are placeholders, not recommendations: take the
 # hostname, port and scheme from your pool's own documentation. Prefer a
 # TLS scheme (stratum+v2tls:// or stratum+tls://) — stratum+v2:// is sent
-# in the clear (see docs/KNOWN_LIMITATIONS.md §2). Otedama's built-in
-# default endpoint no longer resolves, which is precisely why this file
-# shows you how to set your own; see §20.
+# in the clear (see docs/KNOWN_LIMITATIONS.md §2). There is no built-in
+# default pool: `otedama run` refuses to start without at least one entry
+# here (§20).
 pools:
   - url: stratum+v2tls://your-pool.example:3336
   - url: stratum+tls://your-backup-pool.example:3334

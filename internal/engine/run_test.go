@@ -327,23 +327,46 @@ func TestParseHost(t *testing.T) {
 	}
 }
 
-func TestDefaultPoolURL_UsesConfiguredPool(t *testing.T) {
+func TestPrimaryPoolURL_UsesConfiguredPool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://custom.pool:3336"}},
 	}
-	got := defaultPoolURL(cfg)
+	got := primaryPoolURL(cfg)
 	if got != "stratum+v2://custom.pool:3336" {
 		t.Errorf("got %q, want custom pool", got)
 	}
 }
 
-func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
-	got := defaultPoolURL(config.Config{})
-	if got == "" {
-		t.Error("default pool URL is empty")
+// TestPrimaryPoolURL_EmptyWhenNoneConfigured replaces a test that asserted the
+// opposite: that an unconfigured Otedama falls back to a built-in stratum+v2://
+// endpoint. It did, and that endpoint's host has no address record, so the
+// fallback could only produce an endless reconnect loop. The default was
+// removed in session 266 (see the note where config.DefaultPoolURL was), and
+// "no pool" is now an error the CLI reports with instructions rather than a
+// state the engine papers over.
+func TestPrimaryPoolURL_EmptyWhenNoneConfigured(t *testing.T) {
+	if got := primaryPoolURL(config.Config{}); got != "" {
+		t.Errorf("primaryPoolURL with no pools = %q, want \"\" — there is no built-in default", got)
 	}
-	if got[:11] != "stratum+v2:" {
-		t.Errorf("default pool URL should be stratum+v2: scheme, got %q", got)
+	if got := poolURLs(config.Config{}); len(got) != 0 {
+		t.Errorf("poolURLs with no pools = %v, want empty", got)
+	}
+}
+
+// TestRunReconnectLoop_RefusesWithoutAPool pins the engine-side backstop. The
+// CLI refuses first, so this covers an embedder calling engine.Run directly:
+// looping over an empty pool list would spin without ever dialling anything.
+func TestRunReconnectLoop_RefusesWithoutAPool(t *testing.T) {
+	err := runReconnectLoop(context.Background(), reconnectOpts{
+		opts: Options{Config: config.Config{
+			BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		}},
+	})
+	if err == nil {
+		t.Fatal("runReconnectLoop with no pools returned nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "no mining pool configured") {
+		t.Errorf("error should name the missing pool, got %v", err)
 	}
 }
 
@@ -563,13 +586,15 @@ func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	}
 }
 
-func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
-	urls := poolURLs(config.Config{})
-	if len(urls) != 1 {
-		t.Fatalf("empty config: got %d URLs, want 1 default", len(urls))
-	}
-	if urls[0] == "" {
-		t.Error("default pool URL is empty")
+// TestPoolURLs_EmptyReturnsNothing replaces TestPoolURLs_EmptyReturnsDefault,
+// which required poolURLs to invent a pool for a config that named none. That
+// default's host has no address record, so the substitution produced a
+// reconnect loop that could never connect. Returning nothing lets the caller
+// fail with an instruction instead — see
+// TestRunReconnectLoop_RefusesWithoutAPool.
+func TestPoolURLs_EmptyReturnsNothing(t *testing.T) {
+	if urls := poolURLs(config.Config{}); len(urls) != 0 {
+		t.Fatalf("empty config: got %v, want no URLs (there is no built-in default)", urls)
 	}
 }
 

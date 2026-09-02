@@ -565,35 +565,36 @@ func TestIsLikelyBitcoinAddress_Bech32InvalidCharInValidLengthAddress(t *testing
 // checkPoolReachability — default URL branch (no pools configured)
 // ============================================================================
 
-func TestCheckPoolReachability_NoPoolsUsesDefault(t *testing.T) {
-	// With an empty Pools slice the check falls back to config.DefaultPoolURL.
+func TestCheckPoolReachability_NoPoolsFailsWithoutDialling(t *testing.T) {
+	// This test has tracked the same question through three answers. It first
+	// accepted either Pass or Fail and asserted nothing else, which made it
+	// unfalsifiable. It was then made to require advice that tells a user with
+	// no pool to configure one rather than to check their connection. Session
+	// 266 removed the built-in default entirely, so there is now nothing to
+	// dial at all — the check must fail immediately, without network, and say
+	// what to put in config.yaml.
 	//
-	// This test used to accept either Pass or Fail and assert nothing else,
-	// which made it unfalsifiable: no change to the check could break it.
-	// What matters for a user who has configured nothing is the *advice*.
-	// The built-in default does not resolve (docs/KNOWN_LIMITATIONS.md §20),
-	// so "check your internet connection" is the wrong instruction — their
-	// connection is fine and no amount of retrying will help. The fix has to
-	// tell them to configure a pool.
-	cfg := config.Config{} // no Pools
-	c := checkPoolReachability(cfg)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	r := c.Run(ctx)
+	// The deadline is the proof that no dial happens: a DNS lookup or TCP
+	// connect could not complete inside it.
+	start := time.Now()
+	r := checkPoolReachability(config.Config{}).Run(context.Background())
+	if elapsed := time.Since(start); elapsed > 250*time.Millisecond {
+		t.Errorf("no-pools check took %v — it should not attempt any network I/O", elapsed)
+	}
 
-	if r.Status == StatusPass {
-		// The default endpoint answered. That contradicts §20 and is worth
-		// knowing, but it is not this test's failure.
-		t.Skip("built-in default pool is reachable from here; see KNOWN_LIMITATIONS §20")
-	}
 	if r.Status != StatusFail {
-		t.Fatalf("no-pools reachability status = %v, want Fail or Pass", r.Status)
+		t.Fatalf("no-pools reachability status = %v, want Fail (detail: %s)", r.Status, r.Detail)
 	}
-	if !strings.Contains(r.Fix, "configure a pool") {
-		t.Errorf("no-pools failure must tell the user to configure a pool, got fix: %q", r.Fix)
+	if !strings.Contains(r.Detail, "no pool configured") {
+		t.Errorf("detail should name the real problem, got %q", r.Detail)
 	}
 	if strings.Contains(r.Fix, "check internet connection") {
 		t.Errorf("no-pools failure must not blame the network: %q", r.Fix)
+	}
+	for _, want := range []string{"pools:", "stratum+v2tls://"} {
+		if !strings.Contains(r.Fix, want) {
+			t.Errorf("fix should show the configuration to add (%q missing): %q", want, r.Fix)
+		}
 	}
 }
 
@@ -898,23 +899,38 @@ func TestCheckFailoverAddresses_TypoFailsChecksum(t *testing.T) {
 // checkPoolEncryption — plaintext stratum warning
 // ============================================================================
 
-// TestCheckPoolEncryption_DefaultPoolWarnsBecauseItIsPlaintext replaces a test
-// that asserted Skip with the detail "using built-in default pool (encrypted)".
-// The built-in default is a stratum+v2:// URL, which is not encrypted: the
-// engine dials it with a bare net.Dialer and logs "connecting over plaintext
-// Stratum V2 — no transport encryption" as it does so. Skipping the check for
-// the one configuration every unconfigured user runs, and calling it encrypted
-// while skipping, was the worst case of the defect.
-func TestCheckPoolEncryption_DefaultPoolWarnsBecauseItIsPlaintext(t *testing.T) {
+// TestCheckPoolEncryption_NoPoolsIsSkippedNotJudged tracks the transport check
+// through two corrections.
+//
+// It first asserted Skip with the detail "using built-in default pool
+// (encrypted)" — the worst case of the session-264 defect, since the built-in
+// default was a plaintext stratum+v2:// URL and this told every unconfigured
+// user it was encrypted. That was changed to Warn, correctly describing what
+// the default actually was.
+//
+// Session 266 removed the default outright, because its host has no address
+// record and the zero-configuration path could never mine. With nothing to
+// dial there is no transport to classify, so Skip is right again — for the
+// opposite reason, and only because the reachability check now fails with the
+// instruction to configure a pool. If that ever stops being true, this becomes
+// silence about a configuration that cannot work.
+func TestCheckPoolEncryption_NoPoolsIsSkippedNotJudged(t *testing.T) {
 	r := checkPoolEncryption(config.Config{}).Run(context.Background())
-	if r.Status != StatusWarn {
-		t.Fatalf("default pool: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	if r.Status != StatusSkip {
+		t.Fatalf("no pools: status = %v, want Skip (detail: %s)", r.Status, r.Detail)
 	}
-	if strings.Contains(r.Detail, "(encrypted)") {
-		t.Errorf("detail still calls the default pool encrypted: %q", r.Detail)
+	if strings.Contains(r.Detail, "encrypted") {
+		t.Errorf("with no pool configured the check must not judge encryption: %q", r.Detail)
 	}
-	if r.Fix == "" {
-		t.Error("Warn must include a Fix hint")
+
+	// The instruction has to exist somewhere, or removing the default just
+	// made the product quieter about being unusable.
+	reach := checkPoolReachability(config.Config{}).Run(context.Background())
+	if reach.Status != StatusFail {
+		t.Errorf("reachability with no pools = %v, want Fail", reach.Status)
+	}
+	if !strings.Contains(reach.Fix, "pools:") {
+		t.Errorf("reachability fix must show the config to add, got %q", reach.Fix)
 	}
 }
 
@@ -1297,13 +1313,19 @@ func TestCheckPoolDiversity(t *testing.T) {
 		return checkPoolDiversity(cfg).Run(ctx)
 	}
 
-	// No pools configured → warn (built-in default, no failover).
+	// No pools configured → skip. This asserted Warn with a "default" in the
+	// detail until session 266, which was right while a built-in default
+	// existed and became misleading the moment it did not: advising a user who
+	// has zero pools to configure two for failover competes with the one
+	// instruction that matters, which the reachability check now delivers as a
+	// hard failure. Diversity is a question you can only ask of a
+	// configuration that can already mine.
 	noPools := run(config.Config{})
-	if noPools.Status != StatusWarn {
-		t.Errorf("no pools: status = %v, want StatusWarn", noPools.Status)
+	if noPools.Status != StatusSkip {
+		t.Errorf("no pools: status = %v, want StatusSkip", noPools.Status)
 	}
-	if !strings.Contains(noPools.Detail, "default") {
-		t.Errorf("no pools: detail = %q, want 'default' substring", noPools.Detail)
+	if strings.Contains(strings.ToLower(noPools.Detail), "default") {
+		t.Errorf("no pools: detail still mentions a default that no longer exists: %q", noPools.Detail)
 	}
 
 	// Single pool → warn (no failover).
@@ -2027,6 +2049,41 @@ func TestSchemeIsEncrypted_StaysInStepWithPoolproto(t *testing.T) {
 		}
 		if got := schemeIsEncrypted(tc.url); got != tc.encrypted {
 			t.Errorf("schemeIsEncrypted(%q) = %v, want %v", tc.url, got, tc.encrypted)
+		}
+	}
+}
+
+// TestDefaultChecks_NoCheckMentionsABuiltInDefaultPool guards a class of stale
+// string rather than one instance of it.
+//
+// Session 266 removed the built-in default pool, updated the checks that dialled
+// it, and left two others still narrating it: "Pool diversity | using built-in
+// default pool (no failover configured)" and "Pool payout schemes | no pools
+// configured; using built-in default". Neither was found by grepping the diff —
+// they surfaced only when the built binary's `doctor --json` output was read.
+// The diagnostic is the last thing a confused user reads; it must not describe a
+// fallback that no longer exists.
+//
+// The list is of things that cannot be true again, so it stays valid if the
+// checks are reworded.
+func TestDefaultChecks_NoCheckMentionsABuiltInDefaultPool(t *testing.T) {
+	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	forbidden := []string{"built-in default", "builtin default", "default pool"}
+	for _, c := range DefaultChecks(cfg, "") {
+		// Skip the checks that reach the network; this test is about wording.
+		if c.Name == "Pool reachability" || c.Name == "Network" || c.Name == "System clock accuracy" {
+			continue
+		}
+		r := c.Run(ctx)
+		text := strings.ToLower(r.Detail + " " + r.Fix)
+		for _, bad := range forbidden {
+			if strings.Contains(text, bad) {
+				t.Errorf("check %q still refers to a built-in default pool (%q): detail=%q fix=%q",
+					c.Name, bad, r.Detail, r.Fix)
+			}
 		}
 	}
 }

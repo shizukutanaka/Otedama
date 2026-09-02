@@ -456,12 +456,12 @@ func TestConfig_Help_ExitsZeroOnStdout(t *testing.T) {
 func TestRun_HTTPAddrFlag_DryRun(t *testing.T) {
 	// --http-addr in combination with --dry-run must parse correctly.
 	var out, err bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--http-addr", "127.0.0.1:0",
 		"--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...), &out, &err)
 
 	if code != exitOK {
 		t.Errorf("run with --http-addr --dry-run exit = %d (err=%s)",
@@ -471,12 +471,12 @@ func TestRun_HTTPAddrFlag_DryRun(t *testing.T) {
 
 func TestRun_LogFormatJSON_DryRun(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--log-format", "json",
 		"--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...), &out, &err)
 
 	if code != exitOK {
 		t.Errorf("run with --log-format=json --dry-run exit = %d (err=%s)",
@@ -490,11 +490,11 @@ func TestRun_MalformedNumericEnvVar_WarnsAndSucceeds(t *testing.T) {
 	// itself should succeed with the default value for that field.
 	t.Setenv("OTEDAMA_POWER_WATTS", "not-a-number")
 	var out, errb bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--dry-run",
-	}, &out, &errb)
+	}, poolConfigArgs(t)...), &out, &errb)
 	if code != exitOK {
 		t.Errorf("run with malformed env var should succeed (dry-run): code=%d, stderr=%q",
 			code, errb.String())

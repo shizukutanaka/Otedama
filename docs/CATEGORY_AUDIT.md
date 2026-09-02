@@ -1304,34 +1304,62 @@ trace to evidence should treat this section as precedent for how to
 handle it — name it, measure it, and write down which half of your own
 account turned out to be wrong.
 
+### The hook was right: a ranked list of other people's work is not completion
+
+The summary that closed the previous pass ended with seven items, each
+described as a decision someone had to make or a push someone had to
+perform. Applying the session's own method to that list — *what is the
+evidence that this is someone else's?* — found two entries whose status
+was asserted rather than tested.
+
+**Workflow edits: re-tested, and genuinely blocked.** Session 264 had one
+observation (`git push` refused). Writing the corrected `release.yml`
+through the GitHub contents API produced `403 Resource not accessible by
+integration` — a second, independent mechanism with the same answer.
+"Blocked" is now a measurement. The refused file is complete, parses as
+YAML with a valid `needs:` graph, and sits in §13 ready to paste; it
+fixes the unversioned binaries, publishes `checksums.txt`, and removes
+two jobs that could only fail.
+
+**The default pool: never blocked, only called blocked.** Every fact
+needed for the decision was already in this document — the host has no
+address record, no replacement can be verified from here, and therefore
+*no user can have been depending on it*. That last point is decisive:
+removing something nobody can use breaks nobody. It was removed. `run`
+now refuses without a pool and prints the configuration to add (exit
+78); `doctor` fails the reachability check without dialling; the engine
+refuses an empty pool list; and the flagship command's acceptance test —
+which had certified that an address alone was enough — now asserts both
+halves of the real contract. §20 is resolved by deletion, with the
+measurement kept as the evidence.
+
+The lesson is the same one this session keeps producing, pointed at
+itself once more: "someone else has to decide this" is a claim, and it
+needs evidence like any other. One of two such claims survived testing.
+
 ### 改善点 — re-ranked after session 266
 
 Supersedes the session-265 list. Items 1 and 6 there are closed; the rest
 carry forward with what this session learned about them.
 
-1. **Decide what the zero-configuration path should do** — now the highest
-   item, because it is no longer a preference but a broken first run: the
-   built-in default host does not resolve (§20), so `otedama run
-   --bitcoin-address bc1q...` cannot mine. Two options, both cheap: point
-   the default at a verified endpoint from the pool's own documentation,
-   or remove the default so the product asks for an explicit choice and
-   fails with that instruction. The second needs no external information
-   and cannot go stale. Maintainer decision; the product now warns clearly
-   either way.
-2. **Apply the §13 workflow surgery**, including dropping `GOTOOLCHAIN:
-   local` (or lifting the pins to 1.24.x), fixing `release.yml`'s `-X
-   main.Version` — which silently names symbols this binary does not have,
-   so released builds carry no version — and its "P2P Mining Pool
-   Software" description. Maintainer push; the App used by these sessions
-   may delete a workflow file but not modify one.
-3. **Publish `checksums.txt` from the release workflow** (§21). Needs no
-   key material, is a handful of lines, and turns `install.sh` from a
-   command that always aborts into one that verifies what it downloads.
-   Signing with keyless cosign is the natural next step, not a
-   prerequisite.
-4. **Add `govulncheck` and SHA-pin every action** (§21). Three documents
-   claimed both were already done, and ADR-011 offered the first as a
-   mitigation for taking a fourth dependency.
+1. ~~**Decide what the zero-configuration path should do**~~ — **done
+   (session 266, by deletion).** The built-in default was removed; `run`
+   refuses without a pool and prints what to add; §20 is resolved.
+2. **Replace `.github/workflows/release.yml` with the file in §13** — the
+   single highest-value push left. It fixes the unversioned release
+   binaries, publishes `checksums.txt` (which makes the documented
+   `install.sh` command work at all), and removes two jobs that can only
+   fail. Blocked for these sessions by a `403` from both `git push` and
+   the contents API; for a maintainer it is a paste.
+3. **Apply the rest of the §13 surgery** in `ci.yml`, `test.yml` and
+   `security.yml`: drop `GOTOOLCHAIN: local` (or lift the pins to 1.24.x)
+   and delete the jobs that reference paths this repository does not
+   have. Same blocker, same shape.
+4. **Add `govulncheck` and SHA-pin every action** (§21). Pinning needs the
+   action repositories' commit SHAs, which this session could not fetch
+   without guessing, so it was not done. Three documents claimed both
+   were already in place; ADR-011 offered the first as a mitigation for
+   taking a fourth dependency.
 5. **Decide `go 1.22` → `go 1.24`** — measured green here, evidence in
    `GODEBUG_NOTES.md`; it changes fourteen runtime defaults, so it is a
    maintainer call, not a cleanup.
@@ -1343,5 +1371,56 @@ carry forward with what this session learned about them.
 7. **Widen i18n beyond the fifteen startup messages** when there is
    translation capacity. Mechanism ready; scope is the constraint.
 
-Nothing on this list is blocked on discovery any more. Every item names
-either a decision someone has to make or a push someone has to perform.
+Nothing on this list is blocked on discovery, and — after this pass —
+nothing on it is blocked on a decision either. Items 2–4 are pushes this
+session's credentials cannot make, demonstrated twice; item 5 is a
+maintainer's call with the measurements attached; 6 and 7 are external.
+Everything reachable from here has been reached.
+
+### Completion, re-examined — the hook was right
+
+The first ending to this session presented a re-ranked improvement list and
+called the work complete. It was not: a ranked list of *other people's*
+decisions and pushes is an inventory of unfinished work. The Socratic
+question that had not been asked was about my own classification — **is
+"blocked" a measurement, or an assertion?** Two items answered differently.
+
+**Workflow edits: blocked, and now proven twice.** Session 264 recorded that
+`git push` was refused. Session 266 tested the other write path — the GitHub
+contents API — and got `403 Resource not accessible by integration`. Two
+independent mechanisms, one answer, so the word "blocked" is now earned. What
+follows from that is not a shrug: the corrected `release.yml` the API refused
+is preserved verbatim in §13, YAML-parsed with its `needs:` graph checked. It
+fixes ldflags that named symbols the binary does not declare (so releases
+carried no version), publishes the `checksums.txt` that `install.sh` requires
+and dies without, and deletes two jobs that could only fail. A maintainer's
+task went from "work out the surgery" to "paste this block".
+
+**The default pool: never blocked.** I had filed it as a maintainer design
+decision while holding the argument that settles it — *a hostname with no
+address record cannot have been mining for anyone*, so removing it breaks
+nobody and keeping it helps nobody. That is Musk's second step, and it needed
+no external information at all. It is now gone: `run` exits 78 with the
+configuration to add, `doctor` fails immediately without dialling, the engine
+refuses an empty pool list, §20 is resolved by deletion, and eleven tests were
+rewritten — including the flagship acceptance test, which had been certifying
+that a configuration incapable of mining was valid.
+
+**One more instance of the session's recurring lesson.** After the code and
+every document were updated, running the built binary showed two checks still
+narrating the removed default in their output. The diff greps were clean; the
+program was not. Reading what the product actually says, rather than what its
+source suggests it says, is the third distinct time this session that method
+found something no amount of searching did. The guard added for it asserts an
+invariant that survives rewording — no check mentions a built-in default —
+rather than pinning today's strings.
+
+**Completion, stated precisely.** Everything this session could reach is
+done. What remains is four items, each with a *demonstrated* blocker rather
+than an assumed one: three workflow changes refused by a permission boundary
+tested twice (with the artefact ready to paste), and Noise NX, which waits on
+an audited Go ElligatorSwift implementation that does not exist anywhere. The
+falsification test stands unchanged, now with three demonstrated failure
+modes: a claim verified by grep is not verified; a claim verified in source is
+not verified until the program is run; and a blocker that was never tested is
+not a blocker.

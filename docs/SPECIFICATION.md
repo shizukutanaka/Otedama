@@ -27,7 +27,7 @@ otedama <command> [flags]
 
 | Command | Behaviour |
 |---|---|
-| `run` | Detect hardware, optionally create a Lightning wallet, connect to a pool, and mine. |
+| `run` | Detect hardware, optionally create a Lightning wallet, connect to a pool, and mine. Exits 78 with the configuration to add when no pool is configured. |
 | `version [--json]` | Print version/commit/build-date/go-version/platform; `--json` emits the `version.Info` object. |
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
@@ -62,7 +62,7 @@ its default, and its validation rule:
 |---|---|---|---|
 | `bitcoin_address` | `OTEDAMA_BITCOIN_ADDRESS` | `""` | plausible mainnet address (see §3.3) |
 | `bitcoin_addresses` (failover list) | — (file only) | `nil` | each entry a plausible mainnet address |
-| `pools[].url` | — (file only) | one built-in fallback endpoint (`config.DefaultPoolURL`) — not a curated list, and its host does not currently resolve (KNOWN_LIMITATIONS §20) | supported scheme + non-empty host (§3.3) |
+| `pools[].url` | — (file only) | **none — at least one pool is required.** `run` exits 78 with the snippet to add when the list is empty; there is no built-in fallback (KNOWN_LIMITATIONS §20, resolved) | supported scheme + non-empty host (§3.3) |
 | `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
@@ -240,8 +240,7 @@ plaintext (§2); GPU detection is Linux-only and no compute dispatch exists,
 so a detected GPU is given no work (§4); Lightning is receive-only, with no
 embedded node (§6); ASIC hardware is not detected at all (§8); several CI
 workflows are non-functional (§13); `datum://` is a reserved scheme with no
-dialer (§14); the built-in default pool host does not resolve, so a pool
-must be configured (§20); CI has no SHA-pinned actions, signed releases, or
+dialer (§14); CI has no SHA-pinned actions, signed releases, or
 `govulncheck` (§21); and the mining thread count cannot be set from inside
 the product (§22).
 
@@ -249,6 +248,9 @@ Resolved since the earlier revision of this list: the simulated
 AI-inference yield was deleted rather than disclosed (§1), the post-quantum
 scaffolding was removed as unreachable (§5), the engine now routes through
 `poolproto` (§3), the TUI detects the real terminal width on Linux (§15),
+the built-in default pool — whose host had no address record — was removed
+so that a run without a configured pool is refused with instructions
+instead of retrying a dead endpoint forever (§20),
 **both halves of §16 are closed** — `otedama wallet verify` for backup
 verification and `otedama wallet change-passphrase` for rotation, the latter
 of which an earlier revision of this section still listed as open — and a

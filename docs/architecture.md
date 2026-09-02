@@ -44,7 +44,7 @@ HALの設計で特に注意を要するのは、同一物理デバイスの複�
 
 収益源コネクタ層は、外部サービスとの通信を担う四系統のアダプタで構成されます。各アダプタは`internal/providers/`配下の独立したパッケージとして実装され、共通の`Provider`インターフェースに準拠します。`Provider`インターフェースは`Connect(context.Context) error`、`ExpectedYield(HardwareProfile) (YieldEstimate, error)`、`Submit(Work, Result) (Receipt, error)`、`Disconnect() error`のメソッドを持ちます。
 
-ビットコイン採掘プロバイダはStratum V2プロトコルを主軸に実装されます。**プロトコル実装は自前のGo実装です**（session 266 で訂正。以前ここには「SRIのGoバインディングを統合利用し、自前実装を避ける」と書かれていましたが、採られた判断は逆で、`internal/stratum/` と `internal/poolproto/stratumv1|stratumv2/` がすべて自前実装です。理由は `docs/SUSTAINABILITY.md` §2 と ADR-003 を参照）。Job Negotiation と Template Negotiation は未実装で v3.6 スコープ（§14）、Encrypted Stratum（Noise NX）は実装済みだがどの実接続にも配線されていません（§2）。接続先はユーザーが設定します——特定プールへの「初期サポート」という概念はなく、組み込みの既定値は1つだけです（§20）。
+ビットコイン採掘プロバイダはStratum V2プロトコルを主軸に実装されます。**プロトコル実装は自前のGo実装です**（session 266 で訂正。以前ここには「SRIのGoバインディングを統合利用し、自前実装を避ける」と書かれていましたが、採られた判断は逆で、`internal/stratum/` と `internal/poolproto/stratumv1|stratumv2/` がすべて自前実装です。理由は `docs/SUSTAINABILITY.md` §2 と ADR-003 を参照）。Job Negotiation と Template Negotiation は未実装で v3.6 スコープ（§14）、Encrypted Stratum（Noise NX）は実装済みだがどの実接続にも配線されていません（§2）。接続先はユーザーが設定します——特定プールへの「初期サポート」という概念はなく、組み込みの既定値もありません（未設定なら `run` は起動を拒否。§20）。
 
 AI推論プロバイダは未実装です（本節は設計意図の記述であり、現状の記述ではありません）。統合先の候補は`internal/provider`のパッケージdocに記録した基準——ユーザーがプロバイダ側であり、支払いが非カストディで、価格が注文ごとに発見される市場——で選定します。この基準によりRender Network（RNDRトークンによる中央仲介）とio.net（中央価格決定）は対象外です。以前ここには「Strawberry API（並行開発中のプロジェクト）を主軸として統合」と書かれていましたが、そのようなAPIは実在せず、`CLAUDE.md`が禁じる「存在しないAPIの記載」に該当したため削除しました（session 264）。
 

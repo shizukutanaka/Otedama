@@ -2,9 +2,10 @@
 # Place this file at: ~/.config/otedama/config.yaml
 # Override with:      --config /path/to/config.yaml
 #
-# Every field is optional. The minimum viable configuration is either:
-#   - This file with bitcoin_address set, or
-#   - No file at all, with --bitcoin-address passed on the command line.
+# Two things are required: a payout address and at least one pool. The
+# address can come from here or from --bitcoin-address / OTEDAMA_BITCOIN_ADDRESS;
+# pools can only be set in this file, so "no file at all" is not a working
+# configuration (see the Pools section).
 #
 # Precedence (highest to lowest):
 #   1. Command-line flags  (--bitcoin-address, --log-level, etc.)
@@ -37,11 +38,11 @@ bitcoin_address: ""
 # List of mining pools in order of preference. Otedama connects to the
 # first and fails over to subsequent entries if the connection drops.
 #
-# If this list is empty, Otedama falls back to ONE built-in default
-# endpoint (config.DefaultPoolURL) — there is no curated or recommended
-# pool list, and no fee-based ordering. As of session 266 that default
-# host does not resolve, so configuring this list is not optional in
-# practice; see docs/KNOWN_LIMITATIONS.md §20.
+# At least one entry is required. There is no built-in default pool and no
+# curated or recommended list: `otedama run` refuses to start (exit 78)
+# and prints this shape when the list is empty. (A built-in default used to
+# exist; its host had no address record and it was removed in session 266
+# — docs/KNOWN_LIMITATIONS.md §20.)
 #
 # The hostnames below are placeholders. Take the hostname, port and
 # scheme from your pool's own documentation — Otedama cannot verify

@@ -330,13 +330,21 @@ func checkPoolReachability(cfg config.Config) Check {
 	return Check{
 		Name: "Pool reachability",
 		Run: func(ctx context.Context) Result {
-			var url string
-			usingDefault := len(cfg.Pools) == 0
-			if usingDefault {
-				url = config.DefaultPoolURL
-			} else {
-				url = cfg.Pools[0].URL
+			// No pool configured is its own failure, not a connectivity one.
+			// There is no built-in fallback to dial any more (the one that
+			// existed pointed at a host that does not resolve), so there is
+			// nothing to reach and the network is not the suspect.
+			if len(cfg.Pools) == 0 {
+				return Result{
+					Status: StatusFail,
+					Detail: "no pool configured",
+					Fix: "add a pools: entry to config.yaml with an endpoint from your " +
+						"pool's own documentation, e.g.\n    pools:\n      - url: \"stratum+v2tls://your-pool.example:3336\"\n" +
+						"  Prefer a TLS scheme: stratum+v2:// and stratum+tcp:// send your " +
+						"payout address in the clear (docs/KNOWN_LIMITATIONS.md §2).",
+				}
 			}
+			url := cfg.Pools[0].URL
 			host := stripScheme(url)
 			if host == "" {
 				return Result{
@@ -349,26 +357,10 @@ func checkPoolReachability(cfg config.Config) Check {
 			start := time.Now()
 			conn, err := d.DialContext(ctx, "tcp", host)
 			if err != nil {
-				// A failure against a pool the user chose and a failure
-				// against the built-in default are different problems with
-				// different fixes, and the generic advice ("check your
-				// internet connection") sends the second one down the wrong
-				// path. The default host does not resolve — measured in
-				// session 266 against public resolvers, with four control
-				// hostnames answering in the same run — so for a user who
-				// configured nothing, the network is not the suspect and
-				// retrying will not help. Say what to do instead.
-				fix := "check internet connection or try a different pool"
-				if usingDefault {
-					fix = "configure a pool: no pools are set, so this dialled the " +
-						"built-in default, which does not currently resolve. Add a " +
-						"pools: entry to config.yaml with an endpoint from your " +
-						"pool's own documentation (see docs/KNOWN_LIMITATIONS.md §20)"
-				}
 				return Result{
 					Status: StatusFail,
 					Detail: fmt.Sprintf("%s: %v", host, err),
-					Fix:    fix,
+					Fix:    "check internet connection or try a different pool",
 				}
 			}
 			_ = conn.Close()
@@ -392,11 +384,16 @@ func checkPoolDiversity(cfg config.Config) Check {
 		Run: func(_ context.Context) Result {
 			n := len(cfg.Pools)
 			if n == 0 {
-				// No pools configured → using built-in default. Mention it.
+				// Nothing to diversify. Warning about missing failover here
+				// would be the second voice telling the user the same thing:
+				// with no built-in default (§20), "no pool configured" is
+				// already a hard failure from the reachability check, and
+				// advising two pools to someone who has zero buries the one
+				// instruction that matters. This check earns its keep on
+				// configurations that can actually mine.
 				return Result{
-					Status: StatusWarn,
-					Detail: "using built-in default pool (no failover configured)",
-					Fix:    "add at least two pools under 'pools:' in config.yaml for automatic failover",
+					Status: StatusSkip,
+					Detail: "no pool configured — see the reachability check",
 				}
 			}
 			if n == 1 {
@@ -556,12 +553,15 @@ func checkPoolEncryption(cfg config.Config) Check {
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
 			pools := cfg.Pools
-			usingDefault := len(pools) == 0
-			if usingDefault {
-				// The built-in default is a stratum+v2:// URL, which is
-				// plaintext. Reporting on it is the point: it is what a user
-				// who has configured nothing is about to connect over.
-				pools = []config.PoolConfig{{URL: config.DefaultPoolURL}}
+			if len(pools) == 0 {
+				// Nothing to report on: with no built-in fallback there is no
+				// transport to classify. The reachability check already tells
+				// the user to configure a pool; repeating it here would just
+				// be a second copy of the same instruction.
+				return Result{
+					Status: StatusSkip,
+					Detail: "no pool configured — nothing to assess",
+				}
 			}
 
 			var plaintext []string
@@ -577,9 +577,6 @@ func checkPoolEncryption(cfg config.Config) Check {
 
 			if len(plaintext) > 0 {
 				which := fmt.Sprintf("%d of %d pool(s) use", len(plaintext), len(pools))
-				if usingDefault {
-					which = "the built-in default pool uses"
-				}
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf(
@@ -755,7 +752,7 @@ func checkPayoutScheme(cfg config.Config) Check {
 		Name: "Pool payout schemes",
 		Run: func(_ context.Context) Result {
 			if len(cfg.Pools) == 0 {
-				return Result{Status: StatusSkip, Detail: "no pools configured; using built-in default"}
+				return Result{Status: StatusSkip, Detail: "no pool configured"}
 			}
 			// Collect per-scheme summaries, noting when any pool is unconfigured.
 			var lines []string

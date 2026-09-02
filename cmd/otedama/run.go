@@ -194,28 +194,30 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "[%s] %s\n", level, text)
 	}
 
-	poolURL := config.DefaultPoolURL
-	if len(cfg.Pools) > 0 {
-		poolURL = cfg.Pools[0].URL
-	} else {
-		// Without this line the startup banner announces the built-in
-		// default exactly the way it announces a pool the user chose, so a
-		// first-run user has no way to tell that nothing was configured —
-		// and the reconnect loop then retries a host that does not resolve
-		// (docs/KNOWN_LIMITATIONS.md §20), backing off to a minute between
-		// attempts, forever. The failure was legible; what was missing was
-		// the fact that a choice had never been made.
-		//
-		// This sits before the --dry-run return on purpose. A dry run
-		// answers "is my configuration going to work", and "you have not
-		// chosen a pool, and the fallback is dead" is the most important
-		// thing that path can say — reporting only "configuration is valid"
-		// would be true of the schema and misleading about the outcome.
-		plain("warn", "no pool configured; falling back to the built-in default. "+
-			"That endpoint does not currently resolve, so mining will not start: "+
-			"set pools: in config.yaml to an endpoint from your pool's own "+
-			"documentation. Run `otedama doctor` for the full diagnosis.")
+	// A run needs somewhere to send the work. There is no built-in fallback
+	// (see the note where config.DefaultPoolURL used to be): the one that
+	// existed pointed at a host with no address record, so the
+	// zero-configuration path spent forever in a reconnect loop that could
+	// never succeed, announcing the dead endpoint in the same words it used
+	// for a pool the user had chosen. Refusing with an instruction is worse
+	// than a working default and much better than a silent permanent failure.
+	//
+	// This sits before the --dry-run return on purpose. A dry run answers
+	// "will my configuration work"; reporting "configuration is valid" for a
+	// config that cannot mine is true of the schema and false of the outcome.
+	if len(cfg.Pools) == 0 {
+		fmt.Fprint(stderr, "otedama: no mining pool configured.\n\n"+
+			"  Add a pool to config.yaml with an endpoint from your pool's own\n"+
+			"  documentation:\n\n"+
+			"    pools:\n"+
+			"      - url: \"stratum+v2tls://your-pool.example:3336\"\n\n"+
+			"  Prefer a TLS scheme — stratum+v2:// and stratum+tcp:// send your\n"+
+			"  payout address in the clear (docs/KNOWN_LIMITATIONS.md §2).\n"+
+			"  See config.yaml.example for the full schema, and run\n"+
+			"  `otedama doctor` to check the rest of your setup.\n")
+		return exitConfig
 	}
+	poolURL := cfg.Pools[0].URL
 
 	if f.dryRun {
 		fmt.Fprintln(stdout, "dry-run: configuration is valid; would start run")

@@ -179,62 +179,83 @@ func TestConfigValidate_ValidAddress(t *testing.T) {
 	}
 }
 
-// TestZeroConfigurationStartup is the core acceptance test.
-func TestZeroConfigurationStartup(t *testing.T) {
+// poolConfigArgs writes a minimal config file containing one pool and returns
+// the flags that point a `run` invocation at it.
+//
+// Every test that exercises some other part of the run path needs this, because
+// since session 266 a run without a configured pool is a configuration error:
+// the built-in default endpoint was removed after its host was measured to have
+// no address record. The URL below is RFC 5737 TEST-NET-1, which is
+// syntactically valid and never dialled on the --dry-run path.
+func poolConfigArgs(t *testing.T) []string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	body := "pools:\n  - url: \"stratum+v2tls://192.0.2.1:3336\"\n"
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return []string{"--config", path}
+}
+
+// TestMinimalConfigurationStartup is the core acceptance test: an address and a
+// pool are the two things a run cannot do without.
+//
+// It was called TestZeroConfigurationStartup and asserted that an address alone
+// was enough, which was true of the flag parsing and false of the product: with
+// no pool it fell through to a built-in default whose host does not resolve, so
+// the command it certified could never mine. The pair below asserts both halves
+// of the real contract.
+func TestMinimalConfigurationStartup(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{
+	args := append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...)
+	code := run(args, &out, &err)
 	if code != exitOK {
-		t.Fatalf("zero-config dry-run failed code=%d err=%s", code, err.String())
+		t.Fatalf("minimal dry-run failed code=%d err=%s", code, err.String())
 	}
 	if !strings.Contains(out.String(), "dry-run") {
 		t.Errorf("dry-run output missing text:\n%s", out.String())
 	}
-	// The zero-configuration path has no pool, so it falls back to
-	// config.DefaultPoolURL — an endpoint that does not resolve
-	// (docs/KNOWN_LIMITATIONS.md §20). "configuration is valid" is true of
-	// the schema and misleading about the outcome, so the same run must also
-	// say that no pool was chosen. Without this assertion the acceptance test
-	// for the flagship command passes while that command cannot mine.
-	if !strings.Contains(out.String(), "no pool configured") {
-		t.Errorf("zero-config run must warn that no pool is configured:\n%s", out.String())
-	}
 }
 
-// TestRun_ConfiguredPoolDoesNotWarnAboutMissingPool guards the other half:
-// the warning above is about an absent choice, not about pools in general,
-// so a user who configured one must never see it.
-func TestRun_ConfiguredPoolDoesNotWarnAboutMissingPool(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	// RFC 5737 TEST-NET-1: syntactically valid, never dialled on this path.
-	body := "bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\n" +
-		"pools:\n  - url: \"stratum+v2tls://192.0.2.1:3336\"\n"
-	if e := os.WriteFile(cfgPath, []byte(body), 0600); e != nil {
-		t.Fatalf("write config: %v", e)
-	}
+// TestRun_NoPoolIsAConfigError is the other half. A run with no pool must fail
+// as a configuration error — not warn, not start, not retry a dead endpoint
+// forever — and the message must be enough to fix it without reading the docs.
+func TestRun_NoPoolIsAConfigError(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--dry-run",
+	}, &out, &errb)
 
-	var out, err bytes.Buffer
-	code := run([]string{"run", "--config", cfgPath, "--dry-run"}, &out, &err)
-	if code != exitOK {
-		t.Fatalf("dry-run with a configured pool failed code=%d err=%s", code, err.String())
+	if code != exitConfig {
+		t.Fatalf("run without a pool exit = %d, want %d (stdout: %s)", code, exitConfig, out.String())
 	}
-	if strings.Contains(out.String(), "no pool configured") {
-		t.Errorf("configured pool must not trigger the missing-pool warning:\n%s", out.String())
+	if strings.Contains(out.String(), "configuration is valid") {
+		t.Error("a config that cannot mine must not be reported as valid")
+	}
+	// The message has to carry the fix: the key to set, a well-formed example,
+	// and the scheme guidance, since a plaintext scheme leaks the payout
+	// address (docs/KNOWN_LIMITATIONS.md §2).
+	for _, want := range []string{"no mining pool configured", "pools:", "stratum+v2tls://", "config.yaml.example"} {
+		if !strings.Contains(errb.String(), want) {
+			t.Errorf("missing-pool error should mention %q:\n%s", want, errb.String())
+		}
 	}
 }
 
 func TestRun_WalletPassphraseFlag(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--wallet-passphrase", "test-passphrase",
 		"--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...), &out, &err)
 	if code != exitOK {
 		t.Errorf("code=%d err=%s", code, err.String())
 	}
@@ -242,13 +263,13 @@ func TestRun_WalletPassphraseFlag(t *testing.T) {
 
 func TestRun_WalletMnemonicPassphraseFlag(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--wallet-passphrase", "test-passphrase",
 		"--wallet-mnemonic-passphrase", "my 25th word",
 		"--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...), &out, &err)
 	if code != exitOK {
 		t.Errorf("code=%d err=%s", code, err.String())
 	}
@@ -319,11 +340,11 @@ func TestRun_WalletPassphraseFromEnv_Integration(t *testing.T) {
 	// rejected or ignored by flag parsing.
 	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "test-passphrase-from-env")
 	var out, err bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...), &out, &err)
 	if code != exitOK {
 		t.Errorf("code=%d err=%s", code, err.String())
 	}
@@ -331,11 +352,11 @@ func TestRun_WalletPassphraseFromEnv_Integration(t *testing.T) {
 
 func TestRun_NoTUIFlag(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{
+	code := run(append([]string{
 		"run",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		"--no-tui", "--dry-run",
-	}, &out, &err)
+	}, poolConfigArgs(t)...), &out, &err)
 	if code != exitOK {
 		t.Errorf("code=%d err=%s", code, err.String())
 	}

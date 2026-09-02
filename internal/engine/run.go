@@ -362,6 +362,12 @@ type reconnectOpts struct {
 // error occurs, or MaxReconnectAttempts is exceeded.
 func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	pools := poolURLs(r.opts.Config)
+	if len(pools) == 0 {
+		// Backstop. cmd/otedama refuses to start without a pool and prints
+		// the instructions, so reaching here means a caller embedded the
+		// engine directly. Failing beats looping over an empty pool list.
+		return fmt.Errorf("engine: no mining pool configured (set pools: in config.yaml)")
+	}
 	addrs := payoutAddresses(r.opts.Config)
 	poolIdx := 0
 	addrIdx := 0

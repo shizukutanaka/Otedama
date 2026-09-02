@@ -90,9 +90,9 @@ Braiins OS+は、Stratum V2プロトコルの実装で業界を先導するBraii
 **設定不要の起動 — 実装済み、ただし但し書きあり。** `otedama run --bitcoin-address bc1q...`
 の一行でハードウェア自動検出（`internal/hal`）、Lightning ウォレット自動生成
 （`internal/lightning`）、稼働開始まで到達します。**プールの「自動選択」は実装していません**：
-プール未設定時のフォールバックは `config.DefaultPoolURL` という単一の組み込み定数であって
-推薦リストではなく、しかもそのホストは現在解決しません（`docs/KNOWN_LIMITATIONS.md` §20）。
-つまり本項の空白は**まだ完全には埋まっていません**。
+組み込みの既定プールも推薦リストも無く、プール未設定なら `run` は設定手順を示して起動を拒否します
+（かつての既定はホストが解決せず、session 266 に撤廃——`docs/KNOWN_LIMITATIONS.md` §20）。
+つまり本項の空白は**まだ完全には埋まっていません**——設定不要なのはプール以外の部分です。
 
 **秘密鍵をユーザーデバイス上のみに保持 — 実装済み。** シードは端末上で生成され、
 AES-256-GCM + scrypt で暗号化して保存されます（`internal/lightning/seedstore.go`）。
