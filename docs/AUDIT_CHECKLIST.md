@@ -38,7 +38,7 @@ left for the auditor to run.
 
 | # | Claim | Where to look | Verification | Status |
 |---|-------|---------------|--------------|--------|
-| 1 | Source builds with the Go toolchain the module requires | repo root | `go build ./...` | **PASS** with Go 1.24.7. See the note below on older toolchains — "Go 1.22+" is *not* accurate |
+| 1 | Source builds with the Go toolchain the module requires | repo root | `go build ./...` | **PASS** — `go.mod` declares `go 1.24`, so Go 1.24+ is required and the requirement is now stated honestly (it was `go 1.22` with a godebug block that made 1.22 and 1.23 fail anyway) |
 | 2 | Tests pass with the race detector | repo root | `go test -race -timeout 5m ./...` | **PASS** (24 packages) |
 | 3 | `go vet` is clean | repo root | `go vet ./...` | **PASS** |
 | 4 | `staticcheck` is clean | repo root | `staticcheck ./...` | **—** not installed in the verifying environment, and **not run by any CI workflow** |
@@ -48,10 +48,11 @@ left for the auditor to run.
 | 8 | Exported symbols are documented | `internal/`, `cmd/` | `go doc <pkg> <symbol>` for the packages you care about; there is no repo-wide command that proves this (`go doc -all ./...` is not a valid invocation) | **—** spot-check; not machine-enforced |
 | 9 | SPDX-License-Identifier on every Go file | — | `find internal cmd -name '*.go' -exec sh -c 'head -3 "$1" \| grep -q SPDX \|\| echo "$1"' _ {} \;` | **PASS** (no output) |
 
-**On "Go 1.22+".** `go.mod` declares `go 1.22` but also
-`toolchain go1.24.0` and a `godebug` block containing `tlsmlkem=1`, a key
-that exists only from Go 1.24. Listing a godebug key the toolchain does
-not recognise is a hard error at `go.mod` load — measured directly:
+**On the Go version.** `go.mod` declares `go 1.24` and pins no godebug
+settings. It previously declared `go 1.22` while carrying
+`godebug tlsmlkem=1`, a key Go 1.24 introduced — and listing a godebug key
+the toolchain does not recognise is a hard error at `go.mod` load, so the
+declared minimum could not actually build the module:
 
 ```
 $ GOTOOLCHAIN=local go build ./...          # module with an unknown godebug key
@@ -59,12 +60,12 @@ go: error loading go.mod:
 go.mod:6: unknown godebug "bogusknobthatdoesnotexist"
 ```
 
-With the default `GOTOOLCHAIN=auto`, an older toolchain switches to
-go1.24.0 first and the build succeeds; with `GOTOOLCHAIN=local` it does
-not switch and fails. Build with Go 1.24 or newer, or leave `GOTOOLCHAIN`
-at its default. See `GODEBUG_NOTES.md` for why the pin is load-bearing
-(removing it silently disables hybrid post-quantum TLS) and
-`docs/KNOWN_LIMITATIONS.md` §13 for the CI consequence.
+Under the default `GOTOOLCHAIN=auto` an older toolchain switches to the
+one named by the `toolchain` line and the build succeeds; with
+`GOTOOLCHAIN=local` it does not. `GODEBUG_NOTES.md` records what the bump
+moved (fourteen settings, mostly stricter crypto defaults) and the
+evidence that it is safe here; `docs/KNOWN_LIMITATIONS.md` §13 records the
+CI consequence, which is unchanged and still needs a maintainer push.
 
 ## Supply chain
 

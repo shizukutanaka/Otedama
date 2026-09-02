@@ -30,79 +30,101 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.22
+go 1.24
 toolchain go1.24.0
-
-godebug (
-    panicnil=0
-    randautoseed=1
-    tlsmlkem=1
-)
 ```
 
-**Why split `go` from `toolchain`:** the `go 1.22` directive declares
-the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **build toolchain** used in CI and
-recommended for users. This split lets users with older toolchains
-(Linux distros, NixOS pinning) still build Otedama, while CI gets
-the latest crypto and runtime fixes.
+No `godebug` block. That is the point of the baseline, and it took a
+measurement to get here.
 
-The `go` line is bumped roughly once a year, six months after each
-Go minor's release, on a dedicated PR. The `toolchain` line is
-bumped quarterly to track the latest stable Go.
+Until session 266 the module declared `go 1.22` and pinned three settings.
+GODEBUG defaults follow the `go` directive, so a `go 1.22` module compiled
+by a Go 1.24 toolchain bakes in **Go-1.22-era behaviour** for every setting
+introduced since. The built binary said so plainly — `go version -m` on it
+reported seventeen entries in `DefaultGODEBUG`:
+
+```
+asynctimerchan=1  gotestjsonbuildtext=1  gotypesalias=0
+httpservecontentkeepheaders=1  multipathtcp=0  panicnil=0  randautoseed=1
+randseednop=0  rsa1024min=0  tls3des=1  tlsmlkem=1  winreadlinkvolume=0
+winsymlink=0  x509keypairleaf=0  x509negativeserial=1  x509rsacrt=0
+x509usepolicies=0
+```
+
+Under `go 1.24` with no pins at all, the same command reports
+**`DefaultGODEBUG=` — empty**: every setting sits at the toolchain's current
+default, including `tlsmlkem=1`. Fourteen of the seventeen actually change
+value; the three that do not are exactly the three that used to be pinned,
+because the pins were holding them at what became the default.
+
+**Why split `go` from `toolchain`:** the `go` directive declares the
+language and behaviour baseline the source assumes; `toolchain` is the
+build toolchain. They now agree because they must: `godebug tlsmlkem=1`
+under a `go 1.22` line is an unrecognised key on any toolchain older than
+1.24 (the Go 1.23 name was `tlskyber`; Go's own `doc/godebug.md` records
+the rename and removal), and an unrecognised godebug key is a hard error
+at `go.mod` load. The split was buying compatibility the godebug block had
+already spent.
+
+The `go` line is bumped roughly once a year, six months or more after the
+corresponding Go release. Go 1.24.0 shipped in February 2025 and was
+adopted here in September 2026 — nineteen months, comfortably inside the
+policy below.
 
 ## Active knobs
 
-As of 2026-04-30:
+**None.** As of session 266 the module pins nothing, and that is the
+desired state: a pin is a divergence from the toolchain's judgement and
+should exist only while it buys something.
 
-- **`tlsmlkem=1`** — **load-bearing, not decorative. Do not delete it as a
-  redundant restatement of a default (measured, session 264).** Because
-  `go.mod` declares `go 1.22`, GODEBUG defaults follow Go-1.22-era
-  behaviour, and this key did not exist then, so its default resolves to
-  *off*. Removing the line was measured with `go version -m` on the built
-  binary: `DefaultGODEBUG` flips from `tlsmlkem=1` to `tlsmlkem=0`. That
-  would silently disable post-quantum key exchange on every
-  `stratum+v2tls://` pool connection and every price-feed HTTPS request,
-  with nothing failing and no log line to notice.
+The three that used to be here, and why each is gone:
 
-  There is a cleaner way to get the same result, recorded here rather
-  than applied because it changes more than one thing: declaring
-  `go 1.24` makes `tlsmlkem=1` the native default, so the pin becomes
-  unnecessary. It also moves fourteen other settings from Go-1.22-era to
-  Go-1.24-era defaults, several of them security hardening — `tls3des`
-  1→0, `x509negativeserial` 1→0, `rsa1024min` 0→1, `x509rsacrt` 0→1 —
-  and one with real runtime consequences, `asynctimerchan` 1→0, which
-  changes `time.Timer` channel semantics that this codebase's tickers and
-  reconnect loop depend on. Measured under that directive, all 24
-  packages build, vet, and test green, and the race suite passes; that is
-  one machine and a handful of runs, not a substitute for a maintainer's
-  review of a language-version bump.
+- **`tlsmlkem=1`** (hybrid post-quantum TLS key exchange, X25519MLKEM768,
+  for `stratum+v2tls://` pools and price-feed HTTPS) — **was load-bearing
+  under `go 1.22`, and is the reason this section needs a history.** The
+  key did not exist in the Go 1.22 era, so its `go 1.22` default resolved
+  to *off*; deleting the line as a "redundant restatement of a default"
+  would have silently disabled post-quantum key exchange with nothing
+  failing and no log line. Measured in session 264: removing it flipped the
+  binary's `DefaultGODEBUG` from `tlsmlkem=1` to `tlsmlkem=0`. Under
+  `go 1.24` it is the native default, confirmed by the empty
+  `DefaultGODEBUG` above and by `tls.X25519MLKEM768` being present in the
+  toolchain's curve set. The trap is gone because the condition that
+  created it is gone.
+- **`panicnil=0`** — Go 1.21+ behaviour, already the default under
+  `go 1.24`. Otedama never calls `panic(nil)`; the pin was for visibility.
+- **`randautoseed=1`** — Go 1.20+ behaviour, already the default under
+  `go 1.24`. Nothing security-relevant depends on `math/rand`
+  determinism (`crypto/rand` is used where it matters).
 
-  The original intent below still holds:
+### What the bump moved, and how it was checked
 
-- **`tlsmlkem=1`** — explicitly enable hybrid post-quantum TLS key
-  exchange (X25519MLKEM768) for outbound connections to price feeds.
-  Default on Go 1.24+, but pinning here makes the choice visible to
-  downstream reviewers and survives future default flips. This knob
-  was named `tlskyber` on the Go 1.23 draft (X25519Kyber768) and was
-  renamed `tlsmlkem` in Go 1.24 when the construction was
-  standardized; our `toolchain go1.24.0` therefore requires the new
-  name (the old name is an "unknown godebug" build error on 1.24).
+The fourteen settings that changed value are mostly stricter crypto
+defaults, which for a binary that handles payout addresses is the
+direction to travel: `tls3des` 1→0, `x509negativeserial` 1→0,
+`rsa1024min` 0→1, `x509rsacrt` 0→1, `x509usepolicies` 0→1,
+`x509keypairleaf` 0→1. Several are inert here — `winsymlink`,
+`winreadlinkvolume` (Windows link handling), `gotypesalias` (`go/types`
+consumers), `gotestjsonbuildtext` (`go test -json` output),
+`httpservecontentkeepheaders` (`http.ServeContent`), `randseednop`
+(`rand.Seed`), `multipathtcp`. Checked by grep: this codebase calls none
+of `rand.Seed`, `ServeContent`, `os.Symlink`/`os.Readlink`, the MPTCP
+setters, 3DES, or `crypto/rsa` directly.
 
-- **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
-  a synthetic non-nil error from `panic(nil)`, rather than reverting
-  to the pre-1.21 "recover() sees nil" behavior. Otedama's own code
-  never calls `panic(nil)`, and no known transitive dependency does
-  either, so this pin has no observable effect today — it is set
-  explicitly so a future dependency change cannot silently flip our
-  effective behavior on a `go` directive bump.
+The one with real runtime consequences is **`asynctimerchan` 1→0**: Go
+1.23 changed `time.Timer`/`time.Ticker` channel semantics, and this
+codebase has 25 timer and ticker sites, including the reconnect backoff,
+the stats tick, the uptime publisher and the price-feed poller. Evidence
+it is safe here, all under the new directive: three consecutive clean
+full-suite runs (24/24 packages), the race suite (24/24, no data races),
+`internal/engine` — the timer-heaviest package, and the home of the one
+test with a known contention flake — green five consecutive times, and
+`miner`, `httpserver`, `rates` and `tui` green three times each. The
+binary still refuses a run without a pool (exit 78) and accepts one with
+a pool.
 
-- **`randautoseed=1`** — keep Go 1.20+'s auto-seeding of `math/rand`
-  from a cryptographically random source (rather than the historical
-  fixed seed 1). Otedama does not rely on `math/rand`'s determinism
-  for anything security-relevant (`crypto/rand` is used there;
-  `math/rand/v2` only for non-security uses), so this pin also has no
-  observable effect today — same visibility rationale as `panicnil`.
+That is one machine. It is not a substitute for review, but it is the
+evidence a reviewer would otherwise have to gather themselves.
 
 ## Knobs we may need in the next 10 years
 
@@ -219,7 +241,10 @@ months after each Go minor release. The procedure:
    until Go 1.27.6 before adopting `go 1.27`).
 2. Read the release notes' "Compatibility" section for new GODEBUG
    knobs.
-3. Run `go vet ./...` and `staticcheck ./...` on the new version.
+3. Run `go vet ./...` and `staticcheck ./...` on the new version. (For
+   the 1.24 bump, `go vet` was clean; `staticcheck` is not installed in
+   the session that made the change and is not run by CI either — see
+   docs/KNOWN_LIMITATIONS.md §21 — so that half was not performed.)
 4. Bump the directive in a dedicated PR titled `chore: bump go directive
    to 1.27`.
 5. Add any newly-relevant knobs to this file before merging.

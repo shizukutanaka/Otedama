@@ -1360,9 +1360,16 @@ carry forward with what this session learned about them.
    without guessing, so it was not done. Three documents claimed both
    were already in place; ADR-011 offered the first as a mitigation for
    taking a fourth dependency.
-5. **Decide `go 1.22` → `go 1.24`** — measured green here, evidence in
-   `GODEBUG_NOTES.md`; it changes fourteen runtime defaults, so it is a
-   maintainer call, not a cleanup.
+5. ~~**Decide `go 1.22` → `go 1.24`**~~ — **done (session 266).** Also
+   filed as a maintainer call, and also decided by evidence once the
+   evidence was gathered: the fourteen changed settings were enumerated
+   from the toolchain's own godebug table, six are stricter crypto
+   defaults, seven are inert in this codebase (verified by grep), and the
+   one with real consequences — `asynctimerchan`, across 25 timer sites —
+   was exercised by three clean suite runs, a race run, and five
+   consecutive runs of the timer-heaviest package. The module now declares
+   what it actually requires and pins nothing, which removes the trap
+   where deleting one line disabled post-quantum TLS.
 6. **Wire Noise NX, or keep telling users to use TLS.** Unchanged in
    substance and still externally blocked: no audited Go ElligatorSwift
    exists (ADR-011 erratum). Until then `stratum+v2tls://` is the honest

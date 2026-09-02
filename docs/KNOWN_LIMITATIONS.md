@@ -755,14 +755,23 @@ exactly, so a maintainer can apply it in one pass:
     `GOTOOLCHAIN`, so the default `auto` applies and the `toolchain
     go1.24.0` line moves them to a toolchain that understands the key.
 
-  The inferred link is that Go 1.23 specifically does not know
-  `tlsmlkem` — taken from Go's release history, not measured here, since
-  no 1.23 toolchain is available in this environment. Everything else
-  above is a measurement. Fixing it is one line per file: drop
-  `GOTOOLCHAIN: local`, or raise the pins to 1.24.x. Do not delete the
-  `godebug` block to make the pins work — `GODEBUG_NOTES.md` records the
-  measurement showing that removing `tlsmlkem=1` silently turns off
-  hybrid post-quantum TLS.
+  **The last inferred link is now sourced (session 266).** Go's own
+  `doc/godebug.md`, shipped in the toolchain, states: *"Go 1.24 also
+  removed X25519Kyber768Draft00 and the Go 1.23 `tlskyber` setting."* The
+  Go 1.24 godebug table (`src/internal/godebugs/table.go`) lists
+  `tlsmlkem` with `Changed: 24` and contains no `tlskyber` entry at all.
+  So the 1.23 name was `tlskyber`, `tlsmlkem` is unknown to a 1.23
+  toolchain, and an unknown key is an error at `go.mod` load. Nothing in
+  this diagnosis rests on inference any more.
+
+  **What changed underneath it (session 266):** `go.mod` now declares
+  `go 1.24` and pins nothing. That does not fix CI — a 1.23 runner with
+  `GOTOOLCHAIN: local` still fails — but it changes the failure to an
+  unambiguous `go.mod requires go >= 1.24`, and it removes the trap where
+  deleting one `godebug` line silently disabled post-quantum TLS
+  (`GODEBUG_NOTES.md` has the before/after `DefaultGODEBUG` measurements).
+  The fix for CI is unchanged and still needs a maintainer push: drop
+  `GOTOOLCHAIN: local`, or raise the pins to 1.24.x.
 
 - **`release.yml` produces unversioned binaries** (found session 266).
   Its build step passes `-X main.Version=...`, `-X main.BuildTime=...`
