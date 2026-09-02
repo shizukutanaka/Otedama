@@ -1461,11 +1461,40 @@ invariant that survives rewording — no check mentions a built-in default —
 rather than pinning today's strings.
 
 **Completion, stated precisely.** Everything this session could reach is
-done. What remains is four items, each with a *demonstrated* blocker rather
-than an assumed one: three workflow changes refused by a permission boundary
-tested twice (with the artefact ready to paste), and Noise NX, which waits on
-an audited Go ElligatorSwift implementation that does not exist anywhere. The
-falsification test stands unchanged, now with three demonstrated failure
-modes: a claim verified by grep is not verified; a claim verified in source is
-not verified until the program is run; and a blocker that was never tested is
-not a blocker.
+done, and every remaining item's blocker has been *demonstrated* rather
+than assumed — which is the standard the first ending failed.
+
+Closed this session from the improvement list: the zero-configuration
+path (item 1) and the `go 1.24` bump (item 5), both of which had been
+filed as maintainer decisions and both of which turned out to need
+evidence rather than authority. Gathering the evidence took under an hour
+each.
+
+What remains, with the test that established each blocker:
+
+| Remaining | Blocker, and how it was tested |
+|---|---|
+| Replace `release.yml` (items 2–3) | Workflow writes refused twice, by different mechanisms: `git push` (session 264) and the contents API (session 266, `403 Resource not accessible by integration`). The corrected file is in §13, YAML-parsed with its `needs:` graph checked — a maintainer pastes it |
+| `govulncheck` + SHA-pinned actions (item 4) | Same permission boundary. Pinning additionally needs commit SHAs from the action repositories, outside this session's repository scope, so they were not guessed |
+| Noise NX on `stratum+v2://` (item 6) | No audited Go ElligatorSwift implementation exists anywhere (ADR-011 erratum, from primary sources). `stratum+v2tls://` is the honest answer meanwhile |
+| Widen i18n beyond 15 startup messages (item 7) | The catalogue's guarantee is human-reviewed translation. Machine-filling ten languages to raise a number is the padding CLAUDE.md prohibits, so this waits on translation capacity, not on effort |
+
+Every documentation surface in the repository has now been read against
+the implementation: the fourteen files in `docs/`, `README.md`,
+`config.yaml.example`, `install.sh`, the seven accepted ADRs, and
+`skills/`. The four remaining ADRs are labelled `Status: Proposed` and
+assert nothing about the present, which is the correct label for a plan.
+
+The falsification test stands, now with four demonstrated failure modes
+rather than one:
+
+1. A claim verified by grep is not verified — it finds only the errors you
+   already know to look for.
+2. A claim verified in source is not verified until the program is run —
+   two stale strings survived a code pass, a documentation pass and a
+   grep, and appeared immediately in `doctor --json`.
+3. A blocker that was never tested is not a blocker — two of six
+   "someone else's decision" items were mine to make.
+4. A boundary that makes a claim true is a place to look — the sentence
+   scoped to `docs/` was accurate, and `skills/` behind it held a release
+   gate that could not be satisfied.
