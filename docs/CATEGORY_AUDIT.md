@@ -1384,6 +1384,44 @@ session's credentials cannot make, demonstrated twice; item 5 is a
 maintainer's call with the measurements attached; 6 and 7 are external.
 Everything reachable from here has been reached.
 
+### `skills/` — the surface my own audit claim had quietly excluded
+
+The completion sentence in this entry was scoped to "every `.md` file in
+`docs/`, plus `README.md` and `install.sh`". That scoping was accurate and
+therefore revealing: `skills/` — six files, 559 lines, the procedures a
+maintainer follows for releases, reviews, audits and TDD — had never been
+examined. A boundary drawn to make a claim true is worth walking across.
+
+`release-procedure.md` was the worst document in the repository, because
+of what it is: a gate. It blocked releases on steps that cannot be
+performed and promised automation that does not exist.
+
+| Claim | Reality |
+|---|---|
+| "v2 migration test (`otedama migrate-from-v2`) passes" | **No such subcommand.** The dispatcher has run/version/config/service/doctor/wallet/completion/help. A release gate on running a command that does not exist |
+| "Each binary includes SHA-256 checksums, GPG signature, SBOM" | None of the three is produced (§21). The missing checksums are why `install.sh` aborts |
+| "Docker Hub publication is automated" | The registry is ghcr.io, not Docker Hub |
+| "Homebrew, Snap and AUR rollout is automated" | Zero automation for Snap and AUR; the Homebrew job authenticates to another repository with `GITHUB_TOKEN`, which cannot work |
+| "FreeBSD build and smoke test" | Not a release target; cross-compiles only |
+| "Announce on the official Discord #announcements" | `solo-operations.md` rejects Discord outright as the fastest route to solo-maintainer burnout. Two documents, opposite instructions |
+| "Monitor crash reports and telemetry" | Otedama never phones home by design (`SUSTAINABILITY.md` §7). There is nothing to monitor |
+| "Documentation updated in all ten languages" | Documentation is Japanese and English; the ten languages are 15 startup log messages |
+
+Three more in the other skills: `security-audit.md` claimed `govulncheck`
+runs in CI and that fuzzing runs continuously there (neither does, §21);
+`code-review.md` claimed CODEOWNERS requires "two or more independent
+reviewers" for the funds-critical paths, where the file names one owner —
+bus-factor 1, which `MAINTAINERS.md` and `solo-operations.md` both admit
+elsewhere; `tdd.md` said CI warns on a coverage drop, where there is no
+threshold in the repository and the workflow that uploads coverage does
+not currently run at all.
+
+The pattern across all four is the one this session keeps finding: a
+document describing the system the author intended, in the present tense,
+long enough that nobody reads it against the system that exists. Process
+documents are the most dangerous place for it, because their whole
+function is to be followed without re-derivation.
+
 ### Completion, re-examined — the hook was right
 
 The first ending to this session presented a re-ranked improvement list and

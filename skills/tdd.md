@@ -107,7 +107,13 @@ func (c *fakeClock) Advance(d time.Duration) { c.now = c.now.Add(d) }
 
 テストカバレッジは手段であり目的ではありません。90%以上のカバレッジを目標としますが、数値を稼ぐためにテストを増やすことは禁止します。カバレッジが低い箇所を発見したら、まずそのコードが本当に必要かを問います。必要であれば、意味のあるテストを追加します。意味のないテスト（getter/setterの機械的テスト、トリビアルな定数の比較）でカバレッジを水増しすることは、監査で指摘される対象です。
 
-カバレッジは`go test -coverprofile`で計測し、`go tool cover -func`で関数単位の詳細を確認します。CIではカバレッジが前回コミットから大幅に低下した場合、警告を発します。
+カバレッジは`go test -coverprofile`で計測し、`go tool cover -func`で関数単位の詳細を確認します。
+
+CI 側の実状（session 266 に確認）: `ci.yml` は `-coverprofile` を取り Codecov にアップロードするが、
+**低下を警告する闘値はリポジトリ内に無い**（`codecov.yml` は存在せず、あるとすれば Codecov 側の既定）。
+しかも当のアップロード段は `matrix.go == '1.23.x'` に紐づいており、`ci.yml` は現在そもそも成功しない
+（`docs/KNOWN_LIMITATIONS.md` §13）。つまり**今日この瞬間、カバレッジは計測も比較もされていない**。
+ローカルで `go test -coverprofile` を回すのが唯一効いている手段である。
 
 ## 本スキルの更新
 
