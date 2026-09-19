@@ -31,6 +31,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   KNOWN_LIMITATIONS §15「80カラム固定」の解消。`golang.org/x/sys` を
   direct依存に昇格（理由をgo.modコメントに記録）。
 - シェル補完（bash/zsh/fish）に `wallet` を追加し、テストを更新。
+- **`service install` の wallet 経路** — 生成される systemd ユニットに
+  `EnvironmentFile=-<data-dir>/otedama.env` を追加。サービス環境は
+  インストール元シェルの `OTEDAMA_WALLET_PASSPHRASE` を継承できず、
+  パスフレーズをユニット（0644・argv可視）に埋め込むことも不可能
+  なため、従来はサービス起動時にウォレットが静黙に未初期化だった。
+  0600 の任意ファイルで OTEDAMA_* 変数を供給できる。install 時に
+  作成手順を表示。launchd/Windows には同等機構が無い旨を
+  DEPLOYMENT.md に明記（platform-native secret plumbing は将来課題）。
 
 ### Fixed (session 255)
 

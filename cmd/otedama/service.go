@@ -7,7 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
+	"runtime"
 
+	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/daemon"
 )
 
@@ -71,6 +74,18 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, "Otedama service installed and started.")
 	fmt.Fprintln(stdout, "It will start automatically on login.")
+	if runtime.GOOS == "linux" {
+		dir := *dataDir
+		if dir == "" {
+			dir = config.DefaultDataDir()
+		}
+		if dir != "" {
+			envPath := filepath.Join(dir, "otedama.env")
+			fmt.Fprintf(stdout, "To enable the Lightning wallet under the service, create %s (mode 0600) with:\n", envPath)
+			fmt.Fprintln(stdout, "  OTEDAMA_WALLET_PASSPHRASE=<your wallet passphrase>")
+			fmt.Fprintf(stdout, "then run: systemctl --user restart %s\n", "otedama.service")
+		}
+	}
 	return exitOK
 }
 

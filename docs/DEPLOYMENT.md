@@ -37,6 +37,33 @@ The unit applies these security hardening options by default:
 - `PrivateTmp=true`
 - `Restart=on-failure`, `RestartSec=10s`
 
+### Wallet passphrase for the service
+
+The service cannot inherit `OTEDAMA_WALLET_PASSPHRASE` from your shell,
+and the passphrase must never go on the unit's command line (visible via
+`systemctl`/`/proc`) or inside the unit file itself (written mode 0644).
+The generated unit therefore reads the optional file
+`<data-dir>/otedama.env` via `EnvironmentFile=-` — create it yourself
+with tight permissions:
+
+```bash
+mkdir -p ~/.local/share/otedama   # or your --data-dir
+umask 077
+cat > ~/.local/share/otedama/otedama.env <<'EOF'
+OTEDAMA_WALLET_PASSPHRASE=your-wallet-passphrase
+EOF
+systemctl --user restart otedama.service
+```
+
+Without this file the service runs fine but wallet initialisation is
+skipped silently — the same as `otedama run` without a passphrase.
+On macOS (launchd) and Windows there is no equivalent mechanism yet:
+set the wallet passphrase interactively (first `otedama run` creates the
+wallet) — the service then uses the existing `wallet.dat`; note that
+unlocking it under the service still requires the passphrase, so the
+wallet feature is effectively unavailable for launchd/sc.exe services
+until platform-native secret plumbing lands.
+
 On headless machines without persistent GUI sessions, enable
 lingering so the service survives logout:
 

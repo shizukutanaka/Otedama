@@ -207,8 +207,18 @@ func (m *Manager) systemdUnit() string {
 		effectiveDataDir = config.DefaultDataDir()
 	}
 	readWritePaths := ""
+	envFile := ""
 	if effectiveDataDir != "" {
 		readWritePaths = fmt.Sprintf("ReadWritePaths=%s\n", quoteToken(effectiveDataDir))
+		// The service environment cannot inherit OTEDAMA_WALLET_PASSPHRASE
+		// from the installing shell, and a passphrase must never be embedded
+		// in the unit (argv is visible via systemctl/proc and the unit file
+		// is 0644). EnvironmentFile is the idiomatic systemd answer: the
+		// optional file <data-dir>/otedama.env (0600, created by the user)
+		// carries OTEDAMA_* variables. The leading "-" tolerates its
+		// absence so the unit starts either way — without it the wallet is
+		// simply skipped, matching a passphrase-less `otedama run`.
+		envFile = fmt.Sprintf("EnvironmentFile=-%s\n", quoteToken(filepath.Join(effectiveDataDir, "otedama.env")))
 	}
 	return fmt.Sprintf(`[Unit]
 Description=Otedama — non-custodial compute arbitration
@@ -218,7 +228,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=%s %s
-Restart=on-failure
+%sRestart=on-failure
 RestartSec=10s
 StandardOutput=journal
 StandardError=journal
@@ -231,7 +241,7 @@ PrivateTmp=true
 %s
 [Install]
 WantedBy=default.target
-`, quoteToken(m.binaryPath), args, readWritePaths)
+`, quoteToken(m.binaryPath), args, envFile, readWritePaths)
 }
 
 // ----- macOS / launchd -----

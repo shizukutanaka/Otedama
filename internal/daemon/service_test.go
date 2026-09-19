@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/shizukutanaka/Otedama/internal/config"
 )
 
 // realRunCmd captures the original runCmd before any test replaces it.
@@ -212,6 +214,37 @@ func TestSystemdUnit_ContainsRequiredFields(t *testing.T) {
 	// Binary path must appear in ExecStart.
 	if !strings.Contains(unit, m.binaryPath) {
 		t.Errorf("systemd unit missing binary path %q", m.binaryPath)
+	}
+}
+
+// The service environment cannot inherit OTEDAMA_WALLET_PASSPHRASE from
+// the installing shell — without an EnvironmentFile hook the installed
+// service can never initialise the wallet (engine skips it silently).
+func TestSystemdUnit_EnvironmentFilePresent(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama", dataDir: "/var/lib/otedama"}
+	unit := m.systemdUnit()
+	want := "EnvironmentFile=-/var/lib/otedama/otedama.env"
+	if !strings.Contains(unit, want) {
+		t.Errorf("systemd unit missing %q; got:\n%s", want, unit)
+	}
+}
+
+// With no data dir resolvable at all the EnvironmentFile line must be
+// omitted rather than point at a meaningless path.
+func TestSystemdUnit_NoEnvironmentFileWithoutDataDir(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama", dataDir: ""}
+	if config.DefaultDataDir() == "" {
+		if strings.Contains(m.systemdUnit(), "EnvironmentFile=") {
+			t.Error("EnvironmentFile emitted with no resolvable data dir")
+		}
+		return
+	}
+	// Defaulted data dir → the env file sits inside it (quoted when the
+	// platform path contains spaces, e.g. macOS "Application Support").
+	unit := m.systemdUnit()
+	want := "EnvironmentFile=-" + quoteToken(filepath.Join(config.DefaultDataDir(), "otedama.env"))
+	if !strings.Contains(unit, want) {
+		t.Errorf("systemd unit missing %q; got:\n%s", want, unit)
 	}
 }
 
