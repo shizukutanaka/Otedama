@@ -80,10 +80,13 @@ otedama <command> [flags]
 | `version` | バージョン情報を表示 / Print version information |
 | `config show` | 有効な設定を表示 / Print the effective configuration |
 | `config validate` | 設定ファイルを検証 / Validate a configuration file |
-| `service install` | バックグラウンドサービスとして登録 / Install as a background service (launchd/systemd/Task Scheduler) |
+| `service install` | バックグラウンドサービスとして登録 / Install as a background service (launchd/systemd/Windows Service) |
 | `service uninstall` | サービス登録を解除 / Uninstall the background service |
 | `service status` | サービス状態を表示 / Show background service status |
+| `wallet verify` | 書き取ったリカバリフレーズの検証 / Verify a written-down recovery phrase |
+| `wallet change-passphrase` | ウォレットのパスフレーズ変更 / Rotate the wallet passphrase |
 | `doctor` | 自己診断チェックを実行 / Run self-diagnostic checks |
+| `completion` | シェル補完スクリプトを出力 / Print a shell completion script |
 | `help` | ヘルプを表示 / Print help |
 
 各コマンドの詳細フラグは `otedama <command> --help` で確認できます。
@@ -96,7 +99,7 @@ otedama doctor
 # 有効な設定を確認 / Inspect effective configuration
 otedama config show
 
-# 常駐サービスとして登録 (Linux: systemd, macOS: launchd, Windows: Task Scheduler)
+# 常駐サービスとして登録 (Linux: systemd, macOS: launchd, Windows: Service)
 otedama service install --bitcoin-address bc1q...
 ```
 
