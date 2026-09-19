@@ -81,9 +81,12 @@ func walletDataDir(configFile, dataDirFlag string, stderr io.Writer) string {
 // with passphrase and the fingerprint recomputed from the seed — the
 // fingerprint is a pure function of the seed, so both paths agree.
 //
-// wallet.dat must exist either way: the sidecar is only a cache of the
-// wallet's identity, so trusting it alone would report a successful
-// "match" against a wallet that is not actually there.
+// When a passphrase is supplied the fingerprint is always derived from
+// wallet.dat itself: the sidecar is only a cache of the wallet's
+// identity, so a stale sidecar (wallet.dat swapped in while the old
+// sidecar remains) would otherwise return a false match against a
+// wallet the phrase does not recover. The sidecar is consulted only
+// when no passphrase is available — the fast, decrypt-free path.
 func storedFingerprint(dataDir, passphrase string) (string, error) {
 	walletPath := filepath.Join(dataDir, walletFile)
 	raw, err := os.ReadFile(walletPath)
@@ -100,20 +103,20 @@ func storedFingerprint(dataDir, passphrase string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unmarshal wallet: %w", err)
 	}
+	if passphrase != "" {
+		seed, err := lightning.DecryptSeed(es, passphrase)
+		if err != nil {
+			return "", fmt.Errorf("wallet unlock failed — check your passphrase")
+		}
+		return lightning.Fingerprint(seed), nil
+	}
 	fpPath := filepath.Join(dataDir, walletFingerprintFile)
 	if raw, err := os.ReadFile(fpPath); err == nil {
 		if fp := strings.TrimSpace(string(raw)); fp != "" {
 			return fp, nil
 		}
 	}
-	if passphrase == "" {
-		return "", fmt.Errorf("%s is missing; supply --wallet-passphrase or OTEDAMA_WALLET_PASSPHRASE to derive the fingerprint from %s", walletFingerprintFile, walletFile)
-	}
-	seed, err := lightning.DecryptSeed(es, passphrase)
-	if err != nil {
-		return "", fmt.Errorf("wallet unlock failed — check your passphrase")
-	}
-	return lightning.Fingerprint(seed), nil
+	return "", fmt.Errorf("%s is missing; supply --wallet-passphrase or OTEDAMA_WALLET_PASSPHRASE to derive the fingerprint from %s", walletFingerprintFile, walletFile)
 }
 
 // cmdWalletVerify checks a recovery phrase the user wrote down against
@@ -131,7 +134,8 @@ func cmdWalletVerify(args []string, stdout, stderr io.Writer, stdin io.Reader) i
 	configFile := fs.String("config", "", "Path to config.yaml (optional).")
 	dataDirFlag := fs.String("data-dir", "", "Directory holding wallet.dat.")
 	walletPass := fs.String("wallet-passphrase", "",
-		"Wallet decryption passphrase. Only needed when wallet.fingerprint is missing; "+
+		"Wallet decryption passphrase. When given, wallet.dat is decrypted and the "+
+			"fingerprint recomputed — needed when wallet.fingerprint is missing or stale; "+
 			"prefer OTEDAMA_WALLET_PASSPHRASE (the flag is visible in process lists).")
 	mnPass := fs.String("mnemonic-passphrase", "",
 		"BIP-39 \"25th word\" used when the wallet was created, if any; "+

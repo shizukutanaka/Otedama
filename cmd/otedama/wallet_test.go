@@ -142,6 +142,24 @@ func TestWalletVerify_CorruptWalletIntactSidecar_Fails(t *testing.T) {
 	}
 }
 
+// A stale sidecar (e.g. wallet.dat was replaced while the old
+// fingerprint file remained) must not poison verification when a
+// passphrase is available — the fingerprint is then derived from
+// wallet.dat itself, so the correct phrase still verifies.
+func TestWalletVerify_StaleSidecar_PassphraseStillVerifies(t *testing.T) {
+	dir, mnemonic := newTestWallet(t)
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte("deadbeef\n"), 0o600); err != nil {
+		t.Fatalf("poison sidecar: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := cmdWallet(
+		[]string{"verify", "--data-dir", dir, "--wallet-passphrase", "old-pass"},
+		&out, &errb, strings.NewReader(mnemonic.String()))
+	if code != exitOK {
+		t.Fatalf("verify with passphrase + stale sidecar: exit %d, want %d (stderr: %s)", code, exitOK, errb.String())
+	}
+}
+
 // stdin=/dev/null is a character device, so a ModeCharDevice check would
 // print the interactive prompt into a session with no human attached.
 // The prompt must be gated on a real terminal, not just a char device.
