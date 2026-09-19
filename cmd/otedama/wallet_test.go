@@ -176,8 +176,10 @@ func TestWalletChangePassphrase_RoundTrip(t *testing.T) {
 	dir, _ := newTestWallet(t)
 	var out, errb bytes.Buffer
 	code := cmdWallet(
-		[]string{"change-passphrase", "--data-dir", dir,
-			"--old-passphrase", "old-pass", "--new-passphrase", "new-pass"},
+		[]string{
+			"change-passphrase", "--data-dir", dir,
+			"--old-passphrase", "old-pass", "--new-passphrase", "new-pass",
+		},
 		&out, &errb, nil)
 	if code != exitOK {
 		t.Fatalf("change-passphrase: exit %d, want %d (stderr: %s)", code, exitOK, errb.String())
@@ -201,8 +203,10 @@ func TestWalletChangePassphrase_MissingWallet_DoesNotCreate(t *testing.T) {
 	dir := t.TempDir()
 	var out, errb bytes.Buffer
 	code := cmdWallet(
-		[]string{"change-passphrase", "--data-dir", dir,
-			"--old-passphrase", "old-pass", "--new-passphrase", "new-pass"},
+		[]string{
+			"change-passphrase", "--data-dir", dir,
+			"--old-passphrase", "old-pass", "--new-passphrase", "new-pass",
+		},
 		&out, &errb, nil)
 	if code != exitRuntime {
 		t.Fatalf("change-passphrase with no wallet: exit %d, want %d", code, exitRuntime)
@@ -226,8 +230,10 @@ func TestWalletChangePassphrase_WrongOldPassphrase(t *testing.T) {
 	dir, _ := newTestWallet(t)
 	var out, errb bytes.Buffer
 	code := cmdWallet(
-		[]string{"change-passphrase", "--data-dir", dir,
-			"--old-passphrase", "not-the-pass", "--new-passphrase", "new-pass"},
+		[]string{
+			"change-passphrase", "--data-dir", dir,
+			"--old-passphrase", "not-the-pass", "--new-passphrase", "new-pass",
+		},
 		&out, &errb, nil)
 	if code != exitRuntime {
 		t.Fatalf("change-passphrase with wrong old passphrase: exit %d, want %d", code, exitRuntime)

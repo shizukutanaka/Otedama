@@ -36,6 +36,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **`internal/rates/fetcher_test.go`**: 未使用の `parseFloat` ヘルパーを
   削除（deadcode検出——呼び出し元ゼロ）。
+- **`wallet verify` のE2E所見2件** — (a) `wallet.fingerprint` sidecarのみ
+  存在し wallet.dat が無いdirで「一致」と誤表示し得た問題を修正
+  （sidecarはwallet.datの同一性のキャッシュであり、wallet不在を先に
+  検査する）。(b) 対話プロンプトのTTY判定が `os.ModeCharDevice` ベース
+  で、`/dev/null`（char device）をTTYと誤判定しstdin破棄時にも
+  プロンプトを出していた——新設 `tui.IsTerminal`（unix:
+  TIOCGWINSZ ioctl成功可否、windows: GetConsoleMode）に置換。
+  DetectWidthと同じカーネル問い合わせを使うためptyの0x0も正しく
+  terminal扱いされる。
+- **`/metrics` が go_* ランタイムメトリクスを出さなかった問題** —
+  `metrics.RuntimeCollector`（prometheus/client_golang互換名）が
+  実装・テスト済みなのに `RegisterCollector` される経路がなかった。
+  `startHTTPServer` で登録し、エンジン非依存のプロセス指標を
+  常時出力にした。
+- **ダッシュボードの `est. earned` 行** — 生の `%d sats` 表示を、
+  この用途のために存在したが呼ばれていなかった `SatsToDisplay`
+  （大きい累積値でBTC表記）に置換（deadcode解消）。
 
 ### Docs (session 255)
 
