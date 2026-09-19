@@ -73,6 +73,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   ように変更——wallet.dat 差替え後に古い sidecar が残った場合の
   偽一致・偽不一致を排除。sidecar は passphrase 不在時の復号なし
   経路としてのみ使用。
+- **新規ウォレット作成を対話TTYに限定** — stdout が端末でない
+  （systemd journal、launchd ログ、`> out.log` リダイレクト）場合、
+  wallet.dat が無くてもウォレットを生成しない。BIP-39 復元フレーズは
+  生成時にしか表示されないため、非TTY環境での生成は「フレーズが
+  ログシンクに平文永続化 + 誰も記録していないウォレット」の二重の
+  欠陥となる。既存 wallet.dat は任意の出力でアンロック可——サービス
+  配備前に一度だけ対話実行でウォレットを作成する運用を DEPLOYMENT と
+  install ヒントに明記。
 
 ### Docs (session 255)
 
