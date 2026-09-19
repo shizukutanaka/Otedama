@@ -1,0 +1,134 @@
+diff --git a/.github/workflows/ci-cd.yml b/.github/workflows/ci-cd.yml
+index 9a9bcd6..4afd207 100644
+--- a/.github/workflows/ci-cd.yml
++++ b/.github/workflows/ci-cd.yml
+@@ -11,7 +11,7 @@ on:
+     - cron: '0 0 * * 0' # Weekly security scan
+ 
+ env:
+-  GO_VERSION: '1.21'
++  GO_VERSION: '1.24.x'
+   DOCKER_REGISTRY: ghcr.io
+   IMAGE_NAME: ${{ github.repository }}
+ 
+@@ -22,7 +22,7 @@ jobs:
+     strategy:
+       matrix:
+         os: [ubuntu-latest, windows-latest, macos-latest]
+-        go: ['1.20', '1.21']
++        go: ['1.24.x']
+     
+     steps:
+     - name: Checkout code
+@@ -71,9 +71,9 @@ jobs:
+         go-version: ${{ env.GO_VERSION }}
+     
+     - name: Run golangci-lint
+-      uses: golangci/golangci-lint-action@v3
++      uses: golangci/golangci-lint-action@v8
+       with:
+-        version: latest
++        version: v1.64.8
+         args: --timeout=10m
+ 
+   security:
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index b608d52..150682c 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -13,7 +13,7 @@ on:
+     - cron: '0 2 * * *'
+ 
+ env:
+-  GO_VERSION: '1.23.x'
++  GO_VERSION: '1.24.x'
+   DOCKER_REGISTRY: ghcr.io
+   IMAGE_NAME: ${{ github.repository }}
+   GIT_TERMINAL_PROMPT: 0
+@@ -46,7 +46,7 @@ jobs:
+             
+       - name: Install golangci-lint
+         run: |
+-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
++          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8
+           
+       - name: Run golangci-lint
+         run: golangci-lint run --timeout=5m ./...
+@@ -104,7 +104,7 @@ jobs:
+     strategy:
+       matrix:
+         os: [ubuntu-latest, windows-latest, macos-latest]
+-        go: ['1.22.x', '1.23.x']
++        go: ['1.24.x']
+     timeout-minutes: 30
+     steps:
+       - name: Checkout code
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 44d559e..d8d2d35 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -6,7 +6,7 @@ on:
+       - 'v*'
+ 
+ env:
+-  GO_VERSION: '1.23.x'
++  GO_VERSION: '1.24.x'
+ 
+ jobs:
+   create-release:
+diff --git a/.github/workflows/security.yml b/.github/workflows/security.yml
+index 59f2ae4..79cb8d0 100644
+--- a/.github/workflows/security.yml
++++ b/.github/workflows/security.yml
+@@ -27,7 +27,7 @@ jobs:
+       - name: Set up Go
+         uses: actions/setup-go@v5
+         with:
+-          go-version: '1.21'
++          go-version: '1.24.x'
+           cache: true
+       
+       # Static Analysis with gosec
+@@ -145,7 +145,7 @@ jobs:
+       - name: Set up Go
+         uses: actions/setup-go@v5
+         with:
+-          go-version: '1.21'
++          go-version: '1.24.x'
+           cache: true
+       
+       - name: Run security tests
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index e70097e..23ca572 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -7,7 +7,7 @@ on:
+     branches: [ main, master ]
+ 
+ env:
+-  GO_VERSION: 1.23.x
++  GO_VERSION: 1.24.x
+   GIT_TERMINAL_PROMPT: 0
+   GOPROXY: https://proxy.golang.org,direct
+   GOSUMDB: sum.golang.org
+@@ -20,7 +20,7 @@ jobs:
+     strategy:
+       matrix:
+         os: [ubuntu-latest, windows-latest, macos-latest]
+-        go: [1.23.x]
++        go: [1.24.x]
+     
+     steps:
+     - name: Checkout code
+@@ -90,9 +90,9 @@ jobs:
+         go-version: ${{ env.GO_VERSION }}
+         
+     - name: Run golangci-lint
+-      uses: golangci/golangci-lint-action@v3
++      uses: golangci/golangci-lint-action@v8
+       with:
+-        version: latest
++        version: v1.64.8
+         args: --timeout=5m
+ 
+   security:

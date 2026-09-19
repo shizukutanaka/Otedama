@@ -97,7 +97,10 @@ linters-settings:
     extra-rules: true
 
   misspell:
-    locale: US
+    # The project writes comments/docs in British English (behaviour,
+    # serialise, colour, …) consistently; the US locale flagged ~140
+    # deliberate spellings as typos, drowning real findings.
+    locale: UK
 
   errorlint:
     errorf: true
