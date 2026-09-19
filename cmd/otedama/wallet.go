@@ -86,11 +86,19 @@ func walletDataDir(configFile, dataDirFlag string, stderr io.Writer) string {
 // "match" against a wallet that is not actually there.
 func storedFingerprint(dataDir, passphrase string) (string, error) {
 	walletPath := filepath.Join(dataDir, walletFile)
-	if _, err := os.Stat(walletPath); err != nil {
+	raw, err := os.ReadFile(walletPath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("no wallet found in %s", dataDir)
 		}
 		return "", fmt.Errorf("cannot read %s: %w", walletPath, err)
+	}
+	// Verify is a recovery rehearsal: the phrase must recover THIS wallet.
+	// An unparseable wallet.dat can never be recovered — report it broken
+	// even when the fingerprint sidecar (a cache of its identity) is intact.
+	es, err := lightning.UnmarshalEncryptedSeed(raw)
+	if err != nil {
+		return "", fmt.Errorf("unmarshal wallet: %w", err)
 	}
 	fpPath := filepath.Join(dataDir, walletFingerprintFile)
 	if raw, err := os.ReadFile(fpPath); err == nil {
@@ -98,16 +106,8 @@ func storedFingerprint(dataDir, passphrase string) (string, error) {
 			return fp, nil
 		}
 	}
-	raw, err := os.ReadFile(walletPath)
-	if err != nil {
-		return "", fmt.Errorf("cannot read %s: %w", walletPath, err)
-	}
 	if passphrase == "" {
 		return "", fmt.Errorf("%s is missing; supply --wallet-passphrase or OTEDAMA_WALLET_PASSPHRASE to derive the fingerprint from %s", walletFingerprintFile, walletFile)
-	}
-	es, err := lightning.UnmarshalEncryptedSeed(raw)
-	if err != nil {
-		return "", fmt.Errorf("unmarshal wallet: %w", err)
 	}
 	seed, err := lightning.DecryptSeed(es, passphrase)
 	if err != nil {

@@ -125,6 +125,23 @@ func TestWalletVerify_FingerprintWithoutWallet_Fails(t *testing.T) {
 	}
 }
 
+// A corrupt wallet.dat with an intact fingerprint sidecar must not
+// verify: the phrase would have nothing to recover. Verify is a
+// recovery rehearsal, not a sidecar checksum.
+func TestWalletVerify_CorruptWalletIntactSidecar_Fails(t *testing.T) {
+	dir, mnemonic := newTestWallet(t)
+	if err := os.WriteFile(filepath.Join(dir, walletFile), []byte("not-a-wallet"), 0600); err != nil {
+		t.Fatalf("corrupt wallet.dat: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := cmdWallet(
+		[]string{"verify", "--data-dir", dir},
+		&out, &errb, strings.NewReader(mnemonic.String()))
+	if code != exitRuntime {
+		t.Fatalf("verify against corrupt wallet.dat: exit %d, want %d", code, exitRuntime)
+	}
+}
+
 // stdin=/dev/null is a character device, so a ModeCharDevice check would
 // print the interactive prompt into a session with no human attached.
 // The prompt must be gated on a real terminal, not just a char device.
