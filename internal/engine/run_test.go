@@ -1448,14 +1448,14 @@ func TestSetupWallet_EnvFileMissingOrUnrelated(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
 	if fp := setupWallet(Options{Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {}); fp != "" {
-		t.Error("no passphrase anywhere should not initialise a wallet")
+		t.Error("no passphrase anywhere should not initialize a wallet")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "otedama.env"),
 		[]byte("OTEDAMA_HTTP_ADDR=127.0.0.1:8080\n"), 0o600); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
 	if fp := setupWallet(Options{Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {}); fp != "" {
-		t.Error("env file without OTEDAMA_WALLET_PASSPHRASE should not initialise a wallet")
+		t.Error("env file without OTEDAMA_WALLET_PASSPHRASE should not initialize a wallet")
 	}
 }
 
