@@ -130,7 +130,7 @@ func TestWalletVerify_FingerprintWithoutWallet_Fails(t *testing.T) {
 // recovery rehearsal, not a sidecar checksum.
 func TestWalletVerify_CorruptWalletIntactSidecar_Fails(t *testing.T) {
 	dir, mnemonic := newTestWallet(t)
-	if err := os.WriteFile(filepath.Join(dir, walletFile), []byte("not-a-wallet"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFile), []byte("not-a-wallet"), 0o600); err != nil {
 		t.Fatalf("corrupt wallet.dat: %v", err)
 	}
 	var out, errb bytes.Buffer
