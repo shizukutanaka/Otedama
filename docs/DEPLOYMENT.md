@@ -57,6 +57,16 @@ systemctl --user restart otedama.service
 
 Without this file the service runs fine but wallet initialisation is
 skipped silently — the same as `otedama run` without a passphrase.
+
+Note that a **new** wallet is only ever created on an interactive run:
+with non-terminal stdout (journal, log file) the engine deliberately
+does not mint a wallet — the one-time recovery phrase could only reach
+a log sink, leaving an unbacked-up wallet with a persisted secret.
+Create the wallet once by running interactively
+(`otedama run --bitcoin-address … --wallet-passphrase …`, record the
+phrase), then let the service unlock the existing `wallet.dat` via
+`otedama.env`.
+
 On macOS (launchd) and Windows there is no equivalent mechanism yet:
 set the wallet passphrase interactively (first `otedama run` creates the
 wallet) — the service then uses the existing `wallet.dat`; note that

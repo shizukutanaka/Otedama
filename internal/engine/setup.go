@@ -12,8 +12,11 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -21,7 +24,12 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/lightning"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
+	"github.com/shizukutanaka/Otedama/internal/tui"
 )
+
+// walletDatName mirrors the filename lightning writes the encrypted seed
+// to; needed here only to decide whether this run would create a wallet.
+const walletDatName = "wallet.dat"
 
 // detectDevices initialises the HAL registry, registers CPU and GPU
 // drivers, and runs detection. Returns the list of detected devices,
@@ -117,6 +125,25 @@ func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider
 func setupWallet(opts Options, log func(level, msg string)) string {
 	if opts.WalletPassphrase == "" || opts.Config.DataDir == "" {
 		return ""
+	}
+	// First run with no wallet.dat mints a wallet and prints the BIP-39
+	// recovery phrase to opts.Output. When Output is a real *os.File that
+	// is not a terminal — a systemd service whose StandardOutput=journal,
+	// a launchd log file, `otedama run > out.log` — nobody is there to
+	// write the words on paper, and the phrase instead persists in a log
+	// sink readable by other admin users and any log-shipping pipeline.
+	// In that case defer creation to the first interactive run: the wallet
+	// stays absent (rather than existing unbacked-up) and the user gets a
+	// pointer to how to create it. An EXISTING wallet.dat unlocks under
+	// any output — the phrase is only ever printed on creation. Test and
+	// embedder buffers (non-*os.File writers) are deliberate capture, so
+	// creation still proceeds there.
+	walletPath := filepath.Join(opts.Config.DataDir, walletDatName)
+	if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
+		if out, ok := opts.Output.(*os.File); ok && !tui.IsTerminal(out) {
+			log("warn", "wallet: no wallet.dat and stdout is not a terminal — wallet NOT created (the recovery phrase could only reach a log sink); run `otedama run` interactively once to create and record it")
+			return ""
+		}
 	}
 	wl, err := lightning.NewEnglishWordList()
 	if err != nil {

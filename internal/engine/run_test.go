@@ -6,7 +6,10 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1355,6 +1358,62 @@ func TestSetupWallet_BadDataDirLogsWarningAndReturnsEmpty(t *testing.T) {
 	}
 	if !foundWarn {
 		t.Errorf("setupWallet with bad DataDir should emit a wallet warning; got %v", logs)
+	}
+}
+
+// When Output is a real file that is not a terminal — e.g. a systemd
+// service's journal or `otedama run > out.log` — a first-run wallet must
+// NOT be created: the recovery phrase would only ever reach a log sink,
+// leaving an unbacked-up wallet and a persisted secret. An existing
+// wallet.dat still unlocks; only creation is gated.
+func TestSetupWallet_NonTTYOutput_DoesNotMintNewWallet(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.CreateTemp(t.TempDir(), "journal-like-*.log")
+	if err != nil {
+		t.Fatalf("create output file: %v", err)
+	}
+	defer f.Close()
+	var logs []string
+	opts := Options{
+		WalletPassphrase: "correct-horse-battery-staple-engine-test",
+		Config:           config.Config{DataDir: dir},
+		Output:           f,
+	}
+	fp := setupWallet(opts, func(_, m string) { logs = append(logs, m) })
+	if fp != "" {
+		t.Error("non-TTY output should not mint a new wallet; got fingerprint")
+	}
+	if _, err := os.Stat(filepath.Join(dir, walletDatName)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("wallet.dat must not be created on non-TTY first run: %v", err)
+	}
+	found := false
+	for _, l := range logs {
+		if strings.Contains(l, "not a terminal") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a warning pointing at interactive creation; got %v", logs)
+	}
+}
+
+// An existing wallet.dat still unlocks with non-TTY output — the phrase
+// is only printed on creation, so nothing can leak.
+func TestSetupWallet_NonTTYOutput_ExistingWalletUnlocks(t *testing.T) {
+	dir := t.TempDir()
+	pass := "correct-horse-battery-staple-engine-test"
+	// First create a wallet via an interactive-shaped output (buffer).
+	var buf bytes.Buffer
+	setupWallet(Options{WalletPassphrase: pass, Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {})
+
+	f, err := os.CreateTemp(t.TempDir(), "journal-like-*.log")
+	if err != nil {
+		t.Fatalf("create output file: %v", err)
+	}
+	defer f.Close()
+	fp := setupWallet(Options{WalletPassphrase: pass, Config: config.Config{DataDir: dir}, Output: f}, func(_, _ string) {})
+	if fp == "" {
+		t.Error("existing wallet.dat should still unlock with non-TTY output")
 	}
 }
 
