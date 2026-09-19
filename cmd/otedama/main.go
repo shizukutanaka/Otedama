@@ -13,6 +13,8 @@
 //	otedama service uninstall
 //	otedama service status
 //	otedama doctor [--bitcoin-address bc1q...]
+//	otedama wallet verify [--data-dir path]
+//	otedama wallet change-passphrase [--data-dir path]
 //
 // # Exit codes
 //
@@ -33,8 +35,8 @@
 // indicates that operator attention is needed.
 //
 // Each subcommand lives in its own file (run.go, config.go, service.go,
-// doctor.go, version.go, completion.go); this file holds only the entry
-// point and the top-level dispatcher.
+// doctor.go, version.go, completion.go, wallet.go); this file holds only
+// the entry point and the top-level dispatcher.
 package main
 
 import (
@@ -124,6 +126,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdService(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "wallet":
+		return cmdWallet(args[1:], stdout, stderr, os.Stdin)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -148,6 +152,7 @@ Commands:
   config     Inspect or validate the effective configuration.
   service    Install/uninstall as a background service.
   doctor     Run self-diagnostic checks.
+  wallet     Verify a recovery phrase or change the wallet passphrase.
   completion Generate a shell-completion script (bash|zsh|fish).
   help       Print this help and exit.
 
@@ -156,6 +161,11 @@ Getting started (zero-configuration):
 
 With Lightning wallet:
   otedama run --bitcoin-address bc1q... --wallet-passphrase "strong passphrase"
+
+Wallet maintenance:
+  echo "word1 word2 ... word24" | otedama wallet verify
+  OTEDAMA_WALLET_PASSPHRASE=old OTEDAMA_WALLET_NEW_PASSPHRASE=new \
+    otedama wallet change-passphrase
 
 Exit codes:
   0   success

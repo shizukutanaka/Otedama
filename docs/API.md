@@ -129,6 +129,36 @@ healthcheck:
   test: ["CMD", "otedama", "doctor"]
 ```
 
+### `otedama wallet`
+
+Wallet maintenance commands for the Lightning wallet stored in
+`{data-dir}/wallet.dat`. Both commands locate the wallet through the
+usual layering: `--data-dir` > `data_dir` in `--config` >
+`OTEDAMA_DATA_DIR` > the platform default.
+
+- `otedama wallet verify` — Check a written-down recovery phrase against
+  the stored wallet. The phrase is read from **stdin** (never argv,
+  which leaks via process lists), validated with the BIP-39 checksum,
+  and compared by wallet fingerprint: `wallet.fingerprint` is used when
+  present, otherwise the seed is decrypted with `--wallet-passphrase`
+  (or `OTEDAMA_WALLET_PASSPHRASE`). If the wallet was created with a
+  BIP-39 "25th word", pass it via `--mnemonic-passphrase` (or
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`). Exit `0` on match; `1` when the
+  phrase is valid but belongs to a different wallet or no wallet exists;
+  `64` when the phrase itself is malformed.
+
+  ```
+  echo "word1 word2 ... word24" | otedama wallet verify
+  ```
+
+- `otedama wallet change-passphrase` — Re-encrypt `wallet.dat` with a
+  new passphrase. Reads the current passphrase from `--old-passphrase`
+  (or `OTEDAMA_WALLET_PASSPHRASE`) and the new one from
+  `--new-passphrase` (or `OTEDAMA_WALLET_NEW_PASSPHRASE`); prefer the
+  environment variables in production since flags are visible in process
+  lists. The seed and fingerprint are unchanged; the command never
+  creates a wallet when none exists.
+
 ---
 
 ## Configuration file
@@ -197,8 +227,9 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LOG_LEVEL` | `--log-level` | |
 | `OTEDAMA_LOG_FORMAT` | `--log-format` | |
 | `OTEDAMA_LANGUAGE` | `--language` | |
-| `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
-| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
+| `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. Also read by `wallet verify` (decrypt fallback) and `wallet change-passphrase` (as the old passphrase). |
+| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation) and by `wallet verify` (`--mnemonic-passphrase`). |
+| `OTEDAMA_WALLET_NEW_PASSPHRASE` | `--new-passphrase` | `wallet change-passphrase` only: the replacement passphrase. Same process-list caveat. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
 
 ---
