@@ -18,3 +18,13 @@ func terminalWidth(fd uintptr) int {
 	}
 	return int(ws.Col)
 }
+
+// fdIsTerminal reuses the TIOCGWINSZ probe (the one tty ioctl defined
+// for every unix GOOS — TCGETS is Linux-only and TIOCGETA is
+// Darwin-only): it succeeds on genuine terminals and ptys regardless of
+// the reported size, while /dev/null, pipes and regular files all fail
+// with ENOTTY despite carrying the os.ModeCharDevice stat bit.
+func fdIsTerminal(fd uintptr) bool {
+	_, err := unix.IoctlGetWinsize(int(fd), unix.TIOCGWINSZ)
+	return err == nil
+}

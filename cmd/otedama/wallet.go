@@ -13,6 +13,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/lightning"
+	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
 // walletFile and walletFingerprintFile mirror the constants in
@@ -79,17 +80,27 @@ func walletDataDir(configFile, dataDirFlag string, stderr io.Writer) string {
 // be lost independently of wallet.dat) the wallet itself is decrypted
 // with passphrase and the fingerprint recomputed from the seed — the
 // fingerprint is a pure function of the seed, so both paths agree.
+//
+// wallet.dat must exist either way: the sidecar is only a cache of the
+// wallet's identity, so trusting it alone would report a successful
+// "match" against a wallet that is not actually there.
 func storedFingerprint(dataDir, passphrase string) (string, error) {
+	walletPath := filepath.Join(dataDir, walletFile)
+	if _, err := os.Stat(walletPath); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("no wallet found in %s", dataDir)
+		}
+		return "", fmt.Errorf("cannot read %s: %w", walletPath, err)
+	}
 	fpPath := filepath.Join(dataDir, walletFingerprintFile)
 	if raw, err := os.ReadFile(fpPath); err == nil {
 		if fp := strings.TrimSpace(string(raw)); fp != "" {
 			return fp, nil
 		}
 	}
-	walletPath := filepath.Join(dataDir, walletFile)
 	raw, err := os.ReadFile(walletPath)
 	if err != nil {
-		return "", fmt.Errorf("no wallet found in %s", dataDir)
+		return "", fmt.Errorf("cannot read %s: %w", walletPath, err)
 	}
 	if passphrase == "" {
 		return "", fmt.Errorf("%s is missing; supply --wallet-passphrase or OTEDAMA_WALLET_PASSPHRASE to derive the fingerprint from %s", walletFingerprintFile, walletFile)
@@ -137,7 +148,10 @@ func cmdWalletVerify(args []string, stdout, stderr io.Writer, stdin io.Reader) i
 
 	// The phrase is secret input: prompt on stderr (stdout stays
 	// machine-clean) and only when a human is actually at a terminal.
-	if f, ok := stdin.(*os.File); ok && isTerminal(f) {
+	// tui.IsTerminal rather than the local isTerminal: the latter keys on
+	// os.ModeCharDevice, which /dev/null also sets — a piped-away stdin
+	// would still print the prompt.
+	if f, ok := stdin.(*os.File); ok && tui.IsTerminal(f) {
 		fmt.Fprint(stderr, "Enter recovery phrase, then press Enter followed by Ctrl+D: ")
 	}
 	// A BIP-39 phrase is at most 24 short words; a generous bound keeps a

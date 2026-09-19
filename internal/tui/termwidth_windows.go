@@ -19,3 +19,10 @@ func terminalWidth(fd uintptr) int {
 	}
 	return int(info.Window.Right - info.Window.Left + 1)
 }
+
+// fdIsTerminal asks GetConsoleMode, which succeeds only for console
+// handles — NUL, pipes and files all fail.
+func fdIsTerminal(fd uintptr) bool {
+	var mode uint32
+	return windows.GetConsoleMode(windows.Handle(fd), &mode) == nil
+}

@@ -105,6 +105,45 @@ func TestWalletVerify_NoWallet_NeverCreatesOne(t *testing.T) {
 	}
 }
 
+// A fingerprint sidecar without wallet.dat is a broken data dir — the
+// sidecar caches the wallet's identity, it is not the wallet. Verify
+// must not claim a match against a wallet that is not there.
+func TestWalletVerify_FingerprintWithoutWallet_Fails(t *testing.T) {
+	dir, mnemonic := newTestWallet(t)
+	if err := os.Remove(filepath.Join(dir, walletFile)); err != nil {
+		t.Fatalf("remove wallet.dat: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := cmdWallet(
+		[]string{"verify", "--data-dir", dir},
+		&out, &errb, strings.NewReader(mnemonic.String()))
+	if code != exitRuntime {
+		t.Fatalf("verify with only a fingerprint sidecar: exit %d, want %d", code, exitRuntime)
+	}
+	if !strings.Contains(errb.String(), "no wallet found") {
+		t.Errorf("expected 'no wallet found', got: %s", errb.String())
+	}
+}
+
+// stdin=/dev/null is a character device, so a ModeCharDevice check would
+// print the interactive prompt into a session with no human attached.
+// The prompt must be gated on a real terminal, not just a char device.
+func TestWalletVerify_DevNullStdin_NoPrompt(t *testing.T) {
+	dir, _ := newTestWallet(t)
+	devnull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("cannot open %s: %v", os.DevNull, err)
+	}
+	defer devnull.Close()
+	var out, errb bytes.Buffer
+	// /dev/null yields no words, so the phrase parse fails — fine; this
+	// test only asserts the interactive prompt text is absent.
+	cmdWallet([]string{"verify", "--data-dir", dir}, &out, &errb, devnull)
+	if strings.Contains(errb.String(), "recovery phrase") && strings.Contains(errb.String(), "Enter") {
+		t.Errorf("interactive prompt printed with /dev/null stdin: %s", errb.String())
+	}
+}
+
 func TestWalletVerify_FingerprintFileMissing_UsesPassphrase(t *testing.T) {
 	dir, mnemonic := newTestWallet(t)
 	if err := os.Remove(filepath.Join(dir, walletFingerprintFile)); err != nil {

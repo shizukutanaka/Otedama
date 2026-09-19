@@ -33,3 +33,16 @@ func DetectWidth(w io.Writer) int {
 	}
 	return terminalWidth(f.Fd())
 }
+
+// IsTerminal reports whether f is a real terminal, via the same kernel
+// query DetectWidth uses. It deliberately does not use
+// os.ModeCharDevice: that bit is set for /dev/null, /dev/zero, and
+// /dev/urandom too, so it cannot distinguish an interactive session
+// from a discarded stream. Non-*os.File values and platforms without a
+// console API return false.
+func IsTerminal(f *os.File) bool {
+	if f == nil {
+		return false
+	}
+	return fdIsTerminal(f.Fd())
+}
