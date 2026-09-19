@@ -149,10 +149,17 @@ buffers partial reads so no plaintext is dropped (session 53).
 
 ## 6. Metrics (`/metrics`, Prometheus text format, no client dependency)
 
-All metrics carry the `otedama_` prefix (omitted below). Metrics registered at
-startup always appear; lazily-created series (marked †) appear only after the
-first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
-`/healthz`, `/readyz`, `/`.
+All Otedama-defined metrics carry the `otedama_` prefix (omitted below).
+Metrics registered at startup always appear; lazily-created series (marked †)
+appear only after the first relevant event, with a bounded label set. HTTP
+endpoints: `/metrics`, `/healthz`, `/readyz`, `/`.
+
+In addition the registry always carries the standard Go runtime collector
+(`metrics.RuntimeCollector`), so `/metrics` also emits the unprefixed
+`go_goroutines`, `go_memstats_*`, `go_gc_*` and `go_info{version}` series —
+names matching `prometheus/client_golang`, so existing dashboards and the
+usual `rate(go_gc_duration_seconds_total[5m])` queries work unchanged
+(session 255).
 
 **Shares & rejects**
 
@@ -217,10 +224,14 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 
 ## 7. Known limitations
 
-Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
-simulated; (2) Noise NX uses P-256, not secp256k1; (3) engine does not yet
-route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
-(5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
+The authoritative, numbered list is `docs/KNOWN_LIMITATIONS.md` — items are
+resolved in place there (strikethrough) rather than removed, so this spec
+does not duplicate a subset that can drift stale. As of session 255 the
+unresolved entries are: §1 simulated AI-inference yield, §2 Noise NX
+(DH primitive + message flow; ADR-011 accepted), §4 Linux-only GPU
+detection, §5 post-quantum scaffolding, §6 receive-only Lightning,
+§8 no ASIC detection, §13 non-functional CI workflows, §14 DATUM
+reserved-but-unimplemented.
 
 ---
 
@@ -241,7 +252,7 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux-only;
 | G15 | The miner ground against the **block target** (`TargetFromNBits(job.NBits)`) and discarded the pool-assigned **share target** (`OpenMiningChannelSuccess.Target`), so a worker emitted a share only on an actual block solve — effectively never on a live pool. No shares submitted ⇒ no credited work, no payout, no vardiff feedback. The integration test masked it with an easy block nBits and never asserted shares were submitted. | **Fixed (session 66)**: `handshake` returns the channel share target; `updateWork` grinds to it (block-target fallback only when the pool assigns none). Integration test now asserts `pool.SharesReceived() >= 1`. Grounded in RESEARCH_IMPROVEMENTS session-51 Cat 1/2 (#2/#4). |
 | G16 | This spec's §3 documented only 8 of the 16 config fields — the power-awareness (`power_watts`, `electricity_price_per_kwh`), arbitration/curtailment (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`), and per-pool (`payout_scheme`, `tls_ca_file`) fields were all live, validated, and printed by `config show`, yet absent from the spec; the 4 numeric `OTEDAMA_*` env vars and the range-validation rules were also undocumented. | **Fixed this session** (session 190): §3 rewritten as a complete schema table (key, env var, default, validation) plus precedence and validation subsections. |
 | G17 | §6 listed 17 metrics, but the engine registers ~39 — the entire power/efficiency, rate-redundancy, clock-skew, pool-difficulty, per-device, payout-info, and arbitration-economics families were exposed at `/metrics` but undocumented, so an operator building dashboards/alerts could not discover them from the spec. | **Fixed this session** (session 190): §6 replaced with the full catalogue grouped by purpose (shares/rejects, hashrate/health/power, pool/payout, arbitration/rates), with type and lazy-creation (†) notes. |
-| G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | Open — KNOWN_LIMITATIONS §3; deferred (would regress submit-latency/reject telemetry until `poolproto.Session` is extended — see CHANGELOG session 55). |
+| G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | **Fixed (session 91)**: `runSessionV1` routes `stratum+tcp://`/`stratum+tls://` through `poolproto.DialURL`; KNOWN_LIMITATIONS §3 resolved. |
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |
 | G6 | GPU detection is Linux-only. | Open — KNOWN_LIMITATIONS §4. |

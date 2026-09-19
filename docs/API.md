@@ -257,10 +257,14 @@ Use case: load balancer removes a not-yet-ready instance from rotation.
 
 ### `GET /metrics`
 
-Prometheus text exposition format (version 0.0.4). All metrics are
-prefixed `otedama_`. Metrics are created at startup; counters and the
-lazily-created per-label series (reject reasons, per-device shares, payout
-addresses) appear once their first event occurs.
+Prometheus text exposition format (version 0.0.4). Otedama-defined
+metrics are prefixed `otedama_`; the registry also emits the standard
+unprefixed Go runtime series (`go_goroutines`, `go_memstats_*`,
+`go_gc_*`, `go_info{version}`) via `metrics.RuntimeCollector`, named to
+match `prometheus/client_golang`. Metrics are created at startup;
+counters and the lazily-created per-label series (reject reasons,
+per-device shares, payout addresses) appear once their first event
+occurs.
 
 **Mining & shares**
 
@@ -268,6 +272,7 @@ addresses) appear once their first event occurs.
 |--------|------|--------|-------------|
 | `otedama_hashrate_hashes_per_second` | gauge | — | Live aggregate hash rate. |
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
+| `otedama_shares_submitted_total` | counter | — | Shares actually transmitted to the pool, counted at send time (found but never submitted when the worker's share channel was full — distinct from `_found`). |
 | `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
 | `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
@@ -298,7 +303,9 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
+| `otedama_effective_yield_sats_per_second` | gauge | — | Expected yield × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — gross-minus-downtime estimate. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
+| `otedama_devices_idle` | gauge | — | Devices left idle this cycle (no compatible stream, or below `min_yield_sats_per_sec`). |
 
 **Economics & power**
 
