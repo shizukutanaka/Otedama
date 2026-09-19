@@ -90,6 +90,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   毎5分期限（V1 と同値）、(c) TCP connect に15s `net.Dialer.Timeout`、
   (d) TLS ハンドシェイクに子ctx 30s期限（TCP確立後に ServerHello が
   来ない停滞を捕捉——stratum/tls.go と stratumv1/tls.go 双方）。
+- **二重化していた端末判定を `tui.IsTerminal` に統一** — cmdRun の
+  TUI自動無効化が旧来の `os.ModeCharDevice` ヒューリスティックを使い
+  続けていたため、`otedama run >/dev/null` で ANSI ダッシュボードが
+  有効のまま（出力は捨てられるが誤判定）。ioctl ベースの
+  `tui.IsTerminal` に置換し、旧 `isTerminal` を削除。同関数のテストを
+  `internal/tui` に移設し `/dev/null` 回帰ピンを追加。
 - **`stratum+v2tls://` の休眠 silent downgrade を修正** — poolproto の
   `stratumv2.Dialer{useTLS:true}` は登録されているが `Dial` が useTLS を
   参照せず常に平文TCPで繋いでいた（stratumv1 で既に修正済みのものと

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
 func TestRun_NoArgsPrintsUsage(t *testing.T) {
@@ -454,49 +455,6 @@ func TestBuildLogger_UnopenableLogFileDoesNotPanic(t *testing.T) {
 }
 
 // ============================================================================
-// isTerminal
-// ============================================================================
-
-func TestIsTerminal_RegularFileIsNotATerminal(t *testing.T) {
-	f, err := os.CreateTemp(t.TempDir(), "not-a-tty")
-	if err != nil {
-		t.Fatalf("CreateTemp: %v", err)
-	}
-	defer f.Close()
-
-	if isTerminal(f) {
-		t.Error("isTerminal(regular file) = true, want false")
-	}
-}
-
-func TestIsTerminal_PipeIsNotATerminal(t *testing.T) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	defer r.Close()
-	defer w.Close()
-
-	if isTerminal(w) {
-		t.Error("isTerminal(pipe) = true, want false")
-	}
-}
-
-func TestIsTerminal_ClosedFileReturnsFalse(t *testing.T) {
-	f, err := os.CreateTemp(t.TempDir(), "closed")
-	if err != nil {
-		t.Fatalf("CreateTemp: %v", err)
-	}
-	f.Close()
-
-	// Stat on an already-closed file returns an error; isTerminal must
-	// treat that as "not a terminal" rather than panicking.
-	if isTerminal(f) {
-		t.Error("isTerminal(closed file) = true, want false")
-	}
-}
-
-// ============================================================================
 // cmdRun — TUI auto-disable when stdout is not a terminal
 // ============================================================================
 
@@ -517,8 +475,8 @@ func TestCmdRun_AutoDisableIsNoOpForNonFileStdout(t *testing.T) {
 		t.Fatalf("bytes.Buffer unexpectedly asserted to *os.File: %v", out)
 	}
 	// Mirror cmdRun's own guard so this test fails if that logic regresses
-	// (e.g. an unconditional isTerminal call panicking on a non-*os.File).
-	if o, ok := io.Writer(&out).(*os.File); ok && !isTerminal(o) {
+	// (e.g. an unconditional IsTerminal call panicking on a non-*os.File).
+	if o, ok := io.Writer(&out).(*os.File); ok && !tui.IsTerminal(o) {
 		f.noTUI = true
 	}
 	if f.noTUI {

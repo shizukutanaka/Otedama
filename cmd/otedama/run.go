@@ -19,6 +19,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/i18n/messages"
 	"github.com/shizukutanaka/Otedama/internal/logger"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
+	"github.com/shizukutanaka/Otedama/internal/tui"
 
 	// Register pool-protocol dialers so poolproto.DialURL can find them.
 	// Each package's init() calls poolproto.Register with its Dialer.
@@ -143,7 +144,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	// override, and there is no flag to force the TUI on when stdout is
 	// not a terminal, since that would only ever reproduce this bug.
 	if !f.noTUI {
-		if out, ok := stdout.(*os.File); ok && !isTerminal(out) {
+		if out, ok := stdout.(*os.File); ok && !tui.IsTerminal(out) {
 			f.noTUI = true
 		}
 	}
@@ -231,21 +232,6 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 
 	logln("info", messages.StatusShuttingDown, nil)
 	return exitOK
-}
-
-// isTerminal reports whether f is connected to an interactive terminal,
-// as opposed to a redirected file, a pipe, or a service manager's log
-// capture (systemd's journal, launchd's file-based stdout redirection).
-// Stdlib-only: os.ModeCharDevice is set on a file's Stat() when the
-// underlying descriptor is a character device, which a real terminal is
-// and a regular file/pipe is not, on every platform Go supports — no
-// golang.org/x/term dependency needed for this check.
-func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
 }
 
 // buildLogger constructs the structured logger for a run and returns a cleanup
