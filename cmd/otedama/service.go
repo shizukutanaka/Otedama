@@ -83,9 +83,11 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 		}
 		if dir != "" {
 			envPath := filepath.Join(dir, "otedama.env")
-			fmt.Fprintf(stdout, "To enable the Lightning wallet under the service, create %s (mode 0600) with:\n", envPath)
-			fmt.Fprintln(stdout, "  OTEDAMA_WALLET_PASSPHRASE=<your wallet passphrase>")
-			fmt.Fprintf(stdout, "then run: systemctl --user restart %s\n", "otedama.service")
+			fmt.Fprintf(stdout, "To enable the Lightning wallet under the service, first create the wallet with an interactive 'otedama run --wallet-passphrase …'\n")
+			fmt.Fprintln(stdout, "(a new wallet is never minted with non-terminal output — its recovery phrase must reach a human),")
+			fmt.Fprintf(stdout, "then create %s (mode 0600) containing:\n", envPath)
+			fmt.Fprintln(stdout, "  OTEDAMA_WALLET_PASSPHRASE=<the same passphrase>")
+			fmt.Fprintln(stdout, "and run: systemctl --user restart otedama.service")
 		}
 	}
 	return exitOK
