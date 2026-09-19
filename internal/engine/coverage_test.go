@@ -724,6 +724,48 @@ func TestRunSession_PlainV2SchemeWarnsAboutNoEncryption(t *testing.T) {
 	}
 }
 
+// TestRunSession_SilentPoolTimesOut pins the handshake read deadline:
+// a pool that accepts the TCP connection but never sends a frame must
+// end the session with an error after handshakeDeadline — not park the
+// engine in "connecting" forever (previously ReadFrame had no deadline
+// at all, so only ctx cancellation or an RST could end the wait).
+func TestRunSession_SilentPoolTimesOut(t *testing.T) {
+	prev := handshakeDeadline
+	handshakeDeadline = 200 * time.Millisecond
+	defer func() { handshakeDeadline = prev }()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		// Swallow whatever the client sends; never reply.
+		_, _ = io.Copy(io.Discard, c)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	err = runSession(ctx, sessionOpts{
+		poolURL:  "stratum+v2://" + ln.Addr().String(),
+		log:      func(_, _ string) {},
+		interval: time.Second,
+	})
+	if err == nil {
+		t.Fatal("runSession against a silent pool should return an error once the handshake deadline expires")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("silent-pool session took %v to fail; handshake deadline should have bounded it near 200ms", elapsed)
+	}
+}
+
 // ============================================================================
 // run.go handshake — error paths via net.Pipe fake servers
 // ============================================================================

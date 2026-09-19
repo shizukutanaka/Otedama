@@ -81,6 +81,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   欠陥となる。既存 wallet.dat は任意の出力でアンロック可——サービス
   配備前に一度だけ対話実行でウォレットを作成する運用を DEPLOYMENT と
   install ヒントに明記。
+- **プール接続の無期限ハングを全経路で解消** — Stratum V2（engine
+  inline path と poolproto dialer）には read deadline が一切無く、
+  「TCPは通るが応答しない」プールに対してハンドシェイクもセッション
+  readループも永久にブロックしていた（V1 は行毎5分期限で self-heal）。
+  修正: (a) ハンドシェイク読み取りに30s期限（engine `handshakeDeadline`
+  / stratumv2 `negotiateTimeout`）、(b) セッション readループにフレーム
+  毎5分期限（V1 と同値）、(c) TCP connect に15s `net.Dialer.Timeout`、
+  (d) TLS ハンドシェイクに子ctx 30s期限（TCP確立後に ServerHello が
+  来ない停滞を捕捉——stratum/tls.go と stratumv1/tls.go 双方）。
+- **`stratum+v2tls://` の休眠 silent downgrade を修正** — poolproto の
+  `stratumv2.Dialer{useTLS:true}` は登録されているが `Dial` が useTLS を
+  参照せず常に平文TCPで繋いでいた（stratumv1 で既に修正済みのものと
+  同一クラス）。§3 のengine未配線により現状は休眠経路だが、配線時に
+  そのまま悪用可能なバグとなるため `stratum.DialTLS` + `TLSConfigWithExtraCAs`
+  に接続済み。
 
 ### Docs (session 255)
 

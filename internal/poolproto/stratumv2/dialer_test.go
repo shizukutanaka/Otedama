@@ -5,6 +5,7 @@ package stratumv2
 
 import (
 	"context"
+	"io"
 	"math"
 	"net"
 	"testing"
@@ -60,6 +61,77 @@ func TestDialer_Dial_RejectsUnknownScheme(t *testing.T) {
 	_, err := d.Dial(context.Background(), "http://example.com", poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with non-stratum scheme should fail")
+	}
+}
+
+// TestDialer_Dial_TLSVariantAttemptsTLS pins the silent-downgrade fix:
+// a Dialer registered for stratum+v2tls:// must perform a real,
+// certificate-verified TLS handshake — never dial plaintext. A plain
+// TCP listener that accepts but speaks no TLS makes any genuine TLS
+// attempt fail; a plaintext dial would succeed instead.
+func TestDialer_Dial_TLSVariantAttemptsTLS(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		buf := make([]byte, 256)
+		_, _ = c.Read(buf) // swallow ClientHello; never answer
+	}()
+
+	d := &Dialer{useTLS: true}
+	conn, err := d.Dial(context.Background(),
+		"stratum+v2tls://"+ln.Addr().String(),
+		poolproto.Credentials{User: "alice"})
+	if err == nil {
+		conn.Close()
+		t.Fatal("v2tls dialer connected to a plaintext listener — silent downgrade")
+	}
+}
+
+// TestDialer_Negotiate_SilentPoolTimesOut pins the handshake read
+// deadline: a peer that accepts the connection but never sends a frame
+// must fail Negotiate within negotiateTimeout, not hang on ctx.
+func TestDialer_Negotiate_SilentPoolTimesOut(t *testing.T) {
+	prev := negotiateTimeout
+	negotiateTimeout = 200 * time.Millisecond
+	defer func() { negotiateTimeout = prev }()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_, _ = io.Copy(io.Discard, c) // read and discard; never reply
+	}()
+
+	d := &Dialer{}
+	conn, err := d.Dial(context.Background(), "stratum+v2://"+ln.Addr().String(),
+		poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	start := time.Now()
+	_, err = d.Negotiate(context.Background(), conn)
+	if err == nil {
+		t.Fatal("Negotiate against a silent peer should fail on the handshake deadline")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("silent-peer Negotiate took %v; negotiateTimeout should have bounded it near 200ms", elapsed)
 	}
 }
 

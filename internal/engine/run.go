@@ -60,7 +60,20 @@ const (
 
 	// reconnectBackoffMax caps the exponential reconnect backoff.
 	reconnectBackoffMax = 64 * time.Second
+
+	// poolReadDeadline is the per-frame read deadline applied to the
+	// Stratum V2 session socket — refreshed before every ReadFrame so a
+	// wedged-but-open connection (silent pool, dropped NAT entry) ends the
+	// session and feeds the reconnect loop instead of hanging forever.
+	// Same rationale as stratumv1's 5-minute per-line deadline.
+	poolReadDeadline = 5 * time.Minute
 )
+
+// handshakeDeadline bounds the whole SetupConnection + OpenMiningChannel
+// exchange so a pool that accepts TCP but never answers cannot park the
+// engine in "connecting" indefinitely. A var (not const) so tests can
+// shrink it — see TestRunSession_SilentPoolTimesOut.
+var handshakeDeadline = 30 * time.Second
 
 // arbitrationInterval is how often the engine re-evaluates the
 // device→stream assignment in the absence of a fresh quote.
@@ -623,6 +636,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
 	}
 
+	// Bound the connect phase (TCP dial or TLS handshake) so a pool that
+	// accepts then stalls mid-handshake can't park the engine in
+	// "connecting" for the OS TCP timeout — ctx alone only cancels on
+	// shutdown. Read stalls after connect are covered by deadlines below.
+	dialCtx, dialCancel := context.WithTimeout(ctx, handshakeDeadline)
+	defer dialCancel()
+
 	var conn net.Conn
 	if proto == poolproto.ProtocolStratumV2TLS {
 		// A configured v2tls:// pool gets an actual, certificate-verified
@@ -640,7 +660,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				tlsCfg = cfg
 			}
 		}
-		conn, err = stratum.DialTLS(ctx, host, tlsCfg)
+		conn, err = stratum.DialTLS(dialCtx, host, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("engine: TLS dial %s: %w", host, err)
 		}
@@ -654,7 +674,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
 			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
 		var d net.Dialer
-		conn, err = d.DialContext(ctx, "tcp", host)
+		conn, err = d.DialContext(dialCtx, "tcp", host)
 		if err != nil {
 			return fmt.Errorf("engine: dial %s: %w", host, err)
 		}
@@ -663,6 +683,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
+	_ = conn.SetReadDeadline(time.Now().Add(handshakeDeadline))
 	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
 	if err != nil {
 		return err
@@ -680,6 +701,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	go func() {
 		defer close(inCh)
 		for {
+			_ = conn.SetReadDeadline(time.Now().Add(poolReadDeadline))
 			f, err := dec.ReadFrame()
 			if err != nil {
 				select {

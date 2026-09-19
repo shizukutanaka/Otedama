@@ -331,6 +331,12 @@ func Available() []ProtocolID {
 // DialURL is the high-level entry point: identify the protocol from
 // the URL, look up its Dialer, dial, and negotiate. Returns the
 // resulting Session ready to receive jobs.
+//
+// Stall bounds are enforced with socket deadlines inside each dialer
+// (Dial's TCP timeout, Negotiate's handshake read deadline, and the
+// session's per-message read deadline) rather than a ctx timeout here:
+// the ctx passed to Negotiate becomes the session's lifetime context,
+// so cancelling a connect-phase ctx on return would kill the session.
 func DialURL(ctx context.Context, url string, creds Credentials) (Session, error) {
 	proto := FromURL(url)
 	if proto == ProtocolUnknown {
