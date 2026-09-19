@@ -53,6 +53,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **ダッシュボードの `est. earned` 行** — 生の `%d sats` 表示を、
   この用途のために存在したが呼ばれていなかった `SatsToDisplay`
   （大きい累積値でBTC表記）に置換（deadcode解消）。
+- **`wallet verify` の sidecar 信頼境界を厳格化** — (a) 破損した
+  wallet.dat と生存した sidecar の組合せで「一致」と誤判定し得た
+  問題を修正（wallet.dat のパース成功を必須化——verifyは復元の
+  リハーサルであり、復元不能なウォレットに対する成功は報告しない）。
+  (b) passphrase供給時は常に wallet.dat から fingerprint を導出する
+  ように変更——wallet.dat 差替え後に古い sidecar が残った場合の
+  偽一致・偽不一致を排除。sidecar は passphrase 不在時の復号なし
+  経路としてのみ使用。
 
 ### Docs (session 255)
 

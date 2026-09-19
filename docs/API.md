@@ -139,9 +139,11 @@ usual layering: `--data-dir` > `data_dir` in `--config` >
 - `otedama wallet verify` — Check a written-down recovery phrase against
   the stored wallet. The phrase is read from **stdin** (never argv,
   which leaks via process lists), validated with the BIP-39 checksum,
-  and compared by wallet fingerprint: `wallet.fingerprint` is used when
-  present, otherwise the seed is decrypted with `--wallet-passphrase`
-  (or `OTEDAMA_WALLET_PASSPHRASE`). If the wallet was created with a
+  and compared by wallet fingerprint: when `--wallet-passphrase` (or
+  `OTEDAMA_WALLET_PASSPHRASE`) is given, `wallet.dat` is always
+  decrypted and the fingerprint recomputed (immune to a stale
+  sidecar); without a passphrase the `wallet.fingerprint` sidecar is
+  used as the decrypt-free path. If the wallet was created with a
   BIP-39 "25th word", pass it via `--mnemonic-passphrase` (or
   `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`). Exit `0` on match; `1` when the
   phrase is valid but belongs to a different wallet or no wallet exists;
