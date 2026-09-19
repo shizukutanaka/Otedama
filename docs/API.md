@@ -233,6 +233,11 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation) and by `wallet verify` (`--mnemonic-passphrase`). |
 | `OTEDAMA_WALLET_NEW_PASSPHRASE` | `--new-passphrase` | `wallet change-passphrase` only: the replacement passphrase. Same process-list caveat. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
+| `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | — | `arbitration_hysteresis_pct`: fraction (default 0.05) a candidate workload must beat the current one by before switching. |
+| `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | — | `min_yield_sats_per_sec`: per-device profitability floor; devices whose best stream is below it stay idle. |
+| `OTEDAMA_CURTAIL_BELOW_BTC_USD` | — | `curtail_below_btc_usd`: pause all hashing while BTC/USD is under this break-even price (0 = off). |
+| `OTEDAMA_POWER_WATTS` | — | `power_watts`: estimated system draw; enables the `otedama_joules_per_terahash` efficiency metric. |
+| `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | — | `electricity_price_per_kwh`: tariff used for cost-aware curtailment decisions. |
 
 ---
 
