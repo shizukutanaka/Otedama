@@ -39,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   0600 の任意ファイルで OTEDAMA_* 変数を供給できる。install 時に
   作成手順を表示。launchd/Windows には同等機構が無い旨を
   DEPLOYMENT.md に明記（platform-native secret plumbing は将来課題）。
+- **`doctor` の厳格化** — `Lightning wallet` チェックが wallet.dat を
+  stat するだけで「initialized」と報告していたのを、シードエンベロープの
+  パース検証（復号なし）に強化——破損 wallet.dat は Fail + 復元手順を提示。
+  `data directory` チェックに `otedama.env` の0600以外パーミッション警告を追加。
 
 ### Fixed (session 255)
 
