@@ -312,6 +312,10 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	// The registry otherwise carries only what engine.Run registers while
+	// it runs; the go_* runtime metrics belong to the process and are
+	// emitted regardless of engine state.
+	reg.RegisterCollector(metrics.RuntimeCollector())
 	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)

@@ -350,7 +350,7 @@ func (d *Dashboard) earningsLine(s Stats) string {
 	}
 
 	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
-	earned := dim + fmt.Sprintf("est. earned: ~%d sats", s.EstSatsEarned) + reset
+	earned := dim + fmt.Sprintf("est. earned: ~%s", SatsToDisplay(s.EstSatsEarned)) + reset
 	return fmt.Sprintf("  %-30s  %s", total, earned)
 }
 

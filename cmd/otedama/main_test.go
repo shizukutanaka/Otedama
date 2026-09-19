@@ -600,6 +600,13 @@ func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
 	if !strings.Contains(out.String(), "http:") {
 		t.Errorf("startHTTPServer: expected log line; got %q", out.String())
 	}
+	var sb strings.Builder
+	if err := reg.WriteText(&sb); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	if !strings.Contains(sb.String(), "go_goroutines") {
+		t.Error("/metrics registry should include go_* runtime metrics")
+	}
 }
 
 // ============================================================================
