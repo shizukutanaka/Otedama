@@ -10,6 +10,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 255 — KNOWN_LIMITATIONS §16/§15 の解消: `otedama wallet` サブコマンド新設とTUI実端末幅検出)
+
+- **`otedama wallet verify`** — 書き取ったリカバリフレーズの正しさを、
+  復旧が必要になる**前**に検証できるようにした。mnemonicはargvではなく
+  stdinから読む（プロセスリスト経由の漏洩を回避——session 254が§16で
+  示した最小案どおり）。`wallet.fingerprint` sidecarがあれば復号なしで
+  高速比較し、なければwalletを復号してBIP-39 fingerprintを突き合わせる。
+  exit code: 一致=0、不一致=1、malformed=64（`cmd/otedama/wallet.go`）。
+- **`otedama wallet change-passphrase`** — 実装・テスト済みだったが本番導線が
+  なかった `lightning.WalletManager.ChangePassphrase` をCLIに公開。
+  新旧passphraseは環境変数（`OTEDAMA_WALLET_PASSPHRASE`/
+  `OTEDAMA_WALLET_NEW_PASSPHRASE`/`OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`）
+  またはTTYプロンプトから取得し、argvには載せない。
+  `NewWalletManager` がウォレット不在時に新規作成する副作用を避けるため、
+  `os.Stat` で先に存在確認する。
+- **TUI実端末幅検出** — `internal/tui` に `DetectWidth`（unix:
+  `TIOCGWINSZ` ioctl、windows: `GetConsoleScreenBufferInfo`、その他: 0）
+  を追加し、`engine.Run` Phase 7 が `dashboard.SetWidth` を呼ぶようにした。
+  KNOWN_LIMITATIONS §15「80カラム固定」の解消。`golang.org/x/sys` を
+  direct依存に昇格（理由をgo.modコメントに記録）。
+- シェル補完（bash/zsh/fish）に `wallet` を追加し、テストを更新。
+
+### Fixed (session 255)
+
+- **`internal/rates/fetcher_test.go`**: 未使用の `parseFloat` ヘルパーを
+  削除（deadcode検出——呼び出し元ゼロ）。
+
+### Docs (session 255)
+
+- **KNOWN_LIMITATIONS §13/§15/§16 更新** — §15・§16を解決済みにし、
+  §13（全CIワークフローが `tlsmlkem` godebugを解せないGo≤1.23をpinして
+  全ジョブが `go mod download` で落ちる件）に `docs/patches/
+  ci-go-1.24-bump.patch` を提供。GitHub Appは `workflow` スコープを
+  持たず `.github/workflows/` をpushできないため、メンテナ適用型の
+  `git apply` パッチとして同梱。進行中の `fix/ci-go124` ブランチとの
+  差分（security.yml/ci-cd.ymlの残存・1.22.xマトリクス脚・golangci-lint
+  ピン）をREADMEに明記。
+- **`docs/API.md`** に `otedama wallet` の使い方と環境変数を追記。
+- **`CLAUDE.md`** アーキテクチャマップのサブコマンド列挙に `wallet` を追加。
+
+全24パッケージ build/vet/test green（Go 1.27.1）、gofmt clean、
+windows/linux/freebsd クロスビルド確認済み。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

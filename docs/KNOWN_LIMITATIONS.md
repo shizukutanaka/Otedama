@@ -585,7 +585,14 @@ Each item also carries a maintainer decision:
   `ci.yml`, `golangci-lint-action@v3`+`version: latest`→`@v8`+`v1.64.8`
   in `test.yml`/`ci-cd.yml`) — is committed at
   **`docs/patches/ci-go-1.24-bump.patch`** (see `docs/patches/README.md`
-  for the `git apply` one-liner). The deeper question — whether to keep
+  for the `git apply` one-liner). Partial in-flight work exists on
+  `fix/ci-go124` (session 255): it bumps `ci.yml`/`test.yml`/
+  `release.yml` to 1.24.x but leaves `security.yml`/`ci-cd.yml` at
+  1.21/1.20, keeps the still-broken `1.22.x` matrix leg, and doesn't
+  touch the golangci-lint pins (v1.55.2 cannot analyse Go 1.24 output —
+  verified: `export data version 4`). The patch above is written
+  against master as a superset; `--3way` applies it cleanly after that
+  branch merges. The deeper question — whether to keep
   the `tlsmlkem=1` godebug pin (which forecloses GODEBUG_NOTES.md's "old
   toolchains can build" intent) or relax it — is a security-posture call
   for the maintainer, informed by GODEBUG_NOTES.md's reasoning; it
@@ -645,7 +652,7 @@ release target.
 
 ---
 
-## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 254)
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 255)
 
 **Resolution:** `engine.Run` now calls `dashboard.SetWidth(tui.DetectWidth(opts.Output))`
 at dashboard construction (`internal/engine/run.go`, Phase 7), so the
@@ -669,7 +676,7 @@ truncates to the detected width via the existing writeLine logic.
 
 ---
 
-## ~~16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI~~ ✅ RESOLVED (session 254)
+## ~~16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI~~ ✅ RESOLVED (session 255)
 
 **Resolution:** a `wallet` subcommand group now exists
 (`cmd/otedama/wallet.go`, dispatched from `cmd/otedama/main.go`), in the
