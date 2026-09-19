@@ -67,12 +67,12 @@ Create the wallet once by running interactively
 phrase), then let the service unlock the existing `wallet.dat` via
 `otedama.env`.
 
-On macOS (launchd) and Windows there is no equivalent mechanism yet:
-set the wallet passphrase interactively (first `otedama run` creates the
-wallet) — the service then uses the existing `wallet.dat`; note that
-unlocking it under the service still requires the passphrase, so the
-wallet feature is effectively unavailable for launchd/sc.exe services
-until platform-native secret plumbing lands.
+On macOS (launchd) and Windows there is no service-manager equivalent,
+so the engine reads `<data-dir>/otedama.env` itself at startup when no
+flag/env passphrase is set — the same file works on every platform
+(systemd's `EnvironmentFile=` loads it too, making it belt and
+suspenders there). The `doctor` data-directory check warns if the file
+is readable by group/other.
 
 On headless machines without persistent GUI sessions, enable
 lingering so the service survives logout:

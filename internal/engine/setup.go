@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -123,7 +124,21 @@ func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider
 // or initialisation failed (errors are logged, not propagated, so the
 // engine can run mining without a wallet).
 func setupWallet(opts Options, log func(level, msg string)) string {
-	if opts.WalletPassphrase == "" || opts.Config.DataDir == "" {
+	if opts.Config.DataDir == "" {
+		return ""
+	}
+	passphrase := opts.WalletPassphrase
+	if passphrase == "" {
+		// Lowest-precedence secret source: <DataDir>/otedama.env, the file
+		// `service install` tells operators to create. systemd loads it via
+		// the unit's EnvironmentFile=-, but launchd and Windows services
+		// have no equivalent mechanism — reading it here gives every
+		// service manager the same wallet path instead of leaving the
+		// wallet permanently uninitialised outside systemd.
+		passphrase = envFileValue(filepath.Join(opts.Config.DataDir, "otedama.env"),
+			"OTEDAMA_WALLET_PASSPHRASE", log)
+	}
+	if passphrase == "" {
 		return ""
 	}
 	// First run with no wallet.dat mints a wallet and prints the BIP-39
@@ -151,7 +166,7 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 		return ""
 	}
 	wm, err := lightning.NewWalletManager(
-		opts.Config.DataDir, opts.WalletPassphrase, nil, wl,
+		opts.Config.DataDir, passphrase, nil, wl,
 		lightning.WithMnemonicPassphrase(opts.WalletMnemonicPassphrase))
 	if err != nil {
 		log("warn", fmt.Sprintf("wallet: %v", err))
@@ -164,6 +179,39 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
+}
+
+// envFileValue reads a systemd-EnvironmentFile-style KEY=VALUE file and
+// returns the value for key, or "" when the file is absent/unreadable or
+// the key is unset. Lines are trimmed, `#` comments skipped, and a single
+// pair of matching single or double quotes around the value is stripped —
+// the same syntax systemd itself accepts. A file readable by group/other
+// still yields the value but logs a warning: the passphrase is a live
+// secret and loose perms defeat the purpose (doctor flags the same file).
+func envFileValue(path, key string, log func(level, msg string)) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if info, statErr := os.Stat(path); statErr == nil && info.Mode()&0o077 != 0 {
+		log("warn", fmt.Sprintf("wallet: %s is readable by group/other (mode %04o) — it holds the wallet passphrase; chmod 600 it", path, info.Mode().Perm()))
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(k) != key {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+			v = v[1 : len(v)-1]
+		}
+		return v
+	}
+	return ""
 }
 
 // printRecoveryPhrase writes the one-time BIP-39 recovery phrase to w.

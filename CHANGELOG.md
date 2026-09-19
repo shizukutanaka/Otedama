@@ -90,6 +90,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   毎5分期限（V1 と同値）、(c) TCP connect に15s `net.Dialer.Timeout`、
   (d) TLS ハンドシェイクに子ctx 30s期限（TCP確立後に ServerHello が
   来ない停滞を捕捉——stratum/tls.go と stratumv1/tls.go 双方）。
+- **ウォレット passphrase の env ファイルをエンジンが自前で読むように** —
+  `<data-dir>/otedama.env` は systemd の `EnvironmentFile=` でしか
+  プロセスに届かず、launchd（macOS）や sc.exe（Windows）のサービスでは
+  ウォレットが永久に未初期化だった。`setupWallet` が flag/env 未指定時に
+  同ファイルを最終フォールバックとして読むように変更（systemd 式
+  KEY=VALUE 構文、引用符剥がし、パーミッション緩い場合は警告）。
+  これで全サービスマネージャでウォレットが動作し、DEPLOYMENT の
+  「launchd/Windows では実質利用不可」の記述を撤回。`service install`
+  ヒントも全OS対応に拡張（systemctl/launchctl/sc.exe の再起動手順付き）。
 - **二重化していた端末判定を `tui.IsTerminal` に統一** — cmdRun の
   TUI自動無効化が旧来の `os.ModeCharDevice` ヒューリスティックを使い
   続けていたため、`otedama run >/dev/null` で ANSI ダッシュボードが

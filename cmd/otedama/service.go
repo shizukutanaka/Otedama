@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 
@@ -76,18 +77,29 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, "Otedama service installed and started.")
 	fmt.Fprintln(stdout, "It will start automatically on login.")
-	if runtime.GOOS == "linux" {
-		dir := *dataDir
-		if dir == "" {
-			dir = config.DefaultDataDir()
-		}
-		if dir != "" {
-			envPath := filepath.Join(dir, "otedama.env")
-			fmt.Fprintf(stdout, "To enable the Lightning wallet under the service, first create the wallet with an interactive 'otedama run --wallet-passphrase …'\n")
-			fmt.Fprintln(stdout, "(a new wallet is never minted with non-terminal output — its recovery phrase must reach a human),")
-			fmt.Fprintf(stdout, "then create %s (mode 0600) containing:\n", envPath)
-			fmt.Fprintln(stdout, "  OTEDAMA_WALLET_PASSPHRASE=<the same passphrase>")
+	// The engine reads <data-dir>/otedama.env itself when no
+	// flag/env passphrase is set, so this file unlocks the wallet under
+	// every service manager — systemd's unit also loads it via
+	// EnvironmentFile=.
+	dir := *dataDir
+	if dir == "" {
+		dir = config.DefaultDataDir()
+	}
+	if dir != "" {
+		envPath := filepath.Join(dir, "otedama.env")
+		fmt.Fprintln(stdout, "To enable the Lightning wallet under the service, first create the wallet with an interactive 'otedama run --wallet-passphrase …'")
+		fmt.Fprintln(stdout, "(a new wallet is never minted with non-terminal output — its recovery phrase must reach a human),")
+		fmt.Fprintf(stdout, "then create %s (mode 0600 / owner-only ACL) containing:\n", envPath)
+		fmt.Fprintln(stdout, "  OTEDAMA_WALLET_PASSPHRASE=<the same passphrase>")
+		switch runtime.GOOS {
+		case "linux":
 			fmt.Fprintln(stdout, "and run: systemctl --user restart otedama.service")
+		case "darwin":
+			fmt.Fprintf(stdout, "and run: launchctl unload -w %s && launchctl load -w %s\n",
+				filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.otedama.daemon.plist"),
+				filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.otedama.daemon.plist"))
+		case "windows":
+			fmt.Fprintln(stdout, "and run: sc.exe stop Otedama && sc.exe start Otedama")
 		}
 	}
 	return exitOK

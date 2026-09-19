@@ -1397,6 +1397,88 @@ func TestSetupWallet_NonTTYOutput_DoesNotMintNewWallet(t *testing.T) {
 	}
 }
 
+// The <DataDir>/otedama.env file is the lowest-precedence passphrase
+// source — it exists for service managers without an EnvironmentFile
+// equivalent (launchd, sc.exe). An existing wallet.dat must unlock from
+// it with no flag/env passphrase at all.
+func TestSetupWallet_EnvFileUnlocksExistingWallet(t *testing.T) {
+	dir := t.TempDir()
+	pass := "correct-horse-battery-staple-engine-test"
+	var buf bytes.Buffer
+	setupWallet(Options{WalletPassphrase: pass, Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {})
+
+	if err := os.WriteFile(filepath.Join(dir, "otedama.env"),
+		[]byte("# service secrets\nOTEDAMA_WALLET_PASSPHRASE="+pass+"\n"), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	fp := setupWallet(Options{Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {})
+	if fp == "" {
+		t.Error("wallet should unlock from otedama.env when flag/env are empty")
+	}
+}
+
+// A group/world-readable otedama.env still works but must warn — the
+// passphrase is a live secret.
+func TestSetupWallet_EnvFileLoosePermsWarns(t *testing.T) {
+	dir := t.TempDir()
+	pass := "correct-horse-battery-staple-engine-test"
+	var buf bytes.Buffer
+	setupWallet(Options{WalletPassphrase: pass, Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {})
+
+	envPath := filepath.Join(dir, "otedama.env")
+	if err := os.WriteFile(envPath, []byte("OTEDAMA_WALLET_PASSPHRASE="+pass+"\n"), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	var logs []string
+	setupWallet(Options{Config: config.Config{DataDir: dir}, Output: &buf},
+		func(_, m string) { logs = append(logs, m) })
+	found := false
+	for _, l := range logs {
+		if strings.Contains(l, "chmod 600") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a permissions warning for the loose env file; got %v", logs)
+	}
+}
+
+// An absent/unrelated env file yields no passphrase — wallet stays off.
+func TestSetupWallet_EnvFileMissingOrUnrelated(t *testing.T) {
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	if fp := setupWallet(Options{Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {}); fp != "" {
+		t.Error("no passphrase anywhere should not initialise a wallet")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "otedama.env"),
+		[]byte("OTEDAMA_HTTP_ADDR=127.0.0.1:8080\n"), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	if fp := setupWallet(Options{Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {}); fp != "" {
+		t.Error("env file without OTEDAMA_WALLET_PASSPHRASE should not initialise a wallet")
+	}
+}
+
+// Flag/env still outrank the env file: a different passphrase in the file
+// must not be used when WalletPassphrase is set.
+func TestSetupWallet_EnvFileDoesNotOverrideExplicitPassphrase(t *testing.T) {
+	dir := t.TempDir()
+	pass := "correct-horse-battery-staple-engine-test"
+	var buf bytes.Buffer
+	setupWallet(Options{WalletPassphrase: pass, Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {})
+
+	if err := os.WriteFile(filepath.Join(dir, "otedama.env"),
+		[]byte("OTEDAMA_WALLET_PASSPHRASE=wrong-passphrase\n"), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	// Right passphrase via flag field; the env file's wrong one must be
+	// ignored (otherwise decrypt fails and returns "").
+	fp := setupWallet(Options{WalletPassphrase: pass, Config: config.Config{DataDir: dir}, Output: &buf}, func(_, _ string) {})
+	if fp == "" {
+		t.Error("explicit passphrase must win over the env file's value")
+	}
+}
+
 // An existing wallet.dat still unlocks with non-TTY output — the phrase
 // is only printed on creation, so nothing can leak.
 func TestSetupWallet_NonTTYOutput_ExistingWalletUnlocks(t *testing.T) {
