@@ -544,6 +544,27 @@ func TestCheckDataDir_PathIsFile_Fails(t *testing.T) {
 	}
 }
 
+func TestCheckDataDir_LooseEnvFilePerms_Warns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod dir: %v", err)
+	}
+	envPath := filepath.Join(dir, "otedama.env")
+	if err := os.WriteFile(envPath, []byte("OTEDAMA_WALLET_PASSPHRASE=x\n"), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+	r := checkDataDir(dir).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("loose otedama.env status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "otedama.env") {
+		t.Errorf("detail should name the env file: %q", r.Detail)
+	}
+}
+
 // ============================================================================
 // isLikelyBitcoinAddress — base58 invalid-char branch
 // ============================================================================

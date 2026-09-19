@@ -226,6 +226,17 @@ func checkDataDir(dir string) Check {
 						Fix:    fmt.Sprintf("run: chmod 0700 %s", dir),
 					}
 				}
+				// otedama.env (EnvironmentFile for the systemd service, see
+				// internal/daemon) can carry OTEDAMA_WALLET_PASSPHRASE — a
+				// group/world-readable copy is a secret leak.
+				envPath := filepath.Join(dir, "otedama.env")
+				if ei, err := os.Stat(envPath); err == nil && ei.Mode().Perm()&0o077 != 0 {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("%s has permissions %04o (may contain wallet passphrase)", envPath, ei.Mode().Perm()),
+						Fix:    fmt.Sprintf("run: chmod 0600 %s", envPath),
+					}
+				}
 			}
 			return Result{
 				Status: StatusPass,
