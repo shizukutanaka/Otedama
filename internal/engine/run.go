@@ -308,6 +308,10 @@ func Run(ctx context.Context, opts Options) error {
 	var dashboard *tui.Dashboard
 	if !opts.NoTUI {
 		dashboard = tui.NewDashboard(opts.Output)
+		// Render at the real terminal width instead of the 80-column
+		// default; DetectWidth returns 0 for non-terminal writers (tests,
+		// redirects) and SetWidth ignores it, leaving the default intact.
+		dashboard.SetWidth(tui.DetectWidth(opts.Output))
 		dashboard.Start()
 		defer dashboard.Stop()
 	}

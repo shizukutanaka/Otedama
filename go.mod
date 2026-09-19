@@ -21,4 +21,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require golang.org/x/sys v0.20.0 // indirect
+// golang.org/x/sys is a direct dependency for terminal-width detection
+// (internal/tui/termwidth_*.go: unix.TIOCGWINSZ, windows console API).
+// It was already in the module graph as x/crypto's dependency, so this
+// adds no new module; BSD-3-Clause, actively maintained, stdlib cannot
+// perform either syscall.
+require golang.org/x/sys v0.20.0

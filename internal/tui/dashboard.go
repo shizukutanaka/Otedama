@@ -14,19 +14,18 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// # Terminal width (not yet auto-detected)
+// # Terminal width
 //
-// SetWidth lets a caller inject the real terminal width (intended
-// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
-// but no caller in this codebase actually calls it in production —
-// engine.Run's dashboard always runs at the NewDashboard default of 80
-// columns, regardless of the real terminal size. See
-// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
-// of the real width: every
-// line is truncated to fit whatever width is configured, and the most
-// important field on each line (pool connection status, in particular)
-// is sized from a dynamic budget rather than a fixed offset, so it
-// cannot be silently cut off even at the documented 40-column minimum.
+// engine.Run feeds DetectWidth's result into SetWidth at construction,
+// so the dashboard renders at the real terminal width (TIOCGWINSZ on
+// Unix, GetConsoleScreenBufferInfo on Windows; see termwidth*.go).
+// Detection failure or a non-file writer leaves the NewDashboard default
+// of 80 columns. What is handled correctly regardless of the real width:
+// every line is truncated to fit whatever width is configured, and the
+// most important field on each line (pool connection status, in
+// particular) is sized from a dynamic budget rather than a fixed offset,
+// so it cannot be silently cut off even at the documented 40-column
+// minimum.
 //
 // # Thread safety
 //
