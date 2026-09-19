@@ -25,6 +25,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/lightning"
 )
 
 // DefaultChecks returns the built-in check set for a config.
@@ -218,7 +219,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -235,8 +236,9 @@ func checkDataDir(dir string) Check {
 }
 
 // walletDatFile and walletFingerprintFile mirror the constants in
-// internal/lightning so doctor can inspect wallet state without importing
-// the full lightning package (and its crypto dependencies).
+// internal/lightning for path construction; the seed envelope itself is
+// parsed via lightning.UnmarshalEncryptedSeed so a present-but-corrupt
+// wallet.dat is reported as a failure rather than "initialized".
 const (
 	walletDatFile         = "wallet.dat"
 	walletFingerprintFile = "wallet.fingerprint"
@@ -270,6 +272,25 @@ func checkWallet(dataDir string) Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("cannot stat %s: %v", walletPath, err),
 					Fix:    "check filesystem permissions",
+				}
+			}
+
+			// Stat alone is not enough: a present-but-unparseable wallet.dat
+			// would still be reported "initialized" and trusted until a
+			// recovery attempt fails. Parse the seed envelope — cheap, no
+			// decryption — so a corrupt wallet surfaces here, not at
+			// restore time.
+			if raw, err := os.ReadFile(walletPath); err != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("cannot read %s: %v", walletPath, err),
+					Fix:    "check filesystem permissions",
+				}
+			} else if _, err := lightning.UnmarshalEncryptedSeed(raw); err != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("wallet.dat is corrupt: %v", err),
+					Fix:    "restore the wallet from your written recovery phrase (otedama run --wallet-passphrase … creates a fresh one after removing wallet.dat)",
 				}
 			}
 
