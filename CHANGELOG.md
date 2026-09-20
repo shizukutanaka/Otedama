@@ -52,6 +52,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   失効していた。`miner.Worker` に `SetPaused`/`Paused`（atomic.Bool）
   を追加し、job配信側がpaused workerをスキップ、AI→mining時に
   resumeする形に修正。
+- **idle→mining の復帰不能** — idle 割当は `SwitchedFromID` を持たない
+  ため適用層の「変化なし」分岐に落ち、idle 中に pause された worker が
+  mining 再割当て後も永久に pause のままだった。非AI stream への
+  割当てで pause を解除（未pauseではno-op）。回帰テスト
+  `TestApplyAllocation_IdleToMiningResumesWorker` 追加。
 
 ### Fixed (session 255)
 
