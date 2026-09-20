@@ -110,9 +110,15 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
+	// extranonce1 and extranonce2Size are negotiated at subscribe time.
+	// extranonce1 is only touched on the read-loop goroutine (set at
+	// subscribe before the loop starts, updated on set_extranonce), so a
+	// plain string is safe. extranonce2Size is atomic because Submit(),
+	// called from the engine's goroutine, reads it to pad a short
+	// extranonce2 — a set_extranonce arriving mid-submit would otherwise
+	// race.
 	extranonce1     string
-	extranonce2Size int
+	extranonce2Size atomic.Int64
 
 	// user is the mining.authorize worker name; mining.submit must
 	// echo it verbatim or the pool rejects the share as unregistered.
@@ -249,7 +255,7 @@ func (s *session) dispatch(line []byte) {
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
 			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.extranonce2Size.Store(int64(sz))
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -307,7 +313,7 @@ func (s *session) sendJob(job poolproto.Job) {
 	if en1, err := hex.DecodeString(s.extranonce1); err == nil {
 		job.Extranonce1 = en1
 	}
-	job.Extranonce2Size = s.extranonce2Size
+	job.Extranonce2Size = int(s.extranonce2Size.Load())
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -347,7 +353,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+		en2 = strings.Repeat("00", int(s.extranonce2Size.Load()))
 	}
 	params := []any{
 		s.user, // worker name must match mining.authorize

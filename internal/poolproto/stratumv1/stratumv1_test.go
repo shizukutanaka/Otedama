@@ -869,8 +869,8 @@ func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	if sess.extranonce1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if sess.extranonce2Size.Load() != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
 	}
 }
 
@@ -1527,8 +1527,8 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	if sv1.extranonce1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if sv1.extranonce2Size.Load() != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
 	}
 }
 
@@ -1925,7 +1925,7 @@ func TestSession_Submit_EchoesAuthorizedWorker(t *testing.T) {
 	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 	sess := newSession(conn)
 	sess.user = "pool.worker.1" // as mining.authorize would have set
-	sess.extranonce2Size = 4
+	sess.extranonce2Size.Store(4)
 	sess.start(context.Background())
 	defer sess.Close()
 
