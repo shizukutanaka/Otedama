@@ -1361,10 +1361,10 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
-// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is parsed back
-// to the uint32 the miner uses; an unparseable ID yields job 0, which
-// the pool will reject on submit, surfacing the problem rather than
-// silently mining a malformed job.
+// (docs/KNOWN_LIMITATIONS.md §3). The pool's opaque string JobID is
+// carried verbatim on the V1 template and echoed back on submit; a job
+// whose coinbase template cannot build a header is rejected here rather
+// than silently mining work the pool will always refuse.
 //
 // difficulty is the Stratum V1 session's most recent mining.set_difficulty
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a

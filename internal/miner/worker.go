@@ -27,6 +27,29 @@ type Work struct {
 	// hashing the fixed Header field. V1 jobs carry no uint32 JobID —
 	// the pool's opaque string id lives in V1.JobID.
 	V1 *V1JobTemplate
+
+	// v1en2 allocates extranonce2 values for this job, shared by every
+	// worker and thread that received this Work pointer — a per-worker
+	// counter would hand the same en2+nonce tuples to different devices,
+	// producing duplicate submissions the pool rejects.
+	v1en2 atomic.Uint64
+}
+
+// nextV1EN2 allocates a fresh extranonce2 of size bytes for a V1 job.
+// Callers (all worker threads sharing this Work) must each hold a
+// distinct value so no two nonce-space ranges ever produce the same
+// (job, extranonce2, ntime, nonce) tuple the pool deduplicates on.
+func (w *Work) nextV1EN2(size int) []byte {
+	if size <= 0 {
+		return nil
+	}
+	v := w.v1en2.Add(1)
+	out := make([]byte, size)
+	for i := size - 1; i >= 0 && v > 0; i-- {
+		out[i] = byte(v)
+		v >>= 8
+	}
+	return out
 }
 
 // Share is a found solution: a Header whose hash meets the target.
@@ -113,10 +136,6 @@ type Worker struct {
 	dropCount  atomic.Uint64 // shares dropped because the share channel was full
 	startTime  atomic.Int64  // UnixNano
 	started    atomic.Bool   // guards Start against a second call
-
-	// v1en2 allocates unique extranonce2 values across threads and nonce
-	// wraparounds (V1 work only).
-	v1en2 atomic.Uint64
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -226,23 +245,6 @@ func (w *Worker) Stats() Stats {
 	}
 }
 
-// nextV1EN2 allocates a fresh extranonce2 of size bytes for a V1 job.
-// Each caller (worker thread) must hold a distinct value so no two
-// threads or nonce-space wraparounds ever produce the same
-// (job, extranonce2, ntime, nonce) tuple the pool deduplicates on.
-func (w *Worker) nextV1EN2(size int) []byte {
-	if size <= 0 {
-		return nil
-	}
-	v := w.v1en2.Add(1)
-	out := make([]byte, size)
-	for i := size - 1; i >= 0 && v > 0; i-- {
-		out[i] = byte(v)
-		v >>= 8
-	}
-	return out
-}
-
 // grind is the hot loop executed by each worker goroutine.
 // threadID determines the starting nonce offset so that threads do not
 // duplicate work.
@@ -285,7 +287,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		h := localWork.Header
 		if localWork.V1 != nil {
 			if v1en2 == nil {
-				v1en2 = w.nextV1EN2(localWork.V1.Extranonce2Size)
+				v1en2 = localWork.nextV1EN2(localWork.V1.Extranonce2Size)
 			}
 			hdr, err := BuildV1Header(localWork.V1, v1en2)
 			if err != nil {
@@ -334,7 +336,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			if localWork.V1 != nil && nonce < prev {
 				// Nonce space wrapped: mint a fresh extranonce2 and rebuild
 				// the header so the new range hashes a distinct coinbase.
-				v1en2 = w.nextV1EN2(localWork.V1.Extranonce2Size)
+				v1en2 = localWork.nextV1EN2(localWork.V1.Extranonce2Size)
 				hdr, err := BuildV1Header(localWork.V1, v1en2)
 				if err != nil {
 					localWork = nil

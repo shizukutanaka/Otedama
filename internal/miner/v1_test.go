@@ -152,3 +152,59 @@ func TestWorker_V1JobProducesShare(t *testing.T) {
 		t.Fatal("no share produced")
 	}
 }
+
+// TestWork_V1EN2UniqueAcrossWorkers pins the regression where each Worker
+// owned a private extranonce2 counter: two devices grinding the same job
+// would hand the pool identical (job, en2, ntime, nonce) tuples — the
+// pool deduplicates on exactly that key and rejects the second share.
+// The counter now lives on the shared Work, so allocations are unique.
+func TestWork_V1EN2UniqueAcrossWorkers(t *testing.T) {
+	coinbase := decodeHex(t, genesisCoinbaseHex)
+	var target Hash
+	for i := range target {
+		target[i] = 0xff // accept every hash
+	}
+	work := &Work{
+		Target: target,
+		V1: &V1JobTemplate{
+			JobID:           "dup-test",
+			Version:         1,
+			NTime:           0x495fab29,
+			NBits:           0x1d00ffff,
+			Coinb1:          coinbase[:80],
+			Extranonce1:     coinbase[80:88],
+			Coinb2:          coinbase[92:],
+			Extranonce2Size: 4,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	w1 := NewWorker(WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	w2 := NewWorker(WorkerConfig{Threads: 1, DeviceID: "cpu-1"})
+	s1 := w1.Start(ctx)
+	s2 := w2.Start(ctx)
+	defer w1.Stop()
+	defer w2.Stop()
+
+	w1.SetWork(work)
+	w2.SetWork(work)
+
+	var a, b Share
+	select {
+	case a = <-s1:
+	case <-ctx.Done():
+		t.Fatal("worker 1 produced no share")
+	}
+	select {
+	case b = <-s2:
+	case <-ctx.Done():
+		t.Fatal("worker 2 produced no share")
+	}
+	// Same nonce is fine only if en2 differs — that is exactly what the
+	// shared counter guarantees.
+	if string(a.ExtraNonce) == string(b.ExtraNonce) {
+		t.Fatalf("duplicate extranonce2 %x across workers on one job", a.ExtraNonce)
+	}
+}

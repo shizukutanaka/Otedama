@@ -114,6 +114,10 @@ type session struct {
 	extranonce1     string
 	extranonce2Size int
 
+	// user is the mining.authorize worker name; mining.submit must
+	// echo it verbatim or the pool rejects the share as unregistered.
+	user string
+
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
@@ -346,7 +350,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2 = strings.Repeat("00", s.extranonce2Size)
 	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		s.user, // worker name must match mining.authorize
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),

@@ -140,6 +140,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if password == "" {
 		password = "x" // most pools accept "x" as the password
 	}
+	sess.user = user
 	id = sess.nextID.Add(1)
 	resp, err = sess.call(ctx, id, "mining.authorize", []any{user, password})
 	if err != nil {

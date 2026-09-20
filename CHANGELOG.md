@@ -150,6 +150,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   ExtraNonce を運び submit がそれをエコー。genesisブロックの実
   coinbaseを分割・再構築してgenesisヘッダハッシュ一致を検証する
   外部ベクターテストで証明（`internal/miner/v1.go`, `v1_test.go`）。
+- **`mining.submit` の worker 名が `"otedama"` にハードコードされて
+  いた問題を修正** — `mining.authorize` が使う実ユーザー名と不一致の
+  ため、プールは worker 未登録として全シェアを拒否する。session に
+  `user` を保持し submit がそれをエコーするようにした。
+- **V1 extranonce2 がワーカー毎に独立採番されていた問題を修正** —
+  複数デバイス（複数 `miner.Worker`）が同一ジョブで en2=1,2,… を
+  並行採番し、かつ nonce 範囲も同一のため (job, en2, ntime, nonce)
+  タプルが衝突 — プールの重複排除で後者が拒否される。カウンタを
+  共有 `Work` に移し全スレッド・全デバイスで一意にした。
 
 ### Docs (session 255)
 
