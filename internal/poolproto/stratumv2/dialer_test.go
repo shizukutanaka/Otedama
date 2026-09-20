@@ -579,6 +579,61 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 	}
 }
 
+// TestSession_Submit_SequenceIncrements pins the SV2 contract that every
+// SubmitSharesStandard within a channel carries a unique sequential
+// sequence_number — pools that de-duplicate on (channel_id, sequence_number)
+// would drop every share after the first if it stayed constant.
+func TestSession_Submit_SequenceIncrements(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	seqs := make(chan uint32, 2)
+	go func() {
+		pool.doHandshake(1)
+		for i := 0; i < 2; i++ {
+			f, err := pool.dec.ReadFrame()
+			if err != nil {
+				pool.t.Logf("pool: read submit %d: %v", i, err)
+				return
+			}
+			ss, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+			if err != nil {
+				pool.t.Logf("pool: decode submit %d: %v", i, err)
+				return
+			}
+			seqs <- ss.SequenceNumber
+		}
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	for i := 0; i < 2; i++ {
+		if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "7", Nonce: uint32(i)}); err != nil {
+			t.Fatalf("Submit %d: %v", i, err)
+		}
+	}
+	got := map[uint32]bool{}
+	for i := 0; i < 2; i++ {
+		select {
+		case s := <-seqs:
+			got[s] = true
+		case <-time.After(2 * time.Second):
+			t.Fatal("pool did not receive both submissions within 2s")
+		}
+	}
+	if !got[1] || !got[2] {
+		t.Errorf("sequence numbers = %v, want {1,2} (unique sequential)", got)
+	}
+}
+
 func TestSession_Close_ClosesJobsChannel(t *testing.T) {
 	pool, clientConn := newPoolSide(t)
 	d := makeDialer(clientConn)

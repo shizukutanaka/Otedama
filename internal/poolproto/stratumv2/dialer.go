@@ -58,6 +58,7 @@ var (
 	connectTimeout     = 15 * time.Second
 	negotiateTimeout   = 30 * time.Second
 	sessionReadTimeout = 5 * time.Minute
+	writeTimeout       = 10 * time.Second
 )
 
 // Dial opens a TCP (or, when configured, TLS) connection to the pool.
@@ -211,6 +212,13 @@ type session struct {
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
+	// submitSeq is the SV2 share sequence: SubmitSharesStandard requires a
+	// unique sequential identifier within the channel (the engine's inline
+	// path increments seqNum the same way). A constant value would let a
+	// pool that de-duplicates on (channel_id, sequence_number) drop every
+	// share after the first.
+	submitSeq atomic.Uint32
+
 	startOnce sync.Once
 }
 
@@ -313,7 +321,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	jobID := parseJobID(sub.JobID)
 	ss := stratum.SubmitSharesStandard{
 		ChannelID:      s.chanID,
-		SequenceNumber: 0,
+		SequenceNumber: s.submitSeq.Add(1),
 		JobID:          jobID,
 		Nonce:          sub.Nonce,
 		NTime:          sub.NTime,
@@ -369,6 +377,10 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	// Bound the write: a dead-but-not-reset peer with a full TCP window
+	// would otherwise block the caller forever (the V1 adapter sets the
+	// same 10s write deadline).
+	_ = w.SetWriteDeadline(time.Now().Add(writeTimeout))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}

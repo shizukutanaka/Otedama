@@ -128,6 +128,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `--log-file` を `service install` フラグに追加し、Windows では既定で
   `<data-dir>\otedama.log` に出力（unix では journald/plist の
   StandardOutPath が捕捉するため従来どおり opt-in）。
+- **stratumv2 adapter の SubmitSharesStandard が `sequence_number` を
+  常に0で送っていた問題を修正** — SV2 は channel 内で一意な連番を要求し、
+  (channel_id, sequence_number) で重複除去するプールでは2件目以降の
+  シェアが全て取りこぼされる（inline 経路は seqNum++ で正しい）。
+  `submitSeq atomic.Uint32` で連番化。同 adapter の sendMsg に write
+  deadline（10s、V1 と同値）を追加し、フル TCP window の死んだピアへの
+  write 永久ブロックを解消。
 
 ### Docs (session 255)
 
