@@ -417,9 +417,14 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	workers := []*miner.Worker{w1, w2}
 
 	job := poolproto.Job{
-		JobID: "42",
-		NTime: 0x60000000,
-		NBits: 0x1d00ffff, // genesis nBits, valid
+		JobID:           "42",
+		Version:         0x00000002,
+		NTime:           0x60000000,
+		NBits:           0x1d00ffff, // genesis nBits, valid
+		Coinb1:          []byte{0x01},
+		Coinb2:          []byte{0x02},
+		Extranonce1:     []byte{0xcc},
+		Extranonce2Size: 4,
 	}
 	if err := applyJob(workers, job, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
@@ -428,7 +433,10 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+func TestApplyJob_MissingCoinbase(t *testing.T) {
+	// V1 job IDs are opaque strings (non-numeric is legal — real pools
+	// send e.g. "59ae"). What applyJob must reject is a job without
+	// coinbase halves: the worker could never build a valid header.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
 		JobID: "not-a-number",
@@ -436,7 +444,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 	}
 	err := applyJob([]*miner.Worker{w}, job, 1, 0)
 	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+		t.Error("applyJob should reject a job missing coinbase halves")
 	}
 }
 
@@ -459,7 +467,13 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// safe without Start; behavioural proof that the right target is chosen
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
-	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
+	job := poolproto.Job{
+		JobID:           "1",
+		NBits:           0x1d00ffff,
+		Coinb1:          []byte{0x01},
+		Coinb2:          []byte{0x02},
+		Extranonce2Size: 4,
+	}
 	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}

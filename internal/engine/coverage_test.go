@@ -1114,12 +1114,15 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
 		if sendJob {
-			// Use numeric job ID "1" so applyJob can parse it with fmt.Sscanf.
+			// Job with a real (Slushpool-format) coinbase — applyJob now
+			// rejects notifies whose coinbase halves are missing.
 			fmt.Fprintf(conn,
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
 					`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-					`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+					`"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20",`+
+					`"ffffffff0100f2052a010000004341041b0e8c2567c12536aa13357b79a073dc4444acb83c4ec7a0e2f99dd7457516c5817242da796924ca4e99947d087fedf9ce467cb9f7c6287078f801df276fdf84ac00000000",`+
+					`[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 			time.Sleep(50 * time.Millisecond)
 		}
 	}()
@@ -2099,7 +2102,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Send job whose coinbase halves are empty → applyJob rejects it
+		// ("missing coinbase halves"); string job IDs are legal in V1.
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"not-a-number",`+
@@ -2132,8 +2136,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, "missing coinbase") {
+		t.Errorf("expected applyJob 'missing coinbase' warn; got: %v", logLines)
 	}
 }
 

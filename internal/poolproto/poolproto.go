@@ -166,6 +166,20 @@ type Job struct {
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
 	ReceivedAt time.Time
+
+	// --- Stratum V1 template fields ---
+	//
+	// V1 delivers no ready-made merkle root: mining.notify carries the
+	// coinbase halves and the merkle branch list, and the MINER must
+	// assemble coinb1+extranonce1+extranonce2+coinb2, hash it, and fold
+	// the result through MerkleBranches to obtain the header's merkle
+	// root (per-share, since extranonce2 varies). V2 provides MerkleRoot
+	// directly and leaves all of these empty.
+	Coinb1          []byte   // raw bytes (hex-decoded from notify)
+	Coinb2          []byte   // raw bytes
+	MerkleBranches  [][]byte // branch hashes in wire order, verbatim
+	Extranonce1     []byte   // negotiated at mining.subscribe
+	Extranonce2Size int      // bytes of extranonce2 each share must carry
 }
 
 // ShareSubmission is a found share submitted upstream.

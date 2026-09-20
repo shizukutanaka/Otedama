@@ -21,6 +21,12 @@ type Work struct {
 	Header    Header // template; Nonce field will be overwritten
 	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
 	Target    Hash   // SHARE target the hash must meet (pool-assigned difficulty)
+
+	// V1, when non-nil, marks this as a Stratum V1 job: the header is
+	// derived per extranonce2 from the template (see v1.go) instead of
+	// hashing the fixed Header field. V1 jobs carry no uint32 JobID —
+	// the pool's opaque string id lives in V1.JobID.
+	V1 *V1JobTemplate
 }
 
 // Share is a found solution: a Header whose hash meets the target.
@@ -37,6 +43,12 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// JobIDStr carries the pool's opaque string job id for V1 work
+	// (Work.V1.JobID); empty for V2 shares, which use JobID.
+	JobIDStr string
+	// ExtraNonce is the extranonce2 bytes the share was mined with;
+	// V1 pools require it on mining.submit. Empty for V2.
+	ExtraNonce []byte
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -101,6 +113,10 @@ type Worker struct {
 	dropCount  atomic.Uint64 // shares dropped because the share channel was full
 	startTime  atomic.Int64  // UnixNano
 	started    atomic.Bool   // guards Start against a second call
+
+	// v1en2 allocates unique extranonce2 values across threads and nonce
+	// wraparounds (V1 work only).
+	v1en2 atomic.Uint64
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -210,6 +226,23 @@ func (w *Worker) Stats() Stats {
 	}
 }
 
+// nextV1EN2 allocates a fresh extranonce2 of size bytes for a V1 job.
+// Each caller (worker thread) must hold a distinct value so no two
+// threads or nonce-space wraparounds ever produce the same
+// (job, extranonce2, ntime, nonce) tuple the pool deduplicates on.
+func (w *Worker) nextV1EN2(size int) []byte {
+	if size <= 0 {
+		return nil
+	}
+	v := w.v1en2.Add(1)
+	out := make([]byte, size)
+	for i := size - 1; i >= 0 && v > 0; i-- {
+		out[i] = byte(v)
+		v >>= 8
+	}
+	return out
+}
+
 // grind is the hot loop executed by each worker goroutine.
 // threadID determines the starting nonce offset so that threads do not
 // duplicate work.
@@ -218,6 +251,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		localWork    *Work
 		localWorkVer uint64
 		nonce        = threadID
+		v1en2        []byte // this thread's current extranonce2 (V1 work only)
 	)
 
 	for {
@@ -233,6 +267,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			localWork = w.work
 			localWorkVer = w.workVer
 			nonce = threadID // restart nonce from thread offset on new job
+			v1en2 = nil      // fresh extranonce2 per job
 		}
 		w.mu.Unlock()
 
@@ -248,6 +283,20 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		const batchSize = 1024
 
 		h := localWork.Header
+		if localWork.V1 != nil {
+			if v1en2 == nil {
+				v1en2 = w.nextV1EN2(localWork.V1.Extranonce2Size)
+			}
+			hdr, err := BuildV1Header(localWork.V1, v1en2)
+			if err != nil {
+				// applyJob pre-validates templates; an unbuildable one here
+				// means the job changed between validation and SetWork —
+				// idle rather than hash garbage.
+				localWork = nil
+				continue
+			}
+			h = hdr
+		}
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(h)
@@ -263,6 +312,10 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					Hash:      hash,
 					DeviceID:  w.cfg.DeviceID,
 				}
+				if localWork.V1 != nil {
+					share.JobIDStr = localWork.V1.JobID
+					share.ExtraNonce = v1en2
+				}
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share
 				// is dropped rather than blocking the miner. A larger
@@ -276,7 +329,19 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
+			prev := nonce
 			nonce += w.cfg.NonceStep
+			if localWork.V1 != nil && nonce < prev {
+				// Nonce space wrapped: mint a fresh extranonce2 and rebuild
+				// the header so the new range hashes a distinct coinbase.
+				v1en2 = w.nextV1EN2(localWork.V1.Extranonce2Size)
+				hdr, err := BuildV1Header(localWork.V1, v1en2)
+				if err != nil {
+					localWork = nil
+					break
+				}
+				h = hdr
+			}
 		}
 	}
 }

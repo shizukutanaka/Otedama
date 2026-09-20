@@ -135,6 +135,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `submitSeq atomic.Uint32` で連番化。同 adapter の sendMsg に write
   deadline（10s、V1 と同値）を追加し、フル TCP window の死んだピアへの
   write 永久ブロックを解消。
+- **Stratum V1 経路で有効シェアが原理的に一切生成不能だった問題を修正**
+  （§11のV2版と同クラスの欠陥がV1側に残存）: (a) `applyJob` が
+  `miner.Work` のヘッダに Version/PrevHash を一切設定せず、
+  (b) `parseNotify` が coinb1/coinb2/merkle_branch を破棄して
+  MerkleRoot を常にゼロ（V1ではプールがrootを送らない——minerが
+  coinb1+extranonce1+extranonce2+coinb2 をハッシュし branch を
+  折り畳んで算出する仕様）、(c) V1の不透明文字列 JobID（実プールは
+  `59ae` 等の非数値を送る）を `%d` で parse し非数値は全ジョブ破棄、
+  (d) submit の extranonce2 が常にゼロ埋め。`parseNotify` はcoinbase
+  部品を保持し prevhash を display→wire 全バイト反転で格納、新設
+  `miner.V1JobTemplate`/`BuildV1Header` がextranonce2毎にヘッダを
+  再構築（nonce空間wrap時に新en2採番）、`miner.Share` が JobIDStr/
+  ExtraNonce を運び submit がそれをエコー。genesisブロックの実
+  coinbaseを分割・再構築してgenesisヘッダハッシュ一致を検証する
+  外部ベクターテストで証明（`internal/miner/v1.go`, `v1_test.go`）。
 
 ### Docs (session 255)
 

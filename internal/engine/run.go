@@ -1152,10 +1152,17 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}
 			go func() {
 				sendTime := time.Now()
+				// V1 shares carry the pool's opaque string job id
+				// (JobIDStr) and the extranonce2 they were mined with.
+				jobID := capturedShare.JobIDStr
+				if jobID == "" {
+					jobID = fmt.Sprintf("%d", capturedShare.JobID)
+				}
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
-					Nonce: capturedShare.Nonce,
-					NTime: capturedShare.NTime,
+					JobID:      jobID,
+					Nonce:      capturedShare.Nonce,
+					NTime:      capturedShare.NTime,
+					ExtraNonce: capturedShare.ExtraNonce,
 				})
 				elapsed := float64(time.Since(sendTime).Milliseconds())
 				if err != nil {
@@ -1363,25 +1370,35 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, job poolproto.Job, _ uint32, difficulty float64) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
-	var jobID uint32
-	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
+	// V1 job IDs are opaque pool strings (commonly non-numeric, e.g.
+	// "59ae") — the worker carries it verbatim in the template for
+	// submit-time echo rather than parsing it into a uint32.
+	tmpl := &miner.V1JobTemplate{
+		JobID:           job.JobID,
+		Version:         job.Version,
+		PrevHash:        job.PrevHash,
+		NTime:           job.NTime,
+		NBits:           job.NBits,
+		Coinb1:          job.Coinb1,
+		Coinb2:          job.Coinb2,
+		MerkleBranches:  job.MerkleBranches,
+		Extranonce1:     job.Extranonce1,
+		Extranonce2Size: job.Extranonce2Size,
+	}
+	// Pre-validate the template so a malformed notify never reaches the
+	// grind loop.
+	if _, err := miner.BuildV1Header(tmpl, make([]byte, job.Extranonce2Size)); err != nil {
+		return fmt.Errorf("engine: V1 job %q: %w", job.JobID, err)
 	}
 	w := &miner.Work{
-		JobID:     jobID,
-		ChannelID: chanID,
-		Header: miner.Header{
-			MerkleRoot: job.MerkleRoot,
-			Time:       job.NTime,
-			Bits:       job.NBits,
-		},
 		NBits:  job.NBits,
 		Target: target,
+		V1:     tmpl,
 	}
 	for _, wr := range workers {
 		wr.SetWork(w)

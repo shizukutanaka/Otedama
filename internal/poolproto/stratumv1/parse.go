@@ -40,8 +40,9 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	}
 
 	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
+		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
+		branchHexes                                                              []string
+		cleanJobs                                                                bool
 	)
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
 		return poolproto.Job{}, err
@@ -49,9 +50,21 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch: the miner — not the
+	// pool — must reconstruct the coinbase transaction (coinb1 +
+	// extranonce1 + extranonce2 + coinb2) and fold its hash through the
+	// branch list to obtain the header's merkle root. Without these fields
+	// every V1 job would be mined against a zeroed merkle root, producing
+	// only shares the pool reconstructs differently and always rejects.
+	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb1: %w", err)
+	}
+	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb2: %w", err)
+	}
+	if err := json.Unmarshal(p[4], &branchHexes); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: merkle_branch: %w", err)
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -85,10 +98,30 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
 		job.NTime = uint32(v)
 	}
+	// notify's prevhash hex is in display order (big-endian); the header
+	// stores it in wire order — the full 32-byte reversal.
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
-		copy(job.PrevHash[:], b)
+		for i := range b {
+			job.PrevHash[31-i] = b[i]
+		}
 	}
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
+	var err error
+	if job.Coinb1, err = hex.DecodeString(coinb1Hex); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb1 not hex: %w", err)
+	}
+	if job.Coinb2, err = hex.DecodeString(coinb2Hex); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: coinb2 not hex: %w", err)
+	}
+	// Merkle branches arrive already in wire (hash) order — fold them
+	// verbatim, no byte reversal.
+	job.MerkleBranches = make([][]byte, len(branchHexes))
+	for i, h := range branchHexes {
+		b, err := hex.DecodeString(h)
+		if err != nil || len(b) != 32 {
+			return poolproto.Job{}, fmt.Errorf("notify: merkle_branch[%d] invalid", i)
+		}
+		job.MerkleBranches[i] = b
+	}
 	return job, nil
 }
 

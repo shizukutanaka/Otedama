@@ -297,6 +297,13 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job poolproto.Job) {
+	// Stamp the session-level extranonce negotiated at subscribe time onto
+	// every job: the worker needs extranonce1 (and the en2 size) to
+	// reconstruct the coinbase per share.
+	if en1, err := hex.DecodeString(s.extranonce1); err == nil {
+		job.Extranonce1 = en1
+	}
+	job.Extranonce2Size = s.extranonce2Size
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
