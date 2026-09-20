@@ -467,6 +467,35 @@ func TestApplyAllocation_NoChangeProducesNoLog(t *testing.T) {
 	}
 }
 
+// TestApplyAllocation_IdleToMiningResumesWorker pins the idle→assigned
+// transition: an idle assignment carries no SwitchedFromID, so it falls
+// into the no-change branch — which must still resume a worker that was
+// paused while the device was idle. Without the resume the worker stays
+// paused forever and silently never mines again.
+func TestApplyAllocation_IdleToMiningResumesWorker(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	log := func(_, _ string) {}
+
+	// Cycle 1: device idles — worker paused.
+	applyAllocation(&arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{DeviceID: "cpu-0"}},
+	}, []*miner.Worker{w}, log)
+	if !w.Paused() {
+		t.Fatal("idle assignment did not pause the worker")
+	}
+
+	// Cycle 2: device routed back to mining — no SwitchedFromID.
+	applyAllocation(&arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID: "cpu-0",
+			Stream:   "mining.stratum",
+		}},
+	}, []*miner.Worker{w}, log)
+	if w.Paused() {
+		t.Error("idle→mining assignment left the worker paused — device never resumes mining")
+	}
+}
+
 // ============================================================================
 // buildStats — engine state → TUI snapshot
 // ============================================================================

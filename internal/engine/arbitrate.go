@@ -309,7 +309,17 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			}
 
 		default:
-			// No change; assignment held per hysteresis.
+			// No recorded switch. Two cases reach here: a plain hold, and
+			// an idle→assigned transition (idle assignments carry no
+			// Stream, so SwitchedFromID is empty and the switch above is
+			// skipped). A device that was paused while idle and is now
+			// routed back to a mining stream must be resumed — otherwise
+			// it stays paused forever. Non-"ai." streams are the mining
+			// family (only SHA256d consumers); resuming an unpaused
+			// worker is a no-op.
+			if !strings.HasPrefix(string(a.Stream), "ai.") {
+				resumeDevice(a.DeviceID)
+			}
 		}
 	}
 }
