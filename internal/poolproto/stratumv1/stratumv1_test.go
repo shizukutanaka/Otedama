@@ -788,6 +788,52 @@ func TestNegotiate_ExtraNonceSubscribeError(t *testing.T) {
 	_ = sess.Close()
 }
 
+// TestNegotiate_ExtraNonceSubscribeSilentPool pins the optionalCallTimeout
+// bound: a pool that silently drops unknown methods (e.g. public-pool.io,
+// observed live) answers subscribe+authorize but never replies to
+// extranonce.subscribe. Without the per-call timeout Negotiate blocked on
+// the session ctx — the connection succeeded yet no job ever arrived.
+func TestNegotiate_ExtraNonceSubscribeSilentPool(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		var req rpcMessage
+		// Subscribe OK.
+		line, _ := reader.ReadBytes('\n')
+		_ = json.Unmarshal(line, &req)
+		id, _ := json.Marshal(req.ID)
+		_, _ = serverConn.Write([]byte(
+			`{"id":` + string(id) + `,"result":[[["mining.notify","s1"]],"deadbeef00",4],"error":null}` + "\n",
+		))
+		// Authorize OK.
+		line, _ = reader.ReadBytes('\n')
+		_ = json.Unmarshal(line, &req)
+		id, _ = json.Marshal(req.ID)
+		_, _ = serverConn.Write([]byte(
+			`{"id":` + string(id) + `,"result":true,"error":null}` + "\n",
+		))
+		// Read extranonce.subscribe — then stay silent (connection open,
+		// no reply), emulating pools that drop unknown methods.
+		_, _ = reader.ReadBytes('\n')
+		// Keep the pipe open so the readLoop does not see EOF; Negotiate
+		// must complete via the optional-call timeout, not the ctx.
+		<-time.After(optionalCallTimeout + 5*time.Second)
+	}()
+	// Generous outer bound: the test must pass well before the ctx ends.
+	ctx, cancel := context.WithTimeout(context.Background(), optionalCallTimeout+10*time.Second)
+	defer cancel()
+	start := time.Now()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: expected success despite silent pool; got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > optionalCallTimeout+5*time.Second {
+		t.Errorf("Negotiate took %v — optional call blocked beyond its timeout", elapsed)
+	}
+	_ = sess.Close()
+}
+
 func TestDialer_Dial_DialFnSuccess_ReturnsConnection(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()

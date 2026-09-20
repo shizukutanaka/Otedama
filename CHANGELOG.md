@@ -46,6 +46,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed (session 256 — 裁定ループの適用層監査: 裁定決定が次ジョブで失効していた問題を是正)
 
+- **Stratum V1 ハンドシェイクが黙殺型プールで永久ブロック** —
+  `extranonce.subscribe`（optional step）が ctx 期限のみで応答を待ち、
+  未知メソッドに応答を返さないプール（実測: public-pool.io）では
+  Negotiate が接続寿命いっぱいブロック——「接続成功」なのにジョブが
+  一切届かない状態に。optional 呼出しに専用 10s timeout を追加。
+  実プール検証: 修正後は接続~10秒で完了し、実 `mining.notify` 受信・
+  CPU で安定ハッシュ稼働を確認。
+
 - **`applyAllocation` の裁定pauseが即座に無効化されていた問題** —
   mining→AI判定で `SetWork(nil)` しても、次のpool配信jobが
   `applyJob`/`updateWork` で全workerに無条件pushされ、裁定が数秒で
