@@ -34,6 +34,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1216,11 +1217,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // did not assign one; the caller falls back to the block target.
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
+	// endpoint_host/endpoint_port are separate wire fields per the spec
+	// (§3.6.1); parseHost yields "host:port", so split it.
+	epHost, epPortStr, _ := net.SplitHostPort(host)
+	epPort, _ := strconv.ParseUint(epPortStr, 10, 16)
 	sc := stratum.SetupConnection{
-		Protocol:        stratum.MiningProtocol,
-		MinVersion:      2,
-		MaxVersion:      2,
-		Endpoint:        host,
+		Protocol:   stratum.MiningProtocol,
+		MinVersion: 2,
+		MaxVersion: 2,
+		// End mining device: we only handle NewMiningJob (standard),
+		// never NewExtendedMiningJob.
+		Flags:           stratum.FlagRequiresStandardJobs,
+		EndpointHost:    epHost,
+		EndpointPort:    uint16(epPort),
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -1252,6 +1261,9 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		ReqID:           1,
 		User:            user,
 		NominalHashrate: hashRate,
+		// max_target is mandatory on the wire (§5.3.2); all-0xff means the
+		// device accepts whatever share target the pool assigns.
+		MaxTarget: stratum.MaxTargetAny(),
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return 0, miner.Hash{}, err
@@ -1263,6 +1275,9 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	msg, err = stratum.DispatchFrame(f)
 	if err != nil {
 		return 0, miner.Hash{}, err
+	}
+	if msg.OpenMiningChannelError != nil {
+		return 0, miner.Hash{}, fmt.Errorf("engine: channel open rejected: %s", msg.OpenMiningChannelError.Error)
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")

@@ -90,6 +90,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   毎5分期限（V1 と同値）、(c) TCP connect に15s `net.Dialer.Timeout`、
   (d) TLS ハンドシェイクに子ctx 30s期限（TCP確立後に ServerHello が
   来ない停滞を捕捉——stratum/tls.go と stratumv1/tls.go 双方）。
+- **Stratum V2 ハンドシェイクの wire 不適合を4件修正**（ライブ経路で
+  使用・自己往復テストでは検出不能だった spec 違反）。(a)
+  `SetupConnection` が endpoint_host のみ送信し spec 必須の
+  `endpoint_port U16` を欠落——以降の全フィールドが pool 側 decoder で
+  2バイトずれて誤読。EndpointHost/EndpointPort に分離。(b)
+  `OpenStandardMiningChannel` が必須の `max_target U256` を未送信——
+  spec準拠プールは32バイト不足でパース失敗。`MaxTarget` フィールド追加
+  ＋両呼出しで all-0xff（任意のターゲットを受諾）を送信。(c)
+  `OpenStandardMiningChannelSuccess` の末尾は spec では
+  `group_channel_id U32` だが `ExtraNonce2Size U16` として誤読——
+  `GroupChannelID U32` に修正。(d) `SetupConnection.flags` に
+  `REQUIRES_STANDARD_JOBS`（bit0）を未設定——end mining device は
+  セット必須で、無いと group channel 経由で NewExtendedMiningJob が
+  来てデコード不能（実装なし）。両呼出しで設定。
+- **`SubmitShares.Error` の msg_type が 0x1d ではなく 0x1e**（specの
+  Reserved）に誤設定——本物のプールのシェア拒否が未知メッセージ化し
+  拒否理由が不可視だった。0x1d に修正。
+- **`SubmitSharesSuccess.new_shares_sum` を spec の U64 に修正**
+  （U32 デコードで4バイト残留・値も切捨て）。
 - **ウォレット passphrase の env ファイルをエンジンが自前で読むように** —
   `<data-dir>/otedama.env` は systemd の `EnvironmentFile=` でしか
   プロセスに届かず、launchd（macOS）や sc.exe（Windows）のサービスでは

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -115,12 +116,17 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// The session read loop re-arms the deadline per frame afterwards.
 	_ = conn.raw.SetReadDeadline(time.Now().Add(negotiateTimeout))
 
-	// SetupConnection.
+	// SetupConnection. endpoint_host/endpoint_port are separate wire fields;
+	// remoteAddr is "host:port" so split it. A missing port degrades to 0 —
+	// pool URLs always carry one in practice.
+	epHost, epPort := splitHostPort(conn.remoteAddr)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        conn.remoteAddr,
+		Flags:           stratum.FlagRequiresStandardJobs,
+		EndpointHost:    epHost,
+		EndpointPort:    epPort,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -144,11 +150,13 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 
-	// OpenMiningChannel.
+	// OpenMiningChannel. MaxTarget is mandatory on the wire (§5.3.2);
+	// all-0xff means the device accepts whatever target the pool assigns.
 	omc := stratum.OpenMiningChannel{
 		ReqID:           1,
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
+		MaxTarget:       stratum.MaxTargetAny(),
 	}
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
@@ -397,6 +405,21 @@ func parseJobID(s string) uint32 {
 // difficulty stored in the session's atomic.Uint64.
 func float64FromBits(bits uint64) float64 {
 	return math.Float64frombits(bits)
+}
+
+// splitHostPort splits "host:port" for the SetupConnection wire fields.
+// A portless input degrades to port 0 rather than failing — the endpoint
+// fields are informational to the pool.
+func splitHostPort(addr string) (string, uint16) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr, 0
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return host, 0
+	}
+	return host, uint16(port)
 }
 
 // Compile-time assertions.
