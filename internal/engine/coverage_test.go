@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1175,6 +1176,113 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	// Ends with pool disconnect.
 	if err != nil && !strings.Contains(err.Error(), "pool closed connection") && err != context.DeadlineExceeded {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestRunSessionV1_SubmitReachesPool is the end-to-end proof of the V1
+// share path: with nbits 0x207fffff (the easiest regtest-era target) every
+// nonce is a valid share, so a working pipeline must discover one
+// immediately and mining.submit must reach the pool carrying the
+// *authorized* worker name, the pool's opaque string job id, the
+// extranonce2 the share was mined with, the notify's ntime, and the nonce.
+// Before the V1 fixes this path could never emit a share at all.
+func TestRunSessionV1_SubmitReachesPool(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	type submitMsg struct {
+		ID     int    `json:"id"`
+		Method string `json:"method"`
+		Params []any  `json:"params"`
+	}
+	got := make(chan submitMsg, 1)
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Same real coinbase as fakeV1Pool but with the easy regtest nbits
+		// and no set_difficulty, so the job's target comes from nbits.
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20",`+
+				`"ffffffff0100f2052a010000004341041b0e8c2567c12536aa13357b79a073dc4444acb83c4ec7a0e2f99dd7457516c5817242da796924ca4e99947d087fedf9ce467cb9f7c6287078f801df276fdf84ac00000000",`+
+				`[],"00000002","207fffff","68d36c5e",true]}`+"\n")
+		_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			var m submitMsg
+			if json.Unmarshal([]byte(line), &m) != nil || m.Method != "mining.submit" {
+				continue
+			}
+			got <- m
+			fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
+			return
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	go func() {
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "pool.worker.1",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Second,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	var m submitMsg
+	select {
+	case m = <-got:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no mining.submit reached the pool")
+	}
+	cancel()
+
+	if len(m.Params) != 5 {
+		t.Fatalf("submit params len = %d, want 5: %v", len(m.Params), m.Params)
+	}
+	if m.Params[0] != "pool.worker.1" {
+		t.Errorf("params[0] worker = %v, want the authorized user", m.Params[0])
+	}
+	if m.Params[1] != "1" {
+		t.Errorf("params[1] job id = %v, want the pool's string job id \"1\"", m.Params[1])
+	}
+	en2, _ := m.Params[2].(string)
+	if len(en2) != 8 {
+		t.Errorf("params[2] extranonce2 = %q, want 8 hex chars (extranonce2_size=4)", en2)
+	}
+	if m.Params[3] != "68d36c5e" {
+		t.Errorf("params[3] ntime = %v, want echo of notify ntime 68d36c5e", m.Params[3])
+	}
+	nonce, _ := m.Params[4].(string)
+	if _, err := strconv.ParseUint(nonce, 16, 32); len(nonce) != 8 || err != nil {
+		t.Errorf("params[4] nonce = %q, want 8-char hex: %v", nonce, err)
 	}
 }
 

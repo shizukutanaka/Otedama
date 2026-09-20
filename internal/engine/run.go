@@ -1030,6 +1030,17 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		opts.onConnected()
 	}
 
+	// Drain pool operator notices (client.show_message — e.g. maintenance
+	// warnings) into the log; unread, the buffered channel would silently
+	// drop them once full.
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		go func() {
+			for notice := range nr.PoolNotices() {
+				opts.log("warn", "engine: pool notice: "+notice)
+			}
+		}()
+	}
+
 	// V1 is single-channel; channel ID 0 is the conventional value.
 	const chanID = uint32(0)
 
