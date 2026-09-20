@@ -433,6 +433,40 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
+// TestApplyJob_SkipsPausedWorker pins the arbitration-pause invariant: a
+// worker paused by applyAllocation (SetPaused) must NOT receive the next
+// pool-delivered job — previously applyJob pushed work to every worker,
+// silently undoing a mining→AI routing decision seconds later.
+func TestApplyJob_SkipsPausedWorker(t *testing.T) {
+	active := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	paused := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "gpu-0"})
+	paused.SetPaused(true)
+	job := poolproto.Job{
+		JobID:           "1",
+		NBits:           0x1d00ffff,
+		Coinb1:          []byte{0x01},
+		Coinb2:          []byte{0x02},
+		Extranonce2Size: 4,
+	}
+	if err := applyJob([]*miner.Worker{active, paused}, job, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if !active.HasWork() {
+		t.Error("unpaused worker did not receive the job")
+	}
+	if paused.HasWork() {
+		t.Error("paused worker received a job — arbitration pause was overridden")
+	}
+	// Resuming re-arms the worker for the NEXT job (no eager re-arm).
+	paused.SetPaused(false)
+	if err := applyJob([]*miner.Worker{active, paused}, job, 1, 0); err != nil {
+		t.Fatalf("applyJob after resume: %v", err)
+	}
+	if !paused.HasWork() {
+		t.Error("resumed worker did not receive the next job")
+	}
+}
+
 func TestApplyJob_MissingCoinbase(t *testing.T) {
 	// V1 job IDs are opaque strings (non-numeric is legal — real pools
 	// send e.g. "59ae"). What applyJob must reject is a job without

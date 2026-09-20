@@ -1351,6 +1351,9 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 		Target: target,
 	}
 	for _, wr := range workers {
+		if wr.Paused() {
+			continue
+		}
 		wr.SetWork(w)
 	}
 }
@@ -1427,6 +1430,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, _ uint32, difficulty f
 		V1:     tmpl,
 	}
 	for _, wr := range workers {
+		if wr.Paused() {
+			continue
+		}
 		wr.SetWork(w)
 	}
 	return nil

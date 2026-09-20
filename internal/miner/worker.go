@@ -136,6 +136,7 @@ type Worker struct {
 	dropCount  atomic.Uint64 // shares dropped because the share channel was full
 	startTime  atomic.Int64  // UnixNano
 	started    atomic.Bool   // guards Start against a second call
+	paused     atomic.Bool   // administrative pause; job delivery skips paused workers
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -209,6 +210,25 @@ func (w *Worker) SetWork(work *Work) {
 	w.workVer++
 	w.mu.Unlock()
 }
+
+// SetPaused marks the worker as administratively paused (true) or clears the
+// pause (false). Pausing clears the current work immediately; while paused,
+// callers delivering new jobs (applyJob/updateWork) must skip this worker so
+// an arbitration decision to idle a device is not undone by the next
+// pool-delivered job. Resuming takes effect on the next delivered job —
+// there is deliberately no eager re-arm, matching how a fresh worker learns
+// about work.
+func (w *Worker) SetPaused(paused bool) {
+	w.paused.Store(paused)
+	if paused {
+		w.SetWork(nil)
+	}
+}
+
+// Paused reports whether the worker was administratively paused via
+// SetPaused(true). Distinct from HasWork: a paused worker stays idle even
+// while the pool keeps delivering jobs.
+func (w *Worker) Paused() bool { return w.paused.Load() }
 
 // DeviceID returns the HAL device identity string this worker was
 // configured with. Empty string means "unidentified device".

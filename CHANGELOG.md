@@ -44,6 +44,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   パース検証（復号なし）に強化——破損 wallet.dat は Fail + 復元手順を提示。
   `data directory` チェックに `otedama.env` の0600以外パーミッション警告を追加。
 
+### Fixed (session 256 — 裁定ループの適用層監査: 裁定決定が次ジョブで失効していた問題を是正)
+
+- **`applyAllocation` の裁定pauseが即座に無効化されていた問題** —
+  mining→AI判定で `SetWork(nil)` しても、次のpool配信jobが
+  `applyJob`/`updateWork` で全workerに無条件pushされ、裁定が数秒で
+  失効していた。`miner.Worker` に `SetPaused`/`Paused`（atomic.Bool）
+  を追加し、job配信側がpaused workerをスキップ、AI→mining時に
+  resumeする形に修正。
+
 ### Fixed (session 255)
 
 - **`internal/rates/fetcher_test.go`**: 未使用の `parseFloat` ヘルパーを
