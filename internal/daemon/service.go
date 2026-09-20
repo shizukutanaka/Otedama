@@ -37,6 +37,11 @@ import (
 // code never changes it; default is the real runtime.GOOS.
 var goos = runtime.GOOS
 
+// ServiceName is the canonical name the service is registered under — used by
+// every sc.exe call and by the SCM handshake in svc_windows.go, which must
+// report under the same name the service was created with.
+const ServiceName = "Otedama"
+
 // ServiceStatus describes the current state of the Otedama service.
 type ServiceStatus struct {
 	Installed bool
@@ -57,6 +62,7 @@ type ServiceFlags struct {
 	LogLevel       string // --log-level  (debug|info|warn|error)
 	LogFormat      string // --log-format (text|json)
 	Language       string // --language   (en, ja, …)
+	LogFile        string // --log-file   audit-trail path
 }
 
 // Manager installs, uninstalls, starts, stops, and queries the Otedama
@@ -198,14 +204,9 @@ func (m *Manager) systemdUnit() string {
 	// the wallet.dat the service must create/update at startup. Without an
 	// explicit exception, a data dir under $HOME (the documented default —
 	// see config.DefaultDataDir) makes the Lightning wallet permanently
-	// read-only and the process would fail to persist it. effectiveDataDir
-	// mirrors what `otedama run` itself resolves at startup when
-	// --data-dir/OTEDAMA_DATA_DIR/data_dir was not set at install time, so
-	// the unit's carve-out matches the path actually used.
-	effectiveDataDir := m.dataDir
-	if effectiveDataDir == "" {
-		effectiveDataDir = config.DefaultDataDir()
-	}
+	// read-only and the process would fail to persist it. The carve-out uses
+	// the same pinned dir serviceArgv embeds as --data-dir.
+	effectiveDataDir := m.effectiveDataDir()
 	readWritePaths := ""
 	envFile := ""
 	if effectiveDataDir != "" {
@@ -356,15 +357,15 @@ func launchdLogPath(name string) string {
 
 func (m *Manager) installWindowsService() error {
 	args := fmt.Sprintf(`"%s" %s`, m.binaryPath, m.serviceArgs())
-	return runCmd("sc.exe", "create", "Otedama",
+	return runCmd("sc.exe", "create", ServiceName,
 		"binPath=", args,
 		"start=", "auto",
 		"DisplayName=", "Otedama Mining Service")
 }
 
 func (m *Manager) uninstallWindowsService() error {
-	_ = runCmd("sc.exe", "stop", "Otedama")
-	return runCmd("sc.exe", "delete", "Otedama")
+	_ = runCmd("sc.exe", "stop", ServiceName)
+	return runCmd("sc.exe", "delete", ServiceName)
 }
 
 // statusWindowsService queries the Service Control Manager for the
@@ -380,7 +381,7 @@ func (m *Manager) uninstallWindowsService() error {
 // answer, matching how statusLaunchd treats a launchctl failure — a
 // missing service is Status's normal "not found" result, not an error.
 func (m *Manager) statusWindowsService() (ServiceStatus, error) {
-	out, err := exec.Command("sc.exe", "query", "Otedama").Output()
+	out, err := exec.Command("sc.exe", "query", ServiceName).Output()
 	if err != nil {
 		return ServiceStatus{}, nil
 	}
@@ -394,6 +395,18 @@ func (m *Manager) statusWindowsService() (ServiceStatus, error) {
 
 // ----- Helpers -----
 
+// effectiveDataDir mirrors what `otedama run` resolves at startup when
+// --data-dir was not given at install time. Pinning the resolved value into
+// the service definition matters on Windows, where the service account
+// (LocalSystem) would otherwise re-resolve %APPDATA% under the system
+// profile — a different directory than the installing user's.
+func (m *Manager) effectiveDataDir() string {
+	if m.dataDir != "" {
+		return m.dataDir
+	}
+	return config.DefaultDataDir()
+}
+
 // serviceArgv returns the service command-line arguments as a slice, with
 // no shell quoting. This is the canonical form: serviceArgs joins it into a
 // single string for systemd ExecStart= and Windows sc.exe binPath= (both of
@@ -406,8 +419,15 @@ func (m *Manager) serviceArgv() []string {
 	if m.configPath != "" {
 		argv = append(argv, "--config", m.configPath)
 	}
-	if m.dataDir != "" {
-		argv = append(argv, "--data-dir", m.dataDir)
+	// The data dir is pinned at install time rather than re-resolved by the
+	// service process: a Windows service runs as LocalSystem, where
+	// config.DefaultDataDir() would resolve %APPDATA% under the system
+	// profile instead of the installing user's — leaving an interactively
+	// created wallet.dat permanently unreachable. systemd --user and
+	// LaunchAgent units happen to resolve the same dir either way, but
+	// pinning keeps the three platforms' definitions identical.
+	if effective := m.effectiveDataDir(); effective != "" {
+		argv = append(argv, "--data-dir", effective)
 	}
 	if m.serviceFlags.BitcoinAddress != "" {
 		argv = append(argv, "--bitcoin-address", m.serviceFlags.BitcoinAddress)
@@ -420,6 +440,19 @@ func (m *Manager) serviceArgv() []string {
 	}
 	if m.serviceFlags.Language != "" {
 		argv = append(argv, "--language", m.serviceFlags.Language)
+	}
+	// SCM-discarded stdout makes a Windows service otherwise blind — unlike
+	// journald and launchd's StandardOutPath there is no service-side
+	// capture — so --log-file defaults to <data-dir>\otedama.log there. On
+	// unix it stays opt-in: the journal/plist paths already capture stdout.
+	logFile := m.serviceFlags.LogFile
+	if logFile == "" && goos == "windows" {
+		if effective := m.effectiveDataDir(); effective != "" {
+			logFile = filepath.Join(effective, "otedama.log")
+		}
+	}
+	if logFile != "" {
+		argv = append(argv, "--log-file", logFile)
 	}
 	return argv
 }

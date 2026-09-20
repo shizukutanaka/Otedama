@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -87,8 +88,16 @@ func TestServiceArgs_IncludesConfigAndDataDir(t *testing.T) {
 func TestServiceArgs_EmptyConfigAndDataDir(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	args := m.serviceArgs()
-	if args != "run" {
-		t.Errorf("serviceArgs with no config/datadir = %q, want %q", args, "run")
+	// The resolved default data dir is pinned into argv: a Windows service
+	// runs as LocalSystem and would re-resolve %APPDATA% under the system
+	// profile, not the installing user's. On hosts where no base dir can be
+	// resolved, argv degrades to bare "run".
+	want := "run"
+	if dir := config.DefaultDataDir(); dir != "" {
+		want = fmt.Sprintf("run --data-dir %q", dir)
+	}
+	if args != want {
+		t.Errorf("serviceArgs with no config/datadir = %q, want %q", args, want)
 	}
 }
 

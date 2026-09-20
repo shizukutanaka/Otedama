@@ -162,12 +162,25 @@ otedama service install --config C:\ProgramData\Otedama\config.yaml
 ```
 
 Otedama registers itself under the service name `Otedama` with
-`DisplayName=Otedama Mining Service` and `start=auto`.
+`DisplayName=Otedama Mining Service` and `start=auto`. The binary
+implements the Service Control Manager protocol, so `sc.exe start`,
+`sc.exe stop`, and `otedama service status` all work — a service stop
+drives the same graceful shutdown as SIGTERM.
 
-To view logs:
+The service runs as **LocalSystem**, so the data directory is pinned
+into the service command line at install time (`--data-dir` defaults to
+the installing user's `%APPDATA%\Otedama`). A wallet created
+interactively under your account is reachable by the service via that
+pinned path; put `OTEDAMA_WALLET_PASSPHRASE=…` in
+`<data-dir>\otedama.env` (ACL-restricted to Administrators/SYSTEM) to
+unlock it.
+
+Stdout is not visible to SCM, so the service writes its log to
+`<data-dir>\otedama.log` (override with `service install --log-file`).
+To view recent entries:
 
 ```powershell
-Get-EventLog -LogName Application -Source Otedama -Newest 50
+Get-Content "$env:APPDATA\Otedama\otedama.log" -Tail 50
 ```
 
 ---

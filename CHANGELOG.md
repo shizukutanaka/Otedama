@@ -111,6 +111,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   同一クラス）。§3 のengine未配線により現状は休眠経路だが、配線時に
   そのまま悪用可能なバグとなるため `stratum.DialTLS` + `TLSConfigWithExtraCAs`
   に接続済み。
+- **Windows サービスが一切起動できなかった問題を修正** — `sc.exe create`
+  で登録されるバイナリに SCM ハンドシェイク（`StartServiceCtrlDispatcher`）
+  が無く、起動要求は必ず error 1053 で失敗していた（インストール自体は
+  「成功」を表示するため検出不能）。`internal/daemon` に
+  `svc.Run`/`svc.Handler` 実装を追加し、`run` サブコマンドがサービス
+  コンテキストで起動された場合のみ SCM 配下で動作するようにした。
+  SCM の Stop/Shutdown は ctx キャンセルとして engine の通常の graceful
+  shutdown に接続される（`cmdRun` に ctx 注入）。
+- **サービスの `--data-dir` を install 時解決値でピン留め** — 従来は
+  未指定時に省略され、サービスプロセス側で再解決されていた。Windows
+  サービスは LocalSystem で動くため `%APPDATA%` が systemprofile 側に
+  解決され、対話実行で作成した wallet.dat に永久に到達しない欠陥だった
+  （systemd --user/launchd は同一ユーザで偶然一致するのみ）。
+- **Windows サービスの可観測性** — SCM 配下では stdout が破棄されるため
+  `--log-file` を `service install` フラグに追加し、Windows では既定で
+  `<data-dir>\otedama.log` に出力（unix では journald/plist の
+  StandardOutPath が捕捉するため従来どおり opt-in）。
 
 ### Docs (session 255)
 

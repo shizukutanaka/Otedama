@@ -30,7 +30,7 @@ otedama <command> [flags]
 | `version [--json]` | Print version/commit/build-date/go-version/platform; `--json` emits the `version.Info` object. |
 | `config show` | Print the **effective** configuration after layering (see §3). |
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
-| `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
+| `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Windows Service). |
 | `doctor` | Run self-diagnostic checks. |
 | `completion bash\|zsh\|fish` | Emit a shell-completion script. |
 | `help` / `--help` / `-h` | Print usage. |

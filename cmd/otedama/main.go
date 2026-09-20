@@ -40,6 +40,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -117,7 +118,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "run":
-		return cmdRun(args[1:], stdout, stderr)
+		// A Windows service binary must complete the Service Control
+		// Manager handshake before doing anything else — no-op elsewhere.
+		if code, ok := maybeRunAsWindowsService(args[1:], stdout, stderr); ok {
+			return code
+		}
+		return cmdRun(context.Background(), args[1:], stdout, stderr)
 	case "version", "--version", "-v":
 		return cmdVersion(args[1:], stdout, stderr)
 	case "config":

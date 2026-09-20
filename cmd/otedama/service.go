@@ -57,6 +57,7 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 	logLevel := fs.String("log-level", "", "Log level for the service (debug|info|warn|error).")
 	logFormat := fs.String("log-format", "", "Log format for the service (text|json).")
 	language := fs.String("language", "", "UI language for the service (en, ja, …).")
+	logFile := fs.String("log-file", "", "Audit-trail log path for the service (default on Windows: <data-dir>\\otedama.log).")
 	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
 		return code
 	}
@@ -65,6 +66,7 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 		LogLevel:       *logLevel,
 		LogFormat:      *logFormat,
 		Language:       *language,
+		LogFile:        *logFile,
 	}
 	mgr, err := newDaemonManager(*configFile, *dataDir, svcFlags)
 	if err != nil {
@@ -76,7 +78,13 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 		return exitRuntime
 	}
 	fmt.Fprintln(stdout, "Otedama service installed and started.")
-	fmt.Fprintln(stdout, "It will start automatically on login.")
+	// systemd --user and LaunchAgent units start at the user's login; a
+	// Windows service (start=auto) starts at boot, before any login.
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(stdout, "It will start automatically at boot (running as LocalSystem).")
+	} else {
+		fmt.Fprintln(stdout, "It will start automatically on login.")
+	}
 	// The engine reads <data-dir>/otedama.env itself when no
 	// flag/env passphrase is set, so this file unlocks the wallet under
 	// every service manager — systemd's unit also loads it via
@@ -99,7 +107,8 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 				filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.otedama.daemon.plist"),
 				filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.otedama.daemon.plist"))
 		case "windows":
-			fmt.Fprintln(stdout, "and run: sc.exe stop Otedama && sc.exe start Otedama")
+			fmt.Fprintf(stdout, "and run: sc.exe stop %s && sc.exe start %s\n", daemon.ServiceName, daemon.ServiceName)
+			fmt.Fprintln(stdout, "Service logs are written to <data-dir>\\otedama.log (stdout is not visible under the Service Control Manager).")
 		}
 	}
 	return exitOK
