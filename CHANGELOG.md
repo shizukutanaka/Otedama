@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 263 — ADR-013: 実Akashプロバイダ統合の設計起案＋Cat5 #3実装済み検証)
+
+quality-passキュー項目5（実Akash統合の設計）をADR-013（Proposed）として
+起案 — コード無変更、依存判断はメンテナに留保。一次検証済みの制約
+4件（akash-api deprecated→chain-sdk後継、入札はprovider daemonの
+on-chain Bidengineで REST APIではない、AEP-64 JWT必須化@Mainnet 14、
+読み取り面は`/status`+`GetStatus`で完結）を踏まえ、**stdlib-onlyの
+REST `/status`クライアント（AEP-64 JWT）をphase 1**とする案を推奨
+（ADR-003ゼロ依存方針と整合）。chain-sdk全体vendoringは選択肢A、
+必要protobufのみ生成は選択肢Bとして留保。併せてフェーズ設計
+（リース状態ゲーティング→bid-price policy出力→preemptionリスク項）と
+Vast.ai代替トラックを記述。Cat 5 #3（provider health/heartbeat）も
+検証 — `lastQuoteAt`/`pruneStaleStreams`によるstale quote失効が既実装と
+判明し✅記録。KNOWN_LIMITATIONS §1に設計へのポインタ追記。
+
 ### Fixed (session 262 — run.goセッション状態機械の異常系監査: V2ジョブmapのDoS無界化封じ＋curtail解除時の再稼働即時化)
 
 quality-pass キュー項目4（`internal/engine/run.go`セッション状態機械の

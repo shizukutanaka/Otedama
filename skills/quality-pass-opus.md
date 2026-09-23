@@ -68,7 +68,11 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
    のみ価値がある）、`internal/engine/run.go`のセッション状態機械の異常系
    — ✅ session 262: V2 jobs map無界化（DoS）を`storeJob` cap256 FIFO退避で封じ、
    curtail解除時の再稼働遅延を`resumeCh`配線で即時化。noise.go側は未踏。
-5. **実Akash統合の設計**（chain-sdkベース、ADR-003の依存方針との整合検討）。
+5. **実Akash統合の設計**（chain-sdkベース、ADR-003の依存方針との整合検討）
+   — ✅ session 263: ADR-013起案。stdlib-only REST `/status` + AEP-64 JWTを
+   phase 1（依存ゼロ）、chain-sdkは書き込み経路が出た場合のエスカレータ。
+   入札はon-chain Bidengineモデル確認済み（ADR-010 A4のreframe採用）。
+   Cat5 #3は実装済み検証済みとして記録。
 
 ## 3. 作業規律（違反すると過去250セッションの資産を毀損する）
 

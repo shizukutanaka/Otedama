@@ -204,9 +204,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 
 1. 🟡 **Real Akash REST integration** — currently simulated
    (KNOWN_LIMITATIONS §1). The single biggest placeholder.
+   — 🔵 **Designed (session 263):** ADR-013 proposes a stdlib-only REST
+   `/status` client (AEP-64 JWT) behind the existing `provider.Provider`
+   interface as the first step; `chain-sdk` only if a later write path
+   demands it.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
-   stop routing GPUs to it (parallels HashrateMonitor for mining).
+3. ✅ **Provider health/heartbeat** — verified already implemented
+   (session 263): `arbitrationLoop`'s `lastQuoteAt`/`pruneStaleStreams`
+   expires any provider stream silent beyond `streamStaleTimeout`
+   (3–6× the quote cadence) and logs the expiry, so a dead provider
+   stops receiving routes within minutes. `internal/engine/arbitrate.go`.
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
@@ -659,7 +666,7 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 5 — replacing the simulated Akash provider
 
-11. 🟡 **Concrete Akash integration surface.** Akash exposes a provider REST
+11. 🔵 **Concrete Akash integration surface.** Akash exposes a provider REST
     gateway (`/status`, `/version`, manifest POST on lease-won) and a gRPC
     `akash.provider.v1.ProviderRPC.GetStatus` (per-node GPU model + status,
     allocatable vs allocated), plus SDK `createLease(bidId)` /
@@ -669,6 +676,8 @@ endpoint against current vendor documentation. Tags as before
     routed GPU is actually leased before counting its yield, and gate
     accounting (Cat 5 #8) on real lease state. gRPC adds a dependency —
     weigh against ADR-003; the REST `/status` path may suffice read-only.
+    — **Folded into ADR-013 (session 263)**: Option C adopts the REST
+    `/status` read-only path (stdlib only); lease-state gating is phase 2.
 12. 🟡 **Vast.ai as a second, simpler real compute backend.** Vast has a
     documented Bearer-token REST API with a *direct-bid* market (`bid_price`
     $/hr; highest bid runs, lower bids pause). Far less code than Akash gRPC
@@ -929,14 +938,17 @@ month, so the discipline matters.
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+10. 🔵 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
     successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
     work, if scoped against akash-api, would build on an archived protobuf
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
     github.com/akash-network/chain-sdk)
-11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+    — **Folded into ADR-013 (session 263)**: recommendation is REST
+    `/status` stdlib-first; `chain-sdk`/generated-protobufs held as the
+    escalator options B/A only for a later on-chain read/write gap.
+11. 🔵 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
     "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
     Akash bidding") currently models a per-order REST sealed-bid submission;
     the real auction is on-chain and mediated by the provider daemon's bid
@@ -946,6 +958,9 @@ month, so the discipline matters.
     #3 "JWT on GetStatus" framing insofar as the *bidding* mechanism is
     on-chain; JWT (AEP-64) still applies to the provider *status/lease* REST
     surface.
+    — **Confirmed as the model in ADR-013 (session 263)**: phase 3 outputs
+    a bid-price policy file for the daemon's on-chain config; no bidding
+    API is designed.
 12. ✅ **[FETCHED] Render / io.net have no open provider-side bidding API and
     are custodial/centrally-priced.** Render intermediates payouts in RNDR
     (burn-and-mint); io.net centrally determines pricing with staking-based

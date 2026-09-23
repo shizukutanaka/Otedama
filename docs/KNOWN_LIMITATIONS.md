@@ -43,6 +43,9 @@ run mining and treat the inference figures as illustrative.
 
 **Target:** v3.1.0 (real Akash REST API). Tracked by ROADMAP v3.1.0 and
 ADR-010 (arbitration engine evolution) §A4 (strategic bidding).
+**Design:** ADR-013 (session 263) proposes a stdlib-only REST `/status`
+client with AEP-64 JWT as phase 1 — zero new dependencies, `chain-sdk`
+reserved for a later on-chain write path if one is scheduled.
 
 ---
 
