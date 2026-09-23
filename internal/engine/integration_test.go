@@ -191,7 +191,8 @@ func (p *mockPool) handleConn(conn net.Conn) {
 // sendServerMsg encodes and writes a server-to-client Stratum V2 message.
 func sendServerMsg(w io.Writer, msgType uint8, isChannel bool, enc interface {
 	Encode() ([]byte, error)
-}) error {
+},
+) error {
 	payload, err := enc.Encode()
 	if err != nil {
 		return err
@@ -576,12 +577,15 @@ func TestEngineMetrics_UpdateShareRates_NoSharesJudged(t *testing.T) {
 
 	// With nothing judged yet, acceptance is 1.0 (nothing lost) and the
 	// reject/stale rates are 0 — no division-by-zero.
-	rate, judged := m.updateShareRates()
+	rate, judged, unaccounted := m.updateShareRates()
 	if rate != 1.0 {
 		t.Errorf("acceptance rate with no shares = %v, want 1.0", rate)
 	}
 	if judged != 0 {
 		t.Errorf("judged with no shares = %d, want 0", judged)
+	}
+	if unaccounted != 0 {
+		t.Errorf("unaccounted with no shares = %d, want 0", unaccounted)
 	}
 	if got := m.rejectRate.Value(); got != 0 {
 		t.Errorf("rejectRate with no shares = %v, want 0", got)
@@ -606,7 +610,7 @@ func TestEngineMetrics_UpdateShareRates_ComputesRejectAndStale(t *testing.T) {
 		m.rejectReason("stale").Inc()
 	}
 
-	rate, judged := m.updateShareRates()
+	rate, judged, _ := m.updateShareRates()
 	if judged != 100 {
 		t.Fatalf("judged = %d, want 100", judged)
 	}
@@ -636,7 +640,10 @@ func TestEngineMetrics_UpdateShareRates_Reconciliation(t *testing.T) {
 	for range 5 {
 		m.sharesRejected.Inc()
 	}
-	m.updateShareRates()
+	_, _, unaccounted := m.updateShareRates()
+	if unaccounted != 5 {
+		t.Errorf("unaccounted return = %d, want 5", unaccounted)
+	}
 	if got := m.sharesUnaccounted.Value(); got != 5 {
 		t.Errorf("sharesUnaccounted = %v, want 5", got)
 	}

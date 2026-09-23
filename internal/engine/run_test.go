@@ -2447,6 +2447,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2464,5 +2465,94 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestUnaccountedWatchdog covers the sustained-backlog warning that turns
+// the otedama_shares_unaccounted gauge into an operator-facing alert:
+// below-threshold samples are silent, a backlog at or above the threshold
+// warns only after unaccountedWarnTicks consecutive ticks, warns once per
+// incident, logs "drained" when the pool catches up, and re-arms for the
+// next incident.
+func TestUnaccountedWatchdog(t *testing.T) {
+	var logs []string
+	logger := func(level, msg string) { logs = append(logs, level+": "+msg) }
+
+	w := newUnaccountedWatchdog(logger)
+
+	count := func(substr string) int {
+		n := 0
+		for _, l := range logs {
+			if strings.Contains(l, substr) {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Small in-flight backlog: below threshold, never warns.
+	for range unaccountedWarnTicks + 2 {
+		w.observe(unaccountedWarnThreshold - 1)
+	}
+	if len(logs) != 0 {
+		t.Fatalf("below-threshold backlog logged: %v", logs)
+	}
+
+	// Two ticks over threshold then one below — streak resets, still silent.
+	w.observe(unaccountedWarnThreshold)
+	w.observe(unaccountedWarnThreshold)
+	w.observe(unaccountedWarnThreshold - 1)
+	if len(logs) != 0 {
+		t.Fatalf("transient backlog logged: %v", logs)
+	}
+
+	// Sustained at threshold for the persistence window → one warning.
+	for range unaccountedWarnTicks {
+		w.observe(unaccountedWarnThreshold)
+	}
+	if got := count("not judged by the pool"); got != 1 {
+		t.Fatalf("sustained backlog warnings = %d, want 1: %v", got, logs)
+	}
+
+	// Further ticks while it persists: no repeated warnings.
+	for range 5 {
+		w.observe(unaccountedWarnThreshold * 2)
+	}
+	if got := count("not judged by the pool"); got != 1 {
+		t.Fatalf("persistent backlog re-warned = %d times, want 1: %v", got, logs)
+	}
+
+	// Backlog drains below threshold → one "drained" info and re-arm.
+	w.observe(0)
+	if got := count("backlog drained"); got != 1 {
+		t.Fatalf("drained messages = %d, want 1: %v", got, logs)
+	}
+	w.observe(0)
+	if got := count("backlog drained"); got != 1 {
+		t.Fatalf("drained repeated = %d times, want 1: %v", got, logs)
+	}
+
+	// New incident warns again.
+	for range unaccountedWarnTicks {
+		w.observe(unaccountedWarnThreshold)
+	}
+	if got := count("not judged by the pool"); got != 2 {
+		t.Fatalf("post-recovery warnings = %d, want 2: %v", got, logs)
+	}
+}
+
+// TestUnaccountedWatchdog_NilLog covers the nil-logger path: state machine
+// still runs, no output, no panic.
+func TestUnaccountedWatchdog_NilLog(t *testing.T) {
+	w := newUnaccountedWatchdog(nil)
+	for range unaccountedWarnTicks + 1 {
+		w.observe(unaccountedWarnThreshold)
+	}
+	if !w.warned {
+		t.Error("warned = false after sustained over-threshold backlog")
+	}
+	w.observe(0)
+	if w.warned || w.streak != 0 {
+		t.Errorf("watchdog not reset after drain: warned=%v streak=%d", w.warned, w.streak)
 	}
 }

@@ -715,6 +715,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// Track dropped shares so a consumer that cannot keep up surfaces as a
 	// warning rather than silently losing found shares.
 	var lastDropped uint64
+	// Warn when shares found locally stay unjudged by the pool across
+	// ticks — submissions being silently dropped (RESEARCH_IMPROVEMENTS
+	// Category 1 item 10).
+	unaccountedMon := newUnaccountedWatchdog(opts.log)
 
 	// Track share-submission round-trip latency. submitTimes maps a
 	// sequence number to the time the share was sent; entries are
@@ -803,7 +807,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// Warn once-per-tick if acceptance has dropped below the
 				// "acceptable" band (industry guidance: >1% reject ≈
 				// <99% acceptance warrants attention).
-				rate, judged := opts.m.updateShareRates()
+				rate, judged, unaccounted := opts.m.updateShareRates()
+				unaccountedMon.observe(unaccounted)
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
@@ -1019,6 +1024,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var hashWindow hashrateWindow
 	var uptime uptimeAccountant
 	var lastDropped uint64
+	// Same unaccounted-share reconciliation warning as the V2 loop.
+	unaccountedMon := newUnaccountedWatchdog(opts.log)
 	latency := NewLatencyTracker(256)
 
 	for {
@@ -1061,7 +1068,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 						opts.m.joulesPerTerahash.Set(opts.powerWatts * 1e12 / currentHashRate)
 					}
 				}
-				rate, judged := opts.m.updateShareRates()
+				rate, judged, unaccounted := opts.m.updateShareRates()
+				unaccountedMon.observe(unaccounted)
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",

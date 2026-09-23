@@ -43,9 +43,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is
    SHA-256d/Bitcoin-only by ADR-002.
-10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
-    from pool-side truth; a periodic reconciliation against pool stats
-    (where the pool exposes them) would catch silent miscounting.
+10. ✅ **"Trust the pool's numbers" reconciliation — RESOLVED (session 261).**
+    Stratum V1 pools expose no server-side share stats to poll, so the
+    reconciliation is necessarily local: `otedama_shares_unaccounted`
+    (found − judged, clamped ≥0) already existed; session 261 adds the
+    `unaccountedWatchdog` operator alert — a `warn` log when the backlog
+    stays ≥8 shares for 3 consecutive stats ticks, with a "drained" info
+    on recovery. Wired in both the V2 and V1 session loops. Original
+    finding: "Trust the pool's numbers" reconciliation. Local counters
+    drift from pool-side truth; a periodic reconciliation against pool
+    stats (where the pool exposes them) would catch silent miscounting.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers

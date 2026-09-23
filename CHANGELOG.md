@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 261 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: "Trust the pool's numbers" 未判定シェア滞留の運用警告)
+
+**RESEARCH_IMPROVEMENTS Category 1 #10 を解消 — プール側採算との照合を
+運用警告に引き上げ**
+
+- `unaccountedWatchdog`（internal/engine/stats.go）を新設 —
+  `otedama_shares_unaccounted` ゲージ（発見済みだがプール未判定のシェア数）
+  が **8 シェア以上で 3 統計ティック連続** した場合に `warn` を一度だけ発火。
+  閾値未満への復帰時に「drained」の `info` を1回出して再武装し、
+  次のインシデントで再度警告する。
+- Stratum V1 プールはサーバ側のシェア統計を公開しないため、ローカル
+  滞留こそが「プールが黙って submission を捨てている」サイン — submit が
+  コネクション内で行方不明になる静かな採算ずれを検出する。
+- V2/V1 両方のセッションループに配線。`updateShareRates` は unaccounted
+  値も返すよう変更（戻り値3つ化）。docs/API.md のメトリクス説明に
+  警告条件を追記。テスト3件追加（警告・リセット・nil logger）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
