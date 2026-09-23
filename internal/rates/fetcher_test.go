@@ -259,6 +259,55 @@ func TestFetcher_TwoSourcesOneImplausibleKeepsGoodOne(t *testing.T) {
 	}
 }
 
+func TestFetcher_NaNReadingExcludedFromMedian(t *testing.T) {
+	// strconv.ParseFloat accepts "NaN" without error — a source emitting
+	// {"amount": "NaN"} would previously pass the two-sided band check
+	// (NaN < lo and NaN > hi are both false) and poison the median to NaN,
+	// which then silently propagates through arbitration comparisons.
+	// The !(lo <= r <= hi) check must reject it.
+	makeHandler := func(amount string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"amount": "%s"}`, amount)
+		})
+	}
+	srvGood := httptest.NewServer(makeHandler("95000"))
+	srvNaN := httptest.NewServer(makeHandler("NaN"))
+	defer srvGood.Close()
+	defer srvNaN.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Amount string `json:"amount"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return strconv.ParseFloat(v.Amount, 64)
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvGood.Client(),
+		sources:    []Source{makeSource("good", srvGood.URL), makeSource("nan", srvNaN.URL)},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, fresh := f.BTCUSDRate()
+	if rate != 95000 {
+		t.Errorf("rate = %v, want 95000 (NaN source must be dropped, not median-poisoning)", rate)
+	}
+	if !fresh {
+		t.Error("rate should be fresh after a successful fetch")
+	}
+}
+
 func TestFetcher_AllSourcesFailReturnsFallback(t *testing.T) {
 	f := &Fetcher{
 		fallback:   80000,

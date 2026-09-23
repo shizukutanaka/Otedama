@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 291 — 非有限レートのメジアン混入 + ホットループの原子加算)
+
+- **`internal/rates`: NaN が sanity 帯域を素通りしメジアンを汚染**:
+  `strconv.ParseFloat` は `"NaN"` をエラー無しで受理するため、価格ソース
+  が `{"amount": "NaN"}` を返すと `r.rate < min || r.rate > max` の両辺が
+  false となり NaN が median に混入 — `f.rate = NaN` が fresh として
+  返され裁定エンジンの比較演算を全て無効化する。s269 の非有限系列と
+  同根因。`!(r >= min && r <= max)` 形式に修正（NaN は両比較 false で
+  棄却＋警告ログ）。`TestFetcher_NaNReadingExcludedFromMedian` 追加。
+- **`internal/miner`: ホットループがハッシュ毎に共有 atomic カウンタを
+  更新**: `w.hashCount.Add(1)` は全ワーカースレッドが同一キャッシュ
+  ラインに LOCK XADD する経路だった。バッチ単位集計（1回/1024ハッシュ）
+  に変更し、シェア発見時のみ進捗フラッシュ（受信シェアがハッシュ集計
+  済みである不変条件を維持）。`BenchmarkWorkerGrind_SingleThread` 実測
+  119.6→111.6 ns/op（約6.7%、単一スレッド・非競合ですら効果；多スレッド
+  競合下ではさらに拡大）。Carmack 原則適用。
+
 ### Fixed (session 290 — DEPLOYMENT.md の実態監査)
 
 - **チェックリスト項目が未公開資産を前提**: 「SHA-256 checksums 検証」

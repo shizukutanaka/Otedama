@@ -1007,3 +1007,13 @@ roll-up sections and older items were never re-synced as code shipped.
 | `otedama_shares_total{status=accepted|rejected}` label used by the doc's alert expr; `/usr/local/bin/otedama` ENTRYPOINT path in compose healthcheck | ✅ Both real. |
 | "CI-verified metric catalogue" claim — `TestMetricsDocumentedInSpecification` exists in internal/engine/metrics_doc_test.go | ✅ True. |
 | `contrib/grafana/otedama-dashboard.json` does not exist | ✅ Already labelled "(TODO for v3.1.0)" — honest. |
+
+## Session 291 update — internal/miner + internal/rates code audit
+
+| Finding | Disposition |
+|---|---|
+| rates band check `r.rate < min || r.rate > max` passes NaN (ParseFloat accepts "NaN" error-free) → NaN poisons median → `f.rate=NaN` returned fresh → arbitration comparisons silently disabled (same non-finite class as s269/s277) | ✅ `!(r >= min && r <= max)` form; NaN dropped + warn-logged. New test via real ParseFloat path. |
+| Worker hot loop: per-hash `w.hashCount.Add(1)` — every thread LOCK XADDs the same cache line per hash | ✅ Batched count (1 add/1024 hashes) + flush-on-share to preserve "received share ⇒ counted hash". Bench 119.6→111.6 ns/op (~6.7%, single-thread; larger under contention). |
+| CoinbaseHash/MerkleRootFromCoinbase (V1 merkle fold), TargetFromNBits/NBitsFromTarget/TargetFromDifficulty, Fetcher single-flight/skew/source-health | ✅ Verified clean — no defects. |
+| Deadcode on changed pkgs: ParseHeader/Hash.String/NBitsFromTarget/MeetsTarget/HasWork | Pre-existing exported API surface, not introduced by this change — baseline. |
+| golangci-lint 1.64.8 cannot decode go1.25.7 export data (v4>v2) — toolchain-level environment constraint; `go vet` clean on changed pkgs | Recorded (not a new finding). |

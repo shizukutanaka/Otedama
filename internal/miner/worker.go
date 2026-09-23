@@ -256,10 +256,14 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		const batchSize = 1024
 
 		h := localWork.Header
+		// counted tracks how many of this batch's hashes have already been
+		// added to w.hashCount (the counter is flushed once per batch below,
+		// and once per found share so a received share always implies its
+		// hash was counted).
+		counted := 0
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(h)
-			w.hashCount.Add(1)
 
 			if hash.LessOrEqual(localWork.Target) {
 				share := Share{
@@ -273,6 +277,11 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)
+				// Flush batch progress so a consumer receiving this share
+				// always sees its hash reflected in Stats (hashCount is
+				// otherwise only updated once per batch below).
+				w.hashCount.Add(uint64(i + 1 - counted))
+				counted = i + 1
 				// Non-blocking send: if the consumer is full, the share
 				// is dropped rather than blocking the miner. A larger
 				// buffer (Threads*4) makes this unlikely in practice;
@@ -287,6 +296,13 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			// Advance nonce by step (interleaves threads' nonce ranges).
 			nonce += w.cfg.NonceStep
 		}
+		// One atomic add per batch, not per hash: a per-hash LOCK XADD
+		// on this shared counter puts every worker thread on the same
+		// cache line N times per second, which measurably costs single-
+		// digit percent of grind throughput even uncontended, and worse
+		// under contention. The loop above always runs batchSize
+		// iterations, so batching the count is exact.
+		w.hashCount.Add(uint64(batchSize - counted))
 	}
 }
 

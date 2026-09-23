@@ -298,11 +298,16 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 			fetchErrs = append(fetchErrs, r.err)
 			continue
 		}
-		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
+		if !(r.rate >= minPlausibleRateUSD && r.rate <= maxPlausibleRateUSD) {
 			// A reading outside the sanity band is a unit/parse error or
 			// manipulation, never a real quote. Drop it so it cannot pull the
-			// median. Stay quiet on a plain zero (a source that simply has no
-			// value yet); only flag genuinely implausible non-zero readings.
+			// median. The !(lo <= r <= hi) form (rather than r < lo || r > hi)
+			// also rejects NaN — strconv.ParseFloat accepts "NaN" without
+			// error, and a NaN would pass a two-sided < / > check and poison
+			// the median (NaN comparisons contaminate arbitration math
+			// downstream). Stay quiet on a plain zero (a source that simply
+			// has no value yet); only flag genuinely implausible non-zero
+			// readings.
 			if r.rate != 0 {
 				f.logMsg(fmt.Sprintf("rates: ignoring implausible reading %.2f (outside [%.0f, %.0f])",
 					r.rate, minPlausibleRateUSD, maxPlausibleRateUSD))
