@@ -3163,3 +3163,38 @@ func TestV1SuggestedDifficulty(t *testing.T) {
 		t.Errorf("0 H/s → %v, want 0", got)
 	}
 }
+
+func TestV1Work_PropagatesNotifyHeaderFields(t *testing.T) {
+	// mining.notify's version and prevhash were parsed but dropped before
+	// reaching the header — the V1 worker hashed a zeroed prevhash while
+	// the V2 path populated both. Assert the parsed values now land in
+	// the work header.
+	var prev [32]byte
+	for i := range prev {
+		prev[i] = byte(i)
+	}
+	job := poolproto.Job{
+		JobID:    "7",
+		Version:  0x20000000,
+		PrevHash: prev,
+		NTime:    0x60000000,
+		NBits:    0x1d00ffff,
+	}
+	target, err := miner.TargetFromNBits(job.NBits)
+	if err != nil {
+		t.Fatalf("target: %v", err)
+	}
+	w := v1Work(job, 7, 3, target)
+	if w.Header.Version != job.Version {
+		t.Errorf("Version = %#x, want %#x", w.Header.Version, job.Version)
+	}
+	if w.Header.PrevHash != prev {
+		t.Error("PrevHash not propagated from mining.notify")
+	}
+	if w.Header.Time != job.NTime || w.Header.Bits != job.NBits {
+		t.Error("Time/Bits not propagated")
+	}
+	if w.JobID != 7 || w.ChannelID != 3 {
+		t.Error("JobID/ChannelID mismatch")
+	}
+}
