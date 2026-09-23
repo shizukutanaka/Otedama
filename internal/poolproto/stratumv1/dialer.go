@@ -15,6 +15,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -44,6 +45,15 @@ type Dialer struct {
 	// for tests to trust a self-signed certificate; production leaves it nil.
 	tlsConfig *tls.Config
 }
+
+// handshakeTimeout bounds one connect-and-negotiate phase: the TCP/TLS
+// dial AND every handshake JSON-RPC call share the budget. Without it,
+// a pool that accepts the socket but never answers mining.subscribe
+// wedges the engine's reconnect loop for the caller's whole context —
+// 'connected to X' is the last log forever. 30s matches standard
+// client behaviour (cgminer ~15s subscribe timeout, doubled for slow
+// TLS round-trips). It is a var (not const) so tests can shrink it.
+var handshakeTimeout = 30 * time.Second
 
 // Protocol identifies which scheme this Dialer handles.
 func (d *Dialer) Protocol() poolproto.ProtocolID {
@@ -89,7 +99,13 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			}
 		}
 	}
-	conn, err := dialFn(ctx, address)
+	// Bound the connect phase: a pool that blackholes SYNs or stalls the
+	// TLS handshake must not out-wait the caller's context (the engine
+	// passes the run lifetime). Cancel is safe post-return: the
+	// established conn does not depend on the context.
+	dialCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	conn, err := dialFn(dialCtx, address)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv1: dial %s: %w", address, err)
 	}
@@ -124,9 +140,16 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	sess := newSession(conn)
 	sess.start(ctx)
 
+	// Bound the negotiate phase: every handshake call shares one budget
+	// so a pool that accepts the socket but never replies cannot wedge
+	// the caller indefinitely. The session's lifetime ctx is untouched —
+	// only the handshake calls see hsCtx.
+	hsCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+
 	// Step 1: mining.subscribe — negotiate extranonce1 / extranonce2_size.
 	id := sess.nextID.Add(1)
-	resp, err := sess.call(ctx, id, "mining.subscribe", []any{agentString})
+	resp, err := sess.call(hsCtx, id, "mining.subscribe", []any{agentString})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: subscribe: %w", err)
@@ -150,7 +173,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		password = "x" // most pools accept "x" as the password
 	}
 	id = sess.nextID.Add(1)
-	resp, err = sess.call(ctx, id, "mining.authorize", []any{user, password})
+	resp, err = sess.call(hsCtx, id, "mining.authorize", []any{user, password})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: authorize: %w", err)
@@ -172,7 +195,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// ASICBoost is ASIC-only and meaningless on CPU/GPU. Optional: a
 	// pre-BIP-310 pool answers "Method not found" and we proceed.
 	id = sess.nextID.Add(1)
-	_, _ = sess.call(ctx, id, "mining.configure", []any{
+	_, _ = sess.call(hsCtx, id, "mining.configure", []any{
 		[]string{"subscribe-extranonce"},
 		map[string]any{},
 	})
@@ -185,7 +208,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// session is in a valid state and the engine will detect stale connections
 	// through the normal Jobs-channel lifecycle.
 	id = sess.nextID.Add(1)
-	if _, eerr := sess.call(ctx, id, "extranonce.subscribe", []any{}); eerr != nil {
+	if _, eerr := sess.call(hsCtx, id, "extranonce.subscribe", []any{}); eerr != nil {
 		// Write failed (connection closed) or context expired: proceed without
 		// extranonce rotation — not a fatal condition.
 		_ = eerr
