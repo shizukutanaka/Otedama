@@ -1131,6 +1131,17 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: %w", err)
 	}
 	defer sess.Close()
+	// stratum+tcp:// and datum:// are cleartext V1 wires — a network
+	// attacker can rewrite the payout address in flight (mirrors the
+	// plaintext-Stratum-V2 warning above). datum:// is cleartext by
+	// design for a locally-running datum_gateway, so the warning is
+	// informational there but still accurate.
+	if proto := poolproto.FromURL(opts.poolURL); proto == poolproto.ProtocolStratumV1 ||
+		proto == poolproto.ProtocolDATUM {
+		opts.log("warn", "engine: connecting over plaintext Stratum V1 — no transport encryption "+
+			"(an on-path attacker can rewrite your payout address; use stratum+tls:// or stratum+v2tls:// "+
+			"unless this is a locally-running datum_gateway)")
+	}
 	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", opts.poolURL))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)

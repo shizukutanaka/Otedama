@@ -533,28 +533,41 @@ var gpuDRMPath = "/sys/class/drm"
 // concern: a network attacker (rogue Wi-Fi, compromised router, hostile ISP)
 // can rewrite the mining.authorize username or share submissions in flight and
 // redirect every payout to their own address — a well-known stratum-hijacking
-// attack. The encrypted transports (stratum+tls:// V1-over-TLS, stratum+v2://
-// which carries an AEAD Noise session, and stratum+v2tls://) defeat it.
+// attack. The encrypted transports (stratum+tls:// V1-over-TLS and
+// stratum+v2tls:// V2-over-TLS) defeat it; stratum+v2://'s Noise transport
+// is not wired into any live connection yet (KNOWN_LIMITATIONS §2).
 func checkPoolEncryption(cfg config.Config) Check {
 	return Check{
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
 			if len(cfg.Pools) == 0 {
-				// The built-in default pool uses an encrypted (stratum+v2://) URL.
-				return Result{Status: StatusSkip, Detail: "using built-in default pool (encrypted)"}
+				// The built-in default is stratum+v2:// — plaintext until
+				// the Noise transport is wired (KNOWN_LIMITATIONS §2).
+				return Result{
+					Status: StatusSkip,
+					Detail: "using built-in default pool (stratum+v2:// — plaintext until Noise lands; prefer stratum+v2tls:// for real confidentiality)",
+				}
 			}
+			// Plaintext schemes: V1 cleartext (stratum+tcp://), DATUM
+			// (the gateway's miner wire is cleartext SV1 — intended for a
+			// locally-running datum_gateway), and stratum+v2://, whose
+			// encryption is the unimplemented Noise transport — TLS is
+			// only engaged by the stratum+v2tls:// scheme
+			// (KNOWN_LIMITATIONS §2).
 			var plaintext []string
 			for _, p := range cfg.Pools {
-				if strings.HasPrefix(p.URL, "stratum+tcp://") {
-					plaintext = append(plaintext, stripScheme(p.URL))
+				for _, scheme := range []string{"stratum+tcp://", "stratum+v2://", "datum://"} {
+					if strings.HasPrefix(p.URL, scheme) {
+						plaintext = append(plaintext, stripScheme(p.URL))
+					}
 				}
 			}
 			if len(plaintext) > 0 {
 				return Result{
 					Status: StatusWarn,
-					Detail: fmt.Sprintf("%d pool(s) use plaintext stratum+tcp:// (%s) — a network attacker can rewrite your payout address and steal earnings",
+					Detail: fmt.Sprintf("%d pool(s) use a plaintext transport (%s) — a network attacker can rewrite your payout address and steal earnings",
 						len(plaintext), strings.Join(plaintext, ", ")),
-					Fix: "switch to stratum+tls:// (V1 over TLS), stratum+v2:// (encrypted), or stratum+v2tls://",
+					Fix: "switch to stratum+tls:// (V1 over TLS) or stratum+v2tls:// (V2 over TLS); stratum+v2://'s Noise encryption is not wired yet (KNOWN_LIMITATIONS §2), and datum:// is cleartext by design for a local gateway",
 				}
 			}
 			return Result{
