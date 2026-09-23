@@ -230,6 +230,15 @@ type engineMetrics struct {
 	// the provider set, not device count.
 	providerYieldMu sync.Mutex
 	providerYield   map[string]*metrics.Gauge
+
+	// providerLastQuote publishes the Unix timestamp of each provider's most
+	// recent quote as otedama_provider_last_quote_seconds{provider,simulated}.
+	// Like lastJobReceivedAt for the pool connection, it makes a provider that
+	// has gone silent alertable from /metrics — before this, a dead inference
+	// provider was visible only in logs (the stream-prune message), and only
+	// indirectly in the active_streams count dropping.
+	providerLastQuoteMu sync.Mutex
+	providerLastQuote   map[string]*metrics.Gauge
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
@@ -485,6 +494,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 		providerYield:        make(map[string]*metrics.Gauge),
+		providerLastQuote:    make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
 	// only its label set does (standard Prometheus `_info` convention).
@@ -600,6 +610,32 @@ func (m *engineMetrics) setActivePayout(masked string) {
 // growing value means found shares are not reaching the pool — submission
 // failures or drops that would otherwise be invisible (the "trust the pool's
 // numbers" reconciliation, RESEARCH_IMPROVEMENTS Category 1 item 10).
+// touchProviderQuote records the timestamp of provider's most recent quote
+// under otedama_provider_last_quote_seconds{provider,simulated}. A stale
+// series means the provider has stopped quoting — alertable like
+// otedama_last_job_received_seconds. Called on every quote arrival.
+func (m *engineMetrics) touchProviderQuote(provider string, simulated bool, at int64) {
+	m.providerLastQuoteMu.Lock()
+	defer m.providerLastQuoteMu.Unlock()
+	sim := "false"
+	if simulated {
+		sim = "true"
+	}
+	key := provider + "\x00" + sim
+	g, ok := m.providerLastQuote[key]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_provider_last_quote_seconds",
+			"Unix timestamp of the most recent yield quote received from each "+
+				"provider. A stale value means the provider has stopped quoting — "+
+				"the provider-health counterpart to "+
+				"otedama_last_job_received_seconds on the pool connection.",
+			map[string]string{"provider": provider, "simulated": sim})
+		m.providerLastQuote[key] = g
+	}
+	g.Set(float64(at))
+}
+
 // setProviderYield publishes one stream's current quoted yield under
 // otedama_provider_yield_sats_per_second{provider,simulated}. Called once per
 // arbitration tick for every live stream.
