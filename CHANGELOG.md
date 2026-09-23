@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 299 — internal/daemon 深部監査)
+
+- **`--config`/`--data-dir` の相対パスがサービス定義へそのまま埋め込まれていた**:
+  systemd/launchd のデーモン cwd はインストーラのシェル cwd と無関係のため、
+  `otedama service install --config config.yaml` は存在しないファイルを指す
+  ユニットを生成（デフォルト設定で起動 → 誤プール・支払先なしで exit 78、
+  あるいは `--bitcoin-address` 併用時は意図しない設定で静黙稼働）。
+  `--data-dir ./data` は systemd が拒否する相対 `ReadWritePaths=` を生成し
+  ユニット自体をロード不可に。`NewManager` が両者を `filepath.Abs` で
+  正規化（バイナリパスの EvalSymlinks と同一箇所）。
+- **install が3プラットフォーム全てで非冪等**: systemd の `enable --now` は
+  実行中ユニットを再起動しないため再インストールの新 ExecStart が次回
+  ログインまで休眠（flags/config 変更の静黙破棄）。launchd の `load -w` は
+  既登録で即失敗。Windows の `sc.exe create` も同名で失敗 — ドキュメント
+  された設定変更経路（install 再実行）が全環境で壊れていた。systemd は
+  `enable`+`restart`、launchd は `unload -w`（不在時無視）→`load -w`、
+  Windows は `stop`/`delete`（不在時無視）→`create` に修正し冪等化。
+- 検証済みクリーン: s274 の status/uninstall mkdir非副作用回帰は健在、
+  ProtectHome=read-only+ReadWritePaths carve-out、quoteToken クォート、
+  plist argv+xmlEscape、statusWindowsService、runCmd テストシーム。
+- テスト3本追加（相対パス正規化、launchd unload→load 順序、Windows
+  stop→delete→create 順序）＋systemd の pin を 2→3 コールに更新。
+
 ### Fixed (session 298 — engine 再接続ループ深部監査 + 並行ブランチ defect 移植)
 
 - **健全セッション後に再接続バジェットがリセットされない**: `attempt` カウンタと

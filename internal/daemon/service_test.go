@@ -323,7 +323,7 @@ func TestSystemdUnitPath_ReturnsNonEmptyPath(t *testing.T) {
 
 // ----- installSystemd -----
 
-func TestInstallSystemd_CallsSystemctlTwice(t *testing.T) {
+func TestInstallSystemd_CallsSystemctl(t *testing.T) {
 	var calls []string
 	mockRunCmd(t, func(name string, args ...string) error {
 		calls = append(calls, strings.Join(append([]string{name}, args...), " "))
@@ -340,8 +340,19 @@ func TestInstallSystemd_CallsSystemctlTwice(t *testing.T) {
 	if err := m.installSystemd(); err != nil {
 		t.Fatalf("installSystemd: %v", err)
 	}
-	if len(calls) != 2 {
-		t.Errorf("expected 2 runCmd calls, got %d: %v", len(calls), calls)
+	// daemon-reload → enable → restart: restart (not enable --now)
+	// applies a rewritten unit to an already-running service.
+	if len(calls) != 3 {
+		t.Fatalf("expected 3 runCmd calls, got %d: %v", len(calls), calls)
+	}
+	if calls[0] != "systemctl --user daemon-reload" {
+		t.Errorf("call[0] = %q, want daemon-reload", calls[0])
+	}
+	if !strings.Contains(calls[1], "enable") {
+		t.Errorf("call[1] = %q, want enable", calls[1])
+	}
+	if !strings.Contains(calls[2], "restart") {
+		t.Errorf("call[2] = %q, want restart", calls[2])
 	}
 }
 
@@ -516,6 +527,31 @@ func TestInstallLaunchd_CallsLaunchctl(t *testing.T) {
 	}
 }
 
+func TestInstallLaunchd_UnloadsBeforeLoad(t *testing.T) {
+	// `launchctl load -w` fails when the service is already loaded, so
+	// every reinstall errored before applying the new plist. install must
+	// unload first (ignored when absent) so install is idempotent.
+	var calls []string
+	mockRunCmd(t, func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return nil
+	})
+
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	path, err := m.launchdPlistPath()
+	if err != nil {
+		t.Fatalf("launchdPlistPath: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(path) })
+
+	if err := m.installLaunchd(); err != nil {
+		t.Fatalf("installLaunchd: %v", err)
+	}
+	if len(calls) != 2 || !strings.Contains(calls[0], "unload") || !strings.Contains(calls[1], "load") {
+		t.Errorf("expected unload then load, got %v", calls)
+	}
+}
+
 func TestInstallLaunchd_RunCmdError(t *testing.T) {
 	mockRunCmd(t, func(name string, args ...string) error {
 		return errors.New("launchctl: not found")
@@ -579,6 +615,25 @@ func TestInstallWindowsService_CallsScExe(t *testing.T) {
 	}
 	if called != "sc.exe" {
 		t.Errorf("expected sc.exe, got %q", called)
+	}
+}
+
+func TestInstallWindowsService_StopsDeletesBeforeCreate(t *testing.T) {
+	// `sc.exe create` fails on an existing service name, so reinstalls
+	// errored. install must stop+delete (ignored when absent) before
+	// create so install is idempotent.
+	var calls []string
+	mockRunCmd(t, func(name string, args ...string) error {
+		calls = append(calls, strings.Join(args, " "))
+		return nil
+	})
+
+	m := &Manager{binaryPath: `C:\otedama.exe`}
+	if err := m.installWindowsService(); err != nil {
+		t.Fatalf("installWindowsService: %v", err)
+	}
+	if len(calls) != 3 || calls[0] != "stop Otedama" || calls[1] != "delete Otedama" || !strings.HasPrefix(calls[2], "create") {
+		t.Errorf("expected stop, delete, create; got %v", calls)
 	}
 }
 
@@ -949,5 +1004,54 @@ func TestStatus_UnsupportedPlatform(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	if _, err := m.Status(); err == nil {
 		t.Error("Status on unsupported platform should return error")
+	}
+}
+
+func TestNewManager_ResolvesRelativePaths(t *testing.T) {
+	// Relative --config/--data-dir would be baked into the service unit
+	// and resolved against the service's cwd (/ for launchd, not the
+	// installer's shell cwd) — a silently broken install. NewManager
+	// must canonicalise them like it does the binary path.
+	// EvalSymlinks matches filepath.Abs's resolved-cwd basis on platforms
+	// where the temp dir sits behind a symlink (macOS /var→/private/var).
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	relConfig := filepath.Join(dir, "config.yaml")
+	relData := filepath.Join(dir, "data")
+	if err := os.WriteFile(relConfig, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := NewManager("config.yaml", "data", ServiceFlags{})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	if m.configPath != relConfig {
+		t.Errorf("configPath = %q, want absolute %q", m.configPath, relConfig)
+	}
+	if m.dataDir != relData {
+		t.Errorf("dataDir = %q, want absolute %q", m.dataDir, relData)
+	}
+	argv := m.serviceArgv()
+	for _, want := range []string{relConfig, relData} {
+		found := false
+		for _, a := range argv {
+			if a == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("serviceArgv missing absolute %q: %v", want, argv)
+		}
 	}
 }

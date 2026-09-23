@@ -81,6 +81,25 @@ func NewManager(configPath, dataDir string, flags ServiceFlags) (*Manager, error
 	if err != nil {
 		return nil, fmt.Errorf("daemon: resolve symlink: %w", err)
 	}
+	// Resolve configPath and dataDir to absolute paths now — the service
+	// does not share the installer's working directory. systemd and
+	// launchd run the daemon with a fixed cwd (/ for LaunchAgents and
+	// most user services), so a relative path baked into the unit
+	// resolves to a file that does not exist there: `otedama service
+	// install --config config.yaml` would produce a service that starts
+	// without its config (wrong pools, missing payout address) or, for
+	// data-dir, a ReadWritePaths entry systemd rejects outright, leaving
+	// the unit unloadable.
+	if configPath != "" {
+		if configPath, err = filepath.Abs(configPath); err != nil {
+			return nil, fmt.Errorf("daemon: resolve config path: %w", err)
+		}
+	}
+	if dataDir != "" {
+		if dataDir, err = filepath.Abs(dataDir); err != nil {
+			return nil, fmt.Errorf("daemon: resolve data dir: %w", err)
+		}
+	}
 	return &Manager{
 		binaryPath:   binary,
 		configPath:   configPath,
@@ -171,12 +190,18 @@ func (m *Manager) installSystemd() error {
 	if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("daemon: write systemd unit: %w", err)
 	}
-	// Reload daemon and enable the unit.
+	// Reload daemon and enable the unit, then restart so an already-
+	// running instance picks up the NEW definition — `enable --now`
+	// leaves a running service on the old ExecStart until next login,
+	// silently discarding a reinstall's flag/config changes.
 	if err := runCmd("systemctl", "--user", "daemon-reload"); err != nil {
 		return fmt.Errorf("daemon: systemctl daemon-reload: %w", err)
 	}
-	if err := runCmd("systemctl", "--user", "enable", "--now", systemdUnitName); err != nil {
+	if err := runCmd("systemctl", "--user", "enable", systemdUnitName); err != nil {
 		return fmt.Errorf("daemon: systemctl enable: %w", err)
+	}
+	if err := runCmd("systemctl", "--user", "restart", systemdUnitName); err != nil {
+		return fmt.Errorf("daemon: systemctl restart: %w", err)
 	}
 	return nil
 }
@@ -283,6 +308,12 @@ func (m *Manager) installLaunchd() error {
 	if err := os.WriteFile(path, []byte(plist), 0o644); err != nil {
 		return fmt.Errorf("daemon: write plist: %w", err)
 	}
+	// Unload first (ignored when absent): `load -w` fails outright when
+	// the service is already loaded, which made every reinstall error
+	// instead of applying the new plist — unlike systemd, whose enable
+	// is idempotent. Unload+load replaces the definition atomically
+	// enough for a per-user agent.
+	_ = runCmd("launchctl", "unload", "-w", path)
 	return runCmd("launchctl", "load", "-w", path)
 }
 
@@ -372,6 +403,13 @@ func launchdLogPath(name string) string {
 // ----- Windows service -----
 
 func (m *Manager) installWindowsService() error {
+	// Stop and delete any existing service first (ignored when absent):
+	// `sc.exe create` fails on an existing name, so a reinstall — the
+	// documented way to change embedded flags — errored on every
+	// platform. Deleting while running marks the service for deletion
+	// once it stops, which is why stop runs first.
+	_ = runCmd("sc.exe", "stop", "Otedama")
+	_ = runCmd("sc.exe", "delete", "Otedama")
 	args := fmt.Sprintf(`"%s" %s`, m.binaryPath, m.serviceArgs())
 	return runCmd("sc.exe", "create", "Otedama",
 		"binPath=", args,
