@@ -1174,10 +1174,25 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var lastSuggestedHPS float64
 	var lastSuggestAt time.Time
 
+	// Drain pool operator notices (client.show_message) into the log —
+	// maintenance windows, fee changes, dead-miner warnings. Without a
+	// consumer the buffered channel silently drops them.
+	var noticeCh <-chan string
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		noticeCh = nr.PoolNotices()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
+		case notice, ok := <-noticeCh:
+			if !ok {
+				noticeCh = nil // session ended; Jobs() carries the terminal signal
+				continue
+			}
+			opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
 
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
