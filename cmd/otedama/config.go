@@ -75,6 +75,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	// which layer set each. %g keeps 0 ("disabled/unset" for the optional ones)
 	// and fractions readable.
 	fmt.Fprintf(stdout, "arbitration_hysteresis_pct: %g%s\n", cfg.ArbitrationHysteresisPct, tag(origins.ArbitrationHysteresisPct))
+	fmt.Fprintf(stdout, "arbitration_policy:           %s%s\n", safeDisplay(cfg.ArbitrationPolicy), tag(origins.ArbitrationPolicy))
 	fmt.Fprintf(stdout, "curtail_below_btc_usd:      %g%s\n", cfg.CurtailBelowBTCUSD, tag(origins.CurtailBelowBTCUSD))
 	fmt.Fprintf(stdout, "min_yield_sats_per_sec:     %g%s\n", cfg.MinYieldSatsPerSec, tag(origins.MinYieldSatsPerSec))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
@@ -113,6 +114,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		DataDir                  string            `json:"data_dir"`
 		WorkerName               string            `json:"worker_name"`
 		ArbitrationHysteresisPct float64           `json:"arbitration_hysteresis_pct"`
+		ArbitrationPolicy        string            `json:"arbitration_policy"`
 		CurtailBelowBTCUSD       float64           `json:"curtail_below_btc_usd"`
 		MinYieldSatsPerSec       float64           `json:"min_yield_sats_per_sec"`
 		PowerWatts               float64           `json:"power_watts"`
@@ -129,6 +131,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		DataDir:                  cfg.DataDir,
 		WorkerName:               cfg.Workers.Name,
 		ArbitrationHysteresisPct: cfg.ArbitrationHysteresisPct,
+		ArbitrationPolicy:        cfg.ArbitrationPolicy,
 		CurtailBelowBTCUSD:       cfg.CurtailBelowBTCUSD,
 		MinYieldSatsPerSec:       cfg.MinYieldSatsPerSec,
 		PowerWatts:               cfg.PowerWatts,
@@ -146,6 +149,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"data_dir":                   origins.DataDir.String(),
 			"worker_name":                origins.WorkerName.String(),
 			"arbitration_hysteresis_pct": origins.ArbitrationHysteresisPct.String(),
+			"arbitration_policy":         origins.ArbitrationPolicy.String(),
 			"curtail_below_btc_usd":      origins.CurtailBelowBTCUSD.String(),
 			"min_yield_sats_per_sec":     origins.MinYieldSatsPerSec.String(),
 			"power_watts":                origins.PowerWatts.String(),

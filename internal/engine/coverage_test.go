@@ -467,6 +467,100 @@ func TestRunArbitrationLoop_TickerDecideError(t *testing.T) {
 	}
 }
 
+// TestArbitrationPolicyFromConfig verifies the configured policy name maps to
+// the matching arbitration.Policy and that anything else (only reachable when
+// Config.Validate was skipped) falls back to the default rather than passing
+// an invalid Policy to Decide.
+func TestArbitrationPolicyFromConfig(t *testing.T) {
+	cases := map[string]arbitration.Policy{
+		"maximize_earnings":    arbitration.PolicyMaximizeEarnings,
+		"stack_btc":            arbitration.PolicyStackBTC,
+		"maximize_privacy":     arbitration.PolicyMaximizePrivacy,
+		"environment_friendly": arbitration.PolicyEnvironmentFriendly,
+	}
+	for name, want := range cases {
+		if got := arbitrationPolicyFromConfig(name); got != want {
+			t.Errorf("arbitrationPolicyFromConfig(%q) = %v, want %v", name, got, want)
+		}
+	}
+	for _, bad := range []string{"", "hodl", "MAXIMIZE_EARNINGS"} {
+		if got := arbitrationPolicyFromConfig(bad); got != arbitration.PolicyMaximizeEarnings {
+			t.Errorf("arbitrationPolicyFromConfig(%q) = %v, want fallback maximize_earnings", bad, got)
+		}
+	}
+}
+
+// TestRunArbitrationLoop_PolicyReachesDecide proves opts.policy actually
+// reaches the Decide call: under environment_friendly a higher-EnvironmentalRating
+// stream must beat a marginally higher-yield rival — which can only happen if
+// the policy propagated (maximize_earnings would pick the raw-yield winner).
+func TestRunArbitrationLoop_PolicyReachesDecide(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	mu := &sync.Mutex{}
+	streamMap := map[string]arbitration.Stream{
+		"dirty": {
+			ID:              "dirty",
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 100, Confidence: 1.0},
+		},
+		"clean": {
+			ID:                  "clean",
+			AcceptsFamilies:     []hal.Family{hal.FamilyCPU},
+			EnvironmentalRating: 10,
+			YieldPerDevice:      map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 95, Confidence: 1.0}},
+			DefaultYield:        arbitration.Yield{SatsPerSecond: 95, Confidence: 1.0},
+		},
+	}
+	devRefs := []arbitration.DeviceRef{
+		{
+			Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+			Capabilities: hal.Capabilities{SHA256d: true},
+		},
+	}
+	quoteCh := make(chan provider.Quote)
+	activityMu := &sync.Mutex{}
+	activity := map[string]float64{}
+
+	opts := arbitrationLoopOpts{
+		devRefs:    devRefs,
+		streamsMu:  mu,
+		streamMap:  streamMap,
+		quoteCh:    quoteCh,
+		metrics:    newEngineMetrics(metrics.NewRegistry()),
+		log:        func(_, _ string) {},
+		activityMu: activityMu,
+		activity:   activity,
+		policy:     arbitration.PolicyEnvironmentFriendly,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+	<-done
+
+	// Under maximize_earnings the raw-yield winner ("dirty", 100 sats/s) would
+	// be picked. Under environment_friendly, clean's score is
+	// 95*(1+10*0.01)=104.5 > 100, so the loop must route the device to "clean"
+	// — the TUI-facing activity map records every non-idle assignment each tick.
+	activityMu.Lock()
+	defer activityMu.Unlock()
+	if _, ok := activity["clean"]; !ok {
+		t.Errorf("environmentally-preferred stream not assigned; activity = %v", activity)
+	}
+	if _, bad := activity["dirty"]; bad {
+		t.Errorf("raw-yield winner assigned despite environment_friendly policy; activity = %v", activity)
+	}
+}
+
 // TestRunArbitrationLoop_HysteresisPctIsUsed verifies that a non-default
 // hysteresisPct propagates to the Decide call without causing an error.
 // The correctness of the damping at the decision level is tested in

@@ -234,6 +234,34 @@ func TestValidate_AcceptsAllValidLogLevels(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsUnknownArbitrationPolicy(t *testing.T) {
+	c := Defaults()
+	c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+	c.ArbitrationPolicy = "hodl" // invalid
+
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("Validate() accepted invalid ArbitrationPolicy")
+	}
+	if !strings.Contains(err.Error(), "arbitration_policy") {
+		t.Errorf("error = %q, must mention arbitration_policy", err)
+	}
+}
+
+func TestValidate_AcceptsAllValidArbitrationPolicies(t *testing.T) {
+	for _, p := range []string{"maximize_earnings", "stack_btc", "maximize_privacy", "environment_friendly"} {
+		t.Run(p, func(t *testing.T) {
+			t.Parallel()
+			c := Defaults()
+			c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+			c.ArbitrationPolicy = p
+			if err := c.Validate(); err != nil {
+				t.Errorf("Validate() rejected valid arbitration policy %q: %v", p, err)
+			}
+		})
+	}
+}
+
 func TestValidate_PoolURLs(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1068,6 +1096,38 @@ func TestArbitrationHysteresisPct_FileOverride(t *testing.T) {
 	}
 	if o.ArbitrationHysteresisPct != OriginFile {
 		t.Errorf("from file: origin = %v, want file", o.ArbitrationHysteresisPct)
+	}
+}
+
+func TestArbitrationPolicy_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_ARBITRATION_POLICY": "stack_btc"}
+	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.ArbitrationPolicy != "stack_btc" {
+		t.Errorf("ArbitrationPolicy = %q, want stack_btc", cfg.ArbitrationPolicy)
+	}
+	if o.ArbitrationPolicy != OriginEnv {
+		t.Errorf("origin = %v, want env", o.ArbitrationPolicy)
+	}
+}
+
+func TestArbitrationPolicy_FileOverride(t *testing.T) {
+	fromFile := Config{ArbitrationPolicy: "environment_friendly"}
+	cfg, o := ResolveWithOrigins(fromFile, nil, FlagValues{})
+	if cfg.ArbitrationPolicy != "environment_friendly" {
+		t.Errorf("from file: ArbitrationPolicy = %q, want environment_friendly", cfg.ArbitrationPolicy)
+	}
+	if o.ArbitrationPolicy != OriginFile {
+		t.Errorf("from file: origin = %v, want file", o.ArbitrationPolicy)
+	}
+}
+
+func TestArbitrationPolicy_DefaultIsMaximizeEarnings(t *testing.T) {
+	cfg, o := ResolveWithOrigins(Config{}, nil, FlagValues{})
+	if cfg.ArbitrationPolicy != "maximize_earnings" {
+		t.Errorf("ArbitrationPolicy = %q, want maximize_earnings (default)", cfg.ArbitrationPolicy)
+	}
+	if o.ArbitrationPolicy != OriginDefault {
+		t.Errorf("origin = %v, want default", o.ArbitrationPolicy)
 	}
 }
 

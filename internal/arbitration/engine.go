@@ -188,6 +188,24 @@ func (p Policy) Valid() bool {
 	}
 }
 
+// ParsePolicy converts a policy name — the same stable identifiers String
+// produces — back into a Policy. It reports false for any other input,
+// including the "unknown(N)" form String emits for out-of-range values.
+func ParsePolicy(name string) (Policy, bool) {
+	switch name {
+	case "maximize_earnings":
+		return PolicyMaximizeEarnings, true
+	case "stack_btc":
+		return PolicyStackBTC, true
+	case "maximize_privacy":
+		return PolicyMaximizePrivacy, true
+	case "environment_friendly":
+		return PolicyEnvironmentFriendly, true
+	default:
+		return 0, false
+	}
+}
+
 // Assignment is the engine's decision for a single device.
 //
 // Stream is the chosen StreamID, or empty if the device is to remain

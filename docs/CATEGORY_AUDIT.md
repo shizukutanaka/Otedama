@@ -672,3 +672,15 @@ All 24 packages build, vet, and test green.
 Tests: `TestSession_E2E_SetExtranoncePurgesPendingJobs` — net.Pipe pool queues two jobs (clean_jobs=false so only the rotation can purge), sends `set_extranonce`, then a `set_difficulty` marker (proves the read loop passed the rotation before the consumer drains) and a new job; asserts the only surviving job is the post-rotation one.
 
 All 24 packages build, vet, and test green.
+
+## Session 271 update — arbitration_policy config knob
+
+| Finding | Disposition |
+|---|---|
+| The arbitration engine implements four scoring policies (`maximize_earnings`, `stack_btc`, `maximize_privacy`, `environment_friendly`), but `runArbitrationLoop` hardcoded `PolicyMaximizeEarnings` in its Decide input — three of the four were unreachable from any configuration surface. No `policy` config field existed, so this was an unexposed feature rather than dead config. | ✅ Fixed: new `arbitration_policy` YAML key + `OTEDAMA_ARBITRATION_POLICY` env var plumbed through `Config`, `Origins`, `config show` (text + JSON + `--origin`), `config.Validate`, `arbitrationLoopOpts`, and the `Decide` input. `arbitration.ParsePolicy` added so config and engine share one source of truth for the policy names (round-trip vs `String()` tested). Empty stays the default (`maximize_earnings`), matching the optional-string convention of `pools[].payout_scheme`. |
+| Scoring semantics worth stating exactly (verified in `policyScore`): `stack_btc` multiplies BTC-native streams ×1.05; `maximize_privacy`/`environment_friendly` add +1% per rating point (0–10, max +10%). These are near-tie breakers — a materially higher raw yield always still wins. | ✅ Documented on the Config field, `config.yaml.example`, and SPECIFICATION §3. |
+| `Validate` initially rejected `""` — broke pre-existing tests that build `Config{}` literals. | ✅ Fixed: empty means "unset → default", same as other optional string fields. |
+
+Tests: `TestParsePolicy` (round-trip + reject set), `TestValidate_RejectsUnknownArbitrationPolicy` + `TestValidate_AcceptsAllValidArbitrationPolicies`, `TestArbitrationPolicy_EnvOverride`/`_FileOverride`/`_DefaultIsMaximizeEarnings`, `TestArbitrationPolicyFromConfig`, and `TestRunArbitrationLoop_PolicyReachesDecide` — the last proves the policy actually reaches Decide by routing a device to a lower-yield (95 vs 100 sats/s) but fully environment-rated stream via the TUI activity map (score 95×1.1 = 104.5 > 100, only possible under `environment_friendly`).
+
+All 24 packages build, vet, and test green.

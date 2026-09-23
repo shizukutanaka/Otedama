@@ -40,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 )
 
@@ -124,6 +125,22 @@ type Config struct {
 	// point that prevents thrashing without meaningfully delaying profitable
 	// switches. Set via OTEDAMA_ARBITRATION_HYSTERESIS_PCT or config file.
 	ArbitrationHysteresisPct float64 `yaml:"arbitration_hysteresis_pct"`
+
+	// ArbitrationPolicy selects how the arbitration engine scores competing
+	// revenue streams. One of:
+	//
+	//   maximize_earnings   (default) highest sat/s wins; ratings ignored
+	//   stack_btc           BTC-native streams get a 5% score edge, modelling
+	//                       the conversion friction avoided by being paid
+	//                       directly in Bitcoin
+	//   maximize_privacy    +1% score per PrivacyRating point (0–10, so a
+	//                       fully-rated stream gets up to +10%)
+	//   environment_friendly +1% score per EnvironmentalRating point
+	//
+	// The bonuses are deliberately small: they settle near-ties without
+	// overriding a materially higher-yielding stream. Set via
+	// OTEDAMA_ARBITRATION_POLICY or config file.
+	ArbitrationPolicy string `yaml:"arbitration_policy"`
 
 	// CurtailBelowBTCUSD pauses all hashing workers when the BTC/USD rate
 	// falls below this threshold. Workers resume automatically when the rate
@@ -243,6 +260,7 @@ func Defaults() Config {
 		LogFormat:                "text",
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
+		ArbitrationPolicy:        "maximize_earnings",
 		CurtailBelowBTCUSD:       0,  // disabled by default
 		MinYieldSatsPerSec:       0,  // disabled by default
 		HTTPAddr:                 "", // HTTP server disabled by default
@@ -304,6 +322,7 @@ type Origins struct {
 	LogFormat                ValueOrigin
 	DataDir                  ValueOrigin
 	ArbitrationHysteresisPct ValueOrigin
+	ArbitrationPolicy        ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
 	MinYieldSatsPerSec       ValueOrigin
 	PowerWatts               ValueOrigin
@@ -431,6 +450,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.ArbitrationHysteresisPct = fromFile.ArbitrationHysteresisPct
 		o.ArbitrationHysteresisPct = OriginFile
 	}
+	if fromFile.ArbitrationPolicy != "" {
+		cfg.ArbitrationPolicy = fromFile.ArbitrationPolicy
+		o.ArbitrationPolicy = OriginFile
+	}
 	// CurtailBelowBTCUSD: same zero-value caveat; treat non-zero file value
 	// as an explicit override.
 	// MinYieldSatsPerSec: same zero-value caveat; treat non-zero file value as
@@ -482,6 +505,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
 		cfg.DataDir = v
 		o.DataDir = OriginEnv
+	}
+	if v := getEnv("OTEDAMA_ARBITRATION_POLICY"); v != "" {
+		cfg.ArbitrationPolicy = v
+		o.ArbitrationPolicy = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_HTTP_ADDR"); v != "" {
 		cfg.HTTPAddr = v
@@ -639,6 +666,14 @@ func (c Config) Validate() error {
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+	}
+	// Empty means "unset → default" (maximize_earnings), same convention as
+	// pools[].payout_scheme and the other optional string fields.
+	if c.ArbitrationPolicy != "" {
+		if _, ok := arbitration.ParsePolicy(c.ArbitrationPolicy); !ok {
+			issues = append(issues, fmt.Sprintf(
+				"arbitration_policy %q is not one of maximize_earnings, stack_btc, maximize_privacy, environment_friendly", c.ArbitrationPolicy))
+		}
 	}
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(

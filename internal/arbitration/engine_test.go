@@ -44,6 +44,26 @@ func TestPolicy_String_Stable(t *testing.T) {
 	}
 }
 
+func TestParsePolicy(t *testing.T) {
+	// Every valid Policy must round-trip through its String() name — the
+	// config schema depends on the two staying in lock-step.
+	for _, p := range []Policy{PolicyMaximizeEarnings, PolicyStackBTC, PolicyMaximizePrivacy, PolicyEnvironmentFriendly} {
+		got, ok := ParsePolicy(p.String())
+		if !ok {
+			t.Errorf("ParsePolicy(%q) reported unknown", p.String())
+			continue
+		}
+		if got != p {
+			t.Errorf("ParsePolicy(%q) = %v, want %v", p.String(), got, p)
+		}
+	}
+	for _, bad := range []string{"", "hodl", "unknown(99)", "MAXIMIZE_EARNINGS", "maximize_earnings "} {
+		if p, ok := ParsePolicy(bad); ok {
+			t.Errorf("ParsePolicy(%q) = %v, want reject", bad, p)
+		}
+	}
+}
+
 func TestYield_Effective(t *testing.T) {
 	tests := []struct {
 		name string

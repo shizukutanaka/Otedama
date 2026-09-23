@@ -31,6 +31,7 @@ type arbitrationLoopOpts struct {
 	log           func(level, msg string)
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
 	minYield      float64 // 0 disables the per-device profitability floor
+	policy        arbitration.Policy
 
 	// activityMu/activity, when both non-nil, receive the TUI-facing
 	// provider status: after each Decide() this loop rewrites activity to
@@ -55,6 +56,17 @@ const defaultHysteresisPct = 0.05
 // exists (RESEARCH_IMPROVEMENTS Category 5 item 3). The window is generous
 // (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
 const streamStaleTimeout = 3 * time.Minute
+
+// arbitrationPolicyFromConfig maps the configured policy name to an
+// arbitration.Policy. Config.Validate rejects unknown names, so an
+// unrecognised value can only arrive when validation was skipped — fall back
+// to the default rather than passing an invalid Policy to Decide.
+func arbitrationPolicyFromConfig(name string) arbitration.Policy {
+	if p, ok := arbitration.ParsePolicy(name); ok {
+		return p
+	}
+	return arbitration.PolicyMaximizeEarnings
+}
 
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
 // or whenever a fresh quote arrives. Blocks until ctx is cancelled or
@@ -99,7 +111,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				Devices:            opts.devRefs,
 				Streams:            streams,
 				Previous:           prevAlloc,
-				Policy:             arbitration.PolicyMaximizeEarnings,
+				Policy:             opts.policy,
 				HysteresisMargin:   margin,
 				MinYieldSatsPerSec: opts.minYield,
 			})

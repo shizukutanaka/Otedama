@@ -169,3 +169,13 @@ log_format: "text"
 # switches on any improvement; higher values leave more yield on the table for
 # greater stability (see otedama_arbitration_holds_total / _foregone_sats_per_second).
 # arbitration_hysteresis_pct: 0.05
+
+# arbitration_policy chooses how the engine scores competing revenue streams.
+# One of:
+#   maximize_earnings    (default) — highest sat/s wins; stream ratings ignored
+#   stack_btc            — BTC-native streams get a 5% score edge, modelling the
+#                          conversion friction avoided by being paid in Bitcoin
+#   maximize_privacy     — +1% score per PrivacyRating point (0–10)
+#   environment_friendly — +1% score per EnvironmentalRating point (0–10)
+# The bonuses settle near-ties only; a materially higher yield still wins.
+# arbitration_policy: maximize_earnings

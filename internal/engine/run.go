@@ -321,6 +321,7 @@ func Run(ctx context.Context, opts Options) error {
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 		minYield:      opts.Config.MinYieldSatsPerSec,
+		policy:        arbitrationPolicyFromConfig(opts.Config.ArbitrationPolicy),
 		activityMu:    &activityMu,
 		activity:      activity,
 	})

@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 271 — `arbitration_policy` 設定ノブで裁定ポリシーを露出)
+
+裁定エンジンは4種のポリシー（`maximize_earnings` / `stack_btc` /
+`maximize_privacy` / `environment_friendly`）を実装済みだったが、
+`runArbitrationLoop` が `PolicyMaximizeEarnings` をハードコードして
+おり、実質3種が到達不能だった。`arbitration_policy` 設定キー
+(YAML) と `OTEDAMA_ARBITRATION_POLICY` 環境変数で露出:
+`stack_btc` は BTC ネイティブ払出しストリームに 5% のスコア優位
+(両替摩擦の回避をモデル化)、`maximize_privacy` /
+`environment_friendly` は各評価点(0–10)あたり +1% のスコア
+ボーナス — どれもニアタイ決着のみで実質的な高利回りを覆さない。
+`arbitration.ParsePolicy` を新設して `String()` の名を正準に往復
+(config ↔ engine で名前の単一ソース)。検証・`config show`・
+JSON/`--origin` 出力・SPECIFICATION §3 スキーマに配線。
+ポリシーが Decide に到達することを activity マップで直接証明する
+e2e テスト含む。CATEGORY_AUDITに session-271 追記。
+
 ### Fixed (session 270 — `set_extranonce` 後の旧 nonce-space ジョブが reject 連発)
 
 `mining.set_extranonce` で extranonce を更新しても `jobsCh` にキュー
