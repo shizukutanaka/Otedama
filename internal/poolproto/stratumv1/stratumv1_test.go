@@ -2128,3 +2128,51 @@ func TestExtranonce2Bytes(t *testing.T) {
 		}
 	}
 }
+
+// TestDialer_Datum_RoutesThroughV1: the datum:// scheme is served by an
+// SV1 dialer reporting ProtocolDATUM — the OCEAN gateway's miner-facing
+// wire is plain Stratum V1 (KNOWN_LIMITATIONS §14), so the full
+// subscribe→authorize→extranonce handshake is identical.
+func TestDialer_Datum_RoutesThroughV1(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	runFakeServer(t, serverConn, fakeServerConfig{keepAlive: true})
+
+	d := &Dialer{
+		datum: true,
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return clientConn, nil
+		},
+	}
+	if d.Protocol() != poolproto.ProtocolDATUM {
+		t.Fatalf("Protocol = %v, want ProtocolDATUM", d.Protocol())
+	}
+	conn, err := d.Dial(context.Background(), "datum://gateway.local:3334", poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("Dial datum://: %v", err)
+	}
+	if conn.Protocol() != poolproto.ProtocolDATUM {
+		t.Errorf("connection protocol = %v, want ProtocolDATUM", conn.Protocol())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate over datum://: %v", err)
+	}
+	defer sess.Close()
+	sv1, ok := sess.(*session)
+	if !ok {
+		t.Fatalf("session type = %T, want *session (V1 wire)", sess)
+	}
+	if sv1.extranonce2Size != 4 {
+		t.Errorf("extranonce2Size = %d, want 4 (default fake handshake)", sv1.extranonce2Size)
+	}
+}
+
+// TestParseAddress_Datum: the datum:// prefix parses like the stratum schemes.
+func TestParseAddress_Datum(t *testing.T) {
+	got, err := parseAddress("datum://ocean.example:3334")
+	if err != nil || got != "ocean.example:3334" {
+		t.Errorf("parseAddress(datum://ocean.example:3334) = %q, %v", got, err)
+	}
+}
