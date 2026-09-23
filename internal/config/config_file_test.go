@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // writeYAML writes cfg as YAML to a temp file and returns its path.
