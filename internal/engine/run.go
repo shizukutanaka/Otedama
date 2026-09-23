@@ -1020,6 +1020,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// Tags each applied job with the share difficulty in force so
+	// post-set_difficulty rejects on old-generation shares classify as
+	// benign races rather than real rejects (ESP-Miner #212).
+	diffTags := newDifficultyTagger(64)
 
 	for {
 		select {
@@ -1093,10 +1097,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				diff := sess.SuggestedDifficulty()
+				jobID, err := applyJob(opts.workers, job, chanID, diff)
+				if err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
+				diffTags.tag(jobID, diff)
 				opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {
@@ -1149,6 +1156,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				} else {
 					category, diagnosis := rejectClass(result.Reason)
+					// A difficulty-class reject on a share issued under a
+					// different share difficulty is a cross-generation race:
+					// the share honestly met the target it was issued under
+					// and the pool moved the target mid-flight (var-diff).
+					// Count it in the reason breakdown as "difficulty-change"
+					// for visibility, but exclude it from sharesRejected so
+					// it never inflates the reject-rate metric (ESP-Miner #212).
+					if category == "difficulty" && diffTags.benign(capturedShare.JobID, capturedSess.SuggestedDifficulty()) {
+						opts.log("info", fmt.Sprintf("engine: V1 share rejected: %s (benign: share met previous share difficulty; pool target changed mid-flight)", result.Reason))
+						if opts.m != nil {
+							opts.m.rejectReason("difficulty-change").Inc()
+						}
+						return
+					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						result.Reason, diagnosis))
 					if opts.m != nil {
@@ -1269,7 +1290,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1337,14 +1359,14 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) (uint32, error) {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
-		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
+		return 0, fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
 	var jobID uint32
 	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
+		return 0, fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
 	}
 	w := &miner.Work{
 		JobID:     jobID,
@@ -1360,7 +1382,7 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 	for _, wr := range workers {
 		wr.SetWork(w)
 	}
-	return nil
+	return jobID, nil
 }
 
 func parseHost(url string) (string, error) {

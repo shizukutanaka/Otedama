@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 257 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: var-diff 切替直後の「見せかけリジェクト」がリジェクト率を汚染する問題を解消)
+
+**`set_difficulty` 変更世代のシェアを区別する benign リジェクト分類**
+（RESEARCH_IMPROVEMENTS Cat 2 #4 / ESP-Miner #212 解消）。プールが
+`mining.set_difficulty` でシェアターゲットを動かすと、旧ターゲットで
+誠実に掘り当てたインフライトのシェアが "above target" / 
+"low-difficulty-share" でリジェクトされる——マイナーの故障ではなく
+世代またぎのレースだが、これまで `rejectClass` の "difficulty" に
+一律計上され `otedama_reject_rate` を実害なく上昇させていた。
+
+- `internal/engine/difftag.go` を新設：発行時のシェア難易度で各 V1 ジョブを
+  タグ付けする上限付き（64件）トラッカー。
+- `runSessionV1` で `applyJob` 適用時に `(jobID, difficulty)` を記録。
+  難易度系リジェクトかつ当該ジョブのタグが現在の `SuggestedDifficulty()`
+  と異なる場合は cross-generation race と判定し、
+  `otedama_shares_rejected_by_reason_total{reason="difficulty-change"}`
+  にのみ計上——`sharesRejected`・`otedama_reject_rate` からは除外。
+  難易度が変わっていない通常の difficulty リジェクトは従来どおり実害として
+  計上される。
+- `applyJob` はパース済み jobID を返すシグネチャに変更（タグ付けに必要）。
+- API.md・SPECIFICATION.md のメトリクス表に `difficulty-change` ラベルを
+  追記し、除外の意味を明文化。
+- テスト：`difftag_test.go`（方向非依存の benign 判定、難易度不変時は非
+  benign、未タグ/退避ジョブの扱い、再タグ挙動）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
