@@ -55,7 +55,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -114,6 +113,17 @@ type session struct {
 	// extranonce1, extranonce2Size are negotiated at subscribe time.
 	extranonce1     string
 	extranonce2Size int
+
+	// extranonce2Ctr cycles the client-owned half of the coinbase
+	// nonce (extranonce2) across submissions. V1 splits coinbase entropy
+	// into pool-issued extranonce1 and a client-chosen extranonce2 of
+	// extranonce2Size bytes; standard clients increment it (cgminer /
+	// bfgminer / ESP-Miner) so every share is a distinct coinbase. A
+	// fixed en2 means the 32-bit nonce is the entire work domain — once
+	// a fast worker wraps it, it grinds byte-identical work and the
+	// pool rejects the result as "duplicate". Monotonic across the
+	// session (never reset): uniqueness is all the pool verifies.
+	extranonce2Ctr atomic.Uint64
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -373,10 +383,15 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	}
 	id := s.nextID.Add(1)
 
-	en2 := hex.EncodeToString(sub.ExtraNonce)
-	if en2 == "" {
-		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+	en2 := ""
+	if len(sub.ExtraNonce) > 0 {
+		en2 = hex.EncodeToString(sub.ExtraNonce)
+	} else if s.extranonce2Size > 0 {
+		// Cycle extranonce2 so each share is a distinct coinbase — a
+		// fixed en2 makes the 32-bit nonce the entire work domain and
+		// produces literal duplicate shares once it wraps. The counter
+		// occupies the low bytes of the negotiated en2_size field.
+		en2 = hex.EncodeToString(extranonce2Bytes(s.extranonce2Ctr.Add(1), s.extranonce2Size))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1
@@ -403,6 +418,18 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		}, nil
 	}
 	return poolproto.ShareResult{Accepted: false, Reason: "rejected"}, nil
+}
+
+// extranonce2Bytes renders n as exactly size big-endian bytes: the
+// counter occupies the low-order bytes (left-padded, matching the
+// hex-string convention pools decode for the coinbase tail).
+func extranonce2Bytes(n uint64, size int) []byte {
+	buf := make([]byte, size)
+	for i := size - 1; i >= 0 && n > 0; i-- {
+		buf[i] = byte(n)
+		n >>= 8
+	}
+	return buf
 }
 
 // SuggestedDifficulty returns the current target difficulty.
