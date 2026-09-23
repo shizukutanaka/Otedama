@@ -43,3 +43,4 @@ a new ADR that supersedes the old one; do not edit the old one.
 | [009](ADR-009-pool-decentralization-integration.md) | Pool-decentralisation integration (JDC, DATUM, solo) | Proposed |
 | [010](ADR-010-arbitration-engine-evolution.md) | Arbitration-engine evolution (forecasting, bandits, change detection) | Proposed |
 | [011](ADR-011-secp256k1-for-stratum-v2-noise.md) | secp256k1 for the Stratum V2 Noise handshake (4th dependency) | Accepted |
+| [012](ADR-012-godebug-tlsmlkem-and-toolchain-floor.md) | `tlsmlkem=1` godebug pin and the effective toolchain floor | Proposed |

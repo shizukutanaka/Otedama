@@ -144,6 +144,29 @@ RESEARCH_IMPROVEMENTS Cat 5 #8（推論収益の建値・会計検証）の監�
 **検証**: `internal/engine`・`internal/provider` テスト green
 （`TestUpdateStream_*` 4件含む）。
 
+### Added (session 261 — tlsmlkemピン存否の判断材料をADR-012草案として提示 + GODEBUG_NOTESの虚偽記述を訂正)
+
+`skills/quality-pass-opus.md`キュー項目3（`tlsmlkem=1` godebugの
+維持/緩和判断）を起案。`go.mod`は**無変更** — 判断はメンテナに留保。
+
+- **`docs/adr/ADR-012`（Proposed）**: 4pinのパースフロアを表で整理
+  （tlsmlkem→1.24、containermaxprocs→1.25、toolchain go1.25.7で
+  実効フロアは既にGo 1.25）し、選択肢3件を提示 — A（pin維持＋doc訂正:
+  推奨。フロアはsession 256に意図的決定済み）、B（tlsmlkem単独緩和:
+  フロア不変でdoc訴求力のみ損失 → 却下）、C（全pin解除で旧toolchain
+  回復: cgroup認識GOMAXPROCS＝CPUマイニングのcgroup制限下スロット
+  リングを再失う回帰、x/crypto v0.49の`go 1.25`フロアとも衝突 →
+  却下）。
+- **GODEBUG_NOTES訂正**: 「このsplitで旧toolchainでもビルド可能」は
+  godebug pinにより既に虚偽（tlsmlkem=1で1.24未満は`go.mod`パース
+  自体が失敗）。実フロア（Go 1.25）と判断留保箇所（ADR-012参照）を
+  追記して訂正。
+- KNOWN_LIMITATIONS §13・ADR README索引にクロスリファレンス追記。
+
+**検証**: ドキュメントのみ — go.mod意図的無変更。判断材料は
+実検証済み（go1.24.7が`unknown godebug "containermaxprocs"`で
+パース失敗を直接確認済み、session 256）。
+
 ### Fixed (session 260 — リリース完全性の実態監査: install.shが実リリース資産と全不整合かつドキュメントが存在しない署名を主張していた)
 
 THREAT_MODELの主張「リリース成果物はcosign署名済み・install.shが

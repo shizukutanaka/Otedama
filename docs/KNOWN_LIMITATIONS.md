@@ -539,11 +539,13 @@ no-op":
   for Go 1.25+ (it builds and passes all 24 packages' tests locally on
   Go 1.25.7). It is purely that CI pins a Go older than the module's
   own godebug knobs require. Note the latent tension it exposes:
-  GODEBUG_NOTES.md says the `go`/`toolchain` split exists so "older
-  toolchains can still build Otedama," but the `tlsmlkem=1` godebug
-  (a 1.24 knob) already makes `go.mod` unparseable by any toolchain
-  < 1.24 — so that stated intent is not actually achievable as long
-  as the godebug is pinned.
+  GODEBUG_NOTES.md's original `go`/`toolchain` split rationale said
+  "older toolchains can still build Otedama," but the `tlsmlkem=1`
+  godebug (a 1.24 knob) already makes `go.mod` unparseable by any
+  toolchain < 1.24 — so that stated intent is not achievable as long
+  as the godebug is pinned (session 261: GODEBUG_NOTES corrected to
+  state the real Go 1.25 floor; the keep/relax decision is drafted
+  in ADR-012).
 
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
@@ -582,9 +584,12 @@ Each item also carries a maintainer decision:
   single change turns the Test/Build/Lint jobs from "red before
   compiling" to actually exercising the (already-green) code. The
   deeper question — whether to keep the `tlsmlkem=1` godebug pin (which
-  forecloses GODEBUG_NOTES.md's "old toolchains can build" intent) or
-  relax it — is a security-posture call for the maintainer, informed by
-  GODEBUG_NOTES.md's reasoning; it should not be changed unilaterally.
+  forecloses the go/toolchain split's original "old toolchains can
+  build" intent) or relax it — is a security-posture call for the
+  maintainer: decision material is drafted in
+  `docs/adr/ADR-012-godebug-tlsmlkem-and-toolchain-floor.md`
+  (recommended: keep the pin, the floor was already raised deliberately
+  at session 256); it should not be changed unilaterally.
 - The rest: author the missing `scripts/`/`config.yaml`/
   `tests/security`/`tests/load` assets and a real Kubernetes/Helm
   deployment target vs. remove the non-functional jobs entirely; decide

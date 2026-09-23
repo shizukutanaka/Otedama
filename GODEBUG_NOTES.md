@@ -44,9 +44,15 @@ godebug (
 **Why split `go` from `toolchain`:** the `go` directive declares
 the **language semantics** Otedama's source assumes, while
 `toolchain` pins the **build toolchain** used in CI and
-recommended for users. This split lets users with older toolchains
-(Linux distros, NixOS pinning) still build Otedama, while CI gets
-the latest crypto and runtime fixes.
+recommended for users.
+
+> **Floor note (session 261):** the split originally intended to let
+> older toolchains still build Otedama, but the godebug pins below
+> already foreclose that — `tlsmlkem=1` makes `go.mod` unparseable
+> on Go <1.24 and `containermaxprocs=1` + `toolchain go1.25.7` raise
+> the effective floor to **Go 1.25**. Whether to keep the `tlsmlkem=1`
+> pin (and this floor) or relax the whole split is framed for
+> maintainer decision in `docs/adr/ADR-012`.
 
 The `go` line is bumped roughly once a year, six months after each
 Go minor's release, on a dedicated PR. The `toolchain` line is

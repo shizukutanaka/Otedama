@@ -54,10 +54,14 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
    BIP324の64バイトellswift、2-level PKIサーバ認証）。監査済みGo実装が存在しない
    ため手書き移植になる — bitcoin-core `examples/ellswift.c` のベクタで
    クロステスト必須。ADR-011 Erratumに全論点記録済み。工数見積の再提示から着手。
-3. **tlsmlkemピンの設計判断の起案**: go.modの`tlsmlkem=1`はGo1.24未満での
-   ビルドを不可能にし、GODEBUG_NOTES.mdの「旧toolchainでもビルド可能」意図と
-   矛盾（KNOWN_LIMITATIONS §13に記録済み）。維持/緩和の判断材料を整理し
-   メンテナに提示するADR/Erratum草案を書く。**独断で変更しない**。
+3. **tlsmlkemピンの設計判断の起案**: ✅ 起案済み（session 261）。
+   `docs/adr/ADR-012`（Proposed）に判断材料を整理 — 選択肢A（pin維持＋
+   doc訂正。toolchain go1.25.7＋containermaxprocs=1で実効フロアは既に
+   意図的に1.25）、B（tlsmlkem単独緩和 — フロアは改善せずdoc訴求力のみ
+   損失、却下）、C（全pin解除で旧toolchain回復 — cgroup認識GOMAXPROCS
+   の回帰を要承認、却下）。推奨Aを記しメンテナ判断に留保 — go.modは
+   **無変更**（独断変更しないルール遵守）。GODEBUG_NOTESの虚偽記述
+   「旧toolchainでもビルド可能」は既成事実として訂正済み。
 4. **資金クリティカル領域の継続監査**: 未踏の深掘り候補は
    `internal/stratum/noise.go`のハンドシェイク状態機械（mixKey出力破棄・
    responder静的鍵未認証はKNOWN_LIMITATIONS §2に既知として記録済み — 新規発見
