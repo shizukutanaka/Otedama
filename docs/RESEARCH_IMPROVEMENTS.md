@@ -110,6 +110,14 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    now counts monotonically via `extranonce2Bytes` — the counter occupies
    the low bytes of the negotiated `extranonce2_size` field, left-padded
    big-endian per the pool's hex convention.
+   — session 281: **BIP-310 `mining.configure` sent.** The only extranonce
+   signal previously was the legacy `extranonce.subscribe` announce —
+   pools that gate `mining.set_extranonce` on formal BIP-310 negotiation
+   never honoured it. Negotiate now sends `mining.configure` with the
+   `subscribe-extranonce` extension as optional step 3a (pre-BIP-310
+   pools answer "Method not found" and the handshake proceeds), ahead of
+   the legacy announce at 3b. `version-rolling` is deliberately NOT
+   advertised — overt ASICBoost is ASIC-only and meaningless on CPU/GPU.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 281 — BIP-310 `mining.configure` の送信)
+
+**Stratum V1 の拡張交渉が BIP-310 に適合** —— 従来はレガシーの
+`extranonce.subscribe` アナウンスのみで、正式な BIP-310 交渉を要件と
+するプールでは `mining.set_extranonce` が届かなかった。Negotiate が
+オプション step 3a として `subscribe-extranonce` 拡張だけを告げる
+`mining.configure` を送出（BIP-310 以前のプールは "Method not found"
+を返し、ハンドシェイクは継続）。`version-rolling` は意図的に非広告
+——overt ASICBoost は ASIC 専用で CPU/GPU には無意味のため。
+
 ### Fixed (session 280 — `mining.submit` の worker 名が固定文字列だった)
 
 **`mining.submit` params[0] がハードコード `"otedama"` だった** ——
