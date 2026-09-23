@@ -44,6 +44,7 @@ your deployment; a home miner and a fleet dashboard want different budgets.
 |---|---|---|---|
 | `otedama_last_job_received_seconds` | < 120s old (≈2× typical notify interval) | `time() - value > 120` | Job feed wedged despite "connected" state — force reconnect/failover. |
 | `otedama_last_pool_message_seconds` | < 120s old | `time() - value > 120` | Link liveness vs job delivery: stale here AND stale job gauge = dead link (reconnect); fresh here but stale job gauge = pool alive but issuing no work (upstream stall — investigate, no reconnect needed). |
+| `otedama_pool_parse_errors_total` | rate = 0 | `rate(...[5m]) > 0` | Inbound messages failing to parse — protocol drift, MITM mangling, or misbehaving proxy. On a live link this separates "pool is quiet" from "pool is speaking garbage". |
 | `otedama_pool_connection_state` | = 2 (connected) | < 2 for 10m | Failover cycling — check `otedama_pool_active_index` drift and per-pool reachability. |
 | `otedama_pool_difficulty` | informational | sudden drop with near-zero shares | Pool may have lost var-diff trust or flagged the client — review `client.get_version`/difficulty history. |
 | `otedama_estimated_share_interval_seconds` | ≈ pool target cadence | ≫ 120s sustained | Difficulty set too high for the hashrate — consider `mining.suggest_difficulty` tuning or another pool. |

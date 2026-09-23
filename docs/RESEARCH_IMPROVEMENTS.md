@@ -156,6 +156,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    the engine polls it per stats tick via the new optional
    `poolproto.LastMessageInformer` (same family as PoolNoticeReceiver /
    ReconnectInformant). A 0 gauge = "connected, never said anything".
+   — session 287: **silent parse drops are now counted.** V1 dispatch
+   dropped malformed inbound with zero trace — malformed JSON, bad
+   notify params, undecodable difficulty/target/extranonce/show_message/
+   reconnect — so a pool speaking garbage (protocol drift, MITM
+   mangling, misbehaving proxy) looked identical to a quiet pool, even
+   with link liveness fresh. Every parse failure now counts into
+   `protoErrors` and surfaces via the new optional
+   `poolproto.ProtoErrorInformer` as `otedama_pool_parse_errors_total`
+   (engine folds the per-session monotonic count into the counter on
+   each stats tick — a rising value on a live link is the diagnostic).
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

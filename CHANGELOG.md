@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 287 — パース失敗の無言 drop を計測)
+
+**新カウンタ `otedama_pool_parse_errors_total`** —— V1 dispatch は
+不正な受信メッセージ（壊れた JSON、notify/difficulty/target/extranonce/
+show_message/reconnect の構造不適合、id なしの ping/get_version）を
+痕跡ゼロで捨てていた。正しい耐性だが可観測性ゼロ: ゴミを話すプール
+（プロトコル逸脱・MITM 破損・不調プロキシ）が静かなプールと区別不能。
+全パース失敗を `protoErrors` に計数し、新規 optional インターフェース
+`poolproto.ProtoErrorInformer`（LastMessageInformer と同族）経由で
+エンジンが stats tick ごとに counter へ畳み込み。リンク生存中に
+上昇 = 「静かなプール」ではなく「ゴミを話すプール」の診断根拠。
+
 ### Added (session 286 — リンク生存とジョブ配送を分離する心拍メトリクス)
 
 **新ゲージ `otedama_last_pool_message_seconds`** ——
