@@ -62,7 +62,12 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			return dialer.DialContext(ctx, "tcp", address)
 		}
 	}
-	raw, err := dialFn(ctx, address)
+	// Bound the connect phase: a pool that blackholes SYNs must not
+	// out-wait the caller's (run-lifetime) context. Cancel is safe
+	// post-return — an established conn does not depend on it.
+	dialCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	raw, err := dialFn(dialCtx, address)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: dial %s: %w", address, err)
 	}
@@ -74,6 +79,13 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
+// handshakeTimeout bounds the SetupConnection + OpenMiningChannel
+// exchange. Without it a pool that accepts the socket but never replies
+// wedges the caller on its context — which is the run lifetime. 30s
+// matches standard client behaviour. It is a var (not const) so tests
+// can shrink it.
+var handshakeTimeout = 30 * time.Second
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -81,6 +93,14 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if !ok {
 		return nil, fmt.Errorf("stratumv2: Negotiate received non-V2 connection: %T", c)
 	}
+
+	// Bound the handshake exchange: ReadFrame has no ctx, so the conn
+	// deadline is the timeout. A pool that accepts the socket but never
+	// sends SetupConnectionSuccess must not wedge the caller on its
+	// (run-lifetime) context. Cleared on success — the session's own
+	// reads run under the liveness metrics instead.
+	_ = conn.raw.SetDeadline(time.Now().Add(handshakeTimeout))
+	defer conn.raw.SetDeadline(time.Time{})
 
 	dec := stratum.NewDecoder(conn.raw)
 
