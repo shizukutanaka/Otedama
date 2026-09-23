@@ -10,6 +10,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 285 — engine→poolproto V2 切替完了)
+
+- **`stratum+v2://` / `stratum+v2tls://` を `poolproto.DialURL` 経由に
+  切替** — `runSession` がプロトコルで `runSessionV1` / `runSessionV2` に
+  分岐し、約350行のインライン V2 セッションループ（`handshake`、
+  `poolMsg` デコードパイプライン、`sendMsg`、`updateWork`、`parseHost`）
+  を削除。SV2 のジョブ/チップ状態機械・シーケンス採番・判定相関・
+  `SetTarget` 適用は `poolproto/stratumv2` アダプタが担当。これで
+  全プール URL が poolproto 抽象化経由となり、KNOWN_LIMITATIONS §3
+  の残存半分を完結。
+- **V1/V2 セッションループの共有部品化** — 統計ティック
+  （`sessionTelemetry`/`tick`）、プール接続前段（`dialPool`：認証情報・
+  CA バンドル読込・DialURL・接続後ブックキープ）、ジョブ適用
+  （`dispatchJob`：カーテル時スキップ・`lastJobReceivedAt`）を両パスで
+  共通化し、ループの構造差を V2 固有処理のみに縮小。
+
+### Added (session 285 — engine→poolproto V2 切替完了)
+
+- **`poolproto.ChannelIdentifier` オプショナルインタフェース** — セッションの
+  交渉済みチャネル ID を公開（`stratumv2` が実装、未実装セッションは 0）。
+- **`stratumv2` アダプタの `stratum+v2tls://` で本物の TLS** — `Dial` が
+  `stratum.DialTLS`（`TLSRootCAsPEM` でプライベート CA 対応）を呼び、
+  証明書検証済みハンドシェイクを実施。平文フォールバックはなし。
+- **接続断時の未判定 submit は `Unconfirmed` で排出** — プールが判定
+  していないため reject rate に混入しない（切断による判定率の歪みを
+  防止）。アダプタ側 `drainPending` に集約。
+
+### Fixed (session 285 — engine→poolproto V2 切替完了)
+
+- **`internal/engine` の `rejectByReason` マップに mutex 追加** —
+  従来から V1 サブミットgoroutine群が非保護で読み書きしていた潜在的
+  データレースを修正（V2 サブミットgoroutine 追加で race detector が
+  検出）。`rejectByReasonMu` で `rejectReason` と `updateShareRates` の
+  stale 参照を保護。
+- V2 submit の RTT 計測は `Microseconds()/1000.0`（loopback RTT を
+  `Milliseconds()` で全て 0 に丸めていた旧インラインパスの
+  セマンティクスに整合）。
+
 ### Added (session 284 — poolproto セッション契約の完成)
 
 - **`poolproto.Job` に `Target` フィールド追加** — SV2 が送出時点で

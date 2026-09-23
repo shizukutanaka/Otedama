@@ -15,6 +15,7 @@ package stratumv2
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"math"
 	"net"
@@ -57,17 +58,33 @@ func dialTCP(ctx context.Context, address string) (net.Conn, error) {
 	return dialer.DialContext(ctx, "tcp", address)
 }
 
-// Dial opens a TCP (or, when configured, TLS) connection to the pool.
+// Dial opens a TCP (or, when the scheme is stratum+v2tls://, a
+// certificate-verified TLS) connection to the pool. A configured
+// CA bundle (creds.TLSRootCAsPEM) extends the root store so a
+// private-CA/self-signed pool verifies; TLS never falls back to
+// plaintext.
 func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := poolproto.StripScheme(url)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: %w", err)
 	}
-	dialFn := d.dialFn
-	if dialFn == nil {
-		dialFn = dialTCP
+	var raw net.Conn
+	switch {
+	case d.dialFn != nil:
+		// Test hook: bypass both transports.
+		raw, err = d.dialFn(ctx, address)
+	case d.useTLS:
+		var cfg *tls.Config
+		cfg, err = stratum.TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)
+		if err == nil {
+			raw, err = stratum.DialTLS(ctx, address, cfg)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("stratumv2: TLS dial %s: %w", address, err)
+		}
+	default:
+		raw, err = dialTCP(ctx, address)
 	}
-	raw, err := dialFn(ctx, address)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: dial %s: %w", address, err)
 	}
@@ -226,16 +243,9 @@ func (s *session) start(ctx context.Context) {
 
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
-	defer func() {
-		// Unblock every in-flight submit so callers aren't left waiting
-		// for a verdict that will never arrive.
-		s.pendingMu.Lock()
-		defer s.pendingMu.Unlock()
-		for seq, ch := range s.pending {
-			ch <- poolproto.ShareResult{Accepted: false, Reason: "connection closed"}
-			delete(s.pending, seq)
-		}
-	}()
+	// Unblock every in-flight submit so callers aren't left waiting
+	// for a verdict that will never arrive.
+	defer s.drainPending()
 	tip := newTipState()
 
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
@@ -363,7 +373,7 @@ func (s *session) applySetTarget(maxTarget [32]byte) {
 // resolveSubmits accepts every in-flight submit with sequence number up
 // to the ack's last_sequence_number. The ack's batch accounting counters
 // (new_submits_accepted/new_shares_summed) apply once to the whole frame,
-// so they are attached to the lowest resolved sequence number's result —
+// so they are attached to exactly one of the resolved results —
 // aggregating across returned results counts the frame exactly once.
 func (s *session) resolveSubmits(ack *stratum.SubmitSharesSuccess) {
 	s.pendingMu.Lock()
@@ -394,8 +404,24 @@ func (s *session) rejectSubmit(e *stratum.SubmitSharesError) {
 	}
 }
 
+// drainPending resolves every still-pending submit when the connection
+// ends. No verdict was ever observed, so the results are Unconfirmed —
+// consumers must not count a connection drop as a pool rejection.
+func (s *session) drainPending() {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	for seq, ch := range s.pending {
+		ch <- poolproto.ShareResult{Accepted: false, Reason: "connection closed", Unconfirmed: true}
+		delete(s.pending, seq)
+	}
+}
+
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
+
+// ChannelID returns the channel ID assigned by the pool in
+// OpenMiningChannelSuccess. Satisfies poolproto.ChannelIdentifier.
+func (s *session) ChannelID() uint32 { return s.chanID }
 
 // Submit sends a share upstream and waits for the pool's verdict: each
 // submit carries a monotonically increasing sequence_number, and the
@@ -449,13 +475,6 @@ func (s *session) Close() error { return s.conn.Close() }
 
 // ----- helpers -----
 
-// Compile-time interface satisfaction checks.
-var (
-	_ poolproto.Dialer     = (*Dialer)(nil)
-	_ poolproto.Connection = (*connection)(nil)
-	_ poolproto.Session    = (*session)(nil)
-)
-
 // encodable is satisfied by every Stratum V2 message type (they all
 // have an Encode method). Defined locally to avoid coupling the
 // poolproto adapter to an exported interface in internal/stratum.
@@ -500,7 +519,8 @@ func float64FromBits(bits uint64) float64 {
 
 // Compile-time assertions.
 var (
-	_ poolproto.Dialer     = (*Dialer)(nil)
-	_ poolproto.Connection = (*connection)(nil)
-	_ poolproto.Session    = (*session)(nil)
+	_ poolproto.Dialer            = (*Dialer)(nil)
+	_ poolproto.Connection        = (*connection)(nil)
+	_ poolproto.Session           = (*session)(nil)
+	_ poolproto.ChannelIdentifier = (*session)(nil)
 )

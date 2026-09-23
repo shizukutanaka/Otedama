@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -878,7 +879,13 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 	// fill the buffer, then cancel ctx so the readLoop's select fires ctx.Done().
 	// SetNewPrevHash first establishes havePrev so each job (HasMinNtime=true)
 	// emits immediately instead of waiting as a future job.
+	done := make(chan struct{})
+	// Closing the conn unblocks a mid-write pool goroutine (net.Pipe writes
+	// block until the peer reads); the wait then guarantees no t.Logf races
+	// past test teardown even on an early t.Fatal.
+	defer func() { clientConn.Close(); <-done }()
 	go func() {
+		defer close(done)
 		pool.doHandshake(1)
 		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, MinNtime: 0x60000000, NBits: 0x1d00ffff}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
@@ -1180,6 +1187,9 @@ func TestSession_Submit_ConnCloseDrainsPending(t *testing.T) {
 	if result.Accepted || result.Reason == "" {
 		t.Errorf("closed-connection submit should report Accepted=false with a reason, got %+v", result)
 	}
+	if !result.Unconfirmed {
+		t.Error("connection drop delivered no verdict — result should be Unconfirmed")
+	}
 }
 
 // TestSession_SetTarget_UpdatesSuggestedDifficulty checks that a pool's
@@ -1344,5 +1354,87 @@ func TestSession_Submit_BatchCountsAttachedOnce(t *testing.T) {
 	}
 	if submits != 2 || shares != 3 {
 		t.Errorf("batch counts = (%d, %d), want (2, 3)", submits, shares)
+	}
+}
+
+// ============================================================================
+// ChannelID + TLS dial path
+// ============================================================================
+
+// TestSession_ChannelID verifies the poolproto.ChannelIdentifier
+// extension: ChannelID returns the value negotiated in
+// OpenMiningChannelSuccess so consumers can label work correctly.
+func TestSession_ChannelID(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doHandshake(42)
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	ident, ok := sess.(poolproto.ChannelIdentifier)
+	if !ok {
+		t.Fatal("session does not implement poolproto.ChannelIdentifier")
+	}
+	if got := ident.ChannelID(); got != 42 {
+		t.Errorf("ChannelID = %d, want 42 (from OpenMiningChannelSuccess)", got)
+	}
+}
+
+// TestDialer_Dial_TLSAttemptsTLS pins the stratum+v2tls:// transport fix:
+// a TLS dialer must attempt a real TLS handshake, never fall back to
+// plaintext. Pointed at a listener that only speaks plain TCP, the dial
+// fails inside the TLS handshake with a TLS-specific error.
+func TestDialer_Dial_TLSAttemptsTLS(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		buf := make([]byte, 64)
+		_, _ = c.Read(buf) // plain TCP sink: TLS ClientHello goes nowhere
+	}()
+
+	d := &Dialer{useTLS: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err = d.Dial(ctx, "stratum+v2tls://"+ln.Addr().String(), poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("TLS dial against a plaintext listener should fail")
+	}
+	if !strings.Contains(err.Error(), "TLS dial") {
+		t.Errorf("error = %q, want a TLS-specific dial failure (proves TLS was attempted)", err.Error())
+	}
+}
+
+// TestDialer_Dial_TLSBadCAPEM: an invalid CA bundle fails before any
+// network traffic rather than silently dropping the operator's pin.
+func TestDialer_Dial_TLSBadCAPEM(t *testing.T) {
+	d := &Dialer{useTLS: true}
+	_, err := d.Dial(context.Background(), "stratum+v2tls://127.0.0.1:1",
+		poolproto.Credentials{TLSRootCAsPEM: []byte("not pem")})
+	if err == nil {
+		t.Fatal("TLS dial with an unreadable CA bundle should fail")
+	}
+	if !strings.Contains(err.Error(), "TLS dial") {
+		t.Errorf("error = %q, want TLS dial CA error", err.Error())
 	}
 }

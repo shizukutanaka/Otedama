@@ -303,30 +303,6 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 	}
 }
 
-func TestParseHost(t *testing.T) {
-	tests := []struct {
-		url      string
-		wantHost string
-		wantErr  bool
-	}{
-		{"stratum+v2://pool.example.com:3336", "pool.example.com:3336", false},
-		{"stratum+v2tls://secure.example.com:34254", "secure.example.com:34254", false},
-		{"stratum+tcp://old.example.com:3333", "old.example.com:3333", false},
-		{"stratum+tls://tls.example.com:3334", "tls.example.com:3334", false},
-		{"http://bad.example.com", "", true},
-		{"", "", true},
-	}
-	for _, tt := range tests {
-		got, err := parseHost(tt.url)
-		if (err != nil) != tt.wantErr {
-			t.Errorf("parseHost(%q): err=%v, wantErr=%v", tt.url, err, tt.wantErr)
-		}
-		if !tt.wantErr && got != tt.wantHost {
-			t.Errorf("parseHost(%q): got %q, want %q", tt.url, got, tt.wantHost)
-		}
-	}
-}
-
 func TestDefaultPoolURL_UsesConfiguredPool(t *testing.T) {
 	cfg := config.Config{
 		Pools: []config.PoolConfig{{URL: "stratum+v2://custom.pool:3336"}},
@@ -347,37 +323,38 @@ func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
 	}
 }
 
-// TestUpdateWork_PopulatesFullHeaderAndShareTarget pins the core fix for
-// the SV2 data path: updateWork must fill ALL five header inputs
+// TestApplyJob_PopulatesFullHeaderAndShareTarget pins the core fix for
+// the SV2 data path: applyJob must fill ALL five header inputs
 // (version, prev-hash, merkle root, time, bits) and hand the workers the
-// POOL-ASSIGNED share target, not the network target. It runs a real
-// worker against the easiest possible target and asserts the found share
-// echoes the exact version and ntime that were hashed.
-func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
+// POOL-ASSIGNED share target (job.Target), not the network target. It
+// runs a real worker against the easiest possible target and asserts the
+// found share echoes the exact version and ntime that were hashed.
+func TestApplyJob_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	shares := w.Start(ctx)
 	defer w.Stop()
 
-	job := &stratum.NewMiningJob{
-		ChannelID: 1,
-		JobID:     42,
-		Version:   0x20000004,
+	job := poolproto.Job{
+		JobID:   "42",
+		Version: 0x20000004,
+		NTime:   0x60000000,
+		NBits:   0x1d00ffff,
 	}
 	for i := range job.MerkleRoot {
 		job.MerkleRoot[i] = byte(i * 7)
 	}
-	var prevHash [32]byte
-	for i := range prevHash {
-		prevHash[i] = byte(i + 1)
+	for i := range job.PrevHash {
+		job.PrevHash[i] = byte(i + 1)
 	}
-	var easiest miner.Hash
-	for i := range easiest {
-		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
+	for i := range job.Target {
+		job.Target[i] = 0xFF // every hash qualifies → share arrives instantly
 	}
 
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
 
 	select {
 	case s := <-shares:
@@ -395,17 +372,18 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 	}
 }
 
-// TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget covers the case
-// where the pool assigns no share target at all (zero value): updateWork
-// must fall back to the network target derived from prevNBits rather
-// than mining against an all-zero (impossible) target.
-func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
+// TestApplyJob_ZeroTargetFallsBackToNetworkTarget covers the case where
+// the pool assigns no share target at all (zero job.Target): applyJob
+// must fall back to the network target derived from NBits rather than
+// mining against an all-zero (impossible) target.
+func TestApplyJob_ZeroTargetFallsBackToNetworkTarget(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
-	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
-	var prevHash [32]byte
+	job := poolproto.Job{JobID: "1", Version: 0x20000000, NBits: 0x1d00ffff}
 
 	// Must not panic; genesis nBits is a valid (very hard) target.
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -1209,14 +1187,19 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetFromNBits: %v", err)
 	}
-	job := &stratum.NewMiningJob{JobID: 7, Version: 0x20000000}
-	var prevHash [32]byte
+	job := poolproto.Job{
+		JobID:   "7",
+		Version: 0x20000000,
+		NTime:   0x60000000,
+		NBits:   0x207fffff,
+		Target:  [32]byte(target),
+	}
 
 	apply := func() {
 		if opts.isCurtailed() {
 			return // mirror runSession: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
+		_ = applyJob(opts.workers, job, 0, 0)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work

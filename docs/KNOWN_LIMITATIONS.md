@@ -123,12 +123,16 @@ same ADR-011 implementation step that replaces the Noise P-256 stub.
 
 ## ~~3. Engine connects to pools directly; poolproto not yet wired in~~ ✅ RESOLVED (session 91)
 
-**Resolution:** `internal/engine/run.go` now dispatches Stratum V1 URLs
-(`stratum+tcp://`, `stratum+tls://`) through `poolproto.DialURL` via the new
-`runSessionV1` function. The blank import
-`_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"` in
-`cmd/otedama/run.go` fires dialer registration at startup. Stratum V2 URLs
-continue to use the existing inline `handshake` path.
+**Resolution:** `internal/engine/run.go` dispatches all pool URLs through
+`poolproto.DialURL`: `stratum+tcp://` / `stratum+tls://` go to `runSessionV1`
+and `stratum+v2://` / `stratum+v2tls://` go to `runSessionV2` (session 285).
+The blank imports for `stratumv1` and `stratumv2` in `cmd/otedama/run.go`
+fire dialer registration at startup. The inline V2 handshake/session loop
+(`handshake`, `sendMsg`, `updateWork`, `parseHost`, the `poolMsg` decode
+pipeline) is deleted — the `stratumv2` adapter owns the SV2 state machine,
+and `stratum+v2tls://` performs a real certificate-verified TLS handshake
+via `stratum.DialTLS` (the interim adapter had briefly dialed plaintext
+under the v2tls scheme; that path never shipped).
 
 **Integration progress (all steps complete):**
 - ✅ Step 1 (session 37): URL-scheme parsing unified into `poolproto.knownSchemes`.
@@ -138,15 +142,21 @@ continue to use the existing inline `handshake` path.
   (`mining.subscribe` + `mining.authorize`); `runSessionV1` added to engine;
   blank import registers the V1 dialer. The `poolproto` abstraction is now
   load-bearing for V1 connections at runtime.
-- 🟡 Step 3c (sessions 283–284): the V2 adapter is now a complete Session —
+- ✅ Step 3c (sessions 283–284): the V2 adapter completed the Session contract —
   Submit performs sequence-number request/response correlation against
   `SubmitSharesSuccess`/`Error` frames (previously hardcoded 0 and the
   verdicts were dropped), `SetTarget`/initial channel target feed
   `SuggestedDifficulty` via `miner.DifficultyFromTarget`, `Job.Target`
   carries the U256 share target, `ShareResult` carries the ack's batch
   counters plus an `Unconfirmed` flag for unverdicted submits, and
-  `SetTarget` re-issues the active job (updateWork semantics). Only the
-  engine-side switch-over for V2 URLs remains.
+  `SetTarget` re-issues the active job (updateWork semantics).
+- ✅ Step 3d (session 285): the engine switch-over itself — `runSessionV2`
+  consumes `poolproto.DialURL`, the adapter's `Dial` performs real TLS for
+  `stratum+v2tls://` (with `TLSRootCAsPEM` support), `ChannelIdentifier`
+  exposes the negotiated channel ID, and connection-drop drains report
+  `Unconfirmed` so disconnects never enter the reject rate. The shared
+  `sessionTelemetry`/`dialPool`/`dispatchJob` helpers keep the V1 and V2
+  loops structurally identical.
 
 ---
 

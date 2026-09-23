@@ -87,19 +87,26 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🟡 **engine→poolproto wiring** — partially resolved (sessions 283–284).
-   The `poolproto/stratumv2` adapter is now a complete drop-in Session:
+8. ✅ **engine→poolproto wiring** — RESOLVED (sessions 283–285).
+   The `poolproto/stratumv2` adapter is a complete drop-in Session:
    Submit carries a real monotonically increasing `sequence_number` and
    blocks for the pool's verdict (SubmitSharesSuccess acks all seqs ≤
    `last_sequence_number`; SubmitSharesError matches by seq; ctx expiry
-   returns the documented provisional result, now flagged
-   `Unconfirmed`), `SetTarget` frames update `SuggestedDifficulty`
+   returns the documented provisional result, flagged `Unconfirmed`),
+   `SetTarget` frames update `SuggestedDifficulty`
    (`miner.DifficultyFromTarget`) and re-issue the active job so the new
    U256 target applies immediately, and `Job.Target` plus
    `ShareResult`'s batch accounting counters carry everything the
-   engine's share-rate accounting needs. Remaining gap is only the
-   engine-side switch-over: V2 URLs still run the inline handshake path
-   (KNOWN_LIMITATIONS §3).
+   engine's share-rate accounting needs. Session 285 completed the
+   engine-side switch-over: `stratum+v2://`/`stratum+v2tls://` URLs now
+   run `runSessionV2` consuming `poolproto.DialURL`, the ~350-line
+   inline V2 handshake/session loop (`handshake`, `sendMsg`,
+   `updateWork`, `parseHost`, the `poolMsg` pipeline) is deleted, the
+   adapter's `Dial` performs a real certificate-verified TLS handshake
+   for `stratum+v2tls://`, and `poolproto.ChannelIdentifier` surfaces
+   the negotiated channel ID. The V1/V2 loops share the
+   `sessionTelemetry`/`dialPool`/`dispatchJob` helpers (KNOWN_LIMITATIONS
+   §3 closed).
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
@@ -928,9 +935,9 @@ Ranked by impact on the path to a real v3.1.0:
 1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
    channel; library identified, licence compatible. Needs an ADR for the
    dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — makes the V2 dialer and job
-   bridge (already built and tested) actually load-bearing; removes the
-   dead-code state.
+2. ~~**engine→poolproto wiring (Cat 2 #8)**~~ — ✅ done (sessions 283–285):
+   the V2 adapter is a complete Session and all pool URLs now dispatch
+   through `poolproto.DialURL`; the inline V2 path is deleted.
 3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
    — small, high-value observability win that directly reflects miner
    profitability and needs no new dependency.

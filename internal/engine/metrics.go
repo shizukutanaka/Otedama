@@ -172,8 +172,9 @@ type engineMetrics struct {
 
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
-	reg            *metrics.Registry
-	rejectByReason map[string]*metrics.Counter
+	reg              *metrics.Registry
+	rejectByReasonMu sync.Mutex
+	rejectByReason   map[string]*metrics.Counter
 
 	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
 	// one per reject category, created lazily on first rejection of that type.
@@ -469,7 +470,11 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // from rejectClass (stale/duplicate/difficulty/hardware/other), giving
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
+// Safe for concurrent use: session submit goroutines resolve verdicts
+// concurrently.
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
 	if c, ok := m.rejectByReason[category]; ok {
 		return c
 	}
@@ -673,9 +678,11 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	}
 	m.rejectRate.Set(float64(rejected) / float64(judged))
 	var stale uint64
+	m.rejectByReasonMu.Lock()
 	if c, ok := m.rejectByReason["stale"]; ok {
 		stale = c.Value()
 	}
+	m.rejectByReasonMu.Unlock()
 	m.staleRate.Set(float64(stale) / float64(judged))
 	return rate, judged
 }

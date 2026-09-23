@@ -203,11 +203,12 @@ type ShareResult struct {
 	// Difficulty is the actual share difficulty as computed by the
 	// pool, when supplied; zero otherwise.
 	Difficulty float64
-	// Unconfirmed is true when the result is provisional — the share
-	// left the client but no verdict arrived before the caller's
-	// deadline (the Session contract's "submitted but unconfirmed"
-	// case). Consumers that count pool-judged shares should treat
-	// Unconfirmed results as pending, not accepted.
+	// Unconfirmed is true when no pool verdict was observed for the
+	// share — either the caller's deadline expired first (the Session
+	// contract's "submitted but unconfirmed" case) or the connection
+	// dropped with the submit still pending. Consumers that count
+	// pool-judged shares should treat Unconfirmed results as pending,
+	// not judged (neither accepted nor rejected).
 	Unconfirmed bool
 	// NewSubmitsAccepted and NewSharesSummed carry the pool-side
 	// accounting counters a Stratum V2 SubmitSharesSuccess reports
@@ -271,6 +272,18 @@ type PoolNoticeReceiver interface {
 	// consumer causes notices to be dropped silently rather than blocking
 	// the read loop.
 	PoolNotices() <-chan string
+}
+
+// ChannelIdentifier is an optional extension to Session implemented by
+// protocols whose mining channel carries a negotiated numeric ID that
+// consumers need when constructing share submissions or labelling work
+// (Stratum V2's channel_id). Callers should type-assert a Session to
+// this interface; single-channel protocols that do not implement it use
+// the conventional channel ID 0.
+type ChannelIdentifier interface {
+	// ChannelID returns the channel ID negotiated during the session
+	// handshake.
+	ChannelID() uint32
 }
 
 // Dialer establishes a Connection to a pool. Different protocols
