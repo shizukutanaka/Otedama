@@ -1337,3 +1337,12 @@ Security-auditor-facing document whose *mitigation* claims were themselves unver
 | Verified clean — `handshake.go`: SetupConnection endpoint_host STR0_255 + endpoint_port U16 split per §3.6.1, mandatory max_target U256, group_channel_id trailing U32, `FlagRequiresStandardJobs` defined; Postel-lenient `getB0_255` extranonce decode documented (strict `appendB0_32` on encode) | ✅ No change needed. |
 | Verified clean — `frame.go`: payload bound checked against MaxFrameSize before allocation, `channel_msg` bit 15 handled on both encode/decode paths, U24 LE msg_length, payload ownership doc consistent (s309 fix) | ✅ No change needed. |
 | `internal/stratum` package audit now complete: tls.go / wire.go / messages.go (s316) + handshake.go / frame.go / noise.go (this session). noise.go's structural divergences are fully enumerated in KNOWN_LIMITATIONS §2 — nothing left to fix short of the maintainer-gated ADR-011 rework | ✅ Audit closed. |
+
+## Session 318 update — i18n surface + maintainer-gate boundary audit
+
+| Finding | Disposition |
+|---|---|
+| Localization claim vs implemented scope: all 10 priority-language catalogs are complete (enforced by `TestAllLanguages_CoverAllEnglishIDs`) but cover only 15 `Startup*`/`Error*`/`Status*` IDs — `i18n.Render` is wired into exactly one call site (`cmd/otedama/run.go` logln). TUI dashboard, doctor output, `config show`, `--help`, and all log lines are hard-coded English | ✅ Recorded as KNOWN_LIMITATIONS §19 — scope gap, not a defect; expanding the ID set is a maintainer-sized refactor. |
+| `NewBundle` silently skips a catalog that fails to construct | 📋 Recorded: documented fail-open behaviour (English fallback); `MissingTranslations()` exists for verification. |
+| Verified clean — `DetectLang`/`DetectLangFromEnv` (BCP-47 case-insensitive, base-tag fallback, POSIX precedence LC_ALL > LC_MESSAGES > LANG, "C"/"POSIX" neutral handling), `normalizePOSIXLocale` (codeset/modifier strip), `NewBundle` construction | ✅ No change needed. |
+| Observed: recent session PRs (#110, #116, #117, #118) are closed unmerged — assumed maintainer triage; stack branches remain intact and each continues to base on the prior head | 📋 Recorded for awareness; work pattern unchanged. |

@@ -892,6 +892,37 @@ downloaded binary — documented in `VERIFY.md`.
 
 ---
 
+## 19. Localization covers all 10 priority languages but only a 15-string startup/error surface; the TUI, doctor output, and CLI help are English-only
+
+**What:** `internal/i18n/messages/` ships complete catalogs for the ten
+priority languages (en/ja/zh/ko/es/fr/de/pt/ru/ar) — completeness is
+enforced by `TestAllLanguages_CoverAllEnglishIDs`. But the catalogs
+contain only the 15 `Startup*`/`Error*`/`Status*` message IDs defined in
+`internal/i18n/message.go`. Everything a running miner actually produces
+— the TUI dashboard labels and badges, `otedama doctor`'s check names
+and details, `config show` output, `--help` text, and every log line —
+is a hard-coded English string elsewhere in the codebase; none of it
+goes through `i18n.Render`. Selecting `--language ja` localizes the
+small startup/status subset and nothing else.
+
+**Impact:** Modest today — the localized surface is exactly the messages
+an operator sees during the first seconds of `otedama run`, which is the
+audience least likely to need the deeper diagnostics. But a user reading
+"10 languages supported" would reasonably expect the dashboard and error
+output to follow the configured language, and they do not.
+
+**Workaround:** None needed — English fallback covers everything
+correctly; only the *scope* of localization is narrower than the claim.
+
+**Target:** No committed target. Expanding the ID set to cover doctor/TUI
+strings is a routine but sizable i18n refactor (every hard-coded user
+string needs an ID + 10 translations); tracked as future-scope work
+rather than a defect. CLAUDE.md's "主要10言語" requirement is satisfied
+by the shipped catalogs; the gap is between the claim's *implied* scope
+and the implemented one.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

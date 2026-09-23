@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 318 — ローカライズ範囲の実態記録)
+
+- KNOWN_LIMITATIONS §19 を新設: i18n カタログは主要10言語を完全網羅
+  （`TestAllLanguages_CoverAllEnglishIDs` で保証）するが、対象は
+  startup/error/status の15 ID のみ — `i18n.Render` の配線は
+  `run.go` logln 1箇所で、TUI・doctor・`config show`・`--help`・
+  全ログ行は英語ハードコード。スコープギャップとして記録
+  （拡張は maintainer 規模のリファクタ）。
+
 ### Docs (session 317 — internal/stratum 監査完結記録)
 
 - `internal/stratum` パッケージ監査が完結: `handshake.go`/`frame.go` は
