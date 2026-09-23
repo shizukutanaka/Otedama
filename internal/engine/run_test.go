@@ -2886,3 +2886,166 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
 	}
 }
+
+// ============================================================================
+// closingPool — server→client CloseChannel conformance (spec §5.3.9)
+// ============================================================================
+
+// closingPool completes the SV2 handshake then immediately closes the
+// channel it just opened. The engine must (a) end the session instead of
+// hashing/submitting on a dead channel — the error path feeds the normal
+// failover/reconnect loop — and (b) reply with its own client→server
+// CloseChannel (the spec's polite close) before dropping the socket.
+type closingPool struct {
+	t       *testing.T
+	ln      net.Listener
+	addr    string
+	started chan struct{}
+	done    chan struct{}
+
+	mu      sync.Mutex
+	gotMsgs []uint8 // msg_types the client sent after the handshake
+}
+
+func newClosingPool(t *testing.T) *closingPool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("closingPool: listen: %v", err)
+	}
+	fp := &closingPool{
+		t:       t,
+		ln:      ln,
+		addr:    ln.Addr().String(),
+		started: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+	go fp.serve()
+	return fp
+}
+
+func (fp *closingPool) URL() string { return "stratum+v2://" + fp.addr }
+func (fp *closingPool) Close()      { fp.ln.Close() }
+
+func (fp *closingPool) emit(conn net.Conn, msgType uint8, isChannel bool, payload []byte) {
+	f, err := stratum.WrapMessage(msgType, isChannel, payload)
+	if err != nil {
+		return
+	}
+	data, err := stratum.EncodeFrame(f)
+	if err != nil {
+		return
+	}
+	conn.Write(data) //nolint:errcheck
+}
+
+func (fp *closingPool) serve() {
+	defer close(fp.done)
+	close(fp.started)
+	conn, err := fp.ln.Accept()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	dec := stratum.NewDecoder(conn)
+	dec.MaxFrameSize = 1 << 20
+
+	// SetupConnection → Success
+	if _, err = dec.ReadFrame(); err != nil {
+		return
+	}
+	succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+	payload, _ := succ.Encode()
+	fp.emit(conn, stratum.MsgSetupConnectionSuccess, false, payload)
+
+	// OpenMiningChannel → Success (group 4, easy target)
+	f, err := dec.ReadFrame()
+	if err != nil {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+	omcSucc := stratum.OpenMiningChannelSuccess{
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
+	}
+	for i := range omcSucc.Target {
+		omcSucc.Target[i] = 0xFF
+	}
+	payload, _ = omcSucc.Encode()
+	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+	// Close the channel with a reason string, then keep the socket open
+	// to capture the client's polite CloseChannel reply.
+	cc := stratum.CloseChannel{ChannelID: 1, ReasonCode: "pool maintenance"}
+	payload, _ = cc.Encode()
+	fp.emit(conn, stratum.MsgCloseChannel, true, payload)
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
+		f, err = dec.ReadFrame()
+		if err != nil {
+			return // client dropped the socket (post-CloseChannel)
+		}
+		fp.mu.Lock()
+		fp.gotMsgs = append(fp.gotMsgs, f.Header.MsgType)
+		fp.mu.Unlock()
+	}
+}
+
+func TestRunSession_PoolCloseChannel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newClosingPool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	err := runSession(ctx, sessionOpts{
+		poolURL:  fp.URL(),
+		user:     "bc1qtest000000000000000000000000000000000",
+		workers:  []*miner.Worker{w},
+		merged:   merged,
+		interval: 5 * time.Millisecond,
+		m:        m,
+		log:      func(_, _ string) {},
+	})
+	if err == nil {
+		t.Fatal("runSession returned nil; pool-closed channel must end the session")
+	}
+	if !strings.Contains(err.Error(), "closed channel 1") {
+		t.Fatalf("session error = %q, want CloseChannel mention", err.Error())
+	}
+
+	// The client must have answered with its own polite CloseChannel
+	// (spec §5.3.9) before the socket dropped.
+	select {
+	case <-fp.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pool read loop did not finish")
+	}
+	fp.mu.Lock()
+	got := append([]uint8(nil), fp.gotMsgs...)
+	fp.mu.Unlock()
+	for _, mt := range got {
+		if mt == stratum.MsgCloseChannel {
+			return
+		}
+	}
+	t.Errorf("client never sent CloseChannel back; msg_types received: %v", got)
+}

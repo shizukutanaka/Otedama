@@ -629,6 +629,43 @@ func TestDecodeOpenMiningChannelError_ShortPayload(t *testing.T) {
 	}
 }
 
+// ----- CloseChannel -----
+
+func TestCloseChannel_Encode_Roundtrip(t *testing.T) {
+	orig := CloseChannel{ChannelID: 42, ReasonCode: "pool maintenance"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeCloseChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip mismatch: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeCloseChannel_Truncated(t *testing.T) {
+	// Minimum is 4 (channel_id) + 1 (STR0_255 length) = 5 bytes.
+	if _, err := DecodeCloseChannel(make([]byte, 4)); err == nil {
+		t.Error("expected error on 4-byte payload")
+	}
+}
+
+func TestDispatchFrame_CloseChannel(t *testing.T) {
+	orig := CloseChannel{ChannelID: 7, ReasonCode: "closing"}
+	payload, _ := orig.Encode()
+	f := Frame{Header: Header{MsgType: MsgCloseChannel, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.CloseChannel == nil || msg.CloseChannel.ChannelID != 7 || msg.CloseChannel.ReasonCode != "closing" {
+		t.Fatalf("CloseChannel not populated: %+v", msg.CloseChannel)
+	}
+}
+
 // ----- DispatchFrame — additional message types -----
 
 func TestDispatchFrame_SubmitSharesSuccess(t *testing.T) {
