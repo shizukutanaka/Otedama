@@ -171,6 +171,15 @@ type Job struct {
 	// CleanJobs, when true, indicates older jobs may be discarded.
 	CleanJobs bool
 
+	// Target is the U256 share target in force when the job was emitted
+	// (little-endian, MSB at [31] — the same byte order miner.Hash and
+	// SV2's U256 wire fields use). Stratum V2 fills this from the
+	// channel's SetTarget/OpenMiningChannelSuccess target so the worker
+	// compares hashes against the exact pool-assigned target. Zero when
+	// the protocol does not carry a target on the job itself — Stratum
+	// V1 callers derive it from SuggestedDifficulty instead.
+	Target [32]byte
+
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
 	ReceivedAt time.Time
@@ -194,6 +203,21 @@ type ShareResult struct {
 	// Difficulty is the actual share difficulty as computed by the
 	// pool, when supplied; zero otherwise.
 	Difficulty float64
+	// Unconfirmed is true when the result is provisional — the share
+	// left the client but no verdict arrived before the caller's
+	// deadline (the Session contract's "submitted but unconfirmed"
+	// case). Consumers that count pool-judged shares should treat
+	// Unconfirmed results as pending, not accepted.
+	Unconfirmed bool
+	// NewSubmitsAccepted and NewSharesSummed carry the pool-side
+	// accounting counters a Stratum V2 SubmitSharesSuccess reports
+	// (new_submits_accepted / new_shares_summed). A success frame acks
+	// a batch of submits, so the batch's counters are attached to
+	// exactly one of the resolved results — consumers aggregating
+	// across results count each frame once. Zero on Stratum V1 and on
+	// non-ack results.
+	NewSubmitsAccepted uint32
+	NewSharesSummed    uint32
 }
 
 // ----- Interfaces -----

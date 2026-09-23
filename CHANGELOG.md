@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 284 — poolproto セッション契約の完成)
+
+- **`poolproto.Job` に `Target` フィールド追加** — SV2 が送出時点で
+  有効な U256 シェアターゲット（LE、MSB at [31]）を搬送。V2 アダプタは
+  チャネルの `OpenMiningChannelSuccess.Target` で種付けし、全 `SetTarget`
+  フレームで更新。従来はジョブにターゲット搬送路がなく、`applyJob` の
+  コメントが指摘していた欠落を解消（V1 は難易度経路を継続）。
+- **`SetTarget` で現行ジョブを再送出** — エンジンのインラインループの
+  `updateWork` セマンティクスに整合：新ターゲットを即時適用するため、
+  アクティブジョブを `clean=false` で再送出。次の `NewMiningJob` を
+  待たずにワーカーが新ターゲットへ移行。
+- **`ShareResult` に判定詳細を追加** — `SubmitSharesSuccess` のバッチ
+  カウンタ `new_submits_accepted`/`new_shares_summed` を搬送（一つの
+  ack が複数 submit を解決するため、最低 seq の結果にのみ付着し
+  集計で二重計上しない設計）。ctx 期限切れの暫定結果は
+  `Unconfirmed=true` で「提出済み・未判定」を明示 — エンジン側の
+  unaccounted-share 集計に必要な区別。
+- read loop の emit に `tipState.active`（現行ジョブ）を保持。
+  アダプタは依然ライブ経路外 — これでエンジン切替に必要な
+  インタフェース要素が全て揃った（残る作業は engine 側のみ）。
+
 ### Fixed (session 283 — poolproto V2 サブミット判定相関)
 
 - **`poolproto/stratumv2` アダプタの Submit をリクエスト/レスポンス相関に

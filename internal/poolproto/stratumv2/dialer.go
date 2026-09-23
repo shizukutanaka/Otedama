@@ -150,12 +150,13 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		jobsCh:  make(chan poolproto.Job, 8),
 		pending: make(map[uint32]chan poolproto.ShareResult),
 	}
-	// Seed the suggested difficulty from the channel's initial target
-	// when the pool assigned one; subsequent SetTarget frames update it.
-	// A zero target means "unset" (SRI v1.5.0 lesson: it is unusable),
-	// so leave SuggestedDifficulty at its documented zero default.
+	// Seed the suggested difficulty and share target from the channel's
+	// initial target when the pool assigned one; subsequent SetTarget
+	// frames update both. A zero target means "unset" (SRI v1.5.0
+	// lesson: it is unusable), so leave the documented zero defaults.
 	var zeroTarget [32]byte
 	if msg.OpenMiningChannelSuccess.Target != zeroTarget {
+		sess.shareTarget = msg.OpenMiningChannelSuccess.Target
 		sess.diff.Store(math.Float64bits(
 			miner.DifficultyFromTarget(miner.Hash(msg.OpenMiningChannelSuccess.Target))))
 	}
@@ -196,6 +197,10 @@ type session struct {
 	jobsCh chan poolproto.Job
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
+
+	// shareTarget is the current pool-assigned U256 share target carried
+	// onto every emitted Job. Written and read only by the read loop.
+	shareTarget [32]byte
 
 	// seq issues the SV2 sequence_number each submit carries so the
 	// pool's SubmitSharesSuccess/Error frames can be correlated back to
@@ -242,6 +247,7 @@ func (s *session) readLoop(ctx context.Context) {
 			NTime:      ntime,
 			NBits:      tip.prevNBits,
 			CleanJobs:  clean,
+			Target:     s.shareTarget,
 			ReceivedAt: time.Now(),
 		}
 		select {
@@ -271,9 +277,18 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.SetTarget != nil {
 			s.applySetTarget(msg.SetTarget.MaxTarget)
+			// Re-issue the active job so consumers apply the new share
+			// target immediately, matching the engine's inline loop
+			// (updateWork with the live job + new target) rather than
+			// waiting for the next NewMiningJob.
+			if tip.active != nil {
+				if !emit(tip.active, tip.activeNTime, false) {
+					return
+				}
+			}
 		}
 		if msg.SubmitSharesSuccess != nil {
-			s.resolveSubmits(msg.SubmitSharesSuccess.LastSequenceNumber)
+			s.resolveSubmits(msg.SubmitSharesSuccess)
 		}
 		if msg.SubmitSharesError != nil {
 			s.rejectSubmit(msg.SubmitSharesError)
@@ -291,6 +306,10 @@ type tipState struct {
 	prevHash  [32]byte
 	prevNBits uint32
 	havePrev  bool
+	// active is the last emitted job and its ntime, kept so a SetTarget
+	// frame can re-issue it at the new share target.
+	active      *stratum.NewMiningJob
+	activeNTime uint32
 }
 
 func newTipState() *tipState {
@@ -306,6 +325,7 @@ func (t *tipState) feed(msg *stratum.Message) (job *stratum.NewMiningJob, ntime 
 		j := msg.NewMiningJob
 		t.pending[j.JobID] = j
 		if j.HasMinNtime && t.havePrev {
+			t.active, t.activeNTime = j, j.MinNtime
 			return j, j.MinNtime, false
 		}
 		return nil, 0, false
@@ -325,28 +345,42 @@ func (t *tipState) feed(msg *stratum.Message) (job *stratum.NewMiningJob, ntime 
 		if named.HasMinNtime && named.MinNtime > ntime {
 			ntime = named.MinNtime
 		}
+		t.active, t.activeNTime = named, ntime
 		return named, ntime, true
 	}
 	return nil, 0, false
 }
 
-// applySetTarget records the pool's new share target as the suggested
-// difficulty so SuggestedDifficulty reflects it.
+// applySetTarget records the pool's new share target: SuggestedDifficulty
+// reports the converted difficulty and emitted Jobs carry the raw U256.
+// Called only from the read loop, so shareTarget needs no synchronisation.
 func (s *session) applySetTarget(maxTarget [32]byte) {
+	s.shareTarget = maxTarget
 	s.diff.Store(math.Float64bits(
 		miner.DifficultyFromTarget(miner.Hash(maxTarget))))
 }
 
 // resolveSubmits accepts every in-flight submit with sequence number up
-// to last: a SubmitSharesSuccess ack covers all of them.
-func (s *session) resolveSubmits(last uint32) {
+// to the ack's last_sequence_number. The ack's batch accounting counters
+// (new_submits_accepted/new_shares_summed) apply once to the whole frame,
+// so they are attached to the lowest resolved sequence number's result —
+// aggregating across returned results counts the frame exactly once.
+func (s *session) resolveSubmits(ack *stratum.SubmitSharesSuccess) {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
+	countsAttached := false
 	for seq, ch := range s.pending {
-		if seq <= last {
-			ch <- poolproto.ShareResult{Accepted: true}
-			delete(s.pending, seq)
+		if seq > ack.LastSequenceNumber {
+			continue
 		}
+		res := poolproto.ShareResult{Accepted: true}
+		if !countsAttached {
+			res.NewSubmitsAccepted = ack.NewSubmitsAccepted
+			res.NewSharesSummed = ack.NewSharesSummed
+			countsAttached = true
+		}
+		ch <- res
+		delete(s.pending, seq)
 	}
 }
 
@@ -401,7 +435,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		s.pendingMu.Lock()
 		delete(s.pending, n)
 		s.pendingMu.Unlock()
-		return poolproto.ShareResult{Accepted: true}, nil
+		return poolproto.ShareResult{Accepted: true, Unconfirmed: true}, nil
 	}
 }
 

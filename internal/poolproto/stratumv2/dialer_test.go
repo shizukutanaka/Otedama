@@ -1146,6 +1146,9 @@ func TestSession_Submit_ContextExpiry_Provisional(t *testing.T) {
 	if !result.Accepted {
 		t.Error("unconfirmed share should report the provisional Accepted=true")
 	}
+	if !result.Unconfirmed {
+		t.Error("provisional result should carry Unconfirmed=true")
+	}
 }
 
 // TestSession_Submit_ConnCloseDrainsPending checks that closing the
@@ -1217,5 +1220,129 @@ func TestSession_SetTarget_UpdatesSuggestedDifficulty(t *testing.T) {
 			t.Fatal("SuggestedDifficulty() stayed 0 after SetTarget")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestSession_SetTarget_ReemitsActiveJob checks that a SetTarget frame
+// re-issues the currently active job carrying the new U256 share target,
+// matching the engine's updateWork-on-SetTarget semantics.
+func TestSession_SetTarget_ReemitsActiveJob(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true,
+			stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, MinNtime: 0x60000000, NBits: 0x1d00ffff})
+		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true,
+			stratum.NewMiningJob{ChannelID: 1, JobID: 7, HasMinNtime: true, MinNtime: 0x60000000})
+		var target [32]byte
+		target[26], target[27] = 0xff, 0xff // diff1 target
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetTarget, true,
+			stratum.SetTarget{ChannelID: 1, MaxTarget: target})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// First delivery: the new job (target still unset — zero before any
+	// SetTarget arrives).
+	j1 := <-sess.Jobs()
+	if j1.JobID != "7" {
+		t.Fatalf("first job = %q, want 7", j1.JobID)
+	}
+	var zero [32]byte
+	if j1.Target != zero {
+		t.Fatalf("first job Target = %x, want zero (no SetTarget yet)", j1.Target)
+	}
+
+	// SetTarget re-issues the same job with the raw U256 share target.
+	j2 := <-sess.Jobs()
+	if j2.JobID != "7" {
+		t.Fatalf("re-issued job = %q, want 7", j2.JobID)
+	}
+	if j2.CleanJobs {
+		t.Error("target re-issue should not mark the job clean")
+	}
+	if j2.Target[26] != 0xff || j2.Target[27] != 0xff {
+		t.Errorf("re-issued job Target = %x, want diff1 target at bytes 26-27", j2.Target)
+	}
+}
+
+// TestSession_Submit_BatchCountsAttachedOnce checks that a
+// SubmitSharesSuccess's batch accounting counters are attached to
+// exactly one of the submits the ack resolves — aggregating across
+// returned results counts the frame once.
+func TestSession_Submit_BatchCountsAttachedOnce(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		// Read both submits, then ack them with one frame carrying
+		// batch counters.
+		for i := 0; i < 2; i++ {
+			if _, err := pool.dec.ReadFrame(); err != nil {
+				pool.t.Logf("pool: read submit %d: %v", i, err)
+				return
+			}
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSubmitSharesSuccess, true,
+			stratum.SubmitSharesSuccess{ChannelID: 1, LastSequenceNumber: 2, NewSubmitsAccepted: 2, NewSharesSummed: 3})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// Two submits must be in flight before the single ack arrives.
+	type outcome struct {
+		res poolproto.ShareResult
+		err error
+	}
+	results := make(chan outcome, 2)
+	for i := 0; i < 2; i++ {
+		go func(nonce uint32) {
+			r, e := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "3", Nonce: nonce})
+			results <- outcome{r, e}
+		}(uint32(i))
+	}
+
+	var totalAccepted, countCarriers, submits, shares int
+	for i := 0; i < 2; i++ {
+		o := <-results
+		if o.err != nil {
+			t.Fatalf("Submit: %v", o.err)
+		}
+		if o.res.Accepted {
+			totalAccepted++
+		}
+		if o.res.NewSubmitsAccepted != 0 || o.res.NewSharesSummed != 0 {
+			countCarriers++
+			submits += int(o.res.NewSubmitsAccepted)
+			shares += int(o.res.NewSharesSummed)
+		}
+	}
+	if totalAccepted != 2 {
+		t.Errorf("accepted submits = %d, want 2", totalAccepted)
+	}
+	if countCarriers != 1 {
+		t.Errorf("results carrying batch counts = %d, want exactly 1", countCarriers)
+	}
+	if submits != 2 || shares != 3 {
+		t.Errorf("batch counts = (%d, %d), want (2, 3)", submits, shares)
 	}
 }
