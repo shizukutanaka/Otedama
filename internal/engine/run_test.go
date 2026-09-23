@@ -103,9 +103,9 @@ func (fp *fakePool) serve() {
 
 	// 4. Send OpenMiningChannelSuccess
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 		// All-0xFF target = easiest possible, so the CPU will find shares.
 	}
 	for i := range omcSucc.Target {
@@ -2312,9 +2312,9 @@ func (fp *responsivePool) serve() {
 
 	// Send OpenMiningChannelSuccess with all-0xFF target (trivially easy)
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 	}
 	for i := range omcSucc.Target {
 		omcSucc.Target[i] = 0xFF
@@ -2572,9 +2572,9 @@ func (fp *retargetPool) serve() {
 	}
 
 	omcSucc := stratum.OpenMiningChannelSuccess{
-		ReqID:           omc.ReqID,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          omc.ReqID,
+		ChannelID:      1,
+		GroupChannelID: 4,
 	}
 	for i := range omcSucc.Target {
 		omcSucc.Target[i] = 0xFF // trivially easy: every hash is a share
