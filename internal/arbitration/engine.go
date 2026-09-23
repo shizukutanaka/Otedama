@@ -110,6 +110,10 @@ type Stream struct {
 	PrivacyRating       int              // 0 (worst) .. 10 (best)
 	EnvironmentalRating int              // 0 (worst) .. 10 (best)
 	IsBitcoinMining     bool             // true for streams that pay out as BTC natively
+	// Simulated mirrors provider.Quote.Simulated: the stream's yield is
+	// modelled, not settled revenue. Metrics expose it as a label so
+	// simulated and real flows can be reconciled separately.
+	Simulated bool
 }
 
 // Accepts reports whether this stream will accept work from a device of

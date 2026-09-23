@@ -219,6 +219,17 @@ type engineMetrics struct {
 	payoutInfoMu       sync.Mutex
 	payoutInfo         map[string]*metrics.Gauge
 	payoutActiveMasked string
+
+	// providerYield publishes each arbitration stream's quoted yield as
+	// otedama_provider_yield_sats_per_second{provider,simulated}, one gauge
+	// per (provider, simulated) pair, created lazily. The simulated label is
+	// what separates modelled revenue (the Akash simulation) from real,
+	// settled revenue in dashboards and reconciliation queries — the
+	// "(simulated)" suffix on the provider's display name is a UI string,
+	// not data a Prometheus query can filter on. Cardinality is bounded by
+	// the provider set, not device count.
+	providerYieldMu sync.Mutex
+	providerYield   map[string]*metrics.Gauge
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
@@ -473,6 +484,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
 		payoutInfo:           make(map[string]*metrics.Gauge),
+		providerYield:        make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
 	// only its label set does (standard Prometheus `_info` convention).
@@ -588,6 +600,31 @@ func (m *engineMetrics) setActivePayout(masked string) {
 // growing value means found shares are not reaching the pool — submission
 // failures or drops that would otherwise be invisible (the "trust the pool's
 // numbers" reconciliation, RESEARCH_IMPROVEMENTS Category 1 item 10).
+// setProviderYield publishes one stream's current quoted yield under
+// otedama_provider_yield_sats_per_second{provider,simulated}. Called once per
+// arbitration tick for every live stream.
+func (m *engineMetrics) setProviderYield(provider string, simulated bool, satsPerSec float64) {
+	m.providerYieldMu.Lock()
+	defer m.providerYieldMu.Unlock()
+	sim := "false"
+	if simulated {
+		sim = "true"
+	}
+	key := provider + "\x00" + sim
+	g, ok := m.providerYield[key]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_provider_yield_sats_per_second",
+			"Current yield quoted by each provider stream, in satoshis per "+
+				"second. The simulated label separates modelled revenue (true — "+
+				"the Akash fixed-price simulation) from real settled revenue "+
+				"(false); always reconcile the two groups separately.",
+			map[string]string{"provider": provider, "simulated": sim})
+		m.providerYield[key] = g
+	}
+	g.Set(satsPerSec)
+}
+
 func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	accepted := m.sharesAccepted.Value()
 	rejected := m.sharesRejected.Value()

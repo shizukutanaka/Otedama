@@ -101,6 +101,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 			AcceptedFamilies: []hal.Family{hal.FamilyGPU},
 			At:               time.Now(),
 			Yield:            Yield{Confidence: 0},
+			Simulated:        true,
 		})
 		return
 	}
@@ -134,6 +135,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 				NetSatsPerSecond: netSats,
 				Confidence:       confidence,
 			},
+			Simulated: true, // fixed-price model — see KNOWN_LIMITATIONS §1
 		}
 		if !p.sendQuote(ctx, q) {
 			return

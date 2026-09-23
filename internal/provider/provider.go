@@ -129,6 +129,18 @@ type Quote struct {
 	// A nil slice means all families are accepted.
 	AcceptedFamilies []hal.Family
 
+	// Simulated marks the quote as modelled rather than observed revenue.
+	// Until a provider wires a real market integration, its figures are a
+	// simulation of what the workload *would* earn — suitable for
+	// exercising arbitration, not for financial decisions. The flag exists
+	// because the "(simulated)" suffix on the provider's display Name is a
+	// UX convention, not data: metrics and accounting must separate
+	// simulated yield from real yield structurally so a simulated flow can
+	// never silently contaminate real payout reconciliation (see
+	// docs/KNOWN_LIMITATIONS.md §1 and RESEARCH_IMPROVEMENTS Category 5 #8).
+	// Providers quoting real, settled revenue leave this false.
+	Simulated bool
+
 	// At is the wall-clock time the quote was generated.
 	At time.Time
 }

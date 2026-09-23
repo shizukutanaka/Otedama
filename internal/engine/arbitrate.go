@@ -90,6 +90,10 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
 			opts.metrics.activeStreams.Set(float64(len(streams)))
+			for _, s := range streams {
+				opts.metrics.setProviderYield(string(s.ID), s.Simulated,
+					s.DefaultYield.SatsPerSecond)
+			}
 
 			margin := opts.hysteresisPct
 			if margin == 0 {
@@ -194,6 +198,7 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 		Confidence:    q.Yield.Confidence,
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
+	existing.Simulated = q.Simulated
 	m[key] = existing
 	return key
 }
