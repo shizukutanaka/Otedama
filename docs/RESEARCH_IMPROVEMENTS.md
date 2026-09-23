@@ -808,6 +808,15 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
+   — ✅ **Done (session 265):** overflow-boundary seeds added to both
+   existing targets (channel_msg + sub-minimum payload, U24-max claims,
+   valid-frame→huge-claim sequences); **new `FuzzV1ReadLine`** — the
+   V1 JSON-RPC reader path the item named — driving `session.readLine`
+   over net.Pipe (panic/termination/cap invariants); **new
+   `FuzzV1Dispatch`** covering the decode+route path incl.
+   `client.reconnect`'s real `Close()`. The encrypted-frame
+   length-prefix target already existed (`FuzzEncryptedConnRead`).
+   Smoke: 18.3k execs (ReadLine) / 2.07M execs (Dispatch), no crashes.
 2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt

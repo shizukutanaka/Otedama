@@ -37,6 +37,14 @@ func FuzzDecodeHeader(f *testing.F) {
 		{0x01, 0x02, 0x03},
 		// Oversized length claim.
 		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
+		// Overflow boundaries: channel_msg flag (high bit of byte 1) with
+		// MsgLength below MinimumChannelPayload — must fail Validate.
+		{0x00, 0x80, 0x00, 0x00, 0x00, 0x00},
+		{0x00, 0x80, 0x00, 0x03, 0x00, 0x00},
+		// Same flag at the exact 4-byte minimum — must pass.
+		{0x00, 0x80, 0x00, 0x04, 0x00, 0x00},
+		// MsgLength one below U24 max — boundary-adjacent arithmetic.
+		{0x00, 0x00, 0x00, 0xFE, 0xFF, 0xFF},
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -95,6 +103,22 @@ func FuzzDecoder_ReadFrame(f *testing.F) {
 		},
 		// Frame claiming huge payload; truncated before payload delivered.
 		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
+		// Overflow boundaries: a well-formed small frame followed by a
+		// second header claiming the U24 maximum — the decoder must
+		// consume the first, then fail/short-read the second without
+		// treating accumulated state as an offset into the claim.
+		{
+			0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xAA,
+			0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+		},
+		// channel_msg frame: flag set (byte1 high bit), MsgLength = 4,
+		// exactly MinimumChannelPayload — boundary-valid channel frame.
+		{
+			0x00, 0x80, 0x00, 0x04, 0x00, 0x00,
+			0x01, 0x00, 0x00, 0x00,
+		},
+		// channel_msg flag with MsgLength = 3 (below minimum).
+		{0x00, 0x80, 0x00, 0x03, 0x00, 0x00, 0x01, 0x02, 0x03},
 		// Garbage.
 		{0xDE, 0xAD, 0xBE, 0xEF},
 	}

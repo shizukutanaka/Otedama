@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Test (session 265 — V1 JSON-RPCリーダのfuzz化＋SV2フレームのオーバーフロー境界種追加)
+
+June-2026リサーチ項目1（SRI fuzz発見の`noise_sv2`算術オーバーフロー教訓を
+Otedamaの同等面に適用）を消化。`FuzzDecodeHeader`/`FuzzDecoder_ReadFrame`に
+channel_msg境界種（フラグ設定+MinimumChannelPayload未満の拒否系、
+ちょうど4バイトの受理系、U24-maxクレーム、正当フレーム→巨大クレーム列）を
+追加。新規`FuzzV1ReadLine`（`session.readLine`をnet.Pipe上で駆動 —
+64KiB行キャップ境界・newline無し巨大行の強制終端・panic/termination/容量
+不変条件を主張）と`FuzzV1Dispatch`（デコード+ルーティング全経路 —
+`client.reconnect`の実`Close()`も通る）を追加し、項目が指名した
+「V1 JSON-RPCリーダ」面をカバー。暗号フレーム長prefixのfuzz対象は
+`FuzzEncryptedConnRead`で既存だったことを確認し重複せず。スモーク:
+ReadLine 18.3k execs / Dispatch 2.07M execs、クラッシュなし。
+
 ### Docs (session 264 — ADR-011にNoise NX/ellswift実装計画＋工数見積を追記)
 
 quality-passキュー項目2（Noise NX / ellswift実装計画）をADR-011への
