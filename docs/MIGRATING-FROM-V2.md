@@ -23,11 +23,12 @@ whether v3 is right for them and how to migrate if so.
   operator.
 - Custodial accumulation (user A and user B share a balance managed
   by the pool). v3 is single-user by design.
-- Stratum V1 compatibility. v3 has no V1 fallback.
 - KYC/AML features. v3 is designed around self-custody.
 
-If any of those is a hard requirement, **stay on v2.x**. The
-`legacy-v2` branch is maintained for security fixes until October 2026.
+If any of those is a hard requirement, staying on v2.x is your only
+option — but be aware the `v2.x` series receives **no further fixes**:
+the final releases remain downloadable, while a dedicated `legacy-v2`
+maintenance branch (planned in CLAUDE.md) has not been created.
 
 ## What changed in v3
 
@@ -36,7 +37,9 @@ If any of those is a hard requirement, **stay on v2.x**. The
   a client that routes earnings directly to the user's address.
 - **Algorithms:** v2 supported Scrypt, Ethash, RandomX, and others;
   v3 is SHA-256d only.
-- **Protocol:** v2 spoke Stratum V1 primarily; v3 is V2-only.
+- **Protocol:** v2 spoke Stratum V1 primarily; v3 speaks Stratum V2
+  (Noise-encrypted) *and* V1 (`stratum+tcp://` / `stratum+tls://`).
+  The protocol is chosen per-pool by the `pools[].url` scheme.
 
 ### Operational
 - **Binary name:** `otedama` (same).
@@ -48,8 +51,9 @@ If any of those is a hard requirement, **stay on v2.x**. The
 ### Security
 - **Noise encryption:** Stratum V2 handshake on every pool connection.
 - **Wallet:** BIP-39 seed encrypted with scrypt + AES-256-GCM.
-- **CI:** SHA-pinned GitHub Actions, Dependabot, nightly fuzz, cosign
-  signing.
+- **CI:** SHA-pinned GitHub Actions, Dependabot, nightly fuzz.
+  (Cosign-signed release assets are planned but not yet published —
+  see VERIFY.md for the current verification story.)
 
 ## Migration procedure
 
@@ -82,10 +86,12 @@ under `[payout]`. Copy the address — you will paste it into v3.
 ### 4. Install v3
 
 ```bash
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash
 ```
 
-Or download from [releases][releases] and verify the signature.
+Or download a release archive from [releases][releases]. Signature
+assets are not yet published; VERIFY.md describes what verification
+is possible today.
 
 [releases]: https://github.com/shizukutanaka/Otedama/releases
 
@@ -137,7 +143,8 @@ Fields that have been **removed**:
 
 - `algorithms:` — v3 is SHA-256d only.
 - `pool_operator:` — v3 is not a pool.
-- `[stratum_v1]` — no V1 support.
+- `[stratum_v1]` — v2's dedicated V1 section is gone; V1 pools are
+  configured per-entry via the `pools[].url` scheme.
 - `[custody]` — non-custodial only.
 - `[kyc]` / `[aml]` — no KYC infrastructure.
 
@@ -151,8 +158,10 @@ Fields that are **new**:
 
 - `data_dir:` — for wallet and persistent state.
 - `language:` — UI language, BCP 47.
-- `pools[].priority:` — failover order.
-- `workers[]:` — per-device worker configuration.
+- `bitcoin_addresses:` — ordered list of extra payout addresses,
+  rotated to on pool/address failure.
+- `pools[]:` — ordered failover list (list order *is* the priority).
+- `workers.name:` — the single worker name reported to pools.
 
 See `config.yaml.example` in the v3 repository for a fully commented
 template.
@@ -167,9 +176,11 @@ template.
 
 ## What happens to v2?
 
-- `legacy-v2` branch receives **security fixes only** until 2026-10-24.
+- The `v2.x` releases remain downloadable; the series is End-of-Life.
+- A `legacy-v2` branch for security fixes is planned (see CLAUDE.md)
+  but does not exist yet — until it is created, v2 receives no
+  updates of any kind.
 - No new features, no compatibility bridges.
-- The `v2.x` series is marked End-of-Life on the release page.
 
 If you cannot migrate within six months, contact the maintainer via
 GitHub Discussions to coordinate. Known dependency situations (e.g.

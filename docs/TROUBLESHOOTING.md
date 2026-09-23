@@ -32,8 +32,8 @@ is ever found.
 ### Fix
 
 1. Switch to a pool that accepts low-difficulty shares, or use a
-   pool with a difficulty-tuning mode. Braiins pool and demand.sv2.io
-   both auto-tune.
+   pool with a difficulty-tuning mode. Braiins Pool auto-tunes share
+   difficulty (vardiff) and also speaks Stratum V2.
 2. There is no GPU speedup available today: Otedama detects GPUs
    (`otedama doctor`) but implements no CUDA/ROCm/Vulkan compute
    dispatch, so a GPU does not increase SHA-256d hashrate (see
@@ -47,7 +47,7 @@ is ever found.
 
 ---
 
-## "wallet: decrypt seed: invalid passphrase" after typing the correct passphrase
+## "lightning: wallet unlock failed — check your passphrase" after typing the correct passphrase
 
 ### Symptom
 
@@ -94,21 +94,24 @@ scheduler does not yield to other processes the way OS processes do.
 
 ### Fix
 
-Limit the number of mining threads:
+Otedama has no thread-count flag: each SHA-256d device spawns a
+`runtime.NumCPU()`-thread worker. Limit it at the OS level instead —
+the worker count follows the CPUs the process can see:
 
 ```bash
-otedama run --bitcoin-address bc1q... --worker-threads 4
+# Linux: restrict to cores 0-3 (NumCPU honours CPU affinity).
+taskset -c 0-3 otedama run --bitcoin-address bc1q...
 ```
 
-Or set a CPU limit at the OS level:
+Other OS-level limits:
 
-- **systemd (Linux):** `CPUQuota=50%` in the service unit.
-- **launchd (macOS):** no direct quota; use `nice`.
+- **systemd (Linux):** `CPUQuota=50%` in a drop-in override for the
+  generated user unit (`systemctl --user edit otedama`), or
+  `CPUSchedulingPolicy=idle` / `Nice=19` to keep the desktop
+  responsive. The generated unit sets no scheduling class itself.
+- **launchd (macOS):** no direct quota; run with `nice`.
 - **Windows:** Task Manager > Details > right-click otedama.exe > Set
   affinity.
-
-For laptops, consider the `service` option which binds Otedama to an
-idle scheduling class automatically.
 
 ---
 
@@ -149,14 +152,18 @@ not require manual intervention.
 
 ### Cause
 
-The metrics registry has been created but the engine has not yet
-emitted any metrics. At startup, this is normal — first metrics
-appear after the first successful pool handshake (~2-5 seconds).
+The engine publishes its first metrics (uptime, start time) as soon
+as `engine.Run` begins — before any pool handshake. If `/metrics`
+is still empty seconds after start, the engine loop never ran:
+config validation failed, or the run aborted earlier.
 
 ### Fix
 
-Wait for 10 seconds after starting and retry. If still empty, check
-logs for `engine:` entries — the engine loop may not have started.
+Check the startup output for a config error or a fatal `engine:`
+line before the TUI takes over the screen; run with `--no-tui` so
+early log lines stay visible. Also confirm `--http-addr` (or
+`http_addr:`/`OTEDAMA_HTTP_ADDR`) is actually set — the HTTP server
+is disabled when it is empty.
 
 ---
 
@@ -215,10 +222,14 @@ If this still fails, ensure `go env GOPROXY` includes `https://proxy.golang.org`
 
 ## Still stuck?
 
-1. Re-run `otedama doctor` with the highest log level:
+1. Re-run `otedama doctor` — its report is already the complete
+   diagnostic (it has no log-level flag; `otedama --log-level=...`
+   is an unknown-subcommand error since flags go *after* the
+   subcommand). For verbose *run* logs instead:
    ```bash
-   otedama --log-level=debug doctor
+   otedama run --log-level=debug --no-tui --bitcoin-address bc1q...
    ```
+   or `OTEDAMA_LOG_LEVEL=debug`.
 2. Search existing issues:
    https://github.com/shizukutanaka/Otedama/issues
 3. Open a new issue using the bug-report template. Include:

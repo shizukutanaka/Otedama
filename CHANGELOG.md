@@ -10,6 +10,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 283 — ユーザ向け運用ドキュメント監査: MIGRATING/TROUBLESHOOTING)
+
+- **MIGRATING-FROM-V2.md が「v3 has no V1 fallback / v3 is V2-only」と虚偽記載**:
+  実際は `stratum+tcp://`/`stratum+tls://` の V1 ダイアラが登録済みで
+  engine.runSessionV1 がライブ経路。V1 限定プール利用者が移行不能と
+  誤認する最大級の記述誤りを訂正（プロトコルは pools[].url スキームで
+  選択と明記）。
+- **install.sh の dead URL を再修正**: s281 の README と同一の
+  `releases/latest/download/install.sh`（404）が残存 → `raw .../master/` 版へ。
+- **「legacy-v2 ブランチが保守中」は未存在ブランチ**: remote に
+  `legacy-v2` は存在せず（v2.x タグのみ実在）—「stay on v2.x で security
+  fix を受けられる」誘導は実態と矛盾。v2.x は fixes 無し・legacy-v2 は
+  計画のみ、と実態記述に訂正（CLAUDE.md のブランチ戦略記述は維持）。
+- **cosign signing を CI 実績として記載**: s260 で実測した通り署名資産は
+  未公開 — VERIFY.md への誘導に訂正。
+- **config diff の虚偽フィールド**: `pools[].priority`（未存在。リスト順が
+  failover 優先度）と `workers[]` per-device 配列（実態は `workers.name`
+  単一オブジェクト）を訂正。`bitcoin_addresses` ローテーションを新規
+  フィールドとして追記。
+- **TROUBLESHOOTING.md の `--worker-threads` フラグは未存在**: run に
+  スレッド数フラグは無く各デバイス NumCPU スレッド生成 → taskset /
+  systemd drop-in / affinity への正しい誘導に置換。
+- **「service が idle scheduling class に自動バインド」は虚偽**: 生成
+  ユニットに Nice/CPUSchedulingPolicy は無し → drop-in override 手順に訂正。
+- **`otedama --log-level=debug doctor` は dead コマンド**: フラグは
+  サブコマンド後置のみ・doctor に log-level フラグ自体無し →
+  `run --log-level=debug --no-tui` / `OTEDAMA_LOG_LEVEL` に訂正。
+- **metrics が「初回 handshake 後に出る」は誤り**: uptime/startTime は
+  engine.Run 開始時に即発行 — 空の場合は engine 未起動が原因と訂正
+  （--http-addr 未設定の可能性も明記）。
+- **プール例 `demand.sv2.io` は NXDOMAIN**（実測）→ Braiins vardiff のみ
+  記載に訂正。wallet エラーメッセージを実メッセージ（
+  `lightning: wallet unlock failed — check your passphrase`）に訂正。
+- 検証済みクリーン: backoff 1s→64s 実装一致、doctor は pool latency を
+  reachability チェックで実測表示、doctor/run/service の他フラグ記述は
+  全て実在、`bitcoin_address`/`log_level`/`pools[].url`/`data_dir`/
+  `language` の renamed 記述は正確。
+
 ### Fixed (session 282 — リポジトリメタファイルの実害群)
 
 - **SECURITY.md が v2 ユーザに不存在コマンドを指示**: `otedama

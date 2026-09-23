@@ -865,3 +865,26 @@ formatter findings are pre-existing reachability, unchanged by this diff).
 | CLAUDE.md "doctor/ 17 並行ヘルスチェック" | ✅ Verified: exactly 17 `Name:` checks in checks.go. |
 | DEPLOYMENT.md's `ROADMAP.md "Real protocols"` reference | ✅ Resolves (v3.1.0 section exists). |
 | `solo-operations.md`'s `.github/MAINTAINERS.md` | ❌ Not a live link — instructive template telling future maintainers what to write; acceptable as-is. |
+
+## Session 283 update — user-facing ops docs audit (MIGRATING-FROM-V2.md, TROUBLESHOOTING.md)
+
+Two remaining never-audited user-facing docs, same "never-verified claims"
+class as s281/s282. Worst finding again contradicts shipped code:
+
+| Finding | Disposition |
+|---|---|
+| "Stratum V1 compatibility. v3 has no V1 fallback" + "v3 is V2-only" — false. V1 dialers are registered (`stratum+tcp://`, `stratum+tls://`; stratumv1.go:516-517) and engine.runSessionV1 is a live path (config.go documents `mining.authorize` for V1 pools). A V1-only-pool user would wrongly conclude they can't migrate. | ✅ Fixed: V1 removed from the "No" list; protocol is per-pool via `pools[].url` scheme; `[stratum_v1]` diff entry clarified. |
+| `releases/latest/download/install.sh` — same dead release-asset URL fixed in README at s281 (404 for everyone). | ✅ Fixed: `raw .../master/install.sh` (verified-200 URL). "verify the signature" → VERIFY.md pointer (signing assets unpublished, s260). |
+| "The `legacy-v2` branch is maintained for security fixes until October 2026" — the branch does not exist on the remote (`git ls-remote --heads`; only v2.x tags exist). Users told to stay on v2.x can receive nothing. | ✅ Fixed (×2): v2.x is EOL with no fixes; legacy-v2 is planned-in-CLAUDE.md but uncreated. CLAUDE.md's governance text left as-is (it describes intent). |
+| "CI: ... cosign signing" — signing assets not published (s260 measured). | ✅ Fixed: dropped from CI claims with VERIFY.md pointer. |
+| `pools[].priority:` listed as a new field — PoolConfig has no `priority` (fields: url/user/password/payout_scheme/tls_ca_file); list order is the failover order. `workers[]:` "per-device worker configuration" — `workers:` is a single `{name}` object, not an array. | ✅ Fixed: `pools[]` ordered list (order = priority), `workers.name`, and added `bitcoin_addresses` (real payout-rotation field missing from the diff). |
+| `--worker-threads` flag — does not exist (run has no thread knob; engine spawns `runtime.NumCPU()` threads per SHA256d device → "flag provided but not defined" exit 64). | ✅ Fixed: taskset/systemd drop-in/affinity guidance (NumCPU honours CPU affinity). |
+| "the `service` option binds Otedama to an idle scheduling class automatically" — generated unit has no Nice/CPUSchedulingPolicy/IOPriority (only ExecStart/Restart/hardening). | ✅ Fixed: `systemctl --user edit otedama` drop-in with CPUQuota/Nice/CPUSchedulingPolicy=idle, noting the unit sets none itself. |
+| `otedama --log-level=debug doctor` — dead command: flags before the subcommand hit "unknown subcommand" (exit 64), and doctor defines no --log-level anyway. | ✅ Fixed: `run --log-level=debug --no-tui` / `OTEDAMA_LOG_LEVEL=debug`; doctor's report is already the full diagnostic. |
+| "first metrics appear after the first successful pool handshake" — engine sets uptime/startTime at engine.Run start, before any dial. | ✅ Fixed: empty /metrics means the engine never started (or --http-addr unset). |
+| `demand.sv2.io` named as an auto-tuning pool — NXDOMAIN (verified). Same class as s280's `demand.fun`. | ✅ Fixed: Braiins Pool vardiff only (didn't fabricate a DEMAND host). |
+| Symptom title quoted `wallet: decrypt seed: invalid passphrase` — real message is `lightning: wallet unlock failed — check your passphrase` (wallet.go:219). | ✅ Fixed. |
+| Reconnect backoff "1s, 2s, 4s, ... up to 64s" | ✅ Verified: reconnectBackoffInitial=1s, ×2, cap=64s (plus pool advisory wait ≤64s from s268 — claim still holds). |
+| "Check `otedama doctor`'s pool latency reading" | ✅ Verified: "Pool reachability" check records per-pool latency (checks.go:323). |
+| `doctor --bitcoin-address`, `run --wallet-passphrase/--dry-run`, `service install/status`, `--http-addr` | ✅ All flags verified to exist. |
+| Renamed fields `payout.address`→`bitcoin_address`, `log.level`→`log_level`, `pool.urls[]`→`pools[].url`; new `data_dir`, `language` | ✅ All yaml tags verified in config.go. |
