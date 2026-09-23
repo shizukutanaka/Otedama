@@ -245,7 +245,14 @@ arXiv grounding (collected sessions 40–41 and here):
    sublinear regret *and* sublinear constraint violation; the right frame
    if Otedama ever optimises yield subject to a hard power cap.
 7. 🔵 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
-8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
+8. 🟡 **Partially resolved — Switching-cost ledger** (session 274 groundwork).
+   The observation half shipped: every stream switch is scored one settle
+   window later against the abandoned stream's current offer and exported as
+   `otedama_arbitration_switch_verdicts_total{verdict}` + realized-gain gauge
+   — the empirical churn rate A2's calibrated `Cost(a,b)` needs. Remaining
+   🔵 (v3.5): persistent per-provider-pair store, downtime/orphan-share
+   accounting, and replacing the fixed hysteresis with
+   `yield_delta * horizon > cost(a,b)` — ADR-010 A2.
 9. 🔵 **Beta-Bernoulli calibration** — ADR-010 A6.
 10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but

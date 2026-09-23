@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 274 — スイッチ判定台帳: 仲裁スイッチが実際に得をしたかを事後採点)
+
+**ADR-010 A2（スイッチングコスト台帳）の観測側を先行実装.** 従来の5%ヒステリシスは
+「スイッチを抑制する」だけで、マージンを抜いたスイッチが**実際に得だったか**を
+記録する経路がなかった。`internal/engine/switchledger.go` はストリームを変えた
+各アサインメントを記録し、一定の settle ウィンドウ（2分）後に、**離れた
+ストリームがそのデバイスに現在提示する単価**と実現イールドを比較して採点する
+——離脱先の現在提示こそ「留まっていた場合の収入」の反実仮想である。
+
+判定は `otedama_arbitration_switch_verdicts_total{verdict}` で公開:
+`paid_off`（実現 ≥ 反実仮想）、`churn`（離れたストリームの方が今も高い
+＝ヒステリシスを抜いたのに損した切替）、`unverifiable`（旧ストリーム消滅で
+比較不能）。直近の判定済み実現ゲインは
+`otedama_arbitration_last_switch_realized_gain_sats_per_second` に出力し、
+ログにも採点を記録する。churn 率が `arbitration_hysteresis_pct` を固定値でなく
+実測に基づき較正するための経験的入力になる（v3.5 の残件: 永続化された
+プロバイダ対コスト表・ダウンタイム/孤児シェア計上・判定式
+`yield_delta * horizon > cost` への置換は ADR-010 A2 スコープとして残置）。
+
+同一プロバイダはデバイス毎に同一 StreamID の複数エントリとして現れるため、
+反実仮想は (stream, device) 単位で評価する——同一IDの最終エントリだけを見ると
+他デバイスの提示が 0 と誤判定され、虚偽の paid_off になる実害を確認済み。
+
+RESEARCH_IMPROVEMENTS Cat 7 #8 を部分解決、ADR-010 A2 に実装ノート追記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

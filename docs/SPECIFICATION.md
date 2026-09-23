@@ -206,6 +206,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_switches_total` | counter | Workload switches (mining ↔ AI). |
 | `arbitration_holds_total` | counter | Better stream existed but hysteresis held. |
 | `arbitration_foregone_sats_per_second` | gauge | Instantaneous opportunity cost of the held allocation. |
+| `arbitration_switch_verdicts_total` | counter | Settled switches by `verdict` (paid_off/churn/unverifiable). |
+| `arbitration_last_switch_realized_gain_sats_per_second` | gauge | Latest switch's realized gain vs the abandoned stream's current offer. |
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |

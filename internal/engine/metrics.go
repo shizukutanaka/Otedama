@@ -191,6 +191,14 @@ type engineMetrics struct {
 	// the device set is bounded to detected hardware so cardinality is safe.
 	sharesFoundPerDeviceMu sync.Mutex
 	sharesFoundPerDevice   map[string]*metrics.Counter
+	// switchVerdicts counts settled arbitration switches by outcome
+	// (otedama_arbitration_switch_verdicts_total{verdict=...}); created lazily.
+	switchVerdictsMu sync.Mutex
+	switchVerdicts   map[string]*metrics.Counter
+	// arbitrationLastSwitchGain is the realized-gain reading of the most recent
+	// settled switch verdict (realized expected yield minus the abandoned
+	// stream's current offer); only set on verifiable verdicts.
+	arbitrationLastSwitchGain *metrics.Gauge
 
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
@@ -248,6 +256,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Total decisions where a higher-yielding stream existed but hysteresis "+
 				"kept the current one. Rising vs switches indicates the hysteresis "+
 				"margin may be too high (yield left on the table).",
+			nil),
+		arbitrationLastSwitchGain: reg.NewGauge(
+			"otedama_arbitration_last_switch_realized_gain_sats_per_second",
+			"Realized gain of the most recent settled arbitration switch: the device's "+
+				"current expected yield minus what the abandoned stream now offers it. "+
+				"Negative means the switch churned yield the hysteresis margin failed to "+
+				"protect. Updated only on verifiable verdicts (paid_off or churn).",
 			nil),
 		arbitrationForegoneSatsPerSec: reg.NewGauge(
 			"otedama_arbitration_foregone_sats_per_second",
@@ -433,6 +448,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		rejectByReason:       make(map[string]*metrics.Counter),
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
+		switchVerdicts:       make(map[string]*metrics.Counter),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -479,6 +495,30 @@ func (m *engineMetrics) touchLastReject(category string, now int64) {
 	}
 	m.lastRejectByReasonMu.Unlock()
 	g.Set(float64(now))
+}
+
+// recordSwitchVerdict counts a settled switch under
+// otedama_arbitration_switch_verdicts_total{verdict=...} and, when the
+// verdict is verifiable (paid_off or churn), updates the realized-gain gauge.
+func (m *engineMetrics) recordSwitchVerdict(v switchVerdict, gain float64) {
+	m.switchVerdictsMu.Lock()
+	c, ok := m.switchVerdicts[string(v)]
+	if !ok {
+		c = m.reg.NewCounter(
+			"otedama_arbitration_switch_verdicts_total",
+			"Settled arbitration switches by outcome: paid_off = realized yield at least "+
+				"matched the abandoned stream's current offer, churn = the abandoned stream "+
+				"now offers more (the switch cost yield), unverifiable = the abandoned stream "+
+				"no longer quotes.",
+			map[string]string{"verdict": string(v)},
+		)
+		m.switchVerdicts[string(v)] = c
+	}
+	m.switchVerdictsMu.Unlock()
+	c.Inc()
+	if v != verdictUnverifiable {
+		m.arbitrationLastSwitchGain.Set(gain)
+	}
 }
 
 // incSharesFoundForDevice increments the per-device shares-found counter

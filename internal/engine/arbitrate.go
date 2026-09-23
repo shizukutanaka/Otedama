@@ -63,6 +63,10 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
 	defer ticker.Stop()
 	var prevAlloc *arbitration.Allocation
+	// pending is the switch-verdict ledger: every assignment that changed
+	// stream is recorded here and scored one switchSettleWindow later
+	// against what the abandoned stream currently offers (session 274).
+	var pending []pendingSwitch
 	// lastQuoteAt records when each stream (keyed as in updateStream) last
 	// received a quote, so stale streams from dead providers can be expired.
 	lastQuoteAt := make(map[string]time.Time)
@@ -148,6 +152,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
 			}
+			pending = settleLedger(pending, alloc, streams, time.Now(), opts.metrics, opts.log)
 			applyAllocation(alloc, opts.workers, opts.log)
 		}
 	}
