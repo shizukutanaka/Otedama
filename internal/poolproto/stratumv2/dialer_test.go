@@ -469,13 +469,16 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 	submitted := make(chan stratum.Frame, 1)
 	go func() {
 		pool.doHandshake(1)
-		// Read the SubmitSharesStandard frame the client sends.
+		// Read the SubmitSharesStandard frame the client sends, then
+		// answer it with a success verdict.
 		f, err := pool.dec.ReadFrame()
 		if err != nil {
 			pool.t.Logf("pool: read submit: %v", err)
 			return
 		}
 		submitted <- f
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSubmitSharesSuccess, true,
+			stratum.SubmitSharesSuccess{ChannelID: 1, LastSequenceNumber: 1})
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
@@ -494,13 +497,22 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 	if !result.Accepted {
-		t.Error("Submit provisional result should be Accepted=true")
+		t.Error("Submit verdict should be Accepted=true")
 	}
 
 	select {
 	case f := <-submitted:
 		if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
 			t.Errorf("pool received MsgType 0x%02X, want 0x%02X", f.Header.MsgType, stratum.MsgSubmitSharesStandard)
+		}
+		// The submit must carry sequence_number 1 (previously
+		// hardcoded 0) so the pool's verdicts can correlate.
+		ss, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+		if err != nil {
+			t.Fatalf("decode SubmitSharesStandard: %v", err)
+		}
+		if ss.SequenceNumber != 1 {
+			t.Errorf("SubmitSharesStandard.SequenceNumber = %d, want 1", ss.SequenceNumber)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("pool did not receive SubmitSharesStandard within 2s")
@@ -1053,5 +1065,157 @@ func TestDialTCP_RespectsCancelledContext(t *testing.T) {
 	cancel()
 	if _, err := dialTCP(ctx, "192.0.2.1:3333"); err == nil {
 		t.Fatal("dialTCP succeeded with a cancelled context")
+	}
+}
+
+// TestSession_Submit_SharesErrorVerdict checks that a pool's
+// SubmitSharesError is correlated back to the submit's sequence number
+// and surfaced as the ShareResult reason.
+func TestSession_Submit_SharesErrorVerdict(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		f, err := pool.dec.ReadFrame()
+		if err != nil {
+			pool.t.Logf("pool: read submit: %v", err)
+			return
+		}
+		ss, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+		if err != nil {
+			pool.t.Logf("pool: decode submit: %v", err)
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSubmitSharesError, true,
+			stratum.SubmitSharesError{ChannelID: 1, SequenceNumber: ss.SequenceNumber, Error: "stale-share"})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	result, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "7", Nonce: 1})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if result.Accepted {
+		t.Error("rejected share should report Accepted=false")
+	}
+	if result.Reason != "stale-share" {
+		t.Errorf("ShareResult.Reason = %q, want %q", result.Reason, "stale-share")
+	}
+}
+
+// TestSession_Submit_ContextExpiry_Provisional checks that when no
+// verdict arrives before the submit context expires, Submit returns the
+// documented provisional result (submitted but unconfirmed) rather than
+// blocking forever.
+func TestSession_Submit_ContextExpiry_Provisional(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	go func() {
+		pool.doHandshake(1)
+		// Read and discard the submit frame; never answer it.
+		_, _ = pool.dec.ReadFrame()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	subCtx, subCancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer subCancel()
+	result, err := sess.Submit(subCtx, poolproto.ShareSubmission{JobID: "9", Nonce: 2})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !result.Accepted {
+		t.Error("unconfirmed share should report the provisional Accepted=true")
+	}
+}
+
+// TestSession_Submit_ConnCloseDrainsPending checks that closing the
+// connection resolves an in-flight submit instead of hanging it.
+func TestSession_Submit_ConnCloseDrainsPending(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	go func() {
+		pool.doHandshake(1)
+		// Read the submit, then drop the connection without a verdict.
+		_, _ = pool.dec.ReadFrame()
+		pool.conn.Close()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	result, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "5", Nonce: 3})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if result.Accepted || result.Reason == "" {
+		t.Errorf("closed-connection submit should report Accepted=false with a reason, got %+v", result)
+	}
+}
+
+// TestSession_SetTarget_UpdatesSuggestedDifficulty checks that a pool's
+// SetTarget frame updates SuggestedDifficulty from the U256 max_target.
+func TestSession_SetTarget_UpdatesSuggestedDifficulty(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		// Assign the difficulty-1 target (nBits 0x1d00ffff equivalent)
+		// as the share target: diff1Target = 0xffff << 208.
+		var target [32]byte
+		target[26], target[27] = 0xff, 0xff
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetTarget, true,
+			stratum.SetTarget{ChannelID: 1, MaxTarget: target})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if got := sess.SuggestedDifficulty(); got != 0 {
+			if math.Abs(got-1.0) > 1e-9 {
+				t.Fatalf("SuggestedDifficulty() = %v, want 1.0 (diff1 target)", got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("SuggestedDifficulty() stayed 0 after SetTarget")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

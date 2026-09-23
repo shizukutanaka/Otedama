@@ -467,3 +467,39 @@ func TestTargetFromNBits_OverflowReturnsError(t *testing.T) {
 		t.Error("TargetFromNBits with overflow exponent should return error")
 	}
 }
+
+// ----- DifficultyFromTarget -----
+
+func TestDifficultyFromTarget_GenesisIsOne(t *testing.T) {
+	// The genesis target (diff1Target, nBits 0x1d00ffff) is difficulty 1
+	// by definition.
+	genesis, err := TargetFromNBits(0x1d00ffff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := DifficultyFromTarget(genesis); d != 1.0 {
+		t.Errorf("DifficultyFromTarget(genesis) = %v, want 1.0", d)
+	}
+}
+
+func TestDifficultyFromTarget_RoundtripsTargetFromDifficulty(t *testing.T) {
+	// Converting a difficulty to a target and back must recover the
+	// difficulty within float64 noise, for both sub-1 (share) and
+	// super-1 difficulties.
+	for _, want := range []float64{0.001, 1.0, 4096.0} {
+		target, err := TargetFromDifficulty(want)
+		if err != nil {
+			t.Fatalf("TargetFromDifficulty(%v): %v", want, err)
+		}
+		got := DifficultyFromTarget(target)
+		if rel := math.Abs(got-want) / want; rel > 1e-9 {
+			t.Errorf("DifficultyFromTarget(TargetFromDifficulty(%v)) = %v (rel err %v)", want, got, rel)
+		}
+	}
+}
+
+func TestDifficultyFromTarget_ZeroIsInfinite(t *testing.T) {
+	if d := DifficultyFromTarget(Hash{}); !math.IsInf(d, 1) {
+		t.Errorf("DifficultyFromTarget(zero) = %v, want +Inf", d)
+	}
+}

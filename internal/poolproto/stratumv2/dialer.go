@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
@@ -143,10 +144,20 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 
 	sess := &session{
-		conn:   conn,
-		dec:    dec,
-		chanID: msg.OpenMiningChannelSuccess.ChannelID,
-		jobsCh: make(chan poolproto.Job, 8),
+		conn:    conn,
+		dec:     dec,
+		chanID:  msg.OpenMiningChannelSuccess.ChannelID,
+		jobsCh:  make(chan poolproto.Job, 8),
+		pending: make(map[uint32]chan poolproto.ShareResult),
+	}
+	// Seed the suggested difficulty from the channel's initial target
+	// when the pool assigned one; subsequent SetTarget frames update it.
+	// A zero target means "unset" (SRI v1.5.0 lesson: it is unusable),
+	// so leave SuggestedDifficulty at its documented zero default.
+	var zeroTarget [32]byte
+	if msg.OpenMiningChannelSuccess.Target != zeroTarget {
+		sess.diff.Store(math.Float64bits(
+			miner.DifficultyFromTarget(miner.Hash(msg.OpenMiningChannelSuccess.Target))))
 	}
 	sess.start(ctx)
 	return sess, nil
@@ -186,6 +197,16 @@ type session struct {
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
+	// seq issues the SV2 sequence_number each submit carries so the
+	// pool's SubmitSharesSuccess/Error frames can be correlated back to
+	// their request. pending holds a buffered result chan per in-flight
+	// sequence number; the read loop resolves them as verdicts arrive
+	// (request/response correlation, replacing the previous fire-and-
+	// forget submit that hardcoded sequence_number=0).
+	seq       atomic.Uint32
+	pending   map[uint32]chan poolproto.ShareResult
+	pendingMu sync.Mutex
+
 	startOnce sync.Once
 }
 
@@ -200,23 +221,26 @@ func (s *session) start(ctx context.Context) {
 
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
-	// SV2 job/tip state, mirroring the engine's inline loop: a job is
-	// emittable only once both NewMiningJob (merkle root + version) and
-	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
-	// (no min_ntime) wait for the SetNewPrevHash that names them.
-	pending := make(map[uint32]*stratum.NewMiningJob)
-	var prevHash [32]byte
-	var prevNBits uint32
-	havePrev := false
+	defer func() {
+		// Unblock every in-flight submit so callers aren't left waiting
+		// for a verdict that will never arrive.
+		s.pendingMu.Lock()
+		defer s.pendingMu.Unlock()
+		for seq, ch := range s.pending {
+			ch <- poolproto.ShareResult{Accepted: false, Reason: "connection closed"}
+			delete(s.pending, seq)
+		}
+	}()
+	tip := newTipState()
 
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
 			JobID:      fmt.Sprintf("%d", j.JobID),
 			Version:    j.Version,
-			PrevHash:   prevHash,
+			PrevHash:   tip.prevHash,
 			MerkleRoot: j.MerkleRoot,
 			NTime:      ntime,
-			NBits:      prevNBits,
+			NBits:      tip.prevNBits,
 			CleanJobs:  clean,
 			ReceivedAt: time.Now(),
 		}
@@ -240,54 +264,122 @@ func (s *session) readLoop(ctx context.Context) {
 		if err != nil {
 			continue // skip undecodable frame, keep reading
 		}
-		if msg.NewMiningJob != nil {
-			j := msg.NewMiningJob
-			pending[j.JobID] = j
-			if j.HasMinNtime && havePrev {
-				if !emit(j, j.MinNtime, false) {
-					return
-				}
-			}
-			// Future job (or no tip yet): held until SetNewPrevHash.
-		}
-		if msg.SetNewPrevHash != nil {
-			p := msg.SetNewPrevHash
-			prevHash = p.PrevHash
-			prevNBits = p.NBits
-			havePrev = true
-			named := pending[p.JobID]
-			pending = map[uint32]*stratum.NewMiningJob{}
-			if named != nil {
-				pending[p.JobID] = named
-				ntime := p.MinNtime
-				if named.HasMinNtime && named.MinNtime > ntime {
-					ntime = named.MinNtime
-				}
-				if !emit(named, ntime, true) {
-					return
-				}
+		if j, ntime, clean := tip.feed(&msg); j != nil {
+			if !emit(j, ntime, clean) {
+				return
 			}
 		}
-		// Note: SetTarget (share difficulty) has no carrier on
-		// poolproto.Job; the engine's inline V2 loop handles it. This
-		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
+		if msg.SetTarget != nil {
+			s.applySetTarget(msg.SetTarget.MaxTarget)
+		}
+		if msg.SubmitSharesSuccess != nil {
+			s.resolveSubmits(msg.SubmitSharesSuccess.LastSequenceNumber)
+		}
+		if msg.SubmitSharesError != nil {
+			s.rejectSubmit(msg.SubmitSharesError)
+		}
+	}
+}
+
+// tipState tracks SV2 job/tip state for the read loop, mirroring the
+// engine's inline loop: a job is emittable only once both NewMiningJob
+// (merkle root + version) and SetNewPrevHash (prev-hash + nBits + ntime)
+// are known. Future jobs (no min_ntime) wait for the SetNewPrevHash that
+// names them.
+type tipState struct {
+	pending   map[uint32]*stratum.NewMiningJob
+	prevHash  [32]byte
+	prevNBits uint32
+	havePrev  bool
+}
+
+func newTipState() *tipState {
+	return &tipState{pending: make(map[uint32]*stratum.NewMiningJob)}
+}
+
+// feed consumes one decoded message and returns the job to emit, if
+// any: NewMiningJob emits immediately when it carries min_ntime and a
+// tip is known, otherwise it is held; SetNewPrevHash clears stale jobs
+// and emits the named one as a clean job.
+func (t *tipState) feed(msg *stratum.Message) (job *stratum.NewMiningJob, ntime uint32, clean bool) {
+	if msg.NewMiningJob != nil {
+		j := msg.NewMiningJob
+		t.pending[j.JobID] = j
+		if j.HasMinNtime && t.havePrev {
+			return j, j.MinNtime, false
+		}
+		return nil, 0, false
+	}
+	if msg.SetNewPrevHash != nil {
+		p := msg.SetNewPrevHash
+		t.prevHash = p.PrevHash
+		t.prevNBits = p.NBits
+		t.havePrev = true
+		named := t.pending[p.JobID]
+		t.pending = map[uint32]*stratum.NewMiningJob{}
+		if named == nil {
+			return nil, 0, false
+		}
+		t.pending[p.JobID] = named
+		ntime = p.MinNtime
+		if named.HasMinNtime && named.MinNtime > ntime {
+			ntime = named.MinNtime
+		}
+		return named, ntime, true
+	}
+	return nil, 0, false
+}
+
+// applySetTarget records the pool's new share target as the suggested
+// difficulty so SuggestedDifficulty reflects it.
+func (s *session) applySetTarget(maxTarget [32]byte) {
+	s.diff.Store(math.Float64bits(
+		miner.DifficultyFromTarget(miner.Hash(maxTarget))))
+}
+
+// resolveSubmits accepts every in-flight submit with sequence number up
+// to last: a SubmitSharesSuccess ack covers all of them.
+func (s *session) resolveSubmits(last uint32) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	for seq, ch := range s.pending {
+		if seq <= last {
+			ch <- poolproto.ShareResult{Accepted: true}
+			delete(s.pending, seq)
+		}
+	}
+}
+
+// rejectSubmit fails the in-flight submit a SubmitSharesError names.
+func (s *session) rejectSubmit(e *stratum.SubmitSharesError) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	if ch, ok := s.pending[e.SequenceNumber]; ok {
+		ch <- poolproto.ShareResult{Accepted: false, Reason: e.Error}
+		delete(s.pending, e.SequenceNumber)
 	}
 }
 
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 
-// Submit sends a share upstream. The verdict is read by the engine's
-// frame loop today; this adapter performs a best-effort synchronous
-// submit and returns a provisional accepted result (the authoritative
-// accept/reject arrives asynchronously via SubmitSharesSuccess/Error
-// frames, which the engine already handles). When the full integration
-// lands, this becomes a request/response correlation.
+// Submit sends a share upstream and waits for the pool's verdict: each
+// submit carries a monotonically increasing sequence_number, and the
+// read loop resolves the matching SubmitSharesSuccess (acked by
+// last_sequence_number) or SubmitSharesError (matched by
+// sequence_number). When ctx expires the share is considered submitted
+// but unconfirmed — the provisional result is Accepted=true, per the
+// Session contract.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	jobID := parseJobID(sub.JobID)
+	n := s.seq.Add(1)
+	resultCh := make(chan poolproto.ShareResult, 1)
+	s.pendingMu.Lock()
+	s.pending[n] = resultCh
+	s.pendingMu.Unlock()
 	ss := stratum.SubmitSharesStandard{
 		ChannelID:      s.chanID,
-		SequenceNumber: 0,
+		SequenceNumber: n,
 		JobID:          jobID,
 		Nonce:          sub.Nonce,
 		NTime:          sub.NTime,
@@ -297,9 +389,20 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	// be set in the frame header (the engine's inline path already does
 	// this; the two paths previously disagreed).
 	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
+		s.pendingMu.Lock()
+		delete(s.pending, n)
+		s.pendingMu.Unlock()
 		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: submit share: %w", err)
 	}
-	return poolproto.ShareResult{Accepted: true}, nil
+	select {
+	case res := <-resultCh:
+		return res, nil
+	case <-ctx.Done():
+		s.pendingMu.Lock()
+		delete(s.pending, n)
+		s.pendingMu.Unlock()
+		return poolproto.ShareResult{Accepted: true}, nil
+	}
 }
 
 // SuggestedDifficulty returns the current target difficulty.

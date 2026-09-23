@@ -246,6 +246,29 @@ func TargetFromDifficulty(difficulty float64) (Hash, error) {
 	return out, nil
 }
 
+// DifficultyFromTarget converts a 32-byte share target (little-endian,
+// MSB at [31] — the order TargetFromNBits/TargetFromDifficulty produce
+// and SV2's U256 fields carry) back into the Stratum share difficulty it
+// encodes: difficulty = diff1Target / target. It is the inverse of
+// TargetFromDifficulty, used when a pool communicates targets as U256s
+// (SetTarget / OpenMiningChannelSuccess) and the caller needs the
+// difficulty number for SuggestedDifficulty-style reporting. A zero or
+// negative target returns +Inf.
+func DifficultyFromTarget(h Hash) float64 {
+	var be [32]byte
+	for i := 0; i < 32; i++ {
+		be[i] = h[31-i]
+	}
+	t := new(big.Int).SetBytes(be[:])
+	if t.Sign() <= 0 {
+		return math.Inf(1)
+	}
+	d := new(big.Float).SetPrec(256).SetInt(diff1Target)
+	d.Quo(d, new(big.Float).SetPrec(256).SetInt(t))
+	f, _ := d.Float64()
+	return f
+}
+
 // MeetsTarget reports whether the given hash value meets the difficulty
 // target represented by nBits.
 func MeetsTarget(hash Hash, nBits uint32) (bool, error) {

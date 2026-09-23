@@ -87,8 +87,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
-   `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
+8. 🟡 **engine→poolproto wiring** — partially resolved (session 283).
+   The `poolproto/stratumv2` adapter is now a complete drop-in Session:
+   Submit carries a real monotonically increasing `sequence_number` and
+   blocks for the pool's verdict (SubmitSharesSuccess acks all seqs ≤
+   `last_sequence_number`; SubmitSharesError matches by seq; ctx expiry
+   returns the documented provisional result), `SetTarget` frames update
+   `SuggestedDifficulty` (new `miner.DifficultyFromTarget` inverse), and
+   the channel's initial target seeds it. Remaining gap is only the
+   engine-side switch-over: V2 URLs still run the inline handshake path
+   (KNOWN_LIMITATIONS §3).
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only

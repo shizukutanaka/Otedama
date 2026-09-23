@@ -138,6 +138,12 @@ continue to use the existing inline `handshake` path.
   (`mining.subscribe` + `mining.authorize`); `runSessionV1` added to engine;
   blank import registers the V1 dialer. The `poolproto` abstraction is now
   load-bearing for V1 connections at runtime.
+- 🟡 Step 3c (session 283): the V2 adapter is now a complete Session —
+  Submit performs sequence-number request/response correlation against
+  `SubmitSharesSuccess`/`Error` frames (previously hardcoded 0 and the
+  verdicts were dropped), and `SetTarget`/initial channel target feed
+  `SuggestedDifficulty` via `miner.DifficultyFromTarget`. Only the
+  engine-side switch-over for V2 URLs remains.
 
 ---
 

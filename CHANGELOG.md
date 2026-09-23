@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 283 — poolproto V2 サブミット判定相関)
+
+- **`poolproto/stratumv2` アダプタの Submit をリクエスト/レスポンス相関に
+  完成** — 従来 `sequence_number` が 0 固定で、プールの
+  `SubmitSharesSuccess`/`Error` フレームは read loop が破棄していたため、
+  アダプタ経由ではシェア判定が一切返せなかった。提出毎に単調増加の
+  sequence_number を採番し、成功 ack（`last_sequence_number` までの全
+  seq を受理）とエラー（`sequence_number` 一致）を待機中の呼出しへ配送。
+  ctx 期限切れは契約どおり「提出済み・未確認」の暫定結果を返し、接続
+  断は全 pending を `connection closed` で解決。
+- **`SetTarget` が `SuggestedDifficulty` に反映** — 従来難易度フィールドは
+  一度も更新されず常に 0 を返していた。チャネルオープン時の初期
+  target（ゼロは「未設定」として扱い種付けしない）と後続 `SetTarget`
+  フレームから U256 ターゲットを難易度へ変換。変換のため
+  `miner.DifficultyFromTarget`（`TargetFromDifficulty` の逆関数、
+  diff1Target/目標値の big.Float 除算）を新設。
+- read loop のジョブ/チップ状態機械を `tipState` 型へ抽出（振る舞い不変）。
+  アダプタは依然ライブ経路ではなく（KNOWN_LIMITATIONS §3：V2 URL は
+  インライン handshake 経路）、今回でドロップインに必要な契約が揃った。
+
 ### Fixed (session 282 — OpenStandardMiningChannel max_target 必須フィールド)
 
 - **SV2 `OpenMiningChannel` のエンコードが仕様必須の `max_target`（U256）
