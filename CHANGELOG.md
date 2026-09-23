@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 292 — provider/httpserver コード監査)
+
+- **`internal/provider`: マイニングクォートの confidence がBTCレート
+  鮮度に（誤って）連動**: sats/s のマイニング収益はハッシュレート占有率
+  ×ブロック報酬の純BTC量で、法定通貨レートを一切使わないのに、レート
+  取得の鮮度で confidence を 0.7/0.95 に変動させ、`_ = rate` の未使用
+  フェッチまで残っていた — レート障害時に価格非依存のクォートが不当に
+  減点される設計ミス。定数 confidence=0.85（静的推定値由来の不確実性を
+  反映）に修正し、dead fetch と `rates` フィールドを除去（コンストラクタ
+  シグネチャは互換維持、`_ RateSource`）。`DefaultHashrates` を実際に
+  フォールバックで使用するよう統合（以前は未使用の「exported for tests」
+  だった）。
+- **`internal/httpserver`: `--pprof` 有効時、WriteTimeout=10s が CPU
+  プロファイル（デフォルト ?seconds=30）・trace を途中切断**: pprof
+  マウント時のみ 120s に引上げ。SetReady の doc 記述も /readyz 契約
+  （ジョブ受領・ハッシュ生成を要件としない）と矛盾していたため訂正。
+- 検証済みクリーン: pollingProvider の start/stop/二重起動拒否/
+  sendQuote の drop-oldest、AkashProvider の GPU フィルタ＋20%fee＋
+  preemption risk=0.15 プレースホルダ、httpserver の healthz/readyz/
+  metrics/index 各ハンドラ、ServeError 露出、KeepAlive/sc.exe 系
+  ハードニング。
+
 ### Fixed (session 291 — 非有限レートのメジアン混入 + ホットループの原子加算)
 
 - **`internal/rates`: NaN が sanity 帯域を素通りしメジアンを汚染**:

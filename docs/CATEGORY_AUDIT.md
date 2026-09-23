@@ -1017,3 +1017,13 @@ roll-up sections and older items were never re-synced as code shipped.
 | CoinbaseHash/MerkleRootFromCoinbase (V1 merkle fold), TargetFromNBits/NBitsFromTarget/TargetFromDifficulty, Fetcher single-flight/skew/source-health | ✅ Verified clean — no defects. |
 | Deadcode on changed pkgs: ParseHeader/Hash.String/NBitsFromTarget/MeetsTarget/HasWork | Pre-existing exported API surface, not introduced by this change — baseline. |
 | golangci-lint 1.64.8 cannot decode go1.25.7 export data (v4>v2) — toolchain-level environment constraint; `go vet` clean on changed pkgs | Recorded (not a new finding). |
+
+## Session 292 update — internal/provider + internal/httpserver audit
+
+| Finding | Disposition |
+|---|---|
+| MiningProvider confidence tied to BTC-rate freshness (0.7/0.95) although sats/s yield never uses the rate — a rate outage silently downweighted a price-independent quote; `_ = rate` dead fetch left behind | ✅ Constant confidence=0.85; dead fetch + `rates` field removed (`_ RateSource` keeps ctor signature); DefaultHashrates actually used for fallback |
+| `--pprof`: WriteTimeout=10s truncates CPU profile (?seconds=30) and trace captures | ✅ Raised to 120s only when pprof mounted; SetReady doc aligned to /readyz contract |
+| pollingProvider lifecycle (double-start reject, stop/restart channel swap, drop-oldest sendQuote) | ✅ Verified clean for single start/stop usage (engine pattern); restart-after-Stop channel swap noted as latent design limit |
+| AkashProvider: GPU filter, 20% fee netting, preemption risk 0.15 placeholder, "(simulated)" name suffix | ✅ Verified clean and honest |
+| httpserver handlers (healthz/readyz/metrics/index), ServeError, timeouts besides WriteTimeout | ✅ Verified clean |

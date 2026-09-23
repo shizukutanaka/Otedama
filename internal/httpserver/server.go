@@ -93,12 +93,20 @@ func New(addr string, registry *metrics.Registry, enablePprof bool) *Server {
 	}
 	mux.HandleFunc("/", s.handleIndex)
 
+	writeTimeout := 10 * time.Second
+	if enablePprof {
+		// pprof profile/trace endpoints legitimately stream for tens of
+		// seconds (CPU profile defaults to ?seconds=30; a 10s ceiling
+		// silently truncates captures). Raise only when pprof is mounted,
+		// and only to a bound that still limits abuse on the other routes.
+		writeTimeout = 120 * time.Second
+	}
 	s.httpSrv = &http.Server{
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second, // slowloris mitigation
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      writeTimeout,
 		IdleTimeout:       60 * time.Second,
 	}
 	return s
@@ -140,8 +148,9 @@ func (s *Server) Stop() error {
 	return s.httpSrv.Shutdown(ctx)
 }
 
-// SetReady marks the server as ready. Called by the engine after pool
-// connection succeeds and workers start producing hashes.
+// SetReady marks the server as ready. Called by the engine once the
+// pool session is established (per the /readyz contract above: not
+// gated on a job having been received or a hash produced).
 func (s *Server) SetReady(ready bool) {
 	s.ready.Store(ready)
 }

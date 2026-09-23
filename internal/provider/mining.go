@@ -25,7 +25,6 @@ type MiningProvider struct {
 	pollingProvider
 	id      string
 	poolURL string
-	rates   RateSource
 	devices []hal.Device
 
 	// HashrateFunc, if non-nil, is called with each device's ID during
@@ -41,7 +40,10 @@ type MiningProvider struct {
 }
 
 // NewMiningProvider creates a provider for a single Stratum V2 pool.
-func NewMiningProvider(poolURL string, rates RateSource) *MiningProvider {
+// The rates argument is retained for signature stability and a future
+// USD-display path — the mining yield itself (sats/s = hashrate share ×
+// block reward) is BTC-price-independent and does not consult it.
+func NewMiningProvider(poolURL string, _ RateSource) *MiningProvider {
 	return &MiningProvider{
 		pollingProvider: pollingProvider{
 			quoteCh:  make(chan Quote, 16),
@@ -49,7 +51,6 @@ func NewMiningProvider(poolURL string, rates RateSource) *MiningProvider {
 		},
 		id:      "mining.stratum",
 		poolURL: poolURL,
-		rates:   rates,
 	}
 }
 
@@ -66,17 +67,17 @@ func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error 
 //     HashrateFunc is set and returns > 0; otherwise a static per-family
 //     estimate (ASIC/GPU/CPU). See docs/KNOWN_LIMITATIONS.md §7.
 //   - Network hashrate: a compile-time constant estimate (not configurable).
-//   - Current BTC price from RateSource (freshness drives the confidence).
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
+//
+// Note the BTC/USD rate does NOT feed this quote: mining yield in sats/s
+// is hashrate-share × block-reward — a pure BTC quantity, so a rate outage
+// must not degrade this quote's confidence (the fiat price only matters
+// for USD display and for converting fiat-denominated yields like Akash's,
+// which is why AkashProvider does consult the rate).
 func (p *MiningProvider) publish(ctx context.Context) {
-	rate, fresh := p.rates.BTCUSDRate()
-	if rate <= 0 {
-		rate = 95000 // fallback estimate
-	}
-	confidence := 0.7
-	if fresh {
-		confidence = 0.95
-	}
+	// Confidence reflects the static-estimate inputs (compile-time network
+	// hashrate, per-family fallback hashrate), not external feed health.
+	const confidence = 0.85
 
 	// Network hashrate estimate: ~1000 EH/s in 2026. This is a compile-time
 	// constant, not yet driven by config or a live difficulty feed.
@@ -97,14 +98,7 @@ func (p *MiningProvider) publish(ctx context.Context) {
 			deviceHashrate = p.HashrateFunc(dev.Identity().ID)
 		}
 		if deviceHashrate <= 0 {
-			switch dev.Identity().Family {
-			case hal.FamilyASIC:
-				deviceHashrate = 100e12 // ~100 TH/s (Antminer S21)
-			case hal.FamilyGPU:
-				deviceHashrate = 1.5e9 // ~1.5 GH/s (RTX 4090 SHA256d)
-			default:
-				deviceHashrate = 10e6 // ~10 MH/s (CPU)
-			}
+			deviceHashrate = DefaultHashrates[dev.Identity().Family]
 		}
 
 		// Expected BTC per second:
@@ -126,7 +120,6 @@ func (p *MiningProvider) publish(ctx context.Context) {
 				Confidence:       confidence,
 			},
 		}
-		_ = rate // used for future USD display
 		if !p.sendQuote(ctx, q) {
 			return
 		}
@@ -136,7 +129,13 @@ func (p *MiningProvider) publish(ctx context.Context) {
 // Ensure *MiningProvider satisfies Provider.
 var _ Provider = (*MiningProvider)(nil)
 
-// ----- Default device hashrate families (exported for tests) -----
+// ----- Default device hashrate families -----
+//
+// Static per-family hashrate estimates used when no live measurement is
+// available (HashrateFunc unset or returning <= 0). ASIC ~100 TH/s
+// (Antminer S21), GPU ~1.5 GH/s (RTX 4090 SHA256d, forward-looking —
+// GPUs currently report SHA256d=false and are skipped above), CPU
+// ~10 MH/s.
 var DefaultHashrates = map[hal.Family]float64{
 	hal.FamilyASIC: 100e12,
 	hal.FamilyGPU:  1.5e9,
