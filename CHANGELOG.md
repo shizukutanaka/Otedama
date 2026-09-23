@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 269 — 非有限イールドが裁定エンジンを汚染)
+
+プロバイダの異常な値が裁定に侵入していた2箇所を防御。
+① `Decide` の `< 0` バリデーションは NaN を素通り（NaN < 0 は false）
+— `MinYieldSatsPerSec=NaN` でフロアが静かに無効化、
+`HysteresisMargin=NaN` でスイッチ閾値が NaN 化しヒステリシス喪失。
+有限性（NaN/±Inf）を要求するよう強化。② `chooseForDevice` の
+`y <= 0` フィルタも NaN を素通り — 孤立 NaN ストリームがデバイスを
+獲得し ExpectedYield=NaN がメトリクスへ伝播、+Inf ストリームは
+全競合に無条件勝利。非有限クォートを非正値と同列に棄却。
+併せて CLAUDE.md が要求する裁定エンジンのプロパティテストを
+`FuzzDecide` として実装（devices/streams/policy/margins/前回
+アロケーションをファズ入力から構築 — 確定性・割当=デバイス数・
+家族適合・フロア遵守・ExpectedYield 有限・Held⇒前回継続・
+Foregone≥0・TotalYield=Σ を不変条件として検査）。6.7M execs 無
+クラッシュ。テスト2本追加。CATEGORY_AUDITに session-269 追記。
+
 ### Fixed (session 268 — V1 `client.reconnect` の advisory wait を再接続ループが実際に尊重)
 
 `client.reconnect`/`mining.reconnect` がパースした指示

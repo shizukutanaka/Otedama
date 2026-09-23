@@ -635,3 +635,27 @@ All 24 packages build, vet, and test green.
 Tests: `TestSession_LastReconnectWait_FalseBeforeDirective`, `LastReconnectWait` assertion in the client.reconnect e2e, `TestRunSessionV1_RecordsPoolReconnectWait` (in-process pool sends a 42s directive).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 269 update — arbitration non-finite hardening + property test
+
+| Finding | Disposition |
+|---|---|
+| `Decide`'s `< 0` validation let `NaN` through (`NaN < 0` is false): `MinYieldSatsPerSec=NaN` silently disabled the profitability floor (`y < NaN` is false for all y), `HysteresisMargin=NaN` made every switch threshold NaN so hysteresis was silently lost. | ✅ Fixed: both fields now require finite non-negative values (error on NaN/±Inf/negative). |
+| `chooseForDevice`'s `y <= 0` filter let `NaN` through the same way — a lone NaN-quoting stream won the device and put `ExpectedYield=NaN` into the allocation (propagates to `TotalYield` and the metrics writer), while a `+Inf` quote beat every real stream unconditionally. | ✅ Fixed: non-finite quotes are rejected alongside non-positive yields; device idles rather than run a garbage quote. |
+| `mining.set_extranonce` mutates `session.extranonce1`/`extranonce2Size` from the read loop while `Submit` reads them — data race + stale-extranonce share-invalidating semantic gap. | ⏭ Not a defect to claim — already fixed by parallel session (devin branch `setextranonce-race`, atomic.Int32 + en2 rotation); verified its diff before claiming. |
+| V1 job-ID string↔uint32 map unbounded growth | ⏭ Not a defect — already bounded at `v1JobIDMapCap=1024` with paired-map reset (session 262's pattern, pre-existing). |
+
+Also implemented the property-test requirement CLAUDE.md places on the
+arbitration engine: `FuzzDecide` decodes devices/streams/policy/margins/
+previous-allocation from fuzz bytes (wild `Float64frombits` scalars so
+NaN/±Inf actually reach the engine) and asserts the documented
+invariants — determinism, one assignment per device, family acceptance,
+floor compliance, finite `ExpectedYield`, `Held` ⇒ previous stream,
+`ForegoneSatsPerSec ≥ 0`, `TotalYield = Σ`. 6.7M execs, no crash.
+
+Tests: `FuzzDecide`, `TestDecide_RejectsNonFiniteMargins`,
+`TestDecide_NonFiniteYieldNeverAssigned`.
+
+All 24 packages build, vet, and test green.

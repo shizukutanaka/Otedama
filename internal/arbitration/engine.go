@@ -302,11 +302,11 @@ func Decide(in Input) (*Allocation, error) {
 	if !in.Policy.Valid() {
 		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
 	}
-	if in.HysteresisMargin < 0 {
-		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
+	if math.IsNaN(in.HysteresisMargin) || math.IsInf(in.HysteresisMargin, 0) || in.HysteresisMargin < 0 {
+		return nil, errors.New("arbitration: HysteresisMargin must be finite and non-negative")
 	}
-	if in.MinYieldSatsPerSec < 0 {
-		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
+	if math.IsNaN(in.MinYieldSatsPerSec) || math.IsInf(in.MinYieldSatsPerSec, 0) || in.MinYieldSatsPerSec < 0 {
+		return nil, errors.New("arbitration: MinYieldSatsPerSec must be finite and non-negative")
 	}
 
 	// Reject duplicate device IDs up front, since silently ignoring
@@ -377,7 +377,12 @@ func chooseForDevice(
 			continue
 		}
 		y := s.YieldFor(dev.Identity.ID).Effective()
-		if y <= 0 {
+		// Non-finite quotes from a misbehaving provider must not reach
+		// arbitration: NaN slips past every comparison below (y<=0,
+		// floor, sort, threshold) and would land in ExpectedYield and
+		// metrics, while +Inf wins every contest unconditionally.
+		// Reject them alongside non-positive yields.
+		if math.IsNaN(y) || math.IsInf(y, 0) || y <= 0 {
 			continue
 		}
 		if y < minYield {

@@ -5,6 +5,7 @@ package arbitration
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -1468,5 +1469,86 @@ func TestDecide_PreemptionRiskDoesNotMakeIncumbentSticky(t *testing.T) {
 	if alloc.Assignments[0].Stream != "mining.braiins" {
 		t.Errorf("interruptible incumbent was sticky: +12%% gain kept it over 10%% margin; got %q",
 			alloc.Assignments[0].Stream)
+	}
+}
+
+// ----- Non-finite input hardening (session 269) -----
+
+func TestDecide_RejectsNonFiniteMargins(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	base := Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{{
+			ID:              "mining.braiins",
+			AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+			DefaultYield:    Yield{SatsPerSecond: 1, Confidence: 1},
+		}},
+		Policy: PolicyMaximizeEarnings,
+	}
+	for name, in := range map[string]Input{
+		"NaN hysteresis":      {Devices: base.Devices, Streams: base.Streams, Policy: base.Policy, HysteresisMargin: math.NaN()},
+		"+Inf hysteresis":     {Devices: base.Devices, Streams: base.Streams, Policy: base.Policy, HysteresisMargin: math.Inf(1)},
+		"NaN minYield":        {Devices: base.Devices, Streams: base.Streams, Policy: base.Policy, MinYieldSatsPerSec: math.NaN()},
+		"+Inf minYield":       {Devices: base.Devices, Streams: base.Streams, Policy: base.Policy, MinYieldSatsPerSec: math.Inf(1)},
+		"negative hysteresis": {Devices: base.Devices, Streams: base.Streams, Policy: base.Policy, HysteresisMargin: -0.1},
+		"negative minYield":   {Devices: base.Devices, Streams: base.Streams, Policy: base.Policy, MinYieldSatsPerSec: -1},
+	} {
+		if _, err := Decide(in); err == nil {
+			t.Errorf("%s: Decide must reject non-finite/negative margins", name)
+		}
+	}
+	// NaN would previously slip past `< 0` and silently disable the check.
+	if _, err := Decide(base); err != nil {
+		t.Fatalf("valid baseline input must not error: %v", err)
+	}
+}
+
+func TestDecide_NonFiniteYieldNeverAssigned(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	nanStream := Stream{
+		ID:              "ai.nan",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		// NaN * anything = NaN — the quote is garbage end-to-end.
+		DefaultYield: Yield{SatsPerSecond: math.NaN(), Confidence: 1},
+	}
+	infStream := Stream{
+		ID:              "ai.inf",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		DefaultYield:    Yield{SatsPerSecond: math.Inf(1), Confidence: 1},
+	}
+	realStream := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		DefaultYield:    Yield{SatsPerSecond: 1, Confidence: 1},
+	}
+
+	// With only a NaN-quoting stream the device must idle — NaN used to
+	// slip past `y <= 0` (NaN <= 0 is false) and win the candidacy.
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{nanStream},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if !alloc.Assignments[0].Idle() {
+		t.Fatalf("NaN-yield stream assigned: %q yield %v", alloc.Assignments[0].Stream, alloc.Assignments[0].ExpectedYield)
+	}
+
+	// +Inf must not win unconditionally either.
+	alloc, err = Decide(Input{
+		Devices: []DeviceRef{gpu},
+		Streams: []Stream{infStream, realStream},
+		Policy:  PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.braiins" {
+		t.Fatalf("+Inf yield took the assignment over a real quote: %q", alloc.Assignments[0].Stream)
+	}
+	if alloc.TotalYield != 1 {
+		t.Fatalf("TotalYield %v should be the real stream's yield", alloc.TotalYield)
 	}
 }
