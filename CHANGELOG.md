@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 282 — V1 ヘッダが notify の version/prevhash を捨てていた)
+
+**`parseNotify` が解析した version・prevhash がワーカーのヘッダに届いていなかった**
+—— `applyJob` は両フィールドを落とし、V1 ワーカーは prevhash・version が
+ゼロ埋めのヘッダを掘っていた（V2 経路では双方設定済み）。純粋関数 `v1Work`
+としてヘッダ構築を切り出し伝播を検証可能に。マークルルートは従来通りゼロ
+（V1 ではコインベース組み立てはプール側のため）。
+
 ### Added (session 281 — BIP-310 `mining.configure` の送信)
 
 **Stratum V1 の拡張交渉が BIP-310 に適合** —— 従来はレガシーの

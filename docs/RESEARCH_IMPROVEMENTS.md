@@ -118,6 +118,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    pools answer "Method not found" and the handshake proceeds), ahead of
    the legacy announce at 3b. `version-rolling` is deliberately NOT
    advertised — overt ASICBoost is ASIC-only and meaningless on CPU/GPU.
+   — session 282: **`mining.notify` version/prevhash reach the header.**
+   `parseNotify` decoded both fields but `applyJob` dropped them — the V1
+   worker hashed a zeroed prevhash/version while the V2 path populated
+   both. `v1Work` now carries them through; MerkleRoot stays zero (the
+   pool owns coinbase assembly in V1), so the header is as complete as
+   the simplified V1 path allows.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the
