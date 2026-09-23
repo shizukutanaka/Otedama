@@ -2282,3 +2282,39 @@ func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
 		t.Errorf("client.show_message notice never reached the log: %v", logs)
 	}
 }
+
+// TestHandshake_SilentPoolTimesOut: a pool that completes TCP connect
+// but never sends SetupConnectionSuccess must not wedge the session
+// on the run-lifetime ctx — the conn deadline bounds the exchange.
+func TestHandshake_SilentPoolTimesOut(t *testing.T) {
+	prev := handshakeTimeout
+	handshakeTimeout = 200 * time.Millisecond
+	defer func() { handshakeTimeout = prev }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+	// Server drains inbound frames and stays silent — never writes.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := serverConn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	dec := stratum.NewDecoder(clientConn)
+	start := time.Now()
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	if err == nil {
+		t.Fatal("handshake: expected timeout against a silent pool")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("handshake took %v against a silent pool — deadline not applied", elapsed)
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) || !ne.Timeout() {
+		t.Fatalf("handshake error = %v, want i/o timeout", err)
+	}
+}

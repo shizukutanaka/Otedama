@@ -5,6 +5,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net"
 	"testing"
@@ -1017,5 +1018,49 @@ func TestFloat64FromBits(t *testing.T) {
 		} else if got != want {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
+	}
+}
+
+// TestNegotiate_SilentPoolTimesOut: a pool that accepts the socket but
+// never sends SetupConnectionSuccess must not wedge negotiate on the
+// caller's context — the handshake conn deadline bounds the exchange.
+func TestNegotiate_SilentPoolTimesOut(t *testing.T) {
+	prev := handshakeTimeout
+	handshakeTimeout = 200 * time.Millisecond
+	defer func() { handshakeTimeout = prev }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	// Server drains inbound frames and stays silent — never writes.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := serverConn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	d := &Dialer{
+		dialFn: func(_ context.Context, _ string) (net.Conn, error) {
+			return clientConn, nil
+		},
+	}
+	conn, err := d.Dial(context.Background(), "stratum+v2://silent.local:3336", poolproto.Credentials{User: "u"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	start := time.Now()
+	sess, err := d.Negotiate(context.Background(), conn)
+	if err == nil {
+		_ = sess.Close()
+		t.Fatal("Negotiate: expected timeout against a silent pool")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Negotiate took %v against a silent pool — handshake deadline not applied", elapsed)
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) || !ne.Timeout() {
+		t.Fatalf("Negotiate error = %v, want i/o timeout", err)
 	}
 }

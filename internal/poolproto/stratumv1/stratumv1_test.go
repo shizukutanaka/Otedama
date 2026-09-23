@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -2631,5 +2632,41 @@ func TestSession_ProtoErrorCount(t *testing.T) {
 	if got := sess.ProtoErrorCount(); got != 2 {
 		t.Errorf("ProtoErrorCount = %d, want 2 "+
 			"(malformed line + bad notify; the valid message must not count)", got)
+	}
+}
+
+// TestNegotiate_SilentPoolTimesOut: a pool that accepts the socket but
+// never answers mining.subscribe must not wedge negotiate on the
+// caller's context — the engine passes the run lifetime, so without the
+// handshake budget a silent pool wedges the reconnect loop forever.
+func TestNegotiate_SilentPoolTimesOut(t *testing.T) {
+	prev := handshakeTimeout
+	handshakeTimeout = 200 * time.Millisecond
+	defer func() { handshakeTimeout = prev }()
+
+	d, conn, serverConn := makeNegotiateConn(t)
+	defer serverConn.Close()
+	// Server reads requests and stays silent — never writes a response.
+	go func() {
+		reader := bufio.NewReader(serverConn)
+		for {
+			if _, err := reader.ReadBytes('\n'); err != nil {
+				return
+			}
+		}
+	}()
+
+	start := time.Now()
+	// Caller ctx is "forever" — only the handshake budget can bound it.
+	sess, err := d.Negotiate(context.Background(), conn)
+	if err == nil {
+		_ = sess.Close()
+		t.Fatal("Negotiate: expected timeout against a silent pool")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Negotiate took %v against a silent pool — handshake budget not applied", elapsed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Negotiate error = %v, want context deadline exceeded", err)
 	}
 }
