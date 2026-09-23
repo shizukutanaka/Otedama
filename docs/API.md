@@ -267,6 +267,8 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
+| `otedama_stream_yield_shifts_total` | counter | `stream`, `device` | Significant yield shifts per stream-device — a change exceeding 2% of the prior level, or a zero/positive transition. The S (switches) drift measure; a high shifts/variation ratio means the stream moves in regime steps and suits change-point handling. |
+| `otedama_stream_yield_drift_sats_per_second` | gauge | `stream`, `device` | Accumulated \|Δyield\| per stream-device since startup — the V_T (total variation) drift measure. High drift with few shifts = smooth wandering suited to a forecaster; many shifts = jumps. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
 
 **Economics & power**

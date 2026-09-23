@@ -215,6 +215,17 @@ func (r *ProviderReliability) PosteriorMean() float64 {
 
 **Non-custodial check:** ✅ Local statistics.
 
+**Implementation note (session 275, groundwork ahead of v3.6):** The
+detector's input now exists: `internal/engine/drift.go` measures each
+stream's yield drift as it quotes — significant-shift count (S,
+>2%-of-prior moves or zero/positive transitions) and accumulated |Δyield|
+(V_T) — exported as `otedama_stream_yield_shifts_total{stream,device}` and
+`otedama_stream_yield_drift_sats_per_second{stream,device}`. A stream whose
+S/V_T ratio is high moves in regime steps (difficulty adjustments, auction
+floors — exactly the cliffs A8 targets) versus smooth wander; the CTS-lite
+trigger now has live data to fire on. What remains for v3.6 is the
+5-epoch/2σ trigger itself and wiring it to the forecaster reset (A1).
+
 ### Feature A9 — Live calibration dashboard (v3.5, ~25h)
 
 **Problem:** The new engine is more opaque than the simple comparator. Users need to be able to debug "why did Otedama choose X right now?"

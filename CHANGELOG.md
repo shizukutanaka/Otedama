@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 275 — ストリーム・ドリフト計測: 各収益源の非定常性タイプを実測)
+
+**非定常バンディットのドリフト尺度をそのまま計装.** NeurIPS 2025 の Non-stationary
+Bandit Convex Optimization（arXiv:2506.02980）がリグレット界をパラメータ化する
+3 尺度——switches S（分布シフト回数）・total variation V_T（|Δイールド| 累積）・
+path length——は、hashprice/プロバイダのイールドが実際に示すドリフト型
+（難易度ステップ・価格変動・日周期）にそのまま対応する。`internal/engine/drift.go`
+はプロバイダクォート到着毎に、Decide が比較するのと同一の量
+（arbitration.Yield.Effective）でドリフトを計測する:
+
+- `otedama_stream_yield_shifts_total{stream,device}` — 有意シフト回数
+  （先行値の 2% を超える変動、または 0↔正の転移は任意の大きさで計上）＝ S 尺度
+- `otedama_stream_yield_drift_sats_per_second{stream,device}` — |Δイールド|
+  累積＝ V_T 尺度
+
+shifts/variation 比が高いストリームはレジーム・ステップ型（難易度調整や
+オークションフロアの崖＝チェンジポイント検出 A8 が狙う構造）、低いものは
+平滑な放浪型（フォーキャスタ A1 が追うべき構造）と区別できる。失効した
+ストリームの追跡状態は stale プルーンと同時に破棄する。
+
+RESEARCH_IMPROVEMENTS Cat 6 #16 を部分解決（ドリフト尺度を A1/A8 の
+自己調整信号へ接続する残件はフォーキャスタと共に v3.6 スコープ）、
+ADR-010 A8 に実装ノート追記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -66,6 +66,10 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	// lastQuoteAt records when each stream (keyed as in updateStream) last
 	// received a quote, so stale streams from dead providers can be expired.
 	lastQuoteAt := make(map[string]time.Time)
+	// drift accumulates per-stream yield-drift measures (shift count S and
+	// total variation V_T) used to pick the self-tuning signal for ADR-010
+	// A1/A8 — see drift.go (session 275).
+	drift := newDriftTracker()
 	for {
 		select {
 		case <-ctx.Done():
@@ -80,9 +84,13 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				ts = time.Now()
 			}
 			lastQuoteAt[key] = ts
+			shifted, _, tv := drift.observe(key, observedEffective(&q))
+			stream, device := splitStreamKey(key)
+			opts.metrics.observeStreamDrift(stream, device, shifted, tv)
 		case <-ticker.C:
 			opts.streamsMu.Lock()
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
+				drift.expire(key)
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
 					key, streamStaleTimeout))

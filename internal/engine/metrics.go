@@ -191,6 +191,11 @@ type engineMetrics struct {
 	// the device set is bounded to detected hardware so cardinality is safe.
 	sharesFoundPerDeviceMu sync.Mutex
 	sharesFoundPerDevice   map[string]*metrics.Counter
+	// streamDrift tracks per-(stream,device) yield-drift series: significant
+	// shift counters and accumulated |Δyield| gauges, created lazily.
+	streamDriftMu       sync.Mutex
+	streamDriftShifts   map[string]*metrics.Counter
+	streamDriftTotalVar map[string]*metrics.Gauge
 
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
@@ -433,6 +438,8 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		rejectByReason:       make(map[string]*metrics.Counter),
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
+		streamDriftShifts:    make(map[string]*metrics.Counter),
+		streamDriftTotalVar:  make(map[string]*metrics.Gauge),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -479,6 +486,46 @@ func (m *engineMetrics) touchLastReject(category string, now int64) {
 	}
 	m.lastRejectByReasonMu.Unlock()
 	g.Set(float64(now))
+}
+
+// observeStreamDrift publishes one stream's yield-drift measures:
+// increments otedama_stream_yield_shifts_total{stream,device} when the
+// observation was a significant shift, and sets the accumulated-variation
+// gauge to the tracker's running total. The stream set is bounded to live
+// providers × devices, so label cardinality is safe.
+func (m *engineMetrics) observeStreamDrift(stream, device string, shifted bool, totalVar float64) {
+	key := stream + "/" + device
+	m.streamDriftMu.Lock()
+	shifts, ok := m.streamDriftShifts[key]
+	if !ok {
+		shifts = m.reg.NewCounter(
+			"otedama_stream_yield_shifts_total",
+			"Significant yield shifts for this (stream, device) pair — a change "+
+				"exceeding 2% of the prior level, or a zero/positive transition. "+
+				"The S (switches) drift measure of non-stationary bandit analysis; "+
+				"a high count relative to drift variation means this stream moves "+
+				"in regime steps and suits change-point handling.",
+			map[string]string{"stream": stream, "device": device},
+		)
+		m.streamDriftShifts[key] = shifts
+	}
+	tv, ok := m.streamDriftTotalVar[key]
+	if !ok {
+		tv = m.reg.NewGauge(
+			"otedama_stream_yield_drift_sats_per_second",
+			"Accumulated absolute yield variation for this (stream, device) pair "+
+				"since startup — the V_T (total variation) drift measure of "+
+				"non-stationary bandit analysis. High drift with few shifts means "+
+				"smooth wandering suited to a forecaster; many shifts mean jumps.",
+			map[string]string{"stream": stream, "device": device},
+		)
+		m.streamDriftTotalVar[key] = tv
+	}
+	m.streamDriftMu.Unlock()
+	if shifted {
+		shifts.Inc()
+	}
+	tv.Set(totalVar)
 }
 
 // incSharesFoundForDevice increments the per-device shares-found counter
