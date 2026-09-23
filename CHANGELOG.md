@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 262 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SLO 文書化 + RESEARCH_IMPROVEMENTS 検証棚卸し)
+
+- **docs/API.md に「Service-level objectives (SLO)」セクションを新設
+  （Cat 9 #10 解消）.** 既存メトリクスを運用可能にする目標値表:
+  productive uptime ≥99%/24h、reject rate <0.5%（>3% 要調査、D-Central
+  閾値と整合）、stale <0.5%、submit latency p95<200ms・p99<1s、
+  unaccounted 滞留はセッション261の watchdog 警告と整合、
+  active_streams≥1、rate freshness <300s、clock skew <120s。
+  CPU-only 採掘の経済限界と区別する「Otedama 自身の健全性」の SLO として
+  明記。
+- **RESEARCH_IMPROVEMENTS の検証済み項目を解消済みに更新.** Cat 5 #3
+  （`streamStaleTimeout`/`pruneStaleStreams`/`lastQuoteAt` による
+  dead-provider 自動遮断は実装済みと検証）、Cat 5 #8（`SatsPerSecond`
+  の USD→sat/s 換算・20% fee・simulated 明示が正しいと検証）、
+  Cat 4 #9（Grunspan & Pérez-Marco の公平性根拠は記録済み＋session 261
+  の watchdog が実装可能側——V1/SV2 は pool-credited block を報告しない
+  プロトコル制約を明記）を RESOLVED (session 262) に。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -205,8 +205,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 1. 🟡 **Real Akash REST integration** — currently simulated
    (KNOWN_LIMITATIONS §1). The single biggest placeholder.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
-   stop routing GPUs to it (parallels HashrateMonitor for mining).
+3. ✅ **Provider health/heartbeat — RESOLVED (session 262, verified
+   implemented).** `internal/engine/arbitrate.go` tracks `lastQuoteAt` per
+   stream and `pruneStaleStreams` drops any stream whose quote is older than
+   `streamStaleTimeout` (3 min — 3–6× the 30/60 s quote cadence) from
+   arbitration each tick, logging `stream %q expired`; a dead provider's
+   last quote can no longer route devices to it. `otedama_active_streams`
+   exposes the surviving count. Original finding: Provider
+   health/heartbeat — detect a dead inference provider and stop routing
+   GPUs to it (parallels HashrateMonitor for mining).
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
@@ -216,7 +223,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
+8. ✅ **Inference revenue is denominated/settled correctly — RESOLVED
+   (session 262, verified).** `SatsPerSecond(usdPerHour, btcUSDRate)` =
+   `(usd/hr ÷ $/BTC) × 1e8 ÷ 3600` — dimensionally correct and applied to
+   both gross and net (20% Akash fee) yields; the conversion is
+   regression-tested in `akash_test.go`. Simulated yield is never mixed
+   silently: the provider's `Name()` carries a deliberate `(simulated)`
+   suffix shown in the TUI/logs/`config show`, `publish()` documents the
+   fixed-midpoint simulation, and KNOWN_LIMITATIONS §1 records that real
+   Akash REST is not integrated (ROADMAP v3.1.0). Original finding:
+   Inference revenue is denominated/settled correctly — verify USD→BTC
    conversion path and that simulated vs real yield is never mixed in
    accounting.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
@@ -383,8 +399,14 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
-    metrics actionable.
+10. ✅ **SLO documentation — RESOLVED (session 262).** New "Service-level
+    objectives (SLO)" section in docs/API.md maps each observability
+    metric to an operator target and a breach action: productive uptime
+    ≥99% per 24h, reject rate <0.5% excellent/>3% investigate, p95 submit
+    latency <200ms (p99 <1s vs typical 1–2s pool stale windows),
+    unaccounted-share drain, active-stream count, rate freshness, and
+    clock skew. Original finding: SLO documentation (target uptime, p99
+    submit latency) to make the metrics actionable.
 
 ---
 
@@ -571,12 +593,22 @@ endpoint against current vendor documentation. Tags as before
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
    Cat 4 #7.
-9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
-   Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
-   Feb 2025), show accounting for orphans makes honest mining the unique
-   optimum. Otedama can't change the DAA, but `doctor` can track
-   pool-acknowledged shares vs. pool-credited blocks over a window and warn
-   on divergence — grounds Cat 1 #10.
+9. ✅ **Orphan-aware reconciliation has a fairness rationale — RESOLVED
+   (session 262).** The implementable half landed in session 261:
+   `unaccountedWatchdog` warns when pool-acknowledged shares diverge from
+   locally found ones (the only reconciliation signal Stratum V1/SV2
+   miner protocols expose — neither reports pool-credited blocks to the
+   miner, so a doctor-side block-credit comparison is a recorded protocol
+   gap, not implementable today). The fairness rationale itself (Grunspan
+   & Pérez-Marco, arXiv:2211.07270 — orphan-aware accounting makes honest
+   mining the unique optimum) is what justifies tracking the divergence
+   at all; Cat 1 #10's warning is the concrete artefact. Original
+   finding: Orphan-aware reconciliation has a fairness rationale.
+   Grunspan & Pérez-Marco, "Block withholding resilience"
+   (arXiv:2211.07270, rev. Feb 2025), show accounting for orphans makes
+   honest mining the unique optimum. Otedama can't change the DAA, but
+   `doctor` can track pool-acknowledged shares vs. pool-credited blocks
+   over a window and warn on divergence — grounds Cat 1 #10.
 10. 🔵 **Auditable PoW for verifiable share attribution (v4.0+).** Lerner,
     "APoW: Auditable Proof-of-Work Against Block Withholding" (arXiv:
     2601.02496), constructs PoW letting pool participants retroactively
