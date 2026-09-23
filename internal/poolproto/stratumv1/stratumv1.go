@@ -110,9 +110,12 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// can rotate mid-session (mining.set_extranonce). extranonce2Size is
+	// read by Submit on a different goroutine than the read loop that
+	// writes it — atomic to keep the race detector honest.
 	extranonce1     string
-	extranonce2Size int
+	extranonce2Size atomic.Int32
 
 	// extranonce2Ctr cycles the client-owned half of the coinbase
 	// nonce (extranonce2) across submissions. V1 splits coinbase entropy
@@ -264,7 +267,7 @@ func (s *session) dispatch(line []byte) {
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
 			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.extranonce2Size.Store(int32(sz))
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -428,12 +431,12 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := ""
 	if len(sub.ExtraNonce) > 0 {
 		en2 = hex.EncodeToString(sub.ExtraNonce)
-	} else if s.extranonce2Size > 0 {
+	} else if n := int(s.extranonce2Size.Load()); n > 0 {
 		// Cycle extranonce2 so each share is a distinct coinbase — a
 		// fixed en2 makes the 32-bit nonce the entire work domain and
 		// produces literal duplicate shares once it wraps. The counter
 		// occupies the low bytes of the negotiated en2_size field.
-		en2 = hex.EncodeToString(extranonce2Bytes(s.extranonce2Ctr.Add(1), s.extranonce2Size))
+		en2 = hex.EncodeToString(extranonce2Bytes(s.extranonce2Ctr.Add(1), n))
 	}
 	// worker name must be the identity mining.authorize used — pools that
 	// validate submit params[0] against the authorized worker (ckpool,
