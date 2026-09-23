@@ -914,8 +914,8 @@ func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	if sess.extranonce1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if sess.extranonce2Size.Load() != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
 	}
 }
 
@@ -1586,8 +1586,8 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	if sv1.extranonce1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if sv1.extranonce2Size.Load() != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
 	}
 }
 
@@ -2106,7 +2106,7 @@ func TestSession_E2E_Extranonce2Cycles(t *testing.T) {
 		protocol:   poolproto.ProtocolStratumV1,
 	}
 	sess := newSession(conn)
-	sess.extranonce2Size = 4 // as negotiated by subscribe/set_extranonce
+	sess.extranonce2Size.Store(4) // as negotiated by subscribe/set_extranonce
 	sess.start(context.Background())
 	defer sess.Close()
 
@@ -2189,8 +2189,8 @@ func TestDialer_Datum_RoutesThroughV1(t *testing.T) {
 	if !ok {
 		t.Fatalf("session type = %T, want *session (V1 wire)", sess)
 	}
-	if sv1.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4 (default fake handshake)", sv1.extranonce2Size)
+	if sv1.extranonce2Size.Load() != 4 {
+		t.Errorf("extranonce2Size = %d, want 4 (default fake handshake)", sv1.extranonce2Size.Load())
 	}
 }
 
@@ -2482,4 +2482,63 @@ func TestNegotiate_MiningConfigure_SubscribeExtranonceOnly(t *testing.T) {
 			t.Fatal("version-rolling must not be advertised")
 		}
 	}
+}
+
+func TestSetExtranonce_ConcurrentSubmit_NoDataRace(t *testing.T) {
+	// mining.set_extranonce writes extranonce2Size on the session's read
+	// loop while Submit reads it on the caller's goroutine. Run with
+	// -race: a plain int field (the previous implementation) reports a
+	// data race here.
+	clientConn, serverConn := net.Pipe()
+	stop := make(chan struct{})
+	go func() { // spam set_extranonce notifications
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				fmt.Fprintf(serverConn,
+					`{"id":null,"method":"mining.set_extranonce","params":["aabbcc",4]}`+"\n")
+			}
+		}
+	}()
+	go func() { // answer submits
+		r := bufio.NewReader(serverConn)
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal([]byte(line), &req) != nil || req.ID == nil {
+				continue
+			}
+			id, _ := json.Marshal(req.ID)
+			fmt.Fprintf(serverConn, `{"id":%s,"result":true,"error":null}`+"\n", id)
+		}
+	}()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "pipe",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "w"},
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer func() { close(stop); sess.Close() }()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				_, _ = sess.Submit(ctx, poolproto.ShareSubmission{JobID: "1", NTime: 1, Nonce: 1})
+				cancel()
+			}
+		}()
+	}
+	wg.Wait()
 }
