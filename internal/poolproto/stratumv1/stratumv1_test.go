@@ -2202,3 +2202,80 @@ func TestLastReconnect_ExportedAccessor(t *testing.T) {
 	// Type-assert like the engine does.
 	var _ poolproto.ReconnectInformant = sess
 }
+
+// TestSession_E2E_UnhandledRequestGetsMethodNotFound: any pool→client
+// message carrying an id is a *request* and must be answered — silently
+// dropping it is the same half-open bug class as an unanswered
+// mining.ping (strict pools time out and disconnect). Unimplemented
+// methods (mining.get_transactions, pool-specific extensions) now get an
+// explicit JSON-RPC -32601 in the [code,"message",data] shape pools use.
+func TestSession_E2E_UnhandledRequestGetsMethodNotFound(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"id":9,"method":"mining.get_transactions","params":["job1"]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no reply within 2s: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply did not parse: %v (%q)", err, line)
+	}
+	if resp.uintID() != 9 {
+		t.Errorf("reply id = %v, want 9 (must echo the request id)", resp.ID)
+	}
+	errArr, ok := resp.Error.([]any)
+	if !ok || len(errArr) < 2 {
+		t.Fatalf("error = %v, want [code, message, data] array", resp.Error)
+	}
+	if code, _ := errArr[0].(float64); int(code) != -32601 {
+		t.Errorf("error code = %v, want -32601", errArr[0])
+	}
+	if errArr[1] != "Method not found" {
+		t.Errorf("error message = %v, want \"Method not found\"", errArr[1])
+	}
+}
+
+// TestSession_E2E_UnknownNotificationStaysSilent: the catch-all must not
+// turn notifications into requests — a method without an id produces no
+// reply at all.
+func TestSession_E2E_UnknownNotificationStaysSilent(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"method":"pool.custom_thing","params":[1,2,3]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err == nil {
+		t.Fatalf("notification produced a reply: %q", line)
+	}
+	// A timeout is the expected outcome — no reply written.
+}
