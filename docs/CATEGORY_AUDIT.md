@@ -888,3 +888,24 @@ class as s281/s282. Worst finding again contradicts shipped code:
 | "Check `otedama doctor`'s pool latency reading" | ✅ Verified: "Pool reachability" check records per-pool latency (checks.go:323). |
 | `doctor --bitcoin-address`, `run --wallet-passphrase/--dry-run`, `service install/status`, `--http-addr` | ✅ All flags verified to exist. |
 | Renamed fields `payout.address`→`bitcoin_address`, `log.level`→`log_level`, `pool.urls[]`→`pools[].url`; new `data_dir`, `language` | ✅ All yaml tags verified in config.go. |
+
+## Session 284 update — metrics-feature wiring + SPECIFICATION/API conformance
+
+Same "implemented but unreachable" class as s271 arbitration_policy, plus the
+normative-spec conformance check:
+
+| Finding | Disposition |
+|---|---|
+| `metrics.RuntimeCollector()` (12 `go_*` series: goroutines, memstats, GC, go_info) implemented and tested but **never registered** — `RegisterCollector` had zero non-test call sites; the go_* family was dead API. | ✅ Fixed: `reg.RegisterCollector(metrics.RuntimeCollector())` in `startHTTPServer` + e2e test asserting go_goroutines/go_memstats_alloc_bytes/go_gc_cycles_total in the exposition. |
+| API.md metric table missing `shares_submitted_total`, `shares_unresolved_total` (s266), `effective_yield_sats_per_second`, `devices_idle`; reject-reason enum missing `transition` (s255). | ✅ Fixed: all added, plus go_* family section. |
+| SPECIFICATION §3.3 "checksum is *not* verified here" — stale: `validateBitcoinAddress` calls `btccrypto.ValidateAddress` (checksum verified at config load). config.go's own doc comment contradicted the code too. | ✅ Fixed (spec §3.3 + the config.go comment). |
+| SPECIFICATION §4 lifecycle described only the V2 handshake — the `stratum+tcp`/`stratum+tls` → V1 session path (subscribe/authorize/notify/submit) was absent, inconsistent with shipped V1 support. | ✅ Fixed: scheme-selects-protocol bullet added. |
+| SPECIFICATION §6 "All metrics carry the `otedama_` prefix" + no go_* mention. | ✅ Fixed: intro now covers the go_* family (wired this PR). |
+| §6's 42 otedama_* names vs `newEngineMetrics` | ✅ Verified: every spec name matches a registered series (labels incl. — build_info{version,commit,goversion}, quantile{0.5,0.95,0.99}, † lazy series). |
+| §3.1 schema table vs `Config.Validate()` | ✅ Verified: every rule matches (datum:// rejected at validate — consistent with parsed-but-unimplemented; hysteresis [0,1); all OTEDAMA_* env vars exist). |
+| §2 command table, §2.1 exit codes, §3.2 precedence | ✅ Verified against main.go/config.Resolve (EnvWarnings reporting confirmed). |
+| rejectClass categories | ✅ Verified: stale/duplicate/difficulty/hardware/other + "transition" constant. |
+
+Verification: `go test ./...` all 24 packages green; changed files gofumpt-
+normalized; lint findings on touched files: none (all pre-existing elsewhere);
+deadcode delta: RuntimeCollector now reachable (baseline shrank, nothing added).

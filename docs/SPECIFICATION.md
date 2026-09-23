@@ -91,8 +91,10 @@ log/language/data-dir/power/arbitration fields. A malformed numeric env var
 ### 3.3 Validation rules
 
 At least one payout address is required (primary or a backup); every address
-must be a plausible mainnet address (length 26–90, prefix `1`/`3`/`bc1`;
-checksum is *not* verified here). Each `pools[].url` must use a supported scheme
+must be a plausible mainnet address (length 26–90, prefix `1`/`3`/`bc1`) **and
+pass checksum verification** — bech32/bech32m for `bc1…`, Base58Check for
+`1…`/`3…` — so a transcription typo is rejected at config load rather than
+misdirecting earnings. Each `pools[].url` must use a supported scheme
 (`stratum+tcp|tls|v2|v2tls://`) with a non-empty host. The numeric fields are
 range-checked per the table above. An empty/comments-only file is valid
 (defaults apply).
@@ -111,6 +113,10 @@ configured pool URLs — each tagged with the layer it was resolved from.
 4. **Reconnect loop** (`runReconnectLoop`):
    - Ordered pool list (`poolURLs`) and ordered payout-address list
      (`payoutAddresses`: primary first, de-duplicated, empties skipped).
+   - The URL scheme selects the protocol per attempt: `stratum+v2`/`v2tls`
+     runs the V2 session described below; `stratum+tcp`/`stratum+tls` runs
+     the Stratum V1 session (`mining.subscribe`/`mining.authorize`/
+     `mining.notify`/`mining.submit`) instead.
    - For each attempt: dial TCP → Stratum V2 handshake (SetupConnection +
      OpenMiningChannel) → on success the address is marked *known-good*.
      The channel's `user_identity` is the per-pool `User` if set, otherwise
@@ -150,7 +156,10 @@ buffers partial reads so no plaintext is dropped (session 53).
 
 ## 6. Metrics (`/metrics`, Prometheus text format, no client dependency)
 
-All metrics carry the `otedama_` prefix (omitted below). Metrics registered at
+Otedama's own metrics carry the `otedama_` prefix (omitted below); the
+standard `go_*` runtime series are served alongside them without the prefix
+(collected at scrape time by `metrics.RuntimeCollector`: `go_goroutines`,
+`go_info{version}`, `go_memstats_*`, `go_gc_*`). Metrics registered at
 startup always appear; lazily-created series (marked †) appear only after the
 first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 `/healthz`, `/readyz`, `/`.

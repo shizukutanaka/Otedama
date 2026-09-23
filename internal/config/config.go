@@ -698,10 +698,10 @@ func (c Config) Validate() error {
 	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
 }
 
-// validateBitcoinAddress performs a lightweight format check on a Bitcoin
-// address. Full cryptographic validation (checksum verification) is
-// performed by the lightning package when the address is first used;
-// this function only catches obvious typos and wrong-chain addresses.
+// validateBitcoinAddress checks a Bitcoin address at config load: length,
+// mainnet prefix (testnet/signet rejected at this layer), and checksum via
+// btccrypto.ValidateAddress — a transcription typo is caught here rather
+// than after mining begins.
 func validateBitcoinAddress(addr string) error {
 	if len(addr) < 26 {
 		return fmt.Errorf("address is too short (%d characters)", len(addr))

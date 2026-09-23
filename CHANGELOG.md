@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 284 — 到達不能メトリクス機能の配線 + SPECIFICATION/API 整合)
+
+- **`metrics.RuntimeCollector()` が未登録で go_* メトリクスが露出されて
+  いなかった**: 12系列（go_goroutines、go_memstats_*、go_gc_*、go_info）
+  を出力するコレクタが実装・テスト済みなのに `RegisterCollector` の呼出し
+  が非テストコードに存在せず dead API 化 — s271 arbitration_policy と
+  同型の「実装済み・未配線」。`startHTTPServer` で登録する1行で配線し
+  e2e テスト追加（/metrics 出力に go_goroutines 等を検証）。
+- **API.md メトリクス表の欠落4件**: `shares_submitted_total`（s266 以前から
+  実在）、`shares_unresolved_total`（s266 追加）、`effective_yield_sats_
+  per_second`、`devices_idle` — 全て登録済みなのに表に無く、運用者が
+  発見不能だった。reject reason 列挙に `transition`（s255 追加）を追記、
+  go_* 系列の節も追加。
+- **SPECIFICATION §3.3 の「checksum is not verified here」は陳腐**: 
+  `validateBitcoinAddress` は btccrypto.ValidateAddress でチェックサム
+  検証を実施済み（誤記 typo を config load 時に拒否）— spec を実態に訂正。
+  config.go 自身の「checksum は lightning で検証」の矛盾コメントも訂正。
+- **SPECIFICATION §4 に V1 セッション経路を明記**: ライフサイクル記述が
+  V2 handshake のみで、stratum+tcp/tls スキームによる V1 セッション選択
+  （mining.subscribe/authorize/notify/submit）が欠落。
+- **SPECIFICATION §6 に go_* 系列を明記**（本 PR で配線された系列を
+  規範文書へ反映）。
+- 検証済みクリーン: §6 の otedama_* 全42名は登録名と一致（build_info
+  ラベル、quantile ラベル、† 遅延生成注記含む）、§3.1 スキーマ表は
+  Validate() の全ルールと一致（datum:// は config validation で拒否 —
+  parsed-but-unimplemented と整合）、exit-code 表・precedence 記述は実装
+  通り、rejectClass カテゴリは stale/duplicate/difficulty/hardware/other
+  +transition。
+
 ### Fixed (session 283 — ユーザ向け運用ドキュメント監査: MIGRATING/TROUBLESHOOTING)
 
 - **MIGRATING-FROM-V2.md が「v3 has no V1 fallback / v3 is V2-only」と虚偽記載**:

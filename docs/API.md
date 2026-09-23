@@ -238,9 +238,11 @@ addresses) appear once their first event occurs.
 | `otedama_hashrate_hashes_per_second` | gauge | — | Live aggregate hash rate. |
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
 | `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
+| `otedama_shares_submitted_total` | counter | — | Shares actually transmitted to the pool (send time, regardless of verdict). A found share is never submitted if the worker's share channel was full. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
 | `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
-| `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
+| `otedama_shares_unresolved_total` | counter | — | Shares transmitted whose verdict was never learned (session dropped before the pool answered, or eviction from the in-flight window). Possibly credited pool-side, unlike never-sent shares. |
+| `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other,transition}` | Rejections by inferred root cause. `transition` = mined under an earlier share target but judged under the pool's current one (benign; excluded from the rate denominators). |
 | `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |
 | `otedama_share_acceptance_rate` | gauge | — | Accepted / judged (1.0 = all accepted). |
 | `otedama_reject_rate` | gauge | — | Rejected / judged (complement of acceptance; >0.03 investigate). |
@@ -267,7 +269,9 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
+| `otedama_effective_yield_sats_per_second` | gauge | — | Expected yield × lifetime productive fraction (productive/uptime) — folds downtime into one gross-minus-losses number. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
+| `otedama_devices_idle` | gauge | — | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 
 **Economics & power**
 
@@ -299,6 +303,14 @@ addresses) appear once their first event occurs.
 | `otedama_uptime_seconds` | gauge | — | Seconds since engine start. |
 | `otedama_start_time_seconds` | gauge | — | Unix timestamp at which engine started. |
 | `otedama_build_info` | gauge | `version,commit,goversion` | Constant 1; build metadata carried as labels. |
+
+**Process (Go runtime, standard `go_*` series)**
+
+Collected at scrape time via `metrics.RuntimeCollector` — no `otedama_`
+prefix: `go_goroutines`, `go_info{version}`, `go_memstats_alloc_bytes`,
+`go_memstats_sys_bytes`, `go_memstats_heap_{alloc,sys,inuse,idle}_bytes`,
+`go_memstats_stack_inuse_bytes`, `go_memstats_gc_cpu_fraction`,
+`go_gc_duration_seconds_total`, `go_gc_cycles_total`.
 
 ### `GET /`
 

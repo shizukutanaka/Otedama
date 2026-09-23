@@ -269,7 +269,7 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logge
 	if f.logFile != "" {
 		// 0600: logs can include pool URLs and worker names; match the
 		// restrictive posture used for the wallet and data directory.
-		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
 		} else {
@@ -312,6 +312,11 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	// Emit the standard go_* process/runtime series alongside the otedama_*
+	// metrics: goroutine count and heap growth are the first things an
+	// operator checks when judging whether the miner leaks over days of
+	// uptime, and RuntimeCollector supplies them without any client dep.
+	reg.RegisterCollector(metrics.RuntimeCollector())
 	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)

@@ -171,7 +171,8 @@ func TestConfigValidate_MissingAddress(t *testing.T) {
 
 func TestConfigValidate_ValidAddress(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{"config", "validate",
+	code := run([]string{
+		"config", "validate",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}, &out, &err)
 	if code != exitOK {
@@ -432,7 +433,7 @@ func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
 		t.Fatalf("stat log file: %v", err)
 	}
 	// The log file may contain pool URLs / worker names — keep it owner-only.
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("log file perms = %04o, want 0600", perm)
 	}
 }
@@ -599,6 +600,29 @@ func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
 	defer srv.Stop()
 	if !strings.Contains(out.String(), "http:") {
 		t.Errorf("startHTTPServer: expected log line; got %q", out.String())
+	}
+}
+
+// The runtime collector is wired into the /metrics registry so the standard
+// go_* series (goroutines, memstats, GC) reach ops dashboards; it was
+// implemented but never registered until session 284.
+func TestStartHTTPServer_ExposesRuntimeMetrics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errb bytes.Buffer
+	reg, srv := startHTTPServer(ctx, "127.0.0.1:0", false, &out, &errb)
+	if srv == nil {
+		t.Fatal("startHTTPServer: srv should not be nil")
+	}
+	defer srv.Stop()
+	var exposition bytes.Buffer
+	if err := reg.WriteText(&exposition); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	for _, name := range []string{"go_goroutines", "go_memstats_alloc_bytes", "go_gc_cycles_total"} {
+		if !strings.Contains(exposition.String(), name) {
+			t.Errorf("exposition missing %s", name)
+		}
 	}
 }
 
