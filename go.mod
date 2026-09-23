@@ -1,8 +1,8 @@
 module github.com/shizukutanaka/Otedama
 
-go 1.22
+go 1.24.0
 
-toolchain go1.24.0
+toolchain go1.24.7
 
 // godebug pins behavior across Go upgrades. See GODEBUG_NOTES.md.
 //   tlsmlkem=1   — enable hybrid PQ key exchange (X25519MLKEM768) in TLS
@@ -16,9 +16,18 @@ godebug (
 	tlsmlkem=1
 )
 
-require (
-	golang.org/x/crypto v0.23.0
-	gopkg.in/yaml.v3 v3.0.1
-)
+// golang.org/x/crypto — ChaCha20-Poly1305, scrypt, ECDH (stdlib cannot
+// replace; confirmed in RESEARCH_IMPROVEMENTS dep-hygiene #4). Pinned at
+// v0.48.0: v0.49+ requires Go >= 1.25 while this module's toolchain is
+// go1.24.7; revisit once the toolchain bump (research item #3) lands.
+require golang.org/x/crypto v0.48.0
 
-require golang.org/x/sys v0.20.0 // indirect
+require (
+	// go.yaml.in/yaml/v3 — config parsing. gopkg.in/yaml.v3 was archived
+	// by its author 2025-04-01; this is the YAML org's maintained,
+	// API-identical successor (v3 line, security-fixes-only upstream —
+	// chosen over v4 to keep the existing API surface). Satisfies
+	// CLAUDE.md §外部依存 criterion 3. See ADR-003 erratum.
+	go.yaml.in/yaml/v3 v3.0.5
+	golang.org/x/sys v0.41.0 // indirect
+)
