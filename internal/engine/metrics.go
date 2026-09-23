@@ -20,11 +20,18 @@ import (
 // run loop. Grouping them in one struct keeps the hot path free of
 // registry lookups — each metric is a pointer cached at startup.
 type engineMetrics struct {
-	hashrate            *metrics.Gauge
-	sharesFound         *metrics.Counter
-	sharesSubmitted     *metrics.Counter
-	sharesAccepted      *metrics.Counter
-	sharesRejected      *metrics.Counter
+	hashrate        *metrics.Gauge
+	sharesFound     *metrics.Counter
+	sharesSubmitted *metrics.Counter
+	sharesAccepted  *metrics.Counter
+	sharesRejected  *metrics.Counter
+	// sharesSuperseded counts pool rejections that are benign
+	// difficulty-transition artefacts (see shareSupersededByRetarget):
+	// shares the pool rejected only because its vardiff raised the bar
+	// after the work was issued. They are excluded from the reject rate
+	// (the operator can act on a real reject, never on a retarget) and
+	// from the unaccounted-share gauge (they were judged by the pool).
+	sharesSuperseded    *metrics.Counter
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
 	arbitrationSwitches *metrics.Counter
@@ -76,9 +83,10 @@ type engineMetrics struct {
 	shareAcceptanceRate *metrics.Gauge
 
 	// sharesUnaccounted is shares found locally but not yet judged by the pool
-	// (found − accepted − rejected, clamped at 0). Small values are normal
-	// in-flight latency; a sustained/growing value means found shares are not
-	// reaching the pool — the local-vs-pool reconciliation signal.
+	// (found − accepted − rejected − superseded, clamped at 0). Small values
+	// are normal in-flight latency; a sustained/growing value means found
+	// shares are not reaching the pool — the local-vs-pool reconciliation
+	// signal.
 	sharesUnaccounted *metrics.Gauge
 
 	// productiveSeconds accumulates wall-clock seconds the miner actually
@@ -231,6 +239,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_shares_total",
 			"Total shares reported by the pool.",
 			map[string]string{"status": "rejected"}),
+		sharesSuperseded: reg.NewCounter(
+			"otedama_shares_superseded_total",
+			"Shares the pool rejected only because its difficulty changed after "+
+				"the work was issued (vardiff transition; ESP-Miner #212). Verified "+
+				"locally to have met the issue-time target. Excluded from "+
+				"otedama_reject_rate — no operator action is possible or needed.",
+			nil),
 		poolConnectAttempts: reg.NewCounter(
 			"otedama_pool_connect_attempts_total",
 			"Total pool-connection attempts, including reconnects.",
@@ -556,13 +571,16 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	rate = acceptanceRate(accepted, rejected)
 	m.shareAcceptanceRate.Set(rate)
 
-	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
-	// can briefly report more judged than we have locally counted if a stats
-	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
+	// Reconcile: found locally vs judged by the pool. Superseded shares
+	// were judged by the pool (rejected, but benignly) so they are settled
+	// alongside accepted+rejected here. Clamp at 0 — the pool can briefly
+	// report more judged than we have locally counted if a stats tick races
+	// a burst of accepts, and a negative "unaccounted" is meaningless.
 	found := m.sharesFound.Value()
+	settled := judged + m.sharesSuperseded.Value()
 	var unaccounted uint64
-	if found > judged {
-		unaccounted = found - judged
+	if found > settled {
+		unaccounted = found - settled
 	}
 	m.sharesUnaccounted.Set(float64(unaccounted))
 

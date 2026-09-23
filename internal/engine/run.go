@@ -716,14 +716,22 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// warning rather than silently losing found shares.
 	var lastDropped uint64
 
-	// Track share-submission round-trip latency. submitTimes maps a
-	// sequence number to the time the share was sent; entries are
-	// settled (and deleted) on SubmitSharesSuccess, and additionally
-	// capped at submitTimesCap below so a pool that never acknowledges
-	// cannot grow the map without bound over a long session.
+	// Track share-submission round-trip latency and reject revalidation.
+	// pending maps a submission's sequence number to the share itself and
+	// the time it was sent; entries are settled (and deleted) on
+	// SubmitSharesSuccess/SubmitSharesError, and additionally capped at
+	// pendingCap below so a pool that never acknowledges cannot grow the
+	// map without bound over a long session. Keeping the share (not just
+	// the send time) lets a SubmitSharesError re-validate the share's
+	// hash against the target it was ground against — the benign
+	// vardiff-transition check (ESP-Miner #212).
 	latency := NewLatencyTracker(256)
-	submitTimes := make(map[uint32]time.Time)
-	const submitTimesCap = 1024
+	type pendingShare struct {
+		sent  time.Time
+		share miner.Share
+	}
+	pending := make(map[uint32]*pendingShare)
+	const pendingCap = 1024
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -898,22 +906,42 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// to LastSequenceNumber, then drop those entries.
 				now := time.Now()
 				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
-				for seq, sent := range submitTimes {
+				for seq, p := range pending {
 					if seq <= last {
-						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
-						delete(submitTimes, seq)
+						latency.Record(float64(now.Sub(p.sent).Microseconds()) / 1000.0)
+						delete(pending, seq)
 					}
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
-				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
-				if opts.m != nil {
-					opts.m.sharesRejected.Inc()
-					opts.m.rejectReason(category).Inc()
-					opts.m.touchLastReject(category, time.Now().Unix())
+				e := pm.msg.SubmitSharesError
+				category, diagnosis := rejectClass(e.Error)
+				// Settle this submission: the reject is a verdict, so its
+				// round-trip is a real latency sample like an accept's.
+				rejected, tracked := pending[e.SequenceNumber]
+				if tracked {
+					latency.Record(float64(time.Since(rejected.sent).Microseconds()) / 1000.0)
+					delete(pending, e.SequenceNumber)
+				}
+				if tracked && category == "difficulty" &&
+					shareSupersededByRetarget(rejected.share.Hash, rejected.share.Target, shareTarget) {
+					// SetTarget raised the bar after this share's work
+					// was issued: it met the target it was ground
+					// against but fails the new one. Benign — account
+					// separately so the reject rate stays actionable.
+					opts.log("info", fmt.Sprintf("engine: share seq=%d superseded by pool retarget "+
+						"(was valid at issue; not counted as a reject)", e.SequenceNumber))
+					if opts.m != nil {
+						opts.m.sharesSuperseded.Inc()
+					}
+				} else {
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						e.Error, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
+					}
 				}
 			}
 
@@ -943,15 +971,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.sharesSubmitted.Inc()
 			}
-			submitTimes[seqNum] = time.Now()
-			if len(submitTimes) > submitTimesCap {
+			pending[seqNum] = &pendingShare{sent: time.Now(), share: share}
+			if len(pending) > pendingCap {
 				// Pool is not acknowledging; drop the oldest half so the
 				// map stays bounded. Latency for dropped entries is lost,
 				// which is the honest outcome — it was never measured.
-				cutoff := seqNum - submitTimesCap/2
-				for seq := range submitTimes {
+				cutoff := seqNum - pendingCap/2
+				for seq := range pending {
 					if seq < cutoff {
-						delete(submitTimes, seq)
+						delete(pending, seq)
 					}
 				}
 			}
@@ -1149,12 +1177,40 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				} else {
 					category, diagnosis := rejectClass(result.Reason)
-					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
-						result.Reason, diagnosis))
-					if opts.m != nil {
-						opts.m.sharesRejected.Inc()
-						opts.m.rejectReason(category).Inc()
-						opts.m.touchLastReject(category, time.Now().Unix())
+					superseded := false
+					if category == "difficulty" {
+						// mining.set_difficulty raises the bar for every
+						// share still in flight, so a share that met the
+						// difficulty in force when its work was issued is
+						// rejected "above target" — a benign transition
+						// artefact, not a real invalid share (ESP-Miner
+						// #212). Re-validate the hash against its issue
+						// target vs the pool's current bar; when
+						// SuggestedDifficulty is 0 the bar never moved
+						// and the reject is genuine.
+						current := capturedShare.Target
+						if d := capturedSess.SuggestedDifficulty(); d > 0 {
+							if t, terr := miner.TargetFromDifficulty(d); terr == nil {
+								current = t
+							}
+						}
+						superseded = shareSupersededByRetarget(
+							capturedShare.Hash, capturedShare.Target, current)
+					}
+					if superseded {
+						opts.log("info", "engine: V1 share superseded by pool retarget "+
+							"(was valid at issue; not counted as a reject)")
+						if opts.m != nil {
+							opts.m.sharesSuperseded.Inc()
+						}
+					} else {
+						opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
+							result.Reason, diagnosis))
+						if opts.m != nil {
+							opts.m.sharesRejected.Inc()
+							opts.m.rejectReason(category).Inc()
+							opts.m.touchLastReject(category, time.Now().Unix())
+						}
 					}
 				}
 			}()
@@ -1269,7 +1325,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

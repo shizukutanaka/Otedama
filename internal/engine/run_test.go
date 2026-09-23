@@ -854,6 +854,120 @@ func TestAcceptanceRate_NoDivByZeroOnFreshStart(t *testing.T) {
 	}
 }
 
+// hashWithMSB builds a Hash whose most significant byte (index 31, the
+// byte LessOrEqual compares first) is v, everything else zero.
+func hashWithMSB(v byte) miner.Hash {
+	var h miner.Hash
+	h[31] = v
+	return h
+}
+
+func TestShareSupersededByRetarget(t *testing.T) {
+	easy := hashWithMSB(0x02) // bar in force when the share was issued
+	hard := hashWithMSB(0x01) // bar raised to after the pool retarget
+	zero := miner.Hash{}      // unknown / never assigned
+
+	// Above the new bar, below the old one: equal to hard at the MSB,
+	// then strictly greater at the next byte — strictly between the two.
+	between := hashWithMSB(0x01)
+	between[30] = 0xFF
+
+	cases := []struct {
+		name           string
+		hash           miner.Hash
+		issueTarget    miner.Hash
+		currentTarget  miner.Hash
+		wantSuperseded bool
+	}{
+		{
+			name:           "valid at issue, fails new bar → superseded",
+			hash:           between,
+			issueTarget:    easy,
+			currentTarget:  hard,
+			wantSuperseded: true,
+		},
+		{
+			name:           "met old bar but not new → superseded (exact boundary)",
+			hash:           easy, // hash == issue target, fails hard
+			issueTarget:    easy,
+			currentTarget:  hard,
+			wantSuperseded: true,
+		},
+		{
+			name:           "still meets current bar → not superseded",
+			hash:           hashWithMSB(0x00),
+			issueTarget:    easy,
+			currentTarget:  hard,
+			wantSuperseded: false,
+		},
+		{
+			name:           "failed even the old bar → genuine reject",
+			hash:           hashWithMSB(0x03),
+			issueTarget:    easy,
+			currentTarget:  hard,
+			wantSuperseded: false,
+		},
+		{
+			// Would be superseded if the issue target were easy — but it is
+			// unknown, so the guard must refuse (conservative: count as genuine).
+			name:           "unknown issue target → conservative, genuine reject",
+			hash:           between,
+			issueTarget:    zero,
+			currentTarget:  hard,
+			wantSuperseded: false,
+		},
+		{
+			// A hash below the issue bar can never fail a bar that moved
+			// downward — 'not superseded' is the only consistent answer.
+			name:           "easier current bar → genuine reject (not a retarget)",
+			hash:           between,
+			issueTarget:    easy,
+			currentTarget:  hashWithMSB(0x03),
+			wantSuperseded: false,
+		},
+	}
+	for _, tt := range cases {
+		got := shareSupersededByRetarget(tt.hash, tt.issueTarget, tt.currentTarget)
+		if got != tt.wantSuperseded {
+			t.Errorf("%s: shareSupersededByRetarget = %v, want %v", tt.name, got, tt.wantSuperseded)
+		}
+	}
+}
+
+func TestEngineMetrics_UpdateShareRates_SupersededSettles(t *testing.T) {
+	// Superseded shares were judged by the pool (rejected, benignly), so
+	// they must reduce the unaccounted gauge — but must not pollute the
+	// reject rate, which exists to signal actionable losses.
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	for range 100 {
+		m.sharesFound.Inc()
+	}
+	for range 90 {
+		m.sharesAccepted.Inc()
+	}
+	for range 5 {
+		m.sharesRejected.Inc()
+	}
+	for range 5 {
+		m.sharesSuperseded.Inc() // benign retarget rejects, judged
+	}
+	rate, judged := m.updateShareRates()
+
+	if got := m.sharesUnaccounted.Value(); got != 0 {
+		t.Errorf("sharesUnaccounted = %v, want 0 (superseded shares are judged)", got)
+	}
+	if judged != 95 {
+		t.Errorf("judged = %d, want 95 (superseded excluded from accept/reject base)", judged)
+	}
+	// acceptance rate = 90/95 — the superseded five must not deflate it
+	// (they are excluded from the judged base entirely).
+	if want := 90.0 / 95.0; rate != want {
+		t.Errorf("acceptance rate = %v, want %v", rate, want)
+	}
+}
+
 func TestPayoutAddresses_PrimaryFirstThenList(t *testing.T) {
 	cfg := config.Config{
 		BitcoinAddress:   "bc1qprimary00000000000000000000000000000",
@@ -2381,6 +2495,216 @@ waitLoop:
 	}
 }
 
+// ============================================================================
+// retargetPool — vardiff-transition reject coverage (ESP-Miner #212)
+// ============================================================================
+
+// retargetPool simulates a pool that raises its share difficulty mid-flight.
+// The channel opens with a trivially-easy target, so every share the worker
+// finds is issued under it. After accepting the first share, the pool sends
+// SetTarget with an impossibly hard target and then rejects the next
+// in-flight share "above target" — exactly the benign reject ESP-Miner #212
+// documents: the share was valid against the target in force when its work
+// was issued. The engine must account it as superseded, never as a reject.
+type retargetPool struct {
+	t       *testing.T
+	ln      net.Listener
+	addr    string
+	started chan struct{}
+}
+
+func newRetargetPool(t *testing.T) *retargetPool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("retargetPool: listen: %v", err)
+	}
+	fp := &retargetPool{
+		t:       t,
+		ln:      ln,
+		addr:    ln.Addr().String(),
+		started: make(chan struct{}),
+	}
+	go fp.serve()
+	return fp
+}
+
+func (fp *retargetPool) URL() string { return "stratum+v2://" + fp.addr }
+func (fp *retargetPool) Close()      { fp.ln.Close() }
+
+func (fp *retargetPool) emit(conn net.Conn, msgType uint8, isChannel bool, payload []byte) {
+	f, err := stratum.WrapMessage(msgType, isChannel, payload)
+	if err != nil {
+		return
+	}
+	data, err := stratum.EncodeFrame(f)
+	if err != nil {
+		return
+	}
+	conn.Write(data) //nolint:errcheck
+}
+
+func (fp *retargetPool) serve() {
+	close(fp.started)
+	conn, err := fp.ln.Accept()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	dec := stratum.NewDecoder(conn)
+	dec.MaxFrameSize = 1 << 20
+
+	if _, err = dec.ReadFrame(); err != nil { // SetupConnection
+		return
+	}
+	succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+	payload, _ := succ.Encode()
+	fp.emit(conn, stratum.MsgSetupConnectionSuccess, false, payload)
+
+	f, err := dec.ReadFrame() // OpenMiningChannel
+	if err != nil {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+
+	omcSucc := stratum.OpenMiningChannelSuccess{
+		ReqID:           omc.ReqID,
+		ChannelID:       1,
+		ExtraNonce2Size: 4,
+	}
+	for i := range omcSucc.Target {
+		omcSucc.Target[i] = 0xFF // trivially easy: every hash is a share
+	}
+	payload, _ = omcSucc.Encode()
+	fp.emit(conn, stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+	job := stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
+	payload, _ = job.Encode()
+	fp.emit(conn, stratum.MsgNewMiningJob, true, payload)
+
+	prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+	payload, _ = prev.Encode()
+	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
+
+	shareCount := 0
+	for {
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+		f, err = dec.ReadFrame()
+		if err != nil {
+			return
+		}
+		if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+			continue
+		}
+		share, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+		if err != nil {
+			continue
+		}
+		shareCount++
+		switch shareCount {
+		case 1:
+			resp := stratum.SubmitSharesSuccess{
+				ChannelID:          share.ChannelID,
+				LastSequenceNumber: share.SequenceNumber,
+				NewSubmitsAccepted: 1,
+			}
+			payload, _ = resp.Encode()
+			fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+		case 2:
+			// Vardiff raises the bar, then rejects the still-in-flight
+			// share it invalidated. SetTarget must arrive first so the
+			// engine's current target is the new (hard) one when the
+			// error is judged — the real-pool ordering ESP-Miner #212
+			// describes. An all-zero target is deterministic: no hash
+			// can meet it, so the share provably fails the new bar
+			// while still meeting its issue target.
+			st := stratum.SetTarget{ChannelID: share.ChannelID}
+			payload, _ = st.Encode()
+			fp.emit(conn, stratum.MsgSetTarget, true, payload)
+
+			resp := stratum.SubmitSharesError{
+				ChannelID:      share.ChannelID,
+				SequenceNumber: share.SequenceNumber,
+				Error:          "above target",
+			}
+			payload, _ = resp.Encode()
+			fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+		}
+	}
+}
+
+// TestRunSession_SupersededRejectCountedSeparately verifies the
+// ESP-Miner #212 path end to end: a share rejected only because the pool
+// retargeted mid-flight increments otedama_shares_superseded_total and
+// leaves the reject counters (and the operator-facing reject rate) alone.
+func TestRunSession_SupersededRejectCountedSeparately(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newRetargetPool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	// Poll until the superseded verdict lands (or give up): the verdict
+	// requires the share submit, the SetTarget, and the error to all be
+	// processed — still milliseconds in the unstarved case.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.sharesSuperseded.Value() > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if got := m.sharesAccepted.Value(); got == 0 {
+		t.Error("sharesAccepted == 0; handshake/first-share path never ran")
+	}
+	if got := m.sharesSuperseded.Value(); got == 0 {
+		t.Error("sharesSuperseded == 0; vardiff-transition reject was not classified as superseded")
+	}
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 — superseded rejects must not pollute the reject rate", got)
+	}
+}
+
 // TestRunSession_CurtailmentSilencesJob verifies that when the curtailment
 // gate is raised a received pool job is not forwarded to workers: the session
 // loop logs a debug "ignored (curtailed)" message instead of calling updateWork.
@@ -2447,6 +2771,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }

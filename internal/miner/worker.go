@@ -37,6 +37,14 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// Target is the exact share target the hash was ground against — the
+	// Work.Target in force when this share was found. The pool validates a
+	// submission against the difficulty in force at *judgement* time, not
+	// at issue, so when vardiff raises the bar mid-flight a genuinely valid
+	// share is rejected "above target". Carrying the issue target lets the
+	// engine re-validate locally and tell that benign case apart from a
+	// real invalid share (ESP-Miner #212; docs/RESEARCH_IMPROVEMENTS.md).
+	Target Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -261,6 +269,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					NTime:     h.Time,
 					Version:   h.Version,
 					Hash:      hash,
+					Target:    localWork.Target,
 					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)

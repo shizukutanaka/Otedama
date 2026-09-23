@@ -276,6 +276,31 @@ func rejectClass(reason string) (category, diagnosis string) {
 	}
 }
 
+// shareSupersededByRetarget reports whether a pool rejection is the
+// *benign* difficulty-transition case rather than a real invalid share:
+// the share genuinely met the target in force when its work was issued
+// (issueTarget), but the pool has since raised the bar — vardiff —
+// so it now fails the current target and is rejected "above target".
+// ESP-Miner #212 documents this on real pools: after a difficulty
+// increase, shares computed against the old (easier) target in flight
+// are rejected as above-target even though they were valid at issue.
+// These rejects cost the operator nothing actionable — the difficulty
+// change, not the hardware, caused them — so they are accounted
+// separately (otedama_shares_superseded_total) instead of inflating
+// the reject rate that operators alert on.
+//
+// The condition hash≤issue && hash>current implies current < issue
+// (the bar moved upward): a hash meeting issueTarget but failing an
+// easier or equal current target is impossible, so no explicit
+// direction check is needed. A zero issueTarget (unknown at issue,
+// e.g. a share that predates target tracking) never matches — the
+// reject is then counted as genuine, the conservative outcome.
+func shareSupersededByRetarget(hash, issueTarget, currentTarget miner.Hash) bool {
+	return issueTarget != (miner.Hash{}) &&
+		hash.LessOrEqual(issueTarget) &&
+		!hash.LessOrEqual(currentTarget)
+}
+
 // acceptanceRate computes the share acceptance rate — accepted /
 // (accepted + rejected) — as a fraction in [0,1]. This is the metric
 // that maps to "net BTC retained": every rejected share is work the

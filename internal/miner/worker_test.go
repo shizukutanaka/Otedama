@@ -115,6 +115,31 @@ func TestWorker_FindsSharesWithEasyTarget(t *testing.T) {
 	}
 }
 
+func TestWorker_ShareCarriesIssueTarget(t *testing.T) {
+	// Share.Target must carry the exact Work.Target the hash was ground
+	// against — the engine re-validates pool rejections against it to
+	// detect benign vardiff-transition rejects (ESP-Miner #212).
+	w := NewWorker(WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+
+	work := makeEasyWork()
+	w.SetWork(work)
+
+	select {
+	case share, ok := <-shares:
+		if !ok {
+			t.Fatal("share channel closed before receiving a share")
+		}
+		if share.Target != work.Target {
+			t.Errorf("share.Target = %s, want issue target %s", share.Target, work.Target)
+		}
+	case <-ctx.Done():
+		t.Fatal("no share found within 2 seconds with maximum target")
+	}
+}
+
 func TestWorker_MultipleThreadsFindShares(t *testing.T) {
 	// With multiple threads and maximum target, shares should arrive
 	// rapidly. This test verifies thread-safe operation of the shared
