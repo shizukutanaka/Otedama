@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed/Added (session 261 — ESP-Miner #1383 / cgminer 系実装との照合に基づく精錬: mining.suggest_difficulty の送信側を実装（V1 の UpdateChannel 相当）)
+
+**`mining.suggest_difficulty` を V1 セッションで送出する経路を実装。**
+ESP-Miner #1383 の調査では「OCEAN 等が `Method not found` でこの RPC を
+拒否する」という*受信側*処理（拒否を reject 集計に混ぜない）は session 100
+で実装済みだったが、肝心の送信が存在しなかった —— SV2 側の
+`UpdateChannel`（実測 hps 報告）と同じギャップの V1 版。
+
+- `session.SuggestDifficulty(ctx, d)` を新設。プール側 JSON-RPC エラー
+  （OCEAN の "Method not found" 等）は非致命 error として呼び出し側が
+  debug ログへ落とす —— suggestion は advisory であり、正式な難易度は
+  引き続き `mining.set_difficulty` が権威として届く。
+- エンジン接続面は `poolproto.DifficultySuggester` optional interface
+  （`PoolNoticeReceiver` と同じ型アサート流儀）経由。プロトコルが実装
+  しない場合は提案不可のまま無害。
+- 送出ポリシーは V2 UpdateChannel と同一の `shouldAdvertiseHashRate`
+  （初回非ゼロ測定で必ず送信、以後 ±25% 変動時のみ、≥1s デバウンス）。
+  `v1SuggestedDifficulty` は hps×10/2³²（≒ 10秒あたり1シェア）を算出 —
+  プールのデフォルト難易度が ASIC 前提でも CPU マイナーが vardiff 収束を
+  待たずに妥当なケイデンスを得られる。
+
+カバレッジ: net.Pipe fake pool による E2E（suggest_difficulty の送出・
+パラメータ値・受理→nil、Method not found→非致命 error + セッション継続を
+検証）、`v1SuggestedDifficulty` 単体テスト。全24パッケージ `go test` green。
+
 ### Fixed/Added (session 260 — 一次情報(sv2-spec §5.3.7/5.3.8)との照合に基づく精錬: UpdateChannel を実装し、実測ハッシュレートをプールへ報告)
 
 **`UpdateChannel` (0x16, channel_msg) を codec＋エンジンに実装。**

@@ -31,6 +31,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    correlated by JSON-RPC id in `Negotiate()` and never reach `rejectClass`
    or the share counters. `cancelPending()` in readLoop ensures no call()
    blocks indefinitely when the pool closes mid-handshake.
+   — ✅ **Send side implemented (session 261).** The rejection handling
+   existed because we asked politely for `extranonce.subscribe`; the
+   sibling method was never sent. `session.SuggestDifficulty` now wraps
+   `mining.suggest_difficulty` (pool-level "Method not found" → non-fatal
+   error the caller logs at debug), surfaced to the engine as
+   `poolproto.DifficultySuggester` and driven by the same
+   `shouldAdvertiseHashRate` policy as SV2's UpdateChannel (first nonzero
+   measurement, then ±25% moves, ≥1s debounce) with
+   `v1SuggestedDifficulty` targeting ~1 share/10s.
 4. ✅ **Multi-pool failover** (session 42) — matches cgminer/bfgminer.
 5. ✅ **Hashrate-drop detection** (session 43, HashrateMonitor) — matches
    Awesome Miner triggers.
