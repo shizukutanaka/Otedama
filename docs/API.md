@@ -158,7 +158,7 @@ data_dir: ~/.local/share/otedama
 # Mining pools, tried in the order listed (list position is the priority;
 # there is no separate priority field).
 pools:
-  - url: stratum+v2://public.stratum.slushpool.com:3336
+  - url: stratum+v2://stratum.slushpool.com:3336
   - url: stratum+v2://demand.sv2.io:34254
 
 # Worker identification sent to pools — a single object, not a list.

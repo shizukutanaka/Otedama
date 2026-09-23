@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 280 — デフォルトプールの死んだホスト名 + config 例示の整合)
+
+- **`config.DefaultPoolURL` が NXDOMAIN のホスト名を指していた**:
+  `public.stratum.slushpool.com` は A/AAAA レコード非存在（実測）— プール
+  未設定での `otedama run` が接続先を一切持てない状態だった。
+  `stratum+v2://stratum.slushpool.com:3336`（Braiins の実在 SV2 エンドポイ
+  ント、名前解決確認済み）に修正。単一ソースのため engine/CLI バナー/
+  doctor 到達性チェックに一括反映。`config.yaml.example`・`docs/API.md`・
+  テストのリテラルも同時更新。
+- **`config.yaml.example` の primary 例が `stratum+v2tls://`** — Braiins は
+  :3336 で TLS ラップ SV2 を提供しない（コードデフォルトは平文 SV2/Noise）。
+  定数と同じ `stratum+v2://` に修正。
+- **コメント例の `demand.fun` も NXDOMAIN** → RFC-2606 の `pool.example.com`
+  に置換（poolproto doc と同じ慣例、架空 URL 禁止準拠）。
+- **「推奨プールリスト」記述の訂正** — config.go が明記する通りビルトイン
+  のリストは存在せずフォールバックは単一デフォルトプールのみ。
+- **言語リスト**: `zh-CN` はコードの `zh` と不一致、`ru`/`ar` が欠落 →
+  実装済み全10言語 (en, ja, zh, ko, es, fr, de, pt, ru, ar) に訂正。
+- **tls_ca_file の「System roots は常に使用」記述を訂正** — SystemCertPool
+  読込失敗時は extra CA のみに縮小（fail-closed、s277 のコード側訂正と同根拠）。
+- **`datum://` スキームの記載追加** — DialURL が受理するが未実装
+  （KNOWN_LIMITATIONS §14 への誘導付き）。
+- 記録のみ: `internal/tui` の FormatHashRate/FormatDuration/SatsToDisplay は
+  「CLI status line 用 export」とあるが status line が存在せず deadcode 対象
+  （配線または削除は maintainer 判断、CATEGORY_AUDIT 記載）。
+
 ### Fixed (session 279 — goreleaser/lint 設定の実害 + release.yml 監査記録)
 
 - **`.goreleaser.yaml` アーカイブ名を install.sh/release.yml 契約に整合**:

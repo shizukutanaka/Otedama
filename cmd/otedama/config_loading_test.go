@@ -19,7 +19,7 @@ import (
 func TestLoadConfigFile_MalformedYAML_WarnsAndReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
-	if err := os.WriteFile(path, []byte("this is: : not : valid yaml"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("this is: : not : valid yaml"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -50,7 +50,7 @@ pools:
   - url: stratum+v2://pool1.example.com:3336
   - url: stratum+v2://pool2.example.com:3336
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -92,7 +92,7 @@ bitcoin_address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
 http_addr: "127.0.0.1:9090"
 log_level: debug
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -134,12 +134,12 @@ log_format: text
 language: en
 data_dir: ~/.local/share/otedama
 pools:
-  - url: stratum+v2://public.stratum.slushpool.com:3336
+  - url: stratum+v2://stratum.slushpool.com:3336
   - url: stratum+v2://demand.sv2.io:34254
 workers:
   name: cpu-worker
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -162,7 +162,7 @@ workers:
 func TestLoadConfigFile_EmptyYAML_ReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.yaml")
-	if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -183,7 +183,7 @@ func TestLoadConfigFile_CommentsOnly_ReturnsEmpty(t *testing.T) {
 # This is a comment-only file.
 # Another comment.
 `)
-	if err := os.WriteFile(path, content, 0644); err != nil {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -237,13 +237,13 @@ func TestLoadConfigFile_UnreadableFile_WarnsOrReturnsEmpty(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "unreadable.yaml")
-	if err := os.WriteFile(path, []byte("bitcoin_address: bc1q..."), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("bitcoin_address: bc1q..."), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if err := os.Chmod(path, 0000); err != nil {
+	if err := os.Chmod(path, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
-	defer os.Chmod(path, 0644) // restore so cleanup works
+	defer os.Chmod(path, 0o644) // restore so cleanup works
 
 	var stderr bytes.Buffer
 	cfg := loadConfigFile(path, &stderr)

@@ -37,17 +37,19 @@ bitcoin_address: ""
 # List of mining pools in order of preference. Otedama connects to the
 # first and fails over to subsequent entries if the connection drops.
 #
-# If this list is empty, Otedama uses its built-in recommended pool list
-# (Stratum V2 pools prioritised, 0% fee where available).
+# If this list is empty, Otedama falls back to the single built-in
+# default pool (config.DefaultPoolURL — a Stratum V2 endpoint).
 #
 # Supported URL schemes:
-#   stratum+v2://       Stratum V2 unencrypted  (LAN or trusted networks only)
-#   stratum+v2tls://    Stratum V2 encrypted    (recommended for internet)
+#   stratum+v2://       Stratum V2 (Noise-encrypted in-band)
+#   stratum+v2tls://    Stratum V2 over TLS
 #   stratum+tls://      Stratum V1 encrypted
 #   stratum+tcp://      Stratum V1 plain        (not recommended)
+#   datum://            parsed but NOT implemented — see
+#                       docs/KNOWN_LIMITATIONS.md section 14
 #
 pools:
-  - url: "stratum+v2tls://public.stratum.slushpool.com:3336"
+  - url: "stratum+v2://stratum.slushpool.com:3336"
     # user is optional; defaults to bitcoin_address.
     user: ""
     # password is optional; most pools accept any value.
@@ -63,16 +65,17 @@ pools:
     #
     # tls_ca_file (optional) is a path to a PEM bundle of extra certificate
     # authorities to trust for this pool's stratum+tls:// certificate, for a
-    # pool presenting a private-CA or self-signed cert. System roots are always
-    # used as well, and certificate verification is never disabled. No effect
-    # on non-TLS schemes.
+    # pool presenting a private-CA or self-signed cert. System roots are used
+    # as well when they can be loaded; if loading them fails, only the extra
+    # CAs are trusted (verification itself is never disabled). No effect on
+    # non-TLS schemes.
     # tls_ca_file: "/etc/otedama/pool-ca.pem"
 
   # Failover: list pools in priority order. Otedama tries the first;
   # if a connection fails or drops, it rotates to the next immediately,
   # and only applies reconnect backoff once every pool has been tried.
   # Uncomment to add a backup:
-  # - url: "stratum+v2tls://demand.fun:3336"
+  # - url: "stratum+v2://pool.example.com:3336"
   #   password: "x"
 
 # ── Workers ──────────────────────────────────────────────────────────────────
@@ -84,7 +87,7 @@ workers:
 # ── Language ─────────────────────────────────────────────────────────────────
 #
 # BCP 47 language tag for UI messages and log output.
-# Supported: en, ja, zh-CN, ko, es, fr, de, pt
+# Supported: en, ja, zh, ko, es, fr, de, pt, ru, ar
 # (Other tags are accepted and fall back to English.)
 # If empty, Otedama detects the language from the operating system.
 #

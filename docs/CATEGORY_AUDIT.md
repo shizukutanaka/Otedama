@@ -817,3 +817,24 @@ producer; .goreleaser.yaml is the sanctioned local alternative
 
 goreleaser binary not installed locally — config validated by YAML parse
 + docs semantics, not a live release run.
+
+## Session 280 update — config surface audit (config.yaml.example + DefaultPoolURL)
+
+User-facing config surface audited key-by-key against `internal/config`,
+`internal/i18n`, and live DNS. Same "never-verified claims" class, worst
+finding in code rather than docs:
+
+| Finding | Disposition |
+|---|---|
+| `DefaultPoolURL` pointed at `public.stratum.slushpool.com` — **NXDOMAIN** (verified: no A/AAAA; `stratum.slushpool.com` resolves). Zero-config startup (`otedama run` with no `pools:`) could never connect to anything. The fabricated-looking hostname (public-pool.io conflation?) had been the code constant since the four copy-pastes were consolidated. | ✅ Fixed: `stratum+v2://stratum.slushpool.com:3336` (Braiins' real SV2 endpoint, resolves, single constant feeds engine/CLI banner/doctor). Also updated in `config.yaml.example`, `docs/API.md`, `config_loading_test.go`. |
+| `config.yaml.example` primary pool used `stratum+v2tls://` — TLS-transport SV2 Braiins does not serve on :3336 (code default is plain SV2/Noise). | ✅ Fixed: `stratum+v2://` matching the constant. |
+| `demand.fun` in the commented failover example — NXDOMAIN. | ✅ Fixed: `pool.example.com` (RFC-2606, same convention as poolproto docs). |
+| "built-in recommended pool list (Stratum V2 pools prioritised, 0% fee)" — false: config.go documents there IS no list, only DefaultPoolURL. | ✅ Reworded to single default pool. |
+| Language list "en, ja, zh-CN, ko, es, fr, de, pt" — code tag is `zh` (not `zh-CN`) and `ru`/`ar` catalogs exist but were omitted. | ✅ Fixed: en, ja, zh, ko, es, fr, de, pt, ru, ar (all 10). |
+| "System roots are always used" for tls_ca_file — false when SystemCertPool load fails (fail-closed narrows to PEM-only; corrected in code at s277). | ✅ Reworded to match reality. |
+| `datum://` parsed by DialURL but unimplemented — absent from the scheme list a user would copy. | ✅ Documented as parsed-but-unimplemented w/ KNOWN_LIMITATIONS §14 pointer. |
+| `FormatHashRate`/`FormatDuration`/`SatsToDisplay` (internal/tui) exported "for use in the CLI status line" — no CLI status line exists; deadcode reports them unreachable outside tests. | ⚠️ Recorded — wire the status line or drop the export; maintainer call (comment states intent). |
+
+Verification: `go test ./...` all packages green; touched files gofumpt-
+normalized; lint/deadcode deltas vs baseline: none introduced (the tui
+formatter findings are pre-existing reachability, unchanged by this diff).
