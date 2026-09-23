@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -289,6 +290,14 @@ type fakePool struct {
 	conn      net.Conn
 	verdict   bool   // result for mining.submit
 	notifyJob string // optional: job ID to send as mining.notify on start
+
+	// rejectSuggest makes the pool answer mining.suggest_difficulty with
+	// a JSON-RPC error — what OCEAN and other pools that don't implement
+	// the extension do ("Method not found").
+	rejectSuggest bool
+	// suggested records the difficulty values the client suggested.
+	suggestedMu sync.Mutex
+	suggested   []float64
 }
 
 func (p *fakePool) run() {
@@ -312,13 +321,31 @@ func (p *fakePool) run() {
 		if err := json.Unmarshal(line, &req); err != nil {
 			continue
 		}
-		if req.Method == "mining.submit" {
+		switch req.Method {
+		case "mining.submit":
 			result := "true"
 			if !p.verdict {
 				result = "false"
 			}
 			id, _ := json.Marshal(req.ID)
 			resp := `{"id":` + string(id) + `,"result":` + result + `,"error":null}` + "\n"
+			_, _ = p.conn.Write([]byte(resp))
+		case "mining.suggest_difficulty":
+			id, _ := json.Marshal(req.ID)
+			if p.rejectSuggest {
+				resp := `{"id":` + string(id) + `,"result":null,"error":[21,"Method not found",null]}` + "\n"
+				_, _ = p.conn.Write([]byte(resp))
+				continue
+			}
+			var params []any
+			if json.Unmarshal(req.Params, &params) == nil && len(params) == 1 {
+				if d, ok := params[0].(float64); ok {
+					p.suggestedMu.Lock()
+					p.suggested = append(p.suggested, d)
+					p.suggestedMu.Unlock()
+				}
+			}
+			resp := `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
 			_, _ = p.conn.Write([]byte(resp))
 		}
 	}
@@ -1887,5 +1914,60 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	}
 	if len(sess.noticeCh) != 0 {
 		t.Error("unknown method enqueued a notice")
+	}
+}
+
+// TestSession_SuggestDifficulty exercises mining.suggest_difficulty end to
+// end: the RPC reaches the pool with a bare float64 param and the pool's
+// true verdict maps to a nil error.
+func TestSession_SuggestDifficulty(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := sess.SuggestDifficulty(ctx, 0.004); err != nil {
+		t.Fatalf("SuggestDifficulty: %v", err)
+	}
+	pool.suggestedMu.Lock()
+	got := append([]float64(nil), pool.suggested...)
+	pool.suggestedMu.Unlock()
+	if len(got) != 1 || got[0] != 0.004 {
+		t.Fatalf("pool recorded suggestions %v, want [0.004]", got)
+	}
+}
+
+// TestSession_SuggestDifficulty_MethodNotFound covers the OCEAN-class pool
+// that answers the extension with a JSON-RPC error: it must surface as a
+// non-fatal error for the caller to log, never a session failure.
+func TestSession_SuggestDifficulty_MethodNotFound(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true, rejectSuggest: true}
+	go pool.run()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := sess.SuggestDifficulty(ctx, 1.0); err == nil {
+		t.Fatal("expected error on 'Method not found' result")
+	}
+	// The session must still be usable — a declined advisory suggestion is
+	// not a failure of the channel itself.
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "J", Nonce: 1, NTime: 1})
+	if err != nil {
+		t.Fatalf("Submit after declined suggestion: %v", err)
+	}
+	if !res.Accepted {
+		t.Error("share rejected after declined suggestion")
 	}
 }

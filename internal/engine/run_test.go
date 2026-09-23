@@ -3148,3 +3148,18 @@ func TestShouldAdvertiseHashRate(t *testing.T) {
 		}
 	}
 }
+
+func TestV1SuggestedDifficulty(t *testing.T) {
+	// 1 GH/s should suggest ~2.33 (diff-1 ≈ 4.3s/share there, so ~10s
+	// needs d≈2.3); a CPU-scale 200 KH/s suggests ~4.7e-4, which the
+	// pool clamps to its floor.
+	if got := v1SuggestedDifficulty(1e9); got < 2.0 || got > 2.7 {
+		t.Errorf("1 GH/s → %v, want ≈2.33", got)
+	}
+	if got := v1SuggestedDifficulty(200e3); got < 4e-4 || got > 5e-4 {
+		t.Errorf("200 KH/s → %v, want ≈4.7e-4", got)
+	}
+	if got := v1SuggestedDifficulty(0); got != 0 {
+		t.Errorf("0 H/s → %v, want 0", got)
+	}
+}
