@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 273 — doctor が `stratum+v2://` を「暗号化」と誤報していた問題)
+
+**`stratum+v2://` は平文だが、doctor の暗号化チェックは「encrypted」
+と報告していた。** Noise NX トランスポートは未接続のため
+（KNOWN_LIMITATIONS §2）、`stratum+v2://` の暗号化は実在しない —
+にもかかわらず `checkPoolEncryption` は平文判定を
+`stratum+tcp://` のみに限定し、組み込みデフォルトプールをさえ
+「encrypted (stratum+v2://)」と呼んでいた。平文スキーム判定を
+`stratum+tcp://` + `stratum+v2://` + `datum://`（設計上平文の
+SV1 ワイヤー — ローカル datum_gateway 向け）に拡張し、修正候補は
+`stratum+tls://` / `stratum+v2tls://` を案内。V2 と同じく、
+V1 平文接続時にも実行時警告を追加 — `stratum+tcp://` と
+`datum://` が警告なしに接続する非対称を解消。
+
 ### Added (session 272 — `datum://` スキームで OCEAN DATUM ゲートウェイへ接続 — KNOWN_LIMITATIONS §14)
 
 **`datum://` が長らく予約済みだが未実装だったスキームを、実際に

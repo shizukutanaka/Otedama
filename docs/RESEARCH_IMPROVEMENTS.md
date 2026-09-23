@@ -484,6 +484,13 @@ arXiv grounding (session 41):
    `crypto/tls`, available today without the secp256k1 dependency
    decision. This item (secp256k1 + message-flow rework) remains open for
    spec-compliant Stratum V2 Noise encryption specifically.
+   — session 273: doctor's "Pool connection encryption" check was
+   found mislabelling `stratum+v2://` as encrypted (it even described
+   the built-in default as "encrypted" in its Skip detail). The
+   plaintext set is now `stratum+tcp://` + `stratum+v2://` +
+   `datum://` (cleartext SV1 wire by design); the engine's V1 session
+   also gained the runtime plaintext warning V2 already had, so
+   `stratum+tcp://`/`datum://` no longer connect silently.
 2. 🔵 **ElligatorSwift encoding** for the SV2 handshake (pairs with item 1).
 3. ✅ **scrypt + AES-GCM seed encryption at rest**.
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).
