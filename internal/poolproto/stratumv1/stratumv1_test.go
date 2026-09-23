@@ -2670,3 +2670,75 @@ func TestNegotiate_SilentPoolTimesOut(t *testing.T) {
 		t.Fatalf("Negotiate error = %v, want context deadline exceeded", err)
 	}
 }
+
+// TestSubmit_SilentPoolTimesOut: a pool that answers the handshake but
+// never answers mining.submit must not wedge the submit on the caller's
+// (run-lifetime) ctx — rpcTimeout bounds the response wait so the share
+// settles as an error instead of leaking the goroutine and diverging
+// submitted vs accepted+rejected forever.
+func TestSubmit_SilentPoolTimesOut(t *testing.T) {
+	prev := rpcTimeout
+	rpcTimeout = 200 * time.Millisecond
+	defer func() { rpcTimeout = prev }()
+
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	go func() {
+		defer serverConn.Close()
+		r := bufio.NewReader(serverConn)
+		// Answer subscribe + authorize.
+		for i, result := range []string{
+			`[[["mining.notify","n1"]],"deadbeef01",4]`,
+			`true`,
+		} {
+			if _, err := r.ReadString('\n'); err != nil {
+				return
+			}
+			fmt.Fprintf(serverConn, `{"id":%d,"result":%s,"error":null}`+"\n", i+1, result)
+		}
+		// Answer the two optional extension calls, then drain everything
+		// (the submit) without ever writing another response.
+		for i := 0; i < 2; i++ {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal([]byte(line), &req) == nil && req.ID != nil {
+				rawID, _ := json.Marshal(req.ID)
+				fmt.Fprintf(serverConn, `{"id":%s,"result":null,"error":[38,"Method not found",null]}`+"\n", rawID)
+			}
+		}
+		for {
+			if _, err := r.ReadString('\n'); err != nil {
+				return
+			}
+		}
+	}()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:3333",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	sess, err := (&Dialer{}).Negotiate(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	start := time.Now()
+	_, err = sess.Submit(context.Background(), poolproto.ShareSubmission{
+		JobID: "1", Nonce: 0, NTime: 0,
+	})
+	if err == nil {
+		t.Fatal("Submit: expected timeout against a pool that never answers")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Submit took %v — rpcTimeout not applied", elapsed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Submit error = %v, want context deadline exceeded", err)
+	}
+}
