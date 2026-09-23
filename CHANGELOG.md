@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed/Added (session 260 — 一次情報(sv2-spec §5.3.7/5.3.8)との照合に基づく精錬: UpdateChannel を実装し、実測ハッシュレートをプールへ報告)
+
+**`UpdateChannel` (0x16, channel_msg) を codec＋エンジンに実装。**
+`OpenMiningChannel` は `nominal_hash_rate` を open 時に宣言するが、
+poolproto 経路では `0`（コード上「engine updates real hashrate later」の
+コメント付き）を送り、raw 経路でも起動時の推定値で固定のままだった ——
+「あとで更新する」ためのメッセージ自体が存在しなかったため、プールからは
+チャネルが永久に 0 H/s（または陳腐値）に見えていた。`nominal_hash_rate`
+はプールの難易度ヒント・テレメトリの入力であり、正しい報告は
+vardiff 挙動にも影響する。
+
+- エンジンは stats tick で実測ハッシュレートを評価し、初回の非ゼロ測定で
+  必ず `UpdateChannel{channel_id, nominal_hash_rate(F32),
+  maximum_target(MaxTargetUnrestricted)}` を送出。以後は ±25% を超える
+  変動時のみ再送（仕様の ≤1回/秒デバウンス下限を `shouldAdvertiseHashRate`
+  で明示的に強制 —— ticker 間隔が短くても逸脱しない）。
+- **`UpdateChannel.Error` (0x17)** をデコードし warn ログへ（受理は応答なしの
+  仕様のため、到着=拒否）。Unknown バケツから除外。
+
+カバレッジ: UpdateChannel の Encode/Decode round-trip（40B wire 検証）・
+truncate・dispatch、UpdateChannelError デコード、`shouldAdvertiseHashRate`
+テーブルテスト（初回送信・±25%ゲート・デバウンス）、responsivePool 経由の
+統合テスト（UpdateChannel の実送出・channel_id・F32 値・unrestricted target
+を検証）。全24パッケージ `go test` green。
+
 ### Fixed/Added (session 259 — 一次情報(sv2-spec §5.3.9)との照合に基づく精錬: CloseChannel を双方向に実装＋dialer sendMsg の書き込みデッドライン欠落を修正)
 
 **sv2-spec §5.3.9 `CloseChannel` (0x18, channel_msg) を codec＋エンジン
