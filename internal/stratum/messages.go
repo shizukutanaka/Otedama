@@ -17,6 +17,8 @@
 //	0x11  OpenMiningChannelSuccess
 //	0x12  OpenMiningChannelError
 //	0x15  NewMiningJob           (server → client, channel_msg)
+//	0x16  UpdateChannel          (client → server, channel_msg)
+//	0x17  UpdateChannel.Error    (server → client, channel_msg)
 //	0x18  CloseChannel           (both directions, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
@@ -52,6 +54,8 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgUpdateChannel            uint8 = 0x16
+	MsgUpdateChannelError       uint8 = 0x17
 	MsgCloseChannel             uint8 = 0x18
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
@@ -354,6 +358,71 @@ func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
 }
 
 // ------------------------------------------------------------------
+// UpdateChannel (client → server, msg_type 0x16, channel_msg)
+// ------------------------------------------------------------------
+
+// UpdateChannel notifies the pool of changed channel parameters (spec
+// §5.3.7): the client's measured hash rate, and optionally a narrower
+// maximum target the device wants the pool to honour (the pool answers
+// the request asynchronously with SetTarget — it may lag while it
+// readies new jobs). A channel opened with nominal_hash_rate=0 (a pool
+// that assigns difficulty purely on its own schedule, or a client that
+// could not measure yet) uses this to publish the real figure once
+// measured; the spec debounces proxies to ≤1 update/second, and the
+// same floor applies to a direct client.
+type UpdateChannel struct {
+	ChannelID       uint32
+	NominalHashRate float32  // F32 — measured device hashrate, hashes/second
+	MaximumTarget   [32]byte // U256 — request; MaxTargetUnrestricted = no bound
+}
+
+// Encode serialises UpdateChannel.
+func (m UpdateChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 40), m.ChannelID)
+	b = appendU32LE(b, float32bits(m.NominalHashRate))
+	return append(b, m.MaximumTarget[:]...), nil
+}
+
+// DecodeUpdateChannel parses an UpdateChannel payload.
+func DecodeUpdateChannel(payload []byte) (UpdateChannel, error) {
+	if len(payload) < 40 {
+		return UpdateChannel{}, fmt.Errorf("stratum: UpdateChannel: short payload (%d < 40)", len(payload))
+	}
+	var m UpdateChannel
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	m.NominalHashRate = float32frombits(binary.LittleEndian.Uint32(payload[4:8]))
+	copy(m.MaximumTarget[:], payload[8:40])
+	return m, nil
+}
+
+// ------------------------------------------------------------------
+// UpdateChannel.Error (server → client, msg_type 0x17, channel_msg)
+// ------------------------------------------------------------------
+
+// UpdateChannelError rejects an UpdateChannel the pool considered
+// invalid (spec §5.3.8). Acceptance is silent — the message exists only
+// on failure.
+type UpdateChannelError struct {
+	ChannelID uint32
+	ErrorCode string // STR0_255 — human-readable, printable ASCII
+}
+
+// DecodeUpdateChannelError parses an UpdateChannel.Error payload.
+func DecodeUpdateChannelError(payload []byte) (UpdateChannelError, error) {
+	if len(payload) < 5 {
+		return UpdateChannelError{}, fmt.Errorf("stratum: UpdateChannelError: short payload (%d < 5)", len(payload))
+	}
+	ec, err := getStr0_255(bytes.NewReader(payload[4:]))
+	if err != nil {
+		return UpdateChannelError{}, fmt.Errorf("stratum: UpdateChannelError: %w", err)
+	}
+	return UpdateChannelError{
+		ChannelID: binary.LittleEndian.Uint32(payload[0:4]),
+		ErrorCode: ec,
+	}, nil
+}
+
+// ------------------------------------------------------------------
 // SubmitSharesError (server → client, msg_type 0x1d, channel_msg)
 // ------------------------------------------------------------------
 
@@ -431,6 +500,8 @@ type Message struct {
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
+	UpdateChannel            *UpdateChannel
+	UpdateChannelError       *UpdateChannelError
 	CloseChannel             *CloseChannel
 	Unknown                  *UnknownMessage
 }
@@ -522,6 +593,18 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.SubmitSharesError = &v
+	case MsgUpdateChannel:
+		v, err := DecodeUpdateChannel(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.UpdateChannel = &v
+	case MsgUpdateChannelError:
+		v, err := DecodeUpdateChannelError(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.UpdateChannelError = &v
 	case MsgCloseChannel:
 		v, err := DecodeCloseChannel(f.Payload)
 		if err != nil {

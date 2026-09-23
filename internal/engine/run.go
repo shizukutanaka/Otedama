@@ -727,6 +727,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// warning rather than silently losing found shares.
 	var lastDropped uint64
 
+	// Spec §5.3.7: UpdateChannel publishes the measured hash rate to the
+	// pool once it diverges from the figure advertised at channel open
+	// (0 on the poolproto path, a boot-time estimate on the raw path —
+	// both wrong once the miner is actually running). Re-sent when the
+	// measured rate moves ±25%; the spec's ≤1/second debounce floor is
+	// satisfied trivially by the stats-tick cadence.
+	var lastAdvertisedHashRate float64
+	var lastUpdateChannelSent time.Time
+
 	// Track share-submission round-trip latency and reject revalidation.
 	// pending maps a submission's sequence number to the share itself and
 	// the time it was sent; entries are settled (and deleted) on
@@ -782,6 +791,19 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			logStats(opts.workers, currentHashRate, opts.log)
+			if shouldAdvertiseHashRate(currentHashRate, lastAdvertisedHashRate, lastUpdateChannelSent, time.Now()) {
+				uc := stratum.UpdateChannel{
+					ChannelID:       chanID,
+					NominalHashRate: float32(currentHashRate),
+					MaximumTarget:   stratum.MaxTargetUnrestricted,
+				}
+				if err := sendMsg(conn, stratum.MsgUpdateChannel, true, &uc); err != nil {
+					opts.log("warn", fmt.Sprintf("engine: UpdateChannel send failed: %v", err))
+				} else {
+					lastAdvertisedHashRate = currentHashRate
+					lastUpdateChannelSent = time.Now()
+				}
+			}
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
@@ -974,11 +996,17 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					"engine: pool sent CloseChannel for unknown channel %d (%s); ignoring",
 					cc.ChannelID, reason))
 			}
+			if pm.msg.UpdateChannelError != nil {
+				uce := pm.msg.UpdateChannelError
+				opts.log("warn", fmt.Sprintf(
+					"engine: pool rejected UpdateChannel for channel %d: %s",
+					uce.ChannelID, uce.ErrorCode))
+			}
 			if pm.msg.Unknown != nil {
-				// Frames we deliberately don't model (UpdateChannel,
-				// SetExtranoncePrefix, SetGroupChannel, extended-channel
-				// types...) land here; they are harmless to the
-				// standard-channel subset but worth a debug breadcrumb.
+				// Frames we deliberately don't model (SetExtranoncePrefix,
+				// SetGroupChannel, extended-channel types...) land here;
+				// they are harmless to the standard-channel subset but
+				// worth a debug breadcrumb.
 				opts.log("debug", fmt.Sprintf(
 					"engine: ignoring pool msg_type 0x%02X (%d payload bytes)",
 					pm.msg.Unknown.MsgType, len(pm.msg.Unknown.Payload)))
@@ -1452,6 +1480,27 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 		}
 	}
 	return target, nil
+}
+
+// shouldAdvertiseHashRate decides whether a stats-tick measurement
+// warrants an UpdateChannel to the pool (spec §5.3.7). The channel was
+// opened with a nominal_hash_rate that is 0 on the poolproto path and a
+// stale boot-time estimate otherwise, so the first real measurement is
+// always advertised; afterwards only a >25% move justifies a re-send.
+// The spec's ≤1-update/second debounce floor is enforced explicitly —
+// the stats ticker outpaces it, but a shorter interval stays conformant.
+func shouldAdvertiseHashRate(measured, lastSent float64, lastTime, now time.Time) bool {
+	if measured <= 0 || now.Sub(lastTime) < time.Second {
+		return false
+	}
+	if lastSent <= 0 {
+		return true
+	}
+	change := (measured - lastSent) / lastSent
+	if change < 0 {
+		change = -change
+	}
+	return change > 0.25
 }
 
 // applyJob converts a poolproto.Job (the protocol-agnostic job type
