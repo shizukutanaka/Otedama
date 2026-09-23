@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 304 — 裁定 pause/resume・V1 negotiate バウンド・nonce wrap)
+
+- **裁定による pause/idle 割当が次のプールジョブで静黙に打ち消されていた**
+  （並行ブランチ修正 `85f40b4` が当スタック未適用 — s298/s301/s303 同型）:
+  `pauseDevice`/`resumeDevice` はワーカーに通知せず、`applyJob`/`updateWork`
+  が届くたびに一時停止中・AI再配置中のワーカーへ `SetWork` していたため、
+  裁定結果が実質無効化されていた。`Worker.paused atomic.Bool` を新設し
+  `SetPaused(true)` は併せて `SetWork(nil)`（即時採掘停止）、`Paused()` を
+  `applyJob`/`updateWork` が参照して配信を skip。resume は次回ジョブ配信で
+  再アーム（eager 再アームは行わない設計）。
+- **idle→mining デバイスが一度も再開されなかった**（並行ブランチ修正
+  `a1c5250` が当スタック未適用）: `applyAllocation` の `default:` 分岐
+  （idle→assigned 等 `SwitchedFromID` 空の遷移）で `ai.` 系以外のストリームを
+  `resumeDevice` するよう移植 — engine.go:502 で `SwitchedFromID` は
+  `previous.Stream != ""` の場合のみ設定されることを確認済み。
+- **V1 `Negotiate` が `extranonce.subscribe` 応答を ctx 全体で待機**
+  （並行ブランチ修正 `2e5d463` が当スタック未適用 — public-pool.io で実測）:
+  未知メソッドを応答無しに落とすプールでは Negotiate がセッションctxまで
+  ブロックされ、接続は成立するがジョブが一切届かなかった。任意ステップのみ
+  `optionalCallTimeout`（10秒・テストで縮小可の var）でバウンド — タイム
+  アウト時は optional capability を失うだけでセッションは継続。
+- **nonce wrap-around で他レーン/自レーンのハッシュを再採掘**（新規・我々の
+  レーン分割アーキテクチャ固有）: `nonce + NonceStep` が uint32 wrap すると、
+  整除 stride では自身の base に戻り全件 duplicate、非整除では他デバイスの
+  レーンへ衝突。検出は `next := nonce + NonceStep; next < NonceStep`（レーン
+  base は常に step 未満のため正）— wrap 時に `exhausted` で次ジョブまで
+  レーンを park。再採掘より常に厳密に良い。
+- `internal/hal` 深部監査は clean（Registry の nil/dup/空名ガード、detector
+  の nil-Device 拒否＋部分成功、gpu_linux の s243 回帰、`drmBasePath` テスト
+  シーム、cpuDriver 配線）。`0df1e73`（並行ブランチの V1 シェア再構築系）は
+  s255 で同クラス修正済み、per-thread en2 回転は機能追加として
+  CATEGORY_AUDIT へ記録。Curtail は別機構（`curtailGate`）で無影響を確認。
+- テスト4本（paused ワーカー skip、pause→resume e2e、wrap 時の lane park
+  ＋新ジョブ再アーム、沈黙プール下の optional ステップバウンド）。
+
 ### Fixed (session 303 — poolproto レジストリ＋miner nonce 空間監査)
 
 - **複数デバイスが同一 nonce 空間を走査 — 全デバイス≥2 のシェアが duplicate**:

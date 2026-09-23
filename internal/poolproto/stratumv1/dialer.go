@@ -15,6 +15,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -38,6 +39,14 @@ type Dialer struct {
 	// for tests to trust a self-signed certificate; production leaves it nil.
 	tlsConfig *tls.Config
 }
+
+// optionalCallTimeout bounds optional handshake steps (currently only
+// extranonce.subscribe). Pools that silently drop unknown methods would
+// otherwise hold Negotiate open for the whole session context — the
+// session never starts delivering jobs. Ten seconds is generous for a
+// request/response pair yet short enough that a dropped call only costs
+// one reconnect-free delay at startup.
+var optionalCallTimeout = 10 * time.Second
 
 // Protocol identifies which scheme this Dialer handles.
 func (d *Dialer) Protocol() poolproto.ProtocolID {
@@ -165,10 +174,19 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// does NOT close the session — the mandatory steps succeeded, so the
 	// session is in a valid state and the engine will detect stale connections
 	// through the normal Jobs-channel lifecycle.
+	//
+	// The call runs under a short timeout of its own: some pools silently
+	// drop unknown methods instead of replying "Method not found", so
+	// waiting on ctx would block Negotiate until session shutdown — the
+	// engine would connect and never receive a job. Timing out here only
+	// loses the optional capability announcement (ported from 2e5d463).
 	id = sess.nextID.Add(1)
-	if _, eerr := sess.call(ctx, id, "extranonce.subscribe", []any{}); eerr != nil {
-		// Write failed (connection closed) or context expired: proceed without
-		// extranonce rotation — not a fatal condition.
+	extraCtx, extraCancel := context.WithTimeout(ctx, optionalCallTimeout)
+	defer extraCancel()
+	if _, eerr := sess.call(extraCtx, id, "extranonce.subscribe", []any{}); eerr != nil {
+		// Write failed (connection closed), context expired, or the pool
+		// never replied within the window: proceed without extranonce
+		// rotation — not a fatal condition.
 		_ = eerr
 	}
 	// resp.errResult ("Method not found") is also silently ignored here.

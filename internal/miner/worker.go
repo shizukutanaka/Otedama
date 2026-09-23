@@ -120,6 +120,7 @@ type Worker struct {
 	dropCount  atomic.Uint64 // shares dropped because the share channel was full
 	startTime  atomic.Int64  // UnixNano
 	started    atomic.Bool   // guards Start against a second call
+	paused     atomic.Bool   // administrative pause; job delivery skips paused workers
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -194,6 +195,25 @@ func (w *Worker) SetWork(work *Work) {
 	w.mu.Unlock()
 }
 
+// SetPaused marks the worker as administratively paused (true) or clears
+// the pause (false). Pausing clears the current work immediately; while
+// paused, callers delivering new jobs (applyJob/updateWork) must skip
+// this worker so an arbitration decision to idle a device is not undone
+// by the next pool-delivered job. Resuming takes effect on the next
+// delivered job — there is deliberately no eager re-arm, matching how a
+// fresh worker learns about work.
+func (w *Worker) SetPaused(paused bool) {
+	w.paused.Store(paused)
+	if paused {
+		w.SetWork(nil)
+	}
+}
+
+// Paused reports whether the worker was administratively paused via
+// SetPaused(true). Distinct from HasWork: a paused worker stays idle
+// even while the pool keeps delivering jobs.
+func (w *Worker) Paused() bool { return w.paused.Load() }
+
 // DeviceID returns the HAL device identity string this worker was
 // configured with. Empty string means "unidentified device".
 func (w *Worker) DeviceID() string { return w.cfg.DeviceID }
@@ -236,7 +256,9 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 	var (
 		localWork    *Work
 		localWorkVer uint64
-		nonce        = threadID + w.cfg.NonceBase
+		base         = threadID + w.cfg.NonceBase
+		nonce        = base
+		exhausted    bool
 	)
 
 	for {
@@ -251,19 +273,24 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if w.work != localWork || w.workVer != localWorkVer {
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = threadID + w.cfg.NonceBase // restart nonce from thread offset on new job
+			nonce = base // restart nonce from thread offset on new job
+			exhausted = false
 		}
 		w.mu.Unlock()
 
-		if localWork == nil {
-			// No job yet; yield and retry.
+		if localWork == nil || exhausted {
+			// No job yet, or this thread's nonce lane is fully scanned
+			// (see below); yield and retry.
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 
 		// Inner loop: hash a batch of nonces before checking context
 		// and work updates. Batch size balances overhead against
-		// responsiveness to job changes.
+		// responsiveness to job changes. i is declared outside the loop
+		// so the batch counter below counts correctly on an early break
+		// (lane exhausted): on break i is pre-incremented so it always
+		// holds the number of iterations actually hashed.
 		const batchSize = 1024
 
 		h := localWork.Header
@@ -272,7 +299,8 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		// and once per found share so a received share always implies its
 		// hash was counted).
 		counted := 0
-		for i := 0; i < batchSize; i++ {
+		i := 0
+		for ; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(h)
 
@@ -305,15 +333,39 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
-			nonce += w.cfg.NonceStep
+			// The work carries a fixed header — the coinbase's extranonce2
+			// is baked in at job delivery, so this thread cannot mint fresh
+			// nonce space by rotating en2 the way cgminer does. When the
+			// uint32 wraps it would land back at this lane's start and
+			// re-hash the identical sequence: every resulting share is an
+			// exact duplicate the pool must reject, and pre-wrap it may
+			// collide with a foreign lane. Parking until the next job is
+			// strictly better than burning hash rate on duplicates.
+			// (next < step ⟺ nonce+step ≥ 2³² ⟺ the lane is fully
+			// scanned — lane bases are always < step, so the post-wrap
+			// value is either a duplicate of our own lane or belongs to
+			// another lane; parking is correct in both cases.)
+			next := nonce + w.cfg.NonceStep
+			if next < w.cfg.NonceStep {
+				exhausted = true
+			}
+			nonce = next
+			if exhausted {
+				// Stop the batch too — continuing it would grind the
+				// foreign/duplicate lane for up to batchSize-1 more
+				// nonces. i++ counts the just-hashed nonce so the
+				// flush below stays exact.
+				i++
+				break
+			}
 		}
 		// One atomic add per batch, not per hash: a per-hash LOCK XADD
 		// on this shared counter puts every worker thread on the same
 		// cache line N times per second, which measurably costs single-
 		// digit percent of grind throughput even uncontended, and worse
-		// under contention. The loop above always runs batchSize
-		// iterations, so batching the count is exact.
-		w.hashCount.Add(uint64(batchSize - counted))
+		// under contention. The count stays exact on an early break
+		// because i then equals iterations actually hashed.
+		w.hashCount.Add(uint64(i - counted))
 	}
 }
 

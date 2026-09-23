@@ -439,3 +439,45 @@ func TestWorker_NonceBasePartitionsAcrossWorkers(t *testing.T) {
 		}
 	}
 }
+
+// TestWorker_ParksExhaustedNonceLane pins the wrap-around defect: with a
+// fixed header (baked extranonce2), a thread whose lane wraps would
+// re-hash the identical sequence — every share an exact pool duplicate.
+// The fix parks the lane until the next job. We force a tiny lane by
+// placing the base near the top of the space: lane = one nonce.
+func TestWorker_ParksExhaustedNonceLane(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Lane = exactly one nonce: base = 2^32-8, step = 8 → hashes
+	// 0xFFFFFFF8 then next wraps to 0 → exhausted.
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 8, NonceBase: 0xFFFFFFF8})
+	w.SetWork(makeEasyWork())
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	// The single lane nonce produces exactly one share (max target);
+	// after that the thread must park — any second share means it
+	// re-hashed a wrapped nonce.
+	first, ok := <-shares
+	if !ok {
+		t.Fatal("no share emitted for the single-nonce lane")
+	}
+	if first.Nonce != 0xFFFFFFF8 {
+		t.Fatalf("first share nonce = %#x, want 0xFFFFFFF8", first.Nonce)
+	}
+	select {
+	case s := <-shares:
+		t.Fatalf("second share (nonce %#x) — thread re-hashed a wrapped lane", s.Nonce)
+	case <-time.After(250 * time.Millisecond):
+	}
+	// A new job re-arms the lane: next work must produce again.
+	w.SetWork(makeEasyWork())
+	select {
+	case s := <-shares:
+		if s.Nonce != 0xFFFFFFF8 {
+			t.Fatalf("re-armed share nonce = %#x, want 0xFFFFFFF8", s.Nonce)
+		}
+	case <-ctx.Done():
+		t.Fatal("worker did not re-arm on new job after lane exhaustion")
+	}
+}

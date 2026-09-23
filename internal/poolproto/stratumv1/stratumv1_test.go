@@ -2152,3 +2152,49 @@ func TestSession_Submit_EchoesAuthorizedWorker(t *testing.T) {
 		t.Errorf("extranonce2 = %q, want 01020304", got.Params[2])
 	}
 }
+
+// TestNegotiate_SilentPoolStillCompletesViaOptionalTimeout pins the
+// optionalCallTimeout bound: a pool that answers subscribe/authorize but
+// silently drops extranonce.subscribe (observed live on public-pool.io)
+// must not hold Negotiate open — previously it waited on ctx for the
+// whole session lifetime, so the engine connected and never received a
+// job (ported from 2e5d463).
+func TestNegotiate_SilentPoolStillCompletesViaOptionalTimeout(t *testing.T) {
+	old := optionalCallTimeout
+	optionalCallTimeout = 100 * time.Millisecond
+	defer func() { optionalCallTimeout = old }()
+
+	d, conn, serverConn := makeNegotiateConn(t)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		reply := func(result string) {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			_ = json.Unmarshal(line, &req)
+			id, _ := json.Marshal(req.ID)
+			_, _ = serverConn.Write([]byte(`{"id":` + string(id) + `,"result":` + result + `,"error":null}` + "\n"))
+		}
+		reply(`[[["mining.notify","s1"]],"deadbeef00",4]`) // subscribe
+		reply("true")                                      // authorize
+		// extranonce.subscribe: read and never reply (silent drop).
+		_, _ = reader.ReadBytes('\n')
+	}()
+
+	// Outer ctx far exceeds optionalCallTimeout — before the bound this
+	// would hang for the full minute.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	start := time.Now()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+	if got := time.Since(start); got > 30*time.Second {
+		t.Fatalf("Negotiate took %v — silent optional step was not bounded", got)
+	}
+}

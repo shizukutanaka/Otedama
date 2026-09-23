@@ -1627,6 +1627,9 @@ func updateWork(
 		Target: target,
 	}
 	for _, wr := range workers {
+		if wr.Paused() {
+			continue
+		}
 		wr.SetWork(w)
 	}
 }
@@ -1660,7 +1663,8 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 
 // applyJob converts a poolproto.Job (the protocol-agnostic job type
 // delivered by poolproto.Session.Jobs()) into a miner.Work and pushes
-// it to every worker. This is the bridge that lets the engine consume
+// it to every worker not administratively paused (Worker.Paused). This
+// is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
 // (docs/KNOWN_LIMITATIONS.md §3). workJobID is the uint32 the worker
@@ -1697,6 +1701,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, workJobID, chanID uint
 		Target: target,
 	}
 	for _, wr := range workers {
+		if wr.Paused() {
+			continue
+		}
 		wr.SetWork(w)
 	}
 	return nil

@@ -298,7 +298,20 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 	pauseDevice := func(deviceID string) {
 		for _, w := range workers {
 			if w.DeviceID() == deviceID {
-				w.SetWork(nil)
+				// SetPaused, not bare SetWork(nil): a cleared work is undone
+				// by the next pool-delivered job, which applyJob pushes to
+				// every worker — the arbitration decision would silently
+				// stop applying seconds later. Paused workers are skipped
+				// by job delivery until resumed.
+				w.SetPaused(true)
+				return
+			}
+		}
+	}
+	resumeDevice := func(deviceID string) {
+		for _, w := range workers {
+			if w.DeviceID() == deviceID {
+				w.SetPaused(false)
 				return
 			}
 		}
@@ -327,7 +340,10 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 				log("info", fmt.Sprintf("arbitration: %s → AI inference (%.0f sat/s)",
 					a.DeviceID, a.ExpectedYield))
 			case wasAI && !nowAI:
-				// AI → Mining: workers will receive new work from the pool on next job.
+				// AI → Mining: lift the pause; the worker picks up the next
+				// pool-delivered job (delivery skips it until then anyway
+				// because its work was cleared when paused).
+				resumeDevice(a.DeviceID)
 				log("info", fmt.Sprintf("arbitration: %s → mining (%.0f sat/s)",
 					a.DeviceID, a.ExpectedYield))
 			default:
@@ -336,7 +352,17 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			}
 
 		default:
-			// No change; assignment held per hysteresis.
+			// No recorded switch. Two cases reach here: a plain hold, and
+			// an idle→assigned transition (idle assignments carry no
+			// Stream, so SwitchedFromID is empty and the switch above is
+			// skipped). A device that was paused while idle and is now
+			// routed back to a mining stream must be resumed — otherwise
+			// it stays paused forever. Non-"ai." streams are the mining
+			// family (only SHA256d consumers); resuming an unpaused worker
+			// is a no-op.
+			if !strings.HasPrefix(string(a.Stream), "ai.") {
+				resumeDevice(a.DeviceID)
+			}
 		}
 	}
 }

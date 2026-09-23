@@ -3207,3 +3207,88 @@ func TestRunSessionV1_DrainsPoolNotices(t *testing.T) {
 	cancel()
 	<-done
 }
+
+// TestApplyJob_SkipsPausedWorker pins the arbitration-pause invariant: a
+// worker paused by applyAllocation (SetPaused) must NOT receive the next
+// pool-delivered job — previously applyJob pushed work to every worker,
+// silently undoing a mining→AI routing decision seconds later (ported
+// from unmerged 85f40b4 on devin/1789850746-e2e-fixes).
+func TestApplyJob_SkipsPausedWorker(t *testing.T) {
+	active := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	paused := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "asic-0"})
+	paused.SetPaused(true)
+	workers := []*miner.Worker{active, paused}
+
+	job := poolproto.Job{
+		JobID: "1",
+		NTime: 0x60000000,
+		NBits: 0x1d00ffff,
+	}
+	if err := applyJob(workers, job, 1, 1, 0); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if !active.HasWork() {
+		t.Error("unpaused worker did not receive the job")
+	}
+	if paused.HasWork() {
+		t.Error("paused worker received a job — arbitration pause was overridden")
+	}
+	// Resuming re-arms the worker for the NEXT job (no eager re-arm).
+	paused.SetPaused(false)
+	if err := applyJob(workers, job, 1, 1, 0); err != nil {
+		t.Fatalf("applyJob after resume: %v", err)
+	}
+	if !paused.HasWork() {
+		t.Error("resumed worker did not receive the next job")
+	}
+}
+
+// TestApplyAllocation_PauseAndResume covers the full defect pair: an
+// idle assignment pauses the device, and a subsequent mining assignment
+// (which carries no SwitchedFromID because idle has no Stream) must
+// resume it — previously it fell into the no-change branch and the
+// device stayed paused forever (ported from a1c5250).
+func TestApplyAllocation_PauseAndResume(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	workers := []*miner.Worker{w}
+	var lines []string
+	log := func(_, msg string) { lines = append(lines, msg) }
+
+	// Idle pauses the device.
+	applyAllocation(&arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{DeviceID: "cpu-0", Stream: ""}},
+	}, workers, log)
+	if !w.Paused() {
+		t.Fatal("idle assignment did not pause the worker")
+	}
+
+	// A mining assignment with no SwitchedFromID (idle→assigned
+	// transition) must resume it.
+	applyAllocation(&arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID: "cpu-0",
+			Stream:   "mining.stratum",
+		}},
+	}, workers, log)
+	if w.Paused() {
+		t.Error("idle→mining assignment did not resume the worker")
+	}
+
+	// mining→AI pauses, AI→mining (real SwitchedFromID) resumes.
+	applyAllocation(&arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID: "cpu-0", Stream: "ai.akash", SwitchedFromID: "mining.stratum",
+		}},
+	}, workers, log)
+	if !w.Paused() {
+		t.Error("mining→AI assignment did not pause the worker")
+	}
+	applyAllocation(&arbitration.Allocation{
+		Assignments: []arbitration.Assignment{{
+			DeviceID: "cpu-0", Stream: "mining.stratum", SwitchedFromID: "ai.akash",
+		}},
+	}, workers, log)
+	if w.Paused() {
+		t.Error("AI→mining assignment did not resume the worker")
+	}
+}
