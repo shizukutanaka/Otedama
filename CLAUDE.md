@@ -33,7 +33,7 @@ Otedama/
 │   ├── daemon/             # systemd/launchd/Windows サービス管理
 │   ├── doctor/             # 17 並行ヘルスチェック
 │   ├── engine/             # 全パッケージを統合するメインループ
-│   ├── hal/                # ハードウェア抽象化（CPU常時、Linux GPU sysfs・macOS system_profiler）
+│   ├── hal/                # ハードウェア抽象化（CPU常時、Linux GPU sysfs・macOS system_profiler・Windows CIM）
 │   ├── httpserver/         # /healthz /readyz /metrics /
 │   ├── i18n/messages/      # メッセージカタログ（10 言語）
 │   ├── lightning/          # BIP-39 シード生成・AES-GCM 暗号化ウォレット

@@ -103,8 +103,8 @@ configured pool URLs — each tagged with the layer it was resolved from.
 ## 4. Mining session lifecycle
 
 1. **Resolve + validate** config; abort with exit 78 on failure.
-2. **Detect devices** (CPU always; GPU via Linux DRM sysfs or macOS
-   `system_profiler` — Windows not yet, KNOWN_LIMITATIONS §4).
+2. **Detect devices** (CPU always; GPU via Linux DRM sysfs, macOS
+   `system_profiler`, or Windows `Win32_VideoController` — KNOWN_LIMITATIONS §4).
 3. **Optional wallet** (only if `--wallet-passphrase` given): BIP-39 seed,
    scrypt+AES-GCM encrypted at rest, receive-only (KNOWN_LIMITATIONS §6).
 4. **Reconnect loop** (`runReconnectLoop`):
@@ -219,7 +219,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 
 Authoritative list in `docs/KNOWN_LIMITATIONS.md`: (1) AI-inference yield is
 simulated; (2) Noise NX uses P-256, not secp256k1; (3) engine does not yet
-route through the `poolproto` abstraction; (4) GPU detection is Linux/macOS-only;
+route through the `poolproto` abstraction; (4) detected GPUs cannot mine (no compute dispatch);
 (5) post-quantum schemes are scaffolded; (6) Lightning is receive-only.
 
 ---
@@ -244,7 +244,7 @@ route through the `poolproto` abstraction; (4) GPU detection is Linux/macOS-only
 | G3 | Engine bypasses the `poolproto` dialer abstraction (inline handshake). | Open — KNOWN_LIMITATIONS §3; deferred (would regress submit-latency/reject telemetry until `poolproto.Session` is extended — see CHANGELOG session 55). |
 | G4 | Noise NX DH uses P-256, not secp256k1 + ElligatorSwift. | Open — KNOWN_LIMITATIONS §2; decided in ADR-011, implementation pending the dependency. |
 | G5 | AI-inference yield is simulated (no live Akash API). | Open — KNOWN_LIMITATIONS §1; concrete integration surface catalogued (RESEARCH_IMPROVEMENTS session-51 #11, session-52 #3). |
-| G6 | GPU detection is Linux/macOS-only; Windows unsupported. | Open — KNOWN_LIMITATIONS §4 (macOS added session 276; Windows remains v3.3.0). |
+| G6 | Detected GPUs cannot mine — no CUDA/ROCm/Metal/Vulkan dispatch. | Open — KNOWN_LIMITATIONS §4 (detection is cross-platform as of session 277; dispatch unscheduled). |
 | G18 | `otedama_submit_latency_milliseconds` is the only time-valued metric expressed in milliseconds; the other eight (`uptime_seconds`, `start_time_seconds`, `clock_skew_seconds`, `btc_rate_age_seconds`, `last_job_received_seconds`, `last_reject_seconds`, `estimated_share_interval_seconds`, `productive_seconds_total`) use seconds. Prometheus naming guidance mandates base units (seconds), so the conventional name would be `otedama_submit_latency_seconds` with values in seconds. The stored value is genuinely milliseconds (`run.go` records `Sub(sent).Microseconds()/1000` and `Since(sendTime).Milliseconds()`), so the current name is *accurate* but non-idiomatic and inconsistent with the rest of the catalogue. | Open — **breaking rename**: any operator dashboard/alert keyed on the metric name or its ms scale would break. Recorded for a maintainer decision rather than changed unilaterally (options: rename to `_seconds` + divide by 1000 in one release; or expose a parallel `_seconds` series and deprecate the ms one). |
 | G19 | Despite G16's "complete schema table" fix (session 190), `http_addr` (`OTEDAMA_HTTP_ADDR` / `--http-addr`) — settable, validated, and printed by `config show` since before that session — was never added to the §3.1 table. | **Fixed (session 244)**: added the missing `http_addr` row (env var, default, and the endpoints it gates). |
 

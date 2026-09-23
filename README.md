@@ -32,7 +32,7 @@ Otedamaの設計は三つの原則に従います。John Carmackのパフォー�
 
 ## 主要機能 / Core Features
 
-Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通りです。Stratum V2/V1対応のマイニングクライアント（実際に採掘します。複数プールを明示設定すれば優先順位付きフェイルオーバーが機能し、未設定時は組み込みの既定プール1つにフォールバック）。Lightning関連コードによるBIP-39シードの暗号化保管（決済処理そのものは未実装）。2系統（実採掘・simulated AI推論）のリアルタイム裁定エンジン。CPU自動検出（実マイニング対応）およびLinux/macOS限定のGPU検出（プレゼンス検出のみで、compute dispatchは未実装のためGPUでのマイニング・推論は不可）。Prometheus互換のメトリクスエクスポート（`/metrics`・`/healthz`・`/readyz`）。
+Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通りです。Stratum V2/V1対応のマイニングクライアント（実際に採掘します。複数プールを明示設定すれば優先順位付きフェイルオーバーが機能し、未設定時は組み込みの既定プール1つにフォールバック）。Lightning関連コードによるBIP-39シードの暗号化保管（決済処理そのものは未実装）。2系統（実採掘・simulated AI推論）のリアルタイム裁定エンジン。CPU自動検出（実マイニング対応）およびGPUプレゼンス検出（Linux・macOS・Windows対応、ただしcompute dispatchは未実装のためGPUでのマイニング・推論は不可）。Prometheus互換のメトリクスエクスポート（`/metrics`・`/healthz`・`/readyz`）。
 
 以下は現時点で未実装、またはv4.0以降の計画のみの機能です：ASIC検出、ZKPベース認証、プラグインアーキテクチャ、Web管理インターフェース、OpenTelemetry分散トレーシング、署名付きバイナリ配布、分散レンダリング、科学計算委託。詳細は `docs/KNOWN_LIMITATIONS.md` を参照してください。
 
@@ -40,7 +40,7 @@ Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通り�
 
 ### 必要環境 / Requirements
 
-Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux・macOS上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
+Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux・macOS・Windows上で検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
 
 ### インストール / Installation
 

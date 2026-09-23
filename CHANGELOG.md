@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 277 — Windows の GPU 検出: §4 の検出半分を完結)
+
+**Windows でも GPU が検出されるようになった.** `internal/hal` に第3の
+プラットフォームドライバ `GPUWindowsDriver` を追加。PowerShell の
+`Get-CimInstance Win32_VideoController | ConvertTo-Json -Compress` を
+パースする方式のため CGO/WMI/DXGI バインディング不要（新規依存ゼロ、
+廃止済みの wmic ではなく現行の CIM コマンドレットを使用）。JSON パーサは
+`gpu_cim.go`（build tag なし）に分離し、全プラットフォームでテスト可能な
+構造にした。`ConvertTo-Json` が1台時に裸オブジェクト・0台時に null を
+返す挙動に対応。Microsoft Basic Display Adapter 等の仮想/ソフトウェア
+アダプタは物理 GPU でないためスキップ（LogFn で通知）。ベンダーは
+`AdapterCompatibility` 文字列から正規化し、不在時はモデル名推定に
+フォールバック。`AdapterRAM` は一部ドライバが負値を返す既知の癖に対応
+（正値のみ GiB/MiB 注記）。デバイス ID は `PNPDeviceID` の `DEV_XXXX` から
+採取、なければ `gpu-win-N`。powershell.exe 不在や空レポートは他 OS と
+同じ「GPUなし」として安全に扱う。KNOWN_LIMITATIONS §4 の検出半分は
+これで完結 — 残置は compute dispatch のみ。
+
 ### Added (session 276 — macOS の GPU 検出: KNOWN_LIMITATIONS §4 半分解消)
 
 **macOS でも GPU が検出されるようになった.** `internal/hal` に第2の
