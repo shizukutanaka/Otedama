@@ -370,6 +370,24 @@ func (s *session) SuggestedDifficulty() float64 {
 	return uint64ToFloat64(s.difficulty.Load())
 }
 
+// SuggestDifficulty sends mining.suggest_difficulty, the V1 mechanism
+// for proposing a share difficulty (the counterpart to SV2's
+// nominal_hash_rate in UpdateChannel — see poolproto.DifficultySuggester
+// for the advisory semantics). Pools that don't implement the method —
+// OCEAN answers "Method not found" — produce a JSON-RPC error result,
+// which surfaces here as a non-fatal error for the caller to log.
+func (s *session) SuggestDifficulty(ctx context.Context, difficulty float64) error {
+	id := s.nextID.Add(1)
+	resp, err := s.call(ctx, id, "mining.suggest_difficulty", []any{difficulty})
+	if err != nil {
+		return fmt.Errorf("stratumv1: suggest_difficulty: %w", err)
+	}
+	if resp.errResult != nil {
+		return fmt.Errorf("stratumv1: suggest_difficulty declined: %v", resp.errResult)
+	}
+	return nil
+}
+
 // Close terminates the session and underlying connection. Idempotent.
 func (s *session) Close() error {
 	var err error

@@ -1147,6 +1147,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
 
+	// V1's counterpart to the V2 UpdateChannel: once the measured rate
+	// exists, mining.suggest_difficulty asks the pool for a share cadence
+	// (~1 per 10s) instead of whatever its default — often tuned for
+	// ASICs — happens to be. Advisory only (poolproto.DifficultySuggester).
+	var lastSuggestedHPS float64
+	var lastSuggestAt time.Time
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1155,6 +1162,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
 			logStats(opts.workers, currentHashRate, opts.log)
+			if shouldAdvertiseHashRate(currentHashRate, lastSuggestedHPS, lastSuggestAt, time.Now()) {
+				if sug, ok := sess.(poolproto.DifficultySuggester); ok {
+					if err := sug.SuggestDifficulty(ctx, v1SuggestedDifficulty(currentHashRate)); err != nil {
+						opts.log("debug", fmt.Sprintf("engine: suggest_difficulty declined or undeliverable: %v", err))
+					} else {
+						lastSuggestedHPS = currentHashRate
+						lastSuggestAt = time.Now()
+					}
+				}
+			}
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
@@ -1480,6 +1497,19 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 		}
 	}
 	return target, nil
+}
+
+// v1SuggestedDifficulty converts a measured hash rate into the
+// mining.suggest_difficulty parameter: V1 difficulty d means ~2^32·d
+// hashes per share on average, so d = hps·10/2^32 targets one share per
+// ~10 seconds — the cadence cgminer-derived miners and pool vardiff
+// implementations are designed around. The pool clamps the value into
+// its supported range itself; sending our true rate is more honest than
+// pre-clamping to a floor the pool may not share.
+func v1SuggestedDifficulty(hps float64) float64 {
+	const hashesPerShareAtDiff1 = 4294967296.0 // 2^32
+	const targetSecondsPerShare = 10.0
+	return hps * targetSecondsPerShare / hashesPerShareAtDiff1
 }
 
 // shouldAdvertiseHashRate decides whether a stats-tick measurement

@@ -241,6 +241,26 @@ type PoolNoticeReceiver interface {
 	PoolNotices() <-chan string
 }
 
+// DifficultySuggester is an optional extension to Session for protocols
+// that let the client propose its own share difficulty — Stratum V1's
+// mining.suggest_difficulty (SV2 covers the same ground differently:
+// nominal_hash_rate in UpdateChannel). Callers type-assert a Session to
+// this interface; a missing implementation means the protocol simply
+// cannot express the suggestion.
+//
+// The suggestion is advisory: pools may honour it, clamp it to their
+// supported range, respond with a JSON-RPC "Method not found" (OCEAN),
+// or ignore it entirely. It is not a contract — the authoritative
+// difficulty always arrives via mining.set_difficulty afterwards.
+type DifficultySuggester interface {
+	// SuggestDifficulty sends a share-difficulty suggestion upstream.
+	// An error means only "the suggestion could not be delivered or was
+	// declined" (transport failure, closed session, or a pool-level
+	// JSON-RPC error such as OCEAN's "Method not found") — never a
+	// session-fatal condition; callers log at debug and move on.
+	SuggestDifficulty(ctx context.Context, difficulty float64) error
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.
