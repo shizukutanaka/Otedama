@@ -11,10 +11,16 @@
 package engine
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
+	"os"
 	"runtime"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -134,6 +140,15 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	if wm.IsNew() {
 		log("info", "wallet: new wallet created — back up your recovery phrase")
 		printRecoveryPhrase(opts.Output, wm.Mnemonic(), fingerprint)
+		// A backup nobody verified is the classic fund-loss vector
+		// (Category 4 #8): like a hardware wallet's first-boot flow, ask
+		// for a few randomly chosen words to prove the paper copy exists.
+		// Only on a real terminal — services and piped installs never
+		// block on a prompt.
+		if interactiveInput(opts.Input) {
+			confirmBackupWords(opts.Input, opts.Output, wm.Mnemonic(),
+				pickWordPositions(len(wm.Mnemonic()), backupProbeWords))
+		}
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
@@ -197,6 +212,80 @@ func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint s
 ========================================================================
 
 `, mnemonic.String(), fingerprint, len(mnemonic))
+}
+
+// backupProbeWords is how many distinct word positions the first-run
+// backup check asks for; backupProbeAttempts bounds retries before the
+// run continues unverified.
+const (
+	backupProbeWords    = 3
+	backupProbeAttempts = 3
+)
+
+// interactiveInput reports whether r is attached to a real terminal,
+// mirroring cmd's isTerminal: a character device on every platform Go
+// supports. Pipes, files, and injected readers are never interactive —
+// so services and tests never see the backup prompt.
+func interactiveInput(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// pickWordPositions returns k distinct word indexes in ascending order.
+// Randomness has no security role here — it only prevents the user from
+// predicting which positions will be asked, so a predictable-source
+// rand is acceptable.
+func pickWordPositions(n, k int) []int {
+	if k > n {
+		k = n
+	}
+	if k <= 0 {
+		return nil
+	}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	positions := r.Perm(n)[:k]
+	slices.Sort(positions)
+	return positions
+}
+
+// confirmBackupWords asks the user to re-enter the words at the given
+// positions, proving the recovery-phrase backup actually exists. It is
+// advisory: an exhausted-retry failure warns loudly but does not abort
+// the run (the wallet already exists and refusing to start wouldn't
+// un-lose the phrase). Positions are injected so tests can ask for
+// deterministic words; production passes pickWordPositions.
+func confirmBackupWords(in io.Reader, out io.Writer, m lightning.Mnemonic, positions []int) {
+	if in == nil || out == nil || len(positions) == 0 {
+		return
+	}
+	r := bufio.NewReader(in)
+	fmt.Fprintln(out, "  Prove your backup — re-enter the requested words.")
+	for attempt := 0; attempt < backupProbeAttempts; attempt++ {
+		ok := true
+		for _, p := range positions {
+			fmt.Fprintf(out, "  Word #%d: ", p+1)
+			word, err := r.ReadString('\n')
+			word = strings.TrimSpace(word)
+			if err != nil && word == "" {
+				fmt.Fprintln(out, "  (input closed — skipping verification)")
+				return
+			}
+			if !strings.EqualFold(word, m[p]) {
+				ok = false
+			}
+		}
+		if ok {
+			fmt.Fprintln(out, "  Backup verified — your wallet is recoverable.")
+			return
+		}
+		fmt.Fprintln(out, "  Not quite — check the paper copy and try again.")
+	}
+	fmt.Fprintln(out, "  WARNING: backup not verified. If wallet.dat is lost, funds are")
+	fmt.Fprintln(out, "  unrecoverable. Run `otedama wallet verify` to check your paper copy.")
 }
 
 // defaultPoolURL returns the first configured pool URL, or the built-in

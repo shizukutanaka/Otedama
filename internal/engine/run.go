@@ -72,6 +72,9 @@ type Options struct {
 	Config config.Config
 	Clock  clock.Clock
 	Output io.Writer // where TUI writes; defaults to os.Stdout
+	Input  io.Reader // interactive prompts; defaults to os.Stdin. Only
+	// read when it is a real terminal — services see nil/pipe input
+	// and are never blocked on prompts.
 	Logger func(level, msg string)
 	NoTUI  bool // disable the terminal dashboard
 
@@ -143,6 +146,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	if opts.Output == nil {
 		opts.Output = os.Stdout
+	}
+	if opts.Input == nil {
+		opts.Input = os.Stdin
 	}
 	log := opts.Logger
 	if log == nil {
