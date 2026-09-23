@@ -164,7 +164,20 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
 	}
 
-	// Step 3 (optional): extranonce.subscribe — announce that we handle
+	// Step 3a (optional): BIP-310 mining.configure — formally negotiate
+	// the subscribe-extranonce extension. Pools that gate
+	// mining.set_extranonce on BIP-310 negotiation honour only this path;
+	// the legacy extranonce.subscribe below covers pools that predate
+	// BIP-310. version-rolling is deliberately NOT advertised — overt
+	// ASICBoost is ASIC-only and meaningless on CPU/GPU. Optional: a
+	// pre-BIP-310 pool answers "Method not found" and we proceed.
+	id = sess.nextID.Add(1)
+	_, _ = sess.call(ctx, id, "mining.configure", []any{
+		[]string{"subscribe-extranonce"},
+		map[string]any{},
+	})
+
+	// Step 3b (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)
 	// and pool-level errors ("Method not found") both mean the pool does not
 	// support extranonce rotation; we proceed without it. A network error here
