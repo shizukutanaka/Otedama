@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 271 — プール hashshare 警告 doctor チェック — Category 4 #7)
+
+**設定したプールがネットワーク過半に近い超大手でも、今まで誰も教えて
+くれなかった。** `checkPoolHashrateShare` を doctor の18番目の
+チェックとして追加：設定プールのエンドポイントが支配的シェアを持つ
+オペレーター（静的サフィックス表 — foundryusapool ≒1/3、antpool
+≒1/6、viabtc/f2pool ≒1/10、公開ダッシュボード由来の粗い分数値）
+に該当すれば WARN。アドバイザリであり fail ではない — 大手で掘る
+こと自体は正常動作であり、問題は上位2社でネットワークの約半分という
+現状への加算。境界完全一致のサフィックスマッチで
+`evil-antpool.com` の類似ドメインは誤爆しない。チェック数は
+CLAUDE.md の「17 並行ヘルスチェック」記述を陳腐化するので、
+本書更新はメンテナ判断に委ねる。
+
 ### Added (session 270 — 初回起動時のシードバックアップ検証 — Category 4 #8)
 
 **書き留めたはずのバックアップが、失って初めて「なかった」と分かる

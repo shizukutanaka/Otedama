@@ -228,8 +228,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    misconfig (two hostnames that are CNAMEs/round-robin for the same node).
 6. 🔵 **TemplateSource abstraction** — ADR-009 lets a URL scheme select
    pool/JDC/solo template provenance.
-7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
+7. ✅ **Pool-share-of-hashrate awareness** — optionally inform the user when
    their chosen pool exceeds a large network share, nudging decentralisation.
+   — ✅ **Implemented (session 271).** `checkPoolHashrateShare` warns when a
+   configured pool endpoint belongs to a dominant-share operator (static
+   suffix table: foundryusapool ~1/3, antpool ~1/6, viabtc/f2pool ~1/10,
+   coarse fractions from public pool-share dashboards). Advisory WARN, not
+   a fail — mining there works; the concern is that the top two operators
+   already approach half the network. Dependency-free like the endpoint
+   check: live share data needs an external feed Otedama doesn't bundle.
+   Boundary-exact suffix match so lookalike domains don't trip it.
 8. ❌ **Running a pool server** — explicitly out of scope (ADR-001).
 9. ✅ **Block-template freshness metric** (session 93):
    `otedama_last_job_received_seconds` (Unix timestamp of last
