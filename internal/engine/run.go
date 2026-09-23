@@ -63,6 +63,15 @@ const (
 	reconnectBackoffMax = 64 * time.Second
 )
 
+// handshakeTimeout bounds the connect-and-handshake phase (TCP/TLS dial
+// plus the SetupConnection/OpenMiningChannel exchange) of one session
+// attempt. Without it a pool that accepts the socket but never replies
+// wedges the reconnect loop on the caller's context — which is the run
+// lifetime, so 'connected to X' would be the last log forever. 30s
+// matches standard client behaviour. It is a var (not const) so tests
+// can shrink it.
+var handshakeTimeout = 30 * time.Second
+
 // arbitrationInterval is how often the engine re-evaluates the
 // device→stream assignment in the absence of a fresh quote.
 // It is a var (not const) so tests can shrink it to milliseconds.
@@ -649,6 +658,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
 	}
 
+	// Bound the connect phase: the dial ctx applies to TCP connect and
+	// the TLS handshake alike. Cancellation after connect is safe — an
+	// established conn does not depend on it.
+	dialCtx, dialCancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer dialCancel()
+
 	var conn net.Conn
 	if proto == poolproto.ProtocolStratumV2TLS {
 		// A configured v2tls:// pool gets an actual, certificate-verified
@@ -666,7 +681,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				tlsCfg = cfg
 			}
 		}
-		conn, err = stratum.DialTLS(ctx, host, tlsCfg)
+		conn, err = stratum.DialTLS(dialCtx, host, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("engine: TLS dial %s: %w", host, err)
 		}
@@ -680,7 +695,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
 			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
 		var d net.Dialer
-		conn, err = d.DialContext(ctx, "tcp", host)
+		conn, err = d.DialContext(dialCtx, "tcp", host)
 		if err != nil {
 			return fmt.Errorf("engine: dial %s: %w", host, err)
 		}
@@ -1436,6 +1451,12 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // CloseChannel's group-close semantics, spec §5.3.9), and the share target.
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (chanID, groupID uint32, shareTarget miner.Hash, err error) {
 	host, _ := parseHost(poolURL)
+	// Bound the whole exchange: ReadFrame has no ctx, so the conn
+	// deadline is the timeout. A pool that accepts the socket but never
+	// sends SetupConnectionSuccess must not wedge the reconnect loop on
+	// the run-lifetime ctx. Cleared on success — mid-session reads run
+	// under the liveness metrics instead.
+	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
@@ -1497,6 +1518,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
 	// map directly.
+	_ = conn.SetDeadline(time.Time{})
 	return omcs.ChannelID, omcs.GroupChannelID, miner.Hash(omcs.Target), nil
 }
 
