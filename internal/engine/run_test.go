@@ -3198,3 +3198,86 @@ func TestV1Work_PropagatesNotifyHeaderFields(t *testing.T) {
 		t.Error("JobID/ChannelID mismatch")
 	}
 }
+
+func TestRunReconnectLoop_HealthySessionResetsAttemptBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	// MaxReconnectAttempts counts *consecutive* failures, not lifetime
+	// attempts: a session that stayed up past healthySessionDur must reset
+	// the budget so an old outage can't drain it. With max=1 the loop
+	// should allow the post-healthy re-dial; without the reset it dies
+	// immediately at attempt 2.
+	p := newMockPool(t)
+
+	var mu sync.Mutex
+	var logs []string
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	var amu sync.Mutex
+	done := make(chan error, 1)
+	go func() {
+		done <- runReconnectLoop(ctx, reconnectOpts{
+			opts: Options{
+				Config: config.Config{
+					BitcoinAddress: "bc1qtest000000000000000000000000000000000",
+					Pools:          []config.PoolConfig{{URL: p.URL()}},
+				},
+				MaxReconnectAttempts: 1,
+			},
+			workers:           []*miner.Worker{w},
+			merged:            merged,
+			metrics:           m,
+			log:               logFn,
+			activityMu:        &amu,
+			activity:          map[string]float64{},
+			healthySessionDur: 50 * time.Millisecond,
+		})
+	}()
+
+	// Wait for session 1 to establish, keep it up past the healthy
+	// threshold, then kill the pool so the session ends "healthy".
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		p.mu.Lock()
+		n := len(p.conns)
+		p.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("session never connected to mock pool")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(120 * time.Millisecond)
+	p.Stop()
+
+	err := <-done
+	if err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("expected exceeded-attempts error, got %v", err)
+	}
+	mu.Lock()
+	connects := 0
+	for _, l := range logs {
+		if strings.Contains(l, "connecting to") {
+			connects++
+		}
+	}
+	mu.Unlock()
+	if connects != 2 {
+		t.Fatalf("connect attempts = %d, want 2 — healthy session did not reset the budget", connects)
+	}
+}
