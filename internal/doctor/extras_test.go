@@ -423,7 +423,8 @@ func TestCheckNetwork_ReturnsResult(t *testing.T) {
 // ============================================================================
 
 func TestCheckConfig_NoPathEmitsWarning(t *testing.T) {
-	c := checkConfig(config.Config{}, "")
+	// A *valid* resolved config with no file is a Warn, not a Fail.
+	c := checkConfig(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "")
 	r := c.Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (no config file is not fatal)", r.Status)
@@ -433,8 +434,21 @@ func TestCheckConfig_NoPathEmitsWarning(t *testing.T) {
 	}
 }
 
+func TestCheckConfig_InvalidEnvOnlyConfig_FailsNotWarns(t *testing.T) {
+	// Session 310: an invalid resolved config must Fail even when there is
+	// no config file at all — cfg may come entirely from env vars/flags
+	// (e.g. a malformed OTEDAMA_HTTP_ADDR has no dedicated check), and a
+	// "no config file" Warn must not mask it. Previously the path==""
+	// early return skipped Validate entirely.
+	c := checkConfig(config.Config{HTTPAddr: "not-a-valid-addr"}, "")
+	r := c.Run(context.Background())
+	if r.Status != StatusFail {
+		t.Fatalf("invalid env-only config status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+}
+
 func TestCheckConfig_NonexistentPathEmitsWarning(t *testing.T) {
-	c := checkConfig(config.Config{}, "/nonexistent/path/config.yaml")
+	c := checkConfig(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "/nonexistent/path/config.yaml")
 	r := c.Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (missing file is not fatal)", r.Status)
@@ -1926,5 +1940,27 @@ func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
 	r := checkClockSkew().Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// TestCheckWallet_BoundsFingerprintFile pins session 310's bounded read:
+// a corrupted or swapped-in fingerprint file must not flood the report —
+// doctor reads at most walletFingerprintMaxLen bytes for display.
+func TestCheckWallet_BoundsFingerprintFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("x"), 0o600); err != nil {
+		t.Fatalf("wallet.dat: %v", err)
+	}
+	huge := strings.Repeat("a", 10_000)
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(huge), 0o600); err != nil {
+		t.Fatalf("wallet.fingerprint: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusPass {
+		t.Fatalf("status = %v, want Pass", r.Status)
+	}
+	if len(r.Detail) > 400 {
+		t.Errorf("detail leaked %d bytes of fingerprint file, want bounded at %d", len(r.Detail), walletFingerprintMaxLen)
 	}
 }

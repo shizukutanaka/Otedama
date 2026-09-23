@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 310 — doctor の検証スキップ・無制限読込)
+
+- **`checkConfig` が解決済み設定を全く検証していなかった** — 設定ファイル
+  無し（env/flag のみ構成）またはファイル不在の経路で `cfg.Validate()` が
+  早期 return でスキップされ、`OTEDAMA_HTTP_ADDR=garbage` のような
+  専用チェックの無い env 層の無効値が benign な「no config file」Warn に
+  遮蔽されていた。Validate を先頭へ移動 — 無効な解決結果は由来層を問わず
+  Fail、ファイル無し＋有効設定は従来通り Warn。
+- **`checkWallet` の fingerprint 読込が無制限** — `os.ReadFile` 全読込の
+  内容を Detail に展開していたため、破損・差替えられたファイルが
+  レポートを氾濫させ得た（s306 lightning 記録の無制限読込と同クラス）。
+  256 バイトで打切り＋空 fingerprint の専用メッセージ。
+
 ### Fixed (session 309 — 裁定 idle ログスパム・マージ非決定性・doc 整合)
 
 - **idle デバイスが 30 秒毎に同じログ行を永久出力** — `applyAllocation` は

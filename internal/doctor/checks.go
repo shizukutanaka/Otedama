@@ -55,6 +55,19 @@ func checkConfig(cfg config.Config, path string) Check {
 	return Check{
 		Name: "Configuration",
 		Run: func(_ context.Context) Result {
+			// Validate the *resolved* config first, before any file-status
+			// check: cfg may come entirely from env vars and flags when no
+			// file exists, and an invalid env-layer value (e.g. a malformed
+			// OTEDAMA_HTTP_ADDR) is a Fail no matter which layer produced it.
+			// Previously both early returns below skipped this, so a broken
+			// env-only config reported a benign "no config file" Warn.
+			if err := cfg.Validate(); err != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("config invalid: %v", err),
+					Fix:    "edit the config file or fix the flagged env var / command-line flag",
+				}
+			}
 			if path == "" {
 				return Result{
 					Status: StatusWarn,
@@ -67,13 +80,6 @@ func checkConfig(cfg config.Config, path string) Check {
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("config file %q not found", path),
 					Fix:    "pass --config /path/to/config.yaml or create the default file",
-				}
-			}
-			if err := cfg.Validate(); err != nil {
-				return Result{
-					Status: StatusFail,
-					Detail: fmt.Sprintf("config invalid: %v", err),
-					Fix:    "edit the config file or pass missing flags on the command line",
 				}
 			}
 			return Result{
@@ -263,6 +269,10 @@ func checkDataDir(dir string) Check {
 const (
 	walletDatFile         = "wallet.dat"
 	walletFingerprintFile = "wallet.fingerprint"
+	// walletFingerprintMaxLen bounds how much of the fingerprint file
+	// doctor reads for display — the identifier is short, so a larger
+	// file is corruption (or a swapped-in file) and gets truncated here.
+	walletFingerprintMaxLen = 256
 )
 
 // checkWallet verifies that the Lightning wallet is initialised and surfaces
@@ -297,8 +307,20 @@ func checkWallet(dataDir string) Check {
 			}
 
 			// Wallet exists — read the public fingerprint file for display.
+			// The file is expected to be a short identifier; bound the read so
+			// a corrupted or swapped-in file cannot flood the report (same
+			// unbounded-read class recorded for internal/lightning in session
+			// 306 — doctor's display path gets the same defence).
 			fpPath := filepath.Join(dir, walletFingerprintFile)
-			fp, err := os.ReadFile(fpPath)
+			fpFile, err := os.Open(fpPath)
+			if err != nil {
+				return Result{
+					Status: StatusPass,
+					Detail: "initialized (fingerprint file missing; re-run to regenerate)",
+				}
+			}
+			fp, err := io.ReadAll(io.LimitReader(fpFile, walletFingerprintMaxLen))
+			_ = fpFile.Close()
 			if err != nil {
 				return Result{
 					Status: StatusPass,
@@ -306,6 +328,12 @@ func checkWallet(dataDir string) Check {
 				}
 			}
 			fingerprint := strings.TrimSpace(string(fp))
+			if fingerprint == "" {
+				return Result{
+					Status: StatusPass,
+					Detail: "initialized (fingerprint file empty; re-run to regenerate)",
+				}
+			}
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("initialized, fingerprint: %s", fingerprint),

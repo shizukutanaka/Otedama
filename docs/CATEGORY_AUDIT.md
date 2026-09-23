@@ -1234,3 +1234,14 @@ Chain tip `origin/devin/1790139074-rpc-response-timeout` (103 commits ahead of m
 | `fanIn` drops a received value if ctx cancels between input-read and output-send; producers writing to a dead fan-in may block | 📋 Recorded: producers (pollingProvider.sendQuote, miner workers) select on ctx themselves; bounded by design. |
 | Audited clean — `internal/stratum/frame.go`/`wire.go` remainder (U24 bounds, channel-msg floor, LE primitives), `internal/provider` remainder (drop-oldest send, GPU filter, fee math), `internal/engine/fanin.go`, `arbitrate.go` remainder | ✅ No change needed. |
 | Tests: `TestStreamsSlice_WildcardQuoteWinsRepresentative`, `TestApplyAllocation_IdleLogDeduplicates` | ✅ All green; 24 packages pass; vet/gofumpt/deadcode report nothing new. |
+
+## Session 310 update — doctor checkConfig/wallet defects; hal remainder clean
+
+| Finding | Disposition |
+|---|---|
+| **`checkConfig` never validated the resolved config on the no-file / missing-file paths** — both early returns skipped `cfg.Validate()`, so an invalid env/flag-layer value with no dedicated check (e.g. malformed `OTEDAMA_HTTP_ADDR`) surfaced as a benign "no config file" Warn | ✅ `Validate()` moved first: an invalid resolved config is a Fail regardless of which layer produced it; a valid config with no file still Warns. Two existing tests updated to pass a *valid* cfg (they relied on `config.Config{}` skipping validation — `bitcoin_address is required` now fails first). |
+| **`checkWallet` read the fingerprint file unbounded and expanded it into `Result.Detail`** — a corrupted or swapped file could flood the report (same unbounded-read class recorded for internal/lightning in session 306) | ✅ Bounded to `walletFingerprintMaxLen = 256` via `io.LimitReader`; empty fingerprint gets its own message. |
+| `checkClockSkew` reports `time.Since(serverTime)` as skew — includes RTT + server processing time (~50-500ms typical) | 📋 Recorded: negligible against the 120s/300s thresholds; the check is deliberately coarse. |
+| `Identity.Validate` allows `\r`, `\v`, and other non-listed whitespace in `hal.Identity.ID` — the contract names space/tab/newline/'/' only | 📋 Recorded: documented subset is the contract; drivers that emit exotic whitespace would extend it, not silently break it. |
+| Audited clean — `internal/doctor/checks.go` remainder (reachability/diversity/endpoint-IP dedup/power/env-vars/floor/payout-scheme/hardware/network/clock-skew), `doctor.go` (concurrent runner, deterministic output, JSON writer), `internal/hal/registry.go` (parallel enumerate, partial-success, buffered channel can't leak goroutines), `device.go` | ✅ No change needed. |
+| Tests: `TestCheckConfig_InvalidEnvOnlyConfig_FailsNotWarns`, `TestCheckWallet_BoundsFingerprintFile`; two stale-warning tests updated to valid cfgs | ✅ All green; 24 packages pass; vet/gofumpt/deadcode report nothing new. |
