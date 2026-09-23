@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 275 — ClassifyAddress が大文字 bech32 を未認識)
+
+`ValidateBech32Address` は BIP-173 許容の全大文字エンコーディング
+("BC1Q…"/"BC1P…") を受理するが、doctor のタイプラベルが参照する
+`ClassifyAddress` は小文字 "bc1p"/"bc1q" prefix のみ照合していたため、
+検証を通過した大文字アドレスが "unrecognised type" と表示されていた。
+prefix 照合を小文字正規化に変更（base58 "1"/"3" は数字prefixのため
+影響なし）。大文字3タイプの回帰テスト追加。併せて
+internal/btccrypto 全4ファイル（base58/bech32/btccrypto/secp256k1）、
+cmd/otedama（run/main/service/configfile/doctor/completion）、
+logger/clock/version/i18n の深掘り監査を実施 — 上記以外に実欠陥なし。
+`--config` に存在しないパスを渡した場合の黙殺は
+`TestLoadConfigFile_NonExistent` の明示仕様として CATEGORY_AUDIT に
+記録。session-275 追記。
+
 ### Fixed (session 274 — service status/uninstall が設定ディレクトリを副作用作成)
 
 `systemdUnitPath`/`launchdPlistPath` が無条件に `os.MkdirAll` を実行し

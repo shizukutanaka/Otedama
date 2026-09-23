@@ -313,6 +313,12 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 //	"bc1q..." → P2WPKH (42 chars) or P2WSH (62 chars) — witness v0, ECDSA
 //	"bc1p..." → P2TR        — witness v1, Schnorr (bech32m)
 //
+// The "bc1" prefixes are matched case-insensitively: BIP-173 permits an
+// all-uppercase encoding and ValidateBech32Address accepts "BC1Q…"/"BC1P…",
+// so a case-sensitive match would classify an address the validator accepts
+// as AddressUnknown. Base58 "1…"/"3…" needs no such handling — the prefix
+// character is a digit.
+//
 // The witness version lives in the first character after "bc1": 'q' encodes
 // version 0 (SegWit v0), 'p' encodes version 1 (Taproot). bech32m P2TR
 // addresses are therefore recognised distinctly from bech32 v0 addresses —
@@ -320,11 +326,12 @@ func SchemeForAddressType(t AddressType) (Scheme, error) {
 // AddressUnknown for anything that does not match (including testnet/signet
 // prefixes, which Otedama does not configure).
 func ClassifyAddress(addr string) AddressType {
+	laddr := strings.ToLower(addr)
 	switch {
-	case strings.HasPrefix(addr, "bc1p"):
+	case strings.HasPrefix(laddr, "bc1p"):
 		// Witness v1: Taproot. (bech32m-encoded.)
 		return AddressP2TR
-	case strings.HasPrefix(addr, "bc1q"):
+	case strings.HasPrefix(laddr, "bc1q"):
 		// Witness v0: distinguish key-hash (P2WPKH) from script-hash (P2WSH)
 		// by encoded length. A 20-byte program yields a 42-char address; a
 		// 32-byte program yields a 62-char address.

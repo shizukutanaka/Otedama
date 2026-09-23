@@ -315,6 +315,21 @@ func TestClassifyAddress_TaprootDistinctFromV0(t *testing.T) {
 	}
 }
 
+func TestClassifyAddress_UppercaseBech32(t *testing.T) {
+	// BIP-173 permits an all-uppercase encoding and ValidateBech32Address
+	// accepts it, so the classifier must agree: a valid "BC1Q…"/"BC1P…"
+	// address is a SegWit type, not AddressUnknown.
+	for addr, want := range map[string]AddressType{
+		"BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4":                     AddressP2WPKH,
+		"BC1QRP33G0Q5C5TXSP9ARYSRX4K6ZDKFS4NCE4XJ0GDCCCEFVPYSXF3QCCFMV3": AddressP2WSH,
+		"BC1P5CYXNUXMEUWUVKWFEM96LQZSZD02N6XDCJRS20CAC6YQJJWUDPXQKEDRCR": AddressP2TR,
+	} {
+		if got := ClassifyAddress(addr); got != want {
+			t.Errorf("ClassifyAddress(%q) = %v, want %v", addr, got, want)
+		}
+	}
+}
+
 func TestClassifyAddress_UnknownReturnsUnknown(t *testing.T) {
 	for _, addr := range []string{
 		"",

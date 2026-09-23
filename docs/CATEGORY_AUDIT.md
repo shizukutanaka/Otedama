@@ -726,3 +726,17 @@ Daemon/service + stratum messages audit.
 | `internal/stratum/messages.go` codecs (NewMiningJob OPTION tag, SetNewPrevHash, SetTarget, SubmitShares* bounds), `frame.go` (bound-before-alloc, U24/channel-msg rules), `metrics/runtime.go` (label escaping) | ✅ Clean. gofumpt also normalized `0644/0755` → `0o644/0o755` across the touched files. |
 
 daemon package tests green; lint shows only pre-existing findings (documented `nilerr` in statusWindowsService, `behaviour` misspell).
+
+## Session 275 update — `ClassifyAddress` rejected all-uppercase bech32 that the validator accepts
+
+btccrypto + cmd/otedama + logger/clock/version/i18n audit.
+
+| Finding | Disposition |
+|---|---|
+| `ValidateBech32Address` accepts BIP-173's all-uppercase encoding ("BC1Q…"/"BC1P…"), but `ClassifyAddress` — which feeds doctor's payout-type label — matched only the lowercase "bc1p"/"bc1q" prefixes, so a *valid* uppercase address validated and was then labelled "unrecognised type". | ✅ Fixed: prefix match now lower-cases the input first (base58 "1"/"3" prefixes are digits and case-free). New test covers all three uppercase types. |
+| `loadConfigFile` returns defaults with no warning when the given path does not exist — including an explicitly passed `--config /typo.yaml`, so a typo'd config path is silently ignored | ℹ️ Pinned by `TestLoadConfigFile_NonExistent` (explicitly asserts *no* stderr for a missing explicit path). Debatable UX but an explicit test decision; recorded, not reversed. |
+| `internal/btccrypto/base58.go` (big.Int decode, leading-'1' zeroes, 25-byte+checksum+version check), `bech32.go` (BIP-173/350 polymod, hrp, convertBits leftover-bit rules, version/program-length table), `btccrypto.go` (registry, AddressType, scheme dispatch), `secp256k1.go` (honest ErrSchemeNotImplemented stubs), `ValidateAddress` dispatch (checksum error surfaces for bc1…, ErrUnrecognisedAddress for neither) | ✅ Clean. Payout addresses are checksum-verified both at config load and in doctor. |
+| `cmd/otedama` run/main/service/configfile/doctor/completion: help→stdout/exit-0 plumbing, TUI auto-disable on non-tty stdout, logger sink matrix, signal handling, POSIX locale precedence (LC_ALL C suppresses LANG), completion lists in sync with dispatch | ✅ Clean. `engine.Run` returns raw `ctx.Err()` so cmdRun's `!= context.Canceled` comparison is correct on the current path. |
+| `internal/logger` (atomic default, Discard, Adapter), `internal/clock` (Fake RWMutex), `internal/version` (ldflags vars), `internal/i18n` (immutable catalogs, English fallback, MissingTranslations) | ✅ Clean. |
+
+lint/deadcode on changed files show only pre-existing findings (G115/cyclomatic on bech32.go, misspell 'recognise' series, scaffolded-API unreachable funcs).
