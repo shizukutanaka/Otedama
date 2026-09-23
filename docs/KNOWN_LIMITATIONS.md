@@ -141,12 +141,16 @@ continue to use the existing inline `handshake` path.
 
 ---
 
-## 4. GPU detection is Linux-only, and detected GPUs cannot mine
+## 4. GPU detection is Linux/macOS-only, and detected GPUs cannot mine
 
 **What:** Hardware detection of GPUs (`internal/hal`) reads Linux DRM
-sysfs (`/sys/class/drm`). On Windows and macOS, the GPU driver is a
-no-op stub that detects no GPUs. Separately, on any platform: no
-CUDA, ROCm, or Vulkan compute dispatch is implemented anywhere in this
+sysfs (`/sys/class/drm`) on Linux and `system_profiler -json
+SPDisplaysDataType` on macOS (added session 276 — Apple Silicon and
+discrete cards enumerate, including headless machines; inside a VM the
+report is empty, which is handled as "no GPUs", same as missing sysfs
+on Linux). On Windows, the GPU driver remains a no-op stub that detects
+no GPUs. Separately, on any platform: no
+CUDA, ROCm, Metal, or Vulkan compute dispatch is implemented anywhere in this
 codebase, so a detected GPU always reports `Capabilities.SHA256d =
 false` (corrected session 243 — this field was previously hardcoded
 `true`, which caused `engine.startMinerWorkers` to spawn a second,
@@ -156,20 +160,22 @@ every share that pool found was misattributed to the GPU in
 `otedama_device_shares_found_total` and the live hashrate sampling
 used by the arbitration engine).
 
-**Impact:** On non-Linux hosts, only CPU devices are detected. Where a
-GPU is detected (Linux only), it is visible to the arbitration engine
+**Impact:** On hosts other than Linux and macOS (i.e. Windows), only
+CPU devices are detected. Where a
+GPU is detected, it is visible to the arbitration engine
 and eligible for the simulated AI-inference stream (§1) via its
 `GeneralCompute` capability, but it contributes zero Bitcoin-mining
 hashrate — mining always runs on the CPU only, regardless of platform
 or GPU presence.
 
-**Workaround:** Run on Linux for GPU detection (needed only for the
+**Workaround:** Run on Linux or macOS for GPU detection (needed only for the
 simulated AI-inference stream) during the alpha. There is no
 workaround for GPU mining; it requires a compute-dispatch driver that
 does not exist yet.
 
-**Target:** v3.3.0, 2027 Q1 (Windows/macOS GPU detection — corrected
-session 245; this previously said v3.7, contradicting ROADMAP.md's
+**Target:** v3.3.0, 2027 Q1 (Windows GPU detection — macOS detection
+landed session 276, ahead of the milestone; corrected
+session 245, this previously said v3.7, contradicting ROADMAP.md's
 "Observability and ops" milestone, which is the authoritative target).
 GPU SHA256d mining dispatch has no committed target; it is not on the
 current roadmap. Tracked by ADR-008 (hardware/power) sub-domain 2.

@@ -31,7 +31,7 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 	if err := reg.Register(&cpuDriver{}); err != nil {
 		return nil, fmt.Errorf("engine: register cpu driver: %w", err)
 	}
-	if err := hal.RegisterGPULinux(reg); err != nil {
+	if err := hal.RegisterGPU(reg); err != nil {
 		log("warn", fmt.Sprintf("engine: register gpu driver: %v", err))
 	}
 	detector := hal.NewDetector(reg, func(driver, msg string, err error) {

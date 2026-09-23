@@ -134,20 +134,6 @@ func parseGPUDevice(renderNode, devicePath string, logFn func(string)) Device {
 	return &linuxGPUDevice{id: id, caps: caps}
 }
 
-// inferVendorName maps PCI vendor ID strings to human-readable names.
-func inferVendorName(vendorID string) string {
-	switch strings.TrimSpace(vendorID) {
-	case "0x10de":
-		return "NVIDIA"
-	case "0x1002":
-		return "AMD"
-	case "0x8086":
-		return "Intel"
-	default:
-		return "Unknown GPU vendor"
-	}
-}
-
 // inferModel reads the product name from sysfs, falling back to the
 // PCI device ID if no name is available.
 func inferModel(devicePath, vendorID string) string {
@@ -182,8 +168,9 @@ func (d *linuxGPUDevice) Identity() Identity               { return d.id }
 func (d *linuxGPUDevice) Capabilities() Capabilities       { return d.caps }
 func (d *linuxGPUDevice) Shutdown(_ context.Context) error { return nil }
 
-// RegisterGPULinux adds the Linux GPU driver to the given registry.
-// Call this from engine/run.go on Linux builds.
-func RegisterGPULinux(r *Registry) error {
+// RegisterGPU adds the platform GPU driver to the given registry.
+// On Linux this is GPULinuxDriver; on macOS GPUDarwinDriver; elsewhere
+// a no-op (see gpu_stub.go).
+func RegisterGPU(r *Registry) error {
 	return r.Register(&GPULinuxDriver{})
 }

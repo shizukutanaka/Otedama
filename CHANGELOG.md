@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 276 — macOS の GPU 検出: KNOWN_LIMITATIONS §4 半分解消)
+
+**macOS でも GPU が検出されるようになった.** `internal/hal` に第2の
+プラットフォームドライバ `GPUDarwinDriver` を追加。標準搭載の
+`system_profiler -json SPDisplaysDataType` を JSON パースして GPU を列挙する
+ため、CGO・IOKit・Metal フレームワーク一切不要（新規依存ゼロ）。Apple
+Silicon（`sppci_vendor_Apple`、PCI device-id なし → `gpu-mac-N` ID）と
+Intel 期のディスクリートカード（`0x1002`/`0x10de` → `gpu-<device-id>`）の両方に
+対応し、ベンダー名正規化は Linux 側と共用の `gpu_vendor.go` へ集約。VRAM
+容量は `spdisplays_vram`/`spdisplays_vram_shared` からモデル名へ付記する。
+
+VM 内やレポートが空の環境では Linux の sysfs 不在と同じ「GPUなし」として
+安全に扱う（エラーにしない）。KNOWN_LIMITATIONS §4 は Windows 残置に
+縮小（v3.3.0 マイルストーン据置き — macOS は前倒しで着地）。登録関数は
+`RegisterGPULinux` → `RegisterGPU` に改名し、スタブの build tag を
+`!linux && !darwin` に更新。SHA256d=false/GeneralCompute=true の
+ケイパビリティ方針は Linux と同一（compute dispatch 未実装のため、検出は
+simulated 推論ストリーム向けのプレゼンスのみ）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
