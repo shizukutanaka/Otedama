@@ -31,10 +31,20 @@ type engineMetrics struct {
 	// after the work was issued. They are excluded from the reject rate
 	// (the operator can act on a real reject, never on a retarget) and
 	// from the unaccounted-share gauge (they were judged by the pool).
-	sharesSuperseded    *metrics.Counter
-	poolConnectAttempts *metrics.Counter
-	poolConnectFailures *metrics.Counter
-	arbitrationSwitches *metrics.Counter
+	sharesSuperseded *metrics.Counter
+	// poolSharesSum is the cumulative share difficulty the pool itself
+	// reports crediting us (summed new_shares_sum fields, spec §5.3.13) —
+	// the pool-side truth against which local share accounting is
+	// reconciled. SV2 only; V1 pools expose no equivalent counter.
+	poolSharesSum *metrics.Counter
+	// poolReconcileDivergence counts times the pool's reported accepted-
+	// submit count disagreed with the submissions it settled locally.
+	// Either side can silently miscount; a nonzero rate means share
+	// accounting cannot be trusted without investigation.
+	poolReconcileDivergence *metrics.Counter
+	poolConnectAttempts     *metrics.Counter
+	poolConnectFailures     *metrics.Counter
+	arbitrationSwitches     *metrics.Counter
 	// arbitrationHolds counts decisions where a strictly better stream existed
 	// but hysteresis kept the device on its current one. Together with
 	// arbitrationSwitches it makes the hysteresis margin tunable: many holds
@@ -245,6 +255,20 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"the work was issued (vardiff transition; ESP-Miner #212). Verified "+
 				"locally to have met the issue-time target. Excluded from "+
 				"otedama_reject_rate — no operator action is possible or needed.",
+			nil),
+		poolSharesSum: reg.NewCounter(
+			"otedama_pool_shares_sum_total",
+			"Cumulative share difficulty the pool reports crediting "+
+				"(sum of new_shares_sum across SubmitSharesSuccess batches, "+
+				"SV2 spec §5.3.13). The pool's own accounting, exposed for "+
+				"reconciliation against otedama_shares_total{status=accepted}.",
+			nil),
+		poolReconcileDivergence: reg.NewCounter(
+			"otedama_pool_reconcile_divergences_total",
+			"Times the pool's reported accepted-submit count differed from "+
+				"the submissions it settled locally — silent miscounting on "+
+				"one side or the other. A nonzero rate means share "+
+				"accounting cannot be trusted without investigation.",
 			nil),
 		poolConnectAttempts: reg.NewCounter(
 			"otedama_pool_connect_attempts_total",

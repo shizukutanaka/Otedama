@@ -277,36 +277,39 @@ func DecodeSubmitSharesStandard(payload []byte) (SubmitSharesStandard, error) {
 // SubmitSharesSuccess (server → client, msg_type 0x1c, channel_msg)
 // ------------------------------------------------------------------
 
-// SubmitSharesSuccess acknowledges accepted shares.
+// SubmitSharesSuccess acknowledges accepted shares. Field names follow the
+// spec names (new_submits_accepted_count, new_shares_sum); the counters
+// describe the batch being acknowledged, not the connection lifetime —
+// cumulative totals come from summing them client-side.
 type SubmitSharesSuccess struct {
-	ChannelID          uint32
-	LastSequenceNumber uint32
-	NewSubmitsAccepted uint32
-	NewSharesSummed    uint32
+	ChannelID               uint32
+	LastSequenceNumber      uint32
+	NewSubmitsAcceptedCount uint32
+	NewSharesSum            uint64 // U64 on the wire — not U32
 }
 
 // Encode serialises SubmitSharesSuccess. It is the symmetric inverse of
 // DecodeSubmitSharesSuccess, used by the server side (and tests that stand
 // in for a pool) to acknowledge accepted shares.
 func (m SubmitSharesSuccess) Encode() ([]byte, error) {
-	buf := make([]byte, 16)
+	buf := make([]byte, 20)
 	binary.LittleEndian.PutUint32(buf[0:4], m.ChannelID)
 	binary.LittleEndian.PutUint32(buf[4:8], m.LastSequenceNumber)
-	binary.LittleEndian.PutUint32(buf[8:12], m.NewSubmitsAccepted)
-	binary.LittleEndian.PutUint32(buf[12:16], m.NewSharesSummed)
+	binary.LittleEndian.PutUint32(buf[8:12], m.NewSubmitsAcceptedCount)
+	binary.LittleEndian.PutUint64(buf[12:20], m.NewSharesSum)
 	return buf, nil
 }
 
 // DecodeSubmitSharesSuccess parses a SubmitSharesSuccess payload.
 func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
-	if len(payload) < 16 {
-		return SubmitSharesSuccess{}, fmt.Errorf("stratum: SubmitSharesSuccess: short payload (%d < 16)", len(payload))
+	if len(payload) < 20 {
+		return SubmitSharesSuccess{}, fmt.Errorf("stratum: SubmitSharesSuccess: short payload (%d < 20)", len(payload))
 	}
 	return SubmitSharesSuccess{
-		ChannelID:          binary.LittleEndian.Uint32(payload[0:4]),
-		LastSequenceNumber: binary.LittleEndian.Uint32(payload[4:8]),
-		NewSubmitsAccepted: binary.LittleEndian.Uint32(payload[8:12]),
-		NewSharesSummed:    binary.LittleEndian.Uint32(payload[12:16]),
+		ChannelID:               binary.LittleEndian.Uint32(payload[0:4]),
+		LastSequenceNumber:      binary.LittleEndian.Uint32(payload[4:8]),
+		NewSubmitsAcceptedCount: binary.LittleEndian.Uint32(payload[8:12]),
+		NewSharesSum:            binary.LittleEndian.Uint64(payload[12:20]),
 	}, nil
 }
 
