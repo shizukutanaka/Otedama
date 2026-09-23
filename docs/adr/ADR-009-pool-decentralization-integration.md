@@ -183,6 +183,8 @@ var _ TemplateSource = (*Client)(nil)
 
 The implementation reuses `internal/stratum/noise*.go` for the Noise NX handshake (already production-ready in Otedama since v3.0.0-alpha.1).
 
+**Correctness requirement (session 258, from SRI v1.5.0's segwit-coinbase bug):** when this sub-domain assembles the coinbase from `coinbase_tx_prefix`/`coinbase_tx_suffix` (Extended Job) or `getblocktemplate` `coinbasetxn`, the merkle root must hash the **non-witness serialization** — including BIP-141 witness fields makes every share fail on a wrong merkle root. SRI shipped exactly this bug and fixed it in v1.5.0. The JDC/DATUM implementation must carry a segwit-coinbase regression fixture that asserts witness txns in the block still produce the correct non-witness merkle root. (No such fixture exists today because neither the V1 path nor the current SV2 dialer assembles a coinbase — the V1 pool sends `coinb1`/`coinb2` for the miner's own share-building, and the engine does not reconstruct it.)
+
 **Cost:** ~150 hours. Protocol parsing + message orchestration + integration with existing Noise NX layer + error recovery semantics. The SRI Rust source serves as a reference implementation but we don't link against it.
 
 **Value/cost rank:** ★★★★★ — this is the canonical decentralized-mining path going forward.

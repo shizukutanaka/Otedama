@@ -51,7 +51,16 @@ Ranked by user-visible impact of compromise:
 - **Supply chain adversary.** Compromises a dependency, a release
   artifact, or a developer's commit signing.
 - **Malicious pool.** The pool itself is evil (sends crafted jobs,
-  withholds shares, manipulates difficulty).
+  withholds shares, manipulates difficulty). Includes *selfish* pools:
+  Bahrani & Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847),
+  prove a selfish-mining strategy whose orphan pattern is statistically
+  indistinguishable from honest mining and profitable from ~38.2% of
+  network hashrate — so a single dominant pool can withhold blocks
+  *undetectably*, and the miner's local telemetry cannot reveal it.
+  This is why Otedama's multi-pool failover / endpoint-diversity
+  defaults are a **security** property, not merely a liveness one:
+  diversifying away from any single pool is the only client-side
+  defense against an attack the evidence cannot show.
 - **Other local user.** A different unprivileged user on the same OS.
 
 We explicitly *exclude* a local attacker with root/administrator

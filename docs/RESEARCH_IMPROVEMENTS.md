@@ -506,11 +506,19 @@ endpoint against current vendor documentation. Tags as before
    field is intentionally not sent (see the dead-field note removed from
    `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
    message is no longer silently unrecognised, which was the blocking gap.
-3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
-   Also fixed in SRI v1.5.0: a client assembling the coinbase from
+3. ✅ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs
+   — RESOLVED (session 259) as a recorded requirement.** Investigation
+   found no coinbase-assembly path in Otedama to attach a fixture to:
+   the V1 path deliberately does not reconstruct the coinbase
+   (`stratumv1/parse.go` — the pool sends `coinb1`/`coinb2` for the
+   miner's own share-building) and no SV2 Extended-Job path exists yet.
+   The requirement is recorded where coinbase assembly *will* live —
+   ADR-009 Sub-domain 3 (JDC) now carries a "Correctness requirement"
+   note mandating non-witness serialization for the merkle root plus a
+   segwit-coinbase regression fixture at implementation time. Original
+   finding: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
-   or every share is rejected on a wrong merkle root. Add a segwit-coinbase
-   regression fixture to the path feeding `engine.applyJob`.
+   or every share is rejected on a wrong merkle root (SRI v1.5.0 fix).
    (stratum-mining/stratum v1.5.0)
 4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
@@ -545,11 +553,16 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
-6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
-   fix for hashrate-counter overflow on reconnect; garbage readings would
-   poison `HashrateMonitor` and the arbitration yield estimate. Reset
-   windowed counters on reconnect, use saturating `uint64` accumulators,
-   and test that a reconnect produces no spurious spike or NaN J/TH.
+6. ✅ **Saturate/reset hashrate counters on reconnect — RESOLVED
+   (session 259).** Verified implemented: `internal/engine/stats.go`'s
+   `hashrateWindow` saturates when the cumulative total decreases
+   (workers recreated on reconnect reset their counters — `total <
+   lastTotal` leaves the rate at 0, never negative or NaN), the windowed
+   rate feeds the monitor/gauge/log/TUI, and a fresh `hashrateWindow` is
+   declared per session so a reconnect re-primes the baseline. Existing
+   tests cover the reset/NaN cases. Original finding: ESP-Miner shipped
+   a reconnect overflow fix; garbage readings would poison
+   `HashrateMonitor` and the yield estimate.
    (bitaxeorg/ESP-Miner releases)
    — **Implemented (session 65):** `hashrateWindow` differentiates the
    cumulative hash counter into a *current* windowed rate (the monitor, gauge,
@@ -557,20 +570,24 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
-   SRI split roles into a separate, independently-versioned repo after
-   v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
-   to cite the (stable) spec so the codec tracks the spec, not moving code.
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app
+   code — RESOLVED (session 259).** Verified: no code or doc comment
+   cites the `stratum-mining/stratum` app repo for protocol truth —
+   `internal/stratum/frame.go`, `handshake.go`, and `messages.go` cite
+   stratumprotocol.org spec chapters, ADR-009 references the spec's job
+   declaration/mining-protocol URLs, and ADR-011 + `skills/` already
+   cite `stratum-mining/sv2-spec` directly. The codec already tracks
+   the spec, not moving code.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
-   Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
-   selfish-mining strategy whose orphan pattern is statistically
-   indistinguishable from honest mining, profitable from 38.2% hashrate.
-   Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
-   defaults as a *security* (not merely liveness) property; strengthens
-   Cat 4 #7.
+8. ✅ **Single-pool concentration enables *undetectable* attacks —
+   RESOLVED (session 259).** `docs/THREAT_MODEL.md`'s "Malicious pool"
+   adversary entry now cites Bahrani & Weinberg (arXiv:2309.06847):
+   selfish mining statistically indistinguishable from honest mining,
+   profitable from ~38.2% hashrate — and frames the multi-pool failover
+   / endpoint-diversity defaults as a *security* (not merely liveness)
+   property. Strengthens Cat 4 #7. Original finding kept below.
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
