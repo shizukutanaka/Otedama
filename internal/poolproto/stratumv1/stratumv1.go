@@ -335,6 +335,17 @@ func (s *session) respond(id any, result any) {
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 
+// LastReconnect returns the most recent client.reconnect directive
+// the pool sent this session, or nil if none arrived. Implements
+// poolproto.ReconnectInformant.
+func (s *session) LastReconnect() *poolproto.ReconnectDirective {
+	d := s.lastReconnect.Load()
+	if d == nil {
+		return nil
+	}
+	return &poolproto.ReconnectDirective{Host: d.Host, Port: d.Port, Wait: d.Wait}
+}
+
 // PoolNotices returns the channel of pool-sent operator notices
 // (client.show_message). The channel is closed when the session ends.
 // Implements poolproto.PoolNoticeReceiver.
@@ -564,6 +575,8 @@ var _ poolproto.Dialer = (*Dialer)(nil)
 
 // Compile-time assertion that *session satisfies poolproto.PoolNoticeReceiver.
 var _ poolproto.PoolNoticeReceiver = (*session)(nil)
+
+var _ poolproto.ReconnectInformant = (*session)(nil)
 
 // We deliberately keep io.Reader satisfied via bufio.Reader.
 var _ io.Reader = (*bufio.Reader)(nil)

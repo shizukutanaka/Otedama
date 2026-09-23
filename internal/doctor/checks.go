@@ -554,10 +554,16 @@ func checkPoolEncryption(cfg config.Config) Check {
 			// encryption is the unimplemented Noise transport — TLS is
 			// only engaged by the stratum+v2tls:// scheme
 			// (KNOWN_LIMITATIONS §2).
+			// Loopback targets are exempt: a cleartext session that never
+			// leaves the box has no on-path attacker. This is the normal
+			// deployment for datum:// (a local datum_gateway beside a
+			// local full node) and for solo stratum+tcp://bitcoind setups,
+			// so warning on them would be alarm fatigue on the sanctioned
+			// configuration.
 			var plaintext []string
 			for _, p := range cfg.Pools {
 				for _, scheme := range []string{"stratum+tcp://", "stratum+v2://", "datum://"} {
-					if strings.HasPrefix(p.URL, scheme) {
+					if strings.HasPrefix(p.URL, scheme) && !poolURLIsLoopback(p.URL) {
 						plaintext = append(plaintext, stripScheme(p.URL))
 					}
 				}
@@ -1063,6 +1069,26 @@ func maskAddress(s string) string {
 		return s
 	}
 	return s[:6] + strings.Repeat("·", 3) + s[len(s)-4:]
+}
+
+// poolURLIsLoopback reports whether a pool URL's host is loopback —
+// 127.0.0.0/8, ::1, or "localhost". Used to exempt cleartext
+// transports whose traffic never leaves the machine (local
+// datum_gateway, local bitcoind) from the plaintext warning.
+func poolURLIsLoopback(url string) bool {
+	rest := stripScheme(url)
+	host, _, err := net.SplitHostPort(rest)
+	if err != nil {
+		host = rest // no port present
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func stripScheme(url string) string {

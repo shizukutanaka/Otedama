@@ -260,6 +260,28 @@ type DifficultySuggester interface {
 	SuggestDifficulty(ctx context.Context, difficulty float64) error
 }
 
+// ReconnectDirective is a pool-sent instruction to move to another
+// node (Stratum V1's client.reconnect / mining.reconnect). It is
+// informational only: following an arbitrary endpoint from an
+// unauthenticated notification is a redirection vector, so the
+// operator-configured pool list always stays authoritative. Wait is
+// the pool's advisory pause, in seconds.
+type ReconnectDirective struct {
+	Host string
+	Port int
+	Wait int
+}
+
+// ReconnectInformant is an optional extension to Session for protocols
+// that deliver pool-sent reconnect directives. Callers type-assert a
+// Session to this interface after the session ends; a nil return means
+// the pool sent no directive (the connection simply closed).
+type ReconnectInformant interface {
+	// LastReconnect returns the most recent pool-sent reconnect
+	// directive, or nil when none was received.
+	LastReconnect() *ReconnectDirective
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

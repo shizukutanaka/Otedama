@@ -1248,6 +1248,25 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 		case job, ok := <-sess.Jobs():
 			if !ok {
+				// If the close followed a client.reconnect directive,
+				// surface it: the session ends identically either way, so
+				// without this log the pool's request is invisible. The
+				// suggested endpoint is deliberately NOT honoured — see
+				// poolproto.ReconnectDirective for the redirection rationale.
+				if ri, ok := sess.(poolproto.ReconnectInformant); ok {
+					if d := ri.LastReconnect(); d != nil {
+						target := d.Host
+						if d.Port > 0 {
+							target = fmt.Sprintf("%s:%d", d.Host, d.Port)
+						}
+						if target == "" {
+							target = "(no endpoint given)"
+						}
+						opts.log("info", fmt.Sprintf(
+							"engine: pool sent client.reconnect toward %s (advisory wait %ds) — "+
+								"reconnecting via the configured pool list instead", target, d.Wait))
+					}
+				}
 				return fmt.Errorf("engine: pool closed connection")
 			}
 			// While curtailed, keep workers idle and ignore the job (see the
