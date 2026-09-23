@@ -6,6 +6,7 @@ package poolproto
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -172,7 +173,9 @@ func TestAvailable_ListsRegisteredProtocols(t *testing.T) {
 	if len(got) != 3 {
 		t.Errorf("got %d protocols, want 3", len(got))
 	}
-	// Order is not guaranteed; verify set membership.
+	if !slices.IsSorted(got) {
+		t.Errorf("Available returned unsorted protocols %v, want sorted", got)
+	}
 	seen := make(map[ProtocolID]bool, len(got))
 	for _, id := range got {
 		seen[id] = true

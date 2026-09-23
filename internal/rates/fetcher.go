@@ -412,6 +412,9 @@ func (f *Fetcher) fetchOne(ctx context.Context, src Source) (rate float64, skewS
 		return 0, skewSecs, fmt.Errorf("rates: %s: HTTP %d", src.Name, resp.StatusCode)
 	}
 	rate, err = src.extract(body)
+	if err != nil {
+		err = fmt.Errorf("rates: %s: %w", src.Name, err)
+	}
 	return rate, skewSecs, err
 }
 

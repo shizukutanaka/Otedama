@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 314 — poolproto/rates の残存監査)
+
+- **`Available()` が非決定順を返していた** — レジストリの map 走査順を
+  そのまま返すため、doctor/config 検証等の消費者が見るプロトコル一覧が
+  実行毎に変わり得た → `slices.Sort` で決定順化。
+- **レート fetch のパースエラーがソース名を失っていた** — `fetchOne` が
+  extract エラーを素通り返していたため、全ソース失敗時の結合エラーから
+  どの API が壊れた JSON を返したか切り分け不能 → ソース名でラップ。
+- **poolproto パッケージdoc が「V2 = Noise NX encryption」と虚偽記述**
+  — V2 ダイアル経路は平文バイナリフレーミング（Noise 未配線、
+  KNOWN_LIMITATIONS §2。s297/s313 と同型）→ 認証は `stratum+v2tls://`
+  側のみと訂正。`Credentials.PoolPubKey` の pinning/TOFU 記述も未消費
+  フィールドの架空仕様だったため訂正。
+
 ### Fixed (session 313 — THREAT_MODEL の虚偽緩和策)
 
 - **THREAT_MODEL.md の緩和策記述を出荷実態へ修正** —

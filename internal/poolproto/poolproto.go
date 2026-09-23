@@ -8,9 +8,14 @@
 //
 // Two protocols are actually implemented today, each with a
 // registered Dialer: Stratum V1 (legacy JSON-RPC over TCP, optionally
-// TLS — package stratumv1) and Stratum V2 (binary framing with Noise
-// NX encryption — package stratumv2). DATUM (OCEAN's protocol,
-// layered on SV1 transport) has a reserved URL scheme constant
+// TLS — package stratumv1) and Stratum V2 (binary framing —
+// package stratumv2). Note the V2 transport is plaintext binary
+// framing today: the Noise NX handshake exists in internal/stratum
+// but is not wired into the dial path (KNOWN_LIMITATIONS §2), so
+// stratum+v2:// offers no channel authentication — use
+// stratum+v2tls:// for an authenticated channel. DATUM (OCEAN's
+// protocol, layered on SV1 transport) has a reserved URL scheme
+// constant
 // (ProtocolDATUM) and is planned (see docs/adr/ADR-009, status
 // Proposed) but has no Dialer registered anywhere and no
 // implementation package — DialURL("datum://...") returns
@@ -62,6 +67,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -288,8 +294,10 @@ type Credentials struct {
 	// Password is the pool password, often "x" or empty.
 	Password string
 
-	// PoolPubKey is the pool's static public key (SV2 Noise NX). For
-	// pinning. Empty disables pinning (SV1, or trust-on-first-use).
+	// PoolPubKey is the pool's static public key, reserved for SV2
+	// Noise NX pinning once that handshake is wired into the dial path
+	// (KNOWN_LIMITATIONS §2). No code path consumes it today — setting
+	// it changes nothing, and there is no trust-on-first-use.
 	PoolPubKey []byte
 
 	// TLSRootCAsPEM is an optional PEM bundle of additional certificate
@@ -339,7 +347,8 @@ func Lookup(id ProtocolID) (Dialer, error) {
 }
 
 // Available returns the list of protocols with registered Dialers in
-// this build. Useful for `otedama doctor` and config validation.
+// this build, sorted for deterministic output. Useful for
+// `otedama doctor` and config validation.
 func Available() []ProtocolID {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
@@ -347,6 +356,7 @@ func Available() []ProtocolID {
 	for id := range registry {
 		out = append(out, id)
 	}
+	slices.Sort(out)
 	return out
 }
 

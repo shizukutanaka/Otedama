@@ -1287,3 +1287,18 @@ Security-auditor-facing document whose *mitigation* claims were themselves unver
 | "TLS via golang.org/x/crypto" | TLS is stdlib `crypto/tls`; x/crypto supplies scrypt etc. | ✅ Corrected |
 | Scope: "Connections to Stratum V2 pools" | V1 is a live path too | ✅ Corrected |
 | Verified accurate — systemd hardening flags (NoNewPrivileges/ProtectHome/PrivateTmp present in unit), http_addr default "" (server off), 3-source median + $95k fallback, wallet AES-256-GCM atomic write, StraTap (arXiv:1703.06545) and selfish-mining (arXiv:2309.06847, 1311.0243) citations with honest residual-risk framing, install.sh honest "warns loudly" verification posture | ✅ No change needed |
+
+## Session 314 update — poolproto registry + rates fetcher remainder audit
+
+| Finding | Disposition |
+|---|---|
+| `Available()` returned the registry map's iteration order verbatim — diagnostics (`otedama doctor`, config validation) would show a differently-ordered protocol list per process | ✅ `slices.Sort` for deterministic output; test asserts sorted order. |
+| `fetchOne` returned `src.extract`'s error unwrapped — in the joined "all sources failed" error, a JSON parse failure could not be attributed to its source | ✅ Wrapped with source name; test asserts the failing source appears in the Fetch error. |
+| Package doc claimed "Stratum V2 (binary framing with Noise NX encryption — package stratumv2)" | ✅ Corrected — V2 is plaintext binary framing; Noise NX is not wired into the dial path (KNOWN_LIMITATIONS §2); `stratum+v2tls://` is the authenticated channel. Same false-security-claim class as s297/s313. |
+| `Credentials.PoolPubKey` doc described pinning / "trust-on-first-use" semantics no code implements — the field is registered but consumed nowhere | ✅ Comment corrected to "reserved, unconsumed today". |
+| `Available()` is exported "for `otedama doctor` and config validation" per its doc, but no non-test code calls it — deadcode baseline already lists it | 📋 Recorded: s284-class implemented-but-unwired helper; wiring it into a doctor check is a feature (changes the 17-check surface) — out of port-defects-only scope. |
+| `FromURL`/`StripScheme` match schemes case-sensitively (`Stratum+TCP://` rejected) — URL schemes are case-insensitive per RFC 3986 | 📋 Recorded (also s303): pool URLs are operator-typed config values, lowercase in every shipped example; canonicalizing at parse would change error surfaces. |
+| Doctor keeps a private `stripScheme` duplicate (checks.go) instead of `poolproto.StripScheme` | 📋 Recorded: cosmetic duplication, two lines, single call site. |
+| `StartBackground` polls at a fixed interval with no jitter/backoff on persistent failure — hammering a downed API at exactly the refresh cadence | 📋 Recorded: 5-minute default cadence is well below rate limits; failure is logged each cycle so silence isn't possible. |
+| Verified clean — `DialURL` conn-close-on-negotiate-failure, Register panic contract (nil/unknown/dup), `Credentials.TLSRootCAsPEM` never disables verification (load-path verified s297), `Fetch` single-flight coalescing + ctx-deadlock-free waiter, `doFetch` median-of-even averaging, implausible-band drop + NaN rejection post-s291, 64KiB body cap, Date-header skew aggregation, `BTCUSDRate`/`RateAge`/`SourceHealth`/`ClockSkewSeconds` lock discipline, fetchAttempts distinguish "0 OK" from "never fetched" | ✅ No change needed. |
+| Tests: `TestFetchOne_ExtractErrorNamesSource`; `TestAvailable_ListsRegisteredProtocols` extended with sorted assertion | ✅ All green; 24 packages pass; vet clean; gofumpt/deadcode report nothing new on touched lines. |

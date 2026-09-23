@@ -1213,3 +1213,33 @@ func TestStartBackground_GoroutineTerminatesOnContextCancel(t *testing.T) {
 		t.Errorf("goroutine leak: count %d did not return to baseline %d within 2s after cancel", final, baseline)
 	}
 }
+
+// An extractor error must name its source: fetchOne previously returned the
+// bare extract error, so a joined "all sources failed" could not identify
+// which API's body failed to parse.
+func TestFetchOne_ExtractErrorNamesSource(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("not json at all"))
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "badjson",
+			URL:  srv.URL,
+			extract: func(b []byte) (float64, error) {
+				return 0, errors.New("invalid character")
+			},
+		}},
+	}
+
+	err := f.Fetch(context.Background())
+	if err == nil {
+		t.Fatal("Fetch succeeded with a failing extractor")
+	}
+	if !strings.Contains(err.Error(), "badjson") {
+		t.Errorf("fetch error %q does not name the failing source", err)
+	}
+}
