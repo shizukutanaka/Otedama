@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 308 — HTTP サーバのライフサイクル欠陥・メソッドスコープ)
+
+- **`Start`→`Stop`→`Start` で永遠にデッドなサーバを正常報告** — `http.Server`
+  は Shutdown 後に再起不能なのに、2回目の `Start` が新リスナを bind し
+  （Serve は即 `ErrServerClosed` で返りリスナは即クローズ）、`boundAddr`
+  が待受の無いポートを指したまま `Addr()` 経由で報告されていた。s300 の
+  TUI Start-after-Stop と同系のライフサイクル欠陥。`started` ガードで
+  全順序（Start→Stop→Start / Stop→Start / 二重 Start）を一律エラー化。
+- **mux が全メソッドを受理** — プローブ・スクレイプ各エンドポイントは
+  GET/HEAD セマンティクスなのに POST/DELETE 等でも 200/503 を返していた。
+  Go 1.22+ のメソッドスコープパターン（`GET /healthz` 等、pprof 含む全
+  ルート）へ移行 — 非 GET は mux が一律 405。`/readyz` への POST が
+  health シグナルを装う誤応答を構造的に排除。
+
 ### Fixed (session 307 — V1 未応答リクエスト群・呼出毎バウンド・バッチ受理会計・実ビルド報告)
 
 - **プール→クライアントのリクエストが未応答で半開き状態に** — dispatch の

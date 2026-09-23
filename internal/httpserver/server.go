@@ -69,6 +69,15 @@ type Server struct {
 	// goroutine, if any (other than the expected ErrServerClosed).
 	// Readable via ServeError() for observability.
 	serveErr atomic.Pointer[error]
+
+	// started is set by the first Start and also by Stop. A second
+	// Start is an error in either order — not only because
+	// double-listening on the same addr fails at bind, but because
+	// after Stop the http.Server is permanently closed: Serve would
+	// return ErrServerClosed immediately, leaving boundAddr pointing
+	// at a listener that died before it served a request (a zombie
+	// the caller believes is up).
+	started atomic.Bool
 }
 
 // New creates an HTTP server that exposes metrics from the given registry.
@@ -84,14 +93,18 @@ func New(addr string, registry *metrics.Registry, enablePprof bool) *Server {
 		registry: registry,
 	}
 
+	// Method-scoped patterns (Go 1.22+): probe and scrape endpoints are
+	// GET/HEAD semantics — a POST to /readyz must not read as a health
+	// signal. Other methods on these paths now get 405 from the mux
+	// instead of a misleading 200/503 body.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", s.handleHealthz)
-	mux.HandleFunc("/readyz", s.handleReadyz)
-	mux.HandleFunc("/metrics", s.handleMetrics)
+	mux.HandleFunc("GET /healthz", s.handleHealthz)
+	mux.HandleFunc("GET /readyz", s.handleReadyz)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	if enablePprof {
 		registerPprofHandlers(mux)
 	}
-	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("GET /", s.handleIndex)
 
 	writeTimeout := 10 * time.Second
 	if enablePprof {
@@ -114,7 +127,13 @@ func New(addr string, registry *metrics.Registry, enablePprof bool) *Server {
 
 // Start begins listening. Returns an error if the listener cannot bind.
 // The server runs in a background goroutine; Stop terminates it cleanly.
+// Start may be called at most once: after Stop the underlying
+// http.Server cannot serve again, so a second Start is rejected rather
+// than silently reporting a bound address that is not listening.
 func (s *Server) Start(ctx context.Context) error {
+	if !s.started.CompareAndSwap(false, true) {
+		return errors.New("httpserver: Start called on an already-started server")
+	}
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return fmt.Errorf("httpserver: listen on %s: %w", s.addr, err)
@@ -141,8 +160,11 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 // Stop shuts down the server, giving in-flight requests up to 5 seconds
-// to complete.
+// to complete. After Stop the http.Server cannot serve again, so Stop
+// also marks the server started — a later Start is rejected instead of
+// binding a listener the closed Server would drop immediately.
 func (s *Server) Stop() error {
+	s.started.Store(true)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return s.httpSrv.Shutdown(ctx)
@@ -218,14 +240,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 // It must only be called when the caller has verified that the server is
 // not internet-facing: pprof can leak sensitive runtime data.
 func registerPprofHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+	mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	// Named profiles: heap, goroutine, allocs, block, mutex, threadcreate.
 	for _, name := range []string{"heap", "goroutine", "allocs", "block", "mutex", "threadcreate"} {
-		mux.Handle("/debug/pprof/"+name, pprof.Handler(name))
+		mux.Handle("GET /debug/pprof/"+name, pprof.Handler(name))
 	}
 }
 

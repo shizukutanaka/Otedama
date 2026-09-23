@@ -449,3 +449,65 @@ func TestServeError_ReturnsStoredError(t *testing.T) {
 		t.Errorf("ServeError() = %q, want 'injected serve error'", got.Error())
 	}
 }
+
+// ============================================================================
+// session 308 — Start-after-Stop lifecycle + method-scoped routes
+// ============================================================================
+
+// TestStart_AfterStop_ReturnsError: a Stop→Start (or Start→Stop→Start)
+// cycle used to bind a listener that the permanently-closed http.Server
+// dropped instantly — boundAddr then reported a dead address while
+// ServeError stayed nil. Start is now rejected once the server has been
+// used or stopped in either order.
+func TestStart_AfterStop_ReturnsError(t *testing.T) {
+	ctx := context.Background()
+	s := New("127.0.0.1:19810", metrics.NewRegistry(), false)
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if err := s.Start(ctx); err == nil {
+		t.Fatal("second Start succeeded — zombie listener would report a dead address")
+	}
+}
+
+// TestStart_AfterStopWithoutStart_ReturnsError: Stop-before-Start marks
+// the server used too — the closed http.Server cannot serve, so a later
+// Start must not silently bind a dead listener.
+func TestStart_AfterStopWithoutStart_ReturnsError(t *testing.T) {
+	s := New("127.0.0.1:19811", metrics.NewRegistry(), false)
+	_ = s.Stop()
+	if err := s.Start(context.Background()); err == nil {
+		t.Fatal("Start after Stop succeeded on a never-started-but-closed server")
+	}
+}
+
+// TestMethodNotAllowed_OnProbes: probe and scrape endpoints are GET/HEAD
+// semantics; a POST to /readyz must not return a health-looking 200/503.
+// The mux now answers non-GET methods on these paths with 405.
+func TestMethodNotAllowed_OnProbes(t *testing.T) {
+	ctx := context.Background()
+	s := New("127.0.0.1:19812", metrics.NewRegistry(), false)
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Stop()
+
+	for _, path := range []string{"/healthz", "/readyz", "/metrics"} {
+		req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:19812"+path, nil)
+		if err != nil {
+			t.Fatalf("build POST %s: %v", path, err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST %s: %v", path, err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s = %d, want 405", path, resp.StatusCode)
+		}
+	}
+}
