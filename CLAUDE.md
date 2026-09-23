@@ -48,7 +48,7 @@ Otedama/
 │   ├── stratum/            # Stratum V2 フレーム・メッセージ・Noise NX
 │   ├── tui/                # ANSI ダッシュボード（外部依存ゼロ）
 │   └── version/            # ビルドメタデータ（ldflags 注入）
-├── docs/adr/               # ADR-001〜011
+├── docs/adr/               # ADR-001〜013
 ├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md
 └── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml
 
@@ -73,7 +73,7 @@ Otedama/
 
 コミットメッセージは Conventional Commits に準拠します。`feat:`、`fix:`、`refactor:`、`docs:`、`test:`、`chore:`、`perf:`、`security:` のプレフィックスを使用し、変更内容を英語で簡潔に記述します。ブレーキングチェンジは `BREAKING CHANGE:` フッターで明示します。
 
-ブランチ戦略は GitHub Flow に準拠します。`main` ブランチは常にリリース可能な状態を保ち、機能開発は `feature/xxx` ブランチで行い、Pull Requestを経てmainにマージされます。`legacy-v2` ブランチは旧バージョンの保全用であり、重大セキュリティ修正以外のコミットは禁止します。
+ブランチ戦略は GitHub Flow に準拠します。`master` ブランチは常にリリース可能な状態を保ち、機能開発は `feature/xxx` ブランチで行い、Pull Requestを経てmasterにマージされます。`legacy-v2` ブランチは旧バージョンの保全用として計画されていますが現時点では未作成です（v2ユーザーへの修正は提供されません — docs/KNOWN_LIMITATIONS.md §3）。重大セキュリティ修正以外のコミットは作成後は禁止です。
 
 ## テスト要件
 
@@ -99,7 +99,7 @@ Otedama/
 
 公開API（`pkg/` 配下）の全ての型・関数・メソッドには godoc コメントを必須とします。`internal/` 配下も主要な型とパブリック関数には godoc コメントを付与します。アーキテクチャ判断（ADR: Architecture Decision Record）は `docs/adr/` に順次記録します。
 
-ユーザー向けドキュメントは日本語と英語を同時に更新します。主要10言語（英・日・中・韓・西・仏・独・葡・露・アラビア）への翻訳はリリース前に完了させます。機械翻訳で1,000言語以上への対応を提供しますが、主要10言語は人間レビュー済みを維持します。
+ユーザー向けドキュメントは日本語と英語を同時に更新します。主要10言語（英・日・中・韓・西・仏・独・葡・露・アラビア）への翻訳はリリース前に完了させます。現状のカタログは主要10言語のみを収録しており、機械翻訳パイプラインによる他言語対応は存在しません。追加言語は人間レビュー済みの品質で段階的に追加します。
 
 ## Claude Code専用指示
 

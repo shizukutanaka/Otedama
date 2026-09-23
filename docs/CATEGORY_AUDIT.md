@@ -954,3 +954,21 @@ docs, and the skills/ procedure files contributors actually follow.
 | skills/release-procedure.md: `otedama migrate-from-v2` migration test (dead subcommand), "golangci-lint 警告ゼロ" (backlog exists), govulncheck in CI (unwired), "E2Eテストの全てが通過" | ✅ Fixed. |
 | skills/security-audit.md: `.github/workflows/codeql.yml` (real file is security.yml), govulncheck "CIで毎回実行" | ✅ Fixed. |
 | Verified accurate: architecture.md carries the session-243 target-vs-actual disclaimer; gosec+CodeQL+Semgrep actions exist in security.yml/ci.yml (three-layer claim holds); `make test-integration`, `make audit`, `make fuzz` targets exist; BenchmarkHashHeader/WorkerGrind_SingleThread/WriteText and 4 other benchmarks exist. | ✅ |
+
+## Session 287 update — CONTRIBUTING/ROADMAP/CLAUDE.md conformance
+
+Closes the docs-conformance sweep with the three highest-traffic
+contributor-facing files. ROADMAP was already self-annotated (sessions 32/251)
+but had regressed again as code shipped.
+
+| Finding | Disposition |
+|---|---|
+| ROADMAP v3.1.0 "engine → poolproto 統合 — 現状 raw TCP に直結" — engine already dials via poolproto.DialURL (verified run.go + coverage tests) | ✅ Marked complete. |
+| ROADMAP v3.2.0 "Stratum V1 互換の追加" — stratumv1 shipped (dialers registered, runSessionV1 live) | ✅ Marked complete; DATUM noted as not started. |
+| ROADMAP "govulncheck + osv-scanner を informational から昇格" — neither was ever wired into CI (§13) | ✅ Corrected to new-add. |
+| CONTRIBUTING "Go 1.22以上" / Docker "統合テスト用" | ✅ → Go 1.24+ with go1.25.7 toolchain pin; Docker for container builds. |
+| CONTRIBUTING "CODEOWNERSにより二人のメンテナによる二重レビュー" — CODEOWNERS lists only @shizukutanaka; two-reviewer requirement is unenforceable on a solo project | ✅ Corrected to auto review request. |
+| CONTRIBUTING cites "Doe v. GitHub訴訟（2025年11月和解）" as the rationale for strict duplication filtering — settlement not verifiable from any source | ✅ Simplified to recommendation without the citation. |
+| CONTRIBUTING "その他の言語は機械翻訳で対応" — no MT pipeline; catalog is 10 languages | ✅ Corrected. |
+| CLAUDE.md factual refs: "ADR-001〜011" (013 exists), "main ブランチ" (default is master), "legacy-v2 ブランチは保全用" (branch was never created — s283), "機械翻訳で1,000言語以上" (no MT) | ✅ Minimal factual corrections; normative sections untouched. |
+| Verified accurate: all 7 workflow filenames in the architecture map exist; CODEOWNERS paths all real; .gitignore protects config.yaml; PR/Conventional-Commits/SPDC requirements match practice; ADR-007/008/009/010 track references in ROADMAP resolve to real ADRs. | ✅ |

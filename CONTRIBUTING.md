@@ -16,7 +16,7 @@ Otedamaプロジェクトは多様な形式の貢献を歓迎します。コー�
 
 ## 開発環境のセットアップ / Development Environment Setup
 
-Otedamaの開発には以下の環境が必要です。Go 1.22以上、Git、Docker（オプション、統合テスト用）、Make（ビルド自動化）、テキストエディタまたはIDE（VSCode、GoLand、Vim、Emacsなど任意）。クローンとビルドは以下のコマンドで実行できます。
+Otedamaの開発には以下の環境が必要です。Go 1.24以上（toolchain は go1.25.7 が推奨 — go.mod に pin）、Git、Docker（オプション、コンテナビルド用）、Make（ビルド自動化）、テキストエディタまたはIDE（VSCode、GoLand、Vim、Emacsなど任意）。クローンとビルドは以下のコマンドで実行できます。
 
 ```bash
 git clone https://github.com/shizukutanaka/Otedama.git
@@ -79,7 +79,7 @@ PRのタイトルはコミットメッセージと同じConventional Commits形�
 
 ## レビュープロセス / Review Process
 
-全てのPRは以下のレビューを経てマージされます。自動化されたCI（ビルド、テスト、静的解析、セキュリティスキャン）の全通過。少なくとも一人のメンテナによる人間レビュー。資金に関わる領域（`internal/lightning/`、`internal/stratum/`のNoise NX関連ファイル）への変更は、CODEOWNERSにより二人のメンテナによる二重レビューが必須です（`internal/security/`・`internal/auth/`はCLAUDE.mdのアーキテクチャマップに存在しないパスであり、セキュリティ関連コードは`lightning/`と`stratum/`に内包されています）。
+全てのPRは以下のレビューを経てマージされます。自動化されたCI（ビルド、テスト、静的解析、セキュリティスキャン）の全通過。少なくとも一人のメンテナによる人間レビュー。資金に関わる領域（`internal/lightning/`、`internal/btccrypto/`、`internal/poolproto/`、`internal/stratum/noise*`）への変更は、CODEOWNERSによりメンテナレビューが自動要求されます（`internal/security/`・`internal/auth/`はCLAUDE.mdのアーキテクチャマップに存在しないパスであり、セキュリティ関連コードは`lightning/`と`stratum/`に内包されています）。
 
 レビュアーは以下の観点で確認します。コードの正確性と設計の妥当性、テストの充実度、ドキュメントの更新、セキュリティへの影響、パフォーマンスへの影響、`CLAUDE.md`で禁止されている機能や方針への抵触の有無。
 
@@ -89,7 +89,7 @@ PRのタイトルはコミットメッセージと同じConventional Commits形�
 
 ドキュメントの改善は、コードと同等に重要な貢献です。誤字脱字の修正、表現の改善、新規セクションの追加、新言語への翻訳、チュートリアルの執筆を歓迎します。
 
-主要言語（英語、日本語、中国語、韓国語、スペイン語、フランス語、ドイツ語、ポルトガル語、ロシア語、アラビア語）への翻訳は、人間レビュー済みの品質を維持するため、ネイティブスピーカーまたは堪能な方からの貢献を特に歓迎します。その他の言語は機械翻訳で対応していますが、品質改善の貢献は歓迎します。
+現在のメッセージカタログ（`internal/i18n/messages/`）は主要10言語（英語、日本語、中国語、韓国語、スペイン語、フランス語、ドイツ語、ポルトガル語、ロシア語、アラビア語）をカバーし、ネイティブスピーカーまたは堪能な方からの翻訳改善の貢献を特に歓迎します（機械翻訳パイプラインによる他言語対応は現状存在しません）。
 
 ## 拡張機能に関する注記 / A Note on Extensibility
 
@@ -112,7 +112,7 @@ AIが生成したコードであっても、コミットした時点であなた
 AI出力をそのままコミットすることを禁止します。各行を読み、ロジックを理解し、Otedamaのコーディング規約に合わせて修正してください。**10行を超える逐語的なAI出力のコミットは禁止**します。
 
 **Copilot duplication filter must be enabled.**
-GitHub Copilotを使用する場合、Settings > Copilot > Duplication detection を **strict** に設定してください。これは、Doe v. GitHub訴訟（2025年11月和解）以降、GPL/AGPL/LGPLコードの逐語コピーを防ぐためのデフォルト推奨設定です。
+GitHub Copilotを使用する場合、Settings > Copilot > Duplication detection を **strict** に設定してください。これは、GPL/AGPL/LGPLコードの逐語コピーを防ぐための推奨設定です。
 
 **Tag AI-assisted commits.**
 AI支援によるコミットには、コミットメッセージ末尾に共著者表記を加えてください。

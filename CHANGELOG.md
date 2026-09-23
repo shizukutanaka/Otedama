@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 287 — CONTRIBUTING/ROADMAP/CLAUDE.md の実態監査)
+
+- **ROADMAP.md のマイルストーンが既出荷項目を未着手扱い**: engine →
+  poolproto 統合（`poolproto.DialURL` 経由で接続済み — 「raw TCP に直結」
+  は陳腐）、Stratum V1 互換（stratumv1 パッケージ出荷済み）を ✅完了に。
+  「govulncheck + osv-scanner を informational から昇格」は未配線のため
+  新規追加と訂正。DATUM は未着手と明記。
+- **CONTRIBUTING.md の環境・運用記述を実態に訂正**: Go 1.22→1.24+
+  （toolchain go1.25.7 pin 明記）、Docker の用途「統合テスト用」→
+  「コンテナビルド用」、CODEOWNERS「二人のメンテナによる二重レビュー」→
+  実設定（@shizukutanaka 単独 — auto review request）、Copilot 重複検出
+  filter の根拠「Doe v. GitHub 訴訟（2025年11月和解）」（出所確認不能 —
+  推奨設定として簡素化）、「その他の言語は機械翻訳で対応」（MT
+  パイプライン非存在 — 10言語カタログのみ）。
+- **CLAUDE.md の事実記述3件を訂正**（規範条項は不変更）: ADR-001〜011→
+  〜013、`main` ブランチ参照→`master`（実デフォルト）、`legacy-v2`
+  ブランチ「保全用」→計画・未作成（s283 で未存在確認）、「機械翻訳で
+  1,000言語以上」→10言語カタログのみ。
+- 検証済みクリーン: workflows ファイル一覧（ci/ci-cd/test/code-review/
+  security/deploy/release）は実在、CODEOWNERS パス全実在、.gitignore の
+  config.yaml 保護あり、PR 手順・Conventional Commits・SPDX 要件は実運用
+  と整合。
+
 ### Fixed (session 286 — ベンチマーク/競合分析/スキル文書の実態監査)
 
 - **BENCHMARKS.md が不存在ベンチマークを「再現可能」として列挙**:
