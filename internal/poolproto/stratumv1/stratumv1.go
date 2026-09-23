@@ -111,9 +111,14 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// can rotate mid-session (mining.set_extranonce). extranonce2Size is
+	// atomic because the read loop (dispatch) writes it while Submit
+	// reads it on the worker's goroutine — a plain int raced under
+	// -race whenever a pool rotated extranonce mid-mining. extranonce1
+	// stays a plain field: written and read on the read loop only.
 	extranonce1     string
-	extranonce2Size int
+	extranonce2Size atomic.Int32
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -251,7 +256,7 @@ func (s *session) dispatch(line []byte) {
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
 			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.setExtranonce2Size(sz)
 			// Every queued job was built under the retired extranonce1:
 			// its coinbase (and thus merkle root) was computed with the
 			// old nonce-space, so any share from it is a guaranteed
@@ -339,7 +344,7 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 func (s *session) sendJob(nj notifyJob) {
 	job := nj.Job
 	if en1, err := hex.DecodeString(s.extranonce1); err == nil && len(nj.coinb1) > 0 {
-		en2 := make([]byte, s.extranonce2Size)
+		en2 := make([]byte, s.extranonce2Size.Load())
 		cbHash := miner.CoinbaseHash(nj.coinb1, en1, en2, nj.coinb2)
 		job.MerkleRoot = miner.MerkleRootFromCoinbase(cbHash, nj.branches)
 	}
@@ -377,6 +382,29 @@ func (s *session) purgeJobs() {
 	}
 }
 
+// maxExtranonce2Size bounds the pool-supplied extranonce2_size.
+// In the wild it is 4 bytes (standard pools) or up to ~8 (ckpool);
+// 64 leaves 8-16x headroom while capping what a hostile or buggy pool
+// can make us allocate — sendJob allocs en2 per job and Submit pads a
+// string per share, so an unchecked size is a per-job memory DoS and a
+// negative value panics makeslice/strings.Repeat outright. The pool is
+// untrusted input: clamp at ingest, not at every use site.
+const maxExtranonce2Size = 64
+
+// setExtranonce2Size stores a pool-supplied extranonce2_size clamped
+// to [0, maxExtranonce2Size]: negative values (protocol violation)
+// become 0 (no client nonce space) and oversized values are truncated
+// to the cap rather than trusted.
+func (s *session) setExtranonce2Size(sz int) {
+	if sz < 0 {
+		sz = 0
+	}
+	if sz > maxExtranonce2Size {
+		sz = maxExtranonce2Size
+	}
+	s.extranonce2Size.Store(int32(sz))
+}
+
 // Submit sends a share via mining.submit and returns the pool's verdict.
 // Stratum V1 submission format: ["worker", "job_id", "extranonce2",
 // "ntime", "nonce"], all hex strings.
@@ -389,7 +417,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+		en2 = strings.Repeat("00", int(s.extranonce2Size.Load()))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1

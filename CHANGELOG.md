@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 301 — stratumv1 ワイヤコード深部監査)
+
+- **`extranonce2Size` のデータレース（並行ブランチ修正が当スタック未適用）**:
+  `mining.set_extranonce` が read loop 上で同フィールドを書き、`Submit` が
+  ワーカーゴルーチンで読む — plain int のまま `-race` 下で実 race。
+  修正 `72230bc` は未マージの `devin/1790137453-setextranonce-race` にのみ
+  存在（s298 と同型の並行ブランチ乖離）。atomic 化の半分を同セマンティクスで
+  移植（`atomic.Int32`）。同ブランチの `extranonce2Ctr` ローテーションは
+  feature 追加のため移植せず maintainer 向け記録に留めた。
+- **プール供給 `extranonce2_size` が無検証 — job毎のメモリDoS／panic**:
+  `sendJob` が `make([]byte, n)`（notify毎）、`Submit` が
+  `strings.Repeat("00", n)`（share毎）に直接使用。`sz=-1` は makeslice/Repeat
+  で即 panic、巨大値は非信頼入力由来の割当てDoS — どちらのブランチ系にも
+  上限が無かった。`setExtranonce2Size` で `[0,64]` にクランプ（実在値は標準
+  4・ckpool ~8、64 は 8-16倍の余裕）し subscribe 結果・途中 rotate 双方の
+  注入点で適用。
+- 検証済みクリーン: `readLine` 64KiB ReadSlice 上限、`cancelPending` 二重
+  クローズなし、`start`/`close` の sync.Once（s277回帰維持）、`call` の
+  pending 清掃、dispatch の応答/通知分岐、`client.reconnect` の記録のみ
+  追従しない設計、`parseNotify` の per-word prevhash スワップと寛容スキップ、
+  Negotiate 3段の optional-nonfatal、TLS 常時検証。
+- テスト2本（set_extranonce クランプ、Submit 同型 Load の -race pin）＋
+  既存テスト3箇所を atomic アクセサへ更新。
+
 ### Fixed (session 300 — internal/tui 深部監査)
 
 - **TUI の `DevicesIdle` が永久に0 — "%d idle" バッジがデッドコードだった**:

@@ -870,9 +870,50 @@ func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	if sess.extranonce1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if got := sess.extranonce2Size.Load(); got != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", got)
 	}
+}
+
+func TestSession_Dispatch_SetExtranonce_ClampsHostileSize(t *testing.T) {
+	// The pool is untrusted input: extranonce2_size feeds make([]byte, n)
+	// in sendJob and strings.Repeat in Submit, so a hostile value is a
+	// panic (negative) or a per-job/per-share memory DoS (huge). It is
+	// clamped at ingest to [0, maxExtranonce2Size].
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",-1]}`))
+	if got := sess.extranonce2Size.Load(); got != 0 {
+		t.Errorf("negative size: extranonce2Size = %d, want 0", got)
+	}
+	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",1073741824]}`))
+	if got := sess.extranonce2Size.Load(); got != int32(maxExtranonce2Size) {
+		t.Errorf("huge size: extranonce2Size = %d, want %d", got, maxExtranonce2Size)
+	}
+	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
+	if got := sess.extranonce2Size.Load(); got != 4 {
+		t.Errorf("normal size: extranonce2Size = %d, want 4", got)
+	}
+}
+
+// TestSession_SetExtranonce_ConcurrentRead_NoRace pins the atomicity of
+// extranonce2Size: dispatch (read loop) writes it while Submit reads it on
+// the worker goroutine — a plain int raced under -race whenever a pool
+// rotated extranonce mid-mining. The concurrent reader here performs the
+// same Load+pad Submit does; extranonce1 stays readLoop-only by design
+// (sendJob is only called from dispatch), so it is deliberately untouched.
+func TestSession_SetExtranonce_ConcurrentRead_NoRace(t *testing.T) {
+	sess := makeBareSess()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		_ = strings.Repeat("00", int(sess.extranonce2Size.Load()))
+	}
+	<-done
 }
 
 func TestSession_Dispatch_FullChannel_DropsOldest(t *testing.T) {
@@ -1540,8 +1581,8 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	if sv1.extranonce1 != "deadbeef01" {
 		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if got := sv1.extranonce2Size.Load(); got != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", got)
 	}
 }
 
@@ -1814,7 +1855,7 @@ func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
 func TestSendJob_ComputesMerkleRoot(t *testing.T) {
 	s := makeTestSession(4)
 	s.extranonce1 = "cc"
-	s.extranonce2Size = 4
+	s.extranonce2Size.Store(4)
 
 	coinb1, _ := hex.DecodeString("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20")
 	coinb2, _ := hex.DecodeString("ffffffff0100f2052a010000004341041b0e8c2567c12536aa13357b79a073dc4444acb83c4ec7a0e2f99dd7457516c5817242da796924ca4e99947d087fedf9ce467cb9f7c6287078f801df276fdf84ac00000000")
