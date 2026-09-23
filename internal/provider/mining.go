@@ -11,6 +11,12 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/hal"
 )
 
+// MiningProviderID is the canonical identifier of the built-in mining
+// provider. The engine compares quotes against it to flag the
+// BTC-denominated mining stream (arbitration.Stream.IsBitcoinMining) and
+// to mark the corresponding TUI row as the mining market.
+const MiningProviderID = "mining.stratum"
+
 // MiningProvider publishes Bitcoin mining yield estimates for Stratum V2 pools.
 //
 // Yield is estimated from the pool's reported difficulty and the device's
@@ -49,7 +55,7 @@ func NewMiningProvider(poolURL string, _ RateSource) *MiningProvider {
 			quoteCh:  make(chan Quote, 16),
 			interval: 30 * time.Second,
 		},
-		id:      "mining.stratum",
+		id:      MiningProviderID,
 		poolURL: poolURL,
 	}
 }

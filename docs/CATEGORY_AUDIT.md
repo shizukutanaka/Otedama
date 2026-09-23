@@ -1036,3 +1036,12 @@ roll-up sections and older items were never re-synced as code shipped.
 | `RegisterCollector` doc claimed "may not call any Registry method (deadlock)" but collectors run after RUnlock | ✅ Doc corrected — registry use inside collectors is free. |
 | HELP/TYPE single-emission per name, label escaping, cross-type panic, `formatFloat` canonical NaN/±Inf, runtime.go go_* set | ✅ Verified clean. |
 | TUI earningsLine/providerLine/walletLine/footer, truncate/visibleLen ANSI handling, s273 mining-quote fix integration | ✅ Verified clean. |
+
+## Session 294 update — engine deep audit (arbitrate/stats/setup/fanin)
+
+| Finding | Disposition |
+|---|---|
+| Stream freshness keyed on provider `q.At` — backdated quotes churn (prune→re-add→prune + log spam), future-dated quotes never prune | ✅ Receipt-time recording; `streamStaleTimeout` const→var for deterministic tests; pinned test updated to receipt semantics. |
+| `streamsSlice` merge writes into representative's `YieldPerDevice` — nil map panic if rep was directly seeded | ✅ Defensive allocation + order-covering regression test. |
+| `"mining.stratum"` magic string duplicated in 3 places | ✅ `provider.MiningProviderID` const; all sites now reference it. |
+| fanIn (ctx observation, buffer cap), uptime/sats accountants, LatencyTracker quantiles, HashrateMonitor, publishDifficulty, setup.go wallet/worker/provider wiring | ✅ Verified clean. |

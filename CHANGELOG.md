@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 294 — engine 深部監査: arbitrate/stats/setup/fanin)
+
+- **`internal/engine`: ストリーム鮮度をプロバイダ時刻 `q.At` ではなく
+  受信時刻で記録**: 期限切れ判定（`streamStaleTimeout` 3分）がプロバイダ
+  側タイムスタンプに依存していたため、(a) 過去時刻で連続発行する
+  プロバイダは生存中なのに毎 tick「expired→再追加→expired」の churn +
+  ログスパム、(b) 未来時刻を送るプロバイダは永久に prune されない —
+  の2方向で誤判定。「最後に自分が聴いた時刻」を記録する受信時刻へ修正。
+  テスト可能化のため `streamStaleTimeout` を var 化し、旧セマンティクス
+  をピン留めしていた e2e テストも受信時刻仕様へ更新（バックデート At が
+  即時 prune されないことも同時に証明）。
+- **`streamsSlice` マージの nil マップ潜在 panic**: 同 ID ストリームの
+  `YieldPerDevice` 併合時、代表エントリが updateStream 経由で生成され
+  ていれば非 nil だが、直接シードされた代表は nil — 書込 panic。
+  防御的にアロケート＋両順序を網羅する回帰テスト追加。
+- **`provider.MiningProviderID` 定数化**: `"mining.stratum"` の3箇所
+  文字列複写（provider/mining.go・arbitrate.go・stats.go）を単一ソース化。
+- 検証済みクリーン: fanIn の ctx 観測・バッファ設計、uptime/sats
+  accountant、LatencyTracker、HashrateMonitor、publishDifficulty、
+  setup.go の wallet/worker/provider 配線。
+
 ### Fixed (session 293 — metrics 実装監査)
 
 - **`internal/metrics`: `metricKey` が非単射で異なるラベル集合が衝突**:

@@ -1879,6 +1879,9 @@ func TestRunArbitrationLoop_StaleStreamPruning(t *testing.T) {
 	old := arbitrationInterval
 	arbitrationInterval = 20 * time.Millisecond
 	defer func() { arbitrationInterval = old }()
+	oldStale := streamStaleTimeout
+	streamStaleTimeout = 60 * time.Millisecond
+	defer func() { streamStaleTimeout = oldStale }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
@@ -1902,8 +1905,10 @@ func TestRunArbitrationLoop_StaleStreamPruning(t *testing.T) {
 		},
 	}
 
-	// Pre-queue a quote older than streamStaleTimeout (3 min) so the first
-	// ticker cycle finds a stale stream and logs the expiry message.
+	// Pre-queue one quote (the At value is deliberately backdated to prove
+	// freshness is measured by RECEIPT time, not the provider timestamp):
+	// once received, no further quotes arrive, so the stream goes stale
+	// ~60ms later and a ticker cycle logs the expiry message.
 	quoteCh <- provider.Quote{
 		ProviderID: "stale-provider",
 		DeviceID:   "cpu-0",

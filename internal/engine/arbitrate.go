@@ -49,13 +49,14 @@ type arbitrationLoopOpts struct {
 const defaultHysteresisPct = 0.05
 
 // streamStaleTimeout is how long a provider's quote remains usable after it
-// was generated. Providers re-quote every 30s (mining) / 60s (AI), so a
+// was received. Providers re-quote every 30s (mining) / 60s (AI), so a
 // provider that has sent no quote within this window is treated as dead and
 // its stream is dropped from arbitration — otherwise a crashed or partitioned
 // provider's last quote would route devices to a revenue source that no longer
 // exists (RESEARCH_IMPROVEMENTS Category 5 item 3). The window is generous
 // (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
-const streamStaleTimeout = 3 * time.Minute
+// A var (not const) so tests can shrink it deterministically.
+var streamStaleTimeout = 3 * time.Minute
 
 // arbitrationPolicyFromConfig maps the configured policy name to an
 // arbitration.Policy. Config.Validate rejects unknown names, so an
@@ -87,11 +88,13 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				return
 			}
 			key := updateStream(opts.streamsMu, opts.streamMap, q)
-			ts := q.At
-			if ts.IsZero() {
-				ts = time.Now()
-			}
-			lastQuoteAt[key] = ts
+			// Freshness is recorded by RECEIPT time, not the provider's own
+			// q.At timestamp: a provider that keeps emitting stale backdated
+			// quotes would otherwise be pruned on every tick while still
+			// alive (expired→re-added→expired log spam), and a future
+			// timestamp would never be pruned at all. Staleness means "we
+			// have not heard recently", so receipt is the correct clock.
+			lastQuoteAt[key] = time.Now()
 		case <-ticker.C:
 			opts.streamsMu.Lock()
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
@@ -218,7 +221,7 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 		SatsPerSecond: net,
 		Confidence:    q.Yield.Confidence,
 	}
-	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
+	existing.IsBitcoinMining = q.ProviderID == provider.MiningProviderID
 	m[key] = existing
 	return key
 }
@@ -238,7 +241,12 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
 			// updateStream always initialises YieldPerDevice before inserting
-			// into the map, so rep.YieldPerDevice is never nil here.
+			// into the map, so rep.YieldPerDevice is never nil today — but a
+			// directly-seeded representative could have a nil map, which the
+			// writes below would panic on, so allocate it defensively.
+			if rep.YieldPerDevice == nil && len(s.YieldPerDevice) > 0 {
+				rep.YieldPerDevice = make(map[string]arbitration.Yield, len(s.YieldPerDevice))
+			}
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y
 			}

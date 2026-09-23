@@ -413,6 +413,31 @@ func TestStreamsSlice_MergesYieldPerDeviceForSameStreamID(t *testing.T) {
 	}
 }
 
+func TestStreamsSlice_MergeIntoNilYieldPerDeviceRepresentative(t *testing.T) {
+	// A representative entry seeded without a YieldPerDevice map (any path
+	// other than updateStream, which always allocates it) must not panic
+	// when a later same-ID entry merges yields into it. Map iteration order
+	// is randomised, so repeat to cover both representative orderings.
+	for i := 0; i < 64; i++ {
+		m := map[string]arbitration.Stream{
+			"ai.akash:gpu-0": {ID: "ai.akash"}, // nil YieldPerDevice
+			"ai.akash:gpu-1": {
+				ID: "ai.akash",
+				YieldPerDevice: map[string]arbitration.Yield{
+					"gpu-1": {SatsPerSecond: 700},
+				},
+			},
+		}
+		got := streamsSlice(m)
+		if len(got) != 1 {
+			t.Fatalf("iteration %d: want 1 merged stream, got %d", i, len(got))
+		}
+		if y := got[0].YieldFor("gpu-1"); y.SatsPerSecond != 700 {
+			t.Fatalf("iteration %d: gpu-1 yield lost in merge: %v", i, y.SatsPerSecond)
+		}
+	}
+}
+
 func TestStreamsSlice_MultiDeviceMergeDoesNotMutateInput(t *testing.T) {
 	// The merge must not alias its YieldPerDevice maps back into m;
 	// otherwise a later updateStream call would mutate the returned slice.
