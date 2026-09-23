@@ -4,6 +4,7 @@
 package config
 
 import (
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -1246,5 +1247,117 @@ func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
 	}
 	if o.ElectricityPricePerKWh != OriginFile {
 		t.Errorf("ElectricityPricePerKWh origin = %v, want file", o.ElectricityPricePerKWh)
+	}
+}
+
+// ----- Non-finite numeric values (env and file) -----
+
+func TestResolve_NonFiniteEnvValuesIgnored(t *testing.T) {
+	// strconv.ParseFloat accepts "NaN"/"Inf" — without a finiteness gate
+	// these would apply and then defeat every range check in Validate
+	// (NaN compares false on both sides).
+	env := map[string]string{
+		"OTEDAMA_MIN_YIELD_SATS_PER_SEC":     "NaN",
+		"OTEDAMA_CURTAIL_BELOW_BTC_USD":      "+Inf",
+		"OTEDAMA_ARBITRATION_HYSTERESIS_PCT": "-Inf",
+		"OTEDAMA_POWER_WATTS":                "300", // valid → applied
+		"OTEDAMA_ELECTRICITY_PRICE_PER_KWH":  "nan", // case-insensitive
+	}
+	cfg, o := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.MinYieldSatsPerSec != 0 {
+		t.Errorf("MinYieldSatsPerSec = %v, want 0 (NaN env ignored)", cfg.MinYieldSatsPerSec)
+	}
+	if o.MinYieldSatsPerSec != OriginDefault {
+		t.Errorf("MinYieldSatsPerSec origin = %v, want default", o.MinYieldSatsPerSec)
+	}
+	if cfg.CurtailBelowBTCUSD != 0 {
+		t.Errorf("CurtailBelowBTCUSD = %v, want 0 (+Inf env ignored)", cfg.CurtailBelowBTCUSD)
+	}
+	if cfg.ArbitrationHysteresisPct != 0.05 {
+		t.Errorf("ArbitrationHysteresisPct = %v, want default 0.05 (-Inf env ignored)", cfg.ArbitrationHysteresisPct)
+	}
+	if cfg.PowerWatts != 300 {
+		t.Errorf("PowerWatts = %v, want 300 (valid env applied)", cfg.PowerWatts)
+	}
+	if cfg.ElectricityPricePerKWh != 0 {
+		t.Errorf("ElectricityPricePerKWh = %v, want 0 (\"nan\" env ignored)", cfg.ElectricityPricePerKWh)
+	}
+}
+
+func TestEnvWarnings_FlagsNonFiniteValues(t *testing.T) {
+	env := map[string]string{
+		"OTEDAMA_POWER_WATTS":            "NaN",
+		"OTEDAMA_CURTAIL_BELOW_BTC_USD":  "Inf",
+		"OTEDAMA_MIN_YIELD_SATS_PER_SEC": "0.5", // finite → no warning
+	}
+	warns := EnvWarnings(env)
+	if len(warns) != 2 {
+		t.Fatalf("EnvWarnings = %d warnings %v, want 2", len(warns), warns)
+	}
+	joined := strings.Join(warns, "\n")
+	if !strings.Contains(joined, "OTEDAMA_POWER_WATTS") {
+		t.Errorf("warnings missing OTEDAMA_POWER_WATTS: %v", warns)
+	}
+	if !strings.Contains(joined, "OTEDAMA_CURTAIL_BELOW_BTC_USD") {
+		t.Errorf("warnings missing OTEDAMA_CURTAIL_BELOW_BTC_USD: %v", warns)
+	}
+	if strings.Contains(joined, "OTEDAMA_MIN_YIELD_SATS_PER_SEC") {
+		t.Errorf("finite var should not warn: %v", warns)
+	}
+}
+
+func TestValidate_RejectsNonFiniteScalars(t *testing.T) {
+	// YAML ".nan"/".inf" decodes to NaN/±Inf and reaches Validate through
+	// the file layer — the range comparisons alone cannot catch NaN.
+	cases := []struct {
+		name   string
+		mutate func(c *Config)
+	}{
+		{"NaN hysteresis", func(c *Config) { c.ArbitrationHysteresisPct = math.NaN() }},
+		{"NaN curtail", func(c *Config) { c.CurtailBelowBTCUSD = math.NaN() }},
+		{"+Inf curtail", func(c *Config) { c.CurtailBelowBTCUSD = math.Inf(1) }},
+		{"NaN min_yield", func(c *Config) { c.MinYieldSatsPerSec = math.NaN() }},
+		{"NaN power", func(c *Config) { c.PowerWatts = math.NaN() }},
+		{"-Inf price", func(c *Config) { c.ElectricityPricePerKWh = math.Inf(-1) }},
+	}
+	for _, tc := range cases {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		tc.mutate(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: Validate() should reject a non-finite scalar", tc.name)
+		}
+	}
+}
+
+func TestValidate_HTTPAddr(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, good := range []string{"", "127.0.0.1:9090", "localhost:8080", ":9090", "[::1]:9090"} {
+		c := base()
+		c.HTTPAddr = good
+		if err := c.Validate(); err != nil {
+			t.Errorf("http_addr %q should be valid: %v", good, err)
+		}
+	}
+	for _, bad := range []string{"127.0.0.1", "9090", "http://127.0.0.1:9090"} {
+		c := base()
+		c.HTTPAddr = bad
+		if err := c.Validate(); err == nil {
+			t.Errorf("http_addr %q should fail validation (malformed silently disables metrics)", bad)
+		}
+	}
+}
+
+func TestValidate_UppercaseBech32Accepted(t *testing.T) {
+	// BIP-173 permits all-uppercase bech32; btccrypto.ValidateAddress
+	// accepts it, so the config prefix gate must not reject it first.
+	c := Defaults()
+	c.BitcoinAddress = "BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ"
+	if err := c.Validate(); err != nil {
+		t.Errorf("uppercase bech32 should be accepted: %v", err)
 	}
 }

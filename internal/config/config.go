@@ -34,6 +34,8 @@ package config
 
 import (
 	"fmt"
+	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -395,9 +397,16 @@ func EnvWarnings(env map[string]string) []string {
 		if v == "" {
 			continue
 		}
-		if _, err := strconv.ParseFloat(v, 64); err != nil {
+		if f, err := strconv.ParseFloat(v, 64); err != nil {
 			warnings = append(warnings, fmt.Sprintf(
 				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v))
+		} else if math.IsNaN(f) || math.IsInf(f, 0) {
+			// ParseFloat accepts "NaN"/"Inf": a non-finite value would sail
+			// through every range comparison in Validate (NaN compares false
+			// on both sides) and silently poison engine behaviour — e.g. a
+			// NaN profitability floor idles every device forever.
+			warnings = append(warnings, fmt.Sprintf(
+				"%s=%q is not a finite number; ignoring it and using the default", spec.key, v))
 		}
 	}
 	return warnings
@@ -519,9 +528,11 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		if v == "" {
 			continue
 		}
-		// A malformed value is left for EnvWarnings to surface; here it is
-		// simply not applied (the default/file/earlier-layer value stands).
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
+		// A malformed or non-finite value is left for EnvWarnings to
+		// surface; here it is simply not applied (the default/file/
+		// earlier-layer value stands). ParseFloat accepts "NaN"/"Inf",
+		// which must be rejected too — NaN defeats every range check.
+		if f, err := strconv.ParseFloat(v, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
 			spec.apply(&cfg, &o, f)
 		}
 	}
@@ -663,9 +674,13 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
+	// A YAML "arbitration_hysteresis_pct: .nan" decodes to NaN and beats
+	// both range comparisons below (NaN < 0 and NaN >= 1 are both false);
+	// the explicit finiteness check keeps it out of the engine.
+	if math.IsNaN(c.ArbitrationHysteresisPct) || math.IsInf(c.ArbitrationHysteresisPct, 0) ||
+		c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
-			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+			"arbitration_hysteresis_pct %.4f must be a finite number in [0.0, 1.0)", c.ArbitrationHysteresisPct))
 	}
 	// Empty means "unset → default" (maximize_earnings), same convention as
 	// pools[].payout_scheme and the other optional string fields.
@@ -675,21 +690,31 @@ func (c Config) Validate() error {
 				"arbitration_policy %q is not one of maximize_earnings, stack_btc, maximize_privacy, environment_friendly", c.ArbitrationPolicy))
 		}
 	}
-	if c.CurtailBelowBTCUSD < 0 {
+	if c.CurtailBelowBTCUSD < 0 || math.IsNaN(c.CurtailBelowBTCUSD) || math.IsInf(c.CurtailBelowBTCUSD, 0) {
 		issues = append(issues, fmt.Sprintf(
-			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+			"curtail_below_btc_usd %.2f must be a finite number >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
 	}
-	if c.MinYieldSatsPerSec < 0 {
+	if c.MinYieldSatsPerSec < 0 || math.IsNaN(c.MinYieldSatsPerSec) || math.IsInf(c.MinYieldSatsPerSec, 0) {
 		issues = append(issues, fmt.Sprintf(
-			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+			"min_yield_sats_per_sec %.4f must be a finite number >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
 	}
-	if c.PowerWatts < 0 {
+	if c.PowerWatts < 0 || math.IsNaN(c.PowerWatts) || math.IsInf(c.PowerWatts, 0) {
 		issues = append(issues, fmt.Sprintf(
-			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+			"power_watts %.2f must be a finite number >= 0 (0 = disabled)", c.PowerWatts))
 	}
-	if c.ElectricityPricePerKWh < 0 {
+	if c.ElectricityPricePerKWh < 0 || math.IsNaN(c.ElectricityPricePerKWh) || math.IsInf(c.ElectricityPricePerKWh, 0) {
 		issues = append(issues, fmt.Sprintf(
-			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+			"electricity_price_per_kwh %.4f must be a finite number >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+	}
+
+	if c.HTTPAddr != "" {
+		// net.Listen("tcp", addr) requires host:port; a malformed value
+		// only surfaces as a startup warning and silently disables the
+		// metrics/health endpoints. Catch it at validation time.
+		if _, _, err := net.SplitHostPort(c.HTTPAddr); err != nil {
+			issues = append(issues, fmt.Sprintf(
+				"http_addr %q is not a valid host:port address: %v", c.HTTPAddr, err))
+		}
 	}
 
 	if len(issues) == 0 {
@@ -715,7 +740,9 @@ func validateBitcoinAddress(addr string) error {
 	switch {
 	case strings.HasPrefix(addr, "1"):
 	case strings.HasPrefix(addr, "3"):
-	case strings.HasPrefix(addr, "bc1"):
+	// BIP-173 permits all-uppercase bech32 ("BC1Q…"); the prefix check
+	// normalises case because btccrypto.ValidateAddress accepts it.
+	case strings.HasPrefix(strings.ToLower(addr), "bc1"):
 	default:
 		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}

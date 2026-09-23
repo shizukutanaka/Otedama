@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 296 — cmd/otedama 残部 + internal/config 深部監査)
+
+- **`internal/config`: 非有限値が env/file 両層から `Validate` を素通り**:
+  `OTEDAMA_*=NaN`/`Inf` は `strconv.ParseFloat` がエラー無しで受理するため
+  範囲チェック（NaN は両辺 false）を突破しエンジンへ伝播 — NaN の
+  `min_yield_sats_per_sec` で全デバイスが静黙に永久アイドル、NaN の
+  hysteresis でスイッチコスト保護が喪失。YAML `.nan`/`.inf` も file 層から
+  同じ穴を通る。env 解決で非有限を棄却（下位層を維持）＋`EnvWarnings` が
+  「not a finite number」と報告＋`Validate` が5数値フィールド全てで
+  NaN/±Inf を拒否。非有限系列の4件目（s269 裁定、s277 latency、
+  s291 レートに続く）。
+- **同: `validateBitcoinAddress` の `bc1` プレフィックス照合が小文字固定**:
+  BIP-173 全大文字 bech32（"BC1Q…"、s275 で `btccrypto.ValidateAddress`
+  は受理済み）がプレフィックスゲートで拒否。`strings.ToLower` で正規化
+  （大文字 bech32 不整合の第3弾: s275 ClassifyAddress、s276 doctor）。
+- **同: `http_addr` が無検証**: `net.Listen` でのみ失敗し、
+  `startHTTPServer` がエラーを警告に格下げするため、タイポひとつで
+  metrics/health がラン中ずっと静黙無効化。`Validate` に
+  `net.SplitHostPort` 検査を追加し `config validate`/`run` 起動時に失敗。
+- 検証済みクリーン: cmd/otedama 全残存ファイル（service/completion/
+  configfile/doctor/main/config/run — completion のサブコマンド一覧は
+  ディスパッチャと一致、safeDisplay の ANSI サニタイズ、wallet env
+  フォールバック、log-file 0600）。
+
 ### Fixed (session 295 — 小パッケージ群 + poolproto/stratumv2 アダプタ監査)
 
 - **`internal/poolproto/stratumv2` が出荷バイナリに未リンク**: 非テスト
