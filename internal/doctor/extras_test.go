@@ -877,10 +877,38 @@ func TestCheckPoolEncryption_PlaintextWarns(t *testing.T) {
 	}
 }
 
+// stratum+v2:// is NOT encrypted: the Noise transport is not wired into any
+// live connection (KNOWN_LIMITATIONS §2), so doctor must not call it
+// "encrypted" the way the old check did.
+func TestCheckPoolEncryption_PlainV2Warns(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+v2://pool.example.com:3336"},
+	}}
+	r := checkPoolEncryption(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("stratum+v2://: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// datum:// is cleartext SV1 by design (the gateway's miner wire); the intended
+// deployment is a locally-running datum_gateway, but it is still a plaintext
+// transport and must be surfaced as such.
+func TestCheckPoolEncryption_DatumWarns(t *testing.T) {
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "datum://127.0.0.1:3334"},
+	}}
+	r := checkPoolEncryption(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("datum://: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "127.0.0.1:3334") {
+		t.Errorf("detail should name the datum pool: %q", r.Detail)
+	}
+}
+
 func TestCheckPoolEncryption_EncryptedSchemesPass(t *testing.T) {
 	for _, url := range []string{
 		"stratum+tls://pool.example.com:3334",
-		"stratum+v2://pool.example.com:34254",
 		"stratum+v2tls://pool.example.com:34254",
 	} {
 		cfg := config.Config{Pools: []config.PoolConfig{{URL: url}}}
