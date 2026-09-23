@@ -72,11 +72,11 @@ Otedamaのコンテキストで特に注意すべき脆弱性カテゴリを列�
 
 **gosec.** Go固有のセキュリティ問題を検出します。`gosec -severity medium ./...`で実行し、明らかな問題（秘密情報のハードコーディング、`math/rand`の暗号用途、危険な権限設定など）を検出します。
 
-**CodeQL.** GitHub Advanced Securityの一部として提供されるセマンティック分析ツール。データフロー分析によってSSRF、SQLインジェクション、パストラバーサルなどを検出します。`.github/workflows/codeql.yml`で定期実行を設定します。
+**CodeQL.** GitHub Advanced Securityの一部として提供されるセマンティック分析ツール。データフロー分析によってSSRF、SQLインジェクション、パストラバーサルなどを検出します。`.github/workflows/security.yml` の CodeQL ジョブ（`codeql-action/init`+`analyze`）で定期実行されます（ファイル名は `codeql.yml` ではなく `security.yml` — ただし workflows の Go バージョン不整合により現在は実行失敗中、KNOWN_LIMITATIONS §13）。
 
 **Semgrep.** パターンベースの静的解析ツール。Otedamaのコンテキスト固有のルール（例：「`log.Printf`に`privateKey`を渡してはならない」）をカスタムルールとして追加します。
 
-**govulncheck.** Go公式の脆弱性スキャンツール。依存ライブラリに既知の脆弱性がないかを確認します。`govulncheck ./...`をCIで毎回実行します。
+**govulncheck.** Go公式の脆弱性スキャンツール。依存ライブラリに既知の脆弱性がないかを確認します。CI ジョブは未配線のため `govulncheck ./...` を手動実行します（週次実行の設計は solo-operations.md §2.2、KNOWN_LIMITATIONS §13）。
 
 **fuzz testing.** Go 1.18以降の標準機能。パーサー、プロトコル実装、入力処理に対して継続的に適用します。
 

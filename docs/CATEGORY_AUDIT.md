@@ -937,3 +937,20 @@ floats — the exact tj-actions/TeamPCP class the doc itself warns about).
 Recorded for maintainer action (push-scope): KNOWN_LIMITATIONS §13 session-285
 addendum — `@master` floating pins, zero SHA pinning, absent govulncheck/
 osv-scanner/Scorecard/fuzz/benchmark jobs.
+
+## Session 286 update — benchmarks/competitive-analysis/skills conformance
+
+Continuation of the docs-vs-reality audit into performance claims, market
+docs, and the skills/ procedure files contributors actually follow.
+
+| Finding | Disposition |
+|---|---|
+| BENCHMARKS "Reproduce: `BenchmarkDecoder_ReadFrame`" — the benchmark does not exist; the decoder throughput table was a design projection presented as measured | ✅ Fixed: status note marks the numbers unmeasured; lists the benchmarks that do exist. |
+| BENCHMARKS "`go test -bench` checked into CI, >5% fails automatically" + "posts a comparison to PRs" — the real job only runs `go test -bench=.` and uploads an artifact (and cannot run at all while the workflow Go floor is broken, §13) | ✅ Fixed: actual job + manual comparison procedure. |
+| BENCHMARKS "decoder fuzzed continuously in CI" — no fuzz job exists | ✅ Fixed. |
+| BENCHMARKS Akash revenue column as "market data" — produced by the simulated provider | ✅ Fixed: caveat added (KNOWN_LIMITATIONS §1 / ADR-013). Go 1.22 reference floor → ≥1.24. |
+| competitive-analysis "ZKP認証で数学的に証明" (v4.0), "LDKバインディング" (not integrated — BIP-39 storage only), "`golang.org/x/text`のmessageパッケージを基礎に" (not a dep; hand-rolled internal/i18n), "プール自動選択" (none — explicit pools[].url), pool list naming DEMAND (NXDOMAIN measured) / Luxor (SV2 unverified) | ✅ All five corrected to shipped reality. |
+| skills/tdd.md: `make test-e2e` (intentionally undefined target), `//go:build integration` tag (not introduced), "CI上で継続的に fuzz 実行" (no job), gopter mention (no property lib) | ✅ Fixed. |
+| skills/release-procedure.md: `otedama migrate-from-v2` migration test (dead subcommand), "golangci-lint 警告ゼロ" (backlog exists), govulncheck in CI (unwired), "E2Eテストの全てが通過" | ✅ Fixed. |
+| skills/security-audit.md: `.github/workflows/codeql.yml` (real file is security.yml), govulncheck "CIで毎回実行" | ✅ Fixed. |
+| Verified accurate: architecture.md carries the session-243 target-vs-actual disclaimer; gosec+CodeQL+Semgrep actions exist in security.yml/ci.yml (three-layer claim holds); `make test-integration`, `make audit`, `make fuzz` targets exist; BenchmarkHashHeader/WorkerGrind_SingleThread/WriteText and 4 other benchmarks exist. | ✅ |

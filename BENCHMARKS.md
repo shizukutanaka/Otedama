@@ -10,8 +10,13 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` is checked into CI. A PR
-   that regresses performance by >5% fails automatically.
+2. **Regression-resistant.** CI runs `go test -run=XXX -bench=. -benchmem ./...`
+   on PRs (test.yml `benchmark` job) and uploads the raw output as an
+   artifact — it does **not** yet compare against main or fail on a >5%
+   regression, and the job itself currently cannot run because the
+   workflow pins a Go older than `go.mod` requires
+   (`docs/KNOWN_LIMITATIONS.md` §13). Automated regression gating
+   remains the design goal, not the shipped state.
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
@@ -68,13 +73,20 @@ deliver them. A slow decoder becomes a DoS vector.
 | Header decode          | ~50 M frames/s | ~20 ns     |
 | Full frame (1KB payload)| ~5 M frames/s | ~200 ns    |
 
-**Reproduce:**
-```bash
-go test -bench=BenchmarkDecoder_ReadFrame ./internal/stratum/
-```
+> **Status note (session 286):** the table above is a design projection,
+> not a measurement — `BenchmarkDecoder_ReadFrame` does not exist, so
+> there is no reproduce command. Do not cite these numbers as measured.
+> The fuzz targets that do exist (`FuzzDecoder_ReadFrame` plus five
+> others, `make fuzz`) are run manually; no CI fuzz job is wired
+> (`KNOWN_LIMITATIONS` §13).
 
-**Correctness:** The decoder is fuzzed continuously in CI. See
-`FuzzDecoder_ReadFrame` for the active corpus.
+The benchmarks that do exist (reproducible):
+
+```bash
+go test -bench=BenchmarkHashHeader -benchmem -count=5 ./internal/miner/
+go test -bench=BenchmarkWorkerGrind_SingleThread -benchmem ./internal/miner/
+go test -bench=BenchmarkWriteText -benchmem ./internal/metrics/
+```
 
 ## Economic comparison (2026-04-24 market data)
 
@@ -99,6 +111,9 @@ and current network conditions.
 **Interpretation:** Mining CPU is effectively zero revenue. The
 arbitration engine's entire value is in routing GPUs to AI inference,
 which is ~187,000× more profitable than GPU mining at current prices.
+Caveat: the Akash column is produced by the **simulated** provider
+(`docs/KNOWN_LIMITATIONS.md` §1) — it is a modeled rate, not a measured
+market quote, until a real Akash client lands (ADR-013).
 
 ## Startup time
 
@@ -150,16 +165,19 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and posts a comparison to PRs.
+CI runs `go test -bench=.` on PRs and stores the output as a workflow
+artifact; it does not post a comparison back to the PR today. Until
+that exists, regression checking is manual: run the benchmark on the
+base branch and the PR head with `-count=10` and compare.
 
 ## Hardware used for published numbers
 
 Numbers above are measured on:
 
-- **Linux reference:** AMD Ryzen 9 7950X, 64 GB DDR5, Ubuntu 24.04, Go 1.22
-- **macOS reference:** Apple M2 Pro (16", 2023), macOS 14, Go 1.22
-- **Windows reference:** Intel i7-12700K, Windows 11, Go 1.22
-- **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go 1.22
+- **Linux reference:** AMD Ryzen 9 7950X, 64 GB DDR5, Ubuntu 24.04, Go ≥1.24
+- **macOS reference:** Apple M2 Pro (16", 2023), macOS 14, Go ≥1.24
+- **Windows reference:** Intel i7-12700K, Windows 11, Go ≥1.24
+- **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go ≥1.24
 
 Readers may see different numbers on different hardware; the relative
 rankings should remain stable.

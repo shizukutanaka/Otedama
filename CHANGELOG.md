@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 286 — ベンチマーク/競合分析/スキル文書の実態監査)
+
+- **BENCHMARKS.md が不存在ベンチマークを「再現可能」として列挙**:
+  `BenchmarkDecoder_ReadFrame` は存在せず（decoder スループット表は設計
+  予測値 — 測定値として引用不可と明記）。「`go test -bench` が CI で
+  >5% 回帰を自動失敗」「PR に比較を投稿」は未実装（実 job は `go test
+  -bench=.` 実行＋artifact アップロードのみ、かつ Go バージョン不整合で
+  実行不能 — §13）。「decoder は CI で継続 fuzz」も未配線。実在する
+  再現可能ベンチ（HashHeader/WorkerGrind/WriteText）を列挙。Akash 収益
+  列は simulated provider 由来と明記、参照 Go 1.22→≥1.24。
+- **competitive-analysis.md の出荷済み扱い5件を訂正**: ZKP認証（v4.0
+  未実装）、LDKバインディング（未統合 — BIP-39暗号化保管のみ）、
+  x/text基盤（未依存 — 自作 internal/i18n カタログ）、プール自動選択
+  （未実装 — pools[].url 明示設定＋既定1件フォールバック）、推奨プール
+  列挙（demand.sv2.io は NXDOMAIN、Luxor SV2 未確認 → 実在確認できるのは
+  Braiins のみ）。
+- **skills/ の手順書が不存在コマンドを指示**: tdd.md の `make test-e2e`
+  （意図的に未定義 — Makefile コメント確認）、`//go:build integration`
+  タグ（未導入）、CI fuzz 実行（未配線）を実態に訂正。release-procedure.md
+  の `otedama migrate-from-v2` 移行テスト（dead サブコマンド → 手動再設定
+  手順へ）、`golangci-lint 警告ゼロ`（既存バックログが残存 → 新規なし基準
+  へ）、govulncheck CI（未配線 → 手動実行代替）、E2Eテスト合格条件を訂正。
+  security-audit.md の `codeql.yml`（実ファイルは security.yml）、
+  govulncheck「CIで毎回実行」（未配線）を訂正。
+- 検証済みクリーン: architecture.md は session 243 の「目標 vs 実装」免責
+  で正直に枠付け済み、CodeQL+Semgrep は security.yml に実在（三層主張は
+  成立）、`make test-integration`/`make audit`/`make fuzz` ターゲット実在、
+  `BenchmarkHashHeader`/`BenchmarkWorkerGrind_SingleThread`/`BenchmarkWriteText`
+  等の実ベンチマーク名は存在、CodeQL+semgrep actions は security.yml 内。
+
 ### Fixed (session 285 — ガバナンス/サプライチェーン系ドキュメント監査: SUSTAINABILITY・solo-operations・AUDIT_CHECKLIST)
 
 - **SUSTAINABILITY.md の「実装済み」主張12件が陳腐または虚偽**:
