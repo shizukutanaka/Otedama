@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 279 — `mining.set_target` が無視され難易度が古いまま残った)
+
+**NiceHash 流プールが `set_difficulty` の代わりに送る `mining.set_target`
+（U256 target の直接指定・16進）が未ハンドルだった** —— 無視されると
+前回難易度が残存し、シェア検証・suggest_difficulty ケイデンス・
+メトリクスの target 評価が全て乖離。`parseSetTarget` が難易度等価値
+（`diff1Target / target`、`miner.TargetFromDifficulty` と同一規約）へ
+変換して `SuggestedDifficulty` に格納 —— 下流は単一の difficulty
+セマンティクスのまま。
+
 ### Fixed (session 278 — 未実装メソッドのプール要求が無応答だった)
 
 **id を持つ pool→client リクエストのうち未実装メソッドが一律無視

@@ -686,6 +686,11 @@ endpoint against current vendor documentation. Tags as before
    pool→client method with an id we don't implement (e.g.
    `mining.get_transactions`), in the same [code,"message",data] array
    shape pools use. Notifications without an id stay ignored.
+   — session 279: `mining.set_target` handled — NiceHash-style pools send
+   the raw U256 share target in place of set_difficulty; it is now
+   stored as the difficulty *equivalent* (diff1Target/target), keeping
+   a single SuggestedDifficulty semantic. An ignored set_target meant
+   stale difficulty ⇒ misjudged share validation and suggested cadence.
    otherwise look half-open (TCP alive, application dead).
    — session 267: `client.get_version` answered too — the other
    request-with-id method Braiins pools send; `agentString` (extracted from
