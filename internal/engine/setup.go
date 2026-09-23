@@ -191,6 +191,9 @@ func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint s
 
   This phrase is not saved to disk and is not written to any log.
   Otedama cannot show it to you again.
+
+  Once written down, prove the backup is correct by re-entering it:
+    otedama wallet verify
 ========================================================================
 
 `, mnemonic.String(), fingerprint, len(mnemonic))
