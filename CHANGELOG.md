@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 298 — engine 再接続ループ深部監査 + 並行ブランチ defect 移植)
+
+- **健全セッション後に再接続バジェットがリセットされない**: `attempt` カウンタと
+  exponential backoff がプロセス寿命で単調増加 — 数時間稼働後に切断された正常な
+  セッションも、成長済み backoff（最大64s）と枯渇した `MaxReconnectAttempts` を
+  引き継ぎ、3回の正常セッション+切断で `max_reconnect_attempts=3` がエンジンを
+  殺す設計だった。`reconnectBackoffMax` を超過したセッションの終了を新失敗連の
+  起点とし attempt=0・backoff=初期値にリセット（`healthySessionDur` でテスト注入
+  可）。並行ブランチ `devin/1790137*-reconnect-budget-reset` の修正が当スタックへ
+  未マージだったため同セマンティクスを移植。
+- **V2 dial+handshake が無制限ブロック**: inline V2 経路の `dec.ReadFrame()` は
+  ctx を受けず conn の read deadline も未設定 — TCP 接続を受けても
+  SetupConnectionSuccess を返さないブラックホールプールが再接続ループを OS TCP
+  タイムアウト（~15-30分）まで固着させ、ctx cancel も効かなかった。
+  `handshakeTimeout=30s` を導入: `dialCtx` が TCP connect + TLS handshake を、
+  handshake 内の `conn.SetDeadline` がフレーム交換をバインド（成功時クリア —
+  セッション中は liveness メトリクス側へ委譲）。ブラックホールリスナ回帰テスト。
+- **`PoolNotices()` の消費者不在**: stratumv1 の `noticeCh`（cap 8、drop-oldest）
+  に `client.show_message` の運営通知（メンテナンス予告・手数料変更・デッドマイナ
+  警告）が蓄積し、読み手無しで全件静黙ドロップ。`runSessionV1` の select で
+  `engine: pool notice: …` としてログへ drain — 閉塞時は nil 化し終端シグナルは
+  Jobs() に一本化。e2e テストで通知到達を検証。
+- 検証済みクリーン: `internal/btccrypto` 全4ファイル（s275/276 以来の初の
+  全パッケージ verify-clean）、engine/run.go 先頭部・全ヘルパー、setup.go、
+  fanin.go、arbitrate.go、`LatencyTracker` mutex（submit goroutine Record vs
+  ticker Quantile が競合しないことを確認）、V1 `Negotiate` の応答待ちは
+  readLoop の 5分 read deadline でバインド済み。残る並行ブランチ項目
+  （pool_parse_errors・last_pool_message・rpc-response-timeout 等）は新規機能
+  追加であり暗黙移植せず監査台帳に記録。
+
 ### Fixed (session 297 — internal/doctor 深部監査)
 
 - **`checkPoolEncryption` が `stratum+v2://` を「encrypted」と虚偽判定**:

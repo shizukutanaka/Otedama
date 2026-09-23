@@ -68,6 +68,15 @@ const (
 	rejectReasonTransition = "transition"
 )
 
+// handshakeTimeout bounds the connect-and-handshake phase (TCP/TLS dial
+// plus the SetupConnection/OpenMiningChannel exchange) of one session
+// attempt. Without it a pool that accepts the socket but never replies
+// wedges the reconnect loop on the caller's context — which is the run
+// lifetime, so "connected to X" would be the last log line forever. 30s
+// matches standard client behaviour. It is a var (not const) so tests
+// can shrink it.
+var handshakeTimeout = 30 * time.Second
+
 // arbitrationInterval is how often the engine re-evaluates the
 // device→stream assignment in the absence of a fresh quote.
 // It is a var (not const) so tests can shrink it to milliseconds.
@@ -386,6 +395,11 @@ type reconnectOpts struct {
 	// the lifetime of Run(), independent of any one pool session.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// healthySessionDur, when > 0, overrides how long a session must
+	// stay up for its end to start a new failure streak — resetting the
+	// consecutive-failure budget (attempt counter + backoff). Defaults
+	// to reconnectBackoffMax; tests inject a shorter value.
+	healthySessionDur time.Duration
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
@@ -442,6 +456,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
+		sessionStart := time.Now()
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:           poolURL,
 			user:              user,
@@ -489,6 +504,20 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		if isFatal(sessionErr) {
 			return sessionErr
+		}
+
+		// A session that outlived the maximum backoff was healthy — its
+		// end starts a NEW failure streak. Reset the consecutive-failure
+		// budget: months of uptime must not silently drain
+		// MaxReconnectAttempts, and a recovered-then-dropped pool should
+		// not inherit a backoff grown by a different failure streak.
+		healthy := r.healthySessionDur
+		if healthy <= 0 {
+			healthy = reconnectBackoffMax
+		}
+		if time.Since(sessionStart) >= healthy {
+			attempt = 0
+			backoff = reconnectBackoffInitial
 		}
 
 		// Pool failover (fast): advance to the next pool in priority order
@@ -673,6 +702,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: bad pool URL %q: %w", opts.poolURL, err)
 	}
 
+	// Bound the connect phase: the dial ctx applies to TCP connect and
+	// the TLS handshake alike. Cancellation after connect is safe — an
+	// established conn does not depend on it.
+	dialCtx, dialCancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer dialCancel()
+
 	var conn net.Conn
 	if proto == poolproto.ProtocolStratumV2TLS {
 		// A configured v2tls:// pool gets an actual, certificate-verified
@@ -690,7 +725,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				tlsCfg = cfg
 			}
 		}
-		conn, err = stratum.DialTLS(ctx, host, tlsCfg)
+		conn, err = stratum.DialTLS(dialCtx, host, tlsCfg)
 		if err != nil {
 			return fmt.Errorf("engine: TLS dial %s: %w", host, err)
 		}
@@ -704,7 +739,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
 			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
 		var d net.Dialer
-		conn, err = d.DialContext(ctx, "tcp", host)
+		conn, err = d.DialContext(dialCtx, "tcp", host)
 		if err != nil {
 			return fmt.Errorf("engine: dial %s: %w", host, err)
 		}
@@ -1179,10 +1214,25 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
 
+	// Drain pool operator notices (client.show_message) into the log —
+	// maintenance windows, fee changes, dead-miner warnings. Without a
+	// consumer the buffered channel silently drops them.
+	var noticeCh <-chan string
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		noticeCh = nr.PoolNotices()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
+		case notice, ok := <-noticeCh:
+			if !ok {
+				noticeCh = nil // session ended; Jobs() carries the terminal signal
+				continue
+			}
+			opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
 
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
@@ -1427,6 +1477,12 @@ func clampShareTarget(set, channelMax miner.Hash) (miner.Hash, bool) {
 // did not assign one; the caller falls back to the block target.
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
+	// Bound the whole exchange: ReadFrame has no ctx, so the conn
+	// deadline is the timeout. A pool that accepts the socket but never
+	// sends SetupConnectionSuccess must not wedge the reconnect loop on
+	// the run-lifetime ctx. Cleared on success — mid-session reads run
+	// under the liveness metrics instead.
+	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
@@ -1481,6 +1537,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
 	// map directly.
+	_ = conn.SetDeadline(time.Time{})
 	return omcs.ChannelID, miner.Hash(omcs.Target), nil
 }
 

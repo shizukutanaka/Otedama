@@ -2940,3 +2940,224 @@ func TestRunSessionV1_RecordsPoolReconnectWait(t *testing.T) {
 		t.Fatalf("reconnectWaitSecs = %d, want 42 from client.reconnect params", got)
 	}
 }
+
+func TestRunReconnectLoop_HealthySessionResetsAttemptBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	// MaxReconnectAttempts and backoff track a *consecutive* failure
+	// streak, not lifetime dials: a session that stayed up past
+	// healthySessionDur must reset the budget so an old outage cannot
+	// drain it. With max=1 the loop should allow the post-healthy
+	// re-dial; without the reset it dies immediately at attempt 2.
+	p := newMockPool(t)
+
+	var mu sync.Mutex
+	var logs []string
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logs = append(logs, msg)
+		mu.Unlock()
+	}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	var amu sync.Mutex
+	done := make(chan error, 1)
+	go func() {
+		done <- runReconnectLoop(ctx, reconnectOpts{
+			opts: Options{
+				Config: config.Config{
+					BitcoinAddress: "bc1qtest000000000000000000000000000000000",
+					Pools:          []config.PoolConfig{{URL: p.URL()}},
+				},
+				MaxReconnectAttempts: 1,
+			},
+			workers:           []*miner.Worker{w},
+			merged:            merged,
+			metrics:           m,
+			log:               logFn,
+			activityMu:        &amu,
+			activity:          map[string]float64{},
+			healthySessionDur: 50 * time.Millisecond,
+		})
+	}()
+
+	// Wait for session 1 to establish, keep it up past the healthy
+	// threshold, then kill the pool so the session ends "healthy".
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		p.mu.Lock()
+		n := len(p.conns)
+		p.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("session never connected to mock pool")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(120 * time.Millisecond)
+	p.Stop()
+
+	err := <-done
+	if err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("expected exceeded-attempts error, got %v", err)
+	}
+	mu.Lock()
+	connects := 0
+	for _, l := range logs {
+		if strings.Contains(l, "connecting to") {
+			connects++
+		}
+	}
+	mu.Unlock()
+	if connects != 2 {
+		t.Fatalf("connect attempts = %d, want 2 — healthy session did not reset the budget", connects)
+	}
+}
+
+func TestRunSessionV2_HandshakeBoundedByTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	// A pool that accepts the socket but never sends
+	// SetupConnectionSuccess must not wedge the reconnect loop on the
+	// run-lifetime ctx — the conn deadline bounds the exchange.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			// Hold the connection open without ever writing — a blackhole.
+			go func(conn net.Conn) {
+				buf := make([]byte, 256)
+				for {
+					if _, err := conn.Read(buf); err != nil {
+						return
+					}
+				}
+			}(c)
+		}
+	}()
+
+	old := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	start := time.Now()
+	err = runSession(context.Background(), sessionOpts{
+		poolURL: "stratum+v2://" + ln.Addr().String(),
+		user:    "bc1qtest",
+		m:       m,
+		log:     func(_, _ string) {},
+	})
+	if err == nil {
+		t.Fatal("expected handshake to fail against a silent pool")
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("handshake took %v — deadline not applied", d)
+	}
+}
+
+func TestRunSessionV1_DrainsPoolNotices(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	// client.show_message operator notices (maintenance windows, fee
+	// changes) must reach the operator log — without a consumer the
+	// buffered PoolNotices channel silently drops them.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"client.show_message","params":["pool maintenance in 1h"]}`+"\n")
+		for {
+			if _, err := r.ReadString('\n'); err != nil {
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	var mu sync.Mutex
+	var logs []string
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "worker.1",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: time.Hour,
+			log: func(_, msg string) {
+				mu.Lock()
+				logs = append(logs, msg)
+				mu.Unlock()
+			},
+			m: m,
+		})
+	}()
+
+	deadline := time.After(6 * time.Second)
+	for {
+		mu.Lock()
+		found := false
+		for _, l := range logs {
+			if strings.Contains(l, "pool notice: pool maintenance in 1h") {
+				found = true
+				break
+			}
+		}
+		mu.Unlock()
+		if found {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("pool notice never reached the operator log")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+}
