@@ -1870,3 +1870,59 @@ func TestCheckPoolPayoutThreshold(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// checkPoolHashrateShare — dominant-share pool warning (session 271)
+// ============================================================================
+
+func TestCheckPoolHashrateShare(t *testing.T) {
+	ctx := context.Background()
+
+	// No pools → Pass (nothing to evaluate).
+	none := checkPoolHashrateShare(config.Config{}).Run(ctx)
+	if none.Status != StatusPass {
+		t.Errorf("no pools: status = %v, want StatusPass", none.Status)
+	}
+
+	// Dominant-share endpoint (with subdomain + port) → Warn.
+	foundry := checkPoolHashrateShare(config.Config{
+		Pools: []config.PoolConfig{{URL: "stratum+tcp://us.foundryusapool.com:3333"}},
+	}).Run(ctx)
+	if foundry.Status != StatusWarn {
+		t.Errorf("foundry pool: status = %v, want StatusWarn", foundry.Status)
+	}
+	if !strings.Contains(foundry.Detail, "foundryusapool.com") {
+		t.Errorf("foundry pool: detail = %q, want host named", foundry.Detail)
+	}
+
+	// Suffix-similar but different operator must NOT match
+	// ("evil-antpool.com" is not "antpool.com").
+	lookalike := checkPoolHashrateShare(config.Config{
+		Pools: []config.PoolConfig{{URL: "stratum+tcp://evil-antpool.com:3333"}},
+	}).Run(ctx)
+	if lookalike.Status != StatusPass {
+		t.Errorf("lookalike host: status = %v, want StatusPass (suffix boundary)", lookalike.Status)
+	}
+
+	// Small/decentralised pool → Pass.
+	ocean := checkPoolHashrateShare(config.Config{
+		Pools: []config.PoolConfig{{URL: "stratum+tcp://ocean.xyz:3333"}},
+	}).Run(ctx)
+	if ocean.Status != StatusPass {
+		t.Errorf("small pool: status = %v, want StatusPass", ocean.Status)
+	}
+
+	// Two dominant pools → single Warn listing both.
+	two := checkPoolHashrateShare(config.Config{
+		Pools: []config.PoolConfig{
+			{URL: "stratum+tcp://ss.antpool.com:3333"},
+			{URL: "stratum+tcp://btc.f2pool.com:3333"},
+		},
+	}).Run(ctx)
+	if two.Status != StatusWarn {
+		t.Errorf("two dominant: status = %v, want StatusWarn", two.Status)
+	}
+	if !strings.Contains(two.Detail, "antpool") || !strings.Contains(two.Detail, "f2pool") {
+		t.Errorf("two dominant: detail = %q, want both hosts listed", two.Detail)
+	}
+}
