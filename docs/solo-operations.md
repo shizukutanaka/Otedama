@@ -231,11 +231,11 @@ jobs:
 ```
 
 **Scorecard で監視する項目（OpenSSF Security Scorecard）：**
-- Dependency-Update-Tool（Renovabot設定済み → 自動高スコア）
-- Signed-Releases（cosign設定済み → 自動高スコア）
+- Dependency-Update-Tool（Dependabot が gomod/github-actions/docker で設定済み → 高スコア見込み。Renovate への移行は v3.3.0 計画で未実施）
+- Signed-Releases（未実施 — cosign 署名は release pipeline に未配線、KNOWN_LIMITATIONS §18）
 - Branch-Protection（mainブランチのPR必須ルール → 設定必要）
 - Token-Permissions（最小権限原則 → 全workflowで設定必要）
-- Fuzzing（go test -fuzz → CIで継続実行 → 設定済み）
+- Fuzzing（`Fuzz*` ターゲット6件と `make fuzz` は存在するが、CI での継続実行は未配線 → 設定必要）
 
 ### 2.3 インシデント対応の事前設計
 
@@ -565,9 +565,11 @@ Otedamaがその罠に入らないために：
 *                           @shizukutanaka
 
 # セキュリティ領域：メンテナ必須（将来は2名以上）
-/internal/security/         @shizukutanaka
+# （実際の CODEOWNERS は /internal/lightning/ と /internal/stratum/noise* を
+#  資金領域として規定。/internal/security/ と /internal/auth/ は存在しない
+#  パスで、CLAUDE.md が作成を禁止している）
 /internal/lightning/        @shizukutanaka
-/internal/auth/             @shizukutanaka
+/internal/stratum/noise*    @shizukutanaka
 
 # ドキュメント：コミュニティコントリビューターで対応可
 /docs/                      @shizukutanaka
@@ -648,7 +650,7 @@ LDKに重大な脆弱性が発見された場合、
 ユーザーの資金が危険にさらされる。
 
 対策：
-- `govulncheck` は週次で自動実行済み
+- `govulncheck` の週次自動実行は §2.2 のワークフローをデプロイして初めて有効になる（現時点で CI ジョブは存在しない。ローカルの `govulncheck ./...` 手動実行は可能）
 - LDKのセキュリティアドバイザリをGitHub Watch経由で監視
 - ユーザーへの緊急通知はGitHub Discussions + READMEのバナー
 
@@ -658,18 +660,18 @@ LDKに重大な脆弱性が発見された場合、
 ユーザーのハッシュレートが無効なブロック生成に使われる可能性がある。
 
 対策：
-- PoolのCA証明書の検証（stratum+v2tls://のみデフォルト）
-- Job Negotiation Protocolの実装（ユーザー自身がtemplate選択）
-- 推奨プール一覧はコードに埋め込まずCDN経由で更新可能にする
+- PoolのTLS CA検証は `pools[].tls_ca_file` で設定可能（組込み既定プールは `stratum+v2://` の cleartext — CA検証を得るには `stratum+v2tls://` の明示設定が必要）
+- Job Declaration Protocolの実装（ユーザー自身がtemplate選択 — SUSTAINABILITY §2 の判断で主要プール対応まで延期中）
+- 推奨プール一覧はコードに埋め込まずCDN経由で更新可能にする（未実施 — 現行は組込み既定プール1つのみ）
 
 ### リスク3：供給チェーン攻撃
 
 前述のtj-actions事件のように、使用するGitHub Actionsへの攻撃。
 
 対策：
-- 全ActionをSHAピン留め（ci.ymlで実施済み）
-- `Dependabot for Actions` を有効化して自動更新
-- SBOMを全リリースに同梱
+- 全ActionをSHAピン留め — **未実施**。現行ワークフローは `@v4`/`@v5` タグ参照で、`aquasecurity/trivy-action@master`・`securego/gosec@master` の mutable `@master` 参照が残存（tj-actions と同型の露出。KNOWN_LIMITATIONS §13 に記録、workflows は push scope 外のため maintainer 対応が必要）
+- `Dependabot for Actions` を有効化して自動更新 — dependabot.yml の `github-actions` ecosystem として配置済み
+- SBOMを全リリースに同梱 — 未実施（release pipeline が SBOM を生成しない）
 
 ### リスク4：規制変更
 

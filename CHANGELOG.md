@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 285 — ガバナンス/サプライチェーン系ドキュメント監査: SUSTAINABILITY・solo-operations・AUDIT_CHECKLIST)
+
+- **SUSTAINABILITY.md の「実装済み」主張12件が陳腐または虚偽**:
+  `go 1.22`/toolchain go1.24.0（実態: go 1.24.0/go1.25.7、godebug に
+  containermaxprocs 欠落）、「SV1/SV2 は v3.2.0 スコープ」（両方実装済み）、
+  「SHA pinning + cosign signing 実装済み」（**両方未実施** — 全 uses: は
+  タグ参照で trivy-action@master・gosec@master の mutable 参照が残存）、
+  XChaCha20/Argon2id「採用」（実態: AES-256-GCM+scrypt、移行は計画のまま）、
+  `otedama.dev`「確保」（NXDOMAIN=未登録を実測）、fuzz「2件」（実6件）、
+  SECURITY.md「v3.1.0スコープ」（存在）、go_* メトリクス prefix 未記載、
+  存在しない `--metrics-addr`/`--otlp-endpoint`/`--pprof-addr` フラグ、
+  ADR参照 001-005→001-013、LEGAL.md 未作成の明記。
+- **solo-operations.md の「設定済み」主張5件が虚偽**: govulncheck週次
+  実行済み（CI ジョブ非存在）、SHAピン留め実施済み（未実施）、
+  Renovabot設定済み（Dependabot のみ、Renovate 未導入）、Fuzzing CI
+  継続実行（未配線）、cosign設定済み（未配線）。CODEOWNERS 例が存在禁止
+  パス `/internal/security/`・`/internal/auth/` を列挙 → 実パス
+  （lightning/・stratum/noise*）に訂正。「v2tls のみデフォルト」の記述も
+  実態（既定プールは stratum+v2 cleartext、CA検証は tls_ca_file 明示設定）
+  に訂正。
+- **AUDIT_CHECKLIST.md — 監査人向け文書の検証可能主張7件が失敗**:
+  Go 1.22+（実1.24+）、SHA pinning 行（現在失敗と明記＋@master 露出）、
+  cosign sign-blob 呼出（未呼出＋失敗明記）、`gopkg.in/yaml.v3`（実
+  `go.yaml.in/yaml/v3`）、scrypt N=32768（実 N=131072、ファイルも seed.go→
+  seedstore.go）、Noise NX「full handshake implemented」（実 P-256 stub＋
+  transcript 乖離2件は §2.4 記録）、CI gate summary に存在しない
+  staticcheck/govulncheck/夜間fuzz/ベンチマーク回帰ジョブを実在として列挙
+  （実ジョブ一覧に書き換え）。行番号重複（9）も全表を 1-31 に通し採番。
+- **KNOWN_LIMITATIONS §13 に session-285 追補**: `trivy-action@master`/
+  `gosec@master` の mutable 参照（tj-actions/TeamPCP と同型の露出）、
+  SHA pinning 全面未実施、govulncheck/osv-scanner/Scorecard/fuzz/benchmark
+  ジョブ不在を maintainer-action として記録（workflows は push scope 外）。
+- 検証済みクリーン: dependabot 3 ecosystem 実在、OTEDAMA_WALLET_PASSPHRASE
+  env 実在、wallet 0600 実在、otedama.org DNS 実在、test:impl 比≈1.77、
+  TODO/FIXME/XXX ゼロ、AES-256-GCM/PBKDF2-2048/SPDXヘッダは主張通り、
+  goreleaser ldflags 例は実ファイルと一致。
+
 ### Fixed (session 284 — 到達不能メトリクス機能の配線 + SPECIFICATION/API 整合)
 
 - **`metrics.RuntimeCollector()` が未登録で go_* メトリクスが露出されて

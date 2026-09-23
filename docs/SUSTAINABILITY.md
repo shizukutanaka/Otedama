@@ -25,8 +25,8 @@ The single highest-leverage observation: **the cost of building these foundation
 **研究結論:** Go の6ヶ月リリース・Russ Cox/Austin Clements/Cherry Mui の制度的継続性・Go 1互換性保証により、Go 2のhard breakは2036年まで実質ゼロ。GODEBUG knobによる behavior pinning が2021年以降強化された。
 
 **Otedamaの判断:**
-- `go 1.22` をベースライン、`toolchain go1.24.0` を最低toolchain pin（FIPS 140-3 + tool directive機能取得）。
-- `go.mod` の `godebug` directive で `tlsmlkem=1`, `panicnil=0`, `randautoseed=1` を明示固定
+- `go 1.24` をベースライン、`toolchain go1.25.7` pin（session 256 で引き上げ済み。`go`/`toolchain` 分割の経緯と floor は GODEBUG_NOTES.md / ADR-012 参照）。
+- `go.mod` の `godebug` directive で `tlsmlkem=1`, `panicnil=0`, `randautoseed=1`, `containermaxprocs=1` を明示固定
   （`tlsmlkem`はGo 1.24でのX25519Kyber768標準化に伴い、旧`tlskyber`から改名された値）。
 - `GOEXPERIMENT` 機能（`greenteagc`, `jsonv2`等）はproductionで使用しない。
 - `GODEBUG_NOTES.md` に依存knobの一覧と廃止予定日を記録。
@@ -43,7 +43,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **JDPは延期**: 3つのメジャープールが対応するまで実装しない（2026/Q2時点でBraiinsとDEMANDのみ）。
 - **SRI を cgo/FFI 経由で組み込まない**: pure-Go cross-compilationを失う。Go native実装を3-6エンジニアヶ月で書く。
 
-**実装状況:** `internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ。
+**実装状況:** `internal/poolproto/` 抽象化＋SV1（`stratum+tcp`/`stratum+tls`）・SV2（`stratum+v2`/`stratum+v2tls`）の両 dialer が実装済みでライブ経路（v3.0.0-alpha.x）。DATUM は URL スキームとして予約済みだが未実装（config validation で拒否）。
 
 ### 3. Bitcoin エコシステム longevity / Bitcoin Ecosystem Longevity
 
@@ -68,7 +68,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - BIP-39 wordlist は `//go:embed` + `init()` での SHA-256 アサート。drift したら起動拒否。
 - **2028-2030 で post-quantum レイヤ書き換え準備**: `internal/btccrypto/` の Scheme registryに `crypto/mldsa` (Go 1.27+ 想定) のskeleton配置。
 
-**実装状況:** `internal/btccrypto/` 抽象化済み（v3.0.0-alpha.1）、実暗号swapはv3.1.0スコープ。
+**実装状況:** `internal/btccrypto/` 抽象化済み（v3.0.0-alpha.1）。decred secp256k1 は namespace stub のまま、実暗号 swap は v3.1.0 スコープ。現行ウォレットは AES-256-GCM + scrypt（N=2¹⁷, r=8, p=1）— XChaCha20-Poly1305 / Argon2id への移行は本判断の計画通り未実施。
 
 ### 5. サプライチェーン10年 / Supply Chain over 10 Years
 
@@ -84,7 +84,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - OSS-Fuzz 統合申請（無料、Google運用）。
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
-**実装状況:** SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
+**実装状況:** Dependabot（gomod/github-actions/docker、週次）は配置済み。**SHA pinning は未実施** — 全 `uses:` が `@v4`/`@v5` タグ参照で、`aquasecurity/trivy-action@master`・`securego/gosec@master` の mutable `@master` 参照が残存（本節が警告する TeamPCP/tj-actions と同型の露出。KNOWN_LIMITATIONS §13 記録、workflows は push scope 外）。**cosign 署名・checksums.txt・SBOM・docker push は未公開**（release pipeline が生成しない、KNOWN_LIMITATIONS §18）。govulncheck/osv-scanner/Scorecard の CI ジョブも未配線。SLSA L3 は v3.5.0 スコープ。
 
 ### 6. Solo Maintainer の現実 / Solo Maintainer Reality
 
@@ -107,9 +107,9 @@ The single highest-leverage observation: **the cost of building these foundation
 **Otedamaの判断:**
 - 2 build artifacts: `otedama` (default、Prometheus single、<15MB、<40 deps) と `otedama-full` (OTel via `-tags otel`、<30MB、<80 deps)。
 - 機密 type に `LogValuer` 実装 (private key、address、credentials を source で redact)。
-- 全 metric `otedama_*` prefix、minor release 間で名前/label set を維持、削除は6ヶ月 deprecation。
+- 自作 metric は `otedama_*` prefix（session 284 以降、Go runtime の標準 `go_*` 系列も prefix なしで同居 — 削除は6ヶ月 deprecation）、minor release 間で名前/label set を維持。
 - label cardinality を `WithCardinalityLimit(2000)` で明示cap。
-- `--metrics-addr`, `--otlp-endpoint`, `--pprof-addr` は全て opt-in、デフォルト無効。
+- 露出系 endpoint は全て opt-in・デフォルト無効。現行実装は `--http-addr`（`/metrics`・`/healthz`・`/readyz`）のみ — `--otlp-endpoint`/`--pprof-addr` は `otedama-full` 向けの計画名で、現時点のフラグとしては存在しない。
 - **絶対に phone home しない**。
 
 **実装状況:** Prometheus `internal/metrics` + httpserver `--http-addr` は実装済み。OTel build tag は v3.3.0 スコープ。
@@ -142,7 +142,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **annual "rebuild from cold" 演習**: 全 released tag を fresh VM (caches なし) で再ビルドし checksum 一致を年1回検証。
 - Docker images は digest pin、tag pin しない。
 
-**実装状況:** Fuzz test は v3.0.0-alpha で `internal/stratum/` に2つ実装済み。`pgregory.net/rapid` 採用と Gremlins 導入は v3.3.0 スコープ。Vendoring と annual rebuild 演習は今すぐ採用可能。
+**実装状況:** Fuzz test は6件実装済み（`internal/stratum` ×2、`internal/stratumv1` ×2、`internal/arbitration` ×2 — session 265/269 で追加）。fuzz はローカル実行のみで CI ジョブは未配線（KNOWN_LIMITATIONS §13）。`pgregory.net/rapid` 採用と Gremlins 導入は v3.3.0 スコープ。Vendoring（AUDIT_CHECKLIST の「no vendored code」条項��意図的に緊張関係にある — 導入時は同条項を改訂すること）と annual rebuild 演習は今すぐ採用可能。
 
 ### 10. ライセンスと法的安定性 / Licensing and Legal Sustainability
 
@@ -154,9 +154,9 @@ The single highest-leverage observation: **the cost of building these foundation
 - **AI-assisted code clause (CONTRIBUTING.md):** 貢献者がAI出力に責任、meaningful review必須、10行超のverbatim AI output禁止、Copilot duplication-filter strict mode + GPL/AGPL/LGPL blocklist 必須、AI支援コミットは `Co-authored-by:` tag。
 - SECURITY.md: **Project Zero 90+30 model** (90日default + 30日grace + active exploitationで7日)、GitHub Private Vulnerability Reporting で受付。
 - LEGAL.md: OFAC/EAR 自己compliance期待を文書化。
-- 商標 free search を USPTO TESS / EUIPO eSearch / 主要 package registry で実施済み。`otedama.org`/`otedama.dev` 確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
+- 商標 free search を USPTO TESS / EUIPO eSearch / 主要 package registry で実施済み。`otedama.org` は DNS が実在して確保済み、`otedama.dev` は NXDOMAIN で未確保（session 285 実測 — CLAUDE.md の「存在しないURL禁止」に沿い実測値のみ記載）。USPTO Class 9 + 42 file は material adoption後 (~$700)。
 
-**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は本セッションで CONTRIBUTING.md に追加。SECURITY.md と LEGAL.md は v3.1.0 スコープ。
+**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は CONTRIBUTING.md に追加済み。SECURITY.md は作成済み（Private Reporting 手順入り）。LEGAL.md は未作成で v3.1.0 スコープのまま。
 
 ---
 
@@ -186,8 +186,8 @@ Otedamaが採用する戦略:
 - `MAINTAINERS.md` — bus-factor 改善の現状
 - `GOVERNANCE.md` — 昇格パスとgreater stake holder 管理
 - `docs/THREAT_MODEL.md` — STRIDE 脅威モデル
-- `docs/AUDIT_CHECKLIST.md` — 30 項目監査チェックリスト
+- `docs/AUDIT_CHECKLIST.md` — 31 項目監査チェックリスト
 - `GODEBUG_NOTES.md` — Go behavior pinning
-- `docs/adr/ADR-001` 〜 `ADR-005` — 主要設計判断
+- `docs/adr/ADR-001` 〜 `ADR-013` — 主要設計判断
 
 本書は **6ヶ月毎に再評価** します。研究結論や Otedama の状況に変化があれば、対応する判断と実装状況を改訂します。

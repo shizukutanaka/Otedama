@@ -909,3 +909,31 @@ normative-spec conformance check:
 Verification: `go test ./...` all 24 packages green; changed files gofumpt-
 normalized; lint findings on touched files: none (all pre-existing elsewhere);
 deadcode delta: RuntimeCollector now reachable (baseline shrank, nothing added).
+
+## Session 285 update — governance/supply-chain docs conformance (SUSTAINABILITY, solo-operations, AUDIT_CHECKLIST)
+
+Three "claims about our own process" docs never previously audited — the same
+never-verified-claims class as s281–s283, but aimed at auditors/maintainers
+rather than users. Worst finding: the auditor-facing checklist's own
+verifiable assertions fail, and the supply-chain section of SUSTAINABILITY
+declares controls that don't exist (tag-pinned actions incl. two `@master`
+floats — the exact tj-actions/TeamPCP class the doc itself warns about).
+
+| Finding | Disposition |
+|---|---|
+| SUSTAINABILITY §1: "go 1.22 baseline / toolchain go1.24.0", godebug list missing `containermaxprocs` | ✅ Fixed: go 1.24.0 / toolchain go1.25.7, all four godebug pins. |
+| SUSTAINABILITY §2: "SV1/SV2 implementation は v3.2.0 スコープ" — both shipped & live | ✅ Fixed. |
+| SUSTAINABILITY §4: XChaCha20-Poly1305/Argon2id "採用" reads as current — wallet ships AES-256-GCM + scrypt; decred secp256k1 still stub | ✅ Fixed: split adopted-design from shipped-state. |
+| SUSTAINABILITY §5: "SHA pinning + cosign signing は実装済み" — **both false**; all `uses:` are tags, `trivy-action@master` & `gosec@master` float; cosign/SBOM/checksums unpublished; govulncheck/osv/scorecard jobs absent | ✅ Fixed with measured negatives + KNOWN_LIMITATIONS pointers. |
+| SUSTAINABILITY §7: "全 metric `otedama_*`" (go_* added s284); `--metrics-addr`/`--otlp-endpoint`/`--pprof-addr` flags don't exist (only `--http-addr`) | ✅ Fixed. |
+| SUSTAINABILITY §9: "fuzz 2件" → actually 6 (stratum×2, stratumv1×2, arbitration×2); vendoring plan vs AUDIT_CHECKLIST "no vendor" row tension noted | ✅ Fixed. |
+| SUSTAINABILITY §10: `otedama.dev` "確保" — NXDOMAIN (measured); SECURITY.md "v3.1.0 スコープ" — exists; "本セッションで追加" tense; ADR-001〜005 → 001〜013 | ✅ Fixed. |
+| solo-operations: "govulncheck 週次自動実行済み", "SHAピン留め ci.yml実施済み", "Renovabot設定済み", "Fuzzing CI継続実行 設定済み", "cosign設定済み" — all five false | ✅ Fixed: restated as un-deployed design targets with exact gap. |
+| solo-operations CODEOWNERS example lists `/internal/security/` & `/internal/auth/` — nonexistent paths CLAUDE.md forbids creating | ✅ Fixed: real gated paths (`internal/lightning/`, `internal/stratum/noise*`). |
+| solo-operations "stratum+v2tls://のみデフォルト" — built-in default is `stratum+v2` cleartext; CA verify needs explicit tls_ca_file | ✅ Fixed. |
+| AUDIT_CHECKLIST: Go 1.22+; `gopkg.in/yaml.v3` dep name; scrypt N=32768 in seed.go; "Noise NX full handshake"; CI-gate list asserting staticcheck/govulncheck/nightly-fuzz/benchmark jobs that don't exist; SHA-pin & cosign rows silently failing; duplicate row number 9 | ✅ Fixed: Go 1.24+, `go.yaml.in/yaml/v3`, N=131072 in seedstore.go, P-256 stub status, real CI-job list, failing rows marked "currently fails", rows renumbered 1–31. |
+| Verified accurate (recorded, not changed): dependabot 3 ecosystems weekly; `OTEDAMA_WALLET_PASSPHRASE` env; wallet 0600; `otedama.org` DNS live; test:impl ≈1.77; zero TODO/FIXME/XXX; AES-256-GCM/PBKDF2-2048/SPDX headers; goreleaser ldflags example matches real file. | ✅ |
+
+Recorded for maintainer action (push-scope): KNOWN_LIMITATIONS §13 session-285
+addendum — `@master` floating pins, zero SHA pinning, absent govulncheck/
+osv-scanner/Scorecard/fuzz/benchmark jobs.

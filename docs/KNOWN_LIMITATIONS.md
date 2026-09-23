@@ -607,6 +607,21 @@ declares (`VERSION`/`COMMIT`/`BUILD_DATE`), so the commit would stay
 `unknown` even if the grep pattern were right. The step fails on all
 three counts whenever docker verification runs.
 
+**Session 285 addendum — mutable `@master` action pins + scanners the
+docs claim but CI lacks.** Beyond the stale-Go and archived-action
+issues above: `aquasecurity/trivy-action@master` (ci.yml) and
+`securego/gosec@master` (ci.yml, test.yml, security.yml) float on a
+mutable branch ref — the exact supply-chain class as the March-2025
+tj-actions / March-2026 trivy-action compromises that
+`docs/solo-operations.md` and `docs/SUSTAINABILITY.md` §5 warn about.
+No workflow pins any `uses:` to a 40-char SHA; every action references
+a release tag. Separately, three scanners the documentation claims run
+in CI have no job anywhere: `govulncheck`, `osv-scanner`, and the
+OpenSSF Scorecard action (a weekly-security workflow is specified in
+solo-operations.md §2.2 but was never deployed; no fuzz or
+benchmark-regression job exists either despite `docs/AUDIT_CHECKLIST.md`
+previously asserting them — the doc is corrected in session 285).
+
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
 code quality — false-negative signals an operator or contributor could
