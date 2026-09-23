@@ -174,6 +174,29 @@ type Config struct {
 	// Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
 	ElectricityPricePerKWh float64 `yaml:"electricity_price_per_kwh"`
 
+	// ThermalThrottleAboveCelsius pauses all hashing workers when the
+	// hottest sensor reported by the OS thermal subsystem (Linux hwmon:
+	// k10temp/coretemp CPU zones, amdgpu edge/junction, nvme composite)
+	// reaches this temperature — the safety counterpart of
+	// CurtailBelowBTCUSD's economic pause (Awesome Miner-style thermal
+	// triggers). Hashing resumes only after the hottest sensor cools 5°C
+	// below the threshold, so a boundary-hovering sensor cannot flap the
+	// gate every poll.
+	//
+	// Temperatures are read through internal/hal's sysfs scan; on
+	// platforms without hwmon (macOS, Windows) or hosts exposing no
+	// temperature channels the gate simply sees no data and stays
+	// disarmed — missing data never pauses or resumes hashing (the same
+	// untrusted-input rule the price gate uses). Individual sensor values
+	// are always published as otedama_thermal_sensor_celsius when metrics
+	// are enabled, with or without a threshold.
+	//
+	// 0 disables the gate (default). Valid range when enabled: [20, 110]
+	// °C — outside that window either the operator's units are wrong or
+	// the machine would already be in hardware distress.
+	// Set via OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS or config file.
+	ThermalThrottleAboveCelsius float64 `yaml:"thermal_throttle_above_celsius"`
+
 	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP
 	// endpoints (see internal/httpserver), for example "127.0.0.1:9090".
 	// Empty (default) disables the HTTP server entirely.
@@ -245,6 +268,7 @@ func Defaults() Config {
 		ArbitrationHysteresisPct: 0.05,
 		CurtailBelowBTCUSD:       0,  // disabled by default
 		MinYieldSatsPerSec:       0,  // disabled by default
+		ThermalThrottleAboveCelsius: 0, // disabled by default
 		HTTPAddr:                 "", // HTTP server disabled by default
 	}
 }
@@ -306,6 +330,7 @@ type Origins struct {
 	ArbitrationHysteresisPct ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
 	MinYieldSatsPerSec       ValueOrigin
+	ThermalThrottleAboveCelsius ValueOrigin
 	PowerWatts               ValueOrigin
 	ElectricityPricePerKWh   ValueOrigin
 	HTTPAddr                 ValueOrigin
@@ -345,6 +370,10 @@ var numericEnvVars = []struct {
 	{"OTEDAMA_CURTAIL_BELOW_BTC_USD", func(c *Config, o *Origins, v float64) {
 		c.CurtailBelowBTCUSD = v
 		o.CurtailBelowBTCUSD = OriginEnv
+	}},
+	{"OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS", func(c *Config, o *Origins, v float64) {
+		c.ThermalThrottleAboveCelsius = v
+		o.ThermalThrottleAboveCelsius = OriginEnv
 	}},
 	{"OTEDAMA_POWER_WATTS", func(c *Config, o *Origins, v float64) {
 		c.PowerWatts = v
@@ -442,6 +471,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if fromFile.CurtailBelowBTCUSD != 0 {
 		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
 		o.CurtailBelowBTCUSD = OriginFile
+	}
+	if fromFile.ThermalThrottleAboveCelsius != 0 {
+		cfg.ThermalThrottleAboveCelsius = fromFile.ThermalThrottleAboveCelsius
+		o.ThermalThrottleAboveCelsius = OriginFile
 	}
 	if fromFile.PowerWatts != 0 {
 		cfg.PowerWatts = fromFile.PowerWatts
@@ -655,6 +688,11 @@ func (c Config) Validate() error {
 	if c.ElectricityPricePerKWh < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+	}
+	if c.ThermalThrottleAboveCelsius != 0 &&
+		(c.ThermalThrottleAboveCelsius < 20 || c.ThermalThrottleAboveCelsius > 110) {
+		issues = append(issues, fmt.Sprintf(
+			"thermal_throttle_above_celsius %.1f out of range [20, 110] (0 = disabled)", c.ThermalThrottleAboveCelsius))
 	}
 
 	if len(issues) == 0 {

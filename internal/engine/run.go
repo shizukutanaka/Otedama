@@ -41,6 +41,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
@@ -206,12 +207,41 @@ func Run(ctx context.Context, opts Options) error {
 	rateFetcher.StartBackground(ctx, 5*time.Minute)
 
 	// curtailGate is the single source of truth for whether hashing is
-	// paused by the curtail_below_btc_usd threshold. The price goroutine
-	// below flips it, and the session loop consults it before applying any
-	// pool job — without this shared gate the next mining.notify (~30–60 s)
-	// would silently re-arm the idled workers while otedama_curtailed still
-	// read 1, so the pause neither held nor matched the metric.
+	// paused by any curtailment gate. Two independent gates feed it: the
+	// price threshold (curtail_below_btc_usd) and the thermal throttle
+	// (thermal_throttle_above_celsius). Each gate keeps its own atomic;
+	// applyCurtail folds them into the combined gate the session loop
+	// consults before applying any pool job — without this shared gate
+	// the next mining.notify (~30–60 s) would silently re-arm the idled
+	// workers while otedama_curtailed still read 1, so the pause neither
+	// held nor matched the metric.
+	priceGate := new(atomic.Bool)
+	thermalGate := new(atomic.Bool)
 	curtailGate := new(atomic.Bool)
+
+	// applyCurtail recomputes the combined gate (OR of all inputs) after
+	// any individual gate transition, and performs the shared side
+	// effects — idling workers and the otedama_curtailed gauge — only on
+	// combined transitions. A gate releasing while another still holds
+	// must NOT resume hashing.
+	applyCurtail := func() {
+		combined := priceGate.Load() || thermalGate.Load()
+		if curtailGate.Swap(combined) == combined {
+			return
+		}
+		if combined {
+			for _, w := range workers {
+				w.SetWork(nil)
+			}
+		}
+		if m != nil {
+			if combined {
+				m.curtailed.Set(1)
+			} else {
+				m.curtailed.Set(0)
+			}
+		}
+	}
 
 	// Publish the BTC/USD rate to its gauge and enforce the optional
 	// curtailment threshold (curtail_below_btc_usd). When the price falls
@@ -230,29 +260,69 @@ func Run(ctx context.Context, opts Options) error {
 				publishBTCRate(m, rateFetcher)
 				threshold := opts.Config.CurtailBelowBTCUSD
 				rate, fresh := rateFetcher.BTCUSDRate()
-				next, changed := curtailDecision(curtailGate.Load(), rate, fresh, threshold)
+				next, changed := curtailDecision(priceGate.Load(), rate, fresh, threshold)
 				if !changed {
 					continue
 				}
-				curtailGate.Store(next)
+				priceGate.Store(next)
 				if next {
-					for _, w := range workers {
-						w.SetWork(nil)
-					}
 					log("info", fmt.Sprintf(
-						"engine: curtailed — BTC/USD $%.0f below threshold $%.0f; hashing paused",
+						"engine: price gate raised — BTC/USD $%.0f below threshold $%.0f",
 						rate, threshold))
-					if m != nil {
-						m.curtailed.Set(1)
-					}
 				} else {
 					log("info", fmt.Sprintf(
-						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
+						"engine: price gate released — BTC/USD $%.0f recovered above threshold $%.0f",
 						rate, threshold))
-					if m != nil {
-						m.curtailed.Set(0)
-					}
 				}
+				applyCurtail()
+			}
+		}
+	}()
+
+	// Thermal poll: publish every hwmon sensor as a labeled gauge and
+	// enforce the optional thermal_throttle_above_celsius gate. Sensors
+	// are published even with no threshold set (operators get the
+	// temperature series for free); the gate only engages when a
+	// threshold is configured. A poll with no valid readings leaves the
+	// gate untouched — see thermalDecision for the untrusted-input rule.
+	go func() {
+		thresholdMilli := int64(opts.Config.ThermalThrottleAboveCelsius * 1000)
+		poll := func() {
+			readings := hal.ReadThermalSensors()
+			var maxMilli int64
+			for _, r := range readings {
+				if m != nil {
+					m.setThermalSensor(r.Source, r.Label, float64(r.MilliCelsius)/1000)
+				}
+				if r.MilliCelsius > maxMilli {
+					maxMilli = r.MilliCelsius
+				}
+			}
+			next, changed := thermalDecision(thermalGate.Load(), maxMilli, len(readings) > 0, thresholdMilli)
+			if !changed {
+				return
+			}
+			thermalGate.Store(next)
+			if next {
+				log("warn", fmt.Sprintf(
+					"engine: thermal gate raised — hottest sensor %.1f°C at or above throttle threshold %.0f°C",
+					float64(maxMilli)/1000, opts.Config.ThermalThrottleAboveCelsius))
+			} else {
+				log("info", fmt.Sprintf(
+					"engine: thermal gate released — hottest sensor %.1f°C cooled below %.0f°C resume margin",
+					float64(maxMilli)/1000, opts.Config.ThermalThrottleAboveCelsius-5))
+			}
+			applyCurtail()
+		}
+		poll()
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				poll()
 			}
 		}
 	}()

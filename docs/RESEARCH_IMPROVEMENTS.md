@@ -34,8 +34,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 4. ✅ **Multi-pool failover** (session 42) — matches cgminer/bfgminer.
 5. ✅ **Hashrate-drop detection** (session 43, HashrateMonitor) — matches
    Awesome Miner triggers.
-6. 🔵 **Temperature-based throttling / shutdown.** Awesome Miner triggers on
-   temperature thresholds. Tracked in ADR-008 sub-domain 6 (thermal).
+6. 🟡 **Partially resolved — Temperature-based throttling** (session 273).
+   OS-visible device temperature now gates hashing: `thermal_throttle_above_celsius`
+   pauses hashing when the hottest hwmon sensor reaches the threshold and
+   resumes 5 °C below it (hysteresis), with per-sensor
+   `otedama_thermal_sensor_celsius` metrics. Covers the Awesome Miner-style
+   device-temperature triggers on Linux (k10temp/coretemp/amdgpu/nvme).
+   Remaining: external ambient sensors (Home Assistant/1-Wire) and
+   power-limit derating remain ADR-008 sub-domain 6 (v3.6) scope; macOS/Windows
+   thermal sources are unimplemented (gate sees no data and stays off).
 7. ✅ **Per-device share statistics** (session 109) — `Share.DeviceID` propagated
    from `WorkerConfig.DeviceID`; lazy `otedama_device_shares_found_total{device=...}`
    counter in `engineMetrics`; 7 new tests.

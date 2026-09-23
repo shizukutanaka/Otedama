@@ -661,6 +661,44 @@ func TestValidate_ElectricityPricePerKWh(t *testing.T) {
 	}
 }
 
+func TestValidate_ThermalThrottleAboveCelsius(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, v := range []float64{0, 20, 75.5, 110} {
+		c := base()
+		c.ThermalThrottleAboveCelsius = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("ThermalThrottleAboveCelsius=%g should be valid; got %v", v, err)
+		}
+	}
+	for _, v := range []float64{-1, 5, 19.9, 110.1, 200} {
+		c := base()
+		c.ThermalThrottleAboveCelsius = v
+		err := c.Validate()
+		if err == nil {
+			t.Errorf("ThermalThrottleAboveCelsius=%g should fail Validate()", v)
+			continue
+		}
+		if !strings.Contains(err.Error(), "thermal_throttle_above_celsius") {
+			t.Errorf("error should mention thermal_throttle_above_celsius: %v", err)
+		}
+	}
+}
+
+func TestResolve_ThermalThrottleAboveCelsius_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS": "78"}
+	cfg, origins := ResolveWithOrigins(Config{}, env, FlagValues{})
+	if cfg.ThermalThrottleAboveCelsius != 78 {
+		t.Errorf("ThermalThrottleAboveCelsius = %g, want 78", cfg.ThermalThrottleAboveCelsius)
+	}
+	if origins.ThermalThrottleAboveCelsius != OriginEnv {
+		t.Errorf("origin = %v, want OriginEnv", origins.ThermalThrottleAboveCelsius)
+	}
+}
+
 func TestResolve_ElectricityPricePerKWh_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_ELECTRICITY_PRICE_PER_KWH": "0.12"}
 	cfg, origins := ResolveWithOrigins(Config{}, env, FlagValues{})
