@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 268 — SLO ドキュメント: `docs/SLO.md` — Category 9 #10)
+
+**メトリクスカタログを「アクション可能な目標」へ。** これまで SPECIFICATION
+§6 は系列の一覧のみで「どの値ならアラートすべきか」は運用者の判断任せ
+だった。Google SRE Workbook の SLO 作法に沿い、実在する全シグナルに
+目的値・Prometheus アラート式・発火時アクションを表形式で付与:
+
+- §1 可用性（`otedama_up` / productive fraction ≥95%）、§2 シェア経路
+  （acceptance ≥0.995 / stale <1% / pool reconcile = 0）、§3 プールリンク
+  （last_job <120s）、§4 プロバイダ心拍（session 265 の last_quote と連携）、
+  §5 価格フィード・時計スキュー、§6 submit p99 ≤2000ms、§7 経済系
+  （`simulated="true"` 分離の運用規範を明記）
+- error budget のチューニング規範（閾値を緩めて黙らせるな、SLO が誤り
+  なら本書を修正しメトリクスは残す）と日本語サマリー付き。
+  SPECIFICATION §6 から相互リンク済み。
+
 ### Fixed (session 267 — Stratum V1 `client.get_version` 応答 — 2つ目の未応答 pool→client リクエストを解消)
 
 **mining.ping と同型のギャップを閉じた。** Braiins 系プールが互換性管理に

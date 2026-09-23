@@ -155,6 +155,10 @@ startup always appear; lazily-created series (marked †) appear only after the
 first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 `/healthz`, `/readyz`, `/`.
 
+`docs/SLO.md` turns this catalogue into actionable targets: per-signal
+objectives, Prometheus alert expressions, and the action to take when each
+fires.
+
 **Shares & rejects**
 
 | Metric | Type | Meaning |

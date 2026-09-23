@@ -410,8 +410,11 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
-    metrics actionable.
+10. ✅ **SLO documentation** — `docs/SLO.md` assigns per-signal objectives,
+    Prometheus alert expressions, and actions for every `/metrics` signal
+    (availability, share path, pool link, provider health, price feed,
+    submit latency, economics), plus an error-budget tuning rule and a
+    Japanese summary. (session 268)
 
 ---
 
