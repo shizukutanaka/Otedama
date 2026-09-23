@@ -2466,3 +2466,33 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
 	}
 }
+
+// TestApplySetTarget verifies the guard against a pool SetTarget carrying
+// an unusable (all-zero) MaxTarget: adopting it would make every hash
+// invalid on the pool's side and silently shift workers to grinding the
+// block target via updateWork's zero-shareTarget fallback. Valid targets
+// — above or below the channel's initial target — are adopted unchanged:
+// both directions are legitimate vardiff (RESEARCH_IMPROVEMENTS Cat 1/2
+// item 2, SRI v1.5.0 lesson).
+func TestApplySetTarget(t *testing.T) {
+	prev := miner.Hash{0x01, 0x02, 0x03}
+
+	var zero stratum.SetTarget // MaxTarget all-zero by default
+	if got, ok := applySetTarget(prev, zero); ok || got != prev {
+		t.Fatalf("zero SetTarget = (%v, %v), want (prev, false)", got, ok)
+	}
+
+	var harder stratum.SetTarget
+	harder.MaxTarget[0] = 0x01 // tiny target = very hard, but non-zero
+	if got, ok := applySetTarget(prev, harder); !ok || got != miner.Hash(harder.MaxTarget) {
+		t.Fatalf("hard SetTarget = (%v, %v), want (new target, true)", got, ok)
+	}
+
+	var easier stratum.SetTarget
+	for i := range easier.MaxTarget {
+		easier.MaxTarget[i] = 0xFF
+	}
+	if got, ok := applySetTarget(prev, easier); !ok || got != miner.Hash(easier.MaxTarget) {
+		t.Fatalf("easy SetTarget = (%v, %v), want (new target, true)", got, ok)
+	}
+}

@@ -506,6 +506,16 @@ endpoint against current vendor documentation. Tags as before
    field is intentionally not sent (see the dead-field note removed from
    `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
    message is no longer silently unrecognised, which was the blocking gap.
+   — ✅ **Unusable-target guard added** (session 265): `applySetTarget`
+   rejects an all-zero `MaxTarget` — the one target value a miner can
+   never satisfy and whose adoption silently flipped workers to grinding
+   the *block* target via `updateWork`'s zero fallback (miner looks busy,
+   pool sees nothing). A zero SetTarget now warns and keeps the previous
+   usable target; a zero `OpenMiningChannelSuccess.Target` warns at
+   channel open. Harder/easier non-zero targets are deliberately adopted
+   unchanged — both directions are legitimate vardiff; the remaining
+   `[min, max_target]` clamp needs the `max_target` advertisement field
+   to exist first (still unsent by design).
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization

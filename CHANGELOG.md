@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 265 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール送信 SetTarget の使用不能ターゲットガード)
+
+- **ゼロ `SetTarget` を無視し直前のシェアターゲットを維持するように
+  （SRI v1.5.0 の教訓、Cat 1/2 #2 の実装可能部分を解消）.** プールが
+  全ゼロの `MaxTarget` を送った場合、従来はそれをそのまま採用し、
+  `updateWork` のゼロフォールバック経路でワーカーが静かにブロック
+  ターゲット掘りへ移行 — 採掘機は稼働中に見えるがプールにはシェアが
+  一切届かない状態になっていた。全ゼロのみが「判定不能ターゲット」
+  （≤0 を満たすハッシュはゼロのみ）であり、新実装の `applySetTarget`
+  がそれを拒否して warn を発火。チャネルオープン時の
+  `OpenMiningChannelSuccess.Target` がゼロの場合も同様に warn。
+  非ゼロの harder/easier ターゲットは従来どおり採用 — 両方向とも
+  正当な vardiff であり、クランプすると vardiff 自体を壊す。
+  `[min, max_target]` クランプの残りは `max_target` 広告フィールドの
+  実装を要するため引き続き意図的に未送信。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

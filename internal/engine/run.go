@@ -664,6 +664,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		return err
 	}
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
+	if shareTarget == (miner.Hash{}) {
+		opts.log("warn", "engine: pool assigned no share target — workers will grind the block target; most pools will not credit this work")
+	}
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2) // handshake complete → connected
 	}
@@ -881,13 +884,17 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SetTarget != nil {
-				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
-				if active != nil && havePrev {
-					// Re-issue the current job so workers compare against
-					// the new share target immediately.
-					startJob(active, activeNTime)
+				if t, ok := applySetTarget(shareTarget, *pm.msg.SetTarget); ok {
+					shareTarget = t
+					if active != nil && havePrev {
+						// Re-issue the current job so workers compare against
+						// the new share target immediately.
+						startJob(active, activeNTime)
+					}
+					opts.log("info", "engine: share target updated by pool")
+				} else {
+					opts.log("warn", "engine: pool sent zero SetTarget — keeping previous share target")
 				}
-				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
 				opts.log("info", "engine: share accepted")
@@ -1251,6 +1258,26 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	_, err = conn.Write(data)
 	return err
+}
+
+// applySetTarget returns the share target to adopt from a pool SetTarget
+// and whether it is usable. The only unusable value is the all-zero
+// MaxTarget: nothing but a zero hash satisfies ≤0, and letting it reach
+// updateWork silently shifts workers to grinding the BLOCK target (its
+// zero-shareTarget fallback), so the miner looks busy while the pool sees
+// no shares — exactly the class of out-of-range pool-produced target SRI
+// hardened against in v1.5.0 (RESEARCH_IMPROVEMENTS Cat 1/2 item 2).
+// Ignoring it keeps the last usable target, which vardiff can correct on
+// the next SetTarget. Targets above or below the channel's initial target
+// are always adopted: harder targets are vardiff raising difficulty for
+// fast miners, easier ones are vardiff lowering it for slow miners —
+// clamping either direction would break vardiff itself.
+func applySetTarget(prev miner.Hash, st stratum.SetTarget) (miner.Hash, bool) {
+	t := miner.Hash(st.MaxTarget)
+	if t == (miner.Hash{}) {
+		return prev, false
+	}
+	return t, true
 }
 
 // updateWork points every worker at the given job, hashed against the
