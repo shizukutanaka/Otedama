@@ -129,6 +129,39 @@ healthcheck:
   test: ["CMD", "otedama", "doctor"]
 ```
 
+### `otedama wallet`
+
+Wallet maintenance that does not require a running engine.
+
+- `otedama wallet verify [--data-dir dir]` — prove the written-down
+  recovery phrase matches the wallet on disk. Reads the phrase from
+  **stdin** (space- or newline-separated words; never a flag, so it
+  cannot appear in process listings), validates the BIP-39 checksum,
+  and compares the derived seed's fingerprint against
+  `{data-dir}/wallet.fingerprint` — **no wallet passphrase needed**
+  while that file exists. If it is missing, the command falls back to
+  decrypting `wallet.dat` and then requires
+  `--wallet-passphrase`/`OTEDAMA_WALLET_PASSPHRASE`.
+  `--wallet-mnemonic-passphrase` is honoured for wallets created with a
+  BIP-39 "25th word".
+  Prints `MATCHES` / `does NOT match`; exit `0` on match, `1` on
+  mismatch or unreadable wallet, `64` on input errors.
+- `otedama wallet change-passphrase [--data-dir dir]` — rotate the
+  passphrase that encrypts `wallet.dat` (the recovery phrase and
+  fingerprint stay the same — same seed). Requires the current
+  passphrase via `--wallet-passphrase`/`OTEDAMA_WALLET_PASSPHRASE` and
+  the new one via `--new-passphrase`/`OTEDAMA_WALLET_NEW_PASSPHRASE`.
+  Fails without creating anything when `wallet.dat` does not exist.
+
+```bash
+# Verify a backup right after first run.
+otedama wallet verify < ~/backup/phrase.txt
+
+# Rotate the at-rest passphrase (env vars keep secrets off the command line).
+OTEDAMA_WALLET_PASSPHRASE='old' OTEDAMA_WALLET_NEW_PASSPHRASE='new' \
+  otedama wallet change-passphrase
+```
+
 ---
 
 ## Configuration file
@@ -199,6 +232,7 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LANGUAGE` | `--language` | |
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
 | `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
+| `OTEDAMA_WALLET_NEW_PASSPHRASE` | `--new-passphrase` (`wallet change-passphrase`) | Same process-list caveat as above. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
 
 ---

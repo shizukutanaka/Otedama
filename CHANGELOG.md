@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 263 — KNOWN_LIMITATIONS §16 の解消: `otedama wallet` サブコマンドを新設 — リカバリフレーズ検証とパスフレーズローテーション)
+
+**非カストディ保証の「使用可能性」ギャップを閉じた。**
+初回起動時に表示される24単語のリカバリフレーズについて、書き取りが
+正しいか確認する術が存在せず（転記ミスは復旧時にしか発覚しない）、
+また `WalletManager.ChangePassphrase` は実装済みながら本番コードから
+一切呼ばれていなかった。§16 が提示した最小構成をそのまま実装:
+
+- `otedama wallet verify [--data-dir dir]` — リカバリフレーズを
+  **stdin から**読む（argv はプロセスリストに残るため使わない）。
+  BIP-39 チェックサムで転記ミスを検出した上で、導出シードの
+  フィンガープリントを `{data-dir}/wallet.fingerprint` と照合 —
+  同ファイルが存在する限りウォレットのパスフレーズすら不要。
+  不在時は wallet.dat 復号へフォールバック（`--wallet-passphrase` /
+  `OTEDAMA_WALLET_PASSPHRASE` 必要）。MATCHES/does NOT match を出力、
+  exit 0/1。
+- `otedama wallet change-passphrase` — 未到達だった
+  `ChangePassphrase` を CLI へ配線。`NewWalletManager` が wallet.dat
+  不在時に新規作成する仕様のため、実行前に存在を stat —— 「ローテート」
+  が空の新ウォレットを黙って mint する事故を防止。新パスフレーズは
+  `--new-passphrase` / `OTEDAMA_WALLET_NEW_PASSPHRASE`。ローテート後も
+  フィンガープリント不変（同一シード）を出力で確認可能。
+- 副次変更: bash/zsh/fish 補完・`otedama help`・docs/API.md に
+  wallet サブコマンドを追記。初回フレーズ表示に
+  `otedama wallet verify` による検証手順を案内する一文を追加。
+  CLI アーキテクチャマップの拡張であり §16 自身が明記していた
+  maintainer 判断事項 —— 最小構成として実装。
+
 ### Fixed (session 262 — KNOWN_LIMITATIONS §15 の解消: TUI ダッシュボードが実ターミナル幅を自動検出し、実行中のリサイズにも追従)
 
 **80 カラム固定だった TUI が実際の端末幅を検出するようになった。**
