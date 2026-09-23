@@ -187,6 +187,15 @@ func (r *ProviderReliability) PosteriorMean() float64 {
 
 **Non-custodial check:** ✅ Local statistics.
 
+**Implementation note (session 279):** shipped the epoch-updating half ahead
+of v3.5 — `arbitration.ProviderReliability` (uniform Beta(1,1) prior) is
+fed per staleness window a stream stays continuously quoted (success) and
+per stream expiring mid-assignment (failure); the posterior mean discounts
+`Confidence` inside `updateStreamReliability` and is exposed as
+`otedama_arbitration_provider_reliability{provider}`. The rolling buffer
+shared with A1, the persistent cost table, and A7's Δα cap / k-confirmation
+hardening remain v3.5/v3.6 scope.
+
 ### Feature A7 — Adversarial-corruption hardening (v3.6, ~45h)
 
 **Problem:** What if a malicious Akash provider offers fake high quotes to lure hashrate, then defaults? What about a pool that briefly inflates share-acceptance rate during a probe period?

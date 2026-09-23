@@ -4,9 +4,11 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -1198,4 +1200,83 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// ============================================================================
+// ADR-010 A6 — Beta-Bernoulli provider reliability
+// ============================================================================
+
+// updateStreamReliability must scale the provider's self-reported confidence
+// by its posterior, so a provider that has let streams die quotes a lower
+// effective confidence on subsequent streams.
+func TestUpdateStreamReliability_DiscountsConfidence(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+	rel := make(map[string]*arbitration.ProviderReliability)
+	r := arbitration.NewProviderReliability()
+	r.Update(false) // posterior (1)/(1+2) = 1/3
+	rel["ai.akash"] = r
+
+	updateStreamReliability(&mu, m, rel, provider.Quote{
+		ProviderID: "ai.akash", DeviceID: "gpu-0",
+		Yield: provider.Yield{SatsPerSecond: 3, Confidence: 0.9},
+	})
+	y := m["ai.akash:gpu-0"].YieldPerDevice["gpu-0"]
+	want := 0.9 * (1.0 / 3.0)
+	if math.Abs(y.Confidence-want) > 1e-9 {
+		t.Errorf("Confidence = %v, want %v (0.9 × 1/3)", y.Confidence, want)
+	}
+	if y := m["ai.akash:gpu-0"].DefaultYield; math.Abs(y.Confidence-want) > 1e-9 {
+		t.Errorf("DefaultYield.Confidence = %v, want %v", y.Confidence, want)
+	}
+}
+
+// Providers absent from the reliability map get no discount (fresh-start
+// neutrality at quote level; the prior applies once an epoch settles).
+func TestUpdateStreamReliability_NilMapNoDiscount(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+	updateStreamReliability(&mu, m, nil, provider.Quote{
+		ProviderID: "ai.akash", DeviceID: "gpu-0",
+		Yield: provider.Yield{SatsPerSecond: 3, Confidence: 0.9},
+	})
+	if got := m["ai.akash:gpu-0"].DefaultYield.Confidence; got != 0.9 {
+		t.Errorf("Confidence = %v, want 0.9 (no discount)", got)
+	}
+}
+
+// providerReliability must lazily create one tracker per provider, keyed by
+// the provider half of the "providerID:deviceID" stream key.
+func TestProviderReliability_LazyAndShared(t *testing.T) {
+	m := make(map[string]*arbitration.ProviderReliability)
+	r1 := providerReliability(m, "ai.akash:gpu-0")
+	r2 := providerReliability(m, "ai.akash:gpu-1")
+	if r1 != r2 {
+		t.Error("same provider across devices must share one tracker")
+	}
+	r3 := providerReliability(m, "mining.stratum:cpu-0")
+	if r3 == r1 {
+		t.Error("distinct providers must have distinct trackers")
+	}
+	if len(m) != 2 {
+		t.Fatalf("map size = %d, want 2", len(m))
+	}
+}
+
+// observeProviderReliability must lazily create the {provider} gauge and
+// expose the posterior through WriteText.
+func TestObserveProviderReliability_ExposesGauge(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.observeProviderReliability("ai.akash", 0.75)
+	m.observeProviderReliability("ai.akash", 0.5) // update same gauge
+
+	var buf bytes.Buffer
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_arbitration_provider_reliability{provider="ai.akash"} 0.5`) {
+		t.Errorf("reliability gauge missing or stale in WriteText output:\n%s", out)
+	}
 }

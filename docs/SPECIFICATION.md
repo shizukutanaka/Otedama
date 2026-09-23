@@ -212,6 +212,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
+| `arbitration_provider_reliability` | gauge | Beta-Bernoulli posterior mean per `{provider}` (ADR-010 A6); discounts quoted confidence. |
 | `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |

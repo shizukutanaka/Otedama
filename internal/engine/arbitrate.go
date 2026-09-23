@@ -66,6 +66,12 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	// lastQuoteAt records when each stream (keyed as in updateStream) last
 	// received a quote, so stale streams from dead providers can be expired.
 	lastQuoteAt := make(map[string]time.Time)
+	// reliability is the per-provider Beta-Bernoulli posterior (ADR-010 A6);
+	// creditAt marks when each stream last earned its success epoch, so a
+	// continuous quote stream accrues at most one success per stale window.
+	// Both are guarded by streamsMu.
+	reliability := make(map[string]*arbitration.ProviderReliability)
+	creditAt := make(map[string]time.Time)
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,7 +80,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if !ok {
 				return
 			}
-			key := updateStream(opts.streamsMu, opts.streamMap, q)
+			key := updateStreamReliability(opts.streamsMu, opts.streamMap, reliability, q)
 			ts := q.At
 			if ts.IsZero() {
 				ts = time.Now()
@@ -82,10 +88,27 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
 			opts.streamsMu.Lock()
-			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
+			now := time.Now()
+			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, now, streamStaleTimeout) {
+				providerReliability(reliability, key).Update(false)
+				delete(creditAt, key)
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
 					key, streamStaleTimeout))
+			}
+			for key := range opts.streamMap {
+				credited, seen := creditAt[key]
+				if !seen {
+					creditAt[key] = now
+					continue
+				}
+				if now.Sub(credited) >= streamStaleTimeout {
+					providerReliability(reliability, key).Update(true)
+					creditAt[key] = now
+				}
+			}
+			for pid, r := range reliability {
+				opts.metrics.observeProviderReliability(pid, r.PosteriorMean())
 			}
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
@@ -174,8 +197,21 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 // keyed by "providerID:deviceID". It returns the key it wrote, so the caller
 // can track per-stream freshness for staleness pruning.
 func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) string {
+	return updateStreamReliability(mu, m, nil, q)
+}
+
+// updateStreamReliability is updateStream plus the ADR-010 A6 discount: the
+// provider's self-reported confidence is scaled by its Beta-Bernoulli
+// posterior, so a provider that has let streams die earns less trust on
+// subsequent quotes. A nil rel map applies no discount (tests, seeds).
+// Guarded by the same mutex as m.
+func updateStreamReliability(mu *sync.Mutex, m map[string]arbitration.Stream, rel map[string]*arbitration.ProviderReliability, q provider.Quote) string {
 	mu.Lock()
 	defer mu.Unlock()
+	discount := 1.0
+	if r := rel[q.ProviderID]; r != nil {
+		discount = r.PosteriorMean()
+	}
 	key := q.ProviderID + ":" + q.DeviceID
 	existing := m[key]
 	existing.ID = arbitration.StreamID(q.ProviderID)
@@ -186,16 +222,29 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 	if q.DeviceID != "" {
 		existing.YieldPerDevice[q.DeviceID] = arbitration.Yield{
 			SatsPerSecond: q.Yield.SatsPerSecond,
-			Confidence:    q.Yield.Confidence,
+			Confidence:    q.Yield.Confidence * discount,
 		}
 	}
 	existing.DefaultYield = arbitration.Yield{
 		SatsPerSecond: q.Yield.SatsPerSecond,
-		Confidence:    q.Yield.Confidence,
+		Confidence:    q.Yield.Confidence * discount,
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
 	m[key] = existing
 	return key
+}
+
+// providerReliability returns (creating on first use) the Beta-Bernoulli
+// tracker for the provider half of a "providerID:deviceID" stream key.
+// Callers must hold the same mutex that guards m.
+func providerReliability(m map[string]*arbitration.ProviderReliability, streamKey string) *arbitration.ProviderReliability {
+	pid, _, _ := strings.Cut(streamKey, ":")
+	r := m[pid]
+	if r == nil {
+		r = arbitration.NewProviderReliability()
+		m[pid] = r
+	}
+	return r
 }
 
 // streamsSlice flattens the streams map into a slice, de-duplicated by

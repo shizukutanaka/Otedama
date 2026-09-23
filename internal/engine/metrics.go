@@ -192,6 +192,14 @@ type engineMetrics struct {
 	sharesFoundPerDeviceMu sync.Mutex
 	sharesFoundPerDevice   map[string]*metrics.Counter
 
+	// providerReliability exposes otedama_arbitration_provider_reliability
+	// {provider="..."} — the Beta-Bernoulli posterior mean (ADR-010 A6) the
+	// arbitration loop currently discounts each provider's quotes by. One
+	// gauge per provider ID, created lazily on first epoch outcome; the
+	// provider set is bounded to configured/quoting providers.
+	providerReliabilityMu sync.Mutex
+	providerReliability   map[string]*metrics.Gauge
+
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
 	// masked address currently receiving rewards. It lets an operator confirm,
@@ -433,6 +441,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		rejectByReason:       make(map[string]*metrics.Counter),
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
+		providerReliability:  make(map[string]*metrics.Gauge),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -457,6 +466,25 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// observeProviderReliability sets otedama_arbitration_provider_reliability
+// {provider=pid} to the provider's Beta-Bernoulli posterior mean (ADR-010
+// A6). The gauge is created lazily on first observation. Safe for
+// concurrent use.
+func (m *engineMetrics) observeProviderReliability(pid string, posterior float64) {
+	m.providerReliabilityMu.Lock()
+	g, ok := m.providerReliability[pid]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_arbitration_provider_reliability",
+			"Beta-Bernoulli posterior mean of this provider's reliability (ADR-010 A6); "+
+				"the arbitration loop discounts the provider's quoted confidence by this factor.",
+			map[string]string{"provider": pid})
+		m.providerReliability[pid] = g
+	}
+	m.providerReliabilityMu.Unlock()
+	g.Set(posterior)
 }
 
 // touchLastReject records the current Unix timestamp as the most recent

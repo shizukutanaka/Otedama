@@ -246,7 +246,12 @@ arXiv grounding (collected sessions 40–41 and here):
    if Otedama ever optimises yield subject to a hard power cap.
 7. 🔵 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
 8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
-9. 🔵 **Beta-Bernoulli calibration** — ADR-010 A6.
+9. 🟡 **Beta-Bernoulli calibration** — ADR-010 A6. — 🟡 **Partially
+    resolved (session 279):** `arbitration.ProviderReliability` shipped
+    ahead of v3.5 — posterior mean discounts quote `Confidence`, epochs are
+    staleness-window survival (success) vs stream expiry (failure), exposed
+    as `otedama_arbitration_provider_reliability`. Shared rolling buffer
+    (with A1), persistent table, and A7 hardening remain open.
 10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but
     catalogued.

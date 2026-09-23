@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 279 — Beta-Bernoulli プロバイダ信頼度: ADR-010 A6)
+
+**プロバイダの自己申告 confidence を実績ベータ事後分布で割引する
+キャリブレーションを実装.** ADR-010 feature A6。ストリームが
+staleness ウィンドウを生き抜くたびに成功エポック、配信中に切れた
+ストリームごとに失敗エポックとして `Beta(α,β)` を更新し、事後平均で
+以後のクォート confidence を割引 — 繰り返し死ぬプロバイダは裁定順位を
+失い、生き続けるプロバイダは 1.0 に収束する。uniform 事前分布
+Beta(1,1) により未実績プロバイダは 0.5 の割引から開始（A7 の
+敵対的スタンスと整合）。新メトリクス
+`otedama_arbitration_provider_reliability{provider}` で事後平均を公開。
+永続コスト表・A1 予測器・A7 腐敗耐性の Δα キャップは v3.5/v3.6
+スコープとして残置。
+
 ### Fixed (session 278 — プールダイヤルの TCP 接続タイムアウト)
 
 **ブラックホール化したプールへの接続が OS の TCP タイムアウト
