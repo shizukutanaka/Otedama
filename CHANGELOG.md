@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 267 — プリエンプションリスクをスイッチコストに織り込む裁定)
+
+リサーチ項目「preemption is the dominant failure mode」(Duan et al.,
+arXiv:2509.11134)を実装。`provider.Quote.PreemptionRisk` [0,1] →
+`arbitration.Stream.PreemptionRisk` → `chooseForDevice`で非対称スイッチコスト:
+割り込み可能ストリームへの*移行*閾値が `incScore × (1 + hysteresis + risk)` に。
+目的地側のみに適用されるため、interruptible在任ストリームからの離脱は
+阻害されない(sticky化しない)。`AkashProvider`は0.15を宣言
+(ADR-013 phase-2のリース実測に置き換えるまでの文書化済みプレースホルダ)。
+仲裁ユニットテスト3本(閾値上昇で保持/閾値超過で移行/在任側非sticky)＋
+updateStream伝播テスト。gocritic `nestingReduce`対応のため hysteresis
+ブロックの条件反転リファクタ含む。
+
 ### Added (session 266 — 送信済み未判定シェアの`shares_unresolved_total`カウンタ)
 
 リサーチ項目「trust the pool's numbers」の依存不要な半分を実装。

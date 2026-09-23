@@ -129,6 +129,18 @@ type Quote struct {
 	// A nil slice means all families are accepted.
 	AcceptedFamilies []hal.Family
 
+	// PreemptionRisk is the provider-declared probability, in [0,1], that
+	// an accepted lease is revoked before its natural end (spot-style
+	// eviction). Mining pools report 0 — a submitted share either pays or
+	// not, but the pool never unassigns work mid-job. Spot-compute
+	// markets (Akash-style) carry a non-zero risk: the arbitration engine
+	// raises the switch threshold into such streams so a GPU is not
+	// churned onto yield it loses to eviction within minutes
+	// (Duan et al., arXiv:2509.11134 — preemption is the dominant spot
+	// failure mode). Zero means non-interruptible; providers that cannot
+	// measure risk should leave it zero rather than guess.
+	PreemptionRisk float64
+
 	// At is the wall-clock time the quote was generated.
 	At time.Time
 }

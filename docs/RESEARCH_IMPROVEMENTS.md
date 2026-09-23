@@ -701,6 +701,14 @@ endpoint against current vendor documentation. Tags as before
     provider's *effective* switch cost in the A2 ledger so the engine
     doesn't churn a GPU onto a stream it loses in minutes. Pairs with #14
     and Cat 5 #6.
+    — ✅ **Done (session 267):** `provider.Quote.PreemptionRisk` [0,1] →
+    `arbitration.Stream.PreemptionRisk` → asymmetric switch cost in
+    `chooseForDevice`: the threshold to *enter* an interruptible stream is
+    `incScore × (1 + hysteresis + risk)` — destination-side only, so an
+    interruptible incumbent is never sticky. `AkashProvider` declares
+    0.15 (documented placeholder until ADR-013 phase-2 lease telemetry
+    replaces it with observed evictions). 3 arbitration unit tests +
+    updateStream propagation test.
 
 ### Category 6 — arbitration / online optimisation (arXiv grounding)
 

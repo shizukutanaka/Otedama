@@ -65,6 +65,16 @@ func NewAkashProvider(rates RateSource) *AkashProvider {
 	}
 }
 
+// akashPreemptionRisk is the declared spot-eviction risk carried on
+// every Akash quote. Akash leases are interruptible (the provider may
+// close them), which the literature identifies as spot compute's
+// dominant failure mode (Duan et al., arXiv:2509.11134 — GPU spot
+// eviction rates run to ~1/3 of deployments). 0.15 is a conservative
+// placeholder, not a measurement: once ADR-013 phase 2 lands real
+// lease-state telemetry this should be derived from observed eviction
+// rates instead of a fixed constant.
+const akashPreemptionRisk = 0.15
+
 func (p *AkashProvider) ID() string { return p.id }
 
 // Name identifies this provider. The "(simulated)" suffix is
@@ -128,6 +138,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 			ProviderID:       p.id,
 			DeviceID:         dev.Identity().ID,
 			AcceptedFamilies: []hal.Family{hal.FamilyGPU},
+			PreemptionRisk:   akashPreemptionRisk,
 			At:               time.Now(),
 			Yield: Yield{
 				SatsPerSecond:    sats,

@@ -1346,3 +1346,127 @@ func TestDecide_Property_AboveFloorStreamPreventsIdle(t *testing.T) {
 		}
 	}
 }
+
+// ----- Preemption-risk-aware switch cost -----
+
+func TestDecide_PreemptionRiskRaisesThresholdIntoInterruptible(t *testing.T) {
+	// A challenger whose yield beats the incumbent by more than the bare
+	// hysteresis margin but less than margin+PreemptionRisk must NOT win:
+	// switching onto an interruptible stream costs extra.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	interruptible := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 118, Confidence: 1.0}},
+		PreemptionRisk:  0.15,
+	}
+
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, interruptible},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	// +18% gain > 10% hysteresis, but < 10% + 15% preemption = 25%: hold.
+	if alloc.Assignments[0].Stream != "mining.braiins" {
+		t.Errorf("switched onto interruptible stream at +18%% (threshold 25%%); got %q",
+			alloc.Assignments[0].Stream)
+	}
+	if !alloc.Assignments[0].Held {
+		t.Error("Held = false, want true (an interruptible challenger was suppressed)")
+	}
+}
+
+func TestDecide_PreemptionRiskSwitchClearsRaisedThreshold(t *testing.T) {
+	// A gain above hysteresis+risk still switches — the penalty must not
+	// make interruptible streams unreachable.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	interruptible := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 130, Confidence: 1.0}},
+		PreemptionRisk:  0.15,
+	}
+
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, interruptible},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	// +30% > 10% + 15% = 25%: switch proceeds.
+	if alloc.Assignments[0].Stream != "ai.akash" {
+		t.Errorf("+30%% gain over 25%% threshold did not switch; got %q",
+			alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_PreemptionRiskDoesNotMakeIncumbentSticky(t *testing.T) {
+	// The penalty is destination-side only: an interruptible *incumbent*
+	// must be easy to leave for a non-interruptible challenger.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	current := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+		PreemptionRisk:  0.15,
+	}
+	solid := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 112, Confidence: 1.0}},
+	}
+
+	prev := &Allocation{
+		Assignments: []Assignment{
+			{DeviceID: "gpu-0", Stream: "ai.akash", ExpectedYield: 100},
+		},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{current, solid},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	// +12% > bare 10% margin — leaving the interruptible stream is not
+	// penalised by its own risk.
+	if alloc.Assignments[0].Stream != "mining.braiins" {
+		t.Errorf("interruptible incumbent was sticky: +12%% gain kept it over 10%% margin; got %q",
+			alloc.Assignments[0].Stream)
+	}
+}

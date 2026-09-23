@@ -1236,3 +1236,28 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 	}
 	return keys
 }
+
+func TestUpdateStream_PropagatesPreemptionRisk(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, provider.Quote{
+		ProviderID:     "ai.akash",
+		DeviceID:       "gpu-0",
+		PreemptionRisk: 0.15,
+		Yield:          provider.Yield{SatsPerSecond: 1.0, Confidence: 0.6},
+	})
+	if got := m["ai.akash:gpu-0"].PreemptionRisk; got != 0.15 {
+		t.Errorf("PreemptionRisk = %v, want 0.15 propagated from quote", got)
+	}
+
+	// A pool stream (no risk declared) stays at the zero default.
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "mining.stratum",
+		DeviceID:   "cpu-0",
+		Yield:      provider.Yield{SatsPerSecond: 0.5, Confidence: 0.9},
+	})
+	if got := m["mining.stratum:cpu-0"].PreemptionRisk; got != 0 {
+		t.Errorf("pool stream PreemptionRisk = %v, want 0", got)
+	}
+}

@@ -110,6 +110,16 @@ type Stream struct {
 	PrivacyRating       int              // 0 (worst) .. 10 (best)
 	EnvironmentalRating int              // 0 (worst) .. 10 (best)
 	IsBitcoinMining     bool             // true for streams that pay out as BTC natively
+
+	// PreemptionRisk is the provider-declared probability, in [0,1], that
+	// work accepted on this stream is revoked before its natural end
+	// (spot-style eviction). It raises the switch threshold *into* the
+	// stream in chooseForDevice: switching onto an interruptible stream
+	// needs an extra margin so the engine does not churn a device onto
+	// yield it loses to eviction within minutes. The penalty is
+	// asymmetric by design — it only makes entering costlier, never
+	// leaving — so an interruptible incumbent is never sticky.
+	PreemptionRisk float64
 }
 
 // Accepts reports whether this stream will accept work from a device of
@@ -423,31 +433,38 @@ func chooseForDevice(
 	// as a marginal (or non-existent) gain rather than a reason to switch.
 	if previous.Stream != "" {
 		for _, c := range candidates {
-			if c.stream.ID == previous.Stream {
-				incScore := policyScore(c.stream, c.yield, policy)
-				threshold := incScore * (1.0 + hysteresis)
-				if bestScore <= threshold {
-					// Held only counts when a *different*, higher-scoring stream
-					// was suppressed — not when the incumbent is itself the best
-					// (in which case nothing was declined).
-					held := best.stream.ID != c.stream.ID
-					var reason string
-					if held {
-						reason = fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100)
-					} else {
-						reason = "incumbent is best; stayed"
-					}
-					return Assignment{
-						DeviceID:           dev.Identity.ID,
-						Stream:             c.stream.ID,
-						ExpectedYield:      c.yield,
-						Reason:             reason,
-						Held:               held,
-						ForegoneSatsPerSec: maxRaw - c.yield,
-					}
-				}
-				break
+			if c.stream.ID != previous.Stream {
+				continue
 			}
+			incScore := policyScore(c.stream, c.yield, policy)
+			// Preemption-aware switch cost: entering an interruptible
+			// stream costs an extra margin proportional to its declared
+			// eviction risk. Switching *away* from one needs no extra
+			// margin — the penalty lives only on the destination side.
+			risk := best.stream.PreemptionRisk
+			risk = min(max(risk, 0), 1)
+			threshold := incScore * (1.0 + hysteresis + risk)
+			if bestScore <= threshold {
+				// Held only counts when a *different*, higher-scoring stream
+				// was suppressed — not when the incumbent is itself the best
+				// (in which case nothing was declined).
+				held := best.stream.ID != c.stream.ID
+				var reason string
+				if held {
+					reason = fmt.Sprintf("held (best gain %.2f%% below switch threshold %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, (hysteresis+risk)*100)
+				} else {
+					reason = "incumbent is best; stayed"
+				}
+				return Assignment{
+					DeviceID:           dev.Identity.ID,
+					Stream:             c.stream.ID,
+					ExpectedYield:      c.yield,
+					Reason:             reason,
+					Held:               held,
+					ForegoneSatsPerSec: maxRaw - c.yield,
+				}
+			}
+			break
 		}
 	}
 
