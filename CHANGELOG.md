@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 272 — Github、論文、Qiita、Zenn、海外技術情報などを参考にさらなる改善: `datum://` スキームが登録済みだが Dialer 不在で `ErrUnknownProtocol`、かつ設定検証でも拒否されていた接続不能を解消——KNOWN_LIMITATIONS §14 の鉱夫向け側を、設計注記どおり SV1-transport で実装)
+
+`internal/poolproto` は `datum://` を `ProtocolDATUM` に解決するが、
+Dialer が登録されていなかったため `DialURL` は `ErrUnknownProtocol` を
+返し、`validatePoolURL` のスキーム許可リストにも `datum://` が無かった。
+session 251 の一次検証（datum_gateway README・MIT）で確認済みのとおり、
+DATUM Gateway の鉱夫向けプロトコルは **Stratum V1 + version-rolling over
+TCP** であり SV2 ではない。したがって新パッケージを作らず、
+
+- `stratumv1.Dialer` に `datum` フラグを追加し `Protocol()` が
+  `ProtocolDATUM` を返す `Dialer{datum:true}` を init() で登録
+- `parseAddress` が `datum://host:port` を受理
+- `runSession` が `ProtocolDATUM` を `runSessionV1` へディスパッチ
+- `validatePoolURL` が `datum://` を受理
+
+の4点で、OCEAN/DATUMゲートウェイへの下流SV1クライアント接続が成立する。
+bitcoind に対するブロックテンプレート構築（DATUM上流側・JDC系）は
+ADR-009 スコープとして未実装のまま明記（KNOWN_LIMITATIONS §14 書換、
+poolproto パッケージdoc更新）。テスト5件追加（parseAddress、Protocol、
+Lookup登録、net.Pipe駆動の subscribe→authorize→notify→submit E2E、
+config validate受理）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

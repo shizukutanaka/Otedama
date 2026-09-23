@@ -696,7 +696,7 @@ func validateBitcoinAddress(addr string) error {
 
 // validatePoolURL checks that a pool URL has an acceptable scheme.
 func validatePoolURL(raw string) error {
-	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
+	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://", "datum://"}
 	for _, s := range validSchemes {
 		if rest, ok := strings.CutPrefix(raw, s); ok {
 			if rest == "" {

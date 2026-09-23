@@ -6,16 +6,18 @@
 // adding a new protocol does not require touching the rest of the
 // codebase.
 //
-// Two protocols are actually implemented today, each with a
-// registered Dialer: Stratum V1 (legacy JSON-RPC over TCP, optionally
-// TLS — package stratumv1) and Stratum V2 (binary framing with Noise
-// NX encryption — package stratumv2). DATUM (OCEAN's protocol,
-// layered on SV1 transport) has a reserved URL scheme constant
-// (ProtocolDATUM) and is planned (see docs/adr/ADR-009, status
-// Proposed) but has no Dialer registered anywhere and no
-// implementation package — DialURL("datum://...") returns
-// ErrUnknownProtocol today. See docs/KNOWN_LIMITATIONS.md for the
-// current implementation-status summary.
+// Three protocols have a registered Dialer today: Stratum V1 (legacy
+// JSON-RPC over TCP, optionally TLS — package stratumv1), Stratum V2
+// (binary framing with Noise NX encryption — package stratumv2), and
+// DATUM. DATUM (OCEAN's protocol,
+// layered on SV1 transport) shares the V1 dialer: stratumv1 registers
+// a Dialer for ProtocolDATUM because the DATUM Gateway's miner-facing
+// protocol is plain Stratum V1 + version-rolling over TCP —
+// DialURL("datum://...") resolves and dials through package stratumv1.
+// The DATUM-specific upstream side (block-template construction) is
+// planned separately (see docs/adr/ADR-009, status Proposed). See
+// docs/KNOWN_LIMITATIONS.md for the current implementation-status
+// summary.
 //
 // # Why this exists (the 10-year case)
 //
