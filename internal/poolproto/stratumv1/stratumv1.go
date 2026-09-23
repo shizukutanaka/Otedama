@@ -30,11 +30,11 @@
 //	client → pool: mining.submit                     (share)
 //	pool → client: result: true | false              (verdict)
 //
-// Plus optional mining.set_extranonce, mining.ping (pool→client keepalive
-// request — answered with a "pong" result via respond()), and various
-// pool-specific extensions (NiceHash version-rolling, ASICBoost via
-// mining.configure, suggest_difficulty). We support the common subset
-// and ignore unknown notifications.
+// Plus optional mining.set_extranonce and pool→client *requests* answered
+// via respond() — mining.ping (keepalive) and client.get_version (agent
+// string) — plus various pool-specific extensions (NiceHash
+// version-rolling, ASICBoost via mining.configure, suggest_difficulty).
+// We support the common subset and ignore unknown notifications.
 //
 // # What this file does NOT do
 //
@@ -288,13 +288,21 @@ func (s *session) dispatch(line []byte) {
 		if msg.ID != nil {
 			s.respond(msg.ID, "pong")
 		}
+	case "client.get_version":
+		// Pool→client request for the miner agent string (Braiins uses
+		// it for compatibility tracking; cgminer/bfgminer/ESP-Miner all
+		// answer). Same unanswered-request class as mining.ping — echo
+		// the agent we advertised in mining.subscribe.
+		if msg.ID != nil {
+			s.respond(msg.ID, agentString)
+		}
 	}
 	// Other notifications (mining.set_version_mask, etc.) are
 	// silently ignored; forward-compatible with pool extensions.
 }
 
 // respond writes a JSON-RPC result reply for a server→client request
-// (currently mining.ping). It is best-effort: a write failure is
+// (mining.ping, client.get_version). It is best-effort: a write failure is
 // swallowed because the broken connection is surfaced by the read loop
 // anyway, and there is nothing actionable to do mid-parse.
 func (s *session) respond(id any, result any) {
@@ -462,6 +470,11 @@ type rpcResponse struct {
 	result    any
 	errResult any
 }
+
+// agentString is the client identity sent in mining.subscribe and echoed
+// to pools that ask client.get_version — keep them identical so a pool
+// never sees two different agents from one session.
+const agentString = "Otedama/3.0.0"
 
 // call sends a JSON-RPC request and waits for the response, honoring ctx.
 // Returns ErrSessionClosed if the session terminates first.
