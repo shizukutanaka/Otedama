@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // ============================================================================
@@ -2541,4 +2542,18 @@ func TestSetExtranonce_ConcurrentSubmit_NoDataRace(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestAgentString_ReportsBuildVersion pins the client-identity invariant:
+// agentString must carry the real build (version.Version, ldflags-injected)
+// so a pool sees "Otedama/3.0.0-alpha.0-dev" from a dev binary rather than
+// a literal frozen at "3.0.0". The subscribe agent and the get_version
+// answer share this string — one identity, no divergence.
+func TestAgentString_ReportsBuildVersion(t *testing.T) {
+	v := strings.TrimPrefix(version.Version, "v")
+	want := "Otedama/" + v
+	if agentString != want {
+		t.Errorf("agentString = %q, want %q (real build, not a frozen literal)",
+			agentString, want)
+	}
 }
