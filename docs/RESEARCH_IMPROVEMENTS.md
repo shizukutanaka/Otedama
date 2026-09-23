@@ -620,6 +620,13 @@ endpoint against current vendor documentation. Tags as before
    and `session.respond` now answers `{"id":<id>,"result":"pong","error":null}`.
    Strict pools disconnect clients that never answer; the connection would
    otherwise look half-open (TCP alive, application dead).
+   — session 267: `client.get_version` answered too — the other
+   request-with-id method Braiins pools send; `agentString` (extracted from
+   the subscribe literal) is echoed so subscribe and get_version can never
+   report different identities. `mining.set_version_mask` remains an
+   intentional no-op: the mask is permission to roll bits, not an
+   obligation, and nVersion rolling gains nothing on CPU/GPU (overt
+   ASICBoost is ASIC-only).
 6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset

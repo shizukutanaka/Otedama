@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 267 — Stratum V1 `client.get_version` 応答 — 2つ目の未応答 pool→client リクエストを解消)
+
+**mining.ping と同型のギャップを閉じた。** Braiins 系プールが互換性管理に
+使う `{"id":N,"method":"client.get_version"}` も id 付きリクエストで
+ありながら無応答だった（ping 対応で整えた `respond` 経路を再利用）。
+応答は `mining.subscribe` で送出しているエージェント文字列を
+`agentString` 定数として共有 — subscribe と get_version が異なる
+identity を返す不整合を構造的に防止。`mining.set_version_mask` は
+意図的な no-op のまま（マスクはロールの許可であり義務ではなく、
+nVersion ローリングは ASIC 専用の overt ASICBoost にしか意味を持たない
+ため CPU/GPU では利益ゼロ）。
+
 ### Fixed (session 266 — Stratum V1 `mining.ping` 応答 — プール側 keepalive 要求への未応答を解消)
 
 **「TCP は生きているがアプリケーションは死んでいる」切断を防ぐ。**
