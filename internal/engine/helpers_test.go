@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/hal"
+	"github.com/shizukutanaka/Otedama/internal/lightning"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
@@ -1274,5 +1276,90 @@ func TestTouchProviderQuote_ExposesHeartbeat(t *testing.T) {
 	}
 	if got := strings.Count(out, "otedama_provider_last_quote_seconds{"); got != 1 {
 		t.Errorf("series count = %d, want 1 (re-touch must update, not duplicate)", got)
+	}
+}
+
+// TestConfirmBackupWords_AcceptsCorrectReEntry proves the first-run
+// backup check: re-entering the requested words prints the verified
+// line and returns.
+func TestConfirmBackupWords_AcceptsCorrectReEntry(t *testing.T) {
+	m := lightning.Mnemonic{"alpha", "bravo", "charlie", "delta", "echo", "foxtrot"}
+	out := &bytes.Buffer{}
+	confirmBackupWords(strings.NewReader("bravo\necho\n"), out, m, []int{1, 4})
+	if !strings.Contains(out.String(), "Backup verified") {
+		t.Errorf("expected verification line, got:\n%s", out.String())
+	}
+}
+
+// TestConfirmBackupWords_RetriesOnWrongWord then succeeds: one wrong
+// attempt must not permanently fail the check (transcription happens).
+func TestConfirmBackupWords_RetriesOnWrongWord(t *testing.T) {
+	m := lightning.Mnemonic{"alpha", "bravo", "charlie"}
+	out := &bytes.Buffer{}
+	confirmBackupWords(strings.NewReader("wrong\nbravo\n"), out, m, []int{1})
+	if !strings.Contains(out.String(), "Backup verified") {
+		t.Errorf("retry with correct word should verify, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Not quite") {
+		t.Error("wrong first attempt should print the retry hint")
+	}
+}
+
+// TestConfirmBackupWords_ExhaustedAttemptsWarns covers the all-wrong
+// path: the warning names the recovery command and never panics.
+func TestConfirmBackupWords_ExhaustedAttemptsWarns(t *testing.T) {
+	m := lightning.Mnemonic{"alpha", "bravo"}
+	out := &bytes.Buffer{}
+	confirmBackupWords(strings.NewReader("x\nx\nx\n"), out, m, []int{0})
+	if !strings.Contains(out.String(), "WARNING") || !strings.Contains(out.String(), "wallet verify") {
+		t.Errorf("exhausted attempts should warn and point at wallet verify, got:\n%s", out.String())
+	}
+}
+
+// TestConfirmBackupWords_EOFStopsQuietly: closed input mid-prompt must
+// not spin — an empty read with an error returns instead of counting
+// an attempt.
+func TestConfirmBackupWords_EOFStopsQuietly(t *testing.T) {
+	m := lightning.Mnemonic{"alpha", "bravo"}
+	out := &bytes.Buffer{}
+	confirmBackupWords(strings.NewReader(""), out, m, []int{0, 1})
+	if !strings.Contains(out.String(), "skipping verification") {
+		t.Errorf("EOF should stop quietly, got:\n%s", out.String())
+	}
+}
+
+// TestInteractiveInput_NonFileReaderIsNotATerminal: injected readers
+// (strings.Reader in tests, pipes in services) never trigger the
+// interactive prompt.
+func TestInteractiveInput_NonFileReaderIsNotATerminal(t *testing.T) {
+	if interactiveInput(strings.NewReader("x")) {
+		t.Error("strings.Reader must not read as interactive")
+	}
+	if interactiveInput(nil) {
+		t.Error("nil must not read as interactive")
+	}
+}
+
+// TestPickWordPositions_DistinctInRange: positions are unique, sorted,
+// and within [0, n).
+func TestPickWordPositions_DistinctInRange(t *testing.T) {
+	for trial := 0; trial < 50; trial++ {
+		pos := pickWordPositions(12, backupProbeWords)
+		if len(pos) != backupProbeWords {
+			t.Fatalf("got %d positions, want %d", len(pos), backupProbeWords)
+		}
+		seen := map[int]bool{}
+		for i, p := range pos {
+			if p < 0 || p >= 12 {
+				t.Fatalf("position %d out of range", p)
+			}
+			if seen[p] {
+				t.Fatalf("duplicate position %d", p)
+			}
+			seen[p] = true
+			if i > 0 && pos[i-1] >= p {
+				t.Fatal("positions must be ascending")
+			}
+		}
 	}
 }
