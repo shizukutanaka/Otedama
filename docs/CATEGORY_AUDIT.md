@@ -852,3 +852,16 @@ formatter findings are pre-existing reachability, unchanged by this diff).
 | README Go badge `1.22+` — go.mod floor is 1.24. | ✅ Fixed: 1.24+. |
 | i18n catalogs — key parity across all 10 languages | ✅ Verified clean: 15 IDs each, completeness test covers all (no defect). |
 | DEPLOYMENT.md endpoints/probes/flags vs httpserver | ✅ Verified consistent (healthz/readyz/metrics, 9090, runAsNonRoot 65532 matches Dockerfile nonroot uid). |
+
+## Session 282 update — repo meta-file audit (SECURITY.md, dependabot, CODEOWNERS, ADR-002)
+
+| Finding | Disposition |
+|---|---|
+| SECURITY.md told v2 users to run `otedama migrate-from-v2` — the subcommand does not exist (confirmed at s278, Makefile target removed for the same reason). Security-policy doc directing users to a dead command. | ✅ Reworded: manual re-config + note the command is unimplemented. |
+| `.github/dependabot.yml` `automerge:` under updates — not a dependabot.yml key; unknown keys make GitHub's config validation reject the file → every update entry silently disabled. | ✅ Removed with explanatory comment (auto-merge is a repo setting). |
+| `.github/CODEOWNERS` `/internal/stratum/noise_pool*` rule — file deleted at session 259 (pooled-HMAC measured pessimisation). | ✅ Removed rule with note. |
+| ADR-002 Implementation Notes cited `noise_pool.go` as a live allocation optimisation — the file is gone. | ✅ Errata inline (strikethrough + measured numbers), per ADR convention of not rewriting history. |
+| `MAINTAINERS.md`, `GOVERNANCE.md`, `BENCHMARKS.md`, `ROADMAP.md`, `SECURITY.md`, `CONTRIBUTING.md`, `.github/CODEOWNERS`, `ISSUE_TEMPLATE/`, `oss-fuzz-integration.md` | ✅ All exist; references resolve. |
+| CLAUDE.md "doctor/ 17 並行ヘルスチェック" | ✅ Verified: exactly 17 `Name:` checks in checks.go. |
+| DEPLOYMENT.md's `ROADMAP.md "Real protocols"` reference | ✅ Resolves (v3.1.0 section exists). |
+| `solo-operations.md`'s `.github/MAINTAINERS.md` | ❌ Not a live link — instructive template telling future maintainers what to write; acceptable as-is. |

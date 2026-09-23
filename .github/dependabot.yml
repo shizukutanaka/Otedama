@@ -33,8 +33,11 @@ updates:
     directory: "/"
     allow:
       - dependency-type: "direct"
-    automerge:
-      - dependency-type: "direct"
+    # 'automerge' is not a dependabot.yml key — unknown keys make
+    # Dependabot reject the whole config (validated server-side),
+    # which would silently disable every update entry in this file.
+    # Auto-merge is a repo setting (Settings -> General -> Allow
+    # auto-merge), not configurable here.
     schedule:
       interval: "weekly"
       day: "monday"

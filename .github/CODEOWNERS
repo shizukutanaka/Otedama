@@ -14,7 +14,9 @@
 /internal/btccrypto/       @shizukutanaka
 /internal/poolproto/       @shizukutanaka
 /internal/stratum/noise*   @shizukutanaka
-/internal/stratum/noise_pool* @shizukutanaka
+# (noise_pool* rule removed — the file was deleted at session 259 when the
+# pooled-HMAC experiment measured a pessimisation; noise* still matches it
+# if it ever returns.)
 
 # Release and CI automation.
 /.github/                  @shizukutanaka

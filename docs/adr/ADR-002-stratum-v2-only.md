@@ -80,8 +80,12 @@ The question is settled once.
 - Alpha release uses P-256 in the Noise DH to avoid a secp256k1
   dependency; v3.1.0 switches to secp256k1 + ElligatorSwift per the
   V2 specification.
-- `internal/stratum/noise_pool.go` reduces allocation pressure during
-  frequent reconnection.
+- ~~`internal/stratum/noise_pool.go` reduces allocation pressure during
+  frequent reconnection.~~ Deleted at session 259: `BenchmarkHmacSHA256`
+  measured the pooled path strictly worse than the unpooled one
+  (178.5ns/4allocs vs 133.8ns/2allocs), so the code was removed rather
+  than wired in — the file's "allocation-minimising" claim did not
+  survive measurement.
 
 ## Related
 

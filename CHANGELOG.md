@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 282 — リポジトリメタファイルの実害群)
+
+- **SECURITY.md が v2 ユーザに不存在コマンドを指示**: `otedama
+  migrate-from-v2` は未実装（s278 で Makefile ターゲット除去済みの同一問題）。
+  手動再設定への誘導＋未実装の明記に訂正。
+- **dependabot.yml の無効 `automerge` キー**: dependabot スキーマに存在せず、
+  未知キーは GitHub 側の設定検証でファイル全体を拒否させる → 全 update
+  エントリが静かに無効化されていた可能性。除去し実際の設定場所（repo
+  Settings の auto-merge）をコメント記載。
+- **CODEOWNERS の `noise_pool*` ルール**: 対象ファイルは s259 で削除済み
+  （pooled-HMAC が実測劣化）— ルール除去。
+- **ADR-002 の `noise_pool.go` 参照**: 削除済みファイルを現行最適化として
+  引用 → ADR 慣例に従い打消線＋計測値の errata。
+- 検証済みクリーン: doctor は正確に17チェック（CLAUDE.md 記載と一致）、
+  MAINTAINERS/GOVERNANCE/BENCHMARKS/ROADMAP/ISSUE_TEMPLATE 実在、
+  DEPLOYMENT.md の ROADMAP 参照は解決可能、dependabot YAML パース正常。
+
 ### Fixed (session 281 — ドキュメント面の壊れた参照群 + K8s 不足マニフェスト)
 
 - **README のインストール手順が 404**: `releases/latest/download/install.sh`

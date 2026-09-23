@@ -18,7 +18,7 @@ Otedama handles software that directly concerns user funds and privacy. We treat
 | v2.1.9 (legacy) | Partial | 重大な脆弱性のみ、2026年10月まで |
 | v2.1.8以前 | No | サポート終了 |
 
-v2系列の継続利用者は、可能な限り早くv3.0への移行を推奨いたします。`otedama migrate-from-v2`コマンドが移行を支援します。
+v2系列の継続利用者は、可能な限り早くv3.0への移行を推奨いたします。v2からの移行は `config.yaml` と新規ウォレットの再設定をもって実施してください（`otedama migrate-from-v2` は未実装です — 移行コマンドが提供された場合、この節を更新します）。
 
 ## 脆弱性報告方法 / Reporting a Vulnerability
 
