@@ -85,6 +85,15 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
+// negotiateTimeout bounds the whole SetupConnection+OpenMiningChannel
+// exchange. The two ReadFrame calls below block on the raw conn, which a
+// context cannot interrupt — without a deadline a pool that accepts the
+// TCP connection but never answers leaves Negotiate blocked forever,
+// ignoring ctx cancellation and leaking the caller in DialURL (same
+// blackhole-pool class the engine's inline V2 handshake bounds via
+// conn.SetDeadline). A var, not a const, so tests can shorten it.
+var negotiateTimeout = 30 * time.Second
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -92,6 +101,13 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if !ok {
 		return nil, fmt.Errorf("stratumv2: Negotiate received non-V2 connection: %T", c)
 	}
+
+	// Bound the exchange, then clear the deadline before the session's
+	// readLoop inherits the conn — post-handshake reads have no deadline
+	// by design (a healthy SV2 pool may legitimately stay silent between
+	// blocks, ~10 min), matching the engine's inline path.
+	_ = conn.raw.SetDeadline(time.Now().Add(negotiateTimeout))
+	defer conn.raw.SetDeadline(time.Time{}) //nolint:errcheck
 
 	dec := stratum.NewDecoder(conn.raw)
 
@@ -196,6 +212,10 @@ type session struct {
 	jobsCh chan poolproto.Job
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
+	// seq is the SubmitSharesStandard sequence counter. Pools correlate
+	// SubmitSharesSuccess/Error by sequence_number and may dedupe on it —
+	// a constant 0 made every share after the first look like a resend.
+	seq atomic.Uint32
 
 	startOnce sync.Once
 }
@@ -318,7 +338,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	jobID := parseJobID(sub.JobID)
 	ss := stratum.SubmitSharesStandard{
 		ChannelID:      s.chanID,
-		SequenceNumber: 0,
+		SequenceNumber: s.seq.Add(1), // first share is 1, like the engine's inline path
 		JobID:          jobID,
 		Nonce:          sub.Nonce,
 		NTime:          sub.NTime,

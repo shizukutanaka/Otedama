@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 302 — stratum ワイヤ層＋stratumv2 アダプタ監査)
+
+- **stratumv2 アダプタ `Negotiate` の無制限ブロック**:
+  `ReadFrame` が raw conn をブロックし ctx キャンセルでも解除不能 — TCP 受理
+  するが応答しないブラックホールプールで `DialURL` が永久停止（s298 で inline
+  V2 handshake に適用した `SetDeadline` バウンドと同型）。`negotiateTimeout`
+  （30秒・テストで縮小可の var）で交換全体をバウンドし、セッションへ渡す前に
+  deadline クリア — handshake 後の読取りは inline 経路同様 deadline なしが
+  正（健常プールもブロック間 ~10分無言で正常）。
+- **`Submit` が `SequenceNumber: 0` を全シェアで送信**:
+  プールは sequence_number で応答相関・重複排除するため2発目以降が再送扱いで
+  silent reject の恐れ。`seq atomic.Uint32` で初回=1（engine inline と同型）に。
+- `frame.go` の「fuzz は once wired up」記述を訂正（ファイル実在・seed corpus
+  は `go test` で常時実行）。
+- ゲート領域記録: `noise.go` `ReadMessage2` x-only フォールバックが DH 無しで
+  handshake 完了 → transport key が認証なし（maintainer ゲート、KNOW§2 系）。
+- テスト2本（ブラックホールタイムアウト、seq 単調増加 e2e）＋既存17テスト影響なし。
+
 ### Fixed (session 301 — stratumv1 ワイヤコード深部監査)
 
 - **`extranonce2Size` のデータレース（並行ブランチ修正が当スタック未適用）**:

@@ -1081,3 +1081,90 @@ func TestFloat64FromBits(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// Session-302 regression tests
+// ============================================================================
+
+func TestDialer_Negotiate_BlackholedPoolTimesOut(t *testing.T) {
+	// A pool that accepts the connection but never reads or replies must
+	// not hang Negotiate forever — before the deadline, ctx cancellation
+	// could not unblock the blocking ReadFrame calls (net.Conn reads do
+	// not observe context).
+	old := negotiateTimeout
+	negotiateTimeout = 150 * time.Millisecond
+	defer func() { negotiateTimeout = old }()
+
+	// Server end is deliberately never serviced: net.Pipe writes block
+	// until the peer reads, and reads block until the peer writes — both
+	// are cut by the deadline.
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	d := makeDialer(client)
+	conn, err := d.Dial(context.Background(), "stratum+v2://x:3336", poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	start := time.Now()
+	_, err = d.Negotiate(context.Background(), conn)
+	if err == nil {
+		t.Fatal("Negotiate should fail against a blackholed pool")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("Negotiate took %v — deadline did not bound the exchange", elapsed)
+	}
+}
+
+func TestSession_Submit_SequenceNumbersIncrement(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	frames := make(chan stratum.Frame, 2)
+	go func() {
+		pool.doHandshake(1)
+		for i := 0; i < 2; i++ {
+			f, err := pool.dec.ReadFrame()
+			if err != nil {
+				pool.t.Logf("pool: read submit %d: %v", i, err)
+				return
+			}
+			frames <- f
+		}
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	for _, jobID := range []string{"7", "7"} {
+		if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: jobID, Nonce: 1}); err != nil {
+			t.Fatalf("Submit: %v", err)
+		}
+	}
+
+	for i, want := range []uint32{1, 2} {
+		select {
+		case f := <-frames:
+			if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+				t.Fatalf("frame %d: MsgType 0x%02X, want SubmitSharesStandard", i, f.Header.MsgType)
+			}
+			m, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+			if err != nil {
+				t.Fatalf("frame %d: decode: %v", i, err)
+			}
+			if m.SequenceNumber != want {
+				t.Errorf("frame %d: SequenceNumber = %d, want %d — constant seq makes later shares look like resends to a deduping pool", i, m.SequenceNumber, want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("pool did not receive submit frame %d within 2s", i)
+		}
+	}
+}

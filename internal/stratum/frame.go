@@ -37,7 +37,8 @@
 //     against the configured maximum (MaxFrameSize).
 //   - Validates all fields before any allocation occurs.
 //   - Refuses to allocate buffers larger than the claimed message size.
-//   - Is fuzz-tested continuously (see frame_fuzz_test.go once wired up).
+//   - Is fuzz-tested (frame_fuzz_test.go; seed corpus runs in every
+//     `go test`, extended fuzzing via `make fuzz`).
 //
 // # References
 //
