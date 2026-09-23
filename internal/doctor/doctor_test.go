@@ -345,7 +345,7 @@ func TestRunner_ExecutesAllChecks(t *testing.T) {
 // ----- DefaultChecks integration -----
 
 func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
-	checks := DefaultChecks(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "")
+	checks := DefaultChecks(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "", nil)
 	names := make(map[string]bool)
 	for _, c := range checks {
 		names[c.Name] = true

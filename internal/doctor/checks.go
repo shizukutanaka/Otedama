@@ -28,10 +28,13 @@ import (
 )
 
 // DefaultChecks returns the built-in check set for a config.
-// Additional checks can be appended by callers before running.
-func DefaultChecks(cfg config.Config, configPath string) []Check {
+// loadErr is the error the caller got loading configPath, if any — the
+// "Configuration" check reports it directly so a broken file surfaces
+// in both text and JSON reports. Additional checks can be appended by
+// callers before running.
+func DefaultChecks(cfg config.Config, configPath string, loadErr error) []Check {
 	return []Check{
-		checkConfig(cfg, configPath),
+		checkConfig(cfg, configPath, loadErr),
 		checkBitcoinAddress(cfg.BitcoinAddress),
 		checkFailoverAddresses(cfg.BitcoinAddresses),
 		checkDataDir(cfg.DataDir),
@@ -51,10 +54,21 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 	}
 }
 
-func checkConfig(cfg config.Config, path string) Check {
+func checkConfig(cfg config.Config, path string, loadErr error) Check {
 	return Check{
 		Name: "Configuration",
 		Run: func(_ context.Context) Result {
+			// A present-but-unloadable file is the root cause of anything
+			// else the resolved config might fail on — report it first so
+			// the operator sees "your file is broken" rather than a
+			// misleading per-field error about a config they did write.
+			if loadErr != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: loadErr.Error(),
+					Fix:    "fix the YAML syntax or permissions of the config file",
+				}
+			}
 			// Validate the *resolved* config first, before any file-status
 			// check: cfg may come entirely from env vars and flags when no
 			// file exists, and an invalid env-layer value (e.g. a malformed

@@ -149,7 +149,14 @@ func cmdRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	fromFile := loadConfigFile(f.configFile, stderr)
+	fromFile, err := loadConfigFile(f.configFile)
+	if err != nil {
+		// A present-but-broken config file is fatal: continuing on
+		// defaults would silently discard the operator's pools,
+		// address, and economics settings.
+		fmt.Fprintf(stderr, "otedama: %v\n", err)
+		return exitConfig
+	}
 	// Surface env vars that were set but could not be parsed: they are
 	// silently ignored during resolution, so warn before starting rather than
 	// let an operator's typo'd setting vanish unnoticed.

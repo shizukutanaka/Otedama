@@ -320,13 +320,12 @@ func TestSafeDisplay(t *testing.T) {
 }
 
 func TestLoadConfigFile_NonExistent(t *testing.T) {
-	var e bytes.Buffer
-	cfg := loadConfigFile("/nonexistent/config.yaml", &e)
+	cfg, err := loadConfigFile("/nonexistent/config.yaml")
+	if err != nil {
+		t.Fatalf("missing file should not error: %v", err)
+	}
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("expected empty config")
-	}
-	if e.Len() > 0 {
-		t.Errorf("unexpected stderr for missing file: %s", e.String())
 	}
 }
 

@@ -43,7 +43,11 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 		}
 		return exitUsage
 	}
-	fromFile := loadConfigFile(f.configFile, stderr)
+	fromFile, err := loadConfigFile(f.configFile)
+	if err != nil {
+		fmt.Fprintf(stderr, "otedama: %v\n", err)
+		return exitConfig
+	}
 	cfg, origins := config.ResolveWithOrigins(fromFile, nil, f.FlagValues)
 
 	if f.jsonOut {
@@ -175,7 +179,13 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 		}
 		return exitUsage
 	}
-	fromFile := loadConfigFile(f.configFile, stderr)
+	fromFile, err := loadConfigFile(f.configFile)
+	if err != nil {
+		// A broken config file IS the invalid configuration being asked
+		// about — report it as a config error, not a usage error.
+		fmt.Fprintf(stderr, "%s\n", err)
+		return exitConfig
+	}
 	// Malformed numeric env vars are dropped silently during resolution; a
 	// validate command should call them out so the operator can fix the typo.
 	for _, w := range config.EnvWarnings(nil) {

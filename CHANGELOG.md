@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 311 — 壊れた設定ファイルの静黙デフォルト化)
+
+- **存在するが壊れた設定ファイルが警告1行＋ゼロ設定で継続していた** —
+  `loadConfigFile` は不在ファイルと「パース不能ファイル」を同じ経路に
+  流し、`otedama run` は破損した `config.yaml` を静黙にデフォルトへ
+  落として pools/bitcoin_address/経済設定を全て消失させていた
+  （`config validate` も誤解を招く "bitcoin_address is required" を
+  報告）。loadConfigFile が error を返すよう変更: `run`/`config show`/
+  `config validate` は `exitConfig(78)` で即時失敗、doctor は新しい
+  `loadErr` 経路で "Configuration" チェックが Fail を報告（従来は
+  ファイル存在チェックのみで Pass "loaded from path" と誤報し得た）。
+  不在ファイルは従来通り nil error（＝デフォルト層無し）。
+
 ### Fixed (session 310 — doctor の検証スキップ・無制限読込)
 
 - **`checkConfig` が解決済み設定を全く検証していなかった** — 設定ファイル

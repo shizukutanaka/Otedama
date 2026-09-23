@@ -424,7 +424,7 @@ func TestCheckNetwork_ReturnsResult(t *testing.T) {
 
 func TestCheckConfig_NoPathEmitsWarning(t *testing.T) {
 	// A *valid* resolved config with no file is a Warn, not a Fail.
-	c := checkConfig(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "")
+	c := checkConfig(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "", nil)
 	r := c.Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (no config file is not fatal)", r.Status)
@@ -440,7 +440,7 @@ func TestCheckConfig_InvalidEnvOnlyConfig_FailsNotWarns(t *testing.T) {
 	// (e.g. a malformed OTEDAMA_HTTP_ADDR has no dedicated check), and a
 	// "no config file" Warn must not mask it. Previously the path==""
 	// early return skipped Validate entirely.
-	c := checkConfig(config.Config{HTTPAddr: "not-a-valid-addr"}, "")
+	c := checkConfig(config.Config{HTTPAddr: "not-a-valid-addr"}, "", nil)
 	r := c.Run(context.Background())
 	if r.Status != StatusFail {
 		t.Fatalf("invalid env-only config status = %v, want Fail (detail: %s)", r.Status, r.Detail)
@@ -448,7 +448,7 @@ func TestCheckConfig_InvalidEnvOnlyConfig_FailsNotWarns(t *testing.T) {
 }
 
 func TestCheckConfig_NonexistentPathEmitsWarning(t *testing.T) {
-	c := checkConfig(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "/nonexistent/path/config.yaml")
+	c := checkConfig(config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}, "/nonexistent/path/config.yaml", nil)
 	r := c.Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (missing file is not fatal)", r.Status)
@@ -460,7 +460,7 @@ func TestCheckConfig_NonexistentPathEmitsWarning(t *testing.T) {
 // ============================================================================
 
 func TestDefaultChecks_AllHaveRunFunction(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(config.Config{}, "", nil)
 	if len(checks) == 0 {
 		t.Fatal("DefaultChecks returned empty slice")
 	}
@@ -486,7 +486,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
-	c := checkConfig(cfg, path)
+	c := checkConfig(cfg, path, nil)
 	r := c.Run(context.Background())
 	if r.Status != StatusFail {
 		t.Errorf("invalid config status = %v, want Fail (detail: %s)", r.Status, r.Detail)
@@ -503,10 +503,32 @@ func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
-	c := checkConfig(cfg, path)
+	c := checkConfig(cfg, path, nil)
 	r := c.Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("valid config status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckConfig_LoadError_FailsEvenWithValidConfig(t *testing.T) {
+	// A present-but-broken config file must Fail even when the resolved
+	// config validates via env/flags — otherwise `doctor --json` would
+	// report "loaded from path" while the file was never read, and a
+	// one-off stderr warning is invisible to JSON consumers.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("bad: : yaml"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
+	loadErr := fmt.Errorf("cannot parse config file %q: yaml: mapping values are not allowed in this context", path)
+	c := checkConfig(cfg, path, loadErr)
+	r := c.Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("loadErr status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "cannot parse") {
+		t.Errorf("detail should surface the load error, got: %s", r.Detail)
 	}
 }
 
@@ -820,7 +842,7 @@ func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 }
 
 func TestDefaultChecks_IncludesWalletCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(config.Config{}, "", nil)
 	var found bool
 	for _, c := range checks {
 		if c.Name == "Lightning wallet" {
@@ -983,7 +1005,7 @@ func TestCheckPoolEncryption_MixedWarnsOnPlaintextOnly(t *testing.T) {
 
 func TestDefaultChecks_IncludesPoolEncryptionCheck(t *testing.T) {
 	var found bool
-	for _, c := range DefaultChecks(config.Config{}, "") {
+	for _, c := range DefaultChecks(config.Config{}, "", nil) {
 		if c.Name == "Pool connection encryption" {
 			found = true
 			break
@@ -1036,7 +1058,7 @@ func TestCheckPowerEconomics_PriceOnlyWarnsInert(t *testing.T) {
 
 func TestDefaultChecks_IncludesPowerEconomicsCheck(t *testing.T) {
 	var found bool
-	for _, c := range DefaultChecks(config.Config{}, "") {
+	for _, c := range DefaultChecks(config.Config{}, "", nil) {
 		if c.Name == "Power & cost config" {
 			found = true
 			break
@@ -1076,7 +1098,7 @@ func TestCheckProfitabilityFloor_SetPassesAndSurfacesValue(t *testing.T) {
 
 func TestDefaultChecks_IncludesProfitabilityFloorCheck(t *testing.T) {
 	var found bool
-	for _, c := range DefaultChecks(config.Config{}, "") {
+	for _, c := range DefaultChecks(config.Config{}, "", nil) {
 		if c.Name == "Profitability floor" {
 			found = true
 			break
@@ -1310,7 +1332,7 @@ func TestCheckPayoutScheme_MultiplePoolsMixedSchemes(t *testing.T) {
 }
 
 func TestDefaultChecks_IncludesPayoutSchemeCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(config.Config{}, "", nil)
 	var found bool
 	for _, c := range checks {
 		if c.Name == "Pool payout schemes" {
@@ -1630,7 +1652,7 @@ func (t *stripDateRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 }
 
 func TestDefaultChecks_IncludesClockSkewCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(config.Config{}, "", nil)
 	for _, c := range checks {
 		if c.Name == "System clock accuracy" {
 			return
@@ -1665,7 +1687,7 @@ func TestCheckEnvVars_WarnsOnMalformed(t *testing.T) {
 }
 
 func TestDefaultChecks_IncludesEnvVarsCheck(t *testing.T) {
-	checks := DefaultChecks(config.Config{}, "")
+	checks := DefaultChecks(config.Config{}, "", nil)
 	for _, c := range checks {
 		if c.Name == "Environment variables" {
 			return

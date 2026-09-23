@@ -8,6 +8,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,19 +18,26 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
 
-func loadConfigFile(path string, stderr io.Writer) config.Config {
+// loadConfigFile decodes the YAML config file at path (or the resolved
+// default when path is empty). A *missing* file is not an error — it
+// just means "no file layer", so callers get the zero Config and nil
+// error. A file that exists but cannot be opened or parsed is an
+// error: silently falling back to defaults would run the engine on a
+// configuration the operator never wrote — a typo'd pools list or
+// bitcoin_address would vanish instead of failing loudly.
+func loadConfigFile(path string) (config.Config, error) {
 	if path == "" {
 		path = defaultConfigPath()
 	}
 	if path == "" {
-		return config.Config{}
+		return config.Config{}, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			fmt.Fprintf(stderr, "warning: cannot open config file %q: %v\n", path, err)
+		if errors.Is(err, os.ErrNotExist) {
+			return config.Config{}, nil
 		}
-		return config.Config{}
+		return config.Config{}, fmt.Errorf("cannot open config file %q: %w", path, err)
 	}
 	defer f.Close()
 	var cfg config.Config
@@ -39,12 +47,11 @@ func loadConfigFile(path string, stderr io.Writer) config.Config {
 		// An empty or comments-only file yields io.EOF (no YAML document);
 		// that is not a parse error — it means "use defaults".
 		if err == io.EOF {
-			return config.Config{}
+			return config.Config{}, nil
 		}
-		fmt.Fprintf(stderr, "warning: cannot parse config file %q: %v\n", path, err)
-		return config.Config{}
+		return config.Config{}, fmt.Errorf("cannot parse config file %q: %w", path, err)
 	}
-	return cfg
+	return cfg, nil
 }
 
 func defaultConfigPath() string {

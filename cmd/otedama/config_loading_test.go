@@ -16,21 +16,21 @@ import (
 // loadConfigFile — malformed YAML handling
 // ============================================================================
 
-func TestLoadConfigFile_MalformedYAML_WarnsAndReturnsEmpty(t *testing.T) {
+func TestLoadConfigFile_MalformedYAML_ErrorsAndReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.yaml")
 	if err := os.WriteFile(path, []byte("this is: : not : valid yaml"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
+	cfg, err := loadConfigFile(path)
 
-	// Must not crash. Must print warning to stderr.
-	if stderr.Len() == 0 {
-		t.Error("malformed YAML: no warning written to stderr")
+	// A present-but-unparseable file must surface an error so callers
+	// fail loudly instead of silently running on defaults.
+	if err == nil {
+		t.Fatal("malformed YAML: expected error, got nil")
 	}
-	if !strings.Contains(stderr.String(), "yaml") && !strings.Contains(stderr.String(), "config") {
-		t.Errorf("stderr should mention config issue:\n%s", stderr.String())
+	if !strings.Contains(err.Error(), "cannot parse") {
+		t.Errorf("error should identify the parse failure, got: %v", err)
 	}
 	// Must return empty (safe default) config.
 	if cfg.BitcoinAddress != "" {
@@ -53,11 +53,9 @@ pools:
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
-
-	if stderr.Len() != 0 {
-		t.Errorf("valid YAML produced stderr output:\n%s", stderr.String())
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("valid YAML produced error: %v", err)
 	}
 	if cfg.BitcoinAddress != "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" {
 		t.Errorf("bitcoin_address = %q, want bc1qar0...", cfg.BitcoinAddress)
@@ -95,11 +93,9 @@ log_level: debug
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
-
-	if stderr.Len() != 0 {
-		t.Errorf("http_addr in config file produced stderr output (should parse cleanly):\n%s", stderr.String())
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("http_addr in config file produced error (should parse cleanly): %v", err)
 	}
 	if cfg.HTTPAddr != "127.0.0.1:9090" {
 		t.Errorf("http_addr = %q, want 127.0.0.1:9090", cfg.HTTPAddr)
@@ -142,11 +138,9 @@ workers:
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
-
-	if stderr.Len() != 0 {
-		t.Errorf("docs/API.md example produced stderr output (should parse cleanly):\n%s", stderr.String())
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("docs/API.md example produced error (should parse cleanly): %v", err)
 	}
 	if cfg.BitcoinAddress != "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" {
 		t.Errorf("bitcoin_address = %q; docs/API.md example did not parse", cfg.BitcoinAddress)
@@ -165,14 +159,12 @@ func TestLoadConfigFile_EmptyYAML_ReturnsEmpty(t *testing.T) {
 	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
-
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("empty YAML produced error: %v", err)
+	}
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("empty YAML produced non-empty config: %+v", cfg)
-	}
-	if stderr.Len() != 0 {
-		t.Errorf("empty YAML produced stderr:\n%s", stderr.String())
 	}
 }
 
@@ -186,8 +178,10 @@ func TestLoadConfigFile_CommentsOnly_ReturnsEmpty(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatalf("comments-only YAML produced error: %v", err)
+	}
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("comments-only YAML leaked field: %q", cfg.BitcoinAddress)
 	}
@@ -195,18 +189,12 @@ func TestLoadConfigFile_CommentsOnly_ReturnsEmpty(t *testing.T) {
 
 func TestLoadConfigFile_EmptyPath_UsesDefault(t *testing.T) {
 	// Passing empty path should invoke defaultConfigPath(). If the
-	// default path does not exist (likely in test env), returns empty.
-	var stderr bytes.Buffer
-	cfg := loadConfigFile("", &stderr)
-
-	// Should not crash. Should not write to stderr just because the
-	// default config doesn't exist.
-	if strings.Contains(stderr.String(), "cannot open") {
-		// Acceptable only if message is about non-default path.
-		// But "cannot open" should only appear if path was given.
-		if strings.Contains(stderr.String(), "warning") {
-			// Permissive — just warn.
-		}
+	// default path does not exist (likely in test env), returns empty
+	// config and nil error.
+	cfg, err := loadConfigFile("")
+	// Should not crash. A missing default file is not an error.
+	if err != nil {
+		t.Logf("default path exists but failed to load: %v", err)
 	}
 	_ = cfg
 }
@@ -216,14 +204,16 @@ func TestLoadConfigFile_NulBytePath_WarnsAboutOpenError(t *testing.T) {
 	// (not ENOENT), so !os.IsNotExist(err) is true. This covers the warning
 	// branch without relying on file-permission tricks that break under root.
 	path := "/tmp/nul\x00byte"
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
+	cfg, err := loadConfigFile(path)
 
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("NUL-byte path leaked config data: %q", cfg.BitcoinAddress)
 	}
-	if !strings.Contains(stderr.String(), "warning") {
-		t.Errorf("expected warning on stderr, got: %q", stderr.String())
+	if err == nil {
+		t.Fatal("expected error on NUL-byte path")
+	}
+	if !strings.Contains(err.Error(), "cannot open") {
+		t.Errorf("expected 'cannot open' error, got: %v", err)
 	}
 }
 
@@ -245,17 +235,14 @@ func TestLoadConfigFile_UnreadableFile_WarnsOrReturnsEmpty(t *testing.T) {
 	}
 	defer os.Chmod(path, 0o644) // restore so cleanup works
 
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
+	cfg, err := loadConfigFile(path)
 
 	// Must not return data from unreadable file.
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("unreadable file leaked data: %q", cfg.BitcoinAddress)
 	}
-	// Running as root (e.g. Docker) bypasses permission checks.
-	// Skip warning assertion if stderr is empty.
-	if os.Getuid() != 0 && stderr.Len() == 0 {
-		t.Error("unreadable file should produce a warning")
+	if err == nil {
+		t.Error("unreadable file should produce an error")
 	}
 }
 
@@ -329,5 +316,56 @@ func TestSafeDisplay_AllControlCharsBecomesDefault(t *testing.T) {
 	got := safeDisplay("\x01\x02\x03\x04")
 	if got != "(default)" {
 		t.Errorf("safeDisplay(all-control) = %q, want '(default)'", got)
+	}
+}
+
+// ============================================================================
+// Broken config file is fatal, not a warning — a file that exists but cannot
+// be loaded must not be silently replaced by defaults, or an operator's pools
+// and bitcoin_address vanish with only a stderr line as evidence.
+// ============================================================================
+
+func TestCmdConfigValidate_BrokenFile_ExitsConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "broken.yaml")
+	if err := os.WriteFile(path, []byte("bad: : yaml"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "validate", "--config", path}, &out, &errb)
+	if code != exitConfig {
+		t.Errorf("broken config file exit = %d, want exitConfig(%d); stderr=%q", code, exitConfig, errb.String())
+	}
+	if !strings.Contains(errb.String(), "cannot parse") {
+		t.Errorf("stderr should name the parse failure, got: %q", errb.String())
+	}
+}
+
+func TestCmdConfigShow_BrokenFile_ExitsConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "broken.yaml")
+	if err := os.WriteFile(path, []byte("bad: : yaml"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := run([]string{"config", "show", "--config", path}, &out, &errb)
+	if code != exitConfig {
+		t.Errorf("broken config file exit = %d, want exitConfig(%d); stderr=%q", code, exitConfig, errb.String())
+	}
+}
+
+func TestCmdDoctor_BrokenFile_ReportsFailInJSON(t *testing.T) {
+	// doctor keeps running (its job is to diagnose), but the broken file
+	// must surface as a failing "Configuration" check in the JSON report —
+	// previously it was a stderr warning that --json consumers never saw.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "broken.yaml")
+	if err := os.WriteFile(path, []byte("bad: : yaml"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var out, errb bytes.Buffer
+	_ = run([]string{"doctor", "--config", path, "--json"}, &out, &errb)
+	if !strings.Contains(out.String(), "cannot parse") {
+		t.Errorf("doctor JSON should surface the load error; got: %s", out.String())
 	}
 }

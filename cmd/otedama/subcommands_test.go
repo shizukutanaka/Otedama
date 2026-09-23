@@ -615,11 +615,10 @@ func TestLoadConfigFile_UnreadableFile_WarnsOnOpen(t *testing.T) {
 	}
 	defer os.Chmod(path, 0o600) //nolint:errcheck — restore for cleanup
 
-	var stderr bytes.Buffer
-	cfg := loadConfigFile(path, &stderr)
+	cfg, err := loadConfigFile(path)
 
-	if !strings.Contains(stderr.String(), "warning") {
-		t.Errorf("non-NotExist open error should produce warning; got: %q", stderr.String())
+	if err == nil {
+		t.Error("non-NotExist open error should produce an error")
 	}
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("unreadable file leaked data: %q", cfg.BitcoinAddress)
@@ -876,13 +875,12 @@ func TestLoadConfigFile_EmptyPathAndNoHome_ReturnsEmpty(t *testing.T) {
 		t.Skip("UserHomeDir fell back to /etc/passwd; cannot exercise double-empty guard")
 	}
 
-	var stderr bytes.Buffer
-	cfg := loadConfigFile("", &stderr)
+	cfg, err := loadConfigFile("")
+	if err != nil {
+		t.Fatalf("loadConfigFile with no path should not error; got %v", err)
+	}
 	if cfg.BitcoinAddress != "" || cfg.LogLevel != "" {
 		t.Errorf("loadConfigFile with no path should return empty Config; got %+v", cfg)
-	}
-	if stderr.Len() != 0 {
-		t.Errorf("loadConfigFile with no path should not print warnings; got: %q", stderr.String())
 	}
 }
 

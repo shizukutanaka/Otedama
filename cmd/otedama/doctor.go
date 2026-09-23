@@ -30,13 +30,16 @@ func cmdDoctor(args []string, stdout, stderr io.Writer) int {
 		BitcoinAddress: *btcAddr,
 		DataDir:        *dataDir,
 	}
-	fromFile := loadConfigFile(*configFile, stderr)
+	// A present-but-unreadable/unparseable config file is reported by the
+	// "Configuration" check itself (loadErr), not by a one-off stderr
+	// warning the --json path would lose entirely.
+	fromFile, loadErr := loadConfigFile(*configFile)
 	cfg := config.Resolve(fromFile, nil, flags)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	runner := &doctor.Runner{Checks: doctor.DefaultChecks(cfg, *configFile)}
+	runner := &doctor.Runner{Checks: doctor.DefaultChecks(cfg, *configFile, loadErr)}
 	report := runner.Run(ctx)
 	if *jsonOut {
 		_ = report.WriteJSON(stdout)
