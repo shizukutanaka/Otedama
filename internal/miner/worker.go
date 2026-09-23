@@ -37,6 +37,14 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// Target is the share target this hash was judged against at issue
+	// time (the Work.Target in force when the share was found). The
+	// submission layer uses it to distinguish a genuine above-target
+	// rejection from a difficulty-transition rejection: when the pool
+	// has moved to a new difficulty since the share's work was issued,
+	// a reject is a benign bookkeeping event, not a mining fault
+	// (ESP-Miner #212).
+	Target Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -261,6 +269,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					NTime:     h.Time,
 					Version:   h.Version,
 					Hash:      hash,
+					Target:    localWork.Target,
 					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)

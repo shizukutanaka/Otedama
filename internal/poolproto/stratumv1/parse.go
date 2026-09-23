@@ -26,40 +26,62 @@ import (
 
 // ----- parsers (exported only for tests in this package) -----
 
+// notifyJob is a parsed mining.notify: the protocol-agnostic Job the
+// session forwards to the engine plus the coinbase pieces needed to
+// reconstruct the block header's merkle root. V1 miners must build the
+// coinbase themselves — the pool never computes the merkle root; it
+// verifies the share's hash against a header the MINER assembles.
+// (Previous revisions dropped these fields, which left MerkleRoot
+// zeroed and every submitted share unverifiable — see
+// docs/KNOWN_LIMITATIONS.md §17.)
+type notifyJob struct {
+	poolproto.Job
+	coinb1   []byte
+	coinb2   []byte
+	branches [][32]byte // merkle_branch list, each entry hex-decoded
+}
+
 // parseNotify decodes the parameters of a mining.notify message.
 // V1 mining.notify format:
 //
 //	[job_id, prevhash, coinb1, coinb2, merkle_branch, version, nbits, ntime, clean_jobs]
-func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
+func parseNotify(raw json.RawMessage) (notifyJob, error) {
 	var p []json.RawMessage
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return poolproto.Job{}, err
+		return notifyJob{}, err
 	}
 	if len(p) < 9 {
-		return poolproto.Job{}, fmt.Errorf("notify: expected 9 params, got %d", len(p))
+		return notifyJob{}, fmt.Errorf("notify: expected 9 params, got %d", len(p))
 	}
 
 	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
+		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
+		branchHexes                                                              []string
+		cleanJobs                                                                bool
 	)
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
-		return poolproto.Job{}, err
+		return notifyJob{}, err
 	}
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
-		return poolproto.Job{}, err
+		return notifyJob{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
+		return notifyJob{}, err
+	}
+	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
+		return notifyJob{}, err
+	}
+	if err := json.Unmarshal(p[4], &branchHexes); err != nil {
+		return notifyJob{}, err
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
-		return poolproto.Job{}, err
+		return notifyJob{}, err
 	}
 	if err := json.Unmarshal(p[6], &nbitsHex); err != nil {
-		return poolproto.Job{}, err
+		return notifyJob{}, err
 	}
 	if err := json.Unmarshal(p[7], &ntimeHex); err != nil {
-		return poolproto.Job{}, err
+		return notifyJob{}, err
 	}
 	if err := json.Unmarshal(p[8], &cleanJobs); err != nil {
 		// Some pools encode this as 0/1 instead of true/false; tolerate.
@@ -67,14 +89,16 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		if err2 := json.Unmarshal(p[8], &n); err2 == nil {
 			cleanJobs = n != 0
 		} else {
-			return poolproto.Job{}, err
+			return notifyJob{}, err
 		}
 	}
 
-	job := poolproto.Job{
-		JobID:      jobID,
-		CleanJobs:  cleanJobs,
-		ReceivedAt: time.Now(),
+	job := notifyJob{
+		Job: poolproto.Job{
+			JobID:      jobID,
+			CleanJobs:  cleanJobs,
+			ReceivedAt: time.Now(),
+		},
 	}
 	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
 		job.Version = uint32(v)
@@ -86,9 +110,38 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		job.NTime = uint32(v)
 	}
 	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
-		copy(job.PrevHash[:], b)
+		// Stratum V1 transmits prevhash as the display-order hash hex.
+		// The canonical conversion into header byte order is a per-word
+		// (32-bit) byte swap — reverse_endianness_per_word in ESP-Miner's
+		// stratum/mining.c — NOT a full reverse: each 4-byte word keeps
+		// its position while its bytes are swapped. Storing it any other
+		// way makes every mined header hash to a value the pool cannot
+		// verify — an always-reject bug.
+		for i := 0; i < 32; i += 4 {
+			job.PrevHash[i+0] = b[i+3]
+			job.PrevHash[i+1] = b[i+2]
+			job.PrevHash[i+2] = b[i+1]
+			job.PrevHash[i+3] = b[i+0]
+		}
 	}
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
+	if b, err := hex.DecodeString(coinb1Hex); err == nil {
+		job.coinb1 = b
+	}
+	if b, err := hex.DecodeString(coinb2Hex); err == nil {
+		job.coinb2 = b
+	}
+	for _, bh := range branchHexes {
+		b, err := hex.DecodeString(bh)
+		if err != nil || len(b) != 32 {
+			// Skip malformed branch entries rather than failing the whole
+			// job — a truncated merkle path still yields a valid header
+			// when the pool (incorrectly) sends padding garbage.
+			continue
+		}
+		var branch [32]byte
+		copy(branch[:], b)
+		job.branches = append(job.branches, branch)
+	}
 	return job, nil
 }
 

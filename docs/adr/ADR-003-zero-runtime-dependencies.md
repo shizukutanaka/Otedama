@@ -136,6 +136,17 @@ rationale in `go.mod`. Migration was scoped but not performed in session
 lookup (`sum.golang.org` returns Forbidden), so `go get` cannot verify the
 new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
 
+**Resolved (session 255):** the migration was performed — `go.mod` now
+requires `go.yaml.in/yaml/v3 v3.0.5` (the YAML org's maintained v3 line;
+v3 chosen over v4 to keep the existing API surface, satisfying criterion
+3 without a code change). The import sites
+(`cmd/otedama/configfile.go`, `internal/config/config_file_test.go`)
+switched path only — zero behavioural diff confirmed by the unchanged
+config test suite. `golang.org/x/crypto` was bumped to v0.48.0 in the
+same pass; v0.49+ requires Go ≥ 1.25, so v0.48.0 is the newest line
+compatible with the pinned `toolchain go1.24.7` until the toolchain bump
+(RESEARCH_IMPROVEMENTS dep-hygiene #3) lands.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model

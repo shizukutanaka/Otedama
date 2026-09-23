@@ -725,6 +725,57 @@ change-passphrase` (wiring the existing, already-tested
 
 ---
 
+## ~~17. Stratum V1 share submissions were mathematically guaranteed to be rejected~~ ✅ RESOLVED (session 255)
+
+**What:** On the `stratum+tcp://` (Stratum V1) path — which `otedama run`
+uses whenever the configured pool speaks V1, i.e. every mainstream pool
+including the public-pool defaults — three independent defects each made
+every submitted share invalid:
+
+1. `mining.notify` was parsed for prevhash/version/nbits/ntime but
+   **coinb1, coinb2, and the merkle branch array were discarded**. The
+   `Job` handed to workers carried a zero `MerkleRoot`, so workers ground
+   headers whose merkle root could not match the pool's coinbase — every
+   share computed against the wrong 80-byte header.
+2. The prevhash byte order was fully reversed instead of the
+   spec-mandated **per-4-byte-word** swap
+   (`reverse_endianness_per_word`, see ESP-Miner
+   `components/stratum/mining.c`), so even with a correct merkle root the
+   header's prevhash field was wrong.
+3. `mining.submit` echoed back the engine's internal synthetic job number
+   formatted as a decimal string instead of the pool's opaque job-ID
+   string — pools using non-numeric IDs (e.g. `"bf"`) would reject every
+   submission for an unknown job even if the hash were valid.
+
+**Impact:** A V1-connected Otedama worker could run indefinitely,
+submitting "shares" that the pool rejected 100% of the time — the worst
+possible failure mode for a miner because the hashrate display stays
+normal and only the reject counters move. V2 connections were
+unaffected. Discovered by implementing RESEARCH_IMPROVEMENTS Cat 1/2 #4
+(difficulty-transition reject handling): the prerequisite for
+distinguishing *benign* rejects is knowing shares can be *valid* at all.
+
+**Resolution:** `stratumv1.parseNotify` now returns a `notifyJob`
+carrying coinb1/coinb2/branches; `sendJob` folds the canonical share
+merkle root — `sha256d(coinb1 ‖ extranonce1 ‖ extranonce2 ‖ coinb2)`,
+then `sha256d(acc ‖ branch)` per branch — via new helpers
+`miner.CoinbaseHash` / `miner.MerkleRootFromCoinbase` (with
+Python-verified test vectors from the canonical construction).
+`parseNotify` byte-swaps prevhash per 4-byte word. `applyJob` now fills
+the full header (version/prevhash/merkleroot/time/bits) and `runSessionV1`
+maintains a bounded map from synthetic work-IDs to the pool's literal
+job-ID strings so `mining.submit` echoes exactly what the pool issued.
+`TestApplyJob_PopulatesFullHeader` proves `miner.HashHeader(header) ==
+share.Hash` end-to-end on a live worker.
+
+**Verification:** unit vectors in `internal/miner/coinbase_test.go` and
+`internal/poolproto/stratumv1/stratumv1_test.go` (merkle fold over
+`aa…/bb…` branches → `7696f344…`); engine round-trip tests in
+`coverage_test.go` now exercise a `mining.notify` with non-numeric job ID
+`"bf"` and assert the submit echoes `"bf"`.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

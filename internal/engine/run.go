@@ -60,6 +60,12 @@ const (
 
 	// reconnectBackoffMax caps the exponential reconnect backoff.
 	reconnectBackoffMax = 64 * time.Second
+
+	// rejectReasonTransition classifies a share the pool rejected under its
+	// current difficulty that was legitimately mined under an earlier target
+	// (ESP-Miner issue #212: benign rejects during difficulty transitions).
+	// Metrics keep it out of the real reject-rate denominator.
+	rejectReasonTransition = "transition"
 )
 
 // arbitrationInterval is how often the engine re-evaluates the
@@ -716,14 +722,21 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// warning rather than silently losing found shares.
 	var lastDropped uint64
 
-	// Track share-submission round-trip latency. submitTimes maps a
-	// sequence number to the time the share was sent; entries are
-	// settled (and deleted) on SubmitSharesSuccess, and additionally
-	// capped at submitTimesCap below so a pool that never acknowledges
-	// cannot grow the map without bound over a long session.
+	// Track in-flight share submissions. submissions maps a share's
+	// sequence number to its send time (for SubmitSharesSuccess round-trip
+	// latency) and its issue-time share target (for SubmitSharesError
+	// correlation — a reject naming a sequence lets us recognise a
+	// difficulty-transition reject, ESP-Miner #212). Entries are settled
+	// on SubmitSharesSuccess/SubmitSharesError, and the map is capped at
+	// submissionsCap so a pool that never acknowledges cannot grow it
+	// without bound over a long session.
 	latency := NewLatencyTracker(256)
-	submitTimes := make(map[uint32]time.Time)
-	const submitTimesCap = 1024
+	type pendingShare struct {
+		sent   time.Time
+		target miner.Hash
+	}
+	submissions := make(map[uint32]pendingShare)
+	const submissionsCap = 1024
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -898,18 +911,36 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// to LastSequenceNumber, then drop those entries.
 				now := time.Now()
 				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
-				for seq, sent := range submitTimes {
+				for seq, ps := range submissions {
 					if seq <= last {
-						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
-						delete(submitTimes, seq)
+						latency.Record(float64(now.Sub(ps.sent).Microseconds()) / 1000.0)
+						delete(submissions, seq)
 					}
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
+				sse := pm.msg.SubmitSharesError
+				reason := sse.Error
 				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
+				// Correlate the reject to the specific share via its sequence
+				// number: a share mined under an earlier share target that the
+				// pool now judges as above-target is a benign transition reject
+				// (ESP-Miner #212), not a mining fault — count it separately.
+				ps, known := submissions[sse.SequenceNumber]
+				if known {
+					delete(submissions, sse.SequenceNumber)
+				}
+				if category == "difficulty" && known &&
+					shareFromStaleDifficulty(ps.target, shareTarget) {
+					category = rejectReasonTransition
+				}
+				if category == rejectReasonTransition {
+					opts.log("info", fmt.Sprintf("engine: share seq=%d rejected (%s) — issued under earlier target; benign",
+						sse.SequenceNumber, reason))
+				} else {
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						reason, diagnosis))
+				}
 				if opts.m != nil {
 					opts.m.sharesRejected.Inc()
 					opts.m.rejectReason(category).Inc()
@@ -943,15 +974,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.sharesSubmitted.Inc()
 			}
-			submitTimes[seqNum] = time.Now()
-			if len(submitTimes) > submitTimesCap {
+			submissions[seqNum] = pendingShare{sent: time.Now(), target: share.Target}
+			if len(submissions) > submissionsCap {
 				// Pool is not acknowledging; drop the oldest half so the
 				// map stays bounded. Latency for dropped entries is lost,
 				// which is the honest outcome — it was never measured.
-				cutoff := seqNum - submitTimesCap/2
-				for seq := range submitTimes {
+				cutoff := seqNum - submissionsCap/2
+				for seq := range submissions {
 					if seq < cutoff {
-						delete(submitTimes, seq)
+						delete(submissions, seq)
 					}
 				}
 			}
@@ -1014,6 +1045,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var satsAcc satsAccountant
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
+
+	// V1 job IDs are arbitrary strings ("bf", "00000000deadb33f"), while
+	// miner.Work.JobID is a uint32 stamped into every share. jobIDByStr
+	// assigns a synthetic uint32 per distinct pool ID and jobStrByID
+	// reverses it on submit so the original string is echoed back exactly
+	// — the pool correlates shares by that string, so losing the mapping
+	// would make every share an orphan. Both maps are bounded and reset
+	// together when they exceed v1JobIDMapCap (entries for evicted IDs are
+	// long-stale by then; a share that survives past eviction is dropped
+	// with a warning rather than submitted under a wrong ID).
+	var nextJobID uint32
+	jobIDByStr := make(map[string]uint32)
+	jobStrByID := make(map[uint32]string)
+	const v1JobIDMapCap = 1024
 
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
 	var hashWindow hashrateWindow
@@ -1093,7 +1138,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				workJobID, seen := jobIDByStr[job.JobID]
+				if !seen {
+					nextJobID++
+					workJobID = nextJobID
+					jobIDByStr[job.JobID] = workJobID
+					jobStrByID[workJobID] = job.JobID
+					if len(jobIDByStr) > v1JobIDMapCap {
+						jobIDByStr = map[string]uint32{job.JobID: workJobID}
+						jobStrByID = map[uint32]string{workJobID: job.JobID}
+					}
+				}
+				if err := applyJob(opts.workers, job, workJobID, chanID, sess.SuggestedDifficulty()); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
@@ -1111,6 +1167,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
 			}
+			// Resolve the pool's original job-ID string here, in the select
+			// loop — the submit goroutine must not touch the maps (the loop
+			// writes them on every new job; concurrent access would race).
+			jobStr, ok := jobStrByID[share.JobID]
+			if !ok {
+				// Job-ID map evicted this ID — the share is long-stale;
+				// submitting a wrong ID would be rejected anyway.
+				opts.log("warn", fmt.Sprintf("engine: V1 share for unknown job ID %d dropped", share.JobID))
+				continue
+			}
 			// V1 Submit is synchronous. Run it in a goroutine so a slow
 			// pool response doesn't block the job-receive path.
 			capturedShare := share
@@ -1127,7 +1193,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
+					JobID: jobStr, // the pool's original string, not the synthetic uint32
 					Nonce: capturedShare.Nonce,
 					NTime: capturedShare.NTime,
 				})
@@ -1149,8 +1215,26 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				} else {
 					category, diagnosis := rejectClass(result.Reason)
-					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
-						result.Reason, diagnosis))
+					// A share mined under an earlier difficulty that the pool
+					// now rejects as above-target is a benign transition reject
+					// (ESP-Miner #212), not a mining fault — count it separately.
+					if category == "difficulty" {
+						var current miner.Hash
+						if d := capturedSess.SuggestedDifficulty(); d > 0 {
+							if t, terr := miner.TargetFromDifficulty(d); terr == nil {
+								current = t
+							}
+						}
+						if shareFromStaleDifficulty(capturedShare.Target, current) {
+							category = rejectReasonTransition
+						}
+					}
+					if category == rejectReasonTransition {
+						opts.log("info", fmt.Sprintf("engine: V1 share rejected (%s) — issued under earlier difficulty; benign", result.Reason))
+					} else {
+						opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
+							result.Reason, diagnosis))
+					}
 					if opts.m != nil {
 						opts.m.sharesRejected.Inc()
 						opts.m.rejectReason(category).Inc()
@@ -1268,8 +1352,15 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // block solve — effectively never, so the pool would see no shares at
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
-func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+func updateWork(
+	workers []*miner.Worker,
+	job *stratum.NewMiningJob,
+	chanID uint32,
+	prevHash [32]byte,
+	prevNBits uint32,
+	ntime uint32,
+	shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1328,28 +1419,32 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
-// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is parsed back
-// to the uint32 the miner uses; an unparseable ID yields job 0, which
-// the pool will reject on submit, surfacing the problem rather than
-// silently mining a malformed job.
+// (docs/KNOWN_LIMITATIONS.md §3). workJobID is the uint32 the worker
+// stamps into every share it finds for this job; the caller owns the
+// string↔uint32 mapping (pool job IDs are arbitrary strings — "bf" is
+// common — so runSessionV1 synthesises an ID and echoes the original
+// string back on submit).
+//
+// All five header inputs are populated (version, prev-hash, merkle root,
+// time, bits): a header missing any of them hashes to a value no pool
+// can verify — an always-reject path, which is exactly the defect this
+// wiring closes for the V1 session (docs/KNOWN_LIMITATIONS.md §17).
 //
 // difficulty is the Stratum V1 session's most recent mining.set_difficulty
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, job poolproto.Job, workJobID, chanID uint32, difficulty float64) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
-	var jobID uint32
-	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
-	}
 	w := &miner.Work{
-		JobID:     jobID,
+		JobID:     workJobID,
 		ChannelID: chanID,
 		Header: miner.Header{
+			Version:    job.Version,
+			PrevHash:   job.PrevHash,
 			MerkleRoot: job.MerkleRoot,
 			Time:       job.NTime,
 			Bits:       job.NBits,
@@ -1361,6 +1456,19 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// shareFromStaleDifficulty reports whether a found share's issue-time
+// target differs from the target the pool currently enforces — the
+// signature of a difficulty-transition rejection (ESP-Miner #212): the
+// share was valid under the difficulty it was issued at, but the pool
+// changed difficulty before judging it. Such rejects are benign — the
+// pool pays nothing but the mining is correct — so they are counted
+// separately from genuine rejections instead of poisoning the
+// acceptance rate.
+func shareFromStaleDifficulty(shareTarget, currentTarget miner.Hash) bool {
+	zero := miner.Hash{}
+	return shareTarget != zero && currentTarget != zero && shareTarget != currentTarget
 }
 
 func parseHost(url string) (string, error) {

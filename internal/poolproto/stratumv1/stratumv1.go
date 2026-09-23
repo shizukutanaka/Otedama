@@ -59,6 +59,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -232,11 +233,11 @@ func (s *session) dispatch(line []byte) {
 	// Notification or request from pool.
 	switch msg.Method {
 	case "mining.notify":
-		job, err := parseNotify(msg.Params)
+		nj, err := parseNotify(msg.Params)
 		if err != nil {
 			return
 		}
-		s.sendJob(job)
+		s.sendJob(nj)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -296,7 +297,28 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // produce stale (rejected) shares, which is the #1 reject cause after
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
-func (s *session) sendJob(job poolproto.Job) {
+//
+// Before enqueueing, the job's MerkleRoot is filled in by reconstructing
+// the coinbase hash (coinb1 + extranonce1 + extranonce2 + coinb2, then
+// folding through merkle_branch). V1 miners must do this themselves:
+// the pool only verifies the submitted header hash, it never computes
+// the merkle root. Without this step the header the worker hashes has a
+// zero merkle root and every share is unverifiable — an always-reject
+// path (docs/KNOWN_LIMITATIONS.md §17).
+//
+// extranonce2 is all-zero bytes of extranonce2Size — the same value
+// Submit() pads an empty ExtraNonce with, so the coinbase hashed here
+// matches what the pool reconstructs from the submission. Per-job
+// extranonce2 rotation is a possible future extension for nonce-space
+// exhaustion; at current CPU hashrates (~10 MH/s against a ~30 s job
+// cadence, i.e. ~430 s to exhaust 2^32) it is not needed.
+func (s *session) sendJob(nj notifyJob) {
+	job := nj.Job
+	if en1, err := hex.DecodeString(s.extranonce1); err == nil && len(nj.coinb1) > 0 {
+		en2 := make([]byte, s.extranonce2Size)
+		cbHash := miner.CoinbaseHash(nj.coinb1, en1, en2, nj.coinb2)
+		job.MerkleRoot = miner.MerkleRootFromCoinbase(cbHash, nj.branches)
+	}
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {

@@ -418,22 +418,78 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, job, 42, 1, 0); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
 	// without Start).
 }
 
+// TestApplyJob_PopulatesFullHeader verifies applyJob wires every header
+// field the pool needs to verify a share — version, prev-hash, merkle
+// root, time, bits — not just merkle+time+bits as the buggy wiring once
+// did (that left headers structurally invalid: docs/KNOWN_LIMITATIONS
+// §17). Proven end-to-end: a live worker emits a share whose hash must
+// equal SHA256d of the fully-populated header at the share's nonce.
+func TestApplyJob_PopulatesFullHeader(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	var prev, merkle [32]byte
+	for i := range prev {
+		prev[i] = byte(i)
+		merkle[i] = byte(i + 1)
+	}
+	job := poolproto.Job{
+		JobID:      "bf", // real V1 pools send non-numeric IDs
+		Version:    0x20000000,
+		PrevHash:   prev,
+		MerkleRoot: merkle,
+		NTime:      0x60000000,
+		NBits:      0x1d00ffff,
+	}
+	// A tiny share difficulty makes the target nearly maximal so the
+	// first hashed nonces produce a share immediately.
+	if err := applyJob([]*miner.Worker{w}, job, 7, 1, 1e-9); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if !w.HasWork() {
+		t.Fatal("worker has no work after applyJob")
+	}
+	select {
+	case share := <-shares:
+		want := miner.Header{
+			Version:    job.Version,
+			PrevHash:   prev,
+			MerkleRoot: merkle,
+			Time:       job.NTime,
+			Bits:       job.NBits,
+			Nonce:      share.Nonce,
+		}
+		if got := miner.HashHeader(want); got != share.Hash {
+			t.Errorf("share hash does not match the fully-populated header; a header field was dropped")
+		}
+		if share.JobID != 7 {
+			t.Errorf("share.JobID = %d, want caller-assigned 7", share.JobID)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no share emitted; target or header wiring is broken")
+	}
+}
+
 func TestApplyJob_UnparseableJobID(t *testing.T) {
+	// Non-numeric pool job IDs ("bf", "deadb33f") are legitimate in V1 —
+	// applyJob takes the caller-assigned uint32, so any string must work.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	if err := applyJob([]*miner.Worker{w}, job, 7, 1, 0); err != nil {
+		t.Errorf("applyJob must accept arbitrary pool job-ID strings: %v", err)
 	}
 }
 
@@ -443,7 +499,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, job, 1, 1, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,7 +513,7 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, job, 1, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}
 }
@@ -2447,6 +2503,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }

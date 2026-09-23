@@ -532,6 +532,21 @@ endpoint against current vendor documentation. Tags as before
    as a reject) remains open — the target now updates correctly on every new
    job, but shares in flight when `set_difficulty` changes are not yet
    re-validated against the difficulty active at issue time.
+   — ✅ **Resolved (session 255), both protocols.** `miner.Share` now
+   carries the target it was issued under; rejects classified as
+   "difficulty" whose issue-target differs from the current pool target
+   are reclassified as `transition` — logged at info level and counted in
+   `shares_rejected_total{reason="transition"}` but **excluded from the
+   reject/stale-rate denominators** in `updateShareRates` (the metric
+   still increments so share accounting stays consistent). V1 correlates
+   via `SuggestedDifficulty()` at verdict time (TCP ordering guarantees
+   `set_difficulty` precedes its rejects); V2 correlates per sequence
+   number via a `submissions` map that records each share's issue-time
+   target. Session 255 also fixed the prerequisite this item silently
+   assumed — see KNOWN_LIMITATIONS §17: the V1 path was submitting
+   shares built on a header with a zero merkle root and a byte-reversed
+   (not word-reversed) prevhash, so every V1 share was invalid regardless
+   of difficulty handling.
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict
@@ -767,6 +782,11 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
+   — ✅ **Migrated (session 255):** `go.mod` now requires
+   `go.yaml.in/yaml/v3 v3.0.5` and the two import sites switched path
+   only (zero behavioural diff — config tests unchanged). v3 chosen over
+   v4 to keep the existing API surface; ADR-003 records an erratum and
+   `go.mod` carries the selection-rationale comment CLAUDE.md requires.
 2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
    (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
@@ -775,6 +795,11 @@ month, so the discipline matters.
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
+   — **Partially done (session 255):** bumped v0.23.0 → **v0.48.0**
+   (2026-02-09). v0.49.0 and later require Go ≥ 1.25, so v0.48.0 is the
+   newest line compatible with the pinned `toolchain go1.24.7`; the
+   remainder of this item resolves when dep-hygiene #3 (toolchain bump)
+   lands. govulncheck re-run still open.
 3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned

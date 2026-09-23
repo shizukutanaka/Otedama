@@ -162,11 +162,11 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `device_shares_found_total{device}` † | counter | Per-device breakdown of shares found. |
 | `shares_submitted_total` | counter | Shares actually transmitted to the pool, counted at send time regardless of the eventual accept/reject response. Distinct from `shares_found_total`: a found share is never submitted if its worker's share channel was full. |
 | `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
-| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). |
+| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other/transition). `transition` = rejected under the pool's current difficulty but mined under an earlier share target (ESP-Miner #212); benign bookkeeping, excluded from the rate denominators below. |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
 | `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected, ≥0). |
-| `share_acceptance_rate` | gauge | accepted / judged. |
-| `reject_rate` | gauge | rejected / judged. |
+| `share_acceptance_rate` | gauge | accepted / (accepted + realRejected), where realRejected = rejected − transition. |
+| `reject_rate` | gauge | (rejected − transition) / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |
 | `submit_latency_milliseconds{quantile}` | gauge | submit→accept RTT at q=0.5/0.95/0.99. Note: milliseconds, not the seconds base unit used by every other time metric — see §8 G18. |
 

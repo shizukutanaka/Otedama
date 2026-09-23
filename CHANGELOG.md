@@ -10,6 +10,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 255 — Stratum V1パスのshare送信が数学的に必ずrejectされる3つの独立欠陥を是正＋難易度遷移rejectの良性分類＋依存衛生)
+
+GitHub（ESP-Minerのcanonical実装 `components/stratum/mining.c`、SRI）、
+RESEARCH_IMPROVEMENTS Cat 1/2 #4の実装過程で、**V1プール接続時に全shareが
+数学的に必ずrejectされる**3つの独立した欠陥を発見した。CPUワーカーしか
+SHA256dを報告しない＝実質V1/V2のいずれでも単一ワーカー構成が現行であり、
+主流プールが全てV1である以上、これは製品の中核機能が完全に死んでいた重大
+欠陥（hashrate表示は正常に見え、rejectカウンタだけが増える最悪の無音
+故障）である。
+
+- **merkle rootが一度も計算されていなかった**: `mining.notify`の
+  coinb1/coinb2/merkle branchesを`parseNotify`が捨てていたため、`Job`の
+  `MerkleRoot`は常にゼロ値。ワーカーはプールのcoinbaseと一致しない
+  80バイトヘッダを掘っていた。canonical構成
+  `sha256d(coinb1‖extranonce1‖extranonce2‖coinb2)` → 各branchで
+  `sha256d(acc‖branch)` を新ヘルパ`miner.CoinbaseHash` /
+  `miner.MerkleRootFromCoinbase`で実装し、`sendJob`がJobを発行する際に
+  畳み込む（ESP-Miner `mining.c`のstratum protocol論文記述と一致）。
+- **prevhashのバイトオーダーが全反転**: specは4バイトワード毎のswap
+  （`reverse_endianness_per_word`）。全反転していたため正しいmerkle root
+  でもヘッダは不正。
+- **`mining.submit`がopaqueなjob-IDをechoしていなかった**: エンジン内部の
+  合成work番号を10進文字列で送信しており、`"bf"`のような非数値job-IDを使う
+  プールではhashが正しくてもunknown jobでreject。`runSessionV1`に
+  上限付き（1024件）の双方向マップを持ち、プール発行のリテラル文字列を
+  echoするよう是正。
+- **難易度遷移rejectの良性分類（ESP-Miner #212）**: `miner.Share`に発行時
+  targetを保持させ、「difficulty」カテゴリのrejectで発行時targetと現在
+  targetが異なるものを`transition`に再分類。infoログ＋
+  `shares_rejected_by_reason_total{reason="transition"}`に計上するが、
+  acceptance/reject rateの分母からは除外（raw rejectedカウンタは維持し
+  unaccounted照合を壊さない）。V1はverdict時点の`SuggestedDifficulty()`で
+  相関（TCP順序により`set_difficulty`は必ずrejectより先に処理される）、
+  V2はsequence番号ごとの`submissions`マップで相関。
+- **依存衛生**: `gopkg.in/yaml.v3`（2025-04に作者アーカイブ、CLAUDE.md
+  §外部依存 criterion 3違反）→ YAML-org後継の`go.yaml.in/yaml/v3 v3.0.5`
+  にAPI非変更で移行、ADR-003にerratum追記、`go.mod`に選定基準コメント。
+  `golang.org/x/crypto`をv0.48.0に更新（v0.49+はGo≥1.25要求のため
+  `toolchain go1.24.7`下での最新互換版）。
+- **テスト**: coinbase構成のPython検証ベクタ、`sendJob`のmerkle計算、
+  prevhashのper-word swap、`applyJob`の全ヘッダフィールド設定＋
+  `miner.HashHeader(header)==share.Hash`のend-to-end証明、非数値job-ID
+  `"bf"`のecho検証、Noise `EncryptedConn.Read`のファズ
+  （`FuzzEncryptedConnRead`）を追加。
+
+**検証**: 全24パッケージ build/test green、変更ファイルgofumpt clean、
+deadcode新規なし。`internal/stratum/noise*`のテスト追加のみはCLAUDE.mdの
+資金領域ルールに抵触しない（既存コード無改変・テストのみ）が、
+maintainer確認を推奨。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

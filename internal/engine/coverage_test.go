@@ -1317,6 +1317,7 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	defer ln.Close()
 
 	submitResponseSent := make(chan struct{})
+	submitLine := make(chan string, 1)
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -1330,7 +1331,10 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		_, _ = r.ReadString('\n') // mining.submit (id=4)
+		// Deliver a job so the engine maps pool job-ID "bf" → synthetic 1.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":["bf","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		line, _ := r.ReadString('\n') // mining.submit (id=4)
+		submitLine <- line
 		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
 		close(submitResponseSent)
 		time.Sleep(500 * time.Millisecond) // keep connection alive
@@ -1339,7 +1343,12 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	// Keep merged open; one share in buffer.  Closing it would cause
 	// runSessionV1 to return before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	go func() {
+		// Inject only after the mining.notify maps job "bf" → synthetic
+		// ID 1; a share for a job never delivered is dropped pre-Submit.
+		time.Sleep(150 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1381,6 +1390,17 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	if got := m.sharesSubmitted.Value(); got != 1 {
 		t.Errorf("sharesSubmitted = %d, want 1", got)
 	}
+	// The submit must echo the pool's opaque job-ID string ("bf"), not the
+	// synthetic numeric work-ID — pools with non-numeric IDs would otherwise
+	// reject every share as an unknown job.
+	select {
+	case line := <-submitLine:
+		if !strings.Contains(line, `"bf"`) {
+			t.Errorf("submit did not echo pool job ID \"bf\": %s", line)
+		}
+	case <-time.After(time.Second):
+		t.Error("no mining.submit received")
+	}
 }
 
 func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
@@ -1406,6 +1426,7 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":["bf","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["23","Duplicate share",null]}`+"\n")
 		close(submitResponseSent)
@@ -1413,7 +1434,10 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 	}()
 
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	go func() {
+		time.Sleep(150 * time.Millisecond) // let the notify map first
+		merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	}()
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1470,6 +1494,7 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":["bf","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit (id=4)
 		// Delay reply by 5 ms so elapsed rounds to >= 1 ms and the p95 > 0
 		// branch in the stats ticker is exercised.
@@ -1482,7 +1507,10 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	// One share in buffer; keep merged open so runSessionV1 doesn't return
 	// via the "merged closed" path before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	go func() {
+		time.Sleep(100 * time.Millisecond) // let the notify map first
+		merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	}()
 
 	var mu sync.Mutex
 	var logLines []string
@@ -2034,8 +2062,8 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	}
 }
 
-// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
+// TestRunSessionV1_ApplyJobError covers the applyJob error path: a job
+// whose nBits produces an invalid target triggers the warn log and
 // continue.
 func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -2057,12 +2085,14 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Send job with an invalid nBits ("00000000" → target error) so
+		// applyJob fails. (Non-numeric job IDs are legitimate V1 input —
+		// they no longer trigger this path.)
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
-				`"not-a-number",`+
+				`"j1",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"","",[],"00000002","00000000","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 
@@ -2090,8 +2120,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, "bad target") {
+		t.Errorf("expected applyJob 'bad target' warn; got: %v", logLines)
 	}
 }
 
@@ -2118,6 +2148,7 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":["bf","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit — read but do not respond
 		// Sleep so elapsed > 0 (triggers latency.Record branch on line 904–906).
 		time.Sleep(5 * time.Millisecond)
@@ -2127,9 +2158,13 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Pre-queue one share so the merged case fires and Submit is called.
+	// Pre-queue one share (delayed until the notify maps "bf" → 1) so the
+	// merged case fires and Submit is called.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	}()
 
 	var logMu sync.Mutex
 	var logLines []string

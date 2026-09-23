@@ -171,7 +171,7 @@ type engineMetrics struct {
 	estimatedShareIntervalSeconds *metrics.Gauge
 
 	// reg is retained so reject counters can be created lazily, one per
-	// reject category (stale/duplicate/difficulty/hardware/other).
+	// reject category (stale/duplicate/difficulty/hardware/other/transition).
 	reg            *metrics.Registry
 	rejectByReason map[string]*metrics.Counter
 
@@ -553,7 +553,23 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	accepted := m.sharesAccepted.Value()
 	rejected := m.sharesRejected.Value()
 	judged = accepted + rejected
-	rate = acceptanceRate(accepted, rejected)
+	// Transition rejects (issued under an earlier difficulty, judged under
+	// the pool's new one — ESP-Miner #212) are benign bookkeeping, not
+	// evidence of lost work: every real reject still lands in the raw
+	// rejected counter so `judged` and the unaccounted-share reconciliation
+	// stay correct, but the acceptance/reject/stale rates are computed
+	// against genuine failures only.
+	var transition uint64
+	if c, ok := m.rejectByReason[rejectReasonTransition]; ok {
+		transition = c.Value()
+	}
+	realRejected := rejected
+	if realRejected >= transition {
+		realRejected -= transition
+	} else {
+		realRejected = 0
+	}
+	rate = acceptanceRate(accepted, realRejected)
 	m.shareAcceptanceRate.Set(rate)
 
 	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
@@ -571,7 +587,7 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		m.staleRate.Set(0)
 		return rate, judged
 	}
-	m.rejectRate.Set(float64(rejected) / float64(judged))
+	m.rejectRate.Set(float64(realRejected) / float64(judged))
 	var stale uint64
 	if c, ok := m.rejectByReason["stale"]; ok {
 		stale = c.Value()

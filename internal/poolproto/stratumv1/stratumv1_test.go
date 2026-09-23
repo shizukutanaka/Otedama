@@ -6,6 +6,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -1733,7 +1734,7 @@ func makeTestSession(cap int) *session {
 
 func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
 	s := makeTestSession(4)
-	s.sendJob(poolproto.Job{JobID: "j1", CleanJobs: false})
+	s.sendJob(notifyJob{Job: poolproto.Job{JobID: "j1", CleanJobs: false}})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
 	}
@@ -1745,10 +1746,10 @@ func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {
 
 func TestSendJob_DropsOldestWhenFullAndCleanJobsFalse(t *testing.T) {
 	s := makeTestSession(2)
-	s.sendJob(poolproto.Job{JobID: "old1"})
-	s.sendJob(poolproto.Job{JobID: "old2"})
+	s.sendJob(notifyJob{Job: poolproto.Job{JobID: "old1"}})
+	s.sendJob(notifyJob{Job: poolproto.Job{JobID: "old2"}})
 	// Channel is now full (cap 2). Sending with clean_jobs=false must drop old1.
-	s.sendJob(poolproto.Job{JobID: "new"})
+	s.sendJob(notifyJob{Job: poolproto.Job{JobID: "new"}})
 
 	// Drain channel; should contain old2 and new (old1 was dropped).
 	var got []string
@@ -1767,14 +1768,14 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 	s := makeTestSession(8)
 	// Pre-fill with 5 stale jobs.
 	for i := range 5 {
-		s.sendJob(poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false})
+		s.sendJob(notifyJob{Job: poolproto.Job{JobID: fmt.Sprintf("stale%d", i), CleanJobs: false}})
 	}
 	if got := len(s.jobsCh); got != 5 {
 		t.Fatalf("pre-fill: jobsCh len = %d, want 5", got)
 	}
 
 	// New block: clean_jobs=true must discard all 5 stale jobs.
-	s.sendJob(poolproto.Job{JobID: "newblock", CleanJobs: true})
+	s.sendJob(notifyJob{Job: poolproto.Job{JobID: "newblock", CleanJobs: true}})
 
 	if got := len(s.jobsCh); got != 1 {
 		t.Fatalf("after clean_jobs: jobsCh len = %d, want 1", got)
@@ -1787,9 +1788,59 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 
 func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
 	s := makeTestSession(4)
-	s.sendJob(poolproto.Job{JobID: "only", CleanJobs: true})
+	s.sendJob(notifyJob{Job: poolproto.Job{JobID: "only", CleanJobs: true}})
 	if got := len(s.jobsCh); got != 1 {
 		t.Errorf("jobsCh len = %d, want 1", got)
+	}
+}
+
+// TestSendJob_ComputesMerkleRoot proves the coinbase reconstruction wired
+// into sendJob: the Job the engine receives must carry the merkle root
+// folded from coinb1+extranonce1+extranonce2+coinb2 and the notify's
+// branch list. The expected value was computed with an independent
+// implementation (Python hashlib); see internal/miner/coinbase_test.go.
+func TestSendJob_ComputesMerkleRoot(t *testing.T) {
+	s := makeTestSession(4)
+	s.extranonce1 = "cc"
+	s.extranonce2Size = 4
+
+	coinb1, _ := hex.DecodeString("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20")
+	coinb2, _ := hex.DecodeString("ffffffff0100f2052a010000004341041b0e8c2567c12536aa13357b79a073dc4444acb83c4ec7a0e2f99dd7457516c5817242da796924ca4e99947d087fedf9ce467cb9f7c6287078f801df276fdf84ac00000000")
+	var b1, b2 [32]byte
+	for i := range b1 {
+		b1[i] = 0xaa
+		b2[i] = 0xbb
+	}
+	s.sendJob(notifyJob{
+		Job:      poolproto.Job{JobID: "j1"},
+		coinb1:   coinb1,
+		coinb2:   coinb2,
+		branches: [][32]byte{b1, b2},
+	})
+
+	got := (<-s.jobsCh).MerkleRoot
+	want, _ := hex.DecodeString("7696f344c0cd6bede8914453910f7deff16646e545e11a2eabc909b3019c2a58")
+	if got != [32]byte(want) {
+		t.Errorf("MerkleRoot = %x, want %x", got, want)
+	}
+}
+
+// TestParseNotify_PrevHashPerWordSwap pins the Stratum V1 prevhash byte
+// convention: display-order hex becomes header wire order via a per-word
+// (32-bit) byte swap, not a full reverse.
+func TestParseNotify_PrevHashPerWordSwap(t *testing.T) {
+	raw := json.RawMessage(`[
+		"60",
+		"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",
+		"", "", [], "00000002", "1d00ffff", "68d36c5e", true
+	]`)
+	job, err := parseNotify(raw)
+	if err != nil {
+		t.Fatalf("parseNotify: %v", err)
+	}
+	want, _ := hex.DecodeString("f8b6164d19e2f65a2aae448f787fe66d61e57a48c0c6771b1e920b4400000000")
+	if job.PrevHash != [32]byte(want) {
+		t.Errorf("PrevHash = %x, want per-word-swapped %x", job.PrevHash, want)
 	}
 }
 
