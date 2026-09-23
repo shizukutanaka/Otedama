@@ -639,89 +639,62 @@ release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 255)
 
-**What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
-real terminal width, but no production call site ever calls it —
-`engine.Run` constructs the dashboard via `tui.NewDashboard` and never
-calls `SetWidth`, so every real invocation renders at the constructor's
-hardcoded default of 80 columns regardless of the actual terminal
-size (confirmed: `SetWidth` is called only from `internal/tui`'s own
-test files).
+**Resolution:** Real terminal-width detection is now wired in — via the
+`x/sys` path the Target below already sketched, so **no new module
+dependency was added** (`golang.org/x/sys` was already an indirect
+dependency via `x/crypto`; it is now a direct one, but the module set
+is unchanged — ADR-003's stance holds). `internal/tui/winsize*.go`
+implements `terminalWidth`: TIOCGWINSZ on every Unix-like Go supports
+(linux/darwin/BSDs/solaris/illumos/aix/zos),
+`GetConsoleScreenBufferInfo` on Windows, and a no-op stub elsewhere.
 
-**Impact:** On a narrower real terminal, output can wrap onto a second
-terminal row, which breaks the dashboard's "cursor home, overwrite in
-place" repaint model (each subsequent frame then draws one row off
-from where the previous one landed). On a wider terminal, screen space
-is simply unused. Separately (fixed session 249): before this session,
-the pool connection-status text and share-count text on the two
-busiest lines were truncated using fixed-width budgets independent of
-the actual configured width, so at the documented 40-column minimum
-they could be cut off entirely even once real width detection lands;
-both lines now size their variable-length fields from the actual
-`cols` value, so this specific failure mode is closed regardless of
-whether width detection itself is ever wired in.
+`NewDashboard` detects the width at construction, and the render loop
+re-detects it on every one-second tick — a mid-session window resize
+(SIGWINCH) is picked up on the next frame with no signal-handling
+plumbing. When the writer is not a real terminal (piped output,
+redirect, test buffer) or the platform cannot report a size, the
+dashboard keeps the 80-column default; `SetWidth` remains as an
+explicit override that only sticks for non-terminal writers (a live
+terminal's detected size wins on the next refresh). As a side effect,
+`cols` is now `atomic.Int32`, closing a latent data race between
+`SetWidth` and the render loop.
 
-**Workaround:** Keep the terminal at or above 80 columns for correct
-rendering, or use `--no-tui` for plain log output, which has no width
-assumptions.
-
-**Target:** No committed target. Wiring in real detection needs either
-`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
-dependency stance would need a documented exception, as the package
-doc's own "Design" section already assumed this was solved) or raw
-per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
-GetConsoleScreenBufferInfo, both already reachable as an indirect
-dependency via `golang.org/x/crypto`) — a maintainer decision between
-the two is needed before implementation.
+The dynamic-budget truncation fix from session 249 is unchanged —
+lines still size variable-length fields from the actual `cols`, now
+simply a real value instead of a constant.
 
 ---
 
-## 16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI
+## ~~16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI~~ ✅ RESOLVED (session 255)
 
-**What:** The CLI dispatches only `run`, `version`, `config`, `service`,
-`doctor`, `completion`, and `help` (`cmd/otedama/main.go`). There is no
-`otedama wallet ...` command. Two consequences:
+**Resolution:** `otedama wallet verify` and `otedama wallet
+change-passphrase` are implemented in `cmd/otedama/wallet.go`, exactly
+along the lines the Target below proposed.
 
-- **No way to verify a backup.** After writing down the 24-word recovery
-  phrase printed on first run (implemented session 253 — see
-  `engine.printRecoveryPhrase`), a user has no way to check that what
-  they wrote down is correct. The standard practice for a non-custodial
-  wallet is a verify step — re-enter the phrase, derive the seed, and
-  confirm the fingerprint matches the stored wallet — precisely because
-  a transcription error is silent and is only discovered during a
-  recovery attempt, when it is too late. `doctor` reports whether
-  `wallet.dat` exists and prints its fingerprint, but never accepts a
-  mnemonic to compare against.
-- **`ChangePassphrase` is implemented but unreachable.**
-  `lightning.WalletManager.ChangePassphrase` (internal/lightning/wallet.go)
-  correctly verifies the old passphrase and atomically re-encrypts the
-  seed, and is covered by tests — but no production code calls it, so a
-  user whose passphrase may have been exposed cannot rotate it without
-  writing their own Go program against the internal package.
+- **`otedama wallet verify`** reads the recovery phrase from **stdin
+  only — never argv** (process lists are world-visible), with terminal
+  echo muted while it is read. It validates word count + BIP-39 checksum
+  (`MnemonicToEntropy`, so a transcription typo is diagnosed before any
+  comparison), derives the seed, and compares its fingerprint against
+  the wallet's. The comparison uses the public `wallet.fingerprint`
+  sidecar — no passphrase needed on the happy path; if the sidecar is
+  missing it falls back to decrypting `wallet.dat` when
+  `OTEDAMA_WALLET_PASSPHRASE` is set. `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`
+  supplies a BIP-39 "25th word" for wallets created with one. Exit
+  codes: 0 match, 2 mismatch, 78 invalid phrase, 64 missing input, 1
+  runtime error.
+- **`otedama wallet change-passphrase`** reads three lines from stdin
+  (current / new / confirm — echo muted on a terminal) and wires the
+  existing, already-tested `WalletManager.ChangePassphrase`. It stats
+  `wallet.dat` first and refuses to operate without one, so a mistyped
+  `--data-dir` can never silently rotate a freshly-created empty wallet.
 
-**Impact:** A user can follow every documented instruction and still hold
-an unusable backup, discovering it only when their disk has already
-failed. Because BIP-39 derivation is one-way, Otedama cannot re-derive
-the phrase to check it later — verification must happen while the user
-still has both the phrase and the working wallet. This is a gap in the
-*usability* of the non-custodial guarantee rather than in its
-cryptography: the seed never leaves the device (that part holds), but
-the user's ability to prove they can recover it is missing.
-
-**Workaround:** Immediately after first run, confirm that the printed
-fingerprint matches what `otedama doctor` reports, and store the phrase
-and a copy of `wallet.dat` separately. There is no in-product way to
-confirm the transcription itself. To rotate a passphrase, create a new
-wallet in a fresh `--data-dir` and mine to it instead.
-
-**Target:** No committed target. Adding a subcommand touches the CLI
-architecture map in CLAUDE.md, so it needs a maintainer decision rather
-than a mechanical fix. A minimal `otedama wallet verify` (read a mnemonic
-from stdin — never argv, which leaks via process lists — derive the seed,
-compare fingerprints, print match/mismatch) and `otedama wallet
-change-passphrase` (wiring the existing, already-tested
-`ChangePassphrase`) would close both halves without new dependencies.
+Echo muting uses per-platform `x/sys` termios/console calls
+(`cmd/otedama/termecho_*.go`) — again no new dependency. Both commands
+resolve the data dir through the same flag > env > file > default
+precedence as `run`, and secrets are accepted via stdin or env only.
 
 ---
 

@@ -10,6 +10,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 255 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: KNOWN_LIMITATIONS §15/§16 の両項目を、同書自身が示した実装方針どおりに解消)
+
+**`otedama wallet` サブコマンドを新設（§16 解消）.** 非カストディ
+ウォレットの運用面の欠落を埋める2コマンドを `cmd/otedama/wallet.go`
+に実装した：
+
+- `otedama wallet verify` — リカバリフレーズを **stdin のみ**から読み取り
+  （argv は `ps` で可視化されるため使用しない）、単語数と BIP-39 チェックサムを
+  `MnemonicToEntropy` で検証し、導出した seed のフィンガープリントをウォレットの
+  公開 `wallet.fingerprint` と照合する。転記ミスは照合前に「invalid recovery
+  phrase」として診断される。サイドカーが無い場合は
+  `OTEDAMA_WALLET_PASSPHRASE` で wallet.dat を復号して照合にフォールバック。
+  BIP-39 25th-word 使用のウォレットには `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`
+  （`run` と同一環境変数）で対応。終了コード: 0 一致 / 2 不一致 / 78 不正フレーズ /
+  64 入力なし / 1 実行時エラー。
+- `otedama wallet change-passphrase` — stdin から3行（現行・新規・確認）を読み、
+  既存かつテスト済みの `WalletManager.ChangePassphrase` を配線。先に
+  `wallet.dat` の存在を stat し、**ウォレットを自動生成しない**ため、
+  `--data-dir` の打ち間違いで空の新規ウォレットをローテーションする事故を
+  防ぐ。
+
+ターミナル上では読み取り中にエコーを抑制する（`cmd/otedama/termecho_*.go`：
+Unix 系は TCGETS/TCSETS・TIOCGETA/TIOCSETA の termios、Windows は
+ENABLE_ECHO_INPUT）。シークレットは stdin または環境変数のみで受け付け、
+ログには一切出力しない。bash/zsh/fish の補完スクリプトも `wallet` と
+`verify`/`change-passphrase` に対応。
+
+**TUI の実端末幅を検出（§15 解消）.** `internal/tui/winsize*.go` を新設し、
+Unix 系では `TIOCGWINSZ` ioctl、Windows では `GetConsoleScreenBufferInfo`
+で実カラム数を取得する。§15 の Target が想定していた `x/sys` 経路を採用し、
+**新規モジュール依存はゼロ**（`x/sys` は `x/crypto` 経由の間接依存を直接依存化
+したのみ——ADR-003 の方針を維持）。`NewDashboard` は構築時に検出し、
+レンダーループが1秒ティックごとに再検出するため、セッション中のウィンドウ
+リサイズ（SIGWINCH）もシグナルハンドラなしで次フレームに反映される。
+非端末（パイプ・リダイレクト・テストバッファ）では従来どおり80カラム既定。
+`SetWidth` は手動オーバーライドとして残すが、実端末では検出値が優先される
+（ドキュメントを更新済み）。副次効果として `cols` を `atomic.Int64` 化し、
+`SetWidth` とレンダーループ間の潜在的データ競合も解消した。
+
+**テスト.** `cmd/otedama/wallet_test.go`（verify 一致/不一致/不正フレーズ/
+空入力/フィンガープリント欠落フォールバック、change-passphrase 成功/現行誤り/
+確認不一致/ウォレット非存在で生成しないこと/早期EOF/空新規拒否）と
+`internal/tui/winsize_test.go`（非ファイル writer・通常ファイル・DevNull が
+いずれも検出失敗→既定80にフォールバックすること）を追加。
+
+**Docs.** KNOWN_LIMITATIONS §15・§16 を解消済みに更新、CLAUDE.md の
+アーキテクチャマップに `wallet` を追記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

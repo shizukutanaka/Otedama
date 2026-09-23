@@ -14,15 +14,18 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// # Terminal width (not yet auto-detected)
+// # Terminal width
 //
-// SetWidth lets a caller inject the real terminal width (intended
-// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
-// but no caller in this codebase actually calls it in production —
-// engine.Run's dashboard always runs at the NewDashboard default of 80
-// columns, regardless of the real terminal size. See
-// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
-// of the real width: every
+// The real terminal width is auto-detected (TIOCGWINSZ on Unix-likes,
+// GetConsoleScreenBufferInfo on Windows — see winsize_*.go) when the
+// output writer is a real terminal, both at NewDashboard time and again
+// on every render tick so a mid-session window resize is picked up.
+// When detection is impossible (piped/redirected output, or an
+// unsupported platform) the dashboard keeps its 80-column default.
+// SetWidth remains as an explicit override for a caller that knows
+// better — but a detectable real terminal still wins on the next
+// refresh, so it is best understood as a floor for non-terminal
+// writers. What IS handled correctly regardless of width: every
 // line is truncated to fit whatever width is configured, and the most
 // important field on each line (pool connection status, in particular)
 // is sized from a dynamic budget rather than a fixed offset, so it
@@ -103,12 +106,16 @@ type ProviderStats struct {
 
 // Dashboard renders a live terminal dashboard.
 type Dashboard struct {
-	w         io.Writer
-	mu        sync.Mutex
-	started   atomic.Bool
-	updateCh  chan Stats
-	doneCh    chan struct{}
-	cols      int
+	w        io.Writer
+	mu       sync.Mutex
+	started  atomic.Bool
+	updateCh chan Stats
+	doneCh   chan struct{}
+	// cols is atomic because SetWidth may be called from any goroutine
+	// (the package contract is "safe to call from any goroutine") while
+	// the render loop reads it each tick — including the tick's own
+	// auto-detected rewrite for terminal resizes.
+	cols      atomic.Int64
 	lastStats Stats
 	// wg tracks the render loop goroutine so Stop can block until it has
 	// genuinely exited before Stop itself writes to w (showCursor /
@@ -117,14 +124,21 @@ type Dashboard struct {
 	wg sync.WaitGroup
 }
 
-// NewDashboard returns a Dashboard that writes to w.
+// NewDashboard returns a Dashboard that writes to w. When w is a real
+// terminal its actual width is detected immediately (and re-detected
+// every refresh, so resizes are picked up); otherwise the dashboard
+// starts at the 80-column default.
 func NewDashboard(w io.Writer) *Dashboard {
-	return &Dashboard{
+	d := &Dashboard{
 		w:        w,
 		updateCh: make(chan Stats, 8),
 		doneCh:   make(chan struct{}),
-		cols:     80,
 	}
+	d.cols.Store(80)
+	if c, ok := terminalWidth(w); ok {
+		d.cols.Store(int64(c))
+	}
+	return d
 }
 
 // Start begins the render loop. Call Stop to terminate it.
@@ -191,6 +205,13 @@ func (d *Dashboard) renderLoop() {
 			d.lastStats = s
 			d.mu.Unlock()
 		case <-ticker.C:
+			// Re-detect the terminal width each tick so a window resize
+			// (SIGWINCH) is reflected on the next frame without any
+			// signal-handling plumbing. The ioctl is cheap (~µs) and only
+			// runs once per second.
+			if c, ok := terminalWidth(d.w); ok {
+				d.cols.Store(int64(c))
+			}
 			d.mu.Lock()
 			s := d.lastStats
 			d.mu.Unlock()
@@ -221,7 +242,7 @@ const (
 
 func (d *Dashboard) render(s Stats) {
 	var sb strings.Builder
-	cols := d.cols
+	cols := int(d.cols.Load())
 
 	// Move to home position (no flicker).
 	sb.WriteString(cursorHome)
@@ -538,13 +559,17 @@ func shortenURL(url string, maxLen int) string {
 	return url[:maxLen-3] + "..."
 }
 
-// ----- Width detection stub -----
+// ----- Width -----
 
-// SetWidth allows callers to inject the terminal width.
-// If never called, defaults to 80 columns.
+// SetWidth injects an explicit width. The real terminal width is
+// auto-detected at construction and again on every render tick, so a
+// manual SetWidth on a live terminal is overridden by the detected size
+// on the next refresh; on a non-terminal writer (pipes, buffers,
+// unsupported platforms) SetWidth is the only way to change the
+// 80-column default. Values below 40 columns are ignored.
 func (d *Dashboard) SetWidth(cols int) {
 	if cols >= 40 {
-		d.cols = cols
+		d.cols.Store(int64(cols))
 	}
 }
 

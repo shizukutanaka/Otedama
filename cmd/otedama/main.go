@@ -13,6 +13,8 @@
 //	otedama service uninstall
 //	otedama service status
 //	otedama doctor [--bitcoin-address bc1q...]
+//	otedama wallet verify
+//	otedama wallet change-passphrase
 //
 // # Exit codes
 //
@@ -29,12 +31,16 @@
 //	1 — at least one check warned (advisory, not fatal)
 //	2 — at least one check failed (action required)
 //
+// The wallet verify / change-passphrase subcommands reuse the shared
+// scale and add exit 2 for "the check ran and failed" (fingerprint
+// mismatch, wrong passphrase).
+//
 // For shell scripting the coarsest check is [ $? -eq 0 ]; any non-zero exit
 // indicates that operator attention is needed.
 //
 // Each subcommand lives in its own file (run.go, config.go, service.go,
-// doctor.go, version.go, completion.go); this file holds only the entry
-// point and the top-level dispatcher.
+// doctor.go, wallet.go, version.go, completion.go); this file holds only
+// the entry point and the top-level dispatcher.
 package main
 
 import (
@@ -124,6 +130,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdService(args[1:], stdout, stderr)
 	case "doctor":
 		return cmdDoctor(args[1:], stdout, stderr)
+	case "wallet":
+		return cmdWallet(args[1:], os.Stdin, stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -148,6 +156,7 @@ Commands:
   config     Inspect or validate the effective configuration.
   service    Install/uninstall as a background service.
   doctor     Run self-diagnostic checks.
+  wallet     Manage the Lightning wallet (verify backup, rotate passphrase).
   completion Generate a shell-completion script (bash|zsh|fish).
   help       Print this help and exit.
 

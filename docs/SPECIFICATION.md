@@ -32,6 +32,8 @@ otedama <command> [flags]
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
 | `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
 | `doctor` | Run self-diagnostic checks. |
+| `wallet verify` | Read a BIP-39 recovery phrase from stdin (never argv) and compare its derived fingerprint against the wallet's — proves the written backup recovers the wallet. |
+| `wallet change-passphrase` | Re-encrypt `wallet.dat` under a new passphrase read from stdin; never creates a wallet. |
 | `completion bash\|zsh\|fish` | Emit a shell-completion script. |
 | `help` / `--help` / `-h` | Print usage. |
 
@@ -47,6 +49,14 @@ otedama <command> [flags]
 Scripts may rely on these. `run` returns `78` if the resolved config fails
 validation, `64` for flag-parse errors, `1` for a runtime error, `0` on clean
 shutdown (SIGINT/SIGTERM).
+
+Two subcommands add domain-specific meanings within the same scale:
+
+- `doctor` uses 0/1/2 for all-pass / warnings / failures.
+- `wallet` uses `2` for "the check ran and failed" — a fingerprint
+  mismatch, a wrong current passphrase, or a new/confirm mismatch —
+  distinct from `1` (could not attempt the check) and `78` (the input
+  itself was malformed).
 
 ## 3. Configuration
 
