@@ -88,7 +88,7 @@ func getB0_255(r io.Reader) ([]byte, error) {
 // be spec-conformant), lenient on decode (getB0_255 accepts a 33..255-byte
 // extranonce from a non-conformant pool rather than dropping the connection
 // over a field length that is still bounded and allocation-safe). See the
-// Extranonce field comment in handshake.go.
+// ExtranoncePrefix field comment in handshake.go.
 func appendB0_32(dst, v []byte) ([]byte, error) {
 	if len(v) > 32 {
 		return nil, fmt.Errorf("stratum: byte slice too long for B0_32 (%d > 32)", len(v))

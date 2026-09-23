@@ -13,13 +13,13 @@
 //	0x00  SetupConnection        (client → server)
 //	0x01  SetupConnectionSuccess (server → client)
 //	0x02  SetupConnectionError   (server → client)
-//	0x10  OpenMiningChannel      (client → server)
+//	0x10  OpenMiningChannel      (client → server; spec: OpenStandardMiningChannel)
 //	0x11  OpenMiningChannelSuccess
 //	0x12  OpenMiningChannelError
 //	0x15  NewMiningJob           (server → client, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
-//	0x1e  SubmitSharesError      (server → client, channel_msg)
+//	0x1d  SubmitSharesError      (server → client, channel_msg; spec 0x1e is Reserved)
 //
 // # Encoding conventions (from spec chapter 3)
 //
@@ -27,7 +27,7 @@
 //	BOOL:   1 byte, 0x00 false / 0x01 true.
 //	STR0_255: 1-byte length prefix followed by UTF-8 bytes (max 255).
 //	B0_255:   1-byte length prefix followed by raw bytes (max 255).
-//	B0_32:    32 raw bytes (fixed, no length prefix).
+//	B0_32:    1-byte length prefix followed by raw bytes (max 32).
 //	B0_16M:  3-byte little-endian length prefix followed by raw bytes.
 //
 // Otedama does not implement all fields of every message; fields that
@@ -52,7 +52,7 @@ const (
 	MsgNewMiningJob             uint8 = 0x15
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
-	MsgSubmitSharesError        uint8 = 0x1e
+	MsgSubmitSharesError        uint8 = 0x1d
 	MsgSetNewPrevHash           uint8 = 0x20
 	MsgSetTarget                uint8 = 0x21
 )
@@ -311,7 +311,7 @@ func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
 }
 
 // ------------------------------------------------------------------
-// SubmitSharesError (server → client, msg_type 0x1e, channel_msg)
+// SubmitSharesError (server → client, msg_type 0x1d, channel_msg)
 // ------------------------------------------------------------------
 
 // SubmitSharesError is returned when the pool rejects a share.

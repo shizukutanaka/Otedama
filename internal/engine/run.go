@@ -1264,6 +1264,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		ReqID:           1,
 		User:            user,
 		NominalHashrate: hashRate,
+		MaxTarget:       stratum.MaxTargetUnrestricted,
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return 0, miner.Hash{}, err

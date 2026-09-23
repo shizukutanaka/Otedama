@@ -117,6 +117,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		ReqID:           1,
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
+		MaxTarget:       stratum.MaxTargetUnrestricted,
 	}
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
