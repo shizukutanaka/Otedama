@@ -4,8 +4,10 @@
 package engine
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -2559,5 +2561,179 @@ func TestClampShareTarget(t *testing.T) {
 	// caller's zero-target fallback in updateWork handles it downstream).
 	if got, clamped := clampShareTarget(miner.Hash{}, high); clamped || got != (miner.Hash{}) {
 		t.Errorf("zero SetTarget: got clamped=%v target=%v, want unclamped zero", clamped, got)
+	}
+}
+
+// TestStoreJob_BoundsAndEvictsOldest covers the bounded outstanding-job
+// map: inserts beyond the cap evict the OLDEST job (the least likely to
+// be named by a future SetNewPrevHash), and a duplicate JobID refreshes
+// in place without growing either structure.
+func TestStoreJob_BoundsAndEvictsOldest(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
+	for id := uint32(1); id <= 5; id++ {
+		order = storeJob(jobs, order, 3, &stratum.NewMiningJob{JobID: id})
+	}
+	if len(jobs) != 3 || len(order) != 3 {
+		t.Fatalf("map/order sizes = %d/%d, want 3/3", len(jobs), len(order))
+	}
+	for _, id := range []uint32{1, 2} {
+		if _, ok := jobs[id]; ok {
+			t.Errorf("job %d should have been evicted (oldest first)", id)
+		}
+	}
+	for _, id := range []uint32{3, 4, 5} {
+		if _, ok := jobs[id]; !ok {
+			t.Errorf("job %d should still be stored", id)
+		}
+	}
+	if order[0] != 3 || order[2] != 5 {
+		t.Errorf("order = %v, want [3 4 5]", order)
+	}
+	// Duplicate ID refreshes the entry in place — no growth, no re-queue.
+	order = storeJob(jobs, order, 3, &stratum.NewMiningJob{JobID: 5, Version: 0x99})
+	if len(jobs) != 3 || len(order) != 3 {
+		t.Fatalf("duplicate insert grew the bound: %d/%d", len(jobs), len(order))
+	}
+	if jobs[5].Version != 0x99 {
+		t.Error("duplicate insert should refresh the stored job")
+	}
+}
+
+// TestRunSession_ResumeReArmsJobAfterUncurtail drives a full V2 session
+// against the fake pool while curtailed: the job+prev-hash sequence is
+// tracked but suppressed. Lifting the gate plus a resumeCh nudge must
+// re-arm the worker immediately — the pool then receives a share (the
+// 0xFF channel target makes any hash valid), proving the resume path
+// works rather than waiting for the pool's next job message.
+func TestRunSession_ResumeReArmsJobAfterUncurtail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	gate := new(atomic.Bool)
+	gate.Store(true) // start curtailed: incoming jobs are suppressed
+	resumeCh := make(chan struct{}, 1)
+
+	go func() {
+		_ = runSession(ctx, sessionOpts{
+			poolURL:     fp.URL(),
+			user:        "w",
+			workers:     []*miner.Worker{w},
+			merged:      merged,
+			interval:    time.Hour,
+			log:         func(_, _ string) {},
+			curtailGate: gate,
+			resumeCh:    resumeCh,
+		})
+	}()
+
+	// Give the session time to handshake and absorb the future-job +
+	// prev-hash sequence while curtailed — nothing may hash yet.
+	time.Sleep(500 * time.Millisecond)
+	if n := len(fp.ReceivedShares()); n != 0 {
+		t.Fatalf("worker produced %d share(s) while curtailed", n)
+	}
+
+	gate.Store(false)
+	resumeCh <- struct{}{}
+
+	deadline := time.After(6 * time.Second)
+	for len(fp.ReceivedShares()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("resume nudge did not re-arm the worker — no share received")
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+}
+
+// TestRunSessionV1_ResumeReArmsJob drives a V1 session where the pool's
+// notify arrives while curtailed: the job is tracked but not applied.
+// After the gate lifts, a resumeCh nudge must re-arm the worker so the
+// server sees a mining.submit without waiting for another notify.
+func TestRunSessionV1_ResumeReArmsJob(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	gotSubmit := make(chan struct{}, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3)
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Trivial difficulty → every hash is a share the moment a job is armed.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e-9]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":["bf","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.Contains(line, `"mining.submit"`) {
+				gotSubmit <- struct{}{}
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	gate := new(atomic.Bool)
+	gate.Store(true)
+	resumeCh := make(chan struct{}, 1)
+
+	go func() {
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:     "stratum+tcp://" + ln.Addr().String(),
+			user:        "worker.1",
+			workers:     []*miner.Worker{w},
+			merged:      merged,
+			interval:    time.Hour,
+			log:         func(_, _ string) {},
+			curtailGate: gate,
+			resumeCh:    resumeCh,
+		})
+	}()
+
+	// Let the session negotiate, receive set_difficulty + notify while
+	// curtailed — the job is tracked, not applied.
+	time.Sleep(500 * time.Millisecond)
+	gate.Store(false)
+	resumeCh <- struct{}{}
+
+	select {
+	case <-gotSubmit:
+	case <-time.After(6 * time.Second):
+		t.Fatal("resume nudge did not re-arm the V1 worker — no mining.submit")
 	}
 }

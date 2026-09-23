@@ -606,3 +606,20 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 262 update — run.go session state machine, error/abnormal paths
+
+Close read of `internal/engine/run.go` session loops (queue item 4), on
+the finding-has-value-only-if-new rule.
+
+| Finding | Disposition |
+|---|---|
+| V2 outstanding-job map `jobs` was unbounded: `NewMiningJob` accumulated per receipt and was only cleared on `SetNewPrevHash`, so a pool streaming future jobs without a tip update grew session memory without bound. | ✅ Fixed: `storeJob` bounds it at 256 with FIFO eviction (mirrors `submissions` cap 1024 and V1 job-ID map cap 1024); eviction drops the oldest entry, the least likely to be named by a later `SetNewPrevHash`. |
+| After `isCurtailed()` lifted, hashing resumed only when the pool's next `NewMiningJob`/notify arrived — minutes of needless idle on a quiet pool. | ✅ Fixed: `resumeCh` (cap-1 buffered, non-blocking send) plumbed Run→reconnect→session; the price goroutine nudges on uncurtail. V2 re-issues `startJob(active, activeNTime)`; V1 re-`applyJob`s `lastV1Job` (job-ID map resolution made unconditional so the resume target is always registered). |
+| Reconnect budget / backoff reset suspicion | ⏭ Not a defect — already fixed by parallel session (devin branch `reconnect-budget-reset`); verified its diff before claiming. |
+
+Tests: `TestStoreJob_BoundsAndEvictsOldest`, `TestRunSession_ResumeReArmsJobAfterUncurtail` (V2 e2e via fakePool), `TestRunSessionV1_ResumeReArmsJob` (V1 e2e via in-process JSON-RPC pool).
+
+All 24 packages build, vet, and test green.

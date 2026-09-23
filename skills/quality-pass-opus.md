@@ -65,7 +65,9 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 4. **資金クリティカル領域の継続監査**: 未踏の深掘り候補は
    `internal/stratum/noise.go`のハンドシェイク状態機械（mixKey出力破棄・
    responder静的鍵未認証はKNOWN_LIMITATIONS §2に既知として記録済み — 新規発見
-   のみ価値がある）、`internal/engine/run.go`のセッション状態機械の異常系。
+   のみ価値がある）、`internal/engine/run.go`のセッション状態機械の異常系
+   — ✅ session 262: V2 jobs map無界化（DoS）を`storeJob` cap256 FIFO退避で封じ、
+   curtail解除時の再稼働遅延を`resumeCh`配線で即時化。noise.go側は未踏。
 5. **実Akash統合の設計**（chain-sdkベース、ADR-003の依存方針との整合検討）。
 
 ## 3. 作業規律（違反すると過去250セッションの資産を毀損する）

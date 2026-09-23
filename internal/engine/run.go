@@ -219,6 +219,12 @@ func Run(ctx context.Context, opts Options) error {
 	// read 1, so the pause neither held nor matched the metric.
 	curtailGate := new(atomic.Bool)
 
+	// resumeCh nudges a live session to re-issue its current job the
+	// moment curtailment lifts instead of waiting for the pool's next
+	// job message. Buffered cap-1 so a signal between sessions is
+	// discarded rather than blocking the price goroutine.
+	resumeCh := make(chan struct{}, 1)
+
 	// Publish the BTC/USD rate to its gauge and enforce the optional
 	// curtailment threshold (curtail_below_btc_usd). When the price falls
 	// below the threshold all workers are idled (SetWork(nil)) and the gate
@@ -253,10 +259,19 @@ func Run(ctx context.Context, opts Options) error {
 					}
 				} else {
 					log("info", fmt.Sprintf(
-						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
+						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes",
 						rate, threshold))
 					if m != nil {
 						m.curtailed.Set(0)
+					}
+					// Nudge the session loop to re-issue the current job
+					// immediately — on a quiet pool the next job message
+					// could be minutes away and the workers would sit
+					// idle for all of it. Buffered cap-1: a stale signal
+					// between sessions is a no-op (no armed job).
+					select {
+					case resumeCh <- struct{}{}:
+					default:
 					}
 				}
 			}
@@ -339,6 +354,7 @@ func Run(ctx context.Context, opts Options) error {
 		metrics:     m,
 		log:         log,
 		curtailGate: curtailGate,
+		resumeCh:    resumeCh,
 		activityMu:  &activityMu,
 		activity:    activity,
 	})
@@ -361,6 +377,9 @@ type reconnectOpts struct {
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised.
 	curtailGate *atomic.Bool
+	// resumeCh, when non-nil, delivers a nudge to re-issue the current
+	// job as soon as curtailment lifts (see Run's price goroutine).
+	resumeCh <-chan struct{}
 	// activityMu/activity: see sessionOpts. Threaded through unchanged
 	// across reconnects since the arbitration loop (the writer) runs for
 	// the lifetime of Run(), independent of any one pool session.
@@ -433,6 +452,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			m:            r.metrics,
 			powerWatts:   r.opts.Config.PowerWatts,
 			curtailGate:  r.curtailGate,
+			resumeCh:     r.resumeCh,
 			tlsCAFile:    poolTLSCAFile,
 			poolPassword: poolPassword,
 			activityMu:   r.activityMu,
@@ -545,6 +565,11 @@ type sessionOpts struct {
 	// curtailGate, when non-nil and raised, suppresses applying pool jobs to
 	// workers (they stay idle) because BTC/USD is below the curtail threshold.
 	curtailGate *atomic.Bool
+	// resumeCh, when non-nil, nudges the session to re-issue the current
+	// job the moment curtailment lifts rather than waiting for the pool's
+	// next job message. nil is fine (tests, minimal setups): resume then
+	// keeps its historical "next pool message" timing.
+	resumeCh <-chan struct{}
 	// tlsCAFile is the active pool's optional PEM CA bundle path (PoolConfig
 	// .TLSCAFile), used to verify a private-CA/self-signed stratum+tls:// pool.
 	tlsCAFile string
@@ -750,7 +775,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// known. Jobs without min_ntime are *future jobs*: they activate only
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
+	//
+	// jobs is insertion-bounded like the V1 job-ID maps and the
+	// submissions map: a pool streaming endless future jobs without a
+	// chain-tip update must not grow memory without bound. storeJob
+	// keeps the FIFO order so eviction drops the oldest stored job —
+	// the least likely to be the one a future SetNewPrevHash names.
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var jobOrder []uint32
+	const jobsCap = 256
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -840,6 +873,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 
+		case <-opts.resumeCh:
+			// Curtailment just lifted: re-issue the armed job now instead
+			// of waiting for the pool's next job message (which on a
+			// quiet pool could be minutes of needless idle time). nil
+			// channel disables this case; startJob re-checks the gate.
+			if active != nil && havePrev {
+				startJob(active, activeNTime)
+			}
+
 		case pm, ok := <-inCh:
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")
@@ -849,7 +891,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				jobOrder = storeJob(jobs, jobOrder, jobsCap, j)
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -880,8 +922,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
+				jobOrder = nil
 				if named != nil {
 					jobs[p.JobID] = named
+					jobOrder = append(jobOrder, p.JobID)
 					ntime := p.MinNtime
 					if named.HasMinNtime && named.MinNtime > ntime {
 						ntime = named.MinNtime
@@ -1070,6 +1114,12 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	jobStrByID := make(map[uint32]string)
 	const v1JobIDMapCap = 1024
 
+	// The last job the pool sent, kept so a curtailment-lift resume can
+	// re-arm it without waiting for the next notify.
+	var lastV1Job poolproto.Job
+	var lastV1WorkID uint32
+	var haveV1Job bool
+
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
 	var hashWindow hashrateWindow
 	var uptime uptimeAccountant
@@ -1138,27 +1188,41 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 
+		case <-opts.resumeCh:
+			// Curtailment just lifted: re-issue the last received job now
+			// instead of waiting for the pool's next notify (which on a
+			// quiet pool could be minutes of needless idle time). nil
+			// channel disables this case.
+			if haveV1Job {
+				if err := applyJob(opts.workers, lastV1Job, lastV1WorkID, chanID, sess.SuggestedDifficulty()); err != nil {
+					opts.log("warn", err.Error())
+				}
+			}
+
 		case job, ok := <-sess.Jobs():
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")
 			}
-			// While curtailed, keep workers idle and ignore the job (see the
-			// V2 path for rationale). lastJobReceivedAt still updates because
-			// the pool connection remains alive.
+			// Track the latest job even while curtailed so a resume nudge
+			// can re-arm it the moment curtailment lifts (see the V2 path).
+			workJobID, seen := jobIDByStr[job.JobID]
+			if !seen {
+				nextJobID++
+				workJobID = nextJobID
+				jobIDByStr[job.JobID] = workJobID
+				jobStrByID[workJobID] = job.JobID
+				if len(jobIDByStr) > v1JobIDMapCap {
+					jobIDByStr = map[string]uint32{job.JobID: workJobID}
+					jobStrByID = map[uint32]string{workJobID: job.JobID}
+				}
+			}
+			lastV1Job, lastV1WorkID, haveV1Job = job, workJobID, true
+			// While curtailed, keep workers idle and do not apply the job
+			// (see the V2 path for rationale). lastJobReceivedAt still
+			// updates because the pool connection remains alive.
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				workJobID, seen := jobIDByStr[job.JobID]
-				if !seen {
-					nextJobID++
-					workJobID = nextJobID
-					jobIDByStr[job.JobID] = workJobID
-					jobStrByID[workJobID] = job.JobID
-					if len(jobIDByStr) > v1JobIDMapCap {
-						jobIDByStr = map[string]uint32{job.JobID: workJobID}
-						jobStrByID = map[uint32]string{workJobID: job.JobID}
-					}
-				}
 				if err := applyJob(opts.workers, job, workJobID, chanID, sess.SuggestedDifficulty()); err != nil {
 					opts.log("warn", err.Error())
 					continue
@@ -1254,6 +1318,26 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}()
 		}
 	}
+}
+
+// storeJob inserts j into the session's outstanding-job map, tracking
+// insertion order in the returned slice and evicting the oldest entry
+// once the slice exceeds cap. The bound mirrors the submissions map
+// and the V1 job-ID maps: a pool streaming endless future jobs without
+// a chain-tip update must not grow session memory without bound.
+// Evicting the oldest (not the newest or a random entry) keeps the job
+// most likely to be named by a future SetNewPrevHash — pools issue
+// jobs in chain order.
+func storeJob(jobs map[uint32]*stratum.NewMiningJob, order []uint32, limit int, j *stratum.NewMiningJob) []uint32 {
+	if _, dup := jobs[j.JobID]; !dup {
+		order = append(order, j.JobID)
+	}
+	jobs[j.JobID] = j
+	for len(order) > limit {
+		delete(jobs, order[0])
+		order = order[1:]
+	}
+	return order
 }
 
 // clampShareTarget caps a pool-supplied SetTarget value at the channel's

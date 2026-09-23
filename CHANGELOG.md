@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 262 — run.goセッション状態機械の異常系監査: V2ジョブmapのDoS無界化封じ＋curtail解除時の再稼働即時化)
+
+quality-pass キュー項目4（`internal/engine/run.go`セッション状態機械の
+異常系精読）で2件の実害を修正。
+
+- **V2 `jobs` map が無界だった（DoS硬化）**: `NewMiningJob`受信のたびに
+  `jobs[JobID]`へ蓄積し`SetNewPrevHash`でのみ解放される構造のため、
+  tip更新を送らずfutureジョブを垂れ流す悪意ある/異常なプールで
+  セッションメモリが無制限に増大した。既存の`submissions`map
+  （cap 1024）やV1ジョブIDマップ（cap 1024）と同型の防御を新ヘルパ
+  `storeJob`で導入（cap=256、最古ジョブからFIFO退避 — プールはチェーン
+  順にジョブを発行するため、将来の`SetNewPrevHash`が指す可能性が最も
+  高い新しい側を保持）。
+- **curtail解除時、再稼働が次のプールメッセージ待ちだった**:
+  `isCurtailed()`中のジョブ受信は追跡のみで`updateWork`を送らず、
+  解除後は次の`NewMiningJob`/notify到来まで採掘が停止したままだった
+  （静かなプールでは分単位の無駄なアイドル）。`resumeCh`（cap 1の
+  バッファ付き、非ブロッキング送信）をRun→reconnect→sessionへ配線し、
+  価格監視ゴルーチンが解除検知時に即座にnudge — V2は
+  `startJob(active, activeNTime)`で現在アーム済みジョブを即時再発行、
+  V1は`lastV1Job`の`applyJob`を再実行（ジョブIDマップの解決をcurtail中も
+  無条件化し、resume先のwork IDが常に登録済みであることを保証）。
+
 ### Fixed (session 255 — Stratum V1パスのshare送信が数学的に必ずrejectされる3つの独立欠陥を是正＋難易度遷移rejectの良性分類＋依存衛生)
 
 GitHub（ESP-Minerのcanonical実装 `components/stratum/mining.c`、SRI）、
