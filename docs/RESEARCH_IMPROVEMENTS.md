@@ -112,6 +112,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    big-endian per the pool's hex convention.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
+   — session 272: **connectivity half done** — `datum://` dials via the
+   stratumv1 dialer (`Dialer{datum:true}`, reports `ProtocolDATUM`), engine
+   routes it through `runSessionV1`, config validation accepts the scheme,
+   doctor strips it. KNOWN_LIMITATIONS §14 RESOLVED. Remaining: the
+   template-verification half (ADR-009 Track D) — Otedama mines the
+   gateway's templates without auditing their construction.
 7. ✅ **Share-submission latency histogram** (session 46). `LatencyTracker`
    records submit→accept RTT in a ring buffer; p50/p95/p99 are logged and
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
@@ -991,6 +997,11 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
+   — ✅ **Implemented (session 272).** `datum://` is served by
+   `stratumv1.Dialer{datum:true}` (ProtocolDATUM, same V1 wire); config
+   `validSchemes`, engine `runSession` routing, doctor `stripScheme`,
+   SPECIFICATION §3.3 and config.yaml.example all accept/document it.
+   KNOWN_LIMITATIONS §14 → RESOLVED.
 9. ✅ **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
    ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
    update the rationale text and pin a specific SRI tag as the interop

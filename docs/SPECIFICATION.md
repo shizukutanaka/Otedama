@@ -93,7 +93,9 @@ log/language/data-dir/power/arbitration fields. A malformed numeric env var
 At least one payout address is required (primary or a backup); every address
 must be a plausible mainnet address (length 26–90, prefix `1`/`3`/`bc1`;
 checksum is *not* verified here). Each `pools[].url` must use a supported scheme
-(`stratum+tcp|tls|v2|v2tls://`) with a non-empty host. The numeric fields are
+(`stratum+tcp|tls|v2|v2tls://`, or `datum://` for an OCEAN DATUM gateway —
+served by the Stratum V1 dialer per KNOWN_LIMITATIONS §14) with a non-empty
+host. The numeric fields are
 range-checked per the table above. An empty/comments-only file is valid
 (defaults apply).
 

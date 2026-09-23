@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 272 — `datum://` スキームで OCEAN DATUM ゲートウェイへ接続 — KNOWN_LIMITATIONS §14)
+
+**`datum://` が長らく予約済みだが未実装だったスキームを、実際に
+ダイヤル可能にした。** DATUM ゲートウェイのマイナー向けワイヤーは
+Stratum V1 そのもの（分散テンプレートの仕事はゲートウェイ側で行う）と
+一次情報で検証済みだったため、新プロトコルではなく
+`stratumv1.Dialer{datum: true}` —— `ProtocolDATUM` を報告する V1
+ダイヤラ変種 —— として実装。`engine.runSession` は `ProtocolDATUM`
+を `runSessionV1` へルーティングし、config バリデーション・doctor の
+到達性チェック・SPECIFICATION §3.3・config.yaml.example が全て
+`datum://` を受理・文書化する。ローカルの `datum_gateway` +
+フルノード宛に `datum://host:3334` と設定するだけで OCEAN 経由の
+分散型テンプレート採掘が可能になる（ADR-009 Track D の接続半分）。
+BIP-310 `mining.configure` の version-rolling 広告は行わない —
+overt ASICBoost は ASIC 固有の機能で CPU/GPU には無意味のため。
+
 ### Added (session 271 — プール hashshare 警告 doctor チェック — Category 4 #7)
 
 **設定したプールがネットワーク過半に近い超大手でも、今まで誰も教えて

@@ -608,40 +608,43 @@ decision on CI/CD strategy.
 
 ---
 
-## 14. DATUM is a reserved URL scheme, not an implemented protocol
+## ~~14. DATUM is a reserved URL scheme, not an implemented protocol~~ ✅ RESOLVED (session 272)
 
-**What:** `internal/poolproto`'s `ProtocolDATUM` constant and the
-`datum://` URL scheme are recognized by `FromURL`/`StripScheme`, and
-prior to session 248 the package doc comment and
-`internal/poolproto/stratumv1/stratumv1.go`'s "what this file does
-NOT do" note both described DATUM in present-tense, "Otedama can
-speak..." language. In reality, no `Dialer` is registered for
-`ProtocolDATUM` anywhere in the codebase (only `stratumv1` and
-`stratumv2` call `poolproto.Register` in `init()`), and no
-`internal/poolproto/datum` package exists.
+**Resolution:** `datum://` now dials. Per the session-251 design note
+(below), the DATUM gateway's miner-facing wire **is** Stratum V1 — the
+decentralised-template work happens gateway-side, not in a new wire
+format — so the correct implementation is an SV1-transport dialer, not
+a `poolproto/datum` package: `stratumv1.Dialer{datum: true}` is
+registered in `init()` and reports `ProtocolDATUM`; `parseAddress`
+accepts the `datum://` prefix; `engine.runSession` routes
+`ProtocolDATUM` through `runSessionV1`; `doctor`'s reachability check
+strips the scheme. A `datum://` pool now negotiates the identical
+subscribe→authorize→extranonce handshake as `stratum+tcp://`.
 
-**Impact:** `poolproto.DialURL("datum://pool.example.com:3334")`
-returns `ErrUnknownProtocol`. Users who configure an OCEAN pool via
-its DATUM endpoint cannot connect through Otedama; OCEAN must be used
-via its SV1-transport-compatible endpoint instead, if it offers one.
+**Verified:** `TestDialer_Datum_RoutesThroughV1` (net.Pipe fake pool:
+Dial `datum://`, assert `ProtocolDATUM` on dialer+connection, full
+Negotiate, assert `*session` V1 wire) and `TestParseAddress_Datum` —
+`go test ./internal/poolproto/... ./internal/doctor ./internal/engine`
+green, session 272.
 
-**Workaround:** Configure OCEAN (or any DATUM-only pool) via a
-Stratum V1 or V2 endpoint if the pool operator provides one.
+**Remaining caveats (honest):** the session does NOT advertise
+BIP-310 `mining.configure` version-rolling — meaningless for CPU/GPU
+(overt ASICBoost is an ASIC feature; `set_version_mask` remains a
+deliberate no-op) — and DATUM's JDC/coinbase-construction duties live
+gateway-side by design; Otedama mines the gateway's templates like any
+other V1 pool. A `datum+tls://` variant does not exist upstream
+(gateway is cleartext V1), so none is registered.
 
-**Design note (session 251, primary-source verified):** the DATUM
-Gateway (OCEAN-xyz/datum_gateway) is **MIT-licensed**, a public
+**Prior design note (session 251, primary-source verified):** the
+DATUM Gateway (OCEAN-xyz/datum_gateway) is **MIT-licensed**, a public
 **BETA**, requires a full Bitcoin node, and miners connect to it over
 **Stratum V1 with version-rolling (ASICBoost) — it does NOT support
-Stratum V2**. This confirms the planned implementation shape: `datum://`
-should be an **SV1-transport dialer reusing `poolproto/stratumv1`**, not
-a new binary protocol, and the MIT license means the reference
-gateway's wire format can be studied directly. (Disregard a stray
-third-party claim of GPL-3.0 — the gateway README says MIT. Source:
-raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
+Stratum V2**. Source:
+raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md
 
 **Target:** Tracked by `docs/adr/ADR-009` (status: Proposed — pool
-decentralization integration, covering JDC/DATUM/solo). No committed
-release target.
+decentralization integration, covering JDC/DATUM/solo). Connectivity
+half is done; the ADR's template-verification half remains open.
 
 ---
 

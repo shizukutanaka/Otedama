@@ -45,6 +45,8 @@ bitcoin_address: ""
 #   stratum+v2tls://    Stratum V2 encrypted    (recommended for internet)
 #   stratum+tls://      Stratum V1 encrypted
 #   stratum+tcp://      Stratum V1 plain        (not recommended)
+#   datum://            OCEAN DATUM gateway     (Stratum V1 wire; needs a
+#                       locally running datum_gateway + full Bitcoin node)
 #
 pools:
   - url: "stratum+v2tls://public.stratum.slushpool.com:3336"
