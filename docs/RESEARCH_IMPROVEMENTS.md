@@ -506,7 +506,7 @@ endpoint against current vendor documentation. Tags as before
    (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
    and a per-pool `authority_pubkey` config field.
    (sv2-spec 04-Protocol-Security.md)
-2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
+2. ✅ **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
    `max_target`. In the V2 channel/job path clamp the effective target into
@@ -523,6 +523,18 @@ endpoint against current vendor documentation. Tags as before
    field is intentionally not sent (see the dead-field note removed from
    `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
    message is no longer silently unrecognised, which was the blocking gap.
+   — ✅ **Wire-fixed (session 257).** Re-checking sv2-spec §5.3.2 showed
+   `max_target` is a *mandatory* U256 — the field was never optional, so
+   omitting it truncated the wire message and made Otedama's
+   OpenMiningChannel undecodable by conformant pools. It is now encoded
+   as `MaxTargetUnrestricted` (all-ones = "any target accepted", the
+   honest form of the original intent); `OpenMiningChannelSuccess`
+   moved to the spec's standard-channel trailer (`extranonce_prefix`
+   B0_32 + `group_channel_id` U32 — it had the extended-channel
+   variant's `extranonce` + `extranonce_size`), and `MsgSubmitSharesError`
+   moved to the spec's 0x1d (0x1e is Reserved). With an unrestricted
+   bound advertised the residual clamp ask is trivially satisfied;
+   it becomes meaningful only if a future knob narrows max_target.
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization

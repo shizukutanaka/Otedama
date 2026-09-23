@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 257 — 一次情報(sv2-spec §5.3/§08-Message-Types)との照合に基づく精錬: SV2 チャネル開設メッセージの必須 max_target 欠落＋Success フィールドレイアウトの旧版残留＋SubmitSharesError の予約 msg_type を現行仕様へ修正)
+
+**sv2-spec (stratum-mining/sv2-spec) §5.3.2 との照合で発見された実プロトコル
+不整合を修正。** `OpenMiningChannel` は仕様上 `max_target` (U256, 32B) が
+*必須*フィールドだが、旧実装はこれを省略しており、メッセージ末尾が 32B 短い
+非適合ペイロードを送出していた —— 仕様適合プールは `max_target` 読み取りで
+EOF となり、OpenMiningChannel.Error または接続切断に至る。**「Otedama は
+プールが割り当てる target を何でも受け付ける」設計意図を
+`MaxTargetUnrestricted` (全ビット1 = 上限なし) として wire に正しく符号化**
+する形に変更（engine + poolproto/stratumv2 の双方の送出側）。
+
+**`OpenMiningChannelSuccess` を現行仕様の standard-channel レイアウトへ更新:**
+トレイラーは `extranonce` + `extranonce_size`(U16) —— 旧仕様の
+extended-channel 版 —— ではなく `extranonce_prefix`(B0_32) +
+`group_channel_id`(U32)。`Extranonce`/`ExtraNonce2Size` は
+`ExtranoncePrefix`/`GroupChannelID` に改名・再配線（strict encode B0_32 /
+lenient decode B0_255 の Postel 非対称は維持）。**`MsgSubmitSharesError` を
+0x1e → 0x1d へ**（現行 §08-Message-Types で 0x1e は Reserved）。
+
+補足: KNOWN_LIMITATIONS §11 注記・CATEGORY_AUDIT の ⏸ 保留項目
+（監査で指摘されていた MaxTargetNBits wire-encoding 未確認項目）を解消。
+RESEARCH_IMPROVEMENTS session-51 Cat 1/2 #2 の残務「max_target へのクランプ」は、
+unrestricted を advertise する限り自明に満たされるため、将来 bound を狭める
+設定 knob が生えた時点で有意になる旨を台帳に記録。
+
+カバレッジ: round-trip に加え payload 末尾 32B = all-ones の wire フィクスチャを
+追加（旧来の欠落を恒久的に pin）。全24パッケージ `go test` green
+（stratum/poolproto/engine すべて pass）。
+
 ### Security/Deps (session 256 — 外部一次情報(FETCHED検証済み依存関係・toolchain調査)に基づく精錬: アーカイブ済み yaml.v3 の後継移行＋x/crypto 最新化＋Go 1.25 toolchain で reachable stdlib advisory を解消＋BIP-39 チェックサムの early-exit 比較を除去)
 
 **1. `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3` v3.0.5 へ移行 (session-251 item 1).**

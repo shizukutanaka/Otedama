@@ -149,11 +149,15 @@ and flagged, not changed this session:
 - ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
   V2 read loop `continue`s silently — adding a debug log would aid attack
   triage. Deferred (forward-compat behaviour is intentional).
-- ⏸ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding: an audit pass
-  suggested a missing field, but the exact SV2 field set must be confirmed
-  against the spec before touching the working round-trip — not changed (the
-  project forbids acting on an unverified spec claim). Tracked for the secp256k1
-  work which revisits the channel messages.
+- ✅ `OpenMiningChannel(.Success)` wire-encoding: confirmed against
+  sv2-spec §5.3.2/5.3.3 — `max_target` is a mandatory U256 the earlier
+  layout had omitted entirely (truncated wire message), and the Success
+  trailer was the extended-channel variant (`extranonce` +
+  `extranonce_size`) rather than `extranonce_prefix` + `group_channel_id`.
+  **Fixed (session 257)**: `OpenMiningChannel.MaxTarget` is now encoded
+  (callers send `MaxTargetUnrestricted`), `OpenMiningChannelSuccess`
+  carries `ExtranoncePrefix` + `GroupChannelID`, and
+  `MsgSubmitSharesError` moved to the spec's 0x1d (0x1e is Reserved).
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

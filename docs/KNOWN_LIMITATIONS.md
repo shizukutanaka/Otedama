@@ -402,11 +402,12 @@ the one actually used today per §3 above) and mirrors the same fix into
 the `internal/poolproto/stratumv2` adapter so it does not regress once
 wired in. A related, lower-severity gap remains open and is tracked in
 `docs/RESEARCH_IMPROVEMENTS.md` Category 10 item 2: clamping the channel
-target to `max_target` on every vardiff update, which is moot for now
-since Otedama never sends a `max_target` preference to the pool in the
-first place (`OpenMiningChannel` intentionally omits it — see the field's
-removal note in `internal/stratum/handshake.go`). The Noise NX secp256k1
-gap is unrelated and already tracked at §2 above.
+target to `max_target` on every vardiff update. Since session 257
+`OpenMiningChannel` sends the spec-mandatory `max_target` as
+`MaxTargetUnrestricted` (all-ones = "any target accepted"), so the clamp
+bound is trivially satisfied today — meaningful only if a future config
+knob advertises a narrower bound. The Noise NX secp256k1 gap is
+unrelated and already tracked at §2 above.
 
 ---
 
