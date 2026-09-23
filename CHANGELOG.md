@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 271 — GPU memory suitability: VRAM-aware workload candidacy)
+
+First slice of "GPU suitability scoring per workload" (RESEARCH_IMPROVEMENTS
+Cat 5 #4). `hal.Capabilities.MemoryBytes` is populated from the amdgpu sysfs
+`mem_info_vram_total` node on Linux; drivers exposing no node (NVIDIA
+proprietary, integrated GPUs reporting unified memory) leave it **0 =
+unknown**, and the arbitration rule treats unknown as *not excluded* — only
+devices positively known to be undersized are rejected, never guessed at.
+`arbitration.Stream` gains `MinMemoryBytes` plus a `SuitableFor` check
+(family + memory), plumbed end-to-end via `provider.Quote.MinMemoryBytes` →
+`updateStream` → the live stream map. The simulated Akash provider advertises
+a 4 GiB floor (`akashSimMinMemoryBytes`, the conventional minimum for a
+usable quantized model), so an amdgpu reporting <4 GiB VRAM is now excluded
+from inference assignment rather than quoted as if it could run the
+workload. Throughput dimensions (FP16/INT8 TFLOPS) stay open — sysfs exposes
+no such figures within the project's zero-CGO constraint — and per-device
+assignment ranking remains ADR-010 A3. Zero new dependencies; tests cover
+sysfs parsing, boundary/exclusion semantics, and Decide-level idling of an
+undersized GPU.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

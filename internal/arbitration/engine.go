@@ -110,17 +110,42 @@ type Stream struct {
 	PrivacyRating       int              // 0 (worst) .. 10 (best)
 	EnvironmentalRating int              // 0 (worst) .. 10 (best)
 	IsBitcoinMining     bool             // true for streams that pay out as BTC natively
+
+	// MinMemoryBytes is the minimum dedicated memory (VRAM) a device must
+	// report to qualify for this stream — e.g. an inference workload
+	// whose model does not fit below a threshold. 0 (the default) means
+	// no memory requirement. Devices that report no memory figure
+	// (Capabilities.MemoryBytes == 0 — NVIDIA proprietary driver,
+	// integrated GPUs) are treated as *unknown* and are NOT excluded:
+	// the requirement only rejects devices positively known to be too
+	// small, it never guesses at unreported capacity.
+	MinMemoryBytes int64
 }
 
 // Accepts reports whether this stream will accept work from a device of
 // the given family.
-func (s Stream) Accepts(f hal.Family) bool {
+func (s *Stream) Accepts(f hal.Family) bool {
 	return slices.Contains(s.AcceptsFamilies, f)
+}
+
+// SuitableFor reports whether this stream can use the given device: its
+// family is accepted AND, when the stream declares a MinMemoryBytes
+// requirement, the device either meets it or reports no memory figure
+// (unknown capacity is not a rejection — only positively-too-small is).
+func (s *Stream) SuitableFor(dev *DeviceRef) bool {
+	if !s.Accepts(dev.Identity.Family) {
+		return false
+	}
+	if s.MinMemoryBytes > 0 && dev.Capabilities.MemoryBytes > 0 &&
+		dev.Capabilities.MemoryBytes < s.MinMemoryBytes {
+		return false
+	}
+	return true
 }
 
 // YieldFor returns the yield this stream offers for the specified device.
 // If the device is not listed in YieldPerDevice, DefaultYield is returned.
-func (s Stream) YieldFor(id string) Yield {
+func (s *Stream) YieldFor(id string) Yield {
 	if y, ok := s.YieldPerDevice[id]; ok {
 		return y
 	}
@@ -363,7 +388,7 @@ func chooseForDevice(
 	var candidates []candidate
 	var belowFloor bool
 	for _, s := range streams {
-		if !s.Accepts(dev.Identity.Family) {
+		if !s.SuitableFor(&dev) {
 			continue
 		}
 		y := s.YieldFor(dev.Identity.ID).Effective()

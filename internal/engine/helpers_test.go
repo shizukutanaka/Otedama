@@ -226,13 +226,14 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 		ProviderID:       "mining.stratum",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		MinMemoryBytes:   4 << 30,
 		Yield: provider.Yield{
 			SatsPerSecond:    0.1,
 			NetSatsPerSecond: 0.099,
 			Confidence:       0.95,
 		},
 	}
-	updateStream(&mu, m, q)
+	updateStream(&mu, m, &q)
 
 	if len(m) != 1 {
 		t.Fatalf("map size = %d, want 1", len(m))
@@ -241,6 +242,9 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	s, ok := m[key]
 	if !ok {
 		t.Fatalf("key %q not in map; got keys %v", key, mapKeys(m))
+	}
+	if s.MinMemoryBytes != q.MinMemoryBytes {
+		t.Errorf("MinMemoryBytes = %d, want %d", s.MinMemoryBytes, q.MinMemoryBytes)
 	}
 	if string(s.ID) != "mining.stratum" {
 		t.Errorf("Stream.ID = %q, want mining.stratum", s.ID)
@@ -260,7 +264,7 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 func TestUpdateStream_AIAkashIsNotBitcoinMining(t *testing.T) {
 	var mu sync.Mutex
 	m := make(map[string]arbitration.Stream)
-	updateStream(&mu, m, provider.Quote{
+	updateStream(&mu, m, &provider.Quote{
 		ProviderID: "ai.akash",
 		DeviceID:   "gpu-0",
 	})
@@ -277,11 +281,11 @@ func TestUpdateStream_UpdateExistingDevice(t *testing.T) {
 	id := "mining.stratum"
 	dev := "cpu-0"
 
-	updateStream(&mu, m, provider.Quote{
+	updateStream(&mu, m, &provider.Quote{
 		ProviderID: id, DeviceID: dev,
 		Yield: provider.Yield{SatsPerSecond: 0.1, Confidence: 0.9},
 	})
-	updateStream(&mu, m, provider.Quote{
+	updateStream(&mu, m, &provider.Quote{
 		ProviderID: id, DeviceID: dev,
 		Yield: provider.Yield{SatsPerSecond: 0.2, Confidence: 0.95}, // updated
 	})

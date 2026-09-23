@@ -74,7 +74,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if !ok {
 				return
 			}
-			key := updateStream(opts.streamsMu, opts.streamMap, q)
+			key := updateStream(opts.streamsMu, opts.streamMap, &q)
 			ts := q.At
 			if ts.IsZero() {
 				ts = time.Now()
@@ -173,13 +173,14 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 // updateStream folds one provider quote into the live streams map,
 // keyed by "providerID:deviceID". It returns the key it wrote, so the caller
 // can track per-stream freshness for staleness pruning.
-func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) string {
+func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q *provider.Quote) string {
 	mu.Lock()
 	defer mu.Unlock()
 	key := q.ProviderID + ":" + q.DeviceID
 	existing := m[key]
 	existing.ID = arbitration.StreamID(q.ProviderID)
 	existing.AcceptsFamilies = q.AcceptedFamilies
+	existing.MinMemoryBytes = q.MinMemoryBytes
 	if existing.YieldPerDevice == nil {
 		existing.YieldPerDevice = make(map[string]arbitration.Yield)
 	}
