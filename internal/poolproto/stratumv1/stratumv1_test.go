@@ -6,6 +6,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -298,6 +299,8 @@ type fakePool struct {
 	// suggested records the difficulty values the client suggested.
 	suggestedMu sync.Mutex
 	suggested   []float64
+	// submits records the extranonce2 (params[2]) of each mining.submit.
+	submits []string
 }
 
 func (p *fakePool) run() {
@@ -323,6 +326,14 @@ func (p *fakePool) run() {
 		}
 		switch req.Method {
 		case "mining.submit":
+			var params []any
+			if json.Unmarshal(req.Params, &params) == nil && len(params) == 5 {
+				if en2, ok := params[2].(string); ok {
+					p.suggestedMu.Lock()
+					p.submits = append(p.submits, en2)
+					p.suggestedMu.Unlock()
+				}
+			}
 			result := "true"
 			if !p.verdict {
 				result = "false"
@@ -2052,5 +2063,68 @@ func TestSession_E2E_GetVersionAnswersAgent(t *testing.T) {
 	}
 	if resp.Result != agentString {
 		t.Errorf("agent = %v, want %q (same as mining.subscribe)", resp.Result, agentString)
+	}
+}
+
+// TestSession_E2E_Extranonce2Cycles verifies each mining.submit carries a
+// distinct extranonce2 — the client-owned half of the coinbase nonce. A
+// fixed en2 makes the 32-bit nonce the entire work domain; once it wraps
+// the worker produces literal duplicate shares the pool rejects.
+func TestSession_E2E_Extranonce2Cycles(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.extranonce2Size = 4 // as negotiated by subscribe/set_extranonce
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	for i := 0; i < 2; i++ {
+		res, err := sess.Submit(ctx, poolproto.ShareSubmission{
+			JobID: "job1", Nonce: uint32(i), NTime: 0x68d36c5e,
+		})
+		if err != nil {
+			t.Fatalf("Submit %d: %v", i, err)
+		}
+		if !res.Accepted {
+			t.Fatalf("Submit %d rejected: %s", i, res.Reason)
+		}
+	}
+
+	pool.suggestedMu.Lock()
+	defer pool.suggestedMu.Unlock()
+	if len(pool.submits) != 2 {
+		t.Fatalf("pool saw %d submits, want 2", len(pool.submits))
+	}
+	if pool.submits[0] != "00000001" || pool.submits[1] != "00000002" {
+		t.Errorf("extranonce2 = %v, want monotonic [00000001 00000002]", pool.submits)
+	}
+}
+
+// TestExtranonce2Bytes checks width/padding of the counter encoding:
+// big-endian, low bytes occupied, exactly extranonce2_size long.
+func TestExtranonce2Bytes(t *testing.T) {
+	cases := []struct {
+		n    uint64
+		size int
+		want string
+	}{
+		{1, 4, "00000001"},
+		{0xdeadbeef, 4, "deadbeef"},
+		{1, 8, "0000000000000001"},
+		{0x1ff, 2, "01ff"},
+	}
+	for _, c := range cases {
+		if got := hex.EncodeToString(extranonce2Bytes(c.n, c.size)); got != c.want {
+			t.Errorf("extranonce2Bytes(%d, %d) = %q, want %q", c.n, c.size, got, c.want)
+		}
 	}
 }
