@@ -659,11 +659,22 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
-	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
+	chanID, groupID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
 	if err != nil {
 		return err
 	}
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
+	defer func() {
+		// Spec §5.3.9 polite close: the client sends CloseChannel when
+		// ending its operation so the pool releases the channel
+		// deterministically rather than inferring it from the TCP socket
+		// going away. Best-effort — on a broken connection the write
+		// fails and the socket close is still the final signal.
+		cc := stratum.CloseChannel{ChannelID: chanID, ReasonCode: "client shutdown"}
+		if err := sendMsg(conn, stratum.MsgCloseChannel, true, &cc); err != nil {
+			opts.log("debug", fmt.Sprintf("engine: CloseChannel send failed: %v", err))
+		}
+	}()
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2) // handshake complete → connected
 	}
@@ -942,6 +953,35 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 							acc.NewSubmitsAcceptedCount, settled, last))
 					}
 				}
+			}
+			if pm.msg.CloseChannel != nil {
+				cc := pm.msg.CloseChannel
+				reason := cc.ReasonCode
+				if reason == "" {
+					reason = "no reason given"
+				}
+				if cc.ChannelID == chanID || cc.ChannelID == groupID {
+					// Spec §5.3.9: the pool ended this channel (or the
+					// group it belongs to) and MUST stop sending messages
+					// for it. Every further submit on the dead channel
+					// would be a wasted reject — end the session so the
+					// failover/reconnect loop opens a fresh channel.
+					return fmt.Errorf("engine: pool closed channel %d (%s)",
+						cc.ChannelID, reason)
+				}
+				// A channel we never opened: protocol noise, not fatal.
+				opts.log("warn", fmt.Sprintf(
+					"engine: pool sent CloseChannel for unknown channel %d (%s); ignoring",
+					cc.ChannelID, reason))
+			}
+			if pm.msg.Unknown != nil {
+				// Frames we deliberately don't model (UpdateChannel,
+				// SetExtranoncePrefix, SetGroupChannel, extended-channel
+				// types...) land here; they are harmless to the
+				// standard-channel subset but worth a debug breadcrumb.
+				opts.log("debug", fmt.Sprintf(
+					"engine: ignoring pool msg_type 0x%02X (%d payload bytes)",
+					pm.msg.Unknown.MsgType, len(pm.msg.Unknown.Payload)))
 			}
 			if pm.msg.SubmitSharesError != nil {
 				e := pm.msg.SubmitSharesError
@@ -1256,7 +1296,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // workers must grind to: it is far easier than the block target, and a hash
 // meeting it is exactly what the pool credits. A zero target means the pool
 // did not assign one; the caller falls back to the block target.
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
+// handshake runs the SV2 setup + OpenMiningChannel exchange and returns
+// the opened channel's id, its group channel id (needed to honour
+// CloseChannel's group-close semantics, spec §5.3.9), and the share target.
+func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (chanID, groupID uint32, shareTarget miner.Hash, err error) {
 	host, _ := parseHost(poolURL)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
@@ -1269,21 +1312,21 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		DeviceID:        "cpu",
 	}
 	if err := sendMsg(conn, stratum.MsgSetupConnection, false, &sc); err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	f, err := dec.ReadFrame()
 	if err != nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: setup response: %w", err)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: setup response: %w", err)
 	}
 	msg, err := stratum.DispatchFrame(f)
 	if err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	if msg.SetupConnectionError != nil {
-		return 0, miner.Hash{}, &fatalError{"pool rejected: " + msg.SetupConnectionError.Error}
+		return 0, 0, miner.Hash{}, &fatalError{"pool rejected: " + msg.SetupConnectionError.Error}
 	}
 	if msg.SetupConnectionSuccess == nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 
 	var hashRate float32
@@ -1297,23 +1340,23 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		MaxTarget:       stratum.MaxTargetUnrestricted,
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	f, err = dec.ReadFrame()
 	if err != nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: channel response: %w", err)
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel response: %w", err)
 	}
 	msg, err = stratum.DispatchFrame(f)
 	if err != nil {
-		return 0, miner.Hash{}, err
+		return 0, 0, miner.Hash{}, err
 	}
 	if msg.OpenMiningChannelSuccess == nil {
-		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
 	}
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
 	// map directly.
-	return omcs.ChannelID, miner.Hash(omcs.Target), nil
+	return omcs.ChannelID, omcs.GroupChannelID, miner.Hash(omcs.Target), nil
 }
 
 // ----- Shared helpers -----

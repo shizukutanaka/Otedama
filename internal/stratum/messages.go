@@ -17,6 +17,7 @@
 //	0x11  OpenMiningChannelSuccess
 //	0x12  OpenMiningChannelError
 //	0x15  NewMiningJob           (server → client, channel_msg)
+//	0x18  CloseChannel           (both directions, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
 //	0x1d  SubmitSharesError      (server → client, channel_msg; spec 0x1e is Reserved)
@@ -37,6 +38,7 @@
 package stratum
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -50,6 +52,7 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgCloseChannel             uint8 = 0x18
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
 	MsgSubmitSharesError        uint8 = 0x1d
@@ -314,6 +317,43 @@ func DecodeSubmitSharesSuccess(payload []byte) (SubmitSharesSuccess, error) {
 }
 
 // ------------------------------------------------------------------
+// CloseChannel (both directions, msg_type 0x18, channel_msg)
+// ------------------------------------------------------------------
+
+// CloseChannel ends a mining channel (spec §5.3.9). Server→client: the
+// pool is shutting the channel down and MUST stop sending messages for
+// it — the client stops submitting on it (a CloseChannel naming a group
+// channel closes every channel in the group). Client→server: a polite
+// close so the pool releases the channel deterministically rather than
+// waiting out the TCP socket. A proxy sends it on behalf of channels
+// whose downstream connection closed.
+type CloseChannel struct {
+	ChannelID  uint32
+	ReasonCode string // STR0_255 — printable ASCII, no control characters
+}
+
+// Encode serialises CloseChannel (symmetric inverse of DecodeCloseChannel).
+func (m CloseChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 8+len(m.ReasonCode)), m.ChannelID)
+	return appendStr0_255(b, m.ReasonCode)
+}
+
+// DecodeCloseChannel parses a CloseChannel payload.
+func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
+	if len(payload) < 5 {
+		return CloseChannel{}, fmt.Errorf("stratum: CloseChannel: short payload (%d < 5)", len(payload))
+	}
+	reason, err := getStr0_255(bytes.NewReader(payload[4:]))
+	if err != nil {
+		return CloseChannel{}, fmt.Errorf("stratum: CloseChannel: %w", err)
+	}
+	return CloseChannel{
+		ChannelID:  binary.LittleEndian.Uint32(payload[0:4]),
+		ReasonCode: reason,
+	}, nil
+}
+
+// ------------------------------------------------------------------
 // SubmitSharesError (server → client, msg_type 0x1d, channel_msg)
 // ------------------------------------------------------------------
 
@@ -391,6 +431,7 @@ type Message struct {
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
+	CloseChannel             *CloseChannel
 	Unknown                  *UnknownMessage
 }
 
@@ -481,6 +522,12 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.SubmitSharesError = &v
+	case MsgCloseChannel:
+		v, err := DecodeCloseChannel(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.CloseChannel = &v
 	default:
 		m.Unknown = &UnknownMessage{MsgType: f.Header.MsgType, Payload: f.Payload}
 	}

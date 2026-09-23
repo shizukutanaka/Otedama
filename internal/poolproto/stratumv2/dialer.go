@@ -138,10 +138,11 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 
 	sess := &session{
-		conn:   conn,
-		dec:    dec,
-		chanID: msg.OpenMiningChannelSuccess.ChannelID,
-		jobsCh: make(chan poolproto.Job, 8),
+		conn:    conn,
+		dec:     dec,
+		chanID:  msg.OpenMiningChannelSuccess.ChannelID,
+		groupID: msg.OpenMiningChannelSuccess.GroupChannelID,
+		jobsCh:  make(chan poolproto.Job, 8),
 	}
 	sess.start(ctx)
 	return sess, nil
@@ -174,10 +175,11 @@ func (c *connection) Close() error {
 // ----- session -----
 
 type session struct {
-	conn   *connection
-	dec    *stratum.Decoder
-	chanID uint32
-	jobsCh chan poolproto.Job
+	conn    *connection
+	dec     *stratum.Decoder
+	chanID  uint32
+	groupID uint32
+	jobsCh  chan poolproto.Job
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
@@ -263,6 +265,13 @@ func (s *session) readLoop(ctx context.Context) {
 				}
 			}
 		}
+		if msg.CloseChannel != nil &&
+			(msg.CloseChannel.ChannelID == s.chanID || msg.CloseChannel.ChannelID == s.groupID) {
+			// Spec §5.3.9: pool ended the channel (or its group) —
+			// nothing more will arrive for it. Exit the read loop so
+			// jobsCh closes and the consumer sees the dead session.
+			return
+		}
 		// Note: SetTarget (share difficulty) has no carrier on
 		// poolproto.Job; the engine's inline V2 loop handles it. This
 		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
@@ -303,7 +312,13 @@ func (s *session) SuggestedDifficulty() float64 {
 }
 
 // Close terminates the session's underlying connection.
-func (s *session) Close() error { return s.conn.Close() }
+func (s *session) Close() error {
+	// Spec §5.3.9 polite close — best-effort: lets the pool release the
+	// channel deterministically rather than inferring the socket close.
+	cc := stratum.CloseChannel{ChannelID: s.chanID, ReasonCode: "client shutdown"}
+	_ = sendMsg(s.conn.raw, stratum.MsgCloseChannel, true, &cc)
+	return s.conn.Close()
+}
 
 // ----- helpers -----
 
@@ -338,6 +353,10 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	// A wedged/half-open socket must not block the caller forever —
+	// fail the write and let the session/reconnect logic take over
+	// (same guarantee the engine's sendMsg makes).
+	_ = w.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}
