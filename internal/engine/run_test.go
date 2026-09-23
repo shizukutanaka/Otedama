@@ -2253,6 +2253,12 @@ type responsivePool struct {
 	// one per share in this fixture's one-ack-per-submit loop.
 	ackCount uint32
 	ackSum   uint64
+
+	// mu guards gotUpdates / gotOther: the pool goroutine appends while
+	// the test reads after the session ends.
+	mu         sync.Mutex
+	gotUpdates []stratum.UpdateChannel
+	gotOther   []uint8 // non-share, non-UpdateChannel msg_types seen
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2363,7 +2369,20 @@ func (fp *responsivePool) serve() {
 		if err != nil {
 			return
 		}
-		if f.Header.MsgType != stratum.MsgSubmitSharesStandard {
+		switch f.Header.MsgType {
+		case stratum.MsgUpdateChannel:
+			uc, err := stratum.DecodeUpdateChannel(f.Payload)
+			if err == nil {
+				fp.mu.Lock()
+				fp.gotUpdates = append(fp.gotUpdates, uc)
+				fp.mu.Unlock()
+			}
+			continue
+		case stratum.MsgSubmitSharesStandard:
+		default:
+			fp.mu.Lock()
+			fp.gotOther = append(fp.gotOther, f.Header.MsgType)
+			fp.mu.Unlock()
 			continue
 		}
 		share, err := stratum.DecodeSubmitSharesStandard(f.Payload)
@@ -3048,4 +3067,84 @@ func TestRunSession_PoolCloseChannel(t *testing.T) {
 		}
 	}
 	t.Errorf("client never sent CloseChannel back; msg_types received: %v", got)
+}
+
+// TestRunSession_UpdateChannelAdvertised verifies the engine publishes the
+// measured hash rate to the pool via UpdateChannel (spec §5.3.7) once the
+// miner actually produces one — the figure advertised at channel open is a
+// boot-time estimate at best (0 on the poolproto path).
+func TestRunSession_UpdateChannelAdvertised(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	err := runSession(ctx, sessionOpts{
+		poolURL:  fp.URL(),
+		user:     "bc1qtest000000000000000000000000000000000",
+		workers:  []*miner.Worker{w},
+		merged:   merged,
+		interval: 10 * time.Millisecond,
+		m:        newEngineMetrics(metrics.NewRegistry()),
+		log:      func(_, _ string) {},
+	})
+	if err == nil {
+		t.Fatal("runSession returned nil before ctx timeout")
+	}
+
+	fp.mu.Lock()
+	updates := append([]stratum.UpdateChannel(nil), fp.gotUpdates...)
+	other := append([]uint8(nil), fp.gotOther...)
+	fp.mu.Unlock()
+
+	if len(updates) == 0 {
+		t.Fatalf("pool never received UpdateChannel; other msg_types seen: %v", other)
+	}
+	first := updates[0]
+	if first.ChannelID != 1 {
+		t.Errorf("UpdateChannel.channel_id = %d, want 1", first.ChannelID)
+	}
+	if first.NominalHashRate <= 0 {
+		t.Errorf("UpdateChannel.nominal_hash_rate = %v, want > 0", first.NominalHashRate)
+	}
+	for i, b := range first.MaximumTarget {
+		if b != 0xFF {
+			t.Fatalf("UpdateChannel.maximum_target[%d] = 0x%02X, want unrestricted (0xFF)", i, b)
+		}
+	}
+}
+
+func TestShouldAdvertiseHashRate(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-2 * time.Second)
+	cases := []struct {
+		name               string
+		measured, lastSent float64
+		lastTime           time.Time
+		want               bool
+	}{
+		{"zero measurement never advertises", 0, 0, old, false},
+		{"first nonzero measurement advertises", 100e6, 0, old, true},
+		{"same rate does not re-send", 100e6, 100e6, old, false},
+		{"small drift within 25%", 120e6, 100e6, old, false},
+		{">25% rise re-advertises", 130e6, 100e6, old, true},
+		{">25% drop re-advertises", 70e6, 100e6, old, true},
+		{"within 1s debounce floor", 500e6, 0, now.Add(-500 * time.Millisecond), false},
+	}
+	for _, c := range cases {
+		if got := shouldAdvertiseHashRate(c.measured, c.lastSent, c.lastTime, now); got != c.want {
+			t.Errorf("%s: shouldAdvertiseHashRate(%v, %v) = %v, want %v",
+				c.name, c.measured, c.lastSent, got, c.want)
+		}
+	}
 }

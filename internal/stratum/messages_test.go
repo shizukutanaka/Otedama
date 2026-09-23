@@ -666,6 +666,59 @@ func TestDispatchFrame_CloseChannel(t *testing.T) {
 	}
 }
 
+// ----- UpdateChannel / UpdateChannel.Error -----
+
+func TestUpdateChannel_Encode_Roundtrip(t *testing.T) {
+	orig := UpdateChannel{ChannelID: 3, NominalHashRate: 42.5e6}
+	for i := range orig.MaximumTarget {
+		orig.MaximumTarget[i] = 0xFF
+	}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if len(payload) != 40 {
+		t.Fatalf("payload = %d bytes, want 40 (U32 + F32 + U256)", len(payload))
+	}
+	got, err := DecodeUpdateChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip mismatch: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeUpdateChannel_Truncated(t *testing.T) {
+	if _, err := DecodeUpdateChannel(make([]byte, 39)); err == nil {
+		t.Error("expected error on 39-byte payload")
+	}
+}
+
+func TestDecodeUpdateChannelError(t *testing.T) {
+	payload := append(appendU32LE(nil, 9), append([]byte{13}, "bad hash rate"...)...)
+	got, err := DecodeUpdateChannelError(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.ChannelID != 9 || got.ErrorCode != "bad hash rate" {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestDispatchFrame_UpdateChannel(t *testing.T) {
+	orig := UpdateChannel{ChannelID: 1, NominalHashRate: 1e9, MaximumTarget: MaxTargetUnrestricted}
+	payload, _ := orig.Encode()
+	f := Frame{Header: Header{MsgType: MsgUpdateChannel, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.UpdateChannel == nil || msg.UpdateChannel.NominalHashRate != 1e9 {
+		t.Fatalf("UpdateChannel not populated: %+v", msg.UpdateChannel)
+	}
+}
+
 // ----- DispatchFrame — additional message types -----
 
 func TestDispatchFrame_SubmitSharesSuccess(t *testing.T) {
