@@ -306,20 +306,43 @@ func (s *session) dispatch(line []byte) {
 		if msg.ID != nil {
 			s.respond(msg.ID, agentString)
 		}
+	default:
+		// A pool→client message carrying an id is a *request* and must
+		// get a reply — silently dropping it is the same half-open bug
+		// class as an unanswered mining.ping: strict pools time out and
+		// disconnect. Answer unimplemented methods (mining.get_transactions,
+		// pool-specific extensions) with an explicit JSON-RPC
+		// "Method not found" rather than silence. Notifications without
+		// an id stay ignored; forward-compatible with pool extensions.
+		if msg.ID != nil {
+			s.respondError(msg.ID, -32601, "Method not found")
+		}
 	}
 	// Other notifications (mining.set_version_mask, etc.) are
 	// silently ignored; forward-compatible with pool extensions.
 }
 
 // respond writes a JSON-RPC result reply for a server→client request
-// (mining.ping, client.get_version). It is best-effort: a write failure is
-// swallowed because the broken connection is surfaced by the read loop
-// anyway, and there is nothing actionable to do mid-parse.
+// (mining.ping, client.get_version).
 func (s *session) respond(id any, result any) {
+	s.writeReply(id, result, nil)
+}
+
+// respondError writes a JSON-RPC error reply for a server→client request
+// we do not implement, in the same [code, "message", data] array shape V1
+// pools use (e.g. [38, "Method not found", null]).
+func (s *session) respondError(id any, code int, message string) {
+	s.writeReply(id, nil, []any{code, message, nil})
+}
+
+// writeReply emits one JSON-RPC response line. Best-effort: a write
+// failure is swallowed because the broken connection is surfaced by the
+// read loop anyway, and there is nothing actionable to do mid-parse.
+func (s *session) writeReply(id any, result any, errVal any) {
 	body, err := json.Marshal(map[string]any{
 		"id":     id,
 		"result": result,
-		"error":  nil,
+		"error":  errVal,
 	})
 	if err != nil {
 		return
