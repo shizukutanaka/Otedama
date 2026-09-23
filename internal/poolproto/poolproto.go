@@ -246,6 +246,23 @@ type PoolNoticeReceiver interface {
 	PoolNotices() <-chan string
 }
 
+// ReconnectInformer is an optional extension implemented by sessions
+// that can receive a pool-directed reconnect request (Stratum V1
+// client.reconnect / mining.reconnect). Type-assert a Session to it;
+// protocols without the concept (V2) simply do not implement it.
+type ReconnectInformer interface {
+	// LastReconnectWait returns the delay, in seconds, the pool asked
+	// the client to observe before re-dialling (0 when the directive
+	// carried no wait). The second return reports whether any directive
+	// was seen during the session's life.
+	//
+	// Only the advisory wait is surfaced — never the pool-supplied
+	// host:port. Following an arbitrary endpoint from an unauthenticated
+	// notification is a redirection vector; the reconnect loop already
+	// owns the operator-configured pool list.
+	LastReconnectWait() (int, bool)
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

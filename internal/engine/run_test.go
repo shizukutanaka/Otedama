@@ -2879,3 +2879,64 @@ func TestRunSessionV1_SubmitErrorCountsUnresolvedShare(t *testing.T) {
 		}
 	}
 }
+
+// TestRunSessionV1_RecordsPoolReconnectWait drives a V1 session whose pool
+// issues client.reconnect with an advisory wait: the session must record it
+// into sessionOpts.reconnectWaitSecs for the reconnect loop to honour.
+func TestRunSessionV1_RecordsPoolReconnectWait(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Pool-directed reconnect with a 42s advisory wait — maintenance drain.
+		fmt.Fprintf(conn, `{"id":null,"method":"client.reconnect","params":["",0,42]}`+"\n")
+		// Keep the conn briefly so the client itself initiates the close;
+		// the directive handler closes the session on its own.
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	var wait atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:           "stratum+tcp://" + ln.Addr().String(),
+			user:              "worker.1",
+			workers:           nil,
+			merged:            nil,
+			interval:          time.Hour,
+			log:               func(_, _ string) {},
+			reconnectWaitSecs: &wait,
+		})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(6 * time.Second):
+		t.Fatal("runSessionV1 did not exit after client.reconnect")
+	}
+	if got := wait.Load(); got != 42 {
+		t.Fatalf("reconnectWaitSecs = %d, want 42 from client.reconnect params", got)
+	}
+}

@@ -398,6 +398,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	addrConnected := false // has the active address ever established a session?
 	attempt := 0
 	backoff := reconnectBackoffInitial
+	// poolWaitSecs carries the advisory wait from the last session's
+	// pool-directed reconnect (V1 client.reconnect) into the delay
+	// before the next dial. Written by runSessionV1 on session unwind.
+	var poolWaitSecs atomic.Int64
 
 	statsInterval := r.opts.StatsInterval
 	if statsInterval <= 0 {
@@ -438,25 +442,26 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:      poolURL,
-			user:         user,
-			workers:      r.workers,
-			merged:       r.merged,
-			interval:     statsInterval,
-			dashboard:    r.dashboard,
-			startTime:    r.startTime,
-			wallet:       r.wallet,
-			devices:      r.deviceN,
-			log:          r.log,
-			providers:    r.providers,
-			m:            r.metrics,
-			powerWatts:   r.opts.Config.PowerWatts,
-			curtailGate:  r.curtailGate,
-			resumeCh:     r.resumeCh,
-			tlsCAFile:    poolTLSCAFile,
-			poolPassword: poolPassword,
-			activityMu:   r.activityMu,
-			activity:     r.activity,
+			poolURL:           poolURL,
+			user:              user,
+			workers:           r.workers,
+			merged:            r.merged,
+			interval:          statsInterval,
+			dashboard:         r.dashboard,
+			startTime:         r.startTime,
+			wallet:            r.wallet,
+			devices:           r.deviceN,
+			log:               r.log,
+			providers:         r.providers,
+			m:                 r.metrics,
+			powerWatts:        r.opts.Config.PowerWatts,
+			curtailGate:       r.curtailGate,
+			resumeCh:          r.resumeCh,
+			tlsCAFile:         poolTLSCAFile,
+			poolPassword:      poolPassword,
+			activityMu:        r.activityMu,
+			activity:          r.activity,
+			reconnectWaitSecs: &poolWaitSecs,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -532,7 +537,19 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
-		timer := time.NewTimer(backoff)
+		delay := backoff
+		if wait := poolWaitSecs.Swap(0); wait > 0 {
+			// The pool asked us to stay away a while (client.reconnect
+			// wait, e.g. a maintenance drain). Honor it up to
+			// reconnectBackoffMax — longer requests are clamped so a
+			// hostile or buggy pool cannot pin the miner offline.
+			poolDelay := min(time.Duration(wait)*time.Second, reconnectBackoffMax)
+			if poolDelay > delay {
+				delay = poolDelay
+				r.log("info", fmt.Sprintf("engine: pool requested %ds before reconnect; waiting %v", wait, delay))
+			}
+		}
+		timer := time.NewTimer(delay)
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
@@ -589,6 +606,11 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// reconnectWaitSecs, when non-nil, receives the advisory wait a
+	// pool-directed reconnect (V1 client.reconnect) asked for — written
+	// once by runSessionV1 as the session unwinds, read by the reconnect
+	// loop before the next dial. Nil in tests/minimal setups.
+	reconnectWaitSecs *atomic.Int64
 }
 
 // isCurtailed reports whether hashing is currently paused by the
@@ -1098,6 +1120,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: %w", err)
 	}
 	defer sess.Close()
+	// Surface the pool's advisory reconnect wait (client.reconnect) to
+	// the reconnect loop: the directive is recorded for the session's
+	// whole life, so reading it on unwind captures the latest one.
+	defer func() {
+		if opts.reconnectWaitSecs == nil {
+			return
+		}
+		if ri, ok := sess.(poolproto.ReconnectInformer); ok {
+			if w, seen := ri.LastReconnectWait(); seen {
+				opts.reconnectWaitSecs.Store(int64(w))
+			}
+		}
+	}()
 	opts.log("info", fmt.Sprintf("engine: connected to %s (Stratum V1)", opts.poolURL))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)

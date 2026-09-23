@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 268 — V1 `client.reconnect` の advisory wait を再接続ループが実際に尊重)
+
+`client.reconnect`/`mining.reconnect` がパースした指示
+(host, port, wait)を `session.lastReconnect` に記録していたが、
+読み手が存在しないデッド状態だった — プールの「メンテナンス排出で
+N秒待て」という助言を無視し、常に独自指数バックオフで再ダイヤル
+していた。`poolproto.ReconnectInformer` 拡張インターフェースで
+advisory waitのみを露出（`LastReconnectWait` — プール指定の
+host:portは認証なし通知由来のリダイレクト経路のため非公開のまま）、
+`runSessionV1` が `sessionOpts.reconnectWaitSecs` に書き込み、
+再接続ループが `max(backoff, min(wait, reconnectBackoffMax))` だけ
+次回ダイヤルを遅延 — クランプで敵対プールによるオフライン固定を防御。
+テスト3本追加。CATEGORY_AUDITに session-268 追記。
+
 ### Added (session 267 — プリエンプションリスクをスイッチコストに織り込む裁定)
 
 リサーチ項目「preemption is the dominant failure mode」(Duan et al.,

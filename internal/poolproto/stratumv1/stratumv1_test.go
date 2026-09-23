@@ -1331,6 +1331,18 @@ func TestSession_E2E_ClientReconnect_ClosesSession(t *testing.T) {
 	} else if d.Host != "alt.pool.example" || d.Port != 4444 || d.Wait != 10 {
 		t.Errorf("lastReconnect = %+v, want {alt.pool.example 4444 10}", *d)
 	}
+
+	// ReconnectInformer surfaces only the advisory wait to the engine.
+	if w, ok := sess.LastReconnectWait(); !ok || w != 10 {
+		t.Errorf("LastReconnectWait = (%d, %v), want (10, true)", w, ok)
+	}
+}
+
+func TestSession_LastReconnectWait_FalseBeforeDirective(t *testing.T) {
+	sess := &session{}
+	if w, ok := sess.LastReconnectWait(); ok || w != 0 {
+		t.Errorf("LastReconnectWait = (%d, %v), want (0, false)", w, ok)
+	}
 }
 
 func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {

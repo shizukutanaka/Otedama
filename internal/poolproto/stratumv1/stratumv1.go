@@ -283,6 +283,18 @@ func (s *session) dispatch(line []byte) {
 	}
 }
 
+// LastReconnectWait implements poolproto.ReconnectInformer: the advisory
+// delay from the most recent client.reconnect / mining.reconnect the
+// pool sent. The host:port is recorded for diagnostics only and never
+// surfaced — see reconnectDirective for the redirection rationale.
+func (s *session) LastReconnectWait() (int, bool) {
+	d := s.lastReconnect.Load()
+	if d == nil {
+		return 0, false
+	}
+	return d.Wait, true
+}
+
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 

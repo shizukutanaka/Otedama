@@ -623,3 +623,15 @@ the finding-has-value-only-if-new rule.
 Tests: `TestStoreJob_BoundsAndEvictsOldest`, `TestRunSession_ResumeReArmsJobAfterUncurtail` (V2 e2e via fakePool), `TestRunSessionV1_ResumeReArmsJob` (V1 e2e via in-process JSON-RPC pool).
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 268 update — V1 client.reconnect advisory-wait handling
+
+| Finding | Disposition |
+|---|---|
+| `client.reconnect` / `mining.reconnect` parsed a full directive (host, port, wait) into `session.lastReconnect` — but nothing ever read it. The pool's advisory wait (seconds to hold off before re-dialling, e.g. a maintenance drain) was dead state: the reconnect loop always slept its own exponential backoff and re-dialled straight back into a draining node. | ✅ Fixed: `poolproto.ReconnectInformer` optional interface surfaces only the advisory wait (`LastReconnectWait`) — the pool-supplied host:port stays unexposed (unauthenticated redirection vector, the existing `reconnectDirective` rationale). `runSessionV1` writes it to `sessionOpts.reconnectWaitSecs` on unwind; `runReconnectLoop` sleeps `max(backoff, min(wait, reconnectBackoffMax))` before the next dial — clamped so a hostile/buggy pool cannot pin the miner offline. |
+
+Tests: `TestSession_LastReconnectWait_FalseBeforeDirective`, `LastReconnectWait` assertion in the client.reconnect e2e, `TestRunSessionV1_RecordsPoolReconnectWait` (in-process pool sends a 42s directive).
+
+All 24 packages build, vet, and test green.
