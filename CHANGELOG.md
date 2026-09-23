@@ -144,6 +144,30 @@ RESEARCH_IMPROVEMENTS Cat 5 #8（推論収益の建値・会計検証）の監�
 **検証**: `internal/engine`・`internal/provider` テスト green
 （`TestUpdateStream_*` 4件含む）。
 
+### Removed (session 259 — 「allocation-minimising」と称していたpooled HMACが実測で回帰と判明しデッドコード削除)
+
+`skills/quality-pass-opus.md`キュー項目1（`hmacSHA256Pooled`の配線
+判断）を実施。キュー自身が「割当プロファイルの定量根拠」を要求して
+いたため、配線前に`BenchmarkHmacSHA256`を実測した。
+
+- **実測でpooled版が一律に劣ることが判明**: pooled 178.5ns・4 allocs
+  ・192B/op、非pooled 133.8ns・2 allocs・64B/op（darwin/arm64、
+  benchtime 1s）。`hash.Hash`のinterface boxingと`Sum(nil)`の
+  不可避アロケーション（結果スライスは呼出毎に新規必要）が、節約
+  対象の2 hasherアロケーションを上回る。ファイルdocの
+  「allocation-minimising」主張は実測と矛盾していた。
+- **配線せず削除**: 配線するとライブハンドシェイク経路が悪化する
+  ため、`internal/stratum/noise_pool.go`と`noise_pool_test.go`を
+  削除（いずれも本番経路からunreachableでdeadcode済み）。
+  `hmacSHA256`（非pooled）はhkdf2/hkdf3から引き続き使用。
+- **Carmack原則の適用例**: 「パフォーマンス優先はプロファイリングに
+  裏付けられる場合のみ」——推測最適化を防いだ計測駆動の判断。
+
+**検証**: `internal/stratum` テスト green、配線前後でdeadcode差分
+なし（該当経路は元来unreachable）。`internal/stratum/noise*`は
+CLAUDE.mdの資金領域ルール対象のためmaintainer確認を推奨
+（既存コード無改変・デッドコード削除のみ）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
