@@ -2015,3 +2015,42 @@ func TestSession_E2E_MiningPingGetsPong(t *testing.T) {
 		t.Errorf("pong error = %v, want nil", resp.Error)
 	}
 }
+
+func TestSession_E2E_GetVersionAnswersAgent(t *testing.T) {
+	// client.get_version is a pool→client request for the miner agent
+	// (Braiins uses it for compatibility tracking; cgminer/bfgminer/
+	// ESP-Miner all answer). The reply must be the same agent string we
+	// sent in mining.subscribe — never a different identity.
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"id":7,"method":"client.get_version","params":[]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no get_version reply within 2s: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply did not parse: %v (%q)", err, line)
+	}
+	if resp.uintID() != 7 {
+		t.Errorf("reply id = %v, want 7 (must echo the request id)", resp.ID)
+	}
+	if resp.Result != agentString {
+		t.Errorf("agent = %v, want %q (same as mining.subscribe)", resp.Result, agentString)
+	}
+}
