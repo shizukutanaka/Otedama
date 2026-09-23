@@ -1027,3 +1027,12 @@ roll-up sections and older items were never re-synced as code shipped.
 | pollingProvider lifecycle (double-start reject, stop/restart channel swap, drop-oldest sendQuote) | ✅ Verified clean for single start/stop usage (engine pattern); restart-after-Stop channel swap noted as latent design limit |
 | AkashProvider: GPU filter, 20% fee netting, preemption risk 0.15 placeholder, "(simulated)" name suffix | ✅ Verified clean and honest |
 | httpserver handlers (healthz/readyz/metrics/index), ServeError, timeouts besides WriteTimeout | ✅ Verified clean |
+
+## Session 293 update — internal/metrics + internal/tui audit
+
+| Finding | Disposition |
+|---|---|
+| `metricKey` non-injective: `name+",k=v"` encoding lets label values containing `,`/`=` collide ({a:"b,c="} vs {a:"b",c:""} → both "m,a=b,c=") — second registration silently returns the first counter with wrong labels | ✅ Reuse quoted+escaped `renderLabels` output as the canonical key (injective, matches exposition form). Regression test confirms old collision. |
+| `RegisterCollector` doc claimed "may not call any Registry method (deadlock)" but collectors run after RUnlock | ✅ Doc corrected — registry use inside collectors is free. |
+| HELP/TYPE single-emission per name, label escaping, cross-type panic, `formatFloat` canonical NaN/±Inf, runtime.go go_* set | ✅ Verified clean. |
+| TUI earningsLine/providerLine/walletLine/footer, truncate/visibleLen ANSI handling, s273 mining-quote fix integration | ✅ Verified clean. |

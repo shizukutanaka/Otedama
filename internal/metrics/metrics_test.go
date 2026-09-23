@@ -96,6 +96,24 @@ func TestCounter_DifferentLabelsCreatesNewCounter(t *testing.T) {
 	}
 }
 
+func TestCounter_SeparatorBytesInLabelValuesDoNotCollide(t *testing.T) {
+	// The identity key must be injective even when label values contain the
+	// separator characters themselves: {a:"b,c="} must NOT collide with
+	// {a:"b", c:""} — under the old unquoted ",k=v" key encoding both mapped
+	// to "m,a=b,c=", so the second registration would silently return the
+	// first counter (with the wrong label set).
+	r := NewRegistry()
+	x := r.NewCounter("m", "help", map[string]string{"a": "b,c="})
+	y := r.NewCounter("m", "help", map[string]string{"a": "b", "c": ""})
+	if x == y {
+		t.Fatal("distinct label sets collided into one counter")
+	}
+	x.Inc()
+	if y.Value() != 0 {
+		t.Errorf("label set {a:b,c=} incremented counter for {a:b,c:''}: %d", y.Value())
+	}
+}
+
 // ============================================================================
 // Gauge
 // ============================================================================

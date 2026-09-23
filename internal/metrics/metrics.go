@@ -66,8 +66,9 @@ func NewRegistry() *Registry {
 
 // RegisterCollector adds fn to the registry. WriteText calls all registered
 // collectors (in registration order) after writing the static counters and
-// gauges. fn must write valid Prometheus text lines and may not call any
-// Registry method (deadlock). Safe to call concurrently.
+// gauges. Collectors run after the registry lock is released, so fn may
+// freely read or update other metrics in the same registry. Safe to call
+// concurrently.
 func (r *Registry) RegisterCollector(fn CollectFunc) {
 	r.mu.Lock()
 	r.collectors = append(r.collectors, fn)
@@ -328,24 +329,15 @@ func counterNameExists(m map[string]*Counter, name string) bool {
 	return false
 }
 
+// metricKey returns a canonical identity for (name, labels). It must be
+// injective — distinct label sets must never map to the same key, or a
+// registration would silently return the wrong series. The old encoding
+// (name + ",k=v"...) was NOT injective: a label value containing ',' or
+// '=' could mimic the separator (e.g. {a:"b,c="} collided with
+// {a:"b",c:""}). The rendered label form is quoted and escaped, which
+// makes it unambiguous, so we reuse it directly.
 func metricKey(name string, labels map[string]string) string {
-	if len(labels) == 0 {
-		return name
-	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	var sb strings.Builder
-	sb.WriteString(name)
-	for _, k := range keys {
-		sb.WriteByte(',')
-		sb.WriteString(k)
-		sb.WriteByte('=')
-		sb.WriteString(labels[k])
-	}
-	return sb.String()
+	return name + renderLabels(labels)
 }
 
 func renderLabels(labels map[string]string) string {

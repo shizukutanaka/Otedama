@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 293 — metrics 実装監査)
+
+- **`internal/metrics`: `metricKey` が非単射で異なるラベル集合が衝突**:
+  `name + ",k=v"` 形式は、ラベル値に `,`/`=` を含むと別ラベル集合と同一
+  キー化（例 `{a:"b,c="}` と `{a:"b",c:""}` が共に `m,a=b,c=`）— 2件目の
+  登録が誤ったラベル集合のカウンタを静黙返却。クォート＋エスケープ済みの
+  `renderLabels` 出力をそのままキーに転用し単射化（exposition 正準形と
+  一致）。`TestCounter_SeparatorBytesInLabelValuesDoNotCollide` 追加 —
+  旧実装では `{a:"b,c="}` と `{a:"b",c:""}` が衝突することを確認済み。
+- **`RegisterCollector` の doc が実装と矛盾**: 「Registry メソッド呼出は
+  deadlock」と記述されていたが、実装は RLock 解放後に collector を呼ぶ
+  ため同一レジストリの読み書きは自由 — 訂正。
+- 検証済みクリーン: HELP/TYPE 単一出力・escapeLabel/escapeHelp・
+  cross-type 拒否・formatFloat（NaN/±Inf 正準形）、runtime.go の go_*
+  12系列、TUI dashboard の earningsLine（s273修正の整合）、provider/
+  wallet/footer 各行。
+
 ### Fixed (session 292 — provider/httpserver コード監査)
 
 - **`internal/provider`: マイニングクォートの confidence がBTCレート
