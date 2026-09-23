@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 295 — 小パッケージ群 + poolproto/stratumv2 アダプタ監査)
+
+- **`internal/poolproto/stratumv2` が出荷バイナリに未リンク**: 非テスト
+  コードから import するものが無く `init()` が一度も走らなかったため、
+  パッケージ doc の「registered Dialer」記述とは裏腹に `stratum+v2://`・
+  `stratum+v2tls://` の登録は実際には行われず、`poolproto.DialURL` は
+  unknown scheme を返していた。`stratumv1` と同型に
+  `cmd/otedama/run.go` で blank import を追加。
+- **同アダプタ TLS ダイアラが平文に静黙フォールバック**:
+  `stratum+v2tls://` が証明書検証のない素 TCP を張りながら
+  `ProtocolStratumV2TLS` を報告していた — 失敗より悪い静黙ダウン
+  グレード。`stratum.TLSConfigWithExtraCAs`＋`stratum.DialTLS` に配線し
+  平文経路を完全排除（認証なしのフォールバック無し）。
+- **同アダプタ `Submit` のフレーム書込を直列化**: 並行 Submit が
+  `conn.raw.Write` を無秩序に叩きワイヤ上でフレームがインターリーブ
+  し得た（V1 アダプタは同理由で既に `writeMu` 保持）。`sendMsg` を
+  `*connection` 経由に変更し `writeMu` で保護。
+- **同アダプタ `pending` ジョブマップを上限化**: tip 更新を送らず
+  NewMiningJob を垂れ流すプールでメモリ無制限増大 — `pendingJobsCap=256`
+  FIFO 退避（エンジン inline `storeJob` と同型）。
+- **`SuggestedDifficulty()` が常に 0 だった**: `readLoop` が SetTarget
+  フレームを捨てて `s.diff` 未更新 — 新規 `miner.DifficultyFromTarget`
+  （`TargetFromDifficulty` の逆変換、big-endian 変換・ゼロターゲット→0）
+  で target→difficulty に変換して公開。e2e テストで diff 8 到達を検証。
+- 検証済みクリーン: `internal/logger`（atomic デフォルト、
+  Discard=LevelError+1）、`internal/clock`、`internal/version`、
+  `internal/i18n`（POSIX ロケール優先順位正準）、`internal/poolproto`
+  コア（scheme 順序照合）。
+
 ### Fixed (session 294 — engine 深部監査: arbitrate/stats/setup/fanin)
 
 - **`internal/engine`: ストリーム鮮度をプロバイダ時刻 `q.At` ではなく

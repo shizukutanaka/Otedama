@@ -1045,3 +1045,15 @@ roll-up sections and older items were never re-synced as code shipped.
 | `streamsSlice` merge writes into representative's `YieldPerDevice` — nil map panic if rep was directly seeded | ✅ Defensive allocation + order-covering regression test. |
 | `"mining.stratum"` magic string duplicated in 3 places | ✅ `provider.MiningProviderID` const; all sites now reference it. |
 | fanIn (ctx observation, buffer cap), uptime/sats accountants, LatencyTracker quantiles, HashrateMonitor, publishDifficulty, setup.go wallet/worker/provider wiring | ✅ Verified clean. |
+
+## Session 295 update — small packages + poolproto/stratumv2 adapter audit
+
+| Finding | Disposition |
+|---|---|
+| **`stratumv2` package never imported in non-test code** — its `init()` (registering both `stratum+v2://` and `stratum+v2tls://` dialers) never ran in the shipped binary; `poolproto.DialURL("stratum+v2://…")` returned unknown-scheme despite the package doc claiming "a registered Dialer" | ✅ Blank-import added in `cmd/otedama/run.go` alongside `stratumv1`; KNOWN_LIMITATIONS §3 resolution note updated. |
+| V2 adapter TLS dialer silently used the plaintext path — `stratum+v2tls://` produced an unverified TCP connection that still reported `ProtocolStratumV2TLS` | ✅ `Dial` now uses `stratum.TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)` + `stratum.DialTLS` (never a plaintext fallback). Regression test asserts the plaintext `dialFn` is never consulted. |
+| Transient `err` shadowing introduced mid-edit (inner `cfg, err :=` shadowed the outer `err`; a failed TLS dial would return `raw=nil` with nil error) — caught by the new TLS regression test before any commit | ✅ `tlsErr` for the CA-parse path; outer `err` checked after the branch. |
+| `Submit` frame writes unserialised — concurrent `sendMsg(conn.raw, …)` could interleave frame bytes on the wire (V1 adapter already carries `writeMu` for this) | ✅ `sendMsg` now takes `*connection` and locks `c.writeMu` around `c.raw.Write`. |
+| `pending` future-job map unbounded — a pool streaming endless NewMiningJob frames without a tip update grew session memory without bound | ✅ FIFO cap `pendingJobsCap = 256` via `order` slice, mirroring the engine's inline `storeJob`; `order` reset on `SetNewPrevHash`. |
+| `s.diff` never written — `SetTarget` frames skipped in `readLoop` meant `SuggestedDifficulty()` permanently returned 0 | ✅ New `miner.DifficultyFromTarget` (inverse of `TargetFromDifficulty`, big-endian conversion, zero-target→0); `readLoop` stores `math.Float64bits(diff)` on every `SetTarget`. e2e test asserts ≈8 after a diff-8 SetTarget. |
+| `internal/logger`, `internal/clock`, `internal/version`, `internal/i18n` (+`messages`), `internal/poolproto` core | ✅ Verified clean (atomic default logger, Discard=LevelError+1, POSIX locale precedence, scheme-order matching). |

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
@@ -60,6 +61,27 @@ func TestDialer_Dial_RejectsUnknownScheme(t *testing.T) {
 	_, err := d.Dial(context.Background(), "http://example.com", poolproto.Credentials{})
 	if err == nil {
 		t.Error("Dial with non-stratum scheme should fail")
+	}
+}
+
+func TestDialer_Dial_TLSDoesNotFallBackToPlaintextDialFn(t *testing.T) {
+	// A TLS dialer must use the verified-TLS path, never the plaintext
+	// dialFn: before the fix, stratum+v2tls:// silently produced a plain
+	// TCP connection that still reported ProtocolStratumV2TLS.
+	called := false
+	d := &Dialer{useTLS: true, dialFn: func(_ context.Context, address string) (net.Conn, error) {
+		called = true
+		s, _ := net.Pipe()
+		return s, nil
+	}}
+	// 127.0.0.1:1 is a guaranteed-fail TLS target — real DialTLS refuses
+	// fast, so success here can only come from a plaintext fallback.
+	_, err := d.Dial(context.Background(), "stratum+v2tls://127.0.0.1:1", poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("TLS dialer succeeded via plaintext dialFn — silent downgrade")
+	}
+	if called {
+		t.Error("TLS dialer invoked the plaintext dialFn")
 	}
 }
 
@@ -456,6 +478,43 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for job from mock pool")
+	}
+}
+
+func TestSession_SetTarget_UpdatesSuggestedDifficulty(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	const chanID = uint32(1)
+	// Difficulty 8 → MaxTarget = diff1/8; the session must convert it
+	// back so SuggestedDifficulty reports ≈8, not the permanent 0 it
+	// returned while SetTarget frames were skipped.
+	target, err := miner.TargetFromDifficulty(8)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty: %v", err)
+	}
+	go func() {
+		pool.doHandshake(chanID)
+		st := stratum.SetTarget{ChannelID: chanID, MaxTarget: [32]byte(target)}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetTarget, true, st)
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for sess.SuggestedDifficulty() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := sess.SuggestedDifficulty(); got < 7.9 || got > 8.1 {
+		t.Errorf("SuggestedDifficulty = %v, want ~8", got)
 	}
 }
 
@@ -963,7 +1022,8 @@ func TestSendMsg_WriteError(t *testing.T) {
 	server.Close() // close server so client Write fails
 	defer client.Close()
 
-	err := sendMsg(client, stratum.MsgSetupConnection, false, &stratum.SetupConnection{
+	c := &connection{raw: client}
+	err := sendMsg(c, stratum.MsgSetupConnection, false, &stratum.SetupConnection{
 		Protocol: stratum.MiningProtocol, MinVersion: 2, MaxVersion: 2,
 		Endpoint: "x:1", Vendor: "test",
 	})
@@ -980,7 +1040,8 @@ func (e errEncodable) Encode() ([]byte, error) { return nil, net.ErrClosed }
 func TestSendMsg_EncodeError(t *testing.T) {
 	_, client := net.Pipe()
 	defer client.Close()
-	if err := sendMsg(client, 0x01, false, errEncodable{}); err == nil {
+	c := &connection{raw: client}
+	if err := sendMsg(c, 0x01, false, errEncodable{}); err == nil {
 		t.Error("sendMsg with failing Encode should return error")
 	}
 }
@@ -996,7 +1057,8 @@ func (b bigEncodable) Encode() ([]byte, error) {
 func TestSendMsg_WrapMessageError(t *testing.T) {
 	_, client := net.Pipe()
 	defer client.Close()
-	if err := sendMsg(client, 0x01, false, bigEncodable{}); err == nil {
+	c := &connection{raw: client}
+	if err := sendMsg(c, 0x01, false, bigEncodable{}); err == nil {
 		t.Error("sendMsg with oversized payload should return WrapMessage error")
 	}
 }

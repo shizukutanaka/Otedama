@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
@@ -48,20 +49,31 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 	return poolproto.ProtocolStratumV2
 }
 
-// Dial opens a TCP (or, when configured, TLS) connection to the pool.
+// Dial opens a TCP (or, when configured, certificate-verified TLS)
+// connection to the pool. A TLS dialer never falls back to plaintext:
+// stratum+v2tls:// either yields a verified TLS connection or an error.
 func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := poolproto.StripScheme(url)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: %w", err)
 	}
-	dialFn := d.dialFn
-	if dialFn == nil {
-		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-			var dialer net.Dialer
-			return dialer.DialContext(ctx, "tcp", address)
+	var raw net.Conn
+	if d.useTLS {
+		cfg, tlsErr := stratum.TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)
+		if tlsErr != nil {
+			return nil, fmt.Errorf("stratumv2: %w", tlsErr)
 		}
+		raw, err = stratum.DialTLS(ctx, address, cfg)
+	} else {
+		dialFn := d.dialFn
+		if dialFn == nil {
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "tcp", address)
+			}
+		}
+		raw, err = dialFn(ctx, address)
 	}
-	raw, err := dialFn(ctx, address)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: dial %s: %w", address, err)
 	}
@@ -94,7 +106,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		Firmware:        "main",
 		DeviceID:        "cpu",
 	}
-	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, false, &sc); err != nil {
+	if err := sendMsg(conn, stratum.MsgSetupConnection, false, &sc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send SetupConnection: %w", err)
 	}
 	f, err := dec.ReadFrame()
@@ -118,7 +130,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
 	}
-	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
+	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
 	}
 	f, err = dec.ReadFrame()
@@ -153,6 +165,11 @@ type connection struct {
 	remoteAddr string
 	protocol   poolproto.ProtocolID
 	user       string
+
+	// writeMu serialises frame writes: a share Submit racing another send
+	// must not interleave frame bytes on the wire (the stratumv1 adapter
+	// carries the same mutex for the same reason).
+	writeMu sync.Mutex
 
 	closeOnce sync.Once
 	closed    atomic.Bool
@@ -199,6 +216,7 @@ func (s *session) readLoop(ctx context.Context) {
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
 	pending := make(map[uint32]*stratum.NewMiningJob)
+	var order []uint32
 	var prevHash [32]byte
 	var prevNBits uint32
 	havePrev := false
@@ -236,7 +254,18 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
+			if _, dup := pending[j.JobID]; !dup {
+				order = append(order, j.JobID)
+			}
 			pending[j.JobID] = j
+			// Bound the awaiting-tip map: a pool streaming endless future
+			// jobs without a chain-tip update must not grow session memory
+			// without bound (same cap and oldest-first eviction as the
+			// engine's inline jobs map).
+			for len(order) > pendingJobsCap {
+				delete(pending, order[0])
+				order = order[1:]
+			}
 			if j.HasMinNtime && havePrev {
 				if !emit(j, j.MinNtime, false) {
 					return
@@ -251,8 +280,10 @@ func (s *session) readLoop(ctx context.Context) {
 			havePrev = true
 			named := pending[p.JobID]
 			pending = map[uint32]*stratum.NewMiningJob{}
+			order = order[:0]
 			if named != nil {
 				pending[p.JobID] = named
+				order = append(order, p.JobID)
 				ntime := p.MinNtime
 				if named.HasMinNtime && named.MinNtime > ntime {
 					ntime = named.MinNtime
@@ -262,9 +293,15 @@ func (s *session) readLoop(ctx context.Context) {
 				}
 			}
 		}
-		// Note: SetTarget (share difficulty) has no carrier on
-		// poolproto.Job; the engine's inline V2 loop handles it. This
-		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
+		if msg.SetTarget != nil {
+			// Publish the pool-assigned share difficulty so
+			// SuggestedDifficulty reports something real. MaxTarget is a
+			// target, not a difficulty — convert via diff1/target.
+			s.diff.Store(math.Float64bits(
+				miner.DifficultyFromTarget(miner.Hash(msg.SetTarget.MaxTarget))))
+		}
+		// This adapter is not yet the live V2 path
+		// (KNOWN_LIMITATIONS §3).
 	}
 }
 
@@ -290,7 +327,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	// SubmitSharesStandard is a channel message: the channel_msg bit must
 	// be set in the frame header (the engine's inline path already does
 	// this; the two paths previously disagreed).
-	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
+	if err := sendMsg(s.conn, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
 		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: submit share: %w", err)
 	}
 	return poolproto.ShareResult{Accepted: true}, nil
@@ -320,11 +357,18 @@ type encodable interface {
 	Encode() ([]byte, error)
 }
 
+// pendingJobsCap bounds the pending-job map, mirroring the engine's
+// inline loop: a pool streaming endless future jobs without a tip update
+// must not grow session memory without bound.
+const pendingJobsCap = 256
+
 // sendMsg encodes, frames, and writes a Stratum V2 message. isChannel
 // sets the frame header's channel_msg bit — required for channel-scoped
 // messages (SubmitSharesStandard etc.), absent for connection-scoped
-// ones (SetupConnection, OpenMiningChannel).
-func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
+// ones (SetupConnection, OpenMiningChannel). Writes are serialised
+// through the connection's writeMu so concurrent Submit calls cannot
+// interleave frame bytes.
+func sendMsg(c *connection, msgType uint8, isChannel bool, enc encodable) error {
 	payload, err := enc.Encode()
 	if err != nil {
 		return err
@@ -337,7 +381,9 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
-	if _, err := w.Write(data); err != nil {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if _, err := c.raw.Write(data); err != nil {
 		return err
 	}
 	return nil

@@ -142,10 +142,12 @@ same ADR-011 implementation step that replaces the Noise P-256 stub.
 
 **Resolution:** `internal/engine/run.go` now dispatches Stratum V1 URLs
 (`stratum+tcp://`, `stratum+tls://`) through `poolproto.DialURL` via the new
-`runSessionV1` function. The blank import
-`_ "github.com/shizukutanaka/Otedama/internal/poolproto/stratumv1"` in
-`cmd/otedama/run.go` fires dialer registration at startup. Stratum V2 URLs
-continue to use the existing inline `handshake` path.
+`runSessionV1` function. Blank imports in `cmd/otedama/run.go` fire dialer
+registration at startup — `stratumv1` since session 91, `stratumv2` since
+session 295 (previously the V2 adapter's `init()` never ran in the shipped
+binary, so `poolproto.DialURL("stratum+v2://…")` reported an unknown
+scheme). Stratum V2 URLs in the CLI itself continue to use the existing
+inline `handshake` path; the adapter is registered for `DialURL` callers.
 
 **Integration progress (all steps complete):**
 - ✅ Step 1 (session 37): URL-scheme parsing unified into `poolproto.knownSchemes`.

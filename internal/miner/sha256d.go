@@ -246,6 +246,27 @@ func TargetFromDifficulty(difficulty float64) (Hash, error) {
 	return out, nil
 }
 
+// DifficultyFromTarget is the inverse of TargetFromDifficulty: it converts
+// a 32-byte share target back into a Stratum difficulty (diff1Target /
+// target). A zero target returns 0 — "no share target assigned yet" —
+// rather than dividing by zero. The quotient is returned as a float64;
+// share difficulties are fractional in practice, so callers must not
+// round-trip the result through integer arithmetic.
+func DifficultyFromTarget(target Hash) float64 {
+	var be [32]byte
+	for i := 0; i < 32; i++ {
+		be[i] = target[31-i]
+	}
+	t := new(big.Int).SetBytes(be[:])
+	if t.Sign() <= 0 {
+		return 0
+	}
+	q := new(big.Float).SetPrec(256).SetInt(diff1Target)
+	q.Quo(q, big.NewFloat(0).SetPrec(256).SetInt(t))
+	d, _ := q.Float64()
+	return d
+}
+
 // MeetsTarget reports whether the given hash value meets the difficulty
 // target represented by nBits.
 func MeetsTarget(hash Hash, nBits uint32) (bool, error) {
