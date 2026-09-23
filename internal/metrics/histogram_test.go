@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Otedama contributors. See NOTICE for details.
 package metrics
 
 import (
