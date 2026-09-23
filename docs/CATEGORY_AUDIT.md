@@ -755,3 +755,18 @@ hal + miner + doctor audit.
 | `internal/doctor` doctor.go runner + checks.go remaining 15 checks (config/address/failover/datadir/wallet/reachability/diversity/endpoint-diversity/encryption/TLSCA/payout/power/floor/hardware/network/clockskew/envvars) | ✅ Clean beyond the two fixes. Per-check ctx-honouring is by contract (cmd wraps 30 s); a ctx-ignoring check would hang — noted, not changed (no such check exists today). |
 
 doctor/hal package tests green; lint/deadcode show only pre-existing findings (hugeParam on cfg params, British-spelling misspell).
+
+## Session 277 update — stratumv1 idempotent-start contract + non-finite guards + TLS doc honesty
+
+engine remainder (stats/setup/metrics/fanin), poolproto interface layer, stratumv1 package (4 files), and lightning package (read-only; maintainer-gated) audit.
+
+| Finding | Disposition |
+|---|---|
+| `session.start` documented "Idempotent" but was not: a second call spawned a second readLoop whose deferred `close(jobsCh)`/`close(noticeCh)` double-closed on exit → panic, plus a ctxCancel write race. | ✅ Fixed: `sync.Once` makes the documented contract real. New test `TestSession_StartIsIdempotent`. |
+| `LatencyTracker.Record` rejected `ms < 0` but admitted NaN — a NaN sample sits in the ring forever and `Quantile` could return it, poisoning submit-latency gauges. | ✅ Fixed: `!(ms >= 0)` rejects negatives and NaN alike. New test `TestLatencyTracker_RecordRejectsNaN`. |
+| `effectiveYield` — same non-finite class: NaN fraction slipped both `> 1` and `< 0` clamps; NaN/+Inf expected yield propagated to the gauge. | ✅ Fixed: NaN fraction clamps to 0, non-finite expected yield returns 0. New test `TestEffectiveYield_NonFiniteInputsReturnZero`. |
+| `tlsConfigWithExtraCAs` doc claimed "system root store plus PEM" — when `x509.SystemCertPool` fails it silently narrows to PEM-only. | ✅ Doc corrected (fail-closed narrowing is the safe behaviour; documented rather than changed). |
+| `extranonce2Size` data race (readLoop writes, Submit reads) | ⏸ Deferred: owned by parallel session `devin/1790137453-setextranonce-race` (atomic field + en2 counter + ping/version responders). Not duplicated here to avoid a conflicting fix. |
+| `NewWalletManager` first-run TOCTOU: stat→createNew race between two simultaneous instances lets the second silently overwrite the first's wallet.dat (a funds-key loss if the first's mnemonic was never backed up). | 📝 Recorded: internal/lightning is maintainer-gated (CLAUDE.md); noted for CODEOWNERS review, no change. |
+| `MnemonicToSeed` leaves PBKDF2 intermediates (password/mnemonic bytes, raw seed slice) unwiped — inconsistent with seedstore.go's zeroBytes hygiene. | 📝 Recorded: same gating; doc-comment-only changes are permitted in noise*, wallet hygiene is not noise*. |
+| `session.start` callers verified single-call (dialer only); `fanIn` ctx-aware fan-in, `buildStats`, `publishBTCRate`, `poolproto` registry/scheme table, `rpcMessage` dispatch, `parseNotify` per-word swap + lenient hex, `dialer.Negotiate` handshake ordering, `seedstore` scrypt+AES-GCM + opaque ErrWrongPassphrase, `wallet.save` atomic rename + 0600-before-rename, `MnemonicToEntropy` constant-accumulate checksum | ✅ Clean. |

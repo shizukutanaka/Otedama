@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 277 — stratumv1 開始契約 + 非有限ガード)
+
+- **`session.start` を真に idempotent 化**: doc コメントは "Idempotent" を
+  宣言していたが実際は二重呼出で2つ目の readLoop が spawn され、終了時の
+  `close(jobsCh)`/`close(noticeCh)` 二重クローズで panic + ctxCancel 書込
+  レースが発生し得た。`sync.Once` で宣言契約を実装。
+  `TestSession_StartIsIdempotent` 追加。
+- **`LatencyTracker.Record` の NaN 素通り**: `ms < 0` チェックは NaN を
+  リングに通し、Quantile が NaN を返してレイテンシゲージを汚染し得た。
+  `!(ms >= 0)` で負値・NaN を一括拒否（session 269 の非有限ガード系統）。
+- **`effectiveYield` の非有限入力**: NaN 分数が `>1`・`<0` 双方のクランプを
+  すり抜け、NaN/+Inf 期待収益がゲージへ伝播し得た。NaN 分数→0、非有限
+  期待収益→0。
+- **`tlsConfigWithExtraCAs` doc 虚偽を訂正**: SystemCertPool 取得失敗時、
+  文書上の「system roots + PEM」ではなく実際は PEM のみに静かに狭まる
+  ことを明記（狭まる方向は fail-closed で安全側のため挙動は維持）。
+
+併せて engine 残部（stats/setup/metrics/fanin）、poolproto 層、stratumv1
+全4ファイル、lightning 全3ファイル（maintainer ゲート領域・読取のみ）の
+監査を完了。lightning 側の発見（wallet 作成 TOCTOU、未ワイプ中間値）は
+CODEOWNERS 向けに CATEGORY_AUDIT へ記録。extranonce2Size レースは並行
+セッション `setextranonce-race` 所有のため重複回避。
+
 ### Fixed (session 276 — HAL nil-device panic + doctor 2件)
 
 hal/miner/doctor 深掘り監査で3件を修正:

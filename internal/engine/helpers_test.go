@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -1259,5 +1260,24 @@ func TestUpdateStream_PropagatesPreemptionRisk(t *testing.T) {
 	})
 	if got := m["mining.stratum:cpu-0"].PreemptionRisk; got != 0 {
 		t.Errorf("pool stream PreemptionRisk = %v, want 0", got)
+	}
+}
+
+func TestEffectiveYield_NonFiniteInputsReturnZero(t *testing.T) {
+	// The metric feeds a Prometheus gauge; a NaN or +Inf input must degrade
+	// to 0 rather than poison the series (session 277, same non-finite
+	// class as session 269's arbitration guards).
+	for _, tc := range []struct {
+		name                         string
+		expected, productive, uptime float64
+	}{
+		{"NaN expected yield", math.NaN(), 3600, 3600},
+		{"+Inf expected yield", math.Inf(1), 3600, 3600},
+		{"NaN productive seconds", 1000, math.NaN(), 3600},
+		{"NaN uptime", 1000, 3600, math.NaN()},
+	} {
+		if got := effectiveYield(tc.expected, tc.productive, tc.uptime); got != 0 {
+			t.Errorf("%s: effectiveYield = %v, want 0", tc.name, got)
+		}
 	}
 }

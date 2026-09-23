@@ -117,6 +117,7 @@ type session struct {
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
+	startOnce sync.Once
 	closeOnce sync.Once
 }
 
@@ -136,11 +137,15 @@ func newSession(conn *connection) *session {
 	}
 }
 
-// start launches the read loop. Idempotent.
+// start launches the read loop. Idempotent: the Once keeps a second
+// call from spawning a second readLoop, which would double-close jobsCh
+// and noticeCh on exit (readLoop's deferred closes) and race on ctxCancel.
 func (s *session) start(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	s.ctxCancel = cancel
-	go s.readLoop(ctx)
+	s.startOnce.Do(func() {
+		ctx, cancel := context.WithCancel(ctx)
+		s.ctxCancel = cancel
+		go s.readLoop(ctx)
+	})
 }
 
 // readLoop is the single goroutine that reads and dispatches V1 messages.

@@ -12,6 +12,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -316,10 +317,16 @@ func effectiveYield(expectedYieldSatsPerSec, productiveSeconds, uptimeSeconds fl
 		return 0
 	}
 	fraction := productiveSeconds / uptimeSeconds
-	if fraction > 1 {
-		fraction = 1
-	} else if fraction < 0 {
+	// NaN is clamped to 0 alongside the range guards, and a non-finite
+	// expected yield returns 0: either would otherwise poison the gauge
+	// (session 269's non-finite-input class, applied to this site).
+	if math.IsNaN(fraction) || fraction < 0 {
 		fraction = 0
+	} else if fraction > 1 {
+		fraction = 1
+	}
+	if math.IsNaN(expectedYieldSatsPerSec) || math.IsInf(expectedYieldSatsPerSec, 0) {
+		return 0
 	}
 	return expectedYieldSatsPerSec * fraction
 }
@@ -352,7 +359,10 @@ func NewLatencyTracker(size int) *LatencyTracker {
 
 // Record adds one round-trip sample in milliseconds.
 func (l *LatencyTracker) Record(ms float64) {
-	if ms < 0 {
+	// !(ms >= 0) rejects negatives and NaN alike: a NaN sample would sit in
+	// the ring forever (slices.Sort leaves it at one end) and Quantile could
+	// return it, poisoning the latency gauges with NaN.
+	if !(ms >= 0) {
 		return
 	}
 	l.mu.Lock()

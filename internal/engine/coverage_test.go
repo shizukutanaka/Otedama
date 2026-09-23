@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -2284,5 +2285,22 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// TestLatencyTracker_RecordRejectsNaN covers the !(ms >= 0) guard: a NaN
+// sample must never enter the ring, or Quantile could return NaN and
+// poison the latency gauges (session 277; negatives were already rejected).
+func TestLatencyTracker_RecordRejectsNaN(t *testing.T) {
+	l := NewLatencyTracker(4)
+	l.Record(math.NaN())
+	if got := l.Quantile(0.5); got != 0 {
+		t.Fatalf("Quantile after only NaN = %v, want 0 (no samples)", got)
+	}
+	l.Record(5)
+	l.Record(math.NaN())
+	l.Record(7)
+	if got := l.Quantile(0.5); got != 5 && got != 7 {
+		t.Errorf("Quantile with NaN rejected = %v, want a real sample (5 or 7)", got)
 	}
 }

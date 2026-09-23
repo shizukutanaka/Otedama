@@ -37,6 +37,13 @@ func defaultTLSConfig() *tls.Config {
 // a private-CA or self-signed certificate: the extra CAs let the certificate be
 // verified rather than rejected, while verification itself stays enabled. A nil
 // or empty pem yields (nil, nil) so the caller uses the secure default.
+//
+// If the platform's SystemCertPool is unavailable (an error or nil — rare, but
+// possible on minimal containers and some non-mainstream platforms), the
+// returned pool contains ONLY the supplied PEM CAs, not "system roots + PEM".
+// That narrows trust rather than widening it, so it fails closed: a publicly-
+// signed pool certificate is then rejected (a visible dial error) rather than
+// silently accepted under an unexpected trust set.
 func tlsConfigWithExtraCAs(pem []byte) (*tls.Config, error) {
 	if len(pem) == 0 {
 		return nil, nil

@@ -2014,3 +2014,31 @@ func TestSession_E2E_SetExtranoncePurgesPendingJobs(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// TestSession_StartIsIdempotent pins the contract documented on start():
+// a second call must not spawn a second readLoop — it would double-close
+// jobsCh and noticeCh on exit and panic. The session stays fully usable.
+func TestSession_StartIsIdempotent(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true, notifyJob: "IDEM7"}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	sess.start(context.Background()) // must be a no-op
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		if job.JobID != "IDEM7" {
+			t.Fatalf("JobID = %q, want IDEM7", job.JobID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no job received — second start() broke the session")
+	}
+}
