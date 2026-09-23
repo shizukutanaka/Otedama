@@ -16,6 +16,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // newSelfSignedTLSListener starts a TLS listener on 127.0.0.1 with a freshly
@@ -74,6 +76,16 @@ func newSelfSignedTLSListener(t *testing.T) (net.Listener, *x509.CertPool, []byt
 	}()
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	return ln, pool, certPEM
+}
+
+// dialConnectTimeout deliberately duplicates poolproto.DialConnectTimeout
+// (stratum sits below poolproto in the dependency graph); the values must
+// not drift apart.
+func TestDialConnectTimeout_MatchesPoolproto(t *testing.T) {
+	if dialConnectTimeout != poolproto.DialConnectTimeout {
+		t.Fatalf("dialConnectTimeout = %v, poolproto.DialConnectTimeout = %v; keep them equal",
+			dialConnectTimeout, poolproto.DialConnectTimeout)
+	}
 }
 
 func TestDialTLS_VerifiedHandshakeSucceeds(t *testing.T) {

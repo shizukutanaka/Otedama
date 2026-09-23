@@ -67,6 +67,14 @@ import (
 	"time"
 )
 
+// DialConnectTimeout bounds the TCP connect phase of every pool dial.
+// Without it a blackholed or packet-dropping pool stalls the failover
+// loop for the operating system's TCP timeout (~2 minutes) instead of
+// failing over promptly — the failure mode sv2-apps v0.5.0 fixed for
+// its translator proxy (stratum-mining/sv2-apps PR #489). The caller's
+// context can still shorten or cancel the dial; this is the ceiling.
+const DialConnectTimeout = 15 * time.Second
+
 // ----- Protocol identifiers -----
 
 // ProtocolID identifies a wire protocol.

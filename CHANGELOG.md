@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 278 — プールダイヤルの TCP 接続タイムアウト)
+
+**ブラックホール化したプールへの接続が OS の TCP タイムアウト
+（約2分）までフェイルオーバーを止めていた欠陥を修正.** sv2-apps
+v0.5.0 が translator proxy のダイヤルに導入した教訓（SRI リポジトリは
+`stratum-mining/stratum`（crates）と `stratum-mining/sv2-apps`（roles）
+に分割済み）に対応し、監査で Otedama の全ダイヤル経路に同一の潜在的
+欠陥があることを確認した。`poolproto.DialConnectTimeout`（15秒）を
+新設し、Stratum V1・Stratum V2・`stratum+tls://`・`stratum+v2tls://`・
+`datum://`・engine の直接 V2 ダイヤルの全経路で TCP 接続フェーズを
+上限する。呼び出し側のコンテキストは従来どおり短縮・キャンセル可能で、
+この値は上限としてのみ作用する。`internal/stratum` 側は依存階層を
+維持するためローカル定数で複製し、値の乖離をテストで防止。
+
 ### Added (session 277 — Windows の GPU 検出: §4 の検出半分を完結)
 
 **Windows でも GPU が検出されるようになった.** `internal/hal` に第3の

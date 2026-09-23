@@ -649,7 +649,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		opts.log("warn", "engine: connecting over plaintext Stratum V2 — no transport encryption "+
 			"(Noise NX is not yet wired into the live connect path; use stratum+v2tls:// for TLS, "+
 			"or stratum+tls:// / stratum+tcp:// with the V1 fallback)")
-		var d net.Dialer
+		d := net.Dialer{Timeout: poolproto.DialConnectTimeout}
 		conn, err = d.DialContext(ctx, "tcp", host)
 		if err != nil {
 			return fmt.Errorf("engine: dial %s: %w", host, err)

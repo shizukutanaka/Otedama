@@ -24,7 +24,13 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"time"
 )
+
+// dialConnectTimeout bounds the TCP connect phase; mirrors
+// poolproto.DialConnectTimeout. It is kept local because stratum
+// deliberately sits below poolproto in the dependency graph.
+const dialConnectTimeout = 15 * time.Second
 
 // defaultTLSConfig is the secure baseline for stratum+v2tls://
 // connections: verify the pool's certificate against the system root
@@ -64,6 +70,9 @@ func DialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 	if cfg == nil {
 		cfg = defaultTLSConfig()
 	}
-	dialer := &tls.Dialer{Config: cfg}
+	dialer := &tls.Dialer{
+		NetDialer: &net.Dialer{Timeout: dialConnectTimeout},
+		Config:    cfg,
+	}
 	return dialer.DialContext(ctx, "tcp", address)
 }

@@ -480,3 +480,11 @@ func TestStripScheme_ConsistentWithFromURL(t *testing.T) {
 		}
 	}
 }
+
+// DialConnectTimeout is the failover-loop ceiling: zero would restore
+// the ~2-minute OS default; too short breaks high-latency pools.
+func TestDialConnectTimeout(t *testing.T) {
+	if DialConnectTimeout < 5*time.Second || DialConnectTimeout > 2*time.Minute {
+		t.Fatalf("DialConnectTimeout = %v, want between 5s and 2m", DialConnectTimeout)
+	}
+}

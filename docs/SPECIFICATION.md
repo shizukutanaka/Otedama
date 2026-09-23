@@ -112,6 +112,9 @@ configured pool URLs — each tagged with the layer it was resolved from.
      (`payoutAddresses`: primary first, de-duplicated, empties skipped).
    - For each attempt: dial TCP → Stratum V2 handshake (SetupConnection +
      OpenMiningChannel) → on success the address is marked *known-good*.
+     The TCP connect phase is bounded by `poolproto.DialConnectTimeout`
+     (15 s; every pool dial path — V1, V2, TLS, datum — shares it), so a
+     blackholed pool fails over in seconds rather than the OS default.
      The channel's `user_identity` is the per-pool `User` if set, otherwise
      the active payout address, suffixed with `.worker` when `Workers.Name`
      is configured.

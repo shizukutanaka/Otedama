@@ -21,6 +21,8 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // defaultTLSConfig is the secure baseline for stratum+tls:// connections:
@@ -60,6 +62,9 @@ func dialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 	if cfg == nil {
 		cfg = defaultTLSConfig()
 	}
-	dialer := &tls.Dialer{Config: cfg}
+	dialer := &tls.Dialer{
+		NetDialer: &net.Dialer{Timeout: poolproto.DialConnectTimeout},
+		Config:    cfg,
+	}
 	return dialer.DialContext(ctx, "tcp", address)
 }

@@ -47,6 +47,14 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 	return poolproto.ProtocolStratumV1
 }
 
+// dialTCP is the default transport for stratum+tcp:// / datum:// pools.
+// poolproto.DialConnectTimeout bounds the connect phase so a blackholed
+// pool fails over in seconds rather than the OS TCP timeout (minutes).
+func dialTCP(ctx context.Context, address string) (net.Conn, error) {
+	dialer := net.Dialer{Timeout: poolproto.DialConnectTimeout}
+	return dialer.DialContext(ctx, "tcp", address)
+}
+
 // Dial opens a TCP connection to the pool. The URL must be of the form
 // stratum+tcp://host:port (or stratum+tls://host:port for the TLS
 // dialer). Credentials are stashed on the returned Connection so that
@@ -74,16 +82,14 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 				return dialTLS(ctx, address, cfg)
 			}
 		} else {
-			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-				var dialer net.Dialer
-				return dialer.DialContext(ctx, "tcp", address)
-			}
+			dialFn = dialTCP
 		}
 	}
 	conn, err := dialFn(ctx, address)
 	if err != nil {
 		return nil, fmt.Errorf("stratumv1: dial %s: %w", address, err)
 	}
+
 	return &connection{
 		raw:        conn,
 		remoteAddr: address,

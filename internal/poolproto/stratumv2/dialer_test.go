@@ -1019,3 +1019,39 @@ func TestFloat64FromBits(t *testing.T) {
 		}
 	}
 }
+
+// dialTCP must reach a live listener and honor context cancellation.
+func TestDialTCP_ConnectsToLocalListener(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err == nil {
+			accepted <- c
+		}
+	}()
+
+	conn, err := dialTCP(context.Background(), ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dialTCP: %v", err)
+	}
+	conn.Close()
+	select {
+	case c := <-accepted:
+		c.Close()
+	case <-time.After(2 * time.Second):
+		t.Fatal("listener never saw the connection")
+	}
+}
+
+func TestDialTCP_RespectsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := dialTCP(ctx, "192.0.2.1:3333"); err == nil {
+		t.Fatal("dialTCP succeeded with a cancelled context")
+	}
+}

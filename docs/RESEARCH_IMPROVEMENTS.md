@@ -919,6 +919,39 @@ research-only passes.
 
 ---
 
+## August 2026 research pass — session 278 increment (sv2-apps re-verification)
+
+Re-checked the Stratum V2 reference implementation ecosystem. The SRI repo
+has split: shared crates live at `stratum-mining/stratum` (v1.11.1 latest)
+while the runnable roles moved to `stratum-mining/sv2-apps`. Same
+[FETCHED]/[SNIPPET] tagging rules as the July pass.
+
+1. ✅ **[FETCHED] sv2-apps v0.5.0 added explicit TCP connect timeouts for its
+   translator-proxy dials.** Audit found the same latent defect on every
+   Otedama dial path: `stratumv1`, `stratumv2`, `stratumv1` TLS
+   (`tls.Dialer`), `stratum` `DialTLS` (v2tls), and the engine's direct V2
+   dial all used a bare `net.Dialer{}`, so a blackholed or packet-dropping
+   pool stalled the failover loop for the OS TCP timeout (~2 min) instead
+   of failing over. — ✅ **Resolved (session 278):** `poolproto.DialConnectTimeout`
+   (15 s) bounds the connect phase on every pool dial path; callers' ctx
+   can still shorten it. The `stratum` copy stays a local literal (layering)
+   pinned equal by test.
+2. ✅ **[FETCHED] sv2-apps v0.5.0 standardized Stratum error-code constants —
+   verified non-applicable.** The constants are an internal refactor of the
+   Rust codebase; the V1 wire carries free-form `[code, "message", null]`
+   arrays per pool convention, so there is no shared wire constant set for
+   Otedama to align with. `rejectClass`'s heuristic classification stands.
+3. ✅ **[FETCHED] Per-upstream `user_identity` (sv2-apps v0.5.0) — already
+   implemented.** Otedama sets the channel `user_identity` from the per-pool
+   `User` field, falling back to the active payout address (SPECIFICATION
+   §4). Share accounting is already `uint64`.
+4. **[FETCHED] sv2-apps v0.7.0 (Job Declaration / SharedSet)** — JDC remains
+   tracked in ADR-009; v0.7.0's release is the cue that an upstream JDS
+   worth integrating against now exists. Priority unchanged pending the
+   segwit-coinbase prerequisite.
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
