@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 267 — Github・論文・Qiita・Zenn・海外技術情報などを参考にさらなる改善（おまかせ）: プールのネットワークハッシュレート占有率警告)
+
+- **Pool-share-of-hashrate awareness**（RESEARCH_IMPROVEMENTS Cat 4 #7 — "optionally inform the user when their chosen pool exceeds a large network share"）。プール接続確立時に mempool.space の週次採掘プール分布を1回照会し、設定ホスト名が既知プール（名前/slug/link ドメインの正規化マッチ、"pool" のような汎用ラベルは ≥5 ルーン規則で誤マッチ排除）と一致した場合に `otedama_pool_network_share{pool_host}` ゲージを記録。占有率 ≥30% で warn 1 発 — Bahrani & Weinberg (arXiv:2309.06847) の「検出不能な selfish mining」が成立する集中度合いへの牽制であり、フェイルオーバー耐性の低下も警告。
+- **`--no-pool-share-check` フラグ**でオプトアウト（プール選択の外部漏洩を完全に避けたい運用向け）。未登録・プライベートプールやフェッチ失敗時は警告せず静かにスキップ。新規依存ゼロ（mempool.space REST、ADR-003 維持）、テスト4件追加（マッチング/HTTPエラー/空分布/ラベル正規化）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

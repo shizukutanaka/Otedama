@@ -188,8 +188,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    misconfig (two hostnames that are CNAMEs/round-robin for the same node).
 6. 🔵 **TemplateSource abstraction** — ADR-009 lets a URL scheme select
    pool/JDC/solo template provenance.
-7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
-   their chosen pool exceeds a large network share, nudging decentralisation.
+7. ✅ **Pool-share-of-hashrate awareness. — RESOLVED (session 267).**
+   `internal/rates.FetchPoolNetworkShare` queries mempool.space's weekly
+   mining-pool distribution once per connected pool host; a hostname match
+   (name/slug/link-domain normalisation, ≥5-rune substring rule so "pool"
+   labels cannot false-match) sets `otedama_pool_network_share{pool_host}`
+   and warns once at ≥30% share — the concentration the undetectable
+   selfish-mining finding (Bahrani & Weinberg, arXiv:2309.06847) relies on.
+   `--no-pool-share-check` opts out (privacy); unknown/private pools stay
+   silent. Original finding: optionally inform the user when their chosen
+   pool exceeds a large network share, nudging decentralisation.
 8. ❌ **Running a pool server** — explicitly out of scope (ADR-001).
 9. ✅ **Block-template freshness metric** (session 93):
    `otedama_last_job_received_seconds` (Unix timestamp of last

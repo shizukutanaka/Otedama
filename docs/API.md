@@ -28,6 +28,7 @@ otedama run [flags]
 | `--log-format` | string | `text` | Log output format: `text` or `json`. |
 | `--log-file` | string | (empty) | Append structured logs to this file. Written even under the TUI, so it provides an audit trail the dashboard otherwise hides. Created `0600`. |
 | `--no-tui` | bool | `false` | Disable the terminal dashboard. |
+| `--no-pool-share-check` | bool | `false` | Skip the one-shot mempool.space lookup that warns when the configured pool controls ≥30% of weekly network blocks (large-pool concentration risk). |
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
 | `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
@@ -255,6 +256,7 @@ addresses) appear once their first event occurs.
 | `otedama_pool_connect_failures_total` | counter | — | Pool dial failures. |
 | `otedama_pool_connection_state` | gauge | — | 0=disconnected, 1=connecting, 2=connected. |
 | `otedama_pool_active_index` | gauge | — | 0-based index of the active pool in the failover list. |
+| `otedama_pool_network_share` | gauge | `pool_host=…` | Connected pool's weekly block-share of the network (mempool.space, one-shot per host). ≥0.30 logs a concentration warn; absent when the pool is not publicly tracked. |
 | `otedama_pool_difficulty` | gauge | — | Current share difficulty (`mining.set_difficulty`). |
 | `otedama_estimated_share_interval_seconds` | gauge | — | Expected seconds between shares (difficulty × 2³² / hashrate). |
 | `otedama_last_job_received_seconds` | gauge | — | Unix timestamp of the most recent pool job (stale-connection detector). |

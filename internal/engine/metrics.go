@@ -120,6 +120,12 @@ type engineMetrics struct {
 	// configured failover list, so failover is observable.
 	poolConnectionState *metrics.Gauge
 	poolActiveIndex     *metrics.Gauge
+	// poolShareSeen dedups the one-shot pool network-share lookup per pool
+	// host across reconnects, so a fast reconnect loop cannot hammer the
+	// public distribution endpoint. The otedama_pool_network_share gauge
+	// itself is created lazily per pool_host label (like rejectReason).
+	poolShareSeenMu sync.Mutex
+	poolShareSeen   map[string]bool
 	// payoutActiveIndex is the 0-based index of the active payout address
 	// in the configured failover list, so address failover is observable.
 	payoutActiveIndex *metrics.Gauge
@@ -430,6 +436,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			nil),
 
 		reg:                  reg,
+		poolShareSeen:        make(map[string]bool),
 		rejectByReason:       make(map[string]*metrics.Counter),
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
