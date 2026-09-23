@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 269 — Stratum V1 extranonce2 のサイクリング: 全 submit が同一 coinbase だった欠陥を修正)
+
+**32bit nonce だけでは十分でない。** Stratum V1 では coinbase の nonce
+空間を「プール発行の extranonce1」と「クライアント側の
+extranonce2（subscribe で交渉したバイト長）」に分割する。標準的な
+クライアント（cgminer/bfgminer/ESP-Miner）は submit ごとに en2 を
+インクリメントしてコインベースを一意にするが、Otedama では
+`ShareSubmission.ExtraNonce` がツリー内のどこからも設定されず、
+全 submit が `extranonce2 = "00…0"` 固定だった。高速な worker が
+nonce 空間を使い切ると完全にバイト同一の作業を再び掘り始め、
+プールはそれを「duplicate」として reject する。セッションに
+`extranonce2Ctr`（`atomic.Uint64`、単調増加・リセットなし —
+一意性こそプールが検証する全て）を追加し、`extranonce2Bytes` で
+交渉済み `extranonce2_size` の下位バイトに big-endian でエンコード
+する。`TestSession_E2E_Extranonce2Cycles`（2 submit で
+`00000001`/`00000002` を検証）+ `TestExtranonce2Bytes`（幅・
+パディング表）を追加。
+
 ### Added (session 268 — SLO ドキュメント: `docs/SLO.md` — Category 9 #10)
 
 **メトリクスカタログを「アクション可能な目標」へ。** これまで SPECIFICATION

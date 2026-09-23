@@ -100,6 +100,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    sent as step 3 of Negotiate(); "Method not found" and other pool errors
    are silently ignored (optional extension). Enables mid-session extranonce
    rotation on pools that support it (OCEAN, AntPool 2.x, etc.).
+   — session 269: **extranonce2 now cycles per submit.** `ShareSubmission.
+   ExtraNonce` was never populated anywhere in the tree, so every
+   `mining.submit` carried `extranonce2 = "00…0"` — the client-owned half
+   of the coinbase nonce never changed, making the 32-bit nonce the
+   entire work domain. Once it wrapped, the worker produced literal
+   duplicate shares the pool rejects as "duplicate" (cgminer/bfgminer/
+   ESP-Miner all increment en2 to keep coinbases distinct). The session
+   now counts monotonically via `extranonce2Bytes` — the counter occupies
+   the low bytes of the negotiated `extranonce2_size` field, left-padded
+   big-endian per the pool's hex convention.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
 7. ✅ **Share-submission latency histogram** (session 46). `LatencyTracker`
