@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 284 — 健全セッション後も再接続予算がリセットされなかった)
+
+**`max_reconnect_attempts` と指数バックオフが累計試行を数えていた**
+—— 本来は連続失敗カウンタであるべきところ、プロセス生存期間全体で単調増加。
+数時間正常稼働したセッションが切断しても、育ったバックオフ（最大64秒）を
+引き継ぎ、attempt 予算を消費し続けた。`reconnectBackoffMax` を超えて生存した
+セッションの終了時に `attempt`・`backoff` を双方リセット —— 健全稼働の
+証明により新しい失敗ストリークとして扱う標準クライアント動作。
+
 ### Fixed (session 283 — `mining.set_extranonce` のデータ競合)
 
 **`set_extranonce` 通知が `extranonce2Size` を読みループで書き込む一方、

@@ -41,6 +41,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    measurement, then ±25% moves, ≥1s debounce) with
    `v1SuggestedDifficulty` targeting ~1 share/10s.
 4. ✅ **Multi-pool failover** (session 42) — matches cgminer/bfgminer.
+   — session 284: **reconnect budget resets after a healthy session.**
+   `MaxReconnectAttempts` and the exponential backoff track a
+   *consecutive* failure streak, but both grew monotonically for the
+   process lifetime: a session that ran for hours and then dropped
+   inherited a grown backoff (up to 64 s) and drained the attempt budget
+   — N healthy sessions with one disconnect each would hit the cap and
+   kill the engine. A session that outlives `reconnectBackoffMax` now
+   resets `attempt` and `backoff` (standard client behaviour: a long
+   healthy session proves connectivity, so its end starts a new streak).
 5. ✅ **Hashrate-drop detection** (session 43, HashrateMonitor) — matches
    Awesome Miner triggers.
 6. 🔵 **Temperature-based throttling / shutdown.** Awesome Miner triggers on
