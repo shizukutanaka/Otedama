@@ -236,9 +236,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
-   conversion path and that simulated vs real yield is never mixed in
-   accounting.
+8. ✅ **Inference revenue is denominated/settled correctly** — the USD→BTC
+   conversion path was already median-source BTC/USD → `SatsPerSecond`
+   (usd/rate×1e8/3600). The never-mixed half is now *structural* rather
+   than verify-by-eye: `Quote.Simulated` → `Stream.Simulated` →
+   `otedama_provider_yield_sats_per_second{provider,simulated}` separates
+   modelled from settled revenue in metrics. (session 264)
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 

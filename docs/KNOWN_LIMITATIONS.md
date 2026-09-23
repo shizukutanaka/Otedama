@@ -35,7 +35,12 @@ income and must not be relied upon for financial decisions.
 **How you can tell:** The provider's name is rendered everywhere as
 **"AI Inference (Akash Network, simulated)"** — in the TUI, in logs,
 and in `otedama config show`. The "(simulated)" suffix is removed only
-when the real integration lands.
+when the real integration lands. Since session 264 this is also a
+*structural* fact, not just a string: quotes carry `Simulated=true`,
+arbitration streams mirror it, and `/metrics` exposes it as the
+`simulated` label on `otedama_provider_yield_sats_per_second`, so
+simulated and real yield can be reconciled separately in dashboards
+and alerts.
 
 **Workaround:** None needed for mining-only operation; the Bitcoin
 mining path (Stratum V2) is real. If you only want real income today,

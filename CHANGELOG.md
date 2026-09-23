@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 264 — シミュレーション収益の構造的分離: `Quote.Simulated` → `Stream.Simulated` → `provider_yield_sats_per_second{provider,simulated}`)
+
+**「simulated」という約束を UI 文字列からデータへ昇格させた。**
+Akash プロバイダの収益がシミュレーションである事実は、これまで
+表示名 `"(simulated)"` サフィックスという UI 文字列上にのみ存在し、
+メトリクスや勘定系からはフィルタ不能だった（RESEARCH_IMPROVEMENTS
+Category 5 #8「シミュレーションと実収益を勘定で混ぜない」の未実装半分）。
+3点で構造化:
+
+- `provider.Quote.Simulated`（新フィールド）: AkashProvider の全見積
+  （GPU あり価格付き・GPU なしゼロ見積双方）に `Simulated: true` を付与。
+  実収益を quote するプロバイダはゼロ値 `false` のまま。
+- `arbitration.Stream.Simulated`: Quote→Stream 変換で引き継ぎ
+  （`IsBitcoinMining` と同型の配線）。
+- 新メトリクス `otedama_provider_yield_sats_per_second{provider,simulated}`:
+  裁定 tick ごとに各ストリームの提示利回りを provider/simulated ラベル付き
+  で公開（遅延生成、カーディナリティはプロバイダ数に限定）。Prometheus 側で
+  `simulated="true"` を除いて集計すれば、モデル収益が実収益計上に混入する
+  ことが構造的に不可能に。SPECIFICATION §6 にカタログ登録、
+  KNOWN_LIMITATIONS §1 に「文字列ではなく構造的事実」として追記。
+
 ### Added (session 263 — KNOWN_LIMITATIONS §16 の解消: `otedama wallet` サブコマンドを新設 — リカバリフレーズ検証とパスフレーズローテーション)
 
 **非カストディ保証の「使用可能性」ギャップを閉じた。**
