@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 275 — ループバック平文の誤警報 + `client.reconnect` 指示の可視化)
+
+2件。① **doctor の平文トランスポート警告がループバック宛でも発火
+していた。** `stratum+tcp://127.0.0.1`・`datum://127.0.0.1` など
+マシンを出ないクリアテキストにはオン経路攻撃者が存在しないため、
+`poolURLIsLoopback`（127.0.0.0/8・`::1`・`localhost`）で免除 ——
+ローカル `datum_gateway` / ソロ bitcoind という正常な設置形態への
+アラーム疲労を解消。リモート宛は全スキーム従来通り WARN。
+② **プールの `client.reconnect` 指示が記録されるだけで可視化
+されなかった。** `poolproto.ReconnectInformant`（`LastReconnect()`
+オプションインターフェース）を新設し、stratumv1 セッションが
+内部保持していた指示を公開 —— エンジンはセッション終了時に
+プールの推奨エンドポイントとアドバイザリ待機秒をログ出力。
+誘導先は従来通り意図的に辿らない（認証なし通知のリダイレクトは
+攻撃経路のため、設定済みプールリストが権威）。
+
 ### Docs (session 274 — CI Go toolchain pin パッチを準備 — KNOWN_LIMITATIONS §13)
 
 **全 Go ジョブが go.mod 解析時点で赤になる既知の CI 不具合に対し、

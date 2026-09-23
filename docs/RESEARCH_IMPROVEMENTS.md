@@ -491,6 +491,10 @@ arXiv grounding (session 41):
    `datum://` (cleartext SV1 wire by design); the engine's V1 session
    also gained the runtime plaintext warning V2 already had, so
    `stratum+tcp://`/`datum://` no longer connect silently.
+   — session 275: loopback targets exempted (`poolURLIsLoopback`) —
+   cleartext to 127.0.0.0/8 / ::1 / localhost never leaves the box, so
+   the sanctioned local datum_gateway / solo bitcoind setups no longer
+   warn. Remote endpoints of all three plaintext schemes still warn.
 2. 🔵 **ElligatorSwift encoding** for the SV2 handshake (pairs with item 1).
 3. ✅ **scrypt + AES-GCM seed encryption at rest**.
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).
@@ -653,6 +657,10 @@ endpoint against current vendor documentation. Tags as before
    rather than erroring the session. Complements Cat 1 #3.
    (bitaxeorg/ESP-Miner releases)
    — `client.reconnect` / `mining.reconnect` handled (session 64).
+   — session 275: the recorded reconnect directive is now *visible* —
+   `poolproto.ReconnectInformant` exposes `LastReconnect()`, and the
+   engine logs the pool's suggested endpoint + advisory wait when the
+   session ends (still deliberately not followed).
    — session 106: `client.show_message` now surfaced via
    `session.PoolNotices() <-chan string` (implements `poolproto.PoolNoticeReceiver`).
    Messages are queued on a buffered channel (cap 8); a full channel drops the
