@@ -699,3 +699,17 @@ Queue item 4's open half — deep-read of `internal/stratum/noise.go`'s handshak
 | `internal/engine/arbitrate.go` remainder (`streamsSlice` same-ID merge, `applyAllocation` per-device pause) | ✅ Clean: merge preserves per-device yields; pause is correctly device-scoped (session-247 fix verified in place). |
 
 All 24 packages build, vet, and test green. Comment-only change inside `internal/stratum/noise*` per the funds-area gate (doc corrections permitted; no behaviour changed).
+
+## Session 273 update — TUI EARNINGS line double-counted mining yield
+
+Provider-package + TUI audit (`polling.go`, `provider.go`, `mining.go`, `ai_inference.go`, `dashboard.go`).
+
+| Finding | Disposition |
+|---|---|
+| `earningsLine` added `HashRate × satsPerHash` AND every active provider's `SatsPerSecond` — but `mining.stratum`'s quote is the same quantity: computed from the same live `worker.Stats().HashRate` (wired via `HashrateFunc`, setup.go) with the same network constant (1e21 H/s, 3.125 BTC, 600 s), net of the 1% pool fee. In the common configuration (mining provider active — the only market CPU/ASIC can route to), the dashboard's expected-earnings figure read ~1.99× the real value. | ✅ Fixed: `ProviderStats.IsMining` (set in stats.go on `p.ID() == "mining.stratum"`, matching arbitrate.go's literal convention). When an active provider is the mining one, its quote stands in for the hashrate-derived term; non-mining actives still add, inactive mining → hashrate fallback preserved. `TestDashboard_EarningsLine_MiningQuoteNotDoubleCounted` covers both branches. |
+| `time.NewTicker(p.interval)` in pollingProvider.loop — panic if interval ≤ 0 | ℹ️ Not a defect: both callers hardcode 30 s / 60 s; `interval` is unreachable from config. statsInterval in run.go is separately guarded (≤0 → 10 s). |
+| `mining.go` fetches `BTCUSDRate` then discards it (`_ = rate`) — yield math uses no price | ℹ️ Kept, with a mild honesty note worth a maintainer eyeball: `Confidence` still tracks feed freshness (0.95 fresh / 0.7 stale) although the quote ignores the rate. Feed-failure therefore *devalues* a quote that never used the feed — but symmetrically across both providers' confidence treatment, so no systematic routing bias was shown. Not changed; recorded here. |
+| `pollingProvider` lifecycle (launch/loop/Stop/sendQuote drop-oldest, quoteCh recreate-after-Wait) | ✅ Clean: single writer, double-start rejected, restart-safe, no leak. `AkashProvider.publish` device filter + zero-yield no-GPU path correct. |
+| `Dashboard` render loop / Update drain / Stop ordering / ANSI width handling | ✅ Clean: wg.Wait before Stop's writes, emoji-free section labels after a prior fix, CSI-aware visibleLen/truncateVisible correct. |
+
+All affected packages build, vet, and test green; gofumpt clean.

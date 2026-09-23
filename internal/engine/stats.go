@@ -67,7 +67,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 	// than defaulting back to the old unconditional true.
 	var providerStats []tui.ProviderStats
 	for _, p := range opts.providers {
-		ps := tui.ProviderStats{Name: p.Name()}
+		ps := tui.ProviderStats{Name: p.Name(), IsMining: p.ID() == "mining.stratum"}
 		if opts.activityMu != nil {
 			opts.activityMu.Lock()
 			yield, active := opts.activity[p.ID()]

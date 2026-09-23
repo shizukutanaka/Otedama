@@ -99,6 +99,13 @@ type ProviderStats struct {
 	Name          string
 	SatsPerSecond float64
 	Active        bool
+	// IsMining marks the provider whose quote measures the same Bitcoin
+	// mining work that Stats.HashRate measures ("mining.stratum"). The
+	// EARNINGS line needs the distinction: its hashrate-derived term and
+	// such a provider's quote are the same quantity (the quote is even
+	// computed from the same live hashrate), so adding both would
+	// double-count mining yield.
+	IsMining bool
 }
 
 // Dashboard renders a live terminal dashboard.
@@ -340,15 +347,27 @@ func truncateToBudget(s string, budget int) string {
 }
 
 func (d *Dashboard) earningsLine(s Stats) string {
-	satsPerSec := s.HashRate * defaultSatsPerHash()
-	satsPerDay := satsPerSec * 86400
-
-	// Add AI inference yield from active providers.
+	// An active mining provider's quote and the hashrate-derived estimate
+	// measure the same work — internal/provider/mining.go computes its
+	// sats/s from this same live hashrate with the same network constant
+	// (net of the 1% pool fee). Adding both would report ~2× the real
+	// expected earnings, so when the mining provider is active its quote
+	// stands in for the hashrate term; non-mining providers still add on.
+	satsPerSec := 0.0
+	miningQuoted := false
 	for _, p := range s.Providers {
-		if p.Active {
-			satsPerDay += p.SatsPerSecond * 86400
+		if !p.Active {
+			continue
 		}
+		if p.IsMining {
+			miningQuoted = true
+		}
+		satsPerSec += p.SatsPerSecond
 	}
+	if !miningQuoted {
+		satsPerSec += s.HashRate * defaultSatsPerHash()
+	}
+	satsPerDay := satsPerSec * 86400
 
 	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
 	earned := dim + fmt.Sprintf("est. earned: ~%d sats", s.EstSatsEarned) + reset

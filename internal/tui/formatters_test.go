@@ -283,6 +283,35 @@ func TestDashboard_EarningsLine_IncludesProviders(t *testing.T) {
 	}
 }
 
+func TestDashboard_EarningsLine_MiningQuoteNotDoubleCounted(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	// A mining provider whose quote already reflects this hashrate: the
+	// displayed sats/day must equal the quote alone, not quote + a
+	// hashrate-derived estimate of the same work.
+	line := d.earningsLine(Stats{
+		HashRate: 100e12, // 100 TH/s — would itself derive ~0.052 sats/s
+		Providers: []ProviderStats{
+			{Name: "Bitcoin Mining", SatsPerSecond: 51.6, Active: true, IsMining: true},
+		},
+	})
+	if !strings.Contains(line, "4458") { // quote alone: 4,458,240 sats/day
+		t.Errorf("earningsLine should show only the mining quote (4458240 sats/day); got %q", line)
+	}
+
+	// Same provider, but arbitration is not routing to it: the
+	// hashrate-derived estimate still applies.
+	idle := d.earningsLine(Stats{
+		HashRate: 100e12,
+		Providers: []ProviderStats{
+			{Name: "Bitcoin Mining", SatsPerSecond: 51.6, Active: false, IsMining: true},
+		},
+	})
+	if !strings.Contains(idle, "4500") { // hashrate-derived: 4,500 sats/day
+		t.Errorf("earningsLine should fall back to the hashrate-derived estimate; got %q", idle)
+	}
+}
+
 func TestDashboard_ProviderLine_ActiveVsIdle(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)

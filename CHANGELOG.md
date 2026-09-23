@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 273 — TUI 収益行のマイニング収支二重計上を修正)
+
+`earningsLine` が `HashRate × satsPerHash` の導出項とアクティブな全
+プロバイダの `SatsPerSecond` を加算していたが、`mining.stratum` の
+クォートは同一ライブハッシュレート・同一ネットワーク定数
+(1e21 H/s・3.125 BTC・600 s)で計算される**同一量**の net 版 — 
+マイニングプロバイダがアクティブな通常構成で、TUI の期待収益表示が
+実値の約2倍になっていた。`ProviderStats.IsMining` を追加し、
+マイニングプロバイダがアクティブな間はそのクォートをハッシュレート
+導出項の代替として使用（非マイニングのアクティブは従来通り加算、
+非アクティブ時は導出項にフォールバック）。CATEGORY_AUDITに
+session-273 追記。
+
 ### Docs (session 272 — Noise transcript 初期化の spec 乖離2件を監査記録)
 
 キュー項目4の残半（noise.go ハンドシェイク状態機械の新規発見監査）。
