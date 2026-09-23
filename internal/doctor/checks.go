@@ -180,6 +180,22 @@ func checkFailoverAddresses(addrs []string) Check {
 	}
 }
 
+// dataDirWriteProbe verifies the directory is actually writable by
+// creating and deleting a throwaway file inside it; overridable in
+// tests. os.Stat alone cannot tell whether *this* user may write —
+// mode bits describe everyone, not the caller's effective access, so a
+// root-owned 0700 directory would otherwise pass with a false
+// "(exists, writable)" claim while every wallet write fails at runtime.
+var dataDirWriteProbe = func(dir string) error {
+	f, err := os.CreateTemp(dir, ".otedama-doctor-probe-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	_ = f.Close()
+	return os.Remove(name)
+}
+
 func checkDataDir(dir string) Check {
 	return Check{
 		Name: "Data directory",
@@ -213,6 +229,13 @@ func checkDataDir(dir string) Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("%s is not a directory", dir),
 					Fix:    "remove the file and restart Otedama",
+				}
+			}
+			if err := dataDirWriteProbe(dir); err != nil {
+				return Result{
+					Status: StatusFail,
+					Detail: fmt.Sprintf("%s exists but is not writable by this user: %v", dir, err),
+					Fix:    fmt.Sprintf("check ownership/permissions (e.g. sudo chown -R \"$USER\" %s)", dir),
 				}
 			}
 			// On Unix, verify the permissions are restrictive (wallet lives here).
@@ -447,37 +470,46 @@ func appendUnique(xs []string, s string) []string {
 // gpuDRMPath is the sysfs path scanned for render devices; overridable in tests.
 var gpuDRMPath = "/sys/class/drm"
 
-// checkPayoutScheme surfaces the payout scheme trade-offs for each configured
-// pool so operators understand the variance/custody implications of their
-// choice. The check is advisory (StatusPass or StatusSkip only — the scheme
-// field is optional and has no effect on the mining protocol).
-// checkPoolEncryption warns when a configured pool uses the plaintext
-// stratum+tcp:// transport. Plaintext stratum is not merely an eavesdropping
-// concern: a network attacker (rogue Wi-Fi, compromised router, hostile ISP)
-// can rewrite the mining.authorize username or share submissions in flight and
-// redirect every payout to their own address — a well-known stratum-hijacking
-// attack. The encrypted transports (stratum+tls:// V1-over-TLS, stratum+v2://
-// which carries an AEAD Noise session, and stratum+v2tls://) defeat it.
+// checkPoolEncryption warns when a configured pool uses an unencrypted
+// transport. Plaintext stratum is not merely an eavesdropping concern: a
+// network attacker (rogue Wi-Fi, compromised router, hostile ISP) can rewrite
+// the mining.authorize username or share submissions in flight and redirect
+// every payout to their own address — a well-known stratum-hijacking attack.
+//
+// Transports are classified by what is actually encrypted *today*:
+// stratum+tls:// (V1 over TLS) and stratum+v2tls:// (TLS-wrapped V2) defeat
+// the attack. stratum+tcp:// and stratum+v2:// do not — the V2 scheme is
+// binary-framed but fully plaintext because the Noise NX handshake is not
+// wired into any live connection (docs/KNOWN_LIMITATIONS.md §2; the engine
+// logs the same warning at connect time).
 func checkPoolEncryption(cfg config.Config) Check {
 	return Check{
 		Name: "Pool connection encryption",
 		Run: func(_ context.Context) Result {
 			if len(cfg.Pools) == 0 {
-				// The built-in default pool uses an encrypted (stratum+v2://) URL.
-				return Result{Status: StatusSkip, Detail: "using built-in default pool (encrypted)"}
-			}
-			var plaintext []string
-			for _, p := range cfg.Pools {
-				if strings.HasPrefix(p.URL, "stratum+tcp://") {
-					plaintext = append(plaintext, stripScheme(p.URL))
-				}
-			}
-			if len(plaintext) > 0 {
+				// The built-in default pool URL is stratum+v2:// — plaintext
+				// today, per docs/KNOWN_LIMITATIONS.md §2. Warn rather than
+				// Skip so operators relying on the default learn it is
+				// unencrypted.
 				return Result{
 					Status: StatusWarn,
-					Detail: fmt.Sprintf("%d pool(s) use plaintext stratum+tcp:// (%s) — a network attacker can rewrite your payout address and steal earnings",
-						len(plaintext), strings.Join(plaintext, ", ")),
-					Fix: "switch to stratum+tls:// (V1 over TLS), stratum+v2:// (encrypted), or stratum+v2tls://",
+					Detail: "using built-in default pool (stratum+v2:// — unencrypted; Noise NX is not wired yet)",
+					Fix:    "configure a pool offering stratum+tls:// or stratum+v2tls:// for real transport encryption (docs/KNOWN_LIMITATIONS.md §2)",
+				}
+			}
+			var unencrypted []string
+			for _, p := range cfg.Pools {
+				if strings.HasPrefix(p.URL, "stratum+tcp://") ||
+					strings.HasPrefix(p.URL, "stratum+v2://") {
+					unencrypted = append(unencrypted, stripScheme(p.URL))
+				}
+			}
+			if len(unencrypted) > 0 {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("%d pool(s) use an unencrypted transport (%s) — a network attacker can rewrite your payout address and steal earnings",
+						len(unencrypted), strings.Join(unencrypted, ", ")),
+					Fix: "switch to stratum+tls:// (V1 over TLS) or stratum+v2tls://; stratum+v2:// is plaintext today — Noise NX is not wired yet (docs/KNOWN_LIMITATIONS.md §2)",
 				}
 			}
 			return Result{
@@ -505,17 +537,20 @@ func checkPoolTLSCA(cfg config.Config) Check {
 					continue
 				}
 				configured++
-				// tls_ca_file is only honoured for stratum+tls:// (V1 over TLS);
-				// for any other scheme it is silently ignored at runtime.
+				// tls_ca_file is honoured by both TLS transports — stratum+tls://
+				// (V1 over TLS) and stratum+v2tls:// (the engine's inline V2
+				// path reads it into the TLS config); for any other scheme it
+				// is silently ignored at runtime.
 				// This is a Warn, but keep scanning every pool — a later pool's
 				// unreadable CA file is a Fail and must not be masked by it.
-				if !strings.HasPrefix(p.URL, "stratum+tls://") {
+				if !strings.HasPrefix(p.URL, "stratum+tls://") &&
+					!strings.HasPrefix(p.URL, "stratum+v2tls://") {
 					if firstWarn == nil {
 						firstWarn = &Result{
 							Status: StatusWarn,
-							Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
+							Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// and stratum+v2tls:// honour it; it will be ignored",
 								stripScheme(p.URL)),
-							Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
+							Fix: "remove tls_ca_file, or use a stratum+tls:// or stratum+v2tls:// URL for this pool",
 						}
 					}
 					continue
@@ -650,6 +685,10 @@ func checkProfitabilityFloor(cfg config.Config) Check {
 	}
 }
 
+// checkPayoutScheme surfaces the payout scheme trade-offs for each configured
+// pool so operators understand the variance/custody implications of their
+// choice. The check is advisory (StatusPass or StatusSkip only — the scheme
+// field is optional and has no effect on the mining protocol).
 func checkPayoutScheme(cfg config.Config) Check {
 	return Check{
 		Name: "Pool payout schemes",
@@ -862,9 +901,9 @@ func checkClockSkew() Check {
 
 // ----- Helpers -----
 
-// isLikelyBitcoinAddress performs a cheap format validity check.
-// Full address validation requires base58/bech32 decoding, which is
-// out of scope for doctor (we trust the user's runtime validation).
+// isLikelyBitcoinAddress performs a cheap format validity check as a
+// first gate; the caller then verifies the real checksum with
+// btccrypto.ValidateAddress, so a one-character typo is still caught.
 // The length bounds (26–90) match internal/config.validateAddress, so an
 // address that passes `config validate` is never flagged by `doctor`
 // (longer bech32m outputs reach up to 90 characters).

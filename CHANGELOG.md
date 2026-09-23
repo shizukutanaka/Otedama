@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 297 — internal/doctor 深部監査)
+
+- **`checkPoolEncryption` が `stratum+v2://` を「encrypted」と虚偽判定**:
+  Noise NX がライブ経路に未配線（KNOWN_LIMITATIONS §2）のため V2 スキーム
+  は現行ではバイナリフレーミングのみの完全平文 — engine 自身は接続時に
+  "plaintext Stratum V2 — no transport encryption" を warn している。
+  doctor は全 v2:// プールを暗号化済みとして Pass、さらに default pool
+  （stratum+v2://）を "(encrypted)" と表示し、stratum-hijacking 系
+  （認可ユーザ名・シェアの経路書換による報酬窃取）への無防備を隠蔽して
+  いた。`stratum+v2://` を平文側に分類し default pool も Warn で報告。
+- **`checkPoolTLSCA` の「only stratum+tls:// honours it」が陳腐**:
+  engine の inline V2 経路も `tls_ca_file` を TLS config に読む
+  （run.go の v2tls 分岐）ため、`stratum+v2tls://` プールに「ignored」
+  警告が誤表示されていた。honor 対象を stratum+tls:// ＋ stratum+v2tls://
+  に修正。
+- **`checkDataDir` が未検証の "(exists, writable)" を主張**: `os.Stat` と
+  perm 確認のみで実書込を未検証 — 例えば root 所有の 0700 ディレクトリは
+  チェックを通過しつつランタイムの全 wallet 書込が失敗する。
+  `dataDirWriteProbe`（CreateTemp→Remove、テスト差替可能）を追加し、
+  書込不可は Fail、Pass 時の writable 表記を実証済みに。
+- doc整理: `checkPayoutScheme` のコメントが `checkPoolEncryption` 直上に
+  誤配置 → 本来の関数へ移動、`isLikelyBitcoinAddress` の陳腐な
+  「checksum はスコープ外」記述を訂正。
+- 検証済みクリーン: doctor 残存14チェック（address/failover/wallet/
+  reachability/diversity/endpoint-diversity/payout/power/floor/hardware/
+  network/clock/env）— Date ヘッダ drain 境界化・リゾルバ差替設計等は健全。
+
 ### Fixed (session 296 — cmd/otedama 残部 + internal/config 深部監査)
 
 - **`internal/config`: 非有限値が env/file 両層から `Validate` を素通り**:

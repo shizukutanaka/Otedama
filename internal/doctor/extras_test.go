@@ -529,6 +529,42 @@ func TestCheckDataDir_PathIsFile_Fails(t *testing.T) {
 	}
 }
 
+func TestCheckDataDir_NotWritable_Fails(t *testing.T) {
+	// The check claims "(exists, writable)" — before the probe it only ran
+	// os.Stat, so a directory the user cannot actually write to (e.g.
+	// root-owned 0700) passed with a false claim while every wallet write
+	// failed at runtime. The probe must turn that into a Fail.
+	dir := t.TempDir()
+	orig := dataDirWriteProbe
+	dataDirWriteProbe = func(string) error { return os.ErrPermission }
+	defer func() { dataDirWriteProbe = orig }()
+
+	r := checkDataDir(dir).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("unwritable dir: status = %v, want Fail (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckDataDir_ProbeLeavesNoFiles(t *testing.T) {
+	// The real probe must clean up after itself — a stale probe file in the
+	// data dir would be a side effect from a read-only diagnostic.
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	r := checkDataDir(dir).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Fatalf("writable tempdir: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("readdir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("write probe left %d file(s) behind in the data dir", len(entries))
+	}
+}
+
 // ============================================================================
 // isLikelyBitcoinAddress — base58 invalid-char branch
 // ============================================================================
@@ -854,10 +890,17 @@ func TestCheckFailoverAddresses_TypoFailsChecksum(t *testing.T) {
 // checkPoolEncryption — plaintext stratum warning
 // ============================================================================
 
-func TestCheckPoolEncryption_NoPoolsSkips(t *testing.T) {
+func TestCheckPoolEncryption_NoPoolsWarnsDefaultUnencrypted(t *testing.T) {
+	// The built-in default pool URL is stratum+v2:// — binary-framed but
+	// plaintext, because Noise NX is not wired into any live connection
+	// (docs/KNOWN_LIMITATIONS.md §2). The check must surface that rather
+	// than reporting the default as "encrypted".
 	r := checkPoolEncryption(config.Config{}).Run(context.Background())
-	if r.Status != StatusSkip {
-		t.Errorf("no pools: status = %v, want Skip", r.Status)
+	if r.Status != StatusWarn {
+		t.Errorf("no pools: status = %v, want Warn (default stratum+v2:// is unencrypted)", r.Status)
+	}
+	if !strings.Contains(r.Detail, "unencrypted") {
+		t.Errorf("detail should disclose the default pool is unencrypted: %q", r.Detail)
 	}
 }
 
@@ -880,7 +923,6 @@ func TestCheckPoolEncryption_PlaintextWarns(t *testing.T) {
 func TestCheckPoolEncryption_EncryptedSchemesPass(t *testing.T) {
 	for _, url := range []string{
 		"stratum+tls://pool.example.com:3334",
-		"stratum+v2://pool.example.com:34254",
 		"stratum+v2tls://pool.example.com:34254",
 	} {
 		cfg := config.Config{Pools: []config.PoolConfig{{URL: url}}}
@@ -888,6 +930,26 @@ func TestCheckPoolEncryption_EncryptedSchemesPass(t *testing.T) {
 		if r.Status != StatusPass {
 			t.Errorf("%s: status = %v, want Pass (detail: %s)", url, r.Status, r.Detail)
 		}
+	}
+}
+
+func TestCheckPoolEncryption_V2PlaintextWarns(t *testing.T) {
+	// stratum+v2:// is binary-framed but fully plaintext today — the Noise
+	// NX handshake is not wired into any live connection
+	// (docs/KNOWN_LIMITATIONS.md §2), and the engine logs the same warning
+	// at connect time. Doctor must not call it "encrypted".
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+v2://pool.example.com:34254"},
+	}}
+	r := checkPoolEncryption(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("stratum+v2://: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "pool.example.com:34254") {
+		t.Errorf("detail should name the unencrypted pool: %q", r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Warn must include a Fix hint")
 	}
 }
 
@@ -1057,6 +1119,20 @@ func TestCheckPoolTLSCA_ValidFilePasses(t *testing.T) {
 	}
 }
 
+func TestCheckPoolTLSCA_V2TLSSchemeHonoursCAFile(t *testing.T) {
+	// tls_ca_file is honoured by stratum+v2tls:// too — the engine's inline
+	// V2 path reads it into the TLS config (run.go). The check must not
+	// warn that it "will be ignored".
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+v2tls://p.example.com:34254", TLSCAFile: ca},
+	}}
+	r := checkPoolTLSCA(cfg).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("status = %v, want Pass (v2tls honours tls_ca_file; detail: %s)", r.Status, r.Detail)
+	}
+}
+
 func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{
 		{URL: "stratum+tls://p.example.com:3334", TLSCAFile: "/nonexistent/ca.pem"},
@@ -1080,6 +1156,19 @@ func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
 	}}
 	if r := checkPoolTLSCA(cfg).Run(context.Background()); r.Status != StatusFail {
 		t.Errorf("status = %v, want Fail (no valid PEM)", r.Status)
+	}
+}
+
+func TestCheckPoolTLSCA_V2SchemeStillWarns(t *testing.T) {
+	// stratum+v2:// (no TLS) still ignores tls_ca_file — the CA never
+	// reaches a handshake that does not happen.
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+v2://p.example.com:34254", TLSCAFile: ca},
+	}}
+	r := checkPoolTLSCA(cfg).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("status = %v, want Warn (CA set on plaintext-V2 pool is ignored)", r.Status)
 	}
 }
 
