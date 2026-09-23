@@ -1616,10 +1616,26 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
 		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
 	}
-	w := &miner.Work{
+	w := v1Work(job, jobID, chanID, target)
+	for _, wr := range workers {
+		wr.SetWork(w)
+	}
+	return nil
+}
+
+// v1Work builds the miner.Work a V1 pool job maps to. Version and
+// PrevHash come straight from mining.notify (previously parsed then
+// dropped — the V2 path sets both); MerkleRoot stays zero because the
+// pool owns coinbase assembly in V1, so no locally-grindable block is
+// ever valid regardless — the header is simply as complete as the V1
+// simplified path allows.
+func v1Work(job poolproto.Job, jobID, chanID uint32, target miner.Hash) *miner.Work {
+	return &miner.Work{
 		JobID:     jobID,
 		ChannelID: chanID,
 		Header: miner.Header{
+			Version:    job.Version,
+			PrevHash:   job.PrevHash,
 			MerkleRoot: job.MerkleRoot,
 			Time:       job.NTime,
 			Bits:       job.NBits,
@@ -1627,10 +1643,6 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		NBits:  job.NBits,
 		Target: target,
 	}
-	for _, wr := range workers {
-		wr.SetWork(w)
-	}
-	return nil
 }
 
 func parseHost(url string) (string, error) {
