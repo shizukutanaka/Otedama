@@ -124,6 +124,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    both. `v1Work` now carries them through; MerkleRoot stays zero (the
    pool owns coinbase assembly in V1), so the header is as complete as
    the simplified V1 path allows.
+   — session 283: **`set_extranonce` data race closed.** The notification
+   wrote `extranonce2Size` on the read loop while `Submit` read it on the
+   caller's goroutine — a plain int. Now `atomic.Int32` (a dedicated
+   -race test spams `set_extranonce` against concurrent submits).
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

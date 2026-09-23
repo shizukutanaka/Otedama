@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 283 — `mining.set_extranonce` のデータ競合)
+
+**`set_extranonce` 通知が `extranonce2Size` を読みループで書き込む一方、
+`Submit` が呼び出し元 goroutine で読み取る実データ競合** —— プールが
+submit 処理中に extranonce をローテーションすると `-race` で報告される
+経路。`atomic.Int32` 化して解消。専用 race テスト（通知スパム × 並行
+submit）を追加。
+
 ### Fixed (session 282 — V1 ヘッダが notify の version/prevhash を捨てていた)
 
 **`parseNotify` が解析した version・prevhash がワーカーのヘッダに届いていなかった**
