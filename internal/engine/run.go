@@ -34,6 +34,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -900,7 +901,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
 				for seq, sent := range submitTimes {
 					if seq <= last {
-						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
+						ms := float64(now.Sub(sent).Microseconds()) / 1000.0
+						latency.Record(ms)
+						if opts.m != nil && opts.m.submitLatencyHist != nil {
+							opts.m.submitLatencyHist.ObserveWithExemplar(ms/1000, map[string]string{
+								"share_seq": strconv.Itoa(int(seq)),
+							})
+						}
 						delete(submitTimes, seq)
 					}
 				}
@@ -1132,18 +1139,27 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					NTime: capturedShare.NTime,
 				})
 				elapsed := float64(time.Since(sendTime).Milliseconds())
+				observeHist := func() {
+					if opts.m != nil && opts.m.submitLatencyHist != nil && elapsed > 0 {
+						opts.m.submitLatencyHist.ObserveWithExemplar(elapsed/1000, map[string]string{
+							"job_id": fmt.Sprintf("%d", capturedShare.JobID),
+						})
+					}
+				}
 				if err != nil {
 					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v", err))
 					// Still record the latency on error: a p99 spike caused by
 					// a pool disconnect is a signal worth surfacing, not hiding.
 					if elapsed > 0 {
 						latency.Record(elapsed)
+						observeHist()
 					}
 					return
 				}
 				if result.Accepted {
 					opts.log("info", "engine: V1 share accepted")
 					latency.Record(elapsed)
+					observeHist()
 					if opts.m != nil {
 						opts.m.sharesAccepted.Inc()
 					}

@@ -246,6 +246,7 @@ addresses) appear once their first event occurs.
 | `otedama_reject_rate` | gauge | — | Rejected / judged (complement of acceptance; >0.03 investigate). |
 | `otedama_stale_rate` | gauge | — | Stale-rejected / judged (network-latency signal). |
 | `otedama_submit_latency_milliseconds` | gauge | `quantile={0.5,0.95,0.99}` | Submit→accept round-trip latency. |
+| `otedama_submit_latency_seconds` | histogram | — | Submit→verdict round-trip latency, le buckets 0.01–10 s. Bucket samples carry OpenMetrics exemplars (`# {share_seq="N"}` on V2, `# {job_id="N"}` on V1) linking a latency spike to the share that produced it; on text/0.0.4 parsers the ` # {…}` suffix is read as a comment. |
 
 **Pool & connection**
 

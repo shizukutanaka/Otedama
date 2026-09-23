@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 266 — Github・論文・Qiita・Zenn・海外技術情報などを参考にさらなる改善（おまかせ）: OpenMetrics エグゼンプラ付き submit-latency ヒストグラムで遅延スパイクをシェアまで追跡可能に)
+
+- **`otedama_submit_latency_seconds` ヒストグラム新設**（RESEARCH_IMPROVEMENTS Cat 9/10 項目20 — "trace exemplars"）。`internal/metrics` に exemplar 対応 `Histogram` を実装（le バケット + `_sum`/`_count`、`slices.BinarySearch` でバケット決定、exemplar は各バケット最新1件）。OpenMetrics の ` # {…} v ts` 構文は text/0.0.4 パーサではコメントとして読み飛ばされるため後方互換。
+- **V2 は `{share_seq}`、V1 は `{job_id}` をエグゼンプラとして記録**。p99 スパイクが発生した際に「どのシェアが遅かったか」をログ（`engine: share seq=N`）へ直接 join できる。registrable name は `otedama_submit_latency_milliseconds` の quantile ゲージ群が既に占有＆SLO 契約 (API.md) 上のため、Prometheus 命名規約どおり canonical `_seconds` 名を採用 — SPECIFICATION §8 G18 の "expose a parallel `_seconds` series" 案に一致（G18 を partially resolved に更新）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

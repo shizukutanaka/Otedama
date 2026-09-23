@@ -649,7 +649,15 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 9/10 — observability & supply-chain (current real tooling)
 
-20. 🟡 **Emit trace exemplars on the submit-latency histogram.**
+20. ✅ **Emit trace exemplars on the submit-latency histogram. — RESOLVED
+    (session 266).** `internal/metrics` gained a histogram type with
+    OpenMetrics exemplars (` # {labels} value ts` — a comment to
+    text/0.0.4 parsers), registered as `otedama_submit_latency_seconds`
+    with `{share_seq="N"}` (V2) / `{job_id="N"}` (V1) exemplars so a
+    p99 spike links to the share that produced it. The `_milliseconds`
+    quantile gauges stay (API.md SLO contract); see SPECIFICATION §8 G18.
+    OTel trace-ids (Cat 9 #3) remain absent, so the exemplar key is the
+    submission identity rather than `trace_id`. Original finding:
     prometheus/client_golang v1.23 (Jul 2025) + OpenMetrics 1.0 allow a
     `{trace_id="…"}` exemplar on a histogram bucket so a p99 spike links to
     its trace. Otedama already has the histogram (Cat 2 #7) and OTel spans
