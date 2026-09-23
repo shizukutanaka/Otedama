@@ -468,7 +468,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 	// A file that exists but whose config fails Validate (no bitcoin address).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
@@ -485,7 +485,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
@@ -625,7 +625,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 	dir := t.TempDir()
 	// Simulate two render nodes.
 	for _, name := range []string{"renderD128", "renderD129", "card0"} {
-		if err := os.MkdirAll(filepath.Join(dir, name), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", name, err)
 		}
 	}
@@ -708,11 +708,11 @@ func TestCheckWallet_NoWallet_EmitsWarn(t *testing.T) {
 
 func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "a1b2c3d4"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -727,7 +727,7 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 
 func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	c := checkWallet(dir)
@@ -752,11 +752,11 @@ func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
 
 func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "deadbeef"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -1034,7 +1034,7 @@ func writePEMCert(t *testing.T) string {
 		t.Fatalf("createcert: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "ca.pem")
-	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	return path
@@ -1072,7 +1072,7 @@ func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 
 func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.pem")
-	if err := os.WriteFile(path, []byte("not a certificate"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("not a certificate"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{Pools: []config.PoolConfig{
@@ -1805,5 +1805,68 @@ func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
 	r := checkClockSkew().Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// ============================================================================
+// checkPoolPayoutThreshold — custodial-float advisory
+// ============================================================================
+
+func TestCheckPoolPayoutThreshold(t *testing.T) {
+	cases := []struct {
+		name       string
+		pools      []config.PoolConfig
+		wantStatus Status
+	}{
+		{"no pools → skip", nil, StatusSkip},
+		{
+			"custodial pool, threshold undeclared → warn",
+			[]config.PoolConfig{
+				{URL: "stratum+v2://pool.example.com:3336", PayoutScheme: "pplns"},
+			},
+			StatusWarn,
+		},
+		{
+			"custodial pool, high threshold → warn",
+			[]config.PoolConfig{
+				{URL: "stratum+v2://pool.example.com:3336", PayoutScheme: "fpps", MinPayoutSats: 5_000_000},
+			},
+			StatusWarn,
+		},
+		{
+			"unknown scheme counts as custodial, undeclared → warn",
+			[]config.PoolConfig{
+				{URL: "stratum+v2://pool.example.com:3336"},
+			},
+			StatusWarn,
+		},
+		{
+			"custodial pool, modest threshold → pass",
+			[]config.PoolConfig{
+				{URL: "stratum+v2://pool.example.com:3336", PayoutScheme: "pplns", MinPayoutSats: 50_000},
+			},
+			StatusPass,
+		},
+		{
+			"tides pool skips the float check → pass",
+			[]config.PoolConfig{
+				{URL: "stratum+v2://ocean.example.com:3334", PayoutScheme: "tides"},
+			},
+			StatusPass,
+		},
+		{
+			"mixed: tides ignored, custodial high → warn",
+			[]config.PoolConfig{
+				{URL: "stratum+v2://ocean.example.com:3334", PayoutScheme: "tides"},
+				{URL: "stratum+v2://pool.example.com:3336", PayoutScheme: "fpps", MinPayoutSats: 2_000_000},
+			},
+			StatusWarn,
+		},
+	}
+	for _, tt := range cases {
+		r := checkPoolPayoutThreshold(config.Config{Pools: tt.pools}).Run(context.Background())
+		if r.Status != tt.wantStatus {
+			t.Errorf("%s: status = %v, want %v (detail: %s)", tt.name, r.Status, tt.wantStatus, r.Detail)
+		}
 	}
 }

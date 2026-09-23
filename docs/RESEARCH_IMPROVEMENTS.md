@@ -448,9 +448,18 @@ comparisons (D-Central, Coin Bureau, Solo Satoshi).
    (ADR-007); aligns with the TIDES/OCEAN sovereignty stance the 2026
    comparisons single out.
 2. 🔵 **BOLT12 reusable offers** — ADR-007 B1.
-3. 🟡 **Low Lightning payout-threshold awareness.** OCEAN's 0.00001 BTC LN
+3. ✅ **Low Lightning payout-threshold awareness.** OCEAN's 0.00001 BTC LN
    minimum makes frequent small withdrawals viable; surfacing the pool's
    minimum payout in `doctor` helps users avoid "trapped" small balances.
+   — ✅ **Implemented (session 255), in the operator-mirrored form.** The
+   stratum protocol cannot read a pool's payout minimum back, so the new
+   `min_payout_sats` field on `PoolConfig` lets the operator declare the
+   threshold they set at the pool; `doctor`'s "Pool payout thresholds"
+   check then estimates the custodial float it implies: warn on custodial
+   schemes (fpps/pplns/unset) with no declared threshold or ≥ 0.01 BTC,
+   pass on declared modest thresholds, and exempt tides/solo (no
+   pool-held balance to trap). Same trap-avoidance goal; the data source
+   is the config, not the wire.
 4. 🔵 **External-node control (Phoenixd/CLN/lnd/Alby)** — ADR-007 B3.
 5. 🔵 **Embedded LDK Node sidecar (opt-in)** — ADR-007 B4.
 6. 🟡 **Min-cost-flow path selection** *if Otedama ever sends*: Pickhardt &
@@ -512,7 +521,7 @@ endpoint against current vendor documentation. Tags as before
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
-4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
+4. ✅ **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
    difficulty active when issued, validate locally against that, and treat
@@ -532,6 +541,20 @@ endpoint against current vendor documentation. Tags as before
    as a reject) remains open — the target now updates correctly on every new
    job, but shares in flight when `set_difficulty` changes are not yet
    re-validated against the difficulty active at issue time.
+   — ✅ **Implemented (session 255).** `miner.Share` now carries the exact
+   `Target` the hash was ground against, and the engine keeps each
+   submission's share by sequence number. On a `difficulty`-class
+   rejection (`above target` etc.) `shareSupersededByRetarget` re-validates
+   the hash against its issue target vs the pool's current bar: valid-then/
+   invalid-now is the benign vardiff transition and counts to the new
+   `otedama_shares_superseded_total` counter — out of the reject rate,
+   out of `otedama_shares_unaccounted` (it was judged), logged at info.
+   Same classification on the V1 path using `SuggestedDifficulty()`.
+   `SubmitSharesError` also settles submit-latency now — a reject is a
+   verdict with a round trip. Covered by `TestShareSupersededByRetarget`
+   (boundary tables), `TestRunSession_SupersededRejectCountedSeparately`
+   (deterministic SetTarget→reject race against a retarget fake pool),
+   and `TestWorker_ShareCarriesIssueTarget`.
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict
@@ -707,7 +730,7 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
    is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
    early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
    fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
@@ -718,6 +741,16 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
+   — ✅ **Implemented (session 255).** New `internal/stratum/noise_fuzz_test.go`:
+   `FuzzHandshakeState_ReadMessage2` (all length-branch boundaries plus
+   valid/invalid compressed & uncompressed P-256 points),
+   `FuzzEncryptedConn_Read` (arbitrary length-prefixed ciphertext streams
+   prefixed by one valid frame), and `FuzzEncryptedConn_RoundTrip`
+   (Write→Read byte-exactness, incl. the 65519-byte u16 boundary and the
+   one-over rejection). `FuzzDecoder_ReadFrame` gained boundary seeds at
+   `DefaultMaxFrameSize−HeaderSize` (0xFFFFFA ±1/±2), channel-msg payloads
+   below the 4-byte channel-id minimum, and a valid frame followed by a
+   maximal claim. ~1.8M + ~1.3M execs clean on the two new targets.
 2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt

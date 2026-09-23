@@ -10,6 +10,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 255 — 外部一次情報(GitHub/仕様/海外技術情報)に基づく精錬: プール難易度遷移中の「above target」拒否を良性として別計上＋Noise/フレーム長算術のオーバーフローfuzz化＋プール最低支払額のカストディ浮動をdoctorで可視化)
+
+**1. vardiff遷移中の良性rejectを reject率から分離 (ESP-Miner #212).**
+`miner.Share` が発行時点の `Target`（ハッシュを掘削した target）を保持するよう
+にした。engine はシーケンス番号ごとに submit した share を保持し、`difficulty`
+系の拒否（`above target` 等）を受けたとき `shareSupersededByRetarget` が
+「発行時点の target は満たすが現在の target は満たさない」を再検証する。
+当てはまる share は `otedama_shares_superseded_total` へ別計上——reject率や
+`otedama_shares_unaccounted`（＝プールの判定待ち）には混入しない。V1 経路も
+`SuggestedDifficulty()` で同分類。あわせて `SubmitSharesError` が
+submit-latency を settle するようにした（reject も往復のある判定）。
+
+**2. Noise/フレーム長算術の fuzz 化 (SRI 24/7 fuzzing の教訓).**
+SRI が `noise_sv2` crate の arithmetic overflow を fuzz で発見した類例に対応する
+`internal/stratum/noise_fuzz_test.go` を追加:
+`FuzzHandshakeState_ReadMessage2`（全長分岐の境界＋有効/無効な P-256 点）、
+`FuzzEncryptedConn_Read`（任意の長さprefix暗号文列＋先頭に有効フレーム）、
+`FuzzEncryptedConn_RoundTrip`（Write→Read のバイト一致、u16 境界 65519 と
+超過時の reject を含む）。`FuzzDecoder_ReadFrame` には
+`DefaultMaxFrameSize−HeaderSize` 境界 ±1/±2、channel_id 最小長未満、
+有効フレームに続く巨大 claim の seeds を追加。~180万+~130万 execs で
+panic/巨大アロケーションなし。
+
+**3. プール最低支払額 `min_payout_sats` + doctor チェック (OCEAN 低閾値の思想).**
+stratum 経由ではプール側の支払閾値を読めないため、オペレータが設定を
+`pools[].min_payout_sats` に記述する宣言的フィールドを追加。`doctor` の新
+「Pool payout thresholds」チェックが custodial 系スキーム（fpps/pplns/未設定）で
+閾値未宣言または 0.01 BTC 以上を warn——プールに滞留する未払残高はプールの
+支払能力への債権であり、OCEAN が LN 低閾値を採るのと同じリスク。tides/solo は
+プール滞留がないため免除。`config.yaml.example` に記述例を追記。
+
+カバレッジ: `TestShareSupersededByRetarget`（境界表駆動）、
+`TestRunSession_SupersededRejectCountedSeparately`（SetTarget→reject の
+決定的レースを retarget fake pool で再現）、`TestWorker_ShareCarriesIssueTarget`、
+`TestEngineMetrics_UpdateShareRates_SupersededSettles`、
+`TestCheckPoolPayoutThreshold`（7ケース表駆動）。依存追加なし。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

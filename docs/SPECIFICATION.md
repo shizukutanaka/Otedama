@@ -63,6 +63,7 @@ its default, and its validation rule:
 | `pools[].user` | — (file only) | `""` | overrides the Stratum `user_identity` when set |
 | `pools[].password` | — (file only) | `""` | V1-only; unused by the V2 transport |
 | `pools[].payout_scheme` | — (file only) | `""` | empty, or one of `fpps`/`pplns`/`tides`/`solo` |
+| `pools[].min_payout_sats` | — (file only) | `0` | ≥ 0; operator-declared pool payout threshold for `doctor`'s custodial-float check — no protocol effect |
 | `pools[].tls_ca_file` | — (file only) | `""` | readable PEM file; honoured only for `stratum+tls://` |
 | `workers.name` | — (file only) | `""` | appended as `.name` to the `user_identity` |
 | `language` | `OTEDAMA_LANGUAGE` | `""` → POSIX-locale fallback | — |
@@ -163,8 +164,9 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `shares_submitted_total` | counter | Shares actually transmitted to the pool, counted at send time regardless of the eventual accept/reject response. Distinct from `shares_found_total`: a found share is never submitted if its worker's share channel was full. |
 | `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
 | `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). |
+| `shares_superseded_total` | counter | Rejects that were benign vardiff-transition artefacts: verified locally to have met the target in force when the share's work was issued, but the pool had since raised its bar (ESP-Miner #212). Excluded from `reject_rate` and `shares_rejected_by_reason_total` — no operator action is possible or needed. |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
-| `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected, ≥0). |
+| `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected−superseded, ≥0). |
 | `share_acceptance_rate` | gauge | accepted / judged. |
 | `reject_rate` | gauge | rejected / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |

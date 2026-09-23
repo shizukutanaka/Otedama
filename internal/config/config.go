@@ -211,6 +211,18 @@ type PoolConfig struct {
 	// This field has no effect on the mining protocol.
 	PayoutScheme string `yaml:"payout_scheme"`
 
+	// MinPayoutSats is the payout threshold configured at this pool, in
+	// satoshis: the accrued-balance level at which the pool releases an
+	// on-chain or Lightning payout. Otedama cannot read the pool-side
+	// setting, so this is operator-declared metadata that lets `doctor`
+	// estimate custodial float — every sat earned but not yet paid out is
+	// a claim on the pool's solvency. OCEAN's low Lightning payout
+	// threshold exists for exactly this reason: small, frequent payouts
+	// keep the custodial balance near zero (docs/RESEARCH_IMPROVEMENTS.md
+	// Category 11). 0 means unset/unknown; no effect on the mining
+	// protocol.
+	MinPayoutSats uint64 `yaml:"min_payout_sats"`
+
 	// TLSCAFile is an optional path to a PEM file of certificate authorities
 	// to trust for this pool's stratum+tls:// connection, in addition to the
 	// system root store. Use it for a pool that presents a private-CA or

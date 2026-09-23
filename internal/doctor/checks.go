@@ -42,6 +42,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolEncryption(cfg),
 		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
+		checkPoolPayoutThreshold(cfg),
 		checkPowerEconomics(cfg),
 		checkProfitabilityFloor(cfg),
 		checkHardware(),
@@ -218,7 +219,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -679,6 +680,78 @@ func checkPayoutScheme(cfg config.Config) Check {
 				}
 			}
 			return Result{Status: StatusPass, Detail: detail}
+		},
+	}
+}
+
+// warnMinPayoutSats is the declared threshold at or above which
+// checkPoolPayoutThreshold flags custodial float as large. 0.01 BTC
+// (1,000,000 sats) is a common on-chain payout floor at public pools —
+// meaningful money left in someone else's custody between payouts.
+const warnMinPayoutSats = 1_000_000
+
+// checkPoolPayoutThreshold estimates the custodial float each pool can
+// hold between payouts: unpaid balance is a claim on the pool's solvency,
+// so on custodial schemes (fpps/pplns/unset) a high threshold — or no
+// declared threshold — is real counterparty exposure. OCEAN's low
+// Lightning payout threshold exists for exactly this reason
+// (docs/RESEARCH_IMPROVEMENTS.md Category 11). Non-custodial schemes are
+// skipped: tides pays straight into the coinbase and solo is
+// all-or-nothing, so neither accrues a pool-held balance. Advisory only —
+// the field is declarative metadata and has no protocol effect.
+func checkPoolPayoutThreshold(cfg config.Config) Check {
+	return Check{
+		Name: "Pool payout thresholds",
+		Run: func(_ context.Context) Result {
+			if len(cfg.Pools) == 0 {
+				return Result{Status: StatusSkip, Detail: "no pools configured; using built-in default"}
+			}
+			var undeclared, high, declared []string
+			for _, p := range cfg.Pools {
+				switch p.PayoutScheme {
+				case "tides", "solo":
+					continue // non-custodial: no pool-held float
+				}
+				host := stripScheme(p.URL)
+				if host == "" {
+					host = p.URL
+				}
+				switch {
+				case p.MinPayoutSats == 0:
+					undeclared = append(undeclared, host)
+				case p.MinPayoutSats >= warnMinPayoutSats:
+					high = append(high, fmt.Sprintf("%s (%d sats)", host, p.MinPayoutSats))
+				default:
+					declared = append(declared, fmt.Sprintf("%s (%d sats)", host, p.MinPayoutSats))
+				}
+			}
+			switch {
+			case len(high) > 0:
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("high payout threshold on %s — up to that balance sits in the pool's custody between payouts",
+						strings.Join(high, ", ")),
+					Fix: "lower the payout threshold at the pool (or switch to Lightning payouts) — unpaid balance is a claim on pool solvency",
+				}
+			case len(undeclared) > 0:
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("payout threshold not declared for %s — custodial float unknown",
+						strings.Join(undeclared, ", ")),
+					Fix: "set min_payout_sats in config.yaml to the threshold you configured at the pool; prefer the smallest available",
+				}
+			case len(declared) > 0:
+				return Result{
+					Status: StatusPass,
+					Detail: fmt.Sprintf("declared thresholds: %s", strings.Join(declared, ", ")),
+				}
+			default:
+				// Every pool is tides/solo — nothing held in pool custody.
+				return Result{
+					Status: StatusPass,
+					Detail: "all pools pay non-custodially (tides/solo); no pool-held float",
+				}
+			}
 		},
 	}
 }

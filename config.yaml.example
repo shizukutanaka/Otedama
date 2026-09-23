@@ -61,6 +61,14 @@ pools:
     #   solo   — full block reward or nothing
     # payout_scheme: "tides"
     #
+    # min_payout_sats (optional) is the payout threshold you configured at
+    # the pool, in satoshis. Otedama cannot read the pool-side setting —
+    # declare it here so `otedama doctor` can estimate how much unpaid
+    # balance sits in the pool's custody between payouts. On a custodial
+    # scheme (fpps/pplns) prefer the smallest threshold the pool offers
+    # (or Lightning payouts): unpaid balance is a claim on pool solvency.
+    # min_payout_sats: 50000
+    #
     # tls_ca_file (optional) is a path to a PEM bundle of extra certificate
     # authorities to trust for this pool's stratum+tls:// certificate, for a
     # pool presenting a private-CA or self-signed cert. System roots are always
