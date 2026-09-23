@@ -768,6 +768,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	}
 	submissions := make(map[uint32]pendingShare)
 	const submissionsCap = 1024
+	// Whatever is still in-flight when the session ends was transmitted but
+	// never judged by this session's view of the pool — it may have been
+	// credited pool-side. Count it as unresolved rather than dropping it
+	// silently: submitted ≈ accepted + rejected + unresolved.
+	defer func() {
+		if opts.m == nil {
+			return
+		}
+		for range submissions {
+			opts.m.sharesUnresolved.Inc()
+		}
+	}()
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -1033,10 +1045,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// Pool is not acknowledging; drop the oldest half so the
 				// map stays bounded. Latency for dropped entries is lost,
 				// which is the honest outcome — it was never measured.
+				// Count them unresolved first: they were sent and their
+				// verdict never arrived.
 				cutoff := seqNum - submissionsCap/2
 				for seq := range submissions {
 					if seq < cutoff {
 						delete(submissions, seq)
+						if opts.m != nil {
+							opts.m.sharesUnresolved.Inc()
+						}
 					}
 				}
 			}
@@ -1273,7 +1290,14 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				})
 				elapsed := float64(time.Since(sendTime).Milliseconds())
 				if err != nil {
-					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v", err))
+					// The request may have been written (or partially
+					// written) before the failure — the pool's verdict is
+					// unknowable from here. Count it unresolved rather
+					// than silently widening the accepted+rejected gap.
+					if opts.m != nil {
+						opts.m.sharesUnresolved.Inc()
+					}
+					opts.log("warn", fmt.Sprintf("engine: V1 submit: %v (verdict unresolved)", err))
 					// Still record the latency on error: a p99 spike caused by
 					// a pool disconnect is a signal worth surfacing, not hiding.
 					if elapsed > 0 {

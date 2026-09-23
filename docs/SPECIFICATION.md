@@ -165,6 +165,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other/transition). `transition` = rejected under the pool's current difficulty but mined under an earlier share target (ESP-Miner #212); benign bookkeeping, excluded from the rate denominators below. |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
 | `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected, ≥0). |
+| `shares_unresolved_total` | counter | Shares transmitted whose verdict was never learned — session dropped before the pool answered, or eviction from the bounded in-flight window. Possibly credited pool-side, unlike never-sent shares: `submitted ≈ accepted + rejected + unresolved` (modulo in-flight). |
 | `share_acceptance_rate` | gauge | accepted / (accepted + realRejected), where realRejected = rejected − transition. |
 | `reject_rate` | gauge | (rejected − transition) / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |

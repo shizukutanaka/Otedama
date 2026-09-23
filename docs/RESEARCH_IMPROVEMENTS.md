@@ -46,6 +46,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
     from pool-side truth; a periodic reconciliation against pool stats
     (where the pool exposes them) would catch silent miscounting.
+    — ✅ **Partially done (session 266):** the dependency-free half. New
+    `otedama_shares_unresolved_total` counts shares transmitted but never
+    judged — V1 submit whose connection died before the response, V2
+    session-end sweep of the in-flight `submissions` map, and V2
+    in-flight cap evictions. Together with existing
+    `shares_unaccounted` (found−judged) this splits "definitely lost"
+    from "possibly credited pool-side": `submitted ≈ accepted +
+    rejected + unresolved`. The pool-API reconciliation half (OCEAN
+    etc.) stays open — it needs a per-pool HTTP surface, which is an
+    ADR-013-shaped design decision, not a free win.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers

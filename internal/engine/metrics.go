@@ -25,6 +25,7 @@ type engineMetrics struct {
 	sharesSubmitted     *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
+	sharesUnresolved    *metrics.Counter
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
 	arbitrationSwitches *metrics.Counter
@@ -231,6 +232,16 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_shares_total",
 			"Total shares reported by the pool.",
 			map[string]string{"status": "rejected"}),
+		sharesUnresolved: reg.NewCounter(
+			"otedama_shares_unresolved_total",
+			"Total shares transmitted to the pool whose accept/reject verdict "+
+				"was never learned (session dropped before the pool answered, or "+
+				"eviction from the bounded in-flight window). The pool may still "+
+				"have credited them — unlike never-sent shares these are "+
+				"possibly-paid work, so they are counted apart from "+
+				"shares_unaccounted. Together they form the identity "+
+				"submitted ≈ accepted + rejected + unresolved (modulo in-flight).",
+			nil),
 		poolConnectAttempts: reg.NewCounter(
 			"otedama_pool_connect_attempts_total",
 			"Total pool-connection attempts, including reconnects.",

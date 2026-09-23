@@ -2737,3 +2737,145 @@ func TestRunSessionV1_ResumeReArmsJob(t *testing.T) {
 		t.Fatal("resume nudge did not re-arm the V1 worker — no mining.submit")
 	}
 }
+
+// TestRunSession_DisconnectCountsUnresolvedShares exercises the session-end
+// reconciliation: a share the fake pool received but never acknowledged is
+// still in the submissions map when the session dies — it must be counted
+// unresolved, not dropped silently.
+func TestRunSession_DisconnectCountsUnresolvedShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "w",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: time.Hour,
+			log:      func(_, _ string) {},
+			m:        m,
+		})
+	}()
+
+	// The fake pool records the share but never answers — the session then
+	// dies when the pool's handler returns and closes the connection.
+	deadline := time.After(6 * time.Second)
+	for len(fp.ReceivedShares()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("no share submitted to fake pool")
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+
+	// Wait for runSession to observe the close and unwind its defer.
+	select {
+	case <-done:
+	case <-time.After(6 * time.Second):
+		t.Fatal("runSession did not exit after pool disconnect")
+	}
+	if got := m.sharesUnresolved.Value(); got == 0 {
+		t.Fatalf("sharesUnresolved = %d, want > 0 — the unacked share was silently dropped", got)
+	}
+}
+
+// TestRunSessionV1_SubmitErrorCountsUnresolvedShare drives a V1 session whose
+// pool accepts the mining.submit line but closes the connection without
+// responding — the verdict is unknowable, so the share must land in
+// sharesUnresolved rather than widening the accepted+rejected gap.
+func TestRunSessionV1_SubmitErrorCountsUnresolvedShare(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	gotSubmit := make(chan struct{}, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e-9]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":["bf","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.Contains(line, `"mining.submit"`) {
+				gotSubmit <- struct{}{}
+				return // close without responding — verdict lost
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "worker.1",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: time.Hour,
+			log:      func(_, _ string) {},
+			m:        m,
+		})
+	}()
+
+	select {
+	case <-gotSubmit:
+	case <-time.After(6 * time.Second):
+		t.Fatal("no mining.submit received")
+	}
+
+	// The submit goroutine resolves once the dead conn reports the error;
+	// wait for the counter rather than a fixed sleep.
+	deadline := time.After(6 * time.Second)
+	for m.sharesUnresolved.Value() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("unanswered V1 submit was not counted unresolved")
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+}

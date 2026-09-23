@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 266 — 送信済み未判定シェアの`shares_unresolved_total`カウンタ)
+
+リサーチ項目「trust the pool's numbers」の依存不要な半分を実装。
+`otedama_shares_unresolved_total` が、送信されたが判定を知り得なかった
+シェアを計測 — V1: 応答前に接続断で `Submit` がエラー、V2: セッション終了時に
+in-flight `submissions` マップを sweep、V2: in-flight cap退避。既存
+`shares_unaccounted`（found−judged）と組み合わせ「確実にロスト」と
+「プール側で計上済みかも」を分離: `submitted ≈ accepted + rejected +
+unresolved`（in-flight分を除く）。プールHTTP APIとの照合半分は
+ADR-013相当の設計判断のため未実施。SPECIFICATION §6のカタログに登録
+（metrics-doc整合テストも通過）。V2切断・V1無応答の2本のe2eテスト追加。
+
 ### Test (session 265 — V1 JSON-RPCリーダのfuzz化＋SV2フレームのオーバーフロー境界種追加)
 
 June-2026リサーチ項目1（SRI fuzz発見の`noise_sv2`算術オーバーフロー教訓を
