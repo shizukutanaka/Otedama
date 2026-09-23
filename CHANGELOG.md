@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 279 — goreleaser/lint 設定の実害 + release.yml 監査記録)
+
+- **`.goreleaser.yaml` アーカイブ名を install.sh/release.yml 契約に整合**:
+  `otedama_v3.0.0_linux_amd64` 形式 → `otedama-<os>-<arch>`。goreleaser 経路で
+  生成したアセットは install.sh が決して取得できない名前だった。
+- **`docs/locales/*.toml` をアーカイブから除去**: ディレクトリ不存在 — 空
+  マッチ glob がリリースを中断させる。翻訳導入時に復活させるコメント付き。
+- **`checksums.txt` を固定名に**: install.sh はリテラル `checksums.txt` を
+  取得する。旧 `otedama_v3.0.0_checksums.txt` では検証経路が成立しない。
+- **`changelog.use: git-cliff` → `git`**: git-cliff バイナリ・cliff.toml 非
+  存在でローカル実行不能、且つ goreleaser は git-cliff 時に `filters` を
+  無視するため宣言済み exclude は死んだ設定だった。`git` なら filters が
+  実際に効く。
+- **`.golangci.yml` の `go: "1.22"` → `"1.24"`**: go.mod の `go` ディレク
+  ティブ（言語フロア）に整合。`1.22` は陳腐化、未指定/`1.25.7` ピンは
+  go1.24 ビルドの golangci-lint が解析不能になることを実測確認。
+- **release.yml の残存実害5件を KNOWN_LIMITATIONS §13 に記録**（workflows
+  は push scope 外）: `-X main.*` の誤ターゲット（正: `internal/version.*`
+  — リリースバイナリが `v3.0.0-alpha.0-dev` を報告）、DEPLOYMENT_GUIDE.md
+  の404リンク、update-homebrew の GITHUB_TOKEN スコープ不足、archived
+  actions、`prerelease: false` が -alpha タグを stable 扱い。
+
 ### Fixed (session 278 — ビルド/リリース経路の壊れたターゲット群)
 
 session 260 の install.sh 監査と同系 — 一度も検証されていなかった配布/

@@ -9,8 +9,12 @@ run:
     - vendor
     - dist
     - bin
-  # Go toolchain version.
-  go: "1.22"
+  # Language floor = go.mod's `go` directive. Do not pin the toolchain
+  # version (or leave this unset so the toolchain directive is picked
+  # up): golangci-lint built with go1.24 cannot load analysis targeted
+  # at go1.25.7 ("language version used to build golangci-lint is lower
+  # than the targeted Go version"). The previous 1.22 was simply stale.
+  go: "1.24"
 
 # Output format.
 output:

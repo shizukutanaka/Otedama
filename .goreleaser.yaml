@@ -44,7 +44,11 @@ builds:
 
 archives:
   - id: default
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # Asset names must match the install.sh / release.yml contract
+    # (`otedama-<os>-<arch>.tar.gz`, no version segment) — the previous
+    # `otedama_v3.0.0_linux_amd64` style produced assets install.sh
+    # could never fetch.
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         format: zip
@@ -54,10 +58,12 @@ archives:
       - LICENSE
       - NOTICE
       - VERIFY.md
-      - docs/locales/*.toml  # 翻訳ファイルを同梱
+      # docs/locales/ does not exist — a glob matching nothing aborts
+      # the release. Re-add (with the directory) when translations land.
 
 checksum:
-  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  # install.sh downloads a literal `checksums.txt` — keep the plain name.
+  name_template: "checksums.txt"
   algorithm: sha256
 
 signs:
@@ -120,9 +126,12 @@ sboms:
       - "--output"
       - "spdx-json=$document"
 
-# 変更履歴は git-cliff によって自動生成される
+# 変更履歴。`git` uses the commit log and honours the exclude filters
+# below; the previous `git-cliff` setting required a git-cliff binary and
+# a cliff.toml that this repo does not carry — and goreleaser ignores
+# `filters` under git-cliff anyway, so the exclusions were dead config.
 changelog:
-  use: git-cliff
+  use: git
   sort: asc
   filters:
     exclude:

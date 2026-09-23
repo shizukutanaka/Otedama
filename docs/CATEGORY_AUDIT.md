@@ -792,3 +792,28 @@ had never been exercised. Six confirmed-broken targets/fixes:
 Docker build itself not run (no docker daemon in this environment) —
 changes reviewed for syntax; Makefile targets verified by execution
 (`make docs`, `make -n fuzz/build/help`).
+
+## Session 279 update — release tooling audit (.goreleaser.yaml, .golangci.yml, release.yml)
+
+Third leg of the distribution-path audit (s260 install.sh → s278
+Makefile/Dockerfile → s279 release config). release.yml is the actual
+producer; .goreleaser.yaml is the sanctioned local alternative
+(`goreleaser release --snapshot`).
+
+| Finding | Disposition |
+|---|---|
+| `.goreleaser.yaml` archive names `otedama_v{ver}_{os}_{arch}` — install.sh fetches `otedama-<os>-<arch>.tar.gz` (release.yml contract) → goreleaser-path assets could never be installed by the installer. | ✅ Fixed: name_template aligned to `{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}`. |
+| `docs/locales/*.toml` in archive files — directory does not exist; an empty-match glob aborts the release. | ✅ Fixed: removed with a re-add comment. |
+| checksum name `otedama_v{ver}_checksums.txt` — install.sh fetches literal `checksums.txt` → signature/checksum verification path impossible. | ✅ Fixed: `name_template: "checksums.txt"` (cosign outputs become `checksums.txt.sig`/`.pem`, matching install.sh fetches). |
+| `changelog.use: git-cliff` — no git-cliff binary guaranteed, no cliff.toml exists, and goreleaser ignores `filters` under git-cliff → the declared exclude list was dead config. | ✅ Fixed: `use: git` so the declared filters actually apply. |
+| `.golangci.yml` `run.go: "1.22"` stale — repo floor is `go 1.24.0`; pinning 1.25.7 or unsetting breaks golangci-lint (built with go1.24.1 — measured: "language version used to build golangci-lint is lower than the targeted Go version"). | ✅ Fixed: `go: "1.24"` (go.mod's language floor). Lint output verified identical to baseline. |
+| release.yml `-X main.Version/-X main.BuildTime/-X main.GitCommit` — symbols don't exist (`-X` silently ignored); metadata lives in `internal/version` → shipped binaries report `v3.0.0-alpha.0-dev`/`unknown`. | ⚠️ Recorded (KNOWN_LIMITATIONS §13) — workflows outside push scope. Same class as the docker-build ARG fix (s278) but ships to users. |
+| release.yml release body links `docs/DEPLOYMENT_GUIDE.md` — only DEPLOYMENT.md exists → 404 in every Release. | ⚠️ Recorded (workflows scope). |
+| release.yml `update-homebrew` uses `GITHUB_TOKEN` for cross-repo checkout of `otedama/homebrew-tap` — needs a PAT; fails on auth regardless of repo existence (tap repo unverifiable from session — git-manager proxy 403). | ⚠️ Recorded (workflows scope). |
+| `actions/create-release@v1`, `actions/upload-release-asset@v1` archived upstream. | ⚠️ Recorded (workflows scope). |
+| `prerelease: false` publishes `-alpha` tags as stable (goreleaser uses `prerelease: auto`). | ⚠️ Recorded (workflows scope). |
+| `scripts/`+`config.yaml` missing → DEB/RPM job fails; GO_VERSION 1.23 below godebug floor | Already recorded §13 (sessions 245-252). |
+| First-tag `git describe HEAD^` failure | ❌ Not a defect — v2.1.x tags exist; HEAD^ resolves on future tags. |
+
+goreleaser binary not installed locally — config validated by YAML parse
++ docs semantics, not a live release run.

@@ -564,6 +564,37 @@ no-op":
   state the real Go 1.25 floor; the keep/relax decision is drafted
   in ADR-012).
 
+**Further release.yml defects found at session 279** (all unfixed —
+workflow files are outside the push scope, see "Not fixed"):
+
+- **Released binaries mislabel themselves.** The `build-binaries` step
+  injects version metadata via `-X main.Version=… -X main.BuildTime=…
+  -X main.GitCommit=…`, but no `main.Version`/`BuildTime`/`GitCommit`
+  symbols exist — the metadata vars live in `internal/version`
+  (`Version`/`Commit`/`BuildDate`; the Makefile and Dockerfile use that
+  fully-qualified path). `go build -X` silently ignores a nonexistent
+  symbol, so every release binary reports
+  `otedama version v3.0.0-alpha.0-dev / commit unknown` regardless of
+  the tag. Same defect class as `make docker-build` (fixed session
+  278), but this one ships to users.
+- **Release body links a nonexistent doc.** The `create-release` body
+  points to `docs/DEPLOYMENT_GUIDE.md`; only `docs/DEPLOYMENT.md`
+  exists → a 404 in every GitHub Release. (Session 245 corrected a
+  different broken deployment-guide link; this one remains.)
+- **`update-homebrew` cannot authenticate.** It checks out
+  `otedama/homebrew-tap` with `GITHUB_TOKEN`, which is scoped to this
+  repository only — cross-repo checkout and the subsequent
+  create-pull-request step need a PAT (e.g. `secrets.TAP_TOKEN`). The
+  job fails on auth even if the tap repository exists.
+- **Deprecated actions.** `actions/create-release@v1` and
+  `actions/upload-release-asset@v1` are archived upstream (superseded
+  by `softprops/action-gh-release`); they still run but carry
+  node16-era deprecation risk.
+- **`prerelease: false` ignores tag shape.** An `-alpha`/`-beta`/`-rc`
+  tag (the repo's own VERSION is `v3.0.0-alpha.1`) is published as a
+  stable release; `.goreleaser.yaml` uses `prerelease: auto` for the
+  same intent.
+
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
 code quality — false-negative signals an operator or contributor could
