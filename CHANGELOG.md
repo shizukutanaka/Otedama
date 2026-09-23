@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 277 — プール運営者通知が誰にも読まれず破棄されていた)
+
+**`client.show_message`（メンテナンス予告・手数料変更・死亡マイナー
+警告等の運営者通知）が `PoolNotices()` チャネルに届くものの、
+消費者が存在せずバッファで黙って捨てられていた**（session 106 で
+チャネル実装済みだが読み手なし）。`runSessionV1` が
+`poolproto.PoolNoticeReceiver` をドレインして
+`engine: pool notice: …` として info ログ出力するよう配線 ——
+ラウンド275の `client.reconnect` と同型の「記録されるが不可視」
+ギャップの残り半分を解消。
+
 ### Fixed (session 276 — SV2 チャネル開設拒否の理由が消えていた)
 
 **engine の inline ハンドシェイクが `OpenMiningChannelError` (§5.3.6) の

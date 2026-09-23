@@ -674,6 +674,10 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
+   — session 277: the notice channel finally has a *consumer* —
+   `runSessionV1` drains `PoolNotices()` into the operator log
+   ("pool notice: …"). Since session 106 the channel existed but
+   nothing read it, so every operator notice silently dropped.
    — session 266: `mining.ping` is no longer grouped with "unknown" — it is a
    pool→client *request* carrying an id (Braiins/NiceHash/ckpool keepalive),
    and `session.respond` now answers `{"id":<id>,"result":"pong","error":null}`.
