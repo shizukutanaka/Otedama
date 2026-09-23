@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 317 — internal/stratum 監査完結記録)
+
+- `internal/stratum` パッケージ監査が完結: `handshake.go`/`frame.go` は
+  spec 準拠・bounded で clean、`noise.go` の構造ギャップ（no-DH x-only
+  経路・static key 未認証・transcript 初期化2点）は KNOWN_LIMITATIONS
+  §2 に既網羅 — 新規3件（空平文フレームで Read が peer 任せに帰らない
+  無限ループ・key 素材の未消去・Write の short-write 契約依存）は
+  maintainer ゲート領域のため CATEGORY_AUDIT に記録のみ。
+
 ### Fixed (session 316 — engine メトリクス map の mutex 欠如)
 
 - **`rejectByReason` lazy カウンタ map が mutex 無保護だった** —
