@@ -121,9 +121,16 @@ a panic in the decode path still terminates the miner (DoS, below).
 version.
 
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
-pinned by SHA. Dependabot auto-updates with review. govulncheck runs
-in CI. See ADR-003.
+the YAML library (`gopkg.in/yaml.v3`, migrating to the YAML-org-owned
+`go.yaml.in/yaml/v3` drop-in — see ADR-003's Erratum), and the Go
+standard library. All GitHub Actions pinned by SHA. Dependabot
+auto-updates with review. govulncheck runs in CI. See ADR-003.
+
+Advisory tracking (session 269): CVE-2025-22871 / GO-2025-3563
+(`net/http` bare-LF chunk-size request smuggling; fixed in go1.23.8 /
+go1.24.2) affects the `/healthz` `/readyz` `/metrics` surface — covered
+by the go1.25.7 toolchain pin. Escalating govulncheck to a hard CI gate
+is the remaining open step.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
 one of the two direct dependencies remains possible. We have no
@@ -212,9 +219,13 @@ into the puzzle so an observer cannot reconstruct or correlate shares)
 Stratum traffic, so the timing/size side channel that infers *earnings*
 (not funds) remains open to a network observer. Funds are not at risk
 (payouts are non-custodial and on-chain/Lightning), but a determined
-on-path adversary can estimate a miner's hashrate and luck. Users who
-need to defeat this should tunnel the pool connection over Tor or a VPN
-(Tor-by-default is planned — ADR-007 B7). Adding traffic shaping or a
+on-path adversary can estimate a miner's hashrate and luck. The
+Lightning analogue is identical in shape: Rohrer & Tschorsch's
+"Counting Down Thunder" (arXiv:2006.12143) shows HTLC-resolution timing
+leaks payment endpoints, so any future LN traffic inherits the same
+channel. Users who need to defeat this should tunnel the pool
+connection over Tor or a VPN (Tor-by-default is planned — ADR-007 B7,
+which mitigates *both* timing channels). Adding traffic shaping or a
 mining-cookie-style construct is tracked as a future hardening item.
 
 ---
@@ -277,6 +288,15 @@ GitHub Actions runtime," which is actively monitored.
 - The Go runtime's random number generator is cryptographically secure.
 - TLS via `golang.org/x/crypto` is correctly implemented.
 
+Design constraints recorded from the research ledger (not
+vulnerabilities, but bounds on future design):
+
+- Any future Lightning routing layer must not default to the dominant
+  hubs: arXiv:2506.19333 shows pure cost-minimising path selection
+  consolidates LN liquidity into a few hubs — the LN echo of ADR-001's
+  pool-decentralisation stance (the same reasoning behind the ≥30%
+  pool-network-share warning).
+
 Any violation of these assumptions is outside Otedama's security
 boundary. Users with elevated threat models (nation-state adversaries)
 should consult specialists.
@@ -303,3 +323,9 @@ The minimum review interval is once per major version.
 - Recabarren & Carbunar, "Hardening Stratum, the Bitcoin Pool Mining
   Protocol" (arXiv:1703.06545) — basis for the traffic-analysis
   side-channel threat in the Information-disclosure section.
+- Rohrer & Tschorsch, "Counting Down Thunder: Timing Attacks on Privacy
+  in Payment Channel Networks" (arXiv:2006.12143) — the LN analogue of
+  that timing channel.
+- arXiv:2506.19333 — Lightning liquidity consolidation under
+  cost-minimising path selection; basis for the no-hub-default
+  design constraint in Assumptions.
