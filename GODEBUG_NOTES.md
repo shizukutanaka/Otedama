@@ -106,9 +106,35 @@ on the default (`1`).
   is recognized — `tlskyber` is a hard "unknown godebug" error.
 - Otedama impact: outbound TLS to Coinbase / Kraken / CoinGecko
   for price feeds. All three handle hybrid PQ ClientHello correctly
-  as of late 2025.
+  as of late 2025. Documented user-facing: outbound price-feed TLS
+  negotiates hybrid post-quantum key exchange (X25519MLKEM768) — see
+  `docs/THREAT_MODEL.md` Spoofing.
 - Removal risk: low — the team commits to keeping this for years
   given the quantum-readiness purpose.
+
+### `fips140` — optional FIPS 140-3 runtime profile (not pinned)
+
+Go 1.24+ ships a **FIPS 140-3-validated crypto module**
+(`GOFIPS140`-certified BoringCrypto-derived implementation); setting
+`GODEBUG=fips140=on` at runtime routes crypto through it, and the
+X25519MLKEM768 hybrid key exchange enabled by `tlsmlkem` above is part
+of that validated module. We deliberately do **not** pin `fips140=on`
+in `go.mod`: forcing FIPS mode on every user would break unconstrained
+paths (e.g. scrypt parameters, P-256 alpha Noise) that fall outside
+the validated set. Regulated operators who need FIPS mode get it as
+an **opt-in runtime profile**:
+
+```
+GODEBUG=fips140=on otedama run ...
+```
+
+Documented for users in `docs/THREAT_MODEL.md` (Spoofing). Source:
+go.dev/blog/fips140.
+
+- Added: Go 1.24 (Feb 2025).
+- Otedama impact: none by default — opt-in profile only.
+- Removal risk: none — this is a runtime opt-in, not a deprecation
+  surface.
 
 ### `httplaxcontentlength` — accept content-length with leading spaces
 
