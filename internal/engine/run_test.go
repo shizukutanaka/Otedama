@@ -3351,3 +3351,40 @@ func TestApplyAllocation_PauseAndResume(t *testing.T) {
 		t.Error("AI→mining assignment did not resume the worker")
 	}
 }
+
+// TestApplyAllocation_IdleLogDeduplicates pins the 30s-spam fix: with an
+// idleSeen map wired in, a device that stays idle across ticks logs its
+// idle line once per distinct reason, not every call — while a reason
+// change or an idle→assigned→idle round trip logs again.
+func TestApplyAllocation_IdleLogDeduplicates(t *testing.T) {
+	var lines []string
+	log := func(_, msg string) { lines = append(lines, msg) }
+	seen := make(map[string]string)
+	idle := &arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "cpu-0", Stream: "", Reason: "below min_yield floor"},
+	}}
+
+	applyAllocation(idle, nil, log, seen)
+	applyAllocation(idle, nil, log, seen)
+	applyAllocation(idle, nil, log, seen)
+	if len(lines) != 1 {
+		t.Fatalf("3 ticks of the same idle allocation logged %d lines, want 1: %v", len(lines), lines)
+	}
+
+	// Same device, different reason — a new line.
+	applyAllocation(&arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "cpu-0", Stream: "", Reason: "no compatible stream"},
+	}}, nil, log, seen)
+	if len(lines) != 2 {
+		t.Fatalf("idle reason change logged %d lines, want 2: %v", len(lines), lines)
+	}
+
+	// Assigned tick clears the entry, so re-idling logs again.
+	applyAllocation(&arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "cpu-0", Stream: "mining.stratum"},
+	}}, nil, log, seen)
+	applyAllocation(idle, nil, log, seen)
+	if len(lines) != 3 {
+		t.Fatalf("idle→assigned→idle logged %d lines, want 3: %v", len(lines), lines)
+	}
+}

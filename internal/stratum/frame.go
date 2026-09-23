@@ -140,9 +140,10 @@ func (h Header) Validate() error {
 // raw payload. Higher layers deserialize the payload based on
 // (ExtensionID, MsgType).
 //
-// The Payload slice is owned by Frame and must not be retained by the
-// caller beyond the lifetime of the Frame, because the Decoder may
-// reuse its internal buffer for the next frame.
+// The Payload slice is freshly allocated per frame by Decoder.ReadFrame
+// and is owned by the caller — it is safe to retain after the next
+// ReadFrame call. (Only the decoder's 6-byte header scratch buffer is
+// reused, and it never aliases Payload.)
 type Frame struct {
 	Header  Header
 	Payload []byte

@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 309 — 裁定 idle ログスパム・マージ非決定性・doc 整合)
+
+- **idle デバイスが 30 秒毎に同じログ行を永久出力** — `applyAllocation` は
+  裁定 tick 毎に idle 割当へ "N idle (reason)" を出しており、`min_yield`
+  フロア下のデバイスは1日に数千行の同一行を積み上げていた。`idleSeen`
+  マップで (デバイス, reason) 単位の重複を抑止 — 理由変化・
+  idle→割当→idle の再遷移は引き続き記録される。
+- **`streamsSlice` の代表ストリーム選択が Go マップ走査順に依存し非決定的** —
+  "providerID:"（ワイルドカード）と "providerID:dev"（デバイス別）の
+  両エントリが混在する場合、代表 `DefaultYield` が実行毎に変わり得た。
+  キーソートでワイルドカードエントリを決定的に代表化（プロバイダ宣言の
+  デフォルト値が合理的に勝る）＋結果順序も安定化。
+- **doc 矛盾2件** — `Frame.Payload` の「呼出側が保持してはならない（デコーダが
+  バッファ再利用）」は `ReadFrame` の「フレーム毎に新規確保・呼出側所有」と
+  矛盾（実装は後者が正しい）→ 前者を訂正。`pollingProvider.Stop` が
+  「再起動可能」を謳う一方 `Provider.Start` は「一度のみ」契約 — 実装は
+  再起動対応だが保守的インタフェース契約を維持し監査録に記録。
+
 ### Fixed (session 308 — HTTP サーバのライフサイクル欠陥・メソッドスコープ)
 
 - **`Start`→`Stop`→`Start` で永遠にデッドなサーバを正常報告** — `http.Server`

@@ -1329,3 +1329,44 @@ func TestEffectiveYield_NonFiniteInputsReturnZero(t *testing.T) {
 		}
 	}
 }
+
+// TestStreamsSlice_WildcardQuoteWinsRepresentative pins two properties of
+// the sorted merge: (1) the representative Stream's DefaultYield is the
+// provider-declared wildcard figure ("providerID:" sorts before any
+// "providerID:dev" key), not whichever device quote map iteration
+// happened to surface first — previously nondeterministic; (2) per-device
+// yields still merge in, and the result order is deterministic.
+func TestStreamsSlice_WildcardQuoteWinsRepresentative(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	// A provider that emits one wildcard figure for every device plus a
+	// stronger per-device quote for dev1.
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "ai.akash",
+		Yield:      provider.Yield{SatsPerSecond: 5.0, Confidence: 0.9},
+	})
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "ai.akash",
+		DeviceID:   "dev1",
+		Yield:      provider.Yield{SatsPerSecond: 8.0, Confidence: 0.9},
+	})
+
+	streams := streamsSlice(m)
+	if len(streams) != 1 {
+		t.Fatalf("streamsSlice returned %d streams, want 1 merged", len(streams))
+	}
+	got := streams[0]
+	if got.DefaultYield.SatsPerSecond != 5.0 {
+		t.Errorf("DefaultYield = %v, want wildcard figure 5.0", got.DefaultYield.SatsPerSecond)
+	}
+	if got.YieldPerDevice["dev1"].SatsPerSecond != 8.0 {
+		t.Errorf("YieldPerDevice[dev1] = %v, want 8.0 merged in", got.YieldPerDevice["dev1"].SatsPerSecond)
+	}
+
+	// Result ordering must be deterministic across calls.
+	again := streamsSlice(m)
+	if again[0].DefaultYield.SatsPerSecond != 5.0 {
+		t.Errorf("second call DefaultYield = %v, want stable 5.0", again[0].DefaultYield.SatsPerSecond)
+	}
+}

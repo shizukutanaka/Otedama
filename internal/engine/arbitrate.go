@@ -11,6 +11,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -86,6 +87,11 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	// lastQuoteAt records when each stream (keyed as in updateStream) last
 	// received a quote, so stale streams from dead providers can be expired.
 	lastQuoteAt := make(map[string]time.Time)
+	// idleSeen records the reason each device was last logged idle under,
+	// so a device that stays idle for many ticks does not repeat the same
+	// "N idle (reason)" line every 30s forever. Entries are removed when
+	// the device leaves the idle state, so a later re-idle logs again.
+	idleSeen := make(map[string]string)
 	for {
 		select {
 		case <-ctx.Done():
@@ -173,7 +179,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
 			}
-			applyAllocation(alloc, opts.workers, opts.log)
+			applyAllocation(alloc, opts.workers, opts.log, idleSeen)
 		}
 	}
 }
@@ -243,9 +249,24 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 // causing the arbitration engine to fall back to DefaultYield for the rest.
 // Instead, same-ID entries are merged: the first becomes the representative
 // and subsequent ones contribute their YieldPerDevice entries into it.
+//
+// The map is iterated in sorted key order for two reasons. First, the
+// representative's DefaultYield must be deterministic: the wildcard entry
+// ("providerID:", produced when a provider quotes one figure for every
+// compatible device) carries the provider-declared default, and sorting
+// keys makes it win the representative slot — an arbitrary map-iteration
+// pick could instead promote a device-scoped quote as the fallback figure
+// for every other device, nondeterministically. Second, a deterministic
+// result order makes tests and debug output stable.
 func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 	merged := make(map[arbitration.StreamID]*arbitration.Stream, len(m))
-	for _, s := range m {
+	for _, k := range keys {
+		s := m[k]
 		if rep, ok := merged[s.ID]; ok {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
@@ -283,7 +304,18 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 // applyAllocation applies a Decide result to the miner workers: pausing
 // SHA256d work on the specific device that was idled or switched to AI
 // inference, and logging every change of assignment.
-func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string)) {
+//
+// idleSeen optionally deduplicates the per-device idle log line across
+// calls: keyed by device ID and valued at the last reason logged, so a
+// device that remains idle for many arbitration ticks logs once per
+// distinct reason instead of every 30s. Entries for non-idle devices are
+// removed, so a re-idle logs again. Callers that pass no map keep the
+// log-every-call behaviour (tests). At most one map is honoured.
+func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string), idleSeen ...map[string]string) {
+	var seen map[string]string
+	if len(idleSeen) > 0 {
+		seen = idleSeen[0]
+	}
 	// pauseDevice stops only the worker whose DeviceID matches the
 	// assignment being processed. Correctness bug fixed session 247:
 	// this previously called SetWork(nil) on every element of workers,
@@ -326,6 +358,12 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			if reason == "" {
 				reason = "no compatible stream"
 			}
+			if seen != nil {
+				if seen[a.DeviceID] == reason {
+					continue
+				}
+				seen[a.DeviceID] = reason
+			}
 			log("info", fmt.Sprintf("arbitration: %s idle (%s)", a.DeviceID, reason))
 
 		case a.SwitchedFromID != "":
@@ -363,6 +401,9 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			if !strings.HasPrefix(string(a.Stream), "ai.") {
 				resumeDevice(a.DeviceID)
 			}
+		}
+		if seen != nil && !a.Idle() {
+			delete(seen, a.DeviceID)
 		}
 	}
 }
