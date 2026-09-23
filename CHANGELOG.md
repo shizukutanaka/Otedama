@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 278 — 未実装メソッドのプール要求が無応答だった)
+
+**id を持つ pool→client リクエストのうち未実装メソッドが一律無視
+されていた** —— `mining.ping`/`client.get_version` と同型の半開き
+接続バグの一般形（厳格プールは応答なし要求のクライアントを切断）。
+未実装メソッド（`mining.get_transactions`、プール独自拡張）へ
+JSON-RPC `-32601 "Method not found"` を明示返送する catch-all を追加
+（エラー形状はプールの `[code,"message",data]` 配列形式に合致）。
+id なし通知は従来通り無視 —— プール拡張への前方互換を維持。
+
 ### Fixed (session 277 — プール運営者通知が誰にも読まれず破棄されていた)
 
 **`client.show_message`（メンテナンス予告・手数料変更・死亡マイナー

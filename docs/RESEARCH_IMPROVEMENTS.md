@@ -681,7 +681,11 @@ endpoint against current vendor documentation. Tags as before
    — session 266: `mining.ping` is no longer grouped with "unknown" — it is a
    pool→client *request* carrying an id (Braiins/NiceHash/ckpool keepalive),
    and `session.respond` now answers `{"id":<id>,"result":"pong","error":null}`.
-   Strict pools disconnect clients that never answer; the connection would
+   — session 278: the unanswered-request class is now closed *generically* —
+   a catch-all replies `[-32601,"Method not found",null]` to any
+   pool→client method with an id we don't implement (e.g.
+   `mining.get_transactions`), in the same [code,"message",data] array
+   shape pools use. Notifications without an id stay ignored.
    otherwise look half-open (TCP alive, application dead).
    — session 267: `client.get_version` answered too — the other
    request-with-id method Braiins pools send; `agentString` (extracted from
