@@ -430,8 +430,16 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
+9. ✅ **Constant-time comparison audit** for any secret/MAC comparisons in the
    handshake and seed paths (use `crypto/subtle`).
+   — ✅ **Audited (session 256).** Sweep of `bytes.Equal`/`==` on
+   secret-shaped data found the surface already clean by construction:
+   passphrase verification runs through AES-GCM `Open` (AEAD check is
+   constant-time inside stdlib), `Fingerprint` is a public identifier,
+   and the base58 compare guards public address data. One real defect
+   fixed: `MnemonicToEntropy`'s BIP-39 checksum compared bit-by-bit
+   with an early exit — a match-prefix oracle on secret-derived data;
+   it now ORs all bits before branching.
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
@@ -580,20 +588,28 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   — ✅ **Pinned (session 256).** ADR-009's References now name
+   `github.com/stratum-mining/sv2-spec` as the protocol truth (with
+   per-document blob links), and ROADMAP pins the v1.11.0 SRI tag for
+   conformance interop.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+8. ✅ **Single-pool concentration enables *undetectable* attacks.** Bahrani &
    Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
    selfish-mining strategy whose orphan pattern is statistically
    indistinguishable from honest mining, profitable from 38.2% hashrate.
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
    Cat 4 #7.
+   — ✅ **Documented (session 256).** THREAT_MODEL's DoS section now
+   records the ~38.2%-hashrate undetectable-selfish-mining result with
+   the multi-pool/JDC rationale and the honest "undetectable by
+   construction" residual.
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
@@ -764,7 +780,7 @@ Four verified items that *update* earlier entries with newer reality.
    and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
    REST endpoint. Fold JWT acquisition into the provider client design.
    (messari.io State of Akash Q3 2025; akash.network/docs)
-4. 🟡 **Offer an optional FIPS 140-3 mode and document the PQ key exchange
+4. ✅ **Offer an optional FIPS 140-3 mode and document the PQ key exchange
    already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
    enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
    X25519MLKEM768 hybrid PQ key exchange Otedama already turns on via
@@ -773,6 +789,11 @@ Four verified items that *update* earlier entries with newer reality.
    post-quantum key exchange; (b) provide a `fips140=on` build/runtime profile
    for regulated operators; (c) note both in THREAT_MODEL. Pairs with the
    existing godebug block (`GODEBUG_NOTES.md`). (go.dev/blog/fips140)
+   — ✅ **Documented (session 256).** THREAT_MODEL's assumptions now
+   state outbound TLS negotiates X25519MLKEM768 (tlsmlkem=1) and that
+   `fips140=on` is deliberately off (it would restrict TLS to the
+   validated module while the Noise transport's ChaCha20-Poly1305 is
+   not FIPS-covered) — matching GODEBUG_NOTES' stance.
 
 ---
 
@@ -790,7 +811,7 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
    The `go-yaml/yaml` source repo was archived by its author; the YAML org
    took over at import path `go.yaml.in/yaml`, where v3 is frozen to
    security-fixes-only and active work is in v4. This makes the dependency
@@ -800,6 +821,12 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
+   — ✅ **Migrated (session 256).** Both import sites
+   (`cmd/otedama/configfile.go`, `internal/config/config_file_test.go`)
+   now use `go.yaml.in/yaml/v3` v3.0.5; `gopkg.in/yaml.v3` is gone from
+   go.mod/go.sum. Decoder/Encoder API is identical (same code lineage).
+   go.mod carries the maintainer-criterion rationale comment CLAUDE.md
+   requires.
 2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
    (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
@@ -808,6 +835,11 @@ month, so the discipline matters.
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
+   — ✅ **Bumped (session 256).** Now at **v0.55.0** — the newest release
+   still requiring only Go 1.25 (v0.56+ requires Go 1.26). govulncheck
+   under `toolchain go1.25.13`: **0 reachable vulnerabilities** in
+   Otedama's code and 0 in imported packages (17 unreachable advisories
+   elsewhere in the module graph). Recorded in THREAT_MODEL assumptions.
 3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
@@ -816,6 +848,11 @@ month, so the discipline matters.
    throttling under cgroup constraints" — describes a benefit not actually
    compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
    own quarterly-toolchain policy. (go.dev/doc/go1.25)
+   — ✅ **Bumped (session 256).** `go 1.25.0` / `toolchain go1.25.13`;
+   GODEBUG_NOTES' containermaxprocs caveat is resolved (now compiled
+   in) and the bump cleared the ~20 reachable stdlib advisories the
+   1.24-line toolchains carried. Environment blueprint lint pins were
+   updated to match (suggested alongside this change).
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the
@@ -825,7 +862,7 @@ month, so the discipline matters.
 
 ### Stratum V2 / Bitcoin (corrects roadmap/limitations wording)
 
-5. 🟡 **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+5. ✅ **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
    BIP-340 nor ElligatorSwift.** Its Schnorr subpackage is EC-Schnorr-DCRv0
    (Decred-custom), not BIP-340, and no ellswift package exists. SV2 mandates
    `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (BIP324 64-byte ellswift
@@ -835,7 +872,10 @@ month, so the discipline matters.
    Go implementation exists)**, materially raising the estimate. **Action:**
    record this in an ADR-011 Erratum. (pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4;
    raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
-6. 🟡 **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+   — ✅ **Erratum recorded (session 251, tag flip session 256).** ADR-011
+   carries a dedicated "Erratum" section covering the decred
+   EC-Schnorr-DCRv0 ≠ BIP-340 gap and the missing ellswift package.
+6. ✅ **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
    signatures.** It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
    the key-path spend removed — and explicitly defers PQ signatures to "a
    separate proposal." So coupling "BIP-360 activation" with "ML-DSA / P2MR
@@ -843,13 +883,19 @@ month, so the discipline matters.
    alone would not give the network ML-DSA, which is gated on a later,
    not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
    / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
-7. 🟡 **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+   — ✅ **Wording corrected (session 251, tag flip session 256).** ROADMAP
+   v4.0/v3.1 text and KNOWN_LIMITATIONS §5 now describe P2MR (no PQ sigs;
+   gated on a later unwritten BIP).
+7. ✅ **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
    Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
    `-DENABLE_IPC`), it lets SV2/other mining software request templates and
    submit blocks over a unix socket — a cleaner target than legacy
    getblocktemplate for ROADMAP Track D node integration. **Action:** note the
    v30 IPC interface (Cap'n Proto / multiprocess `bitcoin-node` binary) in
    ADR-009 / ROADMAP Track D. (raw.githubusercontent.com/bitcoin/bitcoin/v30.0/doc/release-notes.md)
+   — ✅ **Noted (session 256).** ADR-009 Sub-domain 1 now records the
+   v30 IPC Mining Interface (`-ipcbind=unix`, ENABLE_IPC, Cap'n Proto
+   `bitcoin-node` binary) as the preferred Track D transport candidate.
 8. ✅ **[FETCHED] DATUM confirmed MIT / BETA / SV1-transport-only.** The DATUM
    Gateway README states MIT license, public beta, requires a full node, and
    miners connect via Stratum V1 with version-rolling — it does NOT support
@@ -857,21 +903,27 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
-9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+9. ✅ **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
    ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
    update the rationale text and pin a specific SRI tag as the interop
    reference for Go SV2 conformance tests.
    (github.com/stratum-mining/stratum/releases.atom)
+   — ✅ **Pinned (session 256).** ROADMAP v3.2.0 now names
+   `stratum-mining/stratum` v1.11.0 as the conformance interop reference
+   and `stratum-mining/sv2-spec` as the spec's canonical home.
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+10. ✅ **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
     successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
     work, if scoped against akash-api, would build on an archived protobuf
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
     github.com/akash-network/chain-sdk)
+    — ✅ **Correction applied (session 251 text, tag flip session 256).**
+    ROADMAP v3.1.0 already carries the chain-sdk retarget + on-chain
+    Bidengine re-frame inline (see the session-251 注記 there).
 11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
     "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
     Akash bidding") currently models a per-order REST sealed-bid submission;

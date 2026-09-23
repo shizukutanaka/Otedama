@@ -48,6 +48,8 @@ The work is organized into **six sub-domains**:
 
 **State of the art (2026):** Bitcoin Core 30+ exposes `getblocktemplate` over JSON-RPC. Bitcoin Knots (OCEAN-recommended for better template control) adds finer-grained mempool policy options. DATUM Gateway and SRI JDC both consume this RPC. `blocknotify` signals new block arrival.
 
+**Bitcoin Core v30.0 addition (verified session 251):** Core v30 ships an experimental **IPC Mining Interface** (`bitcoin -m node -ipcbind=unix`, gated by `-DENABLE_IPC`) — mining software can request templates and submit blocks over a unix socket via Cap'n Proto against the `bitcoin-node` multiprocess binary. This is a cleaner target than legacy `getblocktemplate` JSON-RPC for the node-integration sub-domain; evaluate it as the primary `BitcoinNode` transport when Track D lands.
+
 **Otedama proposal:** A `BitcoinNode` interface in `internal/btcnode/`:
 
 ```go
@@ -618,11 +620,19 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 - Stratum V2 Working Group expansion (May 7, 2026):
   https://news.bitcoin.com/bitcoin-mining-pool-giants-foundry-antpool-and-f2pool-signal-stratum-v2-shift/
-- Stratum V2 spec (Job Declaration Protocol):
-  https://stratumprotocol.org/specification/06-job-declaration-protocol/
-- Stratum V2 spec (Mining Protocol):
-  https://stratumprotocol.org/specification/05-mining-protocol/
-- OCEAN DATUM Gateway (C, GPL):
+- Stratum V2 spec — protocol truth is the **sv2-spec repository**
+  (independently versioned since the SRI v1.5.0 roles split; the
+  stratumprotocol.org pages below render the same documents):
+  https://github.com/stratum-mining/sv2-spec
+  - Job Declaration Protocol:
+    https://github.com/stratum-mining/sv2-spec/blob/main/06-Job-Declaration-Protocol.md
+  - Mining Protocol:
+    https://github.com/stratum-mining/sv2-spec/blob/main/05-Mining-Protocol.md
+  - Protocol Security (Noise NX + server certificate):
+    https://github.com/stratum-mining/sv2-spec/blob/main/04-Protocol-Security.md
+- OCEAN DATUM Gateway (C, MIT — verified session 251 against the
+  repository README; it is MIT-licensed, public-beta, and transports
+  miners over Stratum V1 with version-rolling, not SV2):
   https://github.com/OCEAN-xyz/datum_gateway
 - OCEAN DATUM docs:
   https://ocean.xyz/docs/datum

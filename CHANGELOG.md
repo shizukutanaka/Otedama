@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security/Deps (session 256 — 外部一次情報(FETCHED検証済み依存関係・toolchain調査)に基づく精錬: アーカイブ済み yaml.v3 の後継移行＋x/crypto 最新化＋Go 1.25 toolchain で reachable stdlib advisory を解消＋BIP-39 チェックサムの early-exit 比較を除去)
+
+**1. `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3` v3.0.5 へ移行 (session-251 item 1).**
+上流 `go-yaml/yaml` は 2025-04 にアーカイブされ、YAML org が後継パスで保守中
+（v3 は security-fixes-only）。CLAUDE.md の外部依存基準3「直近1年の有意義な
+メンテナンス」を自らの依存が満たさない状態を解消。Decoder/Encoder は同一
+系統の API で drop-in、go.mod に選定理由コメントを記録（CLAUDE.md 準拠）。
+
+**2. `golang.org/x/crypto` v0.23.0 → v0.55.0 (session-251 item 2)＋`go 1.25.0` /
+`toolchain go1.25.13` (session-251 item 3)。** v0.55.0 は Go 1.25 を要求する
+最新版（v0.56+ は Go 1.26 要求）。toolchain bump はリポジトリ自身の
+quarterly-toolchain policy に基づくもので、2つの実利がある: (a) Go 1.25 の
+container-aware `GOMAXPROCS` が**ようやく実際にコンパイルされる**
+（GODEBUG_NOTES.md が「効いている」と述べていたが 1.24 pin では未適用だった
+不整合を解消）、(b) govulncheck が `go1.25.13` stdlib 下で
+**reachable vulnerability 0件** —— 1.24系 toolchain では `net/http` サーバ、
+`crypto/tls` dial、`crypto/x509` verify という実攻撃面に ~20件の stdlib
+advisory が到達可能だった。vendored deps 自身は新旧とも 0 件（ssh/openpgp
+subpackage は未使用）。
+
+**3. 定数時間比較監査 (Cat-10 item 9)。** secret 形状データの `bytes.Equal`/`==`
+を総掃引: パスフレーズ検証は AES-GCM `Open`（AEAD、stdlib内部で定数時間）、
+Fingerprint は公開識別子、base58 compare は公開アドレスデータ——既に構造的に
+クリーンだった。唯一の実欠陥を修正: `MnemonicToEntropy` の BIP-39 チェックサム
+比較が bit ごとに early-exit しており、一致 prefix 長を漏らす oracle になりえた
+ため、全 bit を OR してから分岐する形に変更。
+
+**4. 研究台帳由来のドキュメント訂正.** THREAT_MODEL に「単一プール集中は
+検出不能な selfish mining を可能にする」(Bahrani & Weinberg,
+arXiv:2309.06847、38.2% から採算が合う) を追加し multi-pool/JDC 構成を security
+属性として位置付け。同じく依存 advisory 姿勢と hybrid PQ (X25519MLKEM768)
+key exchange・fips140=on の扱いを assumptions に記録。ADR-009: DATUM の
+ライセンス誤記を GPL→MIT に訂正（session-251 FETCHED 検証）、仕様の正本を
+`stratum-mining/sv2-spec` に pin、Bitcoin Core v30 の実験的 IPC Mining
+Interface を追記。ROADMAP: SRI 適合性リファレンスを v1.11.0 に pin。
+SUSTAINABILITY/GODEBUG_NOTES: toolchain 1.25.13 への更新を反映。
+
+カバレッジ: yaml 移行は既存 `config_file_test.go`（config.yaml.example の
+round-trip + フィールド網羅性）で検証。依存追加なし（むしろアーカイブ済み
+依存を除去）。全24パッケージ `go test` green、`govulncheck` 0 reachable。
+
 ### Fixed (session 255 — 外部一次情報(GitHub/仕様/海外技術情報)に基づく精錬: プール難易度遷移中の「above target」拒否を良性として別計上＋Noise/フレーム長算術のオーバーフローfuzz化＋プール最低支払額のカストディ浮動をdoctorで可視化)
 
 **1. vardiff遷移中の良性rejectを reject率から分離 (ESP-Miner #212).**

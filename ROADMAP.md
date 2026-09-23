@@ -23,7 +23,7 @@ This roadmap intentionally lists only technical milestones one solo maintainer c
 
 ### v3.2.0 — Stratum V2 maturity (target: 2026 Q4)
 
-研究調査で「production-quality な Go SV2 実装は存在しない」と判明。Otedamaが実用レベルの Go SV2 実装を提供する。**更新 (session 251, 検証済み)**: SRI (stratum-mining/stratum) は既に alpha を脱し v1.11.0 (2026-07-08)、ほぼ月次リリース。「SRI は alpha」という当初の前提は陳腐化。Go 実装が無い点は依然として有効なので Otedama の位置付けは変わらないが、SV2 適合性テストの interop リファレンスとして特定の SRI タグを pin すること。
+研究調査で「production-quality な Go SV2 実装は存在しない」と判明。Otedamaが実用レベルの Go SV2 実装を提供する。**更新 (session 251, 検証済み)**: SRI (stratum-mining/stratum) は既に alpha を脱し v1.11.0 (2026-07-08)、ほぼ月次リリース。「SRI は alpha」という当初の前提は陳腐化。Go 実装が無い点は依然として有効なので Otedama の位置付けは変わらないが、SV2 適合性テストの interop リファレンスとして特定の SRI タグを pin すること → **pin 確定 (session 256)**: `stratum-mining/stratum` **v1.11.0**（検証済み最新安定タグ）。仕様の正本は独立バージョン管理の `stratum-mining/sv2-spec`（ADR-009 References 参照）。
 
 - **`internal/poolproto/` 抽象化レイヤ** を engine/ から完全分離。SV1/SV2/DATUM 切替可能に。
 - **Stratum V1 互換** の追加。研究調査の通り、>99%のプールはSV1のままなので、ユーザー基盤拡大のため必須。

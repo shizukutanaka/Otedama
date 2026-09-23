@@ -245,6 +245,25 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** Hashrate concentrated in a single dominant pool enables
+*undetectable* selfish mining. Bahrani & Weinberg (arXiv:2309.06847)
+prove a strategy whose orphan pattern is statistically
+indistinguishable from honest mining and profitable from ~38.2% of
+network hashrate — no miner-side telemetry can flag it.
+
+**Mitigation:** This is why multi-pool configuration and endpoint
+diversity are treated as a *security* property, not merely a
+liveness one: failover pools let an operator leave a dominant or
+suspicious pool without downtime. ADR-009's template-source
+abstraction (miner-declared templates via JDC/DATUM) further removes
+the block-content monopoly that makes pool-side withholding valuable.
+
+**Residual risk:** The strategy is undetectable *by construction*;
+Otedama cannot prove a pool is withholding. The defence is
+diversification, not detection.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.
@@ -275,7 +294,25 @@ GitHub Actions runtime," which is actively monitored.
 - The user's shell history and screen lock are reasonable.
 - The Go compiler does not contain a backdoor.
 - The Go runtime's random number generator is cryptographically secure.
-- TLS via `golang.org/x/crypto` is correctly implemented.
+- TLS via `golang.org/x/crypto` is correctly implemented. Outbound TLS
+  (`stratum+v2tls://`, HTTPS feeds) negotiates the **X25519MLKEM768
+  hybrid post-quantum key exchange** via the `tlsmlkem=1` godebug —
+  harvest-now/decrypt-later resistance is already in the transport.
+  The `fips140=on` Go knob is documented in `GODEBUG_NOTES.md`:
+  Otedama is deliberately *not* FIPS-compliant — enabling it would
+  restrict the TLS stack to the validated module while the Noise
+  transport's ChaCha20-Poly1305 is not FIPS-covered, so the knob is
+  off by design.
+- Dependency vulnerability posture (verified session 256): govulncheck
+  under `toolchain go1.25.13` reports **0 reachable vulnerabilities** in
+  Otedama's code and **0 in imported packages** (`golang.org/x/crypto`
+  v0.55.0, `go.yaml.in/yaml/v3` v3.0.5, `golang.org/x/sys` v0.47.0). The
+  module graph contains 17 advisories in *unreachable* modules
+  (transitively required but never called). Earlier 1.24-line
+  toolchains carried ~20 reachable stdlib advisories on Otedama's
+  actual attack surface (`net/http` server, `crypto/tls` dial,
+  `crypto/x509` verify) — the primary motivation for the go1.25.13
+  toolchain pin.
 
 Any violation of these assumptions is outside Otedama's security
 boundary. Users with elevated threat models (nation-state adversaries)
@@ -303,3 +340,5 @@ The minimum review interval is once per major version.
 - Recabarren & Carbunar, "Hardening Stratum, the Bitcoin Pool Mining
   Protocol" (arXiv:1703.06545) — basis for the traffic-analysis
   side-channel threat in the Information-disclosure section.
+- Bahrani & Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847)
+  — basis for the pool-concentration threat in the DoS section.
