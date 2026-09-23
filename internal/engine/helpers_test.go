@@ -1252,3 +1252,27 @@ func TestSetProviderYield_SeparatesSimulatedFromReal(t *testing.T) {
 		t.Errorf("series count = %d, want exactly 2 (re-set must update, not duplicate)", got)
 	}
 }
+
+// ============================================================================
+// touchProviderQuote — provider heartbeat timestamp (session 265)
+// ============================================================================
+
+func TestTouchProviderQuote_ExposesHeartbeat(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.touchProviderQuote("ai.akash", true, 1700000000)
+	m.touchProviderQuote("ai.akash", true, 1700000300) // updates in place
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_provider_last_quote_seconds{provider="ai.akash",simulated="true"} 1.7000003e+09`) &&
+		!strings.Contains(out, `otedama_provider_last_quote_seconds{provider="ai.akash",simulated="true"} 1700000300`) {
+		t.Errorf("provider heartbeat series missing/incorrect:\n%s", out)
+	}
+	if got := strings.Count(out, "otedama_provider_last_quote_seconds{"); got != 1 {
+		t.Errorf("series count = %d, want 1 (re-touch must update, not duplicate)", got)
+	}
+}
