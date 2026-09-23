@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 290 — DEPLOYMENT.md の実態監査)
+
+- **チェックリスト項目が未公開資産を前提**: 「SHA-256 checksums 検証」
+  「cosign 署名検証」は公開資産が存在しないため現時点では達成不能 →
+  「once published（未公開 — §13）」と明記。「Dependabot でコンテナ
+  イメージタグ自動更新」→ 実設定は gomod/actions/Dockerfile ベースの
+  みでデプロイ manifest のイメージタグは対象外と訂正。
+- **例示アドレスをそのまま本番投入する罠**: `bc1qar0srrr7...wf5mdq`
+  （有名な公開例示アドレス）が docker run/compose/Secret 例に無注記で
+  登場 → 「自分のアドレスに置き換え」の注意を3箇所に追記。
+- **SLO.md への相互リンク追加**: Alerts 節冒頭に対象閾値の正本として
+  `docs/SLO.md` を参照。
+- 検証済みクリーン: systemd ハードニング行（NoNewPrivileges/
+  ProtectHome=read-only/PrivateTmp/RestartSec=10s）は生成ユニットと
+  一致、launchd `com.otedama.daemon.plist`+KeepAlive=true、Windows
+  `sc.exe create Otedama` DisplayName/start=auto、compose ヘルスチェック
+  の `/usr/local/bin/otedama`（ENTRYPOINT 実在）、`otedama_shares_total
+  {status}` ラベル実在、アラート式のメトリクス名・比率計算は有効、
+  `TestMetricsDocumentedInSpecification` 実在（§6 CI 検証主張は正しい）、
+  contrib/grafana は TODO 表記で正直、k8s Secret/PVC/ServiceMonitor は
+  s281 で欠落マニフェスト追加済み。
+
 ### Added (session 289 — SLO ドキュメント)
 
 - **`docs/SLO.md` 新規**（RESEARCH_IMPROVEMENTS Cat 9 #10 解消）: 出荷済み

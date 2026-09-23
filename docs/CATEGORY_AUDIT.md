@@ -993,3 +993,17 @@ roll-up sections and older items were never re-synced as code shipped.
 | Cat 9 #10 "SLO documentation (target uptime, p99 submit latency) to make the metrics actionable" — the one remaining cheap doc item; no SLO file existed | ✅ `docs/SLO.md` created: 7 SLOs referencing only shipped metric names (verified all 42 `otedama_*` registrations in internal/), D-Central reject bands matching the code comments, PromQL alert examples, and an explicit note that no alert manager is shipped. |
 | README "Go 1.22以上" — fourth surviving 1.22 floor claim (badge was fixed s281; CONTRIBUTING/BENCHMARKS/AUDIT_CHECKLIST fixed s285–287) | ✅ Corrected to Go 1.24+ with the go1.25.7 toolchain pin. |
 | Metric-name grounding: every SLO references a real registered name (verified via grep over `"otedama_*"` literals — `otedama_up`, `pool_connection_state`, `submit_latency_milliseconds`, `reject_rate`, `stale_rate`, `shares_unaccounted`, `shares_unresolved_total`, `btc_rate_age_seconds`, `rate_sources_ok`, `curtailed`, `pool_connect_failures_total`, `pool_active_index`, `last_job_received_seconds`). | ✅ |
+
+## Session 290 update — DEPLOYMENT.md shipped-state audit
+
+| Finding | Disposition |
+|---|---|
+| Hardening checklist presumes unpublished assets: "SHA-256 verified against published checksums" + "cosign signature verified" — neither asset is published (§13) | ✅ Marked "(once published — not yet)" on both. |
+| "Automatic updates via Dependabot for the Otedama container image tag" — dependabot.yml covers gomod/github-actions/Dockerfile base only, not deployment manifests | ✅ Corrected to actual scope + manual-bump note. |
+| Well-known public example BTC address appears bare in docker run/compose/Secret examples — copy-paste risk of mining revenue to someone else's wallet | ✅ "Replace with your address" warnings at all 3 sites. |
+| Alerts section duplicated threshold intent with no link to the new SLO doc | ✅ Cross-link to docs/SLO.md as the threshold source of truth. |
+| systemd hardening lines in the doc vs generated unit | ✅ Exact match (NoNewPrivileges, ProtectHome=read-only, PrivateTmp, Restart=on-failure/10s). |
+| launchd label `com.otedama.daemon.plist` + KeepAlive=true; Windows `sc.exe create Otedama`, DisplayName/start=auto | ✅ All match daemon/service.go. |
+| `otedama_shares_total{status=accepted|rejected}` label used by the doc's alert expr; `/usr/local/bin/otedama` ENTRYPOINT path in compose healthcheck | ✅ Both real. |
+| "CI-verified metric catalogue" claim — `TestMetricsDocumentedInSpecification` exists in internal/engine/metrics_doc_test.go | ✅ True. |
+| `contrib/grafana/otedama-dashboard.json` does not exist | ✅ Already labelled "(TODO for v3.1.0)" — honest. |

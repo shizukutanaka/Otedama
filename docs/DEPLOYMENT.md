@@ -165,7 +165,7 @@ docker run -d \
   --restart unless-stopped \
   -v otedama-data:/var/lib/otedama \
   -p 127.0.0.1:9090:9090 \
-  -e OTEDAMA_BITCOIN_ADDRESS=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
+  -e OTEDAMA_BITCOIN_ADDRESS=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \  # REPLACE with your address
   -e OTEDAMA_DATA_DIR=/var/lib/otedama \
   ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1 \
   run --http-addr=0.0.0.0:9090
@@ -298,6 +298,8 @@ metadata:
   name: otedama-secrets
 type: Opaque
 stringData:
+  # Replace with YOUR payout address — this is a well-known public example
+  # address; mining to it pays someone else's wallet.
   bitcoin-address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
   wallet-passphrase: your-strong-passphrase-here
 ```
@@ -380,7 +382,9 @@ A reference Grafana dashboard lives at
 
 ### Alerts
 
-Minimal alert set:
+The full operator SLOs and target thresholds (availability, connectivity,
+submit-latency, reject/stale rates, share accounting, rate freshness) live
+in `docs/SLO.md`. Minimal alert set:
 
 ```yaml
 - alert: OtedamaDown
@@ -444,12 +448,12 @@ recoverable from mnemonic. A lost mnemonic AND wallet.dat is not.
 
 For production deployments:
 
-- [ ] Binary SHA-256 verified against published checksums.
-- [ ] Binary cosign signature verified.
+- [ ] Binary SHA-256 verified against published checksums (once checksums.txt is published — not yet: `docs/KNOWN_LIMITATIONS.md` §13).
+- [ ] Binary cosign signature verified (once signed releases ship — not yet: planned v3.1.0, `docs/KNOWN_LIMITATIONS.md` §13).
 - [ ] Running as a dedicated, non-root user.
 - [ ] Wallet passphrase passed via secret store (not `--wallet-passphrase` on command line).
 - [ ] Data directory permissions are 0700.
 - [ ] Firewall restricts inbound traffic; only outbound to pool + rate sources.
 - [ ] Prometheus scrape port bound to localhost or private network.
-- [ ] Automatic updates via Dependabot for the Otedama container image tag.
+- [ ] Automatic updates via Dependabot for the repo's build inputs (dependabot.yml covers `gomod`, `github-actions`, and the Dockerfile base image — deployment manifests like the compose/K8s image tag above are NOT covered and must be bumped manually).
 - [ ] Monthly review of `otedama doctor` output.
