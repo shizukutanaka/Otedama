@@ -290,6 +290,13 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 		devs = fmt.Sprintf("%d device(s), %d idle", s.Devices, s.DevicesIdle)
 	}
 	sharesFull := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
+	// Pad the device column by VISIBLE width like poolLine: %-Ns counts
+	// bytes, and wrapping devs in dim/reset adds escape bytes that would
+	// swallow the padding and collapse the column for the shares field.
+	devsCol := dim + devs + reset
+	if pad := 20 - len(devs); pad > 0 {
+		devsCol += strings.Repeat(" ", pad)
+	}
 	switch {
 	case s.Curtailed:
 		// Deliberate price-driven pause: zero hashrate is expected, not a
@@ -302,11 +309,11 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 	case s.Stalled:
 		// Yellow hashrate + stall badge so the operator sees the warning
 		// immediately without needing to check Prometheus.
-		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %-20s  ", yellow, rate, reset, dim+devs+reset)
+		prefix := fmt.Sprintf("  %s%-14s ⚠ stalled%s  %s  ", yellow, rate, reset, devsCol)
 		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
 		return prefix + dim + shares + reset
 	default:
-		prefix := fmt.Sprintf("  %s%-14s%s  %-20s  ", green, rate, reset, dim+devs+reset)
+		prefix := fmt.Sprintf("  %s%-14s%s  %s  ", green, rate, reset, devsCol)
 		shares := truncateToBudget(sharesFull, cols-visibleLen(prefix))
 		return prefix + dim + shares + reset
 	}
@@ -384,9 +391,16 @@ func (d *Dashboard) earningsLine(s Stats) string {
 	}
 	satsPerDay := satsPerSec * 86400
 
-	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
+	totalPlain := fmt.Sprintf("%.0f sats/day", satsPerDay)
+	total := bold + yellow + totalPlain + reset
 	earned := dim + fmt.Sprintf("est. earned: ~%d sats", s.EstSatsEarned) + reset
-	return fmt.Sprintf("  %-30s  %s", total, earned)
+	// Pad by visible width (see miningLine): %-Ns would count the ANSI
+	// bytes inside total and never pad, sliding the earned column left.
+	pad := 30 - len(totalPlain)
+	if pad < 0 {
+		pad = 0
+	}
+	return fmt.Sprintf("  %s%s  %s", total, strings.Repeat(" ", pad), earned)
 }
 
 func (d *Dashboard) providerLine(p ProviderStats) string {

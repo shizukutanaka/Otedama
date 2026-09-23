@@ -345,3 +345,43 @@ func TestDashboard_RenderLoop_UpdateAndTick(t *testing.T) {
 		t.Error("expected rendered hashrate in output after ticker fired")
 	}
 }
+
+// Regression: %-Ns counts bytes, so wrapping a value in ANSI escapes
+// inside a width-verbatim Sprintf swallows the padding and collapses the
+// column. miningLine's device column and earningsLine's total column must
+// land at their reserved offsets by VISIBLE width (same fix as poolLine).
+func TestDashboard_MiningLine_DeviceColumnPaddedByVisibleWidth(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	for _, tc := range []struct {
+		stats   Stats
+		wantCol int // visible offset where "shares:" must begin
+	}{
+		{Stats{HashRate: 1e9, Devices: 4, Connected: true}, 40},                  // default
+		{Stats{HashRate: 1e9, Devices: 4, DevicesIdle: 2, Connected: true}, 40},  // longer devs
+		{Stats{HashRate: 1e9, Devices: 4, Connected: true, Stalled: true}, 50},   // stalled badge adds 10
+		{Stats{HashRate: 1e9, Devices: 4, Connected: true, Curtailed: true}, 51}, // paused badge
+	} {
+		line := d.miningLine(tc.stats, 80)
+		idx := strings.Index(line, "shares:")
+		if idx < 0 {
+			t.Fatalf("miningLine missing shares field: %q", line)
+		}
+		if got := visibleLen(line[:idx]); got != tc.wantCol {
+			t.Errorf("shares column at visible offset %d, want %d (stats %+v): %q", got, tc.wantCol, tc.stats, line)
+		}
+	}
+}
+
+func TestDashboard_EarningsLine_TotalColumnPaddedByVisibleWidth(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.earningsLine(Stats{EstSatsEarned: 7})
+	idx := strings.Index(line, "est. earned:")
+	if idx < 0 {
+		t.Fatalf("earningsLine missing est field: %q", line)
+	}
+	if got := visibleLen(line[:idx]); got != 34 {
+		t.Errorf("est. earned column at visible offset %d, want 34: %q", got, line)
+	}
+}

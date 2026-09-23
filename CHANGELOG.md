@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 312 — TUI の ANSI 桁崩れ残存)
+
+- **`miningLine`/`earningsLine` が s296 poolLine と同型の桁崩れを残存**
+  — `% -Ns` がバイト数を数えるため `dim`/`reset` や `bold`/`yellow` で
+  包んだ値にパディングが効かず、デバイス列と sats/day 列が潰れて
+  後続フィールド（shares、est. earned）が左へずれていた。poolLine と
+  同じ可視幅パディングへ統一（stalled/paused バッジ分の offset を
+  含む列位置をテストでピン留め）。
+
 ### Fixed (session 311 — 壊れた設定ファイルの静黙デフォルト化)
 
 - **存在するが壊れた設定ファイルが警告1行＋ゼロ設定で継続していた** —
