@@ -137,15 +137,28 @@ func (m *Manager) Status() (ServiceStatus, error) {
 const systemdUnitName = "otedama.service"
 
 func (m *Manager) systemdUnitPath() (string, error) {
+	dir, err := m.systemdUnitDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, systemdUnitName), nil
+}
+
+// systemdUnitDir resolves the unit's parent directory WITHOUT creating
+// it. status/uninstall must use this rather than systemdUnitPath: a
+// read-only `service status` has no business creating
+// ~/.config/systemd/user on a machine where the service was never
+// installed, and uninstall shouldn't leave a fresh empty directory
+// behind as it removes the unit.
+func (m *Manager) systemdUnitDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".config", "systemd", "user")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, systemdUnitName), nil
+	return filepath.Join(home, ".config", "systemd", "user"), nil
 }
 
 func (m *Manager) installSystemd() error {
@@ -155,7 +168,7 @@ func (m *Manager) installSystemd() error {
 	}
 
 	unit := m.systemdUnit()
-	if err := os.WriteFile(path, []byte(unit), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("daemon: write systemd unit: %w", err)
 	}
 	// Reload daemon and enable the unit.
@@ -170,17 +183,19 @@ func (m *Manager) installSystemd() error {
 
 func (m *Manager) uninstallSystemd() error {
 	_ = runCmd("systemctl", "--user", "disable", "--now", systemdUnitName)
-	path, err := m.systemdUnitPath()
+	dir, err := m.systemdUnitDir()
 	if err != nil {
 		return err
 	}
-	return os.Remove(path)
+	return os.Remove(filepath.Join(dir, systemdUnitName))
 }
 
 func (m *Manager) statusSystemd() (ServiceStatus, error) {
-	path, _ := m.systemdUnitPath()
-	_, statErr := os.Stat(path)
-	installed := statErr == nil
+	installed := false
+	if dir, err := m.systemdUnitDir(); err == nil {
+		_, statErr := os.Stat(filepath.Join(dir, systemdUnitName))
+		installed = statErr == nil
+	}
 
 	out, err := exec.Command("systemctl", "--user", "is-active", systemdUnitName).Output()
 	running := err == nil && strings.TrimSpace(string(out)) == "active"
@@ -239,15 +254,24 @@ WantedBy=default.target
 const launchdLabel = "com.otedama.daemon"
 
 func (m *Manager) launchdPlistPath() (string, error) {
+	dir, err := m.launchdAgentsDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, launchdLabel+".plist"), nil
+}
+
+// launchdAgentsDir resolves the LaunchAgents directory WITHOUT creating
+// it — the launchd counterpart of systemdUnitDir, for status/uninstall.
+func (m *Manager) launchdAgentsDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, "Library", "LaunchAgents")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, launchdLabel+".plist"), nil
+	return filepath.Join(home, "Library", "LaunchAgents"), nil
 }
 
 func (m *Manager) installLaunchd() error {
@@ -256,25 +280,28 @@ func (m *Manager) installLaunchd() error {
 		return err
 	}
 	plist := m.launchdPlist()
-	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(plist), 0o644); err != nil {
 		return fmt.Errorf("daemon: write plist: %w", err)
 	}
 	return runCmd("launchctl", "load", "-w", path)
 }
 
 func (m *Manager) uninstallLaunchd() error {
-	path, err := m.launchdPlistPath()
+	dir, err := m.launchdAgentsDir()
 	if err != nil {
 		return err
 	}
+	path := filepath.Join(dir, launchdLabel+".plist")
 	_ = runCmd("launchctl", "unload", "-w", path)
 	return os.Remove(path)
 }
 
 func (m *Manager) statusLaunchd() (ServiceStatus, error) {
-	path, _ := m.launchdPlistPath()
-	_, statErr := os.Stat(path)
-	installed := statErr == nil
+	installed := false
+	if dir, err := m.launchdAgentsDir(); err == nil {
+		_, statErr := os.Stat(filepath.Join(dir, launchdLabel+".plist"))
+		installed = statErr == nil
+	}
 
 	out, err := exec.Command("launchctl", "list", launchdLabel).Output()
 	running := err == nil && !strings.Contains(string(out), "Could not find")
@@ -336,7 +363,7 @@ func launchdLogPath(name string) string {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	dir := filepath.Join(home, "Library", "Logs")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	return filepath.Join(dir, name)

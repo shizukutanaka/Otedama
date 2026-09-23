@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 274 — service status/uninstall が設定ディレクトリを副作用作成)
+
+`systemdUnitPath`/`launchdPlistPath` が無条件に `os.MkdirAll` を実行し
+status/uninstall 経路も使用していたため、読み取り専用の
+`otedama service status` が未インストール環境で
+`~/.config/systemd/user` / `~/Library/LaunchAgents` を作成し、
+uninstall も空ディレクトリを残していた。mkdir しない純粋リゾルバ
+`systemdUnitDir`/`launchdAgentsDir` を status/uninstall に適用
+（install 用ヘルパは `TestSystemdUnitPath_CreatesDirectory` で
+pin 済みのため mkdir を維持）。ユニット不在時の uninstall エラーは
+既存テストの明示仕様として維持。副作用回帰テスト3件追加。
+CATEGORY_AUDITに session-274 追記。
+
 ### Fixed (session 273 — TUI 収益行のマイニング収支二重計上を修正)
 
 `earningsLine` が `HashRate × satsPerHash` の導出項とアクティブな全

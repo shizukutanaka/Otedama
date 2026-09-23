@@ -399,7 +399,7 @@ func TestUninstallSystemd_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemdUnitPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("[Unit]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[Unit]\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -424,6 +424,46 @@ func TestUninstallSystemd_FileNotFound(t *testing.T) {
 }
 
 // ----- statusSystemd -----
+
+func TestStatusSystemd_DoesNotCreateUnitDir(t *testing.T) {
+	// status is a read operation: it must not leave a fresh
+	// ~/.config/systemd/user on a machine where the service was never
+	// installed.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	if _, err := m.statusSystemd(); err != nil {
+		t.Fatalf("statusSystemd: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "systemd", "user")); !os.IsNotExist(err) {
+		t.Errorf("statusSystemd created the unit dir as a side effect (stat err=%v)", err)
+	}
+}
+
+func TestUninstallSystemd_DoesNotCreateUnitDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	mockRunCmd(t, func(name string, args ...string) error { return nil })
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	// Uninstalling a never-installed service still errors on the missing
+	// unit file (pinned behavior), but it must not create the directory.
+	_ = m.uninstallSystemd()
+	if _, err := os.Stat(filepath.Join(home, ".config", "systemd", "user")); !os.IsNotExist(err) {
+		t.Errorf("uninstallSystemd created the unit dir as a side effect (stat err=%v)", err)
+	}
+}
+
+func TestStatusLaunchd_DoesNotCreateAgentsDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	if _, err := m.statusLaunchd(); err != nil {
+		t.Fatalf("statusLaunchd: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "Library", "LaunchAgents")); !os.IsNotExist(err) {
+		t.Errorf("statusLaunchd created LaunchAgents as a side effect (stat err=%v)", err)
+	}
+}
 
 func TestStatusSystemd_ReturnsWithoutPanic(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
@@ -503,7 +543,7 @@ func TestUninstallLaunchd_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("launchdPlistPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("<plist/>"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -666,7 +706,7 @@ func TestUninstall_Linux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemdUnitPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("[Unit]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[Unit]\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -702,7 +742,7 @@ func blockConfigDir(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, ".config"), []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".config"), []byte("block"), 0o644); err != nil {
 		t.Fatalf("blockConfigDir WriteFile: %v", err)
 	}
 }
@@ -713,7 +753,7 @@ func blockLibraryDir(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, "Library"), []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "Library"), []byte("block"), 0o644); err != nil {
 		t.Fatalf("blockLibraryDir WriteFile: %v", err)
 	}
 }
@@ -790,7 +830,7 @@ func TestInstallSystemd_WriteFileError(t *testing.T) {
 	// Create a DIRECTORY where the unit FILE must go — os.WriteFile returns
 	// "is a directory" even as root, which covers the error branch.
 	unitPath := filepath.Join(home, ".config", "systemd", "user", systemdUnitName)
-	if err := os.MkdirAll(unitPath, 0755); err != nil {
+	if err := os.MkdirAll(unitPath, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -807,7 +847,7 @@ func TestInstallLaunchd_WriteFileError(t *testing.T) {
 	t.Setenv("HOME", home)
 	// Create a DIRECTORY at the plist path to force WriteFile to fail.
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
-	if err := os.MkdirAll(plistPath, 0755); err != nil {
+	if err := os.MkdirAll(plistPath, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -858,7 +898,7 @@ func TestUninstall_DarwinDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("launchdPlistPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("<plist/>"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	if err := m.Uninstall(); err != nil {

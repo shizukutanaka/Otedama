@@ -713,3 +713,16 @@ Provider-package + TUI audit (`polling.go`, `provider.go`, `mining.go`, `ai_infe
 | `Dashboard` render loop / Update drain / Stop ordering / ANSI width handling | ✅ Clean: wg.Wait before Stop's writes, emoji-free section labels after a prior fix, CSI-aware visibleLen/truncateVisible correct. |
 
 All affected packages build, vet, and test green; gofumpt clean.
+
+## Session 274 update — `service status`/`uninstall` created config dirs as side effects
+
+Daemon/service + stratum messages audit.
+
+| Finding | Disposition |
+|---|---|
+| `systemdUnitPath`/`launchdPlistPath` called `os.MkdirAll` unconditionally, and `statusSystemd`/`statusLaunchd`/`uninstallSystemd`/`uninstallLaunchd` all used them — so a read-only `otedama service status` created `~/.config/systemd/user` / `~/Library/LaunchAgents` on machines where the service was never installed, and `uninstall` left a fresh empty dir behind. | ✅ Fixed: new pure resolvers `systemdUnitDir`/`launchdAgentsDir` (no mkdir) for status/uninstall; the mkdir-ing helpers stay for install (and remain pinned by `TestSystemdUnitPath_CreatesDirectory`). 3 new side-effect tests. |
+| `uninstall` errors when the unit file is absent | ℹ️ Pinned by `TestUninstallSystemd_FileNotFound` — an explicit test decision, not a defect; left as-is and noted here so it isn't "re-fixed" later. |
+| `DecodeSubmitSharesError` accepts an 8-byte payload (channel_id+seq only) and yields an empty error string — a payload that omits the STR0_255 entirely is silently treated as empty | ℹ️ Postel-leniency consistent with the file's trailing-byte leniency; empty error renders identically to a real empty one. Noted, not changed (a strict parser would still have nothing to display). |
+| `internal/stratum/messages.go` codecs (NewMiningJob OPTION tag, SetNewPrevHash, SetTarget, SubmitShares* bounds), `frame.go` (bound-before-alloc, U24/channel-msg rules), `metrics/runtime.go` (label escaping) | ✅ Clean. gofumpt also normalized `0644/0755` → `0o644/0o755` across the touched files. |
+
+daemon package tests green; lint shows only pre-existing findings (documented `nilerr` in statusWindowsService, `behaviour` misspell).
