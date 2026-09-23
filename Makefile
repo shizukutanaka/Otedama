@@ -17,6 +17,11 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Go settings
 GO := go
 GOFLAGS := -trimpath
+# Pin the toolchain to go.mod's `toolchain` directive (single source of
+# truth): without it, tools that load compiled-package export data
+# (golangci-lint) can resolve an older toolchain and fail to parse the
+# format produced by the newer one.
+export GOTOOLCHAIN ?= $(shell sed -n 's/^toolchain //p' go.mod)
 LDFLAGS := -s -w \
 	-X '$(MODULE)/internal/version.Version=$(VERSION)' \
 	-X '$(MODULE)/internal/version.Commit=$(COMMIT)' \
@@ -138,9 +143,12 @@ bench: ## Run benchmarks
 
 .PHONY: fuzz
 fuzz: ## Run fuzz tests for 30 seconds per target
-	@for pkg in $$($(GO) list ./... | xargs -I {} sh -c 'grep -l "func Fuzz" {}/*.go 2>/dev/null | head -1'); do \
-		echo "Fuzzing $$pkg..."; \
-		$(GO) test -fuzz=. -fuzztime=30s $$pkg || exit 1; \
+	# grep -rl yields *file* paths, but `go test -fuzz` takes *package*
+	# paths — a file path is compiled as command-line-arguments and fails
+	# on undefined symbols. Derive the owning package dirs instead.
+	@for dir in $$(grep -rl '^func Fuzz' --include='*_test.go' internal cmd | xargs -n1 dirname | sort -u); do \
+		echo "Fuzzing $$dir..."; \
+		$(GO) test -fuzz=. -fuzztime=30s ./$$dir || exit 1; \
 	done
 
 # --------------------------------------------------------------------------
@@ -229,13 +237,24 @@ audit: ## Run the AUDIT_CHECKLIST verification script
 
 .PHONY: docker-build
 docker-build: ## Build Docker image
-	docker build -t $(PROJECT):$(VERSION) -t $(PROJECT):latest .
+	# The Dockerfile's VERSION/COMMIT/BUILD_DATE args default to
+	# dev/unknown — pass the real values or the image binary reports
+	# `otedama version dev`.
+	docker build -t $(PROJECT):$(VERSION) -t $(PROJECT):latest \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) .
 
 .PHONY: docker-run
 docker-run: ## Run Otedama in Docker
+	# The container reads config only from ~/.config/otedama/config.yaml
+	# or --config, so the mount alone was never consulted — and the
+	# image's default CMD is `run --help`, which exits immediately.
+	# Pass `run --config` so this target actually mines with the
+	# mounted file.
+	@test -f $(PWD)/config.yaml || (echo "config.yaml not found in $(PWD) — copy config.yaml.example first" && exit 1)
 	docker run --rm -it \
 		-v $(PWD)/config.yaml:/etc/otedama/config.yaml:ro \
-		$(PROJECT):latest
+		$(PROJECT):latest run --config /etc/otedama/config.yaml
 
 .PHONY: docker-push
 docker-push: ## Push Docker image to registry
@@ -248,7 +267,11 @@ docker-push: ## Push Docker image to registry
 
 .PHONY: docs
 docs: ## Generate documentation
-	$(GO) doc -all ./... > $(DOCS_DIR)/api-reference.txt
+	# `go doc` takes one package at a time — it does not expand ./...
+	# patterns (the invocation below used to fail outright with
+	# "cannot find package ."). Iterate `go list` instead.
+	@mkdir -p $(DOCS_DIR)
+	@for pkg in $$($(GO) list ./...); do $(GO) doc -all $$pkg; done > $(DOCS_DIR)/api-reference.txt
 	@echo "Documentation generated at $(DOCS_DIR)/"
 
 .PHONY: docs-serve
@@ -309,6 +332,7 @@ deps-graph: ## Generate dependency graph
 # v2 Migration Support
 # --------------------------------------------------------------------------
 
-.PHONY: migrate-from-v2
-migrate-from-v2: build ## Migrate v2 configuration to v3 format (requires --v2-config)
-	@echo "Use: $(BIN_DIR)/$(PROJECT) migrate-from-v2 --v2-config <path>"
+# migrate-from-v2 intentionally omitted: no `otedama migrate-from-v2`
+# subcommand exists — this target only echoed a command that fails with
+# "unknown subcommand" (same class as the removed test-e2e target).
+# Restore it if a real v2→v3 migration path is implemented.

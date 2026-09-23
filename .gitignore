@@ -240,3 +240,6 @@ benchmark-results/
 cpu.pprof
 mem.pprof
 trace.out
+
+# Generated API docs (make docs)
+docs/api-reference.txt

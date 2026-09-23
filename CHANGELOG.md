@@ -10,6 +10,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 278 — ビルド/リリース経路の壊れたターゲット群)
+
+session 260 の install.sh 監査と同系 — 一度も検証されていなかった配布/
+ビルド経路の実害を修正:
+
+- **`make docs` が常に失敗**: `go doc -all ./...` は `...` パターン非対応
+  （"cannot find package"）。`go list` で per-package 反復に修正、196KB の
+  実出力を確認。生成物 `docs/api-reference.txt` を .gitignore 追加。
+- **`make fuzz` が常に失敗**: `grep -l` の *ファイルパス* を `go test
+  -fuzz`（*パッケージパス* 要求）に直渡し → command-line-arguments 扱いで
+  未定義シンボルエラー。dirname でパッケージ dir に変換。
+- **`make migrate-from-v2` 削除**: `otedama migrate-from-v2` サブコマンドは
+  存在しない（echo するコマンドが必ず失敗）。test-e2e 除去と同じ判例。
+- **`make docker-run` が機能していなかった**: `/etc/otedama/config.yaml`
+  へのマウントはローダ非対応パス（読むのは `~/.config` か `--config`）+
+  デフォルト CMD `run --help` で即終了。`run --config` 明示 + config.yaml
+  不在ガード追加。
+- **`make docker-build` がバージョン ARG を未受け渡し** → 全イメージが
+  `version dev` を報告。`--build-arg` 3点追加。
+- **`GOTOOLCHAIN` を go.mod toolchain から導出**して export — go list
+  -export 形式と golangci-lint のパーサのミスマッチを構造的に防止。
+- **Dockerfile**: `golang:1.24-alpine` → `1.25-alpine`（toolchain pin 整合、
+  2本目の toolchain 自動DLを解消）。`EXPOSE 0` 削除（公開不能な無意味指定、
+  且つ `--http-addr` で実際は listen 可能なので記述としても誤り）。
+  `VOLUME /var/lib/otedama` のマウントポイントを `--chown=65532` 所有で
+  作成 — nonroot プロセスの wallet 書込 permission denied を解消。
+
 ### Fixed (session 277 — stratumv1 開始契約 + 非有限ガード)
 
 - **`session.start` を真に idempotent 化**: doc コメントは "Idempotent" を

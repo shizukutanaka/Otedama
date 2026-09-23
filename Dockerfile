@@ -1,10 +1,17 @@
 # ---- Build stage ----
-FROM golang:1.24-alpine AS builder
+# Match go.mod's `toolchain` directive (go1.25.x): on a 1.24 base the
+# toolchain pin silently downloads a second toolchain into the layer
+# cache — slower builds and a version the maintainer did not pin.
+FROM golang:1.25-alpine AS builder
 
 # Install git for go module fetching and ca-certificates for TLS.
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /src
+
+# Create the data-dir mountpoint the final stage copies (owned there by
+# --chown to the nonroot uid so the wallet write succeeds).
+RUN mkdir -p /var/lib/otedama
 
 # Copy dependency manifests first so Docker layer cache is effective
 # when only source files change.
@@ -42,6 +49,11 @@ COPY --from=builder /src/NOTICE /NOTICE
 # Copy timezone data (needed for correct timestamp formatting).
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
+# Copy the data-dir mountpoint owned by the nonroot uid. Without this,
+# Docker creates the VOLUME mountpoint as root and the nonroot process
+# cannot write the wallet into it (permission denied on first run).
+COPY --from=builder --chown=65532:65532 /var/lib/otedama /var/lib/otedama
+
 # Run as a non-root user (distroless 'nonroot' is uid 65532).
 USER nonroot:nonroot
 
@@ -53,8 +65,10 @@ USER nonroot:nonroot
 # resolve to inside the container ($HOME/.local/share/otedama).
 VOLUME ["/var/lib/otedama"]
 
-# Otedama has no listening ports of its own; it dials out to the pool.
-EXPOSE 0
+# No EXPOSE: there is no fixed listening port — the optional metrics/
+# health HTTP server binds to whatever --http-addr/OTEDAMA_HTTP_ADDR is
+# configured (off by default). `EXPOSE 0` was syntactically accepted but
+# meaningless: port 0 can never be published.
 
 ENTRYPOINT ["/usr/local/bin/otedama"]
 CMD ["run", "--help"]
