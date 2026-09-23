@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 276 — HAL nil-device panic + doctor 2件)
+
+hal/miner/doctor 深掘り監査で3件を修正:
+
+- **`detector.Detect` の nil Device パニック**: ドライバが nil Device を
+  スライスに含めた場合（不正なドライバ出力は拒否する設計意図そのもの）、
+  `dev.Identity().Validate()` 到達前に panic していた。nil は無効
+  アイデンティティと同じログ付き拒否経路へ。`TestDetector_RejectsNilDevices` 追加。
+- **`isLikelyBitcoinAddress` が大文字 bech32 を拒否**: session 275 と同系の
+  大文字整合性欠陥 — `ValidateBech32Address` が受理する正当な "BC1…"
+  支払アドレスが、doctor の前置チェックで "does not look like a valid
+  address" と誤報されていた。bc1 prefix+charset 照合を小文字正規化に。
+- **`checkPoolTLSCA` が Warn で早期 return し後続プールの Fail を遮蔽**:
+  最初のプールで "tls_ca_file on non-TLS scheme" (Warn) を返すと、後の
+  プールの読取不能 CA ファイル (Fail) が報告されなかった。Warn を遅延し
+  全プールを走査（Fail は引き続き即時 return）。
+  `TestCheckPoolTLSCA_WarnDoesNotMaskLaterFail` 追加。
+
+併せて internal/hal（device/registry/gpu_linux）、internal/miner
+（sha256d/coinbase）、internal/doctor（runner+全17チェック）の監査を
+完了 — 上記以外に実欠陥なし。CATEGORY_AUDIT に session-276 追記。
+
 ### Fixed (session 275 — ClassifyAddress が大文字 bech32 を未認識)
 
 `ValidateBech32Address` は BIP-173 許容の全大文字エンコーディング

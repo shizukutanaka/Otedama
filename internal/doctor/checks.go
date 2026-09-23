@@ -218,7 +218,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -499,6 +499,7 @@ func checkPoolTLSCA(cfg config.Config) Check {
 		Name: "Pool TLS CA files",
 		Run: func(_ context.Context) Result {
 			var configured int
+			var firstWarn *Result
 			for _, p := range cfg.Pools {
 				if p.TLSCAFile == "" {
 					continue
@@ -506,13 +507,18 @@ func checkPoolTLSCA(cfg config.Config) Check {
 				configured++
 				// tls_ca_file is only honoured for stratum+tls:// (V1 over TLS);
 				// for any other scheme it is silently ignored at runtime.
+				// This is a Warn, but keep scanning every pool — a later pool's
+				// unreadable CA file is a Fail and must not be masked by it.
 				if !strings.HasPrefix(p.URL, "stratum+tls://") {
-					return Result{
-						Status: StatusWarn,
-						Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
-							stripScheme(p.URL)),
-						Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
+					if firstWarn == nil {
+						firstWarn = &Result{
+							Status: StatusWarn,
+							Detail: fmt.Sprintf("tls_ca_file set on %s but only stratum+tls:// honours it; it will be ignored",
+								stripScheme(p.URL)),
+							Fix: "remove tls_ca_file, or use a stratum+tls:// URL for this pool",
+						}
 					}
+					continue
 				}
 				pem, err := os.ReadFile(p.TLSCAFile)
 				if err != nil {
@@ -532,6 +538,9 @@ func checkPoolTLSCA(cfg config.Config) Check {
 			}
 			if configured == 0 {
 				return Result{Status: StatusSkip, Detail: "no pool sets tls_ca_file"}
+			}
+			if firstWarn != nil {
+				return *firstWarn
 			}
 			return Result{
 				Status: StatusPass,
@@ -865,9 +874,13 @@ func isLikelyBitcoinAddress(s string) bool {
 		return false
 	}
 	switch {
-	case strings.HasPrefix(s, "bc1"):
-		// Bech32: bc1 followed by base32 chars (lowercase).
-		for _, c := range s[3:] {
+	case strings.HasPrefix(strings.ToLower(s), "bc1"):
+		// Bech32: bc1 followed by base32 chars. BIP-173 permits an
+		// all-uppercase encoding, which btccrypto.ValidateBech32Address
+		// accepts — folding to lowercase lets a valid "BC1…" reach the
+		// real validator instead of being rejected here with a misleading
+		// "does not look like a valid address".
+		for _, c := range strings.ToLower(s)[3:] {
 			if !isBech32Char(c) {
 				return false
 			}

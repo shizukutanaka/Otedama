@@ -740,3 +740,18 @@ btccrypto + cmd/otedama + logger/clock/version/i18n audit.
 | `internal/logger` (atomic default, Discard, Adapter), `internal/clock` (Fake RWMutex), `internal/version` (ldflags vars), `internal/i18n` (immutable catalogs, English fallback, MissingTranslations) | ✅ Clean. |
 
 lint/deadcode on changed files show only pre-existing findings (G115/cyclomatic on bech32.go, misspell 'recognise' series, scaffolded-API unreachable funcs).
+
+## Session 276 update — hal detector nil-device panic + doctor pre-check/severity-mask fixes
+
+hal + miner + doctor audit.
+
+| Finding | Disposition |
+|---|---|
+| `detector.Detect` rejects malformed driver output via `dev.Identity().Validate()` — but a `nil` Device in a driver's slice panicked before reaching the check. | ✅ Fixed: nil devices are now filtered with the same logged-rejection path as invalid identities. New test `TestDetector_RejectsNilDevices`. |
+| `isLikelyBitcoinAddress` (doctor's cheap pre-check) required the lowercase bech32 charset, so a valid all-uppercase `BC1…` payout address (accepted by `ValidateBech32Address`) failed with a misleading "does not look like a valid address" before the real validator ran. | ✅ Fixed: folds to lowercase for the `bc1` prefix + charset test. New uppercase pre-check test. |
+| `checkPoolTLSCA` returned immediately on the *first* pool's Warn (tls_ca_file on non-TLS scheme), so a later pool's unreadable/invalid CA file — a Fail — was masked. | ✅ Fixed: Warn is deferred and the scan continues; Fail still returns immediately. New test `TestCheckPoolTLSCA_WarnDoesNotMaskLaterFail`. |
+| `internal/hal` device.go/registry.go/gpu_linux.go (driver contract, dedup, honest SHA256d=false) | ✅ Clean beyond the nil guard. |
+| `internal/miner` sha256d.go (nBits decode incl. sign-bit/zero-mantissa/overflow rejects, diff1Target fractional-difficulty path), coinbase.go (V1 coinbase concat + merkle fold conventions) | ✅ Clean. |
+| `internal/doctor` doctor.go runner + checks.go remaining 15 checks (config/address/failover/datadir/wallet/reachability/diversity/endpoint-diversity/encryption/TLSCA/payout/power/floor/hardware/network/clockskew/envvars) | ✅ Clean beyond the two fixes. Per-check ctx-honouring is by contract (cmd wraps 30 s); a ctx-ignoring check would hang — noted, not changed (no such check exists today). |
+
+doctor/hal package tests green; lint/deadcode show only pre-existing findings (hugeParam on cfg params, British-spelling misspell).

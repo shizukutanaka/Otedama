@@ -181,6 +181,16 @@ loop:
 				d.logger(res.driver, "enumerate failed", res.err)
 			}
 			for _, dev := range res.devices {
+				// A nil Device is malformed driver output just like an
+				// invalid identity: reject it rather than let the Identity
+				// call below panic.
+				if dev == nil {
+					if d.logger != nil {
+						d.logger(res.driver, "device rejected due to invalid identity",
+							errors.New("hal: driver returned a nil Device"))
+					}
+					continue
+				}
 				if err := dev.Identity().Validate(); err != nil {
 					if d.logger != nil {
 						d.logger(res.driver, "device rejected due to invalid identity", err)

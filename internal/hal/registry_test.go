@@ -299,6 +299,39 @@ func TestDetector_RejectsInvalidIdentities(t *testing.T) {
 	}
 }
 
+func TestDetector_RejectsNilDevices(t *testing.T) {
+	// A driver that returns a nil Device in its slice is producing
+	// malformed output; Detect must filter it like an invalid identity
+	// rather than panic calling Identity() on it.
+	r := NewRegistry()
+	_ = r.Register(&mockDriver{
+		name: "buggy",
+		devices: []Device{
+			nil,
+			newMockDevice("valid-1", FamilyGPU),
+		},
+	})
+
+	var logged bool
+	logger := func(_, msg string, _ error) {
+		if msg == "device rejected due to invalid identity" {
+			logged = true
+		}
+	}
+
+	d := NewDetector(r, logger)
+	devices, err := d.Detect(context.Background())
+	if err != nil {
+		t.Fatalf("Detect returned error: %v", err)
+	}
+	if got := len(devices); got != 1 {
+		t.Errorf("Detect returned %d devices, want 1 (nil filtered)", got)
+	}
+	if !logged {
+		t.Error("nil device rejection was not logged")
+	}
+}
+
 func TestDetector_CanceledContextReturnsPartialResults(t *testing.T) {
 	r := NewRegistry()
 

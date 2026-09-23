@@ -468,7 +468,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 	// A file that exists but whose config fails Validate (no bitcoin address).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
@@ -485,7 +485,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
@@ -625,7 +625,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 	dir := t.TempDir()
 	// Simulate two render nodes.
 	for _, name := range []string{"renderD128", "renderD129", "card0"} {
-		if err := os.MkdirAll(filepath.Join(dir, name), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", name, err)
 		}
 	}
@@ -708,11 +708,11 @@ func TestCheckWallet_NoWallet_EmitsWarn(t *testing.T) {
 
 func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "a1b2c3d4"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -727,7 +727,7 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 
 func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	c := checkWallet(dir)
@@ -752,11 +752,11 @@ func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
 
 func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "deadbeef"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -1034,7 +1034,7 @@ func writePEMCert(t *testing.T) string {
 		t.Fatalf("createcert: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "ca.pem")
-	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	return path
@@ -1072,7 +1072,7 @@ func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 
 func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.pem")
-	if err := os.WriteFile(path, []byte("not a certificate"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("not a certificate"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{Pools: []config.PoolConfig{
@@ -1091,6 +1091,38 @@ func TestCheckPoolTLSCA_NonTLSSchemeWarns(t *testing.T) {
 	r := checkPoolTLSCA(cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("status = %v, want Warn (CA set on non-TLS pool)", r.Status)
+	}
+}
+
+func TestCheckPoolTLSCA_WarnDoesNotMaskLaterFail(t *testing.T) {
+	// Pool[0] sets tls_ca_file on a non-TLS scheme (Warn). Pool[1] points at
+	// an unreadable CA file (Fail). The check must keep scanning after the
+	// Warn so the worse outcome is reported, not the first.
+	ca := writePEMCert(t)
+	cfg := config.Config{Pools: []config.PoolConfig{
+		{URL: "stratum+tcp://p0.example.com:3333", TLSCAFile: ca},
+		{URL: "stratum+tls://p1.example.com:3334", TLSCAFile: "/nonexistent/ca.pem"},
+	}}
+	r := checkPoolTLSCA(cfg).Run(context.Background())
+	if r.Status != StatusFail {
+		t.Errorf("status = %v, want Fail (later pool's unreadable CA must not be masked)", r.Status)
+	}
+}
+
+// ============================================================================
+// isLikelyBitcoinAddress — uppercase bech32 (BIP-173 all-caps encoding)
+// ============================================================================
+
+func TestIsLikelyBitcoinAddress_UppercaseBech32(t *testing.T) {
+	// BIP-173 permits an all-uppercase encoding and btccrypto validates it,
+	// so the cheap pre-check must not reject it before the validator runs.
+	addr := "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4"
+	if !isLikelyBitcoinAddress(addr) {
+		t.Errorf("uppercase bech32 %q rejected by pre-check", addr)
+	}
+	// A bad charset char still fails regardless of case.
+	if isLikelyBitcoinAddress("BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3TB") {
+		t.Error("uppercase bech32 with invalid charset char passed pre-check")
 	}
 }
 
