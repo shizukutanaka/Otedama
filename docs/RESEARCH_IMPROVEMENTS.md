@@ -792,8 +792,12 @@ month, so the discipline matters.
 
 ### Stratum V2 / Bitcoin (corrects roadmap/limitations wording)
 
-5. 🟡 **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
-   BIP-340 nor ElligatorSwift.** Its Schnorr subpackage is EC-Schnorr-DCRv0
+5. ✅ **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+   BIP-340 nor ElligatorSwift — RESOLVED (session 258).** Fix recorded in
+   ADR-011's "Erratum (added session 251)" section (v4.4.1 lacks BIP-340
+   Schnorr and ellswift; SV2 mandates the full
+   `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` suite; ElligatorSwift
+   must be hand-ported). Original finding: Its Schnorr subpackage is EC-Schnorr-DCRv0
    (Decred-custom), not BIP-340, and no ellswift package exists. SV2 mandates
    `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (BIP324 64-byte ellswift
    x-only encoding + 2-level PKI server auth). So ADR-011's Option A alone does
@@ -802,16 +806,22 @@ month, so the discipline matters.
    Go implementation exists)**, materially raising the estimate. **Action:**
    record this in an ADR-011 Erratum. (pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4;
    raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
-6. 🟡 **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
-   signatures.** It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
+6. ✅ **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+   signatures — RESOLVED (session 258).** Wording corrected: ROADMAP v3.1.0
+   bullet now notes BIP-360 is P2MR and defers PQ signatures to a separate
+   not-yet-written BIP; KNOWN_LIMITATIONS §5 uncouples the ML-DSA scaffold
+   from "BIP-360 activation". Original finding: It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
    the key-path spend removed — and explicitly defers PQ signatures to "a
    separate proposal." So coupling "BIP-360 activation" with "ML-DSA / P2MR
    default" (as ROADMAP/KNOWN_LIMITATIONS §5 currently do) is wrong: activation
    alone would not give the network ML-DSA, which is gated on a later,
    not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
    / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
-7. 🟡 **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
-   Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
+7. ✅ **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+   Interface — RESOLVED (session 258).** ROADMAP v3.5 bullet and ADR-009
+   Sub-domain 1 now note the `-m node -ipcbind=unix` / Cap'n Proto /
+   multiprocess `bitcoin-node` interface as the target, with JSON-RPC
+   `getblocktemplate` as fallback. Original finding: Started via `bitcoin -m node -ipcbind=unix` (gated by
    `-DENABLE_IPC`), it lets SV2/other mining software request templates and
    submit blocks over a unix socket — a cleaner target than legacy
    getblocktemplate for ROADMAP Track D node integration. **Action:** note the
@@ -824,23 +834,31 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
-9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
-   ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
-   update the rationale text and pin a specific SRI tag as the interop
-   reference for Go SV2 conformance tests.
+9. ✅ **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08)
+   — RESOLVED (session 258).** ROADMAP v3.2.0 rationale updated with the
+   "(session 251, 検証済み)" note recording SRI's post-alpha cadence and
+   the directive to pin a specific SRI tag as the interop reference for
+   Go SV2 conformance tests.
    (github.com/stratum-mining/stratum/releases.atom)
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
-    successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
+10. ✅ **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+    successor is `akash-network/chain-sdk` — RESOLVED (session 258).**
+    ROADMAP v3.1.0 Akash bullet now targets `chain-sdk` and notes the
+    option of generating only the needed market/provider protobufs to
+    stay lighter under ADR-003. Original finding: ROADMAP v3.1.0's "Akash REST API"
     work, if scoped against akash-api, would build on an archived protobuf
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
     github.com/akash-network/chain-sdk)
-11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
-    "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
+11. ✅ **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+    "Bidengine", not a REST bid-submit call — RESOLVED (session 258).**
+    ADR-010 Feature A4 carries the "Re-framing (session 251, primary-source
+    verified)" paragraph: A4 outputs a bid-price *policy* fed into the
+    provider daemon's on-chain bid config, not a per-order REST sealed
+    bid. Original finding: ADR-010 Feature A4 ("Strategic
     Akash bidding") currently models a per-order REST sealed-bid submission;
     the real auction is on-chain and mediated by the provider daemon's bid
     configuration. **Action:** re-frame A4 to output a *bid-price policy fed to
@@ -858,8 +876,11 @@ month, so the discipline matters.
     non-custodial payout) is the supported model and Render/io.net are out of
     scope, so they aren't naively added later.
     (github.com/rendernetwork/RNPs/blob/main/RNP-005.md; github.com/api-evangelist/io-net)
-13. 🔵 **[FETCHED title-match] ADR-010's bandit direction holds; add a
-    2024-25 citation.** The Mellor & Shapiro 2013 paper ADR-010 cites (Thompson
+13. ✅ **[FETCHED title-match] ADR-010's bandit direction holds; add a
+    2024-25 citation — RESOLVED (session 258).** ADR-010's reference list
+    now cites sliding-window/discounted Thompson Sampling results
+    (arXiv:2409.05181, arXiv:2305.10718) alongside the 2013 Mellor &
+    Shapiro paper. Original finding: The Mellor & Shapiro 2013 paper ADR-010 cites (Thompson
     Sampling + Bayesian change-point) is real (arxiv.org/pdf/1302.3721); recent
     sliding-window / discounted Thompson Sampling results
     (arxiv.org/pdf/2409.05181, .../2305.10718) corroborate the "don't overbuild
@@ -873,8 +894,11 @@ month, so the discipline matters.
 
 ### Lightning
 
-15. 🔵 **[FETCHED] LDK Node v0.7.0 (2025-12-03) adds experimental splicing +
-    async payments; BOLT12 already shipped.** Depends on rust-lightning v0.2,
+15. ✅ **[FETCHED] LDK Node v0.7.0 (2025-12-03) adds experimental splicing +
+    async payments; BOLT12 already shipped — RESOLVED (session 258).**
+    ADR-007 Feature B4 records "Version target (session 251, primary-source
+    verified): target LDK Node ≥ v0.7.0"; the B5 dependency note still
+    gates auto-splice on mainline splicing GA. Original finding: Depends on rust-lightning v0.2,
     MSRV rustc 1.85. **Action:** target the v3.7 embedded sidecar at LDK Node
     ≥ v0.7.0 and record in ADR-007 that it is a Rust subprocess/FFI sidecar
     (not in-Go). (github.com/lightningdevkit/ldk-node/releases;
