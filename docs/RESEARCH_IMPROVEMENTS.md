@@ -512,12 +512,15 @@ endpoint against current vendor documentation. Tags as before
    `internal/stratum/messages.go` now decodes `SetTarget{ChannelID,
    MaxTarget}`; the engine's session loop updates the live share target
    and re-issues the active job so workers compare against it immediately.
-   The clamp-to-`[min, max_target]` behavior this item originally asked
-   for is not yet implemented — Otedama accepts whatever target the pool
-   sends outright, since `OpenMiningChannel`'s `max_target` preference
-   field is intentionally not sent (see the dead-field note removed from
-   `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
-   message is no longer silently unrecognised, which was the blocking gap.
+   — ✅ **Resolved (session 282).** Re-verification against the spec
+   showed `max_target` is a *required* trailing U256 of
+   `OpenStandardMiningChannel`, not an optional preference — omitting it
+   truncated the wire message for any spec-conformant pool. The
+   advertisement is now sent as all-ones (`stratum.MaxTargetUnbounded`,
+   "accept anything"), making the encode spec-conformant while keeping
+   the accept-anything semantics; with an unbounded advertisement the
+   `[min, max_target]` clamp has no bound to clamp to, closing the item.
+   (Previous note claimed the omission was deliberate — corrected.)
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
@@ -958,6 +961,50 @@ while the runnable roles moved to `stratum-mining/sv2-apps`. Same
    `User` field, falling back to the active payout address (SPECIFICATION
    §4). Share accounting is already `uint64`.
 4. **[FETCHED] sv2-apps v0.7.0 (Job Declaration / SharedSet)** — JDC remains
+   ADR-009 scope; see the September 2026 increment below for the full
+   v0.6.0/v0.7.0 audit.
+
+---
+
+## September 2026 research pass — session 282 increment (sv2-apps v0.6/v0.7)
+
+sv2-apps shipped v0.6.0 (2026-07-08) and v0.7.0 (2026-07-24) after the
+session-278 pass. Audited every highlight for Otedama applicability
+(we are a mining *client*, so pool/proxy/JD-server changes mostly don't
+translate):
+
+1. ✅ **[FETCHED] `OpenStandardMiningChannel.max_target` is a REQUIRED
+   wire field — our encode omitted it.** Found while auditing v0.6.0's
+   "integer powers of two in mining.set_difficulty" note (the difficulty
+   negotiation path). Otedama's `OpenMiningChannel.Encode` wrote
+   req_id+user+hashrate only; a spec-conformant pool expects the trailing
+   U256 and reads a truncated message. — ✅ **Fixed (session 282):**
+   `stratum.MaxTargetUnbounded` (all-ones) is now advertised on both V2
+   call sites, closing the recorded `[min, max_target]` clamp item.
+2. ✅ **[FETCHED] tProxy builds `UserIdentity` TLV only when extension
+   0x0002 is negotiated (v0.7.0) — verified non-applicable.** The bug
+   class was a translator-proxy constructing the *channel-extension TLV*
+   for upstream translation. Otedama sets the *standard* `user_identity`
+   field of `OpenStandardMiningChannel` (required, no extension
+   negotiation needed) and builds no extension TLVs.
+3. ✅ **[FETCHED] JDC `RequestTransactionData` race fix + JDS
+   `DownstreamState` isolation (v0.7.0) — ADR-009 scope.** Job Declaration
+   remains unimplemented by design; no client-side action.
+4. ✅ **[FETCHED] Downstream share validation vs advertised pow2
+   difficulty (v0.7.0) — pool-side, non-applicable.** Otedama mines
+   against whatever share target the pool advertises; the symmetric
+   client-side concern (a pool *sending* an unusable target) is covered
+   by the SetTarget handling from session 238 and this session's
+   max_target advertisement.
+5. **[FETCHED] `bitcoin_core_sv2` multi-version IPC backends (v30.x +
+   v31.x, v0.6.0)** — corroborates the ADR-009 "versioned backend"
+   recording; the upstream pattern (one API, runtime version selection)
+   is the same shape Otedama's own V1/V2 protocol abstraction follows.
+   No action.
+6. **[SNIPPET] ASIC telemetry discovery by miner username+port (v0.7.0)
+   — lead only.** tProxy auto-discovers `asic-rs` endpoints; Otedama's
+   ASIC discovery remains a hardware-probing item with no testable
+   path on this VM. Recorded, not acted on.
    tracked in ADR-009; v0.7.0's release is the cue that an upstream JDS
    worth integrating against now exists. Priority unchanged pending the
    segwit-coinbase prerequisite.

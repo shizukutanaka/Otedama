@@ -137,6 +137,7 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 		ReqID:           42,
 		User:            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		NominalHashrate: 1e6, // 1 MH/s
+		MaxTarget:       MaxTargetUnbounded,
 	}
 	payload, err := orig.Encode()
 	if err != nil {
@@ -155,6 +156,33 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 	// float32 may differ slightly; we accept within 1%
 	if diff := got.NominalHashrate - orig.NominalHashrate; diff > 1e4 || diff < -1e4 {
 		t.Errorf("NominalHashrate: got %f, want %f", got.NominalHashrate, orig.NominalHashrate)
+	}
+	if got.MaxTarget != orig.MaxTarget {
+		t.Error("MaxTarget mismatch")
+	}
+}
+
+// The SV2 spec marks max_target (U256) as a required trailing field of
+// OpenStandardMiningChannel — the encoded message must end with the
+// 32-byte advertisement or a spec-conformant pool reads a truncated
+// message.
+func TestOpenMiningChannel_EncodeWritesMaxTarget(t *testing.T) {
+	m := OpenMiningChannel{
+		ReqID:           1,
+		User:            "alice",
+		NominalHashrate: 1e6,
+		MaxTarget:       MaxTargetUnbounded,
+	}
+	payload, err := m.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	want := 4 + 1 + len("alice") + 4 + 32
+	if len(payload) != want {
+		t.Fatalf("payload len = %d, want %d (missing trailing max_target?)", len(payload), want)
+	}
+	if tail := payload[len(payload)-32:]; !bytes.Equal(tail, MaxTargetUnbounded[:]) {
+		t.Errorf("trailing 32 bytes = %x, want all-0xFF (MaxTargetUnbounded)", tail)
 	}
 }
 
@@ -923,9 +951,19 @@ func TestDecodeSubmitSharesStandard_ShortPayload(t *testing.T) {
 func TestDecodeOpenMiningChannel_TruncatedAtHashrate(t *testing.T) {
 	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6}
 	payload, _ := orig.Encode()
-	// Remove last 3 bytes to cut into the 4-byte float32 field.
-	if _, err := DecodeOpenMiningChannel(payload[:len(payload)-3]); err == nil {
+	// Remove 35 bytes: the 32-byte max_target plus 3 bytes into the
+	// 4-byte float32 field.
+	if _, err := DecodeOpenMiningChannel(payload[:len(payload)-35]); err == nil {
 		t.Error("expected error for payload truncated at NominalHashrate")
+	}
+}
+
+func TestDecodeOpenMiningChannel_TruncatedAtMaxTarget(t *testing.T) {
+	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6}
+	payload, _ := orig.Encode()
+	// Remove just 3 bytes: cuts into the trailing max_target field.
+	if _, err := DecodeOpenMiningChannel(payload[:len(payload)-3]); err == nil {
+		t.Error("expected error for payload truncated inside MaxTarget")
 	}
 }
 

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 282 — OpenStandardMiningChannel max_target 必須フィールド)
+
+- **SV2 `OpenMiningChannel` のエンコードが仕様必須の `max_target`（U256）
+  を欠落させていたワイヤ準拠バグを修正** — sv2-apps v0.6.0/v0.7.0 の
+  再検証中に発見。仕様上必須フィールドのため、準拠パーサを持つプールは
+  末尾32バイトを期待してメッセージを読み、欠落時はチャネルオープンを
+  切断/誤パースし得た。両 V2 呼出しサイトから
+  `stratum.MaxTargetUnbounded`（all-ones＝プール任意のターゲットを受諾、
+  従来の「なんでも受ける」セマンティクスを維持）を広告。Decode 側も
+  max_target を読むよう更新し、エンコード末尾32バイト=0xFF と
+  切り詰めペイロードのエラーをテストでピン留め。
+
 ### Added (session 281 — チェンジポイント検出: ADR-010 A8)
 
 **フォーキャスタのレジームリセット（CTS-lite、Mellor & Shapiro 2013）を
