@@ -282,6 +282,25 @@ type ReconnectInformant interface {
 	LastReconnect() *ReconnectDirective
 }
 
+// LastMessageInformer is an optional extension to Session for protocols
+// whose engine-facing channel only surfaces jobs, so the caller cannot
+// observe non-job traffic itself. It reports link liveness — the last
+// inbound protocol message of ANY kind — which is a different signal
+// from job delivery (last_job_received_seconds): a link that is alive
+// but delivering no work is a distinct failure from a dead link, and
+// collapsing them into one gauge makes either invisible.
+//
+// Callers type-assert a Session to this interface; a missing
+// implementation means the caller must infer liveness from the frames
+// it can already see (e.g. the engine's inline SV2 dispatch counts
+// every inbound frame itself).
+type LastMessageInformer interface {
+	// LastMessageAt returns the Unix time (seconds) the session last
+	// received any inbound protocol message — job, notification,
+	// request, or response. Returns 0 before the first message.
+	LastMessageAt() int64
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

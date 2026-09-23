@@ -899,6 +899,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if pm.err != nil {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
+			// Every inbound frame — job or housekeeping (SetTarget,
+			// SetExtranoncePrefix, …) — proves link liveness. Job
+			// delivery stays tracked separately on lastJobReceivedAt.
+			if opts.m != nil {
+				opts.m.lastPoolMessageAt.Set(float64(time.Now().Unix()))
+			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
 				jobs[j.JobID] = j
@@ -1270,6 +1276,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// operators can distinguish "hardware is slow" from "the pool
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
+				// V1 surfaces only jobs to the engine, so non-job traffic
+				// (set_difficulty, set_extranonce, keepalives) must be polled
+				// out of the session to keep the link-liveness gauge fresh.
+				publishPoolLinkLiveness(opts.m, sess)
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(

@@ -152,6 +152,17 @@ type engineMetrics struct {
 	// pool connections that look "connected" but deliver no work.
 	lastJobReceivedAt *metrics.Gauge
 
+	// lastPoolMessageAt is a Unix-timestamp gauge updated on EVERY inbound
+	// pool message — job, notification, request, or response — not just
+	// jobs. It separates link liveness from job delivery: a connection
+	// that is alive but sending no work (stalled upstream template, empty
+	// mempool epoch) is a different failure from a dead link, and only
+	// tracking lastJobReceivedAt makes one indistinguishable from the
+	// other. Alert when stale while lastJobReceivedAt is also stale
+	// (dead link); an alive lastPoolMessageAt with a stale job gauge
+	// means the pool itself has stopped issuing work.
+	lastPoolMessageAt *metrics.Gauge
+
 	// clockSkewSeconds is the maximum absolute offset (in seconds) observed
 	// between the local system clock and the wall-clock reported by BTC/USD
 	// rate-source HTTPS servers via their HTTP Date response headers. Reuses
@@ -444,6 +455,15 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Unix timestamp of the most recent mining job received from the pool. "+
 				"Alert when this is older than 2× the pool's expected notify interval "+
 				"(~30–60 s) to detect a stale connection that looks connected but delivers no work.",
+			nil),
+
+		lastPoolMessageAt: reg.NewGauge(
+			"otedama_last_pool_message_seconds",
+			"Unix timestamp of the most recent inbound pool message of any kind "+
+				"(job, notification, request, or response). Separates link liveness "+
+				"from job delivery: alert when stale AND last_job_received is stale "+
+				"(dead link); alive here with a stale job gauge means the pool "+
+				"stopped issuing work.",
 			nil),
 
 		clockSkewSeconds: reg.NewGauge(

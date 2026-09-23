@@ -112,6 +112,13 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
+	// lastMsgAt is the Unix time the read loop last received ANY inbound
+	// message — job, notification, request, or response. The session's
+	// only engine-facing channel is jobs, so without this the link's
+	// liveness is invisible to the caller whenever the pool is alive but
+	// sending no work. Surfaced via poolproto.LastMessageInformer.
+	lastMsgAt atomic.Int64
+
 	// extranonce1, extranonce2Size are negotiated at subscribe time and
 	// can rotate mid-session (mining.set_extranonce). extranonce2Size is
 	// read by Submit on a different goroutine than the read loop that
@@ -137,8 +144,9 @@ type session struct {
 
 // Compile-time interface satisfaction checks.
 var (
-	_ poolproto.Session            = (*session)(nil)
-	_ poolproto.PoolNoticeReceiver = (*session)(nil)
+	_ poolproto.Session             = (*session)(nil)
+	_ poolproto.PoolNoticeReceiver  = (*session)(nil)
+	_ poolproto.LastMessageInformer = (*session)(nil)
 )
 
 func newSession(conn *connection) *session {
@@ -185,6 +193,9 @@ func (s *session) readLoop(ctx context.Context) {
 			// EOF, network error, or an oversized line: terminate cleanly.
 			return
 		}
+		// Any received line proves the link is alive — including a
+		// malformed one dispatch will drop — so timestamp before routing.
+		s.lastMsgAt.Store(time.Now().Unix())
 		s.dispatch(line)
 	}
 }
@@ -386,6 +397,11 @@ func (s *session) LastReconnect() *poolproto.ReconnectDirective {
 // (client.show_message). The channel is closed when the session ends.
 // Implements poolproto.PoolNoticeReceiver.
 func (s *session) PoolNotices() <-chan string { return s.noticeCh }
+
+// LastMessageAt returns the Unix time the read loop last received any
+// inbound message, or 0 before the first. Implements
+// poolproto.LastMessageInformer.
+func (s *session) LastMessageAt() int64 { return s.lastMsgAt.Load() }
 
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;

@@ -19,6 +19,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
@@ -534,5 +535,23 @@ func publishDifficulty(m *engineMetrics, diff, hashrate float64) {
 		m.estimatedShareIntervalSeconds.Set(diff * 4294967296 / hashrate)
 	} else {
 		m.estimatedShareIntervalSeconds.Set(0)
+	}
+}
+
+// publishPoolLinkLiveness copies the session's last-inbound-message
+// timestamp into the link-liveness gauge. V1's engine-facing channel
+// only surfaces jobs, so non-job traffic (set_difficulty, extranonce
+// rotation, keepalive pings) would otherwise leave the gauge stale
+// while the link is alive. Sessions without
+// poolproto.LastMessageInformer — and sessions that have received
+// nothing yet (ts == 0) — leave the gauge alone; a zero gauge is the
+// "connected but never said anything" alert state.
+func publishPoolLinkLiveness(m *engineMetrics, sess poolproto.Session) {
+	li, ok := sess.(poolproto.LastMessageInformer)
+	if !ok {
+		return
+	}
+	if ts := li.LastMessageAt(); ts > 0 {
+		m.lastPoolMessageAt.Set(float64(ts))
 	}
 }
