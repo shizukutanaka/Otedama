@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed/Added (session 259 — 一次情報(sv2-spec §5.3.9)との照合に基づく精錬: CloseChannel を双方向に実装＋dialer sendMsg の書き込みデッドライン欠落を修正)
+
+**sv2-spec §5.3.9 `CloseChannel` (0x18, channel_msg) を codec＋エンジン
+双方に実装。** 旧来は Unknown バケツへ沈黙廃棄されていたが、このメッセージは
+双方向意味を持つ:
+
+- **Server→Client:** プールがチャネル（またはそのグループ）を閉じた時点で
+  以後の submit は全て無駄な reject となるが、旧実装は検知せず dead
+  channel に向けて掘り続けていた。`CloseChannel.channel_id` が自チャネル
+  または `group_channel_id`（OpenMiningChannelSuccess から handshake 経路へ
+  新規配線）に一致した場合、セッションを終了し通常のフェイルオーバー/
+  再接続ループが新チャネルを開く経路へ。未知の channel_id は warn で無視。
+- **Client→Server:** 切断時に TCP ソケットを落とすだけだった従来から、
+  セッション終了の defer で polite close（`CloseChannel{chanID,
+  "client shutdown"}`）を送出 —— プール側が socket EOF を推測せず決定的に
+  チャネルを解放できる（engine + stratumv2 dialer session.Close の双方）。
+
+**stratumv2 dialer の `sendMsg` に write deadline を追加**（session.Close 経路の
+テストが 10m ハングで発覚）: 相手が read を止めた wedged socket への Write が
+無期限ブロックする既存欠陥を、engine 側 sendMsg と同じ 10s deadline で解消。
+`session.Close()` 経由の polite close 送出がこの既存ギャップを顕在化させた。
+
+**Unknown メッセージの debug 観測可能性**: UpdateChannel/
+SetExtranoncePrefix/extended-channel 系など意図的にモデル化しない
+server→client フレームは引き続き無害に無視するが、0x?? msg_type として
+debug ログに記録（プロトコル逸脱の可観測化）。
+
+カバレッジ: CloseChannel の Encode/Decode round-trip・truncate・dispatch テスト、
+fake pool が channel close を送る統合テスト（セッション終了＋クライアント側
+polite close 送出の両方を検証）。全24パッケージ `go test` green。
+
 ### Fixed/Added (session 258 — 一次情報(sv2-spec §5.3.13)との照合に基づく精錬: SubmitSharesSuccess の new_shares_sum が U64 なのに U32 で codec していた欠陥を修正＋プール自身の会計カウンタとの照合（share accounting reconciler）を新設)
 
 **sv2-spec §5.3.13 との再照合で発見された第4の wire 不整合を修正。**
