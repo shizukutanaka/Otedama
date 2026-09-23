@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Alpha](https://img.shields.io/badge/Status-Alpha-orange)](CHANGELOG.md)
 
 **遊休計算資源を、非カストディで最大収益化する自律型ソフトウェア層。**
@@ -51,7 +51,9 @@ cd Otedama
 make build
 
 # または、リリースバイナリをダウンロード
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
+# (install.sh is a repo file, not a release asset — fetch it from the
+# default branch; releases/latest/download/install.sh returns 404.)
+curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash
 ```
 
 ### 最小設定での起動 / Running with Minimal Configuration

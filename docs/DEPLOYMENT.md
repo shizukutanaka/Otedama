@@ -143,6 +143,12 @@ Pull the official image (built from `Dockerfile`):
 
 ```bash
 docker pull ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
+
+# NOTE: if this pull fails, no published image exists for your
+# organisation yet — the CI docker jobs build verification images only
+# (they never push; see docs/KNOWN_LIMITATIONS.md §13). Build locally
+# instead and substitute `otedama:latest` for the ghcr reference below:
+#   make docker-build
 ```
 
 Images are built on a distroless base. Cosign/Sigstore image signing is
@@ -294,6 +300,39 @@ type: Opaque
 stringData:
   bitcoin-address: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
   wallet-passphrase: your-strong-passphrase-here
+```
+
+### Service + PersistentVolumeClaim
+
+The Deployment above references a PVC named `otedama-data` and the
+ServiceMonitor below selects a Service exposing port `metrics` — both
+objects must exist or the pod stays Pending and no scrape target ever
+appears.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: otedama-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otedama
+  labels:
+    app: otedama
+spec:
+  selector:
+    app: otedama
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
 ```
 
 ### ServiceMonitor (Prometheus Operator)

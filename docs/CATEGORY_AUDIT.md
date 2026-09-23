@@ -838,3 +838,17 @@ finding in code rather than docs:
 Verification: `go test ./...` all packages green; touched files gofumpt-
 normalized; lint/deadcode deltas vs baseline: none introduced (the tui
 formatter findings are pre-existing reachability, unchanged by this diff).
+
+## Session 281 update — docs surface audit (DEPLOYMENT.md, API.md, README, install.sh self-URL, i18n)
+
+| Finding | Disposition |
+|---|---|
+| README install command `releases/latest/download/install.sh` — install.sh is not a release asset → **verified 404**; the documented quick-start was dead. | ✅ Fixed: fetch from `raw.githubusercontent.com/.../master/install.sh` (verified 200). |
+| install.sh's own header self-URL used `/main/` branch — repo's default branch is `master` → **verified 404**. | ✅ Fixed: `/master/` ×2. |
+| `ghcr.io/shizukutanaka/otedama` image referenced by DEPLOYMENT.md pull/compose/k8s — every CI docker job builds `load:true` verification images only; nothing pushes (push-capable workflows are the recorded-broken ones, §13) → pull likely fails for everyone. | ✅ Documented: pull note + `make docker-build` fallback. Image publish remains a maintainer/workflow fix (§13). |
+| K8s section: Deployment mounts `persistentVolumeClaim: otedama-data` but no PVC manifest existed → pod stays Pending. ServiceMonitor selects a Service `otedama` exposing port `metrics` — no Service manifest existed → zero scrape targets. | ✅ Added PVC (1Gi RWO) + Service manifests with a note. |
+| ci.yml docker-verify: runs `docker run otedama:ci-test -version` — `-version` is "unknown subcommand" (verified; only version/--version/-v accepted); greps for `Git Commit:` — a string the version output never contains; passes `GIT_COMMIT`/`CGO_ENABLED` build-args the Dockerfile doesn't declare (declared: VERSION/COMMIT/BUILD_DATE) → commit stays `unknown`. Triply-determined failure. | ⚠️ Recorded (KNOWN_LIMITATIONS §13 addendum — workflows outside push scope). |
+| API.md `--language` examples said `zh-CN` — real tag is `zh`. | ✅ Fixed (added `ru`/`ar` examples). |
+| README Go badge `1.22+` — go.mod floor is 1.24. | ✅ Fixed: 1.24+. |
+| i18n catalogs — key parity across all 10 languages | ✅ Verified clean: 15 IDs each, completeness test covers all (no defect). |
+| DEPLOYMENT.md endpoints/probes/flags vs httpserver | ✅ Verified consistent (healthz/readyz/metrics, 9090, runAsNonRoot 65532 matches Dockerfile nonroot uid). |

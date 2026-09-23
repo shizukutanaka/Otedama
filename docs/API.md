@@ -23,7 +23,7 @@ otedama run [flags]
 | `--bitcoin-address` | string | (required) | Bitcoin address for mining rewards. Bech32 (`bc1...`) or legacy (`1.../3...`). |
 | `--config` | string | `~/.config/otedama/config.yaml` | Path to YAML configuration file. Optional. |
 | `--data-dir` | string | `~/.local/share/otedama` | Directory for wallet and persistent state. |
-| `--language` | string | `en` | UI language. BCP 47 tag (e.g. `ja`, `zh-CN`). |
+| `--language` | string | `en` | UI language. BCP 47 tag (e.g. `ja`, `zh`, `ru`, `ar`). |
 | `--log-level` | string | `info` | Log verbosity: `debug`, `info`, `warn`, `error`. |
 | `--log-format` | string | `text` | Log output format: `text` or `json`. |
 | `--log-file` | string | (empty) | Append structured logs to this file. Written even under the TUI, so it provides an audit trail the dashboard otherwise hides. Created `0600`. |

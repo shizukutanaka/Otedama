@@ -3,10 +3,10 @@
 # Otedama one-line installer.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash
 #
 # Or with explicit options:
-#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/master/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
 #
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).

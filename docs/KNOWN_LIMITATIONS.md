@@ -595,6 +595,18 @@ workflow files are outside the push scope, see "Not fixed"):
   stable release; `.goreleaser.yaml` uses `prerelease: auto` for the
   same intent.
 
+**Session 280 addendum — ci.yml's docker-verify job is doubly broken**
+(beyond the Go-version floor already noted): it runs
+`docker run otedama:ci-test -version`, but the CLI accepts only
+`version`/`--version`/`-v` — `-version` exits "unknown subcommand"
+(verified). And the step greps the output for `Git Commit: <sha>`,
+a string the version output never contains (format is
+`otedama <Version> (<Commit>) built …`); separately, the build-args it
+passes (`GIT_COMMIT`, `CGO_ENABLED`) are not ARG names the Dockerfile
+declares (`VERSION`/`COMMIT`/`BUILD_DATE`), so the commit would stay
+`unknown` even if the grep pattern were right. The step fails on all
+three counts whenever docker verification runs.
+
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
 code quality — false-negative signals an operator or contributor could

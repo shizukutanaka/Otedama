@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 281 — ドキュメント面の壊れた参照群 + K8s 不足マニフェスト)
+
+- **README のインストール手順が 404**: `releases/latest/download/install.sh`
+  はリリースアセット化されていないため全利用者で失敗（実測 404）。
+  `raw.githubusercontent.com/.../master/install.sh`（実測 200）に修正。
+- **install.sh 自身のヘッダ記述も 404**: `raw .../main/install.sh` — 実デフォル
+  トブランチは `master`。×2箇所修正。
+- **DEPLOYMENT.md の GHCR イメージ**: CI docker ジョブは全て `load:true` の
+  検証ビルドのみで push 経路無し — pull 失敗時の `make docker-build` フォー
+  ルバックを明記（publish 自体は workflows scope 外のため §13 記録側）。
+- **K8s 例に PVC・Service マニフェスト欠落**: Deployment は存在しない
+  `otedama-data` PVC を参照（Pod が Pending 化）、ServiceMonitor は同名
+  Service の `metrics` ポートを選択（対象なしでスクレイプ成立せず）。
+  両マニフェストを追加。
+- **API.md `--language` の `zh-CN` 例を `zh` に訂正**（ru/ar 例も追記）。
+- **README Go バッジ `1.22+` → `1.24+`**（go.mod の言語フロア整合）。
+- 記録のみ（KNOWN_LIMITATIONS §13 追記）: ci.yml docker-verify が三重の
+  決定的失敗 — `-version` は非対応サブコマンド、出力に `Git Commit:` 文字列
+  非存在、`GIT_COMMIT`/`CGO_ENABLED` build-arg は Dockerfile 未宣言。
+- 検証済みクリーン: i18n 全10言語15キー完備（完全性テスト実在）、
+  DEPLOYMENT.md のエンドポイント/probe/securityContext は実装と整合。
+
 ### Fixed (session 280 — デフォルトプールの死んだホスト名 + config 例示の整合)
 
 - **`config.DefaultPoolURL` が NXDOMAIN のホスト名を指していた**:
