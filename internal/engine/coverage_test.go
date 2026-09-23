@@ -2157,3 +2157,51 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
 	}
 }
+
+// TestHandshake_OpenMiningChannelError surfaces the pool's named rejection
+// (sv2-spec §5.3.6): previously the error string was dropped and every
+// channel-open failure reported the same generic text. The rejection is
+// kept non-fatal so failover to the next pool can still succeed.
+func TestHandshake_OpenMiningChannelError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		dec := stratum.NewDecoder(serverConn)
+		// Read SetupConnection → answer success.
+		f, err := dec.ReadFrame()
+		if err != nil || f.Header.MsgType != stratum.MsgSetupConnection {
+			return
+		}
+		payload, _ := stratum.SetupConnectionSuccess{UsedVersion: 2}.Encode()
+		out, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(out)
+		serverConn.Write(data) //nolint:errcheck
+		// Read OpenMiningChannel → reject with a named reason.
+		f, err = dec.ReadFrame()
+		if err != nil || f.Header.MsgType != stratum.MsgOpenMiningChannel {
+			return
+		}
+		rej := stratum.OpenMiningChannelError{ReqID: 1, Error: "unsupported-user"}
+		payload, _ = rej.Encode()
+		out, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelError, true, payload)
+		data, _ = stratum.EncodeFrame(out)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	dec := stratum.NewDecoder(clientConn)
+	_, _, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	<-done
+	if err == nil {
+		t.Fatal("handshake: expected error on OpenMiningChannelError")
+	}
+	if !strings.Contains(err.Error(), "unsupported-user") {
+		t.Errorf("error %q does not surface the pool's rejection reason", err)
+	}
+	if isFatal(err) {
+		t.Errorf("channel-open rejection must stay non-fatal so pool failover still runs, got fatalError")
+	}
+}
