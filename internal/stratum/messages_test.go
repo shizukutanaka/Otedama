@@ -400,18 +400,42 @@ func TestSubmitSharesStandard_Roundtrip(t *testing.T) {
 // ----- SubmitSharesSuccess -----
 
 func TestDecodeSubmitSharesSuccess_Basic(t *testing.T) {
-	buf := make([]byte, 16)
+	// Spec layout (§5.3.13): U32 channel_id + U32 last_sequence_number +
+	// U32 new_submits_accepted_count + U64 new_shares_sum = 20 bytes.
+	buf := make([]byte, 20)
 	binary.LittleEndian.PutUint32(buf[0:4], 1)   // ChannelID
 	binary.LittleEndian.PutUint32(buf[4:8], 3)   // LastSeq
-	binary.LittleEndian.PutUint32(buf[8:12], 2)  // Accepted
-	binary.LittleEndian.PutUint32(buf[12:16], 5) // Summed
+	binary.LittleEndian.PutUint32(buf[8:12], 2)  // AcceptedCount
+	binary.LittleEndian.PutUint64(buf[12:20], 5) // SharesSum
 
 	got, err := DecodeSubmitSharesSuccess(buf)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.ChannelID != 1 || got.LastSequenceNumber != 3 {
+	if got.ChannelID != 1 || got.LastSequenceNumber != 3 ||
+		got.NewSubmitsAcceptedCount != 2 || got.NewSharesSum != 5 {
 		t.Errorf("got %+v", got)
+	}
+}
+
+func TestDecodeSubmitSharesSuccess_LargeSharesSum(t *testing.T) {
+	// new_shares_sum is U64 — difficulty sums legitimately exceed 2^32
+	// over a long session; the old 16-byte U32 layout would have
+	// silently truncated the upper word.
+	orig := SubmitSharesSuccess{NewSharesSum: 1<<33 + 42}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if len(payload) != 20 {
+		t.Fatalf("Encode produced %d bytes, want 20", len(payload))
+	}
+	got, err := DecodeSubmitSharesSuccess(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.NewSharesSum != orig.NewSharesSum {
+		t.Errorf("NewSharesSum = %d, want %d", got.NewSharesSum, orig.NewSharesSum)
 	}
 }
 
@@ -496,10 +520,10 @@ func TestFloat32Encoding(t *testing.T) {
 
 func TestSubmitSharesSuccess_Encode_Roundtrip(t *testing.T) {
 	orig := SubmitSharesSuccess{
-		ChannelID:          7,
-		LastSequenceNumber: 99,
-		NewSubmitsAccepted: 3,
-		NewSharesSummed:    10,
+		ChannelID:               7,
+		LastSequenceNumber:      99,
+		NewSubmitsAcceptedCount: 3,
+		NewSharesSum:            10,
 	}
 	payload, err := orig.Encode()
 	if err != nil {
@@ -608,7 +632,7 @@ func TestDecodeOpenMiningChannelError_ShortPayload(t *testing.T) {
 // ----- DispatchFrame — additional message types -----
 
 func TestDispatchFrame_SubmitSharesSuccess(t *testing.T) {
-	orig := SubmitSharesSuccess{ChannelID: 1, LastSequenceNumber: 5, NewSubmitsAccepted: 1, NewSharesSummed: 1}
+	orig := SubmitSharesSuccess{ChannelID: 1, LastSequenceNumber: 5, NewSubmitsAcceptedCount: 1, NewSharesSum: 1}
 	payload, _ := orig.Encode()
 	f := Frame{Header: Header{MsgType: MsgSubmitSharesSuccess, MsgLength: uint32(len(payload))}, Payload: payload}
 	msg, err := DispatchFrame(f)

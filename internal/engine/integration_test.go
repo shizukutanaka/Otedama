@@ -178,10 +178,12 @@ func (p *mockPool) handleConn(conn net.Conn) {
 			p.mu.Lock()
 			p.shares++
 			p.mu.Unlock()
-			// Acknowledge.
+			// Acknowledge — a conformant pool reports the batch counters.
 			ack := stratum.SubmitSharesSuccess{
-				ChannelID:          1,
-				LastSequenceNumber: msg.SubmitSharesStandard.SequenceNumber,
+				ChannelID:               1,
+				LastSequenceNumber:      msg.SubmitSharesStandard.SequenceNumber,
+				NewSubmitsAcceptedCount: 1,
+				NewSharesSum:            1,
 			}
 			_ = sendServerMsg(conn, stratum.MsgSubmitSharesSuccess, true, &ack)
 		}
@@ -191,7 +193,8 @@ func (p *mockPool) handleConn(conn net.Conn) {
 // sendServerMsg encodes and writes a server-to-client Stratum V2 message.
 func sendServerMsg(w io.Writer, msgType uint8, isChannel bool, enc interface {
 	Encode() ([]byte, error)
-}) error {
+},
+) error {
 	payload, err := enc.Encode()
 	if err != nil {
 		return err

@@ -2247,6 +2247,12 @@ type responsivePool struct {
 	ln      net.Listener
 	addr    string
 	started chan struct{}
+	// Batch counters the pool reports in each SubmitSharesSuccess
+	// (new_submits_accepted_count / new_shares_sum). A conformant pool
+	// reports the number of submissions it is actually acknowledging —
+	// one per share in this fixture's one-ack-per-submit loop.
+	ackCount uint32
+	ackSum   uint64
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2256,10 +2262,12 @@ func newResponsivePool(t *testing.T) *responsivePool {
 		t.Fatalf("responsivePool: listen: %v", err)
 	}
 	fp := &responsivePool{
-		t:       t,
-		ln:      ln,
-		addr:    ln.Addr().String(),
-		started: make(chan struct{}),
+		t:        t,
+		ln:       ln,
+		addr:     ln.Addr().String(),
+		started:  make(chan struct{}),
+		ackCount: 1,
+		ackSum:   1,
 	}
 	go fp.serve()
 	return fp
@@ -2368,9 +2376,10 @@ func (fp *responsivePool) serve() {
 			// First share: acknowledge. Exercises SubmitSharesSuccess handler
 			// and the latency-recording path.
 			resp := stratum.SubmitSharesSuccess{
-				ChannelID:          share.ChannelID,
-				LastSequenceNumber: share.SequenceNumber,
-				NewSubmitsAccepted: 1,
+				ChannelID:               share.ChannelID,
+				LastSequenceNumber:      share.SequenceNumber,
+				NewSubmitsAcceptedCount: fp.ackCount,
+				NewSharesSum:            fp.ackSum,
 			}
 			payload, _ = resp.Encode()
 			fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
@@ -2493,6 +2502,91 @@ waitLoop:
 	if !latencyObserved {
 		t.Error("submitLatencyP95 never became nonzero within 10s; latency-quantile stats-tick path not covered")
 	}
+	// The conformant fake pool reports count=1 for the share it settled:
+	// reported-vs-settled reconciliation must stay quiet.
+	if got := m.poolReconcileDivergence.Value(); got != 0 {
+		t.Errorf("poolReconcileDivergence = %d, want 0 for a conformant pool", got)
+	}
+}
+
+// TestRunSession_PoolReconcileAccounting exercises the pool-side accounting
+// reconciliation: the fake pool reports batch counters
+// (new_submits_accepted_count / new_shares_sum) that do NOT match the
+// submissions it actually settles. The engine must (a) count accepted
+// shares by the pool's reported count — one Success can acknowledge a
+// batch — rather than one per Success message, (b) accumulate the pool's
+// credited difficulty into otedama_pool_shares_sum_total, and (c) flag
+// the reported-vs-settled disagreement as a reconciliation divergence.
+func TestRunSession_PoolReconcileAccounting(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	// Pool claims 3 accepted submits (9 difficulty) per Success while
+	// acknowledging only one submission per message — the miscounting
+	// scenario reconciliation exists to catch.
+	fp.ackCount = 3
+	fp.ackSum = 9
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	// Wait for at least one divergent batch to settle; how many total
+	// shares flow before cancellation is intentionally not asserted.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.poolReconcileDivergence.Value() > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	// Invariants per Success batch regardless of batch count: the pool
+	// reports 3 accepted + 9 difficulty and settles 1 local submission,
+	// so each batch is one divergence.
+	d := m.poolReconcileDivergence.Value()
+	if d == 0 {
+		t.Fatal("poolReconcileDivergence == 0; divergence was not flagged")
+	}
+	if got, want := m.sharesAccepted.Value(), 3*d; got != want {
+		t.Errorf("sharesAccepted = %d, want %d (pool-reported batch count)", got, want)
+	}
+	if got, want := m.poolSharesSum.Value(), 9*d; got != want {
+		t.Errorf("poolSharesSum = %d, want %d (pool-reported difficulty)", got, want)
+	}
 }
 
 // ============================================================================
@@ -2608,9 +2702,10 @@ func (fp *retargetPool) serve() {
 		switch shareCount {
 		case 1:
 			resp := stratum.SubmitSharesSuccess{
-				ChannelID:          share.ChannelID,
-				LastSequenceNumber: share.SequenceNumber,
-				NewSubmitsAccepted: 1,
+				ChannelID:               share.ChannelID,
+				LastSequenceNumber:      share.SequenceNumber,
+				NewSubmitsAcceptedCount: 1,
+				NewSharesSum:            1,
 			}
 			payload, _ = resp.Encode()
 			fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
