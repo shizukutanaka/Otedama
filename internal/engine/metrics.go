@@ -20,15 +20,29 @@ import (
 // run loop. Grouping them in one struct keeps the hot path free of
 // registry lookups — each metric is a pointer cached at startup.
 type engineMetrics struct {
-	hashrate            *metrics.Gauge
-	sharesFound         *metrics.Counter
-	sharesSubmitted     *metrics.Counter
-	sharesAccepted      *metrics.Counter
-	sharesRejected      *metrics.Counter
-	sharesUnresolved    *metrics.Counter
-	poolConnectAttempts *metrics.Counter
-	poolConnectFailures *metrics.Counter
-	arbitrationSwitches *metrics.Counter
+	hashrate         *metrics.Gauge
+	sharesFound      *metrics.Counter
+	sharesSubmitted  *metrics.Counter
+	sharesAccepted   *metrics.Counter
+	sharesRejected   *metrics.Counter
+	sharesUnresolved *metrics.Counter
+	// poolSharesSum accumulates the new_shares_sum field of every
+	// SubmitSharesSuccess: the pool's own running total of accepted-share
+	// weight (difficulty units). It is the pool-side counterpart of
+	// sharesAccepted — reconciling the two surfaces disagreement between
+	// what the pool credited and what the submit window delivered
+	// (ported from d7b5901).
+	poolSharesSum *metrics.Counter
+	// poolReconcileDivergence increments each time the number of our
+	// submissions settled by a SubmitSharesSuccess diverges from the
+	// count the pool says it accepted (new_submits_accepted_count). A
+	// sustained rise means submissions are being lost between our wire
+	// and the pool's ledger — network reordering, a raced share the
+	// pool dropped silently, or an upstream proxy.
+	poolReconcileDivergence *metrics.Counter
+	poolConnectAttempts     *metrics.Counter
+	poolConnectFailures     *metrics.Counter
+	arbitrationSwitches     *metrics.Counter
 	// arbitrationHolds counts decisions where a strictly better stream existed
 	// but hysteresis kept the device on its current one. Together with
 	// arbitrationSwitches it makes the hysteresis margin tunable: many holds
@@ -241,6 +255,21 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"possibly-paid work, so they are counted apart from "+
 				"shares_unaccounted. Together they form the identity "+
 				"submitted ≈ accepted + rejected + unresolved (modulo in-flight).",
+			nil),
+		poolSharesSum: reg.NewCounter(
+			"otedama_pool_shares_sum_total",
+			"Cumulative sum of the new_shares_sum field reported by the pool in "+
+				"SubmitSharesSuccess messages — the pool's own running total of "+
+				"accepted-share weight (difficulty units). Reconciles against "+
+				"otedama_shares_total{status=\"accepted\"}.",
+			nil),
+		poolReconcileDivergence: reg.NewCounter(
+			"otedama_pool_reconcile_divergences_total",
+			"Total SubmitSharesSuccess responses where the count of submissions "+
+				"we settled differs from the pool's new_submits_accepted_count — "+
+				"i.e. shares we believe we sent that the pool does not count. A "+
+				"sustained rise indicates submission loss between our wire and "+
+				"the pool's ledger.",
 			nil),
 		poolConnectAttempts: reg.NewCounter(
 			"otedama_pool_connect_attempts_total",

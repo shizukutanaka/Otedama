@@ -49,6 +49,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"github.com/shizukutanaka/Otedama/internal/tui"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // Engine timing constants. Centralised here so the reconnection and
@@ -1054,18 +1055,50 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
-				opts.log("info", "engine: share accepted")
-				if opts.m != nil {
-					opts.m.sharesAccepted.Inc()
-				}
+				acc := pm.msg.SubmitSharesSuccess
 				// Settle round-trip latency for every submitted share up
-				// to LastSequenceNumber, then drop those entries.
+				// to LastSequenceNumber, then drop those entries. The
+				// settled count is the local side of the reconciliation
+				// against the pool's own batch accept count below.
 				now := time.Now()
-				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
+				last := acc.LastSequenceNumber
+				var settled uint64
 				for seq, ps := range submissions {
 					if seq <= last {
 						latency.Record(float64(now.Sub(ps.sent).Microseconds()) / 1000.0)
 						delete(submissions, seq)
+						settled++
+					}
+				}
+				// Pool truth (spec §5.3.13): new_submits_accepted_count
+				// is the number of submissions the pool accepted in
+				// this batch — a Success can acknowledge several at
+				// once, so counting one accepted share per Success
+				// message under-reports. new_shares_sum is the
+				// difficulty the pool credited; summed client-side it
+				// is the pool's own running total.
+				accepted := uint64(acc.NewSubmitsAccepted)
+				if accepted == 0 {
+					// Degenerate pool reports no count; the entries
+					// it settled are still verdicts. Falling back to the
+					// settled count also suppresses a spurious
+					// divergence on every Success from such pools.
+					accepted = settled
+				}
+				opts.log("info", fmt.Sprintf("engine: %d share(s) accepted", accepted))
+				if opts.m != nil {
+					opts.m.sharesAccepted.Add(accepted)
+					opts.m.poolSharesSum.Add(acc.NewSharesSummed)
+					if settled != accepted {
+						// The pool's reported accept count disagrees
+						// with the submissions it actually settled —
+						// silent miscounting on one side or the
+						// other (also fires when the bounded in-flight
+						// window evicted acknowledged shares).
+						opts.m.poolReconcileDivergence.Inc()
+						opts.log("warn", fmt.Sprintf(
+							"engine: pool accounting divergence: pool reports %d accepted submits, settled %d locally (seq <= %d)",
+							acc.NewSubmitsAccepted, settled, last))
 					}
 				}
 			}
@@ -1524,7 +1557,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		EndpointHost:    epHost,
 		EndpointPort:    uint16(epPort),
 		Vendor:          "Otedama",
-		HardwareVersion: "v3.0.0",
+		HardwareVersion: version.Version,
 		Firmware:        "main",
 		DeviceID:        "cpu",
 	}

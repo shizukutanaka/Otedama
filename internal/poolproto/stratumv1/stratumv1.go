@@ -61,6 +61,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // ----- session -----
@@ -72,6 +73,25 @@ import (
 // unbounded line (a stream with no newline) into memory until OOM. readLine
 // enforces this limit via ReadSlice, which never grows past the buffer.
 const maxLineBytes = 64 << 10 // 64 KiB
+
+// agentString is the client identity sent in mining.subscribe and echoed
+// back on client.get_version requests — one string for both so a pool
+// cannot observe two different agent identities. It carries the real
+// ldflags-injected build (version.Version, e.g. "v3.0.0-alpha.0-dev")
+// rather than a frozen literal: pools correlate client behaviour to
+// builds, and a hardcoded string made every dev build indistinguishable
+// from the release it predates (ported from 9029cf3).
+var agentString = "Otedama/" + strings.TrimPrefix(version.Version, "v")
+
+// rpcTimeout bounds one JSON-RPC round trip mid-session — the response
+// wait inside session.call for mining.submit and similar. Callers pass
+// the run-lifetime ctx, so without a per-call bound a pool that receives
+// the write but never answers leaves the caller blocked until session
+// teardown (leaking the goroutine and leaving the share unsettled —
+// submitted never reconciles with accepted+rejected). 30s is generous:
+// healthy pools answer submits in seconds. It is a var (not const) so
+// tests can shrink it (ported from cce67aa).
+var rpcTimeout = 30 * time.Second
 
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
@@ -302,9 +322,70 @@ func (s *session) dispatch(line []byte) {
 			s.lastReconnect.Store(&d)
 		}
 		go s.Close()
-		// Other notifications (mining.set_version_mask, etc.) are
-		// silently ignored; forward-compatible with pool extensions.
+	case "mining.ping":
+		// Application-level keepalive used by Braiins, NiceHash and
+		// ckpool-style pools: the pool sends a request carrying an id and
+		// expects {"id":<id>,"result":"pong","error":null} back. Strict
+		// pools disconnect clients that never answer (the connection then
+		// looks half-open: TCP alive, application dead). A ping without an
+		// id is a malformed notification — ignore it (ported from 92794bf).
+		if msg.ID != nil {
+			s.respond(msg.ID, "pong")
+		}
+	case "client.get_version":
+		// Pool→client request for the miner agent string (Braiins uses
+		// it for compatibility tracking; cgminer/bfgminer/ESP-Miner all
+		// answer). Same unanswered-request class as mining.ping — echo
+		// the agent we advertised in mining.subscribe (ported from 01acd25).
+		if msg.ID != nil {
+			s.respond(msg.ID, agentString)
+		}
+	default:
+		// A pool→client message carrying an id is a *request* and must
+		// get a reply — silently dropping it is the same half-open bug
+		// class as an unanswered mining.ping: strict pools time out and
+		// disconnect. Answer unimplemented methods (mining.get_transactions,
+		// pool-specific extensions) with an explicit JSON-RPC
+		// "Method not found" rather than silence. Notifications without
+		// an id stay ignored; forward-compatible with pool extensions
+		// (ported from 5620c4c).
+		if msg.ID != nil {
+			s.respondError(msg.ID, -32601, "Method not found")
+		}
 	}
+}
+
+// respond writes a JSON-RPC result reply for a server→client request
+// (mining.ping, client.get_version).
+func (s *session) respond(id any, result any) {
+	s.writeReply(id, result, nil)
+}
+
+// respondError writes a JSON-RPC error reply for a server→client request
+// we do not implement, in the same [code, "message", data] array shape V1
+// pools use (e.g. [-32601, "Method not found", null]).
+func (s *session) respondError(id any, code int, message string) {
+	s.writeReply(id, nil, []any{code, message, nil})
+}
+
+// writeReply emits one JSON-RPC response line. Best-effort: a write
+// failure is swallowed because the broken connection is surfaced by the
+// read loop anyway, and there is nothing actionable to do mid-parse.
+func (s *session) writeReply(id any, result any, errVal any) {
+	body, err := json.Marshal(map[string]any{
+		"id":     id,
+		"result": result,
+		"error":  errVal,
+	})
+	if err != nil {
+		return
+	}
+	body = append(body, '\n')
+
+	s.writeMu.Lock()
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_, _ = s.conn.raw.Write(body)
+	s.writeMu.Unlock()
 }
 
 // LastReconnectWait implements poolproto.ReconnectInformer: the advisory
@@ -509,6 +590,15 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 	s.pending[id] = respCh
 	s.pendingMu.Unlock()
 
+	// Bound the response wait per-call: the caller's ctx is the run
+	// lifetime, so a pool that receives the write but never answers
+	// would leave the caller blocked forever — a submit goroutine
+	// leaks AND the share never settles (submitted != accepted+rejected
+	// diverges permanently). Shorter caller-supplied deadlines still
+	// win — both bounds coexist (ported from cce67aa).
+	callCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
 	req := map[string]any{
 		"id":     id,
 		"method": method,
@@ -537,11 +627,11 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 			return rpcResponse{}, errors.New("stratumv1: session closed before response")
 		}
 		return r, nil
-	case <-ctx.Done():
+	case <-callCtx.Done():
 		s.pendingMu.Lock()
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
-		return rpcResponse{}, ctx.Err()
+		return rpcResponse{}, callCtx.Err()
 	}
 }
 

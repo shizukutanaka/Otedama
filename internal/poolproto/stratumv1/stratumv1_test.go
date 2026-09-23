@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // ============================================================================
@@ -2196,5 +2197,220 @@ func TestNegotiate_SilentPoolStillCompletesViaOptionalTimeout(t *testing.T) {
 	defer sess.Close()
 	if got := time.Since(start); got > 30*time.Second {
 		t.Fatalf("Negotiate took %v — silent optional step was not bounded", got)
+	}
+}
+
+// TestSession_E2E_UnhandledRequestGetsMethodNotFound: any pool→client
+// message carrying an id is a *request* and must be answered — silently
+// dropping it is the same half-open bug class as an unanswered
+// mining.ping (strict pools time out and disconnect). Unimplemented
+// methods (mining.get_transactions, pool-specific extensions) now get an
+// explicit JSON-RPC -32601 in the [code,"message",data] shape pools use
+// (ported from 7278a2c).
+func TestSession_E2E_UnhandledRequestGetsMethodNotFound(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"id":9,"method":"mining.get_transactions","params":["job1"]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no reply within 2s: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply did not parse: %v (%q)", err, line)
+	}
+	if resp.uintID() != 9 {
+		t.Errorf("reply id = %v, want 9 (must echo the request id)", resp.ID)
+	}
+	errArr, ok := resp.Error.([]any)
+	if !ok || len(errArr) < 2 {
+		t.Fatalf("error = %v, want [code, message, data] array", resp.Error)
+	}
+	if code, _ := errArr[0].(float64); int(code) != -32601 {
+		t.Errorf("error code = %v, want -32601", errArr[0])
+	}
+	if errArr[1] != "Method not found" {
+		t.Errorf("error message = %v, want \"Method not found\"", errArr[1])
+	}
+}
+
+// TestSession_E2E_UnknownNotificationStaysSilent: the catch-all must not
+// turn notifications into requests — a method without an id produces no
+// reply at all (ported from 7278a2c).
+func TestSession_E2E_UnknownNotificationStaysSilent(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"method":"pool.custom_thing","params":[1,2,3]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err == nil {
+		t.Fatalf("notification produced a reply: %q", line)
+	}
+	// A timeout is the expected outcome — no reply written.
+}
+
+// TestSession_E2E_MiningPingGetsPong: a pool→client mining.ping request
+// must get {"id":<id>,"result":"pong","error":null} — strict pools
+// (Braiins, NiceHash, ckpool-style) disconnect clients that never
+// answer, treating the link as half-open (ported from 92794bf's class).
+func TestSession_E2E_MiningPingGetsPong(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"id":5,"method":"mining.ping","params":[]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no reply within 2s: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply did not parse: %v (%q)", err, line)
+	}
+	if resp.uintID() != 5 {
+		t.Errorf("reply id = %v, want 5", resp.ID)
+	}
+	if resp.Result != "pong" {
+		t.Errorf("result = %v, want \"pong\"", resp.Result)
+	}
+	if resp.Error != nil {
+		t.Errorf("error = %v, want nil", resp.Error)
+	}
+}
+
+// TestSession_E2E_ClientGetVersionEchoesAgent: client.get_version must
+// return the same agent string advertised in mining.subscribe — one
+// identity, no divergence (ported from 01acd25's class).
+func TestSession_E2E_ClientGetVersionEchoesAgent(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"id":7,"method":"client.get_version","params":[]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no reply within 2s: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply did not parse: %v (%q)", err, line)
+	}
+	if resp.uintID() != 7 {
+		t.Errorf("reply id = %v, want 7", resp.ID)
+	}
+	if resp.Result != agentString {
+		t.Errorf("result = %v, want agentString %q", resp.Result, agentString)
+	}
+}
+
+// TestAgentString_ReportsBuildVersion pins the client-identity invariant:
+// agentString must carry the real build (version.Version, ldflags-injected)
+// so a pool sees "Otedama/3.0.0-alpha.0-dev" from a dev binary rather than
+// a literal frozen at "3.0.0". The subscribe agent and the get_version
+// answer share this string — one identity, no divergence (ported from a360211).
+func TestAgentString_ReportsBuildVersion(t *testing.T) {
+	v := strings.TrimPrefix(version.Version, "v")
+	want := "Otedama/" + v
+	if agentString != want {
+		t.Errorf("agentString = %q, want %q", agentString, want)
+	}
+}
+
+// TestSessionCall_RpcTimeout: a call whose response never arrives must
+// return on rpcTimeout — before the bound it waited on the run-lifetime
+// ctx and leaked the goroutine with the share unsettled (ported from
+// cce67aa).
+func TestSessionCall_RpcTimeout(t *testing.T) {
+	old := rpcTimeout
+	rpcTimeout = 50 * time.Millisecond
+	defer func() { rpcTimeout = old }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Drain the request write but never reply — the blackhole-pool case.
+	go func() {
+		reader := bufio.NewReader(serverConn)
+		for {
+			if _, err := reader.ReadBytes('\n'); err != nil {
+				return
+			}
+		}
+	}()
+
+	start := time.Now()
+	_, err := sess.call(context.Background(), 1, "mining.suggest_difficulty", []any{1.0})
+	if err == nil {
+		t.Fatal("call returned nil error with no response")
+	}
+	if !strings.Contains(err.Error(), "deadline") && !strings.Contains(err.Error(), "Deadline") {
+		t.Errorf("error = %v, want context deadline", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("call took %v — rpcTimeout did not bound the wait", elapsed)
 	}
 }

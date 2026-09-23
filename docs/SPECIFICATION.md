@@ -204,6 +204,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `pool_connection_state` | gauge | 0=disconnected, 1=connecting, 2=connected. |
 | `pool_active_index` | gauge | 0-based index of active pool in the failover list. |
 | `pool_difficulty` | gauge | Current pool-assigned share difficulty. |
+| `pool_shares_sum_total` | counter | Sum of `new_shares_sum` from SubmitSharesSuccess — the pool's own running total of credited share difficulty. Reconciles against `shares_total{status="accepted"}`. |
+| `pool_reconcile_divergences_total` | counter | SubmitSharesSuccess responses where the locally-settled submission count differs from the pool's `new_submits_accepted_count` — shares we sent that the pool did not count. |
 | `estimated_share_interval_seconds` | gauge | difficulty × 2³² / hashrate. |
 | `last_job_received_seconds` | gauge | Unix time of the most recent job. |
 | `payout_active_index` | gauge | 0-based index of active payout address. |

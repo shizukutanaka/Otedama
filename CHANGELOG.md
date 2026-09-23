@@ -10,6 +10,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 307 — V1 未応答リクエスト群・呼出毎バウンド・バッチ受理会計・実ビルド報告)
+
+- **プール→クライアントのリクエストが未応答で半開き状態に** — dispatch の
+  `default:` が id 付きメッセージを無言破棄していたため、`mining.ping`・
+  `client.get_version`・未知メソッドの全てが応答なしで放置され、厳格な
+  プール（Braiins・NiceHash・ckpool 系）はアプリケーション層死亡と判定して
+  切断していた（TCP 生存・アプリ死亡の半開きクラス）。`mining.ping` →
+  `{"result":"pong"}`、`client.get_version` → agentString、id 付き未知
+  メソッド → JSON-RPC `-32601 "Method not found"`（`[code,"message",data]`
+  配列形式）を応答。id なし通知は従来どおり無言破棄（並行ブランチ
+  `5620c4c`・`92794bf`・`01acd25` 移植）。
+- **`session.call` の応答待機がセッション寿命の ctx に依存** — 書込を受信
+  したまま応答しないプールに対し submit 等の呼出が永久ブロックし、ゴルーチン
+  リーク＋シェア未決済（submitted ≠ accepted+rejected が永久発散）となって
+  いた。呼出毎に `rpcTimeout`（30s、テストで短縮可の var）を適用（`cce67aa`
+  移植）。
+- **クライアント識別が固定リテラル `"Otedama/3.0.0"`** — mining.subscribe の
+  agent と SV2 SetupConnection の `hardware_version`（2箇所）が ldflags 注入の
+  実ビルドを反映せず、dev ビルドがリリースと区別不能だった。`agentString =
+  "Otedama/" + version.Version` に一本化し subscribe/get_version/両
+  SetupConnection で共有（`9029cf3` 移植）。
+- **`SubmitSharesSuccess` が1メッセージ=1受理として計上** — spec §5.3.13 の
+  `new_submits_accepted_count` によりプールはバッチ受理できるのに、過少計上
+  していた。受理数を `NewSubmitsAccepted`（0 時はローカル決済数へ
+  フォールバック）で累積、新メトリクス `otedama_pool_shares_sum_total`
+  （`new_shares_sum` U64 の累積＝プール側の計上難易度総量）と
+  `otedama_pool_reconcile_divergences_total`（決済数とプール報告数の乖離検出
+  ＋ warn ログ — 送信済みだが計上されないシェアの可視化）（`d7b5901` 移植）。
+
 ### Docs (session 306 — internal/lightning 専用監査記録)
 
 - `internal/lightning`（資金直結・CODEOWNERS maintainer ゲート）の読取専用

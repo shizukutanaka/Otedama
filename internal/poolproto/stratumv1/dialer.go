@@ -126,7 +126,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 
 	// Step 1: mining.subscribe — negotiate extranonce1 / extranonce2_size.
 	id := sess.nextID.Add(1)
-	resp, err := sess.call(ctx, id, "mining.subscribe", []any{"Otedama/3.0.0"})
+	resp, err := sess.call(ctx, id, "mining.subscribe", []any{agentString})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: subscribe: %w", err)

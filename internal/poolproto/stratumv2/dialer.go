@@ -26,6 +26,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 func init() {
@@ -132,7 +133,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		EndpointHost:    epHost,
 		EndpointPort:    epPort,
 		Vendor:          "Otedama",
-		HardwareVersion: "v3.0.0",
+		HardwareVersion: version.Version,
 		Firmware:        "main",
 		DeviceID:        "cpu",
 	}

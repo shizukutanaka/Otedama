@@ -258,6 +258,8 @@ addresses) appear once their first event occurs.
 | `otedama_pool_connection_state` | gauge | — | 0=disconnected, 1=connecting, 2=connected. |
 | `otedama_pool_active_index` | gauge | — | 0-based index of the active pool in the failover list. |
 | `otedama_pool_difficulty` | gauge | — | Current share difficulty (`mining.set_difficulty`). |
+| `otedama_pool_shares_sum_total` | counter | — | Sum of `new_shares_sum` from SubmitSharesSuccess — the pool's own running total of credited share difficulty; reconciles against `otedama_shares_total{status="accepted"}`. |
+| `otedama_pool_reconcile_divergences_total` | counter | — | SubmitSharesSuccess responses where the locally-settled submission count differs from the pool's `new_submits_accepted_count` — shares we sent that the pool did not count. |
 | `otedama_estimated_share_interval_seconds` | gauge | — | Expected seconds between shares (difficulty × 2³² / hashrate). |
 | `otedama_last_job_received_seconds` | gauge | — | Unix timestamp of the most recent pool job (stale-connection detector). |
 
