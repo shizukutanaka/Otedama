@@ -1199,3 +1199,56 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 	}
 	return keys
 }
+
+// ============================================================================
+// updateStream — Quote.Simulated → Stream.Simulated (session 264)
+// ============================================================================
+
+func TestUpdateStream_PropagatesSimulatedFlag(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "ai.akash", DeviceID: "gpu-0",
+		Yield:     provider.Yield{SatsPerSecond: 0.4},
+		Simulated: true,
+	})
+	if !m["ai.akash:gpu-0"].Simulated {
+		t.Error("simulated quote must produce Stream.Simulated=true")
+	}
+
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "mining.stratum", DeviceID: "cpu-0",
+		Yield: provider.Yield{SatsPerSecond: 0.1},
+	})
+	if m["mining.stratum:cpu-0"].Simulated {
+		t.Error("real pool quote must produce Stream.Simulated=false")
+	}
+}
+
+// ============================================================================
+// setProviderYield — per-provider yield with simulated label (session 264)
+// ============================================================================
+
+func TestSetProviderYield_SeparatesSimulatedFromReal(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.setProviderYield("ai.akash", true, 0.5)
+	m.setProviderYield("mining.stratum", false, 0.12)
+	m.setProviderYield("ai.akash", true, 0.55) // update, not a new series
+
+	var buf strings.Builder
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_provider_yield_sats_per_second{provider="ai.akash",simulated="true"} 0.55`) {
+		t.Errorf("simulated series missing/incorrect:\n%s", out)
+	}
+	if !strings.Contains(out, `otedama_provider_yield_sats_per_second{provider="mining.stratum",simulated="false"} 0.12`) {
+		t.Errorf("real series missing/incorrect:\n%s", out)
+	}
+	if got := strings.Count(out, "otedama_provider_yield_sats_per_second{"); got != 2 {
+		t.Errorf("series count = %d, want exactly 2 (re-set must update, not duplicate)", got)
+	}
+}

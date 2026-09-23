@@ -133,6 +133,10 @@ loop:
 		if q.Yield.NetSatsPerSecond > q.Yield.SatsPerSecond {
 			t.Errorf("device %s: net > gross yield", dev.Identity().ID)
 		}
+		if q.Simulated {
+			t.Errorf("device %s: mining quote marked simulated; pool-settled "+
+				"revenue must read Simulated=false", dev.Identity().ID)
+		}
 	}
 }
 

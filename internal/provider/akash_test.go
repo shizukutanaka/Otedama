@@ -356,3 +356,36 @@ func TestAkashProvider_NameDisclosesSimulation(t *testing.T) {
 			"while yield is not live (see docs/KNOWN_LIMITATIONS.md)", name)
 	}
 }
+
+func TestAkashProvider_QuotesAreFlaggedSimulated(t *testing.T) {
+	// The name suffix is a UI string; Quote.Simulated is the structural
+	// flag metrics and accounting actually filter on. Both quote paths —
+	// the no-GPU zero quote and the priced per-device quotes — must carry
+	// it while the Akash integration remains a fixed-price model
+	// (docs/KNOWN_LIMITATIONS.md §1). A real REST integration flips this
+	// to false in the same change that removes the name suffix.
+	p := NewAkashProvider(StaticRateSource{Rate: 95000})
+	p.publish(context.Background())
+	select {
+	case q := <-p.Quotes():
+		if !q.Simulated {
+			t.Error("no-GPU zero-yield quote: Simulated = false, want true")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no quote within 1s (no-GPU path)")
+	}
+
+	p2 := NewAkashProvider(StaticRateSource{Rate: 95000})
+	p2.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p2.publish(context.Background())
+	select {
+	case q := <-p2.Quotes():
+		if !q.Simulated {
+			t.Error("priced GPU quote: Simulated = false, want true")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no quote within 1s (GPU path)")
+	}
+}
