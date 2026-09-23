@@ -169,6 +169,12 @@ func writeTableLine(b *strings.Builder, cells []string, widths []int) {
 		if i > 0 {
 			b.WriteString("  ")
 		}
+		// The last column is left unpadded: trailing whitespace carries no
+		// alignment information and trips copy-paste consumers.
+		if i == len(cells)-1 {
+			b.WriteString(c)
+			continue
+		}
 		fmt.Fprintf(b, "%-*s", widths[i], c)
 	}
 	b.WriteByte('\n')
