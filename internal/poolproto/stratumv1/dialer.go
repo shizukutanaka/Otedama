@@ -55,6 +55,15 @@ type Dialer struct {
 // TLS round-trips). It is a var (not const) so tests can shrink it.
 var handshakeTimeout = 30 * time.Second
 
+// rpcTimeout bounds one JSON-RPC round trip mid-session — the response
+// wait inside session.call for submits and suggest_difficulty. Callers
+// pass the run-lifetime ctx, so without a per-call bound a pool that
+// receives the write but never answers leaves the caller blocked
+// forever (leaking the goroutine and leaving the share unsettled).
+// 30s is generous — healthy pools answer submits in seconds. It is a
+// var (not const) so tests can shrink it.
+var rpcTimeout = 30 * time.Second
+
 // Protocol identifies which scheme this Dialer handles.
 func (d *Dialer) Protocol() poolproto.ProtocolID {
 	if d.datum {

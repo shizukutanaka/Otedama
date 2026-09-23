@@ -618,6 +618,15 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 	s.pending[id] = respCh
 	s.pendingMu.Unlock()
 
+	// Bound the response wait per-call: the caller's ctx is the run
+	// lifetime, so a pool that receives the write but never answers
+	// would leave the caller blocked forever — a submit goroutine
+	// leaks AND the share never settles (submitted != accepted+rejected
+	// diverges permanently). Handshake calls run under hsCtx, which
+	// wins when it is the shorter deadline — both bounds coexist.
+	callCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
 	req := map[string]any{
 		"id":     id,
 		"method": method,
@@ -646,11 +655,11 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 			return rpcResponse{}, errors.New("stratumv1: session closed before response")
 		}
 		return r, nil
-	case <-ctx.Done():
+	case <-callCtx.Done():
 		s.pendingMu.Lock()
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
-		return rpcResponse{}, ctx.Err()
+		return rpcResponse{}, callCtx.Err()
 	}
 }
 
