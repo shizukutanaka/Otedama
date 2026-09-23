@@ -160,3 +160,37 @@ bitcoin-core's `examples/ellswift.c` vectors. Also note the "2-level
 PKI server authentication" clause is the concrete missing piece behind
 KNOWN_LIMITATIONS §2's "no code authenticates a responder static key" —
 the message flow, not just the DH primitive, must change.
+
+## Implementation plan & effort estimate (session 264 addendum)
+
+The follow-up work decomposes into six stages; estimates are in Devin
+session units (1 session ≈ one focused implementation+test iteration),
+not human-weeks. Every stage touches `internal/stratum/noise*` or its
+callers — all CODEOWNERS-gated for maintainer review, so the calendar
+cost is dominated by sequential review rounds, not the work itself.
+
+| # | Stage | Scope | Estimate | Risk |
+|---|-------|-------|----------|------|
+| 1 | secp256k1 ECDH swap | `decred/dcrd/dcrec/secp256k1/v4` import (dep #4, already accepted), replace the P-256 `ecdh` calls in `noise.go`, update wire sizes (33-byte compressed → spec wire form handled by stage 2) | ~1 session | low |
+| 2 | ElligatorSwift port | Hand-port of BIP324's 64-byte x-only encoding — **no audited Go implementation exists**; cross-test against bitcoin-core `examples/ellswift.c` vectors is mandatory acceptance (queue criterion) | ~2 sessions | **high** — the residual DIY-crypto risk this ADR warns about |
+| 3 | BIP-340 Schnorr | Needed for the 2-level PKI certificate signature check. Two sub-options: (a) adopt `btcec/v2`'s `schnorr` package — a **fifth** runtime dep needing a second ADR-003 exception; (b) implement BIP-340 *verification* (~100 lines) on decred primitives — smaller dep surface but more owned crypto. Decision belongs to the maintainer | ~1 session (a) / ~1.5 (b) | medium |
+| 4 | Server-cert verification (2-level PKI) | `VerifyServerCert(valid_from, not_valid_after, server_public_key, sig, authority_pubkey, now)` per sv2-spec 04-Protocol-Security, plus a per-pool `authority_pubkey` config field (PoolConfig) | ~1 session | medium |
+| 5 | NX message-flow rework | KNOWN_LIMITATIONS §2's three structural gaps: `ReadMessage2`'s x-only fallback derives keys from `mixHash` alone (no DH at all — on-path observer can reproduce), `mixKey`'s HKDF output `k` computed and discarded, responder static key never authenticated | ~1.5 sessions | high — protocol-correctness, not just crypto |
+| 6 | Live wiring + interop test | `runSession` currently `net.Dial`s plaintext with zero callers of the handshake — wire `NewHandshakeInitiator`/`EncryptedConn` into the V2 dial path behind a scheme flag, then prove against a real V2 pool before removing KNOWN_LIMITATIONS §2 | ~1 session + external wait | medium — pool availability for interop testing is an external dependency |
+
+**Total: ~7–8 sessions of work** (+ maintainer-review latency ×6 stages,
++ the dependency decision for stage 3a). Ordering is strict: 1 → 2/3
+(parallelisable) → 4 → 5 → 6; stage 5's flow rework must precede live
+wiring or the encrypted channel would ship the known no-DH fallback
+hole to production.
+
+**Non-goals for v3.1.0:** JDC/template work (ADR-009), alternate
+handshake patterns, responder-side implementation (Otedama initiates
+only).
+
+**Fallback if the ellswift port stalls (stage 2 > 3 sessions):** ship
+`stratum+v2noise://` without ellswift — a 33-byte compressed-key wire
+form is *not* spec-conformant but restores real DH+authentication; it
+interoperates only with pools that accept the non-standard form, so it
+would be a documented interim scheme, not a §2-closer. Not recommended;
+recorded only to bound the downside.

@@ -53,7 +53,12 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
    sv2-spec `04-Protocol-Security.md`（Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256、
    BIP324の64バイトellswift、2-level PKIサーバ認証）。監査済みGo実装が存在しない
    ため手書き移植になる — bitcoin-core `examples/ellswift.c` のベクタで
-   クロステスト必須。ADR-011 Erratumに全論点記録済み。工数見積の再提示から着手。
+   クロステスト必須。ADR-011 Erratumに全論点記録済み。
+   — ✅ session 264: ADR-011に6ステージ計画＋工数見積（計7–8セッション＋
+   CODEOWNERSレビュー待ち×6）追記。ellswift移植（~2s,高リスク）と
+   NXフロー改修（~1.5s）がクリティカルパス、stage3のBIP-340は
+   dep判断（btcec/v2 vs decred上の自前verify）をメンテナに留保。
+   実装自体はCODEOWNERSゲートのため着手せず。
 3. **tlsmlkemピンの設計判断の起案**: ✅ 起案済み（session 261）。
    `docs/adr/ADR-012`（Proposed）に判断材料を整理 — 選択肢A（pin維持＋
    doc訂正。toolchain go1.25.7＋containermaxprocs=1で実効フロアは既に

@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 264 — ADR-011にNoise NX/ellswift実装計画＋工数見積を追記)
+
+quality-passキュー項目2（Noise NX / ellswift実装計画）をADR-011への
+session-264 addendumとして起案。sv2-spec `04-Protocol-Security.md`の
+受け入れ基準（`Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256`、BIP324
+64バイトellswift、2-level PKIサーバ認証）に沿って6ステージに分解:
+① secp256k1 ECDH swap（dep#4、ADR-011受理済み）② ElligatorSwift
+手書き移植（監査済みGo実装なし — bitcoin-core `examples/ellswift.c`
+ベクタのクロステストが必須受入条件、~2セッション・最高リスク）
+③ BIP-340 Schnorr（btcec/v2のdep#5化 vs decredプリミティブ上の
+自前verify — メンテナ判断留保）④ サーバ証明書verify+
+`authority_pubkey`設定項目 ⑤ NXメッセージフロー改修（no-DH fallback
+穴・`mixKey`出力破棄・responder静的鍵未認証 — KNOWN_LIMITATIONS §2の
+構造的欠陥3件）⑥ ライブ接続への配線＋実プール相互運用テスト。
+**合計見積 ~7–8セッション＋CODEOWNERSレビュー待ち×6**。ellswift移植が
+3セッション超で停滞する場合のフォールバック（非標準wire形式の暫定
+スキーム）も記録。実装自体はnoise*のmaintainer-review gateのため
+本セッションでは着手せず。
+
 ### Docs (session 263 — ADR-013: 実Akashプロバイダ統合の設計起案＋Cat5 #3実装済み検証)
 
 quality-passキュー項目5（実Akash統合の設計）をADR-013（Proposed）として
