@@ -30,10 +30,11 @@
 //	client → pool: mining.submit                     (share)
 //	pool → client: result: true | false              (verdict)
 //
-// Plus optional mining.set_extranonce and various pool-specific
-// extensions (NiceHash version-rolling, ASICBoost via mining.configure,
-// suggest_difficulty). We support the common subset and ignore unknown
-// notifications.
+// Plus optional mining.set_extranonce, mining.ping (pool→client keepalive
+// request — answered with a "pong" result via respond()), and various
+// pool-specific extensions (NiceHash version-rolling, ASICBoost via
+// mining.configure, suggest_difficulty). We support the common subset
+// and ignore unknown notifications.
 //
 // # What this file does NOT do
 //
@@ -277,9 +278,40 @@ func (s *session) dispatch(line []byte) {
 			s.lastReconnect.Store(&d)
 		}
 		go s.Close()
-		// Other notifications (mining.set_version_mask, etc.) are
-		// silently ignored; forward-compatible with pool extensions.
+	case "mining.ping":
+		// Application-level keepalive used by Braiins, NiceHash and
+		// ckpool-style pools: the pool sends a request carrying an id and
+		// expects {"id":<id>,"result":"pong","error":null} back. Strict
+		// pools disconnect clients that never answer (the connection then
+		// looks half-open: TCP alive, application dead). A ping without an
+		// id is a malformed notification — ignore it.
+		if msg.ID != nil {
+			s.respond(msg.ID, "pong")
+		}
 	}
+	// Other notifications (mining.set_version_mask, etc.) are
+	// silently ignored; forward-compatible with pool extensions.
+}
+
+// respond writes a JSON-RPC result reply for a server→client request
+// (currently mining.ping). It is best-effort: a write failure is
+// swallowed because the broken connection is surfaced by the read loop
+// anyway, and there is nothing actionable to do mid-parse.
+func (s *session) respond(id any, result any) {
+	body, err := json.Marshal(map[string]any{
+		"id":     id,
+		"result": result,
+		"error":  nil,
+	})
+	if err != nil {
+		return
+	}
+	body = append(body, '\n')
+
+	s.writeMu.Lock()
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_, _ = s.conn.raw.Write(body)
+	s.writeMu.Unlock()
 }
 
 // Jobs returns the channel of incoming jobs.
