@@ -972,3 +972,16 @@ but had regressed again as code shipped.
 | CONTRIBUTING "その他の言語は機械翻訳で対応" — no MT pipeline; catalog is 10 languages | ✅ Corrected. |
 | CLAUDE.md factual refs: "ADR-001〜011" (013 exists), "main ブランチ" (default is master), "legacy-v2 ブランチは保全用" (branch was never created — s283), "機械翻訳で1,000言語以上" (no MT) | ✅ Minimal factual corrections; normative sections untouched. |
 | Verified accurate: all 7 workflow filenames in the architecture map exist; CODEOWNERS paths all real; .gitignore protects config.yaml; PR/Conventional-Commits/SPDC requirements match practice; ADR-007/008/009/010 track references in ROADMAP resolve to real ADRs. | ✅ |
+
+## Session 288 update — RESEARCH_IMPROVEMENTS.md ledger staleness audit
+
+The research ledger itself drifts: it is annotated per-session but the
+roll-up sections and older items were never re-synced as code shipped.
+
+| Finding | Disposition |
+|---|---|
+| Cat 2 #8 "engine→poolproto wiring (the dialers aren't imported yet)" — `poolproto.DialURL` is the live connect path for V1 AND V2; the note was stale | ✅ Marked done with session-288 correction note. |
+| Cat 9 #3 "OTel spans — confirm spans exist" — no OTel anywhere in internal/ (planned v3.3.0 `-tags otel` opt-in) | ✅ Item clarified as confirmed-not-implemented. |
+| Item 20 "Otedama already has the histogram and OTel spans (Cat 9 #3)" — the spans premise was false | ✅ Gated on Cat 9 #3. |
+| "Highest-leverage next actions" ranked three completed items (#2 wiring, #3 reject classification, #5 latency/pool metrics) as outstanding | ✅ Rewritten: struck done items, re-ordered the real remainder (secp256k1 via ADR-011, real Akash via ADR-013, CI-unwired cluster §13, SLO doc). |
+| Verified statuses still correct: Cat 1 #6 temperature throttling (no hwmon code — comment only), Cat 1 #11 ASIC undetected (🔵 ADR-008 v3.5), Cat 5 #4 GPU suitability (unimplemented), Cat 9 #10 SLO doc (unimplemented), Cat 10 #1 Noise P-256 stub (open, session-272 divergences already appended). | ✅ |

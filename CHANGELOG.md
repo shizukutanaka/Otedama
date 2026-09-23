@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 288 — RESEARCH_IMPROVEMENTS.md のステータス陳腐化監査)
+
+- **研究台帳の項目ステータスが出荷実態とズレていた**:
+  Cat 2 #8「engine→poolproto wiring（dialers aren't imported yet）」は
+  完了済み（`poolproto.DialURL` が V1/V2 双方のライブ経路）→ ✅に昇格。
+  Cat 9 #3「OTel spans … confirm spans exist」→ 未実装を明記
+  （v3.3.0 opt-in `-tags otel` 計画）。項目20の前提
+  「OTel spans (Cat 9 #3) 既存」は虚偽 → Cat 9 #3 先行ゲートと訂正。
+  「Highest-leverage next actions」ランキングが完了済みの #2（wiring）、
+  #3（reject分類＋メトリクス、s44-45/101/255）、#5（latency＋pool状態
+  メトリクス、s46/91-93）を未完了のまま提示 → 出荷済み打線＋現実の残順序
+  （secp256k1=ADR-011 maintainerゲート、real Akash=ADR-013、CI未配線
+  クラスタ=§13、SLO doc）に更新。
+- 検証済みクリーン（ステータス正しい）: Cat 1 #6 温度スロットリング未実装
+  （hwmon読取コード無し）、Cat 1 #11 ASIC未検出（🔵 ADR-008 v3.5 のまま
+  正しい）、Cat 5 #4 GPU suitability 未実装、Cat 9 #10 SLO doc 未実装、
+  Cat 10 #1 Noise P-256 stub 依然 open（s272 発見を追記済み）、SRI v1.11.0
+  陳腐化注記・Bitcoin Core v30 IPC・DATUM SV1-only・chain-sdk 後継は
+  全て一次検証済み注記として正確。
+
 ### Fixed (session 287 — CONTRIBUTING/ROADMAP/CLAUDE.md の実態監査)
 
 - **ROADMAP.md のマイルストーンが既出荷項目を未着手扱い**: engine →

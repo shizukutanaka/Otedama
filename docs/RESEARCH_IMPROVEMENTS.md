@@ -97,8 +97,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
-   `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
+8. ✅ **engine→poolproto wiring** — done: `engine.Run` connects via
+   `poolproto.DialURL` (`internal/engine/run.go`); the V2 dialer and the
+   `stratumv1` V1 dialer (`stratum+tcp://`/`stratum+tls://`) are both
+   registered and load-bearing (`runSessionV1`/`runSessionV2` live).
+   (status corrected session 288 — the "dialers aren't imported" note
+   was stale).
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
@@ -402,8 +406,9 @@ arXiv grounding (session 41):
 1. ✅ **Prometheus text-format `/metrics`** without a client dependency
    (ADR-005).
 2. ✅ **Health endpoint** + `ServeError()` accessor (session 31).
-3. 🟡 **OpenTelemetry traces** for the connect→handshake→mine span — ADR
-   mentions OTel; confirm spans exist on pool dial and submit.
+3. 🟡 **OpenTelemetry traces** for the connect→handshake→mine span —
+   confirmed **not implemented** (no OTel dependency or span code exists;
+   ROADMAP v3.3.0 plans it as opt-in via a `-tags otel` build tag).
 4. ✅ **Reject-rate & stale-rate gauges** (ties to Category 1). — session 101:
    `otedama_reject_rate` (rejected/judged) and `otedama_stale_rate`
    (stale-rejected/judged) gauges, recomputed each stats tick via
@@ -761,9 +766,10 @@ endpoint against current vendor documentation. Tags as before
 20. 🟡 **Emit trace exemplars on the submit-latency histogram.**
     prometheus/client_golang v1.23 (Jul 2025) + OpenMetrics 1.0 allow a
     `{trace_id="…"}` exemplar on a histogram bucket so a p99 spike links to
-    its trace. Otedama already has the histogram (Cat 2 #7) and OTel spans
-    (Cat 9 #3); joining them is a small extension to the hand-rolled
-    exposition writer (no client_golang dep — keeps ADR-003/005).
+    its trace. Otedama already has the histogram (Cat 2 #7); OTel spans do
+    not exist yet (Cat 9 #3 — v3.3.0 opt-in build tag), so this item is
+    gated on that milestone. The exemplar half is a small extension to the
+    hand-rolled exposition writer (no client_golang dep — keeps ADR-003/005).
 21. ✅ **Follow Prometheus naming: `_info` gauge, bounded labels, std runtime
     metrics.** `CollectFunc`/`RegisterCollector` hook added to `internal/metrics`
     registry; `RuntimeCollector()` emits 12 standard `go_*` metrics
@@ -1047,23 +1053,29 @@ month, so the discipline matters.
 
 Ranked by impact on the path to a real v3.1.0:
 
-1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
-   channel; library identified, licence compatible. Needs an ADR for the
-   dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — makes the V2 dialer and job
-   bridge (already built and tested) actually load-bearing; removes the
-   dead-code state.
-3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
-   — small, high-value observability win that directly reflects miner
-   profitability and needs no new dependency.
-4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
-   placeholder; larger effort, external API.
-5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable.
+*Updated session 288 — the list now reflects shipped state. Completed items
+are struck; the remainder is the real outstanding order.*
 
-Items 3 and 5 are the cheapest real-code wins with no dependency or
-external-API risk, and are the natural next implementation targets after the
-research-only passes.
+1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
+   channel; library identified, licence compatible. ADR-011 holds the staged
+   plan (secp256k1 + BIP-340 + hand-ported ElligatorSwift); maintainer-gated
+   path (`internal/stratum/noise*`).
+2. ~~**engine→poolproto wiring (Cat 2 #8)**~~ — **done**: `poolproto.DialURL`
+   is the live connect path for both protocols (`runSessionV1`/`runSessionV2`).
+3. ~~**Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**~~
+   — **done** (sessions 44–45, 101, 255: reject classes incl. `transition`,
+   `otedama_reject_rate`/`_stale_rate` gauges).
+4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
+   placeholder; larger effort, external API. Design exists: ADR-013
+   (stdlib REST `/status` + AEP-64 JWT) — the natural next *big* item.
+5. ~~**Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)**~~ — **done**
+   (sessions 46, 91–93: latency quantiles, connection-state and
+   active-index gauges).
+
+The remaining highest-leverage items are now: #1 secp256k1/Noise (maintainer
+gate), #4 real Akash (ADR-013), the unwired-CI cluster (govulncheck,
+osv-scanner, Scorecard, fuzz, benchmark compare — KNOWN_LIMITATIONS §13,
+maintainer-side), and Cat 9 #10 SLO documentation as the cheap doc win.
 
 ---
 
