@@ -187,8 +187,9 @@ type engineMetrics struct {
 
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other/transition).
-	reg            *metrics.Registry
-	rejectByReason map[string]*metrics.Counter
+	reg              *metrics.Registry
+	rejectByReasonMu sync.Mutex
+	rejectByReason   map[string]*metrics.Counter
 
 	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
 	// one per reject category, created lazily on first rejection of that type.
@@ -487,15 +488,19 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // from rejectClass (stale/duplicate/difficulty/hardware/other), giving
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
+// Safe for concurrent use; counters are created lazily on first call for
+// a given category.
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
-	if c, ok := m.rejectByReason[category]; ok {
-		return c
+	m.rejectByReasonMu.Lock()
+	c, ok := m.rejectByReason[category]
+	if !ok {
+		c = m.reg.NewCounter(
+			"otedama_shares_rejected_by_reason_total",
+			"Rejected shares broken down by inferred root cause.",
+			map[string]string{"reason": category})
+		m.rejectByReason[category] = c
 	}
-	c := m.reg.NewCounter(
-		"otedama_shares_rejected_by_reason_total",
-		"Rejected shares broken down by inferred root cause.",
-		map[string]string{"reason": category})
-	m.rejectByReason[category] = c
+	m.rejectByReasonMu.Unlock()
 	return c
 }
 
@@ -599,9 +604,13 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	// rejected counter so `judged` and the unaccounted-share reconciliation
 	// stay correct, but the acceptance/reject/stale rates are computed
 	// against genuine failures only.
+	m.rejectByReasonMu.Lock()
+	transitionCounter := m.rejectByReason[rejectReasonTransition]
+	staleCounter := m.rejectByReason["stale"]
+	m.rejectByReasonMu.Unlock()
 	var transition uint64
-	if c, ok := m.rejectByReason[rejectReasonTransition]; ok {
-		transition = c.Value()
+	if transitionCounter != nil {
+		transition = transitionCounter.Value()
 	}
 	realRejected := rejected
 	if realRejected >= transition {
@@ -629,8 +638,8 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	}
 	m.rejectRate.Set(float64(realRejected) / float64(judged))
 	var stale uint64
-	if c, ok := m.rejectByReason["stale"]; ok {
-		stale = c.Value()
+	if staleCounter != nil {
+		stale = staleCounter.Value()
 	}
 	m.staleRate.Set(float64(stale) / float64(judged))
 	return rate, judged

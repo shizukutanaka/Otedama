@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 316 — engine メトリクス map の mutex 欠如)
+
+- **`rejectByReason` lazy カウンタ map が mutex 無保護だった** —
+  兄弟の lazy map 3 つ（`lastRejectByReason`、`sharesFoundPerDevice`、
+  `payoutInfo`）は全て専用 mutex を持つのに、当 map の書込
+  （`rejectReason`）と読取（`updateShareRates` の2箇所）だけが
+  無保護のまま残っていた。現行の呼出は全てセッション goroutine 上で
+  逐次のため今日は発火しないが、将来 reject 記録が別 goroutine に
+  移った瞬間に concurrent map read/write で panic する設計不整合を、
+  兄弟と同じパターンで解消。
+
 ### Fixed (session 315 — stratumv1 パーサの静かなゼロ値)
 
 - **`mining.notify` の必須フィールド破損をゼロ値で黙殺していた** —
