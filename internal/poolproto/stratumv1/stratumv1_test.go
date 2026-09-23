@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"sync"
@@ -2278,4 +2279,56 @@ func TestSession_E2E_UnknownNotificationStaysSilent(t *testing.T) {
 		t.Fatalf("notification produced a reply: %q", line)
 	}
 	// A timeout is the expected outcome — no reply written.
+}
+
+// ============================================================================
+// mining.set_target — NiceHash-style direct target assignment
+// ============================================================================
+
+func TestParseSetTarget(t *testing.T) {
+	// diff1Target = 0xffff << 208 → difficulty 1; half that → 2; 1/16th → 16.
+	diff1Hex := "00000000ffff0000000000000000000000000000000000000000000000000000"
+	halfHex := "000000007fff8000000000000000000000000000000000000000000000000000"
+	sixteenthHex := "000000000ffff000000000000000000000000000000000000000000000000000"
+	cases := []struct {
+		name     string
+		params   string
+		wantOK   bool
+		wantDiff float64
+	}{
+		{"difficulty-1 target", `["` + diff1Hex + `"]`, true, 1.0},
+		{"half target → diff 2", `["` + halfHex + `"]`, true, 2.0},
+		{"1/16 target → diff 16", `["` + sixteenthHex + `"]`, true, 16.0},
+		{"no leading zeros", `["ffff0000000000000000000000000000000000000000000000000000"]`, true, 1.0},
+		{"zero target", `["0000000000000000000000000000000000000000000000000000000000000000"]`, false, 0},
+		{"empty string", `[""]`, false, 0},
+		{"non-hex", `["not-hex-at-all"]`, false, 0},
+		{"overlong (>64 hex)", `["1` + diff1Hex + `"]`, false, 0},
+		{"empty params", `[]`, false, 0},
+		{"number not string", `[1234]`, false, 0},
+	}
+	for _, c := range cases {
+		got, ok := parseSetTarget(json.RawMessage(c.params))
+		if ok != c.wantOK {
+			t.Errorf("%s: ok = %v, want %v", c.name, ok, c.wantOK)
+			continue
+		}
+		if ok && math.Abs(got-c.wantDiff) > c.wantDiff*0.001 {
+			t.Errorf("%s: diff = %v, want ≈%v", c.name, got, c.wantDiff)
+		}
+	}
+}
+
+// TestSession_Dispatch_SetTarget_UpdatesDifficulty: the notification stores
+// the difficulty equivalent — downstream validation sees one semantic.
+func TestSession_Dispatch_SetTarget_UpdatesDifficulty(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"mining.set_target","params":["00000000ffff0000000000000000000000000000000000000000000000000000"]}`))
+	if d := sess.SuggestedDifficulty(); math.Abs(d-1.0) > 0.001 {
+		t.Errorf("SuggestedDifficulty after set_target(diff1) = %v, want ≈1.0", d)
+	}
+	sess.dispatch([]byte(`{"method":"mining.set_target","params":["000000007fff8000000000000000000000000000000000000000000000000000"]}`))
+	if d := sess.SuggestedDifficulty(); math.Abs(d-2.0) > 0.002 {
+		t.Errorf("SuggestedDifficulty after set_target(half) = %v, want ≈2.0", d)
+	}
 }
