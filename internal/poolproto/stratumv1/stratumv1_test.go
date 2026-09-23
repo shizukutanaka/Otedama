@@ -1971,3 +1971,47 @@ func TestSession_SuggestDifficulty_MethodNotFound(t *testing.T) {
 		t.Error("share rejected after declined suggestion")
 	}
 }
+
+func TestSession_E2E_MiningPingGetsPong(t *testing.T) {
+	// Application-level keepalive: Braiins/NiceHash/ckpool-style pools send
+	// {"id":N,"method":"mining.ping","params":[]} and expect
+	// {"id":N,"result":"pong","error":null}. An unanswered ping can get the
+	// client disconnected by strict pools — the connection reads as
+	// half-open (TCP alive, application dead). Previously the request fell
+	// into the "silently ignored" default.
+	clientConn, serverConn := net.Pipe()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		_, _ = serverConn.Write([]byte(
+			`{"id":42,"method":"mining.ping","params":[]}` + "\n"))
+	}()
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reader := bufio.NewReader(serverConn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no pong within 2s: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("pong line did not parse: %v (%q)", err, line)
+	}
+	if resp.uintID() != 42 {
+		t.Errorf("pong id = %v, want 42 (must echo the ping id)", resp.ID)
+	}
+	if resp.Result != "pong" {
+		t.Errorf("pong result = %v, want \"pong\"", resp.Result)
+	}
+	if resp.Error != nil {
+		t.Errorf("pong error = %v, want nil", resp.Error)
+	}
+}
