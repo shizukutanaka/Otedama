@@ -35,6 +35,7 @@ type runFlags struct {
 	noTUI                    bool
 	walletPassphrase         string
 	walletMnemonicPassphrase string
+	noBackupCheck            bool
 	pprofEnabled             bool
 	logFile                  string // --log-file: audit-trail path, written even under the TUI
 	showOrigin               bool   // --origin: annotate config show output with value sources
@@ -75,6 +76,10 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 			"created. Distinct from --wallet-passphrase (which encrypts the seed at "+
 			"rest); this changes which seed the recovery mnemonic derives to. Not "+
 			"needed again after first run — it is already folded into wallet.dat.")
+	fs.BoolVar(&f.noBackupCheck, "no-wallet-backup-check", false,
+		"(run only) Skip the interactive recovery-phrase backup check on first "+
+			"wallet creation (re-entering a few words). The check only ever runs "+
+			"on an interactive terminal; unattended runs already skip it.")
 	fs.StringVar(&f.LogFormat, "log-format", "", "Log output format: text or json.")
 	fs.StringVar(&f.logFile, "log-file", "",
 		"(run only) Append structured logs to this file. Written even while the TUI is active, "+
@@ -217,9 +222,11 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	if err := engine.Run(ctx, engine.Options{
 		Config:                   cfg,
 		Output:                   stdout,
+		Input:                    os.Stdin,
 		NoTUI:                    f.noTUI,
 		WalletPassphrase:         f.walletPassphrase,
 		WalletMnemonicPassphrase: f.walletMnemonicPassphrase,
+		NoBackupCheck:            f.noBackupCheck,
 		Logger:                   structlog.Adapter(),
 		Metrics:                  metricsRegistry,
 		OnReady:                  onReady,

@@ -134,6 +134,16 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	if wm.IsNew() {
 		log("info", "wallet: new wallet created — back up your recovery phrase")
 		printRecoveryPhrase(opts.Output, wm.Mnemonic(), fingerprint)
+		// First-run backup check (RESEARCH_IMPROVEMENTS Cat 3 #8):
+		// proving the written copy matches is the only window in which
+		// a transcription error is still fixable — BIP-39 derivation is
+		// one-way, so no later check can re-derive the phrase. Skipped
+		// unless stdin is a real terminal, so unattended first runs
+		// (systemd, docker, scripts) are never blocked on input.
+		if !opts.NoBackupCheck && interactiveInput(opts.Input) &&
+			!runBackupVerification(opts.Output, opts.Input, wm.Mnemonic(), pickBackupPositions) {
+			log("warn", "wallet: recovery-phrase backup could not be verified — your written copy may contain a transcription error")
+		}
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
