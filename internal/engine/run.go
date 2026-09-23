@@ -1434,8 +1434,14 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	if err != nil {
 		return 0, 0, miner.Hash{}, err
 	}
+	if msg.OpenMiningChannelError != nil {
+		// A named protocol rejection (e.g. "unsupported-user") — surface
+		// the pool's reason so misconfiguration is diagnosable. Kept
+		// non-fatal: failover to the next pool may still succeed.
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel open rejected: %s", msg.OpenMiningChannelError.Error)
+	}
 	if msg.OpenMiningChannelSuccess == nil {
-		return 0, 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
+		return 0, 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during channel open", f.Header.MsgType)
 	}
 	omcs := msg.OpenMiningChannelSuccess
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
