@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 306 — internal/lightning 専用監査記録)
+
+- `internal/lightning`（資金直結・CODEOWNERS maintainer ゲート）の読取専用
+  監査を実施し CATEGORY_AUDIT に記録。挙動変更なし。新規発見5件: ①
+  `wm.mnemonic` が初回作成後にプロセス終了まで残留（`Mnemonic()` doc の
+  "only returned once" 記述と乖離 — getter は冪等）②`MnemonicToSeed` が
+  mnemonic/passphrase を NFKD 正規化せず PBKDF2 へ（BIP-39 要件 — English
+  語彙は ASCII のため現行影響なし、`WithMnemonicPassphrase` 自由入力が
+  復元ツール間差異の縁）③`wallet.fingerprint` が非原子書込＋unlock 時に
+  再検証されず（部分書込/陳腐値の誤表示 — 資金影響なし・UI のみ）④
+  `createNew`/変換パイプラインの中間体（entropy・bits バッファ）未消去 —
+  s277 記録の PBKDF2 中間体と同クラス ⑤`loadExisting` の無制限
+  `os.ReadFile`（ローカル自己 DoS のみ）。s277 記録の TOCTOU・PBKDF2
+  中間体は再記録せず参照。
+- 併せて堅牢性の検証済み項目を明記: BIP-39 公式ベクタ（Trezor
+  vectors.json＋all-0x00/all-0xFF）テスト済み、wordlist SHA-256 完全性
+  チェック（init panic）、scrypt 2¹⁷/r8/p1＋AES-256-GCM、wallet.dat の
+  原子書込＋0600、空 passphrase の二重拒否、`ChangePassphrase` の
+  ディスク復号検証、mnemonic が opts.Output のみに到達（logger/metrics
+  経路なし＋s305 の非TTY ガード）。
+
 ### Fixed (session 305 — SV2 ハンドシェイクのワイヤ準拠・接続全フェーズのバウンド・Windows SCM・wallet 非TTY)
 
 - **SV2 SetupConnection が `endpoint_port` U16 を欠落** — ワイヤ上は
