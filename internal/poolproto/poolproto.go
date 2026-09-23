@@ -10,11 +10,10 @@
 // registered Dialer: Stratum V1 (legacy JSON-RPC over TCP, optionally
 // TLS — package stratumv1) and Stratum V2 (binary framing with Noise
 // NX encryption — package stratumv2). DATUM (OCEAN's protocol,
-// layered on SV1 transport) has a reserved URL scheme constant
-// (ProtocolDATUM) and is planned (see docs/adr/ADR-009, status
-// Proposed) but has no Dialer registered anywhere and no
-// implementation package — DialURL("datum://...") returns
-// ErrUnknownProtocol today. See docs/KNOWN_LIMITATIONS.md for the
+// layered on SV1 transport) is served by the stratumv1 dialer under
+// the datum:// scheme — the gateway's miner-facing wire is plain
+// Stratum V1; its decentralised-template work happens gateway-side
+// (docs/adr/ADR-009). See docs/KNOWN_LIMITATIONS.md for the
 // current implementation-status summary.
 //
 // # Why this exists (the 10-year case)

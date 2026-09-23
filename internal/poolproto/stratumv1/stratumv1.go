@@ -39,10 +39,10 @@
 // # What this file does NOT do
 //
 //   - TLS: the stratum+tls:// scheme uses tls.Dial in a sibling file.
-//   - DATUM: OCEAN's variant uses different message types. No package
-//     datum exists yet — this is planned (docs/adr/ADR-009, status
-//     Proposed), not implemented; poolproto.ProtocolDATUM is a
-//     reserved URL-scheme constant with no Dialer registered.
+//   - DATUM: the datum:// scheme is served by this same dialer — the
+//     OCEAN gateway's miner-facing wire is plain Stratum V1 (the
+//     decentralised-template work happens gateway-side; see
+//     KNOWN_LIMITATIONS §14 and ADR-009). No separate wire format.
 //   - Job Declaration Protocol: SV2 only; not relevant to V1.
 package stratumv1
 
@@ -552,6 +552,11 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 func init() {
 	poolproto.Register(&Dialer{})
 	poolproto.Register(&Dialer{useTLS: true})
+	// The DATUM gateway's miner-facing wire is Stratum V1 (its
+	// decentralised-template work happens gateway-side — see
+	// KNOWN_LIMITATIONS §14), so datum:// routes through the same
+	// plaintext V1 session; only the reported ProtocolID differs.
+	poolproto.Register(&Dialer{datum: true})
 }
 
 // Compile-time assertion that *Dialer satisfies poolproto.Dialer.

@@ -205,9 +205,12 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 
 // ----- helpers -----
 
-// parseAddress extracts host:port from a stratum+tcp:// or stratum+tls:// URL.
+// parseAddress extracts host:port from a stratum+tcp://, stratum+tls://,
+// or datum:// URL. The DATUM gateway's miner-facing wire is plain
+// Stratum V1, so its scheme parses through the same path (KNOWN_LIMITATIONS
+// §14).
 func parseAddress(url string) (string, error) {
-	for _, prefix := range []string{"stratum+tcp://", "stratum+tls://"} {
+	for _, prefix := range []string{"stratum+tcp://", "stratum+tls://", "datum://"} {
 		if rest, ok := strings.CutPrefix(url, prefix); ok {
 			if rest == "" {
 				return "", fmt.Errorf("stratumv1: empty host in %q", url)

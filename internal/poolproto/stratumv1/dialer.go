@@ -33,6 +33,12 @@ type Dialer struct {
 	// certificate-verified TLS connection (see tls.go) instead of plaintext.
 	useTLS bool
 
+	// datum marks the datum:// scheme variant: the OCEAN DATUM gateway's
+	// miner-facing wire protocol is Stratum V1 (see KNOWN_LIMITATIONS §14),
+	// so the same plaintext V1 session handles it — the dialer only differs
+	// in which scheme it parses and which ProtocolID it reports.
+	datum bool
+
 	// tlsConfig overrides the TLS settings used when useTLS is true. nil means
 	// the secure default (verify against the system roots, TLS 1.2+). Exposed
 	// for tests to trust a self-signed certificate; production leaves it nil.
@@ -41,6 +47,9 @@ type Dialer struct {
 
 // Protocol identifies which scheme this Dialer handles.
 func (d *Dialer) Protocol() poolproto.ProtocolID {
+	if d.datum {
+		return poolproto.ProtocolDATUM
+	}
 	if d.useTLS {
 		return poolproto.ProtocolStratumV1TLS
 	}

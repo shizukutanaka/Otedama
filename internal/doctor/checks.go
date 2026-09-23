@@ -1056,6 +1056,7 @@ func stripScheme(url string) string {
 	for _, p := range []string{
 		"stratum+v2tls://", "stratum+v2://",
 		"stratum+tls://", "stratum+tcp://",
+		"datum://",
 	} {
 		if rest, ok := strings.CutPrefix(url, p); ok {
 			return rest

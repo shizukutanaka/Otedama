@@ -184,8 +184,9 @@ type Config struct {
 // PoolConfig describes a single mining pool connection.
 type PoolConfig struct {
 	// URL is the stratum endpoint, for example "stratum+tcp://pool.example.com:3333"
-	// or "stratum+v2://pool.example.com:34254". The scheme determines the
-	// protocol version.
+	// or "stratum+v2://pool.example.com:34254"; a "datum://" URL reaches an
+	// OCEAN DATUM gateway over the Stratum V1 wire. The scheme determines
+	// the protocol version.
 	URL string `yaml:"url"`
 
 	// User is the Stratum user_identity sent when opening the mining
@@ -708,7 +709,13 @@ func validateBitcoinAddress(addr string) error {
 
 // validatePoolURL checks that a pool URL has an acceptable scheme.
 func validatePoolURL(raw string) error {
-	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
+	// datum:// rides the Stratum V1 dialer: the OCEAN DATUM gateway's
+	// miner-facing wire is plain SV1 (KNOWN_LIMITATIONS §14).
+	validSchemes := []string{
+		"stratum+tcp://", "stratum+tls://",
+		"stratum+v2://", "stratum+v2tls://",
+		"datum://",
+	}
 	for _, s := range validSchemes {
 		if rest, ok := strings.CutPrefix(raw, s); ok {
 			if rest == "" {

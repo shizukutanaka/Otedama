@@ -616,7 +616,10 @@ type poolMsg struct {
 func runSession(ctx context.Context, opts sessionOpts) error {
 	proto := poolproto.FromURL(opts.poolURL)
 	opts.log("info", fmt.Sprintf("engine: transport protocol: %s", proto))
-	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS {
+	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS ||
+		proto == poolproto.ProtocolDATUM {
+		// datum:// rides the same V1 session: the gateway's miner-facing
+		// wire is plain Stratum V1 (KNOWN_LIMITATIONS §14).
 		return runSessionV1(ctx, opts)
 	}
 
