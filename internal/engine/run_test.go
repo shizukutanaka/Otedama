@@ -3313,3 +3313,42 @@ func TestPublishPoolLinkLiveness(t *testing.T) {
 		t.Errorf("lastPoolMessageAt = %v, want 1720000000", v)
 	}
 }
+
+// protoErrSession is a minimal poolproto.Session that only implements
+// ProtoErrorInformer — the capability publishPoolParseErrors polls.
+type protoErrSession struct {
+	poolproto.Session
+	n int64
+}
+
+func (s protoErrSession) ProtoErrorCount() int64 { return s.n }
+
+// TestPublishPoolParseErrors verifies the V1 parse-error bridge: deltas
+// land exactly once against `last`, a non-informant session is a no-op,
+// and the counter tracks the session's monotonic total.
+func TestPublishPoolParseErrors(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+	var last int64
+
+	publishPoolParseErrors(m, nil, &last) // no informant capability
+	if v := m.poolParseErrors.Value(); v != 0 {
+		t.Fatalf("poolParseErrors = %v, want 0 for a non-informant session", v)
+	}
+
+	sess := protoErrSession{n: 3}
+	publishPoolParseErrors(m, sess, &last)
+	if v := m.poolParseErrors.Value(); v != 3 {
+		t.Fatalf("poolParseErrors = %v, want 3", v)
+	}
+
+	publishPoolParseErrors(m, sess, &last) // same tick value → no double-count
+	if v := m.poolParseErrors.Value(); v != 3 {
+		t.Fatalf("poolParseErrors = %v after repeat, want 3 (delta counted once)", v)
+	}
+
+	sess.n = 7
+	publishPoolParseErrors(m, sess, &last)
+	if v := m.poolParseErrors.Value(); v != 7 {
+		t.Fatalf("poolParseErrors = %v, want 7 (cumulative delta)", v)
+	}
+}

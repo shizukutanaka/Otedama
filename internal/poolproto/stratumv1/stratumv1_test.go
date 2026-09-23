@@ -2595,3 +2595,41 @@ func TestSession_LastMessageAt_TracksAnyInbound(t *testing.T) {
 			"(notification traffic must stamp liveness)", got, before, time.Now().Unix())
 	}
 }
+
+// TestSession_ProtoErrorCount verifies malformed inbound traffic is
+// counted — the drops are correct resilience but must stay visible:
+// a pool speaking garbage must not look like a quiet pool.
+func TestSession_ProtoErrorCount(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	if got := sess.ProtoErrorCount(); got != 0 {
+		t.Fatalf("ProtoErrorCount = %d before any traffic, want 0", got)
+	}
+	sess.start(context.Background())
+	defer sess.Close()
+	defer serverConn.Close()
+
+	go func() {
+		// Malformed JSON, a well-formed-but-invalid notify, then a valid
+		// message — only the first two count.
+		_, _ = serverConn.Write([]byte("{not json\n"))
+		_, _ = serverConn.Write([]byte(
+			`{"id":null,"method":"mining.notify","params":[1,2,3]}` + "\n"))
+		_, _ = serverConn.Write([]byte(
+			`{"id":null,"method":"mining.set_difficulty","params":[1024]}` + "\n"))
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for sess.ProtoErrorCount() < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := sess.ProtoErrorCount(); got != 2 {
+		t.Errorf("ProtoErrorCount = %d, want 2 "+
+			"(malformed line + bad notify; the valid message must not count)", got)
+	}
+}
