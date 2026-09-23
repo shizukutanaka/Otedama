@@ -215,6 +215,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_provider_reliability` | gauge | Beta-Bernoulli posterior mean per `{provider}` (ADR-010 A6); discounts quoted confidence. |
 | `arbitration_yield_forecast_sats_per_second` | gauge | Holt-Winters one-step-ahead predicted yield per `{stream,device}` (ADR-010 A1). |
 | `arbitration_forecast_misses_total` | counter | Quotes deviating >2σ from the forecast per `{stream,device}` (ADR-010 A1/A8 signal). |
+| `arbitration_forecaster_resets_total` | counter | A8 change-point resets per `{stream,device}` — median of last-5 errors > 2σ re-seeds the smoother. |
 | `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |

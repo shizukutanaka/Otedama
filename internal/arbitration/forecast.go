@@ -29,6 +29,23 @@ type YieldForecaster struct {
 	initialized  bool
 
 	mae float64 // EWMA of absolute one-step forecast error
+
+	// A8 change-point detection (CTS-lite, Mellor & Shapiro 2013): a
+	// rolling window of the last-5 absolute one-step errors. When the
+	// window's median exceeds 2σ (the running MAE above), the smoother is
+	// systematically mispredicting — a regime break (difficulty step,
+	// auction-floor change) — and Update resets the smoother so the next
+	// observation re-seeds the level. The median (not the mean) keeps a
+	// single outlier epoch from triggering a reset: an isolated spike
+	// costs at most one window slot, while a real regime break fills
+	// most of the window with large errors.
+	errWin       [5]float64
+	errPos       int // write position within errWin
+	errWinFilled int // entries populated so far, capped at 5
+	updates      int // lifetime observations; the reset check stays disarmed
+	// for the first 2×window epochs while sigma (the MAE EWMA) converges —
+	// a freshly-seeded forecaster reports near-zero sigma, so any consistent
+	// nonzero error would otherwise look like a regime break.
 }
 
 // NewYieldForecaster returns a forecaster with the ADR-010 defaults for a
@@ -44,16 +61,18 @@ func NewYieldForecaster(period int) *YieldForecaster {
 
 // Update folds one observation into the smoother and returns the absolute
 // error of the forecast it would have made for this step (0 before the
-// forecaster initializes — the first observation seeds the level).
-func (f *YieldForecaster) Update(v float64) float64 {
+// forecaster initializes — the first observation seeds the level) plus a
+// flag telling whether the observation triggered an A8 regime reset.
+func (f *YieldForecaster) Update(v float64) (err float64, reset bool) {
 	if !f.initialized {
 		f.level = v
 		f.initialized = true
 		f.filled = 1
-		return 0
+		return 0, false
 	}
+	f.updates++
 	pred := f.Predict(1)
-	err := math.Abs(v - pred)
+	err = math.Abs(v - pred)
 
 	var season float64
 	if f.period > 0 {
@@ -74,7 +93,48 @@ func (f *YieldForecaster) Update(v float64) float64 {
 
 	// Residual EWMA at rate ~0.1 — sigma input for A8's 2σ regime test.
 	f.mae = 0.9*f.mae + 0.1*err
-	return err
+
+	f.errWin[f.errPos] = err
+	f.errPos = (f.errPos + 1) % len(f.errWin)
+	if f.errWinFilled < len(f.errWin) {
+		f.errWinFilled++
+	}
+	if f.errWinFilled == len(f.errWin) && f.updates >= 2*len(f.errWin) &&
+		f.mae > 0 && median5(f.errWin) > 2*f.mae {
+		f.reset()
+		return err, true
+	}
+	return err, false
+}
+
+// reset clears the smoothed state after an A8 regime break so the next
+// observation re-seeds the level from the new regime. The running MAE is
+// kept — it decays naturally as post-reset errors shrink — but the error
+// window is cleared so a second reset needs five fresh misses.
+func (f *YieldForecaster) reset() {
+	f.level, f.trend = 0, 0
+	for i := range f.seasonal {
+		f.seasonal[i] = 0
+	}
+	f.idx, f.filled = 0, 0
+	f.initialized = false
+	f.errWin = [5]float64{}
+	f.errPos, f.errWinFilled = 0, 0
+	// f.updates deliberately survives the reset: the warm-up gate counts
+	// lifetime observations, and a forecaster that already calibrated once
+	// may immediately re-arm after a break.
+}
+
+// median5 returns the median of a 5-element window (insertion sort — the
+// window is tiny and stays fixed-size, so no allocation is needed).
+func median5(w [5]float64) float64 {
+	a := w
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j] < a[j-1]; j-- {
+			a[j], a[j-1] = a[j-1], a[j]
+		}
+	}
+	return a[2]
 }
 
 // Predict returns the forecast yield steps ahead of the latest

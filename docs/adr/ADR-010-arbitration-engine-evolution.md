@@ -231,6 +231,17 @@ hardening remain v3.5/v3.6 scope.
 
 **Mechanism:** CTS-lite (Mellor & Shapiro 2013): trigger forecaster reset when 5-epoch moving average shifts > 2σ.
 
+**Implementation note (session 281):** the reset half shipped ahead of
+v3.6 — `YieldForecaster.Update` now returns `(err, reset)` and re-seeds
+the smoother when the *median* of its last-5 absolute one-step errors
+exceeds 2σ (median over the literal "moving average": an isolated outlier
+epoch can't trigger, a real cliff fills most of the window). The check
+arms only after 2×window lifetime observations so a freshly-seeded σ
+can't false-fire, and resets are exported as
+`otedama_arbitration_forecaster_resets_total{stream,device}` — a rising
+rate marks providers whose yield moves in cliffs. Full BOCPD run-length
+posteriors and any reset-driven decision override remain v3.6 scope.
+
 **Cost:** ~25h. Necessary glue between A1 and A2.
 
 **Value/cost rank:** ★★★.

@@ -205,9 +205,10 @@ type engineMetrics struct {
 	// otedama_arbitration_yield_forecast_sats_per_second{stream,device} and
 	// the >2σ miss counter otedama_arbitration_forecast_misses_total
 	// {stream,device} — the divergence signal A8's regime reset consumes.
-	yieldForecastMu sync.Mutex
-	yieldForecast   map[[2]string]*metrics.Gauge
-	forecastMisses  map[[2]string]*metrics.Counter
+	yieldForecastMu  sync.Mutex
+	yieldForecast    map[[2]string]*metrics.Gauge
+	forecastMisses   map[[2]string]*metrics.Counter
+	forecasterResets map[[2]string]*metrics.Counter
 
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
@@ -453,6 +454,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		providerReliability:  make(map[string]*metrics.Gauge),
 		yieldForecast:        make(map[[2]string]*metrics.Gauge),
 		forecastMisses:       make(map[[2]string]*metrics.Counter),
+		forecasterResets:     make(map[[2]string]*metrics.Counter),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -532,6 +534,26 @@ func (m *engineMetrics) observeForecastMiss(stream, device string) {
 				"signal for ADR-010 A8's forecaster reset.",
 			map[string]string{"stream": stream, "device": device})
 		m.forecastMisses[key] = c
+	}
+	m.yieldForecastMu.Unlock()
+	c.Inc()
+}
+
+// observeForecasterReset increments otedama_arbitration_forecaster_resets_total
+// {stream,device} when the A8 change-point check (median of the last-5
+// absolute errors > 2σ) fires and the smoother is re-seeded (ADR-010 A8).
+// Safe for concurrent use.
+func (m *engineMetrics) observeForecasterReset(stream, device string) {
+	key := [2]string{stream, device}
+	m.yieldForecastMu.Lock()
+	c, ok := m.forecasterResets[key]
+	if !ok {
+		c = m.reg.NewCounter(
+			"otedama_arbitration_forecaster_resets_total",
+			"Holt-Winters smoother resets triggered by the A8 change-point check "+
+				"(median of last-5 errors > 2σ) — one per detected regime break.",
+			map[string]string{"stream": stream, "device": device})
+		m.forecasterResets[key] = c
 	}
 	m.yieldForecastMu.Unlock()
 	c.Inc()

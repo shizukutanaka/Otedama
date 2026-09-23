@@ -94,3 +94,58 @@ func TestYieldForecaster_NeverPredictsNegative(t *testing.T) {
 		t.Fatalf("Predict returned negative yield %v", got)
 	}
 }
+
+// ============================================================================
+// ADR-010 A8 — change-point reset (CTS-lite)
+// ============================================================================
+
+// A sustained regime break (5-epoch window median error > 2σ) must trigger
+// exactly one reset; afterwards the smoother re-seeds onto the new level.
+func TestYieldForecaster_ResetsOnRegimeBreak(t *testing.T) {
+	f := NewYieldForecaster(24)
+	for i := 0; i < 100; i++ {
+		f.Update(10)
+	}
+	resets := 0
+	for i := 0; i < 60; i++ {
+		if _, reset := f.Update(1000); reset {
+			resets++
+		}
+	}
+	if resets == 0 {
+		t.Fatal("expected at least one A8 reset after a 100x regime break")
+	}
+	if got := f.Predict(1); math.Abs(got-1000) > 100 {
+		t.Fatalf("Predict(1) after reset+convergence = %v, want ~1000", got)
+	}
+}
+
+// A single outlier spike must NOT trigger a reset — the median-of-5 window
+// guards against one bad epoch (a lone anomalous quote is not a regime).
+func TestYieldForecaster_SingleSpikeDoesNotReset(t *testing.T) {
+	f := NewYieldForecaster(24)
+	for i := 0; i < 100; i++ {
+		f.Update(10)
+	}
+	resets := 0
+	f.Update(1000) // one anomalous quote
+	for i := 0; i < 20; i++ {
+		if _, reset := f.Update(10); reset {
+			resets++
+		}
+	}
+	if resets != 0 {
+		t.Fatalf("single spike triggered %d resets, want 0", resets)
+	}
+}
+
+// Smooth drift that the trend component can track must not reset — only
+// discontinuities (cliffs) are regime breaks, not gentle evolution.
+func TestYieldForecaster_NoResetWithinNoise(t *testing.T) {
+	f := NewYieldForecaster(24)
+	for i := 0; i < 300; i++ {
+		if _, reset := f.Update(10 + 0.02*float64(i)); reset {
+			t.Fatalf("unexpected reset at observation %d", i)
+		}
+	}
+}

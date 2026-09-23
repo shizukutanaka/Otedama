@@ -1319,3 +1319,19 @@ func TestObserveForecastMiss_ExposesCounter(t *testing.T) {
 		t.Errorf("miss counter missing or stale in WriteText output:\n%s", out)
 	}
 }
+
+// observeForecasterReset must lazily create the {stream,device} counter.
+func TestObserveForecasterReset_ExposesCounter(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.observeForecasterReset("mining.stratum", "cpu-0")
+
+	var buf bytes.Buffer
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_arbitration_forecaster_resets_total{device="cpu-0",stream="mining.stratum"} 1`) {
+		t.Errorf("reset counter missing in WriteText output:\n%s", out)
+	}
+}

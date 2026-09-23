@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 281 — チェンジポイント検出: ADR-010 A8)
+
+**フォーキャスタのレジームリセット（CTS-lite、Mellor & Shapiro 2013）を
+実装** — ADR-010 feature A8 のリセット側を v3.6 前倒し実装。
+`YieldForecaster` が直近5エポックの絶対誤差の**中央値**が 2σ を超えた時点で
+スムーザを再シード（難易度調整・オークションフロア変動等の断層を横断する際の
+予測崩壊を自己修復）。中央値採用で単発アウトライアは発火せず、
+リセット数は `otedama_arbitration_forecaster_resets_total{stream,device}` に
+記録 — 断層型イールドのプロバイダを実測で識別可能に。検出は累積観測
+2×ウィンドウ後にのみ武装（初期 σ 収束前の誤発火を防止）。完全な BOCPD
+run-length 事後分布とリセット由来の決定オーバーライドは v3.6 スコープ。
+新規依存ゼロ。
+
 ### Added (session 280 — Holt-Winters イールド予測: ADR-010 A1)
 
 **ライブストリーム毎に加法 Holt-Winters（レベル+トレンド+季節）予測器

@@ -101,12 +101,15 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if observed <= 0 {
 				observed = q.Yield.SatsPerSecond
 			}
-			err := fc.Update(observed * q.Yield.Confidence)
+			err, reset := fc.Update(observed * q.Yield.Confidence)
 			stream, device, _ := strings.Cut(key, ":")
 			opts.streamsMu.Unlock()
 			opts.metrics.observeYieldForecast(stream, device, fc.Predict(1))
 			if err > 0 && fc.Sigma() > 0 && err > 2*fc.Sigma() {
 				opts.metrics.observeForecastMiss(stream, device)
+			}
+			if reset {
+				opts.metrics.observeForecasterReset(stream, device)
 			}
 			ts := q.At
 			if ts.IsZero() {
