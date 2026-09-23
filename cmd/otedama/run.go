@@ -10,8 +10,10 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 
+	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/engine"
 	"github.com/shizukutanaka/Otedama/internal/httpserver"
@@ -202,8 +204,13 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	structlog, closeLog := buildLogger(f, cfg, stdout)
 	defer closeLog()
 
+	// The arbitration decision snapshot (ADR-010 A9): engine.Run records
+	// the latest Decide cycle here; /arbitration serves it and
+	// `arb explain` fetches it through the same pointer.
+	decisions := new(atomic.Pointer[arbitration.DecisionSnapshot])
+
 	// Start HTTP health/metrics server if requested.
-	metricsRegistry, httpSrv := startHTTPServer(ctx, cfg.HTTPAddr, f.pprofEnabled, stdout, stderr)
+	metricsRegistry, httpSrv := startHTTPServer(ctx, cfg.HTTPAddr, f.pprofEnabled, decisions.Load, stdout, stderr)
 	if httpSrv != nil {
 		defer httpSrv.Stop()
 	}
@@ -224,6 +231,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		Logger:                   structlog.Adapter(),
 		Metrics:                  metricsRegistry,
 		OnReady:                  onReady,
+		Explain:                  decisions,
 	}); err != nil && err != context.Canceled {
 		structlog.Error("engine", "error", err.Error())
 		plain("error", err.Error())
@@ -308,12 +316,12 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logge
 // http_addr via config.Resolve). Returns the metrics registry and server
 // handle (both nil if no address was set, or if startup failed — a startup
 // failure is logged as a warning but does not abort the run).
-func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, stdout, stderr io.Writer) (*metrics.Registry, *httpserver.Server) {
+func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, decisions func() *arbitration.DecisionSnapshot, stdout, stderr io.Writer) (*metrics.Registry, *httpserver.Server) {
 	if httpAddr == "" {
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
-	srv := httpserver.New(httpAddr, reg, pprofEnabled)
+	srv := httpserver.New(httpAddr, reg, pprofEnabled, decisions)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
 		return reg, nil

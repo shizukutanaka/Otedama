@@ -275,6 +275,21 @@ overlap. Switch cost amortizes over 4h horizon (~$0.07 vs $0.27 advantage).
 
 **Non-custodial check:** ✅ Local report.
 
+**Implementation note (session 286):** the plumbing half shipped ahead of
+v3.5 — the engine records a `arbitration.DecisionSnapshot` after every
+`Decide` tick (one `ExplainRow` per device: selected stream, expected
+yield, the A1 forecaster's one-step prediction ± its MAE error scale,
+the A6 posterior α/β, and the held/switch/foregone detail), served as
+JSON at `GET /arbitration` and rendered per the table above by
+`otedama arb explain` (fetch → `ExplainText`). Differences from the
+mockup: yield is shown in sat/s with the forecast at the next ~30 s tick
+(not a 4 h horizon — matching `Predict`'s calibrated error scale rather
+than extrapolating), the "switch cost" column is expressed via the
+held/switch/foregone detail pending A2's persistent ledger, and the
+free-text "Reasoning" paragraph is pending. The 4h-horizon forecast,
+confidence-interval exclusion test, and switch-cost amortization row
+remain v3.5 scope alongside A2.
+
 ---
 
 ## Architectural sketch
@@ -300,8 +315,7 @@ internal/arbitration/
 │   └── betabernoulli.go
 ├── robust/                 # A7
 │   └── epoch.go            # Lykouris-Mirrokni-style buckets
-└── explain/                # A9
-    └── print.go
+└── explain.go              # A9 (session 286: DecisionSnapshot + ExplainText)
 ```
 
 ---

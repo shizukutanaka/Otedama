@@ -102,6 +102,12 @@ type Options struct {
 	// actual pool connection rather than mere process start. It may be
 	// called multiple times over a run as the connection drops and recovers.
 	OnReady func(ready bool)
+
+	// Explain, if set, receives the arbitration DecisionSnapshot after
+	// every Decide cycle (ADR-010 A9). The HTTP server reads the same
+	// pointer to serve /arbitration, and `otedama arb explain` renders it.
+	// Nil disables snapshot recording.
+	Explain *atomic.Pointer[arbitration.DecisionSnapshot]
 }
 
 // curtailDecision is the pure decision function for the price-curtailment
@@ -299,6 +305,7 @@ func Run(ctx context.Context, opts Options) error {
 		minYield:      opts.Config.MinYieldSatsPerSec,
 		activityMu:    &activityMu,
 		activity:      activity,
+		explain:       opts.Explain,
 	})
 
 	// ----- Phase 7: TUI dashboard -----

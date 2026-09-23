@@ -38,3 +38,9 @@ func (r *ProviderReliability) Update(success bool) {
 func (r *ProviderReliability) PosteriorMean() float64 {
 	return r.alpha / (r.alpha + r.beta)
 }
+
+// Params returns the posterior's pseudo-counts (α successes, β failures),
+// displayed by `arb explain` as evidence weight behind the posterior mean.
+func (r *ProviderReliability) Params() (alpha, beta float64) {
+	return r.alpha, r.beta
+}

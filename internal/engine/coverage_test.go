@@ -1870,3 +1870,122 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
 	}
 }
+
+// TestRunArbitrationLoop_ExplainSnapshot covers the ADR-010 A9 read-model:
+// with explain set, every Decide tick publishes a DecisionSnapshot whose
+// rows carry the forecast and posterior reliability for the assigned
+// stream — the data /arbitration serves and `arb explain` renders.
+func TestRunArbitrationLoop_ExplainSnapshot(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	quoteCh := make(chan provider.Quote, 4)
+	mu := &sync.Mutex{}
+	streamMap := make(map[string]arbitration.Stream)
+
+	devRefs := []arbitration.DeviceRef{{
+		Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+		Capabilities: hal.Capabilities{SHA256d: true},
+	}}
+
+	// One live quote drives updateStreamReliability + the forecaster, so
+	// the snapshot exercises the populated-forecast path, not only dashes.
+	quoteCh <- provider.Quote{
+		ProviderID: "mining.stratum",
+		DeviceID:   "cpu-0",
+		Yield: provider.Yield{
+			SatsPerSecond:    100,
+			NetSatsPerSecond: 100,
+			Confidence:       1.0,
+		},
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		At:               time.Now(),
+	}
+
+	var snap atomic.Pointer[arbitration.DecisionSnapshot]
+	opts := arbitrationLoopOpts{
+		devRefs:   devRefs,
+		streamsMu: mu,
+		streamMap: streamMap,
+		quoteCh:   quoteCh,
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log:       func(_, _ string) {},
+		explain:   &snap,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	// Wait for a snapshot whose row carries a forecast (the quote must be
+	// consumed before the first Decide for the forecaster to exist; if the
+	// tick wins the race the next tick still populates it).
+	deadline := time.After(300 * time.Millisecond)
+	for {
+		s := snap.Load()
+		if s != nil && len(s.Rows) == 1 && s.Rows[0].ForecastSatsPerSec != nil {
+			if s.Rows[0].DeviceID != "cpu-0" || s.Rows[0].Stream != "mining.stratum" {
+				t.Errorf("row assignment mismatch: %+v", s.Rows[0])
+			}
+			if s.Rows[0].ExpectedSatsPerSec != 100 {
+				t.Errorf("ExpectedSatsPerSec = %v, want 100 (confidence 1.0)", s.Rows[0].ExpectedSatsPerSec)
+			}
+			if *s.Rows[0].ForecastSatsPerSec <= 0 {
+				t.Errorf("forecast should be positive after a 100 sat/s quote, got %v", *s.Rows[0].ForecastSatsPerSec)
+			}
+			if s.Policy != arbitration.PolicyMaximizeEarnings.String() {
+				t.Errorf("Policy = %q", s.Policy)
+			}
+			if s.TotalSatsPerSec != 100 || s.Skipped != 0 {
+				t.Errorf("totals: %v sat/s, %d skipped", s.TotalSatsPerSec, s.Skipped)
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("no populated snapshot within 300ms; last=%+v", snap.Load())
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	<-done
+}
+
+// TestRunArbitrationLoop_ExplainSnapshotNilByDefault pins the opt-in: a
+// nil explain pointer records nothing (no goroutine-side work at all).
+func TestRunArbitrationLoop_ExplainSnapshotNilByDefault(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+
+	opts := arbitrationLoopOpts{
+		devRefs:   []arbitration.DeviceRef{{Identity: hal.Identity{ID: "cpu-0"}}},
+		streamsMu: &sync.Mutex{},
+		streamMap: map[string]arbitration.Stream{
+			"s:d": {
+				ID: "s", AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+				YieldPerDevice: map[string]arbitration.Yield{"d": {SatsPerSecond: 1, Confidence: 1}},
+				DefaultYield:   arbitration.Yield{SatsPerSecond: 1, Confidence: 1},
+			},
+		},
+		quoteCh: make(chan provider.Quote),
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     func(_, _ string) {},
+		// explain: nil — recording disabled
+	}
+	done := make(chan struct{})
+	go func() { runArbitrationLoop(ctx, opts); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(300 * time.Millisecond):
+		t.Error("loop did not exit")
+	}
+}

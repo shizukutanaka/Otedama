@@ -14,7 +14,7 @@ func TestCompletion_EmitsPerShellScript(t *testing.T) {
 		shell    string
 		mustHave []string
 	}{
-		{"bash", []string{"complete -F _otedama otedama", "run version config service doctor help completion"}},
+		{"bash", []string{"complete -F _otedama otedama", "run version config service doctor arb help completion"}},
 		{"zsh", []string{"#compdef otedama", "compdef _otedama otedama"}},
 		{"fish", []string{"__fish_use_subcommand", "complete -c otedama"}},
 	}

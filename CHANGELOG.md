@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 286 — arb explain / A9 説明可能性の土台)
+
+- **`otedama arb explain` サブコマンド** — ADR-010 A9（ライブ較正
+  ダッシュボード）の土台を実装。裁定ループが `Decide` ティック毎に
+  `arbitration.DecisionSnapshot`（デバイス毎に選択ストリーム・期待
+  イールド・A1 フォーキャスタの1ステップ予測±MAE・A6 の事後 α/β・
+  held/switch/foregone の内訳）を記録し、`GET /arbitration` で JSON
+  として配信。CLI は既存の4層設定（`--http-addr` → env → config）で
+  アドレスを解決して取得し、ADR-010 の表形式で描画します。初回
+  ティック前は 503、daemon 未到達時は exit 1、アドレス未設定は
+  exit 78。
+- **`ProviderReliability.Params()`** — A9 の表が必要とする事後 α/β
+  へのアクセサを追加。
+
 ### Changed (session 285 — engine→poolproto V2 切替完了)
 
 - **`stratum+v2://` / `stratum+v2tls://` を `poolproto.DialURL` 経由に

@@ -573,7 +573,7 @@ func TestStartHTTPServer_NoAddrReturnsNils(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out, errb bytes.Buffer
-	reg, srv := startHTTPServer(ctx, "", false, &out, &errb)
+	reg, srv := startHTTPServer(ctx, "", false, nil, &out, &errb)
 	if reg != nil {
 		t.Error("startHTTPServer(no addr): reg should be nil")
 	}
@@ -586,7 +586,7 @@ func TestStartHTTPServer_WithAddrStartsServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out, errb bytes.Buffer
-	reg, srv := startHTTPServer(ctx, "127.0.0.1:0", false, &out, &errb)
+	reg, srv := startHTTPServer(ctx, "127.0.0.1:0", false, nil, &out, &errb)
 	if errb.Len() != 0 {
 		t.Fatalf("startHTTPServer: unexpected stderr: %s", errb.String())
 	}

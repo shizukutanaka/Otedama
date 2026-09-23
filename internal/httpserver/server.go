@@ -21,6 +21,12 @@
 //	                 hashrate, shares, pool latency, arbitration switches,
 //	                 and BTC/USD rate over time.
 //
+//	GET /arbitration JSON DecisionSnapshot of the most recent arbitration
+//	                 Decide cycle (ADR-010 A9): per-device assignment,
+//	                 forecast, posterior reliability, held/foregone. This is
+//	                 the read-model `otedama arb explain` renders; 503 while
+//	                 no decision has been recorded yet.
+//
 // # Security
 //
 // The server binds to the configured address. For most users, 127.0.0.1
@@ -34,6 +40,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -47,13 +54,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 )
 
 // Server serves health and metrics endpoints.
 type Server struct {
-	addr     string
-	registry *metrics.Registry
+	addr      string
+	registry  *metrics.Registry
+	decisions func() *arbitration.DecisionSnapshot
 
 	// ready is 1 when the engine is fully started and hashing.
 	// Atomic so it is safe to update from the engine goroutine.
@@ -74,20 +83,26 @@ type Server struct {
 // New creates an HTTP server that exposes metrics from the given registry.
 // The server is not started until Start is called.
 //
+// decisions, when non-nil, supplies the latest arbitration
+// DecisionSnapshot for /arbitration (ADR-010 A9). Pass nil to leave the
+// endpoint permanently 503 (e.g. in a binary that never runs arbitration).
+//
 // If enablePprof is true the standard Go pprof profiling endpoints are
 // mounted at /debug/pprof/. Only enable this on localhost or a private
 // network: pprof exposes goroutine stacks, heap contents, and CPU profiles
 // — do not expose it publicly without authentication.
-func New(addr string, registry *metrics.Registry, enablePprof bool) *Server {
+func New(addr string, registry *metrics.Registry, enablePprof bool, decisions func() *arbitration.DecisionSnapshot) *Server {
 	s := &Server{
-		addr:     addr,
-		registry: registry,
+		addr:      addr,
+		registry:  registry,
+		decisions: decisions,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 	mux.HandleFunc("/metrics", s.handleMetrics)
+	mux.HandleFunc("/arbitration", s.handleArbitration)
 	if enablePprof {
 		registerPprofHandlers(mux)
 	}
@@ -196,6 +211,24 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	_ = s.registry.WriteText(w)
 }
 
+func (s *Server) handleArbitration(w http.ResponseWriter, _ *http.Request) {
+	var snap *arbitration.DecisionSnapshot
+	if s.decisions != nil {
+		snap = s.decisions()
+	}
+	if snap == nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, "no arbitration decision recorded yet\n")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(snap)
+}
+
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -229,6 +262,7 @@ const indexHTML = `<!DOCTYPE html>
 <p>Non-custodial compute arbitration — HTTP management interface.</p>
 <ul>
 <li><a href="/metrics">/metrics</a> — Prometheus scrape endpoint</li>
+<li><a href="/arbitration">/arbitration</a> — latest arbitration decision (JSON)</li>
 <li><a href="/healthz">/healthz</a> — liveness probe</li>
 <li><a href="/readyz">/readyz</a> — readiness probe</li>
 </ul>

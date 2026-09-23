@@ -129,6 +129,24 @@ healthcheck:
   test: ["CMD", "otedama", "doctor"]
 ```
 
+### `otedama arb`
+
+Inspect the running engine's arbitration decisions.
+
+```
+otedama arb explain [--config path] [--http-addr addr]
+```
+
+`arb explain` fetches `GET /arbitration` from the daemon (the `--http-addr`
+flag, then `OTEDAMA_HTTP_ADDR`, then `http_addr` in the config file) and
+renders the latest `DecisionSnapshot` as a per-device table: selected
+stream, expected vs one-step forecast yield (± the forecaster's error
+scale), the Beta-Bernoulli provider reliability posterior used by the
+decision, and the held/switch/foregone detail (ADR-010 A9).
+
+**Exit codes:** `0` — rendered; `1` — daemon unreachable or no decision
+recorded yet (503); `78` — no HTTP address configured.
+
 ---
 
 ## Configuration file
@@ -306,8 +324,20 @@ addresses) appear once their first event occurs.
 
 ### `GET /`
 
-Minimal HTML landing page linking to the three endpoints. Useful for
+Minimal HTML landing page linking to the endpoints. Useful for
 human operators verifying the server is up.
+
+### `GET /arbitration`
+
+Latest arbitration `DecisionSnapshot` as indented JSON — one row per
+device with the selected stream, expected yield, the Holt-Winters
+one-step forecast ± error scale, the Beta-Bernoulli provider reliability
+posterior (mean, α, β), and the held/switch/foregone detail
+(ADR-010 A9). Served by `otedama arb explain` for terminal rendering.
+
+- `200 OK` — snapshot JSON.
+- `503 Service Unavailable` — the engine has not recorded its first
+  decision tick yet.
 
 ---
 

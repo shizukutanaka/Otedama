@@ -5,6 +5,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 )
 
@@ -21,7 +23,7 @@ import (
 
 func TestHealthz_Returns200(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19801", r, false)
+	s := New("127.0.0.1:19801", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -53,7 +55,7 @@ func TestHealthz_Returns200(t *testing.T) {
 
 func TestReadyz_503_WhenNotReady(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19802", r, false)
+	s := New("127.0.0.1:19802", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -75,7 +77,7 @@ func TestReadyz_503_WhenNotReady(t *testing.T) {
 
 func TestReadyz_200_WhenReady(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19803", r, false)
+	s := New("127.0.0.1:19803", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -99,7 +101,7 @@ func TestReadyz_200_WhenReady(t *testing.T) {
 
 func TestReadyz_FlipsBackTo503WhenSetFalse(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19804", r, false)
+	s := New("127.0.0.1:19804", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -126,7 +128,7 @@ func TestMetrics_ServesPrometheusFormat(t *testing.T) {
 	r := metrics.NewRegistry()
 	r.NewCounter("test_total", "help", nil).Add(5)
 
-	s := New("127.0.0.1:19805", r, false)
+	s := New("127.0.0.1:19805", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -156,7 +158,7 @@ func TestMetrics_ServesPrometheusFormat(t *testing.T) {
 
 func TestIndex_Returns200WithHTML(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19806", r, false)
+	s := New("127.0.0.1:19806", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -186,7 +188,7 @@ func TestIndex_Returns200WithHTML(t *testing.T) {
 
 func TestUnknownPath_Returns404(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19807", r, false)
+	s := New("127.0.0.1:19807", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -210,7 +212,7 @@ func TestConcurrentRequests_NoRace(t *testing.T) {
 	r := metrics.NewRegistry()
 	counter := r.NewCounter("hits_total", "help", nil)
 
-	s := New("127.0.0.1:19808", r, false)
+	s := New("127.0.0.1:19808", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -241,7 +243,7 @@ func TestConcurrentRequests_NoRace(t *testing.T) {
 
 func TestStart_InvalidAddressReturnsError(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("invalid-address-no-colon", r, false)
+	s := New("invalid-address-no-colon", r, false, nil)
 	ctx := context.Background()
 	if err := s.Start(ctx); err == nil {
 		t.Error("Start with invalid address should return error")
@@ -250,7 +252,7 @@ func TestStart_InvalidAddressReturnsError(t *testing.T) {
 
 func TestStop_GracefulShutdown(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19809", r, false)
+	s := New("127.0.0.1:19809", r, false, nil)
 	ctx := context.Background()
 	if err := s.Start(ctx); err != nil {
 		t.Skip("port unavailable:", err)
@@ -265,7 +267,7 @@ func TestStop_GracefulShutdown(t *testing.T) {
 
 func TestContextCancellation_TriggersShutdown(t *testing.T) {
 	r := metrics.NewRegistry()
-	s := New("127.0.0.1:19810", r, false)
+	s := New("127.0.0.1:19810", r, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	if err := s.Start(ctx); err != nil {
 		t.Skip("port unavailable:", err)
@@ -284,7 +286,7 @@ func TestContextCancellation_TriggersShutdown(t *testing.T) {
 }
 
 func TestServeError_NilWhenHealthy(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -301,7 +303,7 @@ func TestServeError_NilWhenHealthy(t *testing.T) {
 }
 
 func TestServeError_NilAfterCleanStop(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false, nil)
 	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
@@ -318,7 +320,7 @@ func TestServeError_NilAfterCleanStop(t *testing.T) {
 }
 
 func TestAddr_ReturnsBindAddress(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -333,7 +335,7 @@ func TestAddr_ReturnsBindAddress(t *testing.T) {
 
 func TestMetrics_NilRegistry_Returns500(t *testing.T) {
 	// New accepts a nil registry; accessing /metrics should return 500.
-	s := New("127.0.0.1:0", nil, false)
+	s := New("127.0.0.1:0", nil, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -353,7 +355,7 @@ func TestMetrics_NilRegistry_Returns500(t *testing.T) {
 }
 
 func TestPprof_DisabledByDefault(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -373,7 +375,7 @@ func TestPprof_DisabledByDefault(t *testing.T) {
 }
 
 func TestPprof_EnabledServesIndex(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry(), true)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), true, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -397,7 +399,7 @@ func TestPprof_EnabledServesIndex(t *testing.T) {
 }
 
 func TestPprof_NamedProfilesAccessible(t *testing.T) {
-	s := New("127.0.0.1:0", metrics.NewRegistry(), true)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), true, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := s.Start(ctx); err != nil {
@@ -427,7 +429,7 @@ func TestAddr_BeforeStart_ReturnsConfiguredAddress(t *testing.T) {
 	// Addr() returns the configured address string when Start has not been
 	// called yet (boundAddr is nil). This covers server.go:152.
 	const addr = "127.0.0.1:12399"
-	s := New(addr, metrics.NewRegistry(), false)
+	s := New(addr, metrics.NewRegistry(), false, nil)
 	if got := s.Addr(); got != addr {
 		t.Errorf("Addr() before Start = %q, want %q", got, addr)
 	}
@@ -438,7 +440,7 @@ func TestServeError_ReturnsStoredError(t *testing.T) {
 	// it terminates with a non-ErrServerClosed error. We inject the error
 	// directly (white-box) to cover server.go:160-162 without needing to
 	// race the background goroutine.
-	s := New("127.0.0.1:0", metrics.NewRegistry(), false)
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false, nil)
 	injected := errors.New("injected serve error")
 	s.serveErr.Store(&injected)
 	got := s.ServeError()
@@ -447,5 +449,72 @@ func TestServeError_ReturnsStoredError(t *testing.T) {
 	}
 	if got.Error() != "injected serve error" {
 		t.Errorf("ServeError() = %q, want 'injected serve error'", got.Error())
+	}
+}
+
+// ============================================================================
+// /arbitration (ADR-010 A9 read-model)
+// ============================================================================
+
+// TestArbitration_ServesSnapshot covers the happy path: a non-nil feeder
+// supplies the latest DecisionSnapshot and the handler returns it as JSON.
+func TestArbitration_ServesSnapshot(t *testing.T) {
+	snap := &arbitration.DecisionSnapshot{
+		At:            time.Date(2026, 9, 23, 8, 13, 0, 0, time.UTC),
+		Policy:        "maximize_earnings",
+		HysteresisPct: 0.05,
+		Rows: []arbitration.ExplainRow{
+			{DeviceID: "cpu-0", Stream: "mining.stratum", ExpectedSatsPerSec: 42.5},
+		},
+		TotalSatsPerSec: 42.5,
+	}
+	s := New("127.0.0.1:0", metrics.NewRegistry(), false, func() *arbitration.DecisionSnapshot { return snap })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx); err != nil {
+		t.Skip("port unavailable:", err)
+	}
+	defer s.Stop()
+
+	resp, err := http.Get("http://" + s.Addr() + "/arbitration")
+	if err != nil {
+		t.Fatalf("GET /arbitration: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var got arbitration.DecisionSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Rows) != 1 || got.Rows[0].DeviceID != "cpu-0" || got.TotalSatsPerSec != 42.5 {
+		t.Errorf("snapshot mismatch: %+v", got)
+	}
+}
+
+// TestArbitration_503WithoutDecision covers both empty paths: no feeder
+// configured, and a feeder that still has nothing to report (the engine
+// has not ticked yet). Clients get 503, not a null 200.
+func TestArbitration_503WithoutDecision(t *testing.T) {
+	for name, feeder := range map[string]func() *arbitration.DecisionSnapshot{
+		"nil feeder":   nil,
+		"empty feeder": func() *arbitration.DecisionSnapshot { return nil },
+	} {
+		s := New("127.0.0.1:0", metrics.NewRegistry(), false, feeder)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if err := s.Start(ctx); err != nil {
+			t.Skip("port unavailable:", err)
+		}
+		resp, err := http.Get("http://" + s.Addr() + "/arbitration")
+		if err != nil {
+			t.Fatalf("%s: GET: %v", name, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want 503", name, resp.StatusCode)
+		}
+		s.Stop()
 	}
 }

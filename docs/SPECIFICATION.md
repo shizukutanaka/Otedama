@@ -32,6 +32,7 @@ otedama <command> [flags]
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
 | `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
 | `doctor` | Run self-diagnostic checks. |
+| `arb explain` | Print the running engine's latest arbitration decision as a per-device table (ADR-010 A9). |
 | `completion bash\|zsh\|fish` | Emit a shell-completion script. |
 | `help` / `--help` / `-h` | Print usage. |
 

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
@@ -42,6 +43,12 @@ type arbitrationLoopOpts struct {
 	// exists. See buildStats/stats.go for the read side.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+
+	// explain, when non-nil, receives a fresh DecisionSnapshot after every
+	// Decide cycle — the ADR-010 A9 read-model served by /arbitration and
+	// rendered by `otedama arb explain`. Nil disables recording (tests and
+	// the non-HTTP run configuration skip the allocation bookkeeping).
+	explain *atomic.Pointer[arbitration.DecisionSnapshot]
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -203,8 +210,59 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				}
 			}
 			applyAllocation(alloc, opts.workers, opts.log)
+			opts.recordExplainSnapshot(alloc, margin, forecasters, reliability)
 		}
 	}
+}
+
+// recordExplainSnapshot publishes a fresh DecisionSnapshot for ADR-010 A9
+// explainability: one ExplainRow per assignment carrying the Holt-Winters
+// one-step forecast ± MAE and the Beta-Bernoulli posterior Decide() just
+// used, plus the held/foregone context that explains a non-maximal pick.
+// forecasters and reliability are guarded by streamsMu (taken here) — the
+// snapshot is built after applyAllocation so a slow reader never delays
+// the worker pause/unpause the loop just issued.
+func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Allocation, margin float64, forecasters map[string]*arbitration.YieldForecaster, reliability map[string]*arbitration.ProviderReliability) {
+	if opts.explain == nil {
+		return // recording disabled (no /arbitration consumer)
+	}
+	snap := &arbitration.DecisionSnapshot{
+		At:                 time.Now(),
+		Policy:             arbitration.PolicyMaximizeEarnings.String(),
+		HysteresisPct:      margin,
+		MinYieldSatsPerSec: opts.minYield,
+		Rows:               make([]arbitration.ExplainRow, 0, len(alloc.Assignments)),
+		Skipped:            alloc.SkippedDevice,
+		TotalSatsPerSec:    alloc.TotalYield,
+	}
+	opts.streamsMu.Lock()
+	for _, a := range alloc.Assignments {
+		row := arbitration.ExplainRow{
+			DeviceID:           a.DeviceID,
+			Stream:             a.Stream,
+			ExpectedSatsPerSec: a.ExpectedYield,
+			SwitchedFrom:       a.SwitchedFromID,
+			Held:               a.Held,
+			ForegoneSatsPerSec: a.ForegoneSatsPerSec,
+			Reason:             a.Reason,
+		}
+		if !a.Idle() {
+			if fc := forecasters[string(a.Stream)+":"+a.DeviceID]; fc != nil {
+				pred := fc.Predict(1)
+				sigma := fc.Sigma()
+				row.ForecastSatsPerSec = &pred
+				row.ForecastSigmaSatsPerSec = &sigma
+			}
+			if r := reliability[string(a.Stream)]; r != nil {
+				mean := r.PosteriorMean()
+				row.Reliability = &mean
+				row.ReliabilityAlpha, row.ReliabilityBeta = r.Params()
+			}
+		}
+		snap.Rows = append(snap.Rows, row)
+	}
+	opts.streamsMu.Unlock()
+	opts.explain.Store(snap)
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is
