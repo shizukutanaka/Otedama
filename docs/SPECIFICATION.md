@@ -214,6 +214,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
 | `provider_yield_sats_per_second{provider,simulated}` † | gauge | Each stream's current quoted yield. The `simulated` label separates modelled revenue (`true` — the Akash fixed-price simulation, KNOWN_LIMITATIONS §1) from real settled revenue (`false`); always reconcile the two groups separately. |
+| `provider_last_quote_seconds{provider,simulated}` † | gauge | Unix time of the provider's most recent quote. A stale value means the provider has stopped quoting — the provider-health counterpart to `last_job_received_seconds`. |
 | `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |

@@ -225,8 +225,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 1. 🟡 **Real Akash REST integration** — currently simulated
    (KNOWN_LIMITATIONS §1). The single biggest placeholder.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
-   stop routing GPUs to it (parallels HashrateMonitor for mining).
+3. ✅ **Provider health/heartbeat** — the stop-routing half already existed
+   (`pruneStaleStreams` expires a stream after `streamStaleTimeout` without
+   quotes and logs it); the detection half is now alertable:
+   `otedama_provider_last_quote_seconds{provider,simulated}` publishes the
+   Unix timestamp of each provider's most recent quote, the provider-side
+   counterpart of `otedama_last_job_received_seconds`. (session 265)
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).

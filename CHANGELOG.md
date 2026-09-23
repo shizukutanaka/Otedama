@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 265 — プロバイダ心拍メトリクス: `provider_last_quote_seconds{provider,simulated}` — Category 5 #3 の検出半分を解消)
+
+**プロバイダの「沈黙」が /metrics からアラート可能になった。**
+死んだ推論プロバイダへのルーティング停止は `pruneStaleStreams`（quote
+欠落でストリームを期限切れ除去）が既に担っていたが、検出側は
+ログ行と `active_streams` の間接的な減少のみで、Prometheus からは
+「いつ最後の quote が来たか」を知る術がなかった。pool 接続側には
+`otedama_last_job_received_seconds` という同等の心拍ゲージが既存
+なのに、プロバイダ側には無かった非対称を解消:
+
+- 新メトリクス `otedama_provider_last_quote_seconds{provider,simulated}`:
+  quote 到着ごとに各プロバイダの最終 quote Unix 時刻を公開
+  （遅延生成、session 264 の `provider_yield` と同一ラベル族）。
+  ストリームが prune されても系列は最終時刻を保持し続けるため、
+  `time() - provider_last_quote_seconds > しきい値` で provider 死亡を
+  直接アラート可能。SPECIFICATION §6 にカタログ登録。
+
 ### Added (session 264 — シミュレーション収益の構造的分離: `Quote.Simulated` → `Stream.Simulated` → `provider_yield_sats_per_second{provider,simulated}`)
 
 **「simulated」という約束を UI 文字列からデータへ昇格させた。**
