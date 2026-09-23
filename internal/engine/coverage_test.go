@@ -2205,3 +2205,63 @@ func TestHandshake_OpenMiningChannelError(t *testing.T) {
 		t.Errorf("channel-open rejection must stay non-fatal so pool failover still runs, got fatalError")
 	}
 }
+
+// TestRunSessionV1_PoolNoticeLogged: a client.show_message notification
+// reaches the operator log — previously PoolNotices() had no consumer and
+// operator notices died in the buffered channel.
+func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"client.show_message","params":["pool maintenance in 10 min"]}`+"\n")
+		time.Sleep(300 * time.Millisecond)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var mu sync.Mutex
+	var logs []string
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log: func(level, msg string) {
+			mu.Lock()
+			logs = append(logs, level+": "+msg)
+			mu.Unlock()
+		},
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	found := false
+	for _, l := range logs {
+		if strings.Contains(l, "pool maintenance in 10 min") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("client.show_message notice never reached the log: %v", logs)
+	}
+}
