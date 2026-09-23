@@ -1201,6 +1201,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var lastSuggestedHPS float64
 	var lastSuggestAt time.Time
 
+	// lastProtoErrs is the session parse-error count already folded into
+	// the engine counter — publishPoolParseErrors deltas against it.
+	var lastProtoErrs int64
+
 	// Drain pool operator notices (client.show_message) into the log —
 	// maintenance windows, fee changes, dead-miner warnings. Without a
 	// consumer the buffered channel silently drops them.
@@ -1280,6 +1284,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// (set_difficulty, set_extranonce, keepalives) must be polled
 				// out of the session to keep the link-liveness gauge fresh.
 				publishPoolLinkLiveness(opts.m, sess)
+				publishPoolParseErrors(opts.m, sess, &lastProtoErrs)
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(

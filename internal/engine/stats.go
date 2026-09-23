@@ -555,3 +555,22 @@ func publishPoolLinkLiveness(m *engineMetrics, sess poolproto.Session) {
 		m.lastPoolMessageAt.Set(float64(ts))
 	}
 }
+
+// publishPoolParseErrors folds the session's inbound parse-error count
+// into the engine counter. The session count is monotonic within one
+// session, so `last` carries the previously applied value across ticks
+// and each delta lands exactly once — callers scope `last` to the
+// session's lifetime (a fresh variable per session, since a fresh
+// session's count restarts at 0). Sessions without
+// poolproto.ProtoErrorInformer are a no-op.
+func publishPoolParseErrors(m *engineMetrics, sess poolproto.Session, last *int64) {
+	pi, ok := sess.(poolproto.ProtoErrorInformer)
+	if !ok {
+		return
+	}
+	cur := pi.ProtoErrorCount()
+	if d := cur - *last; d > 0 {
+		m.poolParseErrors.Add(uint64(d))
+		*last = cur
+	}
+}

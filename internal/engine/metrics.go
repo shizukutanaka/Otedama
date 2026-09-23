@@ -163,6 +163,14 @@ type engineMetrics struct {
 	// means the pool itself has stopped issuing work.
 	lastPoolMessageAt *metrics.Gauge
 
+	// poolParseErrors counts inbound pool messages that failed to parse.
+	// V1 drops malformed lines silently (correct resilience), which makes
+	// corruption otherwise invisible: a pool speaking garbage looks like
+	// a quiet pool. A rising value on a live link (lastPoolMessageAt
+	// fresh) separates "pool is quiet" from "pool is speaking garbage" —
+	// protocol drift, MITM mangling, or a misbehaving proxy.
+	poolParseErrors *metrics.Counter
+
 	// clockSkewSeconds is the maximum absolute offset (in seconds) observed
 	// between the local system clock and the wall-clock reported by BTC/USD
 	// rate-source HTTPS servers via their HTTP Date response headers. Reuses
@@ -464,6 +472,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"from job delivery: alert when stale AND last_job_received is stale "+
 				"(dead link); alive here with a stale job gauge means the pool "+
 				"stopped issuing work.",
+			nil),
+
+		poolParseErrors: reg.NewCounter(
+			"otedama_pool_parse_errors_total",
+			"Inbound pool messages that failed to parse (malformed JSON or "+
+				"params that did not decode). Rising on a live link = protocol "+
+				"drift, MITM mangling, or a misbehaving proxy — the diagnostic "+
+				"that separates 'pool is quiet' from 'pool is speaking garbage'.",
 			nil),
 
 		clockSkewSeconds: reg.NewGauge(

@@ -301,6 +301,20 @@ type LastMessageInformer interface {
 	LastMessageAt() int64
 }
 
+// ProtoErrorInformer is an optional extension to Session for protocols
+// that silently drop malformed inbound messages. Such drops are the
+// correct resilience behaviour, but without a counter they leave zero
+// trace: a pool delivering corrupt traffic (protocol drift, MITM
+// mangling, a misbehaving proxy) looks identical to "the pool sends no
+// work". Callers type-assert a Session to this interface and poll the
+// count; a rising value on a live link is the diagnostic that separates
+// "pool is quiet" from "pool is speaking garbage".
+type ProtoErrorInformer interface {
+	// ProtoErrorCount returns the number of inbound messages that
+	// failed to parse since session start. Monotonic; 0 is the norm.
+	ProtoErrorCount() int64
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

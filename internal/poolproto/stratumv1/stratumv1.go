@@ -119,6 +119,14 @@ type session struct {
 	// sending no work. Surfaced via poolproto.LastMessageInformer.
 	lastMsgAt atomic.Int64
 
+	// protoErrors counts inbound lines that failed to parse — malformed
+	// JSON and messages whose params did not decode. The session keeps
+	// no logger (the caller owns diagnostics), so these drops would
+	// otherwise leave zero trace: a pool delivering corrupt jobs (drift,
+	// MITM mangling) looks exactly like "the pool sends no work".
+	// Surfaced via poolproto.ProtoErrorInformer.
+	protoErrors atomic.Int64
+
 	// extranonce1, extranonce2Size are negotiated at subscribe time and
 	// can rotate mid-session (mining.set_extranonce). extranonce2Size is
 	// read by Submit on a different goroutine than the read loop that
@@ -147,6 +155,7 @@ var (
 	_ poolproto.Session             = (*session)(nil)
 	_ poolproto.PoolNoticeReceiver  = (*session)(nil)
 	_ poolproto.LastMessageInformer = (*session)(nil)
+	_ poolproto.ProtoErrorInformer  = (*session)(nil)
 )
 
 func newSession(conn *connection) *session {
@@ -240,7 +249,9 @@ func (s *session) dispatch(line []byte) {
 	}
 	var msg rpcMessage
 	if err := json.Unmarshal(line, &msg); err != nil {
-		// Malformed lines are ignored; misbehaving pools can't crash us.
+		// Malformed lines are ignored; misbehaving pools can't crash us,
+		// but the drop is counted — silent corruption must stay visible.
+		s.protoErrors.Add(1)
 		return
 	}
 	// Response (has id, no method).
@@ -261,12 +272,17 @@ func (s *session) dispatch(line []byte) {
 	case "mining.notify":
 		job, err := parseNotify(msg.Params)
 		if err != nil {
+			// A malformed notify is the worst silent outcome: the pool
+			// is sending work and we drop all of it. Count the drop.
+			s.protoErrors.Add(1)
 			return
 		}
 		s.sendJob(job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
+		} else {
+			s.protoErrors.Add(1)
 		}
 	case "mining.set_target":
 		// NiceHash-style direct target assignment (hex U256) instead of
@@ -275,18 +291,24 @@ func (s *session) dispatch(line []byte) {
 		// stays single-semantic.
 		if d, ok := parseSetTarget(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
+		} else {
+			s.protoErrors.Add(1)
 		}
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
 			s.extranonce1 = en1
 			s.extranonce2Size.Store(int32(sz))
+		} else {
+			s.protoErrors.Add(1)
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
 		// Surface it via PoolNotices(); if the caller is not draining the
 		// channel, drop the oldest notice to avoid blocking the read loop.
-		if notice, ok := parseShowMessage(msg.Params); ok && notice != "" {
+		if notice, ok := parseShowMessage(msg.Params); !ok {
+			s.protoErrors.Add(1)
+		} else if notice != "" {
 			select {
 			case s.noticeCh <- notice:
 			default:
@@ -310,6 +332,8 @@ func (s *session) dispatch(line []byte) {
 		// reconnectDirective for the rationale.
 		if d, ok := parseReconnect(msg.Params); ok {
 			s.lastReconnect.Store(&d)
+		} else {
+			s.protoErrors.Add(1)
 		}
 		go s.Close()
 	case "mining.ping":
@@ -318,9 +342,11 @@ func (s *session) dispatch(line []byte) {
 		// expects {"id":<id>,"result":"pong","error":null} back. Strict
 		// pools disconnect clients that never answer (the connection then
 		// looks half-open: TCP alive, application dead). A ping without an
-		// id is a malformed notification — ignore it.
+		// id is a malformed notification — count and ignore it.
 		if msg.ID != nil {
 			s.respond(msg.ID, "pong")
+		} else {
+			s.protoErrors.Add(1)
 		}
 	case "client.get_version":
 		// Pool→client request for the miner agent string (Braiins uses
@@ -329,6 +355,8 @@ func (s *session) dispatch(line []byte) {
 		// the agent we advertised in mining.subscribe.
 		if msg.ID != nil {
 			s.respond(msg.ID, agentString)
+		} else {
+			s.protoErrors.Add(1)
 		}
 	default:
 		// A pool→client message carrying an id is a *request* and must
@@ -402,6 +430,10 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // inbound message, or 0 before the first. Implements
 // poolproto.LastMessageInformer.
 func (s *session) LastMessageAt() int64 { return s.lastMsgAt.Load() }
+
+// ProtoErrorCount returns the number of inbound messages that failed to
+// parse since session start. Implements poolproto.ProtoErrorInformer.
+func (s *session) ProtoErrorCount() int64 { return s.protoErrors.Load() }
 
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
