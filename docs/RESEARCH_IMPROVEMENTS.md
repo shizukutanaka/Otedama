@@ -615,6 +615,11 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
+   — session 266: `mining.ping` is no longer grouped with "unknown" — it is a
+   pool→client *request* carrying an id (Braiins/NiceHash/ckpool keepalive),
+   and `session.respond` now answers `{"id":<id>,"result":"pong","error":null}`.
+   Strict pools disconnect clients that never answer; the connection would
+   otherwise look half-open (TCP alive, application dead).
 6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset

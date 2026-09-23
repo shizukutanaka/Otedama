@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 266 — Stratum V1 `mining.ping` 応答 — プール側 keepalive 要求への未応答を解消)
+
+**「TCP は生きているがアプリケーションは死んでいる」切断を防ぐ。**
+Braiins・NiceHash・ckpool 系プールが送る `{"id":N,"method":"mining.ping"}` は
+id を持つ pool→client *リクエスト*であり `{"id":N,"result":"pong","error":null}`
+の応答を期待するが、これまで「未知の通知は無視」のデフォルト経路に落ちて
+無応答だった。厳格なプールは ping に答えないクライアントを切断するため、
+接続が半開き（TCP 生存・プロトコル死亡）に見え得た。`session.respond` を
+新設し ping id をエコーして "pong" を返送（id なしの ping は malformed 通知
+として無視）。net.Pipe fake pool での E2E 検証済み。
+
 ### Added (session 265 — プロバイダ心拍メトリクス: `provider_last_quote_seconds{provider,simulated}` — Category 5 #3 の検出半分を解消)
 
 **プロバイダの「沈黙」が /metrics からアラート可能になった。**
