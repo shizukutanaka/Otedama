@@ -2557,3 +2557,41 @@ func TestAgentString_ReportsBuildVersion(t *testing.T) {
 			agentString, want)
 	}
 }
+
+// TestSession_LastMessageAt_TracksAnyInbound verifies link liveness is
+// stamped on ANY inbound line — including a notification that yields no
+// job — and is 0 before the first message. This is the signal the
+// engine's last_pool_message gauge polls out of a session whose only
+// engine-facing channel is jobs.
+func TestSession_LastMessageAt_TracksAnyInbound(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	if got := sess.LastMessageAt(); got != 0 {
+		t.Fatalf("LastMessageAt = %d before any message, want 0", got)
+	}
+	sess.start(context.Background())
+	defer sess.Close()
+	defer serverConn.Close()
+
+	before := time.Now().Unix()
+	go func() {
+		// A pure notification — no job is produced, but the link is alive.
+		_, _ = serverConn.Write([]byte(
+			`{"id":null,"method":"mining.set_difficulty","params":[1024]}` + "\n"))
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for sess.LastMessageAt() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := sess.LastMessageAt()
+	if got < before || got > time.Now().Unix() {
+		t.Fatalf("LastMessageAt = %d, want a Unix time in [%d, %d] "+
+			"(notification traffic must stamp liveness)", got, before, time.Now().Unix())
+	}
+}

@@ -3281,3 +3281,35 @@ func TestRunReconnectLoop_HealthySessionResetsAttemptBudget(t *testing.T) {
 		t.Fatalf("connect attempts = %d, want 2 — healthy session did not reset the budget", connects)
 	}
 }
+
+// livenessSession is a minimal poolproto.Session that only implements
+// LastMessageInformer — the capability publishPoolLinkLiveness polls.
+type livenessSession struct {
+	poolproto.Session // embedded nil interface: only LastMessageAt is used
+	ts                int64
+}
+
+func (s livenessSession) LastMessageAt() int64 { return s.ts }
+
+// TestPublishPoolLinkLiveness verifies the V1 liveness bridge: the gauge
+// only moves when the session both reports LastMessageInformer and has
+// actually received a message — a connected-but-silent link stays at 0,
+// which is the alertable "never said anything" state.
+func TestPublishPoolLinkLiveness(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+
+	publishPoolLinkLiveness(m, nil) // no informant capability
+	if v := m.lastPoolMessageAt.Value(); v != 0 {
+		t.Fatalf("lastPoolMessageAt = %v, want 0 for a non-informant session", v)
+	}
+
+	publishPoolLinkLiveness(m, livenessSession{ts: 0}) // connected, silent
+	if v := m.lastPoolMessageAt.Value(); v != 0 {
+		t.Fatalf("lastPoolMessageAt = %v, want 0 before the first message", v)
+	}
+
+	publishPoolLinkLiveness(m, livenessSession{ts: 1720000000})
+	if v := m.lastPoolMessageAt.Value(); v != 1720000000 {
+		t.Errorf("lastPoolMessageAt = %v, want 1720000000", v)
+	}
+}
