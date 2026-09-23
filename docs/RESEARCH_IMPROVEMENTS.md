@@ -430,9 +430,25 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
-10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
+9. ✅ **Constant-time comparison audit — RESOLVED (session 263).** Every
+   comparison touching secret-derived material enumerated (audit table in
+   THREAT_MODEL §I): the only early-exit was `MnemonicToEntropy`'s BIP-39
+   checksum verify — now accumulates via `subtle.ConstantTimeByteEq`.
+   Everything else was already constant-time or non-secret: EncryptedSeed
+   auth goes through stdlib AEAD tag verification, Fingerprint is public
+   by design, the base58 checksum covers public data only, and Noise key
+   material is never manually compared. Original finding: Constant-time
+   comparison audit for any secret/MAC comparisons in the handshake and
+   seed paths (use `crypto/subtle`).
+10. ✅ **Supply-chain: pin and verify the one new crypto dep — RESOLVED
+    (session 263, posture documented).** The secp256k1 dep itself is still
+    item 1's scope; what item 10 asked to exist is now documented:
+    THREAT_MODEL's Tampering/Supply-chain mitigation records that every
+    dependency is pinned+verified by construction (`go.sum` SHA-256
+    module and go.mod hashes, GOSUMDB default-on, `go mod verify`) and
+    that item 1's future dep must enter through the same path — pinned to
+    a reviewed version, never floating — before merge. Original finding:
+    Supply-chain: pin and verify the one new crypto dep (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
 

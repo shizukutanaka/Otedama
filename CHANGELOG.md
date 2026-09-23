@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 263 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: シークレット比較の constant-time 監査 + 依存ピン文書化)
+
+- **`MnemonicToEntropy` の BIP-39 チェックサム検証を constant-time 化
+  （Cat 10 #9 解消）.** 監査で唯一検出された early-exit 比較 —
+  `crypto/subtle.ConstantTimeByteEq` による累積判定に変更。mnemonic は
+  オペレータ入力のみ（リモートオラクルなし）だが、将来の呼出し元が
+  オラクルを露出するリスクを恒常時間で予防。
+- **THREAT_MODEL に監査記録を追加.** Information disclosure 項に
+  「Timing side channel on secret comparisons」を新設 — シークレット由来
+  データに触れる全比較箇所（BIP-39 チェックサム、EncryptedSeed の AEAD
+  タグ検証、Fingerprint、base58 チェックサム、Noise 鍵）の棚卸し表と
+  残存リスク評価。Supply-chain 緩和に `go.sum` の SHA-256 ハッシュ・
+  GOSUMDB・`go mod verify` によるピン+検証の仕組みを明記し、将来の
+  secp256k1 依存（item 1）も同一路径を必須化（Cat 10 #10 解消）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

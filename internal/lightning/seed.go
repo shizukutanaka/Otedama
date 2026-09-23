@@ -51,6 +51,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -267,13 +268,21 @@ func MnemonicToEntropy(m Mnemonic, w *WordList) (Entropy, error) {
 		entropy[i/8] |= bits[i] << uint(7-(i%8))
 	}
 
-	// Verify checksum.
+	// Verify checksum. The bit comparison accumulates through
+	// subtle.ConstantTimeByteEq rather than early-exiting on the first
+	// mismatch: the mnemonic is a secret, and although today this check
+	// only runs on operator-typed input (no remote oracle), keeping every
+	// secret comparison constant-time is cheaper than re-auditing each
+	// future caller for oracle exposure (RESEARCH_IMPROVEMENTS Category
+	// 10 item 9; audit table in docs/THREAT_MODEL.md).
 	sum := sha256.Sum256(entropy)
+	var bad byte
 	for i := 0; i < cs; i++ {
 		want := (sum[0] >> uint(7-i)) & 1
-		if bits[entBits+i] != want {
-			return nil, errors.New("lightning: mnemonic checksum mismatch; check for transcription errors")
-		}
+		bad |= byte(subtle.ConstantTimeByteEq(bits[entBits+i], want) ^ 1)
+	}
+	if bad != 0 {
+		return nil, errors.New("lightning: mnemonic checksum mismatch; check for transcription errors")
 	}
 	return entropy, nil
 }

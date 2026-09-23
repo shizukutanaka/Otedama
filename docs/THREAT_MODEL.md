@@ -125,6 +125,16 @@ version.
 pinned by SHA. Dependabot auto-updates with review. govulncheck runs
 in CI. See ADR-003.
 
+Every dependency is pinned and verified by construction: `go.sum`
+records SHA-256 content hashes for each module and each module's
+go.mod, verified against the checksum database (GOSUMDB, default on;
+GONOSUMDB/GONOSUMCHECK are not set), and `go mod verify` re-checks the
+module cache against those hashes. This pinning-and-verification
+posture is the documented requirement for the one planned crypto
+addition (secp256k1, KNOWN_LIMITATIONS §2): when it lands it must enter
+go.sum through the same path — pinned to a reviewed version, never a
+floating pseudo-version — before merge.
+
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
 one of the two direct dependencies remains possible. We have no
 mitigation other than early detection.
@@ -188,6 +198,27 @@ never written to a log file.
 **Residual risk:** Users who manually enable `--log-level=debug` may
 see more information; the threshold between "useful debug" and "leaks
 secrets" is judgment-based.
+
+---
+
+**Threat:** Timing side channel on secret comparisons. An early-exit
+byte/bit comparison on secret material can leak match progress to an
+observer who can drive repeated attempts.
+
+**Mitigation / audit (session 263):** every comparison touching
+secret-derived material was enumerated:
+
+| Site | Comparison | Exposure |
+|------|-----------|----------|
+| `MnemonicToEntropy` BIP-39 checksum | `crypto/subtle.ConstantTimeByteEq` accumulation over all checksum bits (was early-exit until session 263) | Operator-typed mnemonic; no remote oracle today, kept constant-time regardless |
+| `EncryptedSeed` open | scrypt + AES-256-GCM; tag verified inside stdlib AEAD (constant-time) | Passphrase auth |
+| `Fingerprint()` | compared only as a public 8-hex identifier (HMAC with a public label — reveals nothing about the seed) | Public by design |
+| `btccrypto/base58` checksum | `bytes.Equal` on non-secret address data | Input is public; timing carries no secret |
+| Noise session keys | derived/compared only inside HMAC/AEAD library paths | No manual key-material comparisons exist |
+
+**Residual risk:** None identified in Otedama's own code after the
+mnemonic-checksum fix; standard-library AEAD internals are out of audit
+scope.
 
 ---
 
