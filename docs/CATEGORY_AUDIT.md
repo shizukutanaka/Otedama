@@ -985,3 +985,11 @@ roll-up sections and older items were never re-synced as code shipped.
 | Item 20 "Otedama already has the histogram and OTel spans (Cat 9 #3)" — the spans premise was false | ✅ Gated on Cat 9 #3. |
 | "Highest-leverage next actions" ranked three completed items (#2 wiring, #3 reject classification, #5 latency/pool metrics) as outstanding | ✅ Rewritten: struck done items, re-ordered the real remainder (secp256k1 via ADR-011, real Akash via ADR-013, CI-unwired cluster §13, SLO doc). |
 | Verified statuses still correct: Cat 1 #6 temperature throttling (no hwmon code — comment only), Cat 1 #11 ASIC undetected (🔵 ADR-008 v3.5), Cat 5 #4 GPU suitability (unimplemented), Cat 9 #10 SLO doc (unimplemented), Cat 10 #1 Noise P-256 stub (open, session-272 divergences already appended). | ✅ |
+
+## Session 289 update — SLO documentation (Cat 9 #10) + README Go floor
+
+| Finding | Disposition |
+|---|---|
+| Cat 9 #10 "SLO documentation (target uptime, p99 submit latency) to make the metrics actionable" — the one remaining cheap doc item; no SLO file existed | ✅ `docs/SLO.md` created: 7 SLOs referencing only shipped metric names (verified all 42 `otedama_*` registrations in internal/), D-Central reject bands matching the code comments, PromQL alert examples, and an explicit note that no alert manager is shipped. |
+| README "Go 1.22以上" — fourth surviving 1.22 floor claim (badge was fixed s281; CONTRIBUTING/BENCHMARKS/AUDIT_CHECKLIST fixed s285–287) | ✅ Corrected to Go 1.24+ with the go1.25.7 toolchain pin. |
+| Metric-name grounding: every SLO references a real registered name (verified via grep over `"otedama_*"` literals — `otedama_up`, `pool_connection_state`, `submit_latency_milliseconds`, `reject_rate`, `stale_rate`, `shares_unaccounted`, `shares_unresolved_total`, `btc_rate_age_seconds`, `rate_sources_ok`, `curtailed`, `pool_connect_failures_total`, `pool_active_index`, `last_job_received_seconds`). | ✅ |

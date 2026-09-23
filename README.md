@@ -40,7 +40,7 @@ Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通り�
 
 ### 必要環境 / Requirements
 
-Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
+Go 1.24以上（toolchain は go1.25.7 を推奨 — go.mod に pin）、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
 
 ### インストール / Installation
 

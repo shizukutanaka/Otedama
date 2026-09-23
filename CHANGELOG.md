@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 289 — SLO ドキュメント)
+
+- **`docs/SLO.md` 新規**（RESEARCH_IMPROVEMENTS Cat 9 #10 解消）: 出荷済み
+  メトリクスのみを参照する7系統の運用目標 — 稼働率（`otedama_up`、99%/30d、
+  curtailment 除外）、プール接続（`otedama_pool_connection_state`）、
+  シェア提出レイテンシ p99（<500ms 目標）、リジェクト率（<0.5% 目標・
+  >3% 即対応 — コード内コメントと同じ D-Central 区分）、ステイル率
+  （<0.1%）、シェア会計（`unaccounted`/`unresolved` ≈ 0）、BTC レート
+  鮮度（<120s、`rate_sources_ok` ≥2）。コピペ可能な PromQL アラート例と、
+  アラート機構未搭載の明記（運用側スタックへ配置する設計）を含む。
+
+### Fixed (session 289)
+
+- **README.md の Go バージョン表記が陳腐**: 「Go 1.22以上」→ Go 1.24+（
+  toolchain go1.25.7 pin 明記）。s281 でバッジは修正済みだが本文が残存
+  していた（第4箇所目の 1.22 残存 — CONTRIBUTING/BENCHMARKS/AUDIT_CHECKLIST
+  に続く）。
+
 ### Fixed (session 288 — RESEARCH_IMPROVEMENTS.md のステータス陳腐化監査)
 
 - **研究台帳の項目ステータスが出荷実態とズレていた**:

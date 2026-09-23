@@ -424,8 +424,13 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
-    metrics actionable.
+10. ✅ **SLO documentation** (session 289) — `docs/SLO.md` defines seven
+    SLOs over the shipped metrics: availability (`otedama_up`, 99%/30d excl.
+    curtailment), pool connectivity (`otedama_pool_connection_state`),
+    submit-latency p99 (<500 ms), reject rate (<0.5% target, >3% act-now —
+    the D-Central bands the code comments already cite), stale rate (<0.1%),
+    share accounting (`unaccounted`/`unresolved` ≈ 0), and BTC-rate freshness
+    (age <120 s, `rate_sources_ok` ≥2) — plus copy-paste PromQL alert rules.
 
 ---
 
@@ -1075,7 +1080,8 @@ are struck; the remainder is the real outstanding order.*
 The remaining highest-leverage items are now: #1 secp256k1/Noise (maintainer
 gate), #4 real Akash (ADR-013), the unwired-CI cluster (govulncheck,
 osv-scanner, Scorecard, fuzz, benchmark compare — KNOWN_LIMITATIONS §13,
-maintainer-side), and Cat 9 #10 SLO documentation as the cheap doc win.
+maintainer-side). Cat 9 #10 SLO documentation was completed in session 289
+(`docs/SLO.md`).
 
 ---
 
