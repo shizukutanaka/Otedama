@@ -292,9 +292,9 @@ func (p *poolSide) doHandshake(channelID uint32) {
 	// Send OpenMiningChannelSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgOpenMiningChannelSuccess, false,
 		stratum.OpenMiningChannelSuccess{
-			ReqID:           1,
-			ChannelID:       channelID,
-			ExtraNonce2Size: 4,
+			ReqID:          1,
+			ChannelID:      channelID,
+			GroupChannelID: 4,
 		})
 }
 
@@ -743,7 +743,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringSetup(t *testing.T) {
 		pool.dec.ReadFrame() //nolint:errcheck
 		// Send OpenMiningChannelSuccess instead of SetupConnectionSuccess/Error.
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
-			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4})
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, GroupChannelID: 4})
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
@@ -1025,7 +1025,7 @@ func TestSendMsg_WriteError(t *testing.T) {
 	c := &connection{raw: client}
 	err := sendMsg(c, stratum.MsgSetupConnection, false, &stratum.SetupConnection{
 		Protocol: stratum.MiningProtocol, MinVersion: 2, MaxVersion: 2,
-		Endpoint: "x:1", Vendor: "test",
+		EndpointHost: "x", EndpointPort: 1, Vendor: "test",
 	})
 	if err == nil {
 		t.Error("sendMsg to closed conn should return error")
@@ -1166,5 +1166,40 @@ func TestSession_Submit_SequenceNumbersIncrement(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatalf("pool did not receive submit frame %d within 2s", i)
 		}
+	}
+}
+
+// TestSession_ReadDeadline_EndsSilentPool pins the per-frame read
+// deadline: after the handshake a pool that accepts the connection but
+// then sends nothing must end the session (jobsCh closes) rather than
+// leave the readLoop blocked on ReadFrame forever — the same wedged-but-
+// open class V1's per-line deadline covers. Real SV2 pools emit jobs on
+// every template update, far more often than sessionReadTimeout.
+func TestSession_ReadDeadline_EndsSilentPool(t *testing.T) {
+	prev := sessionReadTimeout
+	sessionReadTimeout = 150 * time.Millisecond
+	defer func() { sessionReadTimeout = prev }()
+
+	pool, client := newPoolSide(t)
+	go pool.doHandshake(7)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	d := &Dialer{}
+	sess, err := d.Negotiate(ctx, &connection{raw: client})
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// The pool stays silent; the deadline must end the session well before
+	// the ctx bound.
+	deadline := time.After(5 * time.Second)
+	select {
+	case _, ok := <-sess.Jobs():
+		for range sess.Jobs() { // drain until close
+		}
+		_ = ok
+	case <-deadline:
+		t.Fatal("session readLoop did not exit on pool silence; read deadline not armed")
 	}
 }

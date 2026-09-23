@@ -84,7 +84,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			}
 		} else {
 			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-				var dialer net.Dialer
+				dialer := net.Dialer{Timeout: connectTimeout}
 				return dialer.DialContext(ctx, "tcp", address)
 			}
 		}

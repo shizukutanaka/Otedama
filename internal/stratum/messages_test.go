@@ -17,7 +17,8 @@ func TestSetupConnection_Roundtrip(t *testing.T) {
 		MinVersion:      2,
 		MaxVersion:      2,
 		Flags:           0,
-		Endpoint:        "pool.example.com:3336",
+		EndpointHost:    "pool.example.com",
+		EndpointPort:    3336,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -37,8 +38,8 @@ func TestSetupConnection_Roundtrip(t *testing.T) {
 	if got.MinVersion != orig.MinVersion || got.MaxVersion != orig.MaxVersion {
 		t.Errorf("Version: got %d/%d, want %d/%d", got.MinVersion, got.MaxVersion, orig.MinVersion, orig.MaxVersion)
 	}
-	if got.Endpoint != orig.Endpoint {
-		t.Errorf("Endpoint: got %q, want %q", got.Endpoint, orig.Endpoint)
+	if got.EndpointHost != orig.EndpointHost || got.EndpointPort != orig.EndpointPort {
+		t.Errorf("Endpoint: got %q:%d, want %q:%d", got.EndpointHost, got.EndpointPort, orig.EndpointHost, orig.EndpointPort)
 	}
 	if got.DeviceID != orig.DeviceID {
 		t.Errorf("DeviceID: got %q, want %q", got.DeviceID, orig.DeviceID)
@@ -55,15 +56,15 @@ func TestSetupConnection_EmptyStrings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.Endpoint != "" || got.Vendor != "" {
-		t.Errorf("empty strings not preserved: Endpoint=%q Vendor=%q", got.Endpoint, got.Vendor)
+	if got.EndpointHost != "" || got.EndpointPort != 0 || got.Vendor != "" {
+		t.Errorf("empty strings not preserved: EndpointHost=%q Vendor=%q", got.EndpointHost, got.Vendor)
 	}
 }
 
 func TestSetupConnection_StringTooLong(t *testing.T) {
 	m := SetupConnection{
-		Protocol: MiningProtocol,
-		Endpoint: string(make([]byte, 256)), // 256 > 255 max
+		Protocol:     MiningProtocol,
+		EndpointHost: string(make([]byte, 256)), // 256 > 255 max
 	}
 	if _, err := m.Encode(); err == nil {
 		t.Error("Encode accepted string > 255 bytes")
@@ -162,9 +163,9 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 
 func TestOpenMiningChannelSuccess_Roundtrip(t *testing.T) {
 	orig := OpenMiningChannelSuccess{
-		ReqID:           42,
-		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		ReqID:          42,
+		ChannelID:      1,
+		GroupChannelID: 4,
 	}
 	// Set a non-zero target
 	for i := range orig.Target {
@@ -190,8 +191,8 @@ func TestOpenMiningChannelSuccess_Roundtrip(t *testing.T) {
 	if !bytes.Equal(got.Extranonce, orig.Extranonce) {
 		t.Errorf("Extranonce: got %X, want %X", got.Extranonce, orig.Extranonce)
 	}
-	if got.ExtraNonce2Size != orig.ExtraNonce2Size {
-		t.Errorf("ExtraNonce2Size: got %d, want %d", got.ExtraNonce2Size, orig.ExtraNonce2Size)
+	if got.GroupChannelID != orig.GroupChannelID {
+		t.Errorf("GroupChannelID: got %d, want %d", got.GroupChannelID, orig.GroupChannelID)
 	}
 }
 
@@ -390,17 +391,17 @@ func TestSubmitSharesStandard_Roundtrip(t *testing.T) {
 // ----- SubmitSharesSuccess -----
 
 func TestDecodeSubmitSharesSuccess_Basic(t *testing.T) {
-	buf := make([]byte, 16)
+	buf := make([]byte, 20)
 	binary.LittleEndian.PutUint32(buf[0:4], 1)   // ChannelID
 	binary.LittleEndian.PutUint32(buf[4:8], 3)   // LastSeq
 	binary.LittleEndian.PutUint32(buf[8:12], 2)  // Accepted
-	binary.LittleEndian.PutUint32(buf[12:16], 5) // Summed
+	binary.LittleEndian.PutUint64(buf[12:20], 5) // Summed (U64)
 
 	got, err := DecodeSubmitSharesSuccess(buf)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.ChannelID != 1 || got.LastSequenceNumber != 3 {
+	if got.ChannelID != 1 || got.LastSequenceNumber != 3 || got.NewSharesSummed != 5 {
 		t.Errorf("got %+v", got)
 	}
 }
@@ -779,7 +780,7 @@ func TestSubmitSharesError_Encode_EmptyError(t *testing.T) {
 // ============================================================================
 
 func TestDispatchFrame_OpenMiningChannelSuccess(t *testing.T) {
-	orig := OpenMiningChannelSuccess{ReqID: 7, ChannelID: 3, ExtraNonce2Size: 4}
+	orig := OpenMiningChannelSuccess{ReqID: 7, ChannelID: 3, GroupChannelID: 4}
 	payload, err := orig.Encode()
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -881,7 +882,7 @@ func TestOpenMiningChannelSuccess_Decode_LenientExtranonce(t *testing.T) {
 	payload = append(payload, make([]byte, 32)...) // Target (U256)
 	payload = append(payload, 40)                  // extranonce length prefix = 40 (> B0_32 max)
 	payload = append(payload, make([]byte, 40)...) // 40 extranonce bytes
-	payload = appendU16LE(payload, 4)              // ExtraNonce2Size
+	payload = appendU32LE(payload, 4)              // GroupChannelID
 
 	m, err := DecodeOpenMiningChannelSuccess(payload)
 	if err != nil {
@@ -890,9 +891,9 @@ func TestOpenMiningChannelSuccess_Decode_LenientExtranonce(t *testing.T) {
 	if len(m.Extranonce) != 40 {
 		t.Errorf("decoded Extranonce = %d bytes, want 40", len(m.Extranonce))
 	}
-	if m.ReqID != 7 || m.ChannelID != 9 || m.ExtraNonce2Size != 4 {
-		t.Errorf("surrounding fields mis-decoded: ReqID=%d ChannelID=%d ExtraNonce2Size=%d",
-			m.ReqID, m.ChannelID, m.ExtraNonce2Size)
+	if m.ReqID != 7 || m.ChannelID != 9 || m.GroupChannelID != 4 {
+		t.Errorf("surrounding fields mis-decoded: ReqID=%d ChannelID=%d GroupChannelID=%d",
+			m.ReqID, m.ChannelID, m.GroupChannelID)
 	}
 }
 
@@ -948,13 +949,13 @@ func TestDecodeOpenMiningChannelSuccess_TruncatedAtTarget(t *testing.T) {
 	}
 }
 
-func TestDecodeOpenMiningChannelSuccess_TruncatedAtExtraNonce2Size(t *testing.T) {
-	// Build a valid payload then chop the last ExtraNonce2Size bytes.
-	orig := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: []byte{0x01}, ExtraNonce2Size: 4}
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtGroupChannelID(t *testing.T) {
+	// Build a valid payload then chop into the last GroupChannelID bytes.
+	orig := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: []byte{0x01}, GroupChannelID: 4}
 	payload, _ := orig.Encode()
-	// Remove the last 2 bytes (ExtraNonce2Size is uint16).
+	// Remove the last 2 bytes (GroupChannelID is uint32 — needs 4).
 	if _, err := DecodeOpenMiningChannelSuccess(payload[:len(payload)-2]); err == nil {
-		t.Error("expected error for payload missing ExtraNonce2Size")
+		t.Error("expected error for payload missing GroupChannelID")
 	}
 }
 
@@ -966,15 +967,15 @@ func TestDecodeSetupConnection_TruncatedLate(t *testing.T) {
 		Protocol:        MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        "pool.example.com",
+		EndpointHost:    "pool.example.com",
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main-firmware",
 		DeviceID:        "cpu-0",
 	}
 	payload, _ := orig.Encode()
-	// Keep only enough bytes to get through Endpoint+Vendor+HardwareVersion
-	// but cut off Firmware+DeviceID (remove last ~20 bytes).
+	// Keep only enough bytes to get through EndpointHost+Port+Vendor+
+	// HardwareVersion but cut off Firmware+DeviceID (remove last ~15 bytes).
 	short := payload[:len(payload)-15]
 	if _, err := DecodeSetupConnection(short); err == nil {
 		t.Error("expected error for payload truncated within last strings")
@@ -1187,5 +1188,68 @@ func TestDispatchFrame_SetupConnection_Malformed(t *testing.T) {
 	}
 	if _, err := DispatchFrame(f); err == nil {
 		t.Error("DispatchFrame with 1-byte SetupConnection payload must return a decode error")
+	}
+}
+
+// ----- Wire-layout conformance (ported checks for the 09fe275 defect class) -----
+//
+// Self-roundtrip tests cannot catch a missing/misaligned wire field — the
+// encoder and decoder share the same bug. These tests assert the byte-level
+// layout the SV2 spec mandates so the divergence class stays pinned.
+
+func TestSetupConnection_WireLayout_EndpointPort(t *testing.T) {
+	orig := SetupConnection{
+		Protocol: MiningProtocol, MinVersion: 2, MaxVersion: 2,
+		EndpointHost: "h", EndpointPort: 0xBEEF, Vendor: "v",
+	}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	// Layout: proto(1)+minV(2)+maxV(2)+flags(4)+len(1)+"h"+port(2)+
+	// len(1)+"v"+3×empty STR0_255 (hw/fw/device).
+	want := []byte{
+		0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 'h', 0xEF, 0xBE, 0x01, 'v', 0x00, 0x00, 0x00,
+	}
+	if !bytes.Equal(payload, want) {
+		t.Fatalf("wire layout = % X, want % X (endpoint_port U16 after host)", payload, want)
+	}
+}
+
+func TestOpenMiningChannel_WireLayout_MaxTarget(t *testing.T) {
+	orig := OpenMiningChannel{ReqID: 1, User: "u", NominalHashrate: 0, MaxTarget: MaxTargetAny()}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	// max_target is the mandatory last field (§5.3.2): U256 = 32 bytes.
+	if len(payload) < 32+4+1+4 {
+		t.Fatalf("payload too short for max_target: %d", len(payload))
+	}
+	for i, b := range payload[len(payload)-32:] {
+		if b != 0xff {
+			t.Fatalf("max_target byte %d = 0x%02x, want 0xff", i, b)
+		}
+	}
+}
+
+func TestOpenMiningChannelSuccess_WireLayout_GroupChannelID(t *testing.T) {
+	// Last field on the wire is group_channel_id U32 (§5.3.3), not a U16.
+	orig := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 2, Extranonce: []byte{0xaa}, GroupChannelID: 0xDEADBEEF}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got := binary.LittleEndian.Uint32(payload[len(payload)-4:])
+	if got != 0xDEADBEEF {
+		t.Fatalf("last U32 on wire = 0x%08x, want 0xDEADBEEF", got)
+	}
+	m, err := DecodeOpenMiningChannelSuccess(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if m.GroupChannelID != 0xDEADBEEF {
+		t.Fatalf("decoded GroupChannelID = 0x%08x, want 0xDEADBEEF", m.GroupChannelID)
 	}
 }

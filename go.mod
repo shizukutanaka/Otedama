@@ -35,5 +35,5 @@ require (
 	// chosen over v4 to keep the existing API surface). Satisfies
 	// CLAUDE.md §外部依存 criterion 3. See ADR-003 erratum.
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.41.0
 )

@@ -21,6 +21,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"time"
 )
 
 // defaultTLSConfig is the secure baseline for stratum+tls:// connections:
@@ -58,6 +59,11 @@ func tlsConfigWithExtraCAs(pem []byte) (*tls.Config, error) {
 	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 }
 
+// connectTimeout bounds the TCP connect phase — a black-holed endpoint
+// otherwise fails only at the OS TCP timeout (~minutes). The TLS
+// handshake gets a child-context bound of twice that inside dialTLS.
+var connectTimeout = 15 * time.Second
+
 // dialTLS opens a certificate-verified TLS connection to address. When cfg is
 // nil the secure default is used. It performs the TLS handshake before
 // returning (tls.Dialer.DialContext blocks until the handshake completes), so
@@ -67,6 +73,15 @@ func dialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 	if cfg == nil {
 		cfg = defaultTLSConfig()
 	}
-	dialer := &tls.Dialer{Config: cfg}
-	return dialer.DialContext(ctx, "tcp", address)
+	// Bound the handshake: a server that completes TCP connect but stalls
+	// mid-TLS must fail within the connect budget, not at ctx's end. The
+	// child ctx is safe to cancel on return — unlike a poolproto Session
+	// ctx, nothing retains it.
+	dctx, cancel := context.WithTimeout(ctx, connectTimeout*2)
+	defer cancel()
+	dialer := &tls.Dialer{
+		Config:    cfg,
+		NetDialer: &net.Dialer{Timeout: connectTimeout},
+	}
+	return dialer.DialContext(dctx, "tcp", address)
 }

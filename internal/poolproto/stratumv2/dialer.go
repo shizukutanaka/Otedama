@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -68,7 +69,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 		dialFn := d.dialFn
 		if dialFn == nil {
 			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-				var dialer net.Dialer
+				dialer := net.Dialer{Timeout: connectTimeout}
 				return dialer.DialContext(ctx, "tcp", address)
 			}
 		}
@@ -85,14 +86,22 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
-// negotiateTimeout bounds the whole SetupConnection+OpenMiningChannel
-// exchange. The two ReadFrame calls below block on the raw conn, which a
-// context cannot interrupt — without a deadline a pool that accepts the
+// Network stall bounds. connectTimeout caps the TCP connect phase (a
+// black-holed endpoint otherwise fails only at the OS TCP timeout);
+// negotiateTimeout caps the whole SetupConnection+OpenMiningChannel
+// exchange — the two ReadFrame calls below block on the raw conn, which a
+// context cannot interrupt, so without a deadline a pool that accepts the
 // TCP connection but never answers leaves Negotiate blocked forever,
 // ignoring ctx cancellation and leaking the caller in DialURL (same
 // blackhole-pool class the engine's inline V2 handshake bounds via
-// conn.SetDeadline). A var, not a const, so tests can shorten it.
-var negotiateTimeout = 30 * time.Second
+// conn.SetDeadline); sessionReadTimeout is the per-frame deadline
+// refreshed in the read loop — same rationale as stratumv1's 5-minute
+// per-line deadline. Vars (not consts) so tests can shrink them.
+var (
+	connectTimeout     = 15 * time.Second
+	negotiateTimeout   = 30 * time.Second
+	sessionReadTimeout = 5 * time.Minute
+)
 
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
@@ -103,20 +112,25 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 
 	// Bound the exchange, then clear the deadline before the session's
-	// readLoop inherits the conn — post-handshake reads have no deadline
-	// by design (a healthy SV2 pool may legitimately stay silent between
-	// blocks, ~10 min), matching the engine's inline path.
+	// readLoop inherits the conn — the loop re-arms a per-frame read
+	// deadline (sessionReadTimeout) itself from then on.
 	_ = conn.raw.SetDeadline(time.Now().Add(negotiateTimeout))
 	defer conn.raw.SetDeadline(time.Time{}) //nolint:errcheck
 
 	dec := stratum.NewDecoder(conn.raw)
 
-	// SetupConnection.
+	// SetupConnection. remoteAddr is "host:port" so split it for the
+	// spec's separate endpoint_host/endpoint_port wire fields (§3.6.1).
+	epHost, epPort := splitHostPort(conn.remoteAddr)
 	sc := stratum.SetupConnection{
-		Protocol:        stratum.MiningProtocol,
-		MinVersion:      2,
-		MaxVersion:      2,
-		Endpoint:        conn.remoteAddr,
+		Protocol:   stratum.MiningProtocol,
+		MinVersion: 2,
+		MaxVersion: 2,
+		// End mining device: we only handle NewMiningJob (standard),
+		// never NewExtendedMiningJob.
+		Flags:           stratum.FlagRequiresStandardJobs,
+		EndpointHost:    epHost,
+		EndpointPort:    epPort,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -140,11 +154,14 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 
-	// OpenMiningChannel.
+	// OpenMiningChannel. MaxTarget is mandatory on the wire (§5.3.2);
+	// all-0xff means the device accepts whatever share target the pool
+	// assigns.
 	omc := stratum.OpenMiningChannel{
 		ReqID:           1,
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
+		MaxTarget:       stratum.MaxTargetAny(),
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
@@ -264,6 +281,11 @@ func (s *session) readLoop(ctx context.Context) {
 		if ctx.Err() != nil || s.conn.closed.Load() {
 			return
 		}
+		// Re-arm per frame: a wedged-but-open pool connection must end
+		// the session rather than hang forever (V1 carries the same
+		// 5-minute per-line deadline). Healthy SV2 pools push jobs on
+		// every template update, far more often than the block interval.
+		_ = s.conn.raw.SetReadDeadline(time.Now().Add(sessionReadTimeout))
 		f, err := s.dec.ReadFrame()
 		if err != nil {
 			return
@@ -419,6 +441,20 @@ func parseJobID(s string) uint32 {
 // difficulty stored in the session's atomic.Uint64.
 func float64FromBits(bits uint64) float64 {
 	return math.Float64frombits(bits)
+}
+
+// splitHostPort splits "host:port" for the SetupConnection wire fields.
+// A missing or unparseable port degrades to 0 — informational only.
+func splitHostPort(addr string) (string, uint16) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr, 0
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return host, 0
+	}
+	return host, uint16(port)
 }
 
 // Compile-time assertions.

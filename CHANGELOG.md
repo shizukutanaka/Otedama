@@ -10,6 +10,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 305 — SV2 ハンドシェイクのワイヤ準拠・接続全フェーズのバウンド・Windows SCM・wallet 非TTY)
+
+- **SV2 SetupConnection が `endpoint_port` U16 を欠落** — ワイヤ上は
+  `endpoint_host` STR0_255 + `endpoint_port` U16 の別フィールド（spec §3.6.1）
+  なのに `"host:port"` を単一 STR0_255 として送っていたため、準拠プール側で
+  endpoint_host 以降の全フィールドが2バイトずれてデコードされていた。
+  `Endpoint` → `EndpointHost`+`EndpointPort` に分離（並行ブランチ `09fe275`
+  移植、self-roundtrip では検出不能 — バイトレベル回帰テスト追加）。
+- **`OpenStandardMiningChannel` が mandatory `max_target` U256 を欠落**
+  （spec §5.3.2）— 準拠プールはペイロード末尾に達して受理拒否となる。
+  `MaxTarget` フィールド追加、呼出側は all-0xff（`MaxTargetAny()` =
+  割当ターゲットを全て受諾）を送信。
+- **`OpenMiningChannelSuccess` の末尾フィールドを `ExtraNonce2Size` U16 と
+  誤認** — spec §5.3.3 では `group_channel_id` U32。2バイトしか読まず残り
+  2バイトを未消費で値も誤っていた → `GroupChannelID uint32` に修正。
+- **`SetupConnection.flags` に `REQUIRES_STANDARD_JOBS`（bit0）を未設定**
+  — end mining device は設定必須（§5.2）で、未設定だとプールがチャネルを
+  グループに fold しデコード不能な `NewExtendedMiningJob` フレームを
+  送付してくる可能性がある → `FlagRequiresStandardJobs` 定数を engine
+  inline 経路・stratumv2 dialer 双方で送信。
+- **`SubmitShares.Error` の msg_type が予約値 `0x1e`** — spec §08 では
+  `0x1d`。シェア拒否が Unknown メッセージとして届いていた → `0x1d` へ修正。
+  併せて `SubmitSharesSuccess.new_shares_sum` は U32 ではなく U64（§5.3.13）
+  → `NewSharesSummed uint64` に修正（エンコード16→20バイト）。
+- **engine inline 経路で `OpenMiningChannel.Error` を未検査** — チャネル
+  拒否が「unexpected msg」のみの報告だった → 明示的な rejected エラーへ。
+- **V2 セッション read ループに deadline 無し**（`b05b25e` 移植）— 接続は
+  維持されるが応答が止まったプール（沈黙・NAT切断）でセッションが永久に
+  ハング。V1 の行毎5分期限と同原理で `poolReadDeadline`/`sessionReadTimeout`
+  （各5分・フレーム毎に再アーム）を engine・stratumv2 dialer 双方に導入 —
+  実 SV2 プールはブロック間隔（約10分）より遥かに頻繁にジョブを push する
+  ため安全。`DialURL` に「Negotiate の ctx はセッション寿命のため ctx 期限を
+  使わず socket deadline でバウンドする」設計注記を追加。
+- **TCP/TLS connect フェーズが OS タイムアウト依存**（`b05b25e` 移植）—
+  `net.Dialer{Timeout: 15s}`（connectTimeout）を stratumv1/stratumv2 dialer
+  へ、TLS handshake は `connectTimeout*2` の子ctxでバウンド（TCPは通るが
+  ServerHello が来ない停滞を捕捉）— `stratum/tls.go`・`stratumv1/tls.go` 双方。
+- **Windows サービスが一度も起動できなかった**（`48228ec` 移植 — error
+  1053）: sc.exe 登録済みサービスは `StartServiceCtrlDispatcher` ハンド
+  シェイクが無いため SCM に起動時即killされ、install は成功と報告していた。
+  `svc.Run` ベースの `daemon.RunWindowsService`（StartPending→Running→
+  StopPending→Stopped を報告、Stop/Shutdown を ctx cancel へ接続 — Unix の
+  SIGINT/SIGTERM と同一経路）を `internal/daemon/svc_windows.go` に実装、
+  `cmd/otedama` 入口で `IsWindowsService` 判定を差し込み。`golang.org/x/sys`
+  は既存 indirect 依存を direct 化（追加ではない）。
+- **サービス argv に `--data-dir` を未設定時ピンしなかった**（`48228ec`
+  移植）— Windows サービスは LocalSystem 実行で `%APPDATA%` がシステム
+  プロファイル側に再解決され、対話作成の wallet.dat が永久に到達不能に
+  なる → `effectiveDataDir()` を常に `--data-dir` にピン（systemd/launchd も
+  同一pinで3OS定義一致）。SCM は stdout を捨てるため Windows では
+  `--log-file` を `<data-dir>\otedama.log` にデフォルト化＋
+  `service install --log-file` フラグ新設。
+- **stdout 非TTY時に新規 wallet を mint していた**（`e784c7b` 移植）—
+  初回実行の BIP-39 復元フレーズが journal/ログファイル等の永続シンクへ
+  書き込まれ、誰も紙に書かないまま他管理者やログ転送から読める状態に
+  （未バックアップ wallet ＋ 漏洩したシード相当）。`wallet.dat` 不在かつ
+  Output が非端末の *os.File の場合は mint をスキップし対話実行を促す
+  warn を出力。既存 wallet.dat は任意出力でアンロック可（フレーズは作成時
+  のみ出力）。非 *os.File ライター（テスト/埋込バッファ）は従来通り mint。
+- 並行ブランチ `6c9d207`（`otedama.env` を最下位秘密ソースにする `feat:`）
+  は defect-fix ではなく機能追加のため CATEGORY_AUDIT に記録のみ（未移植）。
+
 ### Fixed (session 304 — 裁定 pause/resume・V1 negotiate バウンド・nonce wrap)
 
 - **裁定による pause/idle 割当が次のプールジョブで静黙に打ち消されていた**

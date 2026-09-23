@@ -7,15 +7,18 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"runtime"
 
 	"github.com/shizukutanaka/Otedama/internal/daemon"
 )
 
 // Injectable function variables — overridden in tests to avoid real OS service operations.
-var newDaemonManager = daemon.NewManager
-var managerInstall = func(m *daemon.Manager) error { return m.Install() }
-var managerUninstall = func(m *daemon.Manager) error { return m.Uninstall() }
-var managerStatus = func(m *daemon.Manager) (daemon.ServiceStatus, error) { return m.Status() }
+var (
+	newDaemonManager = daemon.NewManager
+	managerInstall   = func(m *daemon.Manager) error { return m.Install() }
+	managerUninstall = func(m *daemon.Manager) error { return m.Uninstall() }
+	managerStatus    = func(m *daemon.Manager) (daemon.ServiceStatus, error) { return m.Status() }
+)
 
 func cmdService(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -51,6 +54,7 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 	logLevel := fs.String("log-level", "", "Log level for the service (debug|info|warn|error).")
 	logFormat := fs.String("log-format", "", "Log format for the service (text|json).")
 	language := fs.String("language", "", "UI language for the service (en, ja, …).")
+	logFile := fs.String("log-file", "", "Audit-trail log path for the service (default on Windows: <data-dir>\\otedama.log).")
 	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
 		return code
 	}
@@ -59,6 +63,7 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 		LogLevel:       *logLevel,
 		LogFormat:      *logFormat,
 		Language:       *language,
+		LogFile:        *logFile,
 	}
 	mgr, err := newDaemonManager(*configFile, *dataDir, svcFlags)
 	if err != nil {
@@ -70,7 +75,14 @@ func cmdServiceInstall(args []string, stdout, stderr io.Writer) int {
 		return exitRuntime
 	}
 	fmt.Fprintln(stdout, "Otedama service installed and started.")
-	fmt.Fprintln(stdout, "It will start automatically on login.")
+	// systemd --user and LaunchAgent units start at the user's login; a
+	// Windows service (start=auto) starts at boot, before any login.
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(stdout, "It will start automatically at boot (running as LocalSystem).")
+		fmt.Fprintln(stdout, "Service logs are written to <data-dir>\\otedama.log (stdout is not visible under the Service Control Manager).")
+	} else {
+		fmt.Fprintln(stdout, "It will start automatically on login.")
+	}
 	return exitOK
 }
 

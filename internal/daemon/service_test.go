@@ -85,8 +85,11 @@ func TestServiceArgs_IncludesConfigAndDataDir(t *testing.T) {
 func TestServiceArgs_EmptyConfigAndDataDir(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	args := m.serviceArgs()
-	if args != "run" {
-		t.Errorf("serviceArgs with no config/datadir = %q, want %q", args, "run")
+	// --data-dir is pinned even when unset at install time: the service
+	// must not re-resolve the default under a different account (Windows
+	// LocalSystem vs the installing user's %APPDATA%).
+	if !strings.HasPrefix(args, "run --data-dir ") {
+		t.Errorf("serviceArgs should always pin --data-dir; got %q", args)
 	}
 }
 

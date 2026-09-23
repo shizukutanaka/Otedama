@@ -120,7 +120,7 @@ func applyRunEnvFallbacks(f *runFlags) {
 	}
 }
 
-func cmdRun(args []string, stdout, stderr io.Writer) int {
+func cmdRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags("run", args, stdout, stderr)
 	if err != nil {
 		if err == flag.ErrHelp {
@@ -192,8 +192,8 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	}
 	logln("info", messages.StartupPoolConnecting, map[string]any{"url": poolURL})
 
-	ctx, cancel := signal.NotifyContext(
-		context.Background(),
+	runCtx, cancel := signal.NotifyContext(
+		ctx,
 		os.Interrupt, syscall.SIGTERM,
 	)
 	defer cancel()
@@ -203,7 +203,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	defer closeLog()
 
 	// Start HTTP health/metrics server if requested.
-	metricsRegistry, httpSrv := startHTTPServer(ctx, cfg.HTTPAddr, f.pprofEnabled, stdout, stderr)
+	metricsRegistry, httpSrv := startHTTPServer(runCtx, cfg.HTTPAddr, f.pprofEnabled, stdout, stderr)
 	if httpSrv != nil {
 		defer httpSrv.Stop()
 	}
@@ -215,7 +215,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if err := engine.Run(ctx, engine.Options{
+	if err := engine.Run(runCtx, engine.Options{
 		Config:                   cfg,
 		Output:                   stdout,
 		NoTUI:                    f.noTUI,
