@@ -97,6 +97,25 @@ func FuzzDecoder_ReadFrame(f *testing.F) {
 		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
 		// Garbage.
 		{0xDE, 0xAD, 0xBE, 0xEF},
+		// Length-arithmetic boundaries (the class of bug SRI's fuzzing
+		// found in noise_sv2: overflow when length fields are summed).
+		// DefaultMaxFrameSize − HeaderSize = 0xFFFFFA; that claim is the
+		// largest a decoder should attempt to read, one above must be
+		// rejected before any allocation.
+		{0x00, 0x00, 0x00, 0xFA, 0xFF, 0xFF}, // MsgLength 0xFFFFFA: exactly at bound
+		{0x00, 0x00, 0x00, 0xFB, 0xFF, 0xFF}, // MsgLength 0xFFFFFB: one over
+		{0x00, 0x00, 0x00, 0xFC, 0xFF, 0xFF}, // MsgLength 0xFFFFFC: further over
+		// channel_msg set but payload claim below the 4-byte channel_id
+		// minimum → Header.Validate must reject before reading payload.
+		{0x00, 0x80, 0x00, 0x01, 0x00, 0x00, 0xAA},
+		{0x00, 0x80, 0x00, 0x03, 0x00, 0x00, 0xAA, 0xBB, 0xCC},
+		// A valid empty frame followed by a frame claiming a maximal
+		// payload — the decoder must handle the first, then refuse the
+		// second without growing memory.
+		{
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+		},
 	}
 	for _, s := range seeds {
 		f.Add(s)
