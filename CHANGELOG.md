@@ -144,6 +144,41 @@ RESEARCH_IMPROVEMENTS Cat 5 #8（推論収益の建値・会計検証）の監�
 **検証**: `internal/engine`・`internal/provider` テスト green
 （`TestUpdateStream_*` 4件含む）。
 
+### Fixed (session 260 — リリース完全性の実態監査: install.shが実リリース資産と全不整合かつドキュメントが存在しない署名を主張していた)
+
+THREAT_MODELの主張「リリース成果物はcosign署名済み・install.shが
+SHA-256検証」を実査したところ、**どれも今日存在しない**ことが判明
+（release.yml は `.tar.gz` + deb/rpm のみ公開。`checksums.txt`・
+`.sig`・`.pem`・`.bundle`・SBOM は未公開）。
+
+- **`install.sh` は4層で実リリースと不整合だった**: ①使用方法が
+  存在しない `otedama.io` ドメインを参照（NXDOMAIN — CLAUDE.mdの
+  架空URL禁止に抵触）、②アーカイブ名 `otedama_${VERSION}_${OS}_${ARCH}.tar.gz`
+  が実際のアセット名 `otedama-${OS}-${ARCH}.tar.gz` と不一致
+  （全リリースで404）、③未公開の `checksums.txt` でハード失敗、
+  ④tarball内バイナリが `otedama-${OS}-${ARCH}` なのに `otedama`
+  を期待し展開後に失敗。アセット名一致・展開バイナリ一致・
+  実URL（`raw.githubusercontent.com`）に修正し、`checksums.txt`
+  不在時はdieではなく大きく警告して未検証インストールを明示する
+  よう変更（cosign経路は資産公開時にそのまま有効化）。
+- **VERIFY.md**: 「Every release ships with cryptographic
+  provenance」は虚偽 — 冒頭に現状ブロック（署名系資産は未公開、
+  今日有効なのはgit+toolchainだけで済むbuild-from-source検証のみ）
+  を追加し、架空のアセット名を実名に修正。残りの手順は署名導入後の
+  目標フローとして保持（Cat 4 #22-25 が資産公開を追跡）。
+- **THREAT_MODEL**: 「cosign-signed artifacts」主張を実態（未署名、
+  資産公開時にverifyは動く設計、インストーラは未検証を明示警告）
+  に修正し、residual risk を実際のリスク（out-of-band検証必須）に
+  書き直した。
+- **selfish mining 脅威追記**（Cat 4 #8 解消）: Bahrani & Weinberg
+  (arXiv:2309.06847) の「検出不可能なselfish mining」（38.2%で
+  利益化、orphan統計上は正直採掘と区別不能）を Tampering に追記し、
+  複数プール設定・裁定既定が liveness でなく*security* 上の根拠で
+  あることを明記。
+
+**検証**: `bash -n install.sh` clean、`--help` 正常。Go資産無変更の
+ためコードゲート該当なし。
+
 ### Removed (session 259 — 「allocation-minimising」と称していたpooled HMACが実測で回帰と判明しデッドコード削除)
 
 `skills/quality-pass-opus.md`キュー項目1（`hmacSHA256Pooled`の配線

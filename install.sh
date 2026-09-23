@@ -3,15 +3,16 @@
 # Otedama one-line installer.
 #
 # Usage:
-#   curl -sSL https://otedama.io/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash
 #
 # Or with explicit options:
-#   curl -sSL https://otedama.io/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
+#   curl -sSL https://raw.githubusercontent.com/shizukutanaka/Otedama/main/install.sh | bash -s -- --version v3.0.0-alpha.1 --prefix /usr/local
 #
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
-#   2. Downloads the matching Otedama binary from GitHub Releases.
-#   3. Verifies the SHA-256 checksum against the published checksums.txt.
+#   2. Downloads the matching Otedama archive from GitHub Releases.
+#   3. Verifies the SHA-256 checksum when the release publishes
+#      checksums.txt (warns loudly when it does not).
 #   4. Optionally verifies the cosign signature of the checksums file.
 #   5. Installs the binary to $PREFIX/bin (default: /usr/local/bin, or
 #      $HOME/.local/bin if /usr/local is not writable).
@@ -113,7 +114,10 @@ mkdir -p "$INSTALL_BIN"
 
 # ---------- Download + verify ----------
 
-ARCHIVE="otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+# Asset names match release.yml: otedama-<os>-<arch>.tar.gz (no version
+# in the asset name; the version selects the release tag).
+ARCHIVE="otedama-${OS}-${ARCH}.tar.gz"
+BIN_IN_ARCHIVE="otedama-${OS}-${ARCH}"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
 # Temporary workspace cleaned up on exit.
@@ -125,13 +129,19 @@ curl -sSfL "${BASE_URL}/${ARCHIVE}" -o "${TMPDIR}/${ARCHIVE}" \
     || die "download failed"
 
 log "downloading checksums..."
-curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" \
-    || die "checksums download failed"
+HAVE_CHECKSUMS=1
+curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" 2>/dev/null \
+    || HAVE_CHECKSUMS=0
 
 # ---------- SHA-256 verification ----------
 
 if [[ "$SKIP_VERIFY" == "1" ]]; then
     log "SKIPPING checksum verification (--skip-verify)"
+elif [[ "$HAVE_CHECKSUMS" == "0" ]]; then
+    log "WARNING: this release does not publish checksums.txt —"
+    log "WARNING: installing WITHOUT integrity verification."
+    log "WARNING: pass --skip-verify to silence this warning, or verify"
+    log "WARNING: the archive hash out-of-band against the release notes."
 else
     log "verifying SHA-256..."
     cd "$TMPDIR"
@@ -149,7 +159,7 @@ fi
 
 # ---------- Cosign verification (optional, skipped if cosign missing) ----------
 
-if command -v cosign >/dev/null 2>&1; then
+if [[ "$HAVE_CHECKSUMS" == "1" ]] && command -v cosign >/dev/null 2>&1; then
     log "verifying cosign signature..."
     cd "$TMPDIR"
     if curl -sSfL "${BASE_URL}/checksums.txt.sig" -o checksums.txt.sig 2>/dev/null \
@@ -175,10 +185,10 @@ fi
 log "extracting..."
 tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$TMPDIR"
 
-[[ -f "${TMPDIR}/otedama" ]] || die "otedama binary not found in archive"
+[[ -f "${TMPDIR}/${BIN_IN_ARCHIVE}" ]] || die "otedama binary not found in archive"
 
 log "installing to ${INSTALL_BIN}/otedama..."
-install -m 0755 "${TMPDIR}/otedama" "${INSTALL_BIN}/otedama"
+install -m 0755 "${TMPDIR}/${BIN_IN_ARCHIVE}" "${INSTALL_BIN}/otedama"
 
 # ---------- Verify install ----------
 

@@ -777,6 +777,39 @@ share.Hash` end-to-end on a live worker.
 
 ---
 
+## 18. Release artifacts are unsigned; install-time verification applies only when checksums are published
+
+`docs/THREAT_MODEL.md` (pre-session-260) and `VERIFY.md` described
+releases as cosign-signed with verified checksums. The audit this
+section records found the release pipeline (`.github/workflows/release.yml`)
+publishes only binary archives (`otedama-<os>-<arch>.tar.gz`) plus DEB/RPM
+packages — **no `checksums.txt`, no Sigstore signatures, no bundles, no
+SBOMs** — and `install.sh` could not have worked at all: it referenced a
+nonexistent `otedama.io` domain, an archive name that no release
+publishes, hard-failed on the absent `checksums.txt`, and expected a
+binary name inside the tarball that the build does not produce.
+
+Session 260 aligned the client side: `install.sh` now downloads the
+assets the pipeline actually produces, verifies SHA-256 when a
+`checksums.txt` is published (cosign verification likewise activates
+when `.sig`/`.pem` appear), and — until then — warns loudly that the
+install proceeds *without* integrity verification rather than claiming
+checks that did not run.
+
+**What remains:** the workflow-side change — publishing `checksums.txt`
+and adding `actions/attest-build-provenance` + `cosign sign-blob`
+(GitHub OIDC, keyless, no stored keys) to `release.yml`, per
+`docs/RESEARCH_IMPROVEMENTS.md` category 4 #22–#25. `.github/workflows`
+sits outside the automation push scope, so this part needs a maintainer
+commit.
+
+**Honest check available today:** rebuild from source at the release
+tag (`git clone --depth=1 --branch <tag>` → `go build -trimpath
+-ldflags="-s -w" ./cmd/otedama`) and compare `sha256sum` with the
+downloaded binary — documented in `VERIFY.md`.
+
+---
+
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to

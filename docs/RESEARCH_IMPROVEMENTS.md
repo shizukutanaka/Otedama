@@ -639,13 +639,11 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
-   Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
-   selfish-mining strategy whose orphan pattern is statistically
-   indistinguishable from honest mining, profitable from 38.2% hashrate.
-   Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
-   defaults as a *security* (not merely liveness) property; strengthens
-   Cat 4 #7.
+8. ✅ **Single-pool concentration enables *undetectable* attacks** (session
+   260): THREAT_MODEL Tampering section now documents selfish mining with
+   the Bahrani & Weinberg arXiv:2309.06847 result (undetectable orphan
+   pattern, profitable from 38.2% hashrate) and states the multi-pool /
+   endpoint-diversity defaults as a *security* rationale. Strengthens #7.
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
@@ -744,6 +742,14 @@ endpoint against current vendor documentation. Tags as before
     verify. Add provenance + `cosign sign-blob` (GitHub OIDC, no stored
     keys) to release.yml and document `cosign verify-blob` /
     `gh attestation verify`. (sigstore/cosign, slsa.dev)
+    *Client side (session 260):* THREAT_MODEL previously asserted releases
+    "are cosign-signed" — false today (release.yml publishes archives only,
+    no checksums.txt, no signatures). Corrected to describe the actual
+    verify-when-published behaviour, and `install.sh` now matches the real
+    asset names and warns loudly instead of dying on the absent
+    checksums.txt. What remains is the release.yml change itself
+    (`.github/workflows` is outside the GitHub App push scope —
+    maintainer-side change).
 23. 🟡 **Publish an OpenSSF Scorecard workflow as a release gate.**
     `ossf/scorecard-action` checks Branch-Protection / Pinned-Dependencies /
     Signed-Releases / Token-Permissions and bundles osv-scanner; the

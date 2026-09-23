@@ -1,8 +1,18 @@
 # Verifying Otedama Release Artifacts
 
-Every Otedama release ships with cryptographic provenance. This document
-explains how to verify that the binary you downloaded was built by the
-Otedama project's GitHub Actions, was not tampered with in transit, and
+> **Current status (session 260 audit):** the release pipeline today
+> publishes binary archives only — `checksums.txt`, Sigstore
+> signatures, bundles, and SBOMs are **not yet published**. This
+> document describes the verification flow that applies once release
+> signing lands (tracked in `docs/RESEARCH_IMPROVEMENTS.md`, category
+> 4 #22–#25). What works **today** is the build-from-source check in
+> [Verifying the source matches the
+> release](#verifying-the-source-matches-the-release) below — it needs
+> only git and the Go toolchain, and is the honest check to run now.
+
+When the assets below are published, this document explains how to
+verify that the binary you downloaded was built by the Otedama
+project's GitHub Actions, was not tampered with in transit, and
 contains the source code documented in the corresponding tag.
 
 If any verification step fails, **do not run the binary**. Open a
@@ -10,9 +20,10 @@ security advisory per `SECURITY.md`.
 
 ## What to verify
 
-For each release, four artifacts can be verified:
+For each signed release, four artifacts can be verified:
 
-1. The **binary** itself (e.g. `otedama_v3.0.0-alpha.1_linux_amd64.tar.gz`).
+1. The **binary** itself (e.g. `otedama-linux-amd64.tar.gz` — asset
+   names carry no version; the release tag selects the version).
 2. The **checksums file** (`checksums.txt`) listing SHA-256 of every
    binary in the release.
 3. The **Sigstore signature** of the checksums file
@@ -26,7 +37,7 @@ For each release, four artifacts can be verified:
 ```bash
 # Pick the version you downloaded.
 VERSION="v3.0.0-alpha.1"
-ARCHIVE="otedama_${VERSION}_linux_amd64.tar.gz"
+ARCHIVE="otedama-linux-amd64.tar.gz"
 
 # 1. Download the artifact, the checksums, and the signature.
 gh release download "${VERSION}" --repo shizukutanaka/Otedama \
@@ -131,7 +142,7 @@ CGO_ENABLED=0 \
 
 # 4. Compare against the release binary.
 sha256sum otedama
-sha256sum <(tar xOf "${ARCHIVE}" otedama)
+sha256sum <(tar xOf "${ARCHIVE}" otedama-linux-amd64)
 ```
 
 Go binaries built with `-trimpath` and identical Go toolchain versions

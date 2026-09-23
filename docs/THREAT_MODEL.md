@@ -131,6 +131,29 @@ mitigation other than early detection.
 
 ---
 
+**Threat:** Selfish mining (block withholding): a pool accepts valid
+shares and withholds blocks that a miner's shares found, keeping the
+reward for itself. Bahrani & Weinberg's "Undetectable Selfish Mining"
+(arXiv:2309.06847) show a variant whose orphan pattern is
+statistically indistinguishable from honest mining and profitable
+from 38.2% hashrate — so a miner's local counters cannot prove the
+pool is withholding.
+
+**Mitigation:** None exists in-protocol, and the attack is
+**undetectable from the miner's side**: a share that found a withheld
+block is indistinguishable from one that found nothing. Defences are
+out-of-band: pool transparency/audited orphan statistics, and miners
+diversifying across pools so a withholding pool's relative share does
+not grow unchecked.
+
+**Residual risk:** Fully residual. This is the security rationale for
+keeping more than one pool configured and for the arbitration
+defaults: if one pool's reported yields drift below the alternatives,
+switching limits the attacker's reach. It cannot be removed by client
+software.
+
+---
+
 ### Repudiation (R)
 
 **Threat:** A user claims "Otedama never mined for me" to dispute
@@ -261,13 +284,20 @@ OS-level bugs (kernel CVEs), which are out of scope for Otedama.
 
 **Threat:** Malicious code in the binary itself.
 
-**Mitigation:** Release artifacts are cosign-signed. The `install.sh`
-script verifies SHA-256 and, when cosign is installed, verifies the
-signature. Reproducible builds via `-trimpath` and fixed `-ldflags`.
+**Mitigation:** `install.sh` verifies the archive's SHA-256 against the
+release's `checksums.txt` when the release publishes one, and — when
+cosign is installed and a signature is published — verifies the
+keyless Sigstore signature of the checksums file against the
+GitHub Actions OIDC identity. Builds use `-trimpath` and fixed
+`-ldflags`. Today the release pipeline publishes the archives but
+**not** `checksums.txt` or signatures; the installer detects that and
+warns loudly rather than claiming verification that did not happen.
+Signing and provenance attestation remain a tracked improvement item
+(`docs/RESEARCH_IMPROVEMENTS.md`, category 4 #22).
 
-**Residual risk:** The signing key can be stolen. GitHub's OIDC-based
-keyless signing via Sigstore reduces this to "compromise of the
-GitHub Actions runtime," which is actively monitored.
+**Residual risk:** Until release signing ships, a compromised release
+or lookalike asset is only detectable by out-of-band hash comparison.
+Download assets directly from the repository's Releases page.
 
 ## Assumptions
 
@@ -303,3 +333,7 @@ The minimum review interval is once per major version.
 - Recabarren & Carbunar, "Hardening Stratum, the Bitcoin Pool Mining
   Protocol" (arXiv:1703.06545) — basis for the traffic-analysis
   side-channel threat in the Information-disclosure section.
+- Eyal & Sirer, "Majority is not Enough: Bitcoin Mining is Vulnerable"
+  (arXiv:1311.0243) and Bahrani & Weinberg, "Undetectable Selfish
+  Mining" (arXiv:2309.06847) — basis for the selfish-mining threat in
+  the Tampering section.
