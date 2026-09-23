@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 270 — `set_extranonce` 後の旧 nonce-space ジョブが reject 連発)
+
+`mining.set_extranonce` で extranonce を更新しても `jobsCh` にキュー
+済みのジョブを残していた — それらは旧 extranonce1 でコインベース
+(merkle root)が構築済みのため、新 nonce-space で提出すれば全件 reject。
+cgminer/bfgminer と同様にローテーションをワーク無効化として扱い、
+`purgeJobs()`(clean_jobs パスから抽出)で滞留ジョブを排出。次の notify
+が新 extranonce で再武装する。net.Pipe e2e テスト追加
+(difficulty マーカーでローテーション横断を決定的に証明)。
+CATEGORY_AUDITに session-270 追記。
+
 ### Fixed (session 269 — 非有限イールドが裁定エンジンを汚染)
 
 プロバイダの異常な値が裁定に侵入していた2箇所を防御。

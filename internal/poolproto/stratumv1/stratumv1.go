@@ -247,6 +247,13 @@ func (s *session) dispatch(line []byte) {
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
 			s.extranonce1 = en1
 			s.extranonce2Size = sz
+			// Every queued job was built under the retired extranonce1:
+			// its coinbase (and thus merkle root) was computed with the
+			// old nonce-space, so any share from it is a guaranteed
+			// reject under the new extranonce. Standard clients treat
+			// the rotation like clean_jobs (cgminer, bfgminer): purge
+			// pending work and let the next notify re-arm the miner.
+			s.purgeJobs()
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -333,15 +340,8 @@ func (s *session) sendJob(nj notifyJob) {
 	}
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
-		for {
-			select {
-			case <-s.jobsCh:
-			default:
-				goto send // channel empty
-			}
-		}
+		s.purgeJobs()
 	}
-send:
 	select {
 	case s.jobsCh <- job:
 	default:
@@ -354,6 +354,20 @@ send:
 		select {
 		case s.jobsCh <- job:
 		default:
+		}
+	}
+}
+
+// purgeJobs drains every queued job without blocking. It runs when the
+// pool invalidates pending work: clean_jobs=true on a new block, or a
+// mining.set_extranonce rotation that retires the nonce-space the queued
+// jobs were built under.
+func (s *session) purgeJobs() {
+	for {
+		select {
+		case <-s.jobsCh:
+		default:
+			return
 		}
 	}
 }

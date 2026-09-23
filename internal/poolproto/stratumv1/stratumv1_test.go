@@ -1952,3 +1952,65 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 		t.Error("unknown method enqueued a notice")
 	}
 }
+
+func TestSession_E2E_SetExtranoncePurgesPendingJobs(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		// Two jobs queued under the old extranonce. clean_jobs=false on all
+		// notifies so only the rotation itself can purge — a clean_jobs
+		// flag would mask the missing purge.
+		for _, id := range []string{"OLDJOB1", "OLDJOB2"} {
+			fmt.Fprintf(serverConn, `{"id":null,"method":"mining.notify","params":[%q,"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",false]}`+"\n", id)
+		}
+		// Rotate the extranonce: retires the nonce-space the queued jobs
+		// were built under — both must be purged (clean_jobs semantics).
+		fmt.Fprintf(serverConn, `{"id":null,"method":"mining.set_extranonce","params":["bb00",4]}`+"\n")
+		// Marker: once difficulty 777 is observed, the read loop has
+		// dispatched everything sent so far, including the rotation.
+		fmt.Fprintf(serverConn, `{"id":null,"method":"mining.set_difficulty","params":[777]}`+"\n")
+		fmt.Fprintf(serverConn, `{"id":null,"method":"mining.notify","params":["NEWJOB","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",false]}`+"\n")
+	}()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Wait for the difficulty marker: proves the read loop dispatched the
+	// set_extranonce (and therefore the purge) before we consume — without
+	// this barrier the test races the queue and can legitimately dequeue a
+	// pre-rotation job that was delivered before the marker.
+	deadline := time.After(2 * time.Second)
+	for sess.SuggestedDifficulty() != 777 {
+		select {
+		case <-deadline:
+			t.Fatal("difficulty marker never arrived")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	// The only job still queued must be NEWJOB — OLDJOB1/2 were built
+	// under the retired extranonce and had to be discarded, or every
+	// share derived from them is a guaranteed reject under the new
+	// nonce-space.
+	select {
+	case job := <-sess.Jobs():
+		if job.JobID != "NEWJOB" {
+			t.Fatalf("got stale job %q; pre-rotation jobs must be purged on set_extranonce", job.JobID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no job within 2s")
+	}
+	select {
+	case job, ok := <-sess.Jobs():
+		if ok {
+			t.Fatalf("unexpected extra job %q after rotation", job.JobID)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}

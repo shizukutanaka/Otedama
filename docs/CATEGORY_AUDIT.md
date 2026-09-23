@@ -659,3 +659,16 @@ Tests: `FuzzDecide`, `TestDecide_RejectsNonFiniteMargins`,
 `TestDecide_NonFiniteYieldNeverAssigned`.
 
 All 24 packages build, vet, and test green.
+
+---
+
+## Session 270 update — V1 set_extranonce stale-work invalidation
+
+| Finding | Disposition |
+|---|---|
+| `mining.set_extranonce` updated `extranonce1`/`extranonce2Size` but left jobs already queued in `jobsCh` intact. Those jobs were built under the retired extranonce1 — the client computes the coinbase (`coinb1 + en1 + en2 + coinb2`) and hence the merkle root with the old nonce-space, so every share mined from them is a guaranteed reject under the new extranonce. Standard clients (cgminer, bfgminer) treat extranonce rotation as work invalidation like `clean_jobs`. | ✅ Fixed: `purgeJobs()` (extracted from the clean_jobs path) now runs on a parsed `set_extranonce`; queued stale jobs are drained and the next notify re-arms the miner under the new nonce-space. |
+| Race: `extranonce2Size` written by the read loop, read by `Submit` on the engine's goroutine | ⏭ Not a defect to claim — fixed by parallel session (branch `setextranonce-race`: atomic.Int32 + en2 rotation); verified its diff before claiming. The stale-work purge was NOT covered there — this session's change is orthogonal (small merge overlap expected on the same `case` block). |
+
+Tests: `TestSession_E2E_SetExtranoncePurgesPendingJobs` — net.Pipe pool queues two jobs (clean_jobs=false so only the rotation can purge), sends `set_extranonce`, then a `set_difficulty` marker (proves the read loop passed the rotation before the consumer drains) and a new job; asserts the only surviving job is the post-rotation one.
+
+All 24 packages build, vet, and test green.
