@@ -176,6 +176,18 @@ func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Tim
 func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Quote) string {
 	mu.Lock()
 	defer mu.Unlock()
+	// arbitration.Yield.SatsPerSecond must carry the provider's *net*
+	// rate: provider.Yield documents Effective() — net × confidence — as
+	// "what the arbitration engine uses for comparison". Copying the
+	// gross rate instead would silently discard provider fees (mining
+	// pool ~1%, Akash platform ~20%), inflating every quote by its fee
+	// share and biasing switches toward the higher-fee stream. A
+	// provider that leaves NetSatsPerSecond unset falls back to its
+	// gross figure (the Yield doc defines that as "no explicit fee").
+	net := q.Yield.NetSatsPerSecond
+	if net <= 0 {
+		net = q.Yield.SatsPerSecond
+	}
 	key := q.ProviderID + ":" + q.DeviceID
 	existing := m[key]
 	existing.ID = arbitration.StreamID(q.ProviderID)
@@ -185,12 +197,12 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 	}
 	if q.DeviceID != "" {
 		existing.YieldPerDevice[q.DeviceID] = arbitration.Yield{
-			SatsPerSecond: q.Yield.SatsPerSecond,
+			SatsPerSecond: net,
 			Confidence:    q.Yield.Confidence,
 		}
 	}
 	existing.DefaultYield = arbitration.Yield{
-		SatsPerSecond: q.Yield.SatsPerSecond,
+		SatsPerSecond: net,
 		Confidence:    q.Yield.Confidence,
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"

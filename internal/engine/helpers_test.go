@@ -252,8 +252,45 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	if !ok {
 		t.Fatal("YieldPerDevice[cpu-0] missing")
 	}
-	if y.SatsPerSecond != 0.1 {
-		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.1", y.SatsPerSecond)
+	// updateStream maps the provider's *net* yield (gross minus fee) into
+	// arbitration — the contract provider.Yield.Effective() documents.
+	if y.SatsPerSecond != 0.099 {
+		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.099 (net)", y.SatsPerSecond)
+	}
+}
+
+// TestUpdateStream_MapsNetYield pins the fee-aware boundary: arbitration
+// compares yields net of provider fees. A quote carrying NetSatsPerSecond
+// maps net into both YieldPerDevice and DefaultYield; a quote leaving
+// NetSatsPerSecond unset (zero) falls back to its gross figure, matching
+// provider.Yield's "no explicit fee" contract.
+func TestUpdateStream_MapsNetYield(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "ai.akash",
+		DeviceID:   "gpu-0",
+		Yield:      provider.Yield{SatsPerSecond: 1.0, NetSatsPerSecond: 0.8, Confidence: 0.6},
+	})
+	s := m["ai.akash:gpu-0"]
+	if got := s.YieldPerDevice["gpu-0"].SatsPerSecond; got != 0.8 {
+		t.Errorf("net-carrying quote: YieldPerDevice = %v, want 0.8", got)
+	}
+	if got := s.DefaultYield.SatsPerSecond; got != 0.8 {
+		t.Errorf("net-carrying quote: DefaultYield = %v, want 0.8", got)
+	}
+
+	// Gross-only quote (Net unset): the gross figure is the fee-free rate
+	// by contract, so it maps through unchanged.
+	updateStream(&mu, m, provider.Quote{
+		ProviderID: "mining.stratum",
+		DeviceID:   "cpu-0",
+		Yield:      provider.Yield{SatsPerSecond: 0.5, Confidence: 0.9},
+	})
+	s = m["mining.stratum:cpu-0"]
+	if got := s.YieldPerDevice["cpu-0"].SatsPerSecond; got != 0.5 {
+		t.Errorf("gross-only quote: YieldPerDevice = %v, want 0.5", got)
 	}
 }
 

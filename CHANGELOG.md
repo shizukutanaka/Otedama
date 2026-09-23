@@ -115,6 +115,35 @@ RESEARCH_IMPROVEMENTS Cat 2 #9（定時間比較監査）を実施し、
 CLAUDE.mdの資金領域ルール対象のためmaintainer確認を推奨（既存動作は
 等価・タイミング特性のみ変更）。
 
+### Fixed (session 258 — 裁定が手数料控除前の粗利で比較していた欠陥を是正: 推論収益が実質25%過大評価されていた)
+
+RESEARCH_IMPROVEMENTS Cat 5 #8（推論収益の建値・会計検証）の監査で、
+項目記述より深刻な実害を発見。
+
+- **`updateStream`が粗利`SatsPerSecond`を裁定エンジンに渡していた**:
+  `provider.Yield`は粗利`SatsPerSecond`と手数料控除後
+  `NetSatsPerSecond`の両方を保持し、`Yield.Effective()`のdocは
+  「net×confidenceが裁定エンジンの比較値」と明記していたが、実装は
+  粗利フィールドを`arbitration.Yield`にコピーしていた。結果として
+  各プロバイダの手数料（mining pool ~1%、Akash platform ~20%）が
+  計算された上で完全に破棄され、裁定は粗利同士の比較をしていた。
+  推論ストリームの収益はnetに対し~25%過大評価され、高手数料側の
+  プロバイダへ切り替えが偏るバイアスがあった。`updateStream`は
+  `NetSatsPerSecond`を裁定に写すよう修正（Net未設定時は「手数料
+  なし」の契約通り粗利にフォールバック）。activity snapshot経由で
+  TUIのper-provider sats表示も同じnet値を継承する。
+- **既存テストがバグ値をpinしていた**: `TestUpdateStream_
+  InsertsNewStream`は`Net=0.099`のquoteに対し粗利`0.1`を期待して
+  いた——修正しnet `0.099`を期待に変更。新規`TestUpdateStream_
+  MapsNetYield`がnet写像とgrossフォールバックの両方向をpin。
+- **検証済みの健全部分**: USD→BTC変換（`SatsPerSecond`ヘルパ）と
+  「(simulated)」プロバイダ名マーカーは正直で、シミュレート収益が
+  実会計に混入しないこと（ストリーム全体がラベル+confidenceキャップ
+  済み）を確認。
+
+**検証**: `internal/engine`・`internal/provider` テスト green
+（`TestUpdateStream_*` 4件含む）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

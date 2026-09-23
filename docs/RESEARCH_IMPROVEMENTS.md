@@ -216,9 +216,28 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
+8. ✅ **Inference revenue is denominated/settled correctly** — verify USD→BTC
    conversion path and that simulated vs real yield is never mixed in
    accounting.
+   — ✅ **Verified and fixed (session 258).** The audit surfaced a real
+   defect worse than the item described: `provider.Yield` carries both
+   `SatsPerSecond` (gross) and `NetSatsPerSecond` (post-fee), and
+   `Yield.Effective()` documents net×confidence as "what the arbitration
+   engine uses for comparison" — but `engine.updateStream` copied the
+   **gross** field into `arbitration.Yield`, silently discarding every
+   provider's fee (mining pool ~1%, Akash platform ~20%). Arbitration
+   therefore compared gross-vs-gross, overstating the inference stream
+   ~25% relative to its net and biasing switches toward the higher-fee
+   provider. `updateStream` now maps `NetSatsPerSecond` into arbitration
+   (gross fallback when Net is unset, per the field's contract); the
+   TUI's per-provider sats display inherits the same net figure via the
+   activity snapshot. `TestUpdateStream_MapsNetYield` pins both
+   directions; the pre-existing `TestUpdateStream_InsertsNewStream`
+   fixture had been asserting the buggy gross value and is corrected.
+   USD→BTC conversion itself (`SatsPerSecond` helper) and the
+   "(simulated)" provider-name marker verified honest — simulated
+   yield never enters real accounting because the entire stream is
+   labelled and confidence-capped.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 
