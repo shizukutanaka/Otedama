@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 262 — KNOWN_LIMITATIONS §15 の解消: TUI ダッシュボードが実ターミナル幅を自動検出し、実行中のリサイズにも追従)
+
+**80 カラム固定だった TUI が実際の端末幅を検出するようになった。**
+従来は `Dashboard.SetWidth` が存在しながら本番の呼び出し側が一つも
+なく、常に 80 カラムで描画されていた（狭い端末では行折返しで
+「カーソルホーム + 上書き再描画」モデルが崩れ、広い端末では右半分が
+未使用）。
+
+- `tui.NewDashboard` が `io.Writer` が端末付き `*os.File` なら構築時に
+  幅を検出し、以後 ~1 秒ごとの render tick で再検出 —— tmux split や
+  SSH ウィンドウのドラッグなど実行中のリサイズにも追従。
+- 検出は `internal/tui/termsize*.go` に分離: Unix は
+  `TIOCGWINSZ`（`golang.org/x/sys/unix`）、Windows は
+  `GetConsoleScreenBufferInfo`、その他の環境では検出なし（0 を返す
+  スタブ）。パイプ・リダイレクト等の非端末 writer は従来通り
+  80 カラム既定。`SetWidth` は手動オーバーライドとして残り、
+  呼ばれた時点で自動検出を無効化する。
+- 依存判断: KNOWN_LIMITATIONS §15 が提示した二案のうち
+  `golang.org/x/sys` 直 syscall 側を採用 —— `x/crypto` 経由で既に
+  推移依存に存在するため直接 require への昇格のみで供給面は不変。
+  `x/term` は本件の必要（片側 1 ioctl）に対して API 面が過大。
+
 ### Fixed/Added (session 261 — ESP-Miner #1383 / cgminer 系実装との照合に基づく精錬: mining.suggest_difficulty の送信側を実装（V1 の UpdateChannel 相当）)
 
 **`mining.suggest_difficulty` を V1 セッションで送出する経路を実装。**

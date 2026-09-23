@@ -640,41 +640,33 @@ release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 262)
 
-**What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
-real terminal width, but no production call site ever calls it —
-`engine.Run` constructs the dashboard via `tui.NewDashboard` and never
-calls `SetWidth`, so every real invocation renders at the constructor's
-hardcoded default of 80 columns regardless of the actual terminal
-size (confirmed: `SetWidth` is called only from `internal/tui`'s own
-test files).
+**Resolution:** `tui.NewDashboard` now detects the real terminal width
+itself (no caller-side wiring required) and re-detects on every ~1s
+render tick, so a mid-run resize — tmux split, SSH window drag — takes
+effect without a restart. Detection lives in `internal/tui/termsize*.go`:
+`TIOCGWINSZ` via `golang.org/x/sys/unix` on Unix,
+`GetConsoleScreenBufferInfo` via `golang.org/x/sys/windows` on Windows,
+a 0-returning stub elsewhere. A non-terminal writer (pipe, redirect)
+or a failed ioctl keeps the 80-column default; widths below the
+40-column layout minimum are ignored rather than honored.
+`Dashboard.SetWidth` remains a manual override and disables
+auto-detection once invoked (tests, a future `--width` flag).
 
-**Impact:** On a narrower real terminal, output can wrap onto a second
-terminal row, which breaks the dashboard's "cursor home, overwrite in
-place" repaint model (each subsequent frame then draws one row off
-from where the previous one landed). On a wider terminal, screen space
-is simply unused. Separately (fixed session 249): before this session,
-the pool connection-status text and share-count text on the two
-busiest lines were truncated using fixed-width budgets independent of
-the actual configured width, so at the documented 40-column minimum
-they could be cut off entirely even once real width detection lands;
-both lines now size their variable-length fields from the actual
-`cols` value, so this specific failure mode is closed regardless of
-whether width detection itself is ever wired in.
+**Dependency decision taken:** the raw `golang.org/x/sys` syscall path
+this entry proposed — not `x/term`. `x/sys` was already in the module
+graph transitively via `x/crypto`, so promoting it to a direct
+requirement adds no new supply-chain surface; `x/term` is heavier
+(whole termios/pty API) for a need that is one ioctl per side. `go.mod`
+records the rationale per the dependency-addition rule.
 
-**Workaround:** Keep the terminal at or above 80 columns for correct
-rendering, or use `--no-tui` for plain log output, which has no width
-assumptions.
-
-**Target:** No committed target. Wiring in real detection needs either
-`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
-dependency stance would need a documented exception, as the package
-doc's own "Design" section already assumed this was solved) or raw
-per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
-GetConsoleScreenBufferInfo, both already reachable as an indirect
-dependency via `golang.org/x/crypto`) — a maintainer decision between
-the two is needed before implementation.
+**Verified:** `TerminalWidth` returns 0 on `bytes.Buffer`, a regular
+file, and any non-terminal writer; on a real pty with winsize set it
+returned 132 columns end-to-end (probe test run under python `pty.fork`
++ `TIOCSWINSZ`, not committed). Unit tests cover the non-terminal
+cases, the `SetWidth` manual-override semantics, and the regular-file
+no-op refresh path.
 
 ---
 
