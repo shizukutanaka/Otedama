@@ -166,6 +166,19 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    `poolproto.ProtoErrorInformer` as `otedama_pool_parse_errors_total`
    (engine folds the per-session monotonic count into the counter on
    each stats tick — a rising value on a live link is the diagnostic).
+   — session 288: **connect/handshake is now bounded on every path.**
+   Neither the TCP/TLS dial nor the protocol handshake had a timeout:
+   V1's `DialURL` ran under the caller's context (the run lifetime), so
+   a pool that accepts the socket but never answers `mining.subscribe`
+   wedged the reconnect loop forever — "connected to X" as the last
+   log. The V2 inline path was worse: `ReadFrame` has no ctx at all.
+   `handshakeTimeout` (30s, cgminer-class) now bounds dial + handshake
+   on all three sites: stratumv1 Dial (ctx wrap) + Negotiate (hsCtx for
+   the call() steps while `sess.start` keeps the outer ctx — session
+   lifetime is NOT shortened), stratumv2 Dial/Negotiate, and the
+   engine's inline V2 `handshake()` (conn SetDeadline since ReadFrame
+   takes no ctx; cleared on success — mid-session reads run under the
+   liveness metrics). net.Pipe silent-pool tests cut each path at 200ms.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

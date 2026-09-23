@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 288 — 接続・ハンドシェイクを全経路でタイムアウト化)
+
+TCP/TLS ダイヤルとプロトコルハンドシェイクに一切タイムアウトがなかった:
+V1 `DialURL` は呼び出し側 ctx（= ラン lifetime）で待ち続けるため、TCP は
+accept するのに `mining.subscribe` へ応答しないプールで再接続ループが
+無期限に wedged —「connected to X」が最後のログのまま停止。V2 インライン
+経路は更に深刻で `ReadFrame` に ctx すら存在しなかった。`handshakeTimeout`
+（30 秒、cgminer 級）で dial + handshake を全3経路（stratumv1 Dial/Negotiate、
+stratumv2 Dial/Negotiate、エンジン inline V2 `handshake()`）にバインド。
+V1 Negotiate は hsCtx を call() 系のみに適用し `sess.start` は外側 ctx を
+維持 —— セッション寿命は短縮しない。V2 は ReadFrame が ctx を取らないため
+conn `SetDeadline`（成功時に解除、mid-session 読み取りは心拍メトリクス管轄）。
+net.Pipe の沈黙プールテストで各経路を 200ms で検証。
+
 ### Added (session 287 — パース失敗の無言 drop を計測)
 
 **新カウンタ `otedama_pool_parse_errors_total`** —— V1 dispatch は
