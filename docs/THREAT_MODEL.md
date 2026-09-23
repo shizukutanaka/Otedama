@@ -14,7 +14,7 @@ network handling, wallet persistence).
 
 - The `otedama` binary, its configuration files, its wallet file,
   and its HTTP endpoints.
-- Connections to Stratum V2 pools.
+- Connections to Stratum V1 and Stratum V2 pools.
 - Connections to price feeds (Coinbase, Kraken, CoinGecko).
 - Connections to AI inference providers (Akash Network, future).
 - Interactions with the operating system (systemd, launchd, filesystem).
@@ -63,14 +63,22 @@ privileges. No user-space software resists that threat.
 
 **Threat:** An attacker impersonates the pool to steal shares.
 
-**Mitigation:** Stratum V2 Noise NX handshake authenticates the pool
-to the miner via a static public key. `internal/stratum/noise.go`
-implements the handshake. Falling back to V1 is not supported, so
-downgrade attacks are structurally impossible.
+**Mitigation:** Pool authentication exists **only** through the TLS
+certificate on the `stratum+tls://` and `stratum+v2tls://` transports
+(optionally pinned to a custom CA via `tls_ca_file`). The Noise NX
+handshake in `internal/stratum/noise*.go` is implemented and tested
+but is **not wired into the live dial path** — `stratum+v2://` is
+plaintext binary framing and `stratum+tcp://` is plaintext JSON-RPC,
+so on those schemes a network adversary can impersonate the pool and
+redirect shares (stratum-hijacking; KNOWN_LIMITATIONS §2). V1 fallback
+**is** supported, so downgrade resistance is a deployment property,
+not a protocol guarantee: use a `*tls://` scheme and run
+`otedama doctor`, whose pool-encryption check flags plaintext schemes.
 
-**Residual risk:** In v3.0.0-alpha, the Noise DH uses P-256 instead of
-the spec-mandated secp256k1. This does not weaken authentication but
-makes the alpha technically non-conforming. Tracked for v3.1.0.
+**Residual risk:** Until Noise NX (spec: secp256k1; see ADR-011) is
+wired into the session path, authentication coverage is TLS-only and
+plaintext schemes offer none. Users on `stratum+v2://` or
+`stratum+tcp://` remain exposed to on-path share theft.
 
 ---
 
@@ -99,7 +107,8 @@ The file is written atomically (tempfile + rename) so a crash during
 write cannot corrupt the existing file.
 
 **Residual risk:** Root can delete the file (no Otedama-side
-mitigation). The encryption's key derivation uses scrypt (N=32768);
+mitigation). The encryption's key derivation uses scrypt
+(N=131072, r=8, p=1);
 a determined offline attacker with a modern GPU cluster can brute-force
 weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 
@@ -108,9 +117,13 @@ weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 **Threat:** A malicious pool sends a crafted frame that causes buffer
 overflow, panic, or memory exhaustion.
 
-**Mitigation:** `MaxFrameSize` caps any single frame. The fuzz tests
-`FuzzDecodeHeader` and `FuzzDecoder_ReadFrame` run nightly with
-automatic crasher reporting.
+**Mitigation:** `MaxFrameSize` caps any single frame. Fuzz targets
+exist for the riskiest parsers (`FuzzDecodeHeader`,
+`FuzzDecoder_ReadFrame`, `FuzzV1ReadLine`, `FuzzV1Dispatch`,
+`FuzzEncryptedConnRead`); they run in CI on every push/PR as
+seed-corpus regression tests. Nightly duration fuzzing and automatic
+crasher reporting are **not** wired — tracked in
+KNOWN_LIMITATIONS §13 for the maintainer.
 
 **Residual risk:** Go panic safety provides strong guarantees, but
 a panic in the decode path still terminates the miner (DoS, below).
@@ -120,14 +133,20 @@ a panic in the decode path still terminates the miner (DoS, below).
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
-**Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
-pinned by SHA. Dependabot auto-updates with review. govulncheck runs
-in CI. See ADR-003.
+**Mitigation:** Only two direct runtime dependencies beyond the Go
+standard library: `golang.org/x/crypto` and `go.yaml.in/yaml/v3`
+(the maintained successor of `gopkg.in/yaml.v3`; see ADR-003 erratum).
+Most GitHub Actions are pinned by SHA; known floating `@master`
+references (`trivy-action`, `gosec`) are recorded in
+KNOWN_LIMITATIONS §13 and remain the maintainer's to pin.
+Dependabot auto-updates with review. `govulncheck` is **not** wired
+into CI today — also tracked in §13.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
-one of the two direct dependencies remains possible. We have no
-mitigation other than early detection.
+one of the two direct dependencies remains possible — as does
+compromise of an unpinned Action's `@master` ref between updates.
+We have no mitigation other than early detection and dependency
+minimalism.
 
 ---
 
@@ -159,10 +178,14 @@ software.
 **Threat:** A user claims "Otedama never mined for me" to dispute
 operator claims.
 
-**Mitigation:** All share submissions are logged with timestamp, nonce,
-and sequence number. Prometheus metrics persist via the scrape target.
-Share acknowledgment messages from the pool are logged by
-`SubmitSharesSuccess` handlers.
+**Mitigation:** Share submissions and pool verdicts are logged. On the
+V2 path the log lines carry the share's sequence number and nonce
+(`engine: share seq=N nonce=0x…`); V1 verdicts are logged by class
+(accepted / rejected-with-reason / unresolved). Prometheus metrics
+persist via the scrape target. Pool batch acknowledgements are
+reconciled against the submitted count and logged
+(`otedama_pool_shares_sum_total`,
+`otedama_pool_reconcile_divergences_total`).
 
 **Residual risk:** The user can still delete logs. This is a feature,
 not a bug — Otedama is the user's software, not surveillance.
@@ -204,9 +227,11 @@ of these allows fund theft, but they reduce user privacy.
 **Threat:** Logs contain sensitive values.
 
 **Mitigation:** `otedama doctor` and log outputs use `maskAddress` to
-truncate Bitcoin addresses to `bc1qar0···5mdq`. Wallet passphrases are
-never logged. Mnemonics are displayed exactly once on first run and
-never written to a log file.
+truncate Bitcoin addresses to `bc1qar···5mdq` (first 6 + last 4
+chars). Wallet passphrases are never logged. Mnemonics are displayed
+exactly once on first run (interactive TTY only — output is refused
+when stdout is not a terminal, so the phrase cannot end up in a log
+file) and never written to a log file.
 
 **Residual risk:** Users who manually enable `--log-level=debug` may
 see more information; the threshold between "useful debug" and "leaks
@@ -246,8 +271,10 @@ mining-cookie-style construct is tracked as a future hardening item.
 
 **Threat:** A malicious pool sends oversized frames to exhaust memory.
 
-**Mitigation:** `MaxFrameSize` = 16 MiB (Stratum V2 spec maximum) in
-the decoder. Frames larger than this are rejected before allocation.
+**Mitigation:** `MaxFrameSize` = 16 MiB in the decoder — the bound
+the Stratum Reference Implementation uses (the V2 spec mandates no
+single value). Frames larger than this are rejected before
+allocation.
 
 **Residual risk:** 16 MiB × 1000 misbehaving channels = 16 GiB. Otedama
 is a single-pool client, so this scales with concurrent connections
@@ -258,9 +285,11 @@ configuration.
 
 **Threat:** A pool sends jobs so rapidly that the miner falls behind.
 
-**Mitigation:** Job channel is bounded (buffer size 32). The worker
-picks the newest job, dropping older ones. Share submission is also
-channel-bounded.
+**Mitigation:** The engine's job store is bounded (256 entries, FIFO
+eviction of the oldest) and per-session pending-job maps are capped
+(256) — a flooding pool cannot grow memory without bound. The worker
+consumes the newest job, dropping older ones, and share submission is
+channel-bounded (4 per worker thread).
 
 **Residual risk:** Legitimate high-throughput pools may trigger drops.
 The design tradeoff favors freshness (no stale share penalty) over
@@ -305,7 +334,9 @@ Download assets directly from the repository's Releases page.
 - The user's shell history and screen lock are reasonable.
 - The Go compiler does not contain a backdoor.
 - The Go runtime's random number generator is cryptographically secure.
-- TLS via `golang.org/x/crypto` is correctly implemented.
+- TLS via the standard library's `crypto/tls` is correctly implemented
+  (`golang.org/x/crypto` supplies scrypt and related primitives, not
+  the TLS stack).
 
 Any violation of these assumptions is outside Otedama's security
 boundary. Users with elevated threat models (nation-state adversaries)

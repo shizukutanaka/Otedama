@@ -1268,3 +1268,22 @@ Chain tip `origin/devin/1790139074-rpc-response-timeout` (103 commits ahead of m
 | `Update` drain-then-enqueue is not atomic; concurrent producers can each drop one entry | 📋 Recorded: single producer (engine 1 Hz tick) today; bounded queue keeps freshest stats available regardless. |
 | Audited clean — `internal/metrics/metrics.go` remainder (injective `metricKey` via escaped renderLabels post-s293, cross-type name guard, decorate-sort-undecorate key caching, per-name single HELP/TYPE, escapeHelp/escapeLabel coverage, formatFloat specials, snapshot-then-unlock collector call, label-name panic contract) and `internal/tui/dashboard.go` remainder (Start/Stop idempotence post-s296, wg-joined Stop writes, writeLine truncation keeps repaint model, visibleLen/truncateVisible CSI final-byte handling, providerLine/footer/header paths) | ✅ No change needed. |
 | Tests: `TestDashboard_MiningLine_DeviceColumnPaddedByVisibleWidth`, `TestDashboard_EarningsLine_TotalColumnPaddedByVisibleWidth` | ✅ All green; 24 packages pass; vet/gofumpt/deadcode report nothing new. |
+
+## Session 313 update — THREAT_MODEL.md shipped-state audit
+
+Security-auditor-facing document whose *mitigation* claims were themselves unverifiable or false — the worst place for a stale claim, since an auditor trusts it instead of re-deriving from code. Every claim re-verified against the shipped tree:
+
+| Claim in THREAT_MODEL.md | Reality (verified) | Disposition |
+|---|---|---|
+| "Noise NX handshake authenticates the pool to the miner" + "Falling back to V1 is not supported, so downgrade attacks are structurally impossible" | Noise NX exists in `internal/stratum/noise*.go` but is **not wired into the live dial path** — `stratum+v2://` is plaintext framing and `stratum+tcp://` is plaintext JSON-RPC (KNOWN_LIMITATIONS §2; same false-security-claim class fixed in doctor, s297). V1 IS a registered dialer. Pool auth today = TLS certificate on `*tls://` schemes only | ✅ Section rewritten: TLS-only auth coverage, downgrade resistance is a deployment property, doctor flags plaintext schemes |
+| "FuzzDecodeHeader/FuzzDecoder_ReadFrame run nightly with automatic crasher reporting" | Targets exist but CI runs them only as push/PR seed-corpus regressions — no schedule, no duration, no crasher upload | ✅ Mitigation corrected; nightly fuzzing tracked in §13 |
+| "All GitHub Actions pinned by SHA" + "govulncheck runs in CI" | Floating `@master` refs (trivy-action, gosec) recorded §13; govulncheck never wired | ✅ Corrected; both tracked §13 |
+| "three runtime dependencies: x/crypto, gopkg.in/yaml.v3, stdlib" | Two direct deps; yaml module is `go.yaml.in/yaml/v3` (successor, ADR-003 erratum) | ✅ Corrected |
+| scrypt "N=32768" | `scryptN = 1<<17 = 131072` (r=8, p=1) — 4× understates actual work factor | ✅ Corrected |
+| "Job channel is bounded (buffer size 32)" | Actual bound is the engine's `jobsCap = 256` map + per-session pending cap 256 + shares channel threads×4 | ✅ Corrected |
+| "share submissions logged with timestamp, nonce, and sequence number" | Sequence+nonce logging exists on the V2 path only (`engine: share seq=N nonce=0x…`); V1 logs verdict class | ✅ Corrected; added shares_sum/reconcile_divergences metrics to the description |
+| "maskAddress truncates to `bc1qar0···5mdq`" | Format is first-6 + `···` + last-4 → `bc1qar···5mdq` | ✅ Example corrected; non-TTY mnemonic guard (s305) added |
+| "`MaxFrameSize` = 16 MiB (Stratum V2 spec maximum)" | Code: "the spec does not mandate a value; we match the SRI's 16 MiB" | ✅ Corrected |
+| "TLS via golang.org/x/crypto" | TLS is stdlib `crypto/tls`; x/crypto supplies scrypt etc. | ✅ Corrected |
+| Scope: "Connections to Stratum V2 pools" | V1 is a live path too | ✅ Corrected |
+| Verified accurate — systemd hardening flags (NoNewPrivileges/ProtectHome/PrivateTmp present in unit), http_addr default "" (server off), 3-source median + $95k fallback, wallet AES-256-GCM atomic write, StraTap (arXiv:1703.06545) and selfish-mining (arXiv:2309.06847, 1311.0243) citations with honest residual-risk framing, install.sh honest "warns loudly" verification posture | ✅ No change needed |

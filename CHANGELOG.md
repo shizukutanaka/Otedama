@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 313 — THREAT_MODEL の虚偽緩和策)
+
+- **THREAT_MODEL.md の緩和策記述を出荷実態へ修正** —
+  監査人が読む文書に「実在しない防御」が書かれていた:
+  ①Noise NX で「プールを認証」「V1 fallback 非対応のため
+  downgrade 構造的不可能」→ Noise はライブ経路未配線で
+  `stratum+v2://`/`stratum+tcp://` は平文無認証、V1 は登録済み
+  ダイアラ。認証は `*tls://` の TLS 証明書のみと訂正
+  ②「fuzz が nightly+crasher 報告」→ CI は push/PR 時の
+  seed-corpus リグレッションのみ、§13 へ記録
+  ③「Actions 全 SHA ピン・govulncheck CI 実行」→ @master 浮動残存
+  ・govulncheck 未配線（共に §13）
+  ④scrypt N=32768 → 実際 131072
+  ⑤「job channel buffer 32」→ 実際は jobsCap=256 の有界ストア
+  ⑥runtime deps「3つ」→ 直接依存は x/crypto + go.yaml.in/yaml/v3
+  ⑦V1 シェアログに nonce/seq があると誤記 → V2 のみと訂正
+  ⑧maskAddress 例・MaxFrameSize の「spec maximum」由来・
+  TLS 実装ライブラリ・スコープ記述の V1 欠落を訂正。
+
 ### Fixed (session 312 — TUI の ANSI 桁崩れ残存)
 
 - **`miningLine`/`earningsLine` が s296 poolLine と同型の桁崩れを残存**
