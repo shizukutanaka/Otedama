@@ -179,6 +179,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    engine's inline V2 `handshake()` (conn SetDeadline since ReadFrame
    takes no ctx; cleared on success — mid-session reads run under the
    liveness metrics). net.Pipe silent-pool tests cut each path at 200ms.
+   — session 289: **per-call RPC response bound mid-session.** The
+   session-288 audit's other half: `call()` waits `<-ctx.Done()` with
+   the caller's ctx — the run lifetime — so a pool that receives a
+   `mining.submit` write but never answers left the submit goroutine
+   blocked forever; the share never settled (submitted ≠
+   accepted+rejected diverges permanently) and `suggest_difficulty`,
+   called inline on the stats tick, could stall that loop. `rpcTimeout`
+   (30s) now wraps every `call()` response wait — handshake calls keep
+   their hsCtx (the shorter deadline wins), session lifetime untouched.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

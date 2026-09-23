@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 289 — JSON-RPC 応答待ちを per-call でバインド)
+
+session 288 監査の残り半分: V1 `call()` の応答待ちは caller ctx（= ラン
+lifetime）のみ —— `mining.submit` の書き込みは成功するが応答を返さない
+プールで submit goroutine が無期限ブロック。シェアが永遠に unsettle
+（submitted ≠ accepted+rejected が発散し続ける）し、stats tick 上で
+同期呼び出しの `suggest_difficulty` は tick ループ全体を stall させ得た。
+`rpcTimeout`（30秒）が全 `call()` の応答待ちを per-call でバインド ——
+ハンドシェイク呼び出しは hsCtx が残るため短い方が優先、セッション寿命は
+不変。net.Pipe 沈黙プールテストで 200ms deadline を検証。
+
 ### Fixed (session 288 — 接続・ハンドシェイクを全経路でタイムアウト化)
 
 TCP/TLS ダイヤルとプロトコルハンドシェイクに一切タイムアウトがなかった:
