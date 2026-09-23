@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,37 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 		return 0, false
 	}
 	return p[0], true
+}
+
+// diff1Target mirrors miner.TargetFromDifficulty's constant: the target
+// nBits 0x1d00ffff encodes — 0xffff << 208.
+var diff1Target = new(big.Int).Lsh(big.NewInt(0xffff), 208)
+
+// parseSetTarget decodes mining.set_target params: [target_hex]. Some
+// pools (NiceHash) send the raw 256-bit share target directly instead of
+// mining.set_difficulty; returning the difficulty *equivalent*
+// (diff1Target / target) keeps a single SuggestedDifficulty semantic —
+// the engine and worker validation only ever see a difficulty.
+func parseSetTarget(raw json.RawMessage) (float64, bool) {
+	var p []string
+	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
+		return 0, false
+	}
+	hexStr := strings.TrimPrefix(p[0], "0x")
+	if hexStr == "" || len(hexStr) > 64 {
+		return 0, false
+	}
+	target, ok := new(big.Int).SetString(hexStr, 16)
+	if !ok || target.Sign() <= 0 {
+		return 0, false
+	}
+	q := new(big.Float).SetPrec(256).SetInt(diff1Target)
+	q.Quo(q, new(big.Float).SetPrec(256).SetInt(target))
+	diff, _ := q.Float64()
+	if !(diff > 0) || math.IsInf(diff, 0) {
+		return 0, false
+	}
+	return diff, true
 }
 
 // parseSetExtranonce decodes mining.set_extranonce params:

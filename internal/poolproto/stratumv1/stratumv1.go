@@ -252,6 +252,14 @@ func (s *session) dispatch(line []byte) {
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
 		}
+	case "mining.set_target":
+		// NiceHash-style direct target assignment (hex U256) instead of
+		// set_difficulty — stores the difficulty equivalent so the whole
+		// downstream path (validation, metrics, suggested share cadence)
+		// stays single-semantic.
+		if d, ok := parseSetTarget(msg.Params); ok {
+			s.difficulty.Store(float64ToUint64(d))
+		}
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
