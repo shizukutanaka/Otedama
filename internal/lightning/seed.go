@@ -267,13 +267,18 @@ func MnemonicToEntropy(m Mnemonic, w *WordList) (Entropy, error) {
 		entropy[i/8] |= bits[i] << uint(7-(i%8))
 	}
 
-	// Verify checksum.
+	// Verify checksum over all bits before branching — an early exit would
+	// leak the length of the matching checksum prefix on secret-derived
+	// data (constant-time-comparison discipline; RESEARCH_IMPROVEMENTS
+	// Cat-10 item 9).
 	sum := sha256.Sum256(entropy)
+	mismatch := 0
 	for i := 0; i < cs; i++ {
 		want := (sum[0] >> uint(7-i)) & 1
-		if bits[entBits+i] != want {
-			return nil, errors.New("lightning: mnemonic checksum mismatch; check for transcription errors")
-		}
+		mismatch |= int(bits[entBits+i] ^ want)
+	}
+	if mismatch != 0 {
+		return nil, errors.New("lightning: mnemonic checksum mismatch; check for transcription errors")
 	}
 	return entropy, nil
 }

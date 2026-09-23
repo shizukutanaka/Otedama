@@ -179,14 +179,23 @@ func TestMnemonicToEntropy_DetectsChecksumMismatch(t *testing.T) {
 	e, _ := GenerateEntropy(256, nil)
 	m, _ := EntropyToMnemonic(e, wl)
 
-	// Swap two adjacent words: this will almost always invalidate the
-	// checksum, which is exactly the transcription error we want to catch.
+	// Corrupt the checksum deterministically: the last word's LSB lies inside
+	// the checksum region (ENT bits come first), so flipping it guarantees a
+	// mismatch. A word swap would also invalidate it, but only with
+	// probability 1-2^-CS — flaky under a random mnemonic.
 	mutated := make(Mnemonic, len(m))
 	copy(mutated, m)
-	mutated[0], mutated[1] = mutated[1], mutated[0]
+	idx, err := wl.Index(mutated[len(mutated)-1])
+	if err != nil {
+		t.Fatalf("lookup last word: %v", err)
+	}
+	mutated[len(mutated)-1], err = wl.Word(idx ^ 1)
+	if err != nil {
+		t.Fatalf("mutate last word: %v", err)
+	}
 
 	if _, err := MnemonicToEntropy(mutated, wl); err == nil {
-		t.Error("swapped-word mnemonic accepted; checksum check is not working")
+		t.Error("checksum-corrupted mnemonic accepted; checksum check is not working")
 	}
 }
 
