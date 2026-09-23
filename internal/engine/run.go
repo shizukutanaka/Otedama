@@ -366,6 +366,11 @@ type reconnectOpts struct {
 	// the lifetime of Run(), independent of any one pool session.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// healthySessionDur, when > 0, overrides how long a session must
+	// stay up for its end to start a new failure streak — resetting the
+	// consecutive-failure budget (attempt counter + backoff). Defaults
+	// to reconnectBackoffMax; tests inject a shorter value.
+	healthySessionDur time.Duration
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
@@ -418,6 +423,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
+		sessionStart := time.Now()
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:      poolURL,
 			user:         user,
@@ -463,6 +469,20 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		if isFatal(sessionErr) {
 			return sessionErr
+		}
+
+		// A session that outlived the maximum backoff was healthy — its
+		// end starts a NEW failure streak. Reset the consecutive-failure
+		// budget: months of uptime must not silently drain
+		// MaxReconnectAttempts, and a recovered-then-dropped pool should
+		// not inherit a backoff grown by a different failure streak.
+		healthy := r.healthySessionDur
+		if healthy <= 0 {
+			healthy = reconnectBackoffMax
+		}
+		if time.Since(sessionStart) >= healthy {
+			attempt = 0
+			backoff = reconnectBackoffInitial
 		}
 
 		// Pool failover (fast): advance to the next pool in priority order
