@@ -820,7 +820,8 @@ func TestNegotiate_ExtraNonceSubscribeError(t *testing.T) {
 		_, _ = serverConn.Write([]byte(
 			`{"id":` + string(id) + `,"result":true,"error":null}` + "\n",
 		))
-		// Read extranonce.subscribe then close without responding.
+		// Read mining.configure (the first optional extension call) then
+		// close without responding — covers the optional-step failure path.
 		_, _ = reader.ReadBytes('\n')
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1150,8 +1151,10 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"abc123",4],"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // consume authorize request
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
-		_, _ = r.ReadString('\n') // consume extranonce.subscribe request
+		_, _ = r.ReadString('\n') // consume mining.configure request
 		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // consume extranonce.subscribe request
+		fmt.Fprintf(serverConn, `{"id":4,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		// Close mid-session without sending any jobs.
 		time.Sleep(50 * time.Millisecond)
 	}()
@@ -1188,8 +1191,10 @@ func TestSession_Close_Idempotent(t *testing.T) {
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[],"cc",2],"error":null}`+"\n")
 		_, _ = r.ReadString('\n')
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
-		_, _ = r.ReadString('\n') // extranonce.subscribe
+		_, _ = r.ReadString('\n') // mining.configure
 		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn, `{"id":4,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		// Keep alive briefly.
 		time.Sleep(200 * time.Millisecond)
 		serverConn.Close()
@@ -1224,8 +1229,10 @@ func TestSession_SuggestedDifficulty_InitialDefault(t *testing.T) {
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[],"dd",2],"error":null}`+"\n")
 		_, _ = r.ReadString('\n')
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
-		_, _ = r.ReadString('\n') // extranonce.subscribe
+		_, _ = r.ReadString('\n') // mining.configure
 		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn, `{"id":4,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		time.Sleep(500 * time.Millisecond)
 		serverConn.Close()
 	}()
@@ -1529,14 +1536,22 @@ func runFakeServer(t *testing.T, serverConn net.Conn, cfg fakeServerConfig) {
 			return // handshake terminated at authorize
 		}
 
-		// Step 3: extranonce.subscribe (optional). Read it and respond with
-		// "Method not found" (the default for pools that predate extranonce
-		// rotation). The client must proceed normally regardless of this error.
-		_, err = r.ReadString('\n')
-		if err != nil {
-			return
+		// Step 3: optional extension calls (BIP-310 mining.configure and
+		// extranonce.subscribe). Respond to each with "Method not found" —
+		// the default for pools that predate the extensions. The client
+		// must proceed normally regardless of these errors.
+		for i := 0; i < 2; i++ {
+			line, rerr := r.ReadString('\n')
+			if rerr != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal([]byte(line), &req) != nil || req.ID == nil {
+				continue
+			}
+			rawID, _ := json.Marshal(req.ID)
+			fmt.Fprintf(serverConn, `{"id":%s,"result":null,"error":[38,"Method not found",null]}`+"\n", rawID)
 		}
-		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
 		if !cfg.keepAlive {
 			return
@@ -1610,8 +1625,10 @@ func TestNegotiate_Success_EmptyPasswordDefaultsToX(t *testing.T) {
 		line, _ := r.ReadString('\n') // authorize
 		gotAuth = line
 		fmt.Fprintf(serverConn2, `{"id":2,"result":true,"error":null}`+"\n")
-		_, _ = r.ReadString('\n') // extranonce.subscribe
+		_, _ = r.ReadString('\n') // mining.configure
 		fmt.Fprintf(serverConn2, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(serverConn2, `{"id":4,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		time.Sleep(100 * time.Millisecond)
 	}()
 
@@ -1745,8 +1762,10 @@ func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) 
 		fmt.Fprintf(serverConn, `{"id":1,"result":[[["mining.notify","n1"]],"ff00",4],"error":null}`+"\n")
 		_, _ = r.ReadString('\n')
 		fmt.Fprintf(serverConn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.configure
+		fmt.Fprintf(serverConn, `{"id":3,"result":{"subscribe-extranonce":true},"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
-		fmt.Fprintf(serverConn, `{"id":3,"result":true,"error":null}`+"\n")
+		fmt.Fprintf(serverConn, `{"id":4,"result":true,"error":null}`+"\n")
 		time.Sleep(200 * time.Millisecond)
 	}()
 
@@ -2395,5 +2414,72 @@ func TestSession_E2E_SubmitEmptyUserFallsBack(t *testing.T) {
 	defer pool.suggestedMu.Unlock()
 	if len(pool.submitWorker) == 0 || pool.submitWorker[0] != "otedama" {
 		t.Errorf("submit worker = %v, want [otedama] fallback", pool.submitWorker)
+	}
+}
+
+func TestNegotiate_MiningConfigure_SubscribeExtranonceOnly(t *testing.T) {
+	// BIP-310: the client must send mining.configure advertising exactly
+	// the subscribe-extranonce extension — version-rolling is deliberately
+	// NOT claimed (overt ASICBoost is ASIC-only).
+	clientConn, serverConn := net.Pipe()
+	var cfgParams []any
+	go func() {
+		defer serverConn.Close()
+		r := bufio.NewReader(serverConn)
+		var req rpcMessage
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if json.Unmarshal([]byte(line), &req) != nil {
+				continue
+			}
+			id, _ := json.Marshal(req.ID)
+			switch req.Method {
+			case "mining.subscribe":
+				fmt.Fprintf(serverConn, `{"id":%s,"result":[[["mining.notify","n1"]],"a1",4],"error":null}`+"\n", id)
+			case "mining.authorize":
+				fmt.Fprintf(serverConn, `{"id":%s,"result":true,"error":null}`+"\n", id)
+			case "mining.configure":
+				var params []any
+				if json.Unmarshal(req.Params, &params) == nil {
+					cfgParams = params
+				}
+				fmt.Fprintf(serverConn, `{"id":%s,"result":{"subscribe-extranonce":true},"error":null}`+"\n", id)
+			default:
+				fmt.Fprintf(serverConn, `{"id":%s,"result":null,"error":[38,"Method not found",null]}`+"\n", id)
+			}
+		}
+	}()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "fake:3333",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "w", Password: "x"},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sess, err := (&Dialer{}).Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	if len(cfgParams) != 2 {
+		t.Fatalf("mining.configure params len = %d, want 2 (extensions list + params object)", len(cfgParams))
+	}
+	exts, ok := cfgParams[0].([]any)
+	if !ok || len(exts) != 1 {
+		t.Fatalf("mining.configure params[0] = %v, want single-element extension list", cfgParams[0])
+	}
+	if exts[0] != "subscribe-extranonce" {
+		t.Fatalf("mining.configure extension = %v, want subscribe-extranonce", exts[0])
+	}
+	for _, e := range exts {
+		if e == "version-rolling" {
+			t.Fatal("version-rolling must not be advertised")
+		}
 	}
 }
