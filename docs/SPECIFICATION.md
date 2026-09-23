@@ -167,6 +167,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `shares_superseded_total` | counter | Rejects that were benign vardiff-transition artefacts: verified locally to have met the target in force when the share's work was issued, but the pool had since raised its bar (ESP-Miner #212). Excluded from `reject_rate` and `shares_rejected_by_reason_total` — no operator action is possible or needed. |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
 | `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected−superseded, ≥0). |
+| `pool_shares_sum_total` | counter | Cumulative share difficulty the pool reports crediting (summed `new_shares_sum` across SubmitSharesSuccess batches, SV2 spec §5.3.13). The pool's own accounting, exposed so operators can reconcile it against `shares_total{status=accepted}`; SV2 only — V1 pools expose no equivalent counter. |
+| `pool_reconcile_divergences_total` | counter | Times the pool's reported accepted-submit count differed from the submissions it actually settled locally — silent miscounting on one side or the other. A nonzero rate means share accounting cannot be trusted without investigation. |
 | `share_acceptance_rate` | gauge | accepted / judged. |
 | `reject_rate` | gauge | rejected / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |

@@ -43,9 +43,20 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is
    SHA-256d/Bitcoin-only by ADR-002.
-10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
+10. ✅ **"Trust the pool's numbers" reconciliation.** Local counters drift
     from pool-side truth; a periodic reconciliation against pool stats
     (where the pool exposes them) would catch silent miscounting.
+    — ✅ **Implemented (session 258).** SV2 pools expose their own
+    accounting: `SubmitSharesSuccess.new_submits_accepted_count` and
+    `new_shares_sum` (spec §5.3.13, per-ack-batch counters). The engine
+    now counts accepted shares by the pool's reported batch count
+    (fixing the old one-accept-per-Success undercount on batching
+    pools), accumulates `otedama_pool_shares_sum_total` as the
+    pool-side credited-difficulty truth, and increments
+    `otedama_pool_reconcile_divergences_total` (plus a warn log) when
+    the reported accept count disagrees with the submissions it
+    actually settled — the silent-miscounting detector this item
+    wanted. V1 pools expose no equivalent counters.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers
@@ -628,6 +639,12 @@ endpoint against current vendor documentation. Tags as before
    optimum. Otedama can't change the DAA, but `doctor` can track
    pool-acknowledged shares vs. pool-credited blocks over a window and warn
    on divergence — grounds Cat 1 #10.
+   — 🟡 **Partially grounded (session 258).** The share-level half now
+   exists: `otedama_pool_reconcile_divergences_total` compares the
+   pool's reported accepts against locally-settled submits, and
+   `otedama_pool_shares_sum_total` exposes the pool's own credited
+   difficulty. The credited-*blocks* window this item names needs
+   payout/coinbase data stratum never reports — remains open.
 10. 🔵 **Auditable PoW for verifiable share attribution (v4.0+).** Lerner,
     "APoW: Auditable Proof-of-Work Against Block Withholding" (arXiv:
     2601.02496), constructs PoW letting pool participants retroactively

@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed/Added (session 258 — 一次情報(sv2-spec §5.3.13)との照合に基づく精錬: SubmitSharesSuccess の new_shares_sum が U64 なのに U32 で codec していた欠陥を修正＋プール自身の会計カウンタとの照合（share accounting reconciler）を新設)
+
+**sv2-spec §5.3.13 との再照合で発見された第4の wire 不整合を修正。**
+`SubmitSharesSuccess` のペイロードは `channel_id`(U32) +
+`last_sequence_number`(U32) + `new_submits_accepted_count`(U32) +
+`new_shares_sum`(**U64**) = **20B** が正しいが、旧実装は `new_shares_sum` を
+U32 として 16B で encode/decode していた —— 実プールの 20B メッセージに対し
+share-difficulty 合計の上位 4B を黙って捨て、ペイロード末尾 4B を未消費のまま
+放置していた。構造体フィールドを仕様名に改名
+（`NewSubmitsAcceptedCount` / `NewSharesSum`）し 20B レイアウトへ修正。
+
+**プール自身の会計との照合（"trust the pool's numbers" 台帳項目 Cat 1 #10）を実装:**
+- `new_submits_accepted_count` は *そのバッチで受理された submit 数* ——
+  Success 1通 = accepted+1 という旧カウントはバッチ ack するプールで
+  under-count するため、プール報告値で加算するよう修正（報告なし
+  （count=0) の退化ケースは settle 済み件数へフォールバック）。
+- `new_shares_sum` をクライアント側で累積した
+  `otedama_pool_shares_sum_total` を新設 —— プールが計上したと言っている
+  difficulty のプール側累計として閲覧可能。
+- バッチ報告受理数 と 実際に settle した submit 数 の不一致を
+  `otedama_pool_reconcile_divergences_total` + warn ログで検出 ——
+  どちらか片方の会計がサイレントにずれている検知器
+  （pendingCap eviction による自側の追跡喪失もこれで検出可能）。
+
+カバレッジ: wire フィクスチャを 20B/U64 へ更新 + U64 上位ワードの
+round-trip pin、engine に報告≠settle の divergent ケース（fake pool が
+accept=3/settle=1 を報告）を検証する新規統合テスト追加。SPECIFICATION §6 に
+新メトリクス 2 行追加（TestMetricsDocumentedInSpecification 準拠）。
+全24パッケージ `go test` green。
+
 ### Fixed (session 257 — 一次情報(sv2-spec §5.3/§08-Message-Types)との照合に基づく精錬: SV2 チャネル開設メッセージの必須 max_target 欠落＋Success フィールドレイアウトの旧版残留＋SubmitSharesError の予約 msg_type を現行仕様へ修正)
 
 **sv2-spec (stratum-mining/sv2-spec) §5.3.2 との照合で発見された実プロトコル
