@@ -200,6 +200,15 @@ type engineMetrics struct {
 	providerReliabilityMu sync.Mutex
 	providerReliability   map[string]*metrics.Gauge
 
+	// yieldForecast / forecastMisses expose the Holt-Winters per-stream
+	// forecaster (ADR-010 A1): the one-step-ahead predicted yield gauge
+	// otedama_arbitration_yield_forecast_sats_per_second{stream,device} and
+	// the >2σ miss counter otedama_arbitration_forecast_misses_total
+	// {stream,device} — the divergence signal A8's regime reset consumes.
+	yieldForecastMu sync.Mutex
+	yieldForecast   map[[2]string]*metrics.Gauge
+	forecastMisses  map[[2]string]*metrics.Counter
+
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
 	// masked address currently receiving rewards. It lets an operator confirm,
@@ -442,6 +451,8 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
 		providerReliability:  make(map[string]*metrics.Gauge),
+		yieldForecast:        make(map[[2]string]*metrics.Gauge),
+		forecastMisses:       make(map[[2]string]*metrics.Counter),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -485,6 +496,45 @@ func (m *engineMetrics) observeProviderReliability(pid string, posterior float64
 	}
 	m.providerReliabilityMu.Unlock()
 	g.Set(posterior)
+}
+
+// observeYieldForecast sets otedama_arbitration_yield_forecast_sats_per_second
+// {stream,device} to the Holt-Winters one-step-ahead prediction (ADR-010 A1).
+// Created lazily on first observation. Safe for concurrent use.
+func (m *engineMetrics) observeYieldForecast(stream, device string, v float64) {
+	key := [2]string{stream, device}
+	m.yieldForecastMu.Lock()
+	g, ok := m.yieldForecast[key]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_arbitration_yield_forecast_sats_per_second",
+			"Holt-Winters one-step-ahead predicted effective yield for this stream "+
+				"(ADR-010 A1). Compare with the stream's actual quote series.",
+			map[string]string{"stream": stream, "device": device})
+		m.yieldForecast[key] = g
+	}
+	m.yieldForecastMu.Unlock()
+	g.Set(v)
+}
+
+// observeForecastMiss increments otedama_arbitration_forecast_misses_total
+// {stream,device} when a quote deviates >2σ from the forecast (ADR-010 A1);
+// the counter feeds the regime-change detection planned as A8. Safe for
+// concurrent use.
+func (m *engineMetrics) observeForecastMiss(stream, device string) {
+	key := [2]string{stream, device}
+	m.yieldForecastMu.Lock()
+	c, ok := m.forecastMisses[key]
+	if !ok {
+		c = m.reg.NewCounter(
+			"otedama_arbitration_forecast_misses_total",
+			"Quotes deviating >2σ from the Holt-Winters forecast — the regime-change "+
+				"signal for ADR-010 A8's forecaster reset.",
+			map[string]string{"stream": stream, "device": device})
+		m.forecastMisses[key] = c
+	}
+	m.yieldForecastMu.Unlock()
+	c.Inc()
 }
 
 // touchLastReject records the current Unix timestamp as the most recent

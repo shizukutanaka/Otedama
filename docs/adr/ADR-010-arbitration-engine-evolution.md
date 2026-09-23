@@ -50,6 +50,19 @@ func (f *Forecaster) Predict(horizon time.Duration) (yield float64, sigma float6
 
 **Why not LSTM/transformer:** Literature shows direction-accuracy ceiling around 50–54%. Holt-Winters captures ~95% of achievable value at ~5% of complexity.
 
+**Implementation note (session 280):** shipped the observation half ahead
+of v3.5 — `arbitration.YieldForecaster` (additive level+trend+seasonal,
+α=0.3/β=0.05/γ=0.1, period=2880 ticks ≈ 24h at the 30s cadence) tracks each
+live stream's *effective* yield (`NetSatsPerSecond × Confidence`) per quote
+and publishes the one-step prediction as
+`otedama_arbitration_yield_forecast_sats_per_second{stream,device}` plus a
+>2σ divergence counter
+`otedama_arbitration_forecast_misses_total{stream,device}` (σ = running
+MAE — the regime-change signal A8 consumes). `Predict` is not yet fed back
+into `Decide`: the rolling buffer feeding it, multi-horizon emission
+(15min/1h/4h), and the `predicted_yield` wiring into the comparator remain
+v3.5/v3.6 scope.
+
 **Cost:** ~40h. ~120 LOC of pure Go.
 
 **Value/cost rank:** ★★★★★.

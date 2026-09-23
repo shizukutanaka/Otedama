@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 280 — Holt-Winters イールド予測: ADR-010 A1)
+
+**ライブストリーム毎に加法 Holt-Winters（レベル+トレンド+季節）予測器
+`arbitration.NewYieldForecaster` を整備** — ADR-010 feature A1 の観測側を
+v3.6 前倒し実装。実効イールド（`NetSatsPerSecond × Confidence`、Decide が
+比較する量と同一）をクォート毎に平滑化し、1 ステップ先の予測を
+`otedama_arbitration_yield_forecast_sats_per_second{stream,device}` に、
+2σ 乖離（σ = フォーキャスタの移動 MAE）を
+`otedama_arbitration_forecast_misses_total{stream,device}` に記録 —
+A8 のチェンジポイント検出が消費するレジーム変化信号。
+`Predict` は**まだ** `Decide` に還流させない（v3.6 配線は今後）—
+決定ロジックが予測依存になる前に、実運用のミス率で A8 のリセット閾値を
+較正できるようにするのが本セッションの狙い。季節周期 = 2,880 ティック
+（30 秒裁定周期で ≈24h）。ストリーム期限切れ時にフォーキャスタも
+合わせて刈取。新規依存ゼロ。
+
 ### Added (session 279 — Beta-Bernoulli プロバイダ信頼度: ADR-010 A6)
 
 **プロバイダの自己申告 confidence を実績ベータ事後分布で割引する

@@ -56,6 +56,11 @@ const defaultHysteresisPct = 0.05
 // (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
 const streamStaleTimeout = 3 * time.Minute
 
+// forecastSeasonSteps is the Holt-Winters seasonal period in quote steps
+// (ADR-010 A1). Providers re-quote on every arbitration tick, so one step
+// ≈ 30 s and 2880 steps ≈ 24 h — one diurnal cycle of hashprice/AI demand.
+const forecastSeasonSteps = 2880
+
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
 // or whenever a fresh quote arrives. Blocks until ctx is cancelled or
 // the quote channel is closed.
@@ -72,6 +77,11 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	// Both are guarded by streamsMu.
 	reliability := make(map[string]*arbitration.ProviderReliability)
 	creditAt := make(map[string]time.Time)
+	// forecasters is the per-stream Holt-Winters smoother (ADR-010 A1):
+	// each quote is one step, so a 24h season for tick-cadence providers is
+	// ~2880 steps. Its sigma feeds the forecast-miss counter that A8's
+	// regime-reset (>2σ shift) will consume.
+	forecasters := make(map[string]*arbitration.YieldForecaster)
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,6 +91,23 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				return
 			}
 			key := updateStreamReliability(opts.streamsMu, opts.streamMap, reliability, q)
+			opts.streamsMu.Lock()
+			fc := forecasters[key]
+			if fc == nil {
+				fc = arbitration.NewYieldForecaster(forecastSeasonSteps)
+				forecasters[key] = fc
+			}
+			observed := q.Yield.NetSatsPerSecond
+			if observed <= 0 {
+				observed = q.Yield.SatsPerSecond
+			}
+			err := fc.Update(observed * q.Yield.Confidence)
+			stream, device, _ := strings.Cut(key, ":")
+			opts.streamsMu.Unlock()
+			opts.metrics.observeYieldForecast(stream, device, fc.Predict(1))
+			if err > 0 && fc.Sigma() > 0 && err > 2*fc.Sigma() {
+				opts.metrics.observeForecastMiss(stream, device)
+			}
 			ts := q.At
 			if ts.IsZero() {
 				ts = time.Now()
@@ -92,6 +119,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, now, streamStaleTimeout) {
 				providerReliability(reliability, key).Update(false)
 				delete(creditAt, key)
+				delete(forecasters, key)
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
 					key, streamStaleTimeout))

@@ -244,7 +244,14 @@ arXiv grounding (collected sessions 40–41 and here):
    transforms offline bi-criteria approximations into online CMAB with
    sublinear regret *and* sublinear constraint violation; the right frame
    if Otedama ever optimises yield subject to a hard power cap.
-7. 🔵 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
+7. 🟡 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
+    — 🟡 **Partially resolved (session 280):** `arbitration.YieldForecaster`
+    (additive level+trend+seasonal, 2880-tick season ≈ 24h at 30s cadence)
+    shipped ahead of v3.5 — per-quote effective-yield smoothing exposed as
+    `otedama_arbitration_yield_forecast_sats_per_second{stream,device}` +
+    `otedama_arbitration_forecast_misses_total{stream,device}` (>2σ, the A8
+    input). `Predict` is not yet wired into `Decide`; the shared rolling
+    buffer and multi-horizon emission remain open.
 8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
 9. 🟡 **Beta-Bernoulli calibration** — ADR-010 A6. — 🟡 **Partially
     resolved (session 279):** `arbitration.ProviderReliability` shipped

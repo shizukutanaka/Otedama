@@ -1280,3 +1280,42 @@ func TestObserveProviderReliability_ExposesGauge(t *testing.T) {
 		t.Errorf("reliability gauge missing or stale in WriteText output:\n%s", out)
 	}
 }
+
+// ============================================================================
+// ADR-010 A1 — Holt-Winters yield forecast metrics
+// ============================================================================
+
+// observeYieldForecast must lazily create the {stream,device} gauge and
+// expose the prediction through WriteText.
+func TestObserveYieldForecast_ExposesGauge(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.observeYieldForecast("mining.stratum", "cpu-0", 12.5)
+	m.observeYieldForecast("mining.stratum", "cpu-0", 13.0)
+
+	var buf bytes.Buffer
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_arbitration_yield_forecast_sats_per_second{device="cpu-0",stream="mining.stratum"} 13`) {
+		t.Errorf("forecast gauge missing or stale in WriteText output:\n%s", out)
+	}
+}
+
+// observeForecastMiss must lazily create the {stream,device} counter.
+func TestObserveForecastMiss_ExposesCounter(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.observeForecastMiss("ai.akash", "gpu-0")
+	m.observeForecastMiss("ai.akash", "gpu-0")
+
+	var buf bytes.Buffer
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `otedama_arbitration_forecast_misses_total{device="gpu-0",stream="ai.akash"} 2`) {
+		t.Errorf("miss counter missing or stale in WriteText output:\n%s", out)
+	}
+}

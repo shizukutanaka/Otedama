@@ -269,6 +269,8 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
 | `otedama_arbitration_provider_reliability` | gauge | `provider` | Beta-Bernoulli posterior mean of the provider's reliability (ADR-010 A6) — the factor currently discounting its quoted confidence. New providers start at 0.5 and converge toward 1 (reliable) or 0 (dead). |
+| `otedama_arbitration_yield_forecast_sats_per_second` | gauge | `stream`, `device` | Holt-Winters one-step-ahead predicted effective yield (ADR-010 A1). Compare against the stream's actual quote series. |
+| `otedama_arbitration_forecast_misses_total` | counter | `stream`, `device` | Quotes deviating >2σ from the Holt-Winters forecast — the regime-change signal for ADR-010 A8's forecaster reset. |
 
 **Economics & power**
 
