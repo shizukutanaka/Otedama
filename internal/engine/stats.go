@@ -67,6 +67,15 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 	// (see arbitrationLoopOpts.activity). Nil activityMu (no arbitration
 	// loop wired, e.g. some tests) renders every provider inactive rather
 	// than defaulting back to the old unconditional true.
+	// DevicesIdle mirrors the arbitration loop's latest SkippedDevice —
+	// the same number the otedama_devices_idle gauge and the log
+	// transition already report — so the TUI's own "N idle" badge works
+	// instead of pinning to its zero value forever.
+	var devicesIdle int
+	if opts.activityIdle != nil {
+		devicesIdle = int(opts.activityIdle.Load())
+	}
+
 	var providerStats []tui.ProviderStats
 	for _, p := range opts.providers {
 		ps := tui.ProviderStats{Name: p.Name(), IsMining: p.ID() == provider.MiningProviderID}
@@ -93,6 +102,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		WalletFingerprint: opts.wallet,
 		Uptime:            time.Since(opts.startTime),
 		Devices:           opts.devices,
+		DevicesIdle:       devicesIdle,
 		Providers:         providerStats,
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -597,6 +598,28 @@ func TestBuildStats_PoolLatencyFromTracker(t *testing.T) {
 	want := 50 * time.Millisecond
 	if stats.PoolLatency != want {
 		t.Errorf("PoolLatency = %v, want %v", stats.PoolLatency, want)
+	}
+}
+
+// ============================================================================
+// buildStats — DevicesIdle wired from the shared activityIdle snapshot
+// ============================================================================
+
+func TestBuildStats_DevicesIdleFromActivityIdle(t *testing.T) {
+	// Regression: Stats.DevicesIdle existed and the TUI rendered "N idle"
+	// for it, but buildStats never populated it — the badge stayed 0
+	// forever while the otedama_devices_idle gauge reported the real
+	// count. buildStats must read the arbitration loop's shared snapshot.
+	opts := sessionOpts{startTime: time.Now()}
+	if got := buildStats(opts, 0, 0, nil, false).DevicesIdle; got != 0 {
+		t.Errorf("nil activityIdle: DevicesIdle = %d, want 0", got)
+	}
+
+	var idle atomic.Int64
+	idle.Store(2)
+	opts.activityIdle = &idle
+	if got := buildStats(opts, 0, 0, nil, false).DevicesIdle; got != 2 {
+		t.Errorf("DevicesIdle = %d, want 2 (arbitration floor count)", got)
 	}
 }
 

@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 300 — internal/tui 深部監査)
+
+- **TUI の `DevicesIdle` が永久に0 — "%d idle" バッジがデッドコードだった**:
+  フィールド・描画分岐・TUI側テストは揃っていたが `buildStats` が供給せず、
+  `otedama_devices_idle` ゲージとログ遷移は実数を報告する一方 TUI だけは
+  採用下限フロアの稼働中デバイス休止を一切表示できなかった（s271
+  `arbitration_policy` / s284 `RuntimeCollector` と同型の「実装済み・
+  未配線」）。共有スナップショットに `activityIdle atomic.Int64` を追加し、
+  `runArbitrationLoop` が `alloc.SkippedDevice` をゲージ更新と同箇所で
+  Store、`buildStats` が Load して `Stats.DevicesIdle` へ。書き側・読み側
+  回帰テスト2本。
+- **`poolLine` の予約桁が潰れ接続状態が左ずれ**: `%-*s` はバイト数で
+  パディングするが URL には既に `dim`/`reset`（9バイトのエスケープ）が
+  含まれるため一切パッドされず、ステータスが予約桁から脱落。可視幅で
+  パディングに修正。
+- **`Start`→`Stop`→`Start` でデッド dashboard**: `Stop` が `started` を
+  戻すため二度目の `Start` が CAS を通過し、`hideCursor`+`clearScreen` を
+  書き込んだ後 spawn される renderLoop は閉鎖済み `doneCh` で即終了 — 
+  カーソル非表示のまま描画なし。`Start` が `doneCh` を先検査して no-op。
+- 検証済みクリーン: `visibleLen`/`truncateVisible` の CSI 終端範囲、
+  `Update` drain-oldest 非ブロッキング、`Stop` の wg.Wait 書込順序、
+  s273 の二重計算修正、`writeLine` 切捨てモデル、`defaultSatsPerHash`、
+  予算フロア、書式関数群。
+
 ### Fixed (session 299 — internal/daemon 深部監査)
 
 - **`--config`/`--data-dir` の相対パスがサービス定義へそのまま埋め込まれていた**:

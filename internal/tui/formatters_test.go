@@ -361,6 +361,23 @@ func TestDashboard_DoubleStart_SecondIsNoop(t *testing.T) {
 	d.Stop()
 }
 
+func TestDashboard_StartAfterStop_IsNoop(t *testing.T) {
+	// A second Start after Stop would spawn a renderLoop whose first
+	// select hits the permanently closed doneCh — the loop exits at once
+	// but hideCursor/clearScreen have already written, leaving the
+	// cursor hidden with nothing driving the display. The guard on
+	// doneCh must make the call a true no-op (zero bytes written).
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	d.Start()
+	d.Stop()
+	before := buf.Len()
+	d.Start()
+	if buf.Len() != before {
+		t.Errorf("Start after Stop wrote %d bytes; must be a no-op", buf.Len()-before)
+	}
+}
+
 func TestDashboard_StopWithoutStart_IsSafe(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)

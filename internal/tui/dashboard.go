@@ -135,8 +135,16 @@ func NewDashboard(w io.Writer) *Dashboard {
 }
 
 // Start begins the render loop. Call Stop to terminate it.
-// Start must only be called once.
+// Start must only be called once: after Stop, doneCh is permanently
+// closed and a second Start would spawn a render loop that exits on
+// its first select — leaving the cursor hidden with nothing driving
+// the display. Detect that state and no-op instead.
 func (d *Dashboard) Start() {
+	select {
+	case <-d.doneCh:
+		return // already stopped once: permanently finished
+	default:
+	}
 	if !d.started.CompareAndSwap(false, true) {
 		return
 	}
@@ -326,8 +334,15 @@ func (d *Dashboard) poolLine(s Stats, cols int) string {
 	if urlBudget < 8 {
 		urlBudget = 8
 	}
-	url := dim + shortenURL(s.PoolURL, urlBudget) + reset
-	return fmt.Sprintf("%s%-*s  %s", prefix, urlBudget, url, status)
+	url := shortenURL(s.PoolURL, urlBudget)
+	// Pad by VISIBLE width: %-Ns counts bytes, and the wrapped url
+	// already carries dim/reset escapes (9 bytes) so it would never pad
+	// at all, collapsing the reserved column and sliding status left.
+	pad := urlBudget - len(url)
+	if pad < 0 {
+		pad = 0
+	}
+	return fmt.Sprintf("%s%s%s%s  %s", prefix, dim, url+reset, strings.Repeat(" ", pad), status)
 }
 
 // truncateToBudget shortens a plain (no-ANSI) string to fit budget visible

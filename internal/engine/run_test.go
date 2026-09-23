@@ -2084,6 +2084,52 @@ func TestRunArbitrationLoop_PublishesDevicesIdleGauge(t *testing.T) {
 	}
 }
 
+func TestRunArbitrationLoop_PublishesActivityIdle(t *testing.T) {
+	// Regression: the TUI's Stats.DevicesIdle stayed 0 forever because
+	// nothing carried Decide's SkippedDevice to buildStats — only the
+	// gauge and log saw it. The shared activityIdle snapshot must track
+	// the same count the gauge reports.
+	old := arbitrationInterval
+	arbitrationInterval = 10 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var idle atomic.Int64
+	idle.Store(-999) // sentinel: prove the loop stores, not just defaults to 0
+
+	quoteCh := make(chan provider.Quote, 1)
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{
+			{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}},
+		},
+		streamsMu:    &sync.Mutex{},
+		streamMap:    make(map[string]arbitration.Stream),
+		quoteCh:      quoteCh,
+		metrics:      newEngineMetrics(metrics.NewRegistry()),
+		log:          func(_, _ string) {},
+		minYield:     2000,
+		activityIdle: &idle,
+	}
+
+	go runArbitrationLoop(ctx, opts)
+
+	quoteCh <- provider.Quote{
+		ProviderID:       "mining.stratum",
+		DeviceID:         "cpu-0",
+		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+	}
+
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+
+	if got := idle.Load(); got != 1 {
+		t.Errorf("activityIdle = %d, want 1 (cpu-0 below the 2000 sat/s floor)", got)
+	}
+}
+
 func TestRunArbitrationLoop_LogsIdleTransition(t *testing.T) {
 	// A device driven below the floor must produce exactly one "idle" log line
 	// on the transition (for log-only operators), not one per tick.

@@ -318,6 +318,11 @@ func Run(ctx context.Context, opts Options) error {
 	// Active: true.
 	activityMu := sync.Mutex{}
 	activity := make(map[string]float64)
+	// activityIdle carries the same snapshot's floor-idle device count
+	// (Decide's SkippedDevice) to buildStats — the gauge and log already
+	// see it, but the TUI's own DevicesIdle field renders nothing without
+	// this wire (it stayed 0 forever, making "N idle" dead code).
+	activityIdle := atomic.Int64{}
 
 	// Arbitration loop: re-run Decide whenever quotes change.
 	go runArbitrationLoop(ctx, arbitrationLoopOpts{
@@ -333,6 +338,7 @@ func Run(ctx context.Context, opts Options) error {
 		policy:        arbitrationPolicyFromConfig(opts.Config.ArbitrationPolicy),
 		activityMu:    &activityMu,
 		activity:      activity,
+		activityIdle:  &activityIdle,
 	})
 
 	// ----- Phase 7: TUI dashboard -----
@@ -353,20 +359,21 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	return runReconnectLoop(ctx, reconnectOpts{
-		opts:        opts,
-		workers:     workers,
-		merged:      merged,
-		dashboard:   dashboard,
-		startTime:   startTime,
-		wallet:      walletFingerprint,
-		deviceN:     len(devices),
-		providers:   []provider.Provider{miningProvider, akashProvider},
-		metrics:     m,
-		log:         log,
-		curtailGate: curtailGate,
-		resumeCh:    resumeCh,
-		activityMu:  &activityMu,
-		activity:    activity,
+		opts:         opts,
+		workers:      workers,
+		merged:       merged,
+		dashboard:    dashboard,
+		startTime:    startTime,
+		wallet:       walletFingerprint,
+		deviceN:      len(devices),
+		providers:    []provider.Provider{miningProvider, akashProvider},
+		metrics:      m,
+		log:          log,
+		curtailGate:  curtailGate,
+		resumeCh:     resumeCh,
+		activityMu:   &activityMu,
+		activity:     activity,
+		activityIdle: &activityIdle,
 	})
 }
 
@@ -390,11 +397,13 @@ type reconnectOpts struct {
 	// resumeCh, when non-nil, delivers a nudge to re-issue the current
 	// job as soon as curtailment lifts (see Run's price goroutine).
 	resumeCh <-chan struct{}
-	// activityMu/activity: see sessionOpts. Threaded through unchanged
-	// across reconnects since the arbitration loop (the writer) runs for
-	// the lifetime of Run(), independent of any one pool session.
-	activityMu *sync.Mutex
-	activity   map[string]float64
+	// activityMu/activity/activityIdle: see sessionOpts. Threaded
+	// through unchanged across reconnects since the arbitration loop
+	// (the writer) runs for the lifetime of Run(), independent of any
+	// one pool session.
+	activityMu   *sync.Mutex
+	activity     map[string]float64
+	activityIdle *atomic.Int64
 	// healthySessionDur, when > 0, overrides how long a session must
 	// stay up for its end to start a new failure streak — resetting the
 	// consecutive-failure budget (attempt counter + backoff). Defaults
@@ -477,6 +486,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword:      poolPassword,
 			activityMu:        r.activityMu,
 			activity:          r.activity,
+			activityIdle:      r.activityIdle,
 			reconnectWaitSecs: &poolWaitSecs,
 			onConnected: func() {
 				addrConnected = true
@@ -636,6 +646,12 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// activityIdle, when non-nil, carries the latest Decide's
+	// SkippedDevice — devices left idle by the profitability floor this
+	// cycle — so buildStats can populate Stats.DevicesIdle (which
+	// otherwise rendered 0 forever and the "N idle" TUI badge was dead
+	// code). Written by runArbitrationLoop; nil in tests/minimal setups.
+	activityIdle *atomic.Int64
 	// reconnectWaitSecs, when non-nil, receives the advisory wait a
 	// pool-directed reconnect (V1 client.reconnect) asked for — written
 	// once by runSessionV1 as the session unwinds, read by the reconnect

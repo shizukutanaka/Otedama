@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
@@ -43,6 +44,12 @@ type arbitrationLoopOpts struct {
 	// exists. See buildStats/stats.go for the read side.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// activityIdle, when non-nil, receives the same snapshot's
+	// SkippedDevice count (devices left idle by the profitability
+	// floor) so buildStats can populate Stats.DevicesIdle — the gauge
+	// and log already see it, but the TUI field stayed 0 forever
+	// without this wire. Written alongside the gauge update.
+	activityIdle *atomic.Int64
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -143,6 +150,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
 			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
 			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
+			if opts.activityIdle != nil {
+				opts.activityIdle.Store(int64(alloc.SkippedDevice))
+			}
 			if opts.activityMu != nil && opts.activity != nil {
 				opts.activityMu.Lock()
 				clear(opts.activity)
