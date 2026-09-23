@@ -14,15 +14,14 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// # Terminal width (not yet auto-detected)
+// # Terminal width
 //
-// SetWidth lets a caller inject the real terminal width (intended
-// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
-// but no caller in this codebase actually calls it in production —
-// engine.Run's dashboard always runs at the NewDashboard default of 80
-// columns, regardless of the real terminal size. See
-// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
-// of the real width: every
+// NewDashboard detects the real width when the writer is a terminal
+// (TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows — see
+// termsize.go) and render() re-detects every tick, so a resize mid-run
+// takes effect without a restart. SetWidth remains a manual override
+// and wins over auto-detection. A non-terminal writer (pipe, redirect)
+// keeps the 80-column default. Regardless of the real width, every
 // line is truncated to fit whatever width is configured, and the most
 // important field on each line (pool connection status, in particular)
 // is sized from a dynamic budget rather than a fixed offset, so it
@@ -37,6 +36,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,6 +110,11 @@ type Dashboard struct {
 	doneCh    chan struct{}
 	cols      int
 	lastStats Stats
+	// fd is w when it is an *os.File (nil for buffers/pipes), used by
+	// refreshWidth for per-tick terminal-size detection. manualWidth is
+	// set by SetWidth and disables auto-detection.
+	fd          *os.File
+	manualWidth bool
 	// wg tracks the render loop goroutine so Stop can block until it has
 	// genuinely exited before Stop itself writes to w (showCursor /
 	// Fprintln below) — without this, Stop's writes could race an
@@ -117,14 +122,24 @@ type Dashboard struct {
 	wg sync.WaitGroup
 }
 
-// NewDashboard returns a Dashboard that writes to w.
+// NewDashboard returns a Dashboard that writes to w. When w is an
+// *os.File attached to a terminal the real width is detected
+// immediately and re-checked on every render tick; otherwise the
+// 80-column default applies. SetWidth overrides detection.
 func NewDashboard(w io.Writer) *Dashboard {
-	return &Dashboard{
+	d := &Dashboard{
 		w:        w,
 		updateCh: make(chan Stats, 8),
 		doneCh:   make(chan struct{}),
 		cols:     80,
 	}
+	if f, ok := w.(*os.File); ok {
+		d.fd = f
+		if cols := terminalWidth(f); cols >= minCols {
+			d.cols = cols
+		}
+	}
+	return d
 }
 
 // Start begins the render loop. Call Stop to terminate it.
@@ -194,6 +209,7 @@ func (d *Dashboard) renderLoop() {
 			d.mu.Lock()
 			s := d.lastStats
 			d.mu.Unlock()
+			d.refreshWidth()
 			d.render(s)
 		}
 	}
@@ -538,12 +554,27 @@ func shortenURL(url string, maxLen int) string {
 	return url[:maxLen-3] + "..."
 }
 
-// ----- Width detection stub -----
+// ----- Width -----
 
-// SetWidth allows callers to inject the terminal width.
-// If never called, defaults to 80 columns.
+// SetWidth pins the dashboard to an explicit column count and disables
+// terminal auto-detection (use it for tests or a --width flag). Values
+// below the 40-column layout minimum are ignored.
 func (d *Dashboard) SetWidth(cols int) {
-	if cols >= 40 {
+	if cols >= minCols {
+		d.cols = cols
+		d.manualWidth = true
+	}
+}
+
+// refreshWidth re-detects the terminal size unless the caller pinned a
+// width with SetWidth. Called once per render tick; the ioctl failure
+// modes (non-terminal writer, resized below the minimum) leave cols
+// untouched.
+func (d *Dashboard) refreshWidth() {
+	if d.manualWidth || d.fd == nil {
+		return
+	}
+	if cols := terminalWidth(d.fd); cols >= minCols {
 		d.cols = cols
 	}
 }

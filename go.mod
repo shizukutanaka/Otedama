@@ -28,4 +28,9 @@ require (
 	golang.org/x/crypto v0.55.0
 )
 
-require golang.org/x/sys v0.47.0 // indirect
+// golang.org/x/sys: terminal-size detection for the TUI (TIOCGWINSZ on
+// unix, GetConsoleScreenBufferInfo on Windows) — no stdlib equivalent.
+// Chosen per the dependency criteria: BSD-licensed, actively maintained
+// by the Go team, zero govulncheck findings, already in the tree
+// (transitively via x/crypto), so no new supply-chain surface.
+require golang.org/x/sys v0.47.0
