@@ -280,6 +280,7 @@ addresses) appear once their first event occurs.
 | `otedama_power_watts` | gauge | — | Configured system power draw (0 = unset). |
 | `otedama_joules_per_terahash` | gauge | — | Energy efficiency: watts × 1e12 / hashrate. |
 | `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |
+| `otedama_electricity_tariff_pence_per_kwh` | gauge | — | Current Octopus Energy unit rate (pence/kWh incl. VAT); populated only when `electricity_tariff_octopus` is set. |
 
 **Payout (non-custodial transparency)**
 

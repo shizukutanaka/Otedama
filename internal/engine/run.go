@@ -34,6 +34,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -256,6 +257,52 @@ func Run(ctx context.Context, opts Options) error {
 			}
 		}
 	}()
+
+	// Optional Octopus Energy tariff feed (electricity_tariff_octopus =
+	// "PRODUCT/TARIFF"). Polls the keyless half-hourly unit-rate API every
+	// 15 min — Agile prices settle at 16:00 for the next day and tick on
+	// the half hour, so 15 min tracks both transitions promptly — and
+	// publishes the current slot's price in pence/kWh on
+	// otedama_electricity_tariff_pence_per_kwh. Like the other feeds it
+	// acts only on a fresh reading: a failed fetch keeps the last value.
+	// The curve itself is not yet consumed by arbitration (ADR-008
+	// sub-domain 4 groundwork); the gauge makes the feed observable now.
+	if opts.Config.ElectricityTariffOctopus != "" {
+		product, tariff, _ := strings.Cut(opts.Config.ElectricityTariffOctopus, "/")
+		go func() {
+			var last float64
+			tick := func() {
+				slots, err := rates.FetchAgileRates(ctx, nil, product, tariff,
+					time.Now().Add(-30*time.Minute), 48)
+				if err != nil {
+					return
+				}
+				slot, ok := rates.AgileRateAt(slots, time.Now())
+				if !ok {
+					return
+				}
+				m.electricityTariffPence.Set(slot.ValueIncVATPence)
+				if slot.ValueIncVATPence != last {
+					last = slot.ValueIncVATPence
+					log("info", fmt.Sprintf(
+						"engine: electricity tariff %s = %.2f p/kWh (slot %s–%s UTC)",
+						opts.Config.ElectricityTariffOctopus, slot.ValueIncVATPence,
+						slot.ValidFrom.Format("15:04"), slot.ValidTo.Format("15:04")))
+				}
+			}
+			tick()
+			t := time.NewTicker(15 * time.Minute)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					tick()
+				}
+			}
+		}()
+	}
 
 	// ----- Phase 5: Providers -----
 	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
@@ -1269,7 +1316,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

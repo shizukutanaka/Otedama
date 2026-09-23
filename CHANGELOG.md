@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 270 — Octopus Energy half-hourly electricity-tariff feed: groundwork for tariff-aware scheduling)
+
+New `electricity_tariff_octopus` option (4-layer + `OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS`)
+names an Octopus Energy tariff as `"PRODUCT/TARIFF"` (e.g.
+`AGILE-24-10-01/E-1R-AGILE-24-10-01-A`). When set, the engine polls the
+keyless `api.octopus.energy` `standard-unit-rates` endpoint every 15 minutes —
+Agile prices settle at 16:00 for the next day and tick on the half hour — and
+publishes the current slot's price on the new
+`otedama_electricity_tariff_pence_per_kwh` gauge. The feed reports **GB
+pence/kWh (incl. VAT)**, which is why it is a separate field and metric from
+the USD-denominated `electricity_price_per_kwh` / `otedama_power_cost_usd_per_hour`:
+no silent currency mixing. Failed fetches keep the last trusted value, matching
+the price/curtailment feeds' untrusted-input semantics. `FetchAgileRates`
+returns the forward `[]AgileRate` curve (not a spot price) — the interface
+shape RESEARCH_IMPROVEMENTS Cat 8 #18 prescribes for the horizon-aware
+scheduler in ADR-008 sub-domain 4. `AgileRateAt` locates the active slot with
+half-open `valid_from ≤ t < valid_to` boundaries. Only
+`internal/rates/octopus.go` + a poll goroutine + config plumbing — the gauge
+is observable today; consuming the curve for curtailment (Cat 8 #9) and
+scheduling stays open, as do Tibber/Amber for non-GB regions. Zero new
+dependencies. RESEARCH_IMPROVEMENTS Cat 8 items 17–18 partially resolved;
+SPECIFICATION §3/§6 and API.md catalogue rows added.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

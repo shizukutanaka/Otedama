@@ -115,6 +115,12 @@ type engineMetrics struct {
 	// cost half of profitability. Constant for a run; set once at startup when
 	// both power and price are configured.
 	powerCostUSDPerHour *metrics.Gauge
+	// electricityTariffPence is the current unit rate of the configured
+	// Octopus Energy tariff (pence/kWh, incl. VAT) published by the tariff
+	// poll; 0 until the first reading when electricity_tariff_octopus is
+	// configured. Named in pence to prevent silent mixing with the
+	// USD-denominated electricity_price_per_kwh.
+	electricityTariffPence *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -358,6 +364,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Estimated electricity cost: power_watts/1000 × electricity_price_per_kwh. "+
 				"Combine with the BTC/USD rate and revenue to see net profit. "+
 				"0 when power_watts or electricity_price_per_kwh is unset.",
+			nil),
+		electricityTariffPence: reg.NewGauge(
+			"otedama_electricity_tariff_pence_per_kwh",
+			"Current electricity unit rate in pence/kWh incl. VAT (Octopus Energy "+
+				"tariff feed, 15-min poll). 0 until the first reading; only populated "+
+				"when electricity_tariff_octopus is configured.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",
