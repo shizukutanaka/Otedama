@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 280 — `mining.submit` の worker 名が固定文字列だった)
+
+**`mining.submit` params[0] がハードコード `"otedama"` だった** ——
+authorize した ID と異なる worker 名を検証するプール（ckpool・
+NiceHash）では全シェアが `unauthorized-worker` 拒否となる実害。
+認可済みユーザー（`conn.creds.User`）を送出するよう修正、未設定時は
+従来の `"otedama"` をフォールバックとして維持。
+
 ### Fixed (session 279 — `mining.set_target` が無視され難易度が古いまま残った)
 
 **NiceHash 流プールが `set_difficulty` の代わりに送る `mining.set_target`

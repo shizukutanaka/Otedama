@@ -691,6 +691,10 @@ endpoint against current vendor documentation. Tags as before
    stored as the difficulty *equivalent* (diff1Target/target), keeping
    a single SuggestedDifficulty semantic. An ignored set_target meant
    stale difficulty ⇒ misjudged share validation and suggested cadence.
+   — session 280: `mining.submit` params[0] now carries the authorized
+   user instead of the hardcoded literal "otedama" — pools that
+   validate the submit worker name against the authorized identity
+   (ckpool, NiceHash) reject shares under a mismatched name.
    otherwise look half-open (TCP alive, application dead).
    — session 267: `client.get_version` answered too — the other
    request-with-id method Braiins pools send; `agentString` (extracted from
