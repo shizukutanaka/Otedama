@@ -890,19 +890,54 @@ func TestCheckPoolEncryption_PlainV2Warns(t *testing.T) {
 	}
 }
 
-// datum:// is cleartext SV1 by design (the gateway's miner wire); the intended
-// deployment is a locally-running datum_gateway, but it is still a plaintext
-// transport and must be surfaced as such.
+// datum:// is cleartext SV1 by design (the gateway's miner wire); a REMOTE
+// datum endpoint still traverses the network and must warn.
 func TestCheckPoolEncryption_DatumWarns(t *testing.T) {
 	cfg := config.Config{Pools: []config.PoolConfig{
-		{URL: "datum://127.0.0.1:3334"},
+		{URL: "datum://gateway.example.com:3334"},
 	}}
 	r := checkPoolEncryption(cfg).Run(context.Background())
 	if r.Status != StatusWarn {
 		t.Errorf("datum://: status = %v, want Warn (detail: %s)", r.Status, r.Detail)
 	}
-	if !strings.Contains(r.Detail, "127.0.0.1:3334") {
+	if !strings.Contains(r.Detail, "gateway.example.com:3334") {
 		t.Errorf("detail should name the datum pool: %q", r.Detail)
+	}
+}
+
+// Loopback cleartext is exempt: traffic never leaves the box, so there is no
+// on-path attacker — this is the sanctioned local datum_gateway / local
+// bitcoind deployment.
+func TestCheckPoolEncryption_LoopbackPlaintextExempt(t *testing.T) {
+	for _, url := range []string{
+		"datum://127.0.0.1:3334",
+		"stratum+tcp://127.0.0.1:8332",
+		"stratum+tcp://[::1]:8332",
+		"stratum+tcp://localhost:8332",
+		"stratum+v2://127.0.0.1:3336",
+	} {
+		cfg := config.Config{Pools: []config.PoolConfig{{URL: url}}}
+		r := checkPoolEncryption(cfg).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Errorf("%s: status = %v, want Pass (loopback exempt; detail: %s)", url, r.Status, r.Detail)
+		}
+	}
+}
+
+func TestPoolURLIsLoopback(t *testing.T) {
+	cases := map[string]bool{
+		"datum://127.0.0.1:3334":          true,
+		"stratum+tcp://localhost:8332":    true,
+		"stratum+tcp://[::1]:8332":        true,
+		"stratum+tcp://127.0.0.55":        true,
+		"stratum+tcp://8.8.8.8:3333":      false,
+		"stratum+tcp://pool.example.com":  false,
+		"stratum+tcp://[2001:db8::1]:833": false,
+	}
+	for url, want := range cases {
+		if got := poolURLIsLoopback(url); got != want {
+			t.Errorf("poolURLIsLoopback(%q) = %v, want %v", url, got, want)
+		}
 	}
 }
 

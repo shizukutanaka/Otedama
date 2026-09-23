@@ -2176,3 +2176,29 @@ func TestParseAddress_Datum(t *testing.T) {
 		t.Errorf("parseAddress(datum://ocean.example:3334) = %q, %v", got, err)
 	}
 }
+
+// TestLastReconnect_ExportedAccessor: the poolproto.ReconnectInformant
+// surface exposes the same directive the internal field records — nil
+// before any client.reconnect, populated afterwards.
+func TestLastReconnect_ExportedAccessor(t *testing.T) {
+	conn := &connection{
+		raw:        nil,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	if got := sess.LastReconnect(); got != nil {
+		t.Fatalf("LastReconnect before directive = %+v, want nil", got)
+	}
+	d := reconnectDirective{Host: "alt.pool.example", Port: 4444, Wait: 10}
+	sess.lastReconnect.Store(&d)
+	got := sess.LastReconnect()
+	if got == nil {
+		t.Fatal("LastReconnect after directive = nil")
+	}
+	if got.Host != "alt.pool.example" || got.Port != 4444 || got.Wait != 10 {
+		t.Errorf("LastReconnect = %+v, want {alt.pool.example 4444 10}", *got)
+	}
+	// Type-assert like the engine does.
+	var _ poolproto.ReconnectInformant = sess
+}
