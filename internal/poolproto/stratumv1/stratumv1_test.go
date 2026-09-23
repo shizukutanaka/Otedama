@@ -2414,3 +2414,50 @@ func TestSessionCall_RpcTimeout(t *testing.T) {
 		t.Errorf("call took %v — rpcTimeout did not bound the wait", elapsed)
 	}
 }
+
+// A notify whose REQUIRED hex fields are malformed must error, not deliver
+// a zero-valued Job — a job with zeroed nbits/prevhash produces shares the
+// pool can only reject (silent corruption vs loud drop).
+func TestParseNotify_MalformedRequiredFields(t *testing.T) {
+	base := func(field, value string) json.RawMessage {
+		vals := map[string]string{
+			"jobid": `"60"`, "prevhash": `"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"`,
+			"coinb1": `"01"`, "coinb2": `"ff"`, "branches": `[]`,
+			"version": `"00000002"`, "nbits": `"1d00ffff"`, "ntime": `"68d36c5e"`, "clean": `true`,
+		}
+		vals[field] = value
+		return json.RawMessage(fmt.Sprintf(`[%s,%s,%s,%s,%s,%s,%s,%s,%s]`,
+			vals["jobid"], vals["prevhash"], vals["coinb1"], vals["coinb2"],
+			vals["branches"], vals["version"], vals["nbits"], vals["ntime"], vals["clean"]))
+	}
+	for field, bad := range map[string]string{
+		"prevhash": `"zz"`,      // non-hex
+		"coinb1":   `"zz"`,      // non-hex
+		"coinb2":   `"zz"`,      // non-hex
+		"version":  `"gggg"`,    // non-hex u32
+		"nbits":    `"notbits"`, // non-hex u32
+		"ntime":    `"xxyy"`,    // non-hex u32
+	} {
+		if _, err := parseNotify(base(field, bad)); err == nil {
+			t.Errorf("parseNotify with malformed %s=%s succeeded — zero-valued fields must not propagate as a Job", field, bad)
+		}
+	}
+	// A wrong-length prevhash must also fail (was silently kept as zero).
+	if _, err := parseNotify(base("prevhash", `"abcd"`)); err == nil {
+		t.Error("parseNotify with 2-byte prevhash succeeded — must require 32 bytes")
+	}
+}
+
+// A set_difficulty carrying a non-positive or non-finite value must not
+// overwrite the live share target: NaN/zero/negative/Inf would silently
+// poison every subsequent share filter.
+func TestParseDifficulty_RejectsNonPositiveAndNonFinite(t *testing.T) {
+	for _, raw := range []string{`[0]`, `[-5]`, `[1e400]`, `["x"]`, `[]`, `not-json`} {
+		if d, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) = (%v, true), want rejected", raw, d)
+		}
+	}
+	if d, ok := parseDifficulty(json.RawMessage(`[1024.5]`)); !ok || d != 1024.5 {
+		t.Errorf("parseDifficulty valid = (%v, %v), want (1024.5, true)", d, ok)
+	}
+}

@@ -102,33 +102,45 @@ func parseNotify(raw json.RawMessage) (notifyJob, error) {
 	}
 	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
 		job.Version = uint32(v)
+	} else {
+		return notifyJob{}, fmt.Errorf("notify: bad version %q: %w", versionHex, err)
 	}
 	if v, err := strconv.ParseUint(nbitsHex, 16, 32); err == nil {
 		job.NBits = uint32(v)
+	} else {
+		return notifyJob{}, fmt.Errorf("notify: bad nbits %q: %w", nbitsHex, err)
 	}
 	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
 		job.NTime = uint32(v)
+	} else {
+		return notifyJob{}, fmt.Errorf("notify: bad ntime %q: %w", ntimeHex, err)
 	}
-	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
-		// Stratum V1 transmits prevhash as the display-order hash hex.
-		// The canonical conversion into header byte order is a per-word
-		// (32-bit) byte swap — reverse_endianness_per_word in ESP-Miner's
-		// stratum/mining.c — NOT a full reverse: each 4-byte word keeps
-		// its position while its bytes are swapped. Storing it any other
-		// way makes every mined header hash to a value the pool cannot
-		// verify — an always-reject bug.
-		for i := 0; i < 32; i += 4 {
-			job.PrevHash[i+0] = b[i+3]
-			job.PrevHash[i+1] = b[i+2]
-			job.PrevHash[i+2] = b[i+1]
-			job.PrevHash[i+3] = b[i+0]
-		}
+	// Stratum V1 transmits prevhash as the display-order hash hex.
+	// The canonical conversion into header byte order is a per-word
+	// (32-bit) byte swap — reverse_endianness_per_word in ESP-Miner's
+	// stratum/mining.c — NOT a full reverse: each 4-byte word keeps
+	// its position while its bytes are swapped. Storing it any other
+	// way makes every mined header hash to a value the pool cannot
+	// verify — an always-reject bug.
+	b, err := hex.DecodeString(prevHashHex)
+	if err != nil || len(b) != 32 {
+		return notifyJob{}, fmt.Errorf("notify: bad prevhash %q (len=%d)", prevHashHex, len(b))
+	}
+	for i := 0; i < 32; i += 4 {
+		job.PrevHash[i+0] = b[i+3]
+		job.PrevHash[i+1] = b[i+2]
+		job.PrevHash[i+2] = b[i+1]
+		job.PrevHash[i+3] = b[i+0]
 	}
 	if b, err := hex.DecodeString(coinb1Hex); err == nil {
 		job.coinb1 = b
+	} else {
+		return notifyJob{}, fmt.Errorf("notify: bad coinb1: %w", err)
 	}
 	if b, err := hex.DecodeString(coinb2Hex); err == nil {
 		job.coinb2 = b
+	} else {
+		return notifyJob{}, fmt.Errorf("notify: bad coinb2: %w", err)
 	}
 	for _, bh := range branchHexes {
 		b, err := hex.DecodeString(bh)
@@ -146,9 +158,15 @@ func parseNotify(raw json.RawMessage) (notifyJob, error) {
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
+// A non-positive or non-finite value is not a usable share target —
+// rejected here so a malformed notification cannot poison the
+// difficulty the worker filters shares against.
 func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	var p []float64
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
+		return 0, false
+	}
+	if !(p[0] > 0) || math.IsInf(p[0], 0) {
 		return 0, false
 	}
 	return p[0], true

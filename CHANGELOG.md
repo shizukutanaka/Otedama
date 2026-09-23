@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 315 — stratumv1 パーサの静かなゼロ値)
+
+- **`mining.notify` の必須フィールド破損をゼロ値で黙殺していた** —
+  `version`/`nbits`/`ntime`/`prevhash`/`coinb1`/`coinb2` の
+  hex パース失敗が `err == nil` で握り潰され、NBits=0・PrevHash=0 の
+  破損ジョブがそのまま engine へ配信されていた（投入シェアは全件
+  プール側 reject — s311 の壊れた設定と同型の「静かなゼロ値」）。
+  必須フィールドはパースエラーでジョブを落とすよう修正
+  （clean_jobs の 0/1 寛容と merkle_branch 要素のスキップは意図的
+  仕様として維持）。
+- **`mining.set_difficulty` が非正・非有限値を無検証受理していた** —
+  `0`/負/`Inf` の難易度がそのままシェアフィルタへ書き込まれ
+  以後の全提出を歪め得た → `!(d > 0) || IsInf` で拒否（NaN も
+  同条件で棄却）。直前の有効難易度は保持される。
+
 ### Fixed (session 314 — poolproto/rates の残存監査)
 
 - **`Available()` が非決定順を返していた** — レジストリの map 走査順を
