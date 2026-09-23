@@ -84,6 +84,37 @@ RESEARCH_IMPROVEMENTS Cat 1/2 #2と依存衛生#3を実施。
 **検証**: 全24パッケージ go1.25.7下でbuild/test green、変更ファイル
 gofumpt clean、deadcode新規なし。
 
+### Security (session 257 — 定時間比較監査＋SV2調査項目の棚卸し)
+
+RESEARCH_IMPROVEMENTS Cat 2 #9（定時間比較監査）を実施し、
+`internal/`全体の秘密値・MAC隣接の等値比較を網羅的に検査。AEADタグ
+検証はstdlib内部（定時間）、Noise NXハンドシェイクはMACを直接
+比較しない、パスフレーズ経路はGCM open検証、と既に安全な領域を
+確認した上で、1件の実害を発見・修正した。
+
+- **BIP-39チェックサム検証のearly-exitタイミングリーク是正**:
+  `internal/lightning/seed.go`のマジックワード検証ループが最初の
+  不一致ビットで即returnしており、検証時間から一致した先頭
+  チェックサムビット数が漏洩していた（チェックサムは秘密エントロピー
+  の関数）。全ビットで`diff |= bit ^ want`を蓄積してから1回だけ判定
+  する形に変更。`crypto/subtle`のインポートは不要（ビットベクトルでは
+  XOR蓄積イディオムが同等かつ明快）。
+- **Cat 1/2 #3（segwitコインベース除去）を ❌ 非該当として記録**:
+  同ハザードはクライアントが`coinbase_tx_prefix`/`suffix`から
+  コインベースを組み立てるSV2拡張ジョブ経路でのみ成立するが、
+  OtedamaのSV2クライアントは標準チャネルのみで`NewMiningJob.
+  merkle_root`をそのまま消費し、コインベース組み立てコードが存在
+  しない（`NewExtendedMiningJob`等のgrepは0件）。V1経路はnotify
+  提供値をそのままハッシュする正準構成のため剥離は適用外。
+- **Cat 1/2 #7（sv2-spec参照の固定）を ✅ 検証済みとして記録**:
+  コード・ADR-009の全SV2参照は既にstableな
+  `stratumprotocol.org/specification/*`を指しており、
+  `stratum-mining/stratum`（アプリrepo）への言及は本書の出典表記のみ。
+
+**検証**: `internal/lightning` テスト green。`internal/lightning/`は
+CLAUDE.mdの資金領域ルール対象のためmaintainer確認を推奨（既存動作は
+等価・タイミング特性のみ変更）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

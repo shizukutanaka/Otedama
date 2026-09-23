@@ -430,8 +430,19 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
+9. ✅ **Constant-time comparison audit** for any secret/MAC comparisons in the
    handshake and seed paths (use `crypto/subtle`).
+   — ✅ **Audited (session 257).** Grepped every equality on secret/
+   MAC-adjacent values across `internal/`: AEAD tag checks are inside
+   stdlib `gcm.Open`/`aead.Open` (constant-time already); the Noise NX
+   handshake compares no MACs directly; passphrase paths verify via
+   GCM open (no manual compare); `bytes.Equal` appears only on base58
+   checksums (public data). One real finding, fixed: the BIP-39
+   mnemonic checksum loop in `internal/lightning/seed.go` early-exited
+   on the first differing bit, leaking via timing how many leading
+   checksum bits matched — now accumulates `diff |= bit ^ want` over
+   all bits and decides once. No `crypto/subtle` import needed (the
+   XOR-accumulate idiom is equivalent for bit-vectors and clearer).
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
@@ -515,12 +526,26 @@ endpoint against current vendor documentation. Tags as before
    max) leaves the target untouched, matching the spec's unbounded
    channel semantics. `TestClampShareTarget` covers below/at/above-bound,
    unbounded, and zero-target inputs.
-3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
+3. ❌ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
+   — ❌ **Not applicable (verified session 257).** The hazard requires the
+   client to *assemble* a coinbase from `coinbase_tx_prefix`/`suffix`,
+   which only exists on the SV2 **extended-job** path
+   (`NewExtendedMiningJob`, used with a Job Declarator / template
+   provider). Otedama's SV2 client is standard-channel only: it consumes
+   `NewMiningJob.merkle_root` verbatim (pool-computed) and carries no
+   coinbase-assembly code at all — `grep` for `coinbase_tx_prefix`,
+   `NewExtendedMiningJob` across `internal/` is empty. There is no
+   witness serialization to mis-hash. The V1 path's coinbase assembly
+   (session 255) builds the coinbase itself from `coinb1‖en1‖en2‖coinb2`
+   exactly as notify supplies it — a pool that includes segwit fields in
+   coinb1 supplies them *to be hashed*, matching every V1 pool's
+   canonical layout, so no stripping applies there either. Re-open only
+   if extended-job support is ever added.
 4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
@@ -581,10 +606,17 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   — ✅ **Verified already satisfied (session 257).** Every spec citation
+   in code and ADR-009 points at `stratumprotocol.org/specification/*`
+   (the stable spec site), not the SRI app repo — `internal/stratum/
+   frame.go`, `messages.go`, `noise.go`, and the ADR-009 references
+   section all cite spec chapters. The only `stratum-mining/stratum`
+   strings left are inside this document's own source attributions
+   (correct — they cite the release notes the finding came from).
 
 ### Category 4 — decentralisation (arXiv grounding)
 
