@@ -145,6 +145,17 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    agent/hardware strings to correlate behaviour to client builds; a
    frozen literal made every dev build indistinguishable from the
    release it predates. All three now derive from `version.Version`.
+   — session 286: **link liveness separated from job delivery.**
+   `otedama_last_job_received_seconds` conflated "the link is alive"
+   with "the pool is issuing work" — a connected pool that stalls
+   upstream (housekeeping frames, no jobs) was indistinguishable from a
+   dead link, so "reconnect" vs "wait" could not be told apart. New
+   `otedama_last_pool_message_seconds` stamps EVERY inbound message:
+   V2 counts each dispatched frame; V1 — whose engine-facing channel
+   only surfaces jobs — stamps `lastMsgAt` in the session read loop and
+   the engine polls it per stats tick via the new optional
+   `poolproto.LastMessageInformer` (same family as PoolNoticeReceiver /
+   ReconnectInformant). A 0 gauge = "connected, never said anything".
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

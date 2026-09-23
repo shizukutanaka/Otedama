@@ -205,6 +205,7 @@ fires.
 | `pool_difficulty` | gauge | Current pool-assigned share difficulty. |
 | `estimated_share_interval_seconds` | gauge | difficulty × 2³² / hashrate. |
 | `last_job_received_seconds` | gauge | Unix time of the most recent job. |
+| `last_pool_message_seconds` | gauge | Unix time of the most recent inbound pool message of any kind (job or housekeeping). Separates link liveness from job delivery: stale with a fresh `last_job_received_seconds` impossible; fresh here with a stale job gauge means the pool stopped issuing work while the link is alive. |
 | `payout_active_index` | gauge | 0-based index of active payout address. |
 | `payout_info{address}` † | gauge | Active (masked) payout destination = 1. |
 | `build_info{version,commit,goversion}` | gauge | Constant 1; build metadata in labels. |

@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 286 — リンク生存とジョブ配送を分離する心拍メトリクス)
+
+**新ゲージ `otedama_last_pool_message_seconds`** ——
+`otedama_last_job_received_seconds` は「リンクが生きている」と
+「プールがジョブを出している」を混同していた: 上流で停滞したプール
+（ハウスキーピングは届くがジョブなし）が死んだリンクと区別不能で、
+「再接続すべきか」「待つべきか」を判断できなかった。新ゲージは
+全ての受信メッセージで生存時刻を更新。V2 はインライン読み取り経路の
+全フレームを計数、V1（エンジンへはジョブしか届かない）はセッション
+読みループで `lastMsgAt` を打刻し、エンジンが新規 optional インターフェース
+`poolproto.LastMessageInformer`（PoolNoticeReceiver/ReconnectInformant
+と同族）経由で stats tick ごとに公開。0 のまま = 「接続済みだがプールが
+一度も応答していない」アラート状態。
+
 ### Fixed (session 285 — プール向け client identity が実ビルドを報告しなかった)
 
 **`agentString`（mining.subscribe / client.get_version）と V2
