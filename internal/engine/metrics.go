@@ -101,10 +101,15 @@ type engineMetrics struct {
 	// up reflects whether the miner is currently producing hashrate
 	// (1) or has stalled (0); a scrape can alert on a wedged miner.
 	up *metrics.Gauge
-	// curtailed is 1 when hashing has been paused due to the
-	// curtail_below_btc_usd threshold; 0 otherwise. Distinct from
-	// otedama_up (which reflects the miner stalling, not a deliberate pause).
+	// curtailed is 1 when hashing has been paused by either curtail gate
+	// (curtail_below_btc_usd or curtail_above_uk_carbon); 0 otherwise.
+	// Distinct from otedama_up (which reflects the miner stalling, not a
+	// deliberate pause).
 	curtailed *metrics.Gauge
+	// carbonIntensity is the latest GB grid carbon intensity forecast
+	// (gCO2/kWh) published by the carbon-curtailment poll; 0 until the
+	// first reading when curtail_above_uk_carbon is enabled.
+	carbonIntensity *metrics.Gauge
 	// powerWatts is the user-configured system power draw in watts.
 	// 0 when not configured (power_watts = 0).
 	powerWatts *metrics.Gauge
@@ -343,7 +348,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			nil),
 		curtailed: reg.NewGauge(
 			"otedama_curtailed",
-			"1 if hashing is paused because BTC/USD is below curtail_below_btc_usd threshold, else 0.",
+			"1 if hashing is paused by curtailment (BTC/USD below curtail_below_btc_usd, or "+
+				"UK grid carbon intensity above curtail_above_uk_carbon), else 0.",
+			nil),
+		carbonIntensity: reg.NewGauge(
+			"otedama_uk_grid_carbon_intensity",
+			"GB grid carbon intensity forecast in gCO2/kWh (api.carbonintensity.org.uk, "+
+				"10-min poll). 0 until the first reading; only populated when "+
+				"curtail_above_uk_carbon is configured.",
 			nil),
 		powerWatts: reg.NewGauge(
 			"otedama_power_watts",

@@ -71,6 +71,7 @@ its default, and its validation rule:
 | `data_dir` | `OTEDAMA_DATA_DIR` | `""` → XDG/platform convention | — |
 | `arbitration_hysteresis_pct` | `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `0.05` | ∈ [0.0, 1.0) |
 | `curtail_below_btc_usd` | `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `0` (disabled) | ≥ 0 |
+| `curtail_above_uk_carbon` | `OTEDAMA_CURTAIL_ABOVE_UK_CARBON` | `0` (disabled) | ≥ 0 (GB-grid forecast gCO2/kWh threshold; UK-only source) |
 | `min_yield_sats_per_sec` | `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `0` (disabled) | ≥ 0 |
 | `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
 | `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
@@ -176,7 +177,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 |---|---|---|
 | `hashrate_hashes_per_second` | gauge | Current aggregate hashrate. |
 | `up` | gauge | 1 = healthy (hashing or curtailed), 0 = stalled when it should hash. |
-| `curtailed` | gauge | 1 = paused below `curtail_below_btc_usd`, else 0. |
+| `curtailed` | gauge | 1 = paused by either curtail gate (`curtail_below_btc_usd` or `curtail_above_uk_carbon`), else 0. |
+| `uk_grid_carbon_intensity` | gauge | GB grid carbon intensity forecast (gCO2/kWh, 10-min poll via api.carbonintensity.org.uk); populated only when `curtail_above_uk_carbon` is set. |
 | `productive_seconds_total` | counter | Wall-clock seconds actually producing hashrate. |
 | `power_watts` | gauge | Configured system draw (0 = unset). |
 | `joules_per_terahash` | gauge | watts × 1e12 / hashrate (0 = power unset). |

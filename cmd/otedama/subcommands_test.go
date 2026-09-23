@@ -229,6 +229,7 @@ func TestConfigShow_NoArgs(t *testing.T) {
 		"pools",
 		"arbitration_hysteresis_pct",
 		"curtail_below_btc_usd",
+		"curtail_above_uk_carbon",
 		"power_watts",
 		"electricity_price_per_kwh",
 		"http_addr",

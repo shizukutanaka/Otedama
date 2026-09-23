@@ -135,6 +135,21 @@ type Config struct {
 	// Validate(). Set via OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
 	CurtailBelowBTCUSD float64 `yaml:"curtail_below_btc_usd"`
 
+	// CurtailAboveUKCarbon pauses all hashing workers when the UK National
+	// Grid's carbon intensity forecast rises above this threshold (gCO2/kWh),
+	// letting GB operators stop mining during dirty grid windows
+	// (SUSTAINABILITY.md). Workers resume automatically once intensity
+	// recovers (on the next pool notify, up to ~60 s). Like the price gate,
+	// it acts only on a fresh reading — a failed fetch never pauses or
+	// resumes mining.
+	//
+	// The source (api.carbonintensity.org.uk) covers the GB grid only; it
+	// says nothing about other grids, which is why the name carries the
+	// region. 0 disables the feature (default). Negative values are
+	// rejected by Validate(). Set via OTEDAMA_CURTAIL_ABOVE_UK_CARBON or
+	// config file.
+	CurtailAboveUKCarbon float64 `yaml:"curtail_above_uk_carbon"`
+
 	// MinYieldSatsPerSec is a per-device profitability floor in satoshis per
 	// second: the arbitration engine leaves a device idle when none of its
 	// compatible revenue streams clears this rate, rather than running it for a
@@ -244,6 +259,7 @@ func Defaults() Config {
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
 		CurtailBelowBTCUSD:       0,  // disabled by default
+		CurtailAboveUKCarbon:     0,  // disabled by default
 		MinYieldSatsPerSec:       0,  // disabled by default
 		HTTPAddr:                 "", // HTTP server disabled by default
 	}
@@ -305,6 +321,7 @@ type Origins struct {
 	DataDir                  ValueOrigin
 	ArbitrationHysteresisPct ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
+	CurtailAboveUKCarbon     ValueOrigin
 	MinYieldSatsPerSec       ValueOrigin
 	PowerWatts               ValueOrigin
 	ElectricityPricePerKWh   ValueOrigin
@@ -345,6 +362,10 @@ var numericEnvVars = []struct {
 	{"OTEDAMA_CURTAIL_BELOW_BTC_USD", func(c *Config, o *Origins, v float64) {
 		c.CurtailBelowBTCUSD = v
 		o.CurtailBelowBTCUSD = OriginEnv
+	}},
+	{"OTEDAMA_CURTAIL_ABOVE_UK_CARBON", func(c *Config, o *Origins, v float64) {
+		c.CurtailAboveUKCarbon = v
+		o.CurtailAboveUKCarbon = OriginEnv
 	}},
 	{"OTEDAMA_POWER_WATTS", func(c *Config, o *Origins, v float64) {
 		c.PowerWatts = v
@@ -442,6 +463,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if fromFile.CurtailBelowBTCUSD != 0 {
 		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
 		o.CurtailBelowBTCUSD = OriginFile
+	}
+	// CurtailAboveUKCarbon: same zero-value caveat; treat non-zero file
+	// value as an explicit override.
+	if fromFile.CurtailAboveUKCarbon != 0 {
+		cfg.CurtailAboveUKCarbon = fromFile.CurtailAboveUKCarbon
+		o.CurtailAboveUKCarbon = OriginFile
 	}
 	if fromFile.PowerWatts != 0 {
 		cfg.PowerWatts = fromFile.PowerWatts
@@ -643,6 +670,10 @@ func (c Config) Validate() error {
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+	}
+	if c.CurtailAboveUKCarbon < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"curtail_above_uk_carbon %.2f must be >= 0 (0 = disabled)", c.CurtailAboveUKCarbon))
 	}
 	if c.MinYieldSatsPerSec < 0 {
 		issues = append(issues, fmt.Sprintf(

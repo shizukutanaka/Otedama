@@ -134,6 +134,23 @@ func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (ne
 	}
 }
 
+// curtailAboveDecision is the mirrored gate for above-threshold signals
+// (carbon intensity): identical hold-on-untrusted semantics, opposite
+// comparator. A threshold of 0 disables.
+func curtailAboveDecision(curr bool, value float64, fresh bool, threshold float64) (next, changed bool) {
+	if threshold <= 0 || !fresh || value <= 0 {
+		return curr, false
+	}
+	switch {
+	case value > threshold && !curr:
+		return true, true // signal rose above threshold → pause
+	case value <= threshold && curr:
+		return false, true // signal recovered → resume
+	default:
+		return curr, false
+	}
+}
+
 // Run starts a full mining session and blocks until ctx is cancelled.
 // It orchestrates every subsystem: wallet, HAL, providers, arbitration,
 // TUI, and the Stratum V2 pool connection.
@@ -210,8 +227,22 @@ func Run(ctx context.Context, opts Options) error {
 	// below flips it, and the session loop consults it before applying any
 	// pool job — without this shared gate the next mining.notify (~30–60 s)
 	// would silently re-arm the idled workers while otedama_curtailed still
-	// read 1, so the pause neither held nor matched the metric.
+	// read 1, so the pause neither held nor matched the metric. carbonGate
+	// is the parallel gate for curtail_above_uk_carbon; either gate raised
+	// curtails (the session ORs them).
 	curtailGate := new(atomic.Bool)
+	carbonGate := new(atomic.Bool)
+
+	// setCurtailedMetric keeps otedama_curtailed honest under two gates:
+	// it is 1 while EITHER gate is raised, so a price-recovery uncurtail
+	// cannot falsely report 0 while the carbon gate still pauses hashing.
+	setCurtailedMetric := func() {
+		if curtailGate.Load() || carbonGate.Load() {
+			m.curtailed.Set(1)
+		} else {
+			m.curtailed.Set(0)
+		}
+	}
 
 	// Publish the BTC/USD rate to its gauge and enforce the optional
 	// curtailment threshold (curtail_below_btc_usd). When the price falls
@@ -242,20 +273,61 @@ func Run(ctx context.Context, opts Options) error {
 					log("info", fmt.Sprintf(
 						"engine: curtailed — BTC/USD $%.0f below threshold $%.0f; hashing paused",
 						rate, threshold))
-					if m != nil {
-						m.curtailed.Set(1)
-					}
 				} else {
 					log("info", fmt.Sprintf(
 						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
 						rate, threshold))
-					if m != nil {
-						m.curtailed.Set(0)
-					}
 				}
+				setCurtailedMetric()
 			}
 		}
 	}()
+
+	// Optional GB-grid carbon curtailment (curtail_above_uk_carbon): mirror
+	// of the price gate. A failed fetch holds the last trusted state — the
+	// gate never pauses or resumes on data it could not read. Polls every
+	// 10 min so the half-hourly settlement slots are tracked promptly.
+	if opts.Config.CurtailAboveUKCarbon > 0 {
+		go func() {
+			tick := func() {
+				ci, err := rates.FetchCarbonIntensity(ctx)
+				if err != nil {
+					return
+				}
+				m.carbonIntensity.Set(ci.Forecast)
+				next, changed := curtailAboveDecision(carbonGate.Load(),
+					ci.Forecast, true, opts.Config.CurtailAboveUKCarbon)
+				if !changed {
+					return
+				}
+				carbonGate.Store(next)
+				if next {
+					for _, w := range workers {
+						w.SetWork(nil)
+					}
+					log("info", fmt.Sprintf(
+						"engine: curtailed — UK grid carbon intensity %.0f gCO2/kWh (%s) above threshold %.0f; hashing paused",
+						ci.Forecast, ci.Index, opts.Config.CurtailAboveUKCarbon))
+				} else {
+					log("info", fmt.Sprintf(
+						"engine: uncurtailed — UK grid carbon intensity %.0f gCO2/kWh recovered; hashing resumes on next job",
+						ci.Forecast))
+				}
+				setCurtailedMetric()
+			}
+			tick()
+			t := time.NewTicker(10 * time.Minute)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					tick()
+				}
+			}
+		}()
+	}
 
 	// ----- Phase 5: Providers -----
 	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
@@ -333,6 +405,7 @@ func Run(ctx context.Context, opts Options) error {
 		metrics:     m,
 		log:         log,
 		curtailGate: curtailGate,
+		carbonGate:  carbonGate,
 		activityMu:  &activityMu,
 		activity:    activity,
 	})
@@ -353,8 +426,10 @@ type reconnectOpts struct {
 	log       func(level, msg string)
 	// curtailGate, when non-nil and true, means hashing is paused by the
 	// curtail_below_btc_usd threshold; the session loop must not apply
-	// incoming pool jobs while it is raised.
+	// incoming pool jobs while it is raised. carbonGate is the parallel
+	// gate for curtail_above_uk_carbon.
 	curtailGate *atomic.Bool
+	carbonGate  *atomic.Bool
 	// activityMu/activity: see sessionOpts. Threaded through unchanged
 	// across reconnects since the arbitration loop (the writer) runs for
 	// the lifetime of Run(), independent of any one pool session.
@@ -427,6 +502,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			m:            r.metrics,
 			powerWatts:   r.opts.Config.PowerWatts,
 			curtailGate:  r.curtailGate,
+			carbonGate:   r.carbonGate,
 			tlsCAFile:    poolTLSCAFile,
 			poolPassword: poolPassword,
 			activityMu:   r.activityMu,
@@ -539,6 +615,9 @@ type sessionOpts struct {
 	// curtailGate, when non-nil and raised, suppresses applying pool jobs to
 	// workers (they stay idle) because BTC/USD is below the curtail threshold.
 	curtailGate *atomic.Bool
+	// carbonGate is the parallel gate raised when the UK grid carbon
+	// intensity exceeds curtail_above_uk_carbon; either gate curtails.
+	carbonGate *atomic.Bool
 	// tlsCAFile is the active pool's optional PEM CA bundle path (PoolConfig
 	// .TLSCAFile), used to verify a private-CA/self-signed stratum+tls:// pool.
 	tlsCAFile string
@@ -560,10 +639,12 @@ type sessionOpts struct {
 	activity   map[string]float64
 }
 
-// isCurtailed reports whether hashing is currently paused by the
-// curtail_below_btc_usd threshold. Safe to call with a nil gate.
-func (o sessionOpts) isCurtailed() bool {
-	return o.curtailGate != nil && o.curtailGate.Load()
+// isCurtailed reports whether hashing is currently paused by either
+// curtailment gate (curtail_below_btc_usd or curtail_above_uk_carbon).
+// Safe to call with nil gates.
+func (o *sessionOpts) isCurtailed() bool {
+	return (o.curtailGate != nil && o.curtailGate.Load()) ||
+		(o.carbonGate != nil && o.carbonGate.Load())
 }
 
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,

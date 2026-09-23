@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 268 — RESEARCH_IMPROVEMENTS Cat 8 #10: optional UK-grid carbon-intensity curtailment)
+
+**カーテルメントの第2ゲートを電力炭素強度に拡張.** `curtail_below_btc_usd`
+が価格で止めるのに対し、`curtail_above_uk_carbon` (gCO2/kWh) は GB グリッドが
+「汚い」時間帯にハッシングを止める。無鍵の `api.carbonintensity.org.uk`
+半時間スロット予報を10分毎にポーリング (新規 `internal/rates/carbon.go`) し、
+閾値超過で価格ゲートと同一の untrusted-input セマンティクスで
+`w.SetWork(nil)` に落とす: 新規読み取りにのみ作用、フェッチ失敗では状態を保持、
+`value<=0` は変更なし。`otedama_curtailed` は両ゲートの OR に拡張され、新設
+`otedama_uk_grid_carbon_intensity` ゲージが最新予報を公開する。
+
+**UK 限定は正直な命名.** National Grid ESO の index は GB グリッドのみの
+national index であり、限界排出量 (marginal/MOER) ではない。他グリッドには
+無意味なためキー名に地域を明記し、MOER フィード (WattTime 等) は API キー
+供給後の将来作業として SUSTAINABILITY.md §7 に記録した。
+
+**配線.** `curtailAboveDecision` (価格版の反転比較) + `carbonGate`
+`atomic.Bool` を `sessionOpts.isCurtailed()` が OR 判定。`config show` /
+4層設定 (file/env `OTEDAMA_CURTAIL_ABOVE_UK_CARBON`) / SPECIFICATION §3・§6 /
+API.md / config.yaml.example 更新。テスト: `TestCurtailAboveDecision` (15
+ケース) + `TestIsCurtailed_CarbonGate` + carbon decode/fixture テスト。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

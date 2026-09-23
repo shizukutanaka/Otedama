@@ -1152,6 +1152,65 @@ func TestCurtailDecision(t *testing.T) {
 	}
 }
 
+func TestCurtailAboveDecision(t *testing.T) {
+	tests := []struct {
+		name        string
+		curr        bool
+		value       float64
+		fresh       bool
+		threshold   float64
+		wantNext    bool
+		wantChanged bool
+	}{
+		// --- identical untrusted-input semantics as the price gate ---
+		{"not fresh above threshold does not curtail", false, 400, false, 300, false, false},
+		{"not fresh below threshold does not uncurtail", true, 100, false, 300, true, false},
+
+		// --- normal fresh transitions (comparator inverted vs price gate) ---
+		{"fresh above threshold curtails", false, 400, true, 300, true, true},
+		{"fresh at/below threshold uncurtails", true, 300, true, 300, false, true},
+		{"fresh below threshold uncurtails", true, 100, true, 300, false, true},
+
+		// --- no-op steady states ---
+		{"fresh above while already curtailed: no change", true, 500, true, 300, true, false},
+		{"fresh below while not curtailed: no change", false, 100, true, 300, false, false},
+
+		// --- feature disabled / invalid inputs ---
+		{"threshold 0 disables (no curtail)", false, 999, true, 0, false, false},
+		{"threshold 0 disables (no uncurtail either)", true, 999, true, 0, true, false},
+		{"negative threshold disabled", false, 400, true, -1, false, false},
+		{"zero value never changes state", true, 0, true, 300, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			next, changed := curtailAboveDecision(tt.curr, tt.value, tt.fresh, tt.threshold)
+			if next != tt.wantNext || changed != tt.wantChanged {
+				t.Errorf("curtailAboveDecision(curr=%v, value=%g, fresh=%v, thr=%g) = (%v, %v), want (%v, %v)",
+					tt.curr, tt.value, tt.fresh, tt.threshold, next, changed, tt.wantNext, tt.wantChanged)
+			}
+		})
+	}
+}
+
+func TestIsCurtailed_CarbonGate(t *testing.T) {
+	price := new(atomic.Bool)
+	carbon := new(atomic.Bool)
+	opts := sessionOpts{curtailGate: price, carbonGate: carbon}
+	carbon.Store(true)
+	if !opts.isCurtailed() {
+		t.Error("isCurtailed() = false with carbon gate raised, want true")
+	}
+	// Price gate lowering must not release the carbon hold.
+	price.Store(false)
+	if !opts.isCurtailed() {
+		t.Error("isCurtailed() released while carbon gate still raised")
+	}
+	carbon.Store(false)
+	if opts.isCurtailed() {
+		t.Error("isCurtailed() = true with both gates lowered, want false")
+	}
+}
+
 // ============================================================================
 // sessionOpts.isCurtailed — curtailment gate predicate (session 115)
 //

@@ -76,6 +76,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	// and fractions readable.
 	fmt.Fprintf(stdout, "arbitration_hysteresis_pct: %g%s\n", cfg.ArbitrationHysteresisPct, tag(origins.ArbitrationHysteresisPct))
 	fmt.Fprintf(stdout, "curtail_below_btc_usd:      %g%s\n", cfg.CurtailBelowBTCUSD, tag(origins.CurtailBelowBTCUSD))
+	fmt.Fprintf(stdout, "curtail_above_uk_carbon:    %g%s\n", cfg.CurtailAboveUKCarbon, tag(origins.CurtailAboveUKCarbon))
 	fmt.Fprintf(stdout, "min_yield_sats_per_sec:     %g%s\n", cfg.MinYieldSatsPerSec, tag(origins.MinYieldSatsPerSec))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
 	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
@@ -114,6 +115,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		WorkerName               string            `json:"worker_name"`
 		ArbitrationHysteresisPct float64           `json:"arbitration_hysteresis_pct"`
 		CurtailBelowBTCUSD       float64           `json:"curtail_below_btc_usd"`
+		CurtailAboveUKCarbon     float64           `json:"curtail_above_uk_carbon"`
 		MinYieldSatsPerSec       float64           `json:"min_yield_sats_per_sec"`
 		PowerWatts               float64           `json:"power_watts"`
 		ElectricityPricePerKWh   float64           `json:"electricity_price_per_kwh"`
@@ -130,6 +132,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		WorkerName:               cfg.Workers.Name,
 		ArbitrationHysteresisPct: cfg.ArbitrationHysteresisPct,
 		CurtailBelowBTCUSD:       cfg.CurtailBelowBTCUSD,
+		CurtailAboveUKCarbon:     cfg.CurtailAboveUKCarbon,
 		MinYieldSatsPerSec:       cfg.MinYieldSatsPerSec,
 		PowerWatts:               cfg.PowerWatts,
 		ElectricityPricePerKWh:   cfg.ElectricityPricePerKWh,
@@ -147,6 +150,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"worker_name":                origins.WorkerName.String(),
 			"arbitration_hysteresis_pct": origins.ArbitrationHysteresisPct.String(),
 			"curtail_below_btc_usd":      origins.CurtailBelowBTCUSD.String(),
+			"curtail_above_uk_carbon":    origins.CurtailAboveUKCarbon.String(),
 			"min_yield_sats_per_sec":     origins.MinYieldSatsPerSec.String(),
 			"power_watts":                origins.PowerWatts.String(),
 			"electricity_price_per_kwh":  origins.ElectricityPricePerKWh.String(),
