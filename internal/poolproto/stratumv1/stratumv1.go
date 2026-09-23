@@ -55,11 +55,13 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // ----- session -----
@@ -553,8 +555,12 @@ type rpcResponse struct {
 
 // agentString is the client identity sent in mining.subscribe and echoed
 // to pools that ask client.get_version — keep them identical so a pool
-// never sees two different agents from one session.
-const agentString = "Otedama/3.0.0"
+// never sees two different agents from one session. It reports the real
+// build (ldflags-injected version.Version, e.g. "v3.0.0-alpha.0-dev"
+// for development builds) rather than a frozen literal — pool-side agent
+// strings are how operators correlate behaviour to client builds, and a
+// hardcoded "3.0.0" made every dev build indistinguishable from release.
+var agentString = "Otedama/" + strings.TrimPrefix(version.Version, "v")
 
 // call sends a JSON-RPC request and waits for the response, honoring ctx.
 // Returns ErrSessionClosed if the session terminates first.

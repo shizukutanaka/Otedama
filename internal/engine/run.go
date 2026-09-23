@@ -48,6 +48,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/rates"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 	"github.com/shizukutanaka/Otedama/internal/tui"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // Engine timing constants. Centralised here so the reconnection and
@@ -1426,7 +1427,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		MaxVersion:      2,
 		Endpoint:        host,
 		Vendor:          "Otedama",
-		HardwareVersion: "v3.0.0",
+		HardwareVersion: version.Version,
 		Firmware:        "main",
 		DeviceID:        "cpu",
 	}
