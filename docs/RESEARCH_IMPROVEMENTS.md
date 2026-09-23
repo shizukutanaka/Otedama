@@ -610,6 +610,13 @@ endpoint against current vendor documentation. Tags as before
    moved to the spec's 0x1d (0x1e is Reserved). With an unrestricted
    bound advertised the residual clamp ask is trivially satisfied;
    it becomes meaningful only if a future knob narrows max_target.
+   — session 276: the engine's inline `handshake` dropped the reason
+   text of `OpenMiningChannelError` (§5.3.6) — every rejection read as
+   "channel open failed" with no pool-supplied cause. It now surfaces
+   `channel open rejected: <reason>` (parity with the poolproto
+   dialer, which already handled it), kept non-fatal so failover to
+   the next pool still runs. The Success-missing error path also
+   names the unexpected msg_type.
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization

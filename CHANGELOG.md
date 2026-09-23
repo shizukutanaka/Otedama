@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 276 — SV2 チャネル開設拒否の理由が消えていた)
+
+**engine の inline ハンドシェイクが `OpenMiningChannelError` (§5.3.6) の
+理由文字列を破棄していた。** 全ての拒否が一律 `channel open failed` に
+なり、プールが返す原因（`unsupported-user` 等の設定不整合）が診断
+不可能だった。`channel open rejected: <reason>` として報告するように
+修正 —— poolproto ダイヤラーは既に正しく処理しており、live 経路との
+パリティ回復。非致命的のまま維持（次プールへのフェイルオーバーが
+従来通り動作）。Success 未到着時のエラーも受信 msg_type を報告する
+よう改善。
+
 ### Fixed (session 275 — ループバック平文の誤警報 + `client.reconnect` 指示の可視化)
 
 2件。① **doctor の平文トランスポート警告がループバック宛でも発火
