@@ -30,19 +30,20 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.22
-toolchain go1.24.0
+go 1.24.0
+toolchain go1.25.7
 
 godebug (
+    containermaxprocs=1
     panicnil=0
     randautoseed=1
     tlsmlkem=1
 )
 ```
 
-**Why split `go` from `toolchain`:** the `go 1.22` directive declares
+**Why split `go` from `toolchain`:** the `go` directive declares
 the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **build toolchain** used in CI and
+`toolchain` pins the **build toolchain** used in CI and
 recommended for users. This split lets users with older toolchains
 (Linux distros, NixOS pinning) still build Otedama, while CI gets
 the latest crypto and runtime fixes.
@@ -78,6 +79,12 @@ As of 2026-04-30:
   for anything security-relevant (`crypto/rand` is used there;
   `math/rand/v2` only for non-security uses), so this pin also has no
   observable effect today — same visibility rationale as `panicnil`.
+
+- **`containermaxprocs=1`** — keep Go 1.25+'s cgroup-aware `GOMAXPROCS`
+  default: under a container CPU limit, GOMAXPROCS tracks the limit
+  rather than the host's core count (load-bearing for correct CPU
+  mining throttling; details in "Knobs we may need" below — the entry
+  moved to "active" when the toolchain reached 1.25 in session 256).
 
 ## Knobs we may need in the next 10 years
 
@@ -129,19 +136,17 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- **Not yet in effect (verified session 251):** `go.mod` still pins
-  `toolchain go1.24.0`, which predates this feature — so the
-  container-aware default is **not compiled into current builds**.
-  A Kubernetes miner today still sees the host's full core count. This
-  benefit only materializes once the `toolchain` line is bumped to
-  go1.25.x (per the quarterly-toolchain policy above; go1.24.0 is now
-  over a year old). The bump was scoped but not performed in session
-  251 because this environment's module proxy denies the Go toolchain
-  download (`sum.golang.org` Forbidden). Tracked in
-  RESEARCH_IMPROVEMENTS session-251 item 3.
-- Otedama impact: positive once the toolchain bump lands — fixes a
-  class of "miner saturates noisy-neighbor pod limit" reports we
-  expect from Kubernetes users.
+- **In effect since session 256:** `toolchain go1.25.7` plus an
+  explicit `containermaxprocs=1` pin in `go.mod`'s godebug block (the
+  default is on; the pin is for visibility and surviving a future
+  default flip, same rationale as `tlsmlkem`). The sibling knob
+  `updatemaxprocs` (periodic re-read of the cgroup limit) stays on its
+  enabled default. Session 251 had scoped the bump but could not
+  perform it because that environment's module proxy denied the Go
+  toolchain download.
+- Otedama impact: fixes a class of "miner saturates noisy-neighbor
+  pod limit" reports we expect from Kubernetes users — a `cpu: 2`
+  container now gets GOMAXPROCS=2, not the host's core count.
 - Removal risk: very low — this is a fix, not a deprecation. The
   knob to revert (`containermaxprocs=0`) will exist for years.
 

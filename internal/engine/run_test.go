@@ -2523,3 +2523,41 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
 	}
 }
+
+// TestClampShareTarget pins the SetTarget clamp: a target numerically
+// above the channel's declared max_target is easier work than the pool
+// said it would credit, so it must be clamped (SRI v1.5.0 stuck-miner
+// bug class, mirrored client-side).
+func TestClampShareTarget(t *testing.T) {
+	low, err := miner.TargetFromDifficulty(8)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty: %v", err)
+	}
+	high, err := miner.TargetFromDifficulty(1)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty: %v", err)
+	}
+	if !low.LessOrEqual(high) {
+		t.Fatal("fixture: difficulty-8 target should be numerically smaller than difficulty-1 target")
+	}
+
+	if got, clamped := clampShareTarget(low, high); clamped || got != low {
+		t.Errorf("below-bound target: got clamped=%v target=%v, want unclamped %v", clamped, got, low)
+	}
+	if got, clamped := clampShareTarget(high, low); !clamped || got != low {
+		t.Errorf("above-bound target: got clamped=%v target=%v, want clamped %v", clamped, got, low)
+	}
+	if got, clamped := clampShareTarget(low, low); clamped || got != low {
+		t.Errorf("equal target: got clamped=%v, want unclamped pass-through", clamped)
+	}
+	// Zero channelMax (pool declared no bound): any SetTarget stands.
+	if got, clamped := clampShareTarget(high, miner.Hash{}); clamped || got != high {
+		t.Errorf("unbounded channel: got clamped=%v target=%v, want unclamped %v", clamped, got, high)
+	}
+	// Zero SetTarget is degenerate input, not a clamp opportunity: it is
+	// numerically below every bound and passes through untouched (the
+	// caller's zero-target fallback in updateWork handles it downstream).
+	if got, clamped := clampShareTarget(miner.Hash{}, high); clamped || got != (miner.Hash{}) {
+		t.Errorf("zero SetTarget: got clamped=%v target=%v, want unclamped zero", clamped, got)
+	}
+}

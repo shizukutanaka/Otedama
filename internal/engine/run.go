@@ -669,6 +669,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	if err != nil {
 		return err
 	}
+	// channelMax is the channel's declared max_target
+	// (OpenMiningChannelSuccess.Target): the largest (easiest) target the
+	// pool will ever accept. SetTarget updates are clamped to it — a
+	// vardiff reply must never request work easier than the channel bound
+	// (SRI v1.5.0 bug class; RESEARCH_IMPROVEMENTS Cat 1/2 #2).
+	channelMax := shareTarget
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2) // handshake complete → connected
@@ -894,7 +900,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SetTarget != nil {
-				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+				var clamped bool
+				shareTarget, clamped = clampShareTarget(miner.Hash(pm.msg.SetTarget.MaxTarget), channelMax)
+				if clamped {
+					opts.log("warn", "engine: SetTarget exceeds the channel's declared max_target — clamped")
+				}
 				if active != nil && havePrev {
 					// Re-issue the current job so workers compare against
 					// the new share target immediately.
@@ -1244,6 +1254,23 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			}()
 		}
 	}
+}
+
+// clampShareTarget caps a pool-supplied SetTarget value at the channel's
+// declared max_target. In U256 ordering a larger target is easier work;
+// accepting a target above the channel bound means grinding shares the
+// pool already said it will not credit — silently burning hashrate (the
+// SRI v1.5.0 stuck-miner bug, mirrored client-side). A zero channelMax
+// means the pool declared no bound, so the SetTarget value stands.
+// Returns the effective target and whether clamping occurred.
+func clampShareTarget(set, channelMax miner.Hash) (miner.Hash, bool) {
+	if channelMax == (miner.Hash{}) {
+		return set, false
+	}
+	if set.LessOrEqual(channelMax) {
+		return set, false
+	}
+	return channelMax, true
 }
 
 // ----- Handshake -----

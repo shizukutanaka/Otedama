@@ -506,6 +506,15 @@ endpoint against current vendor documentation. Tags as before
    field is intentionally not sent (see the dead-field note removed from
    `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
    message is no longer silently unrecognised, which was the blocking gap.
+   — ✅ **Clamp implemented** (session 256): `runSessionV2` retains the
+   channel's declared bound (`OpenMiningChannelSuccess.Target`) and
+   `clampShareTarget` caps each `SetTarget.MaxTarget` at it — a vardiff
+   reply numerically above the bound would mean grinding shares easier
+   than the pool credits, the exact "stuck miner" bug SRI v1.5.0 fixed
+   pool-side. Clamp events log `warn`. A zero bound (pool declared no
+   max) leaves the target untouched, matching the spec's unbounded
+   channel semantics. `TestClampShareTarget` covers below/at/above-bound,
+   unbounded, and zero-target inputs.
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
@@ -796,11 +805,12 @@ month, so the discipline matters.
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
    — **Partially done (session 255):** bumped v0.23.0 → **v0.48.0**
-   (2026-02-09). v0.49.0 and later require Go ≥ 1.25, so v0.48.0 is the
-   newest line compatible with the pinned `toolchain go1.24.7`; the
-   remainder of this item resolves when dep-hygiene #3 (toolchain bump)
-   lands. govulncheck re-run still open.
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+   (2026-02-09). v0.49.0 and later declare `go 1.25`, so v0.48.0 is the
+   newest line compatible with the module's `go 1.24.0` floor even after
+   the `toolchain go1.25.7` bump (session 256); the remainder of this
+   item resolves with the annual `go` directive bump. govulncheck
+   re-run still open.
+3. ✅ **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
    toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
@@ -808,6 +818,11 @@ month, so the discipline matters.
    throttling under cgroup constraints" — describes a benefit not actually
    compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
    own quarterly-toolchain policy. (go.dev/doc/go1.25)
+   — ✅ **Done (session 256):** `toolchain go1.25.7` and an explicit
+   `containermaxprocs=1` pin in `go.mod`'s godebug block (the feature is
+   now actually compiled in, not just documented). The `go` directive
+   stays at 1.24.0 per the go/toolchain-split policy; raising it is a
+   separate annual-cycle PR (and is what gates x/crypto ≥ v0.49).
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the

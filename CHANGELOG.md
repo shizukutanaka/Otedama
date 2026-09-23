@@ -60,6 +60,30 @@ deadcode新規なし。`internal/stratum/noise*`のテスト追加のみはCLAUD
 資金領域ルールに抵触しない（既存コード無改変・テストのみ）が、
 maintainer確認を推奨。
 
+### Fixed (session 256 — SV2 `SetTarget`をチャネル宣言max_targetにクランプ＋toolchain go1.25.7)
+
+RESEARCH_IMPROVEMENTS Cat 1/2 #2と依存衛生#3を実施。
+
+- **SV2 `SetTarget`のクランプ（SRI v1.5.0バグ系統をクライアント側で防御）**:
+  vardiffがチャネルの`max_target`（OpenMiningChannelSuccessのTarget）を
+  超える＝より易しいターゲットを設定した場合、以後のshareはプールが
+  計数しない難易度でgrindされる。`clampShareTarget`で
+  `min(set, channelMax)`に制限し、クランプ時はwarnログ。`channelMax==0`
+  （プールが境界未宣言）はクランプをスキップするSRI実装準拠の挙動。
+- **toolchain `go1.24.7`→`go1.25.7`**: リポジトリ自身の四半期toolchain
+  ポリシー通りの追従で、GODEBUG_NOTES.mdが「load-bearing」と記述していた
+  コンテナ認識GOMAXPROCS（Go 1.25の新機能）が実際にコンパイルされる
+  ように。`godebug`ブロックに`containermaxprocs=1`を明示ピン
+  （デフォルトはonだが、`tlsmlkem`と同じ可視性の論理）。
+  `go`ディレクティブはgo/toolchain分離ポリシーにより`1.24.0`のまま
+  （年次サイクルの別PR）。x/crypto ≥v0.49は`go 1.25`宣言のため
+  同ディレクティブ更新時まで据え置き。
+- **テスト**: `TestClampShareTarget`で下回る/上回る/等値/境界未宣言/
+  ゼロSetTargetの5ケースを検証。
+
+**検証**: 全24パッケージ go1.25.7下でbuild/test green、変更ファイル
+gofumpt clean、deadcode新規なし。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
