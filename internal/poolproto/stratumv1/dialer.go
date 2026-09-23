@@ -140,6 +140,9 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if password == "" {
 		password = "x" // most pools accept "x" as the password
 	}
+	// The same name must go out on every mining.submit — pools reject
+	// shares from unregistered workers (ported from d37fe99).
+	sess.user = user
 	id = sess.nextID.Add(1)
 	resp, err = sess.call(ctx, id, "mining.authorize", []any{user, password})
 	if err != nil {

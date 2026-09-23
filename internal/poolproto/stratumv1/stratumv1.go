@@ -120,6 +120,13 @@ type session struct {
 	extranonce1     string
 	extranonce2Size atomic.Int32
 
+	// user is the mining.authorize worker name; mining.submit must echo
+	// it verbatim or the pool rejects the share as unregistered. Written
+	// once during Negotiate, read on Submit's goroutine — safe by
+	// construction: the engine cannot see the session (and so cannot
+	// call Submit) until Negotiate returns.
+	user string
+
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
 	startOnce sync.Once
@@ -420,7 +427,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2 = strings.Repeat("00", int(s.extranonce2Size.Load()))
 	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		s.user, // worker name must match mining.authorize
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),

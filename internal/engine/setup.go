@@ -57,14 +57,26 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 // returns the workers and a merged share channel. Returns an error if
 // no SHA256d-capable device is present. The caller owns worker shutdown.
 func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level, msg string)) ([]*miner.Worker, <-chan miner.Share, error) {
+	// Every worker receives the same Work (the adapter bakes one header
+	// per job), so without a nonce-space partition every device would
+	// grind the identical (header, nonce) sequence — shares from all but
+	// the first device arrive at the pool as exact duplicates. Split the
+	// 2^32 space into one lane per (device, thread): worker i thread k
+	// visits nonces i*Threads+k, i*Threads+k+stride, ... with stride =
+	// shaWorkers*Threads, so no two lanes ever produce the same tuple.
+	var shaDevices []hal.Device
+	for _, dev := range devices {
+		if dev.Capabilities().SHA256d {
+			shaDevices = append(shaDevices, dev)
+		}
+	}
 	var workers []*miner.Worker
 	var shareChans []<-chan miner.Share
-	for _, dev := range devices {
-		if !dev.Capabilities().SHA256d {
-			continue
-		}
+	for i, dev := range shaDevices {
 		cfg := miner.DefaultWorkerConfig()
 		cfg.DeviceID = dev.Identity().ID
+		cfg.NonceBase = uint32(i * cfg.Threads)
+		cfg.NonceStep = uint32(len(shaDevices) * cfg.Threads)
 		w := miner.NewWorker(cfg)
 		workers = append(workers, w)
 		shareChans = append(shareChans, w.Start(ctx))

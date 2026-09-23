@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 303 — poolproto レジストリ＋miner nonce 空間監査)
+
+- **複数デバイスが同一 nonce 空間を走査 — 全デバイス≥2 のシェアが duplicate**:
+  `applyJob` は 1 個の `*miner.Work` を全ワーカーへ配るため全デバイスの全
+  スレッドが `nonce=threadID`・同一 `NonceStep` で同一 (header, nonce) 空間を
+  重複採掘し、プールは先着1件以外を duplicate reject していた（並行ブランチ
+  `d37fe99` の per-worker extranonce2 カウンタは我々の単一 Work アーキテク
+  チャでは不適用のため、global-stride 分割を採用）。`WorkerConfig.NonceBase`
+  を新設し grind の開始/リスタート nonce を `threadID + NonceBase` に —
+  `startMinerWorkers` が SHA256d デバイス i 番に `NonceBase=i*threads`・
+  `NonceStep=D*threads` を割当て、レーン (i*threads+k) mod D*threads を全面
+  分割。wrap-around 後の厳密不交は `D*threads` が 2^32 を割り切る場合のみで、
+  非整除でも部分重複のみ（全重複より常に良い）— 既知の限定事項として記録。
+- **`mining.submit` がワーカー名 `"otedama"` をハードコード**（並行ブランチ修正
+  `d37fe99` が当スタック未適用 — s298/s301 同型）: authorize 済みの
+  `creds.User` と不一致のため厳格プールは unregistered worker として reject
+  していた。session `user` フィールドを Negotiate で記録し `params[0]` へ
+  反映 — fake-pool wire capture テスト（d37fe99 移植、我々の atomic 化に合わせ
+  て `extranonce2Size.Store` 使用）を含む。
+- 記録のみ: `Credentials.PoolPubKey` が未消費（Noise 未配線のため一貫）、
+  `FromURL`/`StripScheme` の case-sensitive scheme、`ShareResult.Difficulty`
+  が V1 では SuggestedDifficulty を返す doc ギャップ — CATEGORY_AUDIT に記載。
+- テスト2本（wire capture の authorize-echo、2ワーカー disjoint-lane e2e）。
+
 ### Fixed (session 302 — stratum ワイヤ層＋stratumv2 アダプタ監査)
 
 - **stratumv2 アダプタ `Negotiate` の無制限ブロック**:

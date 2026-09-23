@@ -67,6 +67,17 @@ type WorkerConfig struct {
 	// grinding the same nonces instead of partitioning the nonce space).
 	NonceStep uint32
 
+	// NonceBase is added to every thread's starting nonce (and to the
+	// restart point on each new job). Zero keeps the single-worker
+	// behaviour. When the engine runs one Worker per device on the same
+	// job, it assigns each a disjoint base and a global stride —
+	// NonceBase = index*Threads, NonceStep = totalDevices*Threads — so
+	// no two devices ever hash the same (header, nonce) pair. Without
+	// it, every device grinds the identical nonce sequence on identical
+	// work and the pool rejects all but the first device's shares as
+	// duplicates.
+	NonceBase uint32
+
 	// DeviceID is the HAL identity of the hardware device this worker
 	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
 	// emits so the engine can attribute shares per device.
@@ -225,7 +236,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 	var (
 		localWork    *Work
 		localWorkVer uint64
-		nonce        = threadID
+		nonce        = threadID + w.cfg.NonceBase
 	)
 
 	for {
@@ -240,7 +251,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if w.work != localWork || w.workVer != localWorkVer {
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = threadID // restart nonce from thread offset on new job
+			nonce = threadID + w.cfg.NonceBase // restart nonce from thread offset on new job
 		}
 		w.mu.Unlock()
 

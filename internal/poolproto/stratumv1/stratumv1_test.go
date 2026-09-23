@@ -2083,3 +2083,72 @@ func TestSession_StartIsIdempotent(t *testing.T) {
 		t.Fatal("no job received — second start() broke the session")
 	}
 }
+
+// TestSession_Submit_EchoesAuthorizedWorker captures the mining.submit
+// params and asserts the worker name is the one mining.authorize used —
+// pools reject submits whose worker name doesn't match the authorized
+// identity. Regression: the param was previously hardcoded "otedama"
+// (ported from unmerged d37fe99 on devin/1789850746-e2e-fixes).
+func TestSession_Submit_EchoesAuthorizedWorker(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+
+	type captured struct{ Params []string }
+	done := make(chan captured, 1)
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req struct {
+				ID     any      `json:"id"`
+				Method string   `json:"method"`
+				Params []string `json:"params"`
+			}
+			if json.Unmarshal(line, &req) != nil || req.Method != "mining.submit" {
+				continue
+			}
+			done <- captured{Params: req.Params}
+			id, _ := json.Marshal(req.ID)
+			_, _ = serverConn.Write([]byte(`{"id":` + string(id) + `,"result":true,"error":null}` + "\n"))
+			return
+		}
+	}()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.user = "pool.worker.1" // as mining.authorize would have set
+	sess.extranonce2Size.Store(4)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{
+		JobID:      "abc",
+		Nonce:      0xdeadbeef,
+		NTime:      0x68d36c5e,
+		ExtraNonce: []byte{0x01, 0x02, 0x03, 0x04},
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !res.Accepted {
+		t.Fatal("share rejected by fake pool")
+	}
+	got := <-done
+	if len(got.Params) != 5 {
+		t.Fatalf("submit params = %v, want 5 elements", got.Params)
+	}
+	if got.Params[0] != "pool.worker.1" {
+		t.Errorf("worker name = %q, want authorized user", got.Params[0])
+	}
+	if got.Params[1] != "abc" {
+		t.Errorf("job_id = %q, want abc", got.Params[1])
+	}
+	if got.Params[2] != "01020304" {
+		t.Errorf("extranonce2 = %q, want 01020304", got.Params[2])
+	}
+}

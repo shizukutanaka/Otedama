@@ -385,3 +385,57 @@ func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
 		t.Errorf("DeviceID() = %q, want empty string", got)
 	}
 }
+
+// TestWorker_NonceBasePartitionsAcrossWorkers proves two workers built
+// the way startMinerWorkers builds them (same Work, NonceBase=i*Threads,
+// NonceStep=totalLanes) never hash the same nonce: worker A covers
+// residues {0..3} mod 8 and worker B {4..7} mod 8. Before NonceBase,
+// every worker started every thread at nonce=threadID with step=Threads,
+// so two devices grinding the same job produced identical
+// (header, nonce) tuples — shares a pool rejects as duplicates.
+func TestWorker_NonceBasePartitionsAcrossWorkers(t *testing.T) {
+	const threads = 4
+	const stride = 2 * threads // 2 workers × 4 threads
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collect := func(base uint32, n int) map[uint32]bool {
+		w := NewWorker(WorkerConfig{Threads: threads, NonceStep: stride, NonceBase: base})
+		w.SetWork(makeEasyWork())
+		shares := w.Start(ctx)
+		defer w.Stop()
+		seen := make(map[uint32]bool, n)
+		for len(seen) < n {
+			select {
+			case s, ok := <-shares:
+				if !ok {
+					t.Fatalf("share channel closed after %d shares", len(seen))
+				}
+				seen[s.Nonce] = true
+			case <-ctx.Done():
+				t.Fatalf("timed out collecting shares (got %d, want %d)", len(seen), n)
+			}
+		}
+		return seen
+	}
+
+	a := collect(0, 64)
+	b := collect(threads, 64)
+	for nonce := range b {
+		if a[nonce] {
+			t.Fatalf("nonce %d produced by both workers — duplicate share", nonce)
+		}
+	}
+	// Every nonce B produced must sit in B's lanes (base..base+threads-1
+	// mod stride); a lane leak would still collide on some other job.
+	for nonce := range b {
+		if got := nonce % stride; got < threads || got >= stride {
+			t.Errorf("worker B hashed nonce %d outside its lanes (residue %d)", nonce, got)
+		}
+	}
+	for nonce := range a {
+		if got := nonce % stride; got >= threads {
+			t.Errorf("worker A hashed nonce %d outside its lanes (residue %d)", nonce, got)
+		}
+	}
+}
