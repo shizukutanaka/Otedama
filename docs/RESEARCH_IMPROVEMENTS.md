@@ -171,8 +171,18 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
    against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
-8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
+8. ✅ **Seed backup reminder / verification flow** on first run (ask the user
    to re-enter N words) — reduces fund-loss from un-backed-up seeds.
+   — ✅ **Implemented (session 270).** First-run wallet creation now
+   follows the hardware-wallet boot pattern: `printRecoveryPhrase` shows
+   the phrase, then `confirmBackupWords` asks for `backupProbeWords` (3)
+   randomly chosen word positions with `backupProbeAttempts` (3) retries;
+   exhaustion warns loudly and names `otedama wallet verify` as the
+   recovery path but never aborts (refusing to start wouldn't un-lose
+   the phrase). The prompt fires only when `Options.Input` is a real
+   terminal (`interactiveInput`, the `ModeCharDevice` check) — services,
+   pipes, and test readers are never blocked. `Options.Input` added
+   alongside the existing `Output` (defaults `os.Stdin`).
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not

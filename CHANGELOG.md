@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 270 — 初回起動時のシードバックアップ検証 — Category 4 #8)
+
+**書き留めたはずのバックアップが、失って初めて「なかった」と分かる
+古典的喪失経路を塞ぐ。** 新規ウォレット作成時、リカバリフレーズの
+表示に続いて、ハードウェアウォレットの初回起動フローと同様に
+**ランダムに選ばれた3語**の再入力を求めてバックアップ実在を証明する
+（`confirmBackupWords`）。最大3回まで再試行可 — 書き写しミスはあり
+得るため一回の不一致で即失格にしない。全失敗時は警告を出して
+`otedama wallet verify` による再検証手段を明示するが、起動自体は
+妨げない（起動を拒否してもフレーズは取り戻せないため）。プロンプトは
+`Options.Input` が実端末（`ModeCharDevice`）の場合のみ発火し、
+サービス・パイプ・テスト注入リーダーはブロックされない。
+`Options.Input` を新設（デフォルト `os.Stdin`）。検証: 正答成功 /
+誤答→再試行成功 / 全失敗で警告 / EOF で静かに中断 / 非端末で非発火
+/ 位置選択が distinct・昇順・範囲内。
+
 ### Fixed (session 269 — Stratum V1 extranonce2 のサイクリング: 全 submit が同一 coinbase だった欠陥を修正)
 
 **32bit nonce だけでは十分でない。** Stratum V1 では coinbase の nonce

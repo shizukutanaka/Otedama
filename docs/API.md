@@ -361,7 +361,12 @@ The scrypt parameters (N=2^17, r=8, p=1) are fixed constants in code,
 not serialized to disk.
 
 The mnemonic is derived from the seed and is never stored on disk.
-**The mnemonic is only displayed once, on first run.**
+**The mnemonic is only displayed once, on first run.** When the first
+run is attached to a real terminal, Otedama then asks for a few
+randomly chosen words back (up to three tries) to prove the paper
+backup exists — the check is advisory and never blocks a service
+install, and a failed or skipped check can always be re-done with
+`otedama wallet verify`.
 
 ---
 
