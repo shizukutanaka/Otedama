@@ -83,6 +83,20 @@ connection never uses it in the first place:
    "swap the DH primitive" fixes; the message flow itself needs rework,
    contrary to what this entry previously claimed ("only the DH primitive
    ... needs to change; the message flow is final").
+4. **The transcript initialisation itself diverges from the spec in two
+   more places** (found session 272, verified against sv2-spec
+   `04-Protocol-Security.md` §4.5.1). First, the literal passed to
+   `initialize` is `"Noise_NX_secp256k1_ChaChaPoly_SHA256"` — not the
+   spec's `"Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256"` (case differs,
+   `+EllSwift` missing) — and Noise seeds `h`/`ck` from that string, so a
+   spec responder computes a different handshake hash before any DH runs.
+   Second, the spec's act-1 sequence is `h = HASH(protocolName); ck = h;
+   h = HASH(h)`, but `initialize` stops after the second step, leaving
+   `h == ck` — for a >32-byte name (the only case used here) the spec wants
+   `h = HASH(HASH(protocolName))`, so the very first `mixHash` already
+   diverges. Both are part of the same message-flow rework as item 3 and
+   are marked in-code at the divergence points; they change nothing
+   today only because the handshake has no callers.
 
 **Impact:** `stratum+v2://` (the default V2 scheme) carries no transport
 encryption in any configuration. There is no way to get spec-compliant

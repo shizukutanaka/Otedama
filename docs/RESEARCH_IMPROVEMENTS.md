@@ -456,6 +456,15 @@ arXiv grounding (session 41):
    `crypto/tls`, available today without the secp256k1 dependency
    decision. This item (secp256k1 + message-flow rework) remains open for
    spec-compliant Stratum V2 Noise encryption specifically.
+   — **Session 272 update:** two further spec divergences found earlier in
+   the same file, this time in transcript initialisation (verified against
+   sv2-spec `04-Protocol-Security.md` §4.5.1 act 1): the literal passed to
+   `initialize` is `"Noise_NX_secp256k1_ChaChaPoly_SHA256"` — not the
+   official `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` — and the
+   spec's third init step `h = HASH(h)` (after `ck = h`) is missing, so
+   `h == ck` and the first `mixHash` diverges even before DH. Both widen
+   the "message flow needs rework" conclusion; recorded in KNOWN_LIMITATIONS
+   §2 item 4 and in-code at the divergence points.
 2. 🔵 **ElligatorSwift encoding** for the SV2 handshake (pairs with item 1).
 3. ✅ **scrypt + AES-GCM seed encryption at rest**.
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).

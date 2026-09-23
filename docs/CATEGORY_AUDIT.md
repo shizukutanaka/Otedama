@@ -684,3 +684,18 @@ All 24 packages build, vet, and test green.
 Tests: `TestParsePolicy` (round-trip + reject set), `TestValidate_RejectsUnknownArbitrationPolicy` + `TestValidate_AcceptsAllValidArbitrationPolicies`, `TestArbitrationPolicy_EnvOverride`/`_FileOverride`/`_DefaultIsMaximizeEarnings`, `TestArbitrationPolicyFromConfig`, and `TestRunArbitrationLoop_PolicyReachesDecide` — the last proves the policy actually reaches Decide by routing a device to a lower-yield (95 vs 100 sats/s) but fully environment-rated stream via the TUI activity map (score 95×1.1 = 104.5 > 100, only possible under `environment_friendly`).
 
 All 24 packages build, vet, and test green.
+
+## Session 272 update — Noise transcript-init spec divergences (funds-gated: docs/comments only)
+
+Queue item 4's open half — deep-read of `internal/stratum/noise.go`'s handshake state machine for findings beyond the two already on record (P-256 stub; unauthenticated responder static + no-DH x-only fallback + discarded `k`).
+
+| Finding | Disposition |
+|---|---|
+| `NewHandshakeInitiator` passes `"Noise_NX_secp256k1_ChaChaPoly_SHA256"` to `initialize` — NOT the SV2 spec's `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (case differs; `+EllSwift` missing). Noise seeds `h`/`ck` from the name, so a spec responder derives a different handshake hash before any DH. Verified against sv2-spec `04-Protocol-Security.md` §4.5.1 (primary source fetched). | ✅ Documented: KNOWN_LIMITATIONS §2 item 4 + in-code note at the call site. No behaviour change — fixing the literal is part of the maintainer-gated message-flow rework; the code has no live callers today. |
+| `initialize` omits the spec's third act-1 step `h = HASH(h)` (after `ck = h`), leaving `h == ck`. For a >32-byte name the spec wants `h = HASH(HASH(protocolName))`; the first `mixHash` already diverges. Verified against same §4.5.1 steps 1–4. | ✅ Same disposition: documented on the function + KNOWN_LIMITATIONS §2 item 4. |
+| `CipherState.Decrypt` consumes a nonce even when `aead.Open` fails | ℹ️ Noted, no action: Noise requires terminating the session on any auth failure, so post-failure nonce state is moot in practice; `EncryptedConn.Read` surfaces the error and the engine tears down on read errors. Not worth a KNOWN_LIMITATIONS entry. |
+| `EncryptedConn.Read` on a zero-length frame: `ctLen=0` → `aead.Open` of empty ciphertext fails cleanly | ✅ Clean (correct malformed-input handling). `Write` also rejects oversized ciphertext before the u16 prefix overflows — checked. |
+| `internal/stratum/handshake.go`, `wire.go`, `tls.go` (non-gated siblings) | ✅ Clean: message codecs match SV2 layouts (incl. Postel-strict `appendB0_32`/lenient `getB0_255` extranonce), `DialTLS` never downgrades, `defaultTLSConfig` TLS1.2+ verified. |
+| `internal/engine/arbitrate.go` remainder (`streamsSlice` same-ID merge, `applyAllocation` per-device pause) | ✅ Clean: merge preserves per-device yields; pause is correctly device-scoped (session-247 fix verified in place). |
+
+All 24 packages build, vet, and test green. Comment-only change inside `internal/stratum/noise*` per the funds-area gate (doc corrections permitted; no behaviour changed).

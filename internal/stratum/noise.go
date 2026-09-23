@@ -99,12 +99,29 @@ func NewHandshakeInitiator() (*HandshakeState, error) {
 		return nil, fmt.Errorf("noise: generate ephemeral key: %w", err)
 	}
 	hs := &HandshakeState{localEphemeral: ephemeral}
+	// Session-272 audit finding (maintainer-gated — recorded in
+	// docs/KNOWN_LIMITATIONS.md §2, do not "fix" piecemeal): this literal
+	// is NOT the Stratum V2 protocol name. The spec mandates
+	// "Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256" (sv2-spec
+	// 04-Protocol-Security §4.5.1) — different capitalisation and missing
+	// "+EllSwift". Noise seeds h/ck from this string, so a responder using
+	// the official name computes a different handshake hash even with an
+	// otherwise-correct DH. Latent today only because nothing calls this
+	// code; part of the staged noise rework.
 	hs.initialize("Noise_NX_secp256k1_ChaChaPoly_SHA256")
 	return hs, nil
 }
 
 // initialize sets up the handshake hash and chaining key per the
 // Noise spec: h = HASH(protocolName), ck = h.
+//
+// Session-272 audit finding: the SV2 spec adds one further step — after
+// "ck = h" the initiator computes "h = HASH(h)" (sv2-spec
+// 04-Protocol-Security §4.5.1, handshake act 1 steps 1–4). This function
+// omits it, leaving h == ck, so the first mixHash already diverges from
+// a spec-conformant responder. For names >32 bytes (the only case used
+// here) the spec wants h = HASH(HASH(protocolName)) — correcting this is
+// part of the maintainer-gated noise rework, not a local fix.
 func (hs *HandshakeState) initialize(protocolName string) {
 	data := []byte(protocolName)
 	if len(data) <= 32 {

@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 272 — Noise transcript 初期化の spec 乖離2件を監査記録)
+
+キュー項目4の残半（noise.go ハンドシェイク状態機械の新規発見監査）。
+sv2-spec `04-Protocol-Security.md` §4.5.1 と一次検証し、transcript
+初期化で2件の新規乖離を確認: ① `initialize` に渡す protocolName が
+公式名 `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` と不一致
+(大小文字 + `+EllSwift` 欠落) — h/ck の種が相手と合わない。
+② act-1 の第3ステップ `h = HASH(h)` 欠落で `h == ck` のまま — 
+最初の mixHash から既に乖離。noise* は maintainer ゲートのため
+コード無変更 — 乖離点に注記コメント＋KNOWN_LIMITATIONS §2 項目4
+＋RESEARCH項目1に session-272 追記として記録（挙動変更なし、
+ライブ呼出し経路も存在しないため現行影響ゼロ — v3.1.0 メッセージ
+フロー改修で一括対応）。既存の x-only no-DH・responder未認証は
+§2.3 記録済みを再確認。handshake.go / wire.go / tls.go / 
+arbitrate.go 残部は clean 確認。CATEGORY_AUDITに session-272 追記。
+
 ### Added (session 271 — `arbitration_policy` 設定ノブで裁定ポリシーを露出)
 
 裁定エンジンは4種のポリシー（`maximize_earnings` / `stack_btc` /
