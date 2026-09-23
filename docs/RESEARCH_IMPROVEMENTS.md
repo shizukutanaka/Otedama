@@ -137,6 +137,14 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    wrote `extranonce2Size` on the read loop while `Submit` read it on the
    caller's goroutine — a plain int. Now `atomic.Int32` (a dedicated
    -race test spams `set_extranonce` against concurrent submits).
+   — session 285: **pool-facing identity reports the real build.**
+   `agentString` (mining.subscribe + client.get_version) and the two V2
+   `SetupConnection.HardwareVersion` literals were frozen at "3.0.0"
+   while the binary's real version is ldflags-injected
+   (`internal/version.Version`, default `v3.0.0-alpha.0-dev`). Pools use
+   agent/hardware strings to correlate behaviour to client builds; a
+   frozen literal made every dev build indistinguishable from the
+   release it predates. All three now derive from `version.Version`.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
    — session 272: **connectivity half done** — `datum://` dials via the

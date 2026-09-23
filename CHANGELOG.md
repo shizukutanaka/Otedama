@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 285 — プール向け client identity が実ビルドを報告しなかった)
+
+**`agentString`（mining.subscribe / client.get_version）と V2
+`SetupConnection.HardwareVersion`（エンジン inline 経路と poolproto
+dialer の双方）が "3.0.0" 固定リテラル** —— バイナリの実バージョンは
+ldflags 注入の `version.Version`（デフォルト `v3.0.0-alpha.0-dev`）。
+プールは agent/hardware 文字列でクライアントビルドと挙動を相関させるため、
+固定リテラルは全 dev ビルドをリリースと区別不能にしていた。
+3箇所とも `version.Version` 由来に統一。
+
 ### Fixed (session 284 — 健全セッション後も再接続予算がリセットされなかった)
 
 **`max_reconnect_attempts` と指数バックオフが累計試行を数えていた**
