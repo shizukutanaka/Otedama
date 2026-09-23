@@ -39,6 +39,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolReachability(cfg),
 		checkPoolDiversity(cfg),
 		checkPoolEndpointDiversity(cfg),
+		checkPoolHashrateShare(cfg),
 		checkPoolEncryption(cfg),
 		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
@@ -358,6 +359,81 @@ func checkPoolDiversity(cfg config.Config) Check {
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("%d pools configured; failover available", n),
+			}
+		},
+	}
+}
+
+// largePoolDomains maps pool endpoint suffixes to an order-of-magnitude
+// share of Bitcoin network hashrate, from public pool-share dashboards
+// (e.g. mempool.space's mining-pool graphs) as of early 2026. Figures
+// drift over time, so they are stated as coarse fractions — the check
+// only fires on operators holding a *clearly* dominant share (≳10%),
+// the concentration the community treats as the single-entity
+// threshold worth nudging away from (see THREAT_MODEL and ADR-009 for
+// why ~50% between two operators is the live concern).
+var largePoolDomains = []struct {
+	suffix string
+	share  string
+}{
+	{"foundryusapool.com", "~1/3"},
+	{"antpool.com", "~1/6"},
+	{"viabtc.com", "~1/10"},
+	{"viabtc.net", "~1/10"},
+	{"f2pool.com", "~1/10"},
+}
+
+// checkPoolHashrateShare warns when a configured pool endpoint belongs
+// to an operator holding a dominant share of network hashrate. This is
+// advisory decentralisation hygiene, not a failure: mining on a large
+// pool works fine, but the top two operators together already approach
+// half the network — adding hashrate there deepens the single-entity
+// risk the multi-pool/JDC roadmap exists to dilute (Category 4 #7).
+//
+// The signal is a static suffix table, deliberately dependency-free
+// like checkPoolEndpointDiversity: live share data needs an external
+// feed Otedama does not bundle, and a stale-but-coarse table still
+// catches the only case that matters (dominant-share operators).
+func checkPoolHashrateShare(cfg config.Config) Check {
+	return Check{
+		Name: "Pool hashrate share",
+		Run: func(_ context.Context) Result {
+			var dominant []string
+			for _, p := range cfg.Pools {
+				host := stripScheme(p.URL)
+				if host == "" {
+					continue
+				}
+				if h, _, err := net.SplitHostPort(host); err == nil {
+					host = h
+				}
+				host = strings.ToLower(host)
+				for _, d := range largePoolDomains {
+					if host == d.suffix || strings.HasSuffix(host, "."+d.suffix) {
+						dominant = append(dominant, fmt.Sprintf("%s (%s of network hashrate)", host, d.share))
+						break
+					}
+				}
+			}
+			switch len(dominant) {
+			case 0:
+				return Result{
+					Status: StatusPass,
+					Detail: "no configured pool is a dominant-share operator",
+				}
+			case 1:
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("pool %s is one of the largest operators — concentrated hashrate weakens Bitcoin's censorship resistance", dominant[0]),
+					Fix:    "consider a smaller pool (OCEAN/DATUM, Braiins, or solo) to support decentralisation — see ADR-009",
+				}
+			default:
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("%d pools are dominant-share operators: %s — concentrated hashrate weakens Bitcoin's censorship resistance",
+						len(dominant), strings.Join(dominant, "; ")),
+					Fix: "consider a smaller pool (OCEAN/DATUM, Braiins, or solo) to support decentralisation — see ADR-009",
+				}
 			}
 		},
 	}
