@@ -302,6 +302,8 @@ type fakePool struct {
 	suggested   []float64
 	// submits records the extranonce2 (params[2]) of each mining.submit.
 	submits []string
+	// submitWorker records params[0] — the worker name the client claims.
+	submitWorker []string
 }
 
 func (p *fakePool) run() {
@@ -329,11 +331,14 @@ func (p *fakePool) run() {
 		case "mining.submit":
 			var params []any
 			if json.Unmarshal(req.Params, &params) == nil && len(params) == 5 {
-				if en2, ok := params[2].(string); ok {
-					p.suggestedMu.Lock()
-					p.submits = append(p.submits, en2)
-					p.suggestedMu.Unlock()
+				p.suggestedMu.Lock()
+				if w, ok := params[0].(string); ok {
+					p.submitWorker = append(p.submitWorker, w)
 				}
+				if en2, ok := params[2].(string); ok {
+					p.submits = append(p.submits, en2)
+				}
+				p.suggestedMu.Unlock()
 			}
 			result := "true"
 			if !p.verdict {
@@ -2330,5 +2335,65 @@ func TestSession_Dispatch_SetTarget_UpdatesDifficulty(t *testing.T) {
 	sess.dispatch([]byte(`{"method":"mining.set_target","params":["000000007fff8000000000000000000000000000000000000000000000000000"]}`))
 	if d := sess.SuggestedDifficulty(); math.Abs(d-2.0) > 0.002 {
 		t.Errorf("SuggestedDifficulty after set_target(half) = %v, want ≈2.0", d)
+	}
+}
+
+// TestSession_E2E_SubmitUsesAuthorizedWorker: mining.submit params[0] must
+// be the identity mining.authorize used — pools that validate the submit
+// worker name (ckpool, NiceHash) reject shares under a different name.
+func TestSession_E2E_SubmitUsesAuthorizedWorker(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.42", Password: "x"},
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "J1", Nonce: 1}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	pool.suggestedMu.Lock()
+	defer pool.suggestedMu.Unlock()
+	if len(pool.submitWorker) == 0 || pool.submitWorker[0] != "worker.42" {
+		t.Errorf("submit worker = %v, want [worker.42] (authorized user)", pool.submitWorker)
+	}
+}
+
+// TestSession_E2E_SubmitEmptyUserFallsBack: with no authorized user the
+// historical "otedama" name is kept rather than sending an empty worker.
+func TestSession_E2E_SubmitEmptyUserFallsBack(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "J1", Nonce: 1}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	pool.suggestedMu.Lock()
+	defer pool.suggestedMu.Unlock()
+	if len(pool.submitWorker) == 0 || pool.submitWorker[0] != "otedama" {
+		t.Errorf("submit worker = %v, want [otedama] fallback", pool.submitWorker)
 	}
 }
