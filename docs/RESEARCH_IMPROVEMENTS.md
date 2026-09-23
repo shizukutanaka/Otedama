@@ -757,32 +757,34 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
-   The `go-yaml/yaml` source repo was archived by its author; the YAML org
-   took over at import path `go.yaml.in/yaml`, where v3 is frozen to
-   security-fixes-only and active work is in v4. This makes the dependency
-   fail CLAUDE.md's own §外部依存 criterion 3 ("meaningful maintenance within
-   the last year"), and dates ADR-003's "maintained by go-yaml project,
-   stable since 2020" rationale. No CVE against v3.0.1 was found — the issue
-   is maintenance status, not an active vuln. **Action:** plan migration to
-   `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
-   ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
-2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
-   (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
-   GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
-   are all in the `ssh`/`openpgp` subpackages; Otedama imports only
-   `chacha20poly1305`, `scrypt`, and `ecdh`, so `govulncheck` should report
-   zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
-   as routine hygiene and re-run govulncheck to document the zero-reachable
-   result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
-   that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
-   cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
-   toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
-   section — which calls that behavior "load-bearing for correct CPU mining
-   throttling under cgroup constraints" — describes a benefit not actually
-   compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
-   own quarterly-toolchain policy. (go.dev/doc/go1.25)
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01
+   — RESOLVED (session 256).** Migrated both import sites
+   (`cmd/otedama/configfile.go`, `internal/config/config_file_test.go`) to
+   `go.yaml.in/yaml/v3 v3.0.5`, the YAML-org-maintained, API-frozen
+   continuation; ADR-003's erratum now records the migration as done and
+   `go.mod` carries the selection rationale per CLAUDE.md §外部依存.
+   Original finding: the `go-yaml/yaml` source repo was archived by its
+   author; the YAML org took over at import path `go.yaml.in/yaml`, where v3
+   is frozen to security-fixes-only and active work is in v4. No CVE against
+   v3.0.1 existed — the issue was maintenance status, not an active vuln.
+   (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
+2. ✅ **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+   (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here —
+   RESOLVED (session 256).** Bumped to `v0.54.0` (which also pulled
+   `golang.org/x/sys v0.47.0` and, per Go's module rules, raised the `go`
+   directive to 1.25.0 to satisfy the dependency's own `go 1.25.0`
+   requirement). govulncheck at the new version: see PR. Original finding:
+   GO-2025-3487 / CVE-2025-22869 and the May-2026 batch are all in the
+   `ssh`/`openpgp` subpackages; Otedama imports only `chacha20poly1305`,
+   `scrypt`, and `pbkdf2`, so zero reachable vulnerabilities were expected
+   even at v0.23.0. (pkg.go.dev/golang.org/x/crypto?tab=versions;
+   pkg.go.dev/vuln/GO-2025-3487)
+3. ✅ **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+   that GODEBUG_NOTES.md relies on — RESOLVED (session 256).** Bumped to
+   `toolchain go1.25.7`, so container-aware `GOMAXPROCS`
+   (`containermaxprocs`, default-on since Go 1.25) is now compiled in;
+   GODEBUG_NOTES.md's `containermaxprocs` entry updated from "not yet in
+   effect" to in-effect. (go.dev/doc/go1.25)
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the

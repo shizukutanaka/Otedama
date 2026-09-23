@@ -10,6 +10,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 256 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS「Dependency & toolchain hygiene」の open 3 件を解消)
+
+**依存とツールチェーンの衛生更新（session-251 項目 1–3 解消）.**
+
+- **`gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3 v3.0.5` に移行。** go-yaml
+  本家リポジトリは 2025-04-01 にアーカイブされメンテナンス停止となったため、
+  CLAUDE.md §外部依存 基準3（直近1年の有意義なメンテナンス）を満たせなく
+  なっていた。YAML org が継続管理する v3（API凍結・ドロップイン互換）へ
+  `cmd/otedama/configfile.go` と `internal/config/config_file_test.go` の
+  2インポートを切替。v4 ではなく v3 を選んだのは既存の呼び出し箇所と
+  API が一致するためで、依存の個数・ADR-003 の判断自体は不変。
+- **`golang.org/x/crypto` v0.23.0 → v0.54.0 に更新。** 31 マイナー分の
+  ルーティン衛生更新。GO-2025-3487 ほか既知 CVE は全て `ssh`/`openpgp`
+  系サブパッケージにあり Otedama の import（`chacha20poly1305`・`scrypt`・
+  `pbkdf2`）からは到達不可。govulncheck で **0 reachable vulnerabilities**
+  を確認（モジュールレベル4件はいずれも未到達）。`golang.org/x/sys` も
+  v0.20.0 → v0.47.0 に追随更新。
+- **`toolchain go1.24.0` → `go1.25.7` に更新（四半期ポリシー準拠）。**
+  これで Go 1.25 導入のコンテナ対応 `GOMAXPROCS`（`containermaxprocs`）
+  が実際にビルドへ組み込まれ、cgroup CPU 制限下での CPU マイニング
+  スロットリングが正しく効くようになる——GODEBUG_NOTES.md が「load-bearing」
+  と記述しつつ未適用だった便益が実現する。
+
+**`go` ディレクティブは 1.22 → 1.25.0。** `x/crypto v0.54.0` が `go 1.25.0`
+を要求するため Go のモジュール規則で必須となる連鎖変更。ピンしている
+`godebug` 3 knob は不変だが、Go 1.23–1.25 で追加された未ピン knob は新
+デフォルトになる（GODEBUG_NOTES.md に影響範囲を記録）。
+
+**Docs.** RESEARCH_IMPROVEMENTS 項目1–3 を解消済みに、ADR-003 の
+Erratum に Resolution を追記、GODEBUG_NOTES.md のベースライン・
+`containermaxprocs` 項目を更新。
+
 ### Added (session 255 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: KNOWN_LIMITATIONS §15/§16 の両項目を、同書自身が示した実装方針どおりに解消)
 
 **`otedama wallet` サブコマンドを新設（§16 解消）.** 非カストディ
