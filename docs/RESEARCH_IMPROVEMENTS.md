@@ -820,6 +820,12 @@ endpoint against current vendor documentation. Tags as before
     GO-2025-3563 — and fail the build on any govulncheck finding. CLAUDE.md
     already mandates the tool; the gap is the gate. Record advisory IDs in
     THREAT_MODEL's dependency assumptions.
+    — session 274: the toolchain-pin half of this item is blocked on the
+    same wall as KNOWN_LIMITATIONS §13 — a ready-to-apply patch moving
+    every workflow's Go pin to `1.25.x` with `GOTOOLCHAIN: auto` was
+    authored but the push was rejected for `workflows` scope; it ships
+    as a maintainer-applied attachment. The govulncheck-gate half stays
+    open (adding a workflow step is the same forbidden path).
 
 ### Category 11 — Lightning routing & privacy (arXiv grounding)
 

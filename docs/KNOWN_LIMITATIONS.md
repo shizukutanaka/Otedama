@@ -581,14 +581,21 @@ lacks the `workflows` permission — verified repeatedly this session).
 Each item also carries a maintainer decision:
 
 - **The Go-version mismatch is the one-line, highest-value fix:** set
-  every workflow's Go version to **`1.24.x`** (matching `go.mod`'s
-  `toolchain go1.24.0`), or drop `GOTOOLCHAIN=local` so the runner is
-  allowed to fetch the 1.24 toolchain the module already declares. That
-  single change turns the Test/Build/Lint jobs from "red before
-  compiling" to actually exercising the (already-green) code. The
-  deeper question — whether to keep the `tlsmlkem=1` godebug pin (which
-  forecloses GODEBUG_NOTES.md's "old toolchains can build" intent) or
-  relax it — is a security-posture call for the maintainer, informed by
+  every workflow's Go version to **`1.25.x`** (matching `go.mod`'s
+  `go 1.25.0` / `toolchain go1.25.13`), and change `GOTOOLCHAIN: local`
+  to `auto` so the runner honors the toolchain the module declares.
+  That single change turns the Test/Build/Lint jobs from "red before
+  compiling" to actually exercising the (already-green) code.
+  — **Patch prepared (session 274):** a ready-to-apply diff covering
+  all five files (`test.yml`, `ci.yml`, `ci-cd.yml`, `security.yml`,
+  `release.yml` — `GO_VERSION`/`go-version` → `1.25.x`, sub-1.25
+  matrix legs dropped, `GOTOOLCHAIN: local` → `auto`) was authored and
+  verified against YAML parse; the push was rejected for the
+  `workflows` scope noted above, so it ships as an attachment for a
+  maintainer to apply. The deeper question — whether to keep the
+  `tlsmlkem=1` godebug pin (which forecloses GODEBUG_NOTES.md's "old
+  toolchains can build" intent) or relax it — remains a
+  security-posture call for the maintainer, informed by
   GODEBUG_NOTES.md's reasoning; it should not be changed unilaterally.
 - The rest: author the missing `scripts/`/`config.yaml`/
   `tests/security`/`tests/load` assets and a real Kubernetes/Helm

@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 274 — CI Go toolchain pin パッチを準備 — KNOWN_LIMITATIONS §13)
+
+**全 Go ジョブが go.mod 解析時点で赤になる既知の CI 不具合に対し、
+適用可能なパッチを準備。** 全5ワークフローの Go pin を `1.25.x`
+（go.mod `go 1.25.0` / `toolchain go1.25.13` 適合）に揃え、
+`GOTOOLCHAIN: local` → `auto`（go.mod の toolchain 宣言を尊重）、
+go.mod を満たせない 1.20–1.23 のマトリクス脚を削除 —— だが
+`.github/workflows/` への push は `workflows` スコープ不足で
+GitHub に拒否されるため（§13 が繰り返し検証済み）、差分は
+maintainer 適用用の添付パッチとして提供。§13 の当該項を
+「パッチ準備済み」に更新。残りの構造問題（不存在 scripts/tests/
+k8s 参照、npm ベース code-review、fuzz ジョブ欠落）は同じ壁のため
+記録のまま。
+
 ### Fixed (session 273 — doctor が `stratum+v2://` を「暗号化」と誤報していた問題)
 
 **`stratum+v2://` は平文だが、doctor の暗号化チェックは「encrypted」
