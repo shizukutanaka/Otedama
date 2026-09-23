@@ -435,8 +435,16 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		// occupies the low bytes of the negotiated en2_size field.
 		en2 = hex.EncodeToString(extranonce2Bytes(s.extranonce2Ctr.Add(1), s.extranonce2Size))
 	}
+	// worker name must be the identity mining.authorize used — pools that
+	// validate submit params[0] against the authorized worker (ckpool,
+	// NiceHash) reject every share under a different name as
+	// "unauthorized-worker".
+	workerName := s.conn.creds.User
+	if workerName == "" {
+		workerName = "otedama"
+	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		workerName,
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),
