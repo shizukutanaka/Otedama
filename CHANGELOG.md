@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 363 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: asic_endpoints・bitcoin_address の制御文字拒否)
+
+- **`asic_endpoints` の C0 制御バイト拒否** — 手書き文法の reject 集合は
+  `/`・タブ・空白・改行のみで、`\r`・ESC・NUL 等の他制御バイトが検証
+  （`validateASICEndpoint`）とプローブ側正規化（`normalizeASICEndpoint`）双方を
+  通過し、非サニタイズ面への生描画と不可解な dial 失敗が起こり得た。
+  `unicode.IsControl` で双方を統一強化。
+- **`bitcoin_address` の空白・制御バイト拒否** — アドレスは TUI ダッシュボードへ
+  生描画されるため、制御バイト入りは端末エスケープ注入面（下流 checksum でも
+  必ず失敗する値）。プール URL（session 361）と同パターンのフォーマットゲート。
+
 ### Security (session 362 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: --pprof 非 loopback バインドの警告)
 
 - **`--pprof` + 非 loopback `http_addr` で起動時警告** — `/debug/pprof/*` は

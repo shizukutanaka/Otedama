@@ -87,8 +87,12 @@ func TestNormalizeASICEndpoint(t *testing.T) {
 		{"   ", "", false},
 		{"a/b:4028", "", false},
 		{":4028", "", false},
-		{"fd00::1", "", false},         // bare unbracketed IPv6 rejected
-		{"host:abc", "host:abc", true}, // named ports pass normalisation; dial fails
+		{"fd00::1", "", false},            // bare unbracketed IPv6 rejected
+		{"host:abc", "host:abc", true},    // named ports pass normalisation; dial fails
+		{"host\x00name", "", false},       // NUL rejected
+		{"192.168.1.1\x1b[2J", "", false}, // ESC rejected
+		{"ant\rminer", "", false},         // CR rejected
+		{"ant\x07miner", "", false},       // BEL rejected
 	}
 	for _, c := range cases {
 		got, err := normalizeASICEndpoint(c.in)

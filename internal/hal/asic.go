@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // CGMinerAPIPort is the IANA-free port cgminer and its descendants
@@ -110,7 +111,8 @@ func normalizeASICEndpoint(ep string) (string, error) {
 		return "", fmt.Errorf("hal: empty asic endpoint")
 	}
 	if host, port, err := net.SplitHostPort(ep); err == nil {
-		if host == "" || port == "" || strings.ContainsAny(host, "/\t \n") {
+		if host == "" || port == "" || strings.ContainsAny(host, "/\t \n") ||
+			strings.IndexFunc(host, unicode.IsControl) >= 0 {
 			return "", fmt.Errorf("hal: invalid asic endpoint %q (want host:port or host)", ep)
 		}
 		return ep, nil
@@ -127,7 +129,8 @@ func normalizeASICEndpoint(ep string) (string, error) {
 	if bracketed {
 		reject = "/\t \n" // ':' is legal inside a bracketed IPv6 literal
 	}
-	if host == "" || strings.ContainsAny(host, reject) {
+	if host == "" || strings.ContainsAny(host, reject) ||
+		strings.IndexFunc(host, unicode.IsControl) >= 0 {
 		return "", fmt.Errorf("hal: invalid asic endpoint %q (want host:port or host)", ep)
 	}
 	return net.JoinHostPort(host, CGMinerAPIPort), nil

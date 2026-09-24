@@ -876,7 +876,8 @@ func validateASICEndpoint(ep string) error {
 		return fmt.Errorf("empty endpoint (want host:port or host)")
 	}
 	if host, port, err := net.SplitHostPort(ep); err == nil {
-		if host == "" || port == "" || strings.ContainsAny(host, "/\t \n") {
+		if host == "" || port == "" || strings.ContainsAny(host, "/\t \n") ||
+			strings.IndexFunc(host, unicode.IsControl) >= 0 {
 			return fmt.Errorf("%q is not host:port or a bare host", ep)
 		}
 		return nil
@@ -890,7 +891,8 @@ func validateASICEndpoint(ep string) error {
 	if bracketed {
 		reject = "/\t \n" // ':' is legal inside a bracketed IPv6 literal
 	}
-	if host == "" || strings.ContainsAny(host, reject) {
+	if host == "" || strings.ContainsAny(host, reject) ||
+		strings.IndexFunc(host, unicode.IsControl) >= 0 {
 		return fmt.Errorf("%q is not host:port or a bare host", ep)
 	}
 	return nil
@@ -906,6 +908,14 @@ func validateBitcoinAddress(addr string) error {
 	}
 	if len(addr) > 90 {
 		return fmt.Errorf("address is too long (%d characters)", len(addr))
+	}
+	// The address renders on the TUI dashboard — whitespace and control
+	// bytes would render raw there (and can only ever fail the checksum
+	// downstream), so reject them at the format gate.
+	if strings.IndexFunc(addr, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}) >= 0 {
+		return fmt.Errorf("address must not contain whitespace or control characters")
 	}
 	// Bitcoin mainnet addresses start with '1' (P2PKH), '3' (P2SH), or "bc1" (Bech32).
 	// We reject testnet/signet addresses at this layer; test networks are

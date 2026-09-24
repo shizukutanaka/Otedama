@@ -157,6 +157,8 @@ func TestValidate_RejectsInvalidAddresses(t *testing.T) {
 		{"starts with wrong char", "Xabc123456789012345678901234567890"},
 		{"testnet address rejected", "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"},
 		{"too long", strings.Repeat("b", 100)},
+		{"embedded space", "bc1q ar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"},
+		{"embedded escape", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\x1b"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1402,6 +1404,28 @@ func TestValidate_RejectsNaNNumericThresholds(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), chk.name) {
 			t.Errorf("%s: error should name the field: %v", chk.name, err)
+		}
+	}
+}
+
+func TestValidateASICEndpoint_RejectsControlChars(t *testing.T) {
+	// C0 control bytes other than the explicitly-rejected tab/newline
+	// (e.g. \r, ESC, NUL) must not pass validation — they render raw on
+	// unsanitised surfaces and can only ever make the probe dial fail.
+	for _, ep := range []string{
+		"192.168.1.10\r\n4040",
+		"192.168.1.10\x1b[2J",
+		"host\x00name",
+		"ant\x07miner",
+	} {
+		if err := validateASICEndpoint(ep); err == nil {
+			t.Errorf("validateASICEndpoint(%q) should fail", ep)
+		}
+	}
+	// Legitimate endpoints still pass.
+	for _, ep := range []string{"192.168.1.10:4028", "antminer.lan", "[fd00::1]:4028"} {
+		if err := validateASICEndpoint(ep); err != nil {
+			t.Errorf("validateASICEndpoint(%q) should pass: %v", ep, err)
 		}
 	}
 }
