@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/rates"
 )
 
 // ============================================================================
@@ -468,7 +470,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 	// A file that exists but whose config fails Validate (no bitcoin address).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("log_level: invalid_level\n"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{LogLevel: "invalid_level"} // Validate rejects unknown log level
@@ -485,7 +487,7 @@ func TestCheckConfig_ValidFile_InvalidConfig_Fails(t *testing.T) {
 func TestCheckConfig_ValidFile_ValidConfig_Passes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"}
@@ -625,7 +627,7 @@ func TestCheckHardware_GPUDetected(t *testing.T) {
 	dir := t.TempDir()
 	// Simulate two render nodes.
 	for _, name := range []string{"renderD128", "renderD129", "card0"} {
-		if err := os.MkdirAll(filepath.Join(dir, name), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", name, err)
 		}
 	}
@@ -708,11 +710,11 @@ func TestCheckWallet_NoWallet_EmitsWarn(t *testing.T) {
 
 func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "a1b2c3d4"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -727,7 +729,7 @@ func TestCheckWallet_WalletWithFingerprint_ShowsFingerprint(t *testing.T) {
 
 func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	c := checkWallet(dir)
@@ -752,11 +754,11 @@ func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
 
 func TestCheckWallet_FingerprintTrimmedOfWhitespace(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write wallet.dat: %v", err)
 	}
 	const fp = "deadbeef"
-	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, walletFingerprintFile), []byte(fp+"\n"), 0o600); err != nil {
 		t.Fatalf("write fingerprint: %v", err)
 	}
 	c := checkWallet(dir)
@@ -1034,7 +1036,7 @@ func writePEMCert(t *testing.T) string {
 		t.Fatalf("createcert: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "ca.pem")
-	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); err != nil {
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	return path
@@ -1072,7 +1074,7 @@ func TestCheckPoolTLSCA_MissingFileFails(t *testing.T) {
 
 func TestCheckPoolTLSCA_GarbageFileFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.pem")
-	if err := os.WriteFile(path, []byte("not a certificate"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("not a certificate"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	cfg := config.Config{Pools: []config.PoolConfig{
@@ -1805,5 +1807,82 @@ func TestCheckClockSkew_NilClientUsesDefault(t *testing.T) {
 	r := checkClockSkew().Run(context.Background())
 	if r.Status != StatusPass {
 		t.Errorf("nil-client accurate clock: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+// TestCheckPoolPayoutThreshold exercises the Cat-11-#3 check across the
+// identification/table matrix: curated pool → threshold pass, identified
+// but untracked → verify advisory warn, unidentified → warn, no pools →
+// skip, fetch error → warn.
+func TestCheckPoolPayoutThreshold(t *testing.T) {
+	cfgPools := func(urls ...string) config.Config {
+		var cfg config.Config
+		for _, u := range urls {
+			cfg.Pools = append(cfg.Pools, config.PoolConfig{URL: u})
+		}
+		return cfg
+	}
+	stub := func(name string, ok bool, err error) func(context.Context, string) (rates.PoolShare, bool, error) {
+		return func(context.Context, string) (rates.PoolShare, bool, error) {
+			return rates.PoolShare{Name: name, Share: 0.1}, ok, err
+		}
+	}
+
+	t.Run("no pools skips", func(t *testing.T) {
+		defer func(orig func(context.Context, string) (rates.PoolShare, bool, error)) { poolNetworkShare = orig }(poolNetworkShare)
+		poolNetworkShare = stub("X", false, nil)
+		r := checkPoolPayoutThreshold(config.Config{}).Run(context.Background())
+		if r.Status != StatusSkip {
+			t.Errorf("status = %v, want Skip", r.Status)
+		}
+	})
+
+	t.Run("curated pool passes with threshold", func(t *testing.T) {
+		defer func(orig func(context.Context, string) (rates.PoolShare, bool, error)) { poolNetworkShare = orig }(poolNetworkShare)
+		poolNetworkShare = stub("OCEAN", true, nil)
+		r := checkPoolPayoutThreshold(cfgPools("stratum+tcp://ocean.xyz:3334")).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Fatalf("status = %v, want Pass (%s)", r.Status, r.Detail)
+		}
+		if !strings.Contains(r.Detail, "1000 sats") || !strings.Contains(r.Detail, "OCEAN") {
+			t.Errorf("detail missing threshold/pool name: %q", r.Detail)
+		}
+	})
+
+	t.Run("identified untracked pool warns", func(t *testing.T) {
+		defer func(orig func(context.Context, string) (rates.PoolShare, bool, error)) { poolNetworkShare = orig }(poolNetworkShare)
+		poolNetworkShare = stub("SomePool", true, nil)
+		r := checkPoolPayoutThreshold(cfgPools("stratum+tcp://x.example:3333")).Run(context.Background())
+		if r.Status != StatusWarn || !strings.Contains(r.Detail, "not tracked") {
+			t.Errorf("status=%v detail=%q, want warn+advisory", r.Status, r.Detail)
+		}
+	})
+
+	t.Run("unidentified pool warns", func(t *testing.T) {
+		defer func(orig func(context.Context, string) (rates.PoolShare, bool, error)) { poolNetworkShare = orig }(poolNetworkShare)
+		poolNetworkShare = stub("", false, nil)
+		r := checkPoolPayoutThreshold(cfgPools("stratum+tcp://x.example:3333")).Run(context.Background())
+		if r.Status != StatusWarn || !strings.Contains(r.Detail, "not identified") {
+			t.Errorf("status=%v detail=%q, want warn+verify advisory", r.Status, r.Detail)
+		}
+	})
+
+	t.Run("fetch error warns", func(t *testing.T) {
+		defer func(orig func(context.Context, string) (rates.PoolShare, bool, error)) { poolNetworkShare = orig }(poolNetworkShare)
+		poolNetworkShare = stub("", false, errors.New("offline"))
+		r := checkPoolPayoutThreshold(cfgPools("stratum+tcp://x.example:3333")).Run(context.Background())
+		if r.Status != StatusWarn {
+			t.Errorf("status = %v, want Warn on fetch error", r.Status)
+		}
+	})
+}
+
+func TestLookupMinPayout(t *testing.T) {
+	mp, ok := rates.LookupMinPayout("OCEAN")
+	if !ok || mp.Sats != 1000 || mp.Rail != "Lightning" {
+		t.Errorf("OCEAN lookup = %+v ok=%v, want 1000 sats Lightning", mp, ok)
+	}
+	if _, ok := rates.LookupMinPayout("NoSuchPool"); ok {
+		t.Error("unknown pool should not be in the table")
 	}
 }

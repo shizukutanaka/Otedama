@@ -600,9 +600,14 @@ comparisons (D-Central, Coin Bureau, Solo Satoshi).
    (ADR-007); aligns with the TIDES/OCEAN sovereignty stance the 2026
    comparisons single out.
 2. 🔵 **BOLT12 reusable offers** — ADR-007 B1.
-3. 🟡 **Low Lightning payout-threshold awareness.** OCEAN's 0.00001 BTC LN
-   minimum makes frequent small withdrawals viable; surfacing the pool's
-   minimum payout in `doctor` helps users avoid "trapped" small balances.
+3. ✅ **Low Lightning payout-threshold awareness.** Resolved (session 330):
+   a new `doctor` check ("Pool payout threshold") resolves each configured
+   pool hostname through the public mempool.space directory (the same
+   lookup `warnOnPoolShare` uses) and surfaces the documented minimum
+   payout for curated pools (OCEAN: 1,000 sats via Lightning) — everything
+   else gets a verify-with-the-pool warning instead of a guessed number,
+   so small balances don't silently accrue under a threshold the operator
+   never saw.
 4. 🔵 **External-node control (Phoenixd/CLN/lnd/Alby)** — ADR-007 B3.
 5. 🔵 **Embedded LDK Node sidecar (opt-in)** — ADR-007 B4.
 6. 🟡 **Min-cost-flow path selection** *if Otedama ever sends*: Pickhardt &

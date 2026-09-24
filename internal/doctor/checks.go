@@ -25,6 +25,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/rates"
 )
 
 // DefaultChecks returns the built-in check set for a config.
@@ -42,6 +43,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolEncryption(cfg),
 		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
+		checkPoolPayoutThreshold(cfg),
 		checkPowerEconomics(cfg),
 		checkProfitabilityFloor(cfg),
 		checkHardware(),
@@ -218,7 +220,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -676,6 +678,60 @@ func checkPayoutScheme(cfg config.Config) Check {
 					Status: StatusPass,
 					Detail: detail,
 					Fix:    "set payout_scheme: fpps/pplns/tides/solo in config.yaml for variance/custody context",
+				}
+			}
+			return Result{Status: StatusPass, Detail: detail}
+		},
+	}
+}
+
+// poolNetworkShare is the pool-directory lookup used by
+// checkPoolPayoutThreshold; overridable in tests.
+var poolNetworkShare = rates.FetchPoolNetworkShare
+
+// checkPoolPayoutThreshold surfaces each configured pool's documented
+// minimum payout (RESEARCH_IMPROVEMENTS Cat 11 #3): balances below the
+// threshold stay trapped with the operator, which matters most for
+// small or part-time miners. Stratum exposes no threshold field, so the
+// check resolves the configured hostname to a known pool via the public
+// mempool.space distribution (the same source warnOnPoolShare uses) and
+// consults the curated rates.MinPayout table. Pools outside the table —
+// and private/unidentified pools — get a verify-with-the-pool advisory
+// rather than a guessed number.
+func checkPoolPayoutThreshold(cfg config.Config) Check {
+	return Check{
+		Name: "Pool payout threshold",
+		Run: func(ctx context.Context) Result {
+			if len(cfg.Pools) == 0 {
+				return Result{Status: StatusSkip, Detail: "no pools configured; using built-in default"}
+			}
+			var lines []string
+			anyUnknown := false
+			for _, p := range cfg.Pools {
+				host := stripScheme(p.URL)
+				if host == "" {
+					host = p.URL
+				}
+				sh, ok, err := poolNetworkShare(ctx, host)
+				if err == nil && ok {
+					if mp, found := rates.LookupMinPayout(sh.Name); found {
+						lines = append(lines, fmt.Sprintf("%s (%s): min payout %d sats via %s",
+							host, sh.Name, mp.Sats, mp.Rail))
+						continue
+					}
+					lines = append(lines, fmt.Sprintf("%s (%s): minimum payout not tracked — check the pool's docs", host, sh.Name))
+					anyUnknown = true
+					continue
+				}
+				lines = append(lines, fmt.Sprintf("%s: pool not identified; verify its minimum payout", host))
+				anyUnknown = true
+			}
+			detail := strings.Join(lines, "; ")
+			if anyUnknown {
+				return Result{
+					Status: StatusWarn,
+					Detail: detail,
+					Fix:    "balances under a pool's minimum payout stay trapped — verify the threshold in the pool's docs and account for it before small balances accrue",
 				}
 			}
 			return Result{Status: StatusPass, Detail: detail}

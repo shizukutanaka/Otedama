@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 330 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 11 #3 解消 — プール最低支払閾値の doctor 可視化)
+
+- **`doctor` に "Pool payout threshold" チェック（Cat 11 #3 解消）.** 設定プールの
+  ホスト名を `warnOnPoolShare` と同一の mempool.space 公開ディレクトリで
+  既知プールへ解決し、キュレーション済みテーブル（`internal/rates` 新設
+  `LookupMinPayout`、出典注記付き）から文書化された最低支払額を表示 —
+  OCEAN は 1,000 sats（0.00001 BTC、Lightning 払い）。表外・識別不能プールは
+  推測値を出さず「プールの文書で確認」警告 — Stratum は閾値を公開しないため、
+  閾値未満の残高がオペレータに見えないまま捕捉される事態を防ぐ。
+
 ### Added (session 329 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 9/10 #3 部分解消 — プール接続試行のトレース相関タグ)
 
 - **接続試行ごとの `trace=` 相関タグ（Cat 9/10 #3 部分解消）.** OTel スパンが

@@ -31,7 +31,7 @@ Otedama/
 │   ├── clock/              # time 抽象化（clock.Fake でテスト可能）
 │   ├── config/             # 4 層設定（デフォルト→ファイル→env→フラグ）
 │   ├── daemon/             # systemd/launchd/Windows サービス管理
-│   ├── doctor/             # 17 並行ヘルスチェック
+│   ├── doctor/             # 18 並行ヘルスチェック
 │   ├── engine/             # 全パッケージを統合するメインループ
 │   ├── hal/                # ハードウェア抽象化（CPU常時、Linux GPU sysfs・macOS system_profiler・Windows CIM、cgminer API の ASIC 検出）
 │   ├── httpserver/         # /healthz /readyz /metrics /
