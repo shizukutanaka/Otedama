@@ -32,8 +32,8 @@
 //
 // Plus optional mining.set_extranonce and various pool-specific
 // extensions (NiceHash version-rolling, ASICBoost via mining.configure,
-// suggest_difficulty). We support the common subset and ignore unknown
-// notifications.
+// pool-side vardiff via set_target/suggest_target/suggest_difficulty).
+// We support the common subset and ignore unknown notifications.
 //
 // # What this file does NOT do
 //
@@ -240,7 +240,11 @@ func (s *session) dispatch(line []byte) {
 	switch msg.Method {
 	case "mining.notify":
 		s.handleNotify(msg.Params)
-	case "mining.set_difficulty":
+	case "mining.set_difficulty", "mining.suggest_difficulty":
+		// ckpool- and ESP-Miner-family pools also send suggest_difficulty
+		// as a vardiff notification (pool's suggested difficulty becomes
+		// the share target); treat it like set_difficulty, as cgminer
+		// does, rather than dropping the suggestion.
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
 		}

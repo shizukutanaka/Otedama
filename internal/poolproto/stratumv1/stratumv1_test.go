@@ -1185,6 +1185,16 @@ func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	}
 }
 
+func TestSession_Dispatch_SuggestDifficulty_UpdatesDifficulty(t *testing.T) {
+	sess := makeBareSess()
+	// ckpool-/ESP-Miner-family pools send suggest_difficulty as a vardiff
+	// notification; it must update the share target like set_difficulty.
+	sess.dispatch([]byte(`{"method":"mining.suggest_difficulty","params":[2048]}`))
+	if got := sess.SuggestedDifficulty(); got != 2048 {
+		t.Errorf("SuggestedDifficulty = %v, want 2048", got)
+	}
+}
+
 func TestSession_Dispatch_FullChannel_DropsOldest(t *testing.T) {
 	sess := makeBareSess()
 	// Fill channel to capacity (8) before dispatch.

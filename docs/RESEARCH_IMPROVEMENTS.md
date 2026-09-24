@@ -665,7 +665,7 @@ endpoint against current vendor documentation. Tags as before
    future Noise wiring (the NX handshake code exists but is not in the
    live connect path); it stays open *as ADR-011 scope*, not as a
    standalone fix.
-2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
+2. ✅ **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
    `max_target`. In the V2 channel/job path clamp the effective target into
@@ -685,7 +685,7 @@ endpoint against current vendor documentation. Tags as before
    the accept-anything semantics; with an unbounded advertisement the
    `[min, max_target]` clamp has no bound to clamp to, closing the item.
    (Previous note claimed the omission was deliberate — corrected.)
-3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
+3. ✅ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
    or every share is rejected on a wrong merkle root (SRI v1.5.0 fix).
@@ -1437,6 +1437,15 @@ ignored. The per-method bodies were also extracted into
 `handleNotify`/`handleSetExtranonce`/`handleShowMessage`/
 `handleReconnect`/`deliverResponse`, dropping `dispatch`'s
 long-flagged gocyclo complexity under the lint threshold.
+
+**Session-335 follow-up (V1 `mining.suggest_difficulty` pool→client):**
+the vardiff surface covered `set_difficulty`, `set_target` and
+`suggest_target` (sessions 294/305), but the pool→client form of
+`suggest_difficulty` — which ckpool- and ESP-Miner-family pools emit as
+a vardiff notification where the suggestion becomes the share target —
+still fell through to the -32601 default and was dropped. `dispatch` now
+routes it through the same `parseDifficulty` → `difficulty.Store` path
+as `set_difficulty`, matching cgminer's convention.
 
 ---
 

@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 335 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 `mining.suggest_difficulty` pool→client 受理)
+
+- **pool→client `mining.suggest_difficulty` を `set_difficulty` と同経路で処理.**
+  ckpool/ESP-Miner 系プールが vardiff 通知として送る同メソッドが -32601 既定に
+  落ちて破棄されており、該当プールではシェアターゲットが初期値のまま残り得た
+  欠陥を解消（cgminer 系クライアントと同一の取り扱い）。RESEARCH_IMPROVEMENTS の
+  verify 系 stale マーカー2件（#2 max_target クランプ=session 282 解決済み、
+  #3 BIP141=session 302 で非該当解決）も ✅ へ正直化。
+
 ### Docs (session 334 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 解決済み項目の正直な記録)
 
 - **KNOWN_LIMITATIONS §15/§16 を ✅ RESOLVED へ.** session 314 の移植（実端末幅
