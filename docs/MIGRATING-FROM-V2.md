@@ -36,20 +36,24 @@ If any of those is a hard requirement, **stay on v2.x**. The
   a client that routes earnings directly to the user's address.
 - **Algorithms:** v2 supported Scrypt, Ethash, RandomX, and others;
   v3 is SHA-256d only.
-- **Protocol:** v2 spoke Stratum V1 primarily; v3 is V2-only.
+- **Protocol:** v3 supports Stratum V1 (`stratum+tcp://`/`stratum+tls://`)
+  and Stratum V2 (`stratum+v2tls://`), including the `datum://` scheme.
 
 ### Operational
 - **Binary name:** `otedama` (same).
 - **Binary size:** v2 ~65 MB → v3 ~15 MB (distroless).
-- **Dependencies:** v2 had ~50 Go modules; v3 has 2 (`x/crypto`, `yaml.v3`).
+- **Dependencies:** v2 had ~50 Go modules; v3 has 3 (`x/crypto`, `go.yaml.in/yaml/v3`, `x/sys`).
 - **Config format:** still YAML, but schema completely different.
 - **Service installer:** new in v3 (`otedama service install`).
 
 ### Security
-- **Noise encryption:** Stratum V2 handshake on every pool connection.
+- **Transport encryption:** `stratum+v2tls://` TLS on every pool connection
+  (Noise NX transport encryption exists in-tree but is not wired into live
+  connections yet — KNOWN_LIMITATIONS §2).
 - **Wallet:** BIP-39 seed encrypted with scrypt + AES-256-GCM.
-- **CI:** SHA-pinned GitHub Actions, Dependabot, nightly fuzz, cosign
-  signing.
+- **CI:** Dependabot, race-test coverage upload. Actions are tag-pinned
+  (not SHA-pinned) and release assets are unsigned today — see
+  docs/KNOWN_LIMITATIONS.md §13.
 
 ## Migration procedure
 
@@ -82,10 +86,13 @@ under `[payout]`. Copy the address — you will paste it into v3.
 ### 4. Install v3
 
 ```bash
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
+tar xzf otedama-linux-amd64.tar.gz   # or the -{os}-{arch} pair for your platform
 ```
 
-Or download from [releases][releases] and verify the signature.
+Or download the tarball for your platform from [releases][releases] and
+verify its SHA-256 digest (the `install.sh` convenience script is built
+into the repo but is not published as a release asset today; release
+assets are unsigned — see docs/KNOWN_LIMITATIONS.md §13).
 
 [releases]: https://github.com/shizukutanaka/Otedama/releases
 
@@ -137,7 +144,9 @@ Fields that have been **removed**:
 
 - `algorithms:` — v3 is SHA-256d only.
 - `pool_operator:` — v3 is not a pool.
-- `[stratum_v1]` — no V1 support.
+- `[stratum_v1]` — v3 supports Stratum V1 out of the box
+  (`stratum+tcp://` / `stratum+tls://` pool URLs); the separate V1 config
+  section is gone because V1 is just another `pools[].url` scheme.
 - `[custody]` — non-custodial only.
 - `[kyc]` / `[aml]` — no KYC infrastructure.
 
@@ -151,8 +160,9 @@ Fields that are **new**:
 
 - `data_dir:` — for wallet and persistent state.
 - `language:` — UI language, BCP 47.
-- `pools[].priority:` — failover order.
-- `workers[]:` — per-device worker configuration.
+- `pools[]:` — failover follows the YAML list order (first = primary).
+- `workers:` — per-device worker configuration (`name:`); see also the
+  top-level `worker_threads:` knob.
 
 See `config.yaml.example` in the v3 repository for a fully commented
 template.
