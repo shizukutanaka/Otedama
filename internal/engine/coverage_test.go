@@ -21,6 +21,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
@@ -1527,6 +1528,50 @@ func TestRunArbitrationLoop_StaleStreamPruning(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "expired") {
 		t.Errorf("expected stale-stream 'expired' log; got: %v", logs)
+	}
+}
+
+// TestRunArbitrationLoop_FutureQuoteClamped covers arbitrate.go's q.At
+// clamp: a quote timestamped one hour in the future must not defeat the
+// stale-stream prune by keeping lastQuoteAt permanently ahead of now.
+// The clamp records opts.clk.Now() instead — observable via the
+// otedama_stream_last_quote_unixtime gauge staying at ~now, not +1h.
+func TestRunArbitrationLoop_FutureQuoteClamped(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 20 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	quoteCh := make(chan provider.Quote, 1)
+	m := newEngineMetrics(metrics.NewRegistry())
+	opts := arbitrationLoopOpts{
+		streamsMu: &sync.Mutex{},
+		streamMap: make(map[string]arbitration.Stream),
+		quoteCh:   quoteCh,
+		metrics:   m,
+		clk:       clock.System{},
+		log:       func(_, _ string) {},
+	}
+	quoteCh <- provider.Quote{
+		ProviderID: "future-provider",
+		DeviceID:   "cpu-0",
+		At:         time.Now().Add(time.Hour),
+	}
+
+	done := make(chan struct{})
+	go func() { runArbitrationLoop(ctx, opts); close(done) }()
+	<-done
+
+	m.streamLastQuoteMu.Lock()
+	g := m.streamLastQuote[[2]string{"future-provider", "cpu-0"}]
+	m.streamLastQuoteMu.Unlock()
+	if g == nil {
+		t.Fatal("stream_last_quote gauge never populated")
+	}
+	if got := time.Unix(int64(g.Value()), 0); got.After(time.Now().Add(30 * time.Second)) {
+		t.Errorf("future-dated quote recorded unclamped timestamp %v", got)
 	}
 }
 

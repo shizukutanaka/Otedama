@@ -142,8 +142,12 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if reset {
 				opts.metrics.observeForecasterReset(stream, device)
 			}
+			// q.At is provider-controlled: a future-dated quote would keep
+			// lastQuoteAt ahead of now forever and defeat the stale-stream
+			// prune below, so clamp it to the local clock (same posture as
+			// Decide's non-finite quote-value sanitisation, session 355).
 			ts := q.At
-			if ts.IsZero() {
+			if ts.IsZero() || ts.After(opts.clk.Now()) {
 				ts = opts.clk.Now()
 			}
 			lastQuoteAt[key] = ts
