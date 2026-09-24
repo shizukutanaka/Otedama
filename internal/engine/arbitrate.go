@@ -17,17 +17,21 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 )
 
 // arbitrationLoopOpts bundles the arguments to runArbitrationLoop.
 type arbitrationLoopOpts struct {
-	devRefs       []arbitration.DeviceRef
-	streamsMu     *sync.Mutex
-	streamMap     map[string]arbitration.Stream
-	quoteCh       <-chan provider.Quote
-	workers       []*miner.Worker
+	devRefs   []arbitration.DeviceRef
+	streamsMu *sync.Mutex
+	streamMap map[string]arbitration.Stream
+	quoteCh   <-chan provider.Quote
+	workers   []*miner.Worker
+	// clk feeds every logical timestamp in the loop (staleness, ledger
+	// settlement, snapshot); nil falls back to the system clock.
+	clk           clock.Clock
 	metrics       *engineMetrics // must not be nil
 	log           func(level, msg string)
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
@@ -75,6 +79,9 @@ const forecastSeasonSteps = 2880
 // or whenever a fresh quote arrives. Blocks until ctx is cancelled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
+	if opts.clk == nil {
+		opts.clk = clock.System{}
+	}
 	ticker := time.NewTicker(arbitrationInterval)
 	defer ticker.Stop()
 	var prevAlloc *arbitration.Allocation
@@ -137,7 +144,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			ts := q.At
 			if ts.IsZero() {
-				ts = time.Now()
+				ts = opts.clk.Now()
 			}
 			lastQuoteAt[key] = ts
 			opts.metrics.observeStreamLastQuote(stream, device, ts)
@@ -146,7 +153,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			opts.metrics.observeStreamDrift(stream, device, shifted, tv)
 		case <-ticker.C:
 			opts.streamsMu.Lock()
-			now := time.Now()
+			now := opts.clk.Now()
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, now, streamStaleTimeout) {
 				providerReliability(reliability, key).UpdateAt(false, now)
 				delete(creditAt, key)
@@ -240,7 +247,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
 			}
-			pending = settleLedger(pending, alloc, streams, time.Now(), opts.metrics, opts.log)
+			pending = settleLedger(pending, alloc, streams, opts.clk.Now(), opts.metrics, opts.log)
 			applyAllocation(alloc, opts.workers, opts.log)
 			opts.recordExplainSnapshot(alloc, margin, forecasters, reliability, lastQuoteAt)
 		}
@@ -258,8 +265,12 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 	if opts.explain == nil {
 		return // recording disabled (no /arbitration consumer)
 	}
+	now := time.Now()
+	if opts.clk != nil {
+		now = opts.clk.Now()
+	}
 	snap := &arbitration.DecisionSnapshot{
-		At:                 time.Now(),
+		At:                 now,
 		Policy:             arbitration.PolicyMaximizeEarnings.String(),
 		HysteresisPct:      margin,
 		MinYieldSatsPerSec: opts.minYield,

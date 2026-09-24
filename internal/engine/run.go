@@ -556,6 +556,7 @@ func Run(ctx context.Context, opts Options) error {
 		quoteCh:       quoteCh,
 		workers:       workers,
 		metrics:       m,
+		clk:           opts.Clock,
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 		minYield:      opts.Config.MinYieldSatsPerSec,
