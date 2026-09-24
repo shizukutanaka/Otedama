@@ -459,6 +459,80 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 	}
 }
 
+// A consumer that never reads must not stall the frame read loop:
+// while blocked the loop would miss NewMiningJob/SetNewPrevHash frames
+// (the slow-client pile-up behind ESP-Miner #1913). The queue holds the
+// NEWEST jobs — oldest are dropped, since a newer job always supersedes.
+func TestSession_Jobs_SlowConsumerDropsOldest(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	const chanID = uint32(1)
+	const total = 20
+	go func() {
+		pool.doHandshake(chanID)
+		// Establish the tip so jobs with min_ntime emit immediately.
+		prev := stratum.SetNewPrevHash{
+			ChannelID: chanID,
+			JobID:     0,
+			MinNtime:  0x60000000,
+			NBits:     0x170d21b4,
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
+		for id := 1; id <= total; id++ {
+			job := stratum.NewMiningJob{
+				ChannelID:   chanID,
+				JobID:       uint32(id),
+				Version:     0x20000000,
+				HasMinNtime: true,
+				MinNtime:    0x60000000,
+			}
+			writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		}
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// Let the read loop drain all 20 frames into the bounded queue
+	// (capacity 8). If emit still blocked, the loop would wedge on job 9
+	// and the later jobs would never arrive.
+	time.Sleep(200 * time.Millisecond)
+
+	got := map[string]bool{}
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case j, ok := <-sess.Jobs():
+			if !ok {
+				t.Fatal("Jobs() channel closed early")
+			}
+			got[j.JobID] = true
+		default:
+			goto drained
+		case <-deadline:
+			t.Fatal("timeout draining jobs channel")
+		}
+	}
+drained:
+	if len(got) > 8 {
+		t.Fatalf("queued jobs = %d, exceeds channel capacity 8", len(got))
+	}
+	if !got["20"] {
+		t.Error("newest job 20 not queued — read loop stalled or job lost")
+	}
+	if got["1"] {
+		t.Error("oldest job 1 still queued — drop-oldest should have evicted it")
+	}
+}
+
 func TestSession_Submit_SendsFrame(t *testing.T) {
 	pool, clientConn := newPoolSide(t)
 	d := makeDialer(clientConn)

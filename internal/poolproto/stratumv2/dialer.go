@@ -141,6 +141,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		dec:    dec,
 		chanID: msg.OpenMiningChannelSuccess.ChannelID,
 		jobsCh: make(chan poolproto.Job, 8),
+		done:   make(chan struct{}),
 	}
 	sess.start(ctx)
 	return sess, nil
@@ -180,20 +181,34 @@ type session struct {
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
+	done      chan struct{} // closed when readLoop exits
 	startOnce sync.Once
 }
 
 // start launches the read loop that decodes NewMiningJob frames and
 // forwards them onto jobsCh. The loop exits on read error, ctx
 // cancellation, or connection close, closing jobsCh on the way out.
+//
+// A ctx cancel must unblock the loop even while it sits inside
+// ReadFrame — a net.Conn read is not ctx-aware — so a watcher closes
+// the connection, which surfaces a read error on any goroutine
+// currently blocked on the socket.
 func (s *session) start(ctx context.Context) {
 	s.startOnce.Do(func() {
+		go func() {
+			select {
+			case <-ctx.Done():
+				_ = s.conn.Close()
+			case <-s.done: // readLoop exited; do not outlive the session
+			}
+		}()
 		go s.readLoop(ctx)
 	})
 }
 
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
+	defer close(s.done)
 	// SV2 job/tip state, mirroring the engine's inline loop: a job is
 	// emittable only once both NewMiningJob (merkle root + version) and
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
@@ -203,6 +218,15 @@ func (s *session) readLoop(ctx context.Context) {
 	var prevNBits uint32
 	havePrev := false
 
+	// emit enqueues a job without blocking the frame read loop. A slow
+	// consumer must never stall this loop: while blocked it would miss
+	// further NewMiningJob/SetNewPrevHash frames (making everything it
+	// later dequeues stale anyway) — the slow-client pile-up ESP-Miner
+	// fixed in #1913. Same policy as the V1 session's sendJob: when the
+	// new job makes pending work obsolete (clean=true, a new tip), purge
+	// all queued jobs first; when the channel is full, drop the oldest —
+	// the newest job is always the most current work. Return false only
+	// on shutdown so the loop exits.
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
 			JobID:      fmt.Sprintf("%d", j.JobID),
@@ -214,12 +238,32 @@ func (s *session) readLoop(ctx context.Context) {
 			CleanJobs:  clean,
 			ReceivedAt: time.Now(),
 		}
-		select {
-		case s.jobsCh <- job:
-			return true
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return false
 		}
+		if clean {
+			for {
+				select {
+				case <-s.jobsCh:
+				default:
+					goto purgeDone
+				}
+			}
+		}
+	purgeDone:
+		select {
+		case s.jobsCh <- job:
+		default:
+			select {
+			case <-s.jobsCh:
+			default:
+			}
+			select {
+			case s.jobsCh <- job:
+			default:
+			}
+		}
+		return true
 	}
 
 	for {
