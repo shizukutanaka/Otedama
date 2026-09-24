@@ -375,6 +375,31 @@ Served by `otedama arb explain` for terminal rendering.
 
 ---
 
+## Service-level objectives (SLO)
+
+Operational targets that make the metrics above actionable. "Breach" means
+the metric stayed outside target long enough to cost shares or revenue —
+a single bad sample during a reconnect or rate-fetch gap is expected.
+
+| Objective | Metric(s) | Target | On breach |
+|-----------|-----------|--------|-----------|
+| Pool session healthy | `otedama_up` | 1 continuously | Check hashrate, pool difficulty, network path; `otedama_last_job_received_seconds` for a stale conn. |
+| Productive uptime | `otedama_productive_seconds_total` ÷ `otedama_uptime_seconds` | ≥ 0.99 over any 24 h window | Check `otedama_curtailed` (intentional pause is fine), reconnect count, `otedama_devices_idle`. |
+| Share acceptance | `otedama_reject_rate` | < 0.005 excellent; > 0.03 investigate | Break down by `otedama_shares_rejected_by_reason_total` (`stale` = latency, `difficulty-change` = benign generation boundary, others = pool). |
+| Stale fraction | `otedama_stale_rate` | < 0.005 | Submit path too slow for the pool's stale window — pick a closer pool. |
+| Submit latency | `otedama_submit_latency_milliseconds{quantile=0.95}` | < 200 ms; p99 < 1000 ms | Above ~200 ms risks stale rejects (pool stale thresholds are typically 1–2 s). |
+| Unaccounted shares | `otedama_shares_unaccounted` | drains to <8 within one stats tick | The engine warns when ≥8 persists for 3 ticks — submissions are being silently dropped; check connection state and `otedama_shares_submitted_total` vs `otedama_shares_total`. |
+| Live revenue streams | `otedama_active_streams` | ≥ 1 while a market is up | 0 means every provider went 3 min without a quote — check provider reachability/logs. |
+| Rate freshness | `otedama_btc_rate_age_seconds` | < 300 | Rate loop stalled; `otedama_rate_sources_ok` shows how many sources still answer. |
+| Clock skew | `otedama_clock_skew_seconds` | \|skew\| < 120 | Fix NTP — skew breaks rate-freshness accounting and HTTPS cert validation. |
+
+These are single-operator SLOs, not contractual guarantees: CPU-only
+mining earnings are near-zero by hardware economics, so the productive-
+uptime objective measures whether Otedama itself is healthy, not whether
+mining is profitable.
+
+---
+
 ## Wallet file format
 
 Path: `{data-dir}/wallet.dat`

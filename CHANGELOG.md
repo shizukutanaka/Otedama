@@ -12,6 +12,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed (session 307 — V1 dispatch 分割 + 未知リクエスト応答)
 
+### Docs (session 262 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SLO 文書化 + RESEARCH_IMPROVEMENTS 検証棚卸し)
+
+- **docs/API.md に「Service-level objectives (SLO)」セクションを新設
+  （Cat 9 #10 解消）.** 既存メトリクスを運用可能にする目標値表:
+  productive uptime ≥99%/24h、reject rate <0.5%（>3% 要調査、D-Central
+  閾値と整合）、stale <0.5%、submit latency p95<200ms・p99<1s、
+  unaccounted 滞留はセッション261の watchdog 警告と整合、
+  active_streams≥1、rate freshness <300s、clock skew <120s。
+  CPU-only 採掘の経済限界と区別する「Otedama 自身の健全性」の SLO として
+  明記。
+- **RESEARCH_IMPROVEMENTS の検証済み項目を解消済みに更新.** Cat 5 #3
+  （`streamStaleTimeout`/`pruneStaleStreams`/`lastQuoteAt` による
+  dead-provider 自動遮断は実装済みと検証）、Cat 5 #8（`SatsPerSecond`
+  の USD→sat/s 換算・20% fee・simulated 明示が正しいと検証）、
+  Cat 4 #9（Grunspan & Pérez-Marco の公平性根拠は記録済み＋session 261
+  の watchdog が実装可能側——V1/SV2 は pool-credited block を報告しない
+  プロトコル制約を明記）を RESOLVED (session 262) に。
+
+### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
+*(session 324: 別系チェーンの未マージ PR (#122) に留まっていた本 docs 更新を
+現チェーンへ cherry-pick 移植。RESEARCH の項目解決は現チェーン側の後続実装
+（session-292 heartbeat ゲージ・session-316 VRAM 適性・session-290/291 Sharpe/
+会計分離）を優先保持、SLO セクション自体は新規適用。)*
 ### Docs (session 258 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS session-251 の文書是正系項目を棚卸し)
 
 **調査由来の是正のうち未反映だった Bitcoin Core v30 IPC を ADR-009 に記録し、
