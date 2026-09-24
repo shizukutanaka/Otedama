@@ -90,7 +90,7 @@ type Config struct {
 	Pools []PoolConfig `yaml:"pools"`
 
 	// Workers controls how Otedama names itself to pools. If empty,
-	// a hostname-derived name is used automatically.
+	// the bare payout address is sent as the identity (no worker suffix).
 	Workers WorkerConfig `yaml:"workers"`
 
 	// Language is the IETF BCP 47 language tag for UI messages and logs,
@@ -128,8 +128,9 @@ type Config struct {
 	ArbitrationHysteresisPct float64 `yaml:"arbitration_hysteresis_pct"`
 
 	// CurtailBelowBTCUSD pauses all hashing workers when the BTC/USD rate
-	// falls below this threshold. Workers resume automatically when the rate
-	// recovers (on the next pool notify, up to ~60 s). This is the
+	// falls below this threshold. Workers resume automatically when the
+	// rate recovers — the session re-arms the last pool job immediately
+	// rather than waiting for the next notify. This is the
 	// electricity-tariff curtailment hook: set it to your break-even price
 	// so Otedama stops mining when it becomes unprofitable.
 	//
@@ -226,8 +227,10 @@ type PoolConfig struct {
 
 // WorkerConfig controls how Otedama identifies itself to pools.
 type WorkerConfig struct {
-	// Name is the worker name reported to pools. If empty, the hostname
-	// is used.
+	// Name is the worker name reported to pools as "address.name" in
+	// mining.authorize. If empty, the bare payout address is sent.
+	// Must be printable non-space ASCII (≤64 chars) — pools pattern-match
+	// worker names and strict ones reject anything else at authorize time.
 	Name string `yaml:"name"`
 }
 

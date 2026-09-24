@@ -57,9 +57,12 @@ const defaultHysteresisPct = 0.05
 // (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
 const streamStaleTimeout = 3 * time.Minute
 
-// runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is cancelled or
-// the quote channel is closed.
+// runArbitrationLoop re-evaluates device→stream assignment every 30s.
+// Quotes arriving between ticks are folded into the live stream set as
+// they land, so the next Decide always sees the freshest yields; with a
+// 30–60s provider quote cadence a faster tick would only re-decide on
+// stale data. Blocks until ctx is cancelled or the quote channel is
+// closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
 	defer ticker.Stop()

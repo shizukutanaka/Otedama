@@ -2781,3 +2781,97 @@ func TestRunSessionV1_ReconnectDirectiveLogged(t *testing.T) {
 		t.Errorf("reconnect directive missing from log; got:\n%s", joined)
 	}
 }
+
+// TestRunSession_UncurtailReArmsJob verifies that lifting the curtail
+// gate re-arms the still-current pool job at the next stats tick instead
+// of idling until the pool's next activation event — up to a whole
+// notify interval of recovered hashing time.
+func TestRunSession_UncurtailReArmsJob(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+	fp := newFakePool(t)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	gate := new(atomic.Bool)
+	gate.Store(true) // hashing paused from the start; job is tracked but ignored
+
+	// Lift the gate once the job has been received and skipped.
+	time.AfterFunc(400*time.Millisecond, func() { gate.Store(false) })
+
+	_ = runSession(ctx, sessionOpts{
+		poolURL:     fp.URL(),
+		user:        "bc1qtest000000000000000000000000000000000",
+		workers:     []*miner.Worker{w},
+		merged:      merged,
+		interval:    10 * time.Millisecond,
+		log:         func(string, string) {},
+		curtailGate: gate,
+	})
+
+	// The all-0xFF channel target means a re-armed worker finds and
+	// submits a share within the fakePool read window — a received share
+	// proves the job was re-armed, not merely flagged.
+	if !w.HasWork() {
+		t.Error("expected un-curtail to re-arm the in-flight job")
+	}
+	if got := len(fp.ReceivedShares()); got == 0 {
+		t.Error("expected a submitted share after un-curtail re-arm")
+	}
+}
+
+// TestRunSessionV1_UncurtailReArmsJob is the V1 twin: a mining.notify
+// received while curtailed is tracked but not applied; lifting the gate
+// must re-apply it at the next stats tick rather than waiting for the
+// next notify (a full block interval on a quiet pool).
+func TestRunSessionV1_UncurtailReArmsJob(t *testing.T) {
+	pool := newV1ScriptedPool(t, func(conn net.Conn, write func(string)) {
+		write(`{"id":null,"method":"mining.set_difficulty","params":[1]}`)
+		write(`{"id":null,"method":"mining.notify","params":["job-curtail","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`)
+		time.Sleep(3 * time.Second)
+	})
+	defer pool.Close()
+
+	gate := new(atomic.Bool)
+	gate.Store(true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	time.AfterFunc(400*time.Millisecond, func() { gate.Store(false) })
+
+	var mu sync.Mutex
+	var captured []string
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:     pool.URL(),
+		user:        "alice",
+		workers:     []*miner.Worker{w},
+		merged:      merged,
+		interval:    20 * time.Millisecond,
+		curtailGate: gate,
+		log: func(level, msg string) {
+			mu.Lock()
+			captured = append(captured, level+":"+msg)
+			mu.Unlock()
+		},
+	})
+
+	if !w.HasWork() {
+		mu.Lock()
+		t.Logf("logs: %v", captured)
+		mu.Unlock()
+		t.Error("expected un-curtail to re-arm the in-flight V1 job")
+	}
+}

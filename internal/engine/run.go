@@ -848,6 +848,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 		opts.log("info", fmt.Sprintf("engine: job %d version=0x%08X active", j.JobID, j.Version))
 	}
 
+	// wasCurtailed tracks the curtail gate across ticks so the lift edge
+	// can re-arm in-flight work (see the stats arm).
+	wasCurtailed := opts.isCurtailed()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -869,6 +873,16 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			// which retries the same pool or fails over to the next.
 			if since := time.Since(time.Unix(0, lastFrameAt.Load())); since > silenceBound {
 				return fmt.Errorf("engine: pool silent for %s — abandoning session", since.Truncate(time.Second))
+			}
+			// Curtail lift re-arms immediately: the tracked (active,
+			// prevHash) pair is still the pool's current job, and the
+			// next activation event can be a whole notify interval away —
+			// waiting for it would throw away recovered hashing time.
+			uncurtailed := wasCurtailed && !opts.isCurtailed()
+			wasCurtailed = opts.isCurtailed()
+			if uncurtailed && active != nil && havePrev {
+				opts.log("info", "engine: uncurtailed — re-arming in-flight job")
+				startJob(active, activeNTime)
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
 			// Accumulate estimated earnings before building the dashboard
@@ -1209,6 +1223,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
 
+	// wasCurtailed tracks the curtail gate across ticks so the lift edge
+	// can re-arm in-flight work (see the stats arm).
+	wasCurtailed := opts.isCurtailed()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1260,19 +1278,29 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
 			}
-			// Re-arm in-flight work when the pool re-targets: a difficulty
-			// raise after the job was issued leaves shares ground against
-			// the stale easier target — every one rejected. Re-applying the
-			// same job is safe for the workers' nonce space: grind resets
-			// the nonce sequence only on a genuine job/header change, so a
-			// same-header retarget keeps each thread's position (no pair is
-			// hashed twice — see grind's reload check).
+			// Re-arm in-flight work on two triggers: a pool re-target
+			// (a difficulty raise after the job was issued leaves shares
+			// ground against the stale easier target — every one rejected)
+			// or a curtail lift (the last applied job stays valid until
+			// superseded, so re-issue it at once rather than idling until
+			// the next mining.notify — a full block interval on a quiet
+			// pool). Re-applying the same job is safe for the workers'
+			// nonce space: grind resets the nonce sequence only on a
+			// genuine job/header change, so a same-header re-arm keeps
+			// each thread's position (no pair is hashed twice — see
+			// grind's reload check).
+			uncurtailed := wasCurtailed && !opts.isCurtailed()
+			wasCurtailed = opts.isCurtailed()
 			if lastV1JobOK && !opts.isCurtailed() {
-				if d := sess.SuggestedDifficulty(); d != lastV1Difficulty {
+				if d := sess.SuggestedDifficulty(); uncurtailed || d != lastV1Difficulty {
 					if err := applyJob(opts.workers, lastV1Job, chanID, d, lastV1JobID); err != nil {
 						opts.log("warn", fmt.Sprintf("engine: V1 retarget for job %s: %v", lastV1Job.JobID, err))
 					} else {
 						lastV1Difficulty = d
+						if uncurtailed {
+							opts.log("info", fmt.Sprintf(
+								"engine: uncurtailed — re-armed job %s", lastV1Job.JobID))
+						}
 					}
 				}
 			}
@@ -1311,19 +1339,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				}
 				return fmt.Errorf("engine: pool closed connection")
 			}
-			// While curtailed, keep workers idle and ignore the job (see the
-			// V2 path for rationale). lastJobReceivedAt still updates because
-			// the pool connection remains alive.
+			// While curtailed, keep workers idle but still track the job
+			// (the V2 path's startJob does the same for `active`) — the
+			// curtail lift re-arms the last job on the next tick instead
+			// of waiting a full notify interval for the next one.
+			difficulty := sess.SuggestedDifficulty()
+			synthetic := jobIDs.assign(job.JobID)
+			lastV1Job, lastV1JobID, lastV1Difficulty, lastV1JobOK = job, synthetic, difficulty, true
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				difficulty := sess.SuggestedDifficulty()
-				synthetic := jobIDs.assign(job.JobID)
 				if err := applyJob(opts.workers, job, chanID, difficulty, synthetic); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
-				lastV1Job, lastV1JobID, lastV1Difficulty, lastV1JobOK = job, synthetic, difficulty, true
 				opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {

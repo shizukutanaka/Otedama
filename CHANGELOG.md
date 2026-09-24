@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 274 — コンピューターサイエンスの観点から改善点を洗い出す(第19ラウンド): 中断-再開不変条件——curtail 解除後の回復が次イベント到着に依存していた経路 + ドキュメント/コード乖離2件、計4箇所)
+
+第19ラウンドの Socratic 問いは「**中断された作業は、解除と同時に再開できる状態を保っているか?**」——一時停止(pause)の意味論は「現在の有効な作業を保持し、解除時に即再開」であり、「次の新規イベントまでアイドル」ではない。実証2箇所 + 文書乖離2箇所:
+
+- **V2 curtail 解除後のアイドル遅延**(実害): `startJob` は curtail 中も `active`/`prevHash`/`prevNBits`/`shareTarget` を追跡するが、解除時にこれらを再適用する経路がなかった——BTC/USD が閾値を回復しても、ワーカーはプールの次の起動イベント(NewMiningJob+SetNewPrevHash または SetTarget)までアイドルのまま。静かなプールではブロック間隔(約10分)の回復ハッシュレートを捨てる。stats ティックで `wasCurtailed` の遷移を検出し、`active != nil && havePrev` なら即 `startJob` 再発行。
+- **V1 同型の非対称 + 追跡欠如**(実害): V1 はジョブを curtail 中に「記録すらしない」——V2 の `startJob`(追跡は常に行い適用のみ抑止)と非対称で、`lastV1JobOK` が偽のまま解除を迎えると再適用材料が存在しなかった。ジョブを curtail 中も記録(synthetic id も採番)し、解除ティックで直近ジョブを現在難易度で再適用——既存の難易度変更リターゲットブロックに `uncurtailed` トリガーを併合。
+- **`runArbitrationLoop` doc が「quote 到着時に再評価」と虚偽記述**: 実装は 30s ティックのみで Decide を実行——ドキュメントとコードの意味論乖離(quote トリガーを期待する読者を誤解させる)。実装の方が正しい設計(プロバイダの quote 周期は 30-60s で、より速いティックは陳腐データに再決定するのみ)のため、コメントを実装に合わせて訂正。
+- **`WorkerConfig.Name`/`Workers` doc が「hostname-derived」と虚偽記述**: 空 worker 名は実際には素の payout address のみ送信する(hostname 派生はどこにも存在しない——`sessionUser` が `addr+"."+worker` か `addr` の2択)。2箇所のコメントを実際の wire 動作に訂正(`CurtailBelowBTCUSD` doc の「次の notify まで最大 ~60s」も本修正で即時化されたため更新)。
+
+**検証手続き(棄却済み候補).** `applyJob`/`SetWork` は部分失敗し得ない(void 返しで全 worker 同一 Work)、`arbitrate.go` の streamsSlice は sort+deep-copy で決定的、`EnvWarnings` は malformed env を run/config 両コマンドで表面化済み、HTTPAddr は opt-in(`""`=disabled)で文書化済み、provider quote の `At` ゼロ時刻は取り込み時 clamp 済み、curtail 中の2回目の notify は最新勝ち上書きで正当、`estSats`/`satsAcc`/`LatencyTracker`/`pruneStaleStreams`/`submitTimes` 境界は全て過去ラウンドで監査済み clean。
+
+**テスト.** `TestRunSession_UncurtailReArmsJob`(curtail 中に job+prevhash を送信→ゲート解除→全 0xFF ターゲットで HasWork + 実 submit を fakePool が受信)、`TestRunSessionV1_UncurtailReArmsJob`(curtail 中 notify→解除→HasWork)——いずれも修正前は不成立の非vacuous検証。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,config} 緑、差分行 lint/gofumpt クリーン(gocyclo/hugeParam/misspell は親時点から閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 273 — コンピューターサイエンスの観点から改善点を洗い出す(第18ラウンド): 運用シグナル配送不変条件——プールの運用メッセージが消失する経路 + config 検証が wire パラメータに及ばない2面、計4箇所)
 
 第18ラウンドの Socratic 問いは「**プールからの運用指示・構成パラメータは、到達すべき先に届いているか?**」——シグナルが存在するのに受信側がいない経路と、検証器が存在するのに通さないパラメータは、共に「情報が失われる地点」である。実証4箇所:
