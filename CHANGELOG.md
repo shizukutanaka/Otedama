@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documented (session 262 — SLO + 監査)
+
+**`docs/DEPLOYMENT.md` に Service-level objectives 表を追加**
+(RESEARCH_IMPROVEMENTS Cat 9 #10). プロセスの「稼働」ではなく
+「生産的稼働」を主目的に据えた SLO 一覧 —— productive uptime
+(`otedama_productive_seconds_total / otedama_uptime_seconds`
+≥99.5%/30日)、プール接続率 ≥99%、シェア採用率 ≥99.5%、
+stale 率 <0.5%、submit レイテンシ p99 <500ms、
+pending/unaccounted ベースライン —— 各行に行動閾値を併記
+（既存の D-Central バンド <0.5% excellent … >3% act-now に整合）。
+
+**監査済み**: Cat 10 #9（定数時間比較監査）はクリーンと確認
+—— リポジトリ内にシークレット/MAC の自前比較が存在せず、
+シード復号・AEAD 検証は `crypto/` 内部の定数時間実装に依存。
+`crypto/subtle` 呼び出しがゼロなのは包む対象がないため。
+真の secp256k1 NX フロー着工時に MAC 比較が導入されるので再監査。
+上流差分: SRI v1.11.1 が引き続き最新、ESP-Miner v2.15.2rc0 残差分は
+ハードウェア固有で非該当、Qiita/Zenn 新規情報なし。
+
 ### Fixed (session 261 — カウンタ再整合: shares_pending ドレイン)
 
 **`otedama_shares_pending` がセッション切断後に永久に残る不具合を修正**

@@ -368,6 +368,28 @@ Minimal alert set:
     summary: "Share rejection rate above 5% on {{ $labels.instance }}"
 ```
 
+### Service-level objectives
+
+Targets to evaluate the metrics against — a miner that is "up" but not
+earning is a failed miner, so the primary objective is productive uptime,
+not process uptime.
+
+| Objective | Signal | Target | Act when |
+|---|---|---|---|
+| Productive uptime | `otedama_productive_seconds_total / otedama_uptime_seconds` | ≥ 99.5 % over 30 d | < 99 % — check stall causes (curtailment, pool outage) |
+| Pool connectivity | `otedama_pool_connection_state == 2` | ≥ 99 % of scrapes | any sustained 0 — failover path may be broken |
+| Share acceptance | `otedama_share_acceptance_rate` | ≥ 99.5 % | < 97 % (D-Central act-now threshold is 97 %) |
+| Stale share rate | `otedama_stale_rate` | < 0.5 % | ≥ 3 % — switch to a closer pool endpoint |
+| Submit latency | `otedama_submit_latency_milliseconds{quantile="0.99"}` | p99 < 500 ms | p99 > 2 s for 15 m — latency is what drives stale |
+| Pending verdicts | `otedama_shares_pending` | flat near baseline | growing trend — pool is not answering submits |
+| Unaccounted shares | `otedama_shares_unaccounted` | 0 in steady state | > 0 sustained — shares found but never reaching the pool |
+
+The acceptance/stale thresholds mirror the D-Central operator bands the
+gauges were designed around (<0.5 % excellent, <1 % good, <3 %
+acceptable, >3 % act-now). The latency target is set well inside the
+point where RTT inflates stale rate — a p99 over ~2 s means a
+meaningful share of submissions arrive stale on a busy pool.
+
 ---
 
 ## Upgrading

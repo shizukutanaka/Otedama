@@ -392,8 +392,12 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
-    metrics actionable.
+10. ✅ **SLO documentation** (target uptime, p99 submit latency) —
+    **Done (session 262):** `docs/DEPLOYMENT.md` gained a
+    "Service-level objectives" table (productive uptime ≥99.5 %/30 d,
+    pool connectivity ≥99 %, acceptance ≥99.5 %, stale <0.5 %,
+    p99 submit latency <500 ms, pending/unaccounted baselines) with
+    act-now thresholds tied to the D-Central operator bands.
 
 ---
 
@@ -439,8 +443,15 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
+9. ✅ **Constant-time comparison audit** for secret/MAC comparisons in the
+   handshake and seed paths — **audited (session 262), nothing to fix:**
+   no in-repo secret comparisons exist. Seed unlock flows rely on
+   AES-GCM `Open` whose tag verification is constant-time inside
+   `crypto/`; the Noise handshake compares no MAC/tag of its own
+   (AEAD verify is likewise stdlib). `crypto/subtle` has zero call
+   sites because there is nothing to wrap — re-audit when the
+   secp256k1 NX flow lands (item 1), which introduces real MAC
+   comparisons.
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
@@ -1227,6 +1238,29 @@ its own axioms?" Four violations surfaced, all on the V2 path.
   round.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
+
+## September 2026 research pass — session 262 increment (observability docs + audit)
+
+### Implemented
+
+1. ✅ **SLO documentation (Cat 9 #10)** — `docs/DEPLOYMENT.md` "Service-level
+   objectives": productive uptime (productive_seconds/uptime_seconds ≥99.5 %/30 d),
+   pool connectivity, share acceptance ≥99.5 %, stale <0.5 %, p99 submit
+   latency <500 ms, pending/unaccounted baselines — each with act-now
+   thresholds tied to the existing D-Central bands.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **Cat 10 #9 constant-time comparison audit** — clean: no in-repo
+  secret/MAC comparisons exist (seed unlock and AEAD verifies are
+  stdlib-internal and already constant-time; `crypto/subtle` has no call
+  sites because nothing needs wrapping). Re-audit when the real secp256k1
+  NX flow lands.
+- ❌ **Upstream deltas** — SRI v1.11.1 remains latest; ESP-Miner
+  v2.15.2rc0 swept in session 261 (hardware-specific remainder N/A).
+- ❌ **Qiita/Zenn sweep** — no new stratum-v2 material.
+
+---
 
 ## September 2026 research pass — session 261 increment (counter-reconciliation fix)
 
