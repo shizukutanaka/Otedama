@@ -15,9 +15,11 @@ OSS-Fuzz inclusion. The actual integration requires a PR to
 
 1. Otedama has a public release tag (v3.0.0 or later non-alpha).
 2. The maintainer has 30 minutes to file the upstream PR.
-3. At least three `Fuzz*` functions exist in the codebase (we have
-   `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame`; one more is needed
-   — candidates: `FuzzBech32Decode`, `FuzzMnemonicParse`).
+3. At least three `Fuzz*` functions exist in the codebase — **met**:
+   `FuzzDecodeHeader`, `FuzzDecoder_ReadFrame`, `FuzzSession_ReadLine`,
+   `FuzzParseNotification`, `FuzzEncryptedConn_Read`, and
+   `FuzzEncryptedConn_Read_LengthPrefixArithmetic` (six targets across
+   `internal/stratum` and `internal/poolproto/stratumv1`).
 
 ## Files prepared
 
@@ -29,9 +31,9 @@ in the OSS-Fuzz repository (not in Otedama's own repo):
 ```yaml
 homepage: "https://github.com/shizukutanaka/Otedama"
 language: go
-primary_contact: "monu@example.com"
+primary_contact: "irosai.ume@gmail.com"
 auto_ccs:
-  - "monu@example.com"
+  - "irosai.ume@gmail.com"
 sanitizers:
   - address
 fuzzing_engines:
@@ -72,7 +74,10 @@ compile_native_go_fuzzer() {
 
 compile_native_go_fuzzer ./internal/stratum FuzzDecodeHeader fuzz_decode_header
 compile_native_go_fuzzer ./internal/stratum FuzzDecoder_ReadFrame fuzz_decoder_read_frame
-# Add more as fuzz tests are written.
+compile_native_go_fuzzer ./internal/stratum FuzzEncryptedConn_Read fuzz_encrypted_conn_read
+compile_native_go_fuzzer ./internal/stratum FuzzEncryptedConn_Read_LengthPrefixArithmetic fuzz_encrypted_conn_read_lenprefix
+compile_native_go_fuzzer ./internal/poolproto/stratumv1 FuzzSession_ReadLine fuzz_session_read_line
+compile_native_go_fuzzer ./internal/poolproto/stratumv1 FuzzParseNotification fuzz_parse_notification
 ```
 
 ## What OSS-Fuzz provides
