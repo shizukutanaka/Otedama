@@ -1251,6 +1251,20 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 289 increment (OMC.Success wire fix)
+
+- **実装（spec 準拠）: `OpenMiningChannelSuccess` 末尾フィールドを
+  `group_channel_id U32` に修正** —— spec（sv2-spec 05-Mining-Protocol
+  §5.3.3, SRI `mining_sv2` crate と突合）の最終フィールドは
+  `group_channel_id U32`（全チャネルが属するグループ）だが、実装は
+  `ExtraNonce2Size U16` と誤解釈していた。U16→U32 でデコード・
+  エンコードを spec 準拠に変更。単一チャネル運用のため値は記録のみ
+  （group_channel_id の用途は JD/グループ対応時に参照）。
+  Extranonce（spec: extranonce_prefix B0_32）は既存どおり lenient
+  decode/strict encode を維持。
+- **検証:** encode↔decode round-trip / truncation テスト更新、
+  dialer_test/run_test のフィールド参照を一括改名。
+
 ## September 2026 research pass — session 288 increment (V1 coinbase reconstruction)
 
 - **実装（正確性・根本欠陥の解消）: V1 coinbase/merkle 再構成** ——

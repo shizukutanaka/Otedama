@@ -274,9 +274,9 @@ func (p *poolSide) doHandshake(channelID uint32) {
 	// Send OpenMiningChannelSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgOpenMiningChannelSuccess, false,
 		stratum.OpenMiningChannelSuccess{
-			ReqID:           1,
-			ChannelID:       channelID,
-			ExtraNonce2Size: 4,
+			ReqID:          1,
+			ChannelID:      channelID,
+			GroupChannelID: 4,
 		})
 }
 
@@ -770,7 +770,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringSetup(t *testing.T) {
 		pool.dec.ReadFrame() //nolint:errcheck
 		// Send OpenMiningChannelSuccess instead of SetupConnectionSuccess/Error.
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
-			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4})
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, GroupChannelID: 4})
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
@@ -1298,7 +1298,7 @@ func TestNegotiate_InitialShareTarget_FromOpenMiningChannelSuccess(t *testing.T)
 			return
 		}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
-			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 9, Target: tgt, ExtraNonce2Size: 4})
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 9, Target: tgt, GroupChannelID: 4})
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
@@ -1369,7 +1369,7 @@ func TestSession_Jobs_StampedWithChannelAndTarget(t *testing.T) {
 			return
 		}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
-			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 5, Target: tgt, ExtraNonce2Size: 4})
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 5, Target: tgt, GroupChannelID: 4})
 		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true,
 			stratum.NewMiningJob{ChannelID: 5, JobID: 42, Version: 0x20000000})
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true,

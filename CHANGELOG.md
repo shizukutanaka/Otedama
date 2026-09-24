@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 289 — OpenMiningChannelSuccess wire 準拠)
+
+- **末尾フィールドを spec 準拠の `group_channel_id U32` に修正** ——
+  `ExtraNonce2Size U16` と誤解釈していた末尾を正しく U32 でデコード・
+  エンコード。単一チャネル運用のため値は記録のみ（JD/グループ対応時に
+  参照予定）。
+
 ### Fixed (session 288 — V1 coinbase/merkle 再構成)
 
 - **V1 シェアが構造的に不正だった根本欠陥を解消** —— `mining.notify`

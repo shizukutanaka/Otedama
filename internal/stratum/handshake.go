@@ -212,13 +212,18 @@ type OpenMiningChannelSuccess struct {
 	// non-conformant pool sending a 33..255-byte extranonce is still
 	// bounded and allocation-safe, so we accept and use it rather than
 	// dropping an otherwise-working connection over a spec-length nit.
-	Extranonce      []byte
-	ExtraNonce2Size uint16
+	Extranonce []byte
+	// GroupChannelID (U32) names the channel group the pool put this
+	// channel in — every channel belongs to one, per the SV2 spec
+	// (OpenStandardMiningChannel.Success tail field). Kept so channel
+	// bookkeeping can use it; Otedama holds a single channel per
+	// connection, so today it is recorded but not consulted.
+	GroupChannelID uint32
 }
 
 // Encode serialises OpenMiningChannelSuccess.
 func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
-	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+2)
+	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+4)
 	b = appendU32LE(b, m.ReqID)
 	b = appendU32LE(b, m.ChannelID)
 	b = append(b, m.Target[:]...)
@@ -226,7 +231,7 @@ func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return appendU16LE(b, m.ExtraNonce2Size), nil
+	return appendU32LE(b, m.GroupChannelID), nil
 }
 
 // DecodeOpenMiningChannelSuccess parses OpenMiningChannelSuccess.
@@ -249,7 +254,7 @@ func DecodeOpenMiningChannelSuccess(payload []byte) (OpenMiningChannelSuccess, e
 	if m.Extranonce, err = getB0_255(r); err != nil {
 		return m, err
 	}
-	if m.ExtraNonce2Size, err = getU16LE(r); err != nil {
+	if m.GroupChannelID, err = getU32LE(r); err != nil {
 		return m, err
 	}
 	return m, nil
