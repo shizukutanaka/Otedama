@@ -10,8 +10,12 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` is checked into CI. A PR
-   that regresses performance by >5% fails automatically.
+2. **Regression-resistant.** `go test -bench` runs in CI (`test.yml`'s
+   benchmark job) and uploads results for manual review — but no
+   automatic regression gate exists yet: the >5% rule below is review
+   policy, not CI-enforced (the PR "Performance Impact" check in
+   `code-review.yml` is a Node.js stub that never measures Go
+   performance; see docs/KNOWN_LIMITATIONS.md §13).
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
@@ -150,7 +154,9 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and posts a comparison to PRs.
+CI runs benchmarks on every push (test.yml) and uploads them as
+artifacts; no automatic PR comparison exists yet — reviewers compare
+by hand.
 
 ## Hardware used for published numbers
 
