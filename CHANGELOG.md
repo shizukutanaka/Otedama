@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 327 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 10 #9 解消 — 秘密情報比較の恒常時間監査)
+
+- **BIP-39 チェックサム検証の early-exit を解消（Cat 10 #9 解消）.**
+  `mnemonicToEntropy` のチェックサム比較は最初に不一致となったビットで
+  即 `return` していたため、エラー応答時間が最初の不一致位置を漏らし得た。
+  全チェックサムビットにわたり `diff` を累積し最後に一度だけ失敗する形へ
+  変更 — 転記エラー UX は不変のまま、位置のタイミングオラクルを除去。
+- **監査結果の記録.** ハンドシェイク/シード経路の全比較を棚卸し:
+  ウォレット復号は AES-256-GCM（stdlib 恒常時間タグ検証）、初回起動の
+  リカバリフレーズ確認は `crypto/subtle`（session 313）、Noise トランスポートは
+  ChaCha20-Poly1305 AEAD で自前 MAC 比較なし。base58check/bech32/
+  ワードリスト整合ハッシュ/8hex フィンガープリントは公開データ上の
+  整合性チェックであり秘密を漏らさないため early-exit を維持。
+
 ### Changed (session 307 — V1 dispatch 分割 + 未知リクエスト応答)
 
 ### Changed (session 269 — RESEARCH_IMPROVEMENTS 検証・是正パス: GPU spot 一次検証 + LN 設計制約 + アドバイザリ追跡)

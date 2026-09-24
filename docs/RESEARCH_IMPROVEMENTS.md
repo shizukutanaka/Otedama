@@ -549,8 +549,24 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
+9. ✅ **Constant-time comparison audit — RESOLVED (session 327).**
+   Audited every comparison over secret or secret-adjacent data in the
+   handshake and seed paths:
+   - `internal/lightning/seed.go` mnemonic→entropy checksum loop did
+     compare per-bit with an early `return` on the first mismatch —
+     now accumulates `diff` across all checksum bits and fails once
+     at the end, so error timing cannot reveal the first-differing bit.
+   - Wallet passphrase/seed decryption uses AES-256-GCM open (stdlib
+     constant-time tag verification); the recovery-phrase backup check
+     already compares via `crypto/subtle` (session 313).
+   - The base58check/bech32 checksums, English-wordlist integrity hash,
+     and the 8-hex HMAC fingerprint are integrity checks over
+     public-by-design data (addresses, the wordlist, a UI identifier),
+     not MACs over secrets — early-exit `bytes.Equal`/`==` there leaks
+     nothing secret-bearing and stays.
+   - Noise transport relies on ChaCha20-Poly1305 AEAD (stdlib
+     constant-time tag check); no hand-rolled MAC compare exists in
+     `internal/stratum/noise*`.
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
