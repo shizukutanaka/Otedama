@@ -1,0 +1,24 @@
+# System-level unit shipped inside the deb/rpm packages (fpm maps it to
+# /etc/systemd/system/otedama.service). The `service` subcommand instead
+# writes per-user units; this one runs system-wide with its own user.
+[Unit]
+Description=Otedama — non-custodial hardware arbitration
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=otedama
+ExecStart=/usr/bin/otedama run --config /etc/otedama/config.yaml
+Restart=on-failure
+RestartSec=10s
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/otedama /etc/otedama
+
+[Install]
+WantedBy=multi-user.target

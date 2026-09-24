@@ -1,0 +1,6 @@
+# System-package default configuration — installed to /etc/otedama/config.yaml
+# by the deb/rpm packages. Values shown are the safe defaults; see
+# config.yaml.example for the fully commented field list.
+bitcoin_address: ""          # REQUIRED before first real run — see the example file
+log_level: info
+data_dir: /var/lib/otedama
