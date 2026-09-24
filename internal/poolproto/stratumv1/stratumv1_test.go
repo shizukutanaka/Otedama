@@ -561,6 +561,9 @@ type fakePool struct {
 	// client sent for later assertion.
 	suggestUnsupported bool
 	suggestParams      []any
+	// subscribeParams records the params the client sent with
+	// mining.subscribe for later assertion (xnsub extension flag).
+	subscribeParams []any
 	// deferredNotify sends notify after authorize, not on connect —
 	// net.Pipe is synchronous, so notify written before the client's
 	// session starts reading would deadlock a full-handshake dial.
@@ -612,6 +615,7 @@ func (p *fakePool) run() {
 			_, _ = p.conn.Write([]byte(resp))
 		}
 		if req.Method == "mining.subscribe" {
+			_ = json.Unmarshal(req.Params, &p.subscribeParams)
 			id, _ := json.Marshal(req.ID)
 			resp := `{"id":` + string(id) + `,"result":[[["mining.set_difficulty","a"],["mining.notify","b"]],"01020304",4],"error":null}` + "\n"
 			_, _ = p.conn.Write([]byte(resp))
@@ -632,6 +636,42 @@ func (p *fakePool) run() {
 				p.writeNotify()
 			}
 		}
+	}
+}
+
+func TestNegotiate_SubscribeAdvertisesXnsub(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	d := &Dialer{}
+	sess, err := d.Negotiate(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// Subscribe params must be [agent, null, "xnsub"]: the xnsub extension
+	// flag is how NiceHash-family pools learn the client accepts
+	// mining.set_extranonce pushes (in addition to the separate
+	// extranonce.subscribe call in step 3).
+	if len(pool.subscribeParams) != 3 {
+		t.Fatalf("subscribe params = %v, want 3 elements", pool.subscribeParams)
+	}
+	if pool.subscribeParams[0] != clientAgent {
+		t.Errorf("params[0] = %v, want %q", pool.subscribeParams[0], clientAgent)
+	}
+	if pool.subscribeParams[1] != nil {
+		t.Errorf("params[1] = %v, want null", pool.subscribeParams[1])
+	}
+	if pool.subscribeParams[2] != "xnsub" {
+		t.Errorf("params[2] = %v, want %q", pool.subscribeParams[2], "xnsub")
 	}
 }
 

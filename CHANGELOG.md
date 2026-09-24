@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 336 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: `xnsub` 拡張フラグ広告)
+
+- **`mining.subscribe` に `"xnsub"` 拡張フラグを追加**（params `[agent, null, "xnsub"]`）。
+  NiceHash 系プールはクライアントが subscribe params に同フラグを広告した時のみ
+  `mining.set_extranonce` プッシュを有効化 — 従来の `extranonce.subscribe`
+  メソッド呼出では同プール群で有効にならなかった。拡張を無視するプールでは no-op。
+- **RESEARCH 正直化** — Cat 4 #8（単一プール集中、session 325 文書化+312/緩和実装済み）→ ✅、
+  Cat 1/2 #1（Noise-NX 証明書検証）→ ADR-011 スコープとして 🔵、item 21 の stale
+  「next session へ繰延」注記（`otedama_build_info` 実装済み）を訂正。
+
 ### Fixed (session 335 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 `mining.suggest_difficulty` pool→client 受理)
 
 - **pool→client `mining.suggest_difficulty` を `set_difficulty` と同経路で処理.**

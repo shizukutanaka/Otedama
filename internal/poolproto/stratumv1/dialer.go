@@ -132,8 +132,11 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	sess.start(ctx)
 
 	// Step 1: mining.subscribe — negotiate extranonce1 / extranonce2_size.
+	// params[2] advertises the "xnsub" extension flag (NiceHash family):
+	// pools honouring it enable mining.set_extranonce pushes without the
+	// separate extranonce.subscribe call, which we also send in step 3.
 	id := sess.nextID.Add(1)
-	resp, err := sess.call(ctx, id, "mining.subscribe", []any{clientAgent})
+	resp, err := sess.call(ctx, id, "mining.subscribe", []any{clientAgent, nil, "xnsub"})
 	if err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("stratumv1: subscribe: %w", err)

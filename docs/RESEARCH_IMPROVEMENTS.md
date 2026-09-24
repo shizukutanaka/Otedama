@@ -649,7 +649,7 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 1/2 — mining client & Stratum correctness (from SRI v1.5.0 + ESP-Miner)
 
-1. 🟡 **Validate the SV2 server certificate, not just the Noise DH.** The
+1. 🔵 **Validate the SV2 server certificate, not just the Noise DH.** The
    SV2 security spec delivers a signed certificate (`valid_from`,
    `not_valid_after`, `server_public_key`, BIP340 Schnorr sig over the
    fields); the initiator MUST verify the signature against a known
@@ -768,13 +768,16 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
-   Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
-   selfish-mining strategy whose orphan pattern is statistically
-   indistinguishable from honest mining, profitable from 38.2% hashrate.
-   Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
-   defaults as a *security* (not merely liveness) property; strengthens
-   Cat 4 #7.
+8. ✅ **Single-pool concentration enables *undetectable* attacks —
+   RESOLVED.** Bahrani & Weinberg, "Undetectable Selfish Mining"
+   (arXiv:2309.06847), prove a selfish-mining strategy whose orphan pattern
+   is statistically indistinguishable from honest mining, profitable from
+   38.2% hashrate. THREAT_MODEL cites the result and justifies the
+   multi-pool / endpoint-diversity defaults as a *security* (not merely
+   liveness) property (session 325); the concrete mitigations shipped in
+   sessions 312 (`otedama_pool_network_share` gauge + ≥30% warn via
+   mempool.space distribution) and the doctor endpoint-diversity check —
+   all the item asked for is in place.
 9. ✅ **Orphan-aware reconciliation has a fairness rationale — RESOLVED
    (session 262).** The implementable half landed in session 261:
    `unaccountedWatchdog` warns when pool-acknowledged shares diverge from
@@ -905,8 +908,9 @@ endpoint against current vendor documentation. Tags as before
     (`go_goroutines`, `go_info{version}`, `go_memstats_*`, `go_gc_*`) using only
     stdlib `runtime` — no new dependency (ADR-003/005 preserved). Names match
     `prometheus/client_golang` so existing Grafana dashboards work unmodified.
-    `otedama_build_info` (commit/goversion labels) deferred to next session.
-    (session 107)
+    `otedama_build_info` (constant-1 gauge, version/commit/goversion
+    labels) has since landed in `engineMetrics` — the `_info` convention is
+    complete. (session 107; build_info recorded present at session 336)
 22. 🔵 **SLSA Build L3 provenance + Sigstore keyless signing for releases.**
     `actions/attest-build-provenance` + cosign keyless (Fulcio OIDC, Rekor)
     is the current bar for a non-custodial money-handling binary users must
@@ -1446,6 +1450,16 @@ a vardiff notification where the suggestion becomes the share target —
 still fell through to the -32601 default and was dropped. `dispatch` now
 routes it through the same `parseDifficulty` → `difficulty.Store` path
 as `set_difficulty`, matching cgminer's convention.
+
+**Session-336 follow-up (`xnsub` extension flag in `mining.subscribe`):**
+mid-session extranonce rotation was already wired — `set_extranonce` is
+handled and `extranonce.subscribe` is sent as handshake step 3 — but
+NiceHash-family pools only enable `mining.set_extranonce` pushes when the
+client advertises the `"xnsub"` extension flag in `mining.subscribe`
+params[2] (the ESP-Miner convention); the method call alone does not
+enable it on those pools. Subscribe params are now `[agent, null,
+"xnsub"]` — a no-op on pools that ignore extensions, enabling the push
+path on pools that gate it.
 
 ---
 
