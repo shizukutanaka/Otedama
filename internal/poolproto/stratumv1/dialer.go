@@ -84,6 +84,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	if err != nil {
 		return nil, fmt.Errorf("stratumv1: dial %s: %w", address, err)
 	}
+	setNoDelay(conn)
 	return &connection{
 		raw:        conn,
 		remoteAddr: address,

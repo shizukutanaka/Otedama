@@ -1187,6 +1187,38 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - "Where can a u16-length prefix lie?" → chunking + fuzz coverage
   already landed (sessions 257–258); no new surface added this round.
 
+## September 2026 research pass — session 260 increment (upstream parity)
+
+### Implemented
+
+1. ✅ **TCP_NODELAY on every pool dial** (ESP-Miner #1722 parity;
+   precedent: bitcoin/bitcoin PR #30675 and the suprnova latency
+   analysis showing Nagle + delayed-ACK ~40 ms stalls on small
+   request/response exchanges). All four dial paths now disable Nagle:
+   `stratumv1` plaintext + `dialTLS`, `stratumv2` plaintext, and the
+   shared `stratum.DialTLS` used by `stratum+v2tls://`. Test
+   getsockopt(TCP_NODELAY) assertions on all three packages' real-TCP
+   paths (net.Pipe conns are skipped by design).
+
+### Verified already-done / non-applicable this session
+
+- ✅ **Pool-state metrics (Cat 9 #5/#7)** — `otedama_pool_connection_state`
+  (0 disconnected / 1 connecting / 2 connected), `otedama_pool_connect_attempts_total`,
+  and `otedama_pool_connect_failures_total` all exist and are wired in the
+  session loop. Cat 9 #5/#7 confirmed complete.
+- ❌ **ESP-Miner #1799 (extranonce2 minimum 6→2 bytes)** — N/A: Otedama does
+  not roll extranonce2 at all (job composition stays pool-side for the
+  engine's share-echo path), so the minimum-size knob does not exist here.
+- ❌ **ESP-Miner #1796 (SV2 authority-key authentication option)** — N/A:
+  depends on the secp256k1 decision (highest-leverage #1); the Noise stub
+  cannot authenticate regardless of socket options.
+- ❌ **ESP-Miner #1779 + SRI v1.11.1 (fractional difficulty / rounding)** —
+  N/A: Otedama transports raw U256 `max_target` verbatim since session 259;
+  there is no difficulty-to-target float conversion on the write path to
+  round.
+- ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
+  since session 259.
+
 ---
 
 ## Highest-leverage next actions (cross-category synthesis)
@@ -1204,9 +1236,11 @@ Ranked by impact on the path to a real v3.1.0:
 4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
    placeholder; larger effort, external API.
 5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable. The V2 verdict
-   correlation just made V2 submit latency real — the p50/p95/p99 series
-   is now honest on both protocols.
+   makes the new failover and stale-share story observable. V2 verdict
+   correlation (259) made submit latency honest on both protocols;
+   pool-state gauges (Cat 9 #5/#7) verified already present (260); the
+   Nagle fix (260) cut submit RTT floor. Remaining: reconnect-aware
+   counter semantics on the reject histogram.
 
 Items 3 and 5 are the cheapest real-code wins with no dependency or
 external-API risk, and are the natural next implementation targets after the
@@ -1220,6 +1254,12 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-260 additions (September 2026): bitaxeorg/ESP-Miner release
+v2.15.0 delta (#1722 TCP_NODELAY, #1799, #1796, #1779); bitcoin/bitcoin
+PR #30675 (Nagle/delayed-ACK ~40 ms request/response stalls); suprnova
+stratum latency analysis; stratum-mining SRI v1.11.1 notes; Qiita/Zenn
+stratum/ASIC sweep.*
 
 *Session-51 additions (June 2026): arXiv (2309.06847 undetectable selfish
 mining; 2211.07270 block-withholding resilience; 2601.02496 APoW; 2601.14612

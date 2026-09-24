@@ -80,7 +80,17 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 		} else {
 			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
 				var dialer net.Dialer
-				return dialer.DialContext(ctx, "tcp", address)
+				conn, err := dialer.DialContext(ctx, "tcp", address)
+				if err != nil {
+					return nil, err
+				}
+				// Nagle off: submits are latency-sensitive request/response
+				// traffic — batching can hold a share tens of ms behind a
+				// delayed ACK (ESP-Miner #1722).
+				if tc, ok := conn.(*net.TCPConn); ok {
+					_ = tc.SetNoDelay(true)
+				}
+				return conn, nil
 			}
 		}
 	}

@@ -65,5 +65,24 @@ func DialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 		cfg = defaultTLSConfig()
 	}
 	dialer := &tls.Dialer{Config: cfg}
-	return dialer.DialContext(ctx, "tcp", address)
+	conn, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	setNoDelay(conn)
+	return conn, nil
+}
+
+// setNoDelay disables Nagle's algorithm when conn wraps a TCP socket
+// (directly or under TLS). Stratum submits are latency-sensitive
+// request/response traffic — Nagle batching plus delayed ACKs can hold a
+// share submission for tens of milliseconds (ESP-Miner #1722,
+// bitcoin/bitcoin#30675). Non-TCP conns (tests' net.Pipe) are skipped.
+func setNoDelay(c net.Conn) {
+	if tc, ok := c.(*tls.Conn); ok {
+		c = tc.NetConn()
+	}
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.SetNoDelay(true)
+	}
 }

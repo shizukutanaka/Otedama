@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"net"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1396,5 +1397,50 @@ func TestSession_Jobs_StampedWithChannelAndTarget(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("no job emitted after SetNewPrevHash")
+	}
+}
+
+// TestDialer_Dial_SetsTCPNoDelay pins ESP-Miner #1722 parity: the
+// plaintext dial must set TCP_NODELAY so a share submission is not held
+// behind Nagle + delayed ACKs.
+func TestDialer_Dial_SetsTCPNoDelay(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot bind listener")
+	}
+	defer ln.Close()
+	go func() {
+		c, _ := ln.Accept()
+		if c != nil {
+			c.Close()
+		}
+	}()
+
+	d := &Dialer{} // no dialFn → real TCP path
+	conn, err := d.Dial(context.Background(), "stratum+v2://"+ln.Addr().String(), poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+
+	raw, ok := conn.(*connection).raw.(*net.TCPConn)
+	if !ok {
+		t.Fatalf("raw conn is %T, want *net.TCPConn", conn.(*connection).raw)
+	}
+	sc, err := raw.SyscallConn()
+	if err != nil {
+		t.Fatalf("SyscallConn: %v", err)
+	}
+	val, gerr := 0, error(nil)
+	if err := sc.Control(func(fd uintptr) {
+		val, gerr = syscall.GetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_NODELAY)
+	}); err != nil {
+		t.Fatalf("Control: %v", err)
+	}
+	if gerr != nil {
+		t.Fatalf("getsockopt: %v", gerr)
+	}
+	if val == 0 {
+		t.Error("TCP_NODELAY not set on the pool socket (ESP-Miner #1722)")
 	}
 }

@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 260 — upstream parity: TCP_NODELAY)
+
+**プールソケット全経路で Nagle を無効化**（ESP-Miner #1722 parity；
+先行実証: bitcoin/bitcoin PR #30675 および suprnova レイテンシ解析
+—— Nagle バッチング＋遅延ACK は小さな要求/応答交換を ~40ms 滞留
+させる）。stratum の mining.submit/SubmitSharesStandard はまさに
+そのパターン。`stratumv1` 平文・`dialTLS`、`stratumv2` 平文、
+`stratum+v2tls://` 共有経路の `stratum.DialTLS` の4経路すべてで
+`TCP_NODELAY` を設定（テストの net.Pipe 等 TCP 以外はスキップ）。
+提出 RTT の下限が下がり、stale 判定が真に近くなる。
+
+**検証された既達/非該当**: Cat 9 #5/#7（`otedama_pool_connection_state`・
+connect attempts/failures）は既存と確認。ESP-Miner #1799
+（extranonce2 最小 6→2B）は Otedama が extranonce2 を回転させない
+ため非該当。#1796（SV2 権威鍵認証）は secp256k1 依存決定
+（最高レバレッジ #1）が前提。#1779 / SRI v1.11.1（小数難易度の
+丸め）は session 259 で生 U256 ターゲットをそのまま運ぶ設計になった
+ため丸める経路自体が存在しない。
+
+### Documented (session 260)
+
+- **`docs/RESEARCH_IMPROVEMENTS.md`**: session-260 差分 — ESP-Miner
+  v2.15.0 パリティ（#1722 実装、#1799/#1796/#1779 非該当の理由）、
+  Cat 9 #5/#7 既達確認、Qiita/Zenn スイープ、最高レバレッジ #5 の
+  進捗更新。
+
 ### Changed (session 259 — CS第一原理監査: engine→poolproto V2 一本化)
 
 **エンジン V2 パスの重複実装を撤去し poolproto ダイヤラへ一本化**

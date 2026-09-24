@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"syscall"
 	"testing"
 	"time"
 
@@ -192,5 +193,57 @@ func TestDialer_UseTLSProducesEncryptedConnection(t *testing.T) {
 	}
 	if _, ok := conn.raw.(*tls.Conn); !ok {
 		t.Errorf("underlying transport is %T, want *tls.Conn (TLS scheme must not downgrade to plaintext)", conn.raw)
+	}
+}
+
+// tcpNoDelay reports whether TCP_NODELAY is set on the connection's
+// underlying TCP socket (unwrapping *tls.Conn when present).
+func tcpNoDelay(t *testing.T, c net.Conn) bool {
+	t.Helper()
+	if tc, ok := c.(*tls.Conn); ok {
+		c = tc.NetConn()
+	}
+	tc, ok := c.(*net.TCPConn)
+	if !ok {
+		t.Skipf("not a TCP connection: %T", c)
+	}
+	sc, err := tc.SyscallConn()
+	if err != nil {
+		t.Fatalf("SyscallConn: %v", err)
+	}
+	val, gerr := 0, error(nil)
+	if err := sc.Control(func(fd uintptr) {
+		val, gerr = syscall.GetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_NODELAY)
+	}); err != nil {
+		t.Fatalf("Control: %v", err)
+	}
+	if gerr != nil {
+		t.Fatalf("getsockopt: %v", gerr)
+	}
+	return val != 0
+}
+
+// TestDialTLS_SetsTCPNoDelay pins ESP-Miner #1722 parity: the TLS dial
+// must set TCP_NODELAY on the underlying socket so mining.submit is not
+// held behind Nagle + delayed ACKs.
+func TestDialTLS_SetsTCPNoDelay(t *testing.T) {
+	ln, pool, _ := newSelfSignedTLSListener(t)
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, err := dialTLS(ctx, ln.Addr().String(), &tls.Config{
+		RootCAs:    pool,
+		ServerName: "127.0.0.1",
+		MinVersion: tls.VersionTLS12,
+	})
+	if err != nil {
+		t.Fatalf("dialTLS: %v", err)
+	}
+	defer conn.Close()
+
+	if !tcpNoDelay(t, conn) {
+		t.Error("TCP_NODELAY not set on the TLS pool socket")
 	}
 }
