@@ -893,6 +893,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.SetTarget != nil {
 				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+				if shareTarget == (miner.Hash{}) {
+					// A zero max_target can never be satisfied —
+					// updateWork falls back to the block target, so
+					// say so rather than silently grinding at
+					// network difficulty forever.
+					opts.log("warn", "engine: pool assigned zero max_target (unsatisfiable); using block target until next SetTarget")
+				}
 				if active != nil && havePrev {
 					// Re-issue the current job so workers compare against
 					// the new share target immediately.

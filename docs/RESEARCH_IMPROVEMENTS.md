@@ -1069,6 +1069,48 @@ notes re-checked for deltas (both already covered by items 6–9).
 
 ---
 
+## September 2026 research pass — session 258 increment (backlog sweep)
+
+SRI releases re-checked (v1.11.1, 2026-07-22 remains latest — no new
+deltas). Session-52 backlog items resolved.
+
+### Implemented this session
+
+1. ✅ **Fuzz the Noise transport read path (session-52 #1).** The SRI
+   fuzzing grant found an arithmetic overflow in `noise_sv2`; the
+   directly analogous Otedama surface now has `FuzzEncryptedConn_Read`
+   in `frame_fuzz_test.go` — arbitrary bytes into the u16-prefix +
+   AEAD-reject loop, asserting no panic, no unbounded allocation, and
+   no non-advancing read loop. (The write-side counterpart is covered
+   deterministically by the session-257 chunking boundary tests.)
+   (opensats.org/projects/stratumv2)
+2. ✅ **JDC adoption figure updated (session-52 #2).** ADR-009 now
+   carries the ~75%-of-hashrate SV2-commitment figure alongside the
+   original ~70% (coindesk.com 2026-05-11).
+3. ✅ **Impossible-target operator warning.** A `SetTarget` carrying
+   `max_target = 0` can never yield a share; `updateWork` already fell
+   back to the block target silently — the session loop now logs a
+   warn so the fallback is diagnosable rather than invisible.
+
+### Verified already-done / non-applicable this session
+
+4. ✅ **FIPS 140-3 mode + PQ key-exchange documentation (session-52 #4)
+   — already done.** `GODEBUG_NOTES.md §fips140` documents that Otedama
+   is not FIPS-compliant *by design* (Noise transport uses
+   ChaCha20-Poly1305, not FIPS-listed — enabling the knob would break
+   it) while wallet-at-rest AES-256-GCM is validated; `go.mod` already
+   carries `godebug tlsmlkem=1` for hybrid X25519MLKEM768 TLS key
+   exchange. Nothing left to implement; marked done.
+5. ✅ **Clamp channel target to `max_target` (Cat 2 #2 remainder) —
+   verified non-applicable by design.** The upstream clamp bounds the
+   share target to a client-declared `max_target` preference — Otedama
+   intentionally sends no such preference (handshake.go dead-field
+   note), so there is nothing to clamp *to*. Pool-sent targets are
+   applied outright by design; the degenerate case is covered by the
+   new zero-target warn + existing block-target fallback.
+
+---
+
 ## Highest-leverage next actions (cross-category synthesis)
 
 Ranked by impact on the path to a real v3.1.0:

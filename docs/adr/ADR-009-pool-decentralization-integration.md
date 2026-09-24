@@ -9,7 +9,7 @@
 
 ## Context
 
-On **May 7, 2026** — five days before this ADR was drafted — seven of the largest Bitcoin mining pools (**Foundry, AntPool, F2Pool, Spiderpool, Block Inc., MARA Foundation, DMND**) formally joined the **Stratum V2 Working Group**. This is the most significant Bitcoin mining-protocol event of the decade: roughly **70% of global hashrate** is now committed to a protocol that lets **individual miners construct their own block templates** rather than blindly hashing pool-imposed transactions.
+On **May 7, 2026** — five days before this ADR was drafted — seven of the largest Bitcoin mining pools (**Foundry, AntPool, F2Pool, Spiderpool, Block Inc., MARA Foundation, DMND**) formally joined the **Stratum V2 Working Group**. This is the most significant Bitcoin mining-protocol event of the decade: roughly **70% of global hashrate** is now committed to a protocol that lets **individual miners construct their own block templates** rather than blindly hashing pool-imposed transactions. Updated adoption figures put the commitment at roughly **75% of network hashrate** (coindesk.com, 2026-05-11).
 
 The implications:
 

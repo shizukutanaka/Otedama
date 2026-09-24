@@ -130,3 +130,61 @@ func FuzzDecoder_ReadFrame(f *testing.F) {
 		}
 	})
 }
+
+// fuzzReadOnlyRW adapts a *bytes.Reader to the io.ReadWriter that
+// NewEncryptedConn requires; writes are discarded (the fuzz only
+// exercises Read).
+type fuzzReadOnlyRW struct{ *bytes.Reader }
+
+func (fuzzReadOnlyRW) Write(p []byte) (int, error) { return len(p), nil }
+
+// FuzzEncryptedConn_Read drives the Noise transport read path with
+// arbitrary bytes. The u16 length prefix is inherently bounded (so no
+// huge allocation is possible), but the read loop must still never
+// panic on truncated prefixes, short ciphertexts, or AEAD rejections —
+// the arithmetic-overflow class the SRI grant found in noise_sv2.
+// A failed decrypt leaves the conn in a defined error state; each Read
+// returns an error rather than looping forever on partial input.
+func FuzzEncryptedConn_Read(f *testing.F) {
+	seeds := [][]byte{
+		// Empty input — immediate EOF on the length prefix.
+		{},
+		// Truncated prefix.
+		{0x05},
+		// Prefix claims 5 bytes of ciphertext, only 3 follow.
+		{0x05, 0x00, 0xAA, 0xBB, 0xCC},
+		// Maximum u16 claim with no ciphertext.
+		{0xFF, 0xFF},
+		// All zeros — a 0-length transport message (AEAD reject: tag only).
+		{0x00, 0x00},
+		// Random garbage with several plausible prefixes.
+		{0x10, 0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x02, 0x00, 0x42},
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("EncryptedConn.Read panicked on input %x: %v", data, r)
+			}
+		}()
+
+		var key [32]byte
+		conn := NewEncryptedConn(
+			fuzzReadOnlyRW{Reader: bytes.NewReader(data)},
+			&CipherState{key: key},
+			&CipherState{key: key},
+		)
+		buf := make([]byte, 64)
+		// Errors are expected (truncated or undecryptable input); only
+		// panics, hangs, or reads beyond the input would be bugs. Cap
+		// iterations so a hypothetical non-advancing loop shows up.
+		for i := 0; i < 100; i++ {
+			if _, err := conn.Read(buf); err != nil {
+				return
+			}
+		}
+	})
+}

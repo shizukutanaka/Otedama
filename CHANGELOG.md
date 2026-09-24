@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 258 — session-52 backlog sweep)
+
+**Noiseトランスポート読みパスのファズターゲット**
+(session-52 #1, SRI fuzzing grant lesson). SRI のファジング助成金は
+`noise_sv2` クレートの算術オーバーフローを発見した。直接類似の
+Otedama 側面に `FuzzEncryptedConn_Read` を追加（`frame_fuzz_test.go`）:
+任意バイト列を u16長プリフィクス+AEAD拒否ループに投入し、panic・
+無制限アロケーション・非進行リードループがないことを検証する
+（30秒で約490万exec、クラッシュゼロ）。書き込み側の対応面は
+session 257 のチャンキング境界テストが決定的にカバー済み。
+
+### Fixed (session 258)
+
+**プール割当の不可能ターゲットを警告.** `SetTarget` で
+`max_target = 0` が届くと、そのターゲットを満たすシェアは原理的に
+存在しない。`updateWork` は従来から黙ってブロックターゲットに
+フォールバックしていたが、セッションループが warn を出すように
+変更 — フォールバック動作が原因不明の「share が出ない」診断を
+可能にする。クランプ系の残件（Cat 2 #2）は、Otedama が意図的に
+`max_target` プリファレンスを送らない設計（handshake.go）のため
+クランプ先が存在せず、非該当として記録した。
+
+### Documented (session 258)
+
+- **`docs/adr/ADR-009`**: SV2採用コミット率を ~70% の記載に加えて
+  ~75% の一次情報を追記（coindesk.com 2026-05-11、session-52 #2）。
+- **`docs/RESEARCH_IMPROVEMENTS.md`**: session-258差分を記録 —
+  session-52 #1（Noiseファズ）実施、#2（75%図）実施、#4（FIPS/PQ）は
+  GODEBUG_NOTES.md §fips140 + `go.mod godebug tlsmlkem=1` で既済を検証
+  して✅化、Cat 2 #2 クランプ残件は設計上非該当として記録。
+
 ### Fixed (session 257 — ESP-Miner v2.15.2/v2.15.3 + sv2-spec parity)
 
 **SV2フレームのNoiseトランスポート・チャンキング**
