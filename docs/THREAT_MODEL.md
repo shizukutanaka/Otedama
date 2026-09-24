@@ -312,7 +312,9 @@ pool-share HTTP APIs) returns an unbounded body, exhausting memory.
 (`io.LimitReader`) — the same bound `rates/fetcher.go` already applied
 to the BTC/USD fetchers. A day's Agile half-hourly rates is ~10 KB;
 mempool.space pool distribution and National Grid carbon responses are
-smaller still.
+smaller still. Session 348 extended the same cap to the cgminer RPC
+reply (`asic_endpoints` is operator-configured but a rogue LAN device
+or mistyped IP can still stream garbage).
 
 **Residual risk:** None material — oversized legitimate responses would
 surface as decode errors, which the callers already handle as

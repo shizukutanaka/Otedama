@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 348 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: cgminer RPC 応答のレスポンスバウンド)
+
+- **cgminer RPC 応答を 64 KiB でバウンド** — `asic_endpoints` は運営者設定だが、
+  LAN 上の不正機器や IP 打ち間違い先が巨大 JSON を流し続けると無制限アロケーションで
+  メモリ枯渇し得た。session 347 の外部フィードガードと同じ `io.LimitReader(64*1024)`
+  を適用（実応答は数 KB）。1.5s のプローブタイムアウトによる時間バウンドに加えて
+  容量バウンドを付与。
+
 ### Security (session 347 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 外部レートフィードのレスポンスバウンド)
 
 - **octopus/carbon/poolshare 各フィードの応答ボディを 64 KiB でバウンド** —

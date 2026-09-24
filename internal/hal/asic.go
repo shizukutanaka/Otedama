@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -233,7 +234,10 @@ func cgminerCommandParam(ctx context.Context, addr string, timeout time.Duration
 	if _, err := fmt.Fprint(conn, payload+"}\n"); err != nil {
 		return err
 	}
-	dec := json.NewDecoder(conn)
+	// Bound the reply like the external feed fetches: the endpoint is
+	// operator-configured but still network input (a rogue LAN device or
+	// a mistyped IP can stream garbage). cgminer replies are a few KiB.
+	dec := json.NewDecoder(io.LimitReader(conn, 64*1024))
 	if err := dec.Decode(rep); err != nil {
 		return err
 	}

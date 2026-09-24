@@ -420,3 +420,15 @@ func TestPoolIndexFor(t *testing.T) {
 		t.Error("absent pool reported present")
 	}
 }
+
+func TestCGMinerCommand_HugeReplyBounded(t *testing.T) {
+	// A >64 KiB reply exceeds the bounded read — decoding must error
+	// rather than allocating the whole body (rogue LAN device guard).
+	big := `{"STATUS":[{"STATUS":"S","When":1,"Code":1,"Msg":"ok","Description":"` +
+		strings.Repeat("x", 200*1024) + `"}],"id":1}`
+	f := newCGMinerFixture(t, nil, big)
+	var rep cgminerReply
+	if err := cgminerCommand(context.Background(), f.addr(), 2*time.Second, "summary", &rep); err == nil {
+		t.Fatal("oversized reply should error under the body cap")
+	}
+}
