@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 272 — コンピューターサイエンスの観点から改善点を洗い出す(第17ラウンド): 要求-応答相関不変条件——応答が我々の送った要求と対応しないことを検出しない3経路 + テストの構成上の偽陽性、計4箇所)
+
+第17ラウンドの Socratic 問いは「**この応答は、我々が送った要求と同一の要求を識別するか?**」——プロトコル状態機械において、相関フィールドを検証しない応答は「要求に対する応答」ではなく「偶然届いたメッセージ」であり、これを採用するとデシンク状態で動作を続ける。全 live 面の再監査で実証3箇所 + テスト1件:
+
+- **`mining.submit` の worker フィールドが固定文字列 `"otedama"`**(実害): V1 submit の `params[0]` は接続が `mining.authorize` で認証したユーザー名の echo でなければならない——authorize した名前と submit の worker 名を照合するプール(strict モード)は不一致の全シェアを "unauthorized worker" で拒否する。`s.conn.creds.User` を echo するように変更(テスト用 `newSession` で構築した connection の creds が空なら空を送る——それが「実際に authorize した値」の正しい echo)。
+- **V2 handshake が `SetupConnectionSuccess.UsedVersion` を未検証で採用**: 我々は `{2}` だけを offer する(MinVersion=MaxVersion=2)が、応答の UsedVersion を一切照合しなかった——クライアントが offer しなかったバージョンを名乗る応答は「そのフレームで会話する」宣言であり、以後のメッセージは我々がパース不能な構文で往復する(desync セッション → decode エラー束縛 → failover までの遅延)。`UsedVersion != 2` は handshake 失敗とし、failover リストの次プールへ。
+- **V2 handshake が `OpenMiningChannelSuccess.ReqID` を未検証で採用**: `ReqID` は要求-応答の相関フィールドであり、我々の送らなかった request id を echo する応答は別の要求への応答——それを採用した接続は channel id を誤り採用する恐れがある(第264セッションの ChannelID guard が下流で受けるが、相関違反は handshake で fail-fast すべき)。`omcs.ReqID != omc.ReqID` は handshake 失敗とし、failover へ。
+- **`TestSetupWallet_MnemonicNeverReachesLogger` が構成上偽陽性**(ゲート遮断の実害): ニーモニックの全24語を定型ログ文言と1語ずつ照合するが、定型文言の "back"/"phrase"/"wallet" は全て BIP-39 単語であり、ランダムなニーモニックがこれらを含むと約3.5%/run で誤検出(本ラウンドの -race 実行で観測)。漏洩は「ニーモニック語の連続列がログに現れる」形でしか起きないため、隣接2語以上の一致を要求に変更——定型文言に BIP-39 語の隣接ペアは存在しないため決定的に。
+
+**検証手続き(棄却済み候補).** `omcs.Extranonce`/`GroupChannelID` は標準チャネル経路で未使用かつ lenient decode 済み、V1 `call()` は id 相関済みで同型問題なし、handshake 中の割り込みメッセージは型不一致で既に失敗、submit の残りフィールド(job_id/en2/ntime/nonce)は echo/形式ともに正しい、`SetupConnectionError` は既存 fatalError で処理済み、sessionUser のマスク表記は logging 目的のみでワイヤ上の creds.User とは別経路。
+
+**テスト.** `TestSession_Submit_EchoesAuthorizedUser`(authorized creds.User が params[0] に echo される)、`TestHandshake_RejectsUnofferedVersion`(UsedVersion=3 で handshake エラー)、`TestHandshake_RejectsMismatchedRequestID`(ReqID+42 で handshake エラー)——いずれも net.Pipe 駆動のスクリプト化プールで非vacuous検証。`TestSetupWallet_MnemonicNeverReachesLogger` は検出ロジックのみ変更し 5連続 -race 緑。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/...} 緑、差分行 lint/gofumpt クリーン(runSession/runSessionV1 gocyclo・hugeParam は親時点から閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 271 — コンピューターサイエンスの観点から改善点を洗い出す(第16ラウンド): merkle root が計算不能なジョブをワーカーへ配布しない——extranonce 未交渉の notify 配送 + 非hex extranonce1 の ingest 受理、計3箇所)
 
 第16ラウンドの Socratic 問いは「**このジョブで掘ったシェアはプールに受理され得るか?**」——受理される必要条件は、ワーカーがハッシュするヘッダとプールがシェア検証時に再構築するヘッダの一致であり、その肝は merkle root を正しく計算できるかどうか。実証3箇所:

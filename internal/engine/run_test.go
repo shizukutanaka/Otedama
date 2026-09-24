@@ -1561,12 +1561,19 @@ func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 	}
 
 	joined := strings.Join(logs, "\n")
-	for _, word := range strings.Fields(phraseLine) {
-		// Match whole words only: BIP-39 words are common English and
-		// could otherwise collide with substrings of ordinary log prose.
-		for _, logWord := range strings.Fields(joined) {
-			if logWord == word {
-				t.Fatalf("mnemonic word %q leaked into the structured logger; logs:\n%s", word, joined)
+	// A genuine leak appears as a contiguous run of mnemonic words, so
+	// the check requires two adjacent phrase words to appear adjacently
+	// in the logs. A single-word match cannot be asserted: BIP-39 words
+	// are ordinary English, and the canned log prose legitimately
+	// contains some ("back", "phrase", "wallet"), which would flag a
+	// random mnemonic ~3.5% of runs.
+	phrase := strings.Fields(phraseLine)
+	logWords := strings.Fields(joined)
+	for i := 0; i+1 < len(phrase); i++ {
+		for j := 0; j+1 < len(logWords); j++ {
+			if logWords[j] == phrase[i] && logWords[j+1] == phrase[i+1] {
+				t.Fatalf("mnemonic words %q %q leaked into the structured logger; logs:\n%s",
+					phrase[i], phrase[i+1], joined)
 			}
 		}
 	}
@@ -2529,5 +2536,79 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// ----- Handshake request/response correlation -----
+
+// driveHandshakePool plays the pool side of the SV2 handshake over a
+// net.Pipe, returning whatever SetupConnectionSuccess and
+// OpenMiningChannelSuccess the script supplies — including values a
+// conformant pool would never send.
+func driveHandshakePool(t *testing.T, conn net.Conn, usedVersion uint16, reqIDDelta uint32) {
+	t.Helper()
+	defer conn.Close() //nolint:errcheck
+	dec := stratum.NewDecoder(conn)
+
+	f, err := dec.ReadFrame() // SetupConnection
+	if err != nil || f.Header.MsgType != stratum.MsgSetupConnection {
+		return
+	}
+	succ := stratum.SetupConnectionSuccess{UsedVersion: usedVersion}
+	payload, _ := succ.Encode()
+	outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+	encoded, _ := stratum.EncodeFrame(outF)
+	conn.Write(encoded) //nolint:errcheck
+
+	f, err = dec.ReadFrame() // OpenMiningChannel
+	if err != nil || f.Header.MsgType != stratum.MsgOpenMiningChannel {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+	omcs := stratum.OpenMiningChannelSuccess{
+		ReqID:           omc.ReqID + reqIDDelta,
+		ChannelID:       1,
+		ExtraNonce2Size: 4,
+	}
+	for i := range omcs.Target {
+		omcs.Target[i] = 0xFF
+	}
+	payload, _ = omcs.Encode()
+	outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+	encoded, _ = stratum.EncodeFrame(outF)
+	conn.Write(encoded) //nolint:errcheck
+}
+
+// The server may only select a version the client offered — we offer
+// exactly 2. A response claiming any other version means the peer will
+// speak a framing we cannot parse; handshake must fail rather than run
+// a desynchronized session.
+func TestHandshake_RejectsUnofferedVersion(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close() //nolint:errcheck
+	go driveHandshakePool(t, serverConn, 3, 0)
+
+	dec := stratum.NewDecoder(clientConn)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://pool", "user", nil)
+	if err == nil || !strings.Contains(err.Error(), "version") {
+		t.Fatalf("handshake with unoffered UsedVersion = %v, want version error", err)
+	}
+}
+
+// OpenMiningChannelSuccess.ReqID is the request/response correlation
+// field: an echo of an id we never sent is not our channel open. The
+// handshake must fail instead of adopting a desynced peer's channel.
+func TestHandshake_RejectsMismatchedRequestID(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close() //nolint:errcheck
+	go driveHandshakePool(t, serverConn, 2, 42)
+
+	dec := stratum.NewDecoder(clientConn)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://pool", "user", nil)
+	if err == nil || !strings.Contains(err.Error(), "request id") {
+		t.Fatalf("handshake with mismatched ReqID = %v, want request-id error", err)
 	}
 }

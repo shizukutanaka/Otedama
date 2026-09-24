@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -291,6 +292,9 @@ type fakePool struct {
 	conn      net.Conn
 	verdict   bool   // result for mining.submit
 	notifyJob string // optional: job ID to send as mining.notify on start
+
+	mu           sync.Mutex
+	submitParams json.RawMessage // params of the last mining.submit seen
 }
 
 func (p *fakePool) run() {
@@ -315,6 +319,9 @@ func (p *fakePool) run() {
 			continue
 		}
 		if req.Method == "mining.submit" {
+			p.mu.Lock()
+			p.submitParams = req.Params
+			p.mu.Unlock()
 			result := "true"
 			if !p.verdict {
 				result = "false"
@@ -409,6 +416,42 @@ func TestSession_E2E_SubmitRejected(t *testing.T) {
 	}
 	if res.Accepted {
 		t.Error("share accepted; want rejected")
+	}
+}
+
+// mining.submit's worker field must echo the username the connection
+// authorized as — a pool binding submits to the authorized identity
+// rejects any other value. The session must not substitute a constant.
+func TestSession_Submit_EchoesAuthorizedUser(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "alice.worker1"},
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "J", Nonce: 1, NTime: 1}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	pool.mu.Lock()
+	raw := pool.submitParams
+	pool.mu.Unlock()
+	var params []any
+	if err := json.Unmarshal(raw, &params); err != nil || len(params) == 0 {
+		t.Fatalf("submit params unreadable: %v (%s)", err, raw)
+	}
+	if params[0] != "alice.worker1" {
+		t.Errorf("submit worker = %v, want echo of authorized user", params[0])
 	}
 }
 

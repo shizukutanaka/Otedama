@@ -1461,6 +1461,12 @@ func handshake(ctx context.Context, conn net.Conn, dec *stratum.Decoder, poolURL
 	if msg.SetupConnectionSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	// The server must select one of the versions we offered — and we
+	// offer exactly 2. A response naming a version we never sent means
+	// the peer will speak a framing we cannot parse: fail over.
+	if v := msg.SetupConnectionSuccess.UsedVersion; v != 2 {
+		return 0, miner.Hash{}, fmt.Errorf("engine: pool selected unoffered protocol version %d", v)
+	}
 
 	var hashRate float32
 	for _, w := range workers {
@@ -1486,6 +1492,12 @@ func handshake(ctx context.Context, conn net.Conn, dec *stratum.Decoder, poolURL
 		return 0, miner.Hash{}, fmt.Errorf("engine: channel open failed")
 	}
 	omcs := msg.OpenMiningChannelSuccess
+	// ReqID correlates this response with our OpenMiningChannel: an
+	// echo of a request id we never sent means the peer is answering a
+	// different request — desynced, not our channel.
+	if omcs.ReqID != omc.ReqID {
+		return 0, miner.Hash{}, fmt.Errorf("engine: channel open echoed unknown request id %d", omcs.ReqID)
+	}
 	// SV2 target and miner.Hash are both little-endian U256s, so the bytes
 	// map directly.
 	return omcs.ChannelID, miner.Hash(omcs.Target), nil

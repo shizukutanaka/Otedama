@@ -437,7 +437,9 @@ func (s *session) drainJobs() {
 
 // Submit sends a share via mining.submit and returns the pool's verdict.
 // Stratum V1 submission format: ["worker", "job_id", "extranonce2",
-// "ntime", "nonce"], all hex strings.
+// "ntime", "nonce"], all hex strings. The worker field echoes the
+// username this connection authorized as — pools that bind submits to
+// the authorized identity reject any other value.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	if s.conn.closed.Load() {
 		return poolproto.ShareResult{}, errors.New("stratumv1: session closed")
@@ -450,7 +452,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2 = strings.Repeat("00", s.extranonceState().en2Size)
 	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		s.conn.creds.User,
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),
