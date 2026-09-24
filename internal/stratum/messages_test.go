@@ -514,9 +514,11 @@ func TestSubmitSharesSuccess_Encode_ShortPayload(t *testing.T) {
 // ----- SubmitSharesError -----
 
 func TestDecodeSubmitSharesError_Basic(t *testing.T) {
-	buf := make([]byte, 8)
+	// Spec-conformant empty error_code: STR0_255 with length byte 0.
+	buf := make([]byte, 9)
 	binary.LittleEndian.PutUint32(buf[0:4], 5)  // ChannelID
 	binary.LittleEndian.PutUint32(buf[4:8], 12) // SequenceNumber
+	buf[8] = 0                                  // STR0_255 length
 
 	got, err := DecodeSubmitSharesError(buf)
 	if err != nil {
@@ -550,15 +552,21 @@ func TestDecodeSubmitSharesError_WithMessage(t *testing.T) {
 func TestDecodeSubmitSharesError_ShortPayload(t *testing.T) {
 	_, err := DecodeSubmitSharesError(make([]byte, 4))
 	if err == nil {
-		t.Error("DecodeSubmitSharesError(4 bytes) should error (need ≥8)")
+		t.Error("DecodeSubmitSharesError(4 bytes) should error (need ≥9)")
+	}
+	// An exactly-8-byte payload omits the required STR0_255 length
+	// byte entirely — malformed, must error (found via fuzz round-trip).
+	if _, err := DecodeSubmitSharesError(make([]byte, 8)); err == nil {
+		t.Error("DecodeSubmitSharesError(8 bytes, missing STR0_255 length) should error")
 	}
 }
 
 // ----- OpenMiningChannelError -----
 
 func TestDecodeOpenMiningChannelError_Basic(t *testing.T) {
-	buf := make([]byte, 4)
+	buf := make([]byte, 5)
 	binary.LittleEndian.PutUint32(buf[0:4], 1) // ReqID
+	buf[4] = 0                                 // STR0_255 length
 
 	got, err := DecodeOpenMiningChannelError(buf)
 	if err != nil {
@@ -614,10 +622,11 @@ func TestDispatchFrame_SubmitSharesSuccess(t *testing.T) {
 }
 
 func TestDispatchFrame_SubmitSharesError(t *testing.T) {
-	raw := make([]byte, 8)
+	raw := make([]byte, 9)
 	binary.LittleEndian.PutUint32(raw[0:4], 2)
 	binary.LittleEndian.PutUint32(raw[4:8], 3)
-	f := Frame{Header: Header{MsgType: MsgSubmitSharesError, MsgLength: 8}, Payload: raw}
+	raw[8] = 0 // empty STR0_255 error_code
+	f := Frame{Header: Header{MsgType: MsgSubmitSharesError, MsgLength: 9}, Payload: raw}
 	msg, err := DispatchFrame(f)
 	if err != nil {
 		t.Fatalf("DispatchFrame: %v", err)
@@ -631,9 +640,10 @@ func TestDispatchFrame_SubmitSharesError(t *testing.T) {
 }
 
 func TestDispatchFrame_OpenMiningChannelError(t *testing.T) {
-	raw := make([]byte, 4)
+	raw := make([]byte, 5)
 	binary.LittleEndian.PutUint32(raw[0:4], 9) // ReqID
-	f := Frame{Header: Header{MsgType: MsgOpenMiningChannelError, MsgLength: 4}, Payload: raw}
+	raw[4] = 0                                 // empty STR0_255 error_code
+	f := Frame{Header: Header{MsgType: MsgOpenMiningChannelError, MsgLength: 5}, Payload: raw}
 	msg, err := DispatchFrame(f)
 	if err != nil {
 		t.Fatalf("DispatchFrame: %v", err)

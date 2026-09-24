@@ -1251,6 +1251,37 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 269 increment (V2 message-decoder fuzz)
+
+### Implemented
+
+1. ✅ **`FuzzDecodeV2Message`** — one dispatch target over all twelve
+   payload decoders (selector byte + payload); asserts the
+   error-not-panic contract AND that a successfully decoded message
+   re-encodes to a prefix of the input (Encode is the decoders'
+   declared inverse). ~6M execs/25s, zero crashes — but it did find a
+   spec violation (below).
+
+2. ✅ **Strictly require the STR0_255 length byte on error messages** —
+   fuzz-discovered: `DecodeSubmitSharesError` and
+   `DecodeOpenMiningChannelError` silently accepted payloads truncated
+   exactly at the fixed-field boundary (missing the required
+   error_code length byte), producing a phantom empty reason and
+   breaking the encode↔decode invariant. Both now reject payloads that
+   omit the required field (`<9` / `<5` bytes). Existing tests pinning
+   the non-conformant minimal payloads were updated to the spec's
+   zero-length-string encoding (`\x00`) rather than an absent field.
+   `DecodeSetupConnectionError`/`DecodeOpenMiningChannel` were already
+   strict on the same field.
+
+### Verified already-done / non-applicable this session
+
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+- ✅ **V1 read path** already bounded (`maxLineBytes` + ReadSlice) — no
+  unbounded-line-accumulation class on the V1 transport.
+
+---
+
 ## September 2026 research pass — session 268 increment (V1 parser fuzz + extranonce2_size bound)
 
 ### Implemented
@@ -1507,6 +1538,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-269 additions (September 2026): SV2 payload decoders get a
+dispatch fuzzer with an encode↔decode round-trip invariant — found a
+spec violation where error frames could omit the STR0_255 length byte.*
 
 *Session-268 additions (September 2026): Stratum V1 parser fuzz
 coverage parity with the V2 path; extranonce2_size bounds-checking

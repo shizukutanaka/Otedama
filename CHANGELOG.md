@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 269 — V2 デコーダーファズ)
+
+**`FuzzDecodeV2Message` — 全12種の V2 ペイロードデコーダーを網羅する
+ディスパッチファズ**（セレクタバイト + ペイロード）。error-not-panic
+契約に加えて「デコード成功した入力はエンコードで先頭一致する」
+ラウンドトリップ不変条件を検証 —— 約600万 exec/25秒でクラッシュゼロ、
+ただし spec 違反を1件発見:
+
+**エラー系メッセージの必須 STR0_255 長バイト欠落を厳格拒否** —
+`DecodeSubmitSharesError`/`DecodeOpenMiningChannelError` が固定部境界
+ちょうどで切れたペイロード（error_code の長バイト自体が欠落）を
+黙って受理し空の理由にマップしていた —— spec 上 error_code は必須
+フィールドのため不正形として拒否するよう厳格化。該当する規格外最小
+ペイロードを固定していたテストは spec 準拠のゼロ長文字列表現（`\x00`）
+に更新。`DecodeSetupConnectionError`/`DecodeOpenMiningChannel` は同
+フィールドで既に厳格だった。
+
 ### Security (session 268 — V1 パーサ堅牢化)
 
 **プール送信 `extranonce2_size` の境界チェック** —— ファズで発見した

@@ -271,20 +271,21 @@ func (m OpenMiningChannelError) Encode() ([]byte, error) {
 	return appendStr0_255(b, m.Error)
 }
 
-// DecodeOpenMiningChannelError parses an OpenMiningChannelError payload.
+// DecodeOpenMiningChannelError parses an OpenMiningChannelError
+// payload. As with SubmitSharesError, the error_code STR0_255 field is
+// required on the wire — a 4-byte payload with the length byte absent
+// is malformed and rejected rather than mapping to an empty reason.
 func DecodeOpenMiningChannelError(payload []byte) (OpenMiningChannelError, error) {
-	if len(payload) < 4 {
-		return OpenMiningChannelError{}, fmt.Errorf("stratum: OpenMiningChannelError: short payload (%d < 4)", len(payload))
+	if len(payload) < 5 {
+		return OpenMiningChannelError{}, fmt.Errorf("stratum: OpenMiningChannelError: short payload (%d < 5)", len(payload))
 	}
 	m := OpenMiningChannelError{
 		ReqID: binary.LittleEndian.Uint32(payload[0:4]),
 	}
-	if len(payload) > 4 {
-		r := newByteReader(payload[4:])
-		var err error
-		if m.Error, err = getStr0_255(r); err != nil {
-			return m, fmt.Errorf("stratum: OpenMiningChannelError.Error: %w", err)
-		}
+	r := newByteReader(payload[4:])
+	var err error
+	if m.Error, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: OpenMiningChannelError.Error: %w", err)
 	}
 	return m, nil
 }

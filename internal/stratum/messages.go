@@ -329,20 +329,21 @@ func (m SubmitSharesError) Encode() ([]byte, error) {
 }
 
 // DecodeSubmitSharesError parses a SubmitSharesError payload.
+// The error_code STR0_255 field is required on the wire — an exactly
+// 8-byte payload (length byte absent entirely) is malformed, so it is
+// rejected rather than silently mapping to an empty reason.
 func DecodeSubmitSharesError(payload []byte) (SubmitSharesError, error) {
-	if len(payload) < 8 {
-		return SubmitSharesError{}, fmt.Errorf("stratum: SubmitSharesError: short payload (%d < 8)", len(payload))
+	if len(payload) < 9 {
+		return SubmitSharesError{}, fmt.Errorf("stratum: SubmitSharesError: short payload (%d < 9)", len(payload))
 	}
 	m := SubmitSharesError{
 		ChannelID:      binary.LittleEndian.Uint32(payload[0:4]),
 		SequenceNumber: binary.LittleEndian.Uint32(payload[4:8]),
 	}
-	if len(payload) > 8 {
-		r := newByteReader(payload[8:])
-		var err error
-		if m.Error, err = getStr0_255(r); err != nil {
-			return m, err
-		}
+	r := newByteReader(payload[8:])
+	var err error
+	if m.Error, err = getStr0_255(r); err != nil {
+		return m, err
 	}
 	return m, nil
 }
