@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 360 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール URL の userinfo 拒否)
+
+- **`pools[].url` の `user:pass@` userinfo を検証で拒否** — 認証情報は
+  `user`/`password` フィールドが唯一の経路だが、URL に埋め込まれた場合も
+  従来は検証を通過し、"connecting to <url>" ログ行と `pool_host` メトリクス
+  ラベルへ平文流出した上で結局 dial 失敗していた。`@` を含む URL を起動時に
+  明示エラーとし、対応フィールドへ誘導するメッセージを返す。
+
 ### Added (session 359 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール提示のセッション終了理由をログへ)
 
 - **`poolproto.SessionEndDetail` 任意インターフェース** — プールがセッション終了の

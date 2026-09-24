@@ -934,6 +934,14 @@ func validatePoolURL(raw string) error {
 			if rest == "" {
 				return fmt.Errorf("URL has no host after scheme")
 			}
+			// A user[:pass]@ userinfo prefix is rejected rather than
+			// carried: credentials belong to the pool's user/password
+			// fields, and an @-bearing URL would leak them into the
+			// "connecting to" log line and the pool_host metric label
+			// before the dial fails anyway.
+			if strings.Contains(rest, "@") {
+				return fmt.Errorf("URL userinfo (user:pass@) is not supported; use the pool's user/password fields")
+			}
 			return nil
 		}
 	}

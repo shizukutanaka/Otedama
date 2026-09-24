@@ -251,6 +251,8 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"ssh rejected", "ssh://pool.example.com", true},
 		{"no scheme rejected", "pool.example.com:3333", true},
 		{"empty host rejected", "stratum+v2://", true},
+		{"userinfo rejected", "stratum+tcp://worker:secret@pool.example.com:3333", true},
+		{"user-only userinfo rejected", "stratum+tcp://worker@pool.example.com:3333", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
