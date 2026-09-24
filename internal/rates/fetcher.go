@@ -298,9 +298,12 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 			fetchErrs = append(fetchErrs, r.err)
 			continue
 		}
-		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
+		if !(r.rate >= minPlausibleRateUSD && r.rate <= maxPlausibleRateUSD) {
 			// A reading outside the sanity band is a unit/parse error or
-			// manipulation, never a real quote. Drop it so it cannot pull the
+			// manipulation, never a real quote. The !(>= && <=) form also
+			// rejects NaN — an exchange string field of "NaN" survives
+			// strconv.ParseFloat and would poison the median silently.
+			// Drop it so it cannot pull the
 			// median. Stay quiet on a plain zero (a source that simply has no
 			// value yet); only flag genuinely implausible non-zero readings.
 			if r.rate != 0 {

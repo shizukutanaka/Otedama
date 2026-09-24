@@ -1164,3 +1164,86 @@ func TestStartBackground_GoroutineTerminatesOnContextCancel(t *testing.T) {
 		t.Errorf("goroutine leak: count %d did not return to baseline %d within 2s after cancel", final, baseline)
 	}
 }
+
+func TestFetcher_NaNReadingExcludedFromMedian(t *testing.T) {
+	// An exchange string field of "NaN" passes strconv.ParseFloat cleanly
+	// (ParseFloat("NaN") == NaN with nil error — this is exactly how the
+	// real Coinbase and Kraken extractors parse). NaN must not survive the
+	// plausibility band: a NaN median would publish NaN as the BTC/USD
+	// rate, freezing curtail decisions and zeroing every yield's
+	// Effective() score downstream.
+	makeHandler := func(body string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, body)
+		})
+	}
+	srvA := httptest.NewServer(makeHandler(`{"amount": "95000"}`))
+	srvB := httptest.NewServer(makeHandler(`{"amount": "95200"}`))
+	srvNaN := httptest.NewServer(makeHandler(`{"amount": "NaN"}`))
+	defer srvA.Close()
+	defer srvB.Close()
+	defer srvNaN.Close()
+
+	makeSource := func(name, url string) Source {
+		return Source{
+			Name: name,
+			URL:  url,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Amount string `json:"amount"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return strconv.ParseFloat(v.Amount, 64)
+			},
+		}
+	}
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srvA.Client(),
+		sources: []Source{
+			makeSource("a", srvA.URL),
+			makeSource("b", srvB.URL),
+			makeSource("nan", srvNaN.URL),
+		},
+	}
+	if err := f.Fetch(context.Background()); err != nil {
+		t.Fatalf("Fetch failed: %v", err)
+	}
+	rate, _ := f.BTCUSDRate()
+	// NaN dropped: median of the two honest sources = 95100.
+	if rate != 95100 {
+		t.Errorf("rate = %v, want 95100 (NaN source excluded)", rate)
+	}
+}
+
+func TestFetcher_AllSourcesNaN_Fails(t *testing.T) {
+	// When the only reading is NaN there is nothing usable left: Fetch
+	// must error rather than publish NaN into the cache.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"amount": "NaN"}`)
+	}))
+	defer srv.Close()
+
+	f := &Fetcher{
+		fallback:   50000,
+		httpClient: srv.Client(),
+		sources: []Source{{
+			Name: "nan", URL: srv.URL,
+			extract: func(b []byte) (float64, error) {
+				var v struct {
+					Amount string `json:"amount"`
+				}
+				if err := json.Unmarshal(b, &v); err != nil {
+					return 0, err
+				}
+				return strconv.ParseFloat(v.Amount, 64)
+			},
+		}},
+	}
+	if err := f.Fetch(context.Background()); err == nil {
+		t.Fatal("Fetch must fail when the only reading is NaN")
+	}
+}

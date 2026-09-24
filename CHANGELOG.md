@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 259 — コンピューターサイエンスの観点から改善点を洗い出す(第4ラウンド): 全順序契約を残りの2 ingest 面へ拡張 + Noise transport の並行契約違反を修正——計3件)
+
+第3ラウンドの「順序付き比較は NaN を通す」という発見を同型クラスとして全 ingest 面に展開し、加えて暗号プリミティブの並行不変条件(nonce 一意性)を検証した。
+
+**数値の全順序(順序比較への NaN 混入遮断).**
+
+- **rates fetcher の NaN 透過を遮断**(`rates/fetcher.go`): Coinbase/Kraken extractor は取引所供給の**文字列**フィールドを `strconv.ParseFloat` へ通す——`"NaN"` は NaN+nil error で成功し、妥当性バンド `rate < min || rate > max` は NaN に対し両比較 false で**バンドを通過**していた。1件劣化(NaN が中央要素)の時に中央値が NaN → `f.rate=NaN` を publish → `curtailDecision` は `rate<=0`/`rate<threshold`/`rate>=threshold` 全 false で閾値上下いずれにも遷移不能(縮退凍結)、かつ NaN が Prometheus ゲージと各 yield の `SatsPerSecond` に流入して `Effective()` が全ストリームを 0 化→Decide が全デバイスを idle にする**静かな全面停止**経路。`!(r.rate >= min && r.rate <= max)` 形で NaN・±Inf・帯域外を一律棄却。
+- **`Config.Validate()` の非有限数値を棄却**(`config/config.go`): yaml `.nan`/`.inf` リテラルおよび `strconv.ParseFloat` 経由の env 値は NaN/+Inf をフィールドへ到達させ得るが、`< 0`/`>= 1.0` の順序ガードは NaN を通した。`ArbitrationHysteresisPct`(NaN→Decide 毎tick error)、`CurtailBelowBTCUSD`(NaN→curtailment 不作動、+Inf→永久 curtail)、`MinYieldSatsPerSec`/`PowerWatts`/`ElectricityPricePerKWh`(NaN→静かな誤経済値/メトリクス非有限化)の5フィールドに `!(x >= 0) || IsInf(x, 1)` を適用し、fail-fast をロード時へ移した(第3ラウンドで Decide 側に入れた非有限棄却と防御が階層化)。
+
+**暗号プリミティブの並行不変条件(同一 (key,nonce) の再使用禁止 + フレーム原子性).**
+
+- **`EncryptedConn` を goroutine-safe 化**(`stratum/noise.go`): net.Conn 契約(「メソッドは複数 goroutine から呼べる」)を名乗る型でありながら、`send.Encrypt` の nonce カウンタ `n++` は無同期(並行 Write は同じ nonce で異なる平文を封印し得る——ChaCha20-Poly1305 の nonce reuse は機密性と改竄耐性を**破壊**する)、frame は len/ct の2回の `rw.Write`(インターリーブでストリーム脱同期)、`readbuf` は無保護(並行 Read が同一フレームを分割消失)だった。`writeMu`(Write 全体)+`readMu`(Read 全体)で conn 契約を実装、`CipherState` に非同期安全でない旨の契約記述を追加。現行 adapter は未接続の alpha 経路(KNOWN_LIMITATIONS §3)だが、資金隣接領域の不変条件を接続前に正しておく。
+
+**検証手続き(棄却済み候補).** ソクラテス式に「その不変条件は破れ得るか」を経路単位で検証し、以下は clean と確認して棄却: stratum messages/handshake/wire の全デコーダ(境界検査済み)、slog TextHandler/JSONHandler(needsQuoting が制御文字を escape——pool由来文字列のログインジェクションは sink で防御済み)、TUI 描画面(pool由来文字列が TUI に到達しない)、daemon unit/plist 生成(quoteToken/xmlEscape/argv-array 済み、かつローカルオペレータ入力)、stratumv2 adapter `parseJobID`(生成器とパーサが同一ファイル内で閉じた整合)、noise 状態機械(Transport は complete 未了時に error)。
+
+**テスト.** `TestValidate_RejectsNonFiniteNumerics`(9ケース)、`TestFetcher_NaNReadingExcludedFromMedian`/`TestFetcher_AllSourcesNaN_Fails`(Coinbase 型文字列 extractor 経由)、`TestEncryptedConn_ConcurrentWriters`(net.Pipe 上で4 writer×8 msg、フレーム完全性+-race で counter 排他を検証)。`go test -race` ./internal/{stratum,config,rates} 全緑。
+
 ### Fixed (session 258 — コンピューターサイエンスの観点から改善点を洗い出す(第3ラウンド): 決定関数の全順序契約とV1 job_id ラウンドトリップ忠実性の違反2件+防御1件を修正)
 
 **全順序契約(arbitration は純粋関数・比較が全順序を要求).**

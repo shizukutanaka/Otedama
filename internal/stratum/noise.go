@@ -40,6 +40,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -58,6 +59,8 @@ type HandshakeState struct {
 }
 
 // CipherState encrypts/decrypts transport messages after the handshake.
+// A CipherState is not goroutine-safe — its nonce counter must be
+// serialized by the caller (EncryptedConn does this via writeMu/readMu).
 type CipherState struct {
 	key [32]byte
 	n   uint64 // nonce counter
@@ -256,6 +259,21 @@ type EncryptedConn struct {
 	send *CipherState
 	recv *CipherState
 
+	// writeMu serializes Write. Encrypt mutates send.n (the nonce
+	// counter) and the frame is emitted as two rw.Write calls; concurrent
+	// writers could otherwise reuse a nonce under one key — which breaks
+	// the ChaCha20-Poly1305 confidentiality and forgery-resistance
+	// guarantees outright — or interleave one frame's length prefix with
+	// another frame's ciphertext, desynchronising the stream.
+	writeMu sync.Mutex
+
+	// readMu serializes Read: readbuf is drained across calls, so two
+	// concurrent readers would split a frame and both lose plaintext.
+	// Together the mutexes give EncryptedConn the same contract net.Conn
+	// documents: methods may be called from multiple goroutines (one
+	// concurrent Read + one concurrent Write included).
+	readMu sync.Mutex
+
 	// readbuf holds plaintext decrypted from the most recent frame that
 	// did not fit in a caller's Read buffer. It is drained by subsequent
 	// Read calls before the next frame is read, so no plaintext is lost
@@ -281,6 +299,8 @@ func NewEncryptedConn(rw io.ReadWriter, send, recv *CipherState) *EncryptedConn 
 // prefix; a payload that would overflow it is rejected rather than
 // silently truncated, which would desynchronise the stream.
 func (c *EncryptedConn) Write(p []byte) (int, error) {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	ct, err := c.send.Encrypt(nil, p)
 	if err != nil {
 		return 0, err
@@ -304,6 +324,8 @@ func (c *EncryptedConn) Write(p []byte) (int, error) {
 // next length-prefixed frame. Plaintext that does not fit in p is retained
 // for the next call so none is dropped.
 func (c *EncryptedConn) Read(p []byte) (int, error) {
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
 	if len(c.readbuf) == 0 {
 		var lenBuf [2]byte
 		if _, err := io.ReadFull(c.rw, lenBuf[:]); err != nil {

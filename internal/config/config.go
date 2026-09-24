@@ -34,6 +34,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -131,8 +132,9 @@ type Config struct {
 	// electricity-tariff curtailment hook: set it to your break-even price
 	// so Otedama stops mining when it becomes unprofitable.
 	//
-	// 0 disables the feature (default). Negative values are rejected by
-	// Validate(). Set via OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
+	// 0 disables the feature (default). Negative and non-finite (NaN,
+	// +Inf) values are rejected by Validate(). Set via
+	// OTEDAMA_CURTAIL_BELOW_BTC_USD or config file.
 	CurtailBelowBTCUSD float64 `yaml:"curtail_below_btc_usd"`
 
 	// MinYieldSatsPerSec is a per-device profitability floor in satoshis per
@@ -146,7 +148,7 @@ type Config struct {
 	// where a weak device should stop while stronger ones keep earning.
 	//
 	// 0 disables the floor (default): every positive-yield stream qualifies.
-	// Negative values are rejected by Validate(). Set via
+	// Negative and non-finite values are rejected by Validate(). Set via
 	// OTEDAMA_MIN_YIELD_SATS_PER_SEC or config file.
 	MinYieldSatsPerSec float64 `yaml:"min_yield_sats_per_sec"`
 
@@ -157,8 +159,8 @@ type Config struct {
 	// Power measurement from hardware sensors is not yet available; this
 	// field lets users enter their measured TDP or wall-meter reading.
 	//
-	// 0 disables the metric (default). Negative values are rejected.
-	// Set via OTEDAMA_POWER_WATTS or config file.
+	// 0 disables the metric (default). Negative and non-finite values are
+	// rejected. Set via OTEDAMA_POWER_WATTS or config file.
 	PowerWatts float64 `yaml:"power_watts"`
 
 	// ElectricityPricePerKWh is the user's electricity price in USD per
@@ -170,8 +172,8 @@ type Config struct {
 	// lacks — "valuable" workload selection is measured in gross sats, but what
 	// the operator keeps is revenue minus power cost.
 	//
-	// 0 disables the cost metric (default). Negative values are rejected.
-	// Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
+	// 0 disables the cost metric (default). Negative and non-finite values
+	// are rejected. Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
 	ElectricityPricePerKWh float64 `yaml:"electricity_price_per_kwh"`
 
 	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP
@@ -636,25 +638,31 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
+	// The numeric fields below are checked with !(x >= 0) rather than x < 0
+	// because a NaN literal (yaml ".nan", or env values via
+	// strconv.ParseFloat) fails every ordered comparison and would slip a
+	// plain < 0 guard; +Inf is rejected alongside it where an unbounded
+	// value is meaningless (an Inf curtail threshold would pause hashing
+	// forever, an Inf hysteresis would freeze every decision).
+	if !(c.ArbitrationHysteresisPct >= 0) || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
 	}
-	if c.CurtailBelowBTCUSD < 0 {
+	if !(c.CurtailBelowBTCUSD >= 0) || math.IsInf(c.CurtailBelowBTCUSD, 1) {
 		issues = append(issues, fmt.Sprintf(
-			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+			"curtail_below_btc_usd %.2f must be finite and >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
 	}
-	if c.MinYieldSatsPerSec < 0 {
+	if !(c.MinYieldSatsPerSec >= 0) || math.IsInf(c.MinYieldSatsPerSec, 1) {
 		issues = append(issues, fmt.Sprintf(
-			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+			"min_yield_sats_per_sec %.4f must be finite and >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
 	}
-	if c.PowerWatts < 0 {
+	if !(c.PowerWatts >= 0) || math.IsInf(c.PowerWatts, 1) {
 		issues = append(issues, fmt.Sprintf(
-			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+			"power_watts %.2f must be finite and >= 0 (0 = disabled)", c.PowerWatts))
 	}
-	if c.ElectricityPricePerKWh < 0 {
+	if !(c.ElectricityPricePerKWh >= 0) || math.IsInf(c.ElectricityPricePerKWh, 1) {
 		issues = append(issues, fmt.Sprintf(
-			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+			"electricity_price_per_kwh %.4f must be finite and >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
 	}
 
 	if len(issues) == 0 {

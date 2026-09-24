@@ -8,8 +8,12 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
+	"net"
+	"sync"
 	"testing"
+	"time"
 )
 
 // ----- CipherState -----
@@ -393,11 +397,75 @@ func TestHmacSHA256_KnownVector(t *testing.T) {
 	got := hmacSHA256(key, data)
 
 	// Expected from RFC/test-vector tools:
-	want := []byte{0xf7, 0xbc, 0x83, 0xf4, 0x30, 0x53, 0x84, 0x24,
+	want := []byte{
+		0xf7, 0xbc, 0x83, 0xf4, 0x30, 0x53, 0x84, 0x24,
 		0xb1, 0x32, 0x98, 0xe6, 0xaa, 0x6f, 0xb1, 0x43,
 		0xef, 0x4d, 0x59, 0xa1, 0x49, 0x46, 0x17, 0x59,
-		0x97, 0x47, 0x9d, 0xbc, 0x2d, 0x1a, 0x3c, 0xd8}
+		0x97, 0x47, 0x9d, 0xbc, 0x2d, 0x1a, 0x3c, 0xd8,
+	}
 	if !bytes.Equal(got, want) {
 		t.Errorf("hmacSHA256 = %x\nwant %x", got, want)
+	}
+}
+
+func TestEncryptedConn_ConcurrentWriters(t *testing.T) {
+	// EncryptedConn presents net.Conn's contract: methods may be invoked
+	// from multiple goroutines. Two unsynchronized writers could reuse
+	// the send nonce counter — nonce reuse under one ChaCha20-Poly1305
+	// key breaks confidentiality and forgery resistance — or interleave
+	// one frame's length prefix with another's ciphertext. This exercises
+	// several writers; under -race it also catches an unsynchronized
+	// counter regression directly.
+	var k1, k2 [32]byte
+	for i := range k1 {
+		k1[i] = byte(i)
+		k2[i] = byte(255 - i)
+	}
+	c1, c2 := net.Pipe()
+	defer c1.Close()
+	defer c2.Close()
+
+	sideA := NewEncryptedConn(c1, &CipherState{key: k1}, &CipherState{key: k2})
+	sideB := NewEncryptedConn(c2, &CipherState{key: k2}, &CipherState{key: k1})
+
+	// Bound the read side: a failed writer must not hang the test.
+	_ = c2.SetReadDeadline(time.Now().Add(30 * time.Second))
+
+	const writers = 4
+	const msgsPerWriter = 8
+	var wg sync.WaitGroup
+	for g := 0; g < writers; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for m := 0; m < msgsPerWriter; m++ {
+				if _, err := fmt.Fprintf(sideA, "g%d-m%d", g, m); err != nil {
+					t.Errorf("Write: %v", err)
+					return
+				}
+			}
+		}(g)
+	}
+
+	got := make(map[string]bool, writers*msgsPerWriter)
+	buf := make([]byte, 64)
+	for i := 0; i < writers*msgsPerWriter; i++ {
+		n, err := sideB.Read(buf)
+		if err != nil {
+			t.Fatalf("Read %d: %v", i, err)
+		}
+		got[string(buf[:n])] = true
+	}
+	wg.Wait()
+
+	if len(got) != writers*msgsPerWriter {
+		t.Fatalf("received %d distinct messages, want %d", len(got), writers*msgsPerWriter)
+	}
+	for g := 0; g < writers; g++ {
+		for m := 0; m < msgsPerWriter; m++ {
+			if !got[fmt.Sprintf("g%d-m%d", g, m)] {
+				t.Errorf("missing message g%d-m%d", g, m)
+			}
+		}
 	}
 }

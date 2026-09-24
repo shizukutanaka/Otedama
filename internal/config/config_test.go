@@ -4,6 +4,7 @@
 package config
 
 import (
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -125,6 +126,40 @@ func TestValidate_RejectsMissingBitcoinAddress(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "bitcoin_address") {
 		t.Errorf("error = %q, must mention bitcoin_address", err)
+	}
+}
+
+func TestValidate_RejectsNonFiniteNumerics(t *testing.T) {
+	// NaN reaches these fields through yaml ".nan" literals or env vars
+	// parsed with strconv.ParseFloat (both succeed and produce NaN), and
+	// every ordered comparison — x < 0, x >= 1.0 — is false for NaN, so a
+	// plain range guard silently admits it. The same holds for +Inf on the
+	// >= 0 fields. Each case must be rejected at load time rather than
+	// degrade at runtime (a NaN curtail threshold never fires; an Inf one
+	// pauses hashing forever; a NaN hysteresis erases the switch margin).
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"hysteresis NaN", func(c *Config) { c.ArbitrationHysteresisPct = math.NaN() }},
+		{"curtail NaN", func(c *Config) { c.CurtailBelowBTCUSD = math.NaN() }},
+		{"curtail +Inf", func(c *Config) { c.CurtailBelowBTCUSD = math.Inf(1) }},
+		{"min yield NaN", func(c *Config) { c.MinYieldSatsPerSec = math.NaN() }},
+		{"min yield +Inf", func(c *Config) { c.MinYieldSatsPerSec = math.Inf(1) }},
+		{"power NaN", func(c *Config) { c.PowerWatts = math.NaN() }},
+		{"power +Inf", func(c *Config) { c.PowerWatts = math.Inf(1) }},
+		{"electricity NaN", func(c *Config) { c.ElectricityPricePerKWh = math.NaN() }},
+		{"electricity +Inf", func(c *Config) { c.ElectricityPricePerKWh = math.Inf(1) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Defaults()
+			c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+			tt.mutate(&c)
+			if err := c.Validate(); err == nil {
+				t.Errorf("Validate() accepted %s", tt.name)
+			}
+		})
 	}
 }
 
