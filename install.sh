@@ -114,7 +114,10 @@ mkdir -p "$INSTALL_BIN"
 
 # ---------- Download + verify ----------
 
-ARCHIVE="otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+# Release assets are named after the build matrix only —
+# `otedama-{os}-{arch}.tar.gz` (release.yml asset_name), no version
+# component. Using ${VERSION} in the name 404s on every download.
+ARCHIVE="otedama-${OS}-${ARCH}.tar.gz"
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
 # Temporary workspace cleaned up on exit.
