@@ -40,6 +40,16 @@ func TestParseAddress_TLSScheme(t *testing.T) {
 	}
 }
 
+func TestParseAddress_DATUMScheme(t *testing.T) {
+	got, err := parseAddress("datum://pool.ocean.xyz:3334")
+	if err != nil {
+		t.Fatalf("parseAddress(datum://): %v", err)
+	}
+	if got != "pool.ocean.xyz:3334" {
+		t.Errorf("host = %q, want pool.ocean.xyz:3334", got)
+	}
+}
+
 func TestParseAddress_UnsupportedScheme(t *testing.T) {
 	for _, url := range []string{
 		"http://pool.example.com",
@@ -449,6 +459,83 @@ func TestDialer_Protocol_TLS(t *testing.T) {
 	}
 }
 
+func TestDialer_Protocol_DATUM(t *testing.T) {
+	d := &Dialer{datum: true}
+	if got := d.Protocol(); got != poolproto.ProtocolDATUM {
+		t.Errorf("Protocol = %v, want DATUM", got)
+	}
+	// datum wins over TLS flags: DATUM gateways are plaintext SV1.
+	d = &Dialer{datum: true, useTLS: true}
+	if got := d.Protocol(); got != poolproto.ProtocolDATUM {
+		t.Errorf("Protocol = %v, want DATUM", got)
+	}
+}
+
+func TestLookup_DATUMRegistered(t *testing.T) {
+	// The package init registers Dialer{datum:true} — datum:// must
+	// resolve to a live dialer, not ErrUnknownProtocol (§14).
+	d, err := poolproto.Lookup(poolproto.ProtocolDATUM)
+	if err != nil {
+		t.Fatalf("Lookup(ProtocolDATUM): %v", err)
+	}
+	if d.Protocol() != poolproto.ProtocolDATUM {
+		t.Errorf("registered dialer protocol = %v, want DATUM", d.Protocol())
+	}
+}
+
+func TestSession_E2E_DATUMScheme(t *testing.T) {
+	// Full subscribe→authorize→notify→submit over a datum:// URL via a
+	// dialFn-injected dialer — proves the scheme maps onto the plain V1
+	// flow DATUM gateways actually speak.
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true, notifyJob: "JOB1", deferredNotify: true}
+	go pool.run()
+
+	d := &Dialer{
+		datum: true,
+		dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+			if address != "ocean.example:3334" {
+				return nil, fmt.Errorf("unexpected address %q", address)
+			}
+			return clientConn, nil
+		},
+	}
+	c, err := d.Dial(context.Background(), "datum://ocean.example:3334", poolproto.Credentials{
+		User: "worker.1", Password: "x",
+	})
+	if err != nil {
+		t.Fatalf("Dial(datum://): %v", err)
+	}
+	sess, err := d.Negotiate(context.Background(), c)
+	if err != nil {
+		t.Fatalf("Negotiate(datum://): %v", err)
+	}
+	defer sess.Close()
+	// Wait for the notifyJob to arrive, then submit a share — verdict true.
+	select {
+	case j, ok := <-sess.Jobs():
+		if !ok {
+			t.Fatal("Jobs() closed before mining.notify")
+		}
+		if j.JobID != "JOB1" {
+			t.Fatalf("got job %q, want JOB1", j.JobID)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no mining.notify within 5s")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{
+		JobID: "JOB1", NTime: 0x68d36c5e, Nonce: 0xaabbccdd,
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !res.Accepted {
+		t.Errorf("datum share rejected: %s", res.Reason)
+	}
+}
+
 func TestDialer_DialBadURL(t *testing.T) {
 	d := &Dialer{}
 	_, err := d.Dial(context.Background(), "ftp://example.com", poolproto.Credentials{})
@@ -474,18 +561,25 @@ type fakePool struct {
 	// client sent for later assertion.
 	suggestUnsupported bool
 	suggestParams      []any
+	// deferredNotify sends notify after authorize, not on connect —
+	// net.Pipe is synchronous, so notify written before the client's
+	// session starts reading would deadlock a full-handshake dial.
+	deferredNotify bool
+}
+
+func (p *fakePool) writeNotify() {
+	notify := `{"id":null,"method":"mining.notify","params":["` + p.notifyJob + `","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}` + "\n"
+	_, _ = p.conn.Write([]byte(notify))
+	_, _ = p.conn.Write([]byte(`{"id":null,"method":"mining.set_difficulty","params":[1024]}` + "\n"))
 }
 
 func (p *fakePool) run() {
 	defer p.conn.Close()
 	reader := bufio.NewReader(p.conn)
 
-	if p.notifyJob != "" {
+	if p.notifyJob != "" && !p.deferredNotify {
 		// Send a mining.notify shortly after connect.
-		notify := `{"id":null,"method":"mining.notify","params":["` + p.notifyJob + `","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}` + "\n"
-		_, _ = p.conn.Write([]byte(notify))
-		// Send difficulty too.
-		_, _ = p.conn.Write([]byte(`{"id":null,"method":"mining.set_difficulty","params":[1024]}` + "\n"))
+		p.writeNotify()
 	}
 
 	for {
@@ -516,6 +610,27 @@ func (p *fakePool) run() {
 				resp = `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
 			}
 			_, _ = p.conn.Write([]byte(resp))
+		}
+		if req.Method == "mining.subscribe" {
+			id, _ := json.Marshal(req.ID)
+			resp := `{"id":` + string(id) + `,"result":[[["mining.set_difficulty","a"],["mining.notify","b"]],"01020304",4],"error":null}` + "\n"
+			_, _ = p.conn.Write([]byte(resp))
+		}
+		if req.Method == "extranonce.subscribe" {
+			id, _ := json.Marshal(req.ID)
+			resp := `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+			_, _ = p.conn.Write([]byte(resp))
+		}
+		if req.Method == "mining.authorize" {
+			id, _ := json.Marshal(req.ID)
+			resp := `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+			_, _ = p.conn.Write([]byte(resp))
+			// net.Pipe is synchronous: notify written before the client's
+			// session starts reading would deadlock a full-handshake dial,
+			// so deferredNotify pools send it only after authorize.
+			if p.deferredNotify && p.notifyJob != "" {
+				p.writeNotify()
+			}
 		}
 	}
 }

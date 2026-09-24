@@ -1031,10 +1031,20 @@ func (t *sessionTelemetry) updateChannelHashrate(ctx context.Context, sess poolp
 	}()
 }
 
+// runSession runs one pool connection: dial, handshake, then stream
+// jobs to workers and shares back to the pool until the connection
+// drops or ctx is cancelled. Returns the error that ended the session
+// (nil if ctx was cancelled cleanly).
+//
+// Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
+// poolproto.DialURL so the protocol abstraction is load-bearing for V1.
+// datum:// routes the same way: DATUM gateways speak plain SV1 over TCP
+// (KNOWN_LIMITATIONS §14).
 func runSession(ctx context.Context, opts sessionOpts) error {
 	proto := poolproto.FromURL(opts.poolURL)
 	opts.log("info", fmt.Sprintf("engine: transport protocol: %s", proto))
-	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS {
+	if proto == poolproto.ProtocolStratumV1 || proto == poolproto.ProtocolStratumV1TLS ||
+		proto == poolproto.ProtocolDATUM {
 		return runSessionV1(ctx, opts)
 	}
 

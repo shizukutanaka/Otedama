@@ -244,6 +244,7 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"stratum+tls accepted", "stratum+tls://pool.example.com:3334", false},
 		{"stratum+v2 accepted", "stratum+v2://pool.example.com:34254", false},
 		{"stratum+v2tls accepted", "stratum+v2tls://pool.example.com:34254", false},
+		{"datum accepted", "datum://gateway.local:3334", false},
 		{"http rejected", "http://pool.example.com", true},
 		{"https rejected", "https://pool.example.com", true},
 		{"ssh rejected", "ssh://pool.example.com", true},
