@@ -1891,3 +1891,108 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 		t.Error("unknown method enqueued a notice")
 	}
 }
+
+// ============================================================================
+// parseNotify — strict required-hex validation (session 257)
+// ============================================================================
+
+func TestParseNotify_InvalidHexFields_Rejected(t *testing.T) {
+	// A notify whose required hex fields don't parse previously produced a
+	// job with zero-valued version/nbits/ntime/prevhash — workers then
+	// mined a structurally valid but worthless header and every share was
+	// rejected. Now it must error so the engine keeps its last good job.
+	badParams := [][]byte{
+		// bad version
+		[]byte(`["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","","",[],"xyz","1d00ffff","68d36c5e",true]`),
+		// bad nbits
+		[]byte(`["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","","",[],"00000002","nothex","68d36c5e",true]`),
+		// bad ntime
+		[]byte(`["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","","",[],"00000002","1d00ffff","zz",true]`),
+		// prevhash wrong length
+		[]byte(`["60","4d16b6f8","","",[],"00000002","1d00ffff","68d36c5e",true]`),
+		// prevhash non-hex
+		[]byte(`["60","gg16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","","",[],"00000002","1d00ffff","68d36c5e",true]`),
+	}
+	for i, raw := range badParams {
+		if _, err := parseNotify(json.RawMessage(raw)); err == nil {
+			t.Errorf("case %d: expected error, got nil", i)
+		}
+	}
+}
+
+func TestParseNotify_OversizedHex_Rejected(t *testing.T) {
+	// nbits wider than 32 bits is also rejected (ParseUint bitSize).
+	raw := json.RawMessage(`["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","","",[],"00000002","1d00ffffffff","68d36c5e",true]`)
+	if _, err := parseNotify(raw); err == nil {
+		t.Error("oversized nbits should error")
+	}
+}
+
+// ============================================================================
+// parseDifficulty — non-positive values rejected (session 257)
+// ============================================================================
+
+func TestParseDifficulty_NonPositive_Rejected(t *testing.T) {
+	// Zero and negative values must not update the session: the engine
+	// falls back to the nBits block target when difficulty is non-positive,
+	// and a persisted bad value would pin every future job at a
+	// near-impossible target. Rejecting keeps the last good difficulty.
+	for _, tc := range []string{`[0]`, `[-5]`, `[-0.001]`, `[0.0]`} {
+		if _, ok := parseDifficulty(json.RawMessage(tc)); ok {
+			t.Errorf("parseDifficulty(%s) should reject non-positive value", tc)
+		}
+	}
+}
+
+func TestParseDifficulty_TooFewParams(t *testing.T) {
+	if _, ok := parseDifficulty(json.RawMessage(`[]`)); ok {
+		t.Error("empty params should be rejected")
+	}
+}
+
+// ============================================================================
+// extranonce2_size bounds (session 257)
+// ============================================================================
+
+func TestParseSetExtranonce_InvalidSize_Rejected(t *testing.T) {
+	// sz<1: strings.Repeat("00",0) produces an empty extranonce2 the pool
+	// rejects; sz<0 panics Repeat; sz huge is memory amplification. All
+	// must be refused at ingest so the previous good pair persists.
+	for _, sz := range []int{-3, -1, 0, maxExtranonce2Size + 1, 1 << 30} {
+		raw := json.RawMessage(fmt.Sprintf(`["aa",%d]`, sz))
+		if _, _, ok := parseSetExtranonce(raw); ok {
+			t.Errorf("parseSetExtranonce sz=%d should be rejected", sz)
+		}
+	}
+	// Boundaries: 1 and maxExtranonce2Size are accepted.
+	for _, sz := range []int{1, 4, 8, maxExtranonce2Size} {
+		raw := json.RawMessage(fmt.Sprintf(`["aa",%d]`, sz))
+		if _, _, ok := parseSetExtranonce(raw); !ok {
+			t.Errorf("parseSetExtranonce sz=%d should be accepted", sz)
+		}
+	}
+}
+
+func TestParseSubscribeResult_BadExtranonce2Size_Errors(t *testing.T) {
+	for _, sz := range []float64{-1, 0, 500, 1e9} {
+		result := []any{[]any{}, "abc", sz}
+		if _, _, err := parseSubscribeResult(result); err == nil {
+			t.Errorf("parseSubscribeResult en2Size=%v should error", sz)
+		}
+	}
+}
+
+// ============================================================================
+// call() — marshal failure must not strand a pending entry
+// ============================================================================
+
+func TestSession_Call_MarshalError_LeavesNoPendingEntry(t *testing.T) {
+	sess := &session{pending: map[uint64]chan rpcResponse{}}
+	_, err := sess.call(context.Background(), 7, "test", []any{make(chan int)})
+	if err == nil {
+		t.Fatal("expected marshal error")
+	}
+	if len(sess.pending) != 0 {
+		t.Errorf("pending has %d stranded entries after marshal failure", len(sess.pending))
+	}
+}

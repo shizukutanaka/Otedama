@@ -172,6 +172,10 @@ func (c *connection) Close() error {
 
 // ----- session -----
 
+// pendingJobsCap bounds the outstanding-jobs table inside readLoop —
+// the same bound the engine's inline V2 loop applies (jobsCap there).
+const pendingJobsCap = 256
+
 type session struct {
 	conn   *connection
 	dec    *stratum.Decoder
@@ -236,7 +240,16 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
-			pending[j.JobID] = j
+			// Bound the outstanding-jobs table the same way the engine's
+			// inline loop does (jobsCap): the pool is untrusted input and
+			// could stream NewMiningJob frames faster than SetNewPrevHash
+			// ever names them, growing the map without bound for the life
+			// of the session. Only new ids are refused once full — a job
+			// already in flight can always be refreshed. Dropped future
+			// jobs degrade gracefully via the existing "unknown job" path:
+			// if a later SetNewPrevHash names them, nothing is emitted
+			// until the next job rather than mining a wrong header.
+			storePendingJob(pending, j)
 			if j.HasMinNtime && havePrev {
 				if !emit(j, j.MinNtime, false) {
 					return
@@ -341,6 +354,17 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 		return err
 	}
 	return nil
+}
+
+// storePendingJob records a NewMiningJob in the outstanding-jobs table,
+// bounded by pendingJobsCap — the same policy the engine's inline loop
+// applies (jobsCap). An id already present is always updated; only *new*
+// ids are refused once the table is full. See the call site for the
+// rationale and the graceful-degradation path for dropped jobs.
+func storePendingJob(pending map[uint32]*stratum.NewMiningJob, j *stratum.NewMiningJob) {
+	if _, exists := pending[j.JobID]; exists || len(pending) < pendingJobsCap {
+		pending[j.JobID] = j
+	}
 }
 
 func parseJobID(s string) uint32 {

@@ -76,30 +76,71 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
-	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
-		job.Version = uint32(v)
+	// The hex fields are required by the protocol: silently defaulting any
+	// of them to zero would emit a structurally valid but worthless job —
+	// workers would grind a header with a zero prevhash/nbits/ntime and
+	// every produced share would be rejected, burning hashrate invisibly.
+	// Reject the notification instead so the engine keeps its last good
+	// job (or pauses) rather than mining garbage.
+	v, err := strconv.ParseUint(versionHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad version %q: %w", versionHex, err)
 	}
-	if v, err := strconv.ParseUint(nbitsHex, 16, 32); err == nil {
-		job.NBits = uint32(v)
+	job.Version = uint32(v)
+	v, err = strconv.ParseUint(nbitsHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad nbits %q: %w", nbitsHex, err)
 	}
-	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
-		job.NTime = uint32(v)
+	job.NBits = uint32(v)
+	v, err = strconv.ParseUint(ntimeHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad ntime %q: %w", ntimeHex, err)
 	}
-	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
-		copy(job.PrevHash[:], b)
+	job.NTime = uint32(v)
+	b, err := hex.DecodeString(prevHashHex)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad prevhash: %w", err)
 	}
+	if len(b) != 32 {
+		return poolproto.Job{}, fmt.Errorf("notify: bad prevhash length %d, want 32 bytes", len(b))
+	}
+	copy(job.PrevHash[:], b)
 	// MerkleRoot remains zero in the V1 path; the pool computes it.
 	return job, nil
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
+//
+// Values that are not strictly positive (zero, negative, ±Inf — NaN
+// cannot appear in JSON) are rejected: the engine falls back to the
+// nBits *block* target whenever the session difficulty is non-positive,
+// and a persisted bad value would pin every subsequent job at that
+// near-impossible target — the pool would see no credited shares again
+// until the next valid set_difficulty. Ignoring the update preserves the
+// previous good difficulty instead.
 func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	var p []float64
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return 0, false
 	}
+	if !(p[0] > 0) || math.IsInf(p[0], 0) {
+		return 0, false
+	}
 	return p[0], true
 }
+
+// maxExtranonce2Size bounds the pool-supplied extranonce2 size (bytes).
+// Real pools assign 4–8; the bound is generous headroom, not a protocol
+// limit. Without it a malicious or broken pool could crash Submit via
+// strings.Repeat (negative count panics) or grow each submission by
+// megabytes (memory amplification).
+const maxExtranonce2Size = 64
+
+// validExtranonce2Size reports whether sz is a usable extranonce2 size:
+// at least one byte of miner-rolled variance (a zero size would let the
+// miner never roll, so every share collides) and small enough that
+// per-submit padding stays trivial.
+func validExtranonce2Size(sz int) bool { return sz >= 1 && sz <= maxExtranonce2Size }
 
 // parseSetExtranonce decodes mining.set_extranonce params:
 // [extranonce1_hex, extranonce2_size_int].
@@ -114,6 +155,9 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 		return "", 0, false
 	}
 	if err := json.Unmarshal(p[1], &sz); err != nil {
+		return "", 0, false
+	}
+	if !validExtranonce2Size(sz) {
 		return "", 0, false
 	}
 	return en1, sz, true
@@ -200,7 +244,11 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
 	}
-	return en1, int(en2SizeF), nil
+	en2Size = int(en2SizeF)
+	if !validExtranonce2Size(en2Size) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range [1,%d]", en2SizeF, maxExtranonce2Size)
+	}
+	return en1, en2Size, nil
 }
 
 // ----- helpers -----

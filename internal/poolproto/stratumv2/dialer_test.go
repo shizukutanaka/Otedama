@@ -1019,3 +1019,27 @@ func TestFloat64FromBits(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// storePendingJob — bounded outstanding-jobs table (session 257)
+// ============================================================================
+
+func TestStorePendingJob_BoundedTable(t *testing.T) {
+	pending := map[uint32]*stratum.NewMiningJob{}
+	for i := uint32(0); i < pendingJobsCap; i++ {
+		storePendingJob(pending, &stratum.NewMiningJob{JobID: i})
+	}
+	if len(pending) != pendingJobsCap {
+		t.Fatalf("len(pending) = %d, want %d", len(pending), pendingJobsCap)
+	}
+	// A new id beyond the cap is refused.
+	storePendingJob(pending, &stratum.NewMiningJob{JobID: pendingJobsCap})
+	if len(pending) != pendingJobsCap {
+		t.Errorf("len(pending) = %d after drop, want %d", len(pending), pendingJobsCap)
+	}
+	// Re-storing an already-known id still succeeds while full.
+	storePendingJob(pending, &stratum.NewMiningJob{JobID: 2, HasMinNtime: true})
+	if !pending[2].HasMinNtime {
+		t.Error("existing entry was not refreshed by re-store")
+	}
+}

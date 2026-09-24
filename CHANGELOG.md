@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 257 — コンピューターサイエンスの観点から改善点を洗い出す(第2ラウンド): untrusted pool input の ingest 検証を CS 不変条件で問い詰め——クラッシュ/OOM 経路2件、静かな hashrate DoS 2件、並行リーク1件を修正)
+
+session 256 と同じ検証手続き(不変条件ごとに「コード経路上で破壊シナリオが構成できるか」を確認したもののみ採択)。今回は pool→miner 方向の ingest 境界(parse層)と残りの map 境界に集中した。
+
+**プロセス生存性(最優先).**
+
+- **`extranonce2_size` の ingest 境界化**(`stratumv1/parse.go`): pool が送る size 値が `Submit` の `strings.Repeat("00", sz)` に無検証で流れていた——負値は Repeat panic(全 goroutine から見える process crash)、巨大値は submit 毎のメモリ増幅で OOM、`int(float64)` 経由の実装定義変換も同一路線。`validExtranonce2Size`(1–64、実プールは4–8)で `parseSetExtranonce` と `parseSubscribeResult` の双方を検査。無効値は通知を棄却し直前の有効ペアを維持(subscribe 時は handshake 失敗→ failover)。
+- **`mining.set_difficulty` の非正値を棄却**: `difficulty <= 0`(Inf 含む)を session に永続化すると `v1JobTarget` が nBits **block** ターゲットへ退行し、以後全 job が「実質解けない」ターゲットで掘り続ける静かな hashrate DoS になっていた(プールにはシェアが二度と届かない)。parse 層で `p[0] > 0 && !IsInf` を要求し、不正通知は棄却して直前の難易度を維持。
+
+**プロトコル ingest の厳格化.**
+
+- **`mining.notify` の必須 hex フィールドを厳格パース**: version/nbits/ntime の16進パース失敗や prevhash の非32バイトを従来「0 として黙容」していた——構造的に有効だが中身が空の job を生成し、ワーカーはプールが絶対に受理しないヘッダを見えないまま掘り続けた。`parseNotify` はこれらを error として返し、エンジンは直前の有効 job を維持する。
+
+**リソース境界(前回と同型).**
+
+- **`stratumv2` adapter readLoop の pending map に `pendingJobsCap=256`**: engine inline loop の `jobsCap`(session 256)と同じ不変条件を adapter 側にも適用——`SetNewPrevHash` なしに job を湧かせ続ける pool で map が session 寿命分無制限成長していた。`storePendingJob` ヘルパで同じポリシー(既存 id の再格納は常時受理、drop は新規 id のみ、drop された job は「unknown job → 次 job 待ち」経路へ縮退)。
+- **`stratumv1` `call()` の marshal 失敗経路で pending 登録を解除**: `json.Marshal` 失敗時に pending エントリが session 寿命分残留し得た(現在の呼出経路では到達しないが、防御として登録前ではなく失敗時に delete を配置)。
+
+**テスト.**
+
+- `TestParseNotify_InvalidHexFields_Rejected`/`OversizedHex_Rejected`、`TestParseDifficulty_NonPositive_Rejected`/`TooFewParams`、`TestParseSetExtranonce_InvalidSize_Rejected`(境界含む)、`TestParseSubscribeResult_BadExtranonce2Size_Errors`、`TestSession_Call_MarshalError_LeavesNoPendingEntry`、`TestStorePendingJob_BoundedTable`。`go test -race` ./internal/poolproto/... 全緑。
+
 ### Fixed (session 256 — コンピューターサイエンスの観点から改善点を洗い出す: CS不変条件の観点でコードベースを問い詰め、コード実証のある5件を修正——grindループの共有キャッシュライン競合、lazy metrics mapの並行アクセス、pool制御下の無制限map成長、extranonceペアの原子的更新、map走査起因のDecide非決定性)
 
 実施した検証手続きは「候補ごとに『この不変条件は本当に破れ得るか？対象コード経路は並行/非決定か？』をコード上のevidenceで確認したもののみ採択」という Socratic トリアージ。採択した5件は全て破壊シナリオがコード経路から直接構成できる。スタイル・未検証項目は棄却済み。
