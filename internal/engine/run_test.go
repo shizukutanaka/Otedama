@@ -1643,28 +1643,12 @@ func TestPrintRecoveryPhrase_NoOutputCases(t *testing.T) {
 }
 
 // ============================================================================
-// totalHashes / totalDropped — worker stat aggregation
+// totalDropped — worker stat aggregation
 // ============================================================================
-
-func TestTotalHashes_EmptyWorkers(t *testing.T) {
-	if got := totalHashes(nil); got != 0 {
-		t.Errorf("totalHashes(nil) = %d, want 0", got)
-	}
-}
 
 func TestTotalDropped_EmptyWorkers(t *testing.T) {
 	if got := totalDropped(nil); got != 0 {
 		t.Errorf("totalDropped(nil) = %d, want 0", got)
-	}
-}
-
-func TestTotalHashes_SumsAcrossWorkers(t *testing.T) {
-	// Workers start with zero counters; we can only verify the sum is
-	// non-negative and that calling it on an empty slice returns 0 (the
-	// non-empty case requires running workers, covered by integration tests).
-	workers := make([]*miner.Worker, 0)
-	if got := totalHashes(workers); got != 0 {
-		t.Errorf("totalHashes([]) = %d, want 0", got)
 	}
 }
 
@@ -2722,4 +2706,44 @@ func TestJitteredSleep_Bounds(t *testing.T) {
 			}
 		}
 	}
+}
+
+// deviceRates — windowed rate published to the provider's HashrateFunc
+// ============================================================================
+
+func TestDeviceRates_SetGetAndMiss(t *testing.T) {
+	d := &deviceRates{rates: map[string]float64{}}
+	if _, ok := d.get("cpu0"); ok {
+		t.Fatal("get on empty deviceRates should report ok=false")
+	}
+	d.set("cpu0", 78_700_000)
+	if rate, ok := d.get("cpu0"); !ok || rate != 78_700_000 {
+		t.Fatalf("get = %v, %v; want 78700000, true", rate, ok)
+	}
+	// A later tick overwrites — the provider always sees the newest window.
+	d.set("cpu0", 50_000)
+	if rate, _ := d.get("cpu0"); rate != 50_000 {
+		t.Fatalf("overwrite get = %v, want 50000", rate)
+	}
+	// Unknown devices still miss rather than aliasing another device's rate.
+	if _, ok := d.get("gpu0"); ok {
+		t.Fatal("get for unknown device should report ok=false")
+	}
+}
+
+func TestDeviceRates_ConcurrentAccess(t *testing.T) {
+	// Writer (stats tick) and reader (provider publish) run on different
+	// goroutines; exercised under -race.
+	d := &deviceRates{rates: map[string]float64{}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 1000; i++ {
+			d.set("cpu0", float64(i))
+		}
+	}()
+	for i := 0; i < 1000; i++ {
+		_, _ = d.get("cpu0")
+	}
+	<-done
 }

@@ -87,16 +87,24 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 //
 // workers is the set of miner workers already started by startMinerWorkers.
 // When non-empty, a closure over workers is set on the MiningProvider's
-// HashrateFunc so each publish() call samples the live worker.Stats().HashRate
-// rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
-func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
-	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
+// HashrateFunc so each publish() call samples the live rate rather than using
+// the static per-family constant (KNOWN_LIMITATIONS §7). The closure prefers
+// the session loop's windowed rate from rates (current interval) over the
+// worker's lifetime average (Stats().HashRate = total/uptime), which after
+// any stall systematically undervalues mining for the rest of the run.
+func startProviders(ctx context.Context, cfg *config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string), rates *deviceRates) (*provider.MiningProvider, *provider.AkashProvider) {
+	miningProvider := provider.NewMiningProvider(defaultPoolURL(*cfg), rateFetcher)
 	if len(workers) > 0 {
 		// Capture workers by value so the closure stays valid after this
-		// function returns. Each call samples the current hashrate; no
-		// locking is needed because Worker.Stats() is itself concurrency-safe.
+		// function returns. Worker.Stats() is concurrency-safe; rates is
+		// lock-protected.
 		ws := workers
 		miningProvider.HashrateFunc = func(deviceID string) float64 {
+			if rates != nil {
+				if rate, ok := rates.get(deviceID); ok {
+					return rate
+				}
+			}
 			for _, w := range ws {
 				if w.DeviceID() == deviceID {
 					return w.Stats().HashRate

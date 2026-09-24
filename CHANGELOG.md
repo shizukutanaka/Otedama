@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 308 — 仲裁 HashrateFunc をウィンドウ化率へ)
+
+- **MiningProvider.HashrateFunc がワーカーの生涯平均率を返していた経路を解消** ——
+  `Worker.Stats().HashRate` は `HashesTotal/Uptime` の生涯平均で、一度の
+  ストール・中断の後は現在率を永続的に過小評価し、仲裁エンジンが採掘の
+  収益性を他プロバイダのストリームと比べて過小見積もり続けていた。セッション
+  ループが既に統計ティック毎に算出するウィンドウ化率をワーカー毎に
+  `deviceRates`（deviceID → ハッシュ/秒）へ公開し、HashrateFunc はそれを
+  優先参照（未公開時は従来の生涯平均へフォールバック）。集計率は
+  ワーカー毎率の総和で従来値と同一。
+
 ### Performance (session 307 — grind ホットループの共有カウンタ競合解消)
 
 - **毎ハッシュの `hashCount` atomic 加算をバッチ単位のローカル加算に** ——

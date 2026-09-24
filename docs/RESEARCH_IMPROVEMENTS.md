@@ -1251,6 +1251,33 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 308 increment (CS audit / estimator freshness)
+
+- **ソクラテス式問答 —「仲裁が見ている率は真の現在率か？」**: シェア経路
+  （fanIn/merged/per-share Submit goroutine）、stats.go（hashrateWindow・
+  LatencyTracker・rejectClass・uptimeAccountant）、arbitrate.go（30s ティック・
+  ストリーム TTL・applyAllocation）を全面監査し全てクリーンと確認した上で、
+  **推定量の鮮度**に残存欠陥を発見: `setup.go` の
+  `miningProvider.HashrateFunc` は `w.Stats().HashRate`（= HashesTotal/
+  Uptime の生涯平均）を返していた。生涯平均は一度のストール・curtail・
+  再接続後に現在率を永続的に過小評価して回復しない（分母が単調増大）——
+  情報理論的には「直近 N 秒の観測」が推定量として優位なのに、古い全履歴を
+  使っていた構造的ミスマッチ。仲裁エンジンはこの率で採掘収益を AI ストリームと
+  比較するため、一度のストール後はラン終了まで採掘を体系的に過小評価する。
+- **実装**: セッションループが既に統計ティック毎に `hashrateWindow.observe`
+  で算出するウィンドウ化率をワーカー毎に分割（`[]hashrateWindow`）、各
+  ティックで `deviceRates`（mutex 化 deviceID→rate map、Run スコープで
+  生成・reconnectOpts/sessionOpts 経由で配線）に公開。`startProviders` の
+  HashrateFunc は `rates.get(deviceID)` を優先し、未公開（初回ティック前・
+  rates nil）時は従来の生涯平均へフォールバック。集計 currentHashRate は
+  ワーカー毎率の総和 —— 同一 `now`・同一 dt で観測するため従来の単一
+  ウィンドウ値と同一。
+- **副次的整理**: `totalHashes` は唯一の本番呼び出しがこの変更で消滅した
+  ためヘルパとテストを削除（deadcode をベースライン 58 に維持）。
+  `startProviders` は hugeParam 対応で `cfg *config.Config`。
+- **検証**: 全 24 パッケージ green、engine `-race -count=2` clean、
+  deviceRates set/get/concurrent テスト 2 件、lint 純増ゼロ、govulncheck 0。
+
 ## September 2026 research pass — session 307 increment (CS audit / shared-counter contention)
 
 - **第一原理・計算量監査の続き（Musk 式・Socrates 式問答）**: ホットループ

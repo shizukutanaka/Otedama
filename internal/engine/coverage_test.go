@@ -190,15 +190,6 @@ func TestBuildStats_SharesSentIsZeroWithNilMetrics(t *testing.T) {
 	}
 }
 
-func TestTotalHashes_WithRealWorker(t *testing.T) {
-	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
-	// A brand-new worker has 0 hashes; the loop body must still execute.
-	got := totalHashes([]*miner.Worker{w})
-	if got != 0 {
-		t.Errorf("totalHashes with new worker = %d, want 0", got)
-	}
-}
-
 func TestTotalDropped_WithRealWorker(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	got := totalDropped([]*miner.Worker{w})

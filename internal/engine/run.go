@@ -283,7 +283,8 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 5: Providers -----
-	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
+	deviceHashrates := &deviceRates{rates: map[string]float64{}}
+	miningProvider, akashProvider := startProviders(ctx, &opts.Config, rateFetcher, devices, workers, log, deviceHashrates)
 	defer miningProvider.Stop()
 	defer akashProvider.Stop()
 
@@ -363,6 +364,7 @@ func Run(ctx context.Context, opts Options) error {
 		curtailGate: curtailGate,
 		activityMu:  &activityMu,
 		activity:    activity,
+		deviceRates: deviceHashrates,
 	})
 }
 
@@ -388,6 +390,10 @@ type reconnectOpts struct {
 	// the lifetime of Run(), independent of any one pool session.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// deviceRates: see sessionOpts. Threaded through unchanged for the
+	// same reason — the provider's HashrateFunc reads it for the
+	// lifetime of Run().
+	deviceRates *deviceRates
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
@@ -460,6 +466,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword: poolPassword,
 			activityMu:   r.activityMu,
 			activity:     r.activity,
+			deviceRates:  r.deviceRates,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -614,6 +621,11 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// deviceRates receives each worker's windowed hashrate every stats
+	// tick so the mining provider's HashrateFunc quotes the current rate
+	// rather than the lifetime average (see stats.go). Nil is tolerated
+	// (tests) — the tick simply skips publishing.
+	deviceRates *deviceRates
 }
 
 // isCurtailed reports whether hashing is currently paused by the
@@ -759,7 +771,12 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	defer statsTicker.Stop()
 
 	hashMon := NewHashrateMonitor(0, 3, opts.log)
-	var hashWindow hashrateWindow
+	// Per-worker hashrate windows, indexed like opts.workers, so the
+	// mining provider's HashrateFunc can quote each device's *current*
+	// rate (see deviceRates). The aggregate currentHashRate is the sum
+	// of the per-worker rates — the same number the single shared window
+	// produced before, since every window observes at the same tick.
+	hashWindows := make([]hashrateWindow, len(opts.workers))
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
@@ -819,7 +836,14 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 
 		case <-statsTicker.C:
 			now := time.Now()
-			currentHashRate := hashWindow.observe(totalHashes(opts.workers), now)
+			var currentHashRate float64
+			for i, w := range opts.workers {
+				rate := hashWindows[i].observe(w.Stats().HashesTotal, now)
+				if opts.deviceRates != nil {
+					opts.deviceRates.set(w.DeviceID(), rate)
+				}
+				currentHashRate += rate
+			}
 			logStats(opts.workers, currentHashRate, opts.log)
 			// Zombie-session detection: pool_connection_state says
 			// connected, yet no job has arrived for jobWatchdogWarnAfter —

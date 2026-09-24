@@ -119,19 +119,6 @@ func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int)
 	}
 }
 
-// totalHashes sums the lifetime cumulative hash count across all workers.
-// This is the raw counter that hashrateWindow differentiates into a
-// *current* rate — as opposed to a lifetime average (total/uptime), which
-// barely moves once a worker has run for a while and so can never fall to
-// the stall floor after startup, defeating HashrateMonitor.
-func totalHashes(workers []*miner.Worker) uint64 {
-	var total uint64
-	for _, w := range workers {
-		total += w.Stats().HashesTotal
-	}
-	return total
-}
-
 // totalDropped sums the shares dropped (consumer-full) across all workers.
 func totalDropped(workers []*miner.Worker) uint64 {
 	var total uint64
@@ -176,6 +163,32 @@ func (w *hashrateWindow) observe(total uint64, now time.Time) float64 {
 	w.lastTotal = total
 	w.lastTime = now
 	return rate
+}
+
+// deviceRates carries each worker's most recent windowed hashrate from the
+// session stats tick to the mining provider's per-device HashrateFunc, so
+// arbitration quotes the *current* rate rather than the lifetime average
+// (Stats().HashRate = total/uptime, which after any stall systematically
+// undervalues mining for the rest of the run and never recovers).
+type deviceRates struct {
+	mu    sync.RWMutex
+	rates map[string]float64 // deviceID -> hashes/sec over the last interval
+}
+
+// set records the latest windowed rate for a device.
+func (d *deviceRates) set(deviceID string, rate float64) {
+	d.mu.Lock()
+	d.rates[deviceID] = rate
+	d.mu.Unlock()
+}
+
+// get returns the latest windowed rate, or ok=false when no session tick
+// has published one yet (callers fall back to the lifetime average).
+func (d *deviceRates) get(deviceID string) (float64, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	rate, ok := d.rates[deviceID]
+	return rate, ok
 }
 
 // uptimeAccountant accumulates the wall-clock time the miner spends actually
