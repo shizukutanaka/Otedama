@@ -93,6 +93,17 @@ Decision rule replaces 5% hysteresis with: `switch iff (predicted_yield_b - pred
 
 **Cost:** ~30h.
 
+**Implementation note (session 274, groundwork ahead of v3.5):** The
+observation half now exists: `internal/engine/switchledger.go` records every
+assignment that changes stream and, one settle window (2 min) later, scores
+it against the abandoned stream's current offer — `paid_off`, `churn`, or
+`unverifiable` — exported as
+`otedama_arbitration_switch_verdicts_total{verdict}` plus a realized-gain
+gauge. This yields the empirical churn rate the calibrated `Cost(a,b)`
+needs; what remains for v3.5 is the persistent per-provider-pair store
+(bbolt), downtime/orphan-share accounting, and replacing the fixed margin
+with the `yield_delta * horizon > cost(a,b)` rule above.
+
 **Value/cost rank:** ★★★★★.
 
 **Non-custodial check:** ✅ Local ledger.

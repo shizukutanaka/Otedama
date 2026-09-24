@@ -494,6 +494,36 @@ VM 内やレポートが空の環境では Linux の sysfs 不在と同じ「GPU
 ケイパビリティ方針は Linux と同一（compute dispatch 未実装のため、検出は
 simulated 推論ストリーム向けのプレゼンスのみ）。
 
+### Added (session 274 — スイッチ判定台帳: 仲裁スイッチが実際に得をしたかを事後採点)
+
+**ADR-010 A2（スイッチングコスト台帳）の観測側を先行実装.** 従来の5%ヒステリシスは
+「スイッチを抑制する」だけで、マージンを抜いたスイッチが**実際に得だったか**を
+記録する経路がなかった。`internal/engine/switchledger.go` はストリームを変えた
+各アサインメントを記録し、一定の settle ウィンドウ（2分）後に、**離れた
+ストリームがそのデバイスに現在提示する単価**と実現イールドを比較して採点する
+——離脱先の現在提示こそ「留まっていた場合の収入」の反実仮想である。
+
+判定は `otedama_arbitration_switch_verdicts_total{verdict}` で公開:
+`paid_off`（実現 ≥ 反実仮想）、`churn`（離れたストリームの方が今も高い
+＝ヒステリシスを抜いたのに損した切替）、`unverifiable`（旧ストリーム消滅で
+比較不能）。直近の判定済み実現ゲインは
+`otedama_arbitration_last_switch_realized_gain_sats_per_second` に出力し、
+ログにも採点を記録する。churn 率が `arbitration_hysteresis_pct` を固定値でなく
+実測に基づき較正するための経験的入力になる（v3.5 の残件: 永続化された
+プロバイダ対コスト表・ダウンタイム/孤児シェア計上・判定式
+`yield_delta * horizon > cost` への置換は ADR-010 A2 スコープとして残置）。
+
+同一プロバイダはデバイス毎に同一 StreamID の複数エントリとして現れるため、
+反実仮想は (stream, device) 単位で評価する——同一IDの最終エントリだけを見ると
+他デバイスの提示が 0 と誤判定され、虚偽の paid_off になる実害を確認済み。
+
+RESEARCH_IMPROVEMENTS Cat 7 #8 を部分解決、ADR-010 A2 に実装ノート追記。
+
+*(session 308: 別系チェーンの未マージ PR に留まっていた本機能を現チェーンへ
+cherry-pick 移植。シミュレーション会計分離・信頼度・フォーキャスタ・
+A7 ラダーとの共存を検証済み — 台帳は Decide の比較量と同一の
+ExpectedYield を実現側に用いるため意味論は不変。)*
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

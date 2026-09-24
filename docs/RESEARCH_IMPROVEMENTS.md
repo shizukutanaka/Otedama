@@ -302,7 +302,16 @@ arXiv grounding (collected sessions 40–41 and here):
     `otedama_arbitration_forecast_misses_total{stream,device}` (>2σ, the A8
     input). `Predict` is not yet wired into `Decide`; the shared rolling
     buffer and multi-horizon emission remain open.
-8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
+8. 🟡 **Partially resolved — Switching-cost ledger** (ADR-010 A2, groundwork).
+   The observation half shipped (session 308, ported from the
+   session-274 sibling branch): every stream switch is scored one settle
+   window (2 min) later against the abandoned stream's current offer and
+   exported as `otedama_arbitration_switch_verdicts_total{verdict}` +
+   `otedama_arbitration_last_switch_realized_gain_sats_per_second`
+   — the empirical churn rate A2's calibrated `Cost(a,b)` needs. Remaining
+   🔵 (v3.5): persistent per-provider-pair store, downtime/orphan-share
+   accounting, and replacing the fixed hysteresis with
+   `yield_delta * horizon > cost(a,b)`.
 9. 🟡 **Beta-Bernoulli calibration** — ADR-010 A6. — 🟡 **Partially
     resolved (session 279):** `arbitration.ProviderReliability` shipped
     ahead of v3.5 — posterior mean discounts quote `Confidence`, epochs are
