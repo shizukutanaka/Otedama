@@ -1833,3 +1833,29 @@ func TestNegotiate_ArmsHandshakeReadDeadline(t *testing.T) {
 	}
 	<-done // ctx expiry releases the blocked Negotiate
 }
+
+// TestEmit_StampsBIP323VersionMask pins the BIP-323 parity: V2 standard
+// jobs carry the fixed general-purpose mask 0x1fffffe0 (bits 5–28) so
+// the worker can roll nVersion without negotiation — the spec grants
+// those bits to downstream unconditionally.
+func TestEmit_StampsBIP323VersionMask(t *testing.T) {
+	s := &session{jobsCh: make(chan poolproto.Job, 4)}
+	state := &jobState{
+		pending:   make(map[uint32]*stratum.NewMiningJob),
+		havePrev:  true,
+		prevNBits: 0x1d00ffff,
+	}
+	ctx := context.Background()
+
+	j := &stratum.NewMiningJob{ChannelID: 1, JobID: 42, HasMinNtime: true, MinNtime: 100}
+	if !s.emit(ctx, state, j, j.MinNtime, false) {
+		t.Fatal("emit returned false")
+	}
+	job := <-s.jobsCh
+	if job.VersionMask != bip323VersionRollingMask {
+		t.Fatalf("VersionMask = %#08x, want %#08x (BIP-323 GP bits)", job.VersionMask, bip323VersionRollingMask)
+	}
+	if bip323VersionRollingMask != 0x1fffffe0 {
+		t.Fatalf("mask = %#08x, want 0x1fffffe0 (BIP-323 bits 5–28)", bip323VersionRollingMask)
+	}
+}

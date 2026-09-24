@@ -383,6 +383,15 @@ const maxPendingJobs = 256
 // failover ladder on one dead address.
 const dialConnectTimeout = 30 * time.Second
 
+// bip323VersionRollingMask marks the 24 general-purpose nVersion bits
+// (bits 5–28 inclusive) that BIP-323 reserves as extra nonce space.
+// For V2 Standard Jobs the spec grants them to the downstream outright
+// — "the general purpose bits can be freely manipulated" (§5.1.1,
+// SRI mining_sv2 new_mining_job.rs) — unlike V1, which negotiates its
+// mask via BIP-310. Mining them adds ~16.7M header variants per nTime
+// before the timestamp must roll.
+const bip323VersionRollingMask = 0x1fffffe0
+
 // negotiateReadTimeout bounds each handshake ReadFrame during
 // Negotiate (SetupConnection.Success, OpenMiningChannel.Success). The
 // 5-minute read deadline only arms inside readLoop, which starts after
@@ -441,6 +450,7 @@ func (s *session) emit(ctx context.Context, state *jobState, j *stratum.NewMinin
 		ChannelID:      s.chanID,
 		ShareTarget:    target,
 		TargetAssigned: assigned,
+		VersionMask:    bip323VersionRollingMask,
 		ReceivedAt:     time.Now(),
 	}
 	if ctx.Err() != nil {

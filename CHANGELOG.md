@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 304 — V2 標準ジョブの BIP-323 バージョンローリング)
+
+- **V2 standard channel で nVersion 汎用ビット（0x1fffffe0、bits 5–28）
+  をローリング対象に** —— BIP-323（BIP-320 置換、2026-04）が downstream
+  に無交渉で付与する 24bit の探索空間を grind が利用するよう `emit` の
+  `Job.VersionMask` にスタンプ。s278–280 の V1 BIP-310 機構（submask
+  列挙・非ロールビット保存・share へロール済みバージョン echo）をそのまま
+  再利用し、V2 submit の `NVersion` には全バージョン値が既に流れるため
+  変更はスタンプのみ。nTime ロール前に ~16.7M 倍のヘッダ空間を獲得
+  （従来は nonce+ntime のみで 24bit 分を未使用）。
+
 ### Fixed (session 303 — 全ダイヤル経路の接続タイムアウト + V2 handshake deadline)
 
 - **ブラックホール化したプールへの connect/ハンドシェイク待機を遮断** ——

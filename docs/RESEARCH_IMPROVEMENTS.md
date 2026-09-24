@@ -1251,6 +1251,28 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 304 increment (BIP-323 V2 version rolling)
+
+- **V2 標準ジョブに BIP-323 の汎用 nVersion ビット（0x1fffffe0、bits
+  5–28）をスタンプ** —— sv2-spec 最新本文（2026-04 更新、BIP-320 →
+  BIP-323 置換）は「general purpose bits can be freely manipulated by
+  the downstream node」を standard チャネルに無交渉で付与（SRI
+  `mining_sv2` の NewMiningJob にも `version_rolling_allowed` は無い
+  —— Extended のみに存在）。ワーカーの grind 既存機構（submask 列挙
+  → 非ロールビットは `&^ mask` で保存、シェアは `h.Version` を echo、
+  V2 submit は `NVersion` に全値送信）に乗せるだけで nTime ロール前に
+  ~16.7M の追加ヘッダバリアントを獲得 —— 従来は nonce+ntime のみで
+  24bit 分の探索空間を未使用だった。
+- **ESP-Miner v2.15.0 差分の parity 確認**: #1771 単一 write
+  （s256 済）、#1783 フレームサイズ 8kb（当方の DefaultMaxFrameSize は
+  DoS 上限の 16MB — MCU バッファ制約由来で非該当）、#1779 fractional
+  difficulty（V2 は U256 target 直比較で丸め変換を経ない — 非該当）、
+  #1799 extranonce size 下限（プール側設定 — 非該当）。
+- **NewMiningJob wire レイアウト再照合** —— SRI main との突合で
+  channel_id/job_id/min_ntime OPTION/version/merkle_root 一致を再確認
+  （s292 監査の再検証、`future_job` フラグは存在しない ——
+  `is_future` は min_ntime 不在から導出）。
+
 ## September 2026 research pass — session 303 increment (dial/handshake timeouts)
 
 - **全ダイヤル経路に 30 秒の接続タイムアウト + V2 ハンドシェイク read

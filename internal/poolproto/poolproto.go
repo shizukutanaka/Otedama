@@ -189,11 +189,13 @@ type Job struct {
 	// nBits block target rather than mining nothing.
 	TargetAssigned bool
 
-	// VersionMask is the BIP-310 version-rolling mask negotiated for the
-	// session (V1 mining.configure / mining.set_version_mask). Bits set
-	// to 1 may be changed by the miner when grinding; zero means version
-	// rolling is not negotiated. The pool must be sent the mask-region
-	// bits as submit's sixth parameter (see stratumv1.Submit).
+	// VersionMask is the mask of header-version bits the miner may roll
+	// when grinding. V1 sets it from the BIP-310 negotiation
+	// (mining.configure / mining.set_version_mask) and echoes the rolled
+	// bits as submit's sixth parameter; V2 sets it to the fixed BIP-323
+	// general-purpose region 0x1fffffe0, which standard channels grant
+	// unconditionally, and sends the full rolled version in
+	// SubmitSharesStandard.NVersion.
 	VersionMask uint32
 
 	// Coinb1/Coinb2/MerkleBranch carry the V1 coinbase-reconstruction
