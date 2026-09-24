@@ -594,7 +594,7 @@ Otedamaがその罠に入らないために：
 
 ```
 メンテナが長期離脱した場合の連絡先と手順を
-.github/MAINTAINERS.md に記載する：
+MAINTAINERS.md（リポジトリルート）に記載する：
 
 緊急連絡先: [プライベートな連絡先 - GitHub Discussionsで公開]
 
