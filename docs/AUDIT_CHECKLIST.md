@@ -76,20 +76,17 @@ If any row does not pass, open a security advisory.
 
 ## CI gate summary
 
-This is the set of checks a PR must pass before merge. An auditor can
-verify these are enforced by inspecting `.github/workflows/ci.yml`:
+This is the set of checks a PR is intended to pass before merge.
+Actual CI coverage verified against `.github/workflows/` (session 385):
 
-- `go vet ./...`
-- `staticcheck ./...`
-- `golangci-lint run`
-- `govulncheck ./...`
-- `gosec ./...` — verified run (session 384): 38 findings, all triaged false-positive (i18n strings flagged as hardcoded credentials, conventional 0755/0644 service-file modes, fixed-path G304, unhandled Close/Remove)
-- `go test -race -timeout 5m ./...`
-- `go build ./...` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
-
-Nightly additional checks:
-
-- 30-min fuzz of `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame`
+- `go vet ./...` — in test.yml
+- `golangci-lint run` — in ci.yml + ci-cd.yml
+- `gosec ./...` (SARIF) — in ci.yml + ci-cd.yml + security.yml; verified run (session 384): 38 findings, all triaged false-positive (i18n strings flagged as hardcoded credentials, conventional 0755/0644 service-file modes, fixed-path G304, unhandled Close/Remove)
+- `go build` cross-compile for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 — in ci-cd.yml
+- `staticcheck ./...` — **Not met today:** absent from every workflow (run manually; verified clean session 376)
+- `govulncheck ./...` — **Not met today:** absent from every workflow (run manually; verified clean session 375)
+- `go test -race -timeout 5m ./...` — **Not met today:** absent from every workflow (run manually; scoped race runs clean)
+- Nightly 30-min fuzz of `FuzzDecodeHeader`/`FuzzDecoder_ReadFrame` — **Not met today:** no fuzz step exists in any workflow
 - PR-time benchmark comparison vs main (5% regression threshold)
 
 ---
