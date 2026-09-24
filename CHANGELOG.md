@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 264 — コンピューターサイエンスの観点から改善点を洗い出す(第9ラウンド): 着信 V2 メッセージのチャネル同一性検証欠如——クロスチャネル混同を封鎖、計5箇所)
+
+第9ラウンドの Socratic 問いは「**着信プロトコル状態はセッション状態と照合されているか?**」——V2 は接続を複数チャネルで多重化する設計であり、自クライアントはちょうど1チャネル(`chanID`)を開く。なのに `runSession` の inbound arm は channel メッセージの `ChannelID` を一度も照合していなかった。`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/`SubmitSharesError` の全 arm に `ChannelID == chanID` 検査を追加——**プールが発行していないジョブを掘る/先端を汚染する/ターゲットを置換する/他人の verdict を帳簿へ適用する**という4経路を封鎖。dormant adapter(`stratumv2/dialer.go` readLoop)にも同型の guard を適用。
+
+- **`NewMiningJob` 外国チャネル混同**(`engine/run.go`): 異なる channel id のジョブを jobs map に格納・起動してしまい、自分の `chanID` で submit→プールにとって未知のジョブ由来シェアは全件 stale 拒否の静かなハッシュレート消費。warn + 格納/起動の双方を skip(liveness タイムスタンプは任意フレームで更新するため維持)。
+- **`SetNewPrevHash` 外国チャネル混同**(同): 他人チャネルの tip を `prevHash`/`prevNBits` に採用し jobs map を全消去——最悪経路。採用を拒否。
+- **`SetTarget` 外国チャネル混同**(同): 他人チャネルの容易ターゲットが `shareTarget` を置換→適格シェア氾濫+全件 stale。置換を拒否。
+- **`SubmitSharesSuccess`/`SubmitSharesError` 外国チャネル混同**(同): 他人の verdict を `submitTimes` 決済・受理/拒否カウンタに誤適用。適用を拒否。
+- **dormant adapter 同型**(``stratumv2/dialer.go``): `j.ChannelID != s.chanID` の NewMiningJob を pending 格納/emit しない、`p.ChannelID != s.chanID` の SetNewPrevHash を tip/pending 状態に適用しない。第8ラウンドの沈黙バウンドと同じ「live 化時に穴を残さない」方針。
+- **テストハーネスの DATA RACE 修正**(``dialer_test.go``): `writeMsgTo` が Write 失敗時に `t.Logf` を呼ぶ——プール goroutine はテスト終了後も生き残り得るため `t.*` 呼出しが test teardown と race(-race 実行時に検出、flake 源でもあった)。post-close Write 経路では `t.*` に触れない構造に変更。
+
+**検証手続き(棄却済み候補).** failover ループは全プール一巡後に backoff で停滞しない(clean)、メトリクスラベル注入は `escapeLabel`+bounded 分類で防御済み、単調時刻は全 accountant で `elapsed<=0` ガード済み、fanIn/read 行長/frame U24/ticker interval 全 bounded、V1 はチャネル概念なし(対象外)。
+
+**テスト.** `TestRunSessionV2_ForeignChannelIgnored`(スクリプト化プールが channel 99 の job/tip/target/verdict 全型 + channel 1 の正当ペアを送信——外国フレームで `HasWork` が arm せず受理/拒否カウンタ 0 維持、正当フレームで arm を検証)、`TestSession_ReadLoop_ForeignChannelIgnored`(adapter 同型——外国 job+tip で jobsCh 無 emit、正当ペアで emit を検証)。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/stratumv2} 緑、差分行 lint/gofumpt クリーン、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 263 — コンピューターサイエンスの観点から改善点を洗い出す(第8ラウンド): 定常状態の沈黙バウンドが欠けていた経路を閉塞——計2件)
 
 第8ラウンドの Socratic 問いは「**セッションを終了させるものは何か?**」——runSession が返らなければ reconnect ループは failover 到達不能。第5ラウンドは handshake・RPC 応答の無期限化を境界化したが、**定常状態の read だけがピア応答にのみ依存**していた:V1 は 5 分の read deadline があるのに対し V2 インライン経路にはデッドラインが存在しない(TCP keepalive は死んだピアのみ有効、**生きているが送信しない zombie プール**は不検出)。

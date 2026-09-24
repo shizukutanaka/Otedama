@@ -277,38 +277,48 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
-			// Bound the outstanding-jobs table the same way the engine's
-			// inline loop does (jobsCap): the pool is untrusted input and
-			// could stream NewMiningJob frames faster than SetNewPrevHash
-			// ever names them, growing the map without bound for the life
-			// of the session. Only new ids are refused once full — a job
-			// already in flight can always be refreshed. Dropped future
-			// jobs degrade gracefully via the existing "unknown job" path:
-			// if a later SetNewPrevHash names them, nothing is emitted
-			// until the next job rather than mining a wrong header.
-			storePendingJob(pending, j)
-			if j.HasMinNtime && havePrev {
-				if !emit(j, j.MinNtime, false) {
-					return
+			// Channel identity check, mirroring the engine's inline loop:
+			// we opened exactly one channel, so a frame naming another is
+			// bogus — storing or emitting it would feed a job the pool
+			// never issued to this session.
+			if j.ChannelID == s.chanID {
+				// Bound the outstanding-jobs table the same way the engine's
+				// inline loop does (jobsCap): the pool is untrusted input and
+				// could stream NewMiningJob frames faster than SetNewPrevHash
+				// ever names them, growing the map without bound for the life
+				// of the session. Only new ids are refused once full — a job
+				// already in flight can always be refreshed. Dropped future
+				// jobs degrade gracefully via the existing "unknown job" path:
+				// if a later SetNewPrevHash names them, nothing is emitted
+				// until the next job rather than mining a wrong header.
+				storePendingJob(pending, j)
+				if j.HasMinNtime && havePrev {
+					if !emit(j, j.MinNtime, false) {
+						return
+					}
 				}
+				// Future job (or no tip yet): held until SetNewPrevHash.
 			}
-			// Future job (or no tip yet): held until SetNewPrevHash.
 		}
 		if msg.SetNewPrevHash != nil {
 			p := msg.SetNewPrevHash
-			prevHash = p.PrevHash
-			prevNBits = p.NBits
-			havePrev = true
-			named := pending[p.JobID]
-			pending = map[uint32]*stratum.NewMiningJob{}
-			if named != nil {
-				pending[p.JobID] = named
-				ntime := p.MinNtime
-				if named.HasMinNtime && named.MinNtime > ntime {
-					ntime = named.MinNtime
-				}
-				if !emit(named, ntime, true) {
-					return
+			// A tip update for a channel we never opened must not poison
+			// our chain tip or wipe the pending-job table.
+			if p.ChannelID == s.chanID {
+				prevHash = p.PrevHash
+				prevNBits = p.NBits
+				havePrev = true
+				named := pending[p.JobID]
+				pending = map[uint32]*stratum.NewMiningJob{}
+				if named != nil {
+					pending[p.JobID] = named
+					ntime := p.MinNtime
+					if named.HasMinNtime && named.MinNtime > ntime {
+						ntime = named.MinNtime
+					}
+					if !emit(named, ntime, true) {
+						return
+					}
 				}
 			}
 		}

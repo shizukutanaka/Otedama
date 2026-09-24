@@ -243,8 +243,10 @@ func writeMsgTo(t *testing.T, w net.Conn, msgType uint8, isChannel bool, enc int
 	if _, err := w.Write(data); err != nil {
 		// Connection may have been closed by the other side after
 		// the test is done — do not fail on write errors after the
-		// happy path.
-		t.Logf("writeMsgTo Write: %v (likely closed by client)", err)
+		// happy path. t.Logf is deliberately not used here: this
+		// path runs on the pool goroutine, which can outlive the
+		// test, and calling t.* after test completion is a race.
+		return
 	}
 }
 
@@ -1112,5 +1114,55 @@ func TestSession_ReadLoop_SilenceDeadline(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Error("jobsCh not closed after silent pool exceeded readSilenceBound")
+	}
+}
+
+// ============================================================================
+// readLoop — channel-identity: frames naming a foreign channel must not
+// emit jobs or poison tip state
+// ============================================================================
+
+func TestSession_ReadLoop_ForeignChannelIgnored(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go pool.doHandshake(1)
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// Foreign-channel job + tip: must not be stored or emitted.
+	writeMsgTo(t, pool.conn, stratum.MsgNewMiningJob, true,
+		stratum.NewMiningJob{ChannelID: 99, JobID: 1, Version: 0x20000004})
+	writeMsgTo(t, pool.conn, stratum.MsgSetNewPrevHash, true,
+		stratum.SetNewPrevHash{ChannelID: 99, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff})
+
+	select {
+	case j := <-sess.Jobs():
+		t.Fatalf("foreign-channel frames emitted a job: %+v", j)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Real channel-1 pair must emit — the gate is selective.
+	writeMsgTo(t, pool.conn, stratum.MsgNewMiningJob, true,
+		stratum.NewMiningJob{ChannelID: 1, JobID: 2, Version: 0x20000004})
+	writeMsgTo(t, pool.conn, stratum.MsgSetNewPrevHash, true,
+		stratum.SetNewPrevHash{ChannelID: 1, JobID: 2, MinNtime: 0x60000000, NBits: 0x207fffff})
+
+	select {
+	case j, ok := <-sess.Jobs():
+		if !ok {
+			t.Fatal("jobsCh closed before the channel-1 job arrived")
+		}
+		if j.JobID != "2" {
+			t.Errorf("emitted job %q, want \"2\"", j.JobID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("channel-1 job+tip never emitted a job")
 	}
 }

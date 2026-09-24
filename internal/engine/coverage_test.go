@@ -2538,3 +2538,160 @@ func TestRunSession_SilentPoolAbandoned(t *testing.T) {
 		t.Fatalf("expected a pool-silent session error, got %v", err)
 	}
 }
+
+// ============================================================================
+// run.go — V2 channel-identity: frames naming a channel we never opened
+// must not affect job, tip, target, or share-verdict state
+// ============================================================================
+
+// channelConfusionPool completes the SV2 handshake for channel 1, then
+// sends NewMiningJob / SetNewPrevHash / SetTarget / SubmitSharesSuccess
+// / SubmitSharesError frames all stamped with foreign channel 99, and
+// finally a real (job + prev-hash) pair on channel 1.
+func channelConfusionPool(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+
+		writeFrame := func(mt uint8, chMsg bool, payload []byte) {
+			f, err := stratum.WrapMessage(mt, chMsg, payload)
+			if err != nil {
+				return
+			}
+			encoded, _ := stratum.EncodeFrame(f)
+			conn.Write(encoded) //nolint:errcheck
+		}
+
+		if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		payload, _ := stratum.SetupConnectionSuccess{UsedVersion: 2}.Encode()
+		writeFrame(stratum.MsgSetupConnectionSuccess, false, payload)
+		if _, err := dec.ReadFrame(); err != nil { // OpenMiningChannel
+			return
+		}
+		succ := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range succ.Target {
+			succ.Target[i] = 0xFF
+		}
+		payload, _ = succ.Encode()
+		writeFrame(stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+		// Foreign-channel frames: job 99, tip 99, target 99, verdicts 99.
+		job := stratum.NewMiningJob{ChannelID: 99, JobID: 1, Version: 0x20000004}
+		for i := range job.MerkleRoot {
+			job.MerkleRoot[i] = byte(i)
+		}
+		payload, _ = job.Encode()
+		writeFrame(stratum.MsgNewMiningJob, true, payload)
+		prev := stratum.SetNewPrevHash{ChannelID: 99, JobID: 1, MinNtime: 0x60000000, NBits: 0x207fffff}
+		for i := range prev.PrevHash {
+			prev.PrevHash[i] = byte(0xA0 + i%16)
+		}
+		payload, _ = prev.Encode()
+		writeFrame(stratum.MsgSetNewPrevHash, true, payload)
+		st := stratum.SetTarget{ChannelID: 99}
+		payload, _ = st.Encode()
+		writeFrame(stratum.MsgSetTarget, true, payload)
+		ok := stratum.SubmitSharesSuccess{ChannelID: 99, LastSequenceNumber: 1}
+		payload, _ = ok.Encode()
+		writeFrame(stratum.MsgSubmitSharesSuccess, true, payload)
+		rej := stratum.SubmitSharesError{ChannelID: 99, Error: "stale"}
+		payload, _ = rej.Encode()
+		writeFrame(stratum.MsgSubmitSharesError, true, payload)
+
+		// Hold the conn open until the engine gives up the channel test
+		// window, then send a real job+tip on channel 1.
+		time.Sleep(300 * time.Millisecond)
+		job2 := stratum.NewMiningJob{ChannelID: 1, JobID: 2, Version: 0x20000004}
+		for i := range job2.MerkleRoot {
+			job2.MerkleRoot[i] = byte(i)
+		}
+		payload, _ = job2.Encode()
+		writeFrame(stratum.MsgNewMiningJob, true, payload)
+		prev2 := stratum.SetNewPrevHash{ChannelID: 1, JobID: 2, MinNtime: 0x60000000, NBits: 0x207fffff}
+		for i := range prev2.PrevHash {
+			prev2.PrevHash[i] = byte(0xA0 + i%16)
+		}
+		payload, _ = prev2.Encode()
+		writeFrame(stratum.MsgSetNewPrevHash, true, payload)
+
+		for {
+			if _, err := dec.ReadFrame(); err != nil {
+				return
+			}
+		}
+	}()
+	return "stratum+v2://" + ln.Addr().String()
+}
+
+// TestRunSessionV2_ForeignChannelIgnored feeds the session frames stamped
+// with a channel id we never opened: the worker must stay idle and the
+// acceptance counters untouched while foreign frames arrive, then arm
+// normally once a real job+tip land on the actual channel.
+func TestRunSessionV2_ForeignChannelIgnored(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	m := newEngineMetrics(metrics.NewRegistry())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runSession(ctx, sessionOpts{
+			poolURL:  channelConfusionPool(t),
+			user:     "w",
+			workers:  []*miner.Worker{w},
+			merged:   make(chan miner.Share, 8),
+			interval: 20 * time.Millisecond,
+			log:      func(_, _ string) {},
+			m:        m,
+		})
+	}()
+
+	// Foreign frames must not arm the worker. Sample HasWork across the
+	// window in which the foreign job+tip were delivered; any arm is a bug.
+	deadline := time.After(250 * time.Millisecond)
+	for {
+		select {
+		case <-deadline:
+			goto foreignWindowDone
+		case <-time.After(2 * time.Millisecond):
+			if w.HasWork() {
+				t.Fatal("worker armed by a foreign-channel NewMiningJob/SetNewPrevHash")
+			}
+		}
+	}
+foreignWindowDone:
+
+	// The real channel-1 job+tip must arm the worker — proves the gate is
+	// selective, not a blanket drop.
+	deadline = time.After(3 * time.Second)
+	for !w.HasWork() {
+		select {
+		case <-deadline:
+			t.Fatal("worker never armed by the real channel-1 job")
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	if got := m.sharesAccepted.Value(); got != 0 {
+		t.Errorf("foreign-channel SubmitSharesSuccess counted: accepted=%d", got)
+	}
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("foreign-channel SubmitSharesError counted: rejected=%d", got)
+	}
+	cancel()
+	<-done
+}

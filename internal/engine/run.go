@@ -897,26 +897,36 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				if !storeJob(jobs, jobsCap, j) && !jobsOverflowWarned {
-					jobsOverflowWarned = true
+				// Channel identity check: we opened exactly one channel,
+				// so a frame naming any other channel is bogus — storing
+				// it would later mine a job the pool never issued to us,
+				// and every share submitted under our channel id would be
+				// rejected (silent hashrate burn).
+				if j.ChannelID != chanID {
 					opts.log("warn", fmt.Sprintf(
-						"engine: job table full (%d outstanding) — dropping further jobs until next chain tip",
-						jobsCap))
-				}
-				switch {
-				case j.HasMinNtime && havePrev:
-					// Job for the current chain tip: mine it now. Its own
-					// min_ntime supersedes the tip's (it is never older).
-					startJob(j, j.MinNtime)
-				case !j.HasMinNtime:
-					// Future job: valid only for a chain tip we have not
-					// seen yet. Hold until SetNewPrevHash names it.
-					opts.log("info", fmt.Sprintf("engine: job %d stored (future job, awaiting prev-hash)", j.JobID))
-				default:
-					// Job claims to be currently valid but we have never
-					// received a SetNewPrevHash, so the header's prev_hash
-					// is unknown. Hashing now would produce garbage.
-					opts.log("info", fmt.Sprintf("engine: job %d held (no prev-hash yet)", j.JobID))
+						"engine: job %d for foreign channel %d ignored", j.JobID, j.ChannelID))
+				} else {
+					if !storeJob(jobs, jobsCap, j) && !jobsOverflowWarned {
+						jobsOverflowWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: job table full (%d outstanding) — dropping further jobs until next chain tip",
+							jobsCap))
+					}
+					switch {
+					case j.HasMinNtime && havePrev:
+						// Job for the current chain tip: mine it now. Its own
+						// min_ntime supersedes the tip's (it is never older).
+						startJob(j, j.MinNtime)
+					case !j.HasMinNtime:
+						// Future job: valid only for a chain tip we have not
+						// seen yet. Hold until SetNewPrevHash names it.
+						opts.log("info", fmt.Sprintf("engine: job %d stored (future job, awaiting prev-hash)", j.JobID))
+					default:
+						// Job claims to be currently valid but we have never
+						// received a SetNewPrevHash, so the header's prev_hash
+						// is unknown. Hashing now would produce garbage.
+						opts.log("info", fmt.Sprintf("engine: job %d held (no prev-hash yet)", j.JobID))
+					}
 				}
 				// The pool connection is alive regardless of whether the job
 				// was armed (curtailment, future job): lastJobReceivedAt
@@ -927,65 +937,93 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.SetNewPrevHash != nil {
 				p := pm.msg.SetNewPrevHash
-				prevHash = p.PrevHash
-				prevNBits = p.NBits
-				havePrev = true
-				// The new tip invalidates every job except the one it names.
-				named := jobs[p.JobID]
-				jobs = map[uint32]*stratum.NewMiningJob{}
-				if named != nil {
-					jobs[p.JobID] = named
-					ntime := p.MinNtime
-					if named.HasMinNtime && named.MinNtime > ntime {
-						ntime = named.MinNtime
-					}
-					startJob(named, ntime)
-					opts.log("info", fmt.Sprintf("engine: new prev-hash, job %d nBits=0x%08X",
-						p.JobID, p.NBits))
+				if p.ChannelID != chanID {
+					// A tip update for a channel we never opened must not
+					// poison our chain tip or wipe the job table.
+					opts.log("warn", fmt.Sprintf(
+						"engine: SetNewPrevHash for foreign channel %d ignored", p.ChannelID))
 				} else {
-					// Tip references a job we never received — stop hashing
-					// the stale job rather than mining a wrong header.
-					active = nil
-					for _, w := range opts.workers {
-						w.SetWork(nil)
+					prevHash = p.PrevHash
+					prevNBits = p.NBits
+					havePrev = true
+					// The new tip invalidates every job except the one it names.
+					named := jobs[p.JobID]
+					jobs = map[uint32]*stratum.NewMiningJob{}
+					if named != nil {
+						jobs[p.JobID] = named
+						ntime := p.MinNtime
+						if named.HasMinNtime && named.MinNtime > ntime {
+							ntime = named.MinNtime
+						}
+						startJob(named, ntime)
+						opts.log("info", fmt.Sprintf("engine: new prev-hash, job %d nBits=0x%08X",
+							p.JobID, p.NBits))
+					} else {
+						// Tip references a job we never received — stop hashing
+						// the stale job rather than mining a wrong header.
+						active = nil
+						for _, w := range opts.workers {
+							w.SetWork(nil)
+						}
+						opts.log("warn", fmt.Sprintf("engine: SetNewPrevHash names unknown job %d; pausing until next job", p.JobID))
 					}
-					opts.log("warn", fmt.Sprintf("engine: SetNewPrevHash names unknown job %d; pausing until next job", p.JobID))
 				}
 			}
 			if pm.msg.SetTarget != nil {
-				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
-				if active != nil && havePrev {
-					// Re-issue the current job so workers compare against
-					// the new share target immediately.
-					startJob(active, activeNTime)
+				if pm.msg.SetTarget.ChannelID != chanID {
+					// A foreign channel's target must not replace ours.
+					opts.log("warn", fmt.Sprintf(
+						"engine: SetTarget for foreign channel %d ignored", pm.msg.SetTarget.ChannelID))
+				} else {
+					shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+					if active != nil && havePrev {
+						// Re-issue the current job so workers compare
+						// against the new share target immediately.
+						startJob(active, activeNTime)
+					}
+					opts.log("info", "engine: share target updated by pool")
 				}
-				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
-				opts.log("info", "engine: share accepted")
-				if opts.m != nil {
-					opts.m.sharesAccepted.Inc()
-				}
-				// Settle round-trip latency for every submitted share up
-				// to LastSequenceNumber, then drop those entries.
-				now := time.Now()
-				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
-				for seq, sent := range submitTimes {
-					if seq <= last {
-						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
-						delete(submitTimes, seq)
+				// A verdict naming a foreign channel is not ours — applying it
+				// would settle latency entries we never sent and corrupt the
+				// acceptance counters.
+				if pm.msg.SubmitSharesSuccess.ChannelID != chanID {
+					opts.log("warn", fmt.Sprintf(
+						"engine: share verdict for foreign channel %d ignored",
+						pm.msg.SubmitSharesSuccess.ChannelID))
+				} else {
+					opts.log("info", "engine: share accepted")
+					if opts.m != nil {
+						opts.m.sharesAccepted.Inc()
+					}
+					// Settle round-trip latency for every submitted share up
+					// to LastSequenceNumber, then drop those entries.
+					now := time.Now()
+					last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
+					for seq, sent := range submitTimes {
+						if seq <= last {
+							latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
+							delete(submitTimes, seq)
+						}
 					}
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
-				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
-				if opts.m != nil {
-					opts.m.sharesRejected.Inc()
-					opts.m.rejectReason(category).Inc()
-					opts.m.touchLastReject(category, time.Now().Unix())
+				if pm.msg.SubmitSharesError.ChannelID != chanID {
+					opts.log("warn", fmt.Sprintf(
+						"engine: share reject for foreign channel %d ignored",
+						pm.msg.SubmitSharesError.ChannelID))
+				} else {
+					reason := pm.msg.SubmitSharesError.Error
+					category, diagnosis := rejectClass(reason)
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						reason, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
+					}
 				}
 			}
 
