@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 423 — CS 観点: forecaster への非有限 quote 汚染)
+
+- **`provider.Yield.Effective()` に NaN/Inf/clamp サニタイズを追加し
+  forecaster 観測点を切替** — arbitration 側 `Effective()` が session 355 で
+  持つ非有限入力→0 変換と [0,1] クランプが provider 側に欠落しており、
+  仲裁ループは Holt-Winters 平滑器へ生積 `observed * Confidence` を直接
+  観測していた。悪意/故障プロバイダの NaN・±Inf quote 1 発で level/trend が
+  永久に NaN 化（change-point リセットの `err > 2σ` は NaN 比較で常に偽＝
+  発火不能）する経路を閉塞。drift は既に `observedEffective()` 経由で
+  サニタイズ済み。
+
 ### Fixed (session 420 — CS 観点: opaque job_id の verbatim echo)
 
 - **非 10 進 job_id で採掘が停止していた相互運用バグを修正** — Stratum 仕様
