@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 374 — Github・論文・Qiita・Zenn、海外技術情報を参考にさらなる改善（おまかせ）: 到達不能コードの除去)
+
+- **deadcode 解析の残2件を除去** — 本番コードの `FetchAgileRatesDefault`（engine が
+  `FetchAgileRates` を直接呼ぶため死んでいた convenience wrapper）と、テストの
+  未使用 `parseFloat` ヘルパーを削除。`deadcode -test ./...` がクリーンに。
+
 ### Fixed (session 373 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: wallet サブコマンドの dispatch 復旧)
 
 - **`otedama wallet` が CLI から到達不能だった回帰を修復** — session 314 で

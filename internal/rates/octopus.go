@@ -143,9 +143,3 @@ func AgileCurveBounds(curve []AgileRate) (lo, hi float64, ok bool) {
 	}
 	return lo, hi, true
 }
-
-// FetchAgileRatesDefault is the production convenience wrapper using the
-// default 10s-timeout client.
-func FetchAgileRatesDefault(ctx context.Context, product, tariff string, from time.Time, pageSize int) ([]AgileRate, error) {
-	return FetchAgileRates(ctx, nil, product, tariff, from, pageSize)
-}
