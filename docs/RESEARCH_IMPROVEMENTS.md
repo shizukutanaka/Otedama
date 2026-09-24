@@ -1251,6 +1251,32 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 299 increment (clean_jobs stale-share drop)
+
+- **実バグ（保証 stale シェアの submit）: clean_jobs で破棄された
+  ジョブのシェアがそのまま submit される** —— V1 `mining.notify` の
+  `clean_jobs=true`（および V2 の SetNewPrevHash 活性化ジョブ）は
+  「以前の全ジョブを破棄せよ」の指示で、旧 job_id のシェアは上流で
+  必ず stale reject。sendJob は jobsCh をパージするものの、既に
+  `merged` に乗ったシェアは無差別に submit されていた —— 「#1
+  reject 原因」（stratumv1.go コメント）のシェアを自ら量産する
+  構造。cgminer は clean で stale work を破棄するのと同型の修正。
+- **実装**: `runPoolSession` に `cleanJobsActive` を追加し
+  applyJob 成功時に `job.CleanJobs` を反映。merged からのシェアが
+  `cleanJobsActive && share.JobID != lastAppliedJobID` を満たせば
+  submit せず info ログでドロップ（found としては計上、pool 判定
+  なしの unaccounted 枠）。clean_jobs でないジョブへの移行では
+  フラグが落ち、旧ジョブのシェアは従来通り submit される（V1 は
+  非クリーン notify 後も旧ジョブのシェアを受理するため）。V1/V2
+  共通ループのため両プロトコルに適用。
+- **新規テスト:** `TestRunSessionV1_DropsStaleShareAfterCleanJobs` ——
+  clean notify → 旧 job_id のシェア注入で submit が発生しないこと、
+  現行 job_id のシェアは正常に submit/accept されることを検証。
+- **記録:** `mining.suggest_difficulty` は OCEAN が拒否
+  （ESP-Miner #1383）のため無条件送信は相互運用リスク ——
+  設定面の配線が伴うため継続記録。`client.reconnect` の host 消費は
+  リダイレクト攻撃面の ADR 議論として継続記録。
+
 ## September 2026 research pass — session 298 increment (session-end work idle)
 
 - **実バグ（デッドセッション採掘）: 再接続バックオフ中もワーカーが旧セッションのジョブを掘り続ける** ——

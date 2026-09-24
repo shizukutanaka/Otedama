@@ -2404,3 +2404,132 @@ func TestRunSessionV1_SessionEndIdlesWorkers(t *testing.T) {
 		t.Error("worker still holds work after session end — dead-session grinding")
 	}
 }
+
+// TestRunSessionV1_DropsStaleShareAfterCleanJobs: after a clean_jobs job
+// lands, shares found for a superseded job ID must not be submitted —
+// the pool guaranteed it would reject them as stale. The fake pool stays
+// open and records every submit; the stale share must never reach it.
+func TestRunSessionV1_DropsStaleShareAfterCleanJobs(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	var subMu sync.Mutex
+	var submitJobIDs []string
+	poolDone := make(chan struct{})
+	go func() {
+		defer close(poolDone)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// mining.notify, job "1", clean_jobs=true.
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.Contains(line, "mining.submit") {
+				var m map[string]any
+				if json.Unmarshal([]byte(line), &m) == nil {
+					if p, ok := m["params"].([]any); ok && len(p) > 1 {
+						if id, ok := p[1].(string); ok {
+							subMu.Lock()
+							submitJobIDs = append(submitJobIDs, id)
+							subMu.Unlock()
+						}
+					}
+				}
+				// Verdict so the submit goroutine can settle.
+				var idm struct {
+					ID any `json:"id"`
+				}
+				_ = json.Unmarshal([]byte(line), &idm)
+				enc, _ := json.Marshal(idm.ID)
+				fmt.Fprintf(conn, `{"id":%s,"result":true,"error":null}`+"\n", enc)
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	merged := make(chan miner.Share, 4)
+	defer close(merged)
+
+	var mu sync.Mutex
+	var logs []string
+	logFn := func(_, m string) {
+		mu.Lock()
+		logs = append(logs, m)
+		mu.Unlock()
+	}
+	saw := func(sub string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, l := range logs {
+			if strings.Contains(l, sub) {
+				return true
+			}
+		}
+		return false
+	}
+	waitFor := func(sub string) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for !saw(sub) {
+			if time.Now().After(deadline) {
+				mu.Lock()
+				t.Fatalf("log %q never appeared; got %v", sub, logs)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runPoolSession(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "worker.1",
+			merged:   merged,
+			interval: 200 * time.Millisecond,
+			log:      logFn,
+		})
+	}()
+
+	waitFor("engine: job 1 nBits")                // clean job applied
+	merged <- miner.Share{JobID: "pre-clean-job"} // superseded → must drop
+	waitFor("dropped (clean_jobs)")
+
+	// A share for the live job must still be submitted.
+	merged <- miner.Share{JobID: "1", NTime: 0x68d36c5e}
+	waitFor("share accepted")
+
+	cancel()
+	<-done
+
+	subMu.Lock()
+	defer subMu.Unlock()
+	for _, id := range submitJobIDs {
+		if id == "pre-clean-job" {
+			t.Fatalf("stale share for superseded job was submitted: %v", submitJobIDs)
+		}
+	}
+	if len(submitJobIDs) != 1 || submitJobIDs[0] != "1" {
+		t.Fatalf("expected exactly one submit for job 1, got %v", submitJobIDs)
+	}
+}

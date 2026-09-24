@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 299 — clean_jobs で破棄されたジョブのシェアをクライアント側でドロップ)
+
+- **保証 stale reject となるシェアの submit を排除** —— `mining.notify`
+  の `clean_jobs=true`（V2 の SetNewPrevHash 活性化ジョブも同様）は
+  「以前の全ジョブを破棄せよ」の指示で、旧 job_id のシェアは上流で
+  必ず stale reject となるが、`merged` キューに既に乗ったシェアは
+  無差別に submit されていた。`runPoolSession` に `cleanJobsActive`
+  を追加し、クリーンが有効な間は現行 job_id 以外のシェアを submit
+  せずドロップ（cgminer の stale-work 破棄と同型・V1/V2 共通）。
+  found としては計上されるが pool 未判定の unaccounted 枠。
+  clean_jobs でないジョブへの移行ではフラグが落ち、旧ジョブの
+  シェアは従来通り submit される。
+
 ### Fixed (session 298 — セッション終了時の作業アイドル)
 
 - **再接続バックオフ中のデッドセッション採掘を解消** —— セッション

@@ -741,6 +741,11 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	var lastAppliedPrevHash [32]byte
 	var lastAppliedNTime uint32
 	var lastAppliedNBits uint32
+	// cleanJobsActive mirrors the last applied job's clean_jobs flag (V1
+	// mining.notify tail param; V2 SetNewPrevHash-activated jobs): while
+	// true the pool has ordered every older job discarded, so a share
+	// found for any other job ID is a guaranteed stale reject.
+	var cleanJobsActive bool
 	// unsatWarned latches once a pool-assigned unsatisfiable zero target
 	// has been reported, so a repeating pool does not spam the log.
 	// invalidDiffWarned does the same for a V1 set_difficulty value that
@@ -923,6 +928,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedPrevHash = job.PrevHash
 				lastAppliedNTime = job.NTime
 				lastAppliedNBits = job.NBits
+				cleanJobsActive = job.CleanJobs
 				opts.log("info", fmt.Sprintf("engine: job %s nBits=0x%08X", job.JobID, job.NBits))
 				if int64(job.NTime) > time.Now().Unix()+miner.MaxFutureBlockTimeSecs {
 					// The job's header timestamp is already past the
@@ -952,6 +958,16 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.sharesFound.Inc()
 				opts.m.incSharesFoundForDevice(share.DeviceID)
+			}
+			if cleanJobsActive && share.JobID != lastAppliedJobID {
+				// The pool ordered every older job discarded (clean_jobs):
+				// this share's work is provably stale upstream, and
+				// submitting it only buys a guaranteed stale reject — the
+				// #1 reject cause. Drop it client-side like cgminer; the
+				// share stays in shares_unaccounted (found, never judged).
+				opts.log("info", fmt.Sprintf(
+					"engine: share for superseded job %s dropped (clean_jobs)", share.JobID))
+				continue
 			}
 			// V1 Submit is synchronous. Run it in a goroutine so a slow
 			// pool response doesn't block the job-receive path.
