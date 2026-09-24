@@ -145,11 +145,16 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
 
-	// OpenMiningChannel.
+	// OpenMiningChannel. MaxTarget is a required U256 in the request: the
+	// pool MUST accept it or answer OpenMiningChannel.Error. All-ones
+	// advertises no constraint — we accept any target the pool assigns.
 	omc := stratum.OpenMiningChannel{
 		ReqID:           1,
 		User:            conn.user,
 		NominalHashrate: 0, // engine updates real hashrate later
+	}
+	for i := range omc.MaxTarget {
+		omc.MaxTarget[i] = 0xFF
 	}
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)

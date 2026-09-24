@@ -153,27 +153,32 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 // OpenMiningChannel requests a new mining channel on an established
 // connection. Each channel corresponds to one "mining device".
 //
-// Note: the SV2 spec's max_target (U256) field is intentionally not
-// implemented — Otedama accepts whatever share target the pool assigns
-// (OpenMiningChannelSuccess.Target, later adjusted via SetTarget), so
-// advertising a preference would be dead configuration. A previous
-// version of this struct carried a MaxTargetNBits field that Encode
-// never serialized; it was removed rather than left silently dropped.
+// The SV2 spec's max_target (U256) is required in the request — the
+// pool MUST accept it or answer OpenMiningChannel.Error. It is a
+// *cap* on how easy assigned work may be, not a difficulty request:
+// all-ones means "no constraint", which is what Otedama sends since it
+// accepts whatever share target the pool assigns
+// (OpenMiningChannelSuccess.Target, later adjusted via SetTarget). A
+// previous version of this struct carried a MaxTargetNBits field that
+// Encode never serialized; it was removed rather than left silently
+// dropped — the field is now wired for real.
 type OpenMiningChannel struct {
-	ReqID           uint32  // caller-assigned, echoed in response
-	User            string  // STR0_255: worker identifier (usually Bitcoin address)
-	NominalHashrate float32 // H/s, informational
+	ReqID           uint32   // caller-assigned, echoed in response
+	User            string   // STR0_255: worker identifier (usually Bitcoin address)
+	NominalHashrate float32  // H/s, informational
+	MaxTarget       [32]byte // U256 (fixed 32 bytes, no length prefix): highest target the miner accepts
 }
 
 // Encode serialises OpenMiningChannel.
 func (m OpenMiningChannel) Encode() ([]byte, error) {
-	b := appendU32LE(make([]byte, 0, 16), m.ReqID)
+	b := appendU32LE(make([]byte, 0, 48), m.ReqID)
 	b, err := appendStr0_255(b, m.User)
 	if err != nil {
 		return nil, err
 	}
 	// NominalHashrate: IEEE 754 float32 little-endian.
-	return appendU32LE(b, float32bits(m.NominalHashrate)), nil
+	b = appendU32LE(b, float32bits(m.NominalHashrate))
+	return append(b, m.MaxTarget[:]...), nil
 }
 
 // DecodeOpenMiningChannel parses OpenMiningChannel.
@@ -192,6 +197,9 @@ func DecodeOpenMiningChannel(payload []byte) (OpenMiningChannel, error) {
 		return m, fmt.Errorf("stratum: OpenMiningChannel.NominalHashrate: %w", err)
 	}
 	m.NominalHashrate = float32frombits(binary.LittleEndian.Uint32(f[:]))
+	if _, err := io.ReadFull(r, m.MaxTarget[:]); err != nil {
+		return m, fmt.Errorf("stratum: OpenMiningChannel.MaxTarget: %w", err)
+	}
 	return m, nil
 }
 

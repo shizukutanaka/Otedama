@@ -138,6 +138,9 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 		User:            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		NominalHashrate: 1e6, // 1 MH/s
 	}
+	for i := range orig.MaxTarget {
+		orig.MaxTarget[i] = byte(i)
+	}
 	payload, err := orig.Encode()
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -155,6 +158,9 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 	// float32 may differ slightly; we accept within 1%
 	if diff := got.NominalHashrate - orig.NominalHashrate; diff > 1e4 || diff < -1e4 {
 		t.Errorf("NominalHashrate: got %f, want %f", got.NominalHashrate, orig.NominalHashrate)
+	}
+	if got.MaxTarget != orig.MaxTarget {
+		t.Errorf("MaxTarget mismatch")
 	}
 }
 
@@ -933,9 +939,10 @@ func TestDecodeSubmitSharesStandard_ShortPayload(t *testing.T) {
 func TestDecodeOpenMiningChannel_TruncatedAtHashrate(t *testing.T) {
 	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6}
 	payload, _ := orig.Encode()
-	// Remove last 3 bytes to cut into the 4-byte float32 field.
+	// Cut inside the tail: drops the last 3 MaxTarget bytes (the float32
+	// hashrate field now sits 32 bytes earlier in the wire layout).
 	if _, err := DecodeOpenMiningChannel(payload[:len(payload)-3]); err == nil {
-		t.Error("expected error for payload truncated at NominalHashrate")
+		t.Error("expected error for payload truncated inside MaxTarget")
 	}
 }
 

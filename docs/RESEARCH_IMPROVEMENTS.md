@@ -1251,6 +1251,21 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 290 increment (OMC request wire fix)
+
+- **実装（spec 準拠・相互運用）: `OpenMiningChannel` に必須フィールド
+  `max_target U256` を追加** —— spec 5.3.2（sv2-spec と突合）は
+  `OpenStandardMiningChannel` に request_id / user_identity /
+  nominal_hash_rate / **max_target U256** を要求し、サーバは受理するか
+  OpenMiningChannel.Error を返す義務がある。実装は max_target を完全に
+  省略しており、生成ペイロードが末尾32バイト欠け —— 厳格な spec 準拠
+  プールではフレームデコード失敗→ハンドシェイク不能だった。Encode に
+  32バイト末尾を追加、Decode は必須読み取り、dialer は all-ones
+  （無制限 —— プール割当ターゲットを全て受容）を送信。s289 と同型の
+  spec-parity バグのリクエスト側。
+- **検証:** round-trip テストに MaxTarget assert 追加、truncation
+  テストのコメントを新レイアウトに更新。
+
 ## September 2026 research pass — session 289 increment (OMC.Success wire fix)
 
 - **実装（spec 準拠）: `OpenMiningChannelSuccess` 末尾フィールドを

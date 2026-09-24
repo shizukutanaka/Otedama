@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 290 — OpenMiningChannel wire 準拠)
+
+- **必須フィールド `max_target U256` を OpenMiningChannel に追加** ——
+  spec 5.3.2 で必須とされる末尾32バイトが欠落しており、厳格な SV2
+  プールへのチャネル開設リクエストがデコード不能なフレームになっていた。
+  all-ones（無制限）を送信し、Encode/Decode 両方を spec レイアウトに
+  準拠させた。
+
 ### Fixed (session 289 — OpenMiningChannelSuccess wire 準拠)
 
 - **末尾フィールドを spec 準拠の `group_channel_id U32` に修正** ——
