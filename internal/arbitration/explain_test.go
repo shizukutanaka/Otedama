@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/shizukutanaka/Otedama/internal/hal"
 )
 
 func f64(v float64) *float64 { return &v }
@@ -114,6 +116,154 @@ func TestExplainRow_Idle(t *testing.T) {
 	}
 	if (&ExplainRow{DeviceID: "x", Stream: "s"}).Idle() {
 		t.Error("assigned stream should not be idle")
+	}
+}
+
+// TestExplainText_Reasoning covers the trailing Reasoning block: one
+// clause per row that deviated from a plain stay — switch with both
+// yields, switch with an unquotable previous stream, hysteresis hold,
+// and policy foregone — plus the forecast-noise clause when both sides
+// have calibrated error scales.
+func TestExplainText_Reasoning(t *testing.T) {
+	snap := &DecisionSnapshot{
+		At:            time.Now(),
+		HysteresisPct: 0.05,
+		Rows: []ExplainRow{
+			{
+				DeviceID:                       "a",
+				Stream:                         "ai.akash",
+				ExpectedSatsPerSec:             1.51,
+				SwitchedFrom:                   "mining.stratum",
+				SwitchedFromExpectedSatsPerSec: f64(1.20),
+				ForecastSigmaSatsPerSec:        f64(0.10),
+				AltForecastSigmaSatsPerSec:     f64(0.10),
+			},
+			{
+				DeviceID:     "b",
+				Stream:       "ai.akash",
+				SwitchedFrom: "defunct.provider",
+			},
+			{
+				DeviceID:           "c",
+				Stream:             "mining.stratum",
+				ExpectedSatsPerSec: 9,
+				Held:               true,
+				ForegoneSatsPerSec: 0.30,
+				ForegoneStream:     "ai.akash",
+			},
+			{
+				DeviceID:           "d",
+				Stream:             "mining.stratum",
+				ExpectedSatsPerSec: 8,
+				ForegoneSatsPerSec: 0.25,
+				ForegoneStream:     "ai.akash",
+			},
+			{DeviceID: "e", Stream: "mining.stratum", ExpectedSatsPerSec: 9},
+		},
+	}
+	out := ExplainText(snap)
+	for _, want := range []string{
+		"Reasoning:",
+		"a: switched from mining.stratum (1.20 sat/s) to ai.akash (1.51 sat/s), +26%",
+		"gap exceeds combined forecast error ±0.20 sat/s",
+		"b: switched from defunct.provider to ai.akash — previous stream no longer quoted",
+		"c: held on mining.stratum — ai.akash's 0.30 sat/s advantage declined (hysteresis 5%)",
+		"d: policy kept mining.stratum — declined ai.akash's 0.25 sat/s advantage",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Reasoning missing %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "e:") && strings.Contains(out, "e: held") {
+		t.Error("plain stay rows must not produce reasoning clauses\n" + out)
+	}
+}
+
+// TestExplainText_ReasoningQuietWhenNothingHappened shows no Reasoning
+// block at all when every device stayed on the clearly-best stream.
+func TestExplainText_ReasoningQuietWhenNothingHappened(t *testing.T) {
+	snap := &DecisionSnapshot{
+		At:   time.Now(),
+		Rows: []ExplainRow{{DeviceID: "a", Stream: "s", ExpectedSatsPerSec: 1}},
+	}
+	if strings.Contains(ExplainText(snap), "Reasoning:") {
+		t.Error("Reasoning block must not appear for all-stay decisions")
+	}
+}
+
+// TestExplainText_ReasoningErrorBandWithin covers the complementary CI
+// clause: a gap the forecasters cannot separate.
+func TestExplainText_ReasoningErrorBandWithin(t *testing.T) {
+	snap := &DecisionSnapshot{
+		At:            time.Now(),
+		HysteresisPct: 0.05,
+		Rows: []ExplainRow{{
+			DeviceID:                   "a",
+			Stream:                     "s1",
+			ExpectedSatsPerSec:         9,
+			Held:                       true,
+			ForegoneSatsPerSec:         0.05,
+			ForegoneStream:             "s2",
+			ForecastSigmaSatsPerSec:    f64(0.10),
+			AltForecastSigmaSatsPerSec: f64(0.10),
+		}},
+	}
+	if out := ExplainText(snap); !strings.Contains(out, "gap within combined forecast error ±0.20 sat/s") {
+		t.Errorf("expected within-band clause\n%s", out)
+	}
+}
+
+// TestDecide_ForegoneStreamID pins the declined-stream identity: when a
+// device's incumbent wins the hysteresis comparison, ForegoneStreamID
+// names the suppressed higher-yield stream; when the incumbent is itself
+// the max-earnings candidate, the field stays empty.
+func TestDecide_ForegoneStreamID(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 105, Confidence: 1.0}},
+	}
+	prev := &Allocation{Assignments: []Assignment{
+		{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+	}}
+
+	// 5% improvement < 10% margin: held, declining ai.akash.
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu}, Streams: []Stream{incumbent, challenger},
+		Previous: prev, Policy: PolicyMaximizeEarnings, HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("held Decide: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if !a.Held || a.ForegoneStreamID != "ai.akash" || a.ForegoneSatsPerSec != 5 {
+		t.Errorf("expected held declining ai.akash by 5, got held=%v foregone=%q %.2f",
+			a.Held, a.ForegoneStreamID, a.ForegoneSatsPerSec)
+	}
+
+	// Challenger below the incumbent: the incumbent is itself the raw
+	// argmax, so nothing was declined and the field stays empty.
+	weaker := Stream{
+		ID:              "ai.slow",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 90, Confidence: 1.0}},
+	}
+	alloc, err = Decide(Input{
+		Devices: []DeviceRef{gpu}, Streams: []Stream{incumbent, weaker},
+		Previous: prev, Policy: PolicyMaximizeEarnings, HysteresisMargin: 0.50,
+	})
+	if err != nil {
+		t.Fatalf("uncontested Decide: %v", err)
+	}
+	a = alloc.Assignments[0]
+	if a.ForegoneStreamID != "" {
+		t.Errorf("no alternative should be recorded when incumbent is max, got %q", a.ForegoneStreamID)
 	}
 }
 

@@ -134,7 +134,7 @@ healthcheck:
 Inspect the running engine's arbitration decisions.
 
 ```
-otedama arb explain [--config path] [--http-addr addr]
+otedama arb explain [--config path] [--http-addr addr] [--json]
 ```
 
 `arb explain` fetches `GET /arbitration` from the daemon (the `--http-addr`
@@ -142,7 +142,14 @@ flag, then `OTEDAMA_HTTP_ADDR`, then `http_addr` in the config file) and
 renders the latest `DecisionSnapshot` as a per-device table: selected
 stream, expected vs one-step forecast yield (± the forecaster's error
 scale), the Beta-Bernoulli provider reliability posterior used by the
-decision, and the held/switch/foregone detail (ADR-010 A9).
+decision, and the held/switch/foregone detail (ADR-010 A9). A
+"Reasoning:" block below the table explains each non-stay decision in
+one clause — a switch states both streams' yields and the % delta, a
+hysteresis hold or policy override names the declined stream
+(`foregone_stream`) and its advantage, and when both sides have
+forecast error scales the clause states whether the gap exceeds the
+combined forecast error. `--json` emits the snapshot body verbatim for
+scripting.
 
 **Exit codes:** `0` — rendered; `1` — daemon unreachable or no decision
 recorded yet (503); `78` — no HTTP address configured.
@@ -333,7 +340,13 @@ Latest arbitration `DecisionSnapshot` as indented JSON — one row per
 device with the selected stream, expected yield, the Holt-Winters
 one-step forecast ± error scale, the Beta-Bernoulli provider reliability
 posterior (mean, α, β), and the held/switch/foregone detail
-(ADR-010 A9). Served by `otedama arb explain` for terminal rendering.
+(ADR-010 A9). Rows may also carry `foregone_stream` (the declined
+argmax stream), `foregone_expected_sats_per_sec` and
+`switched_from_expected_sats_per_sec` (that stream's current
+confidence-adjusted quote), and `alt_forecast_sigma_sats_per_sec` (the
+alternative's forecast error scale) — the inputs the rendered
+"Reasoning:" block is built from. Served by `otedama arb explain` for
+terminal rendering.
 
 - `200 OK` — snapshot JSON.
 - `503 Service Unavailable` — the engine has not recorded its first

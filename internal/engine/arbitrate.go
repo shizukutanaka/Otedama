@@ -244,7 +244,24 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 			SwitchedFrom:       a.SwitchedFromID,
 			Held:               a.Held,
 			ForegoneSatsPerSec: a.ForegoneSatsPerSec,
+			ForegoneStream:     a.ForegoneStreamID,
 			Reason:             a.Reason,
+		}
+		// The declined stream's current expected yield mirrors Decide's own
+		// effective-yield convention (SatsPerSecond × Confidence). streamMap
+		// is keyed "providerID:deviceID" — the StreamID alone is only the
+		// provider half.
+		if a.ForegoneStreamID != "" {
+			if s, ok := opts.streamMap[string(a.ForegoneStreamID)+":"+a.DeviceID]; ok {
+				exp := s.YieldFor(a.DeviceID).Effective()
+				row.ForegoneExpectedSatsPerSec = &exp
+			}
+		}
+		if a.SwitchedFromID != "" {
+			if s, ok := opts.streamMap[string(a.SwitchedFromID)+":"+a.DeviceID]; ok {
+				exp := s.YieldFor(a.DeviceID).Effective()
+				row.SwitchedFromExpectedSatsPerSec = &exp
+			}
 		}
 		if !a.Idle() {
 			if fc := forecasters[string(a.Stream)+":"+a.DeviceID]; fc != nil {
@@ -252,6 +269,19 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 				sigma := fc.Sigma()
 				row.ForecastSatsPerSec = &pred
 				row.ForecastSigmaSatsPerSec = &sigma
+			}
+			// The alternative stream's error scale powers the "does the gap
+			// exceed forecast noise" reasoning clause: the foregone
+			// candidate for a hold, the previous stream for a switch.
+			altID := a.ForegoneStreamID
+			if altID == "" {
+				altID = a.SwitchedFromID
+			}
+			if altID != "" {
+				if fc := forecasters[string(altID)+":"+a.DeviceID]; fc != nil {
+					sigma := fc.Sigma()
+					row.AltForecastSigmaSatsPerSec = &sigma
+				}
 			}
 			if r := reliability[string(a.Stream)]; r != nil {
 				mean := r.PosteriorMean()

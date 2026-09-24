@@ -18,9 +18,11 @@ func ExampleExplainText() {
 		TotalSatsPerSec:    1.51,
 		Skipped:            1,
 		Rows: []ExplainRow{
-			{DeviceID: "asic-0", Stream: "pool:asic-0", ExpectedSatsPerSec: 1.51,
+			{
+				DeviceID: "asic-0", Stream: "pool:asic-0", ExpectedSatsPerSec: 1.51,
 				ForecastSatsPerSec: &forecast, ForecastSigmaSatsPerSec: &sigma,
-				Reliability: &reliability, ReliabilityAlpha: 89, ReliabilityBeta: 2.6},
+				Reliability: &reliability, ReliabilityAlpha: 89, ReliabilityBeta: 2.6,
+			},
 			{DeviceID: "gpu-0", Reason: "no viable stream"},
 		},
 	}

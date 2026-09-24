@@ -47,7 +47,7 @@ func cmdArb(args []string, stdout, stderr io.Writer) int {
 
 func printArbUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  otedama arb explain [--config path] [--http-addr addr]
+  otedama arb explain [--config path] [--http-addr addr] [--json]
 
 Commands:
   explain    Show why the running engine assigned each device its current
@@ -69,6 +69,7 @@ func cmdArbExplain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("arb explain", flag.ContinueOnError)
 	httpAddr := fs.String("http-addr", "", "Daemon HTTP address (e.g. 127.0.0.1:9090). Resolved from config when empty.")
 	configFile := fs.String("config", "", "Path to config.yaml (optional).")
+	jsonOut := fs.Bool("json", false, "Emit the raw DecisionSnapshot JSON instead of the rendered table.")
 	if ok, code := parseSubcommandFlags(fs, args, stdout, stderr); !ok {
 		return code
 	}
@@ -97,6 +98,15 @@ func cmdArbExplain(args []string, stdout, stderr io.Writer) int {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
+		if *jsonOut {
+			// Pass the snapshot through untouched — scripting consumers
+			// get the exact JSON the daemon serves.
+			if _, err := io.Copy(stdout, resp.Body); err != nil {
+				fmt.Fprintf(stderr, "otedama: read /arbitration: %v\n", err)
+				return exitRuntime
+			}
+			return exitOK
+		}
 		var snap arbitration.DecisionSnapshot
 		if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
 			fmt.Fprintf(stderr, "otedama: malformed /arbitration response: %v\n", err)

@@ -1956,6 +1956,118 @@ func TestRunArbitrationLoop_ExplainSnapshot(t *testing.T) {
 	<-done
 }
 
+// TestRecordExplainSnapshot_ForegoneAndAltSigma covers the reasoning-input
+// fields: a held assignment surfaces the declined stream's *current*
+// expected yield (from streamMap, not the assignment's stale margin) and
+// the alternative stream's forecast error scale.
+func TestRecordExplainSnapshot_ForegoneAndAltSigma(t *testing.T) {
+	var snap atomic.Pointer[arbitration.DecisionSnapshot]
+
+	fore := arbitration.NewYieldForecaster(4)
+	for i := 0; i < 4; i++ {
+		fore.Update(105)
+	}
+	alt := arbitration.NewYieldForecaster(4)
+	for i := 0; i < 4; i++ {
+		alt.Update(103) // some error history → nonzero sigma potential
+	}
+
+	opts := arbitrationLoopOpts{
+		streamsMu: &sync.Mutex{},
+		streamMap: map[string]arbitration.Stream{
+			// Keyed "providerID:deviceID" — the held incumbent and the
+			// declined challenger both quote the same device.
+			"mining.stratum:cpu-0": {
+				ID:             "mining.stratum",
+				YieldPerDevice: map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 100, Confidence: 0.9}},
+			},
+			"ai.akash:cpu-0": {
+				ID:             "ai.akash",
+				YieldPerDevice: map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 120, Confidence: 0.5}},
+			},
+		},
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     func(_, _ string) {},
+		explain: &snap,
+	}
+	forecasters := map[string]*arbitration.YieldForecaster{
+		"mining.stratum:cpu-0": fore,
+		"ai.akash:cpu-0":       alt,
+	}
+	reliability := map[string]*arbitration.ProviderReliability{
+		"mining.stratum": arbitration.NewProviderReliability(),
+	}
+	alloc := &arbitration.Allocation{Assignments: []arbitration.Assignment{{
+		DeviceID:           "cpu-0",
+		Stream:             "mining.stratum",
+		ExpectedYield:      90, // 100 × 0.9 — confidence-adjusted, matching Effective()
+		Held:               true,
+		ForegoneSatsPerSec: 5,
+		ForegoneStreamID:   "ai.akash",
+	}}}
+
+	opts.recordExplainSnapshot(alloc, 0.10, forecasters, reliability)
+
+	s := snap.Load()
+	if s == nil || len(s.Rows) != 1 {
+		t.Fatalf("snapshot not stored: %+v", s)
+	}
+	row := s.Rows[0]
+	if row.ForegoneStream != "ai.akash" {
+		t.Errorf("ForegoneStream = %q, want ai.akash", row.ForegoneStream)
+	}
+	if row.ForegoneExpectedSatsPerSec == nil || *row.ForegoneExpectedSatsPerSec != 60 {
+		t.Errorf("ForegoneExpectedSatsPerSec = %v, want 60 (120 × 0.5)", row.ForegoneExpectedSatsPerSec)
+	}
+	if row.AltForecastSigmaSatsPerSec == nil || *row.AltForecastSigmaSatsPerSec != alt.Sigma() {
+		t.Errorf("AltForecastSigmaSatsPerSec = %v, want alt's %v", row.AltForecastSigmaSatsPerSec, alt.Sigma())
+	}
+	if row.Reliability == nil || *row.Reliability != 0.5 {
+		t.Errorf("Reliability = %v, want uniform prior mean 0.5", row.Reliability)
+	}
+}
+
+// TestRecordExplainSnapshot_SwitchedFromYield covers the mirrored field:
+// after a switch, the *previous* stream's current expected yield fills
+// SwitchedFromExpectedSatsPerSec and its forecaster supplies the alt σ.
+func TestRecordExplainSnapshot_SwitchedFromYield(t *testing.T) {
+	var snap atomic.Pointer[arbitration.DecisionSnapshot]
+	alt := arbitration.NewYieldForecaster(4)
+	for i := 0; i < 4; i++ {
+		alt.Update(50)
+	}
+	opts := arbitrationLoopOpts{
+		streamsMu: &sync.Mutex{},
+		streamMap: map[string]arbitration.Stream{
+			"mining.stratum:cpu-0": {
+				ID:             "mining.stratum",
+				YieldPerDevice: map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 80, Confidence: 1}},
+			},
+		},
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     func(_, _ string) {},
+		explain: &snap,
+	}
+	alloc := &arbitration.Allocation{Assignments: []arbitration.Assignment{{
+		DeviceID:       "cpu-0",
+		Stream:         "ai.akash",
+		ExpectedYield:  95,
+		SwitchedFromID: "mining.stratum",
+	}}}
+
+	opts.recordExplainSnapshot(alloc, 0.05,
+		map[string]*arbitration.YieldForecaster{"mining.stratum:cpu-0": alt},
+		map[string]*arbitration.ProviderReliability{})
+
+	row := snap.Load().Rows[0]
+	if row.SwitchedFromExpectedSatsPerSec == nil || *row.SwitchedFromExpectedSatsPerSec != 80 {
+		t.Errorf("SwitchedFromExpectedSatsPerSec = %v, want 80", row.SwitchedFromExpectedSatsPerSec)
+	}
+	if row.AltForecastSigmaSatsPerSec == nil || *row.AltForecastSigmaSatsPerSec != alt.Sigma() {
+		t.Errorf("AltForecastSigmaSatsPerSec = %v, want %v", row.AltForecastSigmaSatsPerSec, alt.Sigma())
+	}
+}
+
 // TestRunArbitrationLoop_ExplainSnapshotNilByDefault pins the opt-in: a
 // nil explain pointer records nothing (no goroutine-side work at all).
 func TestRunArbitrationLoop_ExplainSnapshotNilByDefault(t *testing.T) {

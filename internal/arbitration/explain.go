@@ -58,6 +58,27 @@ type ExplainRow struct {
 	// headline number for "what did the safety margin cost this cycle".
 	ForegoneSatsPerSec float64 `json:"foregone_sats_per_sec"`
 
+	// ForegoneStream identifies the declined max-earnings stream when it
+	// differs from the assigned one; ForegoneExpectedSatsPerSec is that
+	// stream's current expected yield for this device. Both empty when no
+	// alternative was on the table.
+	ForegoneStream             StreamID `json:"foregone_stream,omitempty"`
+	ForegoneExpectedSatsPerSec *float64 `json:"foregone_expected_sats_per_sec,omitempty"`
+
+	// SwitchedFromExpectedSatsPerSec is the previous stream's current
+	// expected yield for this device — the "what it left" half of a
+	// switch. Nil when the previous stream is no longer quoted: the
+	// counterfactual is then genuinely unknowable, so callers should not
+	// guess a number for it.
+	SwitchedFromExpectedSatsPerSec *float64 `json:"switched_from_expected_sats_per_sec,omitempty"`
+
+	// AltForecastSigmaSatsPerSec is the forecaster error scale of the
+	// alternative stream (the foregone candidate, or the switched-from
+	// stream for a switch row) — the second half of the "does the yield
+	// gap exceed forecast noise" reasoning clause. Nil when the
+	// alternative has no smoother history.
+	AltForecastSigmaSatsPerSec *float64 `json:"alt_forecast_sigma_sats_per_sec,omitempty"`
+
 	// Reason is Decide's own human-readable rationale for the assignment.
 	Reason string `json:"reason,omitempty"`
 }
@@ -117,6 +138,15 @@ func ExplainText(s *DecisionSnapshot) string {
 	for _, c := range cells {
 		writeTableLine(&b, c, widths)
 	}
+
+	if lines := s.reasoningLines(); len(lines) > 0 {
+		b.WriteString("\nReasoning:\n")
+		for _, l := range lines {
+			b.WriteString("  ")
+			b.WriteString(l)
+			b.WriteByte('\n')
+		}
+	}
 	return b.String()
 }
 
@@ -159,6 +189,70 @@ func explainRowCells(r *ExplainRow) []string {
 		}
 	}
 	return []string{r.DeviceID, stream, yield, forecast, reliability, detail}
+}
+
+// reasoningLines produces the trailing "Reasoning:" paragraph from
+// ADR-010 A9's mockup — one clause per device that deviated from a plain
+// stay (switched, hysteresis-held, or foregone yield under the policy),
+// with a forecast-noise clause appended whenever both sides have enough
+// history to say whether the gap exceeds what the forecasters can tell
+// apart. Rows that stayed on the clearly-best stream produce no line.
+func (s *DecisionSnapshot) reasoningLines() []string {
+	var lines []string
+	for i := range s.Rows {
+		r := &s.Rows[i]
+		var clause string
+		switch {
+		case r.SwitchedFrom != "" && r.SwitchedFromExpectedSatsPerSec != nil:
+			old, now := *r.SwitchedFromExpectedSatsPerSec, r.ExpectedSatsPerSec
+			clause = fmt.Sprintf("%s: switched from %s (%.2f sat/s) to %s (%.2f sat/s), %+.0f%%",
+				r.DeviceID, r.SwitchedFrom, old, r.Stream, now, pctDelta(now, old))
+			clause += r.errorBandClause(now - old)
+		case r.SwitchedFrom != "":
+			clause = fmt.Sprintf("%s: switched from %s to %s — previous stream no longer quoted",
+				r.DeviceID, r.SwitchedFrom, r.Stream)
+		case r.Held && r.ForegoneStream != "":
+			clause = fmt.Sprintf("%s: held on %s — %s's %.2f sat/s advantage declined (hysteresis %.0f%%)",
+				r.DeviceID, r.Stream, r.ForegoneStream, r.ForegoneSatsPerSec, s.HysteresisPct*100)
+			clause += r.errorBandClause(r.ForegoneSatsPerSec)
+		case r.ForegoneSatsPerSec > 0 && r.ForegoneStream != "":
+			clause = fmt.Sprintf("%s: policy kept %s — declined %s's %.2f sat/s advantage",
+				r.DeviceID, r.Stream, r.ForegoneStream, r.ForegoneSatsPerSec)
+			clause += r.errorBandClause(r.ForegoneSatsPerSec)
+		}
+		if clause != "" {
+			lines = append(lines, clause)
+		}
+	}
+	return lines
+}
+
+// errorBandClause appends the "does the gap exceed forecast noise" half
+// of a reasoning clause: the two streams' one-step error scales, summed,
+// are the widest band inside which the forecasters cannot distinguish
+// their yields. Empty when either side lacks forecast history — claiming
+// a separation without a calibrated σ would be a false-precision claim.
+func (r *ExplainRow) errorBandClause(gap float64) string {
+	if r.ForecastSigmaSatsPerSec == nil || r.AltForecastSigmaSatsPerSec == nil {
+		return ""
+	}
+	band := *r.ForecastSigmaSatsPerSec + *r.AltForecastSigmaSatsPerSec
+	if band <= 0 {
+		return ""
+	}
+	if gap > band {
+		return fmt.Sprintf("; gap exceeds combined forecast error ±%.2f sat/s", band)
+	}
+	return fmt.Sprintf("; gap within combined forecast error ±%.2f sat/s", band)
+}
+
+// pctDelta renders the percent change from old to now, guarding the
+// division on a zero previous yield (infinite advantage).
+func pctDelta(now, old float64) float64 {
+	if old <= 0 {
+		return 0
+	}
+	return (now - old) / old * 100
 }
 
 // Idle reports whether the row's device is unassigned.

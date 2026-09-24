@@ -52,6 +52,29 @@ func TestCmdArbExplain_RendersSnapshot(t *testing.T) {
 	}
 }
 
+// TestCmdArbExplain_JSONPassThrough: --json emits the body's bytes
+// unchanged (no decode, no render) for scripting consumers.
+func TestCmdArbExplain_JSONPassThrough(t *testing.T) {
+	body := []byte(`{"at":"2026-09-23T08:13:00Z","rows":[],"total_sats_per_sec":0}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	var out, errb bytes.Buffer
+	code := cmdArbExplain([]string{"--http-addr", strings.TrimPrefix(srv.URL, "http://"), "--json"}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, errb.String())
+	}
+	if got := strings.TrimSpace(out.String()); got != string(body) {
+		t.Errorf("--json must pass the body through verbatim\n got: %s\nwant: %s", got, body)
+	}
+	if strings.Contains(out.String(), "Otedama arbitration decision") {
+		t.Error("--json must not render the table")
+	}
+}
+
 // TestCmdArbExplain_503Message: a daemon that has not ticked yet returns
 // 503; the command explains rather than dumping an error trace.
 func TestCmdArbExplain_503Message(t *testing.T) {

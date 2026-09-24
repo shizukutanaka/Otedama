@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 287 — arb explain の Reasoning ブロック / A9 完結)
+
+- **`arb explain` に "Reasoning:" ブロック** — ADR-010 モックアップの
+  自由文段落を実装。非 stay 行（switch・ヒステリシス保持・ポリシー
+  による非最大イールド選択）に1行の根拠文を表の下に出力。switch は
+  両ストリームの信頼度調整済みイールドと % 差を、held/foregone は
+  見送ったストリームとそのアドバンテージを明示し、両側に較正済み
+  予測誤差がある場合は「ギャップが合成予測誤差を超えるか」を併記
+  （モックアップの CI-overlap テストの最簡形）。
+- **新フィールド** — `Assignment.ForegoneStreamID`（argmax だが
+  見送られたストリームの識別子）、ExplainRow の `foregone_stream`・
+  `foregone_expected_sats_per_sec`・`switched_from_expected_sats_per_sec`・
+  `alt_forecast_sigma_sats_per_sec`（`GET /arbitration` の行に
+  omitempty で現れる）。
+- **`arb explain --json`** — スナップショット本文をそのまま出力
+  （スクリプティング向け）。
+
 ### Added (session 286 — arb explain / A9 説明可能性の土台)
 
 - **`otedama arb explain` サブコマンド** — ADR-010 A9（ライブ較正

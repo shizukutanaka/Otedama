@@ -209,6 +209,15 @@ type Assignment struct {
 	// surface here. Zero under PolicyMaximizeEarnings with no hold. Where Held
 	// counts that a better option was declined, this measures how much it cost.
 	ForegoneSatsPerSec float64
+
+	// ForegoneStreamID identifies the stream that produced ForegoneSatsPerSec's
+	// reference point — the highest raw effective yield among this device's
+	// compatible streams — when that stream differs from the one assigned.
+	// Empty when the assigned stream is itself the raw-max candidate (nothing
+	// was declined, only the same option kept). It answers "which stream was
+	// declined" for explainability (ADR-010 A9's reasoning text), where
+	// ForegoneSatsPerSec answers "how much was declined".
+	ForegoneStreamID StreamID
 }
 
 // Idle reports whether this assignment leaves the device idle.
@@ -392,9 +401,15 @@ func chooseForDevice(
 	// independent of policy. It is the reference point for ForegoneSatsPerSec:
 	// the most this device could earn if routed purely by yield. Computed
 	// before the policy sort so it reflects raw yield, not policy score.
+	// maxRawStream records which stream produced it — the identity of "the
+	// best declined alternative" for ForegoneStreamID.
 	maxRaw := candidates[0].yield
+	maxRawStream := candidates[0].stream.ID
 	for _, c := range candidates[1:] {
-		maxRaw = max(maxRaw, c.yield)
+		if c.yield > maxRaw {
+			maxRaw = c.yield
+			maxRawStream = c.stream.ID
+		}
 	}
 
 	// Sort candidates by policy-adjusted score (descending), then by StreamID for
@@ -437,6 +452,10 @@ func chooseForDevice(
 					} else {
 						reason = "incumbent is best; stayed"
 					}
+					foregoneID := StreamID("")
+					if maxRawStream != c.stream.ID {
+						foregoneID = maxRawStream
+					}
 					return Assignment{
 						DeviceID:           dev.Identity.ID,
 						Stream:             c.stream.ID,
@@ -444,6 +463,7 @@ func chooseForDevice(
 						Reason:             reason,
 						Held:               held,
 						ForegoneSatsPerSec: maxRaw - c.yield,
+						ForegoneStreamID:   foregoneID,
 					}
 				}
 				break
@@ -457,6 +477,9 @@ func chooseForDevice(
 		ExpectedYield:      best.yield,
 		Reason:             fmt.Sprintf("best yield under policy %s", policy),
 		ForegoneSatsPerSec: maxRaw - best.yield,
+	}
+	if maxRawStream != best.stream.ID {
+		a.ForegoneStreamID = maxRawStream
 	}
 	if previous.Stream != "" && previous.Stream != best.stream.ID {
 		a.SwitchedFromID = previous.Stream

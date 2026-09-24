@@ -284,11 +284,23 @@ JSON at `GET /arbitration` and rendered per the table above by
 `otedama arb explain` (fetch → `ExplainText`). Differences from the
 mockup: yield is shown in sat/s with the forecast at the next ~30 s tick
 (not a 4 h horizon — matching `Predict`'s calibrated error scale rather
-than extrapolating), the "switch cost" column is expressed via the
-held/switch/foregone detail pending A2's persistent ledger, and the
-free-text "Reasoning" paragraph is pending. The 4h-horizon forecast,
-confidence-interval exclusion test, and switch-cost amortization row
-remain v3.5 scope alongside A2.
+than extrapolating) and the "switch cost" column is expressed via the
+held/switch/foregone detail pending A2's persistent ledger.
+
+**Session 287 update:** the free-text "Reasoning" block shipped. Each
+non-stay row now carries a one-line clause below the table — a switch
+states both streams' confidence-adjusted yields and the % delta, a
+hysteresis hold names the declined stream and its advantage, and a
+policy foregone does the same for policy overrides. When both the
+chosen and alternative streams have calibrated forecast error scales
+(`ForecastSigmaSatsPerSec` / `AltForecastSigmaSatsPerSec`, the latter
+sourced from `Assignment.ForegoneStreamID` — the argmax stream the
+decision declined, or the previous stream after a switch), the clause
+appends whether the gap exceeds the combined forecast error — the
+mockup's "confidence interval excludes overlap" test in its simplest
+two-scale form. `arb explain --json` passes the snapshot body through
+for scripting. The 4h-horizon forecast, full joint CI test, and
+switch-cost amortization row remain v3.5 scope alongside A2.
 
 ---
 
