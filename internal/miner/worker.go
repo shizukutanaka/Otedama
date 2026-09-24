@@ -16,7 +16,12 @@ import (
 // The Worker hashes block headers derived from this work looking for
 // a Nonce that satisfies the difficulty target.
 type Work struct {
-	JobID     uint32
+	JobID uint32
+	// JobKey is the pool's verbatim job_id string: opaque per stratum
+	// spec and echoed back on submission. JobID (uint32) is only the
+	// internal tag for metrics/reject classification — non-decimal job
+	// ids get a hashed tag, never a parse failure.
+	JobKey    string
 	ChannelID uint32
 	Header    Header // template; Nonce field will be overwritten
 	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
@@ -33,10 +38,13 @@ type Work struct {
 type Share struct {
 	ChannelID uint32
 	JobID     uint32
-	Nonce     uint32
-	NTime     uint32
-	Version   uint32
-	Hash      Hash
+	// JobKey is the pool's verbatim job_id string echoed on submission
+	// (Stratum V1 requires the opaque id back byte-for-byte).
+	JobKey  string
+	Nonce   uint32
+	NTime   uint32
+	Version uint32
+	Hash    Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -261,6 +269,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				share := Share{
 					ChannelID: localWork.ChannelID,
 					JobID:     localWork.JobID,
+					JobKey:    localWork.JobKey,
 					Nonce:     nonce,
 					NTime:     h.Time,
 					Version:   h.Version,

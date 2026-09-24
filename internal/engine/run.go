@@ -32,6 +32,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"strings"
@@ -1490,7 +1491,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 func submitV1Share(ctx context.Context, sess poolproto.Session, rt *sessionTelemetry, opts *sessionOpts, share miner.Share) {
 	sendTime := time.Now()
 	result, err := sess.Submit(ctx, poolproto.ShareSubmission{
-		JobID: fmt.Sprintf("%d", share.JobID),
+		JobID: share.JobKey,
 		Nonce: share.Nonce,
 		NTime: share.NTime,
 		// Echoed as the optional 6th submit param when the pool
@@ -1574,10 +1575,11 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
-// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is parsed back
-// to the uint32 the miner uses; an unparseable ID yields job 0, which
-// the pool will reject on submit, surfacing the problem rather than
-// silently mining a malformed job.
+// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is opaque per
+// spec and carried verbatim in Work.JobKey for share submission; the
+// uint32 tag on Work.JobID is internal only (metrics, reject
+// classification) — non-decimal ids hash via FNV-32a rather than failing
+// the job.
 //
 // The share target comes from job.Target when the protocol carries one
 // (Stratum V2: the pool-assigned U256 from OpenMiningChannelSuccess /
@@ -1596,12 +1598,20 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 			return 0, fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 		}
 	}
+	// job_id is opaque per the stratum spec — echoed back verbatim on
+	// submission. The uint32 is only the internal tag (metrics, reject
+	// classification); non-decimal ids hash to a tag instead of failing
+	// the job (previously "unparseable job ID" stalled mining on pools
+	// that send alphanumeric ids).
 	var jobID uint32
 	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return 0, fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
+		h := fnv.New32a()
+		_, _ = h.Write([]byte(job.JobID))
+		jobID = h.Sum32()
 	}
 	w := &miner.Work{
 		JobID:     jobID,
+		JobKey:    job.JobID,
 		ChannelID: chanID,
 		Header: miner.Header{
 			Version:    job.Version,

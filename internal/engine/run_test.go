@@ -404,15 +404,21 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+func TestApplyJob_NonDecimalJobID(t *testing.T) {
+	// job_id is opaque per the stratum spec: a non-decimal id must not
+	// fail the job — the verbatim string goes to Work.JobKey and the
+	// uint32 tag hashes deterministically.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	_, err := applyJob([]*miner.Worker{w}, job, 1, 0)
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	jobID, err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	if err != nil {
+		t.Fatalf("applyJob must accept opaque job ids: %v", err)
+	}
+	if jobID == 0 {
+		t.Error("non-decimal job id should hash to a nonzero tag")
 	}
 }
 

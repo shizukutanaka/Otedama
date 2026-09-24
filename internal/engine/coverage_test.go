@@ -1806,10 +1806,10 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	}
 }
 
-// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
-// continue.
-func TestRunSessionV1_ApplyJobError(t *testing.T) {
+// TestRunSessionV1_NonDecimalJobID covers the opaque job_id contract: a
+// pool sending a non-numeric job ID no longer fails applyJob — the job is
+// applied (logged as "V1 job <id>") and shares echo the id verbatim.
+func TestRunSessionV1_NonDecimalJobID(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -1831,7 +1831,7 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":4,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Send job with non-numeric ID — opaque per spec, applied (not an error).
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"not-a-number",`+
@@ -1864,8 +1864,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, "V1 job not-a-number") {
+		t.Errorf("expected the opaque job id to be applied and logged; got: %v", logLines)
 	}
 }
 
