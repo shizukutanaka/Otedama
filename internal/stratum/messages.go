@@ -49,6 +49,7 @@ const (
 	MsgOpenMiningChannel        uint8 = 0x10
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
+	MsgCloseChannel             uint8 = 0x19
 	MsgNewMiningJob             uint8 = 0x15
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
@@ -372,6 +373,45 @@ func WrapMessage(msgType uint8, isChannelMsg bool, payload []byte) (Frame, error
 }
 
 // ------------------------------------------------------------------
+// CloseChannel (either direction, msg_type 0x19, channel_msg)
+// ------------------------------------------------------------------
+
+// CloseChannel ends a mining channel. Sent by the server it tells the
+// client the channel is gone — its pending jobs are dead and further
+// submits on it would be rejected. The client-side direction exists
+// for polite channel teardown, which Otedama does not use (it simply
+// drops the connection).
+//
+// Wire layout: channel_id U32, reason_code STR0_255.
+type CloseChannel struct {
+	ChannelID  uint32
+	ReasonCode string
+}
+
+// Encode serializes CloseChannel (includes channel_id prefix).
+func (m CloseChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 8), m.ChannelID)
+	return appendStr0_255(b, m.ReasonCode)
+}
+
+// DecodeCloseChannel parses a CloseChannel payload. The reason_code
+// STR0_255 is required on the wire — a 4-byte payload with the length
+// byte absent is malformed and rejected, matching the error-code rule
+// applied to OpenMiningChannelError and SubmitSharesError.
+func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
+	if len(payload) < 5 {
+		return CloseChannel{}, fmt.Errorf("stratum: CloseChannel: short payload (%d < 5)", len(payload))
+	}
+	m := CloseChannel{ChannelID: binary.LittleEndian.Uint32(payload[0:4])}
+	r := newByteReader(payload[4:])
+	var err error
+	if m.ReasonCode, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.ReasonCode: %w", err)
+	}
+	return m, nil
+}
+
+// ------------------------------------------------------------------
 // DispatchFrame decodes a frame into a concrete message type.
 // ------------------------------------------------------------------
 
@@ -383,6 +423,7 @@ type Message struct {
 	OpenMiningChannel        *OpenMiningChannel
 	OpenMiningChannelSuccess *OpenMiningChannelSuccess
 	OpenMiningChannelError   *OpenMiningChannelError
+	CloseChannel             *CloseChannel
 	NewMiningJob             *NewMiningJob
 	SetNewPrevHash           *SetNewPrevHash
 	SetTarget                *SetTarget
@@ -443,6 +484,12 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.OpenMiningChannelError = &v
+	case MsgCloseChannel:
+		v, err := DecodeCloseChannel(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.CloseChannel = &v
 	case MsgNewMiningJob:
 		v, err := DecodeNewMiningJob(f.Payload)
 		if err != nil {

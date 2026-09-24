@@ -1251,6 +1251,20 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 284 increment (SV2 CloseChannel)
+
+- **実装（spec 準拠）: `CloseChannel` (0x19) のデコード + readLoop
+  ハンドリング** —— SV2 spec の正規チャネル終了メッセージが未実装で、
+  プールがチャネルを閉じても TCP が残る経路でセッションが
+  ゾンビ化（ジョブ停止だが切断として検出されず read deadline /
+  watchdog 待ち）していた。自チャネル宛の CloseChannel で readLoop
+  を終了し、エンジンの再接続経路で新チャネルを即座に開く。
+  他チャネル宛は無視。reason_code STR0_255 必須として
+  OpenMiningChannelError/SubmitSharesError と同規則で厳格化。
+- **検証:** `TestReadLoop_CloseChannelEndsSession`（自チャネルで終了、
+  他チャネルで継続）、`FuzzDecodeV2Message` に CloseChannel
+  セレクタ追加（15 秒 3.5M exec クリーン）。
+
 ## September 2026 research pass — session 283 increment (extranonce size interop)
 
 - **実装（interop 非対称修正）: `mining.set_extranonce` のサイズを

@@ -1564,3 +1564,58 @@ func TestReadLoop_ArmsReadDeadline(t *testing.T) {
 		t.Fatal("readLoop did not exit after connection close")
 	}
 }
+
+// TestReadLoop_CloseChannelEndsSession pins the spec path: a
+// CloseChannel addressed to this session's channel ends the session
+// (engine reconnects on a fresh channel), while a close for another
+// channel id is ignored.
+func TestReadLoop_CloseChannelEndsSession(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	conn := &connection{raw: client, remoteAddr: "test", protocol: poolproto.ProtocolStratumV2}
+	sess := &session{
+		conn:   conn,
+		dec:    stratum.NewDecoder(client),
+		chanID: 7,
+		jobsCh: make(chan poolproto.Job, 8),
+		done:   make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sess.readLoop(ctx)
+
+	writeClose := func(channelID uint32) {
+		t.Helper()
+		payload, err := stratum.CloseChannel{ChannelID: channelID, ReasonCode: "pool reorg"}.Encode()
+		if err != nil {
+			t.Fatalf("CloseChannel.Encode: %v", err)
+		}
+		f, err := stratum.WrapMessage(stratum.MsgCloseChannel, true, payload)
+		if err != nil {
+			t.Fatalf("WrapMessage: %v", err)
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			t.Fatalf("EncodeFrame: %v", err)
+		}
+		if _, err := server.Write(data); err != nil {
+			t.Fatalf("write CloseChannel: %v", err)
+		}
+	}
+
+	// A close for a different channel must not end this session.
+	writeClose(42)
+	select {
+	case <-sess.done:
+		t.Fatal("readLoop exited on a CloseChannel for another channel")
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// A close for our channel ends the session.
+	writeClose(7)
+	select {
+	case <-sess.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLoop did not exit after CloseChannel for its channel")
+	}
+}

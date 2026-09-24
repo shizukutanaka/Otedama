@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 284 — SV2 CloseChannel 0x19)
+
+- **V2 `CloseChannel` メッセージ対応** —— プールが正規のチャネル終了を
+  送っても従来は未認識メッセージとしてスキップされ、TCP が残ったまま
+  ジョブが止まるゾンビ経路だった。自チャネル宛の CloseChannel で
+  セッションを終了し、再接続→新チャネルへ即座に移行する
+  （他チャネル宛は無視）。reason_code STR0_255 必須で厳格デコード。
+
 ### Fixed (session 283 — set_extranonce JSON 数値 interop)
 
 - **`mining.set_extranonce` の extranonce2_size を float64 受理に修正** ——

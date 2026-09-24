@@ -295,6 +295,16 @@ func (s *session) readLoop(ctx context.Context) {
 			}
 		case msg.SetTarget != nil:
 			s.onSetTarget(msg.SetTarget)
+		case msg.CloseChannel != nil:
+			// The pool closed the channel: pending jobs are dead and
+			// further submits reject. This session only ever holds one
+			// channel, so a close addressed to it ends the session —
+			// exit the loop and let the engine reconnect on a fresh
+			// channel rather than sitting as a zombie until the read
+			// deadline or job watchdog notices.
+			if msg.CloseChannel.ChannelID == s.chanID {
+				return
+			}
 		case msg.SubmitSharesSuccess != nil:
 			s.settleVerdicts(msg.SubmitSharesSuccess.LastSequenceNumber, true,
 				poolproto.ShareResult{Accepted: true})

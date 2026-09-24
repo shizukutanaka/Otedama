@@ -19,7 +19,7 @@ import (
 // decodeBySelector runs every payload decoder the selector indexes;
 // each arm returns a re-encoded []byte for the round-trip check.
 func decodeBySelector(sel byte, p []byte) ([]byte, error) {
-	switch sel % 12 {
+	switch sel % 13 {
 	case 0:
 		m, err := DecodeNewMiningJob(p)
 		if err != nil {
@@ -86,8 +86,14 @@ func decodeBySelector(sel byte, p []byte) ([]byte, error) {
 			return nil, err
 		}
 		return m.Encode()
-	default:
+	case 11:
 		m, err := DecodeOpenMiningChannelError(p)
+		if err != nil {
+			return nil, err
+		}
+		return m.Encode()
+	default:
+		m, err := DecodeCloseChannel(p)
 		if err != nil {
 			return nil, err
 		}
@@ -105,6 +111,7 @@ func FuzzDecodeV2Message(f *testing.F) {
 	f.Add(byte(1), []byte("\x01\x00\x00\x00\x02\x00\x00\x00"+string(make([]byte, 44))))
 	f.Add(byte(5), []byte("\x01\x00\x00\x00\x02\x00\x00\x00\x05stale-share"))
 	f.Add(byte(9), []byte("\x01\x00\x00\x00\x04user\x00\x00\x00\x00"))
+	f.Add(byte(12), []byte("\x07\x00\x00\x00\x05reorg"))
 	f.Fuzz(func(t *testing.T, sel byte, payload []byte) {
 		enc, err := decodeBySelector(sel, payload)
 		if err != nil {
@@ -112,7 +119,7 @@ func FuzzDecodeV2Message(f *testing.F) {
 		}
 		if !bytes.HasPrefix(payload, enc) && !bytes.Equal(payload, enc) {
 			t.Fatalf("selector %d: re-encode (%d B) does not match decoded prefix of %d B input",
-				sel%12, len(enc), len(payload))
+				sel%13, len(enc), len(payload))
 		}
 	})
 }
