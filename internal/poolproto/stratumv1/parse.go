@@ -72,23 +72,44 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		}
 	}
 
+	return notifyJob(jobID, prevHashHex, versionHex, nbitsHex, ntimeHex, cleanJobs)
+}
+
+// notifyJob validates the notify header fields and builds the Job.
+// Every header field must parse: a malformed value left silently
+// zeroed produces guaranteed-rejected shares the worker still burns
+// hashrate on (and surfaces nothing). cgminer drops such notifies;
+// an empty job_id makes the share unreferencable pool-side. Reject
+// rather than mine on a corrupt header.
+func notifyJob(jobID, prevHashHex, versionHex, nbitsHex, ntimeHex string, cleanJobs bool) (poolproto.Job, error) {
+	if jobID == "" {
+		return poolproto.Job{}, fmt.Errorf("notify: empty job_id")
+	}
 	job := poolproto.Job{
 		JobID:      jobID,
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
-	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
-		job.Version = uint32(v)
+	v, err := strconv.ParseUint(versionHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: version: %w", err)
 	}
-	if v, err := strconv.ParseUint(nbitsHex, 16, 32); err == nil {
-		job.NBits = uint32(v)
+	job.Version = uint32(v)
+	v, err = strconv.ParseUint(nbitsHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: nbits: %w", err)
 	}
-	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
-		job.NTime = uint32(v)
+	job.NBits = uint32(v)
+	v, err = strconv.ParseUint(ntimeHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: ntime: %w", err)
 	}
-	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
-		copy(job.PrevHash[:], b)
+	job.NTime = uint32(v)
+	b, err := hex.DecodeString(prevHashHex)
+	if err != nil || len(b) != 32 {
+		return poolproto.Job{}, fmt.Errorf("notify: prevhash %q is not 32-byte hex", prevHashHex)
 	}
+	copy(job.PrevHash[:], b)
 	// MerkleRoot remains zero in the V1 path; the pool computes it.
 	return job, nil
 }

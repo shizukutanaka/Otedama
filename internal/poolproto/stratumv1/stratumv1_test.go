@@ -144,6 +144,25 @@ func TestParseNotify_MalformedJSON(t *testing.T) {
 	}
 }
 
+func TestParseNotify_MalformedFieldsRejected(t *testing.T) {
+	// Header fields that fail to parse must drop the job rather than
+	// emit one with silently-zeroed values — the worker would burn
+	// hashrate on guaranteed-rejected shares and surface nothing.
+	const ph = `"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"`
+	for name, raw := range map[string]string{
+		"empty job_id":     `["",` + ph + `,"01","ff",[],"00000002","1d00ffff","68d36c5e",true]`,
+		"bad version hex":  `["60",` + ph + `,"01","ff",[],"zzzz","1d00ffff","68d36c5e",true]`,
+		"bad nbits hex":    `["60",` + ph + `,"01","ff",[],"00000002","!","68d36c5e",true]`,
+		"bad ntime hex":    `["60",` + ph + `,"01","ff",[],"00000002","1d00ffff","notatime",true]`,
+		"prevhash short":   `["60","deadbeef","01","ff",[],"00000002","1d00ffff","68d36c5e",true]`,
+		"prevhash non-hex": `["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000XX!","01","ff",[],"00000002","1d00ffff","68d36c5e",true]`,
+	} {
+		if _, err := parseNotify(json.RawMessage(raw)); err == nil {
+			t.Errorf("%s: malformed notify should error, not emit a zeroed job", name)
+		}
+	}
+}
+
 // ============================================================================
 // parseDifficulty
 // ============================================================================

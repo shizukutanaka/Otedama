@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 342 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: mining.notify の破損フィールドで採掘しない)
+
+- **`parseNotify` の厳格化** — `version`/`nbits`/`ntime`/`prevhash` の hex パース失敗や
+  空の `job_id` を、従来はフィールドをゼロ値のまま黙って採用しジョブを発行していた
+  （= 必ず拒否されるヘッダで採掘し続ける wasted work）ため、cgminer と同じく
+  破損 notify としてドロップするよう変更。`handleNotify` の既存エラーパスがそのまま
+  発動し、セッションは健全なまま。
+- **上流監査（SRI v1.11.1）** — `stratum_translation` の「SV1 difficulty 切り上げ
+  除去」修正（ckolivas, stratum-mining/stratum#2227）を検証: 自前の
+  `TargetFromDifficulty` は `big.Float` の `Int()` 切り捨てで既に同挙動を満たす
+  ことを確認（RESEARCH_IMPROVEMENTS に照合記録、pin を v1.11.1 へ更新）。
+
 ### Added (session 341 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール TLS 証明書期限の可視化)
 
 - **`otedama_pool_tls_cert_not_after_unixtime{pool_host}` ゲージ** — `stratum+tls://`

@@ -1120,7 +1120,14 @@ month, so the discipline matters.
    (session 251). **Pin executed (session 293):** ADR-009 names
    **SRI v1.11.0** the conformance reference for Go SV2 compatibility
    tests; bump the pin deliberately on each upstream re-verification.
-   (github.com/stratum-mining/stratum/releases.atom)
+   **Pin bumped (session 342):** latest upstream is **v1.11.1
+   (2026-07-22)**; its user-visible fix "Do not round up SV1
+   difficulties" (stratum-mining/stratum#2227, ckolivas) was verified
+   against our own code — `internal/miner.TargetFromDifficulty` already
+   truncates `diff1Target / difficulty` via `big.Float.Int()` with
+   256-bit precision, matching the upstream behaviour; the
+   `v1.11.0 → v1.11.1` bump is therefore conformance-only, no code
+   change needed. (github.com/stratum-mining/stratum/releases.atom)
 
 ### AI-compute / arbitration engine
 
