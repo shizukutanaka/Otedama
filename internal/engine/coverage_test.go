@@ -2255,3 +2255,121 @@ func TestRunReconnectLoop_ResetsAfterConnectedSession(t *testing.T) {
 		t.Errorf("accepted %d connections, want ≥4 (failure counter must reset after the connected session)", got)
 	}
 }
+
+// ============================================================================
+// run.go — dead-work lifecycle: workers idle between sessions, stale
+// buffered shares never reach the next session's pool
+// ============================================================================
+
+func TestDrainShares(t *testing.T) {
+	// Empty and nil channels return immediately.
+	drainShares(nil)
+	empty := make(chan miner.Share, 4)
+	drainShares(empty)
+
+	ch := make(chan miner.Share, 4)
+	for i := 0; i < 4; i++ {
+		ch <- miner.Share{JobID: uint32(i)}
+	}
+	drainShares(ch)
+	if n := len(ch); n != 0 {
+		t.Fatalf("drainShares left %d buffered shares, want 0", n)
+	}
+	// A share arriving after the drain stays — the drain is a
+	// non-blocking snapshot, not a subscription.
+	ch <- miner.Share{JobID: 9}
+	if n := len(ch); n != 1 {
+		t.Fatalf("post-drain share missing, len=%d", n)
+	}
+}
+
+// TestRunReconnectLoop_IdlesWorkersBetweenSessions scripts a pool whose
+// first connection completes the V1 handshake and delivers a job (so the
+// worker demonstrably has work), then closes; later connections fail. On
+// return the loop must have idled the worker — grinding a dead session's
+// last job through the backoff wastes power and produces only stale
+// shares — and must have drained the pre-connection buffered share so it
+// is never submitted to a pool that never issued its job id.
+func TestRunReconnectLoop_IdlesWorkersBetweenSessions(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	var accepted atomic.Int32
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			n := accepted.Add(1)
+			go func() {
+				defer conn.Close()
+				if n != 1 {
+					return // refuse every connection after the first
+				}
+				r := bufio.NewReader(conn)
+				_, _ = r.ReadString('\n') // mining.subscribe
+				fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+				_, _ = r.ReadString('\n') // mining.authorize
+				fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+				_, _ = r.ReadString('\n') // extranonce.subscribe
+				fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+				fmt.Fprintf(conn,
+					`{"id":null,"method":"mining.notify","params":[`+
+						`"1",`+
+						`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+						`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				time.Sleep(100 * time.Millisecond) // let applyJob land
+			}()
+		}
+	}()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	// One share buffered before any session exists — stale by definition.
+	merged := make(chan miner.Share, 8)
+	merged <- miner.Share{JobID: 1}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	r := reconnectOpts{
+		opts: Options{
+			Config: config.Config{
+				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
+				Pools:          []config.PoolConfig{{URL: "stratum+tcp://" + ln.Addr().String()}},
+			},
+			MaxReconnectAttempts: 2,
+		},
+		workers: []*miner.Worker{w},
+		merged:  merged,
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     func(_, _ string) {},
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- runReconnectLoop(ctx, r) }()
+
+	// The job must actually reach the worker mid-session — otherwise the
+	// idle assertion below is vacuous.
+	deadline := time.After(5 * time.Second)
+	for !w.HasWork() {
+		select {
+		case <-deadline:
+			t.Fatal("worker never received work from the scripted pool")
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("expected 'exceeded reconnect attempts', got: %v", err)
+	}
+	if w.HasWork() {
+		t.Error("worker still holds dead-session work after the reconnect loop ended")
+	}
+	if n := len(merged); n != 0 {
+		t.Errorf("%d pre-session share(s) survived the drain", n)
+	}
+}

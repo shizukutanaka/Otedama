@@ -413,6 +413,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
+		// Discard shares left over from before this session's connection:
+		// each was found against a previous session's job id, which the
+		// pool being dialed has never issued, so every one would arrive
+		// as a guaranteed-stale submit and inflate the reject counters.
+		drainShares(r.merged)
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:      poolURL,
 			user:         user,
@@ -442,6 +447,14 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		})
 		if sessionErr != nil {
 			r.metrics.poolConnectFailures.Inc()
+		}
+		// Idle every worker while disconnected: without a live session no
+		// job is valid, and grinding the dead session's last work through
+		// the backoff wastes power while producing only stale shares the
+		// next session would dutifully submit. Same shape as the curtail
+		// gate, which already idles workers with SetWork(nil).
+		for _, w := range r.workers {
+			w.SetWork(nil)
 		}
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
 		if r.opts.OnReady != nil {
@@ -1521,6 +1534,21 @@ func storeJob(jobs map[uint32]*stratum.NewMiningJob, limit int, j *stratum.NewMi
 		return true
 	}
 	return false
+}
+
+// drainShares discards every share currently buffered in ch without
+// blocking. It runs between sessions, so the channel only ever holds
+// shares found against an ended session's job ids — the pool being
+// connected to has never issued those ids and would reject each one
+// as stale. A nil channel drains to empty immediately.
+func drainShares(ch <-chan miner.Share) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
 }
 
 func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }

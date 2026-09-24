@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -24,6 +25,12 @@ func TestYield_Effective(t *testing.T) {
 		{"zero sats", Yield{SatsPerSecond: 0, NetSatsPerSecond: 0, Confidence: 1.0}, 0},
 		{"zero confidence", Yield{SatsPerSecond: 100, NetSatsPerSecond: 99, Confidence: 0}, 0},
 		{"negative net sats", Yield{SatsPerSecond: 100, NetSatsPerSecond: -1, Confidence: 1.0}, 0},
+		// NaN/±Inf in either operand must collapse to 0 — comparisons
+		// cannot order NaN and an infinite yield must not claim devices.
+		{"NaN net sats", Yield{SatsPerSecond: 100, NetSatsPerSecond: math.NaN(), Confidence: 1.0}, 0},
+		{"NaN confidence", Yield{SatsPerSecond: 100, NetSatsPerSecond: 99, Confidence: math.NaN()}, 0},
+		{"+Inf net sats", Yield{NetSatsPerSecond: math.Inf(1), Confidence: 1.0}, 0},
+		{"-Inf net sats", Yield{NetSatsPerSecond: math.Inf(-1), Confidence: 1.0}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

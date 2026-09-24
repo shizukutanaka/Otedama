@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 261 — コンピューターサイエンスの観点から改善点を洗い出す(第6ラウンド): 死んだセッションの仕事のライフサイクルを切断 + yield 契約の統一——計3件)
+
+第6ラウンドの Socratic 問いは「この仕事は誰の依頼で、依頼主が死んだ後も続くべきか?」——ワーク所有権(work ownership)の不変条件。ジョブは特定のライブなプールセッションが発行するものであり、セッション終了後に残存する仕事は定義上 stale。監査で、curtail ゲートと SetNewPrevHash-unknown-job 経路には既に `SetWork(nil)` でのアイドル化がある一方、**セッション終了経路だけがこの不変条件を欠いていた**ことを確認。
+
+- **セッション終了後もワーカーが死んだジョブを掘り続ける**(`engine/run.go` `runReconnectLoop`): プール切断 → 指数バックオフ(最大64s)→ 再接続の間、ワーカーは旧セッションの最後のジョブを掘り続ける。発見されたシェアは `merged` にバッファされ、**次のセッション**がそれを新しい channel ID / job id で submit する——プールが発行したことのないジョブへの submit は必ず stale 拒否され、受容率シグナルを汚染し、バックオフ中の電力を丸ごと浪費する。セッション関数の直後(成否・切断理由を問わず、ダイヤル失敗にも到達する)に `for _, w := range r.workers { w.SetWork(nil) }` で全ワーカーをアイドル化。curtail ゲートと同型の意味論。
+- **バッファ済み stale シェアが次セッションに submit される**(`engine/run.go` + 新 `drainShares`): 切断直前に発見されたシェアは `merged` のバッファ(深さ64)に残り、次セッションの submit 経路が拾う。新しいプールが発行していない job id への submit は全件 stale 拒否となるため、セッション開始直前(ダイヤル前)に `drainShares(r.merged)` で非ブロッキングに捨てる。nil チャネルは即座に return。
+- **`provider.Yield.Effective()` の NaN 透過**(`provider/provider.go`): 第3ラウンドで修正した `arbitration.Yield.Effective()`(積側ガード `!(eff>0) || IsInf(eff,1)`)と同名契約を持つ別型の `provider.Yield.Effective()` が旧式の入力ガード `NetSatsPerSecond <= 0 || Confidence <= 0` のまま残っていた——NaN は両比較を抜けて `NaN * c` を返す。現時点では provider テストのみが呼ぶ dormant な穴だが、将来の呼び出し側が arbitration 側と同じ全順序契約を仮定すると破れる潜在的トラップ。積側ガードに統一。
+
+**検証手続き(棄却済み候補).** 経路単位で clean と確認: `client.reconnect`/`mining.reconnect`(プール供給の host:port を故意に辿らず記録+close のみ——ハッシュレート盗難/SSRF 経路なし)、bech32 デコーダ(`dataPart>=8` ガード後の `data[0]`/`data[1:len-6]` は境界安全、witness version>16 棄却、BIP-350 checksum 定数の v0/v1 切替正しい)、config 書き込み(CLI パスに WriteFile/Rename が存在せず原子性問題なし)、`LatencyTracker`(mutex 保護済み、負値棄却、`time.Since().Milliseconds()` は NaN 不成立)、`v1JobIDTable` リング(wrap-around 衝突は 2^32 ジョブ≈130年で現実的に不成立)、`latency.Record` の per-share goroutine 呼び出し(mutex 済み)、`v1JobTarget`/`applyJob`(nBits/difficulty 検証済み error 経路)、`parseHost`/`sessionUser`(config 由来文字列、sink 側で escape 済み)。
+
+**テスト.** `TestYield_Effective` に NaN/±Inf 4ケース追加、`TestDrainShares`(満杯→空 + nil + drain後の share 残留)、`TestRunReconnectLoop_IdlesWorkersBetweenSessions`(conn #1 が handshake+notify 完遂→close、以後即 close するスクリプト化プール——セッション中 `HasWork()==true` をポーリングで確認し vacuous pass を排除、ループ終了後 `HasWork()==false` と `len(merged)==0` を検証)。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,provider} 緑、差分行 lint/gofumpt クリーン。
+
 ### Fixed (session 260 — コンピューターサイエンスの観点から改善点を洗い出す(第5ラウンド): 非信頼ピアへの待機に生涯境界がないクラスを3箇所で修正)
 
 第5ラウンドの Socratic 問いは「この待機は何が境界するか?」——ブロッキング待機は全て (a) タイムアウト、(b) ctx キャンセル到達、(c) ピア応答、のいずれかで有限化されねばならない。監査で3箇所が (a) も (b) も持たずピア応答にのみ依存すると確認。
