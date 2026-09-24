@@ -436,6 +436,30 @@ bounds the ledger; `rejectClass` normalises separators across V1/V2
 spellings; `acceptanceRate` returns 1.0 at 0/0 rather than a spurious 0%
 alarm.
 
+**Sessions 418–421 CS-invariant pass, continued.** Session 419 closed a
+real gap — a provider-controlled future-dated `q.At` would pin
+`lastQuoteAt` ahead of the local clock forever, defeating stale-stream
+pruning; `ts.IsZero() || ts.After(clk.Now())` now clamps to the local
+clock (same defence posture as session 355's quote-value sanitisation).
+Session 420 fixed the opaque `job_id` contract: `applyJob` previously
+forced a decimal `Sscanf` and *failed* the job on non-decimal ids
+(alphanumeric job ids stall mining; `"12abc"` even partial-parsed to the
+wrong echo), and `submitV1Share` re-serialised the uint32 tag instead of
+echoing the spec-mandated verbatim string. `miner.Work`/`miner.Share`
+now carry `JobKey` verbatim end-to-end; the uint32 tag (FNV-32a on
+non-decimal ids) is internal-only for metrics/reject classification.
+Session 421 then pointed the submit-latency exemplar's `job_id` at
+`JobKey` so the exemplar names the id the pool knows. Verified
+already-correct: `difficultyTagger` is mutex-guarded with bounded FIFO
+eviction; `stratumv1.Submit` pads extranonce2 to the negotiated size and
+appends version_bits only when version-rolling was negotiated; CPU
+workers roll only the 4-byte nonce space (adequate at CPU hashrates —
+`ShareSubmission.ExtraNonce` stays empty by design, padded server-side);
+exemplars are per-bucket latest-wins (no cardinality growth) and
+`escapeLabel` sanitises `\`/`"`/`\n` so a hostile pool job_id cannot
+inject lines into the `/metrics` exposition; `effectiveYield` guards
+uptime ≤ 0 and clamps the productive fraction to [0,1].
+
 ---
 
 ### Elevation of privilege (E)
