@@ -10,6 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 256 — コンピューターサイエンスの観点から改善点を洗い出す: CS不変条件の観点でコードベースを問い詰め、コード実証のある5件を修正——grindループの共有キャッシュライン競合、lazy metrics mapの並行アクセス、pool制御下の無制限map成長、extranonceペアの原子的更新、map走査起因のDecide非決定性)
+
+実施した検証手続きは「候補ごとに『この不変条件は本当に破れ得るか？対象コード経路は並行/非決定か？』をコード上のevidenceで確認したもののみ採択」という Socratic トリアージ。採択した5件は全て破壊シナリオがコード経路から直接構成できる。スタイル・未検証項目は棄却済み。
+
+**Hot path（Carmack: プロファイル実証済み）.**
+
+- **`internal/miner/worker.go` grind() 内側ループ**: ヘッダ逐次化をバッチ外へホイスト（nonce書換のみループ内、`block[76:80]`）、`w.hashCount.Add` を per-hash → per-batch 化。共有カウンタへの per-hash atomic Add は全 grind goroutine を1本の contended cache line 上で逐次化させていた（MESI 観点の false sharing）。スタンドアロンベンチで内側ループ 107.4 → 89.4 ns/op（−17%、alloc 0）。シェア発見時は発見までの反復分を即座に計上するため、Stats() の HashesTotal がシェア通知に先行する整合性は従来通り。
+
+**並行性（Go memory model 観点）.**
+
+- **`internal/engine/metrics.go`**: `rejectByReason` lazy-create map に `rejectByReasonMu` を追加。V1 submit は呼び出しごとに goroutine を生成し、stats ticker の `updateShareRates` が読み取りに同じ map を触れる——writer×writer・writer×reader 両パターンで「concurrent map access」fatal panic リスクがあった。同ファイル内の他 lazy map と同一の mutex パターンで統一。
+- **`internal/poolproto/stratumv1`**: `extranonce1`/`extranonce2Size` を `atomic.Pointer[extranonceState]` へ。`mining.set_extranonce`（read loop goroutine が書く）と `Submit`（呼び出し goroutine が読む）は別 goroutine——ペアが独立フィールドだと torn read（新 en1 × 旧 size）で extranonce2 が誤長さで投稿されシェア拒否される経路が存在した。ポインタ swap でペアを不可分にし、裸 `&session{}` 構築のテスト経路では zero-value を返す nil-safe getter。
+
+**プロトコル状態・リソース境界（DoS 耐性）.**
+
+- **`internal/engine/run.go`**: V2 `NewMiningJob` の outstanding-jobs map に `jobsCap=256` の上限（`submitTimesCap` と同じ設計原理——プールは untrusted input）。`SetNewPrevHash` なしに job を湧かせ続けるプールで map が session 寿命分無制限成長していた。満杯時の drop は新規 id のみ（既存 id の再送信は常に受理）。drop された job が後の `SetNewPrevHash` で参照されても既存の「unknown job → 次 job まで一時停止」経路で縮退し、誤ヘッダ掘削にはならない。最初の drop のみ warn、以後静粛。
+
+**決定性（参照透明性の境界）.**
+
+- **`internal/engine/arbitrate.go`**: `streamsSlice` をソート済み key 走査＋出力を StreamID ソートに変更。Go の map 走査順はランダムであり、同一 StreamID を持つ複数エントリの「先着代表」が呼び出し毎に変わり、merge 結果（AcceptsFamilies・DefaultYield・rating）が tick ごとに揺れていた——`Decide` の「同一入力→同一出力」保証がパイプライン境界で破れていた。`Quote.At` が未来時刻のときは観測時刻にクランプ（quote は到着時刻より新鮮にはなり得ない；far-future At は stream を永久に pruning 対象外に固定し、provider が沈黙してもデバイスをルートし続ける経路だった）。
+
+**テスト.**
+
+- `TestStoreJob_BoundedTable`（cap・既存 id 再格納・新規 drop）、`TestRejectReason_ConcurrentAccess`（16 goroutine×200 の writer/reader 混在、`-race` 下で検証）、`TestStreamsSlice_DeterministicRepresentative`/`SortedOutput`（50回反復で非決定性を pin）、extranonce 関連テストを accessor 経由に更新。`go test -race` で miner/engine/poolproto 全緑。
+
 ### Fixed (session 255 — Github、論文、Qiita、Zenn、海外技術情報などを参考にさらなる改善。おまかせ。: `docs/RESEARCH_IMPROVEMENTS.md` の検証済みバックログから8項目を実装——アーカイブ済みYAML依存のmaintained fork移行、quarterly toolchain bump、V1 `set_difficulty`推移中シェアのbenign拒否分離、フレーム/Noise長さ計算の境界fuzz、定数時間比較監査)
 
 全ての項目は RESEARCH_IMPROVEMENTS.md 内の既存エントリ（一次ソース検証済みのもの）から選定し、バージョン事実は今セッションでGo module proxy/pkg.go.devに対して再検証した。

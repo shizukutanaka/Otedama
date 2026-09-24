@@ -866,11 +866,12 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if sess.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
+	st := sess.extranonceState()
+	if st.en1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", st.en1)
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if st.en2Size != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", st.en2Size)
 	}
 }
 
@@ -1524,11 +1525,12 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if sv1.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
+	st := sv1.extranonceState()
+	if st.en1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", st.en1)
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if st.en2Size != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", st.en2Size)
 	}
 }
 

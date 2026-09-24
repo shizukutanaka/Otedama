@@ -11,6 +11,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -76,8 +77,13 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			key := updateStream(opts.streamsMu, opts.streamMap, q)
 			ts := q.At
-			if ts.IsZero() {
-				ts = time.Now()
+			now := time.Now()
+			if ts.IsZero() || ts.After(now) {
+				// Unset or future timestamps are clamped to the observation
+				// time: a quote cannot be fresher than the moment it arrived,
+				// and a far-future At would pin the stream forever, never
+				// pruned even if the provider went silent.
+				ts = now
 			}
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
@@ -207,12 +213,24 @@ func updateStream(mu *sync.Mutex, m map[string]arbitration.Stream, q provider.Qu
 // and subsequent ones contribute their YieldPerDevice entries into it.
 func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 	merged := make(map[arbitration.StreamID]*arbitration.Stream, len(m))
-	for _, s := range m {
+	// Iterate in sorted key order: Go map iteration is random, so the
+	// "first entry wins as representative" rule below would otherwise pick
+	// a different representative (and with it different AcceptsFamilies /
+	// DefaultYield / rating fields for the merged stream) on every call,
+	// breaking Decide's identical-input → identical-output guarantee at
+	// the pipeline boundary.
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		s := m[k]
 		if rep, ok := merged[s.ID]; ok {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
-			// updateStream always initialises YieldPerDevice before inserting
+			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y
@@ -234,6 +252,11 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 	for _, s := range merged {
 		result = append(result, *s)
 	}
+	// Deterministic output order — same reasoning as the sorted-key
+	// iteration above.
+	slices.SortFunc(result, func(a, b arbitration.Stream) int {
+		return strings.Compare(string(a.ID), string(b.ID))
+	})
 	return result
 }
 

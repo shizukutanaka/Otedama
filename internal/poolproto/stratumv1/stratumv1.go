@@ -110,9 +110,13 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
-	extranonce1     string
-	extranonce2Size int
+	// extranonce holds the extranonce1 + extranonce2_size pair negotiated
+	// at subscribe time. The read loop replaces it on mining.set_extranonce
+	// while Submit goroutines read it, so the pair moves atomically — two
+	// independent fields could be observed torn (new extranonce1 alongside
+	// the previous size, or vice versa), which would pad a submitted
+	// extranonce2 to the wrong length and get the share rejected.
+	extranonce atomic.Pointer[extranonceState]
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -126,13 +130,37 @@ var (
 )
 
 func newSession(conn *connection) *session {
-	return &session{
+	s := &session{
 		conn:     conn,
 		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
 		jobsCh:   make(chan poolproto.Job, 8),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
 	}
+	s.extranonce.Store(&extranonceState{})
+	return s
+}
+
+// extranonceState is the negotiated extranonce pair: extranonce1 (the
+// pool-assigned coinbase prefix) and extranonce2Size (bytes the miner
+// must supply per share). Updated atomically as a unit — see session.
+type extranonceState struct {
+	en1     string
+	en2Size int
+}
+
+// setExtranonce installs a freshly negotiated extranonce pair.
+func (s *session) setExtranonce(en1 string, en2Size int) {
+	s.extranonce.Store(&extranonceState{en1: en1, en2Size: en2Size})
+}
+
+// extranonceState returns the current negotiated pair (zero when none,
+// or on a session not built via newSession).
+func (s *session) extranonceState() extranonceState {
+	if p := s.extranonce.Load(); p != nil {
+		return *p
+	}
+	return extranonceState{}
 }
 
 // start launches the read loop. Idempotent.
@@ -244,8 +272,7 @@ func (s *session) dispatch(line []byte) {
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.setExtranonce(en1, sz)
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -336,7 +363,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+		en2 = strings.Repeat("00", s.extranonceState().en2Size)
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1

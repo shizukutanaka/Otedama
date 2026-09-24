@@ -5,6 +5,7 @@ package miner
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"runtime"
 	"sync"
@@ -254,23 +255,34 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		// responsiveness to job changes.
 		const batchSize = 1024
 
-		h := localWork.Header
-		for i := 0; i < batchSize; i++ {
-			h.Nonce = nonce
-			hash := HashHeader(h)
-			w.hashCount.Add(1)
+		// Serialize the header once per batch and rewrite only the nonce
+		// field (wire bytes 76-80) per hash — the other 76 bytes are
+		// constant within a batch. The hash counter is likewise updated in
+		// bulk rather than once per hash: every grind goroutine shares
+		// w.hashCount, so a per-hash atomic Add puts all threads on one
+		// contended cache line on every iteration. `counted` tracks how
+		// many iterations have already been charged so that when a share
+		// is reported, the hashes spent finding it are visible to Stats()
+		// before the share is; the remainder is charged at batch end.
+		block := localWork.Header.Bytes()
+		var counted uint64
+		for i := uint64(0); i < batchSize; i++ {
+			binary.LittleEndian.PutUint32(block[76:80], nonce)
+			hash := SHA256d(block[:])
 
 			if hash.LessOrEqual(localWork.Target) {
 				share := Share{
 					ChannelID: localWork.ChannelID,
 					JobID:     localWork.JobID,
 					Nonce:     nonce,
-					NTime:     h.Time,
-					Version:   h.Version,
+					NTime:     localWork.Header.Time,
+					Version:   localWork.Header.Version,
 					Hash:      hash,
 					Target:    localWork.Target,
 					DeviceID:  w.cfg.DeviceID,
 				}
+				w.hashCount.Add(i + 1 - counted)
+				counted = i + 1
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share
 				// is dropped rather than blocking the miner. A larger
@@ -286,6 +298,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			// Advance nonce by step (interleaves threads' nonce ranges).
 			nonce += w.cfg.NonceStep
 		}
+		w.hashCount.Add(batchSize - counted)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/provider"
+	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
 
 // ============================================================================
@@ -1198,4 +1199,137 @@ func mapKeys(m map[string]arbitration.Stream) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// ============================================================================
+// streamsSlice — deterministic output order
+// ============================================================================
+
+// TestStreamsSlice_DeterministicRepresentative pins the sorted-key
+// iteration: when two entries share a StreamID but disagree on scalar
+// fields (AcceptsFamilies, DefaultYield), the merged stream's
+// representative must be chosen deterministically (lowest map key), not
+// by Go's random map iteration order — otherwise identical streamMap
+// contents could feed Decide different inputs on successive ticks,
+// breaking its identical-input → identical-output guarantee.
+func TestStreamsSlice_DeterministicRepresentative(t *testing.T) {
+	m := map[string]arbitration.Stream{
+		"z.last": {
+			ID: "shared.id", AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+			DefaultYield: arbitration.Yield{SatsPerSecond: 111},
+		},
+		"a.first": {
+			ID: "shared.id", AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			DefaultYield: arbitration.Yield{SatsPerSecond: 999},
+		},
+	}
+
+	got := streamsSlice(m)
+	if len(got) != 1 {
+		t.Fatalf("want 1 merged stream, got %d", len(got))
+	}
+	for i := 0; i < 50; i++ {
+		again := streamsSlice(m)
+		if len(again) != 1 || again[0].Accepts(hal.FamilyCPU) != got[0].Accepts(hal.FamilyCPU) ||
+			again[0].DefaultYield != got[0].DefaultYield {
+			t.Fatalf("iteration %d produced a different merge result", i)
+		}
+	}
+	// Deterministic winner is the lowest-sorted key ("a.first").
+	if got[0].DefaultYield.SatsPerSecond != 999 {
+		t.Errorf("representative DefaultYield = %v, want 999 (lowest map key wins)", got[0].DefaultYield.SatsPerSecond)
+	}
+	if !got[0].Accepts(hal.FamilyCPU) || got[0].Accepts(hal.FamilyGPU) {
+		t.Errorf("representative families = %v, want [CPU] from lowest key", got[0].AcceptsFamilies)
+	}
+}
+
+// TestStreamsSlice_SortedOutput pins deterministic output ordering by
+// StreamID.
+func TestStreamsSlice_SortedOutput(t *testing.T) {
+	m := map[string]arbitration.Stream{
+		"k1": {ID: "z.provider"},
+		"k2": {ID: "a.provider"},
+		"k3": {ID: "m.provider"},
+	}
+	got := streamsSlice(m)
+	want := []arbitration.StreamID{"a.provider", "m.provider", "z.provider"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d streams, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i].ID != w {
+			t.Errorf("stream[%d].ID = %q, want %q", i, got[i].ID, w)
+		}
+	}
+}
+
+// ============================================================================
+// storeJob — bounded outstanding-job table
+// ============================================================================
+
+func TestStoreJob_BoundedTable(t *testing.T) {
+	const cap2 = 4
+	jobs := map[uint32]*stratum.NewMiningJob{}
+	for i := uint32(0); i < cap2; i++ {
+		if !storeJob(jobs, cap2, &stratum.NewMiningJob{JobID: i}) {
+			t.Fatalf("job %d dropped before cap reached", i)
+		}
+	}
+	if len(jobs) != cap2 {
+		t.Fatalf("len(jobs) = %d, want %d", len(jobs), cap2)
+	}
+	// A new id beyond the cap is refused.
+	if storeJob(jobs, cap2, &stratum.NewMiningJob{JobID: 99}) {
+		t.Error("new job beyond cap should be dropped")
+	}
+	if len(jobs) != cap2 {
+		t.Errorf("len(jobs) = %d after drop, want %d", len(jobs), cap2)
+	}
+	// Re-storing an already-known id still succeeds while full (the pool
+	// may resend a job payload for the same id).
+	if !storeJob(jobs, cap2, &stratum.NewMiningJob{JobID: 2, HasMinNtime: true}) {
+		t.Error("re-store of existing id should succeed even at cap")
+	}
+	if !jobs[2].HasMinNtime {
+		t.Error("existing entry was not refreshed by re-store")
+	}
+}
+
+// ============================================================================
+// engineMetrics.rejectReason — concurrent lazy creation
+// ============================================================================
+
+// TestRejectReason_ConcurrentAccess exercises the lazy rejectByReason map
+// from many goroutines at once while a reader calls updateShareRates —
+// the interleaving produced by V1 per-submit goroutines plus the stats
+// ticker. Under -race this fails on an unsynchronized map; without the
+// mutex it can also panic with "concurrent map read and map write" or
+// create duplicate counter series for the same reason.
+func TestRejectReason_ConcurrentAccess(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+
+	var wg sync.WaitGroup
+	categories := []string{"stale", "duplicate", "difficulty", "hardware", "other"}
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				m.rejectReason(categories[(n+j)%len(categories)]).Inc()
+				if j%7 == 0 {
+					m.updateShareRates()
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Every category counter must have registered exactly one series and
+	// carry the full increment count (16 goroutines × 40 each → 640).
+	for _, cat := range categories {
+		if got := m.rejectByReason[cat].Value(); got != 640 {
+			t.Errorf("rejectByReason[%q] = %d, want 640", cat, got)
+		}
+	}
 }

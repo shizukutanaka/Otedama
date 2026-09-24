@@ -731,7 +731,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// known. Jobs without min_ntime are *future jobs*: they activate only
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
+	//
+	// jobsCap bounds the table for the same reason submitTimesCap bounds
+	// unacknowledged shares: the pool is untrusted input, and a stream of
+	// NewMiningJob messages without a matching SetNewPrevHash would grow
+	// the map without bound for the life of the session.
+	const jobsCap = 256
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var jobsOverflowWarned bool      // log the first drop, then stay quiet
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -830,7 +837,12 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				if !storeJob(jobs, jobsCap, j) && !jobsOverflowWarned {
+					jobsOverflowWarned = true
+					opts.log("warn", fmt.Sprintf(
+						"engine: job table full (%d outstanding) — dropping further jobs until next chain tip",
+						jobsCap))
+				}
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -1407,6 +1419,20 @@ func parseHost(url string) (string, error) {
 		return "", fmt.Errorf("engine: %w", err)
 	}
 	return host, nil
+}
+
+// storeJob records a NewMiningJob in the outstanding-jobs table, bounded
+// by limit. An id already present is always updated (the pool may resend
+// a job); only *new* ids are refused once the table is full — a dropped
+// future job degrades gracefully: if a later SetNewPrevHash names it, the
+// existing "unknown job" path pauses hashing until the next job instead
+// of mining a wrong header. Reports whether j was stored.
+func storeJob(jobs map[uint32]*stratum.NewMiningJob, limit int, j *stratum.NewMiningJob) bool {
+	if _, exists := jobs[j.JobID]; exists || len(jobs) < limit {
+		jobs[j.JobID] = j
+		return true
+	}
+	return false
 }
 
 func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }
