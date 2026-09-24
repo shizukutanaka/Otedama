@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 278 — BIP-310 version-rolling の正確性)
+
+> session 279 时点的修正 —— session 278 で入れた version-rolling の
+> 二点を正確化。
+
+- **疎なマスクでの重複ハッシュを解消** —— version ロールを
+  `verOff++`→`verOff & mask` で列挙していたため、`0x1fffe000` の
+  ような疎なマスクではほとんどのロールが同一の masked 値を再訪し、
+  同一ヘッダ空間を再ハッシュして duplicate-share reject を量産する
+  状態だった。`(v-1) & mask` の submask 列挙（`nextSubmask`）に
+  置き換え、全 2^popcount(mask) パターンを各一度だけ試行。
+- **`mining.set_version_mask` の即時反映** —— BIP-310 はセッション中
+  のマスクローテーションが既発行ジョブにも即座に効くことを要求。
+  session が直近 notify を `lastJob`（atomic）に保持し、有効な
+  ローテーションで再送出 —— engine が受信時に新マスクを捺印し
+  dedup キーがマスクを含むため、次のジョブを待たずにワーカーへ
+  再アームされる。
+
 ### Added (session 278 — BIP-310 バージョンローリング)
 
 - **BIP-310 version-rolling の実装（V1）** —— `mining.configure` による

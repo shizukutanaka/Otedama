@@ -533,3 +533,83 @@ func TestWorker_NoVersionRollWithoutMask(t *testing.T) {
 		}
 	}
 }
+
+// TestNextSubmask_EnumeratesEachPatternOnce verifies the (v-1)&mask
+// enumeration visits every one of the 2^popcount(mask) version patterns
+// exactly once — critical for sparse masks like 0x1fffe000 (a typical
+// BIP-310 negotiated mask) where a plain increment would re-hash the
+// same masked space thousands of times per distinct pattern.
+func TestNextSubmask_EnumeratesEachPatternOnce(t *testing.T) {
+	const mask = uint32(0x1fffe000) // 16 bits → 65536 distinct patterns
+	want := versionRollSpace(mask)
+	if want != 65536 {
+		t.Fatalf("versionRollSpace(%#x) = %d, want 65536", mask, want)
+	}
+	seen := make(map[uint32]struct{}, want)
+	cur := uint32(0)
+	for i := uint64(0); i < want; i++ {
+		if cur&^mask != 0 {
+			t.Fatalf("step %d: %#08x sets bits outside mask %#08x", i, cur, mask)
+		}
+		if _, dup := seen[cur]; dup {
+			t.Fatalf("step %d: submask %#08x visited twice", i, cur)
+		}
+		seen[cur] = struct{}{}
+		cur = nextSubmask(cur, mask)
+	}
+	if cur != 0 {
+		t.Fatalf("after %d patterns enumeration returned %#08x, want 0 (cycle complete)", want, cur)
+	}
+	if uint64(len(seen)) != want {
+		t.Fatalf("visited %d patterns, want %d", len(seen), want)
+	}
+}
+
+// TestWorker_SparseVersionMaskRollsDistinct drives the grind loop with
+// a sparse mask (0x3000, popcount 2) and asserts the worker actually
+// rolls distinct version patterns (≥2 non-zero submasks observed)
+// while never touching bits outside the mask. Uniqueness across the
+// full 2^popcount enumeration is pinned by
+// TestNextSubmask_EnumeratesEachPatternOnce; roll-before-nTime
+// ordering by TestWorker_RollsVersionBitsBeforeNTime.
+func TestWorker_SparseVersionMaskRollsDistinct(t *testing.T) {
+	work := makeEasyWork()
+	base := work.Header.Version // 1
+	work.VersionMask = 0x3000
+	work.Header.Time = uint32(time.Now().Unix()) - 60
+
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0xFFFFFFFF})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	w.SetWork(work)
+
+	seen := map[uint32]bool{}
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case s, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed unexpectedly")
+			}
+			// Non-mask bits must never move, and every observed
+			// submask is a valid pattern within the mask.
+			if s.Version&^work.VersionMask != base&^work.VersionMask {
+				t.Fatalf("share version %#08x changes bits outside mask %#08x", s.Version, work.VersionMask)
+			}
+			seen[s.Version&work.VersionMask] = true
+			nonzero := 0
+			for v := range seen {
+				if v != 0 {
+					nonzero++
+				}
+			}
+			if nonzero >= 2 {
+				return // sparse mask actually rolled distinct patterns
+			}
+		case <-deadline:
+			t.Fatalf("timeout: saw submasks %v, want >=2 distinct non-zero patterns", seen)
+		}
+	}
+}

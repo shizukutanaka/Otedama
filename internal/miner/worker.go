@@ -6,6 +6,7 @@ package miner
 import (
 	"context"
 	"fmt"
+	"math/bits"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -239,16 +240,29 @@ func (w *Worker) Stats() Stats {
 // so the engine can diagnose a job already past the cap.
 const MaxFutureBlockTimeSecs = 7200
 
+// nextSubmask returns the next value in the submask enumeration of
+// mask after cur: (cur-1)&mask visits each of the 2^popcount(mask)
+// patterns exactly once (wrapping back to 0 after the last). A plain
+// increment would revisit the same masked value for sparse masks —
+// e.g. mask 0x1fffe000 only changes once every 0x2000 steps — and
+// re-hash an identical header space into duplicate-share rejects.
+func nextSubmask(cur, mask uint32) uint32 { return (cur - 1) & mask }
+
+// versionRollSpace is the number of distinct version patterns a mask
+// offers — the unrolled pass plus one roll per remaining pattern.
+func versionRollSpace(mask uint32) uint64 { return uint64(1) << bits.OnesCount32(mask) }
+
 func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share) {
 	var (
 		localWork    *Work
 		localWorkVer uint64
 		exhaustedVer uint64 // work version whose full search space is used up
 		nonce        = threadID
-		// verOff enumerates the mask-region version-bit patterns already
-		// tried for this job (0..VersionMask covers all 2^popcount(mask)
-		// patterns even when the mask is sparse). Reset on work reload.
-		verOff uint32
+		// verSub is the current submask of VersionMask applied to the
+		// header version (0 = unrolled); verTried counts rolls taken.
+		// Both reset on work reload.
+		verSub   uint32
+		verTried uint64
 	)
 
 	for {
@@ -264,7 +278,8 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			localWork = w.work
 			localWorkVer = w.workVer
 			nonce = threadID // restart nonce from thread offset on new job
-			verOff = 0       // and re-enumerate version bits for the new mask
+			verSub = 0       // and re-enumerate version bits for the new mask
+			verTried = 0
 		}
 		w.mu.Unlock()
 
@@ -282,9 +297,9 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 
 		h := localWork.Header
 		// h is rebuilt from the job template each batch, so re-apply the
-		// version offset reached by prior batches within the mask.
-		if vm := localWork.VersionMask; vm != 0 && verOff != 0 {
-			h.Version = (h.Version &^ vm) | (verOff & vm)
+		// version submask reached by prior batches within the mask.
+		if vm := localWork.VersionMask; vm != 0 && verSub != 0 {
+			h.Version = (h.Version &^ vm) | verSub
 		}
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
@@ -323,15 +338,16 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				// search space — then the header timestamp, rather
 				// than re-hash the same nonces (which only yields
 				// duplicate-share rejects). Version rolling ends once
-				// every mask pattern was enumerated (verOff reached
-				// the mask); timestamp rolling is bounded by
-				// MAX_FUTURE_BLOCK_TIME (2 h ahead of now): a header
-				// timestamp beyond it is consensus-invalid, so
-				// further hashing can only produce rejects — stop
-				// until a fresh job arrives.
-				if vm := localWork.VersionMask; vm != 0 && verOff < vm {
-					verOff++
-					h.Version = (localWork.Header.Version &^ vm) | (verOff & vm)
+				// every one of the 2^popcount(mask) patterns was tried
+				// (the unrolled pass counts as the first); timestamp
+				// rolling is bounded by MAX_FUTURE_BLOCK_TIME (2 h ahead
+				// of now): a header timestamp beyond it is consensus-
+				// invalid, so further hashing can only produce rejects
+				// — stop until a fresh job arrives.
+				if vm := localWork.VersionMask; vm != 0 && verTried+1 < versionRollSpace(vm) {
+					verSub = nextSubmask(verSub, vm)
+					verTried++
+					h.Version = (localWork.Header.Version &^ vm) | verSub
 				} else if int64(h.Time)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
 					exhaustedVer = localWorkVer
 					break

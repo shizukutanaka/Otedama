@@ -1251,6 +1251,42 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 279 increment (version-rolling correctness)
+
+### Implemented
+
+1. ✅ **Submask enumeration for version rolling** — session 278 rolled
+   `verOff++` then masked it off (`(h.Version &^ vm) | (verOff & vm)`),
+   which for sparse masks re-visits the same masked value on most rolls:
+   a typical negotiated mask like 0x1fffe000 only changes
+   `verOff & vm` once every 0x2000 increments, so ~99.99% of rolls would
+   re-hash an identical header space into duplicate-share rejects.
+   Replaced with the classic `(v-1) & mask` submask walk
+   (`nextSubmask`), which visits each of the 2^popcount(mask) patterns
+   exactly once, plus `versionRollSpace` (1<<popcount) as the roll
+   bound. `TestNextSubmask_EnumeratesEachPatternOnce` pins uniqueness
+   over the full 65536-pattern space.
+2. ✅ **`mining.set_version_mask` takes effect immediately** — BIP-310
+   requires a mid-session rotation to apply to jobs already dispatched.
+   The session now caches the most recent notify (`lastJob`,
+   `atomic.Pointer[Job]`) and re-emits it on a valid rotation; the
+   engine stamps the new mask at receive time and its dedup key
+   includes the mask, so workers re-arm without waiting for the next
+   job. Malformed rotations do not re-emit.
+3. ✅ **`client.show_message` dispatch regression caught by tests** —
+   an edit collision had dropped the `case` label so show_message
+   handling ran inside the set_version_mask case (a mask became a pool
+   "notice"); restored the label and re-armed
+   `TestSession_Dispatch_UnknownNotification_SilentlyIgnored` with a
+   genuinely unknown method.
+
+### Verified this session
+
+- ✅ `-race -count=2` clean on miner + stratumv1; full suite green.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 278 increment (BIP-310 version rolling)
 
 ### Implemented

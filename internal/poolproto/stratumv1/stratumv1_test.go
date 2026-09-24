@@ -1901,7 +1901,7 @@ func TestSession_PoolNotices_ImplementsInterface(t *testing.T) {
 func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	// Unknown method must not produce any job, notice, or error.
 	sess := makeBareSess()
-	sess.dispatch([]byte(`{"method":"mining.set_version_mask","params":["1fffe000"]}`))
+	sess.dispatch([]byte(`{"method":"mining.frobnicate_widget","params":["1fffe000"]}`))
 	if len(sess.jobsCh) != 0 {
 		t.Error("unknown method enqueued a job")
 	}
@@ -2122,6 +2122,33 @@ func TestSession_Dispatch_SetVersionMask(t *testing.T) {
 	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["zz"]}`))
 	if got := sess.VersionMask(); got != 0x3000 {
 		t.Errorf("VersionMask = %#x after malformed mask, want 0x3000", got)
+	}
+}
+
+// TestSession_Dispatch_SetVersionMask_ReemitsCurrentJob pins the
+// BIP-310 "takes effect immediately" rule: a mid-session mask rotation
+// re-queues the most recent job so the engine can re-arm workers with
+// the new mask (its dedup key includes the mask).
+func TestSession_Dispatch_SetVersionMask_ReemitsCurrentJob(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"mining.notify","params":["JOBX","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",false]}`))
+	if len(sess.jobsCh) != 1 {
+		t.Fatalf("notify should enqueue 1 job, got %d", len(sess.jobsCh))
+	}
+	<-sess.jobsCh // drain the original emission
+
+	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["00003000"]}`))
+	if len(sess.jobsCh) != 1 {
+		t.Fatalf("set_version_mask should re-emit the current job, channel has %d", len(sess.jobsCh))
+	}
+	if j := <-sess.jobsCh; j.JobID != "JOBX" {
+		t.Fatalf("re-emitted job ID = %q, want JOBX", j.JobID)
+	}
+
+	// A malformed rotation must not re-emit.
+	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["zz"]}`))
+	if len(sess.jobsCh) != 0 {
+		t.Fatal("malformed set_version_mask should not re-emit a job")
 	}
 }
 

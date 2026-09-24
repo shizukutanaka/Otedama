@@ -135,6 +135,15 @@ type session struct {
 	// loop, read by Submit callers — atomic like the rest.
 	versionMask atomic.Uint32
 
+	// lastJob is the most recently emitted job, kept so a mid-session
+	// mining.set_version_mask rotation can re-emit it stamped with the
+	// new mask — the spec requires the new mask to take effect
+	// immediately, including for jobs already dispatched. Written and
+	// read only on the read-loop goroutine (dispatch and sendJob both
+	// run there), but atomic anyway since dispatch may be invoked from
+	// tests on other goroutines.
+	lastJob atomic.Pointer[poolproto.Job]
+
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
@@ -277,9 +286,17 @@ func (s *session) dispatch(line []byte) {
 		}
 	case "mining.set_version_mask":
 		// BIP-310: the pool rotated the version-rolling mask; it takes
-		// effect immediately, including for jobs already dispatched.
+		// effect immediately, including for jobs already dispatched. The
+		// worker's mask rides with the job, so re-emit the current job —
+		// the engine stamps the new mask at receive time and its dedup
+		// key includes it, so this alone re-arms workers. The store
+		// happens-before the channel send, so the engine always reads
+		// the new mask for the re-emitted job.
 		if mask, ok := parseSetVersionMask(msg.Params); ok {
 			s.versionMask.Store(mask)
+			if lj := s.lastJob.Load(); lj != nil {
+				s.sendJob(*lj)
+			}
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -311,8 +328,8 @@ func (s *session) dispatch(line []byte) {
 			s.lastReconnect.Store(&d)
 		}
 		go s.Close()
-		// Other notifications (mining.set_version_mask, etc.) are
-		// silently ignored; forward-compatible with pool extensions.
+		// Unhandled notifications are silently ignored;
+		// forward-compatible with pool extensions.
 	}
 }
 
@@ -331,6 +348,7 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job poolproto.Job) {
+	s.lastJob.Store(&job)
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
