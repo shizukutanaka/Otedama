@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 291 — SetupConnection wire 準拠)
+
+- **必須フィールド `endpoint_port U16` を SetupConnection に追加** ——
+  endpoint_host に "host:port" を詰め込み port を省略していたため、
+  厳格な SV2 プールでは vendor 以降の全フィールドがずれて
+  ハンドシェイク不能だった。host/port を分離して spec レイアウトに
+  準拠。s289/s290 と同型の必須フィールド欠落の3件目。
+
 ### Fixed (session 290 — OpenMiningChannel wire 準拠)
 
 - **必須フィールド `max_target U256` を OpenMiningChannel に追加** ——

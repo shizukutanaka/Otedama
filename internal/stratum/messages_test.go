@@ -17,7 +17,8 @@ func TestSetupConnection_Roundtrip(t *testing.T) {
 		MinVersion:      2,
 		MaxVersion:      2,
 		Flags:           0,
-		Endpoint:        "pool.example.com:3336",
+		Endpoint:        "pool.example.com",
+		EndpointPort:    3336,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -39,6 +40,9 @@ func TestSetupConnection_Roundtrip(t *testing.T) {
 	}
 	if got.Endpoint != orig.Endpoint {
 		t.Errorf("Endpoint: got %q, want %q", got.Endpoint, orig.Endpoint)
+	}
+	if got.EndpointPort != orig.EndpointPort {
+		t.Errorf("EndpointPort: got %d, want %d", got.EndpointPort, orig.EndpointPort)
 	}
 	if got.DeviceID != orig.DeviceID {
 		t.Errorf("DeviceID: got %q, want %q", got.DeviceID, orig.DeviceID)

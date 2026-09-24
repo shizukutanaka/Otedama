@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -116,12 +117,19 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 
 	dec := stratum.NewDecoder(conn.raw)
 
-	// SetupConnection.
+	// SetupConnection. The spec splits endpoint_host (STR0_255) from
+	// endpoint_port (U16) — echo the dialed address in both fields.
+	endpointHost, endpointPortStr, err := net.SplitHostPort(conn.remoteAddr)
+	if err != nil {
+		endpointHost = conn.remoteAddr
+	}
+	endpointPort, _ := strconv.ParseUint(endpointPortStr, 10, 16)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        conn.remoteAddr,
+		Endpoint:        endpointHost,
+		EndpointPort:    uint16(endpointPort),
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",

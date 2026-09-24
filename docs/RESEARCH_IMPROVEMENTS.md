@@ -1251,6 +1251,22 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 291 increment (SetupConnection wire fix)
+
+- **実装（spec 準拠・相互運用）: `SetupConnection` に必須フィールド
+  `endpoint_port U16` を追加** —— spec §5.2 の wire 順は …
+  `endpoint_host STR0_255` → **`endpoint_port U16`** → `vendor` …。
+  実装は endpoint_port を完全に省略し endpoint_host に "host:port"
+  を詰め込んでいた —— 生成フレームでは vendor 文字列の先頭2バイトが
+  ポートとして読まれ、以後全フィールドがずれて厳格な SV2 プールは
+  デコード不能。s289（group_channel_id）・s290（max_target）と同型の
+  必須フィールド欠落の3件目。Endpoint を host のみに分離し
+  EndpointPort を追加、dialer は `net.SplitHostPort` で実際に
+  ダイヤルしたホスト/ポートを送信。
+- **検証:** round-trip フィクスチャを host+port 分離形に更新し
+  EndpointPort assert 追加。engine 初回 flake は既知のもの（再実行
+  green）。
+
 ## September 2026 research pass — session 290 increment (OMC request wire fix)
 
 - **実装（spec 準拠・相互運用）: `OpenMiningChannel` に必須フィールド

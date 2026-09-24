@@ -35,7 +35,8 @@ type SetupConnection struct {
 	MinVersion      uint16
 	MaxVersion      uint16
 	Flags           uint32
-	Endpoint        string // STR0_255
+	Endpoint        string // STR0_255: endpoint_host (host only, no port)
+	EndpointPort    uint16 // required by spec: endpoint_port, right after the host string
 	Vendor          string // STR0_255
 	HardwareVersion string // STR0_255
 	Firmware        string // STR0_255
@@ -50,7 +51,11 @@ func (m SetupConnection) Encode() ([]byte, error) {
 	b = appendU16LE(b, m.MaxVersion)
 	b = appendU32LE(b, m.Flags)
 	var err error
-	for _, s := range []string{m.Endpoint, m.Vendor, m.HardwareVersion, m.Firmware, m.DeviceID} {
+	if b, err = appendStr0_255(b, m.Endpoint); err != nil {
+		return nil, err
+	}
+	b = appendU16LE(b, m.EndpointPort)
+	for _, s := range []string{m.Vendor, m.HardwareVersion, m.Firmware, m.DeviceID} {
 		if b, err = appendStr0_255(b, s); err != nil {
 			return nil, err
 		}
@@ -76,8 +81,14 @@ func DecodeSetupConnection(payload []byte) (SetupConnection, error) {
 	if m.Flags, err = getU32LE(r); err != nil {
 		return m, fmt.Errorf("stratum: SetupConnection.Flags: %w", err)
 	}
-	fields := []*string{&m.Endpoint, &m.Vendor, &m.HardwareVersion, &m.Firmware, &m.DeviceID}
-	names := []string{"Endpoint", "Vendor", "HardwareVersion", "Firmware", "DeviceID"}
+	if m.Endpoint, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: SetupConnection.Endpoint: %w", err)
+	}
+	if m.EndpointPort, err = getU16LE(r); err != nil {
+		return m, fmt.Errorf("stratum: SetupConnection.EndpointPort: %w", err)
+	}
+	fields := []*string{&m.Vendor, &m.HardwareVersion, &m.Firmware, &m.DeviceID}
+	names := []string{"Vendor", "HardwareVersion", "Firmware", "DeviceID"}
 	for i, f := range fields {
 		if *f, err = getStr0_255(r); err != nil {
 			return m, fmt.Errorf("stratum: SetupConnection.%s: %w", names[i], err)
