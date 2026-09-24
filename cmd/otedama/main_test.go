@@ -171,7 +171,8 @@ func TestConfigValidate_MissingAddress(t *testing.T) {
 
 func TestConfigValidate_ValidAddress(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{"config", "validate",
+	code := run([]string{
+		"config", "validate",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}, &out, &err)
 	if code != exitOK {
@@ -432,7 +433,7 @@ func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
 		t.Fatalf("stat log file: %v", err)
 	}
 	// The log file may contain pool URLs / worker names — keep it owner-only.
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("log file perms = %04o, want 0600", perm)
 	}
 }
@@ -615,5 +616,31 @@ func TestService_Install_DoesNotCrash(t *testing.T) {
 		// "cannot install service" on an unconfigured/CI environment.
 	default:
 		t.Errorf("service install: unexpected exit code %d (out=%s err=%s)", code, out.String(), errb.String())
+	}
+}
+
+// ============================================================================
+// warnPprofExposed — loopback quiet, everything else warns
+// ============================================================================
+
+func TestWarnPprofExposed_LoopbackQuiet(t *testing.T) {
+	for _, addr := range []string{"127.0.0.1:8080", "[::1]:8080", "localhost:8080"} {
+		var b bytes.Buffer
+		warnPprofExposed(&b, addr)
+		if b.Len() != 0 {
+			t.Errorf("warnPprofExposed(%q): unexpected warning %q", addr, b.String())
+		}
+	}
+}
+
+func TestWarnPprofExposed_NonLoopbackWarns(t *testing.T) {
+	// ":8080" binds every interface; LAN IPs and hostnames expose pprof
+	// to the network — all must warn.
+	for _, addr := range []string{":8080", "0.0.0.0:8080", "[::]:8080", "192.168.1.10:8080", "miner.lan:8080"} {
+		var b bytes.Buffer
+		warnPprofExposed(&b, addr)
+		if !strings.Contains(b.String(), "pprof") {
+			t.Errorf("warnPprofExposed(%q): expected pprof warning, got %q", addr, b.String())
+		}
 	}
 }

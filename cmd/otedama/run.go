@@ -8,8 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 
@@ -336,6 +338,9 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, de
 	if httpAddr == "" {
 		return nil, nil
 	}
+	if pprofEnabled {
+		warnPprofExposed(stderr, httpAddr)
+	}
 	reg := metrics.NewRegistry()
 	srv := httpserver.New(httpAddr, reg, pprofEnabled, decisions)
 	if err := srv.Start(ctx); err != nil {
@@ -344,4 +349,25 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, de
 	}
 	fmt.Fprintf(stdout, "[info] http: listening on %s\n", httpAddr)
 	return reg, srv
+}
+
+// warnPprofExposed prints a loud warning when /debug/pprof/ is mounted
+// on a non-loopback address: pprof exposes goroutine stacks, heap
+// contents, and the process cmdline to anyone who can reach the port.
+// Loopback literals (127.0.0.0/8, ::1, "localhost") stay quiet; ":PORT"
+// binds every interface and warns. Warn, don't fail — binding on a
+// private LAN is a legitimate operator choice; the flag help already
+// scopes the feature to loopback/private use.
+func warnPprofExposed(stderr io.Writer, httpAddr string) {
+	host, _, err := net.SplitHostPort(httpAddr)
+	if err != nil {
+		return // unparseable — srv.Start reports the real error
+	}
+	if strings.EqualFold(host, "localhost") {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	fmt.Fprintf(stderr, "warning: --pprof exposes /debug/pprof/* on non-loopback address %s — goroutine stacks, heap contents and process cmdline are reachable by the network\n", httpAddr)
 }

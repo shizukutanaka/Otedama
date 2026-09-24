@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 362 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: --pprof 非 loopback バインドの警告)
+
+- **`--pprof` + 非 loopback `http_addr` で起動時警告** — `/debug/pprof/*` は
+  goroutine スタック・ヒープ内容・プロセス cmdline を露出するが、フラグ説明の
+  "loopback/private" という注記以外に強制はなく、`:8080` や LAN アドレスへの
+  バインドは無警告で全面露出していた。`warnPprofExposed` で loopback リテラル
+  （127.0.0.0/8・::1・localhost）以外へのバインドを stderr 警告 — private LAN
+  は正当な選択のため fail ではなく warn。
+
 ### Security (session 361 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール URL の空白・制御文字拒否)
 
 - **`pools[].url` の空白・制御バイトを検証で拒否** — session 360 の userinfo
