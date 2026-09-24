@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 263 — シードバックアップ検証)
+
+**初回ウォレット作成時にリカバリーフレーズの記録を検証するプロンプト**
+(RESEARCH_IMPROVEMENTS Cat 3 #8). リマインダー半分は session 253 の
+`printRecoveryPhrase` で実装済みだったが、検証半分（ユーザーに語を
+再入力させる）は未実装だった —— 確認されない印刷フレーズは誰にも
+控えられていないフレーズと同義。新ウォレットがフレーズを表示した後、
+`confirmSeedBackup` が乱択した3語の位置の再入力を求める
+（crypto/rand 駆動の部分 Fisher–Yates、テストでは確定的 io.Reader）。
+不一致 → フレーズを一度だけ再表示して再試行。二度失敗 → 警告して
+続行（バックアップ未検証を理由に採掘起動を拒否しない —— 印刷済み
+フレーズが正本）。対話端末でない起動では何もしない: ゲートは真の
+isatty（unix は ioctl TIOCGWINSZ、Windows は GetConsoleMode —
+x/term と同機構を stdlib syscall で実装、新規依存なし）であり、
+`os.Stat` の ModeCharDevice は /dev/null や pts スレーブを区別
+できないため不採用。サービス/デーモン/`go test` 経路はブロック
+しない。純粋ヘルパ `verifyWordPositions`/`pickWordPositions` は
+io.Reader/io.Writer 注入でスクリプト化テスト可能（新規テスト7件）。
+
+上流差分: SRI v1.11.1・ESP-Miner v2.15.2rc0 が引き続き最新、
+残差分はハードウェア固有で非該当。Qiita/Zenn 新規情報なし。
+
 ### Documented (session 262 — SLO + 監査)
 
 **`docs/DEPLOYMENT.md` に Service-level objectives 表を追加**

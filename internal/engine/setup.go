@@ -11,10 +11,15 @@
 package engine
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -134,6 +139,7 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	if wm.IsNew() {
 		log("info", "wallet: new wallet created — back up your recovery phrase")
 		printRecoveryPhrase(opts.Output, wm.Mnemonic(), fingerprint)
+		confirmSeedBackup(wm.Mnemonic(), opts.Output, log)
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
@@ -194,6 +200,85 @@ func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint s
 ========================================================================
 
 `, mnemonic.String(), fingerprint, len(mnemonic))
+}
+
+// confirmSeedBackup asks the user to re-enter three random word positions
+// of the just-printed recovery phrase — the verification half of the
+// backup flow (RESEARCH_IMPROVEMENTS Cat 3 #8): a printed phrase nobody
+// checked is a phrase nobody wrote down. It runs only when stdin is an
+// interactive terminal, so service/daemon launches never block. A wrong
+// answer re-prints the phrase once and retries; a second failure warns
+// and continues — mining must never refuse to start over an unverified
+// backup (the phrase already printed is the canonical record).
+func confirmSeedBackup(m lightning.Mnemonic, out io.Writer, log func(level, msg string)) {
+	if !stdinIsTerminal() {
+		return // not an interactive terminal — never block non-TTY launches
+	}
+	positions, err := pickWordPositions(len(m), 3, rand.Reader)
+	if err != nil {
+		log("warn", fmt.Sprintf("wallet: backup verification: %v", err))
+		return
+	}
+	if verifyWordPositions(os.Stdin, out, m, positions) {
+		log("info", "wallet: recovery phrase backup verified")
+		return
+	}
+	fmt.Fprint(out, "\n  Mismatch — showing the phrase once more; write it down carefully.\n\n")
+	printRecoveryPhrase(out, m, "")
+	positions, err = pickWordPositions(len(m), 3, rand.Reader)
+	if err != nil {
+		log("warn", fmt.Sprintf("wallet: backup verification: %v", err))
+		return
+	}
+	if verifyWordPositions(os.Stdin, out, m, positions) {
+		log("info", "wallet: recovery phrase backup verified")
+		return
+	}
+	log("warn", "wallet: backup phrase not verified — wallet.dat is unrecoverable if lost; store the printed phrase offline")
+}
+
+// verifyWordPositions reads one word per position from in and reports
+// whether every answer matches the mnemonic (case-insensitive, trimmed).
+// Pure helper split from confirmSeedBackup so tests drive it with
+// scripted input.
+func verifyWordPositions(in io.Reader, out io.Writer, m lightning.Mnemonic, positions []int) bool {
+	sc := bufio.NewScanner(in)
+	for _, pos := range positions {
+		fmt.Fprintf(out, "  word #%d of %d: ", pos+1, len(m))
+		if !sc.Scan() {
+			return false
+		}
+		if !strings.EqualFold(strings.TrimSpace(sc.Text()), m[pos]) {
+			return false
+		}
+	}
+	return true
+}
+
+// pickWordPositions returns k distinct positions in [0,n), shuffled by
+// bytes read from rand — crypto/rand.Reader in production, any io.Reader
+// in tests. A partial Fisher–Yates driven by uniform bytes; the ≤4%
+// modulo bias over a 24-word mnemonic is irrelevant for a prompt.
+func pickWordPositions(n, k int, rand io.Reader) ([]int, error) {
+	if k < 1 || n < 1 || k > n {
+		return nil, fmt.Errorf("invalid sample k=%d of n=%d", k, n)
+	}
+	idx := make([]int, n)
+	for i := range idx {
+		idx[i] = i
+	}
+	picks := make([]int, 0, k)
+	buf := make([]byte, 1)
+	for i := 0; i < k; i++ {
+		if _, err := io.ReadFull(rand, buf); err != nil {
+			return nil, err
+		}
+		j := i + int(buf[0])%(n-i)
+		idx[i], idx[j] = idx[j], idx[i]
+		picks = append(picks, idx[i])
+	}
+	sort.Ints(picks)
+	return picks, nil
 }
 
 // defaultPoolURL returns the first configured pool URL, or the built-in

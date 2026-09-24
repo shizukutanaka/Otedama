@@ -150,8 +150,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
    against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
-8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
+8. ✅ **Seed backup reminder / verification flow** on first run (ask the user
    to re-enter N words) — reduces fund-loss from un-backed-up seeds.
+   Implemented (session 263): after printing the phrase, `confirmSeedBackup`
+   prompts for three random word positions, re-prints + retries once on a
+   mismatch, warns and continues on a second failure; runs only on an
+   interactive terminal (ioctl TIOCGWINSZ / GetConsoleMode gate — no dep).
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not
@@ -1239,6 +1243,32 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 263 increment (seed-backup verification)
+
+### Implemented
+
+1. ✅ **Seed-backup verification prompt (Cat 3 #8)** — the reminder half
+   existed since session 253 (`printRecoveryPhrase`); the verification
+   half did not. After a new wallet prints its phrase,
+   `confirmSeedBackup` asks the user to re-enter three random word
+   positions (partial Fisher–Yates over crypto/rand, deterministic
+   io.Reader in tests). Mismatch → phrase re-prints once and the prompt
+   retries; second failure → warn + continue, because mining must never
+   refuse to start over an unverified backup (the printed phrase is the
+   canonical record). The gate is a real isatty — ioctl(TIOCGWINSZ) on
+   unix, GetConsoleMode on Windows, x/term's mechanism with stdlib
+   syscall and no new dependency — so service/daemon/`go test` launches
+   never block. Pure helpers (`verifyWordPositions`,
+   `pickWordPositions`) take io.Reader/io.Writer for scripted tests.
+
+### Verified already-done / non-applicable this session
+
+- ❌ **Upstream deltas** — SRI v1.11.1 and ESP-Miner v2.15.2rc0 remain
+  latest; residual deltas hardware-specific (BM137x/WPA/UI), N/A.
+- ❌ **Qiita/Zenn sweep** — no new stratum-v2 material this round.
+
+---
+
 ## September 2026 research pass — session 262 increment (observability docs + audit)
 
 ### Implemented
@@ -1326,6 +1356,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-263 additions (September 2026): BIP-39 backup-verification UX
+patterns (electrum/sparrow word-position re-entry); golang.org/x/term
+IsTerminal mechanism replicated via stdlib syscall (no new dependency).*
 
 *Session-261 additions (September 2026): bitaxeorg/ESP-Miner v2.15.1 +
 v2.15.2rc0 deltas (#1913 verified done in session 257; BM137x ASIC
