@@ -1114,6 +1114,17 @@ would hand the hash rate to an arbitrary endpoint).
 it governs unknown-extension channel state, and Otedama negotiates no
 extensions.
 
+**Session-299 follow-up (channel lifecycle):** `CloseChannel` (0x18,
+channel_id + reason_code) had no codec — a pool ending the channel left
+the session alive on work it could no longer settle (per §5.3.9 the
+sender MUST stop sending on it). — ✅ **Fixed (session 299):** codec +
+dispatch added; the read loop records the close reason and ends the
+session so the engine re-dials the configured pool. `SetExtranoncePrefix`
+(0x19) was given a codec for wire completeness; it is deliberately not
+applied to the session — standard-channel submits carry only
+nonce/ntime/version and the pool supplies merkle roots, so no
+miner-built coinbase consumes the prefix.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

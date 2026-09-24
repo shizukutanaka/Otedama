@@ -247,6 +247,10 @@ type session struct {
 	// useful for diagnostics and tests.
 	lastReconnect atomic.Pointer[stratum.Reconnect]
 
+	// lastChannelClose records the pool-directed CloseChannel (msg_type
+	// 0x18, §5.3.9) that ended the session, nil until one is seen.
+	lastChannelClose atomic.Pointer[stratum.CloseChannel]
+
 	startOnce sync.Once
 }
 
@@ -321,11 +325,28 @@ func (s *session) readLoop(ctx context.Context) {
 		if msg.SubmitSharesError != nil {
 			s.rejectSubmit(msg.SubmitSharesError)
 		}
-		// A pool-directed Reconnect ends the session — see
-		// noteReconnect. Closing the conn makes the top-of-loop
-		// closed check exit, so no explicit branch is needed here.
+		// A pool-directed Reconnect or CloseChannel ends the
+		// session — see noteReconnect / noteChannelClosed. Closing
+		// the conn makes the top-of-loop closed check exit, so no
+		// explicit branch is needed here.
 		s.noteReconnect(&msg)
+		s.noteChannelClosed(&msg)
 	}
+}
+
+// noteChannelClosed records a pool-directed CloseChannel (§5.3.9) and
+// ends the session: the sender MUST stop sending on the channel, so the
+// session can no longer mine — closing the connection lets the read
+// loop's closed check / next ReadFrame exit and Jobs() close, the signal
+// the engine's reconnect machinery uses to re-dial the configured pool
+// list. The recorded ReasonCode keeps the pool's stated cause for
+// diagnostics.
+func (s *session) noteChannelClosed(m *stratum.Message) {
+	if m.CloseChannel == nil {
+		return
+	}
+	s.lastChannelClose.Store(m.CloseChannel)
+	s.conn.Close()
 }
 
 // noteReconnect records a pool-directed Reconnect (sv2-spec §3.6.5) and

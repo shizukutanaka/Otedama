@@ -169,6 +169,52 @@ func TestDecodeReconnect_Short(t *testing.T) {
 	}
 }
 
+// ----- CloseChannel (§5.3.9) -----
+
+func TestCloseChannel_Roundtrip(t *testing.T) {
+	orig := CloseChannel{ChannelID: 7, ReasonCode: "channel migrated"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeCloseChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeCloseChannel_Short(t *testing.T) {
+	if _, err := DecodeCloseChannel([]byte{0x01}); err == nil {
+		t.Error("short payload accepted")
+	}
+}
+
+// ----- SetExtranoncePrefix (§5.3.10) -----
+
+func TestSetExtranoncePrefix_Roundtrip(t *testing.T) {
+	orig := SetExtranoncePrefix{ChannelID: 7, ExtranoncePrefix: []byte{0xde, 0xad, 0xbe, 0xef}}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeSetExtranoncePrefix(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.ChannelID != orig.ChannelID || !bytes.Equal(got.ExtranoncePrefix, orig.ExtranoncePrefix) {
+		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeSetExtranoncePrefix_Short(t *testing.T) {
+	if _, err := DecodeSetExtranoncePrefix([]byte{0x01}); err == nil {
+		t.Error("short payload accepted")
+	}
+}
+
 // ----- OpenMiningChannel -----
 
 func TestOpenMiningChannel_Roundtrip(t *testing.T) {

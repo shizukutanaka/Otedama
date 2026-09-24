@@ -1578,3 +1578,49 @@ func TestDialer_Session_ReconnectDirectiveEndsSession(t *testing.T) {
 		t.Errorf("directive = %+v, want host=alt.pool.example port=4444", directive)
 	}
 }
+
+// A pool-directed CloseChannel (§5.3.9) ends the channel — the sender
+// MUST stop sending on it — so the session can no longer mine and must
+// terminate: the read loop records the close (with the pool's stated
+// reason) and Jobs() closes, the signal the engine's reconnect
+// machinery waits on.
+func TestDialer_Session_CloseChannelEndsSession(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(7)
+		writeMsgTo(pool.t, pool.conn, stratum.MsgCloseChannel, true,
+			stratum.CloseChannel{ChannelID: 7, ReasonCode: "channel migrated"})
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Error("Jobs() should close on CloseChannel, not yield a job")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Jobs() not closed after CloseChannel")
+	}
+
+	closed := sess.(*session).lastChannelClose.Load()
+	if closed == nil {
+		t.Fatal("CloseChannel not recorded")
+	}
+	if closed.ChannelID != 7 || closed.ReasonCode != "channel migrated" {
+		t.Errorf("close record = %+v, want channel 7 reason \"channel migrated\"", closed)
+	}
+}

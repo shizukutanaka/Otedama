@@ -18,6 +18,8 @@
 //	0x11  OpenMiningChannelSuccess
 //	0x12  OpenMiningChannelError
 //	0x15  NewMiningJob           (server → client, channel_msg)
+//	0x18  CloseChannel           (server → client, channel_msg)
+//	0x19  SetExtranoncePrefix    (server → client, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
 //	0x1c  SubmitSharesSuccess    (server → client, channel_msg)
 //	0x1e  SubmitSharesError      (server → client, channel_msg)
@@ -52,6 +54,8 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgCloseChannel             uint8 = 0x18
+	MsgSetExtranoncePrefix      uint8 = 0x19
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
 	MsgSubmitSharesError        uint8 = 0x1e
@@ -235,6 +239,78 @@ func DecodeSetTarget(payload []byte) (SetTarget, error) {
 }
 
 // ------------------------------------------------------------------
+// CloseChannel (server → client, msg_type 0x18, channel_msg, §5.3.9)
+// ------------------------------------------------------------------
+
+// CloseChannel terminates a channel; the sender MUST stop sending
+// messages for it. Payload: channel_id U32 + reason_code STR0_255.
+type CloseChannel struct {
+	ChannelID  uint32
+	ReasonCode string
+}
+
+// Encode serialises CloseChannel (includes channel_id prefix).
+func (m CloseChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 4+1+len(m.ReasonCode)), m.ChannelID)
+	return appendStr0_255(b, m.ReasonCode)
+}
+
+// DecodeCloseChannel parses a CloseChannel payload.
+func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
+	const need = 4 + 1
+	if len(payload) < need {
+		return CloseChannel{}, fmt.Errorf("stratum: CloseChannel: short payload (%d < %d)", len(payload), need)
+	}
+	var m CloseChannel
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	r := newByteReader(payload[4:])
+	reason, err := getStr0_255(r)
+	if err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.ReasonCode: %w", err)
+	}
+	m.ReasonCode = reason
+	return m, nil
+}
+
+// ------------------------------------------------------------------
+// SetExtranoncePrefix (server → client, msg_type 0x19, channel_msg,
+// §5.3.10)
+// ------------------------------------------------------------------
+
+// SetExtranoncePrefix changes the extranonce prefix for all subsequent
+// jobs on a channel. Payload: channel_id U32 + extranonce_prefix B0_32.
+type SetExtranoncePrefix struct {
+	ChannelID        uint32
+	ExtranoncePrefix []byte
+}
+
+// Encode serialises SetExtranoncePrefix (includes channel_id prefix).
+func (m SetExtranoncePrefix) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 4+1+len(m.ExtranoncePrefix)), m.ChannelID)
+	return appendB0_32(b, m.ExtranoncePrefix)
+}
+
+// DecodeSetExtranoncePrefix parses a SetExtranoncePrefix payload.
+// The prefix is spec'd B0_32 but read leniently as B0_255, mirroring
+// OpenMiningChannelSuccess.Extranonce: a pool that over-lengths the
+// field still decodes instead of dropping the frame.
+func DecodeSetExtranoncePrefix(payload []byte) (SetExtranoncePrefix, error) {
+	const need = 4 + 1
+	if len(payload) < need {
+		return SetExtranoncePrefix{}, fmt.Errorf("stratum: SetExtranoncePrefix: short payload (%d < %d)", len(payload), need)
+	}
+	var m SetExtranoncePrefix
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	r := newByteReader(payload[4:])
+	prefix, err := getB0_255(r)
+	if err != nil {
+		return m, fmt.Errorf("stratum: SetExtranoncePrefix.ExtranoncePrefix: %w", err)
+	}
+	m.ExtranoncePrefix = prefix
+	return m, nil
+}
+
+// ------------------------------------------------------------------
 // SubmitSharesStandard (client → server, msg_type 0x1a, channel_msg)
 // ------------------------------------------------------------------
 
@@ -388,6 +464,8 @@ type Message struct {
 	NewMiningJob             *NewMiningJob
 	SetNewPrevHash           *SetNewPrevHash
 	SetTarget                *SetTarget
+	CloseChannel             *CloseChannel
+	SetExtranoncePrefix      *SetExtranoncePrefix
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
@@ -469,6 +547,18 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.SetTarget = &v
+	case MsgCloseChannel:
+		v, err := DecodeCloseChannel(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.CloseChannel = &v
+	case MsgSetExtranoncePrefix:
+		v, err := DecodeSetExtranoncePrefix(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.SetExtranoncePrefix = &v
 	case MsgSubmitSharesStandard:
 		v, err := DecodeSubmitSharesStandard(f.Payload)
 		if err != nil {

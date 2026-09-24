@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 299 — SV2 channel ライフサイクル)
+
+- **`CloseChannel` (0x18, §5.3.9) を実装** — codec 欠落のため、プールが
+  チャネルを閉じてもセッションが生き続けていた（spec 上そのチャネルは
+  送信停止必須＝採掘不能）。readLoop で理由コードを記録してセッション
+  を終了し、reconnect loop が設定済みプールへ再ダイヤル。
+- **`SetExtranoncePrefix` (0x19) の codec を追加** — wire 完全性のため
+  decode+dispatch のみ。standard-channel の submit は nonce/ntime/
+  version のみで merkle_root はプール供給のため、prefix を消費する
+  miner 側 coinbase 構築は存在せず session への適用は不要。
+
 ### Added (session 298 — SV2 Reconnect メッセージ処理)
 
 - **`Reconnect` (msg_type 0x04, common §3.6.5) を実装** — V1

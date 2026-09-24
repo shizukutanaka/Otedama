@@ -151,7 +151,13 @@ configured pool URLs — each tagged with the layer it was resolved from.
    the directive and closes — the reconnect loop re-dials the configured
    pool; the pool-supplied host:port is deliberately NOT followed (same
    posture as V1 `client.reconnect`: an unauthenticated redirect would
-   hand the hash rate to an arbitrary endpoint).
+   hand the hash rate to an arbitrary endpoint). A pool-directed
+   `CloseChannel` (0x18) likewise records the reason and ends the
+   session — the channel is dead by spec, so reconnect is the only
+   useful response. `SetExtranoncePrefix` (0x19) is decoded for wire
+   completeness; it does not affect our standard-channel submits (the
+   pool supplies the merkle root — no miner-built coinbase consumes the
+   prefix).
 6. **Graceful shutdown** on SIGINT/SIGTERM.
 
 ## 5. Transport (Stratum V2)
