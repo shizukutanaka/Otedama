@@ -1251,6 +1251,31 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 296 increment (V1 hash wire-order fix)
+
+- **実バグ（構造的シェア不正・s288 と同型）: V1 `prevhash`/`merkle_branch` のバイトオーダー** ——
+  Stratum V1 のハッシュ wire 形式は u32 単位の big-endian
+  エンコード（stratum crate の PrevHash「insane encoding」、
+  TheBlueMatt mining-proxy「byte-swaps in 4-byte chunks」で確認）
+  だが、実装は hex デコード結果を verbatim コピーしていた。
+  ヘッダが要求する内部 LE 順と per-word 逆転がずれるため、
+  V1 で emit した全ジョブの prevhash フィールドが誤り、プール側
+  再構成と一致せず構造的に reject —— s288 の merkle root 修正と
+  同じ「wire→内部変換の欠落」で、これが2件目。さらに
+  `merkle_branch` 要素も同一 HexU32Be 形式のため、s288 の
+  coinbase fold 自体も wire 順のまま畳んでおり root が不一致に
+  なっていた。`swapU32Words`（対合: 各u32 内バイト反転）を追加し
+  両経路で適用。`Job.PrevHash` ドキュメントも「big-endian」
+  という誤記を内部 LE 順に訂正。
+- **新規テスト:** `TestParseNotify_PrevHashWireOrderKAT` /
+  `TestParseCoinbaseParts_BranchWireOrderKAT` —— 自前スワップと
+  同一実装にしないよう期待値を固定16進でピン留め。
+- **検証済み記録:** ntime/nbits/version の V1 wire は数値hexで既に
+  正しい（u32 として parse→LE シリアライズ）、submit の
+  ntime/nonce `%08x` は BE hex で spec 準拠、coinb1/coinb2 は
+  verbatim で正しい（B2Pool ドキュメントでも確認）、V2 U256
+  prev_hash は wire 自体が LE で verbatim 正しい —— 全てクリーン。
+
 ## September 2026 research pass — session 295 increment (V1 pool-request answer policy)
 
 - **実装（interop）: プール→クライアント JSON-RPC リクエストへの応答ポリシー** ——

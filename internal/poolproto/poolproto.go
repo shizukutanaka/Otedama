@@ -145,7 +145,10 @@ type Job struct {
 	// Version is the block-header version field.
 	Version uint32
 
-	// PrevHash is the previous block hash, big-endian.
+	// PrevHash is the previous block hash in the block header's
+	// internal little-endian byte order (the bytes the 80-byte wire
+	// header stores at [4:36]). Producers convert from their wire
+	// format: V1's per-u32 big-endian encoding, V2's U256.
 	PrevHash [32]byte
 
 	// MerkleRoot is the block header's merkle root. V2 pools send it
@@ -194,7 +197,9 @@ type Job struct {
 	VersionMask uint32
 
 	// Coinb1/Coinb2/MerkleBranch carry the V1 coinbase-reconstruction
-	// inputs (mining.notify params 2–4, wire-order bytes as hex-decoded).
+	// inputs (mining.notify params 2–4; coinb hex-decoded verbatim,
+	// branch hashes converted from the per-u32 big-endian wire
+	// encoding to internal little-endian, same as PrevHash).
 	// A V1 pool sends the coinbase in two halves around the miner-supplied
 	// extranonces, so the client — not the pool — must fold
 	// Hash256(coinb1|en1|en2|coinb2) through the branch to obtain the

@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 296 — V1 ハッシュ wire バイトオーダー)
+
+- **`prevhash`/`merkle_branch` を per-u32 スワップで内部 LE 順に変換**
+  —— V1 wire は u32 単位 BE エンコードだが verbatim コピーしており、
+  全 V1 ジョブの prevhash が誤り・coinbase fold も wire 順で不一致
+  （s288 と同型の構造的シェア不正2件目）。実プールでの全シェア
+  reject 経路を解消。
+
 ### Fixed (session 295 — V1 プールリクエスト応答ポリシー)
 
 - **プール→クライアント JSON-RPC リクエストに応答** —— `client.

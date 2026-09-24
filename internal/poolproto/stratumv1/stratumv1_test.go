@@ -6,6 +6,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2457,5 +2458,42 @@ func TestSession_PoolRequests_AnswerPolicy(t *testing.T) {
 		if !errors.As(err, &nerr) || !nerr.Timeout() {
 			t.Fatalf("expected read timeout, got %v", err)
 		}
+	}
+}
+
+// V1 hashes arrive per-u32 big-endian on the wire; the job must carry
+// the header's internal little-endian form. KAT vectors are pinned so
+// the test does not re-implement the same transform it is checking.
+func TestParseNotify_PrevHashWireOrderKAT(t *testing.T) {
+	params := `["j1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","aa","bb",[],"00000002","1d00ffff","68d36c5e",true]`
+	job, err := parseNotify(json.RawMessage(params))
+	if err != nil {
+		t.Fatalf("parseNotify: %v", err)
+	}
+	got := hex.EncodeToString(job.PrevHash[:])
+	// Each wire u32 word reversed: 4d16b6f8->f8b6164d, etc.
+	const want = "f8b6164d19e2f65a2aae448f787fe66d61e57a48c0c6771b1e920b4400000000"
+	if got != want {
+		t.Errorf("PrevHash = %s, want %s", got, want)
+	}
+}
+
+func TestParseCoinbaseParts_BranchWireOrderKAT(t *testing.T) {
+	_, _, branch, err := parseCoinbaseParts(
+		json.RawMessage(`"aa"`),
+		json.RawMessage(`"bb"`),
+		json.RawMessage(`["4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd"]`),
+	)
+	if err != nil {
+		t.Fatalf("parseCoinbaseParts: %v", err)
+	}
+	if len(branch) != 2 {
+		t.Fatalf("branch len = %d, want 2", len(branch))
+	}
+	if got := hex.EncodeToString(branch[0][:]); got != "f8b6164d19e2f65a2aae448f787fe66d61e57a48c0c6771b1e920b4400000000" {
+		t.Errorf("branch[0] = %s, want per-u32-swapped", got)
+	}
+	if got := hex.EncodeToString(branch[1][:]); got != "33221100ddccbbaa33221100ddccbbaa33221100ddccbbaa33221100ddccbbaa" {
+		t.Errorf("branch[1] = %s, want per-u32-swapped", got)
 	}
 }

@@ -96,8 +96,20 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err != nil || len(b) != 32 {
 		return poolproto.Job{}, fmt.Errorf("notify: bad prevhash %q", prevHashHex)
 	}
-	copy(job.PrevHash[:], b)
+	swapU32Words(&job.PrevHash, b)
 	return job, nil
+}
+
+// swapU32Words converts a 32-byte hash between the Stratum V1 wire
+// encoding and the header's internal little-endian order. On the wire
+// each 4-byte word is serialized big-endian (the so-called "insane"
+// encoding used for prevhash and merkle_branch); internally the words
+// are little-endian. Swapping bytes within each u32 — keeping word
+// order — is the whole transform (an involution).
+func swapU32Words(dst *[32]byte, src []byte) {
+	for i := 0; i < 32; i += 4 {
+		dst[i], dst[i+1], dst[i+2], dst[i+3] = src[i+3], src[i+2], src[i+1], src[i]
+	}
 }
 
 // parseCleanJobs decodes the notify clean_jobs flag. The spec says
@@ -115,9 +127,11 @@ func parseCleanJobs(raw json.RawMessage) (bool, error) {
 }
 
 // parseCoinbaseParts decodes the notify params that carry the coinbase
-// split and merkle branch — wire-order bytes as hex. A malformed value
-// would zero the merkle root and burn the whole job into rejects, so
-// they are checked as strictly as the header fields.
+// split and merkle branch — wire-order bytes as hex, converted to
+// internal order where needed (branch hashes swap per-u32 like
+// prevhash). A malformed value would zero the merkle root and burn the
+// whole job into rejects, so they are checked as strictly as the
+// header fields.
 func parseCoinbaseParts(p2, p3, p4 json.RawMessage) (coinb1, coinb2 []byte, branch [][32]byte, err error) {
 	var coinb1Hex, coinb2Hex string
 	var branchHex []string
@@ -142,7 +156,9 @@ func parseCoinbaseParts(p2, p3, p4 json.RawMessage) (coinb1, coinb2 []byte, bran
 		if err != nil || len(bb) != 32 {
 			return nil, nil, nil, fmt.Errorf("notify: bad merkle_branch[%d] %q", i, bh)
 		}
-		copy(branch[i][:], bb)
+		// Branch hashes use the same per-u32 big-endian wire encoding
+		// as prevhash — swap before folding into the coinbase root.
+		swapU32Words(&branch[i], bb)
 	}
 	return coinb1, coinb2, branch, nil
 }
