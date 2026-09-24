@@ -356,3 +356,37 @@ func TestAkashProvider_NameDisclosesSimulation(t *testing.T) {
 			"while yield is not live (see docs/KNOWN_LIMITATIONS.md)", name)
 	}
 }
+
+// Cat 5 #8: every Akash quote must carry Simulated=true — the flag the
+// arbitration engine splits expected-vs-simulated yield accounting on.
+// Removing it would let modeled revenue inflate the real-earnings gauge.
+func TestAkashProvider_QuotesAreFlaggedSimulated(t *testing.T) {
+	p := NewAkashProvider(&StaticRateSource{Rate: 50000})
+
+	// Normal path (GPU present).
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p.publish(context.Background())
+	select {
+	case q := <-p.quoteCh:
+		if !q.Simulated {
+			t.Error("GPU quote missing Simulated=true")
+		}
+	default:
+		t.Fatal("no quote emitted")
+	}
+
+	// Zero-yield path (no GPUs) must carry the flag too — a future reader
+	// should not need to special-case the empty quote.
+	p2 := NewAkashProvider(&StaticRateSource{Rate: 50000})
+	p2.publish(context.Background())
+	select {
+	case q := <-p2.quoteCh:
+		if !q.Simulated {
+			t.Error("no-GPU quote missing Simulated=true")
+		}
+	default:
+		t.Fatal("no quote emitted")
+	}
+}

@@ -240,9 +240,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    score Sharpe 0 (unproven risk ≠ zero risk); balanced blends
    `0.5·normalized-yield + 0.5·normalized-Sharpe`. No CLI flag (hysteresis
    precedent).
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
-   conversion path and that simulated vs real yield is never mixed in
-   accounting.
+8. ✅ **Inference revenue is denominated/settled correctly** — USD→BTC
+   conversion verified (SatsPerSecond + 20% fee + "(simulated)" suffix,
+   session 267); the accounting half shipped session 291: `Quote.Simulated`
+   propagates to `Stream.Simulated`, `arbitration_expected_yield_sats_
+   per_second` counts live-market streams only, and simulated yield
+   publishes to the separate `arbitration_simulated_yield_sats_per_second`
+   gauge — so the TUI's lifetime-sats accumulator (which reads the real
+   gauge) can no longer accrue modeled revenue. `arb explain` marks
+   simulated rows "(sim)".
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 

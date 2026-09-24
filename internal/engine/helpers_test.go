@@ -1335,3 +1335,28 @@ func TestObserveForecasterReset_ExposesCounter(t *testing.T) {
 		t.Errorf("reset counter missing in WriteText output:\n%s", out)
 	}
 }
+
+// Cat 5 #8: the Quote's Simulated flag must survive into the merged
+// stream so splitYieldBySimulation can keep modeled revenue out of the
+// real-earnings gauge. A provider quoting live prices (Simulated unset)
+// must read false — the zero value is the honest default.
+func TestUpdateStreamReliability_PropagatesSimulated(t *testing.T) {
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+
+	updateStreamReliability(&mu, m, nil, provider.Quote{
+		ProviderID: "ai.akash", DeviceID: "gpu-0", Simulated: true,
+		Yield: provider.Yield{SatsPerSecond: 3, Confidence: 0.9},
+	})
+	if !m["ai.akash:gpu-0"].Simulated {
+		t.Error("simulated quote produced a non-simulated stream")
+	}
+
+	updateStreamReliability(&mu, m, nil, provider.Quote{
+		ProviderID: "mining.stratum", DeviceID: "cpu-0",
+		Yield: provider.Yield{SatsPerSecond: 1, Confidence: 0.9},
+	})
+	if m["mining.stratum:cpu-0"].Simulated {
+		t.Error("live-market quote produced a simulated stream")
+	}
+}

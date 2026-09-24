@@ -126,6 +126,14 @@ type Stream struct {
 	// like YieldPerDevice; absent entries mean "no risk measured yet",
 	// which smooth modes treat as unproven risk (Sharpe 0), not zero risk.
 	VolatilityPerDevice map[string]float64
+
+	// Simulated marks the stream's yield as modeled rather than observed
+	// market data (the provider still quotes estimated prices, not live
+	// ones — e.g. the simulated Akash provider). Decide treats it like
+	// any other candidate; the flag exists so accounting can split
+	// simulated revenue out of real-earnings aggregates rather than
+	// silently mixing the two.
+	Simulated bool
 }
 
 // Accepts reports whether this stream will accept work from a device of

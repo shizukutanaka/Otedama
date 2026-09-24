@@ -362,6 +362,15 @@ two-scale form. `arb explain --json` passes the snapshot body through
 for scripting. The 4h-horizon forecast, full joint CI test, and
 switch-cost amortization row remain v3.5 scope alongside A2.
 
+**Session 291 update:** rows now carry `simulated` — surfaced as a
+"(sim)" suffix on the stream cell — when the chosen stream's provider
+quotes modeled rather than live-market yield (Quote.Simulated →
+Stream.Simulated). It is the explain-side half of the accounting split
+that keeps modeled revenue out of `arbitration_expected_yield_sats_per_second`
+(and the TUI lifetime-sats accumulator it feeds), which now publishes
+real streams only alongside the separate
+`arbitration_simulated_yield_sats_per_second` gauge.
+
 ---
 
 ## Architectural sketch

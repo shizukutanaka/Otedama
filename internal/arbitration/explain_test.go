@@ -301,3 +301,27 @@ func TestDecisionSnapshot_JSONRoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", back)
 	}
 }
+
+// Cat 5 #8: a row on a simulated stream is rendered with a "(sim)"
+// suffix on the Stream cell so `arb explain` keeps modeled revenue
+// visually distinct from real earnings.
+func TestExplainRowCells_SimulatedSuffix(t *testing.T) {
+	r := &ExplainRow{
+		DeviceID:           "gpu-0",
+		Stream:             "ai.akash",
+		ExpectedSatsPerSec: 14.25,
+		Simulated:          true,
+	}
+	cells := explainRowCells(r)
+	if cells[1] != "ai.akash (sim)" {
+		t.Errorf("stream cell = %q, want %q", cells[1], "ai.akash (sim)")
+	}
+	r2 := &ExplainRow{
+		DeviceID:           "cpu-0",
+		Stream:             "mining.stratum",
+		ExpectedSatsPerSec: 1.5,
+	}
+	if got := explainRowCells(r2)[1]; got != "mining.stratum" {
+		t.Errorf("real stream cell = %q, want mining.stratum", got)
+	}
+}

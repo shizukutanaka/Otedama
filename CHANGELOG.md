@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 291 — 模擬 vs 実収入の会計分離)
+
+- **`Quote.Simulated` → `Stream.Simulated` → ゲージ分離** —
+  RESEARCH_IMPROVEMENTS Cat 5 #8 の残り半分（「模擬と実収入を会計で
+  混ぜない」）を解消。`AkashProvider` の全クォートに `Simulated:
+  true` を立て、`updateStreamReliability` が `Stream.Simulated` へ
+  伝播 — 新 `otedama_arbitration_simulated_yield_sats_per_second`
+  ゲージにモデル収入を切り分け、既存の
+  `otedama_arbitration_expected_yield_sats_per_second` は
+  **ライブ市場クォート分のみ**を計上するよう意味変更。これにより
+  同ゲージを読む TUI の累計 sats 推定（`estSatsEarned`）と
+  `effective_yield` がモデル収入を仮の収入として積み上げることが
+  なくなった。`ExplainRow.Simulated` を JSON へ出し `arb explain`
+  はストリーム列に "(sim)" 接尾辞を表示 — モデル収入の稼働場所を
+  可視化したまま会計からは分離。修正前は模擬 Akash クォート
+  （mid-range 固定価格、実市場非参照）がそのまま実収入ゲージと
+  ライフタイム累計を水増ししていた。
+
 ### Added (session 290 — A5 修正シャープ比インカムモード)
 
 - **`income_mode`（`max`/`smooth`/`balanced`）** — ADR-010 A5（修正

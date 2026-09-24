@@ -292,7 +292,8 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
 | `otedama_arbitration_confirmation_holds_total` | counter | — | Subset of `_holds_total` where the suppressed candidate was an unconfirmed stream awaiting k quote confirmations (ADR-010 A7 confirmation ladder). |
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
-| `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
+| `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast REAL earning rate (summed ExpectedYield of the chosen allocation restricted to live-market streams — simulated streams publish to `_simulated_yield_sats_per_second` instead). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. Feeds the TUI's lifetime-sats accumulator, so modeled revenue can never accrue as fake income. |
+| `otedama_arbitration_simulated_yield_sats_per_second` | gauge | — | Forecast earning rate of assignments on simulated streams only (providers quoting modeled prices, e.g. ai.akash). Reads 0 on rigs with no devices routed to simulated providers. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
 | `otedama_arbitration_provider_reliability` | gauge | `provider` | Beta-Bernoulli posterior mean of the provider's reliability (ADR-010 A6) — the factor currently discounting its quoted confidence. New providers start at 0.5 and converge toward 1 (reliable) or 0 (dead). |
 | `otedama_arbitration_yield_forecast_sats_per_second` | gauge | `stream`, `device` | Holt-Winters one-step-ahead predicted effective yield (ADR-010 A1). Compare against the stream's actual quote series. |
@@ -348,8 +349,11 @@ confidence-adjusted quote), and `alt_forecast_sigma_sats_per_sec` (the
 alternative's forecast error scale) — the inputs the rendered
 "Reasoning:" block is built from. A held row additionally carries
 `awaiting_confirmation` when the suppressed candidate was an
-unconfirmed stream (ADR-010 A7 confirmation ladder). The snapshot
-header echoes the active `income_mode` (`max`/`smooth`/`balanced` —
+unconfirmed stream (ADR-010 A7 confirmation ladder). Rows carry
+`simulated` when the chosen stream quotes modeled rather than
+live-market yield — rendered as "(sim)" on the stream column so
+simulated revenue stays visually distinct from real earnings. The
+snapshot header echoes the active `income_mode` (`max`/`smooth`/`balanced` —
 ADR-010 A5) alongside policy, hysteresis, and the min-yield floor.
 Served by `otedama arb explain` for terminal rendering.
 

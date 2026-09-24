@@ -58,6 +58,12 @@ type ExplainRow struct {
 	// the incumbent.
 	AwaitingConfirmation bool `json:"awaiting_confirmation,omitempty"`
 
+	// Simulated marks rows whose chosen stream quotes modeled rather than
+	// live-market yield — the row-level disclosure that keeps modeled
+	// revenue visually distinct from real earnings (the counterpart of
+	// the expected/simulated metrics split).
+	Simulated bool `json:"simulated,omitempty"`
+
 	// ForegoneSatsPerSec is the raw yield left on the table by not taking
 	// the max-earnings stream (hysteresis hold or policy deviation), the
 	// headline number for "what did the safety margin cost this cycle".
@@ -182,6 +188,9 @@ func explainRowCells(r *ExplainRow) []string {
 		}
 	} else {
 		yield = fmt.Sprintf("%.2f sat/s", r.ExpectedSatsPerSec)
+		if r.Simulated {
+			stream += " (sim)"
+		}
 		if r.ForecastSatsPerSec != nil {
 			forecast = fmt.Sprintf("%.2f", *r.ForecastSatsPerSec)
 			if r.ForecastSigmaSatsPerSec != nil && *r.ForecastSigmaSatsPerSec > 0 {
@@ -192,22 +201,31 @@ func explainRowCells(r *ExplainRow) []string {
 			reliability = fmt.Sprintf("%.2f (α=%.1f, β=%.1f)",
 				*r.Reliability, r.ReliabilityAlpha, r.ReliabilityBeta)
 		}
-		switch {
-		case r.SwitchedFrom != "":
-			detail = fmt.Sprintf("switch from %s", r.SwitchedFrom)
-		case r.Held && r.ForegoneSatsPerSec > 0 && r.AwaitingConfirmation:
-			detail = fmt.Sprintf("held (%.2f sat/s declined; challenger unconfirmed)", r.ForegoneSatsPerSec)
-		case r.Held && r.ForegoneSatsPerSec > 0:
-			detail = fmt.Sprintf("held (%.2f sat/s declined)", r.ForegoneSatsPerSec)
-		case r.Held:
-			detail = "held (tie or sub-margin alternative)"
-		case r.ForegoneSatsPerSec > 0:
-			detail = fmt.Sprintf("policy: %.2f sat/s foregone", r.ForegoneSatsPerSec)
-		default:
-			detail = "stay"
-		}
+		detail = explainRowDetail(r)
 	}
 	return []string{r.DeviceID, stream, yield, forecast, reliability, detail}
+}
+
+// explainRowDetail renders the non-idle row's Detail cell — the
+// one-phrase summary of what the decision did (switch / hold /
+// policy-foregone / stay) plus the magnitude when one exists. Non-idle
+// rows always render this summary; Decide's own Reason text only
+// survives into the Detail cell of idle rows (which have no summary).
+func explainRowDetail(r *ExplainRow) string {
+	switch {
+	case r.SwitchedFrom != "":
+		return fmt.Sprintf("switch from %s", r.SwitchedFrom)
+	case r.Held && r.ForegoneSatsPerSec > 0 && r.AwaitingConfirmation:
+		return fmt.Sprintf("held (%.2f sat/s declined; challenger unconfirmed)", r.ForegoneSatsPerSec)
+	case r.Held && r.ForegoneSatsPerSec > 0:
+		return fmt.Sprintf("held (%.2f sat/s declined)", r.ForegoneSatsPerSec)
+	case r.Held:
+		return "held (tie or sub-margin alternative)"
+	case r.ForegoneSatsPerSec > 0:
+		return fmt.Sprintf("policy: %.2f sat/s foregone", r.ForegoneSatsPerSec)
+	default:
+		return "stay"
+	}
 }
 
 // reasoningLines produces the trailing "Reasoning:" paragraph from

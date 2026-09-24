@@ -2196,3 +2196,37 @@ func TestMarkVolatility(t *testing.T) {
 		t.Errorf("orphan forecaster mutated map: len=%d, want 1", got)
 	}
 }
+
+// Cat 5 #8: the expected-yield gauge split must attribute each
+// assignment's ExpectedYield to real vs simulated by the chosen stream's
+// flag — modeled revenue goes to its own gauge, never the real total.
+// Idle rows (empty stream) count as real zero — they earn nothing.
+func TestSplitYieldBySimulation(t *testing.T) {
+	streams := []arbitration.Stream{
+		{ID: "mining.stratum"},
+		{ID: "ai.akash", Simulated: true},
+	}
+	alloc := &arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "cpu-0", Stream: "mining.stratum", ExpectedYield: 1.5},
+		{DeviceID: "gpu-0", Stream: "ai.akash", ExpectedYield: 14.25},
+		{DeviceID: "gpu-1", Stream: "ai.akash", ExpectedYield: 14.25},
+		{DeviceID: "gpu-2", Stream: "", ExpectedYield: 0}, // idle
+	}}
+	realYield, simYield := splitYieldBySimulation(alloc, streams)
+	if realYield != 1.5 {
+		t.Errorf("real yield = %v, want 1.5", realYield)
+	}
+	if simYield != 28.5 {
+		t.Errorf("simulated yield = %v, want 28.5", simYield)
+	}
+
+	// A stream absent from the slice (stale edge) counts as real — an
+	// unknown provider's revenue must not silently become "simulated".
+	alloc2 := &arbitration.Allocation{Assignments: []arbitration.Assignment{
+		{DeviceID: "cpu-0", Stream: "ghost", ExpectedYield: 2},
+	}}
+	r2, s2 := splitYieldBySimulation(alloc2, streams)
+	if r2 != 2 || s2 != 0 {
+		t.Errorf("unknown stream: real=%v simulated=%v, want 2,0", r2, s2)
+	}
+}

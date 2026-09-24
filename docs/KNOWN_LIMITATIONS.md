@@ -32,6 +32,17 @@ arbitration engine is a *simulation*. It is suitable for exercising the
 arbitration logic and for development, but the numbers are not real
 income and must not be relied upon for financial decisions.
 
+**Accounting separation (session 291):** simulated quotes carry
+`Quote.Simulated` through to the arbitration `Stream`, and the
+expected-yield gauge splits on it — `otedama_arbitration_expected_yield_
+sats_per_second` now counts only live-market streams, so neither it nor
+the TUI's lifetime-sats accumulator it feeds can accrue modeled
+revenue. Simulated yield publishes to the separate
+`otedama_arbitration_simulated_yield_sats_per_second` gauge instead,
+and `arb explain` marks the row's stream with a "(sim)" suffix. The
+mitigation bounds the *accounting* contamination; the yield figures
+themselves remain modeled until the real integration lands.
+
 **How you can tell:** The provider's name is rendered everywhere as
 **"AI Inference (Akash Network, simulated)"** — in the TUI, in logs,
 and in `otedama config show`. The "(simulated)" suffix is removed only

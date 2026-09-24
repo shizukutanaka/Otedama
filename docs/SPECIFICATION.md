@@ -212,7 +212,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_holds_total` | counter | Better stream existed but hysteresis held. |
 | `arbitration_confirmation_holds_total` | counter | Subset of `arbitration_holds_total` where the suppressed candidate was an unconfirmed stream awaiting k quote confirmations (ADR-010 A7 confirmation ladder). |
 | `arbitration_foregone_sats_per_second` | gauge | Instantaneous opportunity cost of the held allocation. |
-| `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
+| `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate, real (live-market) streams only — simulated streams are excluded and publish to `arbitration_simulated_yield_sats_per_second` instead. |
+| `arbitration_simulated_yield_sats_per_second` | gauge | Forecast earning rate of assignments on simulated streams only (providers quoting modeled prices, e.g. ai.akash). Kept separate so modeled revenue never inflates the real-earnings total. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
 | `arbitration_provider_reliability` | gauge | Beta-Bernoulli posterior mean per `{provider}` (ADR-010 A6); discounts quoted confidence. |

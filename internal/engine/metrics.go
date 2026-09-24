@@ -49,13 +49,24 @@ type engineMetrics struct {
 	// what stability/policy preferences cost per second and tune accordingly.
 	arbitrationForegoneSatsPerSec *metrics.Gauge
 	// arbitrationExpectedYieldSatsPerSec is the engine's own forecast of the
-	// current earning rate: the summed ExpectedYield of the chosen allocation
-	// (alloc.TotalYield) from the latest Decide. Publishing the forecast is what
-	// makes it accountable — an operator can compare this expectation against
+	// current REAL earning rate: the summed ExpectedYield of chosen
+	// assignments whose stream quotes live-market prices. Simulated streams
+	// (providers still modeling prices, e.g. ai.akash in v3.0.0-alpha) are
+	// excluded — they publish to arbitrationSimulatedYieldSatsPerSec — so
+	// this gauge never mixes modeled revenue into real-earnings accounting
+	// (it also feeds the TUI's lifetime-sats accumulator, which would
+	// otherwise accrue fake income). Publishing the forecast is what makes
+	// it accountable — an operator can compare this expectation against
 	// realized earnings (accepted shares × difficulty value) to detect when
-	// provider quotes are over-optimistic or hardware is underperforming. The
-	// expectation half of the expectation-vs-realization pair.
+	// provider quotes are over-optimistic or hardware is underperforming.
+	// The expectation half of the expectation-vs-realization pair.
 	arbitrationExpectedYieldSatsPerSec *metrics.Gauge
+	// arbitrationSimulatedYieldSatsPerSec is the summed ExpectedYield of
+	// chosen assignments on streams whose provider flags its quotes as
+	// Simulated — the separated half of the split above, exposed so
+	// modeled revenue stays visible (for observing what the simulated
+	// providers claim) without ever inflating the real-earnings total.
+	arbitrationSimulatedYieldSatsPerSec *metrics.Gauge
 	// effectiveYieldSatsPerSec is arbitrationExpectedYieldSatsPerSec scaled by
 	// the lifetime productive fraction (productiveSeconds / uptime) — see
 	// effectiveYield in stats.go. Unlike the instantaneous expected-yield
@@ -292,10 +303,20 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			nil),
 		arbitrationExpectedYieldSatsPerSec: reg.NewGauge(
 			"otedama_arbitration_expected_yield_sats_per_second",
-			"The engine's forecast earning rate: summed ExpectedYield of the chosen "+
-				"allocation. Compare against realized earnings to judge whether provider "+
+			"The engine's forecast REAL earning rate: summed ExpectedYield of the chosen "+
+				"allocation restricted to streams quoting live-market prices (simulated "+
+				"streams publish to otedama_arbitration_simulated_yield_sats_per_second "+
+				"instead). Compare against realized earnings to judge whether provider "+
 				"quotes are accurate; combine with otedama_btc_usd_rate for an expected "+
 				"$/day.",
+			nil),
+		arbitrationSimulatedYieldSatsPerSec: reg.NewGauge(
+			"otedama_arbitration_simulated_yield_sats_per_second",
+			"The engine's forecast earning rate from SIMULATED streams only — "+
+				"providers whose quotes are modeled rather than live-market (e.g. "+
+				"ai.akash in v3.0.0-alpha). Kept separate so modeled revenue never "+
+				"inflates the real-earnings total; expect this to read 0 on rigs "+
+				"with no GPUs routed to simulated providers.",
 			nil),
 		effectiveYieldSatsPerSec: reg.NewGauge(
 			"otedama_effective_yield_sats_per_second",

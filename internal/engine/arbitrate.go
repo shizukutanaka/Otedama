@@ -203,7 +203,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				foregone += a.ForegoneSatsPerSec
 			}
 			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
-			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
+			realYield, simYield := splitYieldBySimulation(alloc, streams)
+			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(realYield)
+			opts.metrics.arbitrationSimulatedYieldSatsPerSec.Set(simYield)
 			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
 			if opts.activityMu != nil && opts.activity != nil {
 				opts.activityMu.Lock()
@@ -282,6 +284,12 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 			}
 		}
 		if !a.Idle() {
+			// Flag simulated streams on the row itself so `arb explain`
+			// labels modeled revenue where it is earned — the row-level
+			// counterpart of the expected/simulated gauge split.
+			if s, ok := opts.streamMap[string(a.Stream)+":"+a.DeviceID]; ok {
+				row.Simulated = s.Simulated
+			}
 			if fc := forecasters[string(a.Stream)+":"+a.DeviceID]; fc != nil {
 				pred := fc.Predict(1)
 				sigma := fc.Sigma()
@@ -367,6 +375,7 @@ func updateStreamReliability(mu *sync.Mutex, m map[string]arbitration.Stream, re
 		Confidence:    q.Yield.Confidence * discount,
 	}
 	existing.IsBitcoinMining = q.ProviderID == "mining.stratum"
+	existing.Simulated = q.Simulated
 	m[key] = existing
 	return key
 }
@@ -392,6 +401,28 @@ func markConfirmedStreams(streams []arbitration.Stream, providerQuotes map[strin
 	for i := range streams {
 		streams[i].Confirmed = providerQuotes[string(streams[i].ID)] >= arbitration.ConfirmationEpochs
 	}
+}
+
+// splitYieldBySimulation partitions an allocation's expected yield into
+// the part backed by live-market quotes ("real") and the part backed by
+// modeled quotes ("simulated") — RESEARCH_IMPROVEMENTS Cat 5 #8's rule
+// that simulated revenue must never mix into real-earnings accounting.
+// The caller publishes real to otedama_arbitration_expected_yield_
+// sats_per_second (which feeds the TUI's lifetime-sats accumulator) and
+// simulated to its own clearly-named gauge.
+func splitYieldBySimulation(alloc *arbitration.Allocation, streams []arbitration.Stream) (realYield, simYield float64) {
+	simByStream := make(map[arbitration.StreamID]bool, len(streams))
+	for _, s := range streams {
+		simByStream[s.ID] = s.Simulated
+	}
+	for _, a := range alloc.Assignments {
+		if simByStream[a.Stream] {
+			simYield += a.ExpectedYield
+		} else {
+			realYield += a.ExpectedYield
+		}
+	}
+	return realYield, simYield
 }
 
 // markVolatility publishes each (stream, device) forecaster's realized-

@@ -99,6 +99,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 		p.sendQuote(ctx, Quote{
 			ProviderID:       p.id,
 			AcceptedFamilies: []hal.Family{hal.FamilyGPU},
+			Simulated:        true,
 			At:               time.Now(),
 			Yield:            Yield{Confidence: 0},
 		})
@@ -128,6 +129,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 			ProviderID:       p.id,
 			DeviceID:         dev.Identity().ID,
 			AcceptedFamilies: []hal.Family{hal.FamilyGPU},
+			Simulated:        true,
 			At:               time.Now(),
 			Yield: Yield{
 				SatsPerSecond:    sats,

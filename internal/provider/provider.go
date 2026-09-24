@@ -129,6 +129,16 @@ type Quote struct {
 	// A nil slice means all families are accepted.
 	AcceptedFamilies []hal.Family
 
+	// Simulated marks the quote's yield as modeled rather than observed
+	// market data — e.g. AkashProvider, which in v3.0.0-alpha quotes a
+	// fixed price instead of querying the live Akash REST API. The
+	// arbitration engine must never let simulated revenue inflate real-
+	// earnings accounting (RESEARCH_IMPROVEMENTS Cat 5 #8): expected-yield
+	// metrics split on this flag so otedama_arbitration_expected_yield_
+	// sats_per_second counts only what could actually pay out. Providers
+	// that quote live market prices leave it false (the zero value).
+	Simulated bool
+
 	// At is the wall-clock time the quote was generated.
 	At time.Time
 }
