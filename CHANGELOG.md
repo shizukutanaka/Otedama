@@ -585,6 +585,16 @@ cherry-pick 移植。session-283 の poolproto 統合で V2 の submitTimes 決�
 `job_id` に統一 — latency.Record の発火経路（V1 エラー/受理、V2 エラー/
 unconfirmed/受理）は全てそのままヒストグラムへ配線。)*
 
+### Added (session 267 — Github・論文・Qiita・Zenn・海外技術情報などを参考にさらなる改善（おまかせ）: プールのネットワークハッシュレート占有率警告)
+
+- **Pool-share-of-hashrate awareness**（RESEARCH_IMPROVEMENTS Cat 4 #7 — "optionally inform the user when their chosen pool exceeds a large network share"）。プール接続確立時に mempool.space の週次採掘プール分布を1回照会し、設定ホスト名が既知プール（名前/slug/link ドメインの正規化マッチ、"pool" のような汎用ラベルは ≥5 ルーン規則で誤マッチ排除）と一致した場合に `otedama_pool_network_share{pool_host}` ゲージを記録。占有率 ≥30% で warn 1 発 — Bahrani & Weinberg (arXiv:2309.06847) の「検出不能な selfish mining」が成立する集中度合いへの牽制であり、フェイルオーバー耐性の低下も警告。
+- **`--no-pool-share-check` フラグ**でオプトアウト（プール選択の外部漏洩を完全に避けたい運用向け）。未登録・プライベートプールやフェッチ失敗時は警告せず静かにスキップ。新規依存ゼロ（mempool.space REST、ADR-003 維持）、テスト4件追加（マッチング/HTTPエラー/空分布/ラベル正規化）。
+
+*(session 310: 別系チェーンの未マージ PR に留まっていた本機能を現チェーンへ
+cherry-pick 移植。session-283 の poolproto 統合で接続確立は共通 `dialPool`
+へ集約済みのため、照会呼出しは V2/V1 の接続確立直後に1箇所ずつ — 元実装の
+発火点と同一（ハンドシェイク完了・onConnected 済み・ホスト名は
+`poolproto.StripScheme` で取得、旧 `parseHost` ラッパは吸収済み）。)*
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -36,6 +36,7 @@ type runFlags struct {
 	configFile               string
 	dryRun                   bool
 	noTUI                    bool
+	noPoolShareCheck         bool
 	walletPassphrase         string
 	walletMnemonicPassphrase string
 	pprofEnabled             bool
@@ -71,6 +72,9 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 	fs.StringVar(&f.configFile, "config", "", "Path to config.yaml (optional).")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "(run only) Validate configuration and exit without starting.")
 	fs.BoolVar(&f.noTUI, "no-tui", false, "(run only) Disable the terminal dashboard (plain log output).")
+	fs.BoolVar(&f.noPoolShareCheck, "no-pool-share-check", false,
+		"(run only) Skip the one-shot pool network-hashrate-share lookup (mempool.space) "+
+			"that warns when the configured pool controls a large share of the network.")
 	fs.StringVar(&f.walletPassphrase, "wallet-passphrase", "",
 		"(run only) Passphrase to unlock/create the Lightning wallet. If empty, wallet is skipped.")
 	fs.StringVar(&f.walletMnemonicPassphrase, "wallet-mnemonic-passphrase", "",
@@ -226,6 +230,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		Config:                   cfg,
 		Output:                   stdout,
 		NoTUI:                    f.noTUI,
+		NoPoolShareCheck:         f.noPoolShareCheck,
 		WalletPassphrase:         f.walletPassphrase,
 		WalletMnemonicPassphrase: f.walletMnemonicPassphrase,
 		Logger:                   structlog.Adapter(),

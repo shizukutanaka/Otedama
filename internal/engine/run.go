@@ -96,6 +96,15 @@ type Options struct {
 	// latency, arbitration switches). Nil disables metrics emission.
 	Metrics *metrics.Registry
 
+	// NoPoolShareCheck disables the one-shot pool network-hashrate-share
+	// lookup (mempool.space) performed when a pool session connects. When
+	// the configured pool's weekly block-share meets
+	// rates.PoolShareWarnThreshold the engine warns once — large-pool
+	// concentration enables detection-resistant selfish mining
+	// (THREAT_MODEL, Bahrani & Weinberg). Set true to keep Otedama from
+	// disclosing the configured pool's hostname to the lookup endpoint.
+	NoPoolShareCheck bool
+
 	// OnReady, if set, is called with true each time a pool session is
 	// established and with false when that session ends (and on shutdown).
 	// Used to flip HTTP /readyz between 200 and 503, so readiness tracks an
@@ -438,8 +447,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			curtailGate:  r.curtailGate,
 			tlsCAFile:    poolTLSCAFile,
 			poolPassword: poolPassword,
-			activityMu:   r.activityMu,
-			activity:     r.activity,
+
+			noPoolShareCheck: r.opts.NoPoolShareCheck,
+			activityMu:       r.activityMu,
+			activity:         r.activity,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -555,6 +566,8 @@ type sessionOpts struct {
 	// .Password), sent in the Stratum V1 mining.authorize call. Most V1
 	// pools accept any value, but not all — see KNOWN_LIMITATIONS.md §10.
 	poolPassword string
+	// noPoolShareCheck mirrors Options.NoPoolShareCheck.
+	noPoolShareCheck bool
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
@@ -882,6 +895,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 		chanID = ident.ChannelID()
 	}
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
+	opts.warnOnPoolShare(ctx)
 
 	// estSats, latency and friends live on the shared sessionTelemetry
 	// accumulator so both session loops tick identically.
@@ -1022,6 +1036,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		return err
 	}
 	defer sess.Close()
+	opts.warnOnPoolShare(ctx)
 
 	// V1 is single-channel; channel ID 0 is the conventional value.
 	const chanID = uint32(0)
@@ -1185,6 +1200,52 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// warnOnPoolShare is the one-shot pool-share-of-hashrate awareness check
+// (RESEARCH_IMPROVEMENTS Cat 4 #7): once per configured pool host it asks
+// mempool.space's public weekly distribution which pool the hostname
+// belongs to, records otedama_pool_network_share{pool_host} when the pool
+// is identified, and emits one warn when the share meets
+// rates.PoolShareWarnThreshold — large-pool concentration is what makes
+// the detection-resistant selfish mining in THREAT_MODEL (Bahrani &
+// Weinberg, arXiv:2309.06847) possible and weakens failover resilience.
+// Unknown pools (private, untracked, unmatched hostname) and fetch errors
+// stay silent: this is a nudge, never a nag.
+func (opts sessionOpts) warnOnPoolShare(ctx context.Context) {
+	if opts.m == nil || opts.noPoolShareCheck {
+		return
+	}
+	host, err := poolproto.StripScheme(opts.poolURL)
+	if err != nil || host == "" {
+		return
+	}
+	opts.m.poolShareSeenMu.Lock()
+	if opts.m.poolShareSeen[host] {
+		opts.m.poolShareSeenMu.Unlock()
+		return
+	}
+	opts.m.poolShareSeen[host] = true
+	opts.m.poolShareSeenMu.Unlock()
+	go func() {
+		ps, found, err := rates.FetchPoolNetworkShare(ctx, host)
+		if err != nil || !found {
+			return
+		}
+		opts.m.reg.NewGauge(
+			"otedama_pool_network_share",
+			"Network-hashrate share of the connected pool (weekly block-share "+
+				"via mempool.space). Alert ≳0.30: large-pool concentration "+
+				"enables detection-resistant selfish mining.",
+			map[string]string{"pool_host": host}).Set(ps.Share)
+		if ps.Share >= rates.PoolShareWarnThreshold {
+			opts.log("warn", fmt.Sprintf(
+				"engine: pool %s controls ~%.0f%% of network hashrate this week — "+
+					"large-pool concentration enables detection-resistant selfish mining; "+
+					"consider a smaller pool",
+				ps.Name, ps.Share*100))
+		}
+	}()
 }
 
 func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }

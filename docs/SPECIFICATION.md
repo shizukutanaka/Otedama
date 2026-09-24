@@ -232,6 +232,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `pool_connect_failures_total` | counter | Connection failures. |
 | `pool_connection_state` | gauge | 0=disconnected, 1=connecting, 2=connected. |
 | `pool_active_index` | gauge | 0-based index of active pool in the failover list. |
+| `pool_network_share{pool_host}` † | gauge | Connected pool's share of weekly network blocks (mempool.space), set when the hostname matches a known pool; ≳0.30 triggers the concentration warn. |
 | `pool_difficulty` | gauge | Current pool-assigned share difficulty. |
 | `estimated_share_interval_seconds` | gauge | difficulty × 2³² / hashrate. |
 | `last_job_received_seconds` | gauge | Unix time of the most recent job. |
