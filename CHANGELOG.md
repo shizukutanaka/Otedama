@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 333 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: Octopus 料金カーテルメント — Cat 8 #17 残半分)
+
+- **`curtail_above_tariff_pence`（新設定・env 対応）.** `electricity_tariff_octopus`
+  フィードの現在 Agile スロット価格（VAT 込み p/kWh）が閾値超過の間、全ハッシング
+  を停止 — 従来の `curtail_below_btc_usd`（BTC 価格フロア）・
+  `curtail_above_uk_carbon`（炭素強度）・`thermal_throttle_above_celsius`（温度）に
+  並ぶ第4のカーテルメントゲートで、time-of-use 料金スパイク時の採掘を停止可能に。
+  フェッチ失敗時は状態保持（他ゲートと同一の untrusted-input 規則）、
+  `electricity_tariff_octopus` 未設定での有効化は validation 警告。
+  RESEARCH_IMPROVEMENTS Cat 8 #17 の "feeding the tariff into curtailment" 半分を解消
+  （前方カーブのスケジューリング消費は ADR-008 #2 として残置）。
+
 ### Added (session 332 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: ASIC 追従の観測性 + doctor エンドポイント検証 + RESEARCH 正直化)
 
 - **`otedama_asic_pool_switches_total{pool_host}` カウンタ.** session 331 の

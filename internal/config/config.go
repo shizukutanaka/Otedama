@@ -172,6 +172,21 @@ type Config struct {
 	// config file.
 	CurtailAboveUKCarbon float64 `yaml:"curtail_above_uk_carbon"`
 
+	// CurtailAboveTariffPence pauses all hashing workers when the current
+	// Octopus Agile slot price rises above this threshold (pence/kWh,
+	// VAT-inclusive), letting GB operators stop mining during price spikes
+	// instead of only on a fixed USD rate floor. It reads the same
+	// electricity_tariff_octopus feed that publishes
+	// otedama_electricity_tariff_pence_per_kwh — the feed must be
+	// configured for the gate to have data. Like the price and carbon
+	// gates it acts only on a fresh slot reading.
+	//
+	// 0 disables the feature (default). Negative values are rejected by
+	// Validate(), and setting it without electricity_tariff_octopus is
+	// reported as a validation issue since the gate could never see a
+	// reading. Set via OTEDAMA_CURTAIL_ABOVE_TARIFF_PENCE or config file.
+	CurtailAboveTariffPence float64 `yaml:"curtail_above_tariff_pence"`
+
 	// MinYieldSatsPerSec is a per-device profitability floor in satoshis per
 	// second: the arbitration engine leaves a device idle when none of its
 	// compatible revenue streams clears this rate, rather than running it for a
@@ -330,6 +345,7 @@ func Defaults() Config {
 		ArbitrationHysteresisPct:    0.05,
 		CurtailBelowBTCUSD:          0,  // disabled by default
 		CurtailAboveUKCarbon:        0,  // disabled by default
+		CurtailAboveTariffPence:     0,  // disabled by default
 		MinYieldSatsPerSec:          0,  // disabled by default
 		ThermalThrottleAboveCelsius: 0,  // disabled by default
 		HTTPAddr:                    "", // HTTP server disabled by default
@@ -396,6 +412,7 @@ type Origins struct {
 	IncomeMode                  ValueOrigin
 	ThermalThrottleAboveCelsius ValueOrigin
 	CurtailAboveUKCarbon        ValueOrigin
+	CurtailAboveTariffPence     ValueOrigin
 	PowerWatts                  ValueOrigin
 	ElectricityPricePerKWh      ValueOrigin
 	HTTPAddr                    ValueOrigin
@@ -444,6 +461,10 @@ var numericEnvVars = []struct {
 	{"OTEDAMA_CURTAIL_ABOVE_UK_CARBON", func(c *Config, o *Origins, v float64) {
 		c.CurtailAboveUKCarbon = v
 		o.CurtailAboveUKCarbon = OriginEnv
+	}},
+	{"OTEDAMA_CURTAIL_ABOVE_TARIFF_PENCE", func(c *Config, o *Origins, v float64) {
+		c.CurtailAboveTariffPence = v
+		o.CurtailAboveTariffPence = OriginEnv
 	}},
 	{"OTEDAMA_POWER_WATTS", func(c *Config, o *Origins, v float64) {
 		c.PowerWatts = v
@@ -557,6 +578,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if fromFile.CurtailAboveUKCarbon != 0 {
 		cfg.CurtailAboveUKCarbon = fromFile.CurtailAboveUKCarbon
 		o.CurtailAboveUKCarbon = OriginFile
+	}
+	if fromFile.CurtailAboveTariffPence != 0 {
+		cfg.CurtailAboveTariffPence = fromFile.CurtailAboveTariffPence
+		o.CurtailAboveTariffPence = OriginFile
 	}
 	if fromFile.PowerWatts != 0 {
 		cfg.PowerWatts = fromFile.PowerWatts
@@ -783,6 +808,14 @@ func (c Config) Validate() error {
 	if c.CurtailAboveUKCarbon < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_above_uk_carbon %.2f must be >= 0 (0 = disabled)", c.CurtailAboveUKCarbon))
+	}
+	if c.CurtailAboveTariffPence < 0 {
+		issues = append(issues, fmt.Sprintf(
+			"curtail_above_tariff_pence %.2f must be >= 0 (0 = disabled)", c.CurtailAboveTariffPence))
+	}
+	if c.CurtailAboveTariffPence > 0 && c.ElectricityTariffOctopus == "" {
+		issues = append(issues,
+			"curtail_above_tariff_pence is set but electricity_tariff_octopus is empty — the gate has no price feed")
 	}
 	if c.MinYieldSatsPerSec < 0 {
 		issues = append(issues, fmt.Sprintf(

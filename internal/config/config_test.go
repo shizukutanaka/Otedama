@@ -489,6 +489,39 @@ func TestValidate_CurtailBelowBTCUSD(t *testing.T) {
 	}
 }
 
+func TestValidate_CurtailAboveTariffPence(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	// Disabled (0) and positive values are valid when the tariff feed is set.
+	c := base()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("default config should validate; got %v", err)
+	}
+	c = base()
+	c.ElectricityTariffOctopus = "AGILE-24-10-01/E-1R-AGILE-24-10-01-A"
+	c.CurtailAboveTariffPence = 25
+	if err := c.Validate(); err != nil {
+		t.Errorf("positive threshold with tariff feed should be valid; got %v", err)
+	}
+	// Negative values are rejected.
+	c = base()
+	c.CurtailAboveTariffPence = -1
+	if err := c.Validate(); err == nil ||
+		!strings.Contains(err.Error(), "curtail_above_tariff_pence") {
+		t.Errorf("negative CurtailAboveTariffPence should fail mentioning the field; got %v", err)
+	}
+	// A threshold without the tariff feed has no data source.
+	c = base()
+	c.CurtailAboveTariffPence = 10
+	if err := c.Validate(); err == nil ||
+		!strings.Contains(err.Error(), "electricity_tariff_octopus") {
+		t.Errorf("threshold without electricity_tariff_octopus should flag the missing feed; got %v", err)
+	}
+}
+
 func TestResolve_CurtailBelowBTCUSD_EnvOverride(t *testing.T) {
 	env := map[string]string{"OTEDAMA_CURTAIL_BELOW_BTC_USD": "50000"}
 	cfg := Resolve(Config{}, env, FlagValues{})

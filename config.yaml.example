@@ -178,6 +178,17 @@ log_format: "text"
 # fetch never pauses or resumes mining. 0 (default) disables curtailment.
 # curtail_above_uk_carbon: 0
 
+# curtail_above_tariff_pence pauses ALL hashing when the current Octopus
+# Agile slot price rises above this threshold (pence/kWh, VAT-inclusive),
+# so GB operators on a time-of-use tariff can stop mining during price
+# spikes; hashing resumes automatically once the slot price recovers. It
+# reads the same electricity_tariff_octopus feed that publishes
+# otedama_electricity_tariff_pence_per_kwh — set electricity_tariff_octopus
+# as well or the gate has no data. Like the other gates it acts only on a
+# fresh slot reading: a failed fetch never pauses or resumes mining.
+# 0 (default) disables curtailment.
+# curtail_above_tariff_pence: 0
+
 # min_yield_sats_per_sec is a per-device profitability floor (satoshis/second):
 # the arbitration engine leaves a device idle when none of its compatible
 # revenue streams clears this rate, instead of running it for a trickle of

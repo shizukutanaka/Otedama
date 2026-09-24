@@ -854,13 +854,17 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 8 — power: real, currently-live feeds
 
-17. 🟡 **Partially resolved** (session 270). `internal/rates/octopus.go`
-    implements exactly this endpoint: `FetchAgileRates` returns the keyless
-    half-hourly `standard-unit-rates` curve, and a 15-min engine poll behind
+17. 🟡 **Partially resolved** (session 270, curtailment half resolved
+    session 333). `internal/rates/octopus.go` implements exactly this
+    endpoint: `FetchAgileRates` returns the keyless half-hourly
+    `standard-unit-rates` curve, and a 15-min engine poll behind
     `electricity_tariff_octopus = "PRODUCT/TARIFF"` publishes the current
     slot on `otedama_electricity_tariff_pence_per_kwh` (GB pence — kept
-    separate from the USD `electricity_price_per_kwh`). Still open: feeding
-    the tariff into curtailment/scheduling (Cat 8 #9), and non-GB providers
+    separate from the USD `electricity_price_per_kwh`). Session 333 added
+    `curtail_above_tariff_pence`: a fourth curtailment gate mirroring
+    `curtail_above_uk_carbon`, pausing all hashing while the current Agile
+    slot exceeds the threshold. Still open: consuming the forward curve
+    for horizon-aware scheduling (ADR-008 #2), and non-GB providers
     (Tibber/Amber below). Original finding: "Octopus Agile half-hourly REST
     (no key for read-only rates)."
 18. 🟡 **Partially resolved** (session 270). The fetcher landed returns the

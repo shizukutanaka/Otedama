@@ -263,12 +263,13 @@ func Run(ctx context.Context, opts Options) error {
 	thermalGate := new(atomic.Bool)
 	curtailGate := new(atomic.Bool)
 	carbonGate := new(atomic.Bool)
+	tariffGate := new(atomic.Bool)
 
 	// setCurtailedMetric keeps otedama_curtailed honest under two gates:
 	// it is 1 while EITHER gate is raised, so a price-recovery uncurtail
 	// cannot falsely report 0 while the carbon gate still pauses hashing.
 	setCurtailedMetric := func() {
-		if curtailGate.Load() || carbonGate.Load() {
+		if curtailGate.Load() || carbonGate.Load() || tariffGate.Load() {
 			m.curtailed.Set(1)
 		} else {
 			m.curtailed.Set(0)
@@ -281,7 +282,8 @@ func Run(ctx context.Context, opts Options) error {
 	// combined transitions. A gate releasing while another still holds
 	// must NOT resume hashing.
 	applyCurtail := func() {
-		combined := priceGate.Load() || thermalGate.Load() || carbonGate.Load()
+		combined := priceGate.Load() || thermalGate.Load() || carbonGate.Load() ||
+			tariffGate.Load()
 		if curtailGate.Swap(combined) == combined {
 			return
 		}
@@ -413,6 +415,26 @@ func Run(ctx context.Context, opts Options) error {
 						"engine: electricity tariff %s = %.2f p/kWh (slot %s–%s UTC)",
 						opts.Config.ElectricityTariffOctopus, slot.ValueIncVATPence,
 						slot.ValidFrom.Format("15:04"), slot.ValidTo.Format("15:04")))
+				}
+				if opts.Config.CurtailAboveTariffPence > 0 {
+					next, changed := curtailAboveDecision(tariffGate.Load(),
+						slot.ValueIncVATPence, true, opts.Config.CurtailAboveTariffPence)
+					if changed {
+						tariffGate.Store(next)
+						if next {
+							for _, w := range workers {
+								w.SetWork(nil)
+							}
+							log("info", fmt.Sprintf(
+								"engine: curtailed — electricity tariff %.2f p/kWh above threshold %.2f; hashing paused",
+								slot.ValueIncVATPence, opts.Config.CurtailAboveTariffPence))
+						} else {
+							log("info", fmt.Sprintf(
+								"engine: uncurtailed — electricity tariff %.2f p/kWh recovered; hashing resumes on next job",
+								slot.ValueIncVATPence))
+						}
+						setCurtailedMetric()
+					}
 				}
 			}
 			tick()
@@ -558,6 +580,7 @@ func Run(ctx context.Context, opts Options) error {
 		log:         log,
 		curtailGate: curtailGate,
 		carbonGate:  carbonGate,
+		tariffGate:  tariffGate,
 		activityMu:  &activityMu,
 		activity:    activity,
 	})
@@ -579,9 +602,11 @@ type reconnectOpts struct {
 	// curtailGate, when non-nil and true, means hashing is paused by the
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised. carbonGate is the parallel
-	// gate for curtail_above_uk_carbon.
+	// gate for curtail_above_uk_carbon; tariffGate likewise for
+	// curtail_above_tariff_pence.
 	curtailGate *atomic.Bool
 	carbonGate  *atomic.Bool
+	tariffGate  *atomic.Bool
 	// activityMu/activity: see sessionOpts. Threaded through unchanged
 	// across reconnects since the arbitration loop (the writer) runs for
 	// the lifetime of Run(), independent of any one pool session.
@@ -655,6 +680,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			powerWatts:   r.opts.Config.PowerWatts,
 			curtailGate:  r.curtailGate,
 			carbonGate:   r.carbonGate,
+			tariffGate:   r.tariffGate,
 			tlsCAFile:    poolTLSCAFile,
 			poolPassword: poolPassword,
 
@@ -774,6 +800,9 @@ type sessionOpts struct {
 	// carbonGate is the parallel gate raised when the UK grid carbon
 	// intensity exceeds curtail_above_uk_carbon; either gate curtails.
 	carbonGate *atomic.Bool
+	// tariffGate is the parallel gate raised when the Octopus Agile slot
+	// price exceeds curtail_above_tariff_pence.
+	tariffGate *atomic.Bool
 	// diffTags, when non-nil (V1 sessions only), tags each applied job
 	// with the share difficulty in force so post-set_difficulty rejects
 	// on old-generation shares classify as benign races rather than real
@@ -809,11 +838,12 @@ type sessionOpts struct {
 }
 
 // isCurtailed reports whether hashing is currently paused by either
-// curtailment gate (curtail_below_btc_usd or curtail_above_uk_carbon).
-// Safe to call with nil gates.
+// curtailment gate (curtail_below_btc_usd, curtail_above_uk_carbon, or
+// curtail_above_tariff_pence). Safe to call with nil gates.
 func (o *sessionOpts) isCurtailed() bool {
 	return (o.curtailGate != nil && o.curtailGate.Load()) ||
-		(o.carbonGate != nil && o.carbonGate.Load())
+		(o.carbonGate != nil && o.carbonGate.Load()) ||
+		(o.tariffGate != nil && o.tariffGate.Load())
 }
 
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,
