@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 275 — コンピューターサイエンスの観点から改善点を洗い出す(第20ラウンド): 状態寿命不変条件——ラン全体の蓄積器がセッション毎に捨てられる非対称 + セッション終了時の瞬間値ゲージ残存、計3箇所)
+
+第20ラウンドの Socratic 問いは「**この状態の寿命は何と一致するべきか?**」——実行全体(run)の事実を記述する蓄積器がセッション寿命で作り替えられると、意味上のラン全体の量が failover 毎にリセットされる。逆に「現在セッション」の事実を記述する瞬間値がセッション終了後も残れば、観測者に死んだ値を読ませる。実証3箇所:
+
+- **`satsAccountant` がセッション毎に捨てられ failover で推定収益がゼロ化**(実害): `uptime`/`productiveSeconds`/`power` はラン寿命の `engine` 側にあるのに `satsAcc` だけ `runSession*` 内の局所 `var` ——接続断毎に `estSats` が 0 に戻り、ダッシュボードの推定収益は現セッション区間のみを表示。`sessionOpts.satsAcc` を新設して `runReconnectLoop` でラン寿命のインスタンスを共有(テスト直接呼出し用に nil 時フォールバック維持)——蓄積器の寿命と「推定収益」の意味が一致。
+- **切断〜バックオフ間に `otedama_hashrate`/`otedama_up` が死んだ値を表示**(実害): `poolConnectionState` は第260回でセッション終了時に 0 化済みだが、同一の瞬間値ゲージ `hashrate`/`up` は未リセット——ワーカーは `SetWork(nil)` でアイドル化済みなのに、監視者には dead セッションのレートと `up=1` がバックオフ全期間(最大64s+)残存。セッション終了ブロックで `hashrate.Set(0)`/`up.Set(0)` —— `otedama_up` の文書化契約(「掘るべき時に掘れていれば 1」)に整合し、ダイヤル失敗経路でも同じ地面真理に戻る。
+- **`lastV1JobOK` が適用不能・未到達ジョブで真のまま残存**(round-19 強化): `applyJob` 失敗時に `lastV1JobOK = false` を書かない2箇所(ティック再適用 arm と notify arm)があり、次の難易度ティックで配送不能ジョブが永久に再試行される経路——配送失敗したジョブは `false` に倒して以後の再適用対象から除外。
+
+**検証手続き(棄却済み候補).** エラー吞み込み3箇所(SetDeadline 失敗は read/write 自体が即座に落ちるため時限無意味、Close 失敗は teardown 後で無意味、`io.Copy` drain はベストエフォート)はいずれも正当、`drainShares` の TOCTOU 残存窓(排出後〜新セッション開始の隙間にワーカーが旧ジョブを掘り続け stale が再流入)は `SetWork(nil)` タイミングが同時点のため窓は理論上存在するが極小・発生してもプール側 stale 拒否で収束——設計の完全性と引き換えに残存許容と判断、hashtime `primed`/reset ガード・`fanIn` ctx-aware・`sessionUser` 意味論は clean、`satsAcc` 初回 prime は「前ティック非存在=0寄与」で正当。
+
+**テスト.** `TestRunSessionV1_SatsAccSharedAcrossSessions`(共有 `satsAccountant` で2セッション実行し `total` がリセットせず単調増加——セッション局所版では第2セッションが 0 起点)、`TestRunReconnectLoop_ResetsInstantaneousGauges`(スクリプト化プールでセッション確立→切断→ループ終了時に `hashrate=0`/`up=0` を検証——in-session で `up=1` を先に確認して vacuous 排除)。`go test ./...` 全24pkg 緑、`-race` ./internal/engine 緑、差分行 lint/gofumpt クリーン(gocyclo/hugeParam は親時点から閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 274 — コンピューターサイエンスの観点から改善点を洗い出す(第19ラウンド): 中断-再開不変条件——curtail 解除後の回復が次イベント到着に依存していた経路 + ドキュメント/コード乖離2件、計4箇所)
 
 第19ラウンドの Socratic 問いは「**中断された作業は、解除と同時に再開できる状態を保っているか?**」——一時停止(pause)の意味論は「現在の有効な作業を保持し、解除時に即再開」であり、「次の新規イベントまでアイドル」ではない。実証2箇所 + 文書乖離2箇所:

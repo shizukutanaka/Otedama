@@ -2875,3 +2875,64 @@ func TestRunSessionV1_UncurtailReArmsJob(t *testing.T) {
 		t.Error("expected un-curtail to re-arm the in-flight V1 job")
 	}
 }
+
+// TestRunSessionV1_SatsAccSharedAcrossSessions verifies that the
+// estimated-earnings accountant is shared across sessions: sequential
+// sessions given the same satsAccountant accumulate into it, so the
+// dashboard's running total survives failover instead of resetting to
+// zero on each reconnect.
+func TestRunSessionV1_SatsAccSharedAcrossSessions(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	m.arbitrationExpectedYieldSatsPerSec.Set(1000) // nonzero forecast
+
+	const notify = `{"id":null,"method":"mining.notify","params":["job1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`
+	pool := newV1ScriptedPool(t, func(conn net.Conn, write func(string)) {
+		write(`{"id":null,"method":"mining.set_difficulty","params":[1]}`)
+		write(notify)
+		time.Sleep(600 * time.Millisecond)
+	})
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	shared := new(satsAccountant)
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  pool.URL(),
+		user:     "alice",
+		workers:  []*miner.Worker{w},
+		merged:   merged,
+		interval: 20 * time.Millisecond,
+		m:        m,
+		satsAcc:  shared,
+		log:      func(string, string) {},
+	})
+	total1 := shared.total
+	if total1 <= 0 {
+		t.Fatalf("session produced no estimated sats (total=%v)", total1)
+	}
+
+	pool2 := newV1ScriptedPool(t, func(conn net.Conn, write func(string)) {
+		write(`{"id":null,"method":"mining.set_difficulty","params":[1]}`)
+		write(notify)
+		time.Sleep(400 * time.Millisecond)
+	})
+	defer pool2.Close()
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  pool2.URL(),
+		user:     "alice",
+		workers:  []*miner.Worker{w},
+		merged:   merged,
+		interval: 20 * time.Millisecond,
+		m:        m,
+		satsAcc:  shared,
+		log:      func(string, string) {},
+	})
+	if shared.total <= total1 {
+		t.Errorf("second session did not accumulate into the shared accountant: %v -> %v", total1, shared.total)
+	}
+}

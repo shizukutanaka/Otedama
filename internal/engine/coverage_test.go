@@ -3055,3 +3055,99 @@ func TestRunSessionV1_DifficultyUpdateRetargetsWork(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// run.go — instantaneous gauges return to ground truth between sessions
+// ============================================================================
+
+// TestRunReconnectLoop_ResetsInstantaneousGauges scripts a one-shot pool so
+// a session establishes then dies; the loop must return the instantaneous
+// gauges to ground truth — the workers were idled, so hashrate is 0 and
+// otedama_up is 0 — rather than reporting the dead session's values for
+// the whole backoff window.
+func TestRunReconnectLoop_ResetsInstantaneousGauges(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	var accepted atomic.Int32
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			n := accepted.Add(1)
+			go func() {
+				defer conn.Close()
+				if n != 1 {
+					return // refuse every connection after the first
+				}
+				r := bufio.NewReader(conn)
+				_, _ = r.ReadString('\n') // mining.subscribe
+				fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+				_, _ = r.ReadString('\n') // mining.authorize
+				fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+				_, _ = r.ReadString('\n') // extranonce.subscribe
+				fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+				fmt.Fprintf(conn,
+					`{"id":null,"method":"mining.notify","params":[`+
+						`"1",`+
+						`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+						`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				time.Sleep(250 * time.Millisecond) // let the session tick, then drop
+			}()
+		}
+	}()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	r := reconnectOpts{
+		opts: Options{
+			Config: config.Config{
+				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
+				Pools:          []config.PoolConfig{{URL: "stratum+tcp://" + ln.Addr().String()}},
+			},
+			MaxReconnectAttempts: 2,
+			StatsInterval:        20 * time.Millisecond,
+		},
+		workers: []*miner.Worker{w},
+		merged:  merged,
+		metrics: m,
+		log:     func(_, _ string) {},
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- runReconnectLoop(ctx, r) }()
+
+	// Non-vacuous: the session must actually tick with a hashing worker so
+	// the gauges demonstrably held non-zero values before the disconnect.
+	deadline := time.After(5 * time.Second)
+	for m.hashrate.Value() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("session never reported a hashrate")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if got := m.up.Value(); got != 1 {
+		t.Fatalf("up gauge never reached 1 in-session (got %v)", got)
+	}
+
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("expected 'exceeded reconnect attempts', got: %v", err)
+	}
+	if got := m.hashrate.Value(); got != 0 {
+		t.Errorf("hashrate gauge = %v after session end, want 0", got)
+	}
+	if got := m.up.Value(); got != 0 {
+		t.Errorf("up gauge = %v after session end, want 0", got)
+	}
+}

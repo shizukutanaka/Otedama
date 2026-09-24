@@ -393,6 +393,10 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		statsInterval = 10 * time.Second
 	}
 
+	// Run-scoped earnings accountant: sessions come and go on failover
+	// but the operator's running estimate should not.
+	satsAcc := new(satsAccountant)
+
 	for {
 		if ctx.Err() != nil {
 			break
@@ -451,6 +455,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword: poolPassword,
 			activityMu:   r.activityMu,
 			activity:     r.activity,
+			satsAcc:      satsAcc,
 			onConnected: func() {
 				connected = true
 				addrConnected = true
@@ -471,6 +476,14 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			w.SetWork(nil)
 		}
 		r.metrics.poolConnectionState.Set(0) // session ended → disconnected
+		// Instantaneous gauges must fall back to ground truth between
+		// sessions: the workers were just idled, so the real hashrate is 0
+		// and up is 0 (not hashing, not intentionally paused — the same
+		// stall condition updateLiveness converges to). Left untouched,
+		// they would keep reporting the dead session's values through the
+		// whole backoff/reconnect window.
+		r.metrics.hashrate.Set(0)
+		r.metrics.up.Set(0)
 		if r.opts.OnReady != nil {
 			r.opts.OnReady(false) // session ended → not ready
 		}
@@ -599,6 +612,13 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// satsAcc is the run-scoped estimated-earnings accountant shared by
+	// every session the reconnect loop starts. Without it the dashboard's
+	// running sats estimate reset to zero on each failover while
+	// productiveSeconds kept accumulating — two accumulators describing
+	// the same run with different lifetimes. Nil is legal (tests): the
+	// session falls back to a fresh per-session accountant.
+	satsAcc *satsAccountant
 }
 
 // isCurtailed reports whether hashing is currently paused by the
@@ -782,9 +802,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// estSats is the running estimated earnings shown in the TUI, produced by
 	// integrating the arbitration expected-yield rate over productive time
 	// (satsAcc). It is not a per-share tally — a share carries no sat value on
-	// the wire (KNOWN_LIMITATIONS.md §9).
+	// the wire (KNOWN_LIMITATIONS.md §9). The accountant is shared across
+	// sessions (see sessionOpts.satsAcc) so failover does not zero the total.
 	var estSats uint64
-	var satsAcc satsAccountant
+	satsAcc := opts.satsAcc
+	if satsAcc == nil {
+		satsAcc = new(satsAccountant)
+	}
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
@@ -1193,9 +1217,14 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 	// estSats is the running estimated earnings shown in the TUI, integrated
 	// from the arbitration expected-yield rate over productive time (satsAcc);
-	// not a per-share tally (KNOWN_LIMITATIONS.md §9).
+	// not a per-share tally (KNOWN_LIMITATIONS.md §9). The accountant is
+	// shared across sessions (see sessionOpts.satsAcc) so failover does
+	// not zero the total.
 	var estSats uint64
-	var satsAcc satsAccountant
+	satsAcc := opts.satsAcc
+	if satsAcc == nil {
+		satsAcc = new(satsAccountant)
+	}
 	var jobIDs v1JobIDTable
 	// lastV1Job retains the most recently applied job plus the difficulty
 	// its work target was baked with. A mining.set_difficulty arriving
@@ -1294,6 +1323,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if lastV1JobOK && !opts.isCurtailed() {
 				if d := sess.SuggestedDifficulty(); uncurtailed || d != lastV1Difficulty {
 					if err := applyJob(opts.workers, lastV1Job, chanID, d, lastV1JobID); err != nil {
+						// A job whose target cannot be computed is undeliverable;
+						// drop the re-arm flag so no later trigger retries it.
+						lastV1JobOK = false
 						opts.log("warn", fmt.Sprintf("engine: V1 retarget for job %s: %v", lastV1Job.JobID, err))
 					} else {
 						lastV1Difficulty = d
@@ -1350,6 +1382,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
 				if err := applyJob(opts.workers, job, chanID, difficulty, synthetic); err != nil {
+					// Undeliverable job — undo the tracking above so the stats
+					// tick never tries to re-arm it.
+					lastV1JobOK = false
 					opts.log("warn", err.Error())
 					continue
 				}
