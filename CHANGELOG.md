@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 286 — ジョブ dedup キーの ntime 欠落)
+
+- **同一 job_id の ntime 更新 re-notify が破棄されていた問題を修正** ——
+  V1 プール（slushpool 式）が同一 job_id で ntime をロールして定期
+  通知する際、dedup キーが NTime/NBits を含まず重複と誤認し、
+  ワーカーが古いタイムスタンプで掘り続けた。ヘッダを変える全
+  フィールドをキーに含めるよう修正。
+
 ### Security (session 285 — V2 channel_id フィルタ)
 
 - **V2 channel_msg を自チャネル宛に限定** —— 他チャネル宛の SetTarget /

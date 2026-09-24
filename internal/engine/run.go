@@ -713,6 +713,8 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	var lastAppliedVersionMask uint32
 	var lastAppliedMerkle [32]byte
 	var lastAppliedPrevHash [32]byte
+	var lastAppliedNTime uint32
+	var lastAppliedNBits uint32
 	// unsatWarned latches once a pool-assigned unsatisfiable zero target
 	// has been reported, so a repeating pool does not spam the log.
 	// invalidDiffWarned does the same for a V1 set_difficulty value that
@@ -851,12 +853,17 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				opts.log("debug", fmt.Sprintf("engine: job %s ignored (curtailed)", job.JobID))
 			} else if job.JobID == lastAppliedJobID && shareTarget == lastAppliedTarget &&
 				job.Version == lastAppliedVersion && job.VersionMask == lastAppliedVersionMask &&
-				job.MerkleRoot == lastAppliedMerkle && job.PrevHash == lastAppliedPrevHash {
+				job.MerkleRoot == lastAppliedMerkle && job.PrevHash == lastAppliedPrevHash &&
+				job.NTime == lastAppliedNTime && job.NBits == lastAppliedNBits {
 				// Duplicate job: the pool resent work already on the
 				// devices (ESP-Miner #1731). The key spans every field that
 				// changes what the workers hash — job ID and difficulty alone
 				// would wrongly skip a same-ID job re-armed on a new tip
-				// (different prev_hash) or with a new merkle root.
+				// (different prev_hash) or with a new merkle root. NTime
+				// and NBits are in the key too: V1 pools re-notify the
+				// same job_id with a rolled ntime (slushpool-style) or
+				// updated nbits, and skipping those leaves workers on a
+				// stale timestamp for the session's life.
 				// Skip applyJob — the workers still hold this job — but count
 				// lastJobReceivedAt below: the pool connection is alive and
 				// delivering.
@@ -872,6 +879,8 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedVersionMask = job.VersionMask
 				lastAppliedMerkle = job.MerkleRoot
 				lastAppliedPrevHash = job.PrevHash
+				lastAppliedNTime = job.NTime
+				lastAppliedNBits = job.NBits
 				opts.log("info", fmt.Sprintf("engine: job %s nBits=0x%08X", job.JobID, job.NBits))
 				if int64(job.NTime) > time.Now().Unix()+miner.MaxFutureBlockTimeSecs {
 					// The job's header timestamp is already past the

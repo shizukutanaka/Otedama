@@ -1251,6 +1251,22 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 286 increment (dedup key ntime)
+
+- **実装（正確性）: ジョブ dedup キーに NTime/NBits を追加** —— V1
+  プールは同一 job_id で ntime を更新して定期 re-notify する
+  （slushpool 式ロール）が、dedup キー（JobID+target+Version+
+  VersionMask+Merkle+PrevHash）が NTime/NBits を含まず、ntime 更新
+  ジョブが重複として破棄されていた —— ワーカーはセッション中ずっと
+  古いタイムスタンプで掘り続ける状態。「ヘッダを変える全フィールド」
+  の原則に合わせ両者をキーに追加。
+- **検証:** `TestRunSessionV1_SameJobIDRolledNTimeReapplies` —— 同一
+  job_id + ロール ntime で再適用（applied=2）、既存
+  `DuplicateJobIgnored` も継続 green。
+- **記録:** V1 パスは coinbase/merkle を再構成しない（pool 側が計算、
+  MerkleRoot=0）。実ブロック有効な V1 シェア生成にはコインベース
+  再構成が必要 —— ADR 級の設計変更のため記録のみ。
+
 ## September 2026 research pass — session 285 increment (channel_id filtering)
 
 - **実装（防御）: V2 channel_msg の channel_id 検証** —— セッションは

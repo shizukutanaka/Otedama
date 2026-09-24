@@ -934,6 +934,80 @@ func TestRunSessionV1_DuplicateJobIgnored(t *testing.T) {
 	}
 }
 
+// TestRunSessionV1_SameJobIDRolledNTimeReapplies pins the dedup key's
+// NTime (and by extension NBits) arm: V1 pools re-notify the same
+// job_id with a rolled ntime (slushpool-style). An ntime-only change
+// must re-dispatch to workers — otherwise they grind a stale timestamp
+// for the session's life.
+func TestRunSessionV1_SameJobIDRolledNTimeReapplies(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	notify := func(id, ntime string) string {
+		return `{"id":null,"method":"mining.notify","params":[` +
+			`"` + id + `",` +
+			`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",` +
+			`"","",[],"00000002","1d00ffff","` + ntime + `",false]}` + "\n"
+	}
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		// Same job_id twice: identical → skipped; rolled ntime → applied.
+		_, _ = conn.Write([]byte(notify("1", "68d36c5e")))
+		_, _ = conn.Write([]byte(notify("1", "68d36c5f")))
+		time.Sleep(400 * time.Millisecond)
+	}()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	var logLines []string
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logLines = append(logLines, msg)
+		mu.Unlock()
+	}
+
+	_ = runPoolSession(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: time.Hour,
+		log:      logFn,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	var applied int
+	for _, l := range logLines {
+		if strings.Contains(l, "job 1 nBits=") {
+			applied++
+		}
+	}
+	if applied != 2 {
+		t.Errorf("job 1 applied %d times, want 2 — rolled ntime must re-arm workers (log: %v)", applied, logLines)
+	}
+}
+
 // ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
 //
 // runSessionV1 previously hardcoded the V1 mining.authorize password to
