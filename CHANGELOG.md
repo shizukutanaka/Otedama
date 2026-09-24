@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 425 — CS 観点: nonce wrap の ntime ロール)
+
+- **nonce 空間 wrap 時にスレッドが自系列を再ハッシュする問題を修正** —
+  `threadID + k*NonceStep` は mod 2^32 で周期的なため、wrap 後は既ハッシュ
+  nonce を再処理し「新規」share が全て deterministic duplicate（pool が
+  stale/duplicate 拒否＝拒否率も汚染）。Threads=16・10 MH/s なら ~27 秒で
+  wrap、job 更新の遅い pool で実害。cgminer/ESP-Miner と同じく wrap で
+  ntime（`h.Time`）を +1 し新ハッシュ領域へ遷移。job 毎にオフセット
+  リセット、pool は窓内の ntime ドリフトを受理。
+
 ### Security (session 423 — CS 観点: forecaster への非有限 quote 汚染)
 
 - **`provider.Yield.Effective()` に NaN/Inf/clamp サニタイズを追加し
