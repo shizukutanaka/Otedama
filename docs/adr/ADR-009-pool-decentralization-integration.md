@@ -48,6 +48,8 @@ The work is organized into **six sub-domains**:
 
 **State of the art (2026):** Bitcoin Core 30+ exposes `getblocktemplate` over JSON-RPC. Bitcoin Knots (OCEAN-recommended for better template control) adds finer-grained mempool policy options. DATUM Gateway and SRI JDC both consume this RPC. `blocknotify` signals new block arrival.
 
+**Correction (session 258, primary-source verified — Bitcoin Core v30.0 release notes):** v30.0 ships an **experimental IPC Mining Interface**, started via `bitcoin -m node -ipcbind=unix` and gated by the `-DENABLE_IPC` build option. It serves Cap'n Proto over a unix socket from a separate multiprocess `bitcoin-node` binary and is designed for SV2/other mining clients — template requests and block submission in one interface. When this sub-domain is built, **target the IPC interface rather than the legacy `getblocktemplate` JSON-RPC** (the JSON-RPC surface described below stays as the fallback path). The `internal/btcnode` `BitcoinNode` interface below is interface-stable either way — IPC becomes another backend alongside `bitcoin-core`/`knots`/`external-http`. (Source: raw.githubusercontent.com/bitcoin/bitcoin/v30.0/doc/release-notes.md)
+
 **Otedama proposal:** A `BitcoinNode` interface in `internal/btcnode/`:
 
 ```go

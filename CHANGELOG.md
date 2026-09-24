@@ -12,6 +12,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed (session 307 — V1 dispatch 分割 + 未知リクエスト応答)
 
+### Docs (session 258 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS session-251 の文書是正系項目を棚卸し)
+
+**調査由来の是正のうち未反映だった Bitcoin Core v30 IPC を ADR-009 に記録し、
+既適用済みだった残りの項目を RESEARCH_IMPROVEMENTS で解消済みにマーク。**
+
+- `docs/adr/ADR-009` Sub-domain 1 に「Bitcoin Core v30.0 の実験的 IPC Mining
+  Interface（`-m node -ipcbind=unix`、Cap'n Proto over unix socket、
+  マルチプロセス `bitcoin-node` バイナリ、`-DENABLE_IPC` ビルドオプション）」
+  への追記を追加。当該サブドメインを実装する際はレガシー
+  `getblocktemplate` JSON-RPC ではなく IPC interface をターゲットにする
+  方針を明記（JSON-RPC はフォールバック）。
+- RESEARCH_IMPROVEMENTS session-251 セクションの項目 5（decred
+  secp256k1 に BIP-340/ellswift なし→ADR-011 Erratum）、6（BIP-360 は
+  P2MR で PQ 署名を規定しない→ROADMAP/KNOWN_LIMITATIONS §5 文言）、
+  7（v30 IPC→ROADMAP + 今回の ADR-009 追記）、9（SRI v1.11.0→ROADMAP
+  v3.2.0 文言）、10（akash-api deprecated→ROADMAP v3.1.0 が
+  chain-sdk をターゲット）、11（Akash 入札は on-chain Bidengine→
+  ADR-010 A4 再フレーム）、13（ADR-010 に 2024-25 引用追加済み）、
+  15（LDK Node v0.7.0→ADR-007 B4 バージョンターゲット）を
+  RESOLVED (session 258) に更新。各項目の修正自体は session 251 で
+  各文書へ適用済みだったが、調査ドキュメント側のマークが残っていた。
+- 項目14（GPU spot 価格、一次ソース未検証のため行動禁止）は引き続き
+  🟡 のまま——session-251 の注記どおり一次検証待ち。
+
+### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
+*(session 323: 別系チェーンの未マージ PR (#113) に留まっていた本 docs 更新を
+現チェーンへ cherry-pick 移植。RESEARCH の項目解決は現チェーンの
+session-293 版（chain-sdk TODO・SRI v1.11.0 pin・AEP-64 JWT 経路併記）を
+優先して保持。)*
 ### Changed (session 256 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS「Dependency & toolchain hygiene」の open 3 件を解消)
 
 **依存とツールチェーンの衛生更新（session-251 項目 1–3 解消）.**
