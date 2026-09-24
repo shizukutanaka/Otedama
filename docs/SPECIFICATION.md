@@ -136,6 +136,12 @@ configured pool URLs — each tagged with the layer it was resolved from.
    submit→accept latency and increment accepted; on `SubmitSharesError`
    classify the reason (`rejectClass` → stale/duplicate/difficulty/hardware/
    other) and increment the per-reason counter.
+   On **V1 sessions** the client additionally sends a one-shot
+   `mining.suggest_difficulty` hint once the local hashrate is first
+   measured (targeting a ~15 s share interval) — advisory only, so the
+   pool-side var-diff stays authoritative; low-hashrate devices need the
+   hint because a pool default tuned for ASICs can be too high for
+   var-diff to ever bootstrap. SV2 has no client→pool equivalent.
 6. **Graceful shutdown** on SIGINT/SIGTERM.
 
 ## 5. Transport (Stratum V2)

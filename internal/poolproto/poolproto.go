@@ -274,6 +274,19 @@ type PoolNoticeReceiver interface {
 	PoolNotices() <-chan string
 }
 
+// DifficultySuggester is an optional extension to Session implemented by
+// protocols that let the client propose its share difficulty to the pool
+// (Stratum V1's mining.suggest_difficulty). Callers should type-assert a
+// Session to this interface; protocols without a client→pool suggestion
+// mechanism (SV2 assigns the channel target pool-side) do not implement
+// it. The suggestion is advisory: pools may honor, clamp, or ignore it.
+type DifficultySuggester interface {
+	// SuggestDifficulty asks the pool to consider diff as the share
+	// difficulty for future work. It is a hint only — the pool's
+	// var-diff policy remains authoritative.
+	SuggestDifficulty(ctx context.Context, diff float64) error
+}
+
 // ChannelIdentifier is an optional extension to Session implemented by
 // protocols whose mining channel carries a negotiated numeric ID that
 // consumers need when constructing share submissions or labelling work

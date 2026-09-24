@@ -80,6 +80,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    sent as step 3 of Negotiate(); "Method not found" and other pool errors
    are silently ignored (optional extension). Enables mid-session extranonce
    rotation on pools that support it (OCEAN, AntPool 2.x, etc.).
+   **Session 294:** the complementary client→pool direction is now sent
+   too — one `mining.suggest_difficulty` per session, fired once the
+   local hashrate is first measured (diff = H × 15 s / 2³²), via the new
+   `poolproto.DifficultySuggester` optional interface. It targets the
+   case item 5's note covers from the other side: on a pool default
+   difficulty calibrated for ASICs, a CPU/GPU device produces no shares
+   at all, so pool-side var-diff has nothing to bootstrap from.
 6. 🔵 **DATUM / OCEAN template source** — ADR-009; `engine.parseHost` already
    accepts `datum://` (session 37).
 7. ✅ **Share-submission latency histogram** (session 46). `LatencyTracker`

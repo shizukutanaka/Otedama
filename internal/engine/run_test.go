@@ -6,6 +6,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -2441,6 +2442,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2458,5 +2460,122 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// fakeSuggestSession is a minimal poolproto.Session whose
+// DifficultySuggester records calls — used to verify the engine's
+// once-per-session mining.suggest_difficulty hint.
+type fakeSuggestSession struct {
+	jobs    chan poolproto.Job
+	diffCh  chan float64
+	suggErr error
+}
+
+func newFakeSuggestSession() *fakeSuggestSession {
+	return &fakeSuggestSession{
+		jobs:   make(chan poolproto.Job),
+		diffCh: make(chan float64, 4),
+	}
+}
+
+func (f *fakeSuggestSession) Close() error { return nil }
+func (f *fakeSuggestSession) Jobs() <-chan poolproto.Job {
+	return f.jobs
+}
+
+func (f *fakeSuggestSession) Submit(_ context.Context, _ poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	return poolproto.ShareResult{}, nil
+}
+func (f *fakeSuggestSession) SuggestedDifficulty() float64 { return 0 }
+func (f *fakeSuggestSession) SuggestDifficulty(_ context.Context, diff float64) error {
+	f.diffCh <- diff
+	return f.suggErr
+}
+
+// fakePlainSession satisfies Session but NOT DifficultySuggester — the
+// SV2 case (a distinct type, not an embedding, so it really lacks the
+// method).
+type fakePlainSession struct{}
+
+func (f *fakePlainSession) Close() error { return nil }
+func (f *fakePlainSession) Jobs() <-chan poolproto.Job {
+	return make(chan poolproto.Job)
+}
+
+func (f *fakePlainSession) Submit(_ context.Context, _ poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	return poolproto.ShareResult{}, nil
+}
+func (f *fakePlainSession) SuggestedDifficulty() float64 { return 0 }
+
+func TestSuggestDifficultyOnce_WaitsForMeasuredHashrate(t *testing.T) {
+	rt := newSessionTelemetry(func(_, _ string) {})
+	sess := newFakeSuggestSession()
+	ctx := context.Background()
+
+	// No hashrate measured yet — no suggestion.
+	rt.suggestDifficultyOnce(ctx, sess, func(_, _ string) {})
+	select {
+	case d := <-sess.diffCh:
+		t.Fatalf("suggested %.4g before any hashrate measurement", d)
+	default:
+	}
+
+	// Once a rate is measured, the hint fires with diff = H × 15 / 2^32.
+	rt.lastHashrate = 1e6
+	rt.suggestDifficultyOnce(ctx, sess, func(_, _ string) {})
+	select {
+	case d := <-sess.diffCh:
+		want := 1e6 * desiredShareIntervalSeconds / 4294967296
+		if d != want {
+			t.Errorf("suggested %v, want %v", d, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("suggestion never arrived")
+	}
+
+	// One-shot: a second tick must not re-suggest.
+	rt.suggestDifficultyOnce(ctx, sess, func(_, _ string) {})
+	select {
+	case d := <-sess.diffCh:
+		t.Fatalf("re-suggested %.4g", d)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestSuggestDifficultyOnce_SkipsSessionsWithoutMechanism(t *testing.T) {
+	rt := newSessionTelemetry(func(_, _ string) {})
+	rt.lastHashrate = 1e6
+	// A session that does not implement DifficultySuggester (SV2) marks
+	// the flag without panicking and never suggests.
+	sess := &fakePlainSession{}
+	rt.suggestDifficultyOnce(context.Background(), sess, func(_, _ string) {})
+	if !rt.difficultySuggested {
+		t.Error("difficultySuggested not set for non-suggesting session")
+	}
+}
+
+func TestSuggestDifficultyOnce_SuggesterErrorIsInformational(t *testing.T) {
+	rt := newSessionTelemetry(func(_, _ string) {})
+	rt.lastHashrate = 1e6
+	sess := newFakeSuggestSession()
+	sess.suggErr = errors.New("write: broken pipe")
+
+	logged := make(chan string, 1)
+	rt.suggestDifficultyOnce(context.Background(), sess, func(level, msg string) {
+		logged <- level + ":" + msg
+	})
+	select {
+	case <-sess.diffCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("suggestion never arrived")
+	}
+	select {
+	case line := <-logged:
+		if !strings.Contains(line, "suggestion failed") {
+			t.Errorf("expected suggestion-failed log, got %q", line)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("no log emitted for failed suggestion")
 	}
 }

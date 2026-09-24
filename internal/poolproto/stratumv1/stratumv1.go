@@ -121,8 +121,9 @@ type session struct {
 
 // Compile-time interface satisfaction checks.
 var (
-	_ poolproto.Session            = (*session)(nil)
-	_ poolproto.PoolNoticeReceiver = (*session)(nil)
+	_ poolproto.Session             = (*session)(nil)
+	_ poolproto.PoolNoticeReceiver  = (*session)(nil)
+	_ poolproto.DifficultySuggester = (*session)(nil)
 )
 
 func newSession(conn *connection) *session {
@@ -363,6 +364,21 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		}, nil
 	}
 	return poolproto.ShareResult{Accepted: false, Reason: "rejected"}, nil
+}
+
+// SuggestDifficulty sends the client→pool mining.suggest_difficulty
+// hint (Stratum V1 protocol extension): the pool is asked to consider
+// diff for future share work. Advisory only — pools honor, clamp, or
+// ignore it; the pool-level rejection that follows on unsupporting
+// pools ("Method not found", ESP-Miner #1383) is informational and not
+// an error here since it is correlated by JSON-RPC id and never reaches
+// the share counters. Only transport/session failures are returned.
+func (s *session) SuggestDifficulty(ctx context.Context, diff float64) error {
+	id := s.nextID.Add(1)
+	if _, err := s.call(ctx, id, "mining.suggest_difficulty", []any{diff}); err != nil {
+		return fmt.Errorf("stratumv1: suggest_difficulty: %w", err)
+	}
+	return nil
 }
 
 // SuggestedDifficulty returns the current target difficulty.

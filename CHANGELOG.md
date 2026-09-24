@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 294 — mining.suggest_difficulty クライアントヒント)
+
+- **V1 セッションが `mining.suggest_difficulty` を1回送信** —
+  Stratum V1 プロトコル拡張（stratum-protocol spec）の client→pool
+  方向を実装。プール既定 difficulty が ASIC 向けに校正されていると、
+  CPU/GPU 級のデバイスはシェアを一度も返せず、プール側 var-diff が
+  ブートストラップ不能になる問題への対処。初回にハッシュレートが
+  実測されたティックで `H × 15s / 2³²` の難易度を助言的に送信 —
+  handshake 時点（レート未知）に送ると極小値を要求してしまうため
+  遅延発火。advisory のみで var-diff の権威はプール側に留まる。
+  非対応プールの "Method not found" 応答は JSON-RPC id 相関で
+  informational 扱い（ESP-Miner #1383 の教訓と同一機構）、
+  SV2 には client→pool 相当が無いため新規の
+  `poolproto.DifficultySuggester` 任意インタフェース経由で V1 のみ適用。
+
 ### Changed (session 293 — Akash 統合経路の設計修正反映)
 
 - **v3.1.0 Akash 統合ターゲットを文書・コードコメントへ反映** —

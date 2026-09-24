@@ -602,6 +602,11 @@ func (o sessionOpts) updateLiveness(hashMon *HashrateMonitor, currentHashRate fl
 	return stalled
 }
 
+// desiredShareIntervalSeconds is the share interval the engine asks the
+// pool for via mining.suggest_difficulty — a typical pool-side var-diff
+// target. Advisory only; pools clamp to their own bounds.
+const desiredShareIntervalSeconds = 15
+
 // sessionTelemetry carries the per-session accumulators the stats tick
 // maintains — shared by the V1 and V2 session loops so their tick
 // bodies stay identical.
@@ -613,6 +618,14 @@ type sessionTelemetry struct {
 	uptime      uptimeAccountant
 	lastDropped uint64
 	latency     *LatencyTracker
+
+	// lastHashrate retains the most recent measured hashrate so the
+	// one-shot difficulty suggestion can wait for a real reading.
+	lastHashrate float64
+	// difficultySuggested arms the once-per-session
+	// mining.suggest_difficulty hint (V1 only; sessions without a
+	// client→pool suggestion mechanism mark it and skip).
+	difficultySuggested bool
 }
 
 func newSessionTelemetry(log func(string, string)) *sessionTelemetry {
@@ -627,6 +640,7 @@ func newSessionTelemetry(log func(string, string)) *sessionTelemetry {
 // pool difficulty, and submit-latency quantiles.
 func (t *sessionTelemetry) tick(now time.Time, opts *sessionOpts, suggestedDifficulty float64) {
 	currentHashRate := t.hashWindow.observe(totalHashes(opts.workers), now)
+	t.lastHashrate = currentHashRate
 	logStats(opts.workers, currentHashRate, opts.log)
 	if dropped := totalDropped(opts.workers); dropped > t.lastDropped {
 		opts.log("warn", fmt.Sprintf(
@@ -682,6 +696,38 @@ func (t *sessionTelemetry) tick(now time.Time, opts *sessionOpts, suggestedDiffi
 			opts.m.submitLatencyP99.Set(t.latency.Quantile(0.99))
 		}
 	}
+}
+
+// suggestDifficultyOnce sends the Stratum V1 mining.suggest_difficulty
+// hint exactly once per session, on the first tick after the local
+// hashrate has actually been measured — a suggestion made at handshake
+// time (hashrate 0/unknown) would ask for an arbitrarily tiny
+// difficulty. It targets a share every desiredShareIntervalSeconds at
+// the measured rate; low-hashrate devices benefit most, since a pool
+// default difficulty calibrated for ASICs can otherwise be so high that
+// the pool-side var-diff never observes a share rate to bootstrap from.
+// Sessions without a client→pool suggestion mechanism (SV2) mark the
+// flag and skip; pools that do not support the method answer
+// "Method not found", which the adapter maps to a nil error.
+func (t *sessionTelemetry) suggestDifficultyOnce(ctx context.Context, sess poolproto.Session, log func(string, string)) {
+	if t.difficultySuggested || t.lastHashrate <= 0 {
+		return
+	}
+	t.difficultySuggested = true
+	suggester, ok := sess.(poolproto.DifficultySuggester)
+	if !ok {
+		return
+	}
+	diff := t.lastHashrate * desiredShareIntervalSeconds / 4294967296
+	go func() {
+		if err := suggester.SuggestDifficulty(ctx, diff); err != nil {
+			log("info", fmt.Sprintf("engine: share-difficulty suggestion failed: %v", err))
+			return
+		}
+		log("info", fmt.Sprintf(
+			"engine: suggested share difficulty %.4g to pool (measured %.3g H/s, target share interval %ds — advisory, pool var-diff decides)",
+			diff, t.lastHashrate, desiredShareIntervalSeconds))
+	}()
 }
 
 func runSession(ctx context.Context, opts sessionOpts) error {
@@ -775,6 +821,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 
 		case <-statsTicker.C:
 			rt.tick(time.Now(), opts, sess.SuggestedDifficulty())
+			rt.suggestDifficultyOnce(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")
@@ -913,6 +960,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 		case <-statsTicker.C:
 			rt.tick(time.Now(), &opts, sess.SuggestedDifficulty())
+			rt.suggestDifficultyOnce(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")

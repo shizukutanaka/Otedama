@@ -289,6 +289,13 @@ type fakePool struct {
 	conn      net.Conn
 	verdict   bool   // result for mining.submit
 	notifyJob string // optional: job ID to send as mining.notify on start
+
+	// suggestUnsupported answers mining.suggest_difficulty with a
+	// "Method not found" error instead of true — the OCEAN-style
+	// response (ESP-Miner #1383). suggestParams records the params the
+	// client sent for later assertion.
+	suggestUnsupported bool
+	suggestParams      []any
 }
 
 func (p *fakePool) run() {
@@ -319,6 +326,17 @@ func (p *fakePool) run() {
 			}
 			id, _ := json.Marshal(req.ID)
 			resp := `{"id":` + string(id) + `,"result":` + result + `,"error":null}` + "\n"
+			_, _ = p.conn.Write([]byte(resp))
+		}
+		if req.Method == "mining.suggest_difficulty" {
+			_ = json.Unmarshal(req.Params, &p.suggestParams)
+			id, _ := json.Marshal(req.ID)
+			var resp string
+			if p.suggestUnsupported {
+				resp = `{"id":` + string(id) + `,"result":null,"error":[21,"Method not found",null]}` + "\n"
+			} else {
+				resp = `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+			}
 			_, _ = p.conn.Write([]byte(resp))
 		}
 	}
@@ -1925,5 +1943,56 @@ func TestDialTCP_RespectsCancelledContext(t *testing.T) {
 	cancel()
 	if _, err := dialTCP(ctx, "192.0.2.1:3333"); err == nil {
 		t.Fatal("dialTCP succeeded with a cancelled context")
+	}
+}
+
+func TestSession_SuggestDifficulty_SendsHint(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := sess.SuggestDifficulty(ctx, 0.5); err != nil {
+		t.Fatalf("SuggestDifficulty: %v", err)
+	}
+	if len(pool.suggestParams) != 1 {
+		t.Fatalf("pool saw %d params, want 1", len(pool.suggestParams))
+	}
+	if d, ok := pool.suggestParams[0].(float64); !ok || d != 0.5 {
+		t.Errorf("pool saw param %v, want 0.5", pool.suggestParams[0])
+	}
+}
+
+func TestSession_SuggestDifficulty_MethodNotFoundIsInformational(t *testing.T) {
+	// OCEAN-style pools answer mining.suggest_difficulty with
+	// "Method not found" (ESP-Miner #1383): advisory hint, so the
+	// adapter must surface it as a nil error, not a failure.
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true, suggestUnsupported: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := sess.SuggestDifficulty(ctx, 0.5); err != nil {
+		t.Fatalf("SuggestDifficulty on unsupported pool: %v", err)
 	}
 }
