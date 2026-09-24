@@ -1251,6 +1251,33 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 274 increment (notify strictness + nTime-cap diagnosis)
+
+### Implemented
+
+1. ✅ **V1 `mining.notify` hex fields are strict** — version/nbits/ntime/
+   prevhash parse failures previously zeroed the field silently, so a
+   malformed notify produced a job whose every share could only be
+   rejected (bad ntime/nbits) while looking healthy. They now drop the
+   notify, routing bad input to the job-starvation watchdog (session
+   267), the diagnostic that already exists for "no valid jobs".
+2. ✅ **`nTime > now+2h` warns at apply time** — session 272's
+   MAX_FUTURE_BLOCK_TIME cap means a pool-supplied timestamp already
+   past the bound makes the worker idle rather than hash; the engine
+   now logs it explicitly instead of letting the starvation watchdog
+   fire 120 s later. `maxFutureBlockTimeSecs` is exported as
+   `miner.MaxFutureBlockTimeSecs` so the bound has one definition.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **`mining.set_version_mask`** — silently ignored by design (no
+  ASIC-Boost overt rolling in the CPU path); forward-compatible.
+- ✅ **V1 prevhash byte order** — stored verbatim into `Header.PrevHash`
+  and echoed back untouched; no re-interpretation on the wire path.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 273 increment (opaque V1 job IDs)
 
 ### Implemented
@@ -1664,6 +1691,11 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-274 additions (September 2026): malformed V1 notify hex fields
+now drop the job into the starvation watchdog instead of minting silent
+rejects, and a job whose nTime already exceeds now+2h warns at apply
+time rather than stalling unnoticed.*
 
 *Session-273 additions (September 2026): pool job IDs are now opaque
 strings echoed verbatim on submit — non-decimal V1 job IDs (Braiins,

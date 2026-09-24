@@ -76,18 +76,28 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		CleanJobs:  cleanJobs,
 		ReceivedAt: time.Now(),
 	}
-	if v, err := strconv.ParseUint(versionHex, 16, 32); err == nil {
-		job.Version = uint32(v)
+	// The numeric header fields are required on the wire. Accepting an
+	// unparseable value silently zeroes it — a job that then produces
+	// only rejects (bad ntime/nbits) with no diagnostic. Malformed input
+	// drops here, where the job-starvation watchdog can see it.
+	v, err := strconv.ParseUint(versionHex, 16, 32)
+	if err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad version %q: %w", versionHex, err)
 	}
-	if v, err := strconv.ParseUint(nbitsHex, 16, 32); err == nil {
-		job.NBits = uint32(v)
+	job.Version = uint32(v)
+	if v, err = strconv.ParseUint(nbitsHex, 16, 32); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad nbits %q: %w", nbitsHex, err)
 	}
-	if v, err := strconv.ParseUint(ntimeHex, 16, 32); err == nil {
-		job.NTime = uint32(v)
+	job.NBits = uint32(v)
+	if v, err = strconv.ParseUint(ntimeHex, 16, 32); err != nil {
+		return poolproto.Job{}, fmt.Errorf("notify: bad ntime %q: %w", ntimeHex, err)
 	}
-	if b, err := hex.DecodeString(prevHashHex); err == nil && len(b) == 32 {
-		copy(job.PrevHash[:], b)
+	job.NTime = uint32(v)
+	b, err := hex.DecodeString(prevHashHex)
+	if err != nil || len(b) != 32 {
+		return poolproto.Job{}, fmt.Errorf("notify: bad prevhash %q", prevHashHex)
 	}
+	copy(job.PrevHash[:], b)
 	// MerkleRoot remains zero in the V1 path; the pool computes it.
 	return job, nil
 }

@@ -224,11 +224,12 @@ func (w *Worker) Stats() Stats {
 // grind is the hot loop executed by each worker goroutine.
 // threadID determines the starting nonce offset so that threads do not
 // duplicate work.
-// maxFutureBlockTimeSecs is Bitcoin's MAX_FUTURE_BLOCK_TIME: a block
+// MaxFutureBlockTimeSecs is Bitcoin's MAX_FUTURE_BLOCK_TIME: a block
 // header timestamp may not exceed the network-adjusted current time by
 // more than two hours. Pool-side share validation applies the same
-// bound, so rolling nTime beyond it can only produce rejects.
-const maxFutureBlockTimeSecs = 7200
+// bound, so rolling nTime beyond it can only produce rejects. Exported
+// so the engine can diagnose a job already past the cap.
+const MaxFutureBlockTimeSecs = 7200
 
 func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share) {
 	var (
@@ -306,7 +307,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				// header timestamp beyond it is consensus-invalid,
 				// so further hashing can only produce rejects — stop
 				// until a fresh job arrives.
-				if int64(h.Time)+1 > time.Now().Unix()+maxFutureBlockTimeSecs {
+				if int64(h.Time)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
 					exhaustedVer = localWorkVer
 					break
 				}

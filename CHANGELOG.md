@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 274 — notify 厳格化 + nTime 上限診断)
+
+- **V1 `mining.notify` のヘッダフィールドを厳格化** —— version/nbits/
+  ntime/prevhash の hex パース失敗時にフィールドを暗黙 0 にしていたため、
+  不正 notify が「正常に見えるが全シェア reject」のジョブを生成していた。
+  パース失敗は notify ドロップに変更し、session 267 のジョブ枯渇
+  ウォッチドッグが既存の診断経路として機能するようにした
+- **nTime > 現時刻+2h のジョブで warn を出力** —— session 272 の
+  MAX_FUTURE_BLOCK_TIME キャップにより、上限超過タイムスタンプのジョブは
+  ワーカーが待機となる（ロールすれば無効シェアを生成するのみ）。
+  黙った停止を避け、apply 時に明示ログを出す。上限定数は
+  `miner.MaxFutureBlockTimeSecs` として export し定義を一本化
+
 ### Fixed (session 273 — V1 job ID を不透明文字列として透過)
 
 **プールの job_id を文字列のまま submit でエコー** —— engine が job_id を

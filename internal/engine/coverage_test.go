@@ -2169,3 +2169,65 @@ func TestRunSessionV1_JobStarvationWarn(t *testing.T) {
 	}
 	<-done
 }
+
+// TestRunSessionV1_NTimeBeyondCapWarn covers run.go's diagnostic for a job
+// whose nTime already exceeds MAX_FUTURE_BLOCK_TIME: the worker idles on
+// it (rolling would mint invalid shares), so the warn must surface rather
+// than a silent stall.
+func TestRunSessionV1_NTimeBeyondCapWarn(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// nTime far in the future (beyond now+2h).
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"7",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","ffffffff",true]}`+"\n")
+		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var logMu sync.Mutex
+	var logLines []string
+
+	_ = runPoolSession(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logLines = append(logLines, msg)
+			logMu.Unlock()
+		},
+	})
+
+	logMu.Lock()
+	joined := strings.Join(logLines, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "MAX_FUTURE_BLOCK_TIME") {
+		t.Errorf("expected 'MAX_FUTURE_BLOCK_TIME' warn; got: %v", logLines)
+	}
+}

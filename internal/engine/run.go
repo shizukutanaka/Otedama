@@ -849,6 +849,17 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedMerkle = job.MerkleRoot
 				lastAppliedPrevHash = job.PrevHash
 				opts.log("info", fmt.Sprintf("engine: job %s nBits=0x%08X", job.JobID, job.NBits))
+				if int64(job.NTime) > time.Now().Unix()+miner.MaxFutureBlockTimeSecs {
+					// The job's header timestamp is already past the
+					// consensus bound: the worker can only idle on it
+					// (rolling would mint invalid shares). Surface the
+					// stall instead of waiting for the starvation
+					// watchdog.
+					opts.log("warn", fmt.Sprintf(
+						"engine: job %s nTime %d exceeds MAX_FUTURE_BLOCK_TIME; "+
+							"workers idle until a conformant job arrives",
+						job.JobID, job.NTime))
+				}
 			}
 			lastJobAt = time.Now()
 			if jobStarveWarned {

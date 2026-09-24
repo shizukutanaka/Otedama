@@ -428,7 +428,7 @@ func TestWorker_RollsNTimeOnNonceWrap(t *testing.T) {
 // rather than emit consensus-invalid timestamps.
 func TestWorker_StopsWhenNTimeAtCap(t *testing.T) {
 	work := makeEasyWork()
-	work.Header.Time = uint32(time.Now().Unix()) + maxFutureBlockTimeSecs
+	work.Header.Time = uint32(time.Now().Unix()) + MaxFutureBlockTimeSecs
 
 	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0xFFFFFFFF})
 	ctx, cancel := context.WithCancel(context.Background())

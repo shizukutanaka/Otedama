@@ -1983,3 +1983,32 @@ func TestSession_Submit_SendsAuthorizedUser(t *testing.T) {
 	}
 	t.Run("authorized identity", func(t *testing.T) { run(t, "bc1qaddr.rig1") })
 }
+
+// parseNotify — strict numeric field handling (session 274): unparseable
+// version/nbits/ntime/prevhash previously zeroed the field silently,
+// producing jobs whose shares could only be rejected.
+func TestParseNotify_BadHexFieldsError(t *testing.T) {
+	// Index 5=version, 6=nbits, 7=ntime, 1=prevhash in the params array.
+	mkParams := func(version, nbits, ntime, prevhash string) json.RawMessage {
+		return json.RawMessage(`["abc123","` + prevhash + `","coinb1","coinb2",[],"` +
+			version + `","` + nbits + `","` + ntime + `",false]`)
+	}
+	good := mkParams("20000000", "1d00ffff", "68d36c5e",
+		"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000")
+	if _, err := parseNotify(good); err != nil {
+		t.Fatalf("valid notify rejected: %v", err)
+	}
+	cases := map[string]json.RawMessage{
+		"bad version":    mkParams("zz", "1d00ffff", "68d36c5e", "4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"),
+		"empty version":  mkParams("", "1d00ffff", "68d36c5e", "4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"),
+		"bad nbits":      mkParams("20000000", "not-hex", "68d36c5e", "4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"),
+		"bad ntime":      mkParams("20000000", "1d00ffff", "-1", "4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000"),
+		"short prevhash": mkParams("20000000", "1d00ffff", "68d36c5e", "deadbeef"),
+		"empty prevhash": mkParams("20000000", "1d00ffff", "68d36c5e", ""),
+	}
+	for name, raw := range cases {
+		if _, err := parseNotify(raw); err == nil {
+			t.Errorf("%s: parseNotify should reject, got nil error", name)
+		}
+	}
+}
