@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 373 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: wallet サブコマンドの dispatch 復旧)
+
+- **`otedama wallet` が CLI から到達不能だった回帰を修復** — session 314 で
+  実装された `wallet verify`/`wallet change-passphrase`（実装・テスト完備）は
+  `run()` のサブコマンド switch に `case "wallet"` が無く、常に
+  `unknown subcommand` となっていた。dispatch・usage 一覧・bash/zsh/fish
+  completion へ配線。
+
 ### Security (session 369 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: arb explain 応答ボディ上限)
 
 - **`arb explain` の `/arbitration` 応答を 1 MiB に上限化** — デコード・

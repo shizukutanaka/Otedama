@@ -65,7 +65,7 @@ func joinOr(items []string) string {
 const bashCompletion = `# bash completion for otedama
 _otedama() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local commands="run version config service doctor arb help completion"
+    local commands="run version config service doctor arb wallet help completion"
     if [ "${COMP_CWORD}" -eq 1 ]; then
         COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
         return
@@ -74,6 +74,7 @@ _otedama() {
         config)     COMPREPLY=( $(compgen -W "show validate" -- "${cur}") ) ;;
         service)    COMPREPLY=( $(compgen -W "install uninstall status" -- "${cur}") ) ;;
         arb)        COMPREPLY=( $(compgen -W "explain" -- "${cur}") ) ;;
+        wallet)     COMPREPLY=( $(compgen -W "verify change-passphrase" -- "${cur}") ) ;;
         completion) COMPREPLY=( $(compgen -W "bash zsh fish" -- "${cur}") ) ;;
     esac
 }
@@ -84,7 +85,7 @@ const zshCompletion = `#compdef otedama
 # zsh completion for otedama
 _otedama() {
     local -a commands
-    commands=(run version config service doctor arb help completion)
+    commands=(run version config service doctor arb wallet help completion)
     if (( CURRENT == 2 )); then
         _describe 'otedama command' commands
         return
@@ -93,6 +94,7 @@ _otedama() {
         config)     _values 'config subcommand' show validate ;;
         service)    _values 'service subcommand' install uninstall status ;;
         arb)        _values 'arb subcommand' explain ;;
+        wallet)     _values 'wallet subcommand' verify change-passphrase ;;
         completion) _values 'shell' bash zsh fish ;;
     esac
 }
@@ -107,10 +109,12 @@ complete -c otedama -n __fish_use_subcommand -a config     -d 'Inspect or valida
 complete -c otedama -n __fish_use_subcommand -a service    -d 'Install/uninstall background service'
 complete -c otedama -n __fish_use_subcommand -a doctor     -d 'Run self-diagnostic checks'
 complete -c otedama -n __fish_use_subcommand -a arb        -d 'Inspect arbitration decisions'
+complete -c otedama -n __fish_use_subcommand -a wallet     -d 'Verify or re-encrypt the Lightning wallet'
 complete -c otedama -n __fish_use_subcommand -a help       -d 'Print help'
 complete -c otedama -n __fish_use_subcommand -a completion -d 'Generate shell completion'
 complete -c otedama -n '__fish_seen_subcommand_from config'     -a 'show validate'
 complete -c otedama -n '__fish_seen_subcommand_from service'    -a 'install uninstall status'
 complete -c otedama -n '__fish_seen_subcommand_from arb'        -a 'explain'
+complete -c otedama -n '__fish_seen_subcommand_from wallet'     -a 'verify change-passphrase'
 complete -c otedama -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
 `

@@ -132,6 +132,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdDoctor(args[1:], stdout, stderr)
 	case "arb":
 		return cmdArb(args[1:], stdout, stderr)
+	case "wallet":
+		return cmdWallet(args[1:], os.Stdin, stdout, stderr)
 	case "completion":
 		return cmdCompletion(args[1:], stdout, stderr)
 	case helpWord, "--help", "-h":
@@ -157,6 +159,7 @@ Commands:
   service    Install/uninstall as a background service.
   doctor     Run self-diagnostic checks.
   arb        Inspect arbitration decisions (arb explain).
+  wallet     Verify or re-encrypt the Lightning wallet (wallet verify|change-passphrase).
   completion Generate a shell-completion script (bash|zsh|fish).
   help       Print this help and exit.
 
