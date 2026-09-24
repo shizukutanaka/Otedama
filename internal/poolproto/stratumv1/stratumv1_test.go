@@ -188,6 +188,21 @@ func TestParseSetExtranonce_TooFewParams(t *testing.T) {
 	}
 }
 
+// TestParseSetExtranonce_FloatSize pins the JSON-number interop: pools
+// may encode the size as 4.0, which a plain int unmarshal rejects —
+// leaving the stale extranonce2_size to mis-pad every later submit.
+func TestParseSetExtranonce_FloatSize(t *testing.T) {
+	if _, sz, ok := parseSetExtranonce(json.RawMessage(`["abc12345", 4.0]`)); !ok || sz != 4 {
+		t.Errorf("float-encoded size: sz=%d ok=%v, want 4,true", sz, ok)
+	}
+	// Fractional or out-of-range values still reject.
+	for _, params := range []string{`["aa",4.5]`, `["aa",-1]`, `["aa",65]`, `["aa","x"]`} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(params)); ok {
+			t.Errorf("%s accepted, want !ok", params)
+		}
+	}
+}
+
 // ============================================================================
 // trimRight
 // ============================================================================

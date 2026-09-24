@@ -1251,6 +1251,17 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 283 increment (extranonce size interop)
+
+- **実装（interop 非対称修正）: `mining.set_extranonce` のサイズを
+  float64 受理に** —— JSON 数値は常に float64 でデコードされるため、
+  `extranonce2_size` を `int` 直接 unmarshal すると `4.0` エンコードの
+  プールで通知が静かに棄却され、extranonce2_size が古いまま残り
+  以後の全 submit が en2 長不一致で reject される経路があった。
+  `parseSubscribeResult` と同じ float64→整数性チェックに統一。
+- **検証:** `TestParseSetExtranonce_FloatSize` —— `4.0` 受理、
+  `4.5`/負数/範囲外/非数値は棄却。既存テスト全通過。
+
 ## September 2026 research pass — session 282 increment (V2 read deadline)
 
 - **実装（ゾンビセッション対策）: V2 readLoop に 5 分 read deadline** ——

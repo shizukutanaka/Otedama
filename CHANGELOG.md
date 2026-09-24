@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 283 — set_extranonce JSON 数値 interop)
+
+- **`mining.set_extranonce` の extranonce2_size を float64 受理に修正** ——
+  `int` 直接 unmarshal では `4.0` エンコードのプールで通知が静かに棄却
+  され、古い extranonce2_size のまま以後の全 submit が en2 長不一致で
+  reject される経路があった。`parseSubscribeResult` と同じ
+  float64→整数性チェックに統一（4.5/負数/範囲外は棄却）。
+
 ### Fixed (session 282 — V2 ゾンビセッション対策)
 
 - **V2 readLoop に 5 分 read deadline を追加** —— V1 と同様、TCP が

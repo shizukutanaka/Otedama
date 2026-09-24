@@ -119,21 +119,24 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 const maxExtranonce2Size = 64
 
 // parseSetExtranonce decodes mining.set_extranonce params:
-// [extranonce1_hex, extranonce2_size_int].
+// [extranonce1_hex, extranonce2_size_int]. The size is parsed as float64
+// (like parseSubscribeResult) because JSON numbers have no int type — a
+// pool encoding "4.0" would otherwise be rejected wholesale, leaving the
+// stale size to mis-pad every subsequent submit into en2-length rejects.
 func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	var p []json.RawMessage
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) < 2 {
 		return "", 0, false
 	}
 	var en1 string
-	var sz int
+	var sz float64
 	if err := json.Unmarshal(p[0], &en1); err != nil {
 		return "", 0, false
 	}
-	if err := json.Unmarshal(p[1], &sz); err != nil || sz < 0 || sz > maxExtranonce2Size {
+	if err := json.Unmarshal(p[1], &sz); err != nil || sz < 0 || sz > maxExtranonce2Size || math.Trunc(sz) != sz {
 		return "", 0, false
 	}
-	return en1, sz, true
+	return en1, int(sz), true
 }
 
 // parseShowMessage decodes a client.show_message notification.
