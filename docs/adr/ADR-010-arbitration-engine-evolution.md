@@ -221,6 +221,22 @@ hardening remain v3.5/v3.6 scope.
 
 **Cost:** ~45h. Requires A6 to be live first.
 
+**Implementation note (session 288):** parts 1 and 3 shipped ahead of
+v3.6. `ProviderReliability.UpdateAt(success, now)` adds exactly one
+pseudo-count per settled epoch — the Δα ≤ 1 cap is inherent to the
+single-outcome update — and before each outcome lands, accumulated
+evidence decays toward the Beta(1,1) prior by
+`arbitration.ReputationHalfLife` (168 h): a trust-farming burst loses
+half its weight per week of quiet. Decay scales the pseudo-counts, not
+the mean, so evidence weight and the posterior it supports expire
+together; the pull is toward the prior and can never cross it (decayed
+providers return to untrusted, not negative trust). Part 2 (k=3
+confirmations before fast-tracking) remains v3.6 scope: the engine has
+no fast-track path today — every switch already passes the hysteresis
+margin and a fresh provider enters at the 0.5 prior discount — so the
+piece still worth building is stream-age tracking for an explicit
+confirmation ladder, not the gate itself.
+
 **Value/cost rank:** ★★★.
 
 **Non-custodial check:** ✅ Defense logic, no third-party interaction.

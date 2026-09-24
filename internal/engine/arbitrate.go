@@ -127,7 +127,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			opts.streamsMu.Lock()
 			now := time.Now()
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, now, streamStaleTimeout) {
-				providerReliability(reliability, key).Update(false)
+				providerReliability(reliability, key).UpdateAt(false, now)
 				delete(creditAt, key)
 				delete(forecasters, key)
 				opts.log("info", fmt.Sprintf(
@@ -141,7 +141,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 					continue
 				}
 				if now.Sub(credited) >= streamStaleTimeout {
-					providerReliability(reliability, key).Update(true)
+					providerReliability(reliability, key).UpdateAt(true, now)
 					creditAt[key] = now
 				}
 			}

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 288 — A7 敵対的破壊耐性: 評判半減期)
+
+- **`ProviderReliability.UpdateAt(success, now)`** — ADR-010 A7（Lykouris
+  –Mirrokni–Paes Leme STOC 2018 系の敵対的破壊耐性）の残り2要素のうち
+  評判半減期を実装。エポック集計の前に、累積した (α,β) 擬似カウントを
+  Beta(1,1) 事前分布へ向けて `ReputationHalfLife`（168h）で減衰 — クォート
+  やシェア受理率を短期間だけ水増しして信頼を稼ぐ demonstration attack が
+  自然失効し、数ヶ月前の評判に安住するプロバイダも untrusted へ戻ります。
+  減衰は事前分布を「超えない」ため負の信頼にはならず、Δα ≤ 1 の信頼上限は
+  1 エポック = 1 カウントの更新式に内在する形として文書化。k=3
+  確認ラダーはストリーム年齢追跡と共に v3.6 スコープとして残置。
+
 ### Added (session 287 — arb explain の Reasoning ブロック / A9 完結)
 
 - **`arb explain` に "Reasoning:" ブロック** — ADR-010 モックアップの

@@ -275,8 +275,11 @@ arXiv grounding (collected sessions 40–41 and here):
     resolved (session 279):** `arbitration.ProviderReliability` shipped
     ahead of v3.5 — posterior mean discounts quote `Confidence`, epochs are
     staleness-window survival (success) vs stream expiry (failure), exposed
-    as `otedama_arbitration_provider_reliability`. Shared rolling buffer
-    (with A1), persistent table, and A7 hardening remain open.
+    as `otedama_arbitration_provider_reliability`. A7's Δα ≤ 1 cap and 168h
+    reputation half-life followed in session 288 (`UpdateAt(success, now)`
+    decays pseudo-counts toward the prior before tallying each outcome);
+    shared rolling buffer (with A1), persistent table, and A7's
+    k-confirmation ladder remain open.
 10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but
     catalogued.
