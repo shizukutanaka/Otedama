@@ -186,7 +186,7 @@ Otedamaが採用する戦略:
 - `MAINTAINERS.md` — bus-factor 改善の現状
 - `GOVERNANCE.md` — 昇格パスとgreater stake holder 管理
 - `docs/THREAT_MODEL.md` — STRIDE 脅威モデル
-- `docs/AUDIT_CHECKLIST.md` — 30 項目監査チェックリスト
+- `docs/AUDIT_CHECKLIST.md` — 31 項目監査チェックリスト
 - `GODEBUG_NOTES.md` — Go behavior pinning
 - `docs/adr/ADR-001` 〜 `ADR-005` — 主要設計判断
 

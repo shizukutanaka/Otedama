@@ -34,43 +34,43 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
-| 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
-| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Not met today:** workflows reference tag refs (`@v4`, `@master`), not SHA pins — see KNOWN_LIMITATIONS §13 (workflow changes are also where the env-broken checks live) |
-| 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
-| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
-| 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Direct: `golang.org/x/crypto`, `go.yaml.in/yaml/v3`, `golang.org/x/sys` (+ `x/net`, `x/term`, `x/text` transitives via x/crypto), stdlib |
-| 15 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
+| 10 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
+| 11 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
+| 12 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Not met today:** workflows reference tag refs (`@v4`, `@master`), not SHA pins — see KNOWN_LIMITATIONS §13 (workflow changes are also where the env-broken checks live) |
+| 13 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
+| 14 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
+| 15 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Direct: `golang.org/x/crypto`, `go.yaml.in/yaml/v3`, `golang.org/x/sys` (+ `x/net`, `x/term`, `x/text` transitives via x/crypto), stdlib |
+| 16 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
 ## Secrets and credentials
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 16 | No secrets in repository history | `git log -p \| grep -iE 'password=\|api_key=\|secret='` plus GitHub secret scanning | No hits |
-| 17 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `os.WriteFile(..., 0600)` | Perm 0600 enforced |
-| 18 | Mnemonic never logged | `grep -r 'mnemonic' internal/logger/ internal/lightning/` | Displayed once on stdout, never logged |
-| 19 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
-| 20 | No default password or pre-shared key | Grep for hardcoded strings | None found |
+| 17 | No secrets in repository history | `git log -p \| grep -iE 'password=\|api_key=\|secret='` plus GitHub secret scanning | No hits |
+| 18 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `os.WriteFile(..., 0600)` | Perm 0600 enforced |
+| 19 | Mnemonic never logged | `grep -r 'mnemonic' internal/logger/ internal/lightning/` | Displayed once on stdout, never logged |
+| 20 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
+| 21 | No default password or pre-shared key | Grep for hardcoded strings | None found |
 
 ## Cryptography
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 21 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
-| 22 | Key derivation uses scrypt | `internal/lightning/seed.go` | `scrypt.Key(..., N=32768, r=8, p=1, keyLen=32)` |
-| 23 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
-| 24 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |
-| 25 | BIP-39 seed derivation | `internal/lightning/seed.go` | PBKDF2-HMAC-SHA512 with 2048 rounds |
-| 26 | No home-grown cryptography | All crypto from `golang.org/x/crypto` or stdlib | Code review |
+| 22 | AEAD used for wallet encryption | `internal/lightning/seedstore.go` | AES-256-GCM |
+| 23 | Key derivation uses scrypt | `internal/lightning/seed.go` | `scrypt.Key(..., N=32768, r=8, p=1, keyLen=32)` |
+| 24 | Noise NX handshake for pool auth | `internal/stratum/noise.go` | Full handshake implemented, tested |
+| 25 | TLS-like AEAD for Stratum V2 traffic | `internal/stratum/noise.go` `EncryptedConn` | ChaCha20-Poly1305 post-handshake |
+| 26 | BIP-39 seed derivation | `internal/lightning/seed.go` | PBKDF2-HMAC-SHA512 with 2048 rounds |
+| 27 | No home-grown cryptography | All crypto from `golang.org/x/crypto` or stdlib | Code review |
 
 ## Threat model and documentation
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 27 | STRIDE threat model exists and is current | `docs/THREAT_MODEL.md` | Last-modified within 6 months |
-| 28 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001, ADR-002, ADR-003 present |
-| 29 | Security reporting process documented | `SECURITY.md` | Private reporting instructions |
-| 30 | Code of Conduct adopted | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 or equivalent |
+| 28 | STRIDE threat model exists and is current | `docs/THREAT_MODEL.md` | Last-modified within 6 months |
+| 29 | Architecture Decision Records for major choices | `docs/adr/` | ADR-001, ADR-002, ADR-003 present |
+| 30 | Security reporting process documented | `SECURITY.md` | Private reporting instructions |
+| 31 | Code of Conduct adopted | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 or equivalent |
 
 ---
 
