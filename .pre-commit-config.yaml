@@ -1,0 +1,16 @@
+# Opt-in local checks — install once with: pre-commit install
+# CLAUDE.md requires secrets to be caught by a pre-commit hook;
+# .gitignore alone cannot stop a staged credential.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
