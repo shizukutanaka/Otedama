@@ -1961,7 +1961,7 @@ func TestSession_Submit_SendsAuthorizedUser(t *testing.T) {
 		go pool.run()
 		conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
 		sess := newSession(conn)
-		sess.user = wantUser // as the dialer sets it after authorize
+		sess.user.Store(&wantUser) // as the dialer sets it after authorize
 		sess.start(context.Background())
 		defer sess.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

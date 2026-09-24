@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 277 — `session.user` の atomic 化)
+
+- **V1 `session.user` を `atomic.Pointer[string]` 化** —— session 275 の
+  監査で残った最後の非 atomic 共有フィールド。dialer が `start()` の
+  readLoop 起動後に authorize 完了で書き込み、Submit 呼び出し側が別
+  goroutine で読むため、従来は Negotiate→Submit の呼び出し順序という
+  暗黙の契約にのみ依っていた。extranonce フィールドと同じ修正で、
+  呼び出し順序への依存自体を構造的に除去。`mining.submit` の
+  worker-name パラメータは `s.user.Load()` を dereference し、
+  認証前デフォルトはパッケージレベル `defaultWorkerName` に
+
 ### Fixed (session 276 — 不正 difficulty の無言枯渇を警告化)
 
 - **表現不能な `set_difficulty` で warn** —— V1 の `set_difficulty` 値が

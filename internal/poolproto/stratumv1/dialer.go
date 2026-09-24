@@ -159,7 +159,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// without it every share would arrive attributed to the client
 	// default instead of the authorized user.
 	if user != "" {
-		sess.user = user
+		sess.user.Store(&user)
 	}
 
 	// Step 3 (optional): extranonce.subscribe — announce that we handle

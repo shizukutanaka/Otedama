@@ -122,7 +122,11 @@ type session struct {
 	// pools attribute stats/rejects to it. Defaults to the client name so
 	// sessions constructed without Negotiate still send a valid field;
 	// the dialer overwrites it with conn.creds.User after authorize.
-	user string
+	// Atomic for the same reason as extranonce1 above: the dialer writes
+	// it after start() launched the read loop, and Submit callers read it
+	// on their own goroutines — keeping it atomic removes the reliance
+	// on Negotiate→Submit call ordering entirely.
+	user atomic.Pointer[string]
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -135,15 +139,21 @@ var (
 	_ poolproto.PoolNoticeReceiver = (*session)(nil)
 )
 
+// defaultWorkerName is the mining.submit worker-name param before an
+// authorize response supplies the configured identity. "otedama" is a
+// placeholder a pool only sees if it accepts shares pre-authorization.
+var defaultWorkerName = "otedama"
+
 func newSession(conn *connection) *session {
-	return &session{
-		user:     "otedama",
+	s := &session{
 		conn:     conn,
 		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
 		jobsCh:   make(chan poolproto.Job, 8),
 		noticeCh: make(chan string, 8),
 		pending:  map[uint64]chan rpcResponse{},
 	}
+	s.user.Store(&defaultWorkerName)
+	return s
 }
 
 // start launches the read loop. Idempotent.
@@ -350,7 +360,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2 = strings.Repeat("00", int(s.extranonce2Size.Load()))
 	}
 	params := []any{
-		s.user, // worker name — the identity authorize established
+		*s.user.Load(), // worker name — the identity authorize established
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),

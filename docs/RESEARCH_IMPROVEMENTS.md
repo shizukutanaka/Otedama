@@ -1251,6 +1251,53 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 277 increment (user field atomicity)
+
+### Implemented
+
+1. ✅ **V1 `session.user` is now `atomic.Pointer[string]`** — the last
+   plain shared field left after session 275: the dialer writes it
+   post-authorize *after* `start()` launched the read loop, and Submit
+   callers read it on their own goroutines. It was only safe by an
+   implicit Negotiate→Submit call-ordering invariant; making it atomic
+   (same fix as the extranonce fields) removes that whole class rather
+   than relying on call order. The `mining.submit` worker-name param
+   now dereferences `s.user.Load()`; the pre-authorization default is
+   the package-level `defaultWorkerName`.
+
+### Deep audit — verified clean this session
+
+- ✅ **`mining.set_difficulty` unmarshal path** — `[]float64` JSON
+  decode cannot yield NaN/Inf (no JSON literal; out-of-range numbers
+  error). Guarded by `TargetFromDifficulty` bounds downstream anyway.
+- ✅ **`TargetFromNBits`** — negative-mantissa bit, exp<3, zero
+  mantissa, and >32-byte overflow all error; hostile nBits cannot mint
+  a wild target.
+- ✅ **`parseNotify`** — all nine wire fields strictly validated
+  (session 274); extra params tolerated for forward-compat.
+- ✅ **V2 `emit`/`jobState`** — pending map bounded (256, s271),
+  clean-tip purge, drop-oldest, `min_ntime` floor semantics verified
+  against SRI.
+- ✅ **V1 read deadline** — 5-min inactivity kill refreshed per loop
+  iteration, standard miner behaviour (not a per-connection lifetime).
+- ✅ **`writeMu`** — all conn writes serialised; `SetWriteDeadline`
+  per-write under the same mutex.
+- ✅ **`cancelPending`** — deletes as it closes, so readLoop-defer and
+  Close() callers cannot double-close a channel.
+- ✅ **`parseReconnect`** — deliberately tolerant; host/port are
+  recorded but never consumed (anti-redirect ADR decision, s271).
+- ✅ **TLS paths** — `stratum+v2tls` and V1-TLS both verify certs
+  (MinVersion 1.2, system roots, SNI from dial address); no
+  InsecureSkipVerify anywhere.
+- ✅ **`publishDifficulty`** — `d<=0` gate; huge-but-finite values are
+  honest (a share at 1e300 really does take ~forever).
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+- 🟡 **Observed once, not reproduced**: one transient `-race -count=2`
+  engine-package failure during local verification (no DATA RACE
+  report; three subsequent -count=1/-count=2/-count=3 runs all green).
+
+---
+
 ## September 2026 research pass — session 276 increment (invalid-difficulty starvation warn)
 
 ### Implemented
@@ -1749,6 +1796,9 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-277 additions (September 2026): the last plain shared V1
+field (`session.user`) is atomic too — no reliance on call ordering.*
 
 *Session-276 additions (September 2026): a V1 set_difficulty value
 TargetFromDifficulty cannot represent now warns once instead of
