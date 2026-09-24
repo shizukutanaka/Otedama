@@ -380,6 +380,22 @@ state, cgminer `addpool` field boundaries, `config show` masks
 credentials and strips control bytes via `safeDisplay`, Octopus tariff
 feed URL-escapes product and tariff codes.
 
+**Sessions 366–370 follow-up.** Audited and either verified bounded or
+fixed: config-file permission check when a pool password is set
+(session 366, doctor warns on group/other-readable `config.yaml`),
+systemd unit `%`-specifier escaping (session 367 — `%h`/`%i` in paths
+would otherwise expand inside unit directives), launchd plist XML
+escaping of `$HOME`-derived log paths (session 368), `arb explain`
+`/arbitration` response body bound at 1 MiB (session 369 — closes the
+last unbounded HTTP read; every other feed/probe body was already
+capped: rates 64 KiB, cgminer RPC 64 KiB, clock-probe drain 8 KiB),
+`SanitizeLine` covers C0 + C1 controls (0x00–0x1F, 0x7F–0x9F), logger
+writes to stdout only (file rotation is the service manager's job), V2
+Noise-NX read path unused in the live dialer (§2), secp256k1 scheme
+stubs return `ErrSchemeNotImplemented` everywhere (no false-verify
+surface), and `wallet.dat` permission probing (session 366 family).
+Re-audit warranted only when those code paths change.
+
 ---
 
 ### Elevation of privilege (E)
