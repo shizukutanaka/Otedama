@@ -264,7 +264,7 @@ addresses) appear once their first event occurs.
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
 | `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
-| `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
+| `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool; the engine logs a `warn` when the backlog stays ≥8 for 3 consecutive stats ticks. |
 | `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
 | `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |
 | `otedama_share_acceptance_rate` | gauge | — | Accepted / judged (1.0 = all accepted). |

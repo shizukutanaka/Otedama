@@ -523,8 +523,6 @@ RESEARCH_IMPROVEMENTS Cat 7 #8 を部分解決、ADR-010 A2 に実装ノート�
 cherry-pick 移植。シミュレーション会計分離・信頼度・フォーキャスタ・
 A7 ラダーとの共存を検証済み — 台帳は Decide の比較量と同一の
 ExpectedYield を実現側に用いるため意味論は不変。)*
-
-||||||| parent of 9d73dc1 (feat(engine): per-stream yield-drift measures (S + V_T) for self-tuning signal selection (Cat 6 #16))
 ### Added (session 275 — ストリーム・ドリフト計測: 各収益源の非定常性タイプを実測)
 
 **非定常バンディットのドリフト尺度をそのまま計装.** NeurIPS 2025 の Non-stationary
@@ -553,6 +551,29 @@ ADR-010 A8 に実装ノート追記。
 cherry-pick 移植。スイッチ判定台帳（session 308 移植）・シミュレーション
 会計・信頼度・フォーキャスタ・A7 ラダー・ハートビート計装との共存を検証
 —— 計測量は Decide の比較量と同一の Yield.Effective のため意味論不変。)*
+### Added (session 261 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: "Trust the pool's numbers" 未判定シェア滞留の運用警告)
+
+**RESEARCH_IMPROVEMENTS Category 1 #10 を解消 — プール側採算との照合を
+運用警告に引き上げ**
+
+- `unaccountedWatchdog`（internal/engine/stats.go）を新設 —
+  `otedama_shares_unaccounted` ゲージ（発見済みだがプール未判定のシェア数）
+  が **8 シェア以上で 3 統計ティック連続** した場合に `warn` を一度だけ発火。
+  閾値未満への復帰時に「drained」の `info` を1回出して再武装し、
+  次のインシデントで再度警告する。
+- Stratum V1 プールはサーバ側のシェア統計を公開しないため、ローカル
+  滞留こそが「プールが黙って submission を捨てている」サイン — submit が
+  コネクション内で行方不明になる静かな採算ずれを検出する。
+- V2/V1 両方のセッションループに配線。`updateShareRates` は unaccounted
+  値も返すよう変更（戻り値3つ化）。docs/API.md のメトリクス説明に
+  警告条件を追記。テスト3件追加（警告・リセット・nil logger）。
+
+*(session 310: 別系チェーンの未マージ PR に留まっていた本機能を現チェーンへ
+cherry-pick 移植。session-283 の poolproto 統合で V1/V2 個別ループは
+共通 `sessionTelemetry.tick` へ集約済みのため、ウォッチドッグは同所の
+共有ティックに1箇所配線 — 元実装の2箇所配線と同じ発火経路を維持。
+併せて前回移植で混入していた紛争マーカー残置1行を除去。)*
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

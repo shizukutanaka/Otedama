@@ -619,6 +619,10 @@ type sessionTelemetry struct {
 	lastDropped uint64
 	latency     *LatencyTracker
 
+	// unaccountedMon turns the otedama_shares_unaccounted gauge into an
+	// operator-visible warning when found-but-unjudged shares persist.
+	unaccountedMon *unaccountedWatchdog
+
 	// lastHashrate retains the most recent measured hashrate so the
 	// one-shot difficulty suggestion can wait for a real reading.
 	lastHashrate float64
@@ -650,6 +654,8 @@ func newSessionTelemetry(log func(string, string)) *sessionTelemetry {
 	return &sessionTelemetry{
 		hashMon: NewHashrateMonitor(0, 3, log),
 		latency: NewLatencyTracker(256),
+
+		unaccountedMon: newUnaccountedWatchdog(log),
 	}
 }
 
@@ -693,7 +699,8 @@ func (t *sessionTelemetry) tick(now time.Time, opts *sessionOpts, suggestedDiffi
 				opts.m.joulesPerTerahash.Set(opts.powerWatts * 1e12 / currentHashRate)
 			}
 		}
-		rate, judged := opts.m.updateShareRates()
+		rate, judged, unaccounted := opts.m.updateShareRates()
+		t.unaccountedMon.observe(unaccounted)
 		if judged >= 20 && rate < 0.97 {
 			opts.log("warn", fmt.Sprintf(
 				"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",

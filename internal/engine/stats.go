@@ -137,6 +137,62 @@ func totalDropped(workers []*miner.Worker) uint64 {
 	return total
 }
 
+// unaccountedWarnThreshold is the found-but-not-judged share backlog at
+// which reconciliation starts counting toward a warning. A handful of
+// in-flight shares is normal (submit→accept round trip), so the watchdog
+// ignores small blips.
+const unaccountedWarnThreshold = 8
+
+// unaccountedWarnTicks is how many consecutive stats ticks the backlog
+// must stay at or above the threshold before warning — a backlog that
+// persists across several ticks means submissions are being dropped or
+// ignored, not merely in flight.
+const unaccountedWarnTicks = 3
+
+// unaccountedWatchdog turns the otedama_shares_unaccounted gauge into an
+// operator-facing warning. Shares are counted locally when found, then
+// again when the pool judges them; a gap that never drains means the pool
+// is silently not accounting for our work — the "trust the pool's
+// numbers" miscounting RESEARCH_IMPROVEMENTS Category 1 item 10 targets.
+// Stratum pools expose no server-side share counters to reconcile
+// against, so the local backlog is the only drift signal available.
+type unaccountedWatchdog struct {
+	streak int
+	warned bool
+	log    func(level, msg string)
+}
+
+// newUnaccountedWatchdog creates a watchdog that warns through log after
+// unaccountedWarnTicks consecutive samples at or above
+// unaccountedWarnThreshold. A nil log disables output.
+func newUnaccountedWatchdog(log func(level, msg string)) *unaccountedWatchdog {
+	return &unaccountedWatchdog{log: log}
+}
+
+// observe records one stats-tick sample of the unaccounted backlog. It
+// warns once per incident, then resets and logs a single "drained" line
+// when the backlog falls back below the threshold so it can warn again on
+// the next incident.
+func (w *unaccountedWatchdog) observe(unaccounted uint64) {
+	if unaccounted < unaccountedWarnThreshold {
+		if w.warned && w.log != nil {
+			w.log("info", "engine: unaccounted-share backlog drained — the pool has judged the outstanding submissions")
+		}
+		w.streak = 0
+		w.warned = false
+		return
+	}
+	w.streak++
+	if w.streak >= unaccountedWarnTicks && !w.warned {
+		w.warned = true
+		if w.log != nil {
+			w.log("warn", fmt.Sprintf(
+				"engine: %d shares found locally but not judged by the pool for %d consecutive stats ticks — the pool may be silently dropping submissions (see otedama_shares_unaccounted)",
+				unaccounted, w.streak))
+		}
+	}
+}
+
 // hashrateWindow turns successive cumulative hash-count samples into a
 // current hashrate (hashes/sec over the last interval). This is what every
 // comparable miner reports (cgminer/bfgminer/ESP-Miner rolling averages)

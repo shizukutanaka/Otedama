@@ -804,9 +804,10 @@ func (m *engineMetrics) setActivePayout(masked string) {
 }
 
 // updateShareRates recomputes the acceptance/reject/stale rate gauges from
-// the current share counters. Returns the acceptance rate and the number of
-// judged shares so the caller can decide whether to log a warning. Safe to
-// call with no shares judged yet (returns rate=1.0, judged=0).
+// the current share counters. Returns the acceptance rate, the number of
+// judged shares, and the found-but-not-judged backlog so the caller can
+// decide whether to log warnings. Safe to call with no shares judged yet
+// (returns rate=1.0, judged=0, unaccounted=found).
 //
 // It also reconciles local discovery against the pool's numbers: shares found
 // locally but not yet judged by the pool are exposed as otedama_shares_unaccounted.
@@ -814,7 +815,7 @@ func (m *engineMetrics) setActivePayout(masked string) {
 // growing value means found shares are not reaching the pool — submission
 // failures or drops that would otherwise be invisible (the "trust the pool's
 // numbers" reconciliation, RESEARCH_IMPROVEMENTS Category 1 item 10).
-func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
+func (m *engineMetrics) updateShareRates() (rate float64, judged, unaccounted uint64) {
 	accepted := m.sharesAccepted.Value()
 	rejected := m.sharesRejected.Value()
 	judged = accepted + rejected
@@ -825,7 +826,6 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	// can briefly report more judged than we have locally counted if a stats
 	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
 	found := m.sharesFound.Value()
-	var unaccounted uint64
 	if found > judged {
 		unaccounted = found - judged
 	}
@@ -834,7 +834,7 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	if judged == 0 {
 		m.rejectRate.Set(0)
 		m.staleRate.Set(0)
-		return rate, judged
+		return rate, judged, unaccounted
 	}
 	m.rejectRate.Set(float64(rejected) / float64(judged))
 	var stale uint64
@@ -844,5 +844,5 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	}
 	m.rejectByReasonMu.Unlock()
 	m.staleRate.Set(float64(stale) / float64(judged))
-	return rate, judged
+	return rate, judged, unaccounted
 }
