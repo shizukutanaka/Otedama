@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -176,7 +177,36 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
 	}
 
-	// Step 3 (optional): extranonce.subscribe — announce that we handle
+	// Step 3 (optional): mining.configure — negotiate the
+	// version-rolling extension (the cgminer/ESP-Miner convention:
+	// offer mask 1fffe000 with min-bit-count 2). Sent after authorize:
+	// extension negotiation is permitted at any point before mining,
+	// and pools that don't implement the method answer -32601 or close
+	// the call with an error — both ignored since the extension is
+	// opt-in.
+	id = sess.nextID.Add(1)
+	cfgResp, cfgErr := sess.call(ctx, id, "mining.configure",
+		[]any{
+			[]string{"version-rolling"},
+			map[string]any{
+				"version-rolling.mask":          "1fffe000",
+				"version-rolling.min-bit-count": 2,
+			},
+		})
+	if cfgErr == nil && cfgResp.errResult == nil {
+		if res, ok := cfgResp.result.(map[string]any); ok {
+			if en, _ := res["version-rolling"].(bool); en {
+				sess.versionRolling.Store(true)
+				if hexMask, _ := res["version-rolling.mask"].(string); hexMask != "" {
+					if v, err := strconv.ParseUint(hexMask, 16, 32); err == nil {
+						sess.versionMask.Store(uint32(v))
+					}
+				}
+			}
+		}
+	}
+
+	// Step 4 (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)
 	// and pool-level errors ("Method not found") both mean the pool does not
 	// support extranonce rotation; we proceed without it. A network error here

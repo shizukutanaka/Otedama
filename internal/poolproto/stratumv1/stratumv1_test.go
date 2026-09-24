@@ -564,6 +564,14 @@ type fakePool struct {
 	// subscribeParams records the params the client sent with
 	// mining.subscribe for later assertion (xnsub extension flag).
 	subscribeParams []any
+	// configureParams records the params sent with mining.configure;
+	// configureGranted makes the pool answer with a version-rolling
+	// grant (mask 1fffe000); false = method-not-found error.
+	configureParams  []any
+	configureGranted bool
+	// submitParams records the params sent with mining.submit for
+	// later assertion (version echo under negotiated rolling).
+	submitParams []any
 	// deferredNotify sends notify after authorize, not on connect —
 	// net.Pipe is synchronous, so notify written before the client's
 	// session starts reading would deadlock a full-handshake dial.
@@ -595,12 +603,24 @@ func (p *fakePool) run() {
 			continue
 		}
 		if req.Method == "mining.submit" {
+			_ = json.Unmarshal(req.Params, &p.submitParams)
 			result := "true"
 			if !p.verdict {
 				result = "false"
 			}
 			id, _ := json.Marshal(req.ID)
 			resp := `{"id":` + string(id) + `,"result":` + result + `,"error":null}` + "\n"
+			_, _ = p.conn.Write([]byte(resp))
+		}
+		if req.Method == "mining.configure" {
+			_ = json.Unmarshal(req.Params, &p.configureParams)
+			id, _ := json.Marshal(req.ID)
+			var resp string
+			if p.configureGranted {
+				resp = `{"id":` + string(id) + `,"result":{"version-rolling":true,"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2},"error":null}` + "\n"
+			} else {
+				resp = `{"id":` + string(id) + `,"result":null,"error":[21,"Method not found",null]}` + "\n"
+			}
 			_, _ = p.conn.Write([]byte(resp))
 		}
 		if req.Method == "mining.suggest_difficulty" {
@@ -672,6 +692,141 @@ func TestNegotiate_SubscribeAdvertisesXnsub(t *testing.T) {
 	}
 	if pool.subscribeParams[2] != "xnsub" {
 		t.Errorf("params[2] = %v, want %q", pool.subscribeParams[2], "xnsub")
+	}
+}
+
+func TestNegotiate_ConfigureOffersVersionRolling(t *testing.T) {
+	// Pool grants version-rolling: the handshake must offer
+	// mining.configure and record the negotiated mask so Submit can
+	// echo the hashed version (optional 6th param).
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, configureGranted: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	sess, err := (&Dialer{}).Negotiate(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// configure params = [["version-rolling"], {mask, min-bit-count}]
+	if len(pool.configureParams) != 2 {
+		t.Fatalf("configure params = %v, want 2 elements", pool.configureParams)
+	}
+	s := sess.(*session)
+	if !s.versionRolling.Load() {
+		t.Error("versionRolling should be set after a grant")
+	}
+	if got := s.versionMask.Load(); got != 0x1fffe000 {
+		t.Errorf("versionMask = %#x, want 0x1fffe000", got)
+	}
+}
+
+func TestNegotiate_ConfigureRejectedStillHandshakes(t *testing.T) {
+	// Pools without the extension answer -32601; the handshake must
+	// still succeed with rolling disabled.
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, configureGranted: false}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	sess, err := (&Dialer{}).Negotiate(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("Negotiate should tolerate a configure refusal: %v", err)
+	}
+	defer sess.Close()
+	if s := sess.(*session); s.versionRolling.Load() {
+		t.Error("versionRolling should stay unset after a refusal")
+	}
+}
+
+func TestSession_Submit_EchoesVersionUnderNegotiatedRolling(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, configureGranted: true, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	sess, err := (&Dialer{}).Negotiate(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	res, err := sess.Submit(context.Background(), poolproto.ShareSubmission{
+		JobID: "ABC123", Nonce: 1, NTime: 0x68d36c5e,
+		Version: 0x20000000, ExtraNonce: []byte{0xaa, 0xbb},
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !res.Accepted {
+		t.Fatal("submit rejected by fakePool")
+	}
+	if len(pool.submitParams) != 6 {
+		t.Fatalf("submit params = %v, want 6 elements (version echo)", pool.submitParams)
+	}
+	if pool.submitParams[5] != "20000000" {
+		t.Errorf("submit params[5] = %v, want \"20000000\"", pool.submitParams[5])
+	}
+}
+
+func TestSession_Submit_OmitsVersionWhenRollingNotNegotiated(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, configureGranted: false, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+		creds:      poolproto.Credentials{User: "worker.1", Password: "x"},
+	}
+	sess, err := (&Dialer{}).Negotiate(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	if _, err := sess.Submit(context.Background(), poolproto.ShareSubmission{
+		JobID: "ABC123", Nonce: 1, NTime: 0x68d36c5e, Version: 0x20000000,
+	}); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if len(pool.submitParams) != 5 {
+		t.Fatalf("submit params = %v, want 5 elements (no version param)", pool.submitParams)
+	}
+}
+
+func TestSession_Dispatch_SetVersionMask_StoresMask(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"method":"mining.set_version_mask","params":["1fffe000"]}`))
+	if !sess.versionRolling.Load() {
+		t.Error("versionRolling should be set by the mask push")
+	}
+	if got := sess.versionMask.Load(); got != 0x1fffe000 {
+		t.Errorf("versionMask = %#x, want 0x1fffe000", got)
+	}
+	// Malformed pushes are ignored, not fatal.
+	sess2 := makeBareSess()
+	sess2.dispatch([]byte(`{"method":"mining.set_version_mask","params":["not-hex"]}`))
+	if sess2.versionRolling.Load() {
+		t.Error("malformed set_version_mask should not enable rolling")
 	}
 }
 

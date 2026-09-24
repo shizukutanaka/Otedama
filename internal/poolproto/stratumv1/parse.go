@@ -154,6 +154,27 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	return en1, sz, true
 }
 
+// parseVersionMask decodes a mining.set_version_mask notification.
+// Params format: ["1fffe000"] — a hex bitmask of the version bits the
+// pool permits the miner to roll. Returns false on any parse error;
+// the caller ignores malformed pushes rather than tearing down the
+// session (same convention as the other optional notifications).
+func parseVersionMask(raw json.RawMessage) (uint32, bool) {
+	var p []json.RawMessage
+	if err := json.Unmarshal(raw, &p); err != nil || len(p) < 1 {
+		return 0, false
+	}
+	var hexMask string
+	if err := json.Unmarshal(p[0], &hexMask); err != nil || hexMask == "" {
+		return 0, false
+	}
+	v, err := strconv.ParseUint(hexMask, 16, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(v), true
+}
+
 // parseShowMessage decodes a client.show_message notification.
 // Params format: ["human-readable message text"].
 // Returns the message and true on success; empty string and false on any parse error.

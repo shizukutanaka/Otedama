@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 339 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 version-rolling 拡張交渉)
+
+- **V1 ハンドシェイクに `mining.configure` を追加** — subscribe 成功後・authorize 前に
+  `version-rolling` 拡張（mask `1fffe000`, min-bit-count 2、cgminer/ESP-Miner 慣例）を
+  交渉。DATUM Gateway が miner-facing プロトコルとして明記する "SV1 +
+  version-rolling" のクライアント側を完成させる。拒否・未実装プールでは従来どおり
+  握手成功（オプトイン拡張）。
+- **`mining.set_version_mask` を処理** — 交渉許可済みまたは一方的（NiceHash 系）に
+  プッシュされる version ビット許可マスクをセッションに記録（従来は無視）。
+- **negotiated rolling 下で `mining.submit` が version をエコー** — 第6パラメータとして
+  ハッシュに使用した version を送信し、プールがロール済みシェアを検証可能に
+  （`miner.Share.Version` を `ShareSubmission.Version` へ配線）。シェア構築で version
+  ビット自体を変動させることは CPU プロデューサではノンス空間を使い切らないため
+  引き続き非適用 — ワイヤ経路のみ完成。
+
 ### Added (session 338 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: フォワードカーブ可視化 + asic_manage プール互換警告)
 
 - **`otedama_electricity_tariff_forward_{min,max}_pence_per_kwh`** — 取得済みの

@@ -31,9 +31,10 @@
 //	pool → client: result: true | false              (verdict)
 //
 // Plus optional mining.set_extranonce and various pool-specific
-// extensions (NiceHash version-rolling, ASICBoost via mining.configure,
-// pool-side vardiff via set_target/suggest_target/suggest_difficulty).
-// We support the common subset and ignore unknown notifications.
+// extensions (version-rolling negotiated via mining.configure +
+// set_version_mask, pool-side vardiff via
+// set_target/suggest_target/suggest_difficulty). We support the common
+// subset and ignore unknown notifications.
 //
 // # What this file does NOT do
 //
@@ -125,6 +126,14 @@ type session struct {
 	enMu            sync.RWMutex
 	extranonce1     string
 	extranonce2Size int
+
+	// versionRolling/versionMask track the version-rolling extension:
+	// set when the pool answers mining.configure with
+	// "version-rolling": true or pushes mining.set_version_mask. Once
+	// rolling, Submit echoes the version the share was hashed under
+	// (ESP-Miner convention: optional 6th submit param).
+	versionRolling atomic.Bool
+	versionMask    atomic.Uint32
 
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
@@ -258,6 +267,14 @@ func (s *session) dispatch(line []byte) {
 		}
 	case "mining.set_extranonce":
 		s.handleSetExtranonce(msg.Params)
+	case "mining.set_version_mask":
+		// Version-rolling mask push: pools that granted the extension at
+		// configure time (or grant it unilaterally — NiceHash does)
+		// update the permitted version bits. Params: ["1fffe000"].
+		if v, ok := parseVersionMask(msg.Params); ok {
+			s.versionMask.Store(v)
+			s.versionRolling.Store(true)
+		}
 	case "client.show_message":
 		s.handleShowMessage(msg.Params)
 	case "client.get_version":
@@ -415,6 +432,12 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),
 		fmt.Sprintf("%08x", sub.Nonce),
+	}
+	if s.versionRolling.Load() && sub.Version != 0 {
+		// Once version-rolling is negotiated, submit echoes the exact
+		// version the share was hashed under as the optional 6th
+		// param so the pool can validate rolled shares.
+		params = append(params, fmt.Sprintf("%08x", sub.Version))
 	}
 	resp, err := s.call(ctx, id, "mining.submit", params)
 	if err != nil {

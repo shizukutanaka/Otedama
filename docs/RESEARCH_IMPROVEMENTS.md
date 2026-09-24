@@ -1383,8 +1383,12 @@ during the SV2 handshake are rejected (`Negotiate` fails on any
 unexpected msg_type), `Decoder.MaxFrameSize` caps frame allocation,
 `extranonce.subscribe` opt-in + `mining.set_extranonce` handling exist,
 and Go's dialer already iterates every resolved DNS address.
-Non-applicable: BIP323 version-rolling mask (an end CPU/GPU device
-has nothing to roll — `mining.set_version_mask` is correctly ignored),
+~~Non-applicable: BIP323 version-rolling mask (an end CPU/GPU device
+has nothing to roll — `mining.set_version_mask` is correctly
+ignored),~~ *Superseded (session 339):* `mining.set_version_mask` is now
+handled — pools push it both unilaterally (NiceHash) and after a
+successful `mining.configure` grant, and tracking the mask is required
+for correct version echo on submit.
 JDC/Pool-side items (extranonce allocator exhaustion, share-cache
 ordering, `SeenSharesBudgetExhausted`, `max_past_jobs`) are upstream
 scope, and the `noise_sv2` hardening applies to the unwired Noise path
@@ -1437,6 +1441,16 @@ Verified the remaining pool→client request surface: `mining.configure`
 version rolling is non-applicable to a CPU/GPU end device, and answering
 it would falsely advertise support.
 
+*Correction (session 339):* the claim conflated directions —
+`mining.configure` is a *client→pool* negotiation request, not a
+pool→client one (a pool that sends it gets the standard -32601 default).
+We now SEND it in the handshake (cgminer/ESP-Miner convention) because
+OCEAN/DATUM-family pools advertise their miner-facing protocol as
+"SV1 + version-rolling": the negotiation + mask handling + version
+echo on submit completes the client side. Varying the version bits
+themselves in share construction stays non-applicable — the CPU share
+producer never exhausts a job's nonce space.
+
 **Session-307 follow-up (request contract completion):** the same
 unresolved-id problem generalised — any pool→client method carrying an
 `id` that we don't implement left the pool waiting. `dispatch` now has a
@@ -1477,6 +1491,16 @@ Horizon-aware *scheduling* itself stays ADR-008 sub-domain 2. Also:
 doctor's ASIC-endpoints check now warns when `asic_manage` is armed
 with endpoints but every configured pool is SV2-only — cgminer devices
 speak SV1, so actuation could never fire (previously an info log only).
+
+**Session-339 follow-up (V1 version-rolling extension):** the handshake
+now sends `mining.configure` offering `version-rolling`
+(mask 1fffe000, min-bit-count 2 — the cgminer/ESP-Miner convention),
+records the negotiated mask, honours `mining.set_version_mask` pushes,
+and echoes the hashed version as the optional 6th `mining.submit`
+param once rolling is negotiated. This completes the client side of
+the extension the DATUM gateway documents as its miner-facing
+protocol ("SV1 + version-rolling"); the earlier audit rows that
+treated the extension as wholly non-applicable are corrected above.
 
 ---
 

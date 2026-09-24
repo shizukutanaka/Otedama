@@ -1399,6 +1399,9 @@ func submitV1Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 		JobID: fmt.Sprintf("%d", share.JobID),
 		Nonce: share.Nonce,
 		NTime: share.NTime,
+		// Echoed as the optional 6th submit param when the pool
+		// negotiated version-rolling; ignored otherwise.
+		Version: share.Version,
 	})
 	elapsed := float64(time.Since(sendTime).Milliseconds())
 	if err != nil {
