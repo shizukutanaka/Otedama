@@ -715,12 +715,17 @@ endpoint against current vendor documentation. Tags as before
     feedback with no known cost structure. Justifies making ADR-010 A2's
     switch-cost ledger *learned / non-stationary* rather than a fixed
     calibration; the regret-optimal target for A2.
-16. 🟡 **Track which non-stationarity the engine self-tunes against.**
+16. 🟡 **Partially resolved — drift measures instrumented** (session 275).
     "Non-stationary Bandit Convex Optimization" (arXiv:2506.02980, NeurIPS
     2025) gives regret bounds parameterised by switches / total-variation /
     path-length — exactly the three drift types in hashprice/Akash yield
-    (difficulty steps, volatility, diurnal). Use its measures to choose the
-    self-tuning signal for the Holt-Winters reset threshold (A1+A8).
+    (difficulty steps, volatility, diurnal). The measurement half now exists:
+    `otedama_stream_yield_shifts_total{stream,device}` (S) and
+    `otedama_stream_yield_drift_sats_per_second{stream,device}` (V_T)
+    classify each stream's drift in real time — steps vs smooth wandering
+    shows up directly as shifts/variation ratio. Remaining: feeding the
+    dominant drift type into the Holt-Winters reset threshold (A1+A8) stays
+    🔵 (v3.6 scope with the forecaster itself).
 
 ### Category 8 — power: real, currently-live feeds
 

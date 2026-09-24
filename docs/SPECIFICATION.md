@@ -251,6 +251,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate, real (live-market) streams only — simulated streams are excluded and publish to `arbitration_simulated_yield_sats_per_second` instead. |
 | `arbitration_simulated_yield_sats_per_second` | gauge | Forecast earning rate of assignments on simulated streams only (providers quoting modeled prices, e.g. ai.akash). Kept separate so modeled revenue never inflates the real-earnings total. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
+| `stream_yield_shifts_total` | counter | Significant yield shifts per (stream, device) — the S drift measure. |
+| `stream_yield_drift_sats_per_second` | gauge | Accumulated \|Δyield\| per (stream, device) — the V_T drift measure. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
 | `stream_last_quote_unixtime` | gauge | Unix timestamp of the stream's most recent provider quote per `{stream,device}` — the provider heartbeat: `time() − value` is the quote age, so a dead provider is alertable before (and independently of) the stale-prune TTL and its reliability update. The series keeps its final timestamp after pruning — a stale value is the dead-provider evidence itself. |
 | `arbitration_provider_reliability` | gauge | Beta-Bernoulli posterior mean per `{provider}` (ADR-010 A6); discounts quoted confidence. |

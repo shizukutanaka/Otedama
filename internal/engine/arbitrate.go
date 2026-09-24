@@ -102,6 +102,10 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	// fast-track past a confirmed incumbent on its first cycles. Counts are
 	// monotonic — pruned-then-returning providers keep their history.
 	providerQuotes := make(map[string]int)
+	// drift accumulates per-stream yield-drift measures (shift count S and
+	// total variation V_T) used to pick the self-tuning signal for ADR-010
+	// A1/A8 — see drift.go (session 275, ported session 309).
+	drift := newDriftTracker()
 	for {
 		select {
 		case <-ctx.Done():
@@ -138,6 +142,8 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			lastQuoteAt[key] = ts
 			opts.metrics.observeStreamLastQuote(stream, device, ts)
 			providerQuotes[stream]++
+			shifted, _, tv := drift.observe(key, observedEffective(&q))
+			opts.metrics.observeStreamDrift(stream, device, shifted, tv)
 		case <-ticker.C:
 			opts.streamsMu.Lock()
 			now := time.Now()
@@ -145,6 +151,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				providerReliability(reliability, key).UpdateAt(false, now)
 				delete(creditAt, key)
 				delete(forecasters, key)
+				drift.expire(key)
 				opts.log("warn", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it "+
 						"— provider heartbeat lost (otedama_stream_last_quote_unixtime shows last quote)",
