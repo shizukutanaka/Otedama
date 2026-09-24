@@ -460,12 +460,10 @@ func (s *session) settleVerdicts(lastSeq uint32, cumulative bool, res poolproto.
 // Jobs returns the channel of incoming jobs.
 func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 
-// Submit sends a share upstream. The verdict is read by the engine's
-// frame loop today; this adapter performs a best-effort synchronous
-// submit and returns a provisional accepted result (the authoritative
-// accept/reject arrives asynchronously via SubmitSharesSuccess/Error
-// frames, which the engine already handles). When the full integration
-// lands, this becomes a request/response correlation.
+// Submit sends a share upstream and waits for the pool's verdict.
+// Each submit owns a distinct sequence number; the read loop's
+// settleVerdicts correlates SubmitSharesSuccess (a cumulative ACK up
+// to that sequence) and SubmitSharesError back to the waiting caller.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	jobID := parseJobID(sub.JobID)
 	seq := s.seq.Add(1)

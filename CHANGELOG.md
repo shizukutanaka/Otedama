@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 276 — 不正 difficulty の無言枯渇を警告化)
+
+- **表現不能な `set_difficulty` で warn** —— V1 の `set_difficulty` 値が
+  `TargetFromDifficulty` で表現できない場合（≈0 または diff1 超過 ——
+  不正・敵意的な vardiff）、従来は黙って nBits ブロックターゲットに
+  フォールバックし、V2 の `max_target=0` と同じ形でマイナーを枯渇させ
+  ていた。`invalidDiffWarned` ラッチでインシデント毎に一度だけ警告。
+  `SuggestedDifficulty() > 0` のゲートで初回通知前のデフォルト 0 を
+  誤検出しない。E2E テストで `set_difficulty 1e300` → notify → warn を
+  実証
+- **V1 `session.call` の pending リーク** —— `json.Marshal` 失敗時に
+  `pending[id]` が残ったままセッション寿命分リークしていたのを修正
+- **stratumv2 `Submit` の陳腐化コメントを修正** —— session 259 以前の
+  「暫定 accept 即返し」を説明したままだったのを、実際の verdict
+  相関の契約に更新
+
 ### Fixed (session 275 — extranonce データ競合)
 
 - **V1 `extranonce1`/`extranonce2Size` を atomic 化** —— 実データ競合:

@@ -1334,6 +1334,67 @@ func TestRunSessionV1_TransitionRejectCountedBenign(t *testing.T) {
 	}
 }
 
+func TestRunSessionV1_UnrepresentableDifficultyWarns(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Hostile/malformed vardiff: difficulty ~1e300 cannot be
+		// represented as a share target, so the engine falls back to the
+		// nBits block target — it must warn instead of silently starving.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e300]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"7",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","66ff6600",true]}`+"\n")
+		time.Sleep(200 * time.Millisecond)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var logMu sync.Mutex
+	var logLines []string
+
+	_ = runPoolSession(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log: func(_, msg string) {
+			logMu.Lock()
+			logLines = append(logLines, msg)
+			logMu.Unlock()
+		},
+	})
+
+	logMu.Lock()
+	joined := strings.Join(logLines, " ")
+	logMu.Unlock()
+	if !strings.Contains(joined, "cannot be represented as a share target") {
+		t.Errorf("expected unrepresentable-difficulty warn; got: %v", logLines)
+	}
+}
+
 func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	// Verify that after a share is accepted (latency recorded), the stats
 	// ticker logs p50/p95/p99.  We must NOT close merged before the Submit

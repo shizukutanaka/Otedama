@@ -1251,6 +1251,40 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 276 increment (invalid-difficulty starvation warn)
+
+### Implemented
+
+1. ✅ **V1 unrepresentable `set_difficulty` now warns** — the session-258
+   V2 gap existed identically on V1: a `set_difficulty` value
+   `TargetFromDifficulty` cannot represent (≈0 or above diff1 —
+   malformed or hostile vardiff) silently fell back to the nBits block
+   target, starving the miner exactly like `max_target=0`. The engine
+   now warns once per incident (`invalidDiffWarned` latch), gated on
+   `SuggestedDifficulty() > 0` so the pre-first-notification default
+   doesn't false-positive.
+2. ✅ **`session.call` pending-entry leak on marshal error** — a
+   `json.Marshal` failure returned without `delete(s.pending, id)`,
+   leaking the map entry for the session's life.
+3. ✅ **stratumv2 `Submit` doc comment corrected** — still described the
+   pre-session-259 provisional-accept behaviour; now describes the real
+   verdict-correlation contract.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **V1 write path** — `writeMu` already serialises all conn writes.
+- ✅ **miner `Work`/stats** — `w.mu` guards work/workVer; all counters
+  are `atomic.*`.
+- ✅ **V2 dialer** — `targetMu`, `verdicts sync.Map`, `atomic.*`
+  throughout; `s.done` unblocks waiting Submits on close.
+- ✅ **`parseDifficulty` cannot yield NaN/Inf** — `[]float64` JSON
+  unmarshal rejects non-numeric literals and out-of-range numbers.
+- ✅ **5-min read deadline refreshes per read-loop iteration** — it's
+  an inactivity kill, standard miner behaviour.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 275 increment (extranonce race)
 
 ### Implemented
@@ -1715,6 +1749,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-276 additions (September 2026): a V1 set_difficulty value
+TargetFromDifficulty cannot represent now warns once instead of
+silently degrading to the block target.*
 
 *Session-275 additions (September 2026): V1 extranonce fields are
 atomic — mid-session set_extranonce rotation raced against Submit's

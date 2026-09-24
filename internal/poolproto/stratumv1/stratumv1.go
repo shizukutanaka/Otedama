@@ -439,6 +439,9 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
+		s.pendingMu.Lock()
+		delete(s.pending, id)
+		s.pendingMu.Unlock()
 		return rpcResponse{}, err
 	}
 	body = append(body, '\n')

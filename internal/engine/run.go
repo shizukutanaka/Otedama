@@ -714,7 +714,10 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	var lastAppliedPrevHash [32]byte
 	// unsatWarned latches once a pool-assigned unsatisfiable zero target
 	// has been reported, so a repeating pool does not spam the log.
+	// invalidDiffWarned does the same for a V1 set_difficulty value that
+	// cannot be represented as a share target.
 	var unsatWarned bool
+	var invalidDiffWarned bool
 	// lastJobAt tracks wall-clock delivery of mining.notify/SetNewPrevHash
 	// independently of the lastJobReceivedAt Prometheus gauge. Seeded at
 	// connect so a pool that never sends its first job is caught too.
@@ -820,6 +823,20 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				}
 			default:
 				shareTarget = sessionShareTarget(sess)
+				// A V1 set_difficulty the target conversion cannot
+				// represent (≈0 or above diff1 — malformed or hostile
+				// vardiff) silently degrades to the nBits block target,
+				// starving the miner exactly like a zero max_target.
+				// Warn once, matching the TargetAssigned path above.
+				// d > 0 separates "notification arrived" from the
+				// pre-first-set_difficulty default of zero.
+				if shareTarget == (miner.Hash{}) && !invalidDiffWarned {
+					if d := sess.SuggestedDifficulty(); d > 0 {
+						opts.log("warn", fmt.Sprintf(
+							"engine: set_difficulty %v cannot be represented as a share target; using block target until a valid difficulty arrives", d))
+						invalidDiffWarned = true
+					}
+				}
 			}
 			// While curtailed, keep workers idle and ignore the job (see the
 			// V2 path for rationale). lastJobReceivedAt still updates because
