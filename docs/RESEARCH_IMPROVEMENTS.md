@@ -1025,6 +1025,50 @@ reference implementations shipped to operators since July 2026).
 
 ---
 
+## September 2026 research pass — session 257 increment (upstream parity, cont.)
+
+Continues the session-256 backlog. ESP-Miner v2.15.2/v2.15.3 release
+notes re-checked for deltas (both already covered by items 6–9).
+
+### Implemented this session
+
+1. ✅ **Noise transport chunking for frames >65519 B (session-256 item 8).**
+   `EncryptedConn.Write` rejected any plaintext that did not fit a single
+   transport message; it now splits the payload into ≤65519-byte chunks
+   sent as consecutive transport messages (each still one `Write` call —
+   the session-256 coalescing is preserved per message). Legal because
+   SV2 framing is defined on the decrypted byte stream, not on Noise
+   message boundaries; the receive side already reassembled chunked
+   frames correctly via its plaintext stream. This unblocks JDP/
+   Extended-Channel-sized frames before that work lands.
+   (sv2-spec 03-Protocol-Overview framing)
+2. ✅ **Non-blocking job emit on the V2 dialer (session-256 item 7,
+   ESP-Miner #1913).** The adapter's read loop sent into `jobsCh` with
+   a blocking channel op — a slow consumer stalled the loop, and while
+   stalled it missed further NewMiningJob/SetNewPrevHash frames (every
+   queued job it later dequeues is stale anyway). Now the same policy
+   as the V1 session: clean emits purge the queue, and a full queue
+   drops the oldest job — the newest always supersedes. The blocking
+   send was also the *only* ctx-cancel escape for a conn stuck inside
+   ReadFrame (net.Conn reads are not ctx-aware), so a watcher now
+   closes the connection on ctx.Done — cancellation unblocks a blocked
+   read on real sockets too, not just a full-queue send.
+   (github.com/bitaxeorg/ESP-Miner/pull/1913)
+
+### Verified non-applicable this session
+
+3. ✅ **ESP-Miner #1961 device-class warning floors (session-256 item 9)
+   — deferred by design.** Upstream derives low-hashrate warning floors
+   from the detected board preset. Otedama's only mineable device class
+   today is CPU (no GPU compute dispatch, no ASIC driver —
+   KNOWN_LIMITATIONS §8), and a CPU worker's honest hashrate varies by
+   orders of magnitude with core count, so any fixed floor would be a
+   hard-coded wrong answer. Revisit when a second device class can
+   actually mine; `HashrateMonitor(floor=0)` already covers the
+   complete-stall case.
+
+---
+
 ## Highest-leverage next actions (cross-category synthesis)
 
 Ranked by impact on the path to a real v3.1.0:

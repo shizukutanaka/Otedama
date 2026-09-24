@@ -10,6 +10,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 257 — ESP-Miner v2.15.2/v2.15.3 + sv2-spec parity)
+
+**SV2フレームのNoiseトランスポート・チャンキング**
+(session 256候補#8, sv2-spec framing). Noise の1トランスポート
+メッセージは u16 長プリフィクスで 65535 バイト（平文65519）まで
+しか運べない一方、SV2フレームの長フィールドは u24 — 規格準拠の
+ピアは大きなフレームを複数メッセージに分割して送る。
+`EncryptedConn.Write` は従来 65519 バイト超の平文を**エラーで
+拒否**していたが、SV2フレーム定義は復号済みバイトストリーム上
+（Noiseメッセージ境界ではない）にあるため、平文を ≤65519 バイト
+チャンクに分割して連続したトランスポートメッセージとして送出
+するよう変更（各メッセージは引き続き単一 Write 呼び出し —
+session 256 の結合はメッセージ単位で維持）。受信側は既に
+ストリームとして正しく再構成していた。JDP/Extended-Channel規模の
+フレームが将来導入されてもコネクションが使い物になる。
+
+**V2ダイヤラのジョブemitを非ブロッキング化**
+(session 256候補#7, ESP-Miner #1913). アダプタの読みループは
+`jobsCh` への送信をブロッキングchannel opで行っており、消費が
+遅いとループが停止 — 停止中は NewMiningJob/SetNewPrevHash フレームを
+取りこぼし、後で dequeue するキュー内ジョブはどうせ stale になる
+（#1913 の slow-client 蓄積系統）。V1セッションと同じポリシーに
+統一: clean emit はキューをパージ、満杯時は最古を落とす
+（最新が常に優先）。加えて、ブロッキング送信は ReadFrame 内で
+詰まったコネクションの**唯一の** ctx キャンセル脱出経路だった
+（net.Conn の read は ctx 非対応）ため、ctx.Done を監視して
+コネクションを閉じるウォッチャーを追加 — キャンセルが実ソケットの
+ブロッキング read も確実に解除する。`TestSession_Jobs_
+SlowConsumerDropsOldest`（20ジョブ氾濫→最新のみ保持・最古は
+drop）を追加、旧 `TestSession_Jobs_ContextCancelDuringJobSend`
+の経路は watcher 経由で引き続き通過。
+
+### Documented (session 257)
+
+- **`docs/RESEARCH_IMPROVEMENTS.md`**: session-257差分を記録 —
+  候補#8（チャンキング）・#7（slow-client emit）を実施済みに更新、
+  #9（デバイスクラス警告閾値）は CPU のみが採掘可能な現状では
+  固定閾値が「ハードコードされた誤答」になるため設計上非該当と記録。
+
 ### Added (session 256 — ESP-Miner v2.15.x / SRI v1.10-v1.11.x parity round)
 
 **`otedama_shares_pending` ゲージ＋TUI "+N pending" 表示**
