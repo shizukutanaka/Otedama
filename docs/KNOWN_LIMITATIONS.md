@@ -728,7 +728,7 @@ format can be studied directly. (Disregard a stray third-party claim
 of GPL-3.0 — the gateway README says MIT. Source:
 raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
 
-**Target:** Upstream side tracked by `docs/adr/ADR-009` (status:
+**Target:** Upstream side tracked by `docs/adr/ADR-009-pool-decentralization-integration.md` (status:
 Proposed — pool decentralization integration, covering JDC/DATUM/
 solo). No committed release target.
 

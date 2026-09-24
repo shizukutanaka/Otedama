@@ -191,7 +191,7 @@ Otedamaが採用する戦略:
 - `docs/THREAT_MODEL.md` — STRIDE 脅威モデル
 - `docs/AUDIT_CHECKLIST.md` — 31 項目監査チェックリスト
 - `GODEBUG_NOTES.md` — Go behavior pinning
-- `docs/adr/ADR-001` 〜 `ADR-005` — 主要設計判断
+- `docs/adr/ADR-001-non-custodial-wallet.md` 〜 `ADR-005-prometheus-format-no-client.md` — 主要設計判断
 
 本書は **6ヶ月毎に再評価** します。研究結論や Otedama の状況に変化があれば、対応する判断と実装状況を改訂します。
 
