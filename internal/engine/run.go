@@ -1116,9 +1116,35 @@ func sessionTraceID() string {
 }
 
 // traceLog wraps a session logger so every line emitted for one pool
-// connection attempt carries the same ` trace=<id>` suffix.
+// connection attempt carries the same ` trace=<id>` suffix. The
+// message is sanitized of terminal control characters first: pool-
+// supplied strings (share-reject reasons, client.show_message notices,
+// JSON-decoded error text) can carry C0/C1 controls — ESC injects ANSI
+// sequences into the operator's terminal (clear-screen, OSC 8/52) and
+// newline forges log entries. JSON unmarshal turns the \u001b-style
+// escapes back into real control bytes, so the threat is live.
 func traceLog(log func(string, string), trace string) func(string, string) {
-	return func(level, msg string) { log(level, msg+" trace="+trace) }
+	return func(level, msg string) { log(level, sanitizeLogText(msg)+" trace="+trace) }
+}
+
+// sanitizeLogText replaces terminal control characters (C0 controls,
+// DEL, C1 controls) in a log line with spaces. The fast path returns
+// the input unchanged when no control characters are present.
+func sanitizeLogText(s string) string {
+	isCtl := func(r rune) bool { return r < 0x20 || (r >= 0x7f && r <= 0x9f) }
+	if strings.IndexFunc(s, isCtl) < 0 {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if isCtl(r) {
+			b.WriteByte(' ')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // dialPool builds the session credentials (user, password, optional TLS

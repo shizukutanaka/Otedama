@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 349 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール制御文字列の端末エスケープ注入防止)
+
+- **セッションログの制御文字サニタイズ** — プールが制御する自由テキスト
+  （share reject の `reason`、`client.show_message` 通知、JSON エラー文）は
+  `\u001b` 系エスケープ経由で実 ESC バイトになり得るため、従来のままでは
+  端末へ ANSI シーケンス注入（クリアスクリーン・OSC 8/52・改行による
+  ログ偽造）が可能だった。全セッションログの集約点である `traceLog` で
+  `sanitizeLogText`（C0/DEL/C1 をブランク）を適用し全経路をカバー。
+  TUI ダッシュボードは数値統計のみ・メトリクスラベルは `rejectClass`
+  固定カテゴリのため非露出であることを確認済み。
+
 ### Security (session 348 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: cgminer RPC 応答のレスポンスバウンド)
 
 - **cgminer RPC 応答を 64 KiB でバウンド** — `asic_endpoints` は運営者設定だが、

@@ -169,6 +169,26 @@ mitigation other than early detection.
 
 ---
 
+**Threat:** A malicious pool embeds terminal control bytes in free-text
+fields it controls (share-reject reasons, `client.show_message`
+notices, JSON error text) — `\u001b`-style JSON escapes decode into
+real ESC bytes, injecting ANSI sequences into the operator's terminal
+(clear-screen, OSC 8 hyperlinks, OSC 52 clipboard writes) or forging
+log lines with embedded newlines.
+
+**Mitigation (session 349):** `traceLog` — the single point every
+session log line passes through — sanitises messages via
+`sanitizeLogText`, blanking C0 controls, DEL, and the C1 range before
+emission. The TUI dashboard displays only numeric stats (no pool
+free-text), and metric labels use the fixed `rejectClass` categories,
+so the log is the only vector and it is covered end-to-end.
+
+**Residual risk:** Non-session log lines (startup, config errors)
+carry no pool-derived strings. Legitimate UTF-8 text passes through
+unmodified.
+
+---
+
 ### Repudiation (R)
 
 **Threat:** A user claims "Otedama never mined for me" to dispute

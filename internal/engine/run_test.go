@@ -2873,3 +2873,40 @@ func TestTraceLog(t *testing.T) {
 		}
 	}
 }
+
+// TestTraceLog_SanitizesControlChars verifies pool-supplied strings
+// carrying terminal control bytes (ESC for ANSI injection, \n for log
+// forgery, C1 CSI) are neutralized before reaching the operator's log.
+func TestTraceLog_SanitizesControlChars(t *testing.T) {
+	var got []string
+	log := traceLog(func(_, msg string) { got = append(got, msg) }, "x")
+	log("warn", "engine: pool notice: pool closing\x1b[2J\x1b[H> FAKE PROMPT\nengine: forged line")
+	if len(got) != 1 {
+		t.Fatalf("got %d lines", len(got))
+	}
+	m := got[0]
+	if strings.ContainsAny(m, "\x1b\n\t") {
+		t.Errorf("control chars survived: %q", m)
+	}
+	if !strings.Contains(m, "FAKE PROMPT") || !strings.Contains(m, "forged line") {
+		t.Errorf("message text lost: %q", m)
+	}
+}
+
+// TestSanitizeLogText exercises the helper directly, including the
+// clean-input fast path and the C1 range.
+func TestSanitizeLogText(t *testing.T) {
+	clean := "engine: connected to pool.example:3333"
+	if got := sanitizeLogText(clean); got != clean {
+		t.Errorf("clean input changed: %q", got)
+	}
+	if got := sanitizeLogText("a\x00b\x1fc\x7fd\u009be"); got != "a b c d e" {
+		t.Errorf("control runes not blanked: %q", got)
+	}
+	// Legitimate multibyte UTF-8 must pass through untouched (Japanese
+	// notices are plausible pool text).
+	jp := "プールは10分後にメンテナンス"
+	if got := sanitizeLogText(jp); got != jp {
+		t.Errorf("UTF-8 mangled: %q", got)
+	}
+}
