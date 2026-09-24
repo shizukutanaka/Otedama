@@ -400,11 +400,11 @@ func TestSubmitSharesStandard_Roundtrip(t *testing.T) {
 // ----- SubmitSharesSuccess -----
 
 func TestDecodeSubmitSharesSuccess_Basic(t *testing.T) {
-	buf := make([]byte, 16)
+	buf := make([]byte, 20)
 	binary.LittleEndian.PutUint32(buf[0:4], 1)   // ChannelID
 	binary.LittleEndian.PutUint32(buf[4:8], 3)   // LastSeq
 	binary.LittleEndian.PutUint32(buf[8:12], 2)  // Accepted
-	binary.LittleEndian.PutUint32(buf[12:16], 5) // Summed
+	binary.LittleEndian.PutUint64(buf[12:20], 5) // Summed (U64 per spec)
 
 	got, err := DecodeSubmitSharesSuccess(buf)
 	if err != nil {
@@ -1113,7 +1113,7 @@ func TestDispatchFrame_OpenMiningChannelError_Malformed(t *testing.T) {
 }
 
 func TestDispatchFrame_SubmitSharesSuccess_Malformed(t *testing.T) {
-	// SubmitSharesSuccess needs 16 bytes; 8 triggers Decode error.
+	// SubmitSharesSuccess needs 20 bytes; 8 triggers Decode error.
 	f := Frame{Header: Header{MsgType: MsgSubmitSharesSuccess, MsgLength: 8}, Payload: make([]byte, 8)}
 	if _, err := DispatchFrame(f); err == nil {
 		t.Error("malformed SubmitSharesSuccess payload should return error")

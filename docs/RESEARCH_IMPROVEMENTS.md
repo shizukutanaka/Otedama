@@ -1251,6 +1251,23 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 292 increment (SubmitSharesSuccess wire fix)
+
+- **実装（spec 準拠）: `SubmitSharesSuccess.new_shares_sum` を U64 に修正**
+  —— spec §5.3.x（sv2-spec と突合）は `new_shares_sum U64`（チャネル
+  累積シェア和）を要求するが、実装は U32 で16バイトペイロードを
+  生成・デコードしていた。spec 準拠プールが送る20バイト応答を
+  デコードできず、生成側も末尾4バイト欠け。s289–291 と同型の
+  必須フィールド欠落4件目。Encode/Decode を20バイトに。
+- **残りメッセージ型を全量監査（記録）:** NewMiningJob（OPTION
+  min_ntime 49/45B）、SetNewPrevHash（48B）、SetTarget（36B）、
+  SubmitSharesStandard（24B）、SubmitSharesError（STR0_255 必須）、
+  CloseChannel（STR0_255 必須）、msg_type 定数列 —— 全て spec 一致。
+  未実装型（ChannelEndpointChanged 0x03、SetGroupChannel 0x22、
+  OpenExtendedMiningChannel 0x13–14、JDC 系）は standard-channel 専用
+  運用のため非該当 —— JDC/グループ対応時に検討。
+- **検証:** U64 フィクスチャに更新、short-payload 境界テスト維持。
+
 ## September 2026 research pass — session 291 increment (SetupConnection wire fix)
 
 - **実装（spec 準拠・相互運用）: `SetupConnection` に必須フィールド

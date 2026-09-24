@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 292 — SubmitSharesSuccess wire 準拠)
+
+- **`new_shares_sum` を spec 準拠の U64 に修正** —— U32/16バイト
+  ペイロードだったため、spec 準拠プールの20バイト応答をデコード
+  できなかった。残りの全 SV2 メッセージ型も spec フィールド照合済み
+  （必須フィールド欠落はこれで4件目・全件解消）。
+
 ### Fixed (session 291 — SetupConnection wire 準拠)
 
 - **必須フィールド `endpoint_port U16` を SetupConnection に追加** ——
