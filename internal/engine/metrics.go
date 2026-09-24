@@ -153,6 +153,12 @@ type engineMetrics struct {
 	// configured. Named in pence to prevent silent mixing with the
 	// USD-denominated electricity_price_per_kwh.
 	electricityTariffPence *metrics.Gauge
+	// tariffForwardMin/MaxPence are the min/max unit price across the
+	// fetched forward curve (~24h of half-hourly Agile slots) — the
+	// envelope an operator alerts on: max > threshold warns that a
+	// curtail window is coming, min locates the cheapest upcoming slot.
+	tariffForwardMinPence *metrics.Gauge
+	tariffForwardMaxPence *metrics.Gauge
 	// poolConnectionState is 0=disconnected, 1=connecting, 2=connected;
 	// poolActiveIndex is the 0-based index of the active pool in the
 	// configured failover list, so failover is observable.
@@ -505,6 +511,19 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Current electricity unit rate in pence/kWh incl. VAT (Octopus Energy "+
 				"tariff feed, 15-min poll). 0 until the first reading; only populated "+
 				"when electricity_tariff_octopus is configured.",
+			nil),
+		tariffForwardMinPence: reg.NewGauge(
+			"otedama_electricity_tariff_forward_min_pence_per_kwh",
+			"Minimum unit price across the fetched forward Agile curve "+
+				"(~24h of half-hourly slots) — the cheapest upcoming slot. "+
+				"0 until the first reading.",
+			nil),
+		tariffForwardMaxPence: reg.NewGauge(
+			"otedama_electricity_tariff_forward_max_pence_per_kwh",
+			"Maximum unit price across the fetched forward Agile curve "+
+				"(~24h of half-hourly slots) — alert when it exceeds the "+
+				"curtailment threshold to get lead time on a curtail window. "+
+				"0 until the first reading.",
 			nil),
 		poolConnectionState: reg.NewGauge(
 			"otedama_pool_connection_state",

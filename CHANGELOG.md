@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 338 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: フォワードカーブ可視化 + asic_manage プール互換警告)
+
+- **`otedama_electricity_tariff_forward_{min,max}_pence_per_kwh`** — 取得済みの
+  Agile フォワードカーブ（約24時間分の30分スロット）の min/max 単価を公開。
+  現スロットのみ消費していたフィードの前方包絡を可視化し、max が
+  `curtail_above_tariff_pence` を超えた時点で「カーテルメントが近づく」事前警告が
+  アラート可能に。ADR-008 #2 の地平スケジューリングへの観測性土台。
+- **doctor "ASIC endpoints" チェックに SV1 互換プール判定を追加** —
+  `asic_manage` が有効でエンドポイントが存在しても、設定プールが全て SV2 系だと
+  cgminer 機器へプッシュできる URL が存在せずアクチュエーションが永遠に発火しない
+  設定を Warn で検出（従来は接続時の info ログのみ）。
+
 ### Security (session 337 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: doctor が wallet.dat パーミッションを検査)
 
 - **`otedama doctor` の "Lightning wallet" チェックが `wallet.dat` のファイルモードを検査.**

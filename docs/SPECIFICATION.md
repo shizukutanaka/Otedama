@@ -227,6 +227,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `joules_per_terahash` | gauge | watts × 1e12 / hashrate (0 = power unset). |
 | `power_cost_usd_per_hour` | gauge | watts/1000 × price/kWh (0 = unset). |
 | `electricity_tariff_pence_per_kwh` | gauge | Current Octopus Energy unit rate (pence/kWh incl. VAT, 15-min poll); populated only when `electricity_tariff_octopus` is set. |
+| `electricity_tariff_forward_min_pence_per_kwh` | gauge | Minimum unit price across the fetched forward Agile curve (~24h of half-hourly slots) — the cheapest upcoming slot. |
+| `electricity_tariff_forward_max_pence_per_kwh` | gauge | Maximum unit price across the fetched forward Agile curve — alert when it exceeds `curtail_above_tariff_pence` for lead time on a coming curtail window. |
 | `uptime_seconds` | gauge | Seconds since engine start. |
 | `start_time_seconds` | gauge | Unix start timestamp. |
 

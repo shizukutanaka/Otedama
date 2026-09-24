@@ -1969,4 +1969,33 @@ func TestCheckASICEndpoints(t *testing.T) {
 			t.Errorf("status=%v detail=%q, want pass with 2/2", r.Status, r.Detail)
 		}
 	})
+
+	t.Run("asic_manage with SV2-only pools warns", func(t *testing.T) {
+		probe(2)
+		cfg := config.Config{
+			ASICManage:    true,
+			ASICEndpoints: []string{"a:4028", "b:4028"},
+			Pools: []config.PoolConfig{
+				{URL: "stratum+v2://pool.example:3336"},
+				{URL: "stratum+v2tls://pool.example:3336"},
+			},
+		}
+		r := checkASICEndpoints(cfg).Run(context.Background())
+		if r.Status != StatusWarn || !strings.Contains(r.Detail, "SV2-only") {
+			t.Errorf("status=%v detail=%q, want warn mentioning SV2-only", r.Status, r.Detail)
+		}
+	})
+
+	t.Run("asic_manage with an SV1 pool does not warn on compat", func(t *testing.T) {
+		probe(2)
+		cfg := config.Config{
+			ASICManage:    true,
+			ASICEndpoints: []string{"a:4028", "b:4028"},
+			Pools:         []config.PoolConfig{{URL: "stratum+tcp://pool.example:3333"}},
+		}
+		r := checkASICEndpoints(cfg).Run(context.Background())
+		if r.Status != StatusPass {
+			t.Errorf("status=%v detail=%q, want pass", r.Status, r.Detail)
+		}
+	})
 }

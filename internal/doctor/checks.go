@@ -26,6 +26,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/rates"
 )
 
@@ -781,6 +782,28 @@ func checkASICEndpoints(cfg config.Config) Check {
 					}
 				}
 				return Result{Status: StatusSkip, Detail: "asic_endpoints not configured; ASIC probing disabled"}
+			}
+			// asic_manage can only push SV1-compatible pools onto the
+			// cgminer devices — SV2/datum-agnostic endpoints accept only
+			// stratum+tcp/stratum+tls/datum URLs. Armed with an all-SV2
+			// config, actuation can never fire (run.go logs it at info).
+			sv1Compatible := false
+			if cfg.ASICManage {
+				for _, p := range cfg.Pools {
+					switch poolproto.FromURL(p.URL) {
+					case poolproto.ProtocolStratumV1,
+						poolproto.ProtocolStratumV1TLS,
+						poolproto.ProtocolDATUM:
+						sv1Compatible = true
+					}
+				}
+				if !sv1Compatible {
+					return Result{
+						Status: StatusWarn,
+						Detail: "asic_manage is set but every configured pool is SV2-only — cgminer devices speak SV1, so no pool can ever be pushed",
+						Fix:    "add a stratum+tcp:// (or datum://) pool to pools, or unset asic_manage",
+					}
+				}
 			}
 			answered := asicEndpointProbe(ctx, cfg.ASICEndpoints)
 			if answered == 0 {

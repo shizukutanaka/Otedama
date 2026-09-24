@@ -404,6 +404,10 @@ func Run(ctx context.Context, opts Options) error {
 				if err != nil {
 					return
 				}
+				if lo, hi, ok := rates.AgileCurveBounds(slots); ok {
+					m.tariffForwardMinPence.Set(lo)
+					m.tariffForwardMaxPence.Set(hi)
+				}
 				slot, ok := rates.AgileRateAt(slots, time.Now())
 				if !ok {
 					return

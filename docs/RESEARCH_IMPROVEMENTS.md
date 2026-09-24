@@ -1467,6 +1467,17 @@ enable it on those pools. Subscribe params are now `[agent, null,
 "xnsub"]` — a no-op on pools that ignore extensions, enabling the push
 path on pools that gate it.
 
+**Session-338 follow-up (forward-curve observability, Cat 8 #17/#18
+groundwork):** the Octopus fetcher already returns the ~24h forward
+`[]AgileRate` curve but only the current slot was consumed. Two gauges
+now publish the envelope — `otedama_electricity_tariff_forward_min`
+/`_max_pence_per_kwh` — so operators can alert on "a curtail window is
+coming" (max > threshold) or locate the cheapest upcoming slot (min).
+Horizon-aware *scheduling* itself stays ADR-008 sub-domain 2. Also:
+doctor's ASIC-endpoints check now warns when `asic_manage` is armed
+with endpoints but every configured pool is SV2-only — cgminer devices
+speak SV1, so actuation could never fire (previously an info log only).
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

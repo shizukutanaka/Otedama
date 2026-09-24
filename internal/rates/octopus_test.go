@@ -113,3 +113,26 @@ func TestAgileRateAt(t *testing.T) {
 		t.Error("empty curve should report no slot")
 	}
 }
+
+func TestAgileCurveBounds(t *testing.T) {
+	mk := func(v float64) AgileRate {
+		return AgileRate{ValueIncVATPence: v}
+	}
+	curve := []AgileRate{mk(29.49), mk(-1.26), mk(54.10), mk(12.0)}
+	lo, hi, ok := AgileCurveBounds(curve)
+	if !ok {
+		t.Fatal("non-empty curve should report bounds")
+	}
+	if lo != -1.26 {
+		t.Errorf("lo = %v, want -1.26", lo)
+	}
+	if hi != 54.10 {
+		t.Errorf("hi = %v, want 54.10", hi)
+	}
+	if _, _, ok := AgileCurveBounds(nil); ok {
+		t.Error("empty curve should report no bounds")
+	}
+	if lo, hi, ok := AgileCurveBounds([]AgileRate{mk(7.5)}); !ok || lo != 7.5 || hi != 7.5 {
+		t.Errorf("single slot -> lo=%v hi=%v ok=%v, want 7.5/7.5/true", lo, hi, ok)
+	}
+}

@@ -121,6 +121,26 @@ func AgileRateAt(rates []AgileRate, t time.Time) (AgileRate, bool) {
 	return AgileRate{}, false
 }
 
+// AgileCurveBounds returns the min and max VAT-inclusive unit price across
+// the fetched curve — the forward envelope a scheduler (or an alert) plans
+// around: the max tells you the worst price coming, the min the cheapest
+// upcoming slot. ok=false on an empty curve; callers keep prior values.
+func AgileCurveBounds(curve []AgileRate) (lo, hi float64, ok bool) {
+	if len(curve) == 0 {
+		return 0, 0, false
+	}
+	lo, hi = curve[0].ValueIncVATPence, curve[0].ValueIncVATPence
+	for _, r := range curve[1:] {
+		if r.ValueIncVATPence < lo {
+			lo = r.ValueIncVATPence
+		}
+		if r.ValueIncVATPence > hi {
+			hi = r.ValueIncVATPence
+		}
+	}
+	return lo, hi, true
+}
+
 // FetchAgileRatesDefault is the production convenience wrapper using the
 // default 10s-timeout client.
 func FetchAgileRatesDefault(ctx context.Context, product, tariff string, from time.Time, pageSize int) ([]AgileRate, error) {
