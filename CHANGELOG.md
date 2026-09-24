@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 328 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 10 #10 解消 — 直接依存のピン/チェックサム検証を THREAT_MODEL に記録)
+
+- **サプライチェーン緩和策の記録是正（Cat 10 #10 解消）.** THREAT_MODEL の
+  供給網節が「two direct dependencies」と陳腐化していたため実態へ更新 —
+  直接依存は3件（`golang.org/x/crypto v0.54.0`・`go.yaml.in/yaml/v3 v3.0.5`・
+  `golang.org/x/sys v0.47.0`）で、各々が正確なバージョンピン + `go.mod`
+  コメントの選定理由 + `go.sum` チェックサム（module proxy +
+  `sum.golang.org` 透過ログ、`go mod verify` 全件一致を確認）で検証される
+  ことを明記。residual-risk の件数表現も併せて訂正。
+
 ### Security (session 327 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 10 #9 解消 — 秘密情報比較の恒常時間監査)
 
 - **BIP-39 チェックサム検証の early-exit を解消（Cat 10 #9 解消）.**

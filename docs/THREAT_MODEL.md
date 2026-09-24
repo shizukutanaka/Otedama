@@ -138,11 +138,24 @@ a panic in the decode path still terminates the miner (DoS, below).
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
-**Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-the YAML library (`gopkg.in/yaml.v3`, migrating to the YAML-org-owned
-`go.yaml.in/yaml/v3` drop-in — see ADR-003's Erratum), and the Go
-standard library. All GitHub Actions pinned by SHA. Dependabot
-auto-updates with review. govulncheck runs in CI. See ADR-003.
+**Mitigation:** Three direct runtime dependencies, each pinned by exact
+version with a recorded rationale in `go.mod` comments and verified by
+`go.sum` checksums (Go module proxy + `sum.golang.org` transparency
+log; `go mod verify` catches any post-download substitution on a clean
+fetch):
+
+- `golang.org/x/crypto v0.54.0` — chacha20poly1305 + scrypt + pbkdf2 for
+  the Noise transport and wallet encryption; none exist in stdlib
+  through Go 1.26. (Cat 10 item 10's "the one new crypto dep".)
+- `go.yaml.in/yaml/v3 v3.0.5` — YAML-org-maintained successor of the
+  archived `gopkg.in/yaml.v3` (v3 API-frozen drop-in; ADR-003's
+  Erratum). Replaced the archived import path session 322.
+- `golang.org/x/sys v0.47.0` — termios/TIOCGWINSZ/console-size detection
+  for the wallet subcommands and TUI; promoted from indirect to direct
+  session 322.
+
+All GitHub Actions pinned by SHA. Dependabot auto-updates with review.
+govulncheck runs in CI. See ADR-003.
 
 Advisory tracking (session 269): CVE-2025-22871 / GO-2025-3563
 (`net/http` bare-LF chunk-size request smuggling; fixed in go1.23.8 /
@@ -151,7 +164,7 @@ by the go1.25.7 toolchain pin. Escalating govulncheck to a hard CI gate
 is the remaining open step.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
-one of the two direct dependencies remains possible. We have no
+one of the three direct dependencies remains possible. We have no
 mitigation other than early detection.
 
 ---

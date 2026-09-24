@@ -567,9 +567,16 @@ arXiv grounding (session 41):
    - Noise transport relies on ChaCha20-Poly1305 AEAD (stdlib
      constant-time tag check); no hand-rolled MAC compare exists in
      `internal/stratum/noise*`.
-10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
-    checksum and `go.sum`, and document it in THREAT_MODEL's dependency
-    assumptions.
+10. ✅ **Supply-chain: pin and verify the one new crypto dep — RESOLVED
+    (session 327).** `golang.org/x/crypto` is pinned to an exact version
+    (v0.54.0) with the selection rationale in `go.mod` comments, and its
+    `go.sum` entries are verified via the module proxy + `sum.golang.org`
+    transparency log (`go mod verify` passes — all modules match their
+    recorded hashes). THREAT_MODEL's supply-chain mitigation now names
+    all three direct dependencies with versions + reasons, and records
+    the pin/checksum posture itself. The residual-risk line was also
+    corrected (said "two direct dependencies" — it is three since
+    x/sys was promoted to direct in session 322).
 
 ---
 
