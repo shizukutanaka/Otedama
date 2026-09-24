@@ -43,6 +43,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    Remaining: external ambient sensors (Home Assistant/1-Wire) and
    power-limit derating remain ADR-008 sub-domain 6 (v3.6) scope; macOS/Windows
    thermal sources are unimplemented (gate sees no data and stays off).
+   — **Verified infeasible on arm64 macOS (session 337):** no rootless
+   thermal source exists — `machdep.xcpm` sysctls are Intel-only,
+   `powermetrics` requires root, and the SMC/IOKit path needs CGO, which
+   ADR-003 rules out. Same for Windows (WMI calls would need CGO/syscalls
+   beyond stdlib). The remaining half is a platform-policy constraint,
+   not an implementation gap.
 7. ✅ **Per-device share statistics** (session 109) — `Share.DeviceID` propagated
    from `WorkerConfig.DeviceID`; lazy `otedama_device_shares_found_total{device=...}`
    counter in `engineMetrics`; 7 new tests.

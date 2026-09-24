@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 337 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: doctor が wallet.dat パーミッションを検査)
+
+- **`otedama doctor` の "Lightning wallet" チェックが `wallet.dat` のファイルモードを検査.**
+  ウォレットは 0600 で書き込まれるが、umask の緩い `cp` や手動の `chmod` で
+  group/other の読み取りビットが残ると秘密情報が他ユーザーから読めてしまう。
+  パーミッシブなモードを検出した場合は `chmod 600` の修正手順付きで Warn を返す
+  （Windows は合成モードのため検査対象外）。
+
 ### Added (session 336 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: `xnsub` 拡張フラグ広告)
 
 - **`mining.subscribe` に `"xnsub"` 拡張フラグを追加**（params `[agent, null, "xnsub"]`）。

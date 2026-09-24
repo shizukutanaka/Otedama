@@ -742,6 +742,39 @@ func TestCheckWallet_WalletWithoutFingerprintFile_PassesWithNote(t *testing.T) {
 	}
 }
 
+func TestCheckWallet_PermissiveMode_Warns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("mode bits are synthetic on Windows")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o644); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("0644 wallet status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if r.Fix == "" {
+		t.Error("Warn result must provide a Fix hint")
+	}
+}
+
+func TestCheckWallet_StrictMode_Passes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("mode bits are synthetic on Windows")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, walletDatFile), []byte("stub"), 0o600); err != nil {
+		t.Fatalf("write wallet.dat: %v", err)
+	}
+	c := checkWallet(dir)
+	r := c.Run(context.Background())
+	if r.Status == StatusWarn {
+		t.Errorf("0600 wallet should not warn (detail: %s)", r.Detail)
+	}
+}
+
 func TestCheckWallet_EmptyDataDir_UsesDefault(t *testing.T) {
 	c := checkWallet("")
 	r := c.Run(context.Background())

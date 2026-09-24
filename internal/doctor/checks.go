@@ -263,7 +263,8 @@ func checkWallet(dataDir string) Check {
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
-			if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
+			info, err := os.Stat(walletPath)
+			if errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,
@@ -274,6 +275,17 @@ func checkWallet(dataDir string) Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("cannot stat %s: %v", walletPath, err),
 					Fix:    "check filesystem permissions",
+				}
+			}
+			// The wallet is written 0600, but a loose umask or a manual
+			// cp/chmod can leave group/other read bits set — secret
+			// material readable by other users. Windows reports synthetic
+			// modes, so the perm bits are only meaningful elsewhere.
+			if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("wallet.dat mode %04o is readable by group/other users", info.Mode().Perm()),
+					Fix:    "chmod 600 " + walletPath,
 				}
 			}
 
