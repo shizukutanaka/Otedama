@@ -234,3 +234,20 @@ func TestLogger_With_AddsAttributesToAllRecords(t *testing.T) {
 		t.Errorf("missing worker_id attr: %v", rec)
 	}
 }
+
+// TestSanitizeLine exercises the shared terminal-control blanker:
+// clean input passes through untouched (fast path), C0/DEL/C1 controls
+// are blanked, and legitimate multibyte UTF-8 is preserved.
+func TestSanitizeLine(t *testing.T) {
+	clean := "engine: connected to pool.example:3333"
+	if got := SanitizeLine(clean); got != clean {
+		t.Errorf("clean input changed: %q", got)
+	}
+	if got := SanitizeLine("a\x00b\x1fc\x7fd\u009be"); got != "a b c d e" {
+		t.Errorf("control runes not blanked: %q", got)
+	}
+	jp := "プールは10分後にメンテナンス"
+	if got := SanitizeLine(jp); got != jp {
+		t.Errorf("UTF-8 mangled: %q", got)
+	}
+}

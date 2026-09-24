@@ -43,6 +43,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
+	"github.com/shizukutanaka/Otedama/internal/logger"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
@@ -192,6 +193,16 @@ func Run(ctx context.Context, opts Options) error {
 	if log == nil {
 		log = func(_, _ string) {}
 	}
+	// Sanitize at the outermost wrap point: pool-controlled text reaches
+	// log lines not only through session logging (traceLog already does
+	// this) but also through session errors — sessionErr carries pool
+	// error strings (authorize rejections, OpenMiningChannelError
+	// ReasonCode) into the reconnect/failover lines at r.log, which
+	// never passes through traceLog. Sanitizing here covers both paths;
+	// the per-line fast path makes the double-application inside
+	// traceLog a no-op.
+	base := log
+	log = func(level, msg string) { base(level, sanitizeLogText(msg)) }
 	startTime := opts.Clock.Now()
 
 	// Register metrics. If no registry is provided, use a throwaway one
@@ -1127,24 +1138,11 @@ func traceLog(log func(string, string), trace string) func(string, string) {
 	return func(level, msg string) { log(level, sanitizeLogText(msg)+" trace="+trace) }
 }
 
-// sanitizeLogText replaces terminal control characters (C0 controls,
-// DEL, C1 controls) in a log line with spaces. The fast path returns
-// the input unchanged when no control characters are present.
+// sanitizeLogText delegates to logger.SanitizeLine — kept as a thin
+// wrapper so the call sites below stay readable. It replaces terminal
+// control characters (C0, DEL, C1) in a log line with spaces.
 func sanitizeLogText(s string) string {
-	isCtl := func(r rune) bool { return r < 0x20 || (r >= 0x7f && r <= 0x9f) }
-	if strings.IndexFunc(s, isCtl) < 0 {
-		return s
-	}
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		if isCtl(r) {
-			b.WriteByte(' ')
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return logger.SanitizeLine(s)
 }
 
 // dialPool builds the session credentials (user, password, optional TLS

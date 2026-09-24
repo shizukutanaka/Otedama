@@ -245,8 +245,12 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		OnReady:                  onReady,
 		Explain:                  decisions,
 	}); err != nil && err != context.Canceled {
-		structlog.Error("engine", "error", err.Error())
-		plain("error", err.Error())
+		// A fatal session error can carry pool-supplied text (authorize
+		// rejections, OpenMiningChannelError ReasonCode) — sanitize it
+		// like the engine's log path does before echoing to the terminal.
+		errText := logger.SanitizeLine(err.Error())
+		structlog.Error("engine", "error", errText)
+		plain("error", errText)
 		return exitRuntime
 	}
 
@@ -290,7 +294,7 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logge
 	if f.logFile != "" {
 		// 0600: logs can include pool URLs and worker names; match the
 		// restrictive posture used for the wallet and data directory.
-		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
 		} else {

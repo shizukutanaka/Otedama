@@ -180,8 +180,14 @@ log lines with embedded newlines.
 session log line passes through — sanitises messages via
 `sanitizeLogText`, blanking C0 controls, DEL, and the C1 range before
 emission. The TUI dashboard displays only numeric stats (no pool
-free-text), and metric labels use the fixed `rejectClass` categories,
-so the log is the only vector and it is covered end-to-end.
+free-text), and metric labels use the fixed `rejectClass` categories.
+
+Session 350 widened the wrap point to `engine.Run`'s outermost logger:
+`sessionErr` interpolates pool error strings (authorize rejections,
+`OpenMiningChannelError.ReasonCode`) into the reconnect/failover lines
+which never pass through `traceLog`, and the fatal path prints the raw
+error from `cmdRun` — both now sanitised through the shared
+`logger.SanitizeLine` the session path delegates to.
 
 **Residual risk:** Non-session log lines (startup, config errors)
 carry no pool-derived strings. Legitimate UTF-8 text passes through

@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 350 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: セッションエラー経路の制御文字サニタイズ拡大)
+
+- **エンジン最外ロガー + CLI fatal 出力までサニタイズ拡大** — session 349 は
+  `traceLog`（セッション行）をカバーしたが、`sessionErr` はプール由来のエラー文
+  （authorize 拒否、`OpenMiningChannelError.ReasonCode`）を reconnect/failover 行へ
+  `r.log` 経由で混入させ、fatal 経路は `cmdRun` が生エラーを端末へ出力 — いずれも
+  ラップ外だった残りベクターを解消。`logger.SanitizeLine` を共有サニタイザとして
+  抽出し、エンジン最外ロガー（`opts.Logger` ラップ、全 r.log/セッション行をカバー）
+  と `cmdRun` の fatal 出力双方に適用。
+
 ### Security (session 349 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール制御文字列の端末エスケープ注入防止)
 
 - **セッションログの制御文字サニタイズ** — プールが制御する自由テキスト

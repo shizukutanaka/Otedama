@@ -155,6 +155,31 @@ func (l *Logger) Adapter() func(level, msg string) {
 	}
 }
 
+// SanitizeLine replaces terminal control characters (C0 controls, DEL,
+// and the C1 range) in a log line with spaces. Pool-supplied strings —
+// share-reject reasons, client.show_message notices, JSON error text —
+// can carry \u001b-style escapes that decode into real ESC bytes and
+// inject ANSI sequences into the operator's terminal (clear-screen,
+// OSC 8/52) or forge log entries with embedded newlines. The fast path
+// returns the input unchanged when no control characters are present;
+// legitimate UTF-8 text passes through unmodified.
+func SanitizeLine(s string) string {
+	isCtl := func(r rune) bool { return r < 0x20 || (r >= 0x7f && r <= 0x9f) }
+	if strings.IndexFunc(s, isCtl) < 0 {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if isCtl(r) {
+			b.WriteByte(' ')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // ----- Context keys -----
 
 type ctxKey int
