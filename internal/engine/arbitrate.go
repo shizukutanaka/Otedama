@@ -230,7 +230,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				}
 			}
 			applyAllocation(alloc, opts.workers, opts.log)
-			opts.recordExplainSnapshot(alloc, margin, forecasters, reliability)
+			opts.recordExplainSnapshot(alloc, margin, forecasters, reliability, lastQuoteAt)
 		}
 	}
 }
@@ -242,7 +242,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 // forecasters and reliability are guarded by streamsMu (taken here) — the
 // snapshot is built after applyAllocation so a slow reader never delays
 // the worker pause/unpause the loop just issued.
-func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Allocation, margin float64, forecasters map[string]*arbitration.YieldForecaster, reliability map[string]*arbitration.ProviderReliability) {
+func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Allocation, margin float64, forecasters map[string]*arbitration.YieldForecaster, reliability map[string]*arbitration.ProviderReliability, lastQuoteAt map[string]time.Time) {
 	if opts.explain == nil {
 		return // recording disabled (no /arbitration consumer)
 	}
@@ -316,11 +316,30 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 				row.Reliability = &mean
 				row.ReliabilityAlpha, row.ReliabilityBeta = r.Params()
 			}
+			// Freshness of the assigned stream's quote feed — the same
+			// signal as the last-quote gauge, so `arb explain` can tell a
+			// yield-median loser from a provider that stopped quoting.
+			row.QuoteAgeSeconds = quoteAgeSeconds(lastQuoteAt, string(a.Stream)+":"+a.DeviceID, snap.At)
 		}
 		snap.Rows = append(snap.Rows, row)
 	}
 	opts.streamsMu.Unlock()
 	opts.explain.Store(snap)
+}
+
+// quoteAgeSeconds returns the age of key's most recent quote at time
+// now, or nil when the pair has no recorded quote. Negative ages (a
+// quote timestamped ahead of the snapshot clock) clamp to zero.
+func quoteAgeSeconds(lastQuoteAt map[string]time.Time, key string, now time.Time) *float64 {
+	ts, ok := lastQuoteAt[key]
+	if !ok {
+		return nil
+	}
+	age := now.Sub(ts).Seconds()
+	if age < 0 {
+		age = 0
+	}
+	return &age
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is

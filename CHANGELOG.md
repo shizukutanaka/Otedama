@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 301 — arb explain quote 経過表示)
+
+- **`arb explain` / `GET /arbitration` の各行に `quote_age_seconds` を
+  追加** — 割当ストリームの最終クォート経過（
+  `otedama_stream_last_quote_unixtime` と同一の鮮度信号）を Detail に
+  "last quote Ns ago" として表示。yield 劣後で外れたストリームと
+  プロバイダが静かに停止したストリームが表上区別不能だったギャップを
+  解消（stale クォートの prune まで可視化）。
+
 ### Added (session 300 — SV2 UpdateChannel)
 
 - **`UpdateChannel` (0x16, §5.3.7) の送信経路を実装** — チャネル開設時の

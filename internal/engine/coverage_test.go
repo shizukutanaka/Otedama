@@ -1936,6 +1936,11 @@ func TestRunArbitrationLoop_ExplainSnapshot(t *testing.T) {
 			if s.Rows[0].ExpectedSatsPerSec != 100 {
 				t.Errorf("ExpectedSatsPerSec = %v, want 100 (confidence 1.0)", s.Rows[0].ExpectedSatsPerSec)
 			}
+			if s.Rows[0].QuoteAgeSeconds == nil {
+				t.Error("QuoteAgeSeconds not populated for a quoted stream")
+			} else if a := *s.Rows[0].QuoteAgeSeconds; a < 0 || a > 10 {
+				t.Errorf("QuoteAgeSeconds = %v, want a small non-negative age", a)
+			}
 			if *s.Rows[0].ForecastSatsPerSec <= 0 {
 				t.Errorf("forecast should be positive after a 100 sat/s quote, got %v", *s.Rows[0].ForecastSatsPerSec)
 			}
@@ -2006,7 +2011,7 @@ func TestRecordExplainSnapshot_ForegoneAndAltSigma(t *testing.T) {
 		ForegoneStreamID:   "ai.akash",
 	}}}
 
-	opts.recordExplainSnapshot(alloc, 0.10, forecasters, reliability)
+	opts.recordExplainSnapshot(alloc, 0.10, forecasters, reliability, nil)
 
 	s := snap.Load()
 	if s == nil || len(s.Rows) != 1 {
@@ -2057,7 +2062,7 @@ func TestRecordExplainSnapshot_SwitchedFromYield(t *testing.T) {
 
 	opts.recordExplainSnapshot(alloc, 0.05,
 		map[string]*arbitration.YieldForecaster{"mining.stratum:cpu-0": alt},
-		map[string]*arbitration.ProviderReliability{})
+		map[string]*arbitration.ProviderReliability{}, nil)
 
 	row := snap.Load().Rows[0]
 	if row.SwitchedFromExpectedSatsPerSec == nil || *row.SwitchedFromExpectedSatsPerSec != 80 {
@@ -2122,7 +2127,7 @@ func TestRecordExplainSnapshot_AwaitingConfirmation(t *testing.T) {
 		ForegoneStreamID:     "ai.lure",
 	}}}
 
-	opts.recordExplainSnapshot(alloc, 0.10, nil, nil)
+	opts.recordExplainSnapshot(alloc, 0.10, nil, nil, nil)
 
 	s := snap.Load()
 	if s == nil || len(s.Rows) != 1 {

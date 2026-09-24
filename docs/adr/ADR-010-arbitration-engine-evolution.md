@@ -371,6 +371,15 @@ that keeps modeled revenue out of `arbitration_expected_yield_sats_per_second`
 real streams only alongside the separate
 `arbitration_simulated_yield_sats_per_second` gauge.
 
+**Session 301 update:** rows now carry `quote_age_seconds` — the age of
+the assigned stream's most recent quote at decision time, the same
+freshness signal `otedama_stream_last_quote_unixtime` exports — rendered
+as a "last quote Ns ago" suffix in the Detail cell. It closes the
+read-model half of the provider-heartbeat gap: a row losing on yield and
+a row whose provider quietly stopped quoting previously looked
+identical in the table; now staleness is visible per row until the
+stale-quote pruner removes the stream.
+
 ---
 
 ## Architectural sketch

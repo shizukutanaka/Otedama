@@ -107,6 +107,31 @@ func TestExplainText_MissingOptionalFields(t *testing.T) {
 	if strings.Contains(out, "±") || strings.Contains(out, "α=") {
 		t.Error("forecast/reliability decoration must not appear without data")
 	}
+	if strings.Contains(out, "last quote") {
+		t.Error("quote-age suffix must not appear without QuoteAgeSeconds")
+	}
+}
+
+// TestExplainText_QuoteAge covers the quote-freshness suffix: the detail
+// cell carries "last quote Ns ago" (compact m s form past a minute) so
+// the reader can tell a yield-median loser from a provider that stopped
+// quoting.
+func TestExplainText_QuoteAge(t *testing.T) {
+	age := 42.0
+	snap := &DecisionSnapshot{
+		At: time.Now(),
+		Rows: []ExplainRow{
+			{DeviceID: "cpu-0", Stream: "mining.stratum", ExpectedSatsPerSec: 1, QuoteAgeSeconds: &age},
+		},
+	}
+	if out := ExplainText(snap); !strings.Contains(out, "last quote 42s ago") {
+		t.Errorf("quote age missing from output:\n%s", out)
+	}
+	stale := 125.0
+	snap.Rows[0].QuoteAgeSeconds = &stale
+	if out := ExplainText(snap); !strings.Contains(out, "last quote 2m 5s ago") {
+		t.Errorf("stale quote age not rendered as m s:\n%s", out)
+	}
 }
 
 // TestExplainRow_Idle pins the empty-stream convention.

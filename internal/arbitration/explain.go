@@ -92,6 +92,15 @@ type ExplainRow struct {
 
 	// Reason is Decide's own human-readable rationale for the assignment.
 	Reason string `json:"reason,omitempty"`
+
+	// QuoteAgeSeconds is the age of the assigned stream's most recent
+	// quote at decision time — the same freshness signal the
+	// otedama_stream_last_quote_unixtime gauge exports. It lets the
+	// reader distinguish "stream lost on yield" from "provider went
+	// quiet" (a large or ever-growing age means the stream's quote feed
+	// stalled even though it still sits in the allocation). Nil when no
+	// quote timestamp is recorded for the pair.
+	QuoteAgeSeconds *float64 `json:"quote_age_seconds,omitempty"`
 }
 
 // DecisionSnapshot is the read-model of the most recent Decide cycle.
@@ -202,8 +211,20 @@ func explainRowCells(r *ExplainRow) []string {
 				*r.Reliability, r.ReliabilityAlpha, r.ReliabilityBeta)
 		}
 		detail = explainRowDetail(r)
+		if r.QuoteAgeSeconds != nil {
+			detail += fmt.Sprintf(" · last quote %s ago", formatQuoteAge(*r.QuoteAgeSeconds))
+		}
 	}
 	return []string{r.DeviceID, stream, yield, forecast, reliability, detail}
+}
+
+// formatQuoteAge renders a quote age compactly: whole seconds under a
+// minute, "Xm Ys" beyond it.
+func formatQuoteAge(s float64) string {
+	if s < 60 {
+		return fmt.Sprintf("%.0fs", s)
+	}
+	return fmt.Sprintf("%.0fm %.0fs", s/60, float64(int(s)%60))
 }
 
 // explainRowDetail renders the non-idle row's Detail cell — the
