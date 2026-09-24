@@ -1072,6 +1072,16 @@ translate):
    worth integrating against now exists. Priority unchanged pending the
    segwit-coinbase prerequisite.
 
+**Session-295 follow-up (missed v0.5.0 highlight):** the session-278
+audit itemised v0.5.0's timeout/identity/error-code changes but skipped
+its "REQUIRES_STANDARD_JOBS semantics" protocol-compatibility note.
+Audit found Otedama's `SetupConnection` left `flags=0`, while sv2-spec
+§5.3.1 requires an end mining device opening Standard Channels to set
+bit 0 (it cannot process extended jobs; flags=0 marks a proxy-capable
+downstream). — ✅ **Fixed (session 295):**
+`stratum.SetupFlagRequiresStandardJobs` is now declared on the V2
+dialer's SetupConnection.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

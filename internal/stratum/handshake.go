@@ -28,12 +28,25 @@ import (
 // SetupConnection (client → server, msg_type 0x00)
 // ------------------------------------------------------------------
 
+// SetupConnection.flags bit constants for the Mining protocol
+// (sv2-spec 05-Mining-Protocol §5.3.1).
+const (
+	// SetupFlagRequiresStandardJobs (bit 0) declares the downstream node
+	// requires standard jobs and is unable to process extended jobs.
+	// Every end mining device that opens a Standard Channel must set it;
+	// only a proxy that intends to aggregate standard channels into a
+	// group channel leaves it clear.
+	SetupFlagRequiresStandardJobs uint32 = 0x01
+)
+
 // SetupConnection is the first message sent by the client to negotiate
 // the protocol version and capabilities.
 type SetupConnection struct {
-	Protocol        Protocol
-	MinVersion      uint16
-	MaxVersion      uint16
+	Protocol   Protocol
+	MinVersion uint16
+	MaxVersion uint16
+	// Flags carries the §5.3.1 capability bits; a standard-channel-only
+	// client sets SetupFlagRequiresStandardJobs.
 	Flags           uint32
 	Endpoint        string // STR0_255
 	Vendor          string // STR0_255

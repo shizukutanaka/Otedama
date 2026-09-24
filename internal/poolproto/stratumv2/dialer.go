@@ -108,10 +108,15 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 
 	// SetupConnection.
 	sc := stratum.SetupConnection{
-		Protocol:        stratum.MiningProtocol,
-		MinVersion:      2,
-		MaxVersion:      2,
-		Endpoint:        conn.remoteAddr,
+		Protocol:   stratum.MiningProtocol,
+		MinVersion: 2,
+		MaxVersion: 2,
+		Endpoint:   conn.remoteAddr,
+		// sv2-spec §5.3.1: an end mining device that opens only Standard
+		// Channels (Otedama never handles extended/group jobs) must
+		// declare REQUIRES_STANDARD_JOBS so the pool does not treat this
+		// connection as a proxy-capable downstream.
+		Flags:           stratum.SetupFlagRequiresStandardJobs,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",

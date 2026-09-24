@@ -113,7 +113,10 @@ configured pool URLs — each tagged with the layer it was resolved from.
    - Ordered pool list (`poolURLs`) and ordered payout-address list
      (`payoutAddresses`: primary first, de-duplicated, empties skipped).
    - For each attempt: dial TCP → Stratum V2 handshake (SetupConnection +
-     OpenMiningChannel) → on success the address is marked *known-good*.
+     OpenMiningChannel; SetupConnection.flags declares
+     REQUIRES_STANDARD_JOBS — this client opens Standard Channels only
+     and cannot process extended/group jobs, per sv2-spec §5.3.1) →
+     on success the address is marked *known-good*.
      The TCP connect phase is bounded by `poolproto.DialConnectTimeout`
      (15 s; every pool dial path — V1, V2, TLS, datum — shares it), so a
      blackholed pool fails over in seconds rather than the OS default.

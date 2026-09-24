@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -218,6 +219,10 @@ type poolSide struct {
 	conn net.Conn
 	dec  *stratum.Decoder
 	t    *testing.T
+
+	// setupFlags records the SetupConnection.flags the client sent —
+	// lets tests assert the declared capability bits.
+	setupFlags atomic.Uint32
 }
 
 // writeMsgTo encodes a Stratum V2 message and writes the framed bytes to w.
@@ -254,11 +259,19 @@ func writeMsgTo(t *testing.T, w net.Conn, msgType uint8, isChannel bool, enc int
 // pool's goroutine (see writeMsgTo for why errors use t.Errorf).
 func (p *poolSide) doHandshake(channelID uint32) {
 	p.t.Helper()
-	// Read and discard SetupConnection.
-	if _, err := p.dec.ReadFrame(); err != nil {
+	// Read SetupConnection; record the declared flags for the test to
+	// assert on.
+	f, err := p.dec.ReadFrame()
+	if err != nil {
 		p.t.Errorf("pool: read SetupConnection: %v", err)
 		return
 	}
+	sc, err := stratum.DecodeSetupConnection(f.Payload)
+	if err != nil {
+		p.t.Errorf("pool: decode SetupConnection: %v", err)
+		return
+	}
+	p.setupFlags.Store(sc.Flags)
 	// Send SetupConnectionSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgSetupConnectionSuccess, false,
 		stratum.SetupConnectionSuccess{UsedVersion: 2})
@@ -331,6 +344,36 @@ func TestDialer_Negotiate_Success(t *testing.T) {
 
 	if sess == nil {
 		t.Fatal("Negotiate returned nil session")
+	}
+}
+
+// An end mining device that opens only Standard Channels must declare
+// REQUIRES_STANDARD_JOBS in SetupConnection.flags (sv2-spec §5.3.1) —
+// flags=0 would make a conforming pool treat the connection as a
+// proxy-capable downstream able to receive extended/group jobs.
+func TestDialer_Negotiate_DeclaresRequiresStandardJobs(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doHandshake(42)
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// The pool goroutine stores the received flags; the handshake is
+	// complete once Negotiate returned, so no wait is needed.
+	if pool.setupFlags.Load()&stratum.SetupFlagRequiresStandardJobs == 0 {
+		t.Errorf("SetupConnection.flags = %#x, REQUIRES_STANDARD_JOBS (bit 0) unset", pool.setupFlags.Load())
 	}
 }
 

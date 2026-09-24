@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 295 — SV2 SetupConnection capability 宣言)
+
+- **`SetupConnection.flags` に `REQUIRES_STANDARD_JOBS` を宣言** —
+  sv2-apps v0.5.0 の「REQUIRES_STANDARD_JOBS semantics」監査漏れを
+  session-295 の追補監査で発見。sv2-spec §5.3.1 は Standard Channel
+  のみを開く end mining device が bit 0 を立てることを要求（extended/
+  group jobs を処理できないため）。従来 `flags=0` で送信しており、
+  準拠プールから proxy-capable downstream 扱いを受け得る潜在的な
+  プロトコル不整合だった。`stratum.SetupFlagRequiresStandardJobs`
+  定数を新設し V2 ダイアラで宣言。
+
 ### Added (session 294 — mining.suggest_difficulty クライアントヒント)
 
 - **V1 セッションが `mining.suggest_difficulty` を1回送信** —
