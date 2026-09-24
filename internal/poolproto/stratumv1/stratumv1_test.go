@@ -2114,6 +2114,7 @@ func TestParseSetVersionMask(t *testing.T) {
 // rotation notification updates the session mask immediately.
 func TestSession_Dispatch_SetVersionMask(t *testing.T) {
 	sess := makeBareSess()
+	sess.negotiatedMask.Store(0xffffffff) // mining.configure granted full space
 	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["00003000"]}`))
 	if got := sess.VersionMask(); got != 0x3000 {
 		t.Errorf("VersionMask = %#x, want 0x3000", got)
@@ -2125,12 +2126,39 @@ func TestSession_Dispatch_SetVersionMask(t *testing.T) {
 	}
 }
 
+// TestSession_Dispatch_SetVersionMask_OutsideNegotiated pins the
+// BIP-310 bound: rotations outside the mask mining.configure granted —
+// or any rotation with no negotiation at all — are ignored rather than
+// arming workers with version bits the pool will reject.
+func TestSession_Dispatch_SetVersionMask_OutsideNegotiated(t *testing.T) {
+	// Never negotiated: rotation ignored.
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["00003000"]}`))
+	if got := sess.VersionMask(); got != 0 {
+		t.Errorf("VersionMask = %#x with no negotiation, want 0", got)
+	}
+
+	// Negotiated 0x3000; a rotation adding bits outside it is ignored,
+	// a rotation inside it applies.
+	sess2 := makeBareSess()
+	sess2.negotiatedMask.Store(0x3000)
+	sess2.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}`))
+	if got := sess2.VersionMask(); got != 0 {
+		t.Errorf("VersionMask = %#x for superset rotation, want 0", got)
+	}
+	sess2.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["00001000"]}`))
+	if got := sess2.VersionMask(); got != 0x1000 {
+		t.Errorf("VersionMask = %#x for in-mask rotation, want 0x1000", got)
+	}
+}
+
 // TestSession_Dispatch_SetVersionMask_ReemitsCurrentJob pins the
 // BIP-310 "takes effect immediately" rule: a mid-session mask rotation
 // re-queues the most recent job so the engine can re-arm workers with
 // the new mask (its dedup key includes the mask).
 func TestSession_Dispatch_SetVersionMask_ReemitsCurrentJob(t *testing.T) {
 	sess := makeBareSess()
+	sess.negotiatedMask.Store(0xffffffff) // mining.configure granted full space
 	sess.dispatch([]byte(`{"method":"mining.notify","params":["JOBX","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",false]}`))
 	if len(sess.jobsCh) != 1 {
 		t.Fatalf("notify should enqueue 1 job, got %d", len(sess.jobsCh))

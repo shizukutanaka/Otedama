@@ -358,7 +358,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					verSub = nextSubmask(verSub, vm)
 					verTried++
 					h.Version = (localWork.Header.Version &^ vm) | verSub
-				} else if int64(h.Time)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
+				} else if int64(localWork.Header.Time)+int64(nOff)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
 					exhaustedVer = localWorkVer
 					break
 				} else {

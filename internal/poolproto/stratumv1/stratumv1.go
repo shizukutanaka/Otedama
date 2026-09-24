@@ -135,6 +135,17 @@ type session struct {
 	// loop, read by Submit callers — atomic like the rest.
 	versionMask atomic.Uint32
 
+	// negotiatedMask is the mask the pool granted in its mining.configure
+	// response — the upper bound BIP-310 places on every later
+	// set_version_mask rotation. Kept separate from versionMask (which
+	// rotations overwrite) so a rotation outside the negotiated space —
+	// or any rotation at all when the extension was never negotiated —
+	// can be rejected instead of rolling version bits the pool will
+	// reject as `version_bits & ~mask != 0`. Atomic for the same reason
+	// as versionMask: the dialer writes it after start() launched the
+	// read loop, which reads it on dispatch.
+	negotiatedMask atomic.Uint32
+
 	// lastJob is the most recently emitted job, kept so a mid-session
 	// mining.set_version_mask rotation can re-emit it stamped with the
 	// new mask — the spec requires the new mask to take effect
@@ -293,6 +304,19 @@ func (s *session) dispatch(line []byte) {
 		// happens-before the channel send, so the engine always reads
 		// the new mask for the re-emitted job.
 		if mask, ok := parseSetVersionMask(msg.Params); ok {
+			// The pool may only rotate within the negotiated space;
+			// anything wider (or a rotation with no negotiation at all)
+			// would have workers rolling bits the pool then rejects.
+			// Surface the spec violation via PoolNotices — the same
+			// operator-facing channel client.show_message uses — and
+			// ignore the rotation.
+			if neg := s.negotiatedMask.Load(); neg == 0 || mask&^neg != 0 {
+				select {
+				case s.noticeCh <- fmt.Sprintf("mining.set_version_mask %#x outside negotiated mask %#x — ignored", mask, neg):
+				default:
+				}
+				break
+			}
 			s.versionMask.Store(mask)
 			if lj := s.lastJob.Load(); lj != nil {
 				s.sendJob(*lj)

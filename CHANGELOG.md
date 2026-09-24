@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 281 — BIP-310 ローテーション境界 + ラップ安全 cap)
+
+- **`mining.set_version_mask` を交渉済み空間に限定** —— 従来は
+  ローテーションを無検証で適用していたため、拡張未交渉のプールや
+  交渉済みマスクの超集合を送ってくるプールに対し、ワーカーが
+  交渉外のバージョンビットをロールして全ロール済み share が
+  `version_bits & ~mask != 0` で reject される経路があった。
+  交渉済みマスクを `negotiatedMask`（atomic）に保持し、
+  `neg == 0 || mask &^ neg != 0` なローテーションは PoolNotices
+  経由の通知 + 無視に変更（BIP-310「rotation MUST be a subset of
+  the negotiated mask」準拠）。
+- **nTime cap チェックを int64 ドメインに** —— `h.Time = base+nOff`
+  の u32 ラップで `int64(h.Time)+1 > cap` が発火しなくなり、base
+  ntime ≈ u32max の悪意ジョブで枯渇検出が効かなかった経路を修正。
+  cap 判定を `base + nOff + 1 > cap` の int64 演算に変更。
+
 ### Fixed (session 280 — ロール状態のバッチ跨ぎ永続性)
 
 > session 280 時点の修正 —— session 272（nTime ロール）と

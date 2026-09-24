@@ -1251,6 +1251,31 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 281 increment (mask-rotation bound + wrap-safe cap)
+
+- **実装（BIP-310 防御）: `set_version_mask` を交渉済み空間に限定** ——
+  従来はローテーションを無検証で適用していたため、(a) 拡張未交渉の
+  プールが set_version_mask を送った場合、(b) 交渉済みマスクの
+  超集合を回転で送った場合、いずれもワーカーが交渉外のバージョン
+  ビットをロールし始め、全ロール済み share が
+  `version_bits & ~mask != 0` で reject される経路があった。
+  交渉済みマスクを `negotiatedMask`（atomic — dialer が readLoop
+  起動後に書くため）に保持し、`neg == 0 || mask &^ neg != 0` な
+  ローテーションは PoolNotices 経由の通知 + 無視に変更。
+  BIP-310 の「set_version_mask MUST be a subset of the negotiated
+  mask」制約に準拠。
+- **実装（u32 ラップ安全）: nTime cap チェックを int64 ドメインに** ——
+  `h.Time = base + nOff` が u32 でラップすると `int64(h.Time)+1 > cap`
+  が永遠に発火せず、コンセンサス無効な低タイムスタンプの空間を
+  掘り続ける悪意ジョブ（base ntime ≈ u32max）に対して枯渇検出が
+  効かなかった。cap 判定を `base + nOff + 1 > cap` の int64 演算に。
+- **検証:** 新規 `TestSession_Dispatch_SetVersionMask_OutsideNegotiated`
+  （未交渉/超集合の無視、範囲内ローテーション適用）。既存2テストに
+  negotiatedMask 前提を追加。
+- **記録:** 採用した検証は session-279 実装を拡張 —— dialer は交渉
+  マスクを versionMask と negotiatedMask の両方に書き込む
+  （rotations は前者のみ上書きするため）。
+
 ## September 2026 research pass — session 280 increment (rolled-state persistence)
 
 - **実装（実バグ修正）: ロール状態をバッチ跨ぎで永続化** —— grind

@@ -199,6 +199,10 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}); cerr == nil && cfgResp.errResult == nil {
 		if mask, ok := parseConfigureResult(cfgResp.result); ok {
 			sess.versionMask.Store(mask)
+			// The negotiated space bounds every later set_version_mask
+			// rotation — kept separately since rotations overwrite
+			// versionMask.
+			sess.negotiatedMask.Store(mask)
 		}
 	}
 	cfgCancel()
