@@ -705,15 +705,21 @@ solo). No committed release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 314)
 
-**What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
-real terminal width, but no production call site ever calls it —
-`engine.Run` constructs the dashboard via `tui.NewDashboard` and never
-calls `SetWidth`, so every real invocation renders at the constructor's
+✅ **Resolved (session 314, ported from the session-255 sibling branch).**
+`internal/tui/winsize_*.go` now detects the real width per platform —
+TIOCGWINSZ/TIOCGETA on unix, GetConsoleScreenBufferInfo on Windows — at
+construction *and* on every repaint tick, so terminal resizes are picked
+up live. `SetWidth` remains as an explicit override / non-terminal floor.
+Historical description kept for context:
+
+**What (was):** `internal/tui.Dashboard.SetWidth` let a caller inject the
+real terminal width, but no production call site ever called it —
+`engine.Run` constructed the dashboard via `tui.NewDashboard` and never
+called `SetWidth`, so every real invocation rendered at the constructor's
 hardcoded default of 80 columns regardless of the actual terminal
-size (confirmed: `SetWidth` is called only from `internal/tui`'s own
-test files).
+size.
 
 **Impact:** On a narrower real terminal, output can wrap onto a second
 terminal row, which breaks the dashboard's "cursor home, overwrite in
@@ -743,11 +749,19 @@ the two is needed before implementation.
 
 ---
 
-## 16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI
+## ~~16. No `wallet` subcommand: the recovery phrase cannot be verified, and the passphrase cannot be changed, from the CLI~~ ✅ RESOLVED (session 314)
 
-**What:** The CLI dispatches only `run`, `version`, `config`, `service`,
-`doctor`, `completion`, and `help` (`cmd/otedama/main.go`). There is no
-`otedama wallet ...` command. Two consequences:
+✅ **Resolved (session 314, ported from the session-255 sibling branch).**
+`otedama wallet verify` (stdin mnemonic → fingerprint match, with a
+wallet.dat decryption fallback) and `otedama wallet change-passphrase`
+(wiring the already-tested `ChangePassphrase`; refuses to create a new
+wallet when wallet.dat is absent) now ship in the CLI, and session 313's
+first-run transcription check covers the at-creation half. Historical
+description kept for context:
+
+**What (was):** The CLI dispatched only `run`, `version`, `config`,
+`service`, `doctor`, `completion`, and `help` (`cmd/otedama/main.go`).
+There was no `otedama wallet ...` command. Two consequences:
 
 - **No way to verify a backup.** After writing down the 24-word recovery
   phrase printed on first run (implemented session 253 — see

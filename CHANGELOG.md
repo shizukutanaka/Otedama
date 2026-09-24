@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 334 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 解決済み項目の正直な記録)
+
+- **KNOWN_LIMITATIONS §15/§16 を ✅ RESOLVED へ.** session 314 の移植（実端末幅
+  検出 winsize_*、`otedama wallet verify|change-passphrase`）で機能は解決済みだが
+  見出しが未解決のまま残っていたため、他セクションと同じ形式（打ち消し線 + 解決
+  注記 + 歴史的記述の保持）で更新。
+- **RESEARCH Cat 1 #11 を 🟡 部分解決へ.** ASIC 検出（session 304）・オプトイン
+  プール追従（session 331）・観測性（session 332）まで着弾済みであることを反映。
+  残る 🔵 はワークディスパッチのみ（cgminer 機器は自身で stratum からジョブ取得
+  するため Otedama がシェアを供給できない設計制約 — ADR-008 sub-domain 1）。
+
 ### Added (session 333 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: Octopus 料金カーテルメント — Cat 8 #17 残半分)
 
 - **`curtail_above_tariff_pence`（新設定・env 対応）.** `electricity_tariff_octopus`
