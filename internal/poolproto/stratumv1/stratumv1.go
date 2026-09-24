@@ -48,6 +48,7 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -366,6 +367,20 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job poolproto.Job) {
+	// Compute the merkle root the pool will rebuild when validating
+	// shares: coinbase = coinb1 || extranonce1 || extranonce2 || coinb2,
+	// hashed sha256d, then folded through each branch hash. The
+	// extranonce2 every share is ground and submitted with is all-zeros
+	// of the negotiated size — Submit pads to the identical value — so
+	// the pool's reconstruction is byte-identical to what the worker
+	// hashed. Without this the header grinds a zero merkle root (plus
+	// the prevhash/version fields applyJob now wires), which no pool
+	// can ever validate — every share would be rejected by construction.
+	ex := s.extranonceState()
+	if en1, err := hex.DecodeString(ex.en1); err == nil && len(job.Coinb1) > 0 {
+		en2 := make([]byte, ex.en2Size)
+		job.MerkleRoot = coinbaseMerkleRoot(en1, en2, job.Coinb1, job.Coinb2, job.MerkleBranch)
+	}
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -536,6 +551,30 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		}
 		return rpcResponse{}, ctx.Err()
 	}
+}
+
+// sha256d applies Bitcoin's double-SHA-256 digest.
+func sha256d(b []byte) [32]byte {
+	first := sha256.Sum256(b)
+	return sha256.Sum256(first[:])
+}
+
+// coinbaseMerkleRoot computes the merkle root of a Stratum V1 job:
+// sha256d(coinb1 || extranonce1 || extranonce2 || coinb2), then each
+// merkle-branch hash folded in as sha256d(root || branch). This is the
+// value the pool recomputes when it validates a submitted share, so it
+// must be built from the exact extranonce2 the shares will carry.
+func coinbaseMerkleRoot(en1, en2, coinb1, coinb2 []byte, branch [][]byte) [32]byte {
+	coinbase := make([]byte, 0, len(coinb1)+len(en1)+len(en2)+len(coinb2))
+	coinbase = append(coinbase, coinb1...)
+	coinbase = append(coinbase, en1...)
+	coinbase = append(coinbase, en2...)
+	coinbase = append(coinbase, coinb2...)
+	root := sha256d(coinbase)
+	for _, b := range branch {
+		root = sha256d(append(root[:], b...))
+	}
+	return root
 }
 
 // ----- registration -----

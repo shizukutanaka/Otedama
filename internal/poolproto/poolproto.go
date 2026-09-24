@@ -151,11 +151,26 @@ type Job struct {
 	// PrevHash is the previous block hash, big-endian.
 	PrevHash [32]byte
 
-	// MerkleRoot is the merkle root constructed by the pool.
+	// MerkleRoot is the merkle root of the block being mined.
+	// For Stratum V2 the pool constructs it and sends it in the job;
+	// for Stratum V1 the session computes it from Coinb1/Coinb2/
+	// MerkleBranch and the negotiated extranonces, because V1 pools
+	// only ship the coinbase material — the pool rebuilds the same
+	// root when validating a share, so it must be exact.
 	// (For Job-Declaration-Protocol use cases the miner constructs
 	// this; that variant is exposed through a separate JDPSession
 	// when implementations exist — currently reserved.)
 	MerkleRoot [32]byte
+
+	// Coinb1/Coinb2/MerkleBranch carry the Stratum V1 mining.notify
+	// coinbase material verbatim (hex-decoded): the coinbase is
+	// coinb1 || extranonce1 || extranonce2 || coinb2, and its sha256d
+	// folds through each branch hash to form MerkleRoot. V1 sessions
+	// must retain these to mine a header the pool can validate; they
+	// are empty for protocols whose pools pre-construct the root (V2).
+	Coinb1       []byte
+	Coinb2       []byte
+	MerkleBranch [][]byte
 
 	// NTime is the block timestamp in seconds.
 	NTime uint32

@@ -6,6 +6,8 @@ package stratumv1
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -2103,5 +2105,145 @@ func TestSession_MalformedLinesSkippedThenJobArrives(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("job never arrived — malformed lines may have killed the session")
+	}
+}
+
+// ============================================================================
+// V1 coinbase merkle root — the header the worker grinds must be the one
+// the pool rebuilds on share validation, or every share is structurally
+// invalid (round 14).
+// ============================================================================
+
+func TestCoinbaseMerkleRoot_MatchesSHA256dFold(t *testing.T) {
+	// Independent re-derivation of the fold: coinbase = cb1||en1||en2||cb2,
+	// root = sha256d(coinbase), then root = sha256d(root||branch[i]).
+	en1, _ := hex.DecodeString("deadbeef00")
+	en2 := make([]byte, 4)
+	cb1, _ := hex.DecodeString("0100000001")
+	cb2, _ := hex.DecodeString("ffffffff")
+	branch0, _ := hex.DecodeString("11223344556677889900aabbccddeeff00112233445566778899aabbccddeeff")
+	branch1, _ := hex.DecodeString("ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100")
+
+	coinbase := append(append(append(append([]byte{}, cb1...), en1...), en2...), cb2...)
+	expect := sha256.Sum256(coinbase)
+	expect = sha256.Sum256(expect[:])
+	for _, b := range [][]byte{branch0, branch1} {
+		expect = sha256.Sum256(append(expect[:], b...))
+		expect = sha256.Sum256(expect[:])
+	}
+
+	got := coinbaseMerkleRoot(en1, en2, cb1, cb2, [][]byte{branch0, branch1})
+	if got != expect {
+		t.Errorf("coinbaseMerkleRoot = %x, want %x", got, expect)
+	}
+}
+
+func TestCoinbaseMerkleRoot_EmptyBranchIsCoinbaseDigest(t *testing.T) {
+	en1, _ := hex.DecodeString("08000002")
+	en2 := make([]byte, 4)
+	cb1, _ := hex.DecodeString("0100")
+	cb2, _ := hex.DecodeString("ff00")
+
+	coinbase := append(append(append(append([]byte{}, cb1...), en1...), en2...), cb2...)
+	expect := sha256.Sum256(coinbase)
+	expect = sha256.Sum256(expect[:])
+
+	if got := coinbaseMerkleRoot(en1, en2, cb1, cb2, nil); got != expect {
+		t.Errorf("empty-branch root = %x, want sha256d(coinbase) %x", got, expect)
+	}
+}
+
+func TestSendJob_ComputesMerkleRootFromExtranonces(t *testing.T) {
+	clientConn, _ := net.Pipe()
+	defer clientConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.setExtranonce("deadbeef00", 4)
+
+	cb1, _ := hex.DecodeString("0100000001")
+	cb2, _ := hex.DecodeString("ffffffff")
+	var prev [32]byte
+	for i := range prev {
+		prev[i] = byte(i)
+	}
+	job := poolproto.Job{
+		JobID:    "J1",
+		Version:  0x20000000,
+		PrevHash: prev,
+		Coinb1:   cb1,
+		Coinb2:   cb2,
+		NTime:    0x68d36c5e,
+		NBits:    0x1d00ffff,
+	}
+	sess.sendJob(job)
+
+	select {
+	case got := <-sess.Jobs():
+		en1, _ := hex.DecodeString("deadbeef00")
+		want := coinbaseMerkleRoot(en1, make([]byte, 4), cb1, cb2, nil)
+		if got.MerkleRoot != want {
+			t.Errorf("MerkleRoot = %x, want %x", got.MerkleRoot, want)
+		}
+		if got.MerkleRoot == ([32]byte{}) {
+			t.Error("MerkleRoot still zero — V1 shares would be rejected by construction")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("job never delivered")
+	}
+}
+
+func TestParseNotify_RetainsCoinbaseMaterial(t *testing.T) {
+	raw := json.RawMessage(`[
+		"60",
+		"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",
+		"0100000001",
+		"ffffffff",
+		["11223344556677889900aabbccddeeff00112233445566778899aabbccddeeff"],
+		"00000002", "1d00ffff", "68d36c5e", true
+	]`)
+	job, err := parseNotify(raw)
+	if err != nil {
+		t.Fatalf("parseNotify: %v", err)
+	}
+	if got := hex.EncodeToString(job.Coinb1); got != "0100000001" {
+		t.Errorf("Coinb1 = %q, want 0100000001", got)
+	}
+	if got := hex.EncodeToString(job.Coinb2); got != "ffffffff" {
+		t.Errorf("Coinb2 = %q, want ffffffff", got)
+	}
+	if len(job.MerkleBranch) != 1 {
+		t.Fatalf("MerkleBranch len = %d, want 1", len(job.MerkleBranch))
+	}
+	if l := len(job.MerkleBranch[0]); l != 32 {
+		t.Errorf("branch[0] len = %d, want 32", l)
+	}
+	if job.PrevHash[0] != 0x4d {
+		t.Errorf("PrevHash[0] = %x, want 0x4d", job.PrevHash[0])
+	}
+}
+
+func TestParseNotify_MalformedCoinbaseParts_Rejected(t *testing.T) {
+	// A notify whose coinbase parts cannot build the true merkle root must
+	// be rejected like any other malformed required field — accepting it
+	// would silently grind shares the pool can never validate.
+	cases := []struct {
+		name   string
+		params string
+	}{
+		{"empty coinb1", `["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","","ff",[],"00000002","1d00ffff","68d36c5e",true]`},
+		{"bad coinb2 hex", `["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","zz",[],"00000002","1d00ffff","68d36c5e",true]`},
+		{"short branch", `["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",["1122"],"00000002","1d00ffff","68d36c5e",true]`},
+		{"bad branch hex", `["60","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",["zz"],"00000002","1d00ffff","68d36c5e",true]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseNotify(json.RawMessage(tc.params)); err == nil {
+				t.Error("parseNotify accepted malformed coinbase material")
+			}
+		})
 	}
 }

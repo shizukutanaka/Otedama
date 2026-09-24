@@ -1598,6 +1598,8 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		JobID:     jobID,
 		ChannelID: chanID,
 		Header: miner.Header{
+			Version:    job.Version,
+			PrevHash:   job.PrevHash,
 			MerkleRoot: job.MerkleRoot,
 			Time:       job.NTime,
 			Bits:       job.NBits,

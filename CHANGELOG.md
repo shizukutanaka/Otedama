@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 269 — コンピューターサイエンスの観点から改善点を洗い出す(第14ラウンド): Stratum V1 採掘経路が構造的に有効なシェアを生成不能——コインベース材料破棄による merkle root ゼロ化 + ヘッダフィールド未配線、計2箇所)
+
+第14ラウンドの Socratic 問いは「**ワーカーが掘るヘッダは、プールがシェア検証時に再構築するヘッダと同一か?**」——Stratum V1 では、プールは `coinbase = coinb1 || extranonce1 || extranonce2 || coinb2` を sha256d して merkle ブランチで fold した root と、notify の prevhash/version/nbits/ntime/nonce から完全な80バイトヘッダを再構築する。ワーカー側のヘッダが**1バイトでも異なれば全シェアは構造的に無効**。監査の結果、この不変条件が2箇所で破れ、V1 経路が**設計上ほぼ100%の拒否率**となることを実証(KNOWN_LIMITATIONS に記載なし):
+
+- **V1 `mining.notify` がコインベース材料を破棄し MerkleRoot がゼロのまま**(`stratumv1/parse.go` + `stratumv1.go`): `parseNotify` は p[2] coinb1 / p[3] coinb2 / p[4] merkle_branch を「Otedama はコインベースを再構築しない(プールが行う)」と読み捨て、`job.MerkleRoot` は常に32バイトゼロ——プールが真の root を再構築するのに対し、ワーカーはゼロ化された root でヘッダを掘り続け、全 submit がプール再構築ヘッダと不一致で拒否されていた。silent hashrate burn(電力を消費しシェアを送り続けるが一切受理されない)。`Job` に `Coinb1/Coinb2/MerkleBranch` フィールドを追加し、notify の材料を厳格パース(空 coinb 半部・非32バイトブランチ要素は拒否); `sendJob` でセッションの `extranonceState` から `en1`+ゼロ化 `en2`(Submit が echo する en2 とバイト同一)を用い、`coinbaseMerkleRoot = sha256d(cb1||en1||en2||cb2)` を各ブランチハッシュで fold して `job.MerkleRoot` を設定——標準ライブラリ `crypto/sha256` の合成のみ(CLAUDE.md 独自暗号禁止に準拠)。
+- **`applyJob` が `PrevHash`/`Version` をドロップ**(`engine/run.go`): V1 ジョブ適用時に `Header{MerkleRoot, Time, Bits}` のみ構築し、パース済みの `job.PrevHash`/`job.Version` を未配線のまま捨てていた——ヘッダの先頭36バイトがゼロで、merkle 修正だけでもシェアは依然無効。V2 経路の `updateWork` は両フィールドを正しく配線済み——V1 だけが欠如。`Header{Version, PrevHash, MerkleRoot, Time, Bits}` を完全に配線して V2 と対称化。
+
+**検証手続き(棄却済み候補).** Submit の en2 echo(`ExtraNonce` 未設定時に zeros(en2Size) パディング)は本実装とバイト一致するため正しい前提、`extranonceState` の atomic.Pointer は更新時 torn read なく常に整合ペアを返す、`sendJob` 内計算は clean_jobs purge 前で全ジョブに適用、en1 が非hexの場合は merkle 計算をスキップして現状と同等(劣化なし)、merkle ブランチ空配列(coinbase のみのブロック)は正当として許容、`rates`/`stats`/`arbitrate` の数値・並行面は前ラウンド群で監査済みのまま変更なし。
+
+**テスト.** `TestCoinbaseMerkleRoot_MatchesSHA256dFold`+`TestCoinbaseMerkleRoot_EmptyBranchIsCoinbaseDigest`(独立再導出した fold と一致、空ブランチ=coinbase digest)、`TestSendJob_ComputesMerkleRootFromExtranonces`(en1/en2Size 設定後の job で非ゼロかつ期待値一致)、`TestParseNotify_RetainsCoinbaseMaterial`(材料の厳格パース)、`TestParseNotify_MalformedCoinbaseParts_Rejected`(空 coinb1/不正 coinb2/短いブランチ/不正ブランチhex の4件拒否)、既存 `TestParseNotify_RealisticPayload`/`TestRunSessionV1_*` はプロトコル妥当なフィクスチャで緑を維持。`go test ./...` 全24pkg 緑、`-race` ./internal/{poolproto/...,engine,miner} 緑、差分行 lint/gofumpt クリーン(sendJob hugeParam/uintID G115 は親時点の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 268 — コンピューターサイエンスの観点から改善点を洗い出す(第13ラウンド): nonce 空間の算術不変条件——巡回検出の欠如 + フリート横断パーティションの欠如、計2箇所)
 
 第13ラウンドの Socratic 問いは「**同一の (header, nonce) 対は二度ハッシュされないか?**」——nonce 列は `start + k*step (mod 2^32)` の周期列であり、この不変条件が2箇所で破れていた。実証2箇所:

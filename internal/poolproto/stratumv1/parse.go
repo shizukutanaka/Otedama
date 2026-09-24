@@ -40,8 +40,9 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	}
 
 	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
+		jobID, prevHashHex, coinb1Hex, coinb2Hex, versionHex, nbitsHex, ntimeHex string
+		branchHex                                                                []string
+		cleanJobs                                                                bool
 	)
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
 		return poolproto.Job{}, err
@@ -49,9 +50,15 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	if err := json.Unmarshal(p[2], &coinb1Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[3], &coinb2Hex); err != nil {
+		return poolproto.Job{}, err
+	}
+	if err := json.Unmarshal(p[4], &branchHex); err != nil {
+		return poolproto.Job{}, err
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -105,7 +112,31 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		return poolproto.Job{}, fmt.Errorf("notify: bad prevhash length %d, want 32 bytes", len(b))
 	}
 	copy(job.PrevHash[:], b)
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
+	// The coinbase halves are likewise required fields — the session
+	// computes the merkle root from them, and a missing or malformed
+	// half would produce a root the pool never rebuilds, invalidating
+	// every share ground against it.
+	if job.Coinb1, err = hex.DecodeString(coinb1Hex); err != nil || len(job.Coinb1) == 0 {
+		return poolproto.Job{}, fmt.Errorf("notify: bad coinb1: %w", err)
+	}
+	if job.Coinb2, err = hex.DecodeString(coinb2Hex); err != nil || len(job.Coinb2) == 0 {
+		return poolproto.Job{}, fmt.Errorf("notify: bad coinb2: %w", err)
+	}
+	// The merkle branch may legitimately be empty (a coinbase-only
+	// block), but every element must be a 32-byte hash — the session
+	// folds them verbatim, so a malformed element corrupts the root
+	// and invalidates all resulting shares.
+	job.MerkleBranch = make([][]byte, len(branchHex))
+	for i, h := range branchHex {
+		if job.MerkleBranch[i], err = hex.DecodeString(h); err != nil {
+			return poolproto.Job{}, fmt.Errorf("notify: bad merkle_branch[%d]: %w", i, err)
+		}
+		if len(job.MerkleBranch[i]) != 32 {
+			return poolproto.Job{}, fmt.Errorf("notify: merkle_branch[%d] length %d, want 32 bytes", i, len(job.MerkleBranch[i]))
+		}
+	}
+	// The session computes MerkleRoot in sendJob from these parts and
+	// the negotiated extranonces (see stratumv1.go).
 	return job, nil
 }
 
