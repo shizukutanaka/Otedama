@@ -1999,3 +1999,67 @@ func TestCheckASICEndpoints(t *testing.T) {
 		}
 	})
 }
+
+// ============================================================================
+// checkConfig — permissive config file leaking a pool password
+// ============================================================================
+
+func TestCheckConfig_PermissiveFileWithPassword_Warns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("synthetic perm bits")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{
+		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		Pools:          []config.PoolConfig{{URL: "stratum+tcp://pool.example.com:3333", Password: "x"}},
+	}
+	r := checkConfig(cfg, path).Run(context.Background())
+	if r.Status != StatusWarn {
+		t.Errorf("status = %v, want Warn (detail: %s)", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Fix, "chmod 600") {
+		t.Errorf("Fix should suggest chmod 600, got %q", r.Fix)
+	}
+}
+
+func TestCheckConfig_PermissiveFileNoPassword_Passes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("synthetic perm bits")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{
+		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		Pools:          []config.PoolConfig{{URL: "stratum+tcp://pool.example.com:3333"}},
+	}
+	r := checkConfig(cfg, path).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("password-less config on permissive file: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}
+
+func TestCheckConfig_RestrictiveFileWithPassword_Passes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("synthetic perm bits")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg := config.Config{
+		BitcoinAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		Pools:          []config.PoolConfig{{URL: "stratum+tcp://pool.example.com:3333", Password: "x"}},
+	}
+	r := checkConfig(cfg, path).Run(context.Background())
+	if r.Status != StatusPass {
+		t.Errorf("0600 config file: status = %v, want Pass (detail: %s)", r.Status, r.Detail)
+	}
+}

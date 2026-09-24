@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 366 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 設定ファイルパーミッションの doctor 検査)
+
+- **doctor "Configuration" チェックが config.yaml のパーミッションを検査** —
+  `pools[].password` を含み得る設定ファイルが `--config` で任意パス（共有ディレクトリ等）
+  に置かれ group/other 読み取り可能だと資格情報が他ユーザーへ漏洩。wallet.dat と同じ
+  `0o077` 規則で Warn（chmod 600 の修正手順付き）。パスワード未設定時は静粛
+  （プールは username で認証されるのが慣例のため）。
+
 ### Docs (session 365 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: DoS 監査記録 + 検証済み表面の棚卸し)
 
 - **THREAT_MODEL の DoS 節を拡充** — wedged-pool 判定待ちリークの緩和記録

@@ -67,7 +67,8 @@ func checkConfig(cfg config.Config, path string) Check {
 					Fix:    "create ~/.config/otedama/config.yaml (see config.yaml.example)",
 				}
 			}
-			if _, err := os.Stat(path); err != nil {
+			info, err := os.Stat(path)
+			if err != nil {
 				return Result{
 					Status: StatusWarn,
 					Detail: fmt.Sprintf("config file %q not found", path),
@@ -81,12 +82,35 @@ func checkConfig(cfg config.Config, path string) Check {
 					Fix:    "edit the config file or pass missing flags on the command line",
 				}
 			}
+			// The file can carry pools[].password — a group- or
+			// world-readable config leaks it to other users on the
+			// machine. Only warn when a password is actually set so
+			// password-less setups stay quiet (same 0o077 rule as
+			// wallet.dat; Windows reports synthetic modes).
+			if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 && hasPoolPassword(cfg.Pools) {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("config file %q mode %04o readable by group/other while a pool password is set", path, info.Mode().Perm()),
+					Fix:    "chmod 600 " + path,
+				}
+			}
 			return Result{
 				Status: StatusPass,
 				Detail: fmt.Sprintf("loaded from %s", path),
 			}
 		},
 	}
+}
+
+// hasPoolPassword reports whether any configured pool sets a password —
+// the only credential the YAML file can carry.
+func hasPoolPassword(pools []config.PoolConfig) bool {
+	for _, p := range pools {
+		if p.Password != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func checkBitcoinAddress(addr string) Check {
