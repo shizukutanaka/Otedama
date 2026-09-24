@@ -461,11 +461,20 @@ arXiv grounding (session 41):
 9. ✅ **Idle/curtailment hook** (session 112) — `curtail_below_btc_usd` config
    field; BTC rate goroutine calls `SetWork(nil)` when price drops below
    threshold and logs re-start on recovery; `otedama_curtailed` gauge.
-10. 🟡 **Carbon-intensity feed (optional)** — for users who want to mine on
-    low-carbon grid windows; aligns with SUSTAINABILITY.md.
-    — Implemented in PR #128 (opt-in UK-grid `curtail_above_uk_carbon`
-    gate; sibling branch pending merge). MOER/marginal feeds remain open
-    pending an API key.
+10. ✅ **Carbon-intensity feed (optional) — RESOLVED (session 318,
+    ported from the session-268 sibling branch).**
+    `curtail_above_uk_carbon` (gCO2/kWh) polls the UK National Grid ESO
+    half-hour forecast every 10 min (`internal/rates/carbon.go`; free,
+    keyless, GB-grid only — hence the region in the name) and pauses
+    hashing through the same untrusted-input gate semantics as the price
+    gate: action only on a fresh reading, hold state across fetch
+    failures, and an OR'd `otedama_curtailed` gauge plus new
+    `otedama_uk_grid_carbon_intensity` for observability. Exposed in
+    `config show`, SPECIFICATION §3/§6, API.md, and documented in
+    SUSTAINABILITY.md §7 with the national-index-vs-MOER caveat
+    (marginal-emissions feeds like WattTime remain future work pending an
+    API key). Original finding: "for users who want to mine on low-carbon
+    grid windows; aligns with SUSTAINABILITY.md."
 
 ---
 

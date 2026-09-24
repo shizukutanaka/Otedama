@@ -76,6 +76,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	// and fractions readable.
 	fmt.Fprintf(stdout, "arbitration_hysteresis_pct: %g%s\n", cfg.ArbitrationHysteresisPct, tag(origins.ArbitrationHysteresisPct))
 	fmt.Fprintf(stdout, "curtail_below_btc_usd:      %g%s\n", cfg.CurtailBelowBTCUSD, tag(origins.CurtailBelowBTCUSD))
+	fmt.Fprintf(stdout, "curtail_above_uk_carbon:    %g%s\n", cfg.CurtailAboveUKCarbon, tag(origins.CurtailAboveUKCarbon))
 	fmt.Fprintf(stdout, "min_yield_sats_per_sec:     %g%s\n", cfg.MinYieldSatsPerSec, tag(origins.MinYieldSatsPerSec))
 	fmt.Fprintf(stdout, "income_mode:                %s%s\n", incomeModeDisplay(cfg.IncomeMode), tag(origins.IncomeMode))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
@@ -126,6 +127,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		HTTPAddr                    string            `json:"http_addr"`
 		Pools                       []string          `json:"pools"`
 		Origins                     map[string]string `json:"origins,omitempty"`
+		CurtailAboveUKCarbon        float64           `json:"curtail_above_uk_carbon"`
 	}{
 		BitcoinAddress:              cfg.BitcoinAddress,
 		BitcoinAddresses:            cfg.BitcoinAddresses,
@@ -144,6 +146,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		ElectricityTariffOctopus:    cfg.ElectricityTariffOctopus,
 		HTTPAddr:                    cfg.HTTPAddr,
 		Pools:                       pools,
+		CurtailAboveUKCarbon:        cfg.CurtailAboveUKCarbon,
 	}
 	if withOrigins {
 		doc.Origins = map[string]string{
@@ -164,6 +167,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"electricity_tariff_octopus":     origins.ElectricityTariffOctopus.String(),
 			"http_addr":                      origins.HTTPAddr.String(),
 			"pools":                          origins.Pools.String(),
+			"curtail_above_uk_carbon":        origins.CurtailAboveUKCarbon.String(),
 		}
 	}
 	enc := json.NewEncoder(stdout)

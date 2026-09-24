@@ -335,7 +335,8 @@ addresses) appear once their first event occurs.
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `otedama_up` | gauge | — | 1 if healthy (hashing, or intentionally curtailed), 0 if stalled. |
-| `otedama_curtailed` | gauge | — | 1 if hashing is paused by any curtailment gate (`curtail_below_btc_usd` and/or `thermal_throttle_above_celsius`), else 0. |
+| `otedama_curtailed` | gauge | — | 1 if hashing is paused by any curtailment gate (`curtail_below_btc_usd`, `thermal_throttle_above_celsius`, and/or `curtail_above_uk_carbon`), else 0. |
+| `otedama_uk_grid_carbon_intensity` | gauge | — | GB grid carbon intensity forecast (gCO2/kWh, 10-min poll); populated only when `curtail_above_uk_carbon` is set. |
 | `otedama_productive_seconds_total` | counter | — | Cumulative seconds the miner actually produced hashrate (effective-uptime numerator). |
 | `otedama_clock_skew_seconds` | gauge | — | Max \|local − server\| clock offset from rate-source HTTP Date headers (alert >120). |
 | `otedama_uptime_seconds` | gauge | — | Seconds since engine start. |

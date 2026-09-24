@@ -156,6 +156,16 @@ log_format: "text"
 # 0 (default) disables curtailment.
 # curtail_below_btc_usd: 0
 
+# curtail_above_uk_carbon pauses ALL hashing when the UK National Grid's
+# carbon-intensity forecast rises above this threshold (gCO2/kWh), so GB
+# operators can stop mining during dirty grid windows (SUSTAINABILITY.md);
+# hashing resumes automatically once intensity recovers. The source
+# (api.carbonintensity.org.uk, no key needed) covers the GB grid only —
+# it says nothing about other grids, which is why the name carries the
+# region. Like the price gate it acts only on a fresh reading: a failed
+# fetch never pauses or resumes mining. 0 (default) disables curtailment.
+# curtail_above_uk_carbon: 0
+
 # min_yield_sats_per_sec is a per-device profitability floor (satoshis/second):
 # the arbitration engine leaves a device idle when none of its compatible
 # revenue streams clears this rate, instead of running it for a trickle of

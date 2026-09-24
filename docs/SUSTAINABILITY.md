@@ -191,3 +191,17 @@ Otedamaが採用する戦略:
 - `docs/adr/ADR-001` 〜 `ADR-005` — 主要設計判断
 
 本書は **6ヶ月毎に再評価** します。研究結論や Otedama の状況に変化があれば、対応する判断と実装状況を改訂します。
+
+### 7. Carbon-aware curtailment (optional, GB grid)
+
+**研究結論:** カーテルメントの正しい排出量シグナルは限界排出量 (marginal, MOER)
+であり、平均強度は効果を過小評価する (RESEARCH_IMPROVEMENTS Cat 9/10 の
+WattTime 注記)。ただし MOER ソースは API キーが必要であり、現時点で無登録の
+公開フィードは英国 National Grid ESO の national index のみ。
+
+**Otedamaの実装 (session 268):** `curtail_above_uk_carbon` (gCO2/kWh) を設定すると、
+`api.carbonintensity.org.uk` の半時間スロット予報を10分毎にポーリングし、閾値超過で
+価格カーテルゲートと同じセマンティクス (新規読み取りのみ作用、失敗時は状態保持)
+でハッシングを停止する。`otedama_uk_grid_carbon_intensity` ゲージで観測可能。
+名称に UK を冠するのは、ソースが GB グリッドのみを対象とし他のグリッドには無意味
+であることを明示するため。限界排出量フィード (WattTime 等) はキー供給後の将来作業。
