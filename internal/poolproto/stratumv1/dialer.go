@@ -126,7 +126,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 	if resp.errResult != nil {
 		_ = sess.Close()
-		return nil, fmt.Errorf("%w: subscribe rejected: %v", poolproto.ErrHandshakeFailed, resp.errResult)
+		return nil, fmt.Errorf("%w: subscribe rejected: %s", poolproto.ErrHandshakeFailed, errorReason(resp.errResult))
 	}
 	en1, en2Size, err := parseSubscribeResult(resp.result)
 	if err != nil {
@@ -150,7 +150,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 	if resp.errResult != nil {
 		_ = sess.Close()
-		return nil, fmt.Errorf("%w: authorization rejected: %v", poolproto.ErrHandshakeFailed, resp.errResult)
+		return nil, fmt.Errorf("%w: authorization rejected: %s", poolproto.ErrHandshakeFailed, errorReason(resp.errResult))
 	}
 	if accepted, _ := resp.result.(bool); !accepted {
 		_ = sess.Close()

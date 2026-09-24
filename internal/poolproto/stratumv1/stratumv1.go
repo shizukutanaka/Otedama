@@ -462,7 +462,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	if resp.errResult != nil {
 		return poolproto.ShareResult{
 			Accepted: false,
-			Reason:   fmt.Sprintf("%v", resp.errResult),
+			Reason:   errorReason(resp.errResult),
 		}, nil
 	}
 	// Pool returned `result: true|false`. Decode.
@@ -473,6 +473,29 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		}, nil
 	}
 	return poolproto.ShareResult{Accepted: false, Reason: "rejected"}, nil
+}
+
+// errorReason renders a JSON-RPC error field as a clean reject-reason
+// string. Pools encode it either as the standard object
+// {"code":…,"message":…,"data":…} (miningcore, blitzpool — ESP-Miner
+// #1701 parses the same shape) or as the positional array
+// [code, "message", …] (ckpool, public-pool). Both extract the message
+// text so logs and rejectClass see the pool's own wording instead of
+// Go's map/slice rendering.
+func errorReason(e any) string {
+	switch v := e.(type) {
+	case map[string]any:
+		if m, ok := v["message"].(string); ok {
+			return m
+		}
+	case []any:
+		if len(v) >= 2 {
+			if m, ok := v[1].(string); ok {
+				return m
+			}
+		}
+	}
+	return fmt.Sprintf("%v", e)
 }
 
 // SuggestedDifficulty returns the current target difficulty.

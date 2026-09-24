@@ -1251,6 +1251,31 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 300 increment (reject-reason coverage)
+
+- **SV2 正規コード `invalid-channel-id` の分類漏れを修正** —— spec
+  の SubmitSharesError 正規コードは session 参照系エラーだが、
+  rejectClass の語彙に "channel" が無く "invalid" 分岐へ落下して
+  「hardware（故障チップ）」と誤診断されていた（ESP-Miner #1695 が
+  blitzpool でも同コードの扱いを追加 —— 上流 parity）。stale 分岐に
+  "channel" を追加 —— invalid-job-id と同じ session-desync 扱い。
+- **オブジェクト形式 JSON-RPC エラーの message 抽出** ——
+  miningcore/blitzpool は `{"code":22,"message":"duplicate share"}`
+  のオブジェクト形式で返すが、従来は `%v` で Go map 表記
+  （`map[code:22 message:...]`）のままログ/reason 化していた
+  （ESP-Miner #1701 parity）。`errorReason` ヘルパで object/array
+  両形式から message を抽出し Submit の Reason・dialer の handshake
+  reject 表示に適用。
+- **新規テスト:** `TestRejectClass` に `invalid-channel-id→stale`、
+  `TestSession_Submit_ObjectError_ExtractsMessage`（E2E: object 形式
+  error → Reason="duplicate share"）、`TestErrorReason`（両形式 +
+  fallback のユニットテスト）。
+- **検証済み非該当:** ESP-Miner #1591「mining.submit 応答のみ計上」は
+  当方は ID 相関済みで該当せず。#1694「clean_jobs 時のみ en2 reset」は
+  s297 で en2 を worker-index 分割に固定しているため該当せず。
+  #1587「cleanJob=false への difficulty 変更追随」は dedup キーに
+  shareTarget を含むため既に処理済み。
+
 ## September 2026 research pass — session 299 increment (clean_jobs stale-share drop)
 
 - **実バグ（保証 stale シェアの submit）: clean_jobs で破棄された

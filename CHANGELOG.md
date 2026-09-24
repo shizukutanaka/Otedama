@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 300 — reject 理由の分類・表示を上流 parity で拡充)
+
+- **SV2 正規コード `invalid-channel-id` を stale 系に分類** —— セッション
+  参照系エラーが「hardware（故障チップ）」へ誤診断されていた。
+- **オブジェクト形式 JSON-RPC エラーの message を抽出** ——
+  miningcore/blitzpool 形式（`{"code":…,"message":…}`、ESP-Miner
+  #1701 parity）が Go map 表記でログ化していたのを、object/array
+  両形式から message を抽出する `errorReason` で clean に。
+  Submit の Reason と handshake reject 表示の両方に適用。
+
 ### Fixed (session 299 — clean_jobs で破棄されたジョブのシェアをクライアント側でドロップ)
 
 - **保証 stale reject となるシェアの submit を排除** —— `mining.notify`

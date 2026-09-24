@@ -278,12 +278,13 @@ const rejectTransition = "difficulty_transition"
 // separators are normalized to spaces before matching — otherwise
 // "low-difficulty-share" fell through to "other" and "invalid-job-id"
 // (a stale work reference, never a chip fault) misfiled as "hardware".
-// The "job" test sits in the stale branch: every job-reference error is
-// a work-obsolescence or desync symptom, not a hardware error.
+// The "job"/"channel" tests sit in the stale branch: every job- or
+// channel-reference error (invalid-job-id, invalid-channel-id) is a
+// work-obsolescence or session-desync symptom, not a hardware error.
 func rejectClass(reason string) (category, diagnosis string) {
 	r := strings.NewReplacer("-", " ", "_", " ").Replace(strings.ToLower(reason))
 	switch {
-	case strings.Contains(r, "stale") || strings.Contains(r, "job"):
+	case strings.Contains(r, "stale") || strings.Contains(r, "job") || strings.Contains(r, "channel"):
 		return "stale", "likely cause: network latency / stale work"
 	case strings.Contains(r, "duplicate"):
 		return "duplicate", "likely cause: firmware or connectivity (duplicate submission)"

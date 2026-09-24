@@ -793,6 +793,9 @@ func TestRejectClass(t *testing.T) {
 		{"duplicate-share", "duplicate", "firmware"},
 		{"unauthorized-worker", "auth", "credentials"},
 		{"not-subscribed", "auth", "credentials"},
+		// invalid-channel-id is a session-desync reference, same class
+		// as invalid-job-id — never a chip fault.
+		{"invalid-channel-id", "stale", "latency"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)

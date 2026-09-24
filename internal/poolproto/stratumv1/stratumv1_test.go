@@ -1068,6 +1068,70 @@ func TestSession_Submit_PoolReturnsError_ReportsReason(t *testing.T) {
 	}
 }
 
+// TestSession_Submit_ObjectError_ExtractsMessage: miningcore/blitzpool
+// pools return the JSON-RPC error as an object {code,message,data}
+// rather than the positional array [code,"message",…]; the reject
+// reason must surface the pool's own message text, not Go's map
+// rendering (ESP-Miner #1701 parses the same shape).
+func TestSession_Submit_ObjectError_ExtractsMessage(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal(line, &req) != nil {
+				continue
+			}
+			if req.Method == "mining.submit" {
+				id, _ := json.Marshal(req.ID)
+				resp := `{"id":` + string(id) + `,"result":null,"error":{"code":22,"message":"duplicate share","data":null}}` + "\n"
+				_, _ = serverConn.Write([]byte(resp))
+			}
+		}
+	}()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "X", Nonce: 1, NTime: 1})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if res.Accepted {
+		t.Error("share should not be accepted when pool returns error result")
+	}
+	if res.Reason != "duplicate share" {
+		t.Errorf("Reason = %q, want %q", res.Reason, "duplicate share")
+	}
+}
+
+// TestErrorReason covers both wire encodings and the fallback.
+func TestErrorReason(t *testing.T) {
+	cases := []struct {
+		in   any
+		want string
+	}{
+		{[]any{21.0, "Job not found", nil}, "Job not found"},
+		{map[string]any{"code": 22.0, "message": "duplicate share", "data": nil}, "duplicate share"},
+		{"plain string", "plain string"},
+		{[]any{42.0}, "[42]"}, // degenerate array — falls back to %v
+	}
+	for _, tt := range cases {
+		if got := errorReason(tt.in); got != tt.want {
+			t.Errorf("errorReason(%v) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestSession_Submit_CallError_ReturnsError(t *testing.T) {
 	// Closing the server before any submission causes Write in call to fail;
 	// Submit must propagate that error rather than silently swallowing it.
