@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 298 — セッション終了時の作業アイドル)
+
+- **再接続バックオフ中のデッドセッション採掘を解消** —— セッション
+  終了後もワーカーが旧ジョブを掘り続けていたが、job_id と en1/en2
+  fold はセッションスコープのため発見シェアは次セッションで必ず
+  job-not-found reject になり、バックオフ全期間が無駄ハッシュに
+  なっていた。`runPoolSession` 終了時に全ワーカーを `SetWork(nil)`
+  でアイドル化し、`merged` のデッドシェアを排出。
+
 ### Fixed (session 297 — ワーカー別 extranonce2 分割)
 
 - **マルチデバイスで探索空間が完全重複していた問題を解消**

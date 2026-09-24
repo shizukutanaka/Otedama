@@ -682,6 +682,29 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 		return fmt.Errorf("engine: %w", err)
 	}
 	defer sess.Close()
+	// Everything left on the workers or queued in merged when this
+	// session ends is dead work: job IDs — and for V1 the en1/en2 fold —
+	// are session-scoped, so the next session can neither use the
+	// templates nor validate the shares (a share carries no proof of
+	// which session's job produced it; upstream it is just an unknown
+	// job_id). Idle the workers and drain the queue rather than burn
+	// the reconnect backoff's hashes on guaranteed job-not-found
+	// rejects. Workers re-arm when the next session's first job lands.
+	defer func() {
+		for _, w := range opts.workers {
+			w.SetWork(nil)
+		}
+		for {
+			select {
+			case _, ok := <-opts.merged:
+				if !ok { // channel closed when the workers stopped
+					return
+				}
+			default:
+				return
+			}
+		}
+	}()
 	opts.log("info", fmt.Sprintf("engine: connected to %s (%s)", opts.poolURL, proto))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)

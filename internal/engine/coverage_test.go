@@ -2376,3 +2376,31 @@ func TestRunSessionV1_NTimeBeyondCapWarn(t *testing.T) {
 		t.Errorf("expected 'MAX_FUTURE_BLOCK_TIME' warn; got: %v", logLines)
 	}
 }
+
+// TestRunSessionV1_SessionEndIdlesWorkers verifies the cleanup that runs
+// when a session ends: workers holding the dead session's work are idled,
+// since the job's validity (V1 en1/en2 fold, job IDs) is session-scoped
+// and nothing found on it can be validated by the next session.
+func TestRunSessionV1_SessionEndIdlesWorkers(t *testing.T) {
+	addr := fakeV1Pool(t, true) // sends one job then closes
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	w.SetWork(&miner.Work{JobID: "x", NBits: 0x1d00ffff})
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	_ = runPoolSession(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + addr,
+		user:     "worker.1",
+		workers:  []*miner.Worker{w},
+		merged:   merged,
+		interval: 200 * time.Millisecond,
+		log:      func(_, _ string) {},
+	})
+
+	if w.HasWork() {
+		t.Error("worker still holds work after session end — dead-session grinding")
+	}
+}

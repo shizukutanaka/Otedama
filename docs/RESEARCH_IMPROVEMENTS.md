@@ -1251,6 +1251,26 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 298 increment (session-end work idle)
+
+- **実バグ（デッドセッション採掘）: 再接続バックオフ中もワーカーが旧セッションのジョブを掘り続ける** ——
+  `runPoolSession` 終了時、ワーカーは旧ジョブを保持したまま。セッション
+  スコープの値（V1 job_id・s297 の en1/en2 fold）に依拠するため、
+  発見されたシェアは次セッションで必ず job-not-found reject ——
+  最大64秒×再試行のバックオフ全期間が無駄ハッシュになる。cgminer
+  の "pool dead, work discarded" と同型。
+- **実装**: `runPoolSession` に defer 追加 —— 全ワーカーを
+  `SetWork(nil)` でアイドル化し、`merged` キューのデッドシェアを
+  排出（旧 sess への submit は closed-session error で warn スパム
+  になるのみ）。次セッション最初のジョブで再アーム。V1/V2 共通
+  パスなので両プロトコルに適用。
+- **新規テスト:** `TestRunSessionV1_SessionEndIdlesWorkers` ——
+  fakeV1Pool セッション終了後 `w.HasWork()==false` を検証。
+- **記録:** en2 ロール（worker が自分のパーティション内で
+  ロールする拡張探索空間）は coinb fold を miner に持たせる設計
+  変更が要り nonce×version×ntime 空間で既に十分 —— マージナルとして
+  記録のみ。
+
 ## September 2026 research pass — session 297 increment (per-worker extranonce2 partition)
 
 - **実バグ（探索空間の重複）: 全ワーカーが同一 coinbase 空間を採掘** ——
