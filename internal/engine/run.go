@@ -968,10 +968,17 @@ func newSessionTelemetry(log func(string, string), clk clock.Clock) *sessionTele
 // the share's identity as the OpenMetrics exemplar. The V2 adapter owns
 // sequence-number correlation now, so {job_id} is the exemplar key on
 // both protocols.
-func (t *sessionTelemetry) observeLatencyHist(opts *sessionOpts, ms float64, jobID uint32) {
+func (t *sessionTelemetry) observeLatencyHist(opts *sessionOpts, ms float64, share miner.Share) {
 	if opts.m != nil && opts.m.submitLatencyHist != nil && ms > 0 {
+		// JobKey is the pool's verbatim job_id — what an operator greps
+		// pool-side logs for. Fall back to the decimal tag for shares
+		// constructed without it (V2 numeric ids or tests).
+		jobKey := share.JobKey
+		if jobKey == "" {
+			jobKey = fmt.Sprintf("%d", share.JobID)
+		}
 		opts.m.submitLatencyHist.ObserveWithExemplar(ms/1000, map[string]string{
-			"job_id": fmt.Sprintf("%d", jobID),
+			"job_id": jobKey,
 		})
 	}
 }
@@ -1367,7 +1374,7 @@ func submitV2Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 		opts.log("warn", fmt.Sprintf("engine: V2 submit: %v", err))
 		if elapsed > 0 {
 			rt.latency.Record(elapsed)
-			rt.observeLatencyHist(opts, elapsed, share.JobID)
+			rt.observeLatencyHist(opts, elapsed, share)
 		}
 		return
 	}
@@ -1376,7 +1383,7 @@ func submitV2Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 			"engine: V2 share verdict timed out (unconfirmed, job %d)",
 			share.JobID))
 		rt.latency.Record(elapsed)
-		rt.observeLatencyHist(opts, elapsed, share.JobID)
+		rt.observeLatencyHist(opts, elapsed, share)
 		return
 	}
 	if !result.Accepted {
@@ -1392,7 +1399,7 @@ func submitV2Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 	}
 	opts.log("info", "engine: V2 share accepted")
 	rt.latency.Record(elapsed)
-	rt.observeLatencyHist(opts, elapsed, share.JobID)
+	rt.observeLatencyHist(opts, elapsed, share)
 	if opts.m != nil {
 		opts.m.sharesAccepted.Inc()
 	}
@@ -1505,7 +1512,7 @@ func submitV1Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 		// a pool disconnect is a signal worth surfacing, not hiding.
 		if elapsed > 0 {
 			rt.latency.Record(elapsed)
-			rt.observeLatencyHist(opts, elapsed, share.JobID)
+			rt.observeLatencyHist(opts, elapsed, share)
 		}
 		return
 	}
@@ -1537,7 +1544,7 @@ func submitV1Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 	}
 	opts.log("info", "engine: V1 share accepted")
 	rt.latency.Record(elapsed)
-	rt.observeLatencyHist(opts, elapsed, share.JobID)
+	rt.observeLatencyHist(opts, elapsed, share)
 	if opts.m != nil {
 		opts.m.sharesAccepted.Inc()
 	}
