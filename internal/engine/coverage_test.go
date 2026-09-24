@@ -2533,3 +2533,80 @@ func TestRunSessionV1_DropsStaleShareAfterCleanJobs(t *testing.T) {
 		t.Fatalf("expected exactly one submit for job 1, got %v", submitJobIDs)
 	}
 }
+
+// TestRunSessionV1_MidJobRetarget verifies that a mining.set_difficulty
+// sent WITHOUT a re-notify still re-stamps the in-flight job: the pool
+// judges shares by the new target immediately, so workers must stop
+// minting shares judged too low under the old yardstick.
+func TestRunSessionV1_MidJobRetarget(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		// Low difficulty, job, then a mid-job difficulty raise with no
+		// re-notify — the engine must re-arm the same job by itself.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1]}`+"\n")
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.notify","params":[`+
+			`"1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+			`"","",[],"00000002","1d00ffff","68d36c5e",false]}`+"\n")
+		time.Sleep(300 * time.Millisecond) // let the job apply first
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1000]}`+"\n")
+		time.Sleep(600 * time.Millisecond) // several stats ticks
+	}()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	var logLines []string
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logLines = append(logLines, msg)
+		mu.Unlock()
+	}
+
+	_ = runPoolSession(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: 100 * time.Millisecond,
+		log:      logFn,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	var applied, rearmed int
+	for _, l := range logLines {
+		if strings.Contains(l, "job 1 nBits=") {
+			applied++
+		}
+		if strings.Contains(l, "job 1 re-armed at new pool target") {
+			rearmed++
+		}
+	}
+	if applied != 1 {
+		t.Fatalf("job applied %d times, want 1", applied)
+	}
+	if rearmed != 1 {
+		t.Fatalf("job re-armed %d times, want 1 after the difficulty change", rearmed)
+	}
+}

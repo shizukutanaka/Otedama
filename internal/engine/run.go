@@ -778,6 +778,12 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	var lastAppliedPrevHash [32]byte
 	var lastAppliedNTime uint32
 	var lastAppliedNBits uint32
+	// lastJob holds the most recently applied job so a mid-job target
+	// change (V2 SetTarget, or a V1 set_difficulty the pool sends without
+	// a re-notify) can re-stamp the workers without waiting for the next
+	// notify — the pool judges shares by the new target immediately.
+	var lastJob poolproto.Job
+	var hasLastJob bool
 	// cleanJobsActive mirrors the last applied job's clean_jobs flag (V1
 	// mining.notify tail param; V2 SetNewPrevHash-activated jobs): while
 	// true the pool has ordered every older job discarded, so a share
@@ -833,6 +839,23 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
 					dropped-lastDropped))
 				lastDropped = dropped
+			}
+			// Mid-job retarget: when the session's live share target
+			// changed since the current job was applied (V2 SetTarget
+			// takes effect immediately; a V1 set_difficulty without a
+			// re-notify otherwise leaves workers minting shares the pool
+			// now judges too low), re-stamp the same job at the new
+			// target. The zero Hash means "no assignment yet" and never
+			// triggers a re-stamp.
+			if hasLastJob && !opts.isCurtailed() {
+				if cur := sessionShareTarget(sess); cur != (miner.Hash{}) && cur != lastAppliedTarget {
+					if err := applyJob(opts.workers, lastJob, cur); err != nil {
+						opts.log("warn", err.Error())
+					} else {
+						lastAppliedTarget = cur
+						opts.log("info", fmt.Sprintf("engine: job %s re-armed at new pool target", lastJob.JobID))
+					}
+				}
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
 			// Accumulate estimated earnings before building the dashboard
@@ -965,6 +988,8 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedPrevHash = job.PrevHash
 				lastAppliedNTime = job.NTime
 				lastAppliedNBits = job.NBits
+				lastJob = job
+				hasLastJob = true
 				cleanJobsActive = job.CleanJobs
 				opts.log("info", fmt.Sprintf("engine: job %s nBits=0x%08X", job.JobID, job.NBits))
 				if int64(job.NTime) > time.Now().Unix()+miner.MaxFutureBlockTimeSecs {

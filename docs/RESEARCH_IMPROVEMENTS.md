@@ -1251,6 +1251,23 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 305 increment (mid-job retarget)
+
+- **set_difficulty / SetTarget の飛行中ジョブ即時反映を実装** —— V2 spec
+  は SetTarget を「即時効果」と定めるが、コードは次回 emit まで旧
+  ターゲットで掘り続けた（V1 も set_difficulty 後に re-notify が
+  来ない限り同一 —— dedup キーに target を含める s286 の対策は
+  re-notify 到着前提）。プールは submit 時点の現行ターゲットで判定
+  するため、難易度上げで以後の全シェアが difficulty-too-low reject
+  になる経路が残っていた。stats ティック毎に `sessionShareTarget(sess)`
+  （両プロトコルのライブターゲット getter）をポーリングし、適用済み
+  ターゲットとの差分で `lastJob` を再アーム（curtail 中・未適用・
+  未割当ゼロは除外）。benignTransitionReject の分類は残る（遷移
+  ウインドウ内の reject は依然起こり得る）。
+- **新規テスト:** `TestRunSessionV1_MidJobRetarget` —— re-notify 無しの
+  set_difficulty で "re-armed at new pool target" が 1 回発火（stats
+  ティック駆動を実証）。
+
 ## September 2026 research pass — session 304 increment (BIP-323 V2 version rolling)
 
 - **V2 標準ジョブに BIP-323 の汎用 nVersion ビット（0x1fffffe0、bits

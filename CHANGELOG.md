@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 305 — 難易度変更の飛行中ジョブ即時反映)
+
+- **`mining.set_difficulty` / `SetTarget` が次ジョブまで旧ターゲットで
+  掘り続ける経路を解消** —— プールは submit 時点の現行ターゲットで
+  シェアを判定するため、re-notify の無い難易度上げでは以後の全シェアが
+  difficulty-too-low reject になっていた（V2 spec は SetTarget を即時
+  効果と定義）。stats ティック毎にセッションのライブターゲットを
+  ポーリングし、適用済み値との差分で飛行中ジョブを再アーム
+  （curtail 中・未適用・未割当は除外）。
+
 ### Added (session 304 — V2 標準ジョブの BIP-323 バージョンローリング)
 
 - **V2 standard channel で nVersion 汎用ビット（0x1fffffe0、bits 5–28）
