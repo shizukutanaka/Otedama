@@ -277,6 +277,8 @@ addresses) appear once their first event occurs.
 | `otedama_hashrate_hashes_per_second` | gauge | — | Live aggregate hash rate. |
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
 | `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
+| `otedama_shares_submitted_total` | counter | — | Shares actually transmitted to the pool (counted at send time, before accept/reject). A found share never reaches this counter if the worker's share channel was full. |
+| `otedama_shares_dropped_total` | counter | — | Shares found locally but discarded because the worker's share channel was full — discovered-but-lost work. The engine also logs a `warn` on each increase. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
 | `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool; the engine logs a `warn` when the backlog stays ≥8 for 3 consecutive stats ticks. |
 | `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other,difficulty-change}` | Rejections by inferred root cause. `difficulty-change` marks benign cross-generation rejects: shares honestly mined under the previous share difficulty, rejected because `mining.set_difficulty` moved the target mid-flight; excluded from `shares_rejected`/`reject_rate`. |

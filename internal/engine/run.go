@@ -983,9 +983,13 @@ func (t *sessionTelemetry) tick(now time.Time, opts *sessionOpts, suggestedDiffi
 	t.lastHashrate = currentHashRate
 	logStats(opts.workers, currentHashRate, opts.log)
 	if dropped := totalDropped(opts.workers); dropped > t.lastDropped {
+		delta := dropped - t.lastDropped
 		opts.log("warn", fmt.Sprintf(
 			"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-			dropped-t.lastDropped))
+			delta))
+		if opts.m != nil && opts.m.sharesDropped != nil {
+			opts.m.sharesDropped.Add(delta)
+		}
 		t.lastDropped = dropped
 	}
 	stalled := opts.updateLiveness(t.hashMon, currentHashRate)

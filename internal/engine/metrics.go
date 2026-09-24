@@ -21,9 +21,13 @@ import (
 // run loop. Grouping them in one struct keeps the hot path free of
 // registry lookups — each metric is a pointer cached at startup.
 type engineMetrics struct {
-	hashrate            *metrics.Gauge
-	sharesFound         *metrics.Counter
-	sharesSubmitted     *metrics.Counter
+	hashrate        *metrics.Gauge
+	sharesFound     *metrics.Counter
+	sharesSubmitted *metrics.Counter
+	// sharesDropped counts found shares discarded because the worker's
+	// share channel was full — discovered-but-lost work that previously
+	// only surfaced as a warn log line.
+	sharesDropped       *metrics.Counter
 	sharesAccepted      *metrics.Counter
 	sharesRejected      *metrics.Counter
 	poolConnectAttempts *metrics.Counter
@@ -333,8 +337,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 				"SubmitSharesStandard), incremented at send time regardless of "+
 				"the pool's eventual accept/reject response. Distinct from "+
 				"shares_found_total: a share can be found by a worker but never "+
-				"submitted if its worker's share channel was full (a rate the "+
-				"engine only currently logs, as \"dropped N found share(s)\").",
+				"submitted if its worker's share channel was full — those lost "+
+				"shares are counted in shares_dropped_total.",
+			nil),
+		sharesDropped: reg.NewCounter(
+			"otedama_shares_dropped_total",
+			"Total shares found locally but discarded because the worker's "+
+				"share channel was full at emit time — work discovered but "+
+				"never transmitted to the pool.",
 			nil),
 		sharesAccepted: reg.NewCounter(
 			"otedama_shares_total",
