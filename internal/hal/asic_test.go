@@ -432,3 +432,25 @@ func TestCGMinerCommand_HugeReplyBounded(t *testing.T) {
 		t.Fatal("oversized reply should error under the body cap")
 	}
 }
+
+// TestSwitchPools_RejectsCommaFields covers the addpool parameter
+// boundary: cgminer splits its parameter on commas, so a comma inside
+// any field cannot be represented and must be rejected before any
+// endpoint is touched.
+func TestSwitchPools_RejectsCommaFields(t *testing.T) {
+	cases := []struct{ url, user, pass string }{
+		{"stratum+tcp://pool:3333/x,y", "u", "p"},
+		{"stratum+tcp://pool:3333", "u,w", "p"},
+		{"stratum+tcp://pool:3333", "u", "p,x"},
+	}
+	for _, c := range cases {
+		d := &ASICDriver{Endpoints: []string{"127.0.0.1:4028"}}
+		switched, errs := d.SwitchPools(context.Background(), c.url, c.user, c.pass)
+		if len(errs) != 1 {
+			t.Fatalf("url=%q user=%q pass=%q: want 1 error, got %v", c.url, c.user, c.pass, errs)
+		}
+		if switched != nil {
+			t.Fatalf("url=%q: unexpected switches %v", c.url, switched)
+		}
+	}
+}

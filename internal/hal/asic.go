@@ -266,6 +266,18 @@ func cgminerCommandParam(ctx context.Context, addr string, timeout time.Duration
 // maps to stratum+tcp:// (the DATUM gateway's miner-facing protocol is
 // SV1); stratum+tls:// passes through for firmwares that support it.
 func (d *ASICDriver) SwitchPools(ctx context.Context, poolURL, user, pass string) (switched []string, errs []error) {
+	// cgminer parses addpool's parameter as a comma-separated
+	// URL,USERNAME,PASSWORD triple — a comma inside any field cannot be
+	// represented faithfully (it would shift the field boundaries and
+	// store corrupt credentials on the miner), so reject upfront
+	// rather than push garbage.
+	for _, f := range []struct{ name, v string }{
+		{"poolURL", poolURL}, {"user", user}, {"pass", pass},
+	} {
+		if strings.Contains(f.v, ",") {
+			return nil, []error{fmt.Errorf("hal: %s contains ',' which cgminer's comma-separated addpool parameter cannot represent", f.name)}
+		}
+	}
 	timeout := d.Timeout
 	if timeout <= 0 {
 		timeout = DefaultASICProbeTimeout

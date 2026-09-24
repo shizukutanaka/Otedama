@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 356 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: cgminer addpool パラメータ境界の検証)
+
+- **`ASICDriver.SwitchPools` がカンマ含有フィールドを拒否** — cgminer は
+  `addpool` の parameter を `URL,USERNAME,PASSWORD` のカンマ区切り三重組として
+  解釈するため、URL（パス/ユーザー情報部のカンマは RFC 3986 で合法）・user・pass
+  内のカンマがフィールド境界をずらし、マイナーに破損した認証情報を保存させ得た。
+  いずれかのフィールドに `,` を含む場合はエンドポイントへ一切触れずに拒否。
+
 ### Security (session 355 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 裁定エンジンの非有限値サニタイズ)
 
 - **プロバイダの異常クォートを `Effective()` で無害化** — `NaN` は `<= 0` ガードを
