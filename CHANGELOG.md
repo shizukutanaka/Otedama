@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 307 — V1 dispatch 分割 + 未知リクエスト応答)
+
+- **id 付きの未知メソッドへ "Method not found" エラー応答** — pool→client
+  で id を伴う未実装メソッド（例: `mining.configure` 等の調査系プローブ）
+  を黙殺すると、session-306 で get_version に施したのと同じ「未解決 id
+  滞留」が残っていた。JSON-RPC 契約に従い `respondErr`（SV1 慣習の
+  `[code, message, traceback]` 配列形式）で -32601 を返却。id を持たない
+  未知の通知は従来どおり無視（forward-compatible）。
+- **`session.dispatch` のハンドラ分割** — 各メソッド処理を
+  `handleNotify`/`handleSetExtranonce`/`handleShowMessage`/
+  `handleReconnect`/`deliverResponse` へ抽出し、長年閾値超過だった
+  gocyclo 警告（複雑度20→16→今回 <15）を解消。挙動は不変。
+
 ### Added (session 306 — V1 `client.get_version` 応答 + RESEARCH item 11 解消)
 
 - **`client.get_version`（pool→client リクエスト）へ応答** — braiins 系

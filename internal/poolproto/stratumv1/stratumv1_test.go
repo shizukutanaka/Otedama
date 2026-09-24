@@ -299,6 +299,47 @@ func TestSession_ClientGetVersionResponds(t *testing.T) {
 	}
 }
 
+func TestSession_UnknownMethodWithIDRepliesError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// A request (id present) for a method we don't implement must still
+	// resolve its id — otherwise the pool waits on it forever.
+	_, _ = fmt.Fprintf(serverConn, `{"id":88,"method":"mining.configure","params":[["version-rolling"],{"version-rolling.mask":"ffffffff"}]}`+"\n")
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no method-not-found reply: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply not JSON: %v", err)
+	}
+	if id, _ := resp.ID.(float64); id != 88 {
+		t.Errorf("reply id = %v, want 88", resp.ID)
+	}
+	if resp.Result != nil {
+		t.Errorf("reply result = %v, want nil", resp.Result)
+	}
+	// SV1 error is the [code, message, traceback] array.
+	errArr, ok := resp.Error.([]any)
+	if !ok || len(errArr) < 2 {
+		t.Fatalf("reply error = %v, want [code,message,...] array", resp.Error)
+	}
+	if code, _ := errArr[0].(float64); code != -32601 {
+		t.Errorf("error code = %v, want -32601", errArr[0])
+	}
+}
+
 // ============================================================================
 // parseSetExtranonce
 // ============================================================================

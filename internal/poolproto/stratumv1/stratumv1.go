@@ -226,25 +226,15 @@ func (s *session) dispatch(line []byte) {
 	}
 	// Response (has id, no method).
 	if msg.Method == "" && msg.ID != nil {
-		id := msg.uintID()
-		s.pendingMu.Lock()
-		ch, ok := s.pending[id]
-		delete(s.pending, id)
-		s.pendingMu.Unlock()
-		if ok {
-			ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
-			close(ch)
-		}
+		s.deliverResponse(msg)
 		return
 	}
-	// Notification or request from pool.
+	// Notification or request from pool. Each handler owns one method;
+	// other notifications (mining.set_version_mask, etc.) are silently
+	// ignored — forward-compatible with pool extensions.
 	switch msg.Method {
 	case "mining.notify":
-		job, err := parseNotify(msg.Params)
-		if err != nil {
-			return
-		}
-		s.sendJob(job)
+		s.handleNotify(msg.Params)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -258,31 +248,9 @@ func (s *session) dispatch(line []byte) {
 			s.difficulty.Store(float64ToUint64(d))
 		}
 	case "mining.set_extranonce":
-		// Some pools rotate extranonce mid-session. Update our copy.
-		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.enMu.Lock()
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
-			s.enMu.Unlock()
-		}
+		s.handleSetExtranonce(msg.Params)
 	case "client.show_message":
-		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
-		// Surface it via PoolNotices(); if the caller is not draining the
-		// channel, drop the oldest notice to avoid blocking the read loop.
-		if notice, ok := parseShowMessage(msg.Params); ok && notice != "" {
-			select {
-			case s.noticeCh <- notice:
-			default:
-				select {
-				case <-s.noticeCh:
-				default:
-				}
-				select {
-				case s.noticeCh <- notice:
-				default:
-				}
-			}
-		}
+		s.handleShowMessage(msg.Params)
 	case "client.get_version":
 		// A pool request asking which miner software this is (used by
 		// braiins-family and monitoring tooling for stats). It's a
@@ -294,20 +262,84 @@ func (s *session) dispatch(line []byte) {
 			s.respond(msg.ID, clientAgent)
 		}
 	case "client.reconnect", "mining.reconnect":
-		// The pool is asking us to move to another node (load balancing,
-		// maintenance, failover). Record the directive, then end the
-		// session cleanly: closing the connection makes the read loop
-		// return and Jobs() close, which is exactly the signal the
-		// reconnect machinery uses to re-dial the configured pool list.
-		// We deliberately do NOT follow the pool-supplied Host:Port — see
-		// reconnectDirective for the rationale.
-		if d, ok := parseReconnect(msg.Params); ok {
-			s.lastReconnect.Store(&d)
+		s.handleReconnect(msg.Params)
+	default:
+		// An id-bearing unknown method is a *request*, not a
+		// notification — the pool awaits a reply on that id. Answer
+		// "method not found" so the id resolves instead of hanging
+		// (e.g. pool-side probes we deliberately don't implement).
+		if msg.ID != nil {
+			s.respondErr(msg.ID, -32601, "Method not found")
 		}
-		go s.Close()
-		// Other notifications (mining.set_version_mask, etc.) are
-		// silently ignored; forward-compatible with pool extensions.
 	}
+}
+
+// deliverResponse routes a pool response frame to the call() waiting on
+// its id, if any. Late or unknown-id responses are dropped.
+func (s *session) deliverResponse(msg rpcMessage) {
+	id := msg.uintID()
+	s.pendingMu.Lock()
+	ch, ok := s.pending[id]
+	delete(s.pending, id)
+	s.pendingMu.Unlock()
+	if ok {
+		ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
+		close(ch)
+	}
+}
+
+func (s *session) handleNotify(params json.RawMessage) {
+	job, err := parseNotify(params)
+	if err != nil {
+		return
+	}
+	s.sendJob(job)
+}
+
+// Some pools rotate extranonce mid-session. Update our copy.
+func (s *session) handleSetExtranonce(params json.RawMessage) {
+	if en1, sz, ok := parseSetExtranonce(params); ok {
+		s.enMu.Lock()
+		s.extranonce1 = en1
+		s.extranonce2Size = sz
+		s.enMu.Unlock()
+	}
+}
+
+// Pool is sending an operator notice (e.g. "maintenance in 10 min").
+// Surface it via PoolNotices(); if the caller is not draining the
+// channel, drop the oldest notice to avoid blocking the read loop.
+func (s *session) handleShowMessage(params json.RawMessage) {
+	notice, ok := parseShowMessage(params)
+	if !ok || notice == "" {
+		return
+	}
+	select {
+	case s.noticeCh <- notice:
+	default:
+		select {
+		case <-s.noticeCh:
+		default:
+		}
+		select {
+		case s.noticeCh <- notice:
+		default:
+		}
+	}
+}
+
+// The pool is asking us to move to another node (load balancing,
+// maintenance, failover). Record the directive, then end the
+// session cleanly: closing the connection makes the read loop
+// return and Jobs() close, which is exactly the signal the
+// reconnect machinery uses to re-dial the configured pool list.
+// We deliberately do NOT follow the pool-supplied Host:Port — see
+// reconnectDirective for the rationale.
+func (s *session) handleReconnect(params json.RawMessage) {
+	if d, ok := parseReconnect(params); ok {
+		s.lastReconnect.Store(&d)
+	}
+	go s.Close()
 }
 
 // Jobs returns the channel of incoming jobs.
@@ -467,6 +499,25 @@ func (s *session) respond(id any, result any) {
 		"id":     id,
 		"result": result,
 		"error":  nil,
+	})
+	if err != nil {
+		return
+	}
+	body = append(body, '\n')
+	s.writeMu.Lock()
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_, _ = s.conn.raw.Write(body)
+	s.writeMu.Unlock()
+}
+
+// respondErr writes a JSON-RPC error response for a pool-sent request
+// we decline to handle. Same best-effort contract as respond.
+func (s *session) respondErr(id any, code int, msg string) {
+	// SV1 errors use the [code, message, traceback] array form.
+	body, err := json.Marshal(map[string]any{
+		"id":     id,
+		"result": nil,
+		"error":  []any{code, msg, nil},
 	})
 	if err != nil {
 		return

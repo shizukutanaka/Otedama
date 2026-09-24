@@ -1221,6 +1221,17 @@ Verified the remaining pool→client request surface: `mining.configure`
 version rolling is non-applicable to a CPU/GPU end device, and answering
 it would falsely advertise support.
 
+**Session-307 follow-up (request contract completion):** the same
+unresolved-id problem generalised — any pool→client method carrying an
+`id` that we don't implement left the pool waiting. `dispatch` now has a
+`default` branch answering such requests with the JSON-RPC -32601
+"Method not found" error (SV1 `[code, message, traceback]` array form),
+so unknown *requests* resolve while unknown *notifications* stay
+ignored. The per-method bodies were also extracted into
+`handleNotify`/`handleSetExtranonce`/`handleShowMessage`/
+`handleReconnect`/`deliverResponse`, dropping `dispatch`'s
+long-flagged gocyclo complexity under the lint threshold.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
