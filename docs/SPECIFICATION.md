@@ -245,6 +245,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `pool_difficulty` | gauge | Current pool-assigned share difficulty. |
 | `estimated_share_interval_seconds` | gauge | difficulty × 2³² / hashrate. |
 | `last_job_received_seconds` | gauge | Unix time of the most recent job. |
+| `pool_tls_cert_not_after_unixtime{pool_host}` † | gauge | Leaf certificate expiry of the connected pool (TLS transports only). |
 | `payout_active_index` | gauge | 0-based index of active payout address. |
 | `payout_info{address}` † | gauge | Active (masked) payout destination = 1. |
 | `build_info{version,commit,goversion}` | gauge | Constant 1; build metadata in labels. |

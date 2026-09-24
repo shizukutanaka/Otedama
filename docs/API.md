@@ -287,6 +287,7 @@ addresses) appear once their first event occurs.
 | `otedama_pool_difficulty` | gauge | — | Current share difficulty (`mining.set_difficulty`). |
 | `otedama_estimated_share_interval_seconds` | gauge | — | Expected seconds between shares (difficulty × 2³² / hashrate). |
 | `otedama_last_job_received_seconds` | gauge | — | Unix timestamp of the most recent pool job (stale-connection detector). |
+| `otedama_pool_tls_cert_not_after_unixtime` | gauge | `pool_host=…` | Leaf certificate expiry of the connected pool (TLS transports only: `stratum+tls://`, `stratum+v2tls://`). Alert before `time()` reaches it — an expiring pool cert surfaces as sudden dial failures at the next reconnect. |
 
 **Arbitration**
 

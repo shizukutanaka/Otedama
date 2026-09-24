@@ -170,6 +170,11 @@ type engineMetrics struct {
 	// itself is created lazily per pool_host label (like rejectReason).
 	poolShareSeenMu sync.Mutex
 	poolShareSeen   map[string]bool
+	// poolTLSCertNotAfter lazily creates the per-pool_host gauge holding
+	// the pool TLS leaf certificate's expiry (stratum+tls:// and
+	// stratum+v2tls:// transports only).
+	poolTLSCertNotAfterMu sync.Mutex
+	poolTLSCertNotAfter   map[string]*metrics.Gauge
 	// asicManagedHost records which pool host was last pushed to the
 	// managed ASICs so reconnects to the same pool don't re-issue the
 	// cgminer switchpool — but a failover onto a *different* pool does
@@ -597,6 +602,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 
 		reg:                  reg,
 		poolShareSeen:        make(map[string]bool),
+		poolTLSCertNotAfter:  make(map[string]*metrics.Gauge),
 		rejectByReason:       make(map[string]*metrics.Counter),
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
@@ -644,6 +650,27 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// observePoolTLSCertNotAfter sets otedama_pool_tls_cert_not_after_unixtime
+// {pool_host} to the pool leaf certificate's expiry. Alert before time()
+// reaches the value — an expiring pool certificate otherwise surfaces as
+// sudden unresolvable connect failures at the next reconnect. Created
+// lazily on the first TLS session to the host. Safe for concurrent use.
+func (m *engineMetrics) observePoolTLSCertNotAfter(host string, notAfter time.Time) {
+	m.poolTLSCertNotAfterMu.Lock()
+	g, ok := m.poolTLSCertNotAfter[host]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_pool_tls_cert_not_after_unixtime",
+			"Expiry (NotAfter) of the connected pool's TLS leaf certificate. "+
+				"Alert before time() reaches it: an expiring pool certificate "+
+				"surfaces as sudden unresolvable connect failures.",
+			map[string]string{"pool_host": host})
+		m.poolTLSCertNotAfter[host] = g
+	}
+	m.poolTLSCertNotAfterMu.Unlock()
+	g.Set(float64(notAfter.Unix()))
 }
 
 // observeProviderReliability sets otedama_arbitration_provider_reliability

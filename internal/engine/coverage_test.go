@@ -2251,3 +2251,31 @@ func TestSplitYieldBySimulation(t *testing.T) {
 		t.Errorf("unknown stream: real=%v simulated=%v, want 2,0", r2, s2)
 	}
 }
+
+// ============================================================================
+// observePoolTLSCertNotAfter — pool TLS certificate expiry gauge
+// ============================================================================
+
+func TestObservePoolTLSCertNotAfter(t *testing.T) {
+	// The per-pool_host gauge is created lazily on the first TLS session
+	// and reused on reconnects; the value tracks the newest observed
+	// NotAfter so cert renewals update the alert horizon.
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	exp1 := time.Now().Add(24 * time.Hour).Truncate(time.Second)
+	m.observePoolTLSCertNotAfter("pool.example.com:3334", exp1)
+	g, ok := m.poolTLSCertNotAfter["pool.example.com:3334"]
+	if !ok {
+		t.Fatal("gauge not created for TLS pool host")
+	}
+	if g.Value() != float64(exp1.Unix()) {
+		t.Errorf("gauge = %v, want %v", g.Value(), exp1.Unix())
+	}
+
+	exp2 := exp1.Add(48 * time.Hour)
+	m.observePoolTLSCertNotAfter("pool.example.com:3334", exp2)
+	if g.Value() != float64(exp2.Unix()) {
+		t.Errorf("gauge after renew = %v, want %v", g.Value(), exp2.Unix())
+	}
+}

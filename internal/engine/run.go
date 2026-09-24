@@ -1149,6 +1149,16 @@ func dialPool(ctx context.Context, opts *sessionOpts, password, protoLabel strin
 	opts.log("info", fmt.Sprintf("engine: connected to %s (%s)", opts.poolURL, protoLabel))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2)
+		// TLS transports expose the pool leaf certificate's expiry so a
+		// scrape can alert before it kills the next reconnect — an
+		// expiring cert otherwise surfaces only as sudden dial failures.
+		if tc, ok := sess.(poolproto.TLSCertNotAfterer); ok {
+			if notAfter, ok := tc.TLSCertNotAfter(); ok {
+				if host, herr := poolproto.StripScheme(opts.poolURL); herr == nil && host != "" {
+					opts.m.observePoolTLSCertNotAfter(host, notAfter)
+				}
+			}
+		}
 	}
 	if opts.onConnected != nil {
 		opts.onConnected()

@@ -1517,6 +1517,15 @@ would panic `strings.Repeat` on the next submit, and non-hex or
 oversized extranonce1 previously failed only at share time — a
 hostile pool could crash the handshake or mid-session submit.
 
+Session 341: pool TLS certificate expiry is now observable —
+`otedama_pool_tls_cert_not_after_unixtime{pool_host}` carries the
+peer leaf's NotAfter for stratum+tls:// and stratum+v2tls://
+sessions (new `poolproto.TLSCertNotAfterer` optional interface,
+same shape as PoolNoticeReceiver/DifficultySuggester). An expiring
+pool certificate previously surfaced only as sudden dial failures
+at the next reconnect; it is now alertable in advance. Plaintext
+and Noise sessions report ok=false and publish nothing.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

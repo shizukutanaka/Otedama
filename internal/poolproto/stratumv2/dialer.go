@@ -547,6 +547,13 @@ func (s *session) UpdateNominalHashrate(_ context.Context, hashrate float64) err
 	return nil
 }
 
+// TLSCertNotAfter reports the pool leaf certificate's expiry when the
+// transport is stratum+v2tls://; plaintext and Noise sessions return
+// ok=false.
+func (s *session) TLSCertNotAfter() (time.Time, bool) {
+	return poolproto.PeerCertNotAfter(s.conn.raw)
+}
+
 // Close terminates the session's underlying connection.
 func (s *session) Close() error { return s.conn.Close() }
 
@@ -600,4 +607,5 @@ var (
 	_ poolproto.Connection        = (*connection)(nil)
 	_ poolproto.Session           = (*session)(nil)
 	_ poolproto.ChannelIdentifier = (*session)(nil)
+	_ poolproto.TLSCertNotAfterer = (*session)(nil)
 )

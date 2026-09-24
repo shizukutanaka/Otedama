@@ -146,6 +146,7 @@ var (
 	_ poolproto.Session             = (*session)(nil)
 	_ poolproto.PoolNoticeReceiver  = (*session)(nil)
 	_ poolproto.DifficultySuggester = (*session)(nil)
+	_ poolproto.TLSCertNotAfterer   = (*session)(nil)
 )
 
 func newSession(conn *connection) *session {
@@ -485,6 +486,12 @@ func (s *session) SuggestDifficulty(ctx context.Context, diff float64) error {
 // SuggestedDifficulty returns the current target difficulty.
 func (s *session) SuggestedDifficulty() float64 {
 	return uint64ToFloat64(s.difficulty.Load())
+}
+
+// TLSCertNotAfter reports the pool leaf certificate's expiry when the
+// transport is stratum+tls://; plaintext sessions return ok=false.
+func (s *session) TLSCertNotAfter() (time.Time, bool) {
+	return poolproto.PeerCertNotAfter(s.conn.raw)
 }
 
 // Close terminates the session and underlying connection. Idempotent.

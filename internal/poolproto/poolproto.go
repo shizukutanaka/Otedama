@@ -61,9 +61,11 @@ package poolproto
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -316,6 +318,35 @@ type ChannelIdentifier interface {
 	// ChannelID returns the channel ID negotiated during the session
 	// handshake.
 	ChannelID() uint32
+}
+
+// TLSCertNotAfterer is an optional extension to Session implemented by
+// TLS-backed transports (stratum+tls:// V1, stratum+v2tls:// V2). It
+// reports the peer leaf certificate's expiry so callers can surface it
+// to operators — a pool certificate that expires mid-operation
+// otherwise surfaces only as sudden connect failures at the next
+// reconnect. Plaintext sessions do not implement it.
+type TLSCertNotAfterer interface {
+	// TLSCertNotAfter returns the pool leaf certificate's expiry.
+	// ok is false when the transport is not TLS or the peer presented
+	// no certificates.
+	TLSCertNotAfter() (notAfter time.Time, ok bool)
+}
+
+// PeerCertNotAfter extracts the leaf certificate's NotAfter from a
+// possibly-TLS connection. Protocol sessions use it to implement
+// TLSCertNotAfterer; ok is false for plaintext conns or TLS peers that
+// presented no certificate chain.
+func PeerCertNotAfter(conn net.Conn) (time.Time, bool) {
+	tc, ok := conn.(*tls.Conn)
+	if !ok {
+		return time.Time{}, false
+	}
+	certs := tc.ConnectionState().PeerCertificates
+	if len(certs) == 0 {
+		return time.Time{}, false
+	}
+	return certs[0].NotAfter, true
 }
 
 // Dialer establishes a Connection to a pool. Different protocols

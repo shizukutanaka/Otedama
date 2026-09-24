@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 341 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール TLS 証明書期限の可視化)
+
+- **`otedama_pool_tls_cert_not_after_unixtime{pool_host}` ゲージ** — `stratum+tls://`
+  （V1）および `stratum+v2tls://`（V2）セッション接続時にピアのリーフ証明書
+  NotAfter を公開。プール証明書の失効はこれまで次回リコネクト時の不可解な
+  ダイヤル失敗としてしか表面化しなかったため、`time()` が値へ近付く前に
+  アラート可能に。`poolproto.TLSCertNotAfterer` オプショナルインターフェース
+  （既存の `PoolNoticeReceiver`/`DifficultySuggester`/`ChannelIdentifier` と同型）
+  を V1/V2 両セッションが実装し、共有 `dialPool` 経路で一括配線。平文および
+  Noise セッションは `ok=false` でメトリクス非発行。
+
 ### Added (session 340 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 mining.ping 応答)
 
 - **`mining.ping` へ `result:"pong"` で応答** — ckpool 系プールが生存確認として送る

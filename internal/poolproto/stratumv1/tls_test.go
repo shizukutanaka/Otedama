@@ -105,6 +105,50 @@ func TestDialTLS_VerifiedHandshakeSucceeds(t *testing.T) {
 	}
 }
 
+func TestSession_TLSCertNotAfter(t *testing.T) {
+	// TLS transports expose the peer leaf certificate's expiry so the
+	// engine can publish it before the cert kills the next reconnect.
+	// The fixture's NotAfter is now+1h; assert it lands in a sane window.
+	ln, pool, _ := newSelfSignedTLSListener(t)
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	raw, err := dialTLS(ctx, ln.Addr().String(), &tls.Config{
+		RootCAs:    pool,
+		ServerName: "127.0.0.1",
+		MinVersion: tls.VersionTLS12,
+	})
+	if err != nil {
+		t.Fatalf("dialTLS: %v", err)
+	}
+	defer raw.Close()
+
+	s := newSession(&connection{raw: raw, remoteAddr: ln.Addr().String()})
+	notAfter, ok := s.TLSCertNotAfter()
+	if !ok {
+		t.Fatal("TLSCertNotAfter on a TLS session = !ok")
+	}
+	if notAfter.Before(time.Now()) || notAfter.After(time.Now().Add(2*time.Hour)) {
+		t.Errorf("NotAfter %v outside expected window", notAfter)
+	}
+}
+
+func TestSession_TLSCertNotAfter_PlaintextFalse(t *testing.T) {
+	// Plaintext sessions present no certificate: the optional interface
+	// reports ok=false so callers skip the metric rather than publish
+	// garbage.
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	s := newSession(&connection{raw: client, remoteAddr: "pipe"})
+	if _, ok := s.TLSCertNotAfter(); ok {
+		t.Error("TLSCertNotAfter on plaintext session = ok, want !ok")
+	}
+}
+
 func TestDialTLS_DefaultConfigRejectsUntrustedCert(t *testing.T) {
 	// The secure default verifies against the system roots, so a self-signed
 	// certificate must be rejected. This proves verification is NOT disabled —
