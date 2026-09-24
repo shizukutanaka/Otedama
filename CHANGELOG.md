@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactored (session 415 — CS 観点の改善洗い出し（第一原理・ソクラテス問答）: セッションループの時刻源を完全統一)
+
+- **セッションループ内の全論理時刻を `sessionOpts.clk` へ統一** — `rt.tick`・
+  `lastJobReceivedAt`・`touchLastReject` が `time.Now()` 直読みで、debounce の
+  `t.clk` と混在していた（フェイク時計下では二つの時刻系がずれる矛盾）。
+  全て `opts.clk.Now()` へ（本番は `clock.System{}` で挙動不変、テストでは
+  全タイムスタンプが同一時計で一貫）。`runSessionV1`/`runSessionV2` 入口で
+  nil → `clock.System{}` 正規化を追加し直叩き経路も安全化。実経過測定
+  （submit RTT の `sendTime`）は real clock のまま — 論理時刻 vs 計測時刻を
+  区別する設計。Agile 関税スロット検索（`FetchAgileRates` 窓・`AgileRateAt`）も
+  `opts.Clock.Now()` へ統一。
+
 ### Refactored (session 414 — CS 観点の改善洗い出し（第一原理・ソクラテス問答）: sessionTelemetry に clock 注入)
 
 - **`sessionTelemetry` が `clock.Clock` を受け取るようになり、SV2 `UpdateChannel`

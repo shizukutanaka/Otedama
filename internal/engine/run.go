@@ -411,7 +411,7 @@ func Run(ctx context.Context, opts Options) error {
 			var last float64
 			tick := func() {
 				slots, err := rates.FetchAgileRates(ctx, nil, product, tariff,
-					time.Now().Add(-30*time.Minute), 48)
+					opts.Clock.Now().Add(-30*time.Minute), 48)
 				if err != nil {
 					return
 				}
@@ -419,7 +419,7 @@ func Run(ctx context.Context, opts Options) error {
 					m.tariffForwardMinPence.Set(lo)
 					m.tariffForwardMaxPence.Set(hi)
 				}
-				slot, ok := rates.AgileRateAt(slots, time.Now())
+				slot, ok := rates.AgileRateAt(slots, opts.Clock.Now())
 				if !ok {
 					return
 				}
@@ -1231,6 +1231,9 @@ func dialPool(ctx context.Context, opts *sessionOpts, password, protoLabel strin
 // and verdict correlation, SetTarget-driven target updates (carried on
 // Job.Target), and pending-share drain on disconnect.
 func runSessionV2(ctx context.Context, opts *sessionOpts) error {
+	if opts.clk == nil {
+		opts.clk = clock.System{}
+	}
 	if poolproto.FromURL(opts.poolURL) == poolproto.ProtocolStratumV2 {
 		// Plaintext Stratum V2: no transport encryption today (§2 — the
 		// Noise NX handshake exists but the connect path never invokes
@@ -1271,7 +1274,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 			return ctx.Err()
 
 		case <-statsTicker.C:
-			rt.tick(time.Now(), opts, sess.SuggestedDifficulty())
+			rt.tick(opts.clk.Now(), opts, sess.SuggestedDifficulty())
 			rt.suggestDifficultyOnce(ctx, sess, opts.log)
 			rt.updateChannelHashrate(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
@@ -1334,7 +1337,7 @@ func dispatchJob(opts *sessionOpts, job *poolproto.Job, chanID uint32, difficult
 		opts.log("info", fmt.Sprintf("engine: %s job %s nBits=0x%08X", tag, job.JobID, job.NBits))
 	}
 	if opts.m != nil {
-		opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
+		opts.m.lastJobReceivedAt.Set(float64(opts.clk.Now().Unix()))
 	}
 }
 
@@ -1377,7 +1380,7 @@ func submitV2Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 		if opts.m != nil {
 			opts.m.sharesRejected.Inc()
 			opts.m.rejectReason(category).Inc()
-			opts.m.touchLastReject(category, time.Now().Unix())
+			opts.m.touchLastReject(category, opts.clk.Now().Unix())
 		}
 		return
 	}
@@ -1401,6 +1404,9 @@ func submitV2Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 // It consumes the protocol-agnostic poolproto.Session interface
 // (Jobs() / Submit()) through the stratumv1 adapter.
 func runSessionV1(ctx context.Context, opts sessionOpts) error {
+	if opts.clk == nil {
+		opts.clk = clock.System{}
+	}
 	// "x" is the long-standing convention for "no real password" across V1
 	// pools/miners (most accept any value, some require non-empty), so an
 	// unconfigured PoolConfig.Password keeps sending it — only a pool
@@ -1440,7 +1446,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			return ctx.Err()
 
 		case <-statsTicker.C:
-			rt.tick(time.Now(), &opts, sess.SuggestedDifficulty())
+			rt.tick(opts.clk.Now(), &opts, sess.SuggestedDifficulty())
 			rt.suggestDifficultyOnce(ctx, sess, opts.log)
 			rt.updateChannelHashrate(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
@@ -1519,7 +1525,7 @@ func submitV1Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 		if opts.m != nil {
 			opts.m.sharesRejected.Inc()
 			opts.m.rejectReason(category).Inc()
-			opts.m.touchLastReject(category, time.Now().Unix())
+			opts.m.touchLastReject(category, opts.clk.Now().Unix())
 		}
 		return
 	}
