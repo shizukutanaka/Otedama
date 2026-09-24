@@ -1333,3 +1333,50 @@ func TestRejectReason_ConcurrentAccess(t *testing.T) {
 		}
 	}
 }
+
+// TestV1JobIDTable_VerbatimEcho pins the submit-side contract: the
+// synthetic ID the miner carries must resolve back to the pool's
+// opaque job_id string byte-for-byte — hex forms like "bf", ids with
+// leading zeros like "00123", and long digests all survive a round
+// trip that a numeric parse would destroy.
+func TestV1JobIDTable_VerbatimEcho(t *testing.T) {
+	var tab v1JobIDTable
+	raws := []string{"bf", "00123", "00000000deadbeef", "x"}
+	ids := make([]uint32, len(raws))
+	for i, raw := range raws {
+		ids[i] = tab.assign(raw)
+	}
+	// IDs are monotonic from zero.
+	for i, id := range ids {
+		if id != uint32(i) {
+			t.Fatalf("assign #%d returned id %d, want %d", i, id, i)
+		}
+	}
+	for i, raw := range raws {
+		got, ok := tab.lookup(ids[i])
+		if !ok || got != raw {
+			t.Errorf("lookup(%d) = %q,%v; want %q,true", ids[i], got, ok, raw)
+		}
+	}
+}
+
+// TestV1JobIDTable_EvictionPinnedByID fills the ring past capacity and
+// verifies an evicted entry is reported missing rather than resolved to
+// the newer occupant of its slot — a share on an overwritten slot must
+// not echo the wrong job_id.
+func TestV1JobIDTable_EvictionPinnedByID(t *testing.T) {
+	var tab v1JobIDTable
+	first := tab.assign("oldest")
+	for i := 0; i < v1JobIDTableSize; i++ {
+		tab.assign("newer")
+	}
+	// The first ID's slot was overwritten by a later assignment.
+	if raw, ok := tab.lookup(first); ok {
+		t.Errorf("lookup(%d) = %q,true after eviction; want missing", first, raw)
+	}
+	// The most recent assignment still resolves.
+	last := tab.assign("latest")
+	if raw, ok := tab.lookup(last); !ok || raw != "latest" {
+		t.Errorf("lookup(%d) = %q,%v; want \"latest\",true", last, raw, ok)
+	}
+}

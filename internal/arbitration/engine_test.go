@@ -5,6 +5,7 @@ package arbitration
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -55,6 +56,13 @@ func TestYield_Effective(t *testing.T) {
 		{"zero confidence", Yield{100, 0}, 0},
 		{"negative sats treated as zero", Yield{-50, 1.0}, 0},
 		{"negative confidence treated as zero", Yield{100, -0.5}, 0},
+		// Non-finite quotes: NaN defeats Decide's total-order sort and
+		// +Inf would outscore every competitor, so both land at zero.
+		{"NaN sats treated as zero", Yield{math.NaN(), 1.0}, 0},
+		{"NaN confidence treated as zero", Yield{100, math.NaN()}, 0},
+		{"+Inf sats treated as zero", Yield{math.Inf(1), 1.0}, 0},
+		{"-Inf sats treated as zero", Yield{math.Inf(-1), 1.0}, 0},
+		{"huge product overflowing to +Inf treated as zero", Yield{math.MaxFloat64, math.MaxFloat64}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -78,6 +86,28 @@ func TestDecide_RejectsNegativeHysteresis(t *testing.T) {
 	_, err := Decide(Input{HysteresisMargin: -0.1})
 	if err == nil {
 		t.Fatal("Decide must reject negative HysteresisMargin")
+	}
+}
+
+func TestDecide_RejectsNonFiniteMargins(t *testing.T) {
+	// NaN compares false against everything: a NaN margin would silently
+	// disable hysteresis (bestScore <= NaN) and a NaN floor would admit
+	// every candidate (y < NaN). +Inf makes the constraint unsatisfiable.
+	cases := []struct {
+		name string
+		in   Input
+	}{
+		{"NaN hysteresis", Input{HysteresisMargin: math.NaN()}},
+		{"+Inf hysteresis", Input{HysteresisMargin: math.Inf(1)}},
+		{"NaN min yield", Input{MinYieldSatsPerSec: math.NaN()}},
+		{"+Inf min yield", Input{MinYieldSatsPerSec: math.Inf(1)}},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Decide(tt.in); err == nil {
+				t.Errorf("Decide must reject %s", tt.name)
+			}
+		})
 	}
 }
 

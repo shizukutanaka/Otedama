@@ -1072,7 +1072,8 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
 		if sendJob {
-			// Use numeric job ID "1" so applyJob can parse it with fmt.Sscanf.
+			// Any job_id works — the pool's id is opaque and the engine
+			// assigns its own synthetic id for the miner's domain.
 			fmt.Fprintf(conn,
 				`{"id":null,"method":"mining.notify","params":[`+
 					`"1",`+
@@ -2034,9 +2035,9 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 	}
 }
 
-// TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
-// continue.
+// TestRunSessionV1_ApplyJobError covers the warn-and-continue path in
+// runSessionV1: applyJob returns an error when the pool's job carries
+// an invalid nBits (target computation fails), triggering the warn log.
 func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -2057,12 +2058,14 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Send job whose nBits cannot produce a target → applyJob errors.
+		// (A non-numeric job_id is no longer an error: the pool's id is
+		// opaque and echoed verbatim on submit via v1JobIDTable.)
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
 				`"not-a-number",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"","",[],"00000002","00000000","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 
@@ -2090,8 +2093,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, "bad target") {
+		t.Errorf("expected applyJob 'bad target' warn; got: %v", logLines)
 	}
 }
 

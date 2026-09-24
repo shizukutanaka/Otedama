@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 258 — コンピューターサイエンスの観点から改善点を洗い出す(第3ラウンド): 決定関数の全順序契約とV1 job_id ラウンドトリップ忠実性の違反2件+防御1件を修正)
+
+**全順序契約(arbitration は純粋関数・比較が全順序を要求).**
+
+- **`Yield.Effective()` の非有限値透過を遮断**(`arbitration/engine.go`): `SatsPerSecond <= 0 || Confidence <= 0` の入力側ガードは NaN を通す(NaN の全比較は false)。積 `SatsPerSecond*Confidence` を返すと、NaN は `y <= 0` フィルタを抜けてソート比較に混入し(Decide の決定性が未規定順序で崩れる)、+Inf は無条件に全デバイスを独占する。ガードを積側に移し `!(eff > 0) || IsInf(eff, 1)` で非正・NaN・±Inf・積のオーバーフローを一律 0 化——比較の全順序が保証され、非有限クォートは「クォートなし」と同値になる。
+- **`Decide` の NaN マージン検証を追加**: `HysteresisMargin=NaN` は閾値を NaN にし `bestScore <= NaN` が常 false→ヒステリシス黙殺、`MinYieldSatsPerSec=NaN` は `y < NaN` が常 false→フロア黙殺。`!(x >= 0) || IsInf(x, 1)` で NaN/±Inf を棄却(負値は従来通り)。
+
+**プロトコル忠実性(opaque フィールドの往復変換は無損失でなければならない).**
+
+- **V1 job_id の verbatim echo を復元**(`engine/run.go`): `poolproto.Job.JobID` は「Otedama にとって opaque、submit で verbatim に echo せよ」が型ドキュメントの契約だが、`applyJob` は `Sscanf %d` で数値化していた——hex 形式("bf" 等、Slush/Braiins 系で実在)の job_id は**全 job が drop され接続したまま永久に掘れない**状態、10進でも "00123"→"123" の劣化往復でプールに reject される経路だった。セッション単調カウンタの synthetic uint32 id を採用し `v1JobIDTable`(256エントリ ring、id 照合で上書き検出)が submit 時に生文字列へ逆引き。エントリ eviction 済みの share は従来通り decimal echo→stale reject に縮退(退行なし)。`applyJob` の `Sscanf` は撤廃、シグネチャに synthetic id を追加。lookup は submit goroutine ではなく select ループ内で実行(ring への非同期アクセスを排除)。`TestApplyJob_UnparseableJobID`→`TestApplyJob_OpaqueJobID_Accepted` に置換、`TestRunSessionV1_ApplyJobError` の warn 経路は不正 nBits に置き換え、`TestV1JobIDTable_VerbatimEcho`/`_EvictionPinnedByID` を新設。
+
 ### Fixed (session 257 — コンピューターサイエンスの観点から改善点を洗い出す(第2ラウンド): untrusted pool input の ingest 検証を CS 不変条件で問い詰め——クラッシュ/OOM 経路2件、静かな hashrate DoS 2件、並行リーク1件を修正)
 
 session 256 と同じ検証手続き(不変条件ごとに「コード経路上で破壊シナリオが構成できるか」を確認したもののみ採択)。今回は pool→miner 方向の ingest 境界(parse層)と残りの map 境界に集中した。

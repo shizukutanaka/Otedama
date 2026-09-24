@@ -1024,6 +1024,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// not a per-share tally (KNOWN_LIMITATIONS.md §9).
 	var estSats uint64
 	var satsAcc satsAccountant
+	var jobIDs v1JobIDTable
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
@@ -1105,7 +1106,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty(), jobIDs.assign(job.JobID)); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
@@ -1127,6 +1128,17 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			// pool response doesn't block the job-receive path.
 			capturedShare := share
 			capturedSess := sess
+			// The submit must echo the pool's opaque job_id verbatim
+			// (poolproto.ShareSubmission's contract). The share carries
+			// the session-scoped synthetic id assigned in the job path;
+			// resolve it here — inside the loop — since the submit
+			// goroutine must not touch the table unsynchronized. A share
+			// whose entry was evicted falls back to the decimal form;
+			// the pool rejects it as stale either way.
+			jobID := fmt.Sprintf("%d", capturedShare.JobID)
+			if raw, ok := jobIDs.lookup(capturedShare.JobID); ok {
+				jobID = raw
+			}
 			if opts.m != nil {
 				// Counted here, not after Submit returns: "submitted" means
 				// the transmission was attempted, matching the V2 path's
@@ -1139,7 +1151,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
+					JobID: jobID,
 					Nonce: capturedShare.Nonce,
 					NTime: capturedShare.NTime,
 				})
@@ -1378,23 +1390,24 @@ func isDifficultyTransitionReject(share *miner.Share, currentTarget miner.Hash) 
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
 // decoder — the connection point for the engine→poolproto integration
-// (docs/KNOWN_LIMITATIONS.md §3). The job's string JobID is parsed back
-// to the uint32 the miner uses; an unparseable ID yields job 0, which
-// the pool will reject on submit, surfacing the problem rather than
-// silently mining a malformed job.
+// (docs/KNOWN_LIMITATIONS.md §3).
+//
+// jobID is the session-scoped synthetic identifier allocated by the
+// caller's v1JobIDTable. The pool's job_id is an opaque string that
+// must be echoed verbatim on submit — arbitrary strings including hex
+// forms like "bf" — so it cannot be represented in the miner's uint32
+// domain at all; mapping it through the table is what keeps shares
+// attributable without ever rejecting a well-formed job on an
+// interpretation the protocol does not impose.
 //
 // difficulty is the Stratum V1 session's most recent mining.set_difficulty
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64, jobID uint32) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
-	}
-	var jobID uint32
-	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
 	}
 	w := &miner.Work{
 		JobID:     jobID,
@@ -1411,6 +1424,47 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// v1JobIDTable maps the synthetic uint32 job IDs Otedama assigns to V1
+// jobs back to the pool's opaque job_id string, which must be echoed
+// verbatim on mining.submit. V1 job_ids are arbitrary strings (decimal,
+// hex like "bf", or longer digests) with no numeric interpretation the
+// protocol defines, so the session owns a monotonic counter and this
+// table provides the inverse lookup at submit time.
+//
+// It is a fixed-size ring keyed on the low bits of the synthetic ID:
+// the oldest entry is evicted automatically as the counter advances,
+// and the stored ID distinguishes an overwritten slot from a live one,
+// so a share referencing an evicted job falls back to a decimal echo
+// that the pool rejects as stale — the same outcome as before, never a
+// silently wrong job_id.
+const v1JobIDTableSize = 256
+
+type v1JobIDEntry struct {
+	id  uint32
+	raw string
+}
+
+type v1JobIDTable struct {
+	ring [v1JobIDTableSize]v1JobIDEntry
+	next uint32
+}
+
+// assign allocates the next synthetic ID for a pool job_id and records
+// the verbatim string under it.
+func (t *v1JobIDTable) assign(raw string) uint32 {
+	id := t.next
+	t.next++
+	t.ring[id%v1JobIDTableSize] = v1JobIDEntry{id: id, raw: raw}
+	return id
+}
+
+// lookup resolves a synthetic ID back to the pool's verbatim job_id.
+// ok is false when the entry was evicted by a newer assignment.
+func (t *v1JobIDTable) lookup(id uint32) (string, bool) {
+	e := t.ring[id%v1JobIDTableSize]
+	return e.raw, e.id == id
 }
 
 func parseHost(url string) (string, error) {

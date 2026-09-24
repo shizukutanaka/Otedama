@@ -418,22 +418,26 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, job, 1, 0, 7); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+func TestApplyJob_OpaqueJobID_Accepted(t *testing.T) {
+	// A V1 job_id is opaque to Otedama — pools use hex forms like "bf"
+	// or longer digests. applyJob must not impose a numeric
+	// interpretation on it: the verbatim string is echoed on submit via
+	// v1JobIDTable, and the synthetic uint32 the caller passes is the
+	// only ID the miner ever sees.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
-		JobID: "not-a-number",
+		JobID: "bf",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0, 3); err != nil {
+		t.Fatalf("applyJob(hex job_id): %v", err)
 	}
 }
 
@@ -443,7 +447,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, job, 1, 0, 0)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,7 +461,7 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001, 0); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
 	}
 }

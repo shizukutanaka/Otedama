@@ -89,11 +89,22 @@ type Yield struct {
 
 // Effective returns the confidence-adjusted yield. A quote with zero
 // confidence is treated as zero yield.
+//
+// The guard is on the product, not the inputs, so every non-finite and
+// non-positive result lands at 0: NaN (from any operand) fails the
+// `eff > 0` test, -Inf fails it too, and +Inf — a finite-looking quote
+// that would otherwise outscore every competitor and capture every
+// device — is rejected explicitly. Decide's ordering contract requires
+// yields to be a total order; a NaN yield would defeat that contract
+// (it compares false against everything and silently passes the
+// `y <= 0` candidate filter), so unrepresentable quotes are equivalent
+// to no quote at all.
 func (y Yield) Effective() float64 {
-	if y.SatsPerSecond <= 0 || y.Confidence <= 0 {
+	eff := y.SatsPerSecond * y.Confidence
+	if !(eff > 0) || math.IsInf(eff, 1) {
 		return 0
 	}
-	return y.SatsPerSecond * y.Confidence
+	return eff
 }
 
 // Stream is a revenue source's quote for what it will pay for each
@@ -292,11 +303,16 @@ func Decide(in Input) (*Allocation, error) {
 	if !in.Policy.Valid() {
 		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
 	}
-	if in.HysteresisMargin < 0 {
-		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
+	// Non-finite margins are rejected alongside negatives: NaN compares
+	// false against every score, so a NaN HysteresisMargin would silently
+	// disable hysteresis (bestScore <= NaN is always false) and a NaN
+	// floor would admit every candidate (y < NaN is always false); +Inf
+	// makes the respective constraint unsatisfiable.
+	if !(in.HysteresisMargin >= 0) || math.IsInf(in.HysteresisMargin, 1) {
+		return nil, errors.New("arbitration: HysteresisMargin must be finite and non-negative")
 	}
-	if in.MinYieldSatsPerSec < 0 {
-		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
+	if !(in.MinYieldSatsPerSec >= 0) || math.IsInf(in.MinYieldSatsPerSec, 1) {
+		return nil, errors.New("arbitration: MinYieldSatsPerSec must be finite and non-negative")
 	}
 
 	// Reject duplicate device IDs up front, since silently ignoring
