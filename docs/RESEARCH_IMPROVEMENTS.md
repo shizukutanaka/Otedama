@@ -175,10 +175,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
    against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
-8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
-   to re-enter N words) — reduces fund-loss from un-backed-up seeds.
-   — Implemented in PR #124 (interactive first-run recovery-phrase backup
-   check; sibling branch pending merge).
+8. ✅ **Seed backup reminder / verification flow — RESOLVED (session 313,
+   ported from the session-264 sibling branch).**
+   First-run creation now prompts the operator to re-enter 3 randomly
+   chosen words (one retry with fresh positions on a miss) immediately
+   after the phrase is printed — the only window where a transcription
+   error is still fixable. Constant-time word compare; skipped silently
+   on non-terminal stdin so unattended first runs never block;
+   `--no-wallet-backup-check` opt-out. Original finding: Seed backup
+   reminder / verification flow on first run (ask the user to re-enter
+   N words) — reduces fund-loss from un-backed-up seeds.
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not

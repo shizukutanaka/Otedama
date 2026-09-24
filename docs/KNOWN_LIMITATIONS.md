@@ -769,6 +769,14 @@ compare fingerprints, print match/mismatch) and `otedama wallet
 change-passphrase` (wiring the existing, already-tested
 `ChangePassphrase`) would close both halves without new dependencies.
 
+**Partially mitigated (session 264):** the *first-run* half of the backup
+gap is now closed — when a new wallet is created on an interactive
+terminal, `run` asks the operator to re-enter 3 randomly chosen words
+(one retry) so a transcription error is caught while the printed phrase
+is still on screen. What remains open is after-the-fact verification
+(re-checking a written phrase days later) and passphrase rotation, both
+of which still need the `wallet` subcommand above.
+
 ---
 
 ## How to verify the real vs. simulated boundary yourself

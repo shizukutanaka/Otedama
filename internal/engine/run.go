@@ -92,6 +92,17 @@ type Options struct {
 	// already folded into the seed stored there.
 	WalletMnemonicPassphrase string
 
+	// Input, when connected to an interactive terminal, enables the
+	// first-run recovery-phrase backup check: after the mnemonic is
+	// printed the operator is asked to re-enter a few of its words. A
+	// nil reader or a non-terminal reader (pipe, /dev/null, service
+	// manager) skips the check silently — unattended runs never block.
+	Input io.Reader
+
+	// NoBackupCheck disables the interactive first-run backup check even
+	// when Input is a terminal (scripted interactive runs, CI demos).
+	NoBackupCheck bool
+
 	// Metrics, if set, receives runtime metrics (hashrate, shares, pool
 	// latency, arbitration switches). Nil disables metrics emission.
 	Metrics *metrics.Registry

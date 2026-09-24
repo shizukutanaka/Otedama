@@ -31,6 +31,7 @@ otedama run [flags]
 | `--no-pool-share-check` | bool | `false` | Skip the one-shot mempool.space lookup that warns when the configured pool controls ≥30% of weekly network blocks (large-pool concentration risk). |
 | `--wallet-passphrase` | string | (empty) | Passphrase to unlock/create the Lightning wallet. Empty = skip wallet. |
 | `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
+| `--no-wallet-backup-check` | bool | false | (run only) Skip the interactive recovery-phrase backup check on first wallet creation. The check only ever runs on an interactive terminal — unattended runs already skip it — so this flag exists for scripted interactive sessions and demos. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
 | `--dry-run` | bool | `false` | Validate configuration and exit without mining. |
 
@@ -392,6 +393,14 @@ not serialized to disk.
 
 The mnemonic is derived from the seed and is never stored on disk.
 **The mnemonic is only displayed once, on first run.**
+
+On first run, when stdin is an interactive terminal, Otedama then runs a
+backup check: the operator is asked to re-enter 3 randomly chosen words
+(one retry with different words after a miss). A failure prints a loud
+warning but does not block startup — the wallet is already created and
+mining may proceed while the written copy is re-checked. Piped,
+redirected, or service-managed stdin skips the check silently;
+`--no-wallet-backup-check` disables it on interactive terminals.
 
 ---
 

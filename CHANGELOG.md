@@ -595,6 +595,30 @@ cherry-pick 移植。session-283 の poolproto 統合で接続確立は共通 `d
 へ集約済みのため、照会呼出しは V2/V1 の接続確立直後に1箇所ずつ — 元実装の
 発火点と同一（ハンドシェイク完了・onConnected 済み・ホスト名は
 `poolproto.StripScheme` で取得、旧 `parseHost` ラッパは吸収済み）。)*
+### Added (session 264 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 初回実行時のリカバリフレーズ書き写し検証)
+
+- **初回ウォレット作成時のバックアップ検証フローを追加（Cat 3 #8 解消）.**
+  mnemonic 表示直後、ランダムに選ばれた 3 単語の再入力を求める
+  （不一致時は別位置で 1 回再試行）。転記ミスはサイレントに資金喪失に
+  直結するため、印刷されたフレーズがまだ画面に残る最初の機会でのみ
+  検出可能 — BIP-39 導出は一方向で、後から phrase を再導出できない。
+  単語比較は `crypto/subtle` の恒常時間比較（session 263 監査方針に
+  準拠）。失敗は警告のみで起動はブロックしない。非対話 stdin
+  （systemd / パイプ / /dev/null）ではサイレントにスキップされ、
+  無人初回起動が入力待ちで停止することはない。
+- **`--no-wallet-backup-check` フラグを追加.** 対話端末上でもチェックを
+  明示的に無効化（スクリプト化された対話実行・デモ向け）。engine
+  Options に `Input io.Reader` / `NoBackupCheck` を追加し、端末判定は
+  `os.ModeCharDevice` の stdlib 検査のみ（新規依存ゼロ）。
+- **KNOWN_LIMITATIONS §16 を部分緩和として更新.** 初回実行時の検証は
+  実装済み、事後再検証とパスフレーズローテーションは引き続き
+  `wallet` サブコマンド待ち。
+
+*(session 313: 別系チェーンの未マージ PR に留まっていた本機能を現チェーンへ
+cherry-pick 移植。`Options.Input` 経由の stdin 判定・`setupWallet` 配線・
+`--no-wallet-backup-check` は現構造へそのまま適合。§16 の残半分
+（事後検証・パスフレーズローテーションの `wallet` サブコマンド）は
+別系 PR #104 に実装済みだが未移植 — 後続ラウンドで移植対象。)*
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
