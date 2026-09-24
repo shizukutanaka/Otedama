@@ -574,6 +574,17 @@ cherry-pick 移植。session-283 の poolproto 統合で V1/V2 個別ループ�
 共有ティックに1箇所配線 — 元実装の2箇所配線と同じ発火経路を維持。
 併せて前回移植で混入していた紛争マーカー残置1行を除去。)*
 
+### Added (session 266 — Github・論文・Qiita・Zenn・海外技術情報などを参考にさらなる改善（おまかせ）: OpenMetrics エグゼンプラ付き submit-latency ヒストグラムで遅延スパイクをシェアまで追跡可能に)
+
+- **`otedama_submit_latency_seconds` ヒストグラム新設**（RESEARCH_IMPROVEMENTS Cat 9/10 項目20 — "trace exemplars"）。`internal/metrics` に exemplar 対応 `Histogram` を実装（le バケット + `_sum`/`_count`、`slices.BinarySearch` でバケット決定、exemplar は各バケット最新1件）。OpenMetrics の ` # {…} v ts` 構文は text/0.0.4 パーサではコメントとして読み飛ばされるため後方互換。
+- **V1/V2 とも `{job_id}` をエグゼンプラとして記録**。p99 スパイクが発生した際に「どのシェアが遅かったか」をログ（`engine: share seq=N`）へ直接 join できる。registrable name は `otedama_submit_latency_milliseconds` の quantile ゲージ群が既に占有＆SLO 契約 (API.md) 上のため、Prometheus 命名規約どおり canonical `_seconds` 名を採用 — SPECIFICATION §8 G18 の "expose a parallel `_seconds` series" 案に一致（G18 を partially resolved に更新）。
+
+*(session 311: 別系チェーンの未マージ PR に留まっていた本機能を現チェーンへ
+cherry-pick 移植。session-283 の poolproto 統合で V2 の submitTimes 決済は
+アダプタ側シーケンス相関へ移管されたため、エグゼンプラキーは両プロトコル
+`job_id` に統一 — latency.Record の発火経路（V1 エラー/受理、V2 エラー/
+unconfirmed/受理）は全てそのままヒストグラムへ配線。)*
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

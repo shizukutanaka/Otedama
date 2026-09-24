@@ -92,6 +92,14 @@ type engineMetrics struct {
 	submitLatencyP95 *metrics.Gauge
 	submitLatencyP99 *metrics.Gauge
 
+	// submitLatencyHist is the native-bucket counterpart of the quantile
+	// gauges: every settled share→verdict round-trip lands in a le bucket
+	// carrying an exemplar ({job_id}) so a p99 spike links directly to
+	// the submission that produced it — the trace-join the gauges cannot
+	// express (RESEARCH_IMPROVEMENTS Cat 9/10 item 20). Registered under the canonical _seconds unit; the
+	// _milliseconds gauges remain for the documented SLO contract.
+	submitLatencyHist *metrics.Histogram
+
 	shareAcceptanceRate *metrics.Gauge
 
 	// sharesUnaccounted is shares found locally but not yet judged by the pool
@@ -395,6 +403,14 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_submit_latency_milliseconds",
 			"Share-submission round-trip latency (submit→accept).",
 			map[string]string{"quantile": "0.99"}),
+
+		submitLatencyHist: reg.NewHistogram(
+			"otedama_submit_latency_seconds",
+			"Share-submission round-trip latency (submit→verdict). "+
+				"Buckets carry an exemplar ({job_id}) "+
+				"linking each observation to the submission that produced it.",
+			nil,
+			[]float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}),
 
 		shareAcceptanceRate: reg.NewGauge(
 			"otedama_share_acceptance_rate",

@@ -53,14 +53,16 @@ type Registry struct {
 	mu         sync.RWMutex
 	counters   map[string]*Counter
 	gauges     map[string]*Gauge
+	histograms map[string]*Histogram
 	collectors []CollectFunc
 }
 
 // NewRegistry returns an empty metrics registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		counters: make(map[string]*Counter),
-		gauges:   make(map[string]*Gauge),
+		counters:   make(map[string]*Counter),
+		gauges:     make(map[string]*Gauge),
+		histograms: make(map[string]*Histogram),
 	}
 }
 
@@ -173,6 +175,9 @@ func (r *Registry) NewCounter(name, help string, labels map[string]string) *Coun
 	if gaugeNameExists(r.gauges, name) {
 		panic(fmt.Sprintf("metrics: name %q already registered as a gauge; cannot also be a counter", name))
 	}
+	if histogramNameExists(r.histograms, name) {
+		panic(fmt.Sprintf("metrics: name %q already registered as a histogram; cannot also be a counter", name))
+	}
 	c := &Counter{name: name, help: help, labels: cloneLabels(labels)}
 	r.counters[key] = c
 	return c
@@ -207,6 +212,9 @@ func (r *Registry) NewGauge(name, help string, labels map[string]string) *Gauge 
 	if counterNameExists(r.counters, name) {
 		panic(fmt.Sprintf("metrics: name %q already registered as a counter; cannot also be a gauge", name))
 	}
+	if histogramNameExists(r.histograms, name) {
+		panic(fmt.Sprintf("metrics: name %q already registered as a histogram; cannot also be a gauge", name))
+	}
 	g := &Gauge{name: name, help: help, labels: cloneLabels(labels)}
 	r.gauges[key] = g
 	return g
@@ -238,6 +246,10 @@ func (r *Registry) WriteText(w io.Writer) error {
 		name, help, kind string
 		labels           map[string]string
 		text             string
+		// lines, when non-nil, are pre-rendered exposition lines emitted
+		// verbatim instead of the `name{labels} text` form — a histogram
+		// occupies several series under one registration.
+		lines []string
 		// key is the precomputed sort key (metricKey output). Computing it
 		// once here — rather than inside the sort comparator — turns O(n log n)
 		// metricKey calls (each allocating a slice and a strings.Builder) into
@@ -263,6 +275,14 @@ func (r *Registry) WriteText(w io.Writer) error {
 			key:    metricKey(g.name, g.labels),
 		})
 	}
+	for _, h := range r.histograms {
+		entries = append(entries, entry{
+			name: h.name, help: h.help, kind: "histogram",
+			labels: h.labels,
+			lines:  h.render(),
+			key:    metricKey(h.name, h.labels),
+		})
+	}
 	// Snapshot collector list while the lock is held.
 	fns := make([]CollectFunc, len(r.collectors))
 	copy(fns, r.collectors)
@@ -286,6 +306,14 @@ func (r *Registry) WriteText(w io.Writer) error {
 			if _, err := fmt.Fprintf(w, "# TYPE %s %s\n", e.name, e.kind); err != nil {
 				return err
 			}
+		}
+		if e.lines != nil {
+			for _, ln := range e.lines {
+				if _, err := fmt.Fprintln(w, ln); err != nil {
+					return err
+				}
+			}
+			continue
 		}
 		labelStr := renderLabels(e.labels)
 		if _, err := fmt.Fprintf(w, "%s%s %s\n", e.name, labelStr, e.text); err != nil {
