@@ -253,10 +253,22 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		// Reload work if it changed.
 		w.mu.Lock()
 		if w.work != localWork || w.workVer != localWorkVer {
+			// The nonce sequence start+k*step partitions the space of one
+			// job's header — the (header, nonce) pairs this thread may
+			// hash. A retarget (same job identity, same header, new
+			// target) leaves that space unchanged: keep the position so
+			// no already-proven pair is re-hashed. Only a genuinely new
+			// job (different header or id) resets the sequence, because
+			// its header makes every pair fresh again.
+			if localWork == nil || w.work == nil ||
+				localWork.JobID != w.work.JobID ||
+				localWork.ChannelID != w.work.ChannelID ||
+				localWork.Header != w.work.Header {
+				nonce = w.cfg.NonceStart + threadID
+				exhausted = false
+			}
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = w.cfg.NonceStart + threadID // restart nonce from offset on new job
-			exhausted = false
 		}
 		w.mu.Unlock()
 

@@ -315,6 +315,13 @@ func (s *session) dispatch(line []byte) bool {
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
 			s.setExtranonce(en1, sz)
+			// The rotation invalidates every queued job's coinbase: their
+			// merkle roots were computed with the previous extranonce1, and
+			// the pool now rebuilds with the new one — shares ground
+			// against them reject by construction. Purge like clean_jobs;
+			// pools send a fresh notify after rotating. (Jobs already
+			// delivered to workers expire on that next notify.)
+			s.drainJobs()
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -383,15 +390,8 @@ func (s *session) sendJob(job poolproto.Job) {
 	}
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
-		for {
-			select {
-			case <-s.jobsCh:
-			default:
-				goto send // channel empty
-			}
-		}
+		s.drainJobs()
 	}
-send:
 	select {
 	case s.jobsCh <- job:
 	default:
@@ -404,6 +404,18 @@ send:
 		select {
 		case s.jobsCh <- job:
 		default:
+		}
+	}
+}
+
+// drainJobs discards every job still queued for the worker — the
+// clean_jobs purge and the set_extranonce invalidation share it.
+func (s *session) drainJobs() {
+	for {
+		select {
+		case <-s.jobsCh:
+		default:
+			return
 		}
 	}
 }

@@ -2971,3 +2971,87 @@ func TestRunSessionV2_SessionEndReleasesReader(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// TestRunSessionV1_DifficultyUpdateRetargetsWork scripts a pool that
+// issues a job under an unreachable difficulty, then lowers it mid-job.
+// Without the retarget the worker keeps grinding the stale (hard)
+// target and no share can ever be produced; with it the stats tick
+// re-applies the same job at the new difficulty and a mining.submit
+// arrives — the only observable proof that in-flight work was re-armed.
+func TestRunSessionV1_DifficultyUpdateRetargetsWork(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	var submits atomic.Int32
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Issue the job under an unreachable difficulty first, then
+		// re-target mid-job to a near-all-FF target.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e15]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"01","ff",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		time.Sleep(200 * time.Millisecond) // let the hard target apply
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e-6]}`+"\n")
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.Contains(line, `"mining.submit"`) {
+				submits.Add(1)
+				fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
+			}
+		}
+	}()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := make(chan miner.Share, 64)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	go func() {
+		for s := range shares {
+			merged <- s
+		}
+	}()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	go func() {
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "w",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 30 * time.Millisecond,
+			log:      func(_, _ string) {},
+			m:        m,
+		})
+	}()
+
+	deadline := time.After(8 * time.Second)
+	for submits.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("no mining.submit arrived — in-flight work was never re-armed at the new difficulty")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}

@@ -473,3 +473,41 @@ func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
 		t.Errorf("DeviceID() = %q, want empty string", got)
 	}
 }
+
+func TestWorker_RetargetKeepsNoncePosition(t *testing.T) {
+	// A retarget — same job identity and header, only the share target
+	// changes — must not reset the nonce sequence: the (header, nonce)
+	// space is identical, so restarting would re-hash already-proven
+	// pairs and produce duplicate share submissions the pool rejects.
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStart: 0, NonceStep: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+
+	work := makeEasyWork()
+	w.SetWork(work)
+
+	var first Share
+	waitFor(t, ctx, shares, func(s Share) bool { first = s; return true })
+
+	// Retarget: identical header/JobID/ChannelID, different Target.
+	retargeted := *work
+	var harder Hash
+	for i := range harder {
+		harder[i] = 0xFE // still accepts essentially every hash
+	}
+	retargeted.Target = harder
+	w.SetWork(&retargeted)
+
+	var second Share
+	waitFor(t, ctx, shares, func(s Share) bool {
+		if s.Target == harder {
+			second = s
+			return true
+		}
+		return false
+	})
+	if second.Nonce <= first.Nonce {
+		t.Errorf("nonce restarted on retarget: first=%d second=%d — same (header,nonce) pairs would be re-hashed", first.Nonce, second.Nonce)
+	}
+}

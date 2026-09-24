@@ -2247,3 +2247,40 @@ func TestParseNotify_MalformedCoinbaseParts_Rejected(t *testing.T) {
 		})
 	}
 }
+
+func TestSession_SetExtranoncePurgesQueuedJobs(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Queue a job (jobsCh is buffered; nothing drains it yet).
+	sess.sendJob(poolproto.Job{JobID: "old", Coinb1: []byte{1}, Coinb2: []byte{2}})
+	if len(sess.Jobs()) != 1 {
+		t.Fatalf("precondition: queued job len=%d, want 1", len(sess.Jobs()))
+	}
+
+	go func() {
+		_, _ = serverConn.Write([]byte(`{"id":null,"method":"mining.set_extranonce","params":["aabbcc",6]}` + "\n"))
+	}()
+
+	// The rotation must empty the queue: jobs whose merkle root was
+	// computed under the previous extranonce1 can only produce shares the
+	// pool rejects by construction.
+	deadline := time.After(2 * time.Second)
+	for {
+		if len(sess.Jobs()) == 0 && sess.extranonceState().en1 == "aabbcc" {
+			return // drained and new state installed
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("queued job survived set_extranonce rotation (len=%d, en1=%q)", len(sess.Jobs()), sess.extranonceState().en1)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}

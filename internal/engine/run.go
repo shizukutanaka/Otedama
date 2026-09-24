@@ -1172,6 +1172,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var estSats uint64
 	var satsAcc satsAccountant
 	var jobIDs v1JobIDTable
+	// lastV1Job retains the most recently applied job plus the difficulty
+	// its work target was baked with. A mining.set_difficulty arriving
+	// mid-job changes the bar the pool validates with, but workers keep
+	// grinding the stale (easier) target — every share found below the
+	// new bar is rejected by construction. The stats tick re-applies the
+	// same job at the current difficulty so shares are ground against
+	// what the pool will actually accept.
+	var (
+		lastV1Job        poolproto.Job
+		lastV1JobID      uint32
+		lastV1Difficulty float64
+		lastV1JobOK      bool
+	)
 	// submitSlots is the semaphore enforcing maxConcurrentSubmits: one
 	// slot per in-flight mining.submit goroutine, released when the call
 	// returns (response, rpc timeout, or session close).
@@ -1236,6 +1249,22 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
 			}
+			// Re-arm in-flight work when the pool re-targets: a difficulty
+			// raise after the job was issued leaves shares ground against
+			// the stale easier target — every one rejected. Re-applying the
+			// same job is safe for the workers' nonce space: grind resets
+			// the nonce sequence only on a genuine job/header change, so a
+			// same-header retarget keeps each thread's position (no pair is
+			// hashed twice — see grind's reload check).
+			if lastV1JobOK && !opts.isCurtailed() {
+				if d := sess.SuggestedDifficulty(); d != lastV1Difficulty {
+					if err := applyJob(opts.workers, lastV1Job, chanID, d, lastV1JobID); err != nil {
+						opts.log("warn", fmt.Sprintf("engine: V1 retarget for job %s: %v", lastV1Job.JobID, err))
+					} else {
+						lastV1Difficulty = d
+					}
+				}
+			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
@@ -1257,10 +1286,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty(), jobIDs.assign(job.JobID)); err != nil {
+				difficulty := sess.SuggestedDifficulty()
+				synthetic := jobIDs.assign(job.JobID)
+				if err := applyJob(opts.workers, job, chanID, difficulty, synthetic); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
+				lastV1Job, lastV1JobID, lastV1Difficulty, lastV1JobOK = job, synthetic, difficulty, true
 				opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {

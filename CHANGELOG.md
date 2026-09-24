@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 270 — コンピューターサイエンスの観点から改善点を洗い出す(第15ラウンド): プールのリターゲット通知が配布済みワークに反映されない——set_difficulty の in-flight 未再適用 + set_extranonce のキュー内ジョブ残留、計3箇所)
+
+第15ラウンドの Socratic 問いは「**プールが条件を変えたとき、すでに配った仕事の前提はまだ成り立つか?**」——ジョブ配布時点のスナップショットで焼き付けた値(シェアターゲット・マークルルート)は、プールの後続通知で無効化される。実証3箇所:
+
+- **V1 `set_difficulty` 上昇が in-flight ワークに適用されない**(実害: 難易度上げ後に発見された全シェアが構造的拒否): `applyJob` はジョブ到着時点の `SuggestedDifficulty()` でターゲットを焼き付け、以後ワーカーは旧(易しい)ターゲットで掘り続ける——プールは新基準未満のシェアを全て拒否する(第255セッションの benign-transition 分類はメトリクスを守るが焼失したハッシュレートは戻らない)。`runSessionV1` が最後に適用したジョブ・合成ID・適用時難易度を保持し、stats ティックで難易度変化を検出したら同一ジョブを再 `applyJob`(同一合成IDで submit echo も一貫)。curtail 中は再適用しない。
+- **ワーカーの nonce シーケンスがリターゲットでリセットされる**: `grind` のリロードが「ワーク変更一律で nonce=NonceStart+threadID に戻す」ため、同一ヘッダのターゲット更新でも訪問済み (header, nonce) 対を再ハッシュし重複シェアを送り得る(第268セッションの不変条件に反する)。リロード時に「JobID/ChannelID/Header のいずれかが変わった場合のみ」nonce をリセット——同一ヘッダのリターゲットは対象空間が同一なので位置を保持しつつ `localWork` の新ターゲットで掘削を継続する。
+- **`mining.set_extranonce` がキュー内ジョブを残留させたまま extranonce を交換**: キュー済みジョブの merkle root は旧 extranonce1 で計算済み——プールは新 en1 でコインベースを再構築するため、それらのジョブで掘ったシェアは全て構造的拒否。`set_extranonce` 受理時に `clean_jobs` と同型の排出(新設 `drainJobs` で purge を共有化);プールは回転直後に新 notify を送るため適用済みワークもその時点で更新される。
+
+**検証手続き(棄却済み候補).** `Share.NTime` は `localWork.Header.Time` の正しい echo、v1JobIDTable のリング退避は lookup miss → 10進フォールバックで「stale 拒否として観測可能」に安全収束、set_difficulty 降下でも再適用は正当(易し目ターゲットのシェアは受理される)、難易度同一 float64 値の等値比較は同じパース結果を共有するため安全、en1 非hex時は merkle 計算スキップで現状同等。
+
+**テスト.** `TestWorker_RetargetKeepsNoncePosition`(同一ヘッダリターゲット後のシェア nonce が増分継続かつ新ターゲットを担う)、`TestSession_SetExtranoncePurgesQueuedJobs`(回転通知でキュー空+新状態適用)、`TestRunSessionV1_DifficultyUpdateRetargetsWork`(到達不能難易度でジョブ発行→途中で易化→mining.submit が到達することで in-flight 再適用を証明——修正前はシェア不可)。`go test ./...` 全24pkg 緑、`-race` ./internal/{poolproto/...,engine,miner} 緑、差分行 lint/gofumpt クリーン(runSessionV1 gocyclo 43→47・sendJob hugeParam は親時点から閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 269 — コンピューターサイエンスの観点から改善点を洗い出す(第14ラウンド): Stratum V1 採掘経路が構造的に有効なシェアを生成不能——コインベース材料破棄による merkle root ゼロ化 + ヘッダフィールド未配線、計2箇所)
 
 第14ラウンドの Socratic 問いは「**ワーカーが掘るヘッダは、プールがシェア検証時に再構築するヘッダと同一か?**」——Stratum V1 では、プールは `coinbase = coinb1 || extranonce1 || extranonce2 || coinb2` を sha256d して merkle ブランチで fold した root と、notify の prevhash/version/nbits/ntime/nonce から完全な80バイトヘッダを再構築する。ワーカー側のヘッダが**1バイトでも異なれば全シェアは構造的に無効**。監査の結果、この不変条件が2箇所で破れ、V1 経路が**設計上ほぼ100%の拒否率**となることを実証(KNOWN_LIMITATIONS に記載なし):
