@@ -1251,6 +1251,30 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 275 increment (extranonce race)
+
+### Implemented
+
+1. ✅ **V1 `extranonce1`/`extranonce2Size` are now atomic** — a genuine
+   data race: `mining.set_extranonce` dispatches on the readLoop
+   goroutine while `Submit` reads `extranonce2Size` on the caller's
+   goroutine (mid-session rotation is a real pool behaviour — slushpool
+   rotates per-connection). Plain int/string → `atomic.Int64` /
+   `atomic.Pointer[string]`. The handshake write happens *after*
+   `start()` launches readLoop, so even negotiation wasn't safe under
+   the memory model. New `-race` test loops set_extranonce dispatch
+   against Submit.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **`s.difficulty` (set_difficulty)** — already `atomic.Uint64`.
+- ✅ **`pending` map** — already mutex-guarded (`pendingMu`).
+- ✅ **`s.user`** — written once in `Negotiate` before any Submit can
+  run (same goroutine happens-before), read-only thereafter.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 274 increment (notify strictness + nTime-cap diagnosis)
 
 ### Implemented
@@ -1691,6 +1715,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-275 additions (September 2026): V1 extranonce fields are
+atomic — mid-session set_extranonce rotation raced against Submit's
+extranonce2Size read.*
 
 *Session-274 additions (September 2026): malformed V1 notify hex fields
 now drop the job into the starvation watchdog instead of minting silent

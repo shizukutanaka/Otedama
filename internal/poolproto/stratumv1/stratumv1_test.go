@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -877,11 +878,11 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if sess.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
+	if *sess.extranonce1.Load() != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", *sess.extranonce1.Load())
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if sess.extranonce2Size.Load() != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
 	}
 }
 
@@ -1535,11 +1536,11 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if sv1.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
+	if *sv1.extranonce1.Load() != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", *sv1.extranonce1.Load())
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if sv1.extranonce2Size.Load() != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
 	}
 }
 
@@ -2011,4 +2012,43 @@ func TestParseNotify_BadHexFieldsError(t *testing.T) {
 			t.Errorf("%s: parseNotify should reject, got nil error", name)
 		}
 	}
+}
+
+// TestSession_SetExtranonceConcurrentWithSubmit_NoRace exercises the
+// extranonce fields under -race: mining.set_extranonce dispatches on the
+// readLoop goroutine while Submit reads extranonce2Size on the caller's
+// goroutine — before the atomic conversion this was a concurrent
+// read/write race on a plain int.
+func TestSession_SetExtranonceConcurrentWithSubmit_NoRace(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+	sess.extranonce2Size.Store(4)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			sess.dispatch([]byte(`{"id":null,"method":"mining.set_extranonce","params":["aa",8]}`))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 200; i++ {
+			_, _ = sess.Submit(context.Background(), poolproto.ShareSubmission{
+				JobID: "j", Nonce: uint32(i),
+			})
+		}
+	}()
+	wg.Wait()
 }

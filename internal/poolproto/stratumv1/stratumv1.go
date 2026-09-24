@@ -110,9 +110,12 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
-	extranonce1     string
-	extranonce2Size int
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// may rotate mid-session via mining.set_extranonce — written on the
+	// readLoop goroutine while Submit reads them on the caller's, so both
+	// are atomic (a plain int/string pair raced here).
+	extranonce1     atomic.Pointer[string]
+	extranonce2Size atomic.Int64
 
 	// user is the authorized worker identity sent as mining.submit's
 	// first param — the Stratum V1 spec places the worker name there, and
@@ -252,8 +255,8 @@ func (s *session) dispatch(line []byte) {
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
-			s.extranonce1 = en1
-			s.extranonce2Size = sz
+			s.extranonce1.Store(&en1)
+			s.extranonce2Size.Store(int64(sz))
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -344,7 +347,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+		en2 = strings.Repeat("00", int(s.extranonce2Size.Load()))
 	}
 	params := []any{
 		s.user, // worker name — the identity authorize established

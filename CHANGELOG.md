@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 275 — extranonce データ競合)
+
+- **V1 `extranonce1`/`extranonce2Size` を atomic 化** —— 実データ競合:
+  `mining.set_extranonce` は readLoop goroutine で dispatch される一方、
+  `Submit` は呼び出し元 goroutine で `extranonce2Size` を読む（プールの
+  セッション中 extranonce ローテーションは実在する挙動）。
+  `atomic.Int64` / `atomic.Pointer[string]` に変更。handshake の
+  書き込み自体も `start()` が readLoop を起動した後に走るため、
+  subscribe 時点でも安全ではなかった
+
 ### Fixed (session 274 — notify 厳格化 + nTime 上限診断)
 
 - **V1 `mining.notify` のヘッダフィールドを厳格化** —— version/nbits/
