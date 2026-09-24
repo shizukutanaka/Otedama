@@ -253,3 +253,45 @@ func trimRight(b []byte) []byte {
 // pattern reinterpretation.
 func float64ToUint64(f float64) uint64 { return math.Float64bits(f) }
 func uint64ToFloat64(u uint64) float64 { return math.Float64frombits(u) }
+
+// parseConfigureResult decodes a mining.configure response for the
+// "version-rolling" extension (BIP-310). Returns the negotiated mask
+// and true only when the server activated the extension
+// (result["version-rolling"] == true) AND supplied a usable
+// "version-rolling.mask" hex value. A rejected extension
+// ("version-rolling": false), a missing mask, or a malformed mask all
+// leave version rolling disabled — the miner just never rolls.
+func parseConfigureResult(result any) (uint32, bool) {
+	m, ok := result.(map[string]any)
+	if !ok {
+		return 0, false
+	}
+	enabled, ok := m["version-rolling"].(bool)
+	if !ok || !enabled {
+		return 0, false
+	}
+	hexMask, ok := m["version-rolling.mask"].(string)
+	if !ok {
+		return 0, false
+	}
+	v, err := strconv.ParseUint(hexMask, 16, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(v), true
+}
+
+// parseSetVersionMask decodes a mining.set_version_mask notification:
+// params is [mask_hex]. The server may rotate the mask mid-session;
+// the new mask applies immediately (BIP-310), not on the next job.
+func parseSetVersionMask(raw json.RawMessage) (uint32, bool) {
+	var p []string
+	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
+		return 0, false
+	}
+	v, err := strconv.ParseUint(p[0], 16, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(v), true
+}

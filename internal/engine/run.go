@@ -710,6 +710,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	var lastAppliedJobID string
 	var lastAppliedTarget miner.Hash
 	var lastAppliedVersion uint32
+	var lastAppliedVersionMask uint32
 	var lastAppliedMerkle [32]byte
 	var lastAppliedPrevHash [32]byte
 	// unsatWarned latches once a pool-assigned unsatisfiable zero target
@@ -838,14 +839,19 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 					}
 				}
 			}
+			// The negotiated version-rolling mask rides with the job so
+			// workers can roll BIP-310 version bits within it. It changes
+			// what the workers hash — include it in the dedup key so a
+			// same-job re-notify after a mask change still re-arms.
+			job.VersionMask = sessionVersionMask(sess)
 			// While curtailed, keep workers idle and ignore the job (see the
 			// V2 path for rationale). lastJobReceivedAt still updates because
 			// the pool connection remains alive.
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: job %s ignored (curtailed)", job.JobID))
 			} else if job.JobID == lastAppliedJobID && shareTarget == lastAppliedTarget &&
-				job.Version == lastAppliedVersion && job.MerkleRoot == lastAppliedMerkle &&
-				job.PrevHash == lastAppliedPrevHash {
+				job.Version == lastAppliedVersion && job.VersionMask == lastAppliedVersionMask &&
+				job.MerkleRoot == lastAppliedMerkle && job.PrevHash == lastAppliedPrevHash {
 				// Duplicate job: the pool resent work already on the
 				// devices (ESP-Miner #1731). The key spans every field that
 				// changes what the workers hash — job ID and difficulty alone
@@ -863,6 +869,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedJobID = job.JobID
 				lastAppliedTarget = shareTarget
 				lastAppliedVersion = job.Version
+				lastAppliedVersionMask = job.VersionMask
 				lastAppliedMerkle = job.MerkleRoot
 				lastAppliedPrevHash = job.PrevHash
 				opts.log("info", fmt.Sprintf("engine: job %s nBits=0x%08X", job.JobID, job.NBits))
@@ -1027,8 +1034,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, shareTarget miner.Hash
 			Time:       job.NTime,
 			Bits:       job.NBits,
 		},
-		NBits:  job.NBits,
-		Target: target,
+		NBits:       job.NBits,
+		Target:      target,
+		VersionMask: job.VersionMask,
 	}
 	for _, wr := range workers {
 		wr.SetWork(w)
@@ -1061,6 +1069,16 @@ func sessionShareTarget(sess poolproto.Session) miner.Hash {
 		return miner.Hash{}
 	}
 	return target
+}
+
+// sessionVersionMask returns the BIP-310 version-rolling mask in force
+// on this session (0 = not negotiated). Only the V1 dialer exposes it;
+// other sessions fall through to zero and workers never roll bits.
+func sessionVersionMask(sess poolproto.Session) uint32 {
+	if v, ok := sess.(interface{ VersionMask() uint32 }); ok {
+		return v.VersionMask()
+	}
+	return 0
 }
 
 func isFatal(err error) bool {

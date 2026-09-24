@@ -1251,6 +1251,54 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 278 increment (BIP-310 version rolling)
+
+### Implemented
+
+1. ✅ **BIP-310 version-rolling negotiated end-to-end** — V1 dialer
+   sends `mining.configure` (extension `version-rolling`, offered mask
+   `ffffffff`, min-bit-count 2) as a synchronous, 250 ms-bounded
+   request at the end of `Negotiate`; the negotiated
+   `version-rolling.mask` lives on `session.versionMask`
+   (`atomic.Uint32`). `mining.set_version_mask` notifications rotate it
+   mid-session per spec (takes effect immediately, including for jobs
+   already dispatched). Synchronous ordering keeps configure as wire
+   request #4 — an async goroutine would race positional test pools and
+   real submit ordering; the bounded ctx means a pool that never
+   answers stalls Negotiate ≤250 ms and just leaves rolling off.
+2. ✅ **Submit sends the sixth `version_bits` param** once a mask is
+   negotiated — `fmt.Sprintf("%08x", sub.Version & mask)`, satisfying
+   the spec constraint `version_bits & ~mask == 0` (the pool
+   reconstructs `nVersion = (job_version & ~mask) | (version_bits &
+   mask)`). Without a mask the classic 5-param submit is untouched.
+3. ✅ **Worker rolls version bits before nTime** (cgminer/ESP-Miner
+   ordering): on nonce-space exhaustion `verOff` enumerates 0..mask
+   (covers all 2^popcount(mask) patterns even for sparse masks), then
+   the loop falls back to nTime rolling capped at
+   MAX_FUTURE_BLOCK_TIME. Search space per job grows ~2^popcount(mask)
+   — on typical pools (~16-17 bits) that is >65,536× more work before
+   nTime must move, which also pushes the effective job lifetime far
+   past slow-network edge cases.
+4. ✅ **Engine plumbs the mask** `poolproto.Job.VersionMask` →
+   `miner.Work.VersionMask`, and the dedup key now includes the mask so
+   a `mining.set_version_mask` rotation followed by a same-job_id
+   re-notify still re-arms workers.
+
+### Verified this session (sources)
+
+- ✅ **BIP-310 contract vs slushpool/stratumprotocol spec** — params
+  order `[extensions[], {mask, min-bit-count}]`, response mask =
+  intersection, sixth submit param semantics, set_version_mask
+  immediate effect all match the canonical mediawiki spec.
+- ✅ **Test harness positional-read coupling** — fake V1 pools read
+  requests positionally; the configure step shifted submit from id 4→5
+  in coverage_test.go / stratumv1_test.go (updated, plus one
+  pre-existing flake in TestRunSessionV1_SubmitError made
+  deterministic).
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 277 increment (user field atomicity)
 
 ### Implemented

@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 278 — BIP-310 バージョンローリング)
+
+- **BIP-310 version-rolling の実装（V1）** —— `mining.configure` による
+  拡張交渉を Negotiate 末尾の同期・250ms 上限付きリクエストとして
+  追加（マスク `ffffffff`・min-bit-count 2 を提示、応答はプール側
+  許可マスクとの積）。`mining.set_version_mask` 通知でセッション中
+  のローテーションに対応し、交渉済みマスクは `session.versionMask`
+  （atomic）に保持。マスク非交渉時は従来の 5 パラメータ submit のまま。
+- **submit の第6パラメータ `version_bits`** —— ローリング有効時に
+  `version & mask` を16進で送出（spec 制約 `version_bits & ~mask == 0`
+  を常時満たす）。プールは `(job_version & ~mask) | version_bits` で
+  nVersion を再構成する。
+- **ワーカーのロール順序を BIP-310 準拠に** —— nonce 空間枯渇時に
+  バージョンビットを先にロール（`verOff` が 0..mask を列挙し疎な
+  マスクでも全 2^popcount(mask) パターンを網羅）、全パターン消化後に
+  nTime ロール（MAX_FUTURE_BLOCK_TIME 上限）へフォールバック。
+  ジョブ毎の探索空間が約 2^popcount(mask) 倍に拡大。
+- **エンジンのマスク伝搬と dedup 拡張** —— `poolproto.Job.VersionMask`
+  → `miner.Work.VersionMask` に接続し、dedup キーにマスクを追加
+  （set_version_mask 後の同一 job_id 再通知でも再アーム）。
+
 ### Fixed (session 277 — `session.user` の atomic 化)
 
 - **V1 `session.user` を `atomic.Pointer[string]` 化** —— session 275 の

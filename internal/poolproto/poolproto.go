@@ -184,6 +184,13 @@ type Job struct {
 	// nBits block target rather than mining nothing.
 	TargetAssigned bool
 
+	// VersionMask is the BIP-310 version-rolling mask negotiated for the
+	// session (V1 mining.configure / mining.set_version_mask). Bits set
+	// to 1 may be changed by the miner when grinding; zero means version
+	// rolling is not negotiated. The pool must be sent the mask-region
+	// bits as submit's sixth parameter (see stratumv1.Submit).
+	VersionMask uint32
+
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
 	ReceivedAt time.Time

@@ -15,6 +15,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
@@ -176,6 +177,31 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = eerr
 	}
 	// resp.errResult ("Method not found") is also silently ignored here.
+
+	// Step 4 (optional, bounded): BIP-310 version-rolling via
+	// mining.configure. The spec recommends configure as the first
+	// request; a post-handshake request still activates the extension on
+	// pools that support it. The call is synchronous so wire ordering
+	// stays deterministic (configure is always request #4, before any
+	// submit), but carries its own short timeout: a pool that simply
+	// never answers cannot stall Negotiate for more than this bound.
+	// Errors, pool-side errors, and a rejected/absent extension all just
+	// leave version rolling disabled — mask stays zero.
+	cfgCtx, cfgCancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	if cfgResp, cerr := sess.call(cfgCtx, sess.nextID.Add(1), "mining.configure", []any{
+		[]string{"version-rolling"},
+		// We can roll any bit (rolling is software-side), so offer the
+		// full mask; the server answers with its allowed subset.
+		map[string]any{
+			"version-rolling.mask":          "ffffffff",
+			"version-rolling.min-bit-count": 2,
+		},
+	}); cerr == nil && cfgResp.errResult == nil {
+		if mask, ok := parseConfigureResult(cfgResp.result); ok {
+			sess.versionMask.Store(mask)
+		}
+	}
+	cfgCancel()
 
 	return sess, nil
 }

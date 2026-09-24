@@ -1131,8 +1131,10 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		_, _ = r.ReadString('\n') // mining.submit (id=4)
-		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.configure (id=4, BIP-310 step 4)
+		fmt.Fprintf(conn, `{"id":4,"result":{"version-rolling":false},"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=5)
+		fmt.Fprintf(conn, `{"id":5,"result":true,"error":null}`+"\n")
 		close(submitResponseSent)
 		time.Sleep(500 * time.Millisecond) // keep connection alive
 	}()
@@ -1207,8 +1209,10 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		_, _ = r.ReadString('\n') // mining.submit (id=4)
-		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["23","Duplicate share",null]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.configure (id=4, BIP-310 step 4)
+		fmt.Fprintf(conn, `{"id":4,"result":{"version-rolling":false},"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=5)
+		fmt.Fprintf(conn, `{"id":5,"result":false,"error":["23","Duplicate share",null]}`+"\n")
 		close(submitResponseSent)
 		time.Sleep(500 * time.Millisecond)
 	}()
@@ -1279,8 +1283,10 @@ func TestRunSessionV1_TransitionRejectCountedBenign(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1000000000]}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		_, _ = r.ReadString('\n') // mining.submit (id=4)
-		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["23","low difficulty share",null]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.configure (id=4, BIP-310 step 4)
+		fmt.Fprintf(conn, `{"id":4,"result":{"version-rolling":false},"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=5)
+		fmt.Fprintf(conn, `{"id":5,"result":false,"error":["23","low difficulty share",null]}`+"\n")
 		close(submitResponseSent)
 		time.Sleep(500 * time.Millisecond)
 	}()
@@ -1418,11 +1424,13 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3 in Negotiate)
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		_, _ = r.ReadString('\n') // mining.submit (id=4)
+		_, _ = r.ReadString('\n') // mining.configure (id=4, BIP-310 step 4)
+		fmt.Fprintf(conn, `{"id":4,"result":{"version-rolling":false},"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=5)
 		// Delay reply by 5 ms so elapsed rounds to >= 1 ms and the p95 > 0
 		// branch in the stats ticker is exercised.
 		time.Sleep(5 * time.Millisecond)
-		fmt.Fprintf(conn, `{"id":4,"result":true,"error":null}`+"\n")
+		fmt.Fprintf(conn, `{"id":5,"result":true,"error":null}`+"\n")
 		// Hold alive long enough for the ticker to fire after latency is recorded.
 		time.Sleep(600 * time.Millisecond)
 	}()
@@ -2068,6 +2076,8 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.configure (id=4, BIP-310 step 4)
+		fmt.Fprintf(conn, `{"id":4,"result":{"version-rolling":false},"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // mining.submit — read but do not respond
 		// Sleep so elapsed > 0 (triggers latency.Record branch on line 904–906).
 		time.Sleep(5 * time.Millisecond)

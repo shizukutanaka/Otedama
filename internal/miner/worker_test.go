@@ -454,3 +454,82 @@ func TestWorker_StopsWhenNTimeAtCap(t *testing.T) {
 		t.Errorf("worker kept hashing an exhausted job: %d → %d hashes", before, after)
 	}
 }
+
+// TestWorker_RollsVersionBitsBeforeNTime pins the BIP-310 ordering: on
+// nonce-space exhaustion the worker must roll negotiated version bits
+// FIRST and roll nTime only once every mask pattern has been tried.
+// With mask 0x3 the two low version bits give 3 extra passes per nTime.
+func TestWorker_RollsVersionBitsBeforeNTime(t *testing.T) {
+	work := makeEasyWork()
+	base := work.Header.Version // 1
+	work.VersionMask = 0x3
+	work.Header.Time = uint32(time.Now().Unix()) - 60
+
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0xFFFFFFFF})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	w.SetWork(work)
+
+	sawRolledVersion := false
+	sawRolledNTime := false
+	mask := work.VersionMask
+	deadline := time.After(5 * time.Second)
+	for !(sawRolledVersion && sawRolledNTime) {
+		select {
+		case s, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed unexpectedly")
+			}
+			// Non-mask version bits must never move.
+			if s.Version&^mask != base&^mask {
+				t.Fatalf("share version %#08x changes bits outside mask %#08x (base %#08x)", s.Version, mask, base)
+			}
+			if s.Version != base && s.NTime == work.Header.Time {
+				sawRolledVersion = true // version rolled while nTime still at base
+			}
+			if s.NTime > work.Header.Time {
+				if !sawRolledVersion {
+					t.Fatal("nTime rolled before version bits were exhausted (BIP-310 ordering violated)")
+				}
+				sawRolledNTime = true
+			}
+		case <-deadline:
+			t.Fatalf("timeout: sawRolledVersion=%v sawRolledNTime=%v", sawRolledVersion, sawRolledNTime)
+		}
+	}
+}
+
+// TestWorker_NoVersionRollWithoutMask: a job with VersionMask=0 (rolling
+// not negotiated) must never change version bits — the worker falls
+// straight to nTime rolling.
+func TestWorker_NoVersionRollWithoutMask(t *testing.T) {
+	work := makeEasyWork()
+	work.Header.Time = uint32(time.Now().Unix()) - 60
+
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0xFFFFFFFF})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	w.SetWork(work)
+
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case s, ok := <-shares:
+			if !ok {
+				return
+			}
+			if s.Version != work.Header.Version {
+				t.Fatalf("version rolled to %#08x with VersionMask unset", s.Version)
+			}
+			if s.NTime > work.Header.Time {
+				return // reached nTime roll without touching version — pass
+			}
+		case <-deadline:
+			t.Fatal("no rolled-ntime share within timeout")
+		}
+	}
+}

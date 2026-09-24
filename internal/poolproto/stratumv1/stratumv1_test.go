@@ -1506,6 +1506,14 @@ func runFakeServer(t *testing.T, serverConn net.Conn, cfg fakeServerConfig) {
 		}
 		fmt.Fprintf(serverConn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
 
+		// Step 4: mining.configure (BIP-310, optional). Reject version
+		// rolling — the client must proceed with the mask left unset.
+		_, err = r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(serverConn, `{"id":4,"result":{"version-rolling":false},"error":null}`+"\n")
+
 		if !cfg.keepAlive {
 			return
 		}
@@ -2051,4 +2059,214 @@ func TestSession_SetExtranonceConcurrentWithSubmit_NoRace(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+// --- BIP-310 version rolling (session 278) ---
+
+// TestParseConfigureResult covers the mining.configure response parser:
+// the mask is usable only when the extension was actually activated.
+func TestParseConfigureResult(t *testing.T) {
+	unmarshal := func(s string) any {
+		var v any
+		if err := json.Unmarshal([]byte(s), &v); err != nil {
+			t.Fatalf("bad test JSON: %v", err)
+		}
+		return v
+	}
+	cases := []struct {
+		name     string
+		result   any
+		wantMask uint32
+		wantOK   bool
+	}{
+		{"activated", unmarshal(`{"version-rolling":true,"version-rolling.mask":"1fffe000"}`), 0x1fffe000, true},
+		{"activated full mask", unmarshal(`{"version-rolling":true,"version-rolling.mask":"ffffffff"}`), 0xffffffff, true},
+		{"rejected", unmarshal(`{"version-rolling":false}`), 0, false},
+		{"activated without mask", unmarshal(`{"version-rolling":true}`), 0, false},
+		{"malformed mask", unmarshal(`{"version-rolling":true,"version-rolling.mask":"zzzz"}`), 0, false},
+		{"mask not a string", unmarshal(`{"version-rolling":true,"version-rolling.mask":4}`), 0, false},
+		{"non-map result", "true", 0, false},
+	}
+	for _, tc := range cases {
+		mask, ok := parseConfigureResult(tc.result)
+		if ok != tc.wantOK || mask != tc.wantMask {
+			t.Errorf("%s: parseConfigureResult = %#x,%v; want %#x,%v", tc.name, mask, ok, tc.wantMask, tc.wantOK)
+		}
+	}
+}
+
+// TestParseSetVersionMask covers the mid-session mask-rotation
+// notification parser.
+func TestParseSetVersionMask(t *testing.T) {
+	if mask, ok := parseSetVersionMask(json.RawMessage(`["1fffe000"]`)); !ok || mask != 0x1fffe000 {
+		t.Errorf("parseSetVersionMask = %#x,%v; want 0x1fffe000,true", mask, ok)
+	}
+	for _, bad := range []json.RawMessage{
+		json.RawMessage(`[]`), json.RawMessage(`["zz"]`), json.RawMessage(`{"x":1}`), json.RawMessage(`"nope"`),
+	} {
+		if _, ok := parseSetVersionMask(bad); ok {
+			t.Errorf("parseSetVersionMask(%s) = ok, want !ok", bad)
+		}
+	}
+}
+
+// TestSession_Dispatch_SetVersionMask verifies the pool-side mask
+// rotation notification updates the session mask immediately.
+func TestSession_Dispatch_SetVersionMask(t *testing.T) {
+	sess := makeBareSess()
+	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["00003000"]}`))
+	if got := sess.VersionMask(); got != 0x3000 {
+		t.Errorf("VersionMask = %#x, want 0x3000", got)
+	}
+	// Malformed mask leaves the previous value untouched.
+	sess.dispatch([]byte(`{"id":null,"method":"mining.set_version_mask","params":["zz"]}`))
+	if got := sess.VersionMask(); got != 0x3000 {
+		t.Errorf("VersionMask = %#x after malformed mask, want 0x3000", got)
+	}
+}
+
+// TestSession_Submit_SendsVersionBits pins the BIP-310 submit contract:
+// once version rolling is active, mining.submit carries the mask-region
+// bits as a sixth param (version_bits & ~mask == 0); without a
+// negotiated mask the submit keeps the classic 5-param shape.
+func TestSession_Submit_SendsVersionBits(t *testing.T) {
+	run := func(t *testing.T, mask, version uint32, wantParams int, wantBits string) {
+		t.Helper()
+		clientConn, serverConn := net.Pipe()
+		pool := &fakePool{conn: serverConn, verdict: true, paramsCh: make(chan json.RawMessage, 4)}
+		go pool.run()
+		conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+		sess := newSession(conn)
+		sess.versionMask.Store(mask)
+		sess.start(context.Background())
+		defer sess.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if _, err := sess.Submit(ctx, poolproto.ShareSubmission{
+			JobID: "J", Nonce: 1, NTime: 1, Version: version,
+		}); err != nil {
+			t.Fatalf("Submit: %v", err)
+		}
+		var params []any
+		select {
+		case raw := <-pool.paramsCh:
+			if err := json.Unmarshal(raw, &params); err != nil {
+				t.Fatalf("params unmarshal: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("no mining.submit params captured")
+		}
+		if len(params) != wantParams {
+			t.Fatalf("submit has %d params, want %d: %v", len(params), wantParams, params)
+		}
+		if wantBits != "" && params[5] != wantBits {
+			t.Errorf("version_bits param = %v, want %q", params[5], wantBits)
+		}
+	}
+	// Mask 0x0000ffff negotiated; rolled version 0x1fffe000|0xa5a5 —
+	// only the mask-region bits go on the wire.
+	t.Run("rolling active", func(t *testing.T) { run(t, 0x0000ffff, 0x1fffa5a5, 6, "0000a5a5") })
+	t.Run("not negotiated", func(t *testing.T) { run(t, 0, 0x1fffa5a5, 5, "") })
+}
+
+// TestNegotiate_VersionRolling drives a full handshake where the pool
+// activates version-rolling: the async mining.configure must land its
+// mask on the session without delaying Negotiate's return.
+func TestNegotiate_VersionRolling(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	defer serverConn.Close()
+	go func() {
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal(line, &req) != nil {
+				continue
+			}
+			id, _ := json.Marshal(req.ID)
+			var resp string
+			switch req.Method {
+			case "mining.subscribe":
+				resp = `{"id":` + string(id) + `,"result":[[["mining.notify","s1"]],"deadbeef00",4],"error":null}` + "\n"
+			case "mining.authorize":
+				resp = `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+			case "extranonce.subscribe":
+				resp = `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+			case "mining.configure":
+				resp = `{"id":` + string(id) + `,"result":{"version-rolling":true,"version-rolling.mask":"1fffe000"},"error":null}` + "\n"
+			default:
+				continue
+			}
+			if _, err := serverConn.Write([]byte(resp)); err != nil {
+				return
+			}
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+	// The configure goroutine resolves asynchronously — poll the mask.
+	deadline := time.After(2 * time.Second)
+	for sess.(*session).VersionMask() != 0x1fffe000 {
+		select {
+		case <-deadline:
+			t.Fatalf("version mask never landed: %#x", sess.(*session).VersionMask())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+// TestNegotiate_VersionRollingRejected: a pool answering
+// {"version-rolling":false} leaves the mask at zero and Negotiate still
+// succeeds — rolling simply stays off.
+func TestNegotiate_VersionRollingRejected(t *testing.T) {
+	d, conn, serverConn := makeNegotiateConn(t)
+	defer serverConn.Close()
+	go func() {
+		reader := bufio.NewReader(serverConn)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req rpcMessage
+			if json.Unmarshal(line, &req) != nil {
+				continue
+			}
+			id, _ := json.Marshal(req.ID)
+			var resp string
+			switch req.Method {
+			case "mining.subscribe":
+				resp = `{"id":` + string(id) + `,"result":[[["mining.notify","s1"]],"deadbeef00",4],"error":null}` + "\n"
+			case "mining.authorize", "extranonce.subscribe":
+				resp = `{"id":` + string(id) + `,"result":true,"error":null}` + "\n"
+			case "mining.configure":
+				resp = `{"id":` + string(id) + `,"result":{"version-rolling":false},"error":null}` + "\n"
+			default:
+				continue
+			}
+			if _, err := serverConn.Write([]byte(resp)); err != nil {
+				return
+			}
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+	// Give the async goroutine a moment; mask must remain unset.
+	time.Sleep(200 * time.Millisecond)
+	if got := sess.(*session).VersionMask(); got != 0 {
+		t.Errorf("VersionMask = %#x after rejected configure, want 0", got)
+	}
 }

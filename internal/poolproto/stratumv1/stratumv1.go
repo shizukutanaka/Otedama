@@ -128,6 +128,13 @@ type session struct {
 	// on Negotiate→Submit call ordering entirely.
 	user atomic.Pointer[string]
 
+	// versionMask is the BIP-310 version-rolling mask negotiated via
+	// mining.configure (or rotated later by mining.set_version_mask).
+	// Zero means the extension was not negotiated — workers then never
+	// roll header version bits. Written during Negotiate or by the read
+	// loop, read by Submit callers — atomic like the rest.
+	versionMask atomic.Uint32
+
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
@@ -268,6 +275,12 @@ func (s *session) dispatch(line []byte) {
 			s.extranonce1.Store(&en1)
 			s.extranonce2Size.Store(int64(sz))
 		}
+	case "mining.set_version_mask":
+		// BIP-310: the pool rotated the version-rolling mask; it takes
+		// effect immediately, including for jobs already dispatched.
+		if mask, ok := parseSetVersionMask(msg.Params); ok {
+			s.versionMask.Store(mask)
+		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
 		// Surface it via PoolNotices(); if the caller is not draining the
@@ -347,7 +360,10 @@ send:
 
 // Submit sends a share via mining.submit and returns the pool's verdict.
 // Stratum V1 submission format: ["worker", "job_id", "extranonce2",
-// "ntime", "nonce"], all hex strings.
+// "ntime", "nonce"], all hex strings. When BIP-310 version rolling was
+// negotiated, a sixth param carries the mask-region version bits the
+// worker set (spec: version_bits & ~mask == 0; the pool reconstructs
+// nVersion = (job_version & ~mask) | (version_bits & mask)).
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	if s.conn.closed.Load() {
 		return poolproto.ShareResult{}, errors.New("stratumv1: session closed")
@@ -365,6 +381,9 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),
 		fmt.Sprintf("%08x", sub.Nonce),
+	}
+	if mask := s.versionMask.Load(); mask != 0 {
+		params = append(params, fmt.Sprintf("%08x", sub.Version&mask))
 	}
 	resp, err := s.call(ctx, id, "mining.submit", params)
 	if err != nil {
@@ -389,6 +408,13 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 // SuggestedDifficulty returns the current target difficulty.
 func (s *session) SuggestedDifficulty() float64 {
 	return uint64ToFloat64(s.difficulty.Load())
+}
+
+// VersionMask returns the BIP-310 version-rolling mask in force (0 when
+// the extension was not negotiated). The engine passes it to workers so
+// the grind loop can roll header version bits within the mask.
+func (s *session) VersionMask() uint32 {
+	return s.versionMask.Load()
 }
 
 // Close terminates the session and underlying connection. Idempotent.

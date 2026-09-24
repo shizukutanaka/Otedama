@@ -25,6 +25,14 @@ type Work struct {
 	Header    Header // template; Nonce field will be overwritten
 	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
 	Target    Hash   // SHARE target the hash must meet (pool-assigned difficulty)
+
+	// VersionMask is the BIP-310 negotiated mask of header-version bits
+	// the miner may change (0 = not negotiated). When nonzero, the grind
+	// loop rolls these bits on nonce-space exhaustion before falling
+	// back to nTime rolling — the standard miner ordering — extending
+	// per-job search space by roughly 2^popcount(mask). The masked bits
+	// are reported on submission (Stratum V1 submit param 6).
+	VersionMask uint32
 }
 
 // Share is a found solution: a Header whose hash meets the target.
@@ -237,6 +245,10 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		localWorkVer uint64
 		exhaustedVer uint64 // work version whose full search space is used up
 		nonce        = threadID
+		// verOff enumerates the mask-region version-bit patterns already
+		// tried for this job (0..VersionMask covers all 2^popcount(mask)
+		// patterns even when the mask is sparse). Reset on work reload.
+		verOff uint32
 	)
 
 	for {
@@ -252,6 +264,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			localWork = w.work
 			localWorkVer = w.workVer
 			nonce = threadID // restart nonce from thread offset on new job
+			verOff = 0       // and re-enumerate version bits for the new mask
 		}
 		w.mu.Unlock()
 
@@ -268,6 +281,11 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		const batchSize = 1024
 
 		h := localWork.Header
+		// h is rebuilt from the job template each batch, so re-apply the
+		// version offset reached by prior batches within the mask.
+		if vm := localWork.VersionMask; vm != 0 && verOff != 0 {
+			h.Version = (h.Version &^ vm) | (verOff & vm)
+		}
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(h)
@@ -300,18 +318,26 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			next := nonce + w.cfg.NonceStep
 			if next < nonce {
 				// The 32-bit nonce space wrapped. Standard miner
-				// behavior is to roll the header timestamp forward
-				// rather than re-hash the same nonces (which only
-				// yields duplicate-share rejects). Rolling is bounded
-				// by MAX_FUTURE_BLOCK_TIME (2 h ahead of now): a
-				// header timestamp beyond it is consensus-invalid,
-				// so further hashing can only produce rejects — stop
+				// behavior (BIP-310 ordering: cgminer/ESP-Miner alike)
+				// rolls negotiated version bits first — free extra
+				// search space — then the header timestamp, rather
+				// than re-hash the same nonces (which only yields
+				// duplicate-share rejects). Version rolling ends once
+				// every mask pattern was enumerated (verOff reached
+				// the mask); timestamp rolling is bounded by
+				// MAX_FUTURE_BLOCK_TIME (2 h ahead of now): a header
+				// timestamp beyond it is consensus-invalid, so
+				// further hashing can only produce rejects — stop
 				// until a fresh job arrives.
-				if int64(h.Time)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
+				if vm := localWork.VersionMask; vm != 0 && verOff < vm {
+					verOff++
+					h.Version = (localWork.Header.Version &^ vm) | (verOff & vm)
+				} else if int64(h.Time)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
 					exhaustedVer = localWorkVer
 					break
+				} else {
+					h.Time++
 				}
-				h.Time++
 				next = threadID
 			}
 			nonce = next
