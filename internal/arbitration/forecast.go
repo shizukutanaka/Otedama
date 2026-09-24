@@ -186,7 +186,15 @@ func (f *YieldForecaster) StdDev() float64 {
 	if f.obsN < 2 {
 		return 0
 	}
-	return math.Sqrt(f.obsM2 / float64(f.obsN-1))
+	// Welford's M2 can drift slightly negative on near-constant series
+	// (float cancellation) — sqrt of a negative returns NaN, which would
+	// then ride VolatilityPerDevice into the stream. Clamp at the
+	// source rather than relying on every downstream reader to skip it.
+	variance := f.obsM2 / float64(f.obsN-1)
+	if variance < 0 {
+		return 0
+	}
+	return math.Sqrt(variance)
 }
 
 // HasObservations reports whether the smoother has seen any value — used
