@@ -24,11 +24,11 @@ type difficultyTagger struct {
 
 // newDifficultyTagger keeps at most max tag entries. Job IDs cycle fast
 // on busy pools; 64 comfortably covers a session's outstanding work.
-func newDifficultyTagger(max int) *difficultyTagger {
-	if max <= 0 {
-		max = 1
+func newDifficultyTagger(maxEntries int) *difficultyTagger {
+	if maxEntries <= 0 {
+		maxEntries = 1
 	}
-	return &difficultyTagger{diffs: make(map[uint32]float64, max), max: max}
+	return &difficultyTagger{diffs: make(map[uint32]float64, maxEntries), max: maxEntries}
 }
 
 // tag records that jobID was issued under the given share difficulty.
