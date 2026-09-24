@@ -70,7 +70,10 @@ func (p *MiningProvider) Start(ctx context.Context, devices []hal.Device) error 
 //   - Standard block time (600s) and reward (3.125 BTC post-4th halving)
 func (p *MiningProvider) publish(ctx context.Context) {
 	rate, fresh := p.rates.BTCUSDRate()
-	if rate <= 0 {
+	// !(rate > 0) rather than rate <= 0: a NaN rate must also take the
+	// fallback — NaN would flow into every quote's yield, which the
+	// Effective() guards would then have to absorb per device.
+	if !(rate > 0) {
 		rate = 95000 // fallback estimate
 	}
 	confidence := 0.7
@@ -96,7 +99,9 @@ func (p *MiningProvider) publish(ctx context.Context) {
 		if p.HashrateFunc != nil {
 			deviceHashrate = p.HashrateFunc(dev.Identity().ID)
 		}
-		if deviceHashrate <= 0 {
+		// !(x > 0) covers NaN as well as <= 0: a NaN hashrate sample is
+		// not a measurement, so it must fall back like a missing one.
+		if !(deviceHashrate > 0) {
 			switch dev.Identity().Family {
 			case hal.FamilyASIC:
 				deviceHashrate = 100e12 // ~100 TH/s (Antminer S21)

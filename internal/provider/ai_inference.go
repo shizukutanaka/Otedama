@@ -106,7 +106,9 @@ func (p *AkashProvider) publish(ctx context.Context) {
 	}
 
 	rate, fresh := p.rates.BTCUSDRate()
-	if rate <= 0 {
+	// !(rate > 0) covers NaN as well as <= 0 — a non-numeric rate must
+	// take the fallback rather than propagate NaN into every quote.
+	if !(rate > 0) {
 		rate = 95000
 	}
 	confidence := 0.6

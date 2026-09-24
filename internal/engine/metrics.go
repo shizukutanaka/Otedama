@@ -37,6 +37,11 @@ type engineMetrics struct {
 	transitionRejects   atomic.Uint64
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
+	// sharesSubmitDropped counts shares the engine discarded without
+	// transmitting because the concurrent-submit budget was saturated.
+	// Distinct from worker-side drops (logged as "dropped N found
+	// share(s)"): this one bounds the goroutines spawned per share.
+	sharesSubmitDropped *metrics.Counter
 	arbitrationSwitches *metrics.Counter
 	// arbitrationHolds counts decisions where a strictly better stream existed
 	// but hysteresis kept the device on its current one. Together with
@@ -255,6 +260,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		poolConnectFailures: reg.NewCounter(
 			"otedama_pool_connect_failures_total",
 			"Total pool-connection failures.",
+			nil),
+		sharesSubmitDropped: reg.NewCounter(
+			"otedama_shares_submit_dropped_total",
+			"Shares discarded at the engine without being transmitted because "+
+				"the concurrent-submit budget was saturated. Non-zero only under "+
+				"a flood far above any legitimate share rate — e.g. a pool "+
+				"assigning a trivially-easy share target so every hash qualifies.",
 			nil),
 		arbitrationSwitches: reg.NewCounter(
 			"otedama_arbitration_switches_total",

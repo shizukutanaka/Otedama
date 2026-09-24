@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 262 — コンピューターサイエンスの観点から改善点を洗い出す(第7ラウンド): プール制御レートへの並行度上界 + NaN 盲点ガード——計4件)
+
+第7ラウンドの Socratic 問いは「この産出レートは誰が制御するか?」——シェア産出率は完全にプール制御(set_difficulty ≈ 0 や V2 の SetTarget.MaxTarget で全ハッシュが適格)であり、シェアごとの goroutine 生成に cap がなければ、プールの選択したレートで goroutine と pending map が無制限に増大する。監査で V1 経路のみがこの cap を欠き、V2 はインライン submit(10s write deadline)で既に有界と確認。併せて `<= 0` ガードの NaN 盲点を全 provider に再掃討した。
+
+- **V1 mining.submit の並行度が無制限**(`engine/run.go` `runSessionV1`): merged-share arm が発見シェアごとに `go func() Submit(...)` を spawn——各呼び出しは rpcCallTimeout=30s まで生き、stratumv1 `pending` map にも1エントリ残す。プールが容易ターゲットを割り当てれば1秒間に数百〜数千の適格シェアが湧き、goroutine 数と pending map が session 寿命に比例して増大(第5ラウンドの call() timeout は per-call 上界を与えたが**並行数**は無制限のままだった)。`submitSlots` セマフォ(64)で上界化——正当なシェアレート(デバイス毎 ~1/min)を大きく超える飽和時のみドロップし `sharesSubmitDropped` に計上。ワーカー側の drop 計上("dropped N found share(s)")と同じ意味論で、キュー無限化しない設計。
+- **provider `<= 0` ガードの NaN 盲点 × 3**(`provider/mining.go` × 2、`provider/ai_inference.go` × 1): `rate <= 0` と `deviceHashrate <= 0` の「非正ならフォールバック」ガードは全て NaN を通す。NaN レートは `SatsPerSecond(usd, NaN)` → `NaN` サッツが quote に混入し、第3ラウンドで `Yield.Effective()` に入れた積側ガードが吸収する形で問題を隠蔽する。`!(x > 0)` に統一し、NaN を入力段でフォールバック化(第3ラウンドで `Yield.Effective()` に適用したのと同一の Idiom)。
+
+**検証手続き(棄却済み候補).** 経路単位で clean と確認: V2 sendMsg(write deadline 10s 既存——インライン submit 自体がレート制限器)、stratumv1 writeMu/10s deadline/read deadline 5min、`sendQuote` の単一プロデューサ drop-oldest、`pruneStaleStreams`/`applyAllocation` の streamsMu 下深コピー、`maskAddr` の境界検査、stratum handshake デコーダ全件(STR0_255/[32]byte/len 事前検査)、TUI Update の非ブロッキング drop-oldest、hal sysfs 読み取り専用+identity 検証、`curtailDecision`(NaN rate は hold で無害収束——文書化契約内)。
+
+**テスト.** `TestRunSessionV1_SubmitBudgetDropsUnderFlood`(handshake 後 submit に一切応答しないスクリプト化プール + 100 バッファ済みシェア — submit が 64 で頭打ち・残り36が `sharesSubmitDropped` に計上されることを検証)、`TestMiningProvider_Publish_NaNRateAndHashrate_UseFallback`、`TestAkashProvider_Publish_NaNRate_UsesFallback`。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,provider} 緑、差分行 lint/gofumpt クリーン、deadcode ベースライン、govulncheck 到達可能0件。
+
 ### Fixed (session 261 — コンピューターサイエンスの観点から改善点を洗い出す(第6ラウンド): 死んだセッションの仕事のライフサイクルを切断 + yield 契約の統一——計3件)
 
 第6ラウンドの Socratic 問いは「この仕事は誰の依頼で、依頼主が死んだ後も続くべきか?」——ワーク所有権(work ownership)の不変条件。ジョブは特定のライブなプールセッションが発行するものであり、セッション終了後に残存する仕事は定義上 stale。監査で、curtail ゲートと SetNewPrevHash-unknown-job 経路には既に `SetWork(nil)` でのアイドル化がある一方、**セッション終了経路だけがこの不変条件を欠いていた**ことを確認。

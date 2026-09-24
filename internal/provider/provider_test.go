@@ -521,3 +521,44 @@ func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 		t.Error("sendQuote returned true on a cancelled context; should report failure")
 	}
 }
+
+// ============================================================================
+// NaN inputs to publish() — non-finite samples must take the fallback path,
+// never propagate into quotes (the Effective() guard would otherwise absorb
+// them per device, silently hiding a broken rate/hashrate source)
+// ============================================================================
+
+func TestMiningProvider_Publish_NaNRateAndHashrate_UseFallback(t *testing.T) {
+	p := NewMiningProvider("stratum+tcp://example:3333", StaticRateSource{Rate: math.NaN()})
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+	p.HashrateFunc = func(string) float64 { return math.NaN() }
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if !(q.Yield.SatsPerSecond > 0) || math.IsNaN(q.Yield.SatsPerSecond) {
+			t.Errorf("NaN inputs must fall back to finite yield, got sats=%v", q.Yield.SatsPerSecond)
+		}
+	default:
+		t.Error("no quote received with NaN inputs")
+	}
+}
+
+func TestAkashProvider_Publish_NaNRate_UsesFallback(t *testing.T) {
+	p := NewAkashProvider(StaticRateSource{Rate: math.NaN()})
+	p.devices = []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{GeneralCompute: true}},
+	}
+	p.publish(context.Background())
+
+	select {
+	case q := <-p.quoteCh:
+		if !(q.Yield.SatsPerSecond > 0) || math.IsNaN(q.Yield.SatsPerSecond) {
+			t.Errorf("NaN rate must fall back to finite yield, got sats=%v", q.Yield.SatsPerSecond)
+		}
+	default:
+		t.Error("no quote received with NaN rate")
+	}
+}

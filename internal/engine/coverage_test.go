@@ -2373,3 +2373,90 @@ func TestRunReconnectLoop_IdlesWorkersBetweenSessions(t *testing.T) {
 		t.Errorf("%d pre-session share(s) survived the drain", n)
 	}
 }
+
+// ============================================================================
+// run.go — V1 concurrent-submit budget: a pool-driven share flood must not
+// spawn an unbounded goroutine per share (each lives up to rpcCallTimeout)
+// ============================================================================
+
+// TestRunSessionV1_SubmitBudgetDropsUnderFlood hands the session a scripted
+// pool that completes the handshake, receives submits, and never answers —
+// so every spawned submit goroutine stays resident holding a semaphore slot.
+// With maxConcurrentSubmits=64 and 100 buffered shares, exactly 64 submits
+// may be transmitted; the remaining 36 must be counted as dropped, not
+// queued as goroutines.
+func TestRunSessionV1_SubmitBudgetDropsUnderFlood(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	var submitLines atomic.Int32
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		// Read submits but never answer: each in-flight call stays
+		// resident up to rpcCallTimeout — the flood scenario this
+		// test bounds.
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.Contains(line, `"mining.submit"`) {
+				submitLines.Add(1)
+			}
+		}
+	}()
+
+	merged := make(chan miner.Share, 128)
+	for i := 0; i < 100; i++ {
+		merged <- miner.Share{JobID: uint32(i), Nonce: uint32(i)}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	go func() {
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + ln.Addr().String(),
+			user:     "w",
+			merged:   merged,
+			interval: 30 * time.Millisecond,
+			log:      func(_, _ string) {},
+			m:        m,
+		})
+	}()
+
+	// Wait for the loop to drain all 100 shares: 64 submitted (semaphore
+	// full) + 36 dropped. Bounded by the overall ctx deadline.
+	deadline := time.After(8 * time.Second)
+	for m.sharesSubmitDropped.Value() != 36 {
+		select {
+		case <-deadline:
+			t.Fatalf("dropped=%d submitted=%d — loop never drained the flood",
+				m.sharesSubmitDropped.Value(), m.sharesSubmitted.Value())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if got := m.sharesSubmitted.Value(); got != 64 {
+		t.Errorf("submitted=%d, want exactly %d (semaphore cap)", got, maxConcurrentSubmits)
+	}
+	// The pool must never see more than the cap — a definitive check that
+	// the flood produced no unbounded goroutine growth.
+	if got := submitLines.Load(); got > maxConcurrentSubmits {
+		t.Errorf("pool received %d submits, exceeds cap %d", got, maxConcurrentSubmits)
+	}
+}

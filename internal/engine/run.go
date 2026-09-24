@@ -1052,6 +1052,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var estSats uint64
 	var satsAcc satsAccountant
 	var jobIDs v1JobIDTable
+	// submitSlots is the semaphore enforcing maxConcurrentSubmits: one
+	// slot per in-flight mining.submit goroutine, released when the call
+	// returns (response, rpc timeout, or session close).
+	submitSlots := make(chan struct{}, maxConcurrentSubmits)
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
@@ -1166,6 +1170,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if raw, ok := jobIDs.lookup(capturedShare.JobID); ok {
 				jobID = raw
 			}
+			// Bound asynchronous submits before counting them: the
+			// share-production rate is pool-controlled, so without a cap a
+			// flood of qualifying shares would spawn a goroutine each,
+			// living up to rpcCallTimeout — unbounded growth entirely of
+			// the pool's choosing. Saturated slots drop the share.
+			select {
+			case submitSlots <- struct{}{}:
+			default:
+				if opts.m != nil {
+					opts.m.sharesSubmitDropped.Inc()
+				}
+				continue
+			}
 			if opts.m != nil {
 				// Counted here, not after Submit returns: "submitted" means
 				// the transmission was attempted, matching the V2 path's
@@ -1176,6 +1193,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesSubmitted.Inc()
 			}
 			go func() {
+				defer func() { <-submitSlots }()
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
 					JobID: jobID,
@@ -1472,6 +1490,17 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 	}
 	return nil
 }
+
+// maxConcurrentSubmits bounds in-flight asynchronous mining.submit
+// calls in the V1 session loop. The share-production rate is entirely
+// pool-controlled — a trivially-easy target (set_difficulty ≈ 0, or a
+// near-max SetTarget on V2) makes every hash qualify — so a per-share
+// goroutine with no cap lets the pool grow goroutines and its own
+// pending map at whatever rate it chooses, each living up to
+// rpcCallTimeout. 64 sits far above any legitimate share rate (~1/min
+// per device); shares arriving beyond the budget are dropped and
+// counted, matching the worker-side drop accounting.
+const maxConcurrentSubmits = 64
 
 // v1JobIDTable maps the synthetic uint32 job IDs Otedama assigns to V1
 // jobs back to the pool's opaque job_id string, which must be echoed
