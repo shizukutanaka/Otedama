@@ -1251,6 +1251,27 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 287 increment (V2 write deadline)
+
+- **実装（防御）: V2 Submit に write mutex + 10s write deadline を
+  追加** —— V1 セッションは書き込み経路で `writeMu` +
+  `SetWriteDeadline(10s)` を備えるが、V2 側は `sendMsg` が deadline
+  も mutex も無く `w.Write` を直接呼んでいた。ジョブを送り続けながら
+  submit を読まないプール（劣化・敵的）では、TCP 送信バッファが満杯に
+  なると Submit がソケット write 内で永久ブロック —— read は成功し
+  続けるため read deadline（session 282）もジョブ枯渇 watchdog
+  （session 267）も発火しない死角だった。セッションメソッド
+  `sendMsg` で mutex + 10s deadline に統一（V1 同等）。ハンドシェイク
+  時の `sendMsg` 呼び出しは順序固定のため従来どおりパッケージ関数を
+  使用。
+- **検証:** `TestSubmit_ArmsWriteDeadline` —— deadline 記録 stub で
+  Submit が書き込み前に SetWriteDeadline を呼ぶことを確認。
+- **記録:** OpenMiningChannelSuccess の Extranonce/ExtraNonce2Size は
+  デコードされるが未使用（standard channel では coinbase 再構成を
+  行わないため参照先が無い）。仕様準拠の wire レイアウト上の差異
+  （spec は group_channel_id U32 末尾、実装は U16 解釈）は decode が
+  後続バイトを許容するため実害なし —— 将来 JD 対応時に要見直し。
+
 ## September 2026 research pass — session 286 increment (dedup key ntime)
 
 - **実装（正確性）: ジョブ dedup キーに NTime/NBits を追加** —— V1

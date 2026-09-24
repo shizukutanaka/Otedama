@@ -235,6 +235,14 @@ type session struct {
 
 	done      chan struct{} // closed when readLoop exits
 	startOnce sync.Once
+
+	// writeMu serializes frame writes (Submit runs on the caller's
+	// goroutine, potentially several at once) and pairs with the write
+	// deadline: a pool that keeps sending jobs but stops reading could
+	// otherwise wedge Submit in a full socket send buffer forever —
+	// reads keep succeeding, so the read deadline and job watchdog
+	// never notice. Same 10s bound as the V1 session's write path.
+	writeMu sync.Mutex
 }
 
 // start launches the read loop that decodes NewMiningJob frames and
@@ -514,7 +522,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	// SubmitSharesStandard is a channel message: the channel_msg bit must
 	// be set in the frame header (the engine's inline path already does
 	// this; the two paths previously disagreed).
-	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
+	if err := s.sendMsg(stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
 		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: submit share: %w", err)
 	}
 	// Wait for the pool's verdict so the caller's accept/reject accounting
@@ -565,6 +573,17 @@ var (
 // poolproto adapter to an exported interface in internal/stratum.
 type encodable interface {
 	Encode() ([]byte, error)
+}
+
+// sendMsg serializes a frame write on the session socket: the write
+// mutex keeps concurrent Submits' frames apart, and the write deadline
+// bounds how long a blocked send can hold a caller (V1 write-path
+// parity).
+func (s *session) sendMsg(msgType uint8, isChannel bool, enc encodable) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	return sendMsg(s.conn.raw, msgType, isChannel, enc)
 }
 
 // sendMsg encodes, frames, and writes a Stratum V2 message. isChannel

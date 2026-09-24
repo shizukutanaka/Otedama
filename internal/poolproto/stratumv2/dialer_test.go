@@ -1680,3 +1680,64 @@ func TestReadLoop_ForeignChannelFiltered(t *testing.T) {
 	}
 	_ = server.Close()
 }
+
+// writeDeadlineRecordingConn records SetWriteDeadline calls so a test
+// can assert Submit arms a per-write deadline without blocking a real
+// socket until expiry.
+type writeDeadlineRecordingConn struct {
+	net.Conn
+	writeDeadlines atomic.Int64
+}
+
+func (c *writeDeadlineRecordingConn) SetWriteDeadline(t time.Time) error {
+	c.writeDeadlines.Add(1)
+	return c.Conn.SetWriteDeadline(t)
+}
+
+// TestSubmit_ArmsWriteDeadline pins the V1-parity defense: every frame
+// write on the session socket is preceded by a write deadline, so a
+// pool that keeps reading direction alive but stops consuming our
+// submits cannot wedge Submit inside a full send buffer forever.
+func TestSubmit_ArmsWriteDeadline(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	raw := &writeDeadlineRecordingConn{Conn: client}
+	conn := &connection{raw: raw, remoteAddr: "test", protocol: poolproto.ProtocolStratumV2}
+	sess := &session{
+		conn:   conn,
+		dec:    stratum.NewDecoder(raw),
+		chanID: 7,
+		jobsCh: make(chan poolproto.Job, 8),
+		done:   make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Drain whatever the client writes; the verdict never comes, so
+	// cancel ctx to release the waiting Submit.
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	go sess.Submit(ctx, poolproto.ShareSubmission{
+		JobID:   "9",
+		Nonce:   1,
+		NTime:   1,
+		Version: 0x20000000,
+	})
+	deadline := time.After(2 * time.Second)
+	for raw.writeDeadlines.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("Submit never armed a write deadline")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	cancel()
+}

@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 287 — V2 Submit 書き込みパス保護)
+
+- **V2 Submit に write mutex + 10 秒 write deadline を追加** ——
+  V1 セッションと同じ保護が V2 側になく、ジョブを送り続けながら
+  submit を読まないプールで TCP 送信バッファ満杯時に Submit が
+  ソケット write 内で永久ブロックし得た（read は成功し続けるため
+  read deadline もジョブ枯渇 watchdog も発火しない死角）。
+
 ### Fixed (session 286 — ジョブ dedup キーの ntime 欠落)
 
 - **同一 job_id の ntime 更新 re-notify が破棄されていた問題を修正** ——
