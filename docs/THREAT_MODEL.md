@@ -512,6 +512,15 @@ sources that upstream guards make unreachable in practice
 (`ratePerSec > 0` filters NaN in satsAccountant). ANSI codes in
 miningLine are fixed internal constants, never provider/pool data.
 
+**Session 430 CS-invariant pass.** Stratum wire codec verified: the
+decoder enforces `MaxFrameSize` (default 16 MiB) **before** allocating
+the payload — a peer announcing a huge `msg_length` is rejected without
+allocation; `int` is 64-bit on all supported targets so
+HeaderSize+U24 cannot overflow; `Header.Validate` runs before payload
+read; unknown `msg_type` decodes to `UnknownMessage` rather than an
+error so one unrecognised frame cannot kill the read loop; wire
+helpers bound `str0_255`/`b0_255` fields to their protocol width.
+
 ---
 
 ### Elevation of privilege (E)
