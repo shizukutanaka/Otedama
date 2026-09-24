@@ -23,6 +23,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 
@@ -2278,4 +2279,96 @@ func TestObservePoolTLSCertNotAfter(t *testing.T) {
 	if g.Value() != float64(exp2.Unix()) {
 		t.Errorf("gauge after renew = %v, want %v", g.Value(), exp2.Unix())
 	}
+}
+
+// ============================================================================
+// drainPoolNotices — relay pool operator notices to the log
+// ============================================================================
+
+type noticeSession struct {
+	notices chan string
+}
+
+func (n *noticeSession) Close() error               { return nil }
+func (n *noticeSession) Jobs() <-chan poolproto.Job { return nil }
+func (n *noticeSession) SuggestedDifficulty() float64 {
+	return 1
+}
+func (n *noticeSession) PoolNotices() <-chan string { return n.notices }
+func (n *noticeSession) Submit(context.Context, poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	return poolproto.ShareResult{}, nil
+}
+
+// bareSession satisfies Session but deliberately lacks PoolNotices,
+// so it does not implement PoolNoticeReceiver.
+type bareSession struct{}
+
+func (b *bareSession) Close() error               { return nil }
+func (b *bareSession) Jobs() <-chan poolproto.Job { return nil }
+func (b *bareSession) SuggestedDifficulty() float64 {
+	return 1
+}
+
+func (b *bareSession) Submit(context.Context, poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	return poolproto.ShareResult{}, nil
+}
+
+var (
+	_ poolproto.Session            = (*bareSession)(nil)
+	_ poolproto.Session            = (*noticeSession)(nil)
+	_ poolproto.PoolNoticeReceiver = (*noticeSession)(nil)
+)
+
+func TestDrainPoolNotices_RelaysAndFloodGuards(t *testing.T) {
+	ctx := context.Background()
+	var mu sync.Mutex
+	var logs []string
+	opts := sessionOpts{log: func(_, m string) {
+		mu.Lock()
+		logs = append(logs, m)
+		mu.Unlock()
+	}}
+	sess := &noticeSession{notices: make(chan string, 300)}
+	opts.drainPoolNotices(ctx, sess)
+
+	// First verbatimCap notices must log verbatim.
+	for i := 0; i < 16; i++ {
+		sess.notices <- fmt.Sprintf("maintenance notice %d", i)
+	}
+	// Beyond the cap: suppression + periodic summary at every 64.
+	for i := 0; i < 64; i++ {
+		sess.notices <- "spam"
+	}
+	close(sess.notices)
+	time.Sleep(150 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	var verbatim, summaries int
+	for _, l := range logs {
+		if strings.HasPrefix(l, "engine: pool notice: maintenance notice") {
+			verbatim++
+		}
+		if strings.Contains(l, "suppressed") {
+			summaries++
+		}
+	}
+	if verbatim != 16 {
+		t.Errorf("verbatim notices logged = %d, want 16", verbatim)
+	}
+	// 64 suppressed → one periodic summary at the 64 mark, plus the
+	// close-time flush is a no-op (counter reset to 0), so ≥1 summary.
+	if summaries < 1 {
+		t.Error("no flood-guard summary logged after 64 suppressed notices")
+	}
+	for _, l := range logs {
+		if strings.Contains(l, "spam") {
+			t.Error("suppressed notice leaked into log verbatim")
+		}
+	}
+}
+
+func TestDrainPoolNotices_SkipsSessionsWithoutReceiver(t *testing.T) {
+	opts := sessionOpts{log: func(_, _ string) { t.Error("log should not be called") }}
+	opts.drainPoolNotices(context.Background(), &bareSession{})
 }

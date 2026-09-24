@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 345 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール運営通知のログリレー)
+
+- **`drainPoolNotices`** — V1 `client.show_message`（例: 「maintenance in 10 min」）は
+  `poolproto.PoolNoticeReceiver` のチャネルに届いていたが、エンジン側に消費者が存在せず
+  バッファ8件で溢れて**黙って破棄**されていた実ギャップを解消。両セッションループから
+  ゴルーチンでドレインし warn ログへ転送 — プールメンテ予告が最も必要な時に可視化される。
+  洪水ガード: 接続毎の先頭16件は逐語ログ、以降は抑制カウントの定期サマリに折り畳み
+  （通知スパムするプールがログを埋められない）。チャネル close/ctx で終了。
+
 ### Fixed (session 343 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SV2 ペンディングジョブマップのバウンド)
 
 - **`tipState.pending` の上限化** — SV2 の `NewMiningJob` は `SetNewPrevHash` が指名するまで

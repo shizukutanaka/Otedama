@@ -1200,6 +1200,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
 	opts.warnOnPoolShare(ctx)
 	opts.manageASICPools(ctx)
+	opts.drainPoolNotices(ctx, sess)
 
 	// estSats, latency and friends live on the shared sessionTelemetry
 	// accumulator so both session loops tick identically.
@@ -1346,6 +1347,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	defer sess.Close()
 	opts.warnOnPoolShare(ctx)
 	opts.manageASICPools(ctx)
+	opts.drainPoolNotices(ctx, sess)
 
 	// V1 is single-channel; channel ID 0 is the conventional value.
 	const chanID = uint32(0)
@@ -1629,6 +1631,53 @@ func (opts sessionOpts) manageASICPools(ctx context.Context) {
 				map[string]string{"pool_host": host}).Add(uint64(len(switched)))
 			opts.log("info", fmt.Sprintf(
 				"engine: asic_manage: %d miner(s) switched to %s", len(switched), host))
+		}
+	}()
+}
+
+// drainPoolNotices relays pool operator notices (V1 client.show_message)
+// into the session log when the transport supports
+// poolproto.PoolNoticeReceiver. Without a consumer the session drops
+// notices once its small buffer fills — pool maintenance warnings would
+// vanish exactly when the operator most needs them. The first 16
+// notices per connection log verbatim at warn; beyond that a flood
+// guard collapses to a periodic suppressed-count summary so a
+// notice-spamming pool can't flood the log. The goroutine exits on
+// channel close (session end) or ctx.
+func (opts *sessionOpts) drainPoolNotices(ctx context.Context, sess poolproto.Session) {
+	rcv, ok := sess.(poolproto.PoolNoticeReceiver)
+	if !ok {
+		return
+	}
+	go func() {
+		const verbatimCap = 16
+		ch := rcv.PoolNotices()
+		logged, suppressed := 0, 0
+		flush := func() {
+			if suppressed > 0 {
+				opts.log("warn", fmt.Sprintf("engine: %d pool notices suppressed (flood guard)", suppressed))
+				suppressed = 0
+			}
+		}
+		for {
+			select {
+			case notice, ok := <-ch:
+				if !ok {
+					flush()
+					return
+				}
+				if logged < verbatimCap {
+					opts.log("warn", "engine: pool notice: "+notice)
+					logged++
+				} else {
+					suppressed++
+					if suppressed%64 == 0 {
+						flush()
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 }
