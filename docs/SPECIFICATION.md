@@ -148,7 +148,8 @@ configured pool URLs — each tagged with the layer it was resolved from.
    pool-side var-diff stays authoritative; low-hashrate devices need the
    hint because a pool default tuned for ASICs can be too high for
    var-diff to ever bootstrap. The SV2 counterpart is `UpdateChannel`
-   (0x16, §5.3.7): sent once per session with the measured nominal
+   (0x16, §5.3.7): sent on first measurement and re-sent when the rate
+   drifts ±25% (debounced once a minute), carrying the measured nominal
    hashrate (F32) and an unbounded `maximum_target` — the device makes
    no difficulty request, so var-diff likewise stays pool-side. A
    pool's `UpdateChannel.Error` (0x17) reply is advisory and does not

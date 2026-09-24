@@ -298,8 +298,9 @@ type DifficultySuggester interface {
 type NominalHashrateUpdater interface {
 	// UpdateNominalHashrate reports the device's measured hashrate in
 	// H/s. It carries no difficulty request (the channel's
-	// maximum_target stays pool-assigned); spec debounce is ≤1/s and the
-	// engine currently notifies once per session.
+	// maximum_target stays pool-assigned); the engine notifies once on
+	// first measurement and re-notifies on ±25% drift, debounced at once
+	// a minute (the spec's own bound is ≤1/s for busy proxies).
 	UpdateNominalHashrate(ctx context.Context, hashrate float64) error
 }
 

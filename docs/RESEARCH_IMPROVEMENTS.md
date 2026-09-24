@@ -168,6 +168,8 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
 8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
    to re-enter N words) — reduces fund-loss from un-backed-up seeds.
+   — Implemented in PR #124 (interactive first-run recovery-phrase backup
+   check; sibling branch pending merge).
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not
@@ -215,6 +217,8 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    pool/JDC/solo template provenance.
 7. 🟡 **Pool-share-of-hashrate awareness** — optionally inform the user when
    their chosen pool exceeds a large network share, nudging decentralisation.
+   — Implemented in PR #127 (mempool.space weekly share lookup +
+   `otedama_pool_network_share` + ≥30% warn; sibling branch pending merge).
 8. ❌ **Running a pool server** — explicitly out of scope (ADR-001).
 9. ✅ **Block-template freshness metric** (session 93):
    `otedama_last_job_received_seconds` (Unix timestamp of last
@@ -241,6 +245,8 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    warn (was info).
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
+   — Implemented in PR #131 (VRAM-aware suitability; sibling branch
+   pending merge).
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
 6. ✅ **Spot-price volatility guard** — hysteresis exists in arbitration and
    now has a user-configurable knob: `arbitration_hysteresis_pct` (YAML) /
@@ -420,6 +426,9 @@ arXiv grounding (session 41):
    threshold and logs re-start on recovery; `otedama_curtailed` gauge.
 10. 🟡 **Carbon-intensity feed (optional)** — for users who want to mine on
     low-carbon grid windows; aligns with SUSTAINABILITY.md.
+    — Implemented in PR #128 (opt-in UK-grid `curtail_above_uk_carbon`
+    gate; sibling branch pending merge). MOER/marginal feeds remain open
+    pending an API key.
 
 ---
 
@@ -447,6 +456,8 @@ arXiv grounding (session 41):
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
 10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
     metrics actionable.
+    — Implemented in PR #122 (operator SLO targets published in API.md;
+    sibling branch pending merge).
 
 ---
 
@@ -551,6 +562,13 @@ endpoint against current vendor documentation. Tags as before
    (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
    and a per-pool `authority_pubkey` config field.
    (sv2-spec 04-Protocol-Security.md)
+   — **Scope clarified (session 302):** today's only encrypted transport
+   is `stratum+v2tls://`, which already runs standard X.509 chain
+   verification — there is no insecure path this item guards against.
+   The Noise-NX authority-key certificate applies exclusively to the
+   future Noise wiring (the NX handshake code exists but is not in the
+   live connect path); it stays open *as ADR-011 scope*, not as a
+   standalone fix.
 2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
@@ -577,6 +595,14 @@ endpoint against current vendor documentation. Tags as before
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
+   — ✅ **Resolved — non-applicable by design (session 302).** Otedama
+   never assembles a coinbase anywhere: the V1 path deliberately
+   discards `coinb1`/`coinb2`/`merkle_branch` (the pool supplies the
+   merkle root — see `parseNotify`), and the only SV2 path where
+   coinbase assembly exists — Extended Jobs — is unreachable because
+   `REQUIRES_EXTENDED_CHANNELS` fails the handshake (session 297) and
+   extended channels are ADR-009 scope. There is no code path to
+   regress, hence no fixture to add.
 4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
@@ -597,6 +623,10 @@ endpoint against current vendor documentation. Tags as before
    as a reject) remains open — the target now updates correctly on every new
    job, but shares in flight when `set_difficulty` changes are not yet
    re-validated against the difficulty active at issue time.
+   — The open tail is implemented in PR #111 (difficultyTagger: tags
+   each generation of work with the difficulty active at issue time and
+   excludes benign cross-generation "above target" rejects from the
+   reject-rate metric; sibling branch pending merge).
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict

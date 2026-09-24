@@ -2587,3 +2587,107 @@ func TestSuggestDifficultyOnce_SuggesterErrorIsInformational(t *testing.T) {
 		t.Error("no log emitted for failed suggestion")
 	}
 }
+
+// fakeUpdateSession satisfies Session AND NominalHashrateUpdater — the
+// SV2 case — recording each UpdateNominalHashrate call's hashrate.
+type fakeUpdateSession struct {
+	jobs   chan poolproto.Job
+	hashCh chan float64
+	updErr error
+}
+
+func newFakeUpdateSession() *fakeUpdateSession {
+	return &fakeUpdateSession{
+		jobs:   make(chan poolproto.Job),
+		hashCh: make(chan float64, 8),
+	}
+}
+
+func (f *fakeUpdateSession) Close() error { return nil }
+func (f *fakeUpdateSession) Jobs() <-chan poolproto.Job {
+	return f.jobs
+}
+
+func (f *fakeUpdateSession) Submit(_ context.Context, _ poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	return poolproto.ShareResult{}, nil
+}
+func (f *fakeUpdateSession) SuggestedDifficulty() float64 { return 0 }
+func (f *fakeUpdateSession) UpdateNominalHashrate(_ context.Context, hps float64) error {
+	f.hashCh <- hps
+	return f.updErr
+}
+
+func TestUpdateChannelHashrate_DriftRenotify(t *testing.T) {
+	rt := newSessionTelemetry(func(_, _ string) {})
+	sess := newFakeUpdateSession()
+	ctx := context.Background()
+	drain := func() {
+		for {
+			select {
+			case <-sess.hashCh:
+			default:
+				return
+			}
+		}
+	}
+	expectNone := func(what string) {
+		t.Helper()
+		select {
+		case h := <-sess.hashCh:
+			t.Fatalf("%s: unexpected notification %.4g", what, h)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	// No hashrate measured yet — nothing to report.
+	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
+	expectNone("no hashrate")
+
+	// First measured rate → one notification with the raw H/s.
+	rt.lastHashrate = 1e6
+	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
+	select {
+	case h := <-sess.hashCh:
+		if h != 1e6 {
+			t.Errorf("notified %v, want 1e6", h)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first notification never arrived")
+	}
+
+	// Same rate, well past the debounce window — no re-notify.
+	rt.hashrateNotifiedAt = time.Now().Add(-2 * time.Minute)
+	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
+	expectNone("steady rate")
+
+	// +10% drift — inside the ±25% band — still quiet.
+	rt.lastHashrate = 1.1e6
+	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
+	expectNone("+10% drift")
+
+	// +50% drift inside the debounce window — suppressed until the
+	// minute is up, then fires once.
+	rt.hashrateNotifiedAt = time.Now()
+	rt.lastHashrate = 1.5e6
+	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
+	expectNone("drift inside debounce")
+	rt.hashrateNotifiedAt = time.Now().Add(-2 * time.Minute)
+	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
+	select {
+	case h := <-sess.hashCh:
+		if h != 1.5e6 {
+			t.Errorf("re-notified %v, want 1.5e6", h)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("drift re-notification never arrived")
+	}
+	drain()
+
+	// Sessions without the mechanism (V1) return immediately.
+	rtPlain := newSessionTelemetry(func(_, _ string) {})
+	rtPlain.lastHashrate = 1e6
+	rtPlain.updateChannelHashrate(ctx, &fakePlainSession{}, func(_, _ string) {})
+	if rtPlain.hashrateNotified {
+		t.Error("V1 session should not mark hashrateNotified")
+	}
+}

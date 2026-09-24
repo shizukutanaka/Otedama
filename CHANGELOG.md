@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 302 — UpdateChannel drift 再通知 + 課題棚卸し)
+
+- **SV2 `UpdateChannel` を drift 駆動で再通知** — #160 の1回送信から
+  拡張: 実測 hashrate が前回通知値から ±25% 乖離した際に再送信
+  （1分デバウンス、spec の proxy 緩和 ≤1/s を大きく下回る）。サーマル
+  スロットル・ストリーム切替・ワーカー脱落で変動するデバイスを
+  プール側 var-diff/ジョブサイジングが追従できる。
+- **RESEARCH マーカー棚卸し** — segwit coinbase 項目は「設計上
+  非該当」で解決（coinbase 構築経路が存在しない: V1 は pool-supplied
+  merkle、Extended Jobs は握手時拒否）、SV2 cert 項目は将来 Noise
+  配線 (ADR-011) のスコープとして明確化、兄弟 PR 待ちの解決済み項目
+  6件に PR 番号を併記。
+
 ### Added (session 301 — arb explain quote 経過表示)
 
 - **`arb explain` / `GET /arbitration` の各行に `quote_age_seconds` を

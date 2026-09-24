@@ -626,7 +626,25 @@ type sessionTelemetry struct {
 	// mining.suggest_difficulty hint (V1 only; sessions without a
 	// client→pool suggestion mechanism mark it and skip).
 	difficultySuggested bool
+	// hashrateNotified* track the SV2 UpdateChannel nominal-hashrate
+	// notification: sent once on first measurement, then again when the
+	// measured rate drifts ±25% — debounced at once a minute.
+	hashrateNotified      bool
+	hashrateNotifiedValue float64
+	hashrateNotifiedAt    time.Time
 }
+
+// updateChannelMinInterval debounces SV2 UpdateChannel re-notifications
+// — far below the spec's ≤1/s proxy bound; an end device whose rate
+// swings needs an occasional nudge, not a stream of updates.
+const updateChannelMinInterval = time.Minute
+
+// updateChannelDriftUp/Down bound the hashrate drift (as a ratio of the
+// last notified value) that warrants a fresh UpdateChannel.
+const (
+	updateChannelDriftUp   = 1.25
+	updateChannelDriftDown = 0.75
+)
 
 func newSessionTelemetry(log func(string, string)) *sessionTelemetry {
 	return &sessionTelemetry{
@@ -714,31 +732,57 @@ func (t *sessionTelemetry) suggestDifficultyOnce(ctx context.Context, sess poolp
 		return
 	}
 	t.difficultySuggested = true
-	if suggester, ok := sess.(poolproto.DifficultySuggester); ok {
-		diff := t.lastHashrate * desiredShareIntervalSeconds / 4294967296
-		go func() {
-			if err := suggester.SuggestDifficulty(ctx, diff); err != nil {
-				log("info", fmt.Sprintf("engine: share-difficulty suggestion failed: %v", err))
-				return
-			}
-			log("info", fmt.Sprintf(
-				"engine: suggested share difficulty %.4g to pool (measured %.3g H/s, target share interval %ds — advisory, pool var-diff decides)",
-				diff, t.lastHashrate, desiredShareIntervalSeconds))
-		}()
+	suggester, ok := sess.(poolproto.DifficultySuggester)
+	if !ok {
+		return
 	}
-	// SV2 counterpart: UpdateChannel carries the measured nominal
-	// hashrate (no difficulty request — maximum_target advertised
-	// unbounded, var-diff stays pool-side).
-	if u, ok := sess.(poolproto.NominalHashrateUpdater); ok {
-		hashrate := t.lastHashrate
-		go func() {
-			if err := u.UpdateNominalHashrate(ctx, hashrate); err != nil {
-				log("info", fmt.Sprintf("engine: nominal-hashrate update failed: %v", err))
-				return
-			}
-			log("info", fmt.Sprintf("engine: notified pool of measured nominal hashrate %.3g H/s (SV2 UpdateChannel — advisory)", hashrate))
-		}()
+	diff := t.lastHashrate * desiredShareIntervalSeconds / 4294967296
+	go func() {
+		if err := suggester.SuggestDifficulty(ctx, diff); err != nil {
+			log("info", fmt.Sprintf("engine: share-difficulty suggestion failed: %v", err))
+			return
+		}
+		log("info", fmt.Sprintf(
+			"engine: suggested share difficulty %.4g to pool (measured %.3g H/s, target share interval %ds — advisory, pool var-diff decides)",
+			diff, t.lastHashrate, desiredShareIntervalSeconds))
+	}()
+}
+
+// updateChannelHashrate sends the SV2 UpdateChannel nominal-hashrate
+// notification (§5.3.7) — once on the first measured hashrate, then
+// again whenever the rate drifts beyond ±25% of the last notified
+// value, debounced at updateChannelMinInterval. Drift re-notification
+// is what lets the pool's var-diff and job sizing follow a device that
+// throttles, switches streams, or loses a worker mid-session — the
+// message is advisory and carries no difficulty request
+// (maximum_target stays unbounded, var-diff pool-authoritative).
+// Sessions without the mechanism (V1) return immediately.
+func (t *sessionTelemetry) updateChannelHashrate(ctx context.Context, sess poolproto.Session, log func(string, string)) {
+	u, ok := sess.(poolproto.NominalHashrateUpdater)
+	if !ok || t.lastHashrate <= 0 {
+		return
 	}
+	now := time.Now()
+	if t.hashrateNotified {
+		if now.Sub(t.hashrateNotifiedAt) < updateChannelMinInterval {
+			return
+		}
+		drift := t.lastHashrate / t.hashrateNotifiedValue
+		if drift < updateChannelDriftUp && drift > updateChannelDriftDown {
+			return
+		}
+	}
+	t.hashrateNotified = true
+	t.hashrateNotifiedValue = t.lastHashrate
+	t.hashrateNotifiedAt = now
+	hashrate := t.lastHashrate
+	go func() {
+		if err := u.UpdateNominalHashrate(ctx, hashrate); err != nil {
+			log("info", fmt.Sprintf("engine: nominal-hashrate update failed: %v", err))
+			return
+		}
+		log("info", fmt.Sprintf("engine: notified pool of measured nominal hashrate %.3g H/s (SV2 UpdateChannel — advisory)", hashrate))
+	}()
 }
 
 func runSession(ctx context.Context, opts sessionOpts) error {
@@ -833,6 +877,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 		case <-statsTicker.C:
 			rt.tick(time.Now(), opts, sess.SuggestedDifficulty())
 			rt.suggestDifficultyOnce(ctx, sess, opts.log)
+			rt.updateChannelHashrate(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")
@@ -972,6 +1017,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 		case <-statsTicker.C:
 			rt.tick(time.Now(), &opts, sess.SuggestedDifficulty())
 			rt.suggestDifficultyOnce(ctx, sess, opts.log)
+			rt.updateChannelHashrate(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
 			if !ok {
 				return fmt.Errorf("engine: pool closed connection")
