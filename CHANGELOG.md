@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   切断対象になり得た。cgminer 慣例どおり同一 id で pong を返す（id 無しの通知には
   返信しない）。併せて `Negotiate` の mining.configure ブロックを
   `configureVersionRolling` ヘルパへ抽出（gocyclo 是正）。
+- **`mining.set_difficulty` / `suggest_difficulty` の退化値を拒否** — ゼロ・負値・
+  NaN/+Inf を受理すると `TargetFromDifficulty` が以後の全シェアで失敗し、バグまたは
+  悪意のあるプールによるセッション DoS になり得た。`set_target` のゼロガードと
+  同等の防御を difficulty 経路にも適用（既存値は保護される）。
+
 
 ### Added (session 339 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 version-rolling 拡張交渉)
 

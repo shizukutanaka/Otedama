@@ -1507,6 +1507,10 @@ id-bearing `mining.ping` keepalive and drop clients that never resolve
 the id; the dispatcher now answers with the conventional
 `result: "pong"` (cgminer convention) instead of the -32601
 method-not-found fallback. An id-less ping notification stays silent.
+Also in session 340: `parseDifficulty` now rejects degenerate
+`set_difficulty`/`suggest_difficulty` values (zero, negative, NaN,
++Inf) — the same guard the set_target path already has — because
+storing one would make `TargetFromDifficulty` fail every share.
 
 ---
 
