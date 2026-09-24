@@ -216,6 +216,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_simulated_yield_sats_per_second` | gauge | Forecast earning rate of assignments on simulated streams only (providers quoting modeled prices, e.g. ai.akash). Kept separate so modeled revenue never inflates the real-earnings total. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
+| `stream_last_quote_unixtime` | gauge | Unix timestamp of the stream's most recent provider quote per `{stream,device}` — the provider heartbeat: `time() − value` is the quote age, so a dead provider is alertable before (and independently of) the stale-prune TTL and its reliability update. The series keeps its final timestamp after pruning — a stale value is the dead-provider evidence itself. |
 | `arbitration_provider_reliability` | gauge | Beta-Bernoulli posterior mean per `{provider}` (ADR-010 A6); discounts quoted confidence. |
 | `arbitration_yield_forecast_sats_per_second` | gauge | Holt-Winters one-step-ahead predicted yield per `{stream,device}` (ADR-010 A1). |
 | `arbitration_forecast_misses_total` | counter | Quotes deviating >2σ from the forecast per `{stream,device}` (ADR-010 A1/A8 signal). |

@@ -9,6 +9,7 @@ package engine
 
 import (
 	"sync"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/version"
@@ -228,6 +229,17 @@ type engineMetrics struct {
 	yieldForecast    map[[2]string]*metrics.Gauge
 	forecastMisses   map[[2]string]*metrics.Counter
 	forecasterResets map[[2]string]*metrics.Counter
+
+	// streamLastQuote exposes each live stream's last-quote timestamp as
+	// otedama_stream_last_quote_unixtime{stream,device} — the provider
+	// liveness/heartbeat half of RESEARCH_IMPROVEMENTS Cat 5 #3. Reading
+	// `time() - value` gives quote age, so a dead provider is alertable
+	// before (and independently of) the prune-based reliability update.
+	// The series intentionally keeps its final timestamp after the stream
+	// is pruned — "last quote was 10 min ago" is exactly the dead-provider
+	// signal; deleting it would erase the evidence.
+	streamLastQuoteMu sync.Mutex
+	streamLastQuote   map[[2]string]*metrics.Gauge
 
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
@@ -491,6 +503,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		yieldForecast:        make(map[[2]string]*metrics.Gauge),
 		forecastMisses:       make(map[[2]string]*metrics.Counter),
 		forecasterResets:     make(map[[2]string]*metrics.Counter),
+		streamLastQuote:      make(map[[2]string]*metrics.Gauge),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -557,6 +570,30 @@ func (m *engineMetrics) observeYieldForecast(stream, device string, v float64) {
 	}
 	m.yieldForecastMu.Unlock()
 	g.Set(v)
+}
+
+// observeStreamLastQuote sets otedama_stream_last_quote_unixtime
+// {stream,device} to the wall-clock time of the stream's most recent
+// quote — the provider heartbeat gauge (RESEARCH_IMPROVEMENTS Cat 5 #3).
+// Quote age at scrape time is `time() - value`; a provider that stops
+// quoting is alertable on `time() - otedama_stream_last_quote_unixtime`
+// exceeding the stale-prune TTL, independent of the reliability update
+// the prune itself issues. Created lazily; safe for concurrent use.
+func (m *engineMetrics) observeStreamLastQuote(stream, device string, ts time.Time) {
+	key := [2]string{stream, device}
+	m.streamLastQuoteMu.Lock()
+	g, ok := m.streamLastQuote[key]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_stream_last_quote_unixtime",
+			"Unix timestamp of this stream's most recent provider quote — the "+
+				"heartbeat gauge: a stale value means the provider stopped quoting "+
+				"(dead provider), well before the stale-prune TTL drops the stream.",
+			map[string]string{"stream": stream, "device": device})
+		m.streamLastQuote[key] = g
+	}
+	m.streamLastQuoteMu.Unlock()
+	g.Set(float64(ts.Unix()))
 }
 
 // observeForecastMiss increments otedama_arbitration_forecast_misses_total

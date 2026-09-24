@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 292 — プロバイダ心拍メトリクス)
+
+- **`otedama_stream_last_quote_unixtime{stream,device}`** —
+  RESEARCH_IMPROVEMENTS Cat 5 #3（provider heartbeat）の observability
+  半分を解消。ルーティング停止側は既に実装済みだった
+  （`pruneStaleStreams` が 3 分無クォートでストリームを落とし
+  Beta-Bernoulli 失敗を記録）が、プロバイダ死亡を **アラート化**
+  できるメトリクスが存在しなかった。各ストリームの最終クォート
+  時刻を Unix 秒で公開 — `time() − value` がクォート経過時間と
+  なり、TTL（3m）超過を PromQL で検知可能。プルーン後もシリーズは
+  最終タイムスタンプを保持（stale 値そのものが死亡証拠）し、
+  ストリーム失効ログを info → warn に引き上げ（デッドプロバイダは
+  運用上有意な障害であり、HashrateMonitor の stall 検出と対等）。
+
 ### Added (session 291 — 模擬 vs 実収入の会計分離)
 
 - **`Quote.Simulated` → `Stream.Simulated` → ゲージ分離** —

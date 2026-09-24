@@ -1360,3 +1360,28 @@ func TestUpdateStreamReliability_PropagatesSimulated(t *testing.T) {
 		t.Error("live-market quote produced a simulated stream")
 	}
 }
+
+// ============================================================================
+// Cat 5 #3 — provider heartbeat (last-quote) metric
+// ============================================================================
+
+// observeStreamLastQuote must lazily create the {stream,device} gauge
+// and expose the quote timestamp through WriteText — the heartbeat an
+// operator alerts on (time() - value = quote age).
+func TestObserveStreamLastQuote_ExposesGauge(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+	ts := time.Unix(1790220000, 0)
+	m.observeStreamLastQuote("ai.akash", "gpu-0", ts)
+	m.observeStreamLastQuote("ai.akash", "gpu-0", ts.Add(60*time.Second))
+
+	var buf bytes.Buffer
+	if err := reg.WriteText(&buf); err != nil {
+		t.Fatalf("WriteText: %v", err)
+	}
+	out := buf.String()
+	want := `otedama_stream_last_quote_unixtime{device="gpu-0",stream="ai.akash"} 1.79022006e+09`
+	if !strings.Contains(out, want) {
+		t.Errorf("heartbeat gauge missing or stale in WriteText output:\n%s", out)
+	}
+}

@@ -132,6 +132,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				ts = time.Now()
 			}
 			lastQuoteAt[key] = ts
+			opts.metrics.observeStreamLastQuote(stream, device, ts)
 			providerQuotes[stream]++
 		case <-ticker.C:
 			opts.streamsMu.Lock()
@@ -140,8 +141,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				providerReliability(reliability, key).UpdateAt(false, now)
 				delete(creditAt, key)
 				delete(forecasters, key)
-				opts.log("info", fmt.Sprintf(
-					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
+				opts.log("warn", fmt.Sprintf(
+					"arbitration: stream %q expired (no quote in %s); no longer routing to it "+
+						"— provider heartbeat lost (otedama_stream_last_quote_unixtime shows last quote)",
 					key, streamStaleTimeout))
 			}
 			for key := range opts.streamMap {
