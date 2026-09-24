@@ -476,6 +476,22 @@ unaccounted at 0 and never divides by zero (`judged == 0` early
 return); `publishDifficulty` ignores non-positive difficulties and
 reports 0 share-interval at zero hashrate rather than +Inf.
 
+**Sessions 425–426 CS-invariant pass.** Session 425 closed a real gap —
+a worker thread's nonce sequence (`threadID + k*NonceStep`, periodic mod
+2³²) wrapped and rehashed covered space, emitting deterministic
+duplicate shares the pool rejects; wrap now rolls ntime +1 (the cgminer
+domain shift). Session 426 clamped `YieldForecaster.StdDev`'s Welford
+M2 at zero — float cancellation on a near-constant series could return
+NaN, which `markVolatility` stored unconditionally. Verified
+already-correct: `driftTracker.observe` uses a scale-free relative
+shift band (`max(prev,0)·ε` — any revival/death counts at any size)
+with `expire` map pruning; `unaccountedWatchdog` warns only on a
+consecutive-tick streak and logs recovery on drain; `uptimeAccountant`
+and `satsAccountant` guard `elapsed ≤ 0` and the productive flag, so
+the estimate never runs backwards or accrues while idle/stalled/
+curtailed (`ratePerSec > 0` also filters NaN); `hashrateWindow`
+saturates at 0 on counter reset instead of going negative.
+
 ---
 
 ### Elevation of privilege (E)
