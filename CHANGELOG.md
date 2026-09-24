@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (September 2026 — 第一性原理 + ソクラテス式監査ラウンド: ドキュメント陳腐化の是正)
+
+**第一原理からの導出.** 本監査は製品の中核要件（Stratum V2ワイヤ準拠・非カストディ・
+誠実なドキュメンテーション）から前提を問い直し、全ての主張を一次情報と突き合わせた。
+SV2ワイヤレイアウト（SetupConnection/OpenStandardMiningChannel/SubmitSharesSuccess の
+バッチ応答語義）を stratum-mining/sv2-spec と、V1ワイヤ事実（prevhash の4バイト語
+反転、クライアント側コインベース再構築、不透明な文字列 job_id、`%08x` u32 submit
+パラメタ）を bitaxeorg/ESP-Miner `stratum_api.c` と再検証した。
+
+**収束の発見（検証済み）.** 本監査が独立に再導出したマイニング正確性の欠陥（V2ワイヤ
+準拠、V1シェア有効性、バッチACK計数、ワップしたnonce領域、extranonce競合）は、
+全て未マージの `devin/*` 待機ブランチで既に修正済みだった——キュー済みPR群が
+仕様上確認可能な実バグを直していることの強い収束的証拠。コード側の改善余地は
+飽和しているため、本ラウンドは誠実さの観点でカバー範囲外だったドキュメントの
+陳腐化を是正する。
+
+**修正.** (1) `internal/poolproto/poolproto.go` と RESEARCH_IMPROVEMENTS.md Cat 2 #9:
+SRIスナップショットを **v1.12.0（2026-09-17）** へ更新（GitHub releases で再検証）。
+(2) ADR-009 エラタ: `internal/stratum/noise*.go` が「既に production-ready」という
+主張が KNOWN_LIMITATIONS.md §2（デッドコード・P-256使用・メッセージフロー構造欠陥）
+と矛盾していたため、JDS再利用率見込みへの注意を追記。
+(3) RESEARCH_IMPROVEMENTS.md 末尾に日付付き監査パス記録を追加。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
