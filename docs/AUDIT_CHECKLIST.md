@@ -83,7 +83,7 @@ verify these are enforced by inspecting `.github/workflows/ci.yml`:
 - `staticcheck ./...`
 - `golangci-lint run`
 - `govulncheck ./...`
-- `gosec ./...`
+- `gosec ./...` — verified run (session 384): 38 findings, all triaged false-positive (i18n strings flagged as hardcoded credentials, conventional 0755/0644 service-file modes, fixed-path G304, unhandled Close/Remove)
 - `go test -race -timeout 5m ./...`
 - `go build ./...` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
 
