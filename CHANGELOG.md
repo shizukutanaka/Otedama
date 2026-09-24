@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 289 — A7 敵対的破壊耐性: k=3 確認ラダー)
+
+- **`Stream.Confirmed` / 確認ラダー** — ADR-010 A7（Lykouris–Mirrokni–Paes
+  Leme STOC 2018）の最後の部品を実装。裁定ループがプロバイダ毎の
+  クォート受領数を数え、`arbitration.ConfirmationEpochs`（3 ≈ 90s）に
+  達したプロバイダのストリームを `Confirmed` とマーク。未確認の
+  チャレンジャーはヒステリシス閾値をどれだけ上回っていても確認済み
+  インカンベントを置き換えられない — 高イールドを短時間だけ提示して
+  スイッチを誘う yield-lure 攻撃を完全に阻止。未確認ストリームも
+  アイドルデバイスには実力で割り当て可能、未確認インカンベントは
+  保護されない（新規同士は通常マージンで自由に交代）。カウントは
+  プロセス寿命内で単調増加 — 枯渇→復帰したプロバイダは履歴を保持
+  （「k 個の独立した確認」は鮮度でなく標本として解釈）。これにより
+  unseen provider が最初のエポック判定まで `discount=1.0`（完全信頼）
+  で通っていた潜在ギャップのスイッチ悪用部も閉塞。ラダー発動は
+  `Assignment.AwaitingConfirmation` →
+  `otedama_arbitration_confirmation_holds_total`（`_holds_total` の
+  サブセット）と `/arbitration` explain 行の `awaiting_confirmation`
+  フィールド・detail セル "(…; challenger unconfirmed)" で観測可能。
+  これで A7 の3機構（Δα cap・確認ラダー・評判半減期）が全て実装済み。
+
 ### Added (session 288 — A7 敵対的破壊耐性: 評判半減期)
 
 - **`ProviderReliability.UpdateAt(success, now)`** — ADR-010 A7（Lykouris

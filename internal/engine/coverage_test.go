@@ -2101,3 +2101,60 @@ func TestRunArbitrationLoop_ExplainSnapshotNilByDefault(t *testing.T) {
 		t.Error("loop did not exit")
 	}
 }
+
+func TestRecordExplainSnapshot_AwaitingConfirmation(t *testing.T) {
+	var snap atomic.Pointer[arbitration.DecisionSnapshot]
+
+	opts := arbitrationLoopOpts{
+		streamsMu: &sync.Mutex{},
+		streamMap: map[string]arbitration.Stream{},
+		metrics:   newEngineMetrics(metrics.NewRegistry()),
+		log:       func(_, _ string) {},
+		explain:   &snap,
+	}
+	alloc := &arbitration.Allocation{Assignments: []arbitration.Assignment{{
+		DeviceID:             "cpu-0",
+		Stream:               "mining.stratum",
+		ExpectedYield:        90,
+		Held:                 true,
+		AwaitingConfirmation: true,
+		ForegoneSatsPerSec:   30,
+		ForegoneStreamID:     "ai.lure",
+	}}}
+
+	opts.recordExplainSnapshot(alloc, 0.10, nil, nil)
+
+	s := snap.Load()
+	if s == nil || len(s.Rows) != 1 {
+		t.Fatalf("snapshot not stored: %+v", s)
+	}
+	if !s.Rows[0].AwaitingConfirmation {
+		t.Error("AwaitingConfirmation not propagated to ExplainRow")
+	}
+}
+
+func TestMarkConfirmedStreams(t *testing.T) {
+	// ADR-010 A7: Confirmed is set per provider once its quote count reaches
+	// arbitration.ConfirmationEpochs (3); below that the stream stays
+	// unconfirmed and cannot displace a confirmed incumbent.
+	streams := []arbitration.Stream{
+		{ID: "mining.stratum"},
+		{ID: "ai.akash"},
+		{ID: "ai.vast"},
+	}
+	providerQuotes := map[string]int{
+		"mining.stratum": arbitration.ConfirmationEpochs,
+		"ai.akash":       arbitration.ConfirmationEpochs - 1,
+		// ai.vast absent — no quotes seen
+	}
+	markConfirmedStreams(streams, providerQuotes)
+	if !streams[0].Confirmed {
+		t.Error("provider at ConfirmationEpochs should be confirmed")
+	}
+	if streams[1].Confirmed {
+		t.Error("provider below ConfirmationEpochs should stay unconfirmed")
+	}
+	if streams[2].Confirmed {
+		t.Error("provider with no quotes should stay unconfirmed")
+	}
+}

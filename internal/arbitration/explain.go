@@ -52,6 +52,11 @@ type ExplainRow struct {
 	// same-or-better alternative was suppressed by the hysteresis margin).
 	SwitchedFrom StreamID `json:"switched_from,omitempty"`
 	Held         bool     `json:"held,omitempty"`
+	// AwaitingConfirmation mirrors Assignment.AwaitingConfirmation: the
+	// held row's suppressed best candidate was an unconfirmed stream, so
+	// ADR-010 A7's confirmation ladder (not the hysteresis margin) kept
+	// the incumbent.
+	AwaitingConfirmation bool `json:"awaiting_confirmation,omitempty"`
 
 	// ForegoneSatsPerSec is the raw yield left on the table by not taking
 	// the max-earnings stream (hysteresis hold or policy deviation), the
@@ -178,6 +183,8 @@ func explainRowCells(r *ExplainRow) []string {
 		switch {
 		case r.SwitchedFrom != "":
 			detail = fmt.Sprintf("switch from %s", r.SwitchedFrom)
+		case r.Held && r.ForegoneSatsPerSec > 0 && r.AwaitingConfirmation:
+			detail = fmt.Sprintf("held (%.2f sat/s declined; challenger unconfirmed)", r.ForegoneSatsPerSec)
 		case r.Held && r.ForegoneSatsPerSec > 0:
 			detail = fmt.Sprintf("held (%.2f sat/s declined)", r.ForegoneSatsPerSec)
 		case r.Held:

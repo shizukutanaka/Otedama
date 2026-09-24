@@ -110,6 +110,15 @@ type Stream struct {
 	PrivacyRating       int              // 0 (worst) .. 10 (best)
 	EnvironmentalRating int              // 0 (worst) .. 10 (best)
 	IsBitcoinMining     bool             // true for streams that pay out as BTC natively
+
+	// Confirmed is set once the provider has supplied at least
+	// ConfirmationEpochs quotes within the process lifetime (ADR-010 A7's
+	// confirmation ladder). An unconfirmed stream can still claim an idle
+	// device on merit, but it cannot displace a confirmed incumbent — a
+	// yield-lure stream that quotes high for its first few cycles to
+	// trigger a switch is held regardless of how far above the hysteresis
+	// threshold it scores.
+	Confirmed bool
 }
 
 // Accepts reports whether this stream will accept work from a device of
@@ -218,6 +227,14 @@ type Assignment struct {
 	// declined" for explainability (ADR-010 A9's reasoning text), where
 	// ForegoneSatsPerSec answers "how much was declined".
 	ForegoneStreamID StreamID
+
+	// AwaitingConfirmation is true when the assignment is a hysteresis hold
+	// whose suppressed best candidate was an unconfirmed stream — the ladder
+	// (not the margin) kept the incumbent. It distinguishes "declined for
+	// stability" from "declined because the challenger hasn't proven
+	// ConfirmationEpochs quotes yet" so operators can see the lure defence
+	// working (ote­dama_arbitration_confirmation_holds_total).
+	AwaitingConfirmation bool
 }
 
 // Idle reports whether this assignment leaves the device idle.
@@ -441,15 +458,25 @@ func chooseForDevice(
 			if c.stream.ID == previous.Stream {
 				incScore := policyScore(c.stream, c.yield, policy)
 				threshold := incScore * (1.0 + hysteresis)
-				if bestScore <= threshold {
+				// ADR-010 A7's confirmation ladder: an unconfirmed challenger
+				// cannot fast-track past a confirmed incumbent however far
+				// above the hysteresis threshold it scores — the lure has to
+				// sustain its quote for ConfirmationEpochs cycles first. An
+				// unconfirmed incumbent enjoys no such protection (two fresh
+				// streams trade freely on the usual margin).
+				awaitingConfirm := c.stream.Confirmed && !best.stream.Confirmed
+				if bestScore <= threshold || awaitingConfirm {
 					// Held only counts when a *different*, higher-scoring stream
 					// was suppressed — not when the incumbent is itself the best
 					// (in which case nothing was declined).
 					held := best.stream.ID != c.stream.ID
 					var reason string
-					if held {
+					switch {
+					case held && awaitingConfirm:
+						reason = fmt.Sprintf("held (challenger %s awaiting %d quote confirmations)", best.stream.ID, ConfirmationEpochs)
+					case held:
 						reason = fmt.Sprintf("held (best gain %.2f%% below hysteresis %.2f%%)", (bestScore-incScore)/math.Max(incScore, 1e-9)*100, hysteresis*100)
-					} else {
+					default:
 						reason = "incumbent is best; stayed"
 					}
 					foregoneID := StreamID("")
@@ -457,13 +484,14 @@ func chooseForDevice(
 						foregoneID = maxRawStream
 					}
 					return Assignment{
-						DeviceID:           dev.Identity.ID,
-						Stream:             c.stream.ID,
-						ExpectedYield:      c.yield,
-						Reason:             reason,
-						Held:               held,
-						ForegoneSatsPerSec: maxRaw - c.yield,
-						ForegoneStreamID:   foregoneID,
+						DeviceID:             dev.Identity.ID,
+						Stream:               c.stream.ID,
+						ExpectedYield:        c.yield,
+						Reason:               reason,
+						Held:                 held,
+						AwaitingConfirmation: held && awaitingConfirm,
+						ForegoneSatsPerSec:   maxRaw - c.yield,
+						ForegoneStreamID:     foregoneID,
 					}
 				}
 				break
@@ -486,6 +514,15 @@ func chooseForDevice(
 	}
 	return a
 }
+
+// ConfirmationEpochs is the number of quotes a provider must supply before
+// one of its streams may displace a confirmed incumbent (ADR-010 A7's
+// confirmation ladder, after Lykouris, Mirrokni & Paes Leme's bounded-arm
+// defence). Three ticks ≈ 90 s at the 30 s arbitration cadence: short enough
+// that honest providers clear it quickly, long enough that a lure must
+// sustain its inflated quote — and accrue real epoch observations to the
+// reliability posterior — before it can cause a switch.
+const ConfirmationEpochs = 3
 
 // Scoring constants for policyScore. Extracted so the documented intent and
 // the arithmetic share a single source of truth (the previous inline comment

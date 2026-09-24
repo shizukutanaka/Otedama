@@ -34,6 +34,13 @@ type engineMetrics struct {
 	// mean yield is being left on the table; zero holds mean the margin never
 	// binds. (The "road not taken" — decisions the engine declined.)
 	arbitrationHolds *metrics.Counter
+	// arbitrationConfirmationHolds counts the subset of arbitrationHolds where
+	// the suppressed best candidate was an unconfirmed stream — ADR-010 A7's
+	// confirmation ladder firing rather than the hysteresis margin. A rising
+	// count means new streams repeatedly try to displace incumbents before
+	// their k quote confirmations — eager honest entrants or yield-lure
+	// attempts; the split tells them apart over time.
+	arbitrationConfirmationHolds *metrics.Counter
 	// arbitrationForegoneSatsPerSec is the instantaneous opportunity cost of the
 	// current allocation: summed across devices, the raw sats/second sacrificed
 	// versus routing purely by yield. It is the *magnitude* companion to
@@ -267,6 +274,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Total decisions where a higher-yielding stream existed but hysteresis "+
 				"kept the current one. Rising vs switches indicates the hysteresis "+
 				"margin may be too high (yield left on the table).",
+			nil),
+		arbitrationConfirmationHolds: reg.NewCounter(
+			"otedama_arbitration_confirmation_holds_total",
+			"Total held decisions where the suppressed candidate was an "+
+				"unconfirmed stream awaiting k quote confirmations (ADR-010 "+
+				"A7 confirmation ladder). Subset of "+
+				"otedama_arbitration_holds_total.",
 			nil),
 		arbitrationForegoneSatsPerSec: reg.NewGauge(
 			"otedama_arbitration_foregone_sats_per_second",

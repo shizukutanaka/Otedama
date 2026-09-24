@@ -209,6 +209,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 |---|---|---|
 | `arbitration_switches_total` | counter | Workload switches (mining ↔ AI). |
 | `arbitration_holds_total` | counter | Better stream existed but hysteresis held. |
+| `arbitration_confirmation_holds_total` | counter | Subset of `arbitration_holds_total` where the suppressed candidate was an unconfirmed stream awaiting k quote confirmations (ADR-010 A7 confirmation ladder). |
 | `arbitration_foregone_sats_per_second` | gauge | Instantaneous opportunity cost of the held allocation. |
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |

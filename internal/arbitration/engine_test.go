@@ -1346,3 +1346,154 @@ func TestDecide_Property_AboveFloorStreamPreventsIdle(t *testing.T) {
 		}
 	}
 }
+
+func TestDecide_UnconfirmedChallengerCannotDisplaceConfirmed(t *testing.T) {
+	// ADR-010 A7: a stream whose provider hasn't reached ConfirmationEpochs
+	// quotes may not fast-track past a confirmed incumbent, however large its
+	// yield advantage — the yield-lure case.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+		Confirmed:       true,
+	}
+	lure := Stream{
+		ID:              "ai.lure",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 1000, Confidence: 1.0}},
+	}
+
+	prev := &Allocation{Assignments: []Assignment{
+		{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+	}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, lure},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "mining.braiins" {
+		t.Fatalf("unconfirmed 10x lure displaced confirmed incumbent; got %q", a.Stream)
+	}
+	if !a.Held || !a.AwaitingConfirmation {
+		t.Errorf("Held=%v AwaitingConfirmation=%v; want true,true", a.Held, a.AwaitingConfirmation)
+	}
+	if a.ForegoneStreamID != "ai.lure" {
+		t.Errorf("ForegoneStreamID = %q, want ai.lure", a.ForegoneStreamID)
+	}
+	if a.Reason == "" {
+		t.Error("Reason empty; want the confirmation-ladder hold reason")
+	}
+}
+
+func TestDecide_UnconfirmedChallengerWinsIdleDevice(t *testing.T) {
+	// The ladder guards switches, not entry: an unconfirmed stream wins a
+	// device with no incumbent on merit.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	conf := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+		Confirmed:       true,
+	}
+	fresh := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 150, Confidence: 1.0}},
+	}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{conf, fresh},
+		Previous:         nil,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "ai.akash" {
+		t.Errorf("unconfirmed stream should still win an idle device; got %q", alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_UnconfirmedIncumbentNotProtected(t *testing.T) {
+	// The ladder protects confirmed incumbents only: two unconfirmed streams
+	// trade on the ordinary hysteresis margin.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+	}
+	challenger := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
+	}
+
+	prev := &Allocation{Assignments: []Assignment{
+		{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+	}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "ai.akash" {
+		t.Errorf("unconfirmed incumbent wrongly protected; got %q", alloc.Assignments[0].Stream)
+	}
+}
+
+func TestDecide_ConfirmedChallengerSwitchesNormally(t *testing.T) {
+	// Once both sides are confirmed the ladder is out of the way: an above-
+	// margin challenger switches under the ordinary hysteresis rule.
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "mining.braiins",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 100, Confidence: 1.0}},
+		Confirmed:       true,
+	}
+	challenger := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 200, Confidence: 1.0}},
+		Confirmed:       true,
+	}
+
+	prev := &Allocation{Assignments: []Assignment{
+		{DeviceID: "gpu-0", Stream: "mining.braiins", ExpectedYield: 100},
+	}}
+
+	alloc, err := Decide(Input{
+		Devices:          []DeviceRef{gpu},
+		Streams:          []Stream{incumbent, challenger},
+		Previous:         prev,
+		Policy:           PolicyMaximizeEarnings,
+		HysteresisMargin: 0.10,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	a := alloc.Assignments[0]
+	if a.Stream != "ai.akash" {
+		t.Fatalf("confirmed challenger failed to switch; got %q", a.Stream)
+	}
+	if a.AwaitingConfirmation {
+		t.Error("AwaitingConfirmation true for a confirmed challenger")
+	}
+}

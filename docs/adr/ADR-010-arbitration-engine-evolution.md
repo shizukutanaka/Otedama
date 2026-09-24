@@ -237,6 +237,28 @@ margin and a fresh provider enters at the 0.5 prior discount — so the
 piece still worth building is stream-age tracking for an explicit
 confirmation ladder, not the gate itself.
 
+**Implementation note (session 289):** part 2 shipped too. The engine
+now counts quotes per provider (`providerQuotes` in the arbitration
+loop) and stamps `arbitration.Stream.Confirmed` once a provider has
+supplied `arbitration.ConfirmationEpochs` (3) quotes; `chooseForDevice`
+suppresses an unconfirmed best candidate from displacing a confirmed
+incumbent regardless of how far above the hysteresis threshold it
+scores — the lure must sustain its quote for ~90 s (and accrue real
+epoch observations to the A6 posterior) before it can cause a switch.
+Unconfirmed streams still win idle devices on merit, and an
+unconfirmed incumbent enjoys no protection (two fresh streams trade on
+the ordinary margin). Ladder holds surface as
+`Assignment.AwaitingConfirmation` →
+`otedama_arbitration_confirmation_holds_total` (subset of
+`_holds_total`) and an `awaiting_confirmation` field on the
+`/arbitration` explain row. Counts are monotonic within the process —
+a provider's past observations persist across prune-and-return, which
+is the honest reading of "k independent confirmations": samples, not
+freshness. Also closes a latent gap: unseen providers previously took
+the `discount=1.0` path in `updateStreamReliability` until their first
+epoch outcome; the gate now removes the switch-exploitable part of
+that window. All three mechanisms of the STOC-2018 port are now live.
+
 **Value/cost rank:** ★★★.
 
 **Non-custodial check:** ✅ Defense logic, no third-party interaction.

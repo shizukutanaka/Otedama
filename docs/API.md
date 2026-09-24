@@ -290,6 +290,7 @@ addresses) appear once their first event occurs.
 |--------|------|--------|-------------|
 | `otedama_arbitration_switches_total` | counter | — | Workload reroutes by the arbitration engine. |
 | `otedama_arbitration_holds_total` | counter | — | Decisions where a higher-yielding stream existed but hysteresis kept the current one. |
+| `otedama_arbitration_confirmation_holds_total` | counter | — | Subset of `_holds_total` where the suppressed candidate was an unconfirmed stream awaiting k quote confirmations (ADR-010 A7 confirmation ladder). |
 | `otedama_arbitration_foregone_sats_per_second` | gauge | — | Instantaneous opportunity cost: raw sats/s sacrificed versus pure yield routing, summed across devices (hysteresis holds + non-earnings policy preferences). The magnitude companion to `_holds_total`. |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast earning rate (summed ExpectedYield of the chosen allocation). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. |
 | `otedama_active_streams` | gauge | — | Live revenue streams after pruning stale (dead-provider) quotes. |
@@ -345,8 +346,10 @@ argmax stream), `foregone_expected_sats_per_sec` and
 `switched_from_expected_sats_per_sec` (that stream's current
 confidence-adjusted quote), and `alt_forecast_sigma_sats_per_sec` (the
 alternative's forecast error scale) — the inputs the rendered
-"Reasoning:" block is built from. Served by `otedama arb explain` for
-terminal rendering.
+"Reasoning:" block is built from. A held row additionally carries
+`awaiting_confirmation` when the suppressed candidate was an
+unconfirmed stream (ADR-010 A7 confirmation ladder). Served by
+`otedama arb explain` for terminal rendering.
 
 - `200 OK` — snapshot JSON.
 - `503 Service Unavailable` — the engine has not recorded its first

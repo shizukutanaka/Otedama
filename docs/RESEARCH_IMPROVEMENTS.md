@@ -278,8 +278,11 @@ arXiv grounding (collected sessions 40–41 and here):
     as `otedama_arbitration_provider_reliability`. A7's Δα ≤ 1 cap and 168h
     reputation half-life followed in session 288 (`UpdateAt(success, now)`
     decays pseudo-counts toward the prior before tallying each outcome);
-    shared rolling buffer (with A1), persistent table, and A7's
-    k-confirmation ladder remain open.
+    the k-confirmation ladder landed in session 289 — `Stream.Confirmed`
+    after `ConfirmationEpochs` (3) quotes, and `chooseForDevice` suppresses
+    an unconfirmed best candidate from displacing a confirmed incumbent
+    (`otedama_arbitration_confirmation_holds_total`). Remaining: the
+    shared rolling buffer (with A1) and the persistent cost table.
 10. 🟡 **Federated/multi-agent extension** — arXiv:2405.05950 (if multiple
     Otedama nodes ever cooperate); noted as out-of-scope-for-now but
     catalogued.

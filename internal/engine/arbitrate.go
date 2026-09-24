@@ -89,6 +89,12 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	// ~2880 steps. Its sigma feeds the forecast-miss counter that A8's
 	// regime-reset (>2σ shift) will consume.
 	forecasters := make(map[string]*arbitration.YieldForecaster)
+	// providerQuotes counts quotes per provider for ADR-010 A7's
+	// confirmation ladder: a stream is Confirmed only after
+	// arbitration.ConfirmationEpochs quotes, so a yield-lure entrant cannot
+	// fast-track past a confirmed incumbent on its first cycles. Counts are
+	// monotonic — pruned-then-returning providers keep their history.
+	providerQuotes := make(map[string]int)
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,6 +129,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				ts = time.Now()
 			}
 			lastQuoteAt[key] = ts
+			providerQuotes[stream]++
 		case <-ticker.C:
 			opts.streamsMu.Lock()
 			now := time.Now()
@@ -149,6 +156,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				opts.metrics.observeProviderReliability(pid, r.PosteriorMean())
 			}
 			streams := streamsSlice(opts.streamMap)
+			markConfirmedStreams(streams, providerQuotes)
 			opts.streamsMu.Unlock()
 			opts.metrics.activeStreams.Set(float64(len(streams)))
 
@@ -183,6 +191,9 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				}
 				if a.Held {
 					opts.metrics.arbitrationHolds.Inc()
+					if a.AwaitingConfirmation {
+						opts.metrics.arbitrationConfirmationHolds.Inc()
+					}
 				}
 				foregone += a.ForegoneSatsPerSec
 			}
@@ -238,14 +249,15 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 	opts.streamsMu.Lock()
 	for _, a := range alloc.Assignments {
 		row := arbitration.ExplainRow{
-			DeviceID:           a.DeviceID,
-			Stream:             a.Stream,
-			ExpectedSatsPerSec: a.ExpectedYield,
-			SwitchedFrom:       a.SwitchedFromID,
-			Held:               a.Held,
-			ForegoneSatsPerSec: a.ForegoneSatsPerSec,
-			ForegoneStream:     a.ForegoneStreamID,
-			Reason:             a.Reason,
+			DeviceID:             a.DeviceID,
+			Stream:               a.Stream,
+			ExpectedSatsPerSec:   a.ExpectedYield,
+			SwitchedFrom:         a.SwitchedFromID,
+			Held:                 a.Held,
+			AwaitingConfirmation: a.AwaitingConfirmation,
+			ForegoneSatsPerSec:   a.ForegoneSatsPerSec,
+			ForegoneStream:       a.ForegoneStreamID,
+			Reason:               a.Reason,
 		}
 		// The declined stream's current expected yield mirrors Decide's own
 		// effective-yield convention (SatsPerSecond × Confidence). streamMap
@@ -364,6 +376,16 @@ func providerReliability(m map[string]*arbitration.ProviderReliability, streamKe
 		m[pid] = r
 	}
 	return r
+}
+
+// markConfirmedStreams stamps Stream.Confirmed for ADR-010 A7's
+// confirmation ladder: true once the provider has supplied
+// arbitration.ConfirmationEpochs quotes within the process lifetime.
+// Called under streamsMu immediately before Decide.
+func markConfirmedStreams(streams []arbitration.Stream, providerQuotes map[string]int) {
+	for i := range streams {
+		streams[i].Confirmed = providerQuotes[string(streams[i].ID)] >= arbitration.ConfirmationEpochs
+	}
 }
 
 // streamsSlice flattens the streams map into a slice, de-duplicated by
