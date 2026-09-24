@@ -86,7 +86,7 @@ Actual CI coverage verified against `.github/workflows/` (session 385):
 - `staticcheck ./...` — **Not met today:** absent from every workflow (run manually; verified clean session 376)
 - `govulncheck ./...` — **Not met today:** absent from every workflow (run manually; verified clean session 375)
 - `go test -race` — in ci.yml + test.yml as `go test -v -timeout 10m -race ./...` (timeout is 10m, not the 5m this list previously claimed)
-- Nightly 30-min fuzz of `FuzzDecodeHeader`/`FuzzDecoder_ReadFrame` — **Not met today:** no fuzz step exists in any workflow
+- Nightly 30-min fuzz of `FuzzDecodeHeader`/`FuzzDecoder_ReadFrame` — **Not met today:** no fuzz step exists in any workflow (targets verified functional: 15s smoke of each named target, ~1.9M + ~324K execs, PASS — session 386)
 - PR-time benchmark comparison vs main (5% regression threshold)
 
 ---
