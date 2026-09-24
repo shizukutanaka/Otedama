@@ -1251,6 +1251,37 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 301 increment (verdict-timeout parity)
+
+- **シェア判定/コール応答タイムアウト（V1+V2）を実装** —— Bitcoin Wiki
+  の stratum ページと cgminer のシェアタイムアウト（2分）を再確認:
+  miningcore 系は silently 破棄したシェア（duplicate 等）に対して
+  判定を一切返さない。これまで V1 `session.call` は caller の ctx
+  （エンジンの run ctx —— 実質無期限）、V2 `Submit` の verdictCh
+  wait も ctx/done のみで、応答を返さないプールに対して呼び出し
+  goroutine と pending/verdicts エントリがセッション寿命まで漏洩
+  していた。ハンドシェイクコール（subscribe/authorize/
+  extranonce.subscribe）も TCP 受理後に応答しないプールでは read
+  deadline 5 分まで Negotiate が停止し得た。`callTimeout`/`verdictTimeout`
+  両方に 2 分の上界（cgminer parity・テストで短縮可能な var）を追加し、
+  タイムアウトでエラー返却 + pending/verdicts エントリ排出 ——
+  エンジンは通常の submit 失敗経路（sharesSubmitFailures + pending
+  ゲージ unpin）で処理される。
+- **新規テスト:** `TestSession_Call_TimeoutDrainsPending`（V1: 無応答
+  プール → "no response within" エラー + pending 排出）、
+  `TestSubmit_VerdictTimeoutDrainsPending`（V2: verdict 不在 →
+  "no verdict within" エラー + verdicts 排出）。
+- **検証済み非該当:** ESP-Miner #1897「instant pool switching」は
+  実行時プール設定変更が対象で当方の起動時設定モデルに該当せず。
+  #1900 sntp は nTime ロールが絶対時刻非依存（ntime 単調増加のみ）
+  で該当せず。Bitcoin Wiki「nTime ロールは実時間より速く増加すべき
+  でない」は、当方のロールが nonce 空間 2^32 ハッシュ毎に +1 のため
+  常に満たされることを確認。`mining.set_extranonce` は次の notify
+  から適用の spec 通り（sendJob 毎に stamp する構造で自動充足）。
+- **記録（非実装）:** V1 subscription-id によるセッション再開
+  （mining.subscribe 第2引数）—— セッションスコープの job_id と
+  en2 分割がどちらにせよ失効するため実益なし。
+
 ## September 2026 research pass — session 300 increment (reject-reason coverage)
 
 - **SV2 正規コード `invalid-channel-id` の分類漏れを修正** —— spec

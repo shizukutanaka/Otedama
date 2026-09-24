@@ -374,6 +374,15 @@ type jobState struct {
 // open, so 256 is generous headroom.
 const maxPendingJobs = 256
 
+// verdictTimeout bounds how long Submit waits for the pool's
+// SubmitSharesSuccess/SubmitSharesError when the caller's ctx does not
+// fire first — the same 2-minute bound cgminer places on share
+// submissions and V1's callTimeout places on JSON-RPC responses. A
+// pool that keeps the channel alive but never judges a share would
+// otherwise leak the waiting goroutine and its verdicts-map entry for
+// the session's life. Variable (not const) so tests can shorten it.
+var verdictTimeout = 2 * time.Minute
+
 // insertJob records j in the bounded pending set, evicting the oldest
 // unseen job when the cap is reached (the newest arrivals are the most
 // likely to be named by the next SetNewPrevHash).
@@ -543,10 +552,17 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	// dropped every verdict. Expiry means "submitted but unconfirmed"
 	// (the share may still be judged upstream; the shares_pending gauge
 	// captures the gap). Session teardown unblocks a waiting Submit the
-	// same way ctx cancellation does.
+	// same way ctx cancellation does. The explicit timeout bounds the
+	// wait: a pool that keeps the channel open but never judges the
+	// share would otherwise leak this goroutine and its verdicts entry
+	// for the session's life.
+	timer := time.NewTimer(verdictTimeout)
+	defer timer.Stop()
 	select {
 	case res := <-verdictCh:
 		return res, nil
+	case <-timer.C:
+		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: no verdict within %s", verdictTimeout)
 	case <-ctx.Done():
 		return poolproto.ShareResult{}, ctx.Err()
 	case <-s.done:

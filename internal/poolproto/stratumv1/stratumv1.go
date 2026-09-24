@@ -73,6 +73,16 @@ import (
 // enforces this limit via ReadSlice, which never grows past the buffer.
 const maxLineBytes = 64 << 10 // 64 KiB
 
+// callTimeout bounds how long call() waits for a pool response when the
+// caller's own context does not fire first. Pools commonly never answer
+// silently-ignored messages — miningcore drops duplicate-share verdicts
+// entirely, and a pool that accepts TCP but ignores a handshake step
+// would otherwise stall Negotiate until the 5-minute read deadline —
+// leaking the pending entry and the caller's goroutine for the
+// session's life. cgminer uses the same 2-minute bound for share
+// submissions. Variable (not const) so tests can shorten it.
+var callTimeout = 2 * time.Minute
+
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
 type session struct {
@@ -580,12 +590,19 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		return rpcResponse{}, fmt.Errorf("stratumv1: write: %w", err)
 	}
 
+	timer := time.NewTimer(callTimeout)
+	defer timer.Stop()
 	select {
 	case r, ok := <-respCh:
 		if !ok {
 			return rpcResponse{}, errors.New("stratumv1: session closed before response")
 		}
 		return r, nil
+	case <-timer.C:
+		s.pendingMu.Lock()
+		delete(s.pending, id)
+		s.pendingMu.Unlock()
+		return rpcResponse{}, fmt.Errorf("stratumv1: %s: no response within %s", method, callTimeout)
 	case <-ctx.Done():
 		s.pendingMu.Lock()
 		delete(s.pending, id)

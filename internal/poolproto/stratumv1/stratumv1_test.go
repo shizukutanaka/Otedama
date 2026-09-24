@@ -509,6 +509,49 @@ func TestSession_SubmitAfterCloseFails(t *testing.T) {
 	}
 }
 
+// A pool that never answers a request — e.g. miningcore silently
+// dropping a duplicate-share verdict — must not leave the caller and
+// its pending entry hanging for the session's life. callTimeout bounds
+// the wait and drains the pending slot.
+func TestSession_Call_TimeoutDrainsPending(t *testing.T) {
+	prev := callTimeout
+	callTimeout = 60 * time.Millisecond
+	defer func() { callTimeout = prev }()
+
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// The pool side reads the request but never responds.
+	go func() {
+		buf := make([]byte, 4096)
+		_, _ = serverConn.Read(buf)
+	}()
+
+	_, err := sess.call(context.Background(), sess.nextID.Add(1), "mining.submit", []any{"w", "1", "0", "0", "0", "0"})
+	if err == nil {
+		t.Fatal("call must return an error when the pool never responds")
+	}
+	if !strings.Contains(err.Error(), "no response within") {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+
+	sess.pendingMu.Lock()
+	n := len(sess.pending)
+	sess.pendingMu.Unlock()
+	if n != 0 {
+		t.Fatalf("timed-out call left %d pending entries", n)
+	}
+}
+
 // ============================================================================
 // Registration check
 // ============================================================================

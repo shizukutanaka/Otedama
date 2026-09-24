@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 301 — 応答のないプールへの goroutine/エントリ漏洩を遮断)
+
+- **シェア判定・コール応答に 2 分のタイムアウト（V1+V2）** —— miningcore
+  系は silently 破棄したシェアに判定を返さないため、これまで V1
+  `session.call` と V2 `Submit` の verdict wait は実質無期限で、
+  呼び出し goroutine と pending/verdicts エントリがセッション寿命
+  まで漏洩していた。ハンドシェイクコール（subscribe/authorize/
+  extranonce.subscribe）も TCP 受理後に応答しないプールで read
+  deadline 5 分まで Negotiate が停止し得た。cgminer parity の 2 分
+  上界でエラー返却 + エントリ排出 —— 通常の submit 失敗経路として
+  計上され pending ゲージも unpin される。
+
 ### Fixed (session 300 — reject 理由の分類・表示を上流 parity で拡充)
 
 - **SV2 正規コード `invalid-channel-id` を stale 系に分類** —— セッション

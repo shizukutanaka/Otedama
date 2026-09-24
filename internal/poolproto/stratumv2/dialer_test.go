@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -1740,4 +1741,52 @@ func TestSubmit_ArmsWriteDeadline(t *testing.T) {
 		}
 	}
 	cancel()
+}
+
+// A pool that keeps the channel open but never judges a share must not
+// leave the Submit caller and its verdicts entry hanging for the
+// session's life: verdictTimeout bounds the wait and drains the slot.
+func TestSubmit_VerdictTimeoutDrainsPending(t *testing.T) {
+	prev := verdictTimeout
+	verdictTimeout = 60 * time.Millisecond
+	defer func() { verdictTimeout = prev }()
+
+	server, client := net.Pipe()
+	defer server.Close()
+	conn := &connection{raw: client, remoteAddr: "test", protocol: poolproto.ProtocolStratumV2}
+	sess := &session{
+		conn:   conn,
+		dec:    stratum.NewDecoder(client),
+		chanID: 7,
+		jobsCh: make(chan poolproto.Job, 8),
+		done:   make(chan struct{}),
+	}
+
+	// The pool reads our submit but never sends a verdict.
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	_, err := sess.Submit(context.Background(), poolproto.ShareSubmission{
+		JobID:   "9",
+		Nonce:   1,
+		NTime:   1,
+		Version: 0x20000000,
+	})
+	if err == nil {
+		t.Fatal("Submit must return an error when the pool never judges the share")
+	}
+	if !strings.Contains(err.Error(), "no verdict within") {
+		t.Fatalf("expected verdict-timeout error, got %v", err)
+	}
+
+	sess.verdicts.Range(func(k, v any) bool {
+		t.Fatalf("timed-out submit left verdicts entry %v", k)
+		return false
+	})
 }
