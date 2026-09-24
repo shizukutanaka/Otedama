@@ -5,6 +5,7 @@ package tui
 
 import (
 	"bytes"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -264,6 +265,18 @@ func TestDashboard_SetWidth_MinimumEnforced(t *testing.T) {
 	d.SetWidth(100) // valid
 	if int(d.cols.Load()) != 100 {
 		t.Errorf("cols = %d after SetWidth(100), want 100", int(d.cols.Load()))
+	}
+}
+
+// A width past int32 used to be narrowed with a bare int32() conversion,
+// which wraps: on 64-bit, math.MaxInt became -1 (and 1<<32+50 became 50), a
+// width the minimum check had already accepted as an int. It is now capped
+// at the 16-bit terminal maximum.
+func TestDashboard_SetWidth_HugeWidthIsCappedNotWrapped(t *testing.T) {
+	d := NewDashboard(&bytes.Buffer{})
+	d.SetWidth(math.MaxInt)
+	if got := int(d.cols.Load()); got != maxCols {
+		t.Errorf("cols = %d after SetWidth(math.MaxInt), want %d", got, maxCols)
 	}
 }
 

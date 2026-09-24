@@ -144,6 +144,22 @@ const defaultCols = 80
 // under this is clamped rather than honoured.
 const minCols = 40
 
+// maxCols is the widest width stored. A terminal reports its width as the
+// 16-bit ws_col, so no real width exceeds it; the cap exists so that
+// SetWidth, which takes an int, cannot wrap into a small or negative int32.
+const maxCols = 1<<16 - 1
+
+// clampCols narrows a width to the range the layout handles, and to int32.
+func clampCols(n int) int32 {
+	if n < minCols {
+		return minCols
+	}
+	if n > maxCols {
+		return maxCols
+	}
+	return int32(n)
+}
+
 // NewDashboard returns a Dashboard that writes to w.
 //
 // If w is backed by a file descriptor — os.Stdout in production — the
@@ -173,7 +189,7 @@ func (d *Dashboard) refreshWidth() {
 		return
 	}
 	if n := d.widthFn(); n > 0 {
-		d.cols.Store(int32(max(n, minCols)))
+		d.cols.Store(clampCols(n))
 	}
 }
 
@@ -601,7 +617,7 @@ func shortenURL(url string, maxLen int) string {
 // If never called, defaults to 80 columns.
 func (d *Dashboard) SetWidth(cols int) {
 	if cols >= minCols {
-		d.cols.Store(int32(cols))
+		d.cols.Store(clampCols(cols))
 	}
 }
 
