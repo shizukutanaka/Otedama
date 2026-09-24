@@ -280,6 +280,13 @@ func NewEncryptedConn(rw io.ReadWriter, send, recv *CipherState) *EncryptedConn 
 // The ciphertext (plaintext + 16-byte tag) must fit the u16 length
 // prefix; a payload that would overflow it is rejected rather than
 // silently truncated, which would desynchronise the stream.
+//
+// The length prefix and ciphertext go out in a single Write call —
+// not two — so one frame maps to one write() syscall and one TCP
+// segment when rw is a raw net.Conn (ESP-Miner v2.15 did the same:
+// "Send SV2 frames in a single write"). Besides halving the syscall
+// count per frame, it removes the split-point at which a second
+// writer would otherwise interleave bytes inside our frame.
 func (c *EncryptedConn) Write(p []byte) (int, error) {
 	ct, err := c.send.Encrypt(nil, p)
 	if err != nil {
@@ -288,13 +295,13 @@ func (c *EncryptedConn) Write(p []byte) (int, error) {
 	if len(ct) > maxNoiseFrame {
 		return 0, fmt.Errorf("noise: message too large: %d-byte ciphertext exceeds %d (plaintext %d)", len(ct), maxNoiseFrame, len(p))
 	}
-	var lenBuf [2]byte
-	binary.LittleEndian.PutUint16(lenBuf[:], uint16(len(ct)))
-	if _, err := c.rw.Write(lenBuf[:]); err != nil {
+	frame := make([]byte, 2+len(ct))
+	binary.LittleEndian.PutUint16(frame, uint16(len(ct)))
+	copy(frame[2:], ct)
+	if n, err := c.rw.Write(frame); err != nil {
 		return 0, err
-	}
-	if _, err := c.rw.Write(ct); err != nil {
-		return 0, err
+	} else if n != len(frame) {
+		return 0, io.ErrShortWrite
 	}
 	return len(p), nil
 }

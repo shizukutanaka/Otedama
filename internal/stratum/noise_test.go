@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"crypto/ecdh"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 )
@@ -176,6 +178,49 @@ func TestEncryptedConn_RoundTrip(t *testing.T) {
 	}
 }
 
+// countingReadWriter counts Write calls so tests can assert frame
+// coalescing: EncryptedConn.Write must issue exactly one underlying
+// Write per frame (ESP-Miner v2.15 "Send SV2 frames in a single write").
+type countingReadWriter struct {
+	writes  int
+	written []byte
+}
+
+func (c *countingReadWriter) Write(p []byte) (int, error) {
+	c.writes++
+	c.written = append(c.written, p...)
+	return len(p), nil
+}
+
+func (c *countingReadWriter) Read(p []byte) (int, error) {
+	return 0, fmt.Errorf("not implemented")
+}
+
+func TestEncryptedConn_WriteSingleCall(t *testing.T) {
+	var k1 [32]byte
+	for i := range k1 {
+		k1[i] = byte(i)
+	}
+	rw := &countingReadWriter{}
+	conn := NewEncryptedConn(rw, &CipherState{key: k1}, &CipherState{key: k1})
+
+	msg := []byte("one frame, one write")
+	if _, err := conn.Write(msg); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if rw.writes != 1 {
+		t.Fatalf("underlying Write calls = %d, want 1 (frame must not be split)", rw.writes)
+	}
+	// 2-byte LE length prefix + ciphertext (plaintext + 16-byte tag).
+	wantLen := 2 + len(msg) + 16
+	if len(rw.written) != wantLen {
+		t.Fatalf("written bytes = %d, want %d", len(rw.written), wantLen)
+	}
+	if got := int(binary.LittleEndian.Uint16(rw.written[:2])); got != len(msg)+16 {
+		t.Errorf("length prefix = %d, want %d (plaintext+tag)", got, len(msg)+16)
+	}
+}
+
 // ----- HandshakeState — ReadMessage2 paths -----
 
 func TestHandshakeState_ReadMessage2_TooShort(t *testing.T) {
@@ -271,21 +316,15 @@ type errorReadWriter struct{ err error }
 func (e errorReadWriter) Write(_ []byte) (int, error) { return 0, e.err }
 func (e errorReadWriter) Read(_ []byte) (int, error)  { return 0, e.err }
 
-// failAfterFirstWriter succeeds on the first Write (the length prefix) and
-// then fails, letting us cover the ciphertext-write error path independently.
-type failAfterFirstWriter struct {
-	first bool
-	buf   bytes.Buffer
-}
+// shortWriteReadWriter accepts fewer bytes than offered without an error
+// — a legal-but-hostile io.Writer — so the frame coalescing path's
+// io.ErrShortWrite guard is covered.
+type shortWriteReadWriter struct{ n int }
 
-func (f *failAfterFirstWriter) Write(p []byte) (int, error) {
-	if !f.first {
-		f.first = true
-		return f.buf.Write(p) // length prefix succeeds
-	}
-	return 0, errors.New("ciphertext write error")
+func (s shortWriteReadWriter) Write(p []byte) (int, error) { return s.n, nil }
+func (s shortWriteReadWriter) Read(p []byte) (int, error) {
+	return 0, errors.New("not implemented")
 }
-func (f *failAfterFirstWriter) Read(p []byte) (int, error) { return f.buf.Read(p) }
 
 func TestEncryptedConn_Write_PayloadExceedsMaxFrame(t *testing.T) {
 	var buf bytes.Buffer
@@ -314,13 +353,19 @@ func TestEncryptedConn_Write_LengthPrefixWriteError(t *testing.T) {
 	}
 }
 
-func TestEncryptedConn_Write_CiphertextWriteError(t *testing.T) {
+func TestEncryptedConn_Write_ShortWriteError(t *testing.T) {
 	var key [32]byte
-	w := &failAfterFirstWriter{}
-	conn := NewEncryptedConn(w, &CipherState{key: key}, &CipherState{key: key})
+	conn := NewEncryptedConn(
+		shortWriteReadWriter{n: 1},
+		&CipherState{key: key},
+		&CipherState{key: key},
+	)
 	_, err := conn.Write([]byte("hello"))
 	if err == nil {
-		t.Error("Write when ciphertext write fails should return error")
+		t.Error("Write on a short underlying write should return io.ErrShortWrite")
+	}
+	if !errors.Is(err, io.ErrShortWrite) {
+		t.Errorf("error = %v, want io.ErrShortWrite", err)
 	}
 }
 
