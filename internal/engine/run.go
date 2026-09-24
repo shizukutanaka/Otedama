@@ -729,6 +729,15 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	lastJobAt := time.Now()
 	var jobStarveWarned bool
 
+	// noticeCh carries pool-sent operator notices (V1 client.show_message
+	// and protocol-violation reports surfaced via PoolNoticeReceiver).
+	// Protocols that cannot send notices leave it nil — a receive on a nil
+	// channel in select never fires, so the case below is inert for them.
+	var noticeCh <-chan string
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		noticeCh = nr.PoolNotices()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -804,6 +813,13 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 					opts.m.submitLatencyP99.Set(latency.Quantile(0.99))
 				}
 			}
+
+		case notice, ok := <-noticeCh:
+			if !ok {
+				noticeCh = nil
+				continue
+			}
+			opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
 
 		case job, ok := <-sess.Jobs():
 			if !ok {

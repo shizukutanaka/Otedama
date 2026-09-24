@@ -1251,6 +1251,24 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 294 increment (PoolNotices wiring)
+
+- **実装（配線欠落）: `PoolNotices` を engine が排出** —— `poolproto.
+  PoolNoticeReceiver`（V1 `client.show_message` の運営通知と
+  set_version_mask 範囲外ローテーション違反の通知）を engine が
+  一度も消費しておらず、cap-8 チャネルが満杯後に最古からドロップ
+  されるデッドチャネルだった。runPoolSession で型アサートして
+  noticeCh を得て select に排出ケースを追加し `engine: pool notice:`
+  としてログ出力（nil チャネルは select で不活性、閉鎖時は nil 化）。
+- **検証済み記録（V1 残監査）:** clean_jobs パージ実装済み、
+  再接続 exponential backoff 実装済み、V1 reject 理由の
+  ShareResult.Reason 露出済み、coinb1/coinb2/merkle_branch の
+  hex 厳格化済み（s274/s288）、V1 readLoop 行長バウンド済み、
+  V1/V2 jobsCh cap-8+drop-oldest、Submit の authorize 前 nil-deref
+  は構造上不可能（セッションは handshake 完了まで非公開）、
+  OpenMiningChannel.Error の理由露出済み —— 全てクリーン。
+- **上流（記録）:** SRI v1.11.0 依然最新（s293 sweep と同じ）。
+
 ## September 2026 research pass — session 293 increment (extranonce1 validation)
 
 - **実装（防御・無言停止対策）: `extranonce1` を hex+範囲検証** ——

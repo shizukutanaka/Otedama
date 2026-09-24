@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 294 — PoolNotices 配線)
+
+- **engine が `PoolNotices` を排出して運営通知をログに出す** ——
+  `client.show_message`（「メンテナンス通知」等）と set_version_mask
+  範囲外違反通知を engine が消費しておらず、cap-8 満杯後に無言
+  ドロップされるデッドチャネルだった。`engine: pool notice:` として
+  info ログに表示。
+
 ### Fixed (session 293 — extranonce1 検証)
 
 - **`extranonce1` を hex+範囲検証（≤32B 非空偶数長）** —— 非hex・空の
