@@ -163,6 +163,19 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 // exhaustion).
 const maxExtranonce2Size = 64
 
+// maxExtranonce1Bytes bounds the pool-supplied extranonce1 byte length.
+// Real pools send 4–8 bytes; 32 is generous headroom.
+const maxExtranonce1Bytes = 32
+
+// validExtranonce1 reports whether s is non-empty even-length hex of at
+// most maxExtranonce1Bytes decoded bytes. A bad en1 never surfaces at
+// parse time today — it makes every reconstructed coinbase root
+// (sendJob) silently wrong, which is worse than rejecting it early.
+func validExtranonce1(s string) bool {
+	b, err := hex.DecodeString(s)
+	return err == nil && len(b) > 0 && len(b) <= maxExtranonce1Bytes
+}
+
 // parseSetExtranonce decodes mining.set_extranonce params:
 // [extranonce1_hex, extranonce2_size_int]. The size is parsed as float64
 // (like parseSubscribeResult) because JSON numbers have no int type — a
@@ -179,6 +192,9 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 		return "", 0, false
 	}
 	if err := json.Unmarshal(p[1], &sz); err != nil || sz < 0 || sz > maxExtranonce2Size || math.Trunc(sz) != sz {
+		return "", 0, false
+	}
+	if !validExtranonce1(en1) {
 		return "", 0, false
 	}
 	return en1, int(sz), true
@@ -260,6 +276,9 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	en1, ok = arr[1].(string)
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce1 not a string: %T", arr[1])
+	}
+	if !validExtranonce1(en1) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce1 not valid hex (len=%d)", len(en1))
 	}
 	en2SizeF, ok := arr[2].(float64)
 	if !ok {

@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 293 — extranonce1 検証)
+
+- **`extranonce1` を hex+範囲検証（≤32B 非空偶数長）** —— 非hex・空の
+  en1 を受理すると coinbase 再構成が静かにスキップされ
+  MerkleRoot=0 のワークで全シェア reject になる「無言不正ワーク」
+  経路を遮断。subscribe はハンドシェイク失敗、set_extranonce は
+  通知棄却（安全側）。
+
 ### Fixed (session 292 — SubmitSharesSuccess wire 準拠)
 
 - **`new_shares_sum` を spec 準拠の U64 に修正** —— U32/16バイト

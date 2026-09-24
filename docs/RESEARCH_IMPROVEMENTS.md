@@ -1251,6 +1251,26 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 293 increment (extranonce1 validation)
+
+- **実装（防御・無言停止対策）: `extranonce1` を hex+範囲検証** ——
+  subscribe 応答と `mining.set_extranonce` の en1 は文字列型のみ検査
+  しており、非hex・空・巨大値が受理されていた。en1 が無効だと
+  s288 の coinbase 再構成が `hex.DecodeString` 失敗で静かにスキップ
+  され、MerkleRoot=0 のジョブが採掘され続けて全シェア reject —
+  s274/s288 と同じ「無言で不正ワークを掘る」パターン。両入口で
+  `validExtranonce1`（非空・偶数長hex・≤32バイト）を強制:
+  subscribe 側はエラー（必須ステップ失敗→再接続）、set_extranonce
+  側は通知棄却（従来挙動と同じ安全側）。
+- **上流（記録）:** SRI v1.11.0 —— share_accounting の u64 化は
+  s292 の new_shares_sum U64 化と同方向（確認）。sv1_api ファズ拡充・
+  stratum-translation pow2 difficulty 変換は既に該当範囲で検証済み。
+- **検証済み記録:** V2 `settleVerdicts`/verdict map ライフサイクル
+  （`defer Delete` + buffered ch でリークなし）、V2 emit の
+  drop-oldest（s257 実装済みを再確認）、V1 readLoop 行長バウンド、
+  TargetFromDifficulty の big.Float 精度・NaN/Inf ガード、
+  V1/V2 Submit verdict 相関 —— 全てクリーン。
+
 ## September 2026 research pass — session 292 increment (SubmitSharesSuccess wire fix)
 
 - **実装（spec 準拠）: `SubmitSharesSuccess.new_shares_sum` を U64 に修正**

@@ -1395,15 +1395,15 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 			[]any{"mining.set_difficulty", "sub1"},
 			[]any{"mining.notify", "sub2"},
 		},
-		"extranonce1hex",
+		"deadbeef01",
 		float64(4),
 	}
 	en1, en2Size, err := parseSubscribeResult(result)
 	if err != nil {
 		t.Fatalf("parseSubscribeResult: %v", err)
 	}
-	if en1 != "extranonce1hex" {
-		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	if en1 != "deadbeef01" {
+		t.Errorf("extranonce1 = %q, want deadbeef01", en1)
 	}
 	if en2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", en2Size)
