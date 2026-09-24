@@ -366,7 +366,23 @@ Minimal alert set:
   for: 10m
   annotations:
     summary: "Share rejection rate above 5% on {{ $labels.instance }}"
+
+- alert: OtedamaPoolSilent
+  expr: |
+    otedama_pool_connection_state == 2
+    and
+    (time() - otedama_last_job_received_seconds) > 120
+  for: 5m
+  annotations:
+    summary: "Pool connected but no job delivered for >2 min on {{ $labels.instance }}"
 ```
+
+`OtedamaPoolSilent` catches the zombie-session failure mode the
+connection gauge alone cannot: the TCP session is up, yet the pool has
+stopped sending `mining.notify`/`SetNewPrevHash` (half-open write path,
+pool-side template stall). The engine also logs a warn at the same 120 s
+threshold (`jobWatchdogWarnAfter`), so this failure is surfaced even
+without Prometheus.
 
 ### Service-level objectives
 
@@ -383,6 +399,7 @@ not process uptime.
 | Submit latency | `otedama_submit_latency_milliseconds{quantile="0.99"}` | p99 < 500 ms | p99 > 2 s for 15 m — latency is what drives stale |
 | Pending verdicts | `otedama_shares_pending` | flat near baseline | growing trend — pool is not answering submits |
 | Unaccounted shares | `otedama_shares_unaccounted` | 0 in steady state | > 0 sustained — shares found but never reaching the pool |
+| Job freshness | `time() - otedama_last_job_received_seconds` | < 120 s while connected | > 120 s with `pool_connection_state == 2` — zombie session; engine warns at the same threshold |
 
 The acceptance/stale thresholds mirror the D-Central operator bands the
 gauges were designed around (<0.5 % excellent, <1 % good, <3 %

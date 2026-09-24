@@ -73,6 +73,13 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// jobWatchdogWarnAfter is how long the engine tolerates a connected
+// session delivering no mining.notify/SetNewPrevHash before warning.
+// Pools refresh templates every ~30-60 s; 120 s matches the documented
+// OtedamaPoolSilent alert threshold on otedama_last_job_received_seconds.
+// It is a var (not const) so tests can shrink it to milliseconds.
+var jobWatchdogWarnAfter = 120 * time.Second
+
 // Options configures a Run session.
 type Options struct {
 	Config config.Config
@@ -708,6 +715,13 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	// unsatWarned latches once a pool-assigned unsatisfiable zero target
 	// has been reported, so a repeating pool does not spam the log.
 	var unsatWarned bool
+	// lastJobAt tracks wall-clock delivery of mining.notify/SetNewPrevHash
+	// independently of the lastJobReceivedAt Prometheus gauge. Seeded at
+	// connect so a pool that never sends its first job is caught too.
+	// jobStarveWarned latches the once-per-incident warn so a silent pool
+	// does not spam the log on every stats tick.
+	lastJobAt := time.Now()
+	var jobStarveWarned bool
 
 	for {
 		select {
@@ -715,8 +729,22 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 			return ctx.Err()
 
 		case <-statsTicker.C:
-			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
+			now := time.Now()
+			currentHashRate := hashWindow.observe(totalHashes(opts.workers), now)
 			logStats(opts.workers, currentHashRate, opts.log)
+			// Zombie-session detection: pool_connection_state says
+			// connected, yet no job has arrived for jobWatchdogWarnAfter —
+			// a half-open TCP write path or a pool that silently stopped
+			// delivering notify looks healthy to every other signal.
+			// Mirrors the documented `OtedamaPoolSilent` alert on
+			// otedama_last_job_received_seconds (>120 s) for operators
+			// without Prometheus. Warns once per incident and logs recovery.
+			if gap := now.Sub(lastJobAt); gap > jobWatchdogWarnAfter && !jobStarveWarned {
+				jobStarveWarned = true
+				opts.log("warn", fmt.Sprintf(
+					"engine: pool connected but no job for %s — half-open connection or pool-side stall; consider failover if it persists",
+					gap.Round(time.Second)))
+			}
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
@@ -821,6 +849,11 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedMerkle = job.MerkleRoot
 				lastAppliedPrevHash = job.PrevHash
 				opts.log("info", fmt.Sprintf("engine: job %s nBits=0x%08X", job.JobID, job.NBits))
+			}
+			lastJobAt = time.Now()
+			if jobStarveWarned {
+				jobStarveWarned = false
+				opts.log("info", "engine: job flow resumed")
 			}
 			if opts.m != nil {
 				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))

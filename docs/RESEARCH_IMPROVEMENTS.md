@@ -208,6 +208,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    `otedama_last_job_received_seconds` (Unix timestamp of last
    `mining.notify`); alert `time() - metric > 120` to detect stale
    connections that look connected but deliver no work.
+   — **Alert + watchdog completed (session 267):** `OtedamaPoolSilent`
+   alert added to DEPLOYMENT.md and an in-engine warn fires at the same
+   120 s threshold (`jobWatchdogWarnAfter`) with a recovery log, so the
+   zombie-session failure is visible without Prometheus too.
 10. 🔵 **Stratum V2 header-only / coinbase negotiation** for censorship
     resistance — part of the JDC story (ADR-009).
 
@@ -233,9 +237,14 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
-   conversion path and that simulated vs real yield is never mixed in
-   accounting.
+8. ✅ **Inference revenue is denominated/settled correctly** — verified
+   (session 267): USD→BTC conversion is `provider.SatsPerSecond` —
+   `(usdPerHour / btcUSDRate) * 1e8 / 3600`, unit-checked; the simulated
+   Akash provider is named "...(simulated)" everywhere it appears, and
+   its estimate feeds only the explicitly-labelled "est. earned ~N sats"
+   TUI figure (KNOWN_LIMITATIONS §9) — real earnings accounting books
+   only pool-verified share accepts, so simulated vs real yield is never
+   mixed.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 
@@ -1242,6 +1251,35 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 267 increment (job-starvation watchdog)
+
+### Implemented
+
+1. ✅ **Cat 4 #9 second half — zombie-session detection.** The
+   `otedama_last_job_received_seconds` gauge existed (session 93) but
+   nothing acted on it inside the engine and no documented alert used
+   it: a "connected" pool that silently stops delivering notify left
+   the miner idle while every signal said healthy. Engine now warns
+   once per incident when no job arrives for `jobWatchdogWarnAfter`
+   (120 s, seeded at connect so a never-delivered first job is caught)
+   and logs recovery; `OtedamaPoolSilent` alert + an SLO row added to
+   DEPLOYMENT.md for Prometheus operators.
+   New `TestRunSessionV1_JobStarvationWarn` drives a handshake-then-
+   silent fake pool through warn + recovery deterministically (~50 ms).
+
+### Verified already-done / non-applicable this session
+
+- ✅ **Cat 5 #8** — USD→BTC via `provider.SatsPerSecond` unit-correct;
+  simulated Akash yield is labelled "(simulated)" and feeds only the
+  "est. earned" TUI figure, never real earnings accounting (recorded ✅).
+- ❌ **Upstream** — SRI v1.12.0 still latest; ESP-Miner v2.15.3 deltas
+  hardware/UI-specific, non-applicable.
+- ❌ **Cat 4 #7 pool-share awareness** — needs a pool network-share data
+  source the repo has no dependency for; stays open pending a maintainer
+  decision on whether to fetch pool statistics at all.
+
+---
+
 ## September 2026 research pass — session 266 increment (terminal-width detection)
 
 ### Implemented
@@ -1442,6 +1480,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-267 additions (September 2026): zombie-session / job-starvation
+detection pattern (connected-but-silent Stratum sessions) — standard
+operator guidance codified in-engine and in the DEPLOYMENT alert set.*
 
 *Session-266 additions (September 2026): golang.org/x/term GetSize /
 IsTerminal mechanism (TIOCGWINSZ, GetConsoleScreenBufferInfo)

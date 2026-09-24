@@ -2044,3 +2044,126 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected submit error log; got: %v", logLines)
 	}
 }
+
+// fakeSilentV1Pool handshakes like fakeV1Pool but then holds the
+// connection open without ever sending a job — the "zombie session"
+// shape the job watchdog exists to catch. sendJob releases one
+// mining.notify so tests can assert recovery.
+func fakeSilentV1Pool(t *testing.T, sendJob <-chan struct{}) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeSilentV1Pool listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // mining.subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // mining.authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		<-sendJob
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		// The deferred conn.Close ends the session once the job lands.
+	}()
+
+	return ln.Addr().String()
+}
+
+// TestRunSessionV1_JobStarvationWarn: a pool that stays connected but
+// never delivers a job must trip the watchdog warn, and a late job must
+// log the recovery.
+func TestRunSessionV1_JobStarvationWarn(t *testing.T) {
+	saved := jobWatchdogWarnAfter
+	jobWatchdogWarnAfter = 40 * time.Millisecond
+	defer func() { jobWatchdogWarnAfter = saved }()
+
+	release := make(chan struct{})
+	addr := fakeSilentV1Pool(t, release)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+
+	var mu sync.Mutex
+	var warns, infos []string
+	log := func(level, msg string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if level == "warn" {
+			warns = append(warns, msg)
+		} else if level == "info" {
+			infos = append(infos, msg)
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = runPoolSession(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + addr,
+			user:     "worker.1",
+			workers:  nil,
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			log:      log,
+		})
+	}()
+
+	// Wait for the starvation warn, then release a job and wait for the
+	// recovery log.
+	deadline := time.After(8 * time.Second)
+	for {
+		mu.Lock()
+		found := false
+		for _, w := range warns {
+			if strings.Contains(w, "no job for") {
+				found = true
+			}
+		}
+		mu.Unlock()
+		if found {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for job-starvation warn")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	close(release)
+	for {
+		mu.Lock()
+		found := false
+		for _, i := range infos {
+			if strings.Contains(i, "job flow resumed") {
+				found = true
+			}
+		}
+		mu.Unlock()
+		if found {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for job-flow recovery log")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	<-done
+}

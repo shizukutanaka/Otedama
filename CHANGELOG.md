@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 267 — ジョブ枯渇ウォッチドッグ)
+
+**ゾンビセッション（接続中だがジョブが来ない）を検出する警告を追加**
+（Cat 4 #9 完結）: `otedama_last_job_received_seconds` は存在したが
+内部で誰も見ていなかった —— TCP は生きているのにプールが
+mining.notify を止めた半開き/プール側停滞ケースで、マイナーは
+健全に見えたまま放置されていた。接続直後から `jobWatchdogWarnAfter`
+（120秒、プールは通常30–60秒ごとにテンプレ更新）を超えてジョブが
+来ない場合に一度だけ warn を出し、ジョブが再開すれば復旧ログを出す。
+Prometheus なしでも発見可能になり、運用者向けに `OtedamaPoolSilent`
+アラートと SLO 行を DEPLOYMENT.md に追記。決定的な新テストで
+警告→復旧の両パスを検証。
+
 ### Fixed (session 266 — TUI 端末幅検出)
 
 **KNOWN_LIMITATIONS §15 解消 — TUI が実端末幅でレンダリング**.
