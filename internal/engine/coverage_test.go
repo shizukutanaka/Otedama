@@ -2695,3 +2695,151 @@ foreignWindowDone:
 	cancel()
 	<-done
 }
+
+// ============================================================================
+// run.go — undecodable-frame bound: single bad frames are skipped, but a
+// peer emitting only garbage must not hold the session alive-but-deaf
+// ============================================================================
+
+// garbageFramePool completes the SV2 handshake, then sends `bad` truncated
+// NewMiningJob frames (valid frame header, payload that fails decode),
+// optionally followed by a valid channel-1 job+tip pair.
+func garbageFramePool(t *testing.T, bad int, thenValid bool) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+
+		writeFrame := func(mt uint8, chMsg bool, payload []byte) {
+			f, err := stratum.WrapMessage(mt, chMsg, payload)
+			if err != nil {
+				return
+			}
+			encoded, _ := stratum.EncodeFrame(f)
+			conn.Write(encoded) //nolint:errcheck
+		}
+
+		if _, err := dec.ReadFrame(); err != nil {
+			return
+		}
+		payload, _ := stratum.SetupConnectionSuccess{UsedVersion: 2}.Encode()
+		writeFrame(stratum.MsgSetupConnectionSuccess, false, payload)
+		if _, err := dec.ReadFrame(); err != nil {
+			return
+		}
+		succ := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range succ.Target {
+			succ.Target[i] = 0xFF
+		}
+		payload, _ = succ.Encode()
+		writeFrame(stratum.MsgOpenMiningChannelSuccess, false, payload)
+
+		for i := 0; i < bad; i++ {
+			// Frame-valid (≥4-byte channel id) but decode-invalid:
+			// NewMiningJob needs ~44 bytes after the channel id.
+			writeFrame(stratum.MsgNewMiningJob, true, []byte{1, 0, 0, 0, 0xAA})
+		}
+		if thenValid {
+			job := stratum.NewMiningJob{ChannelID: 1, JobID: 7, Version: 0x20000004}
+			for i := range job.MerkleRoot {
+				job.MerkleRoot[i] = byte(i)
+			}
+			payload, _ = job.Encode()
+			writeFrame(stratum.MsgNewMiningJob, true, payload)
+			prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 7, MinNtime: 0x60000000, NBits: 0x207fffff}
+			for i := range prev.PrevHash {
+				prev.PrevHash[i] = byte(0xA0 + i%16)
+			}
+			payload, _ = prev.Encode()
+			writeFrame(stratum.MsgSetNewPrevHash, true, payload)
+		}
+		for {
+			if _, err := dec.ReadFrame(); err != nil {
+				return
+			}
+		}
+	}()
+	return "stratum+v2://" + ln.Addr().String()
+}
+
+// TestRunSessionV2_UndecodableFramesSkipped sends 3 bad frames then a
+// valid job+tip — the session must survive and arm the worker.
+func TestRunSessionV2_UndecodableFramesSkipped(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runSession(ctx, sessionOpts{
+			poolURL:  garbageFramePool(t, 3, true),
+			user:     "w",
+			workers:  []*miner.Worker{w},
+			merged:   make(chan miner.Share, 8),
+			interval: 20 * time.Millisecond,
+			log:      func(_, _ string) {},
+			m:        newEngineMetrics(metrics.NewRegistry()),
+		})
+	}()
+
+	deadline := time.After(3 * time.Second)
+	for !w.HasWork() {
+		select {
+		case <-deadline:
+			t.Fatal("worker never armed — undecodable frames may have killed the session")
+		case err := <-done:
+			t.Fatalf("session ended early: %v", err)
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+}
+
+// TestRunSessionV2_UndecodableBound sends only bad frames — the session
+// must die once the consecutive bound is reached rather than staying
+// alive-but-deaf forever.
+func TestRunSessionV2_UndecodableBound(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runSession(ctx, sessionOpts{
+			poolURL:  garbageFramePool(t, maxConsecutiveDecodeErrors+2, false),
+			user:     "w",
+			workers:  []*miner.Worker{w},
+			merged:   make(chan miner.Share, 8),
+			interval: 20 * time.Millisecond,
+			log:      func(_, _ string) {},
+			m:        newEngineMetrics(metrics.NewRegistry()),
+		})
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "undecodable") {
+			t.Fatalf("expected undecodable-bound error, got: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("session survived a pure-garbage stream — bound not enforced")
+	}
+	if w.HasWork() {
+		t.Error("worker armed by a garbage stream")
+	}
+	cancel()
+}

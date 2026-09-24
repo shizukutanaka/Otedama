@@ -2033,3 +2033,75 @@ func TestSession_Call_RpcTimeout_ReturnsError(t *testing.T) {
 		t.Errorf("pending still holds %d entries after rpc timeout", n)
 	}
 }
+
+// ============================================================================
+// readLoop — malformed-line bound: consecutive garbage must end the session
+// ============================================================================
+
+func TestSession_MalformedLineBoundTerminates(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		for i := 0; i < maxConsecutiveDecodeErrors+2; i++ {
+			if _, err := serverConn.Write([]byte("{not json}\n")); err != nil {
+				return
+			}
+		}
+	}()
+
+	// maxConsecutiveDecodeErrors malformed lines must end the session:
+	// junk refreshes the read deadline, so without the bound a peer
+	// emitting only garbage could hold the session alive-but-deaf.
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Fatal("unexpected job from a garbage stream")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("session did not terminate on sustained malformed lines")
+	}
+}
+
+func TestSession_MalformedLinesSkippedThenJobArrives(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	go func() {
+		for i := 0; i < 3; i++ {
+			if _, err := serverConn.Write([]byte("{not json}\n")); err != nil {
+				return
+			}
+		}
+		notify := `{"id":null,"method":"mining.notify","params":["J1","4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000","01","ff",[],"00000002","1d00ffff","68d36c5e",true]}` + "\n"
+		serverConn.Write([]byte(notify)) //nolint:errcheck
+	}()
+
+	// A few malformed lines followed by a valid notify must not kill the
+	// session — the bound is for *sustained* garbage only.
+	select {
+	case job, ok := <-sess.Jobs():
+		if !ok {
+			t.Fatal("session ended after only 3 malformed lines")
+		}
+		if job.JobID != "J1" {
+			t.Errorf("job id %q, want J1", job.JobID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("job never arrived — malformed lines may have killed the session")
+	}
+}

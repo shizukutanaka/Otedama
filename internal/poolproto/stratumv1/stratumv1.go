@@ -127,6 +127,10 @@ type session struct {
 	// extranonce2 to the wrong length and get the share rejected.
 	extranonce atomic.Pointer[extranonceState]
 
+	// decodeErrs counts consecutive malformed JSON-RPC lines, bounding
+	// how long a peer emitting only garbage can hold the session alive.
+	decodeErrs int
+
 	// rpcTimeout bounds one call() wait; zero means rpcCallTimeout —
 	// tests shorten it to exercise the no-response path.
 	rpcTimeout time.Duration
@@ -220,9 +224,18 @@ func (s *session) readLoop(ctx context.Context) {
 			// EOF, network error, or an oversized line: terminate cleanly.
 			return
 		}
-		s.dispatch(line)
+		if !s.dispatch(line) {
+			return
+		}
 	}
 }
+
+// maxConsecutiveDecodeErrors bounds how many malformed JSON-RPC lines
+// in a row readLoop tolerates before ending the session — junk lines
+// refresh the read deadline, so without a bound a peer emitting only
+// garbage could hold the session alive-but-deaf forever. The V2 paths
+// enforce the same bound (engine runSession, stratumv2 readLoop).
+const maxConsecutiveDecodeErrors = 8
 
 // readLine reads one newline-terminated line, enforcing maxLineBytes as a hard
 // ceiling. ReadSlice returns bufio.ErrBufferFull (not more data) once the
@@ -256,17 +269,22 @@ func (s *session) cancelPending() {
 	s.pendingMu.Unlock()
 }
 
-// dispatch parses one JSON-RPC line and routes it.
-func (s *session) dispatch(line []byte) {
+// dispatch parses one JSON-RPC line and routes it. Returns false when
+// the malformed-line bound is reached, ending the session.
+func (s *session) dispatch(line []byte) bool {
 	line = trimRight(line)
 	if len(line) == 0 {
-		return
+		return true
 	}
 	var msg rpcMessage
 	if err := json.Unmarshal(line, &msg); err != nil {
-		// Malformed lines are ignored; misbehaving pools can't crash us.
-		return
+		// Malformed lines are skipped, not fatal — but consecutive
+		// garbage is bounded so a peer emitting only junk cannot hold
+		// the session alive-but-deaf forever.
+		s.decodeErrs++
+		return s.decodeErrs < maxConsecutiveDecodeErrors
 	}
+	s.decodeErrs = 0
 	// Response (has id, no method).
 	if msg.Method == "" && msg.ID != nil {
 		id := msg.uintID()
@@ -278,14 +296,14 @@ func (s *session) dispatch(line []byte) {
 			ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
 			close(ch)
 		}
-		return
+		return true
 	}
 	// Notification or request from pool.
 	switch msg.Method {
 	case "mining.notify":
 		job, err := parseNotify(msg.Params)
 		if err != nil {
-			return
+			return true
 		}
 		s.sendJob(job)
 	case "mining.set_difficulty":
@@ -330,6 +348,7 @@ func (s *session) dispatch(line []byte) {
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
 	}
+	return true
 }
 
 // Jobs returns the channel of incoming jobs.

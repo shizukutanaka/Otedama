@@ -201,6 +201,11 @@ func (c *connection) Close() error {
 // the same bound the engine's inline V2 loop applies (jobsCap there).
 const pendingJobsCap = 256
 
+// maxConsecutiveDecodeErrors bounds how many undecodable frames in a
+// row readLoop tolerates before closing jobsCh — the same policy the
+// engine's inline V2 loop enforces.
+const maxConsecutiveDecodeErrors = 8
+
 type session struct {
 	conn   *connection
 	dec    *stratum.Decoder
@@ -237,6 +242,7 @@ func (s *session) readLoop(ctx context.Context) {
 	var prevHash [32]byte
 	var prevNBits uint32
 	havePrev := false
+	var decodeErrs int // consecutive undecodable frames
 
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
 		job := poolproto.Job{
@@ -258,7 +264,8 @@ func (s *session) readLoop(ctx context.Context) {
 	}
 
 	for {
-		if ctx.Err() != nil || s.conn.closed.Load() {
+		if ctx.Err() != nil || s.conn.closed.Load() ||
+			decodeErrs >= maxConsecutiveDecodeErrors {
 			return
 		}
 		// Bound the steady-state read: a pool that keeps the TCP
@@ -273,8 +280,15 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		msg, err := stratum.DispatchFrame(f)
 		if err != nil {
-			continue // skip undecodable frame, keep reading
+			// Skip the undecodable frame and keep reading — but bound
+			// consecutive failures (checked at the top of the loop): a
+			// peer that emits only garbage still has to be released
+			// rather than held as a live-but-deaf session. Mirrors the
+			// engine's inline loop bound.
+			decodeErrs++
+			continue
 		}
+		decodeErrs = 0
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
 			// Channel identity check, mirroring the engine's inline loop:

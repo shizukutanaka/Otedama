@@ -1166,3 +1166,44 @@ func TestSession_ReadLoop_ForeignChannelIgnored(t *testing.T) {
 		t.Fatal("channel-1 job+tip never emitted a job")
 	}
 }
+
+// ============================================================================
+// readLoop — undecodable-frame bound: sustained garbage must end the
+// session rather than hold it alive-but-deaf
+// ============================================================================
+
+func TestSession_ReadLoop_UndecodableBound(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go pool.doHandshake(1)
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// Frame-valid (channel id present) but decode-invalid payloads — the
+	// consecutive bound must close jobsCh rather than keep skipping.
+	// Written from a goroutine: once the loop exits, further writes would
+	// block forever on the synchronous net.Pipe.
+	go func() {
+		for i := 0; i < maxConsecutiveDecodeErrors+2; i++ {
+			writeMsgTo(t, pool.conn, stratum.MsgNewMiningJob, true,
+				stratum.SetupConnectionSuccess{UsedVersion: 2}) // wrong-type payload
+		}
+	}()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Fatal("unexpected job emitted")
+		}
+		// jobsCh closed — bound fired as expected.
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLoop survived a pure-garbage stream — bound not enforced")
+	}
+}

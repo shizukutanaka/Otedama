@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 265 — コンピューターサイエンスの観点から改善点を洗い出す(第10ラウンド): デコード失敗のエラー意味論不一致——トランスポート死と1フレーム壊れを同一扱いしていた経路を分離、計3箇所)
+
+第10ラウンドの Socratic 問いは「**1フレームの失敗はストリームの死と同じ意味か?**」——プロトコル層で「回復不能(トランスポート断)」と「回復可能(1フレームのデコード失敗)」を区別しなければ、偶発的な壊れで接続が死に(可用性損失)、あるいは逆に無限スキップで「生きたまま耳聾」のセッションが failover に到達不能になる(滞留)。監査の結果、3経路でポリシーが非対称だったことを確認:
+
+- **`runSession` でデコード失敗がセッションを即死させていた**(`engine/run.go`): リーダーは `poolMsg{err}` で transport 断と dispatch 失敗を同一フィールドで送出し、consumer は `pm.err != nil → return` で一律 fatal。1個の壊れたフレーム(中途半端な NewMiningJob 等)でセッション全体が落ち、reconnect ループが再接続を繰り返す **「壊れたフレーム→セッション断」= 接続 churn** 経路に。対して dormant adapter の readLoop は `continue // skip undecodable frame` で黙々スキップ——両者の一方が誤り。`poolMsg.decodeErr` に分離し、**デコード失敗はスキップするが連続8回で fatal**(`maxConsecutiveDecodeErrors`)——偶発的壊れを許容しつつ、ゴミしか流さないピアが「生きたまま耳聾」でセッションをピン止めする逆方向の穴も塞ぐ(フレーム到達で lastFrameAt は更新されるため沈黙バウンドは発火しない設計上、連続失敗バウンドが必要)。
+- **stratumv2 adapter readLoop 同型**(``dialer.go``): 既存の無制限 `continue` に同じ連続バウンド(8)を適用——loop 先頭条件へ畳み込んで実装し、gocyclo 増加ゼロ。
+- **stratumv1 readLoop 同型**(``stratumv1.go``): 不正 JSON 行を無限に `return`(スキップ)していた——ゴミ行が 5分 read deadline を更新し続けるため「alive-but-deaf」が無期限に持続。`dispatch` を `bool` 返しに変更し、連続8回でセッション終了。
+
+**検証手続き(棄却済み候補).** rates HTTP body は 64KiB LimitReader で有界、V2 ExtraNonce2Size / V1 extranonce1 は parse されるが未使用(プール供給テンプレート型でコインベース構築なし)で到達不能、V1 clean_jobs 処理は正しく purge、Decoder は 16MB frame cap、share 比較は両側 little-endian で一貫、V2 curtail は `startJob` 内 gate で実装済み(V1 と等価)、channel-msg flag 不整合は ChannelID 検査が先に gate するため実効なし、seqNum 2^32 ラップは到達不能(実測レートで ~49年)。
+
+**テスト.** `TestSession_MalformedLineBoundTerminates`+`TestSession_MalformedLinesSkippedThenJobArrives`(V1: 連続ゴミ行で終了/少数ゴミ後の正常 notify は受理)、`TestRunSessionV2_UndecodableFramesSkipped`+`TestRunSessionV2_UndecodableBound`(エンジン: 3壊+正常ペアで arm/純ゴミで "undecodable" エラー)、`TestSession_ReadLoop_UndecodableBound`(adapter: 8壊で jobsCh close)。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/stratumv1,poolproto/stratumv2} 緑、差分行 lint/gofumpt クリーン(readLoop の gocyclo 19→20 は閾値超過済みの pre-existing baseline のみ、親コミット worktree で実測確認)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 264 — コンピューターサイエンスの観点から改善点を洗い出す(第9ラウンド): 着信 V2 メッセージのチャネル同一性検証欠如——クロスチャネル混同を封鎖、計5箇所)
 
 第9ラウンドの Socratic 問いは「**着信プロトコル状態はセッション状態と照合されているか?**」——V2 は接続を複数チャネルで多重化する設計であり、自クライアントはちょうど1チャネル(`chanID`)を開く。なのに `runSession` の inbound arm は channel メッセージの `ChannelID` を一度も照合していなかった。`NewMiningJob`/`SetNewPrevHash`/`SetTarget`/`SubmitSharesSuccess`/`SubmitSharesError` の全 arm に `ChannelID == chanID` 検査を追加——**プールが発行していないジョブを掘る/先端を汚染する/ターゲットを置換する/他人の verdict を帳簿へ適用する**という4経路を封鎖。dormant adapter(`stratumv2/dialer.go` readLoop)にも同型の guard を適用。

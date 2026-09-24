@@ -636,8 +636,21 @@ func (o sessionOpts) updateLiveness(hashMon *HashrateMonitor, currentHashRate fl
 
 type poolMsg struct {
 	msg stratum.Message
-	err error
+	// err is a transport-level failure (ReadFrame) — the stream is dead
+	// and the session must end. decodeErr is a single frame that failed
+	// payload decode — recoverable by skipping it, but bounded so a peer
+	// emitting only garbage cannot hold the session forever.
+	err       error
+	decodeErr error
 }
+
+// maxConsecutiveDecodeErrors bounds how many undecodable frames in a row
+// the session tolerates before declaring the stream unusable. A working
+// pool interleaves valid frames constantly, so any nonzero run that
+// reaches this bound means a broken or hostile peer — ending the session
+// lets failover try elsewhere rather than mining on stale work while the
+// reader swallows a garbage stream.
+const maxConsecutiveDecodeErrors = 8
 
 // runSession runs one pool connection: dial, handshake, then stream
 // jobs to workers and shares back to the pool until the connection
@@ -738,7 +751,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			lastFrameAt.Store(time.Now().UnixNano())
 			msg, err := stratum.DispatchFrame(f)
 			select {
-			case inCh <- poolMsg{msg: msg, err: err}:
+			case inCh <- poolMsg{msg: msg, decodeErr: err}:
 			case <-ctx.Done():
 				return
 			}
@@ -792,6 +805,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	jobs := make(map[uint32]*stratum.NewMiningJob)
 	var jobsOverflowWarned bool      // log the first drop, then stay quiet
 	var active *stratum.NewMiningJob // job the workers are currently hashing
+	var decodeErrs int               // consecutive undecodable frames (reset on any clean dispatch)
 	var prevHash [32]byte
 	var prevNBits uint32
 	var activeNTime uint32
@@ -895,6 +909,21 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if pm.err != nil {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
+			if pm.decodeErr != nil {
+				// Skip the undecodable frame and keep reading — the adapter
+				// readLoop uses the same policy — but bound consecutive
+				// failures: a peer that emits only garbage still has to be
+				// released to failover.
+				decodeErrs++
+				opts.log("warn", fmt.Sprintf("engine: undecodable frame %d/%d: %v",
+					decodeErrs, maxConsecutiveDecodeErrors, pm.decodeErr))
+				if decodeErrs >= maxConsecutiveDecodeErrors {
+					return fmt.Errorf("engine: %d consecutive undecodable frames — abandoning session",
+						maxConsecutiveDecodeErrors)
+				}
+				continue
+			}
+			decodeErrs = 0
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
 				// Channel identity check: we opened exactly one channel,
