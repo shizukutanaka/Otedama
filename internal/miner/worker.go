@@ -260,9 +260,16 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		nonce        = threadID
 		// verSub is the current submask of VersionMask applied to the
 		// header version (0 = unrolled); verTried counts rolls taken.
-		// Both reset on work reload.
+		// nOff is the nTime offset rolled so far for this job. All three
+		// live at grind scope — NOT inside the per-batch header rebuild —
+		// because a nonce wrap is rare at real step sizes (~2^32 hashes):
+		// keeping rolled state inside the batch would reset it to the
+		// template every 1024 hashes and re-mine the base timestamp
+		// space forever into duplicate-share rejects.
+		// All reset on work reload.
 		verSub   uint32
 		verTried uint64
+		nOff     uint32
 	)
 
 	for {
@@ -280,6 +287,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			nonce = threadID // restart nonce from thread offset on new job
 			verSub = 0       // and re-enumerate version bits for the new mask
 			verTried = 0
+			nOff = 0 // and re-roll nTime from the template value
 		}
 		w.mu.Unlock()
 
@@ -297,7 +305,9 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 
 		h := localWork.Header
 		// h is rebuilt from the job template each batch, so re-apply the
-		// version submask reached by prior batches within the mask.
+		// rolled timestamp offset and the version submask reached by
+		// prior batches.
+		h.Time += nOff
 		if vm := localWork.VersionMask; vm != 0 && verSub != 0 {
 			h.Version = (h.Version &^ vm) | verSub
 		}
@@ -337,13 +347,13 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				// rolls negotiated version bits first — free extra
 				// search space — then the header timestamp, rather
 				// than re-hash the same nonces (which only yields
-				// duplicate-share rejects). Version rolling ends once
-				// every one of the 2^popcount(mask) patterns was tried
-				// (the unrolled pass counts as the first); timestamp
-				// rolling is bounded by MAX_FUTURE_BLOCK_TIME (2 h ahead
-				// of now): a header timestamp beyond it is consensus-
-				// invalid, so further hashing can only produce rejects
-				// — stop until a fresh job arrives.
+				// duplicate-share rejects). A rolled nTime opens a
+				// fresh nonce × version space, so version enumeration
+				// restarts on each timestamp roll; timestamp rolling is
+				// bounded by MAX_FUTURE_BLOCK_TIME (2 h ahead of now):
+				// a header timestamp beyond it is consensus-invalid,
+				// so further hashing can only produce rejects — stop
+				// until a fresh job arrives.
 				if vm := localWork.VersionMask; vm != 0 && verTried+1 < versionRollSpace(vm) {
 					verSub = nextSubmask(verSub, vm)
 					verTried++
@@ -352,7 +362,11 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					exhaustedVer = localWorkVer
 					break
 				} else {
+					nOff++
 					h.Time++
+					verSub = 0
+					verTried = 0
+					h.Version = localWork.Header.Version
 				}
 				next = threadID
 			}

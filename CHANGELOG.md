@@ -10,6 +10,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 280 — ロール状態のバッチ跨ぎ永続性)
+
+> session 280 時点の修正 —— session 272（nTime ロール）と
+> session 278–279（version-rolling）の両方に存在した構造的欠陥を是正。
+
+- **ロール済み nTime/version がバッチ境界で失われる問題を修正** ——
+  grind ループは 1024 ハッシュ毎に `h := localWork.Header` でヘッダを
+  テンプレートから再構築するため、nonce ラップ時の `h.Time++` による
+  nTime ロールが次バッチで破棄され、base nTime の空間を永遠に
+  再ハッシュしていた。実際の NonceStep ではラップは ~2^32 ハッシュに
+  1回しか起きないため、ロール済みタイムスタンプは ~1 バッチ分しか
+  掘られず、以後は同一ヘッダ空間の再掘削 = 全 share が
+  duplicate-share reject となる状態だった。version 列挙も同じ
+  構造問題を抱えていた。ロール状態（`nOff`/`verSub`/`verTried`）を
+  grind スコープへ持ち上げてバッチを跨いで維持し、ヘッダはバッチ
+  先頭でテンプレート＋オフセットから再構成する形に変更。
+- **nTime ロール時に version 列挙を再開** —— ロールした nTime は
+  新規の nonce × version 空間を開くため、`verSub`/`verTried` を
+  リセットして ntime → version → nonce の全積空間を網羅する順序に
+  修正（`h.Version` もテンプレート値に復帰）。
+- 新規テスト `TestWorker_NTimeRollPersistsAcrossBatches` —— 約
+  1ラップ/バッチの step で nTime が base+3 超まで蓄積することを確認
+  （旧実装では base+1 頭打ちで検出可能）。
+
 ### Fixed (session 278 — BIP-310 version-rolling の正確性)
 
 > session 279 时点的修正 —— session 278 で入れた version-rolling の

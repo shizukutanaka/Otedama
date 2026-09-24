@@ -613,3 +613,43 @@ func TestWorker_SparseVersionMaskRollsDistinct(t *testing.T) {
 		}
 	}
 }
+
+// TestWorker_NTimeRollPersistsAcrossBatches pins the batch-boundary
+// behavior: the grind loop rebuilds the header from the job template
+// each 1024-hash batch, so rolled nTime must live in grind-scope state
+// and accumulate — a wrap roughly once per batch (step ≈ 2^32/1024)
+// must push shares to nTime base+3 and beyond. With rolled state kept
+// inside the batch (the bug this guards against), shares would stay
+// pinned at base..base+1 forever, re-mining an identical space into
+// duplicate-share rejects.
+func TestWorker_NTimeRollPersistsAcrossBatches(t *testing.T) {
+	work := makeEasyWork()
+	work.Header.Time = uint32(time.Now().Unix()) - 60
+
+	// ~2^32/1024: nonce wraps roughly once per 1024-hash batch.
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0x400001})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	w.SetWork(work)
+
+	maxNTime := work.Header.Time
+	deadline := time.After(8 * time.Second)
+	for {
+		select {
+		case s, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed unexpectedly")
+			}
+			if s.NTime > maxNTime {
+				maxNTime = s.NTime
+			}
+			if maxNTime >= work.Header.Time+3 {
+				return // rolled nTime accumulated across batch boundaries
+			}
+		case <-deadline:
+			t.Fatalf("nTime only reached %d (base %d) — rolls not persisting across batches", maxNTime, work.Header.Time)
+		}
+	}
+}

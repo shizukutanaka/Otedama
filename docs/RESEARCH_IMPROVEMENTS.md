@@ -1251,6 +1251,31 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 280 increment (rolled-state persistence)
+
+- **実装（実バグ修正）: ロール状態をバッチ跨ぎで永続化** —— grind
+  ループは 1024 ハッシュ毎に `h := localWork.Header` でヘッダを
+  テンプレートから再構築するため、session 272 の nTime ロール
+  （`h.Time++`）がバッチ境界で失われていた。実際の NonceStep での
+  ラップ間隔は ~2^32 ハッシュ（~4M バッチ）なので、nTime は実質
+  base+1 のみを ~バッチサイズ分掘り続けてテンプレート値に戻る
+  —— base nTime 空間の永続的な再ハッシュ = 全 share が
+  duplicate-share reject。version ロールも同じ構造で、列挙が
+  バッチ毎にリセットされていた。ロール状態（nOff/verSub/verTried）
+  を grind スコープへ持ち上げてバッチを跨いで維持し、nTime
+  ロール時は version 列挙を再開して ntime→version→nonce の
+  全積空間を網羅する順序に。`h.Version`/`h.Time` はバッチ先頭で
+  テンプレート＋オフセットから再構成。cgminer/ESP-Miner の
+  rollwork 実装でも同一パターン（ロール済みタイムスタンプは
+  work 側に保持される）。
+- **検証:** 新規 `TestWorker_NTimeRollPersistsAcrossBatches` は
+  step≈2^32/1024（約1ラップ/バッチ）で nTime が base+3 超まで
+  蓄積することを確認（旧実装では base+1 で頭打ちで検出可能）。
+- **記録:** V2 標準チャネルは `NewMiningJob` に
+  version_rolling_allowed フィールドを持たないため version
+  rolling は拡張チャネルのみ —— Otedama の標準チャネル経路は
+  影響なし（session 278 で確認済みの再確認）。
+
 ## September 2026 research pass — session 279 increment (version-rolling correctness)
 
 ### Implemented
