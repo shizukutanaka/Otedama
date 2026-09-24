@@ -734,7 +734,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -754,7 +754,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -778,7 +778,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -802,7 +802,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -835,7 +835,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -859,7 +859,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -884,7 +884,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -913,7 +913,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -941,7 +941,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -2158,5 +2158,100 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// ============================================================================
+// run.go handshake — read deadline bounds setup against a silent pool
+// ============================================================================
+
+func TestHandshake_SilentPool_TimesOut(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	// Pool drains outbound frames but never answers.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	prev := handshakeReadTimeout
+	handshakeReadTimeout = 30 * time.Millisecond
+	defer func() { handshakeReadTimeout = prev }()
+
+	dec := stratum.NewDecoder(client)
+	_, _, err := handshake(context.Background(), client, dec, "stratum+v2://pool.example.com:3336", "worker.1", nil)
+	if err == nil {
+		t.Fatal("handshake should fail when the pool never answers")
+	}
+}
+
+// ============================================================================
+// run.go runReconnectLoop — backoff/attempt reset on a connected session
+// ============================================================================
+
+// TestRunReconnectLoop_ResetsAfterConnectedSession scripts a pool that
+// fails on every connection except the second, which completes the V1
+// handshake then drops. MaxReconnectAttempts=2 counts *consecutive*
+// failures: after the successful session resets the counter, the loop
+// must accept a 4th connection before two more consecutive failures end
+// it. Without the reset it would stop at the 3rd.
+func TestRunReconnectLoop_ResetsAfterConnectedSession(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	var accepted atomic.Int32
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			n := accepted.Add(1)
+			go func() {
+				defer conn.Close()
+				if n != 2 {
+					return // refuse: close without any handshake bytes
+				}
+				r := bufio.NewReader(conn)
+				_, _ = r.ReadString('\n') // mining.subscribe
+				fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+				_, _ = r.ReadString('\n') // mining.authorize
+				fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+				_, _ = r.ReadString('\n') // extranonce.subscribe
+				fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+			}()
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	r := reconnectOpts{
+		opts: Options{
+			Config: config.Config{
+				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
+				Pools:          []config.PoolConfig{{URL: "stratum+tcp://" + ln.Addr().String()}},
+			},
+			MaxReconnectAttempts: 2,
+		},
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     func(_, _ string) {},
+	}
+
+	err = runReconnectLoop(ctx, r)
+	if err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("expected 'exceeded reconnect attempts', got: %v", err)
+	}
+	if got := accepted.Load(); got < 4 {
+		t.Errorf("accepted %d connections, want ≥4 (failure counter must reset after the connected session)", got)
 	}
 }

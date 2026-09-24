@@ -72,6 +72,15 @@ import (
 // enforces this limit via ReadSlice, which never grows past the buffer.
 const maxLineBytes = 64 << 10 // 64 KiB
 
+// rpcCallTimeout bounds how long a single JSON-RPC call may wait for its
+// response. A pool can keep the connection alive — jobs still arrive, so
+// the read deadline never trips — while never answering mining.submit.
+// Without a bound, every waiting call() parks its goroutine and pending
+// entry for the rest of the session, accumulating without limit at one
+// entry per submitted share. Thirty seconds is far beyond a healthy
+// verdict (<1 s typical, even on loaded pools).
+const rpcCallTimeout = 30 * time.Second
+
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
 type session struct {
@@ -118,6 +127,10 @@ type session struct {
 	// extranonce2 to the wrong length and get the share rejected.
 	extranonce atomic.Pointer[extranonceState]
 
+	// rpcTimeout bounds one call() wait; zero means rpcCallTimeout —
+	// tests shorten it to exercise the no-response path.
+	rpcTimeout time.Duration
+
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
@@ -161,6 +174,16 @@ func (s *session) extranonceState() extranonceState {
 		return *p
 	}
 	return extranonceState{}
+}
+
+// callTimeout resolves the per-call bound: rpcCallTimeout normally, or a
+// shorter value when a test installs one. A zero session field keeps the
+// default so sessions constructed without newSession still bound waits.
+func (s *session) callTimeout() time.Duration {
+	if s.rpcTimeout > 0 {
+		return s.rpcTimeout
+	}
+	return rpcCallTimeout
 }
 
 // start launches the read loop. Idempotent.
@@ -475,16 +498,23 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		return rpcResponse{}, fmt.Errorf("stratumv1: write: %w", err)
 	}
 
+	callCtx, cancel := context.WithTimeout(ctx, s.callTimeout())
+	defer cancel()
 	select {
 	case r, ok := <-respCh:
 		if !ok {
 			return rpcResponse{}, errors.New("stratumv1: session closed before response")
 		}
 		return r, nil
-	case <-ctx.Done():
+	case <-callCtx.Done():
 		s.pendingMu.Lock()
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
+		// Distinguish our own per-call bound from a parent cancellation so
+		// the caller can tell "pool went silent" from "shutdown".
+		if ctx.Err() == nil {
+			return rpcResponse{}, fmt.Errorf("stratumv1: %s: no response within %v", method, s.callTimeout())
+		}
 		return rpcResponse{}, ctx.Err()
 	}
 }

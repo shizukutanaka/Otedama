@@ -1996,3 +1996,40 @@ func TestSession_Call_MarshalError_LeavesNoPendingEntry(t *testing.T) {
 		t.Errorf("pending has %d stranded entries after marshal failure", len(sess.pending))
 	}
 }
+
+// ============================================================================
+// call() — per-call response bound (rpcTimeout)
+// ============================================================================
+
+func TestSession_Call_RpcTimeout_ReturnsError(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+	sess := newSession(conn)
+	sess.rpcTimeout = 30 * time.Millisecond
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Pool drains requests but never answers — the connection itself is
+	// healthy, so only the per-call bound can end the wait.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := serverConn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	_, err := sess.call(context.Background(), 1, "mining.submit", nil)
+	if err == nil || !strings.Contains(err.Error(), "no response within") {
+		t.Fatalf("expected rpc timeout error, got: %v", err)
+	}
+	sess.pendingMu.Lock()
+	n := len(sess.pending)
+	sess.pendingMu.Unlock()
+	if n != 0 {
+		t.Errorf("pending still holds %d entries after rpc timeout", n)
+	}
+}

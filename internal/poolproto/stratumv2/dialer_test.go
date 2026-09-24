@@ -1043,3 +1043,37 @@ func TestStorePendingJob_BoundedTable(t *testing.T) {
 		t.Error("existing entry was not refreshed by re-store")
 	}
 }
+
+// ============================================================================
+// Negotiate — read deadline bounds the handshake against a silent pool
+// ============================================================================
+
+func TestNegotiate_SilentPool_TimesOut(t *testing.T) {
+	server, clientConn := net.Pipe()
+	defer server.Close()
+	d := makeDialer(clientConn)
+
+	// Pool drains outbound frames but never answers — the TCP connection
+	// is healthy, so only the handshake deadline can end the wait.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	prev := negotiateReadTimeout
+	negotiateReadTimeout = 30 * time.Millisecond
+	defer func() { negotiateReadTimeout = prev }()
+
+	ctx := context.Background()
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Fatal("Negotiate should fail when the pool never answers the handshake")
+	}
+}

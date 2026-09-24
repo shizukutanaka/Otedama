@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 260 — コンピューターサイエンスの観点から改善点を洗い出す(第5ラウンド): 非信頼ピアへの待機に生涯境界がないクラスを3箇所で修正)
+
+第5ラウンドの Socratic 問いは「この待機は何が境界するか?」——ブロッキング待機は全て (a) タイムアウト、(b) ctx キャンセル到達、(c) ピア応答、のいずれかで有限化されねばならない。監査で3箇所が (a) も (b) も持たずピア応答にのみ依存すると確認。
+
+- **stratumv1 `call()` の応答待ちが無期限**(`stratumv1/stratumv1.go`): `select{<-respCh, <-ctx.Done()}` の ctx はセッション寿命——プールが接続を生かしたまま jobs を流し続けて mining.submit の応答だけを返さない(読み取りデッドラインは通常トラフィックでリセットされ決して発火しない)場合、呼び出しは goroutine と pending エントリをセッション中駐留させる。ASIC は秒間100超のシェアを出すため**無制限の goroutine/map 増大**(過去ラウンドの jobsCap/submitTimesCap と同型の untrusted-input 非バウンド化)。`rpcCallTimeout=30s` の per-call 上界を追加(応答健康時は <<1s)。セッション構築は `rpcTimeout` フィールドでテスト可能にし、タイムアウトと親 ctx キャンセルを識別するエラー経路を分離。
+- **V2 `handshake` の ReadFrame にデッドラインなし**(`engine/run.go`): TCP accept 後に SetupConnection/Channel 応答を一切返さないプールは `runSession` をブロッキング read で**無期限に滞留**——ctx キャンセルも conn.Close(on return)も到達不能で、reconnect ループが failover に到達しない。`handshakeReadTimeout=30s` の ReadDeadline を handshake 期間のみ設定し成功後にクリア(定常状態は従来設計通り ctx+conn.Close で巻き戻す)、加えて `context.AfterFunc(ctx, conn.Close)` でシャットダウン応答性も確保(ctx が発火した handshake は30sを待たず即座に中断)。`stratumv2/dialer.go` の adapter `Negotiate` にも同形の `negotiateReadTimeout`+AfterFunc(dormant 経路だが live 化で同じ穴を踏ませない)。
+- **reconnect ループが成功セッションでも attempt/backoff を保持**(`engine/run.go` `runReconnectLoop`): 指数バックオフの契約は「連続失敗時のみ増大」だが、`attempt++`/`backoff *=2` はセッション成功を跨いでもリセットされなかった。初期の不安定期に蓄積したバックオフがその後ずっと max に張り付き(数時間健全に動いたセッションの終端ドロップも64s待機)、`MaxReconnectAttempts=N` は「連続 N 回失敗」ではなく「累計 N セッション」になっていた(意味違反)。`onConnected` クロージャ内の `connected` フラグで検出し、セッション確立時に `attempt=0; backoff=reconnectBackoffInitial` へリセット。
+
+**検証手続き(棄却済み候補).** 経路単位で clean と確認して棄却: httpserver の timeout 群(ReadHeader/Read/Write/Idle 全設定済み)、V1 `uintID` の garbage id(float64→uint64 の損失変換は既存テストで miss→drop に安全収束)、`Worker.Stats` (uptime>0 ガード済み、除算は uptime.Seconds() でスケール)、provider NaN 吸収(`SatsPerSecond<=0` を NaN が抜けても `Yield.Effective()` が choke point で0化——第4ラウンドの防御が機能)、doctor の17チェック(全 timeout 付き)、V2 adapter `Submit`(fire-and-forget——pending 蓄積クラスなし)、V1 Negotiate(call() 経由で rpcCallTimeout が自動適用)。
+
+**テスト.** `TestSession_Call_RpcTimeout_ReturnsError`(読むだけで応答しないプール→30ms で timeout + pending drain)、`TestHandshake_SilentPool_TimesOut`/`TestNegotiate_SilentPool_TimesOut`(net.Pipe 黙殺プール→設定 deadline でエラー)、`TestRunReconnectLoop_ResetsAfterConnectedSession`(conn #2 のみ handshake 完遂するスクリプト化プール——reset 有:conn4 まで受理、無:conn3 で停止、受理カウンタで判別)。副産物として `TestEngine_HandshakeAndMine` の経路欠陥を発見:reset 実装で2セッション目が dead listener への handshake で30s張り付くことを検出し、`context.AfterFunc` で ctx 中断を追加して解消。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/...} 緑。
+
 ### Fixed (session 259 — コンピューターサイエンスの観点から改善点を洗い出す(第4ラウンド): 全順序契約を残りの2 ingest 面へ拡張 + Noise transport の並行契約違反を修正——計3件)
 
 第3ラウンドの「順序付き比較は NaN を通す」という発見を同型クラスとして全 ingest 面に展開し、加えて暗号プリミティブの並行不変条件(nonce 一意性)を検証した。

@@ -395,6 +395,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword = r.opts.Config.Pools[poolIdx].Password
 		}
 		user := sessionUser(poolUser, addrs[addrIdx], r.opts.Config.Workers.Name)
+		connected := false
 
 		loc := fmt.Sprintf("attempt %d", attempt)
 		if len(pools) > 1 {
@@ -432,6 +433,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			activityMu:   r.activityMu,
 			activity:     r.activity,
 			onConnected: func() {
+				connected = true
 				addrConnected = true
 				if r.opts.OnReady != nil {
 					r.opts.OnReady(true) // pool session established → ready
@@ -450,6 +452,18 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			// without this push the dashboard freezes on its last
 			// "✓ connected" frame for the entire backoff/reconnect window.
 			r.dashboard.Update(disconnectedStats(poolURL, r.wallet, r.startTime, r.deviceN))
+		}
+
+		// Reset the failure accounting when a session established: the
+		// pool path demonstrably works, so the exponential backoff and the
+		// attempt counter only grow on *consecutive* failures. Without
+		// this, backoff accumulated during early flakiness pins every
+		// later drop — even one ending a healthy long-lived session — at
+		// the max wait, and MaxReconnectAttempts caps total sessions
+		// rather than consecutive retries.
+		if connected {
+			attempt = 0
+			backoff = reconnectBackoffInitial
 		}
 
 		if ctx.Err() != nil {
@@ -659,7 +673,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
-	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
+	chanID, shareTarget, err := handshake(ctx, conn, dec, opts.poolURL, opts.user, opts.workers)
 	if err != nil {
 		return err
 	}
@@ -1215,7 +1229,27 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // workers must grind to: it is far easier than the block target, and a hash
 // meeting it is exactly what the pool credits. A zero target means the pool
 // did not assign one; the caller falls back to the block target.
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
+// handshakeReadTimeout bounds each ReadFrame wait during session setup.
+// A pool that accepts the TCP connection but never answers the handshake
+// would park runSession on a blocking read indefinitely — ctx
+// cancellation cannot unblock it because conn.Close only runs when
+// runSession returns — and the reconnect loop would never reach
+// failover. The deadline is cleared before steady-state reads begin,
+// matching the design where the session loop bounds nothing on reads
+// (ctx cancel + conn.Close unwinds the reader goroutine instead).
+// A var so tests can shorten it.
+var handshakeReadTimeout = 30 * time.Second
+
+func handshake(ctx context.Context, conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
+	_ = conn.SetReadDeadline(time.Now().Add(handshakeReadTimeout))
+	defer func() { _ = conn.SetReadDeadline(time.Time{}) }()
+
+	// A blocking ReadFrame cannot observe ctx on its own — closing the
+	// conn is what wakes it — so a stalled handshake must not hold the
+	// session past shutdown.
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+
 	host, _ := parseHost(poolURL)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,

@@ -73,6 +73,11 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}, nil
 }
 
+// negotiateReadTimeout bounds the whole SetupConnection +
+// OpenMiningChannel exchange during Negotiate. A var so tests can
+// shorten it.
+var negotiateReadTimeout = 30 * time.Second
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -82,6 +87,18 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 
 	dec := stratum.NewDecoder(conn.raw)
+
+	// A pool that accepts the TCP connection but never answers the
+	// handshake would park this read indefinitely — ctx cancellation
+	// cannot interrupt a blocking read because the close path only runs
+	// on return. Bound the whole negotiation; the caller's reconnect
+	// loop needs the error to reach failover. The deadline covers a
+	// ctx-independent stall, and the AfterFunc makes shutdown prompt
+	// rather than waiting it out.
+	_ = conn.raw.SetReadDeadline(time.Now().Add(negotiateReadTimeout))
+	defer func() { _ = conn.raw.SetReadDeadline(time.Time{}) }()
+	stop := context.AfterFunc(ctx, func() { _ = conn.raw.Close() })
+	defer stop()
 
 	// SetupConnection.
 	sc := stratum.SetupConnection{
