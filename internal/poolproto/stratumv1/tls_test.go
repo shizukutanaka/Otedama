@@ -238,3 +238,36 @@ func TestDialer_UseTLSProducesEncryptedConnection(t *testing.T) {
 		t.Errorf("underlying transport is %T, want *tls.Conn (TLS scheme must not downgrade to plaintext)", conn.raw)
 	}
 }
+
+// TestDialTLS_StalledHandshakeTimesOut covers a peer that accepts TCP but
+// never answers the TLS handshake: net.Dialer.Timeout covers only the
+// connect phase, so the handshake itself must be deadline-bounded too.
+func TestDialTLS_StalledHandshakeTimesOut(t *testing.T) {
+	old := tlsHandshakeTimeout
+	tlsHandshakeTimeout = 100 * time.Millisecond
+	defer func() { tlsHandshakeTimeout = old }()
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		if c, err := ln.Accept(); err == nil {
+			defer c.Close()
+			time.Sleep(2 * time.Second) // accept, then stay silent
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	conn, err := dialTLS(ctx, ln.Addr().String(), nil)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("dialTLS succeeded against a handshake-stalling peer")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("dialTLS blocked %v, past the handshake timeout", elapsed)
+	}
+}

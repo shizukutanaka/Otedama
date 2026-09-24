@@ -61,18 +61,33 @@ func TLSConfigWithExtraCAs(pem []byte) (*tls.Config, error) {
 	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 }
 
+// tlsHandshakeTimeout bounds the TLS handshake itself: net.Dialer.Timeout
+// covers only the TCP connect phase, so without this a peer that accepts
+// TCP then stalls mid-handshake could hold Dial open until the session
+// context ends. A variable so tests can shorten it.
+var tlsHandshakeTimeout = dialConnectTimeout
+
 // DialTLS opens a certificate-verified TLS connection to address. When
 // cfg is nil the secure default is used. It performs the TLS handshake
-// before returning (tls.Dialer.DialContext blocks until the handshake
-// completes), so a verification failure surfaces here as an error rather
-// than on first write. It never falls back to plaintext.
+// before returning (bounded by tlsHandshakeTimeout), so a verification
+// failure surfaces here as an error rather than on first write. It never
+// falls back to plaintext.
 func DialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, error) {
 	if cfg == nil {
 		cfg = defaultTLSConfig()
 	}
-	dialer := &tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: dialConnectTimeout},
-		Config:    cfg,
+	raw, err := (&net.Dialer{Timeout: dialConnectTimeout}).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, err
 	}
-	return dialer.DialContext(ctx, "tcp", address)
+	conn := tls.Client(raw, cfg)
+	_ = conn.SetDeadline(time.Now().Add(tlsHandshakeTimeout))
+	if err := conn.HandshakeContext(ctx); err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
+	// Clear the handshake deadline: steady-state I/O uses the session's
+	// per-read/per-write deadlines instead.
+	_ = conn.SetDeadline(time.Time{})
+	return conn, nil
 }

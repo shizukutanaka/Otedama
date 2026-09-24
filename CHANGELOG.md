@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 353 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: TLS ハンドシェイクの deadline 化)
+
+- **`stratum.DialTLS` / `stratumv1.dialTLS` のハンドシェイクを時間制限** — 従来の
+  `tls.Dialer{NetDialer: {Timeout}}` は TCP connect フェーズのみを制限し、TLS
+  ハンドシェイク自体は無制限だった — TCP accept 後に ServerHello を送らない
+  ピアがセッション ctx 終了まで Dial を保持し得た実ギャップを解消。明示的な
+  net dial → `tls.Client` → `HandshakeContext`(deadline=connect timeout) →
+  deadline 解除の形へ両トランスポートを揃え、定常 I/O は従来どおり各操作の
+  deadline に委譲。
+
 ### Fixed (session 352 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SV2 ハンドシェイク読み取り・全フレーム書込みの deadline 化)
 
 - **Negotiate 同期 ReadFrame + sendMsg への deadline 適用** — 前セッションの
