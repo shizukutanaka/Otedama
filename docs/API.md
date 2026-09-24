@@ -217,7 +217,7 @@ discards every setting in the file, including `bitcoin_address`. See
 
 All environment variables are prefixed `OTEDAMA_`.
 
-| Variable | Equivalent flag | Notes |
+| Variable | Equivalent flag / config key | Notes |
 |----------|-----------------|-------|
 | `OTEDAMA_CONFIG` | `--config` | Path to config file. |
 | `OTEDAMA_BITCOIN_ADDRESS` | `--bitcoin-address` | |
@@ -228,6 +228,17 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
 | `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
+| `OTEDAMA_INCOME_MODE` | `income_mode` | `max` / `smooth` / `balanced`. |
+| `OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS` | `electricity_tariff_octopus` | Octopus tariff as `PRODUCT/TARIFF`; enables the tariff feed + forward-curve metrics. |
+| `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `arbitration_hysteresis_pct` | [0.0, 1.0); malformed values are rejected. |
+| `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `min_yield_sats_per_sec` | ≥ 0 (0 = floor disabled). |
+| `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `curtail_below_btc_usd` | ≥ 0 (0 = gate disabled). |
+| `OTEDAMA_CURTAIL_ABOVE_UK_CARBON` | `curtail_above_uk_carbon` | ≥ 0 gCO2/kWh (0 = gate disabled). |
+| `OTEDAMA_CURTAIL_ABOVE_TARIFF_PENCE` | `curtail_above_tariff_pence` | ≥ 0 pence/kWh (0 = gate disabled); requires `electricity_tariff_octopus`. |
+| `OTEDAMA_POWER_WATTS` | `power_watts` | ≥ 0 (0 = efficiency metrics off). |
+| `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `electricity_price_per_kwh` | ≥ 0 USD/kWh (0 = cost metrics off). |
+| `OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS` | `thermal_throttle_above_celsius` | [20, 110] or 0 = disabled. |
+| `OTEDAMA_WORKER_THREADS` | `worker_threads` / `--worker-threads` | Integer in [0, 1024]; 0 = one hashing goroutine per logical CPU. |
 
 ---
 
