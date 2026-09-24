@@ -1251,6 +1251,24 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 288 increment (V1 coinbase reconstruction)
+
+- **実装（正確性・根本欠陥の解消）: V1 coinbase/merkle 再構成** ——
+  Stratum V1 ではプールが coinbase を coinb1/coinb2 の二半で送り、
+  miner 側が extranonce を挟んで完成させる。Otedama は再構成せず
+  `MerkleRoot=0` でヘッダを組み立てていたため、プール側の再構成
+  ハッシュと一致せず、**実プールに出す全シェアが構造的に不正**
+  だった（session 286 以降 ADR 級として記録してきた根本欠陥）。
+  `mining.notify` の coinb1/coinb2(hex)/merkle_branch([]hex) を
+  `poolproto.Job` に載せ、sendJob で
+  `Hash256(coinb1|en1|en2|coinb2)` を branch で畳んで MerkleRoot を
+  刻印（en2 は submit と同じ negotiated-size のゼロ列）。notify の
+  coinb/branch hex も他フィールドと同じ厳格さで検査。
+- **検証:** `TestSendJob_ReconstructsMerkleRoot`（畳み込みの
+  既知値検証）、`TestSendJob_MerkleRootSkippedWithoutExtranonce1`
+  （en1 未設定時は安全側スキップ）。既存フィクスチャの
+  `"coinb1"/"coinb2"` リテラルを有効 hex に修正。
+
 ## September 2026 research pass — session 287 increment (V2 write deadline)
 
 - **実装（防御）: V2 Submit に write mutex + 10s write deadline を

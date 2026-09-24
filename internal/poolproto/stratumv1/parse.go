@@ -39,19 +39,20 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		return poolproto.Job{}, fmt.Errorf("notify: expected 9 params, got %d", len(p))
 	}
 
-	var (
-		jobID, prevHashHex, _, _, versionHex, nbitsHex, ntimeHex string
-		cleanJobs                                                bool
-	)
+	var jobID, prevHashHex, versionHex, nbitsHex, ntimeHex string
 	if err := json.Unmarshal(p[0], &jobID); err != nil {
 		return poolproto.Job{}, err
 	}
 	if err := json.Unmarshal(p[1], &prevHashHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch — Otedama doesn't
-	// reconstruct the coinbase in the V1 path (the pool does). We
-	// could in a future JDP variant.
+	// p[2] coinb1, p[3] coinb2, p[4] merkle_branch feed V1 coinbase
+	// reconstruction — without them the header's merkle root is zero
+	// and every share the pool reconstructs fails its own hash check.
+	coinb1, coinb2, branch, err := parseCoinbaseParts(p[2], p[3], p[4])
+	if err != nil {
+		return poolproto.Job{}, err
+	}
 	if err := json.Unmarshal(p[5], &versionHex); err != nil {
 		return poolproto.Job{}, err
 	}
@@ -61,20 +62,18 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 	if err := json.Unmarshal(p[7], &ntimeHex); err != nil {
 		return poolproto.Job{}, err
 	}
-	if err := json.Unmarshal(p[8], &cleanJobs); err != nil {
-		// Some pools encode this as 0/1 instead of true/false; tolerate.
-		var n int
-		if err2 := json.Unmarshal(p[8], &n); err2 == nil {
-			cleanJobs = n != 0
-		} else {
-			return poolproto.Job{}, err
-		}
+	cleanJobs, err := parseCleanJobs(p[8])
+	if err != nil {
+		return poolproto.Job{}, err
 	}
 
 	job := poolproto.Job{
-		JobID:      jobID,
-		CleanJobs:  cleanJobs,
-		ReceivedAt: time.Now(),
+		JobID:        jobID,
+		CleanJobs:    cleanJobs,
+		ReceivedAt:   time.Now(),
+		Coinb1:       coinb1,
+		Coinb2:       coinb2,
+		MerkleBranch: branch,
 	}
 	// The numeric header fields are required on the wire. Accepting an
 	// unparseable value silently zeroes it — a job that then produces
@@ -98,8 +97,54 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 		return poolproto.Job{}, fmt.Errorf("notify: bad prevhash %q", prevHashHex)
 	}
 	copy(job.PrevHash[:], b)
-	// MerkleRoot remains zero in the V1 path; the pool computes it.
 	return job, nil
+}
+
+// parseCleanJobs decodes the notify clean_jobs flag. The spec says
+// bool, but some pools encode it as 0/1 — tolerate both.
+func parseCleanJobs(raw json.RawMessage) (bool, error) {
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		var n int
+		if err2 := json.Unmarshal(raw, &n); err2 != nil {
+			return false, err
+		}
+		return n != 0, nil
+	}
+	return b, nil
+}
+
+// parseCoinbaseParts decodes the notify params that carry the coinbase
+// split and merkle branch — wire-order bytes as hex. A malformed value
+// would zero the merkle root and burn the whole job into rejects, so
+// they are checked as strictly as the header fields.
+func parseCoinbaseParts(p2, p3, p4 json.RawMessage) (coinb1, coinb2 []byte, branch [][32]byte, err error) {
+	var coinb1Hex, coinb2Hex string
+	var branchHex []string
+	if err := json.Unmarshal(p2, &coinb1Hex); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := json.Unmarshal(p3, &coinb2Hex); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := json.Unmarshal(p4, &branchHex); err != nil {
+		return nil, nil, nil, err
+	}
+	if coinb1, err = hex.DecodeString(coinb1Hex); err != nil {
+		return nil, nil, nil, fmt.Errorf("notify: bad coinb1 %q: %w", coinb1Hex, err)
+	}
+	if coinb2, err = hex.DecodeString(coinb2Hex); err != nil {
+		return nil, nil, nil, fmt.Errorf("notify: bad coinb2 %q: %w", coinb2Hex, err)
+	}
+	branch = make([][32]byte, len(branchHex))
+	for i, bh := range branchHex {
+		bb, err := hex.DecodeString(bh)
+		if err != nil || len(bb) != 32 {
+			return nil, nil, nil, fmt.Errorf("notify: bad merkle_branch[%d] %q", i, bh)
+		}
+		copy(branch[i][:], bb)
+	}
+	return coinb1, coinb2, branch, nil
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].

@@ -59,6 +59,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -372,6 +373,32 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job poolproto.Job) {
+	// Reconstruct the coinbase's merkle root before the job leaves: a V1
+	// pool validates each share by rebuilding the exact header the miner
+	// hashed, so a zero MerkleRoot turns every submit into a reject.
+	// coinbase = coinb1|en1|en2|coinb2, root = Hash256(coinbase) folded
+	// through merkle_branch. en2 is all-zero bytes of the negotiated
+	// size — the same value Submit sends when the worker supplies none.
+	if job.Coinb1 != nil || job.Coinb2 != nil || job.MerkleBranch != nil {
+		if en1p := s.extranonce1.Load(); en1p != nil {
+			if en1, err := hex.DecodeString(*en1p); err == nil {
+				en2Size := s.extranonce2Size.Load()
+				coinbase := make([]byte, 0, len(job.Coinb1)+len(en1)+int(en2Size)+len(job.Coinb2))
+				coinbase = append(coinbase, job.Coinb1...)
+				coinbase = append(coinbase, en1...)
+				coinbase = append(coinbase, make([]byte, en2Size)...)
+				coinbase = append(coinbase, job.Coinb2...)
+				root := btccrypto.Hash256(coinbase)
+				var pair [64]byte
+				for _, br := range job.MerkleBranch {
+					copy(pair[:32], root[:])
+					copy(pair[32:], br[:])
+					root = btccrypto.Hash256(pair[:])
+				}
+				job.MerkleRoot = root
+			}
+		}
+	}
 	s.lastJob.Store(&job)
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.

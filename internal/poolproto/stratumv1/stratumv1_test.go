@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -1820,6 +1821,53 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 	}
 }
 
+// TestSendJob_ReconstructsMerkleRoot verifies the V1 coinbase fold:
+// coinbase = coinb1|en1|en2(zeros)|coinb2, then Hash256 chained through
+// each merkle_branch element. A zero root would make every share fail
+// the pool's own reconstruction.
+func TestSendJob_ReconstructsMerkleRoot(t *testing.T) {
+	s := makeTestSession(4)
+	en1 := "c0ffee"
+	s.extranonce1.Store(&en1)
+	s.extranonce2Size.Store(4)
+	var br1, br2 [32]byte
+	br1[0], br2[0] = 0x11, 0x22
+	s.sendJob(poolproto.Job{
+		JobID:        "j1",
+		Coinb1:       []byte{0xaa},
+		Coinb2:       []byte{0xbb},
+		MerkleBranch: [][32]byte{br1, br2},
+	})
+	j := <-s.jobsCh
+
+	coinbase := []byte{0xaa, 0xc0, 0xff, 0xee, 0, 0, 0, 0, 0xbb}
+	want := btccrypto.Hash256(coinbase)
+	var pair [64]byte
+	for _, br := range [][32]byte{br1, br2} {
+		copy(pair[:32], want[:])
+		copy(pair[32:], br[:])
+		want = btccrypto.Hash256(pair[:])
+	}
+	if j.MerkleRoot != want {
+		t.Fatalf("MerkleRoot = %x, want %x", j.MerkleRoot, want)
+	}
+	if j.MerkleRoot == ([32]byte{}) {
+		t.Fatal("MerkleRoot left zero — shares would fail pool reconstruction")
+	}
+}
+
+// TestSendJob_MerkleRootSkippedWithoutExtranonce1 pins the safe fallback:
+// before subscribe completes there is no en1, so reconstruction is
+// skipped rather than hashing a bogus coinbase.
+func TestSendJob_MerkleRootSkippedWithoutExtranonce1(t *testing.T) {
+	s := makeTestSession(4)
+	s.sendJob(poolproto.Job{JobID: "j1", Coinb1: []byte{0xaa}})
+	j := <-s.jobsCh
+	if j.MerkleRoot != ([32]byte{}) {
+		t.Fatalf("MerkleRoot = %x, want zero (no en1 yet)", j.MerkleRoot)
+	}
+}
+
 func TestSendJob_CleanJobsOnEmptyChannelJustSends(t *testing.T) {
 	s := makeTestSession(4)
 	s.sendJob(poolproto.Job{JobID: "only", CleanJobs: true})
@@ -2014,7 +2062,7 @@ func TestSession_Submit_SendsAuthorizedUser(t *testing.T) {
 func TestParseNotify_BadHexFieldsError(t *testing.T) {
 	// Index 5=version, 6=nbits, 7=ntime, 1=prevhash in the params array.
 	mkParams := func(version, nbits, ntime, prevhash string) json.RawMessage {
-		return json.RawMessage(`["abc123","` + prevhash + `","coinb1","coinb2",[],"` +
+		return json.RawMessage(`["abc123","` + prevhash + `","c0ffee","deadbeef",[],"` +
 			version + `","` + nbits + `","` + ntime + `",false]`)
 	}
 	good := mkParams("20000000", "1d00ffff", "68d36c5e",

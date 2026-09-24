@@ -148,7 +148,9 @@ type Job struct {
 	// PrevHash is the previous block hash, big-endian.
 	PrevHash [32]byte
 
-	// MerkleRoot is the merkle root constructed by the pool.
+	// MerkleRoot is the block header's merkle root. V2 pools send it
+	// directly in NewMiningJob; V1 sessions reconstruct it from the
+	// coinbase halves + merkle_branch at emit time (see Coinb1 et al.).
 	// (For Job-Declaration-Protocol use cases the miner constructs
 	// this; that variant is exposed through a separate JDPSession
 	// when implementations exist — currently reserved.)
@@ -190,6 +192,18 @@ type Job struct {
 	// rolling is not negotiated. The pool must be sent the mask-region
 	// bits as submit's sixth parameter (see stratumv1.Submit).
 	VersionMask uint32
+
+	// Coinb1/Coinb2/MerkleBranch carry the V1 coinbase-reconstruction
+	// inputs (mining.notify params 2–4, wire-order bytes as hex-decoded).
+	// A V1 pool sends the coinbase in two halves around the miner-supplied
+	// extranonces, so the client — not the pool — must fold
+	// Hash256(coinb1|en1|en2|coinb2) through the branch to obtain the
+	// header's merkle root; the emitting session computes it at send
+	// time (extranonces are session-scoped). Empty on V2/JD paths, where
+	// MerkleRoot arrives from the pool directly.
+	Coinb1       []byte
+	Coinb2       []byte
+	MerkleBranch [][32]byte
 
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).

@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 288 — V1 coinbase/merkle 再構成)
+
+- **V1 シェアが構造的に不正だった根本欠陥を解消** —— `mining.notify`
+  の coinb1/coinb2/merkle_branch を `poolproto.Job` に載せ、
+  `Hash256(coinb1|extranonce1|extranonce2|coinb2)` を merkle branch で
+  畳んだ真の MerkleRoot を sendJob で刻印。従来 `MerkleRoot=0` で
+  ハッシュしており、プール側の再構成と一致せず全シェアが reject
+  される状態だった。notify の coinb/branch hex は他フィールドと
+  同じ厳格さで検査する。
+
 ### Fixed (session 287 — V2 Submit 書き込みパス保護)
 
 - **V2 Submit に write mutex + 10 秒 write deadline を追加** ——
