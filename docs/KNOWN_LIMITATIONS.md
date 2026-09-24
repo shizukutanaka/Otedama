@@ -566,7 +566,7 @@ no-op":
 - **`ci-cd.yml`** is a second, largely duplicate "CI/CD Pipeline"
   (same workflow name as `ci.yml`) that appears to be superseded dead
   weight: it hardcodes `GO_VERSION: '1.21'` and a `go: ['1.20', '1.21']`
-  matrix, both below `go.mod`'s `go 1.22` minimum (so those legs cannot
+  matrix, both far below `go.mod`'s `go 1.25` minimum (so those legs cannot
   even satisfy the module declaration), and it applies
   `k8s/deployment.yaml` — the same nonexistent path again.
 - **`security.yml`**'s `security-tests` job runs
@@ -594,21 +594,23 @@ no-op":
   (confirmed live on PR CI, session 252).** Every workflow pins an old
   Go: `ci.yml`/`test.yml`/`release.yml` use `1.23.x`, `ci-cd.yml`/
   `security.yml` use `1.21`, all with `GOTOOLCHAIN=local`. But `go.mod`
-  declares `toolchain go1.24.0` and — decisively — a `godebug` block
-  containing `tlsmlkem=1`, which is a **Go 1.24** knob (X25519MLKEM768,
-  standardized in 1.24). Go 1.23/1.21 with `GOTOOLCHAIN=local` refuses
-  to download the newer toolchain and fails immediately with
-  `go.mod:16: unknown godebug "tlsmlkem"` at the very first `go mod
-  download` step — so the Test, Build, Lint, Benchmark, and gosec jobs
-  never even compile the code. This is not a code defect; the module is
-  internally consistent for Go 1.24+ (it builds and passes all 24
-  packages' tests locally on Go 1.24.7). It is purely that CI pins a Go
-  older than the module's own `tlsmlkem` godebug requires. Note the
-  latent tension it exposes: GODEBUG_NOTES.md says the `go 1.22` /
-  `toolchain go1.24.0` split exists so "older toolchains can still
-  build Otedama," but the `tlsmlkem=1` godebug (a 1.24 knob) already
-  makes `go.mod` unparseable by any toolchain < 1.24 — so that stated
-  intent is not actually achievable as long as the godebug is pinned.
+  now declares `go 1.25.0` + `toolchain go1.25.13` and — decisively —
+  a `godebug` block containing `tlsmlkem=1`, which is a **Go 1.24**
+  knob (X25519MLKEM768, standardized in 1.24). Go 1.23/1.21 with
+  `GOTOOLCHAIN=local` refuses to download the newer toolchain and
+  fails immediately — first on the `go 1.25.0` directive itself, and
+  even if that were relaxed, on `unknown godebug "tlsmlkem"` — at the
+  very first `go mod download` step, so the Test, Build, Lint,
+  Benchmark, and gosec jobs never even compile the code. This is not
+  a code defect; the module is internally consistent for Go 1.25+
+  (it builds and passes all packages' tests on go1.25.13). It is
+  purely that CI pins a Go far older than the module's own floor.
+  Note the latent tension it exposes: GODEBUG_NOTES.md says the
+  `go 1.25.0` / `toolchain go1.25.13` split exists so "older
+  toolchains can still build Otedama," but the `tlsmlkem=1` godebug
+  (a 1.24 knob) already makes `go.mod` unparseable by any toolchain
+  < 1.24 — so that stated intent is not actually achievable as long
+  as the godebug is pinned.
 
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
@@ -617,7 +619,7 @@ mistake for a real regression. Most severely, the Go-version mismatch
 above means the flagship **Test/Build/Lint jobs are red on every PR**
 before a single test runs — so CI provides no real signal on Go code
 health at all right now, even though the code itself is green on a
-correct (Go 1.24+) toolchain. `release.yml`'s packaging job and
+correct (Go 1.25+) toolchain. `release.yml`'s packaging job and
 `security.yml`'s `security-tests` job would fail if actually triggered.
 `code-review.yml` gives the appearance of automated Go code review
 while doing none. The `test.yml`/CLAUDE.md mismatch means fuzzing —
@@ -653,17 +655,18 @@ lacks the `workflows` permission — verified repeatedly this session).
 Each item also carries a maintainer decision:
 
 - **The Go-version mismatch is the one-line, highest-value fix:** set
-  every workflow's Go version to **`1.24.x`** (matching `go.mod`'s
-  `toolchain go1.24.0`), or drop `GOTOOLCHAIN=local` so the runner is
-  allowed to fetch the 1.24 toolchain the module already declares. That
+  every workflow's Go version to **`1.25.x`** (matching `go.mod`'s
+  `toolchain go1.25.13`), or drop `GOTOOLCHAIN=local` so the runner is
+  allowed to fetch the 1.25 toolchain the module already declares. That
   single change turns the Test/Build/Lint jobs from "red before
   compiling" to actually exercising the (already-green) code. The
   deeper question — whether to keep the `tlsmlkem=1` godebug pin (which
   forecloses GODEBUG_NOTES.md's "old toolchains can build" intent) or
   relax it — is a security-posture call for the maintainer, informed by
   GODEBUG_NOTES.md's reasoning; it should not be changed unilaterally.
-- The rest: author the missing `scripts/`/`config.yaml`/
-  `tests/security`/`tests/load` assets and a real Kubernetes/Helm
+- The rest: author the still-missing `scripts/verify-docker.*`/
+  `tests/security`/`tests/load` assets (the `scripts/` packaging
+  inputs landed in session 390) and a real Kubernetes/Helm
   deployment target vs. remove the non-functional jobs entirely; decide
   whether `ci-cd.yml` is still needed or should be deleted; decide
   whether to replace `code-review.yml` with a Go-native reviewdog/
