@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 351 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SV2 静寂プールの無限ハング防止)
+
+- **`stratumv2` readLoop に read deadline を追加** — `ReadFrame` が deadline 無しで
+  ブロックしており、ハンドシェイク後に沈黙したまま接続を保つ wedged プールが
+  セッションを永久にハングさせ得た実ギャップを解消（V1 は stratumv1.go:190 で
+  同ポリシー対応済み）。各 ReadFrame 前に 5 分 deadline を適用 — タイムアウトで
+  readLoop 終了 → jobsCh 閉鎖 → エンジンが再接続。`readFrameDeadline` を
+  パッケージ変数化しテストで短縮注入可能に。
+
 ### Security (session 350 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: セッションエラー経路の制御文字サニタイズ拡大)
 
 - **エンジン最外ロガー + CLI fatal 出力までサニタイズ拡大** — session 349 は

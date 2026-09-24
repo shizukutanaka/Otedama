@@ -1751,3 +1751,40 @@ func TestTipState_PendingBounded(t *testing.T) {
 		t.Fatalf("emitted job = %+v clean=%v, want job %d clean", job, clean, last)
 	}
 }
+
+// ============================================================================
+// readLoop — silent pool times out via the read deadline
+// ============================================================================
+
+func TestSession_Jobs_SilentPoolTimesOut(t *testing.T) {
+	// A wedged pool that accepts the handshake then goes silent must not
+	// hang the session forever — the per-read deadline (same policy as
+	// stratumv1) ends the loop.
+	old := readFrameDeadline
+	readFrameDeadline = 50 * time.Millisecond
+	defer func() { readFrameDeadline = old }()
+
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doHandshake(1) // completes, then stays silent
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Fatal("expected Jobs() channel to close on read timeout, got a job")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLoop did not exit within the read deadline")
+	}
+}

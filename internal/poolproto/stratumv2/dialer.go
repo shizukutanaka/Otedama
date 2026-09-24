@@ -254,6 +254,12 @@ type session struct {
 	startOnce sync.Once
 }
 
+// readFrameDeadline bounds each blocking ReadFrame so a wedged (silent
+// but open) pool connection cannot hang the session forever — the same
+// policy as stratumv1's read loop. It is a package variable so tests can
+// shorten it.
+var readFrameDeadline = 5 * time.Minute
+
 // start launches the read loop that decodes NewMiningJob frames and
 // forwards them onto jobsCh. The loop exits on read error, ctx
 // cancellation, or connection close, closing jobsCh on the way out.
@@ -294,6 +300,9 @@ func (s *session) readLoop(ctx context.Context) {
 		if ctx.Err() != nil || s.conn.closed.Load() {
 			return
 		}
+		// Apply a generous read deadline so a wedged pool doesn't hang
+		// us forever (same policy as the stratumv1 read loop).
+		_ = s.conn.raw.SetReadDeadline(time.Now().Add(readFrameDeadline))
 		f, err := s.dec.ReadFrame()
 		if err != nil {
 			return
