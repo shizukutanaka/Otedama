@@ -779,6 +779,17 @@ func TestRejectClass(t *testing.T) {
 		{"Invalid solution", "hardware", "hardware"},
 		{"bad nonce", "hardware", "hardware"},
 		{"some unknown pool error", "other", "unclassified"},
+		// Canonical Stratum V2 SubmitSharesError codes (hyphenated machine
+		// codes per the mining spec) must classify like their V1 prose
+		// equivalents — "invalid-job-id" is stale work, never a chip fault,
+		// and credential rejections are their own actionable category.
+		{"stale-share", "stale", "latency"},
+		{"invalid-job-id", "stale", "latency"},
+		{"low-difficulty-share", "difficulty", "difficulty"},
+		{"difficulty-too-low", "difficulty", "difficulty"},
+		{"duplicate-share", "duplicate", "firmware"},
+		{"unauthorized-worker", "auth", "credentials"},
+		{"not-subscribed", "auth", "credentials"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)

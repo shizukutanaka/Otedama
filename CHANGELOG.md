@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 264 — V2 reject コード分類)
+
+**`rejectClass` が Stratum V2 の canonical エラーコードを正しく分類**
+(RESEARCH_IMPROVEMENTS Cat 1 #1 の是正). V2 プールは spec の機械コード
+（`stale-share`, `low-difficulty-share`, `invalid-job-id`,
+`duplicate-share`, `unauthorized-worker`, `not-subscribed`,
+`difficulty-too-low`）を返すが、V1 散文向けのマッチャでは
+`low-difficulty-share`/`difficulty-too-low` が `other` に脱落し
+（ハイフン ≠ "low difficulty"）、`invalid-job-id` —— stale ワーク
+参照であってチップ故障ではない —— が `hardware` に誤分類されていた。
+区切り文字を正規化してからマッチングし、`job` 含有テストを stale
+分岐に追加（job 参照エラーは常にワーク陳腐化/デシンク症候）、
+`difficulty` 自体を difficulty 分岐に、`unauthorized`/`not
+subscribed` は新カテゴリ `auth`（「ワーカー認証情報を確認」——
+原因は遅延でもハードでもないため独立）。SPECIFICATION/API の
+メトリクス表に `auth` ラベル値を追記、テストに V2 コード7件追加。
+
+上流差分（記録のみ）: **SRI v1.12.0 (9/17)** — codec/framing 刷新、
+noise_sv2 から AES-256-GCM 削除、BIP323 適合。Otedama の Noise NX は
+ChaChaPoly のみ実装（AESGCM 未実装）のため削除は既に準拠済み、
+テンプレート側変更はマイナークライアントに非該当。ESP-Miner
+v2.15.2/v2.15.3 はハードウェア/AxeOS UI 固有で非該当。
+
 ### Added (session 263 — シードバックアップ検証)
 
 **初回ウォレット作成時にリカバリーフレーズの記録を検証するプロンプト**

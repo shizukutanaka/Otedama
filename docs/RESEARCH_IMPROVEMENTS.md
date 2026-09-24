@@ -1243,6 +1243,40 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 264 increment (V2 reject-code taxonomy)
+
+### Implemented
+
+1. ✅ **rejectClass handles canonical SV2 SubmitSharesError codes** —
+   V2 pools return spec machine codes (`stale-share`,
+   `low-difficulty-share`, `invalid-job-id`, `duplicate-share`,
+   `unauthorized-worker`, `not-subscribed`, `difficulty-too-low`), but
+   the V1-prose matcher misfiled them: `low-difficulty-share` and
+   `difficulty-too-low` fell to `other` (hyphen ≠ "low difficulty"),
+   and `invalid-job-id` — a stale work reference — filed as
+   `hardware`. Separators now normalize before matching; a `job`
+   contains-test joins the stale branch (job-reference errors are
+   work-obsolescence/desync, never chip faults); `difficulty` itself
+   matches the difficulty branch; `unauthorized`/`not subscribed` get a
+   new `auth` category ("check worker credentials") since the fix is
+   neither latency nor hardware. SPECIFICATION/API metric docs updated
+   for the new label value.
+
+### Verified already-done / non-applicable this session
+
+- ❌ **SRI v1.12.0 (Sep 17)** — codec/framing refactor, **AES-256-GCM
+  removed from noise_sv2**, BIP323 adaptations. Otedama's Noise NX is
+  ChaChaPoly-only (AESGCM never implemented) so the cipher removal is
+  already spec-aligned; template/BIP323 changes are pool-side, N/A to
+  a miner client.
+- ❌ **ESP-Miner v2.15.2 stable (Sep 18) + v2.15.3 (Sep 20)** — BM137x
+  ASIC support, networking/UI fixes, per-device-preset frequency
+  warnings. All hardware/firmware/AxeOS-UI specific; Otedama has no
+  device presets or ASIC drivers. N/A.
+- ❌ **Qiita/Zenn sweep** — no new stratum-v2 material this round.
+
+---
+
 ## September 2026 research pass — session 263 increment (seed-backup verification)
 
 ### Implemented
@@ -1356,6 +1390,13 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-264 additions (September 2026): sv2-spec canonical
+SubmitSharesError codes (stale-share, low-difficulty-share,
+invalid-job-id, duplicate-share, unauthorized-worker, not-subscribed,
+difficulty-too-low); stratum-mining SRI v1.12.0 release notes
+(AES-256-GCM removed from noise_sv2, codec refactor, BIP323);
+bitaxeorg/ESP-Miner v2.15.2 + v2.15.3 (device-preset warnings).*
 
 *Session-263 additions (September 2026): BIP-39 backup-verification UX
 patterns (electrum/sparrow word-position re-entry); golang.org/x/term

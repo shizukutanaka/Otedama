@@ -129,8 +129,8 @@ configured pool URLs — each tagged with the layer it was resolved from.
    fallback when the pool assigns none); submit found shares
    (`SubmitSharesStandard`); on `SubmitSharesSuccess` settle
    submit→accept latency and increment accepted; on `SubmitSharesError`
-   classify the reason (`rejectClass` → stale/duplicate/difficulty/hardware/
-   other) and increment the per-reason counter.
+   classify the reason (`rejectClass` → stale/duplicate/difficulty/auth/
+   hardware/other) and increment the per-reason counter.
 6. **Graceful shutdown** on SIGINT/SIGTERM.
 
 ## 5. Transport (Stratum V2)
@@ -162,7 +162,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `device_shares_found_total{device}` † | counter | Per-device breakdown of shares found. |
 | `shares_submitted_total` | counter | Shares actually transmitted to the pool, counted at send time regardless of the eventual accept/reject response. Distinct from `shares_found_total`: a found share is never submitted if its worker's share channel was full. |
 | `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
-| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). A sixth value, `difficulty_transition`, is emitted instead of a `shares_total{status="rejected"}` count when the share met its issue-time target but the pool raised difficulty in flight (ESP-Miner #212 — benign, not a miner fault). |
+| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/auth/hardware/other). A sixth value, `difficulty_transition`, is emitted instead of a `shares_total{status="rejected"}` count when the share met its issue-time target but the pool raised difficulty in flight (ESP-Miner #212 — benign, not a miner fault). |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
 | `shares_submit_failures_total` | counter | Shares whose transmission or verdict wait failed outright (disconnect mid-flight, ctx canceled). The pool can never judge these — subtracted from `shares_pending`, retained inside `shares_unaccounted`. |
 | `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected−difficulty-transition-rejected, ≥0). |

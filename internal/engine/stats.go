@@ -270,16 +270,27 @@ const rejectTransition = "difficulty_transition"
 // is the human-readable hint for logs. Both derive from the same
 // classification (community field taxonomy, e.g. D-Central's guide):
 // stale→latency, duplicate→firmware, above-target→difficulty,
-// invalid→hardware.
+// invalid→hardware, unauthorized→credentials.
+//
+// Stratum V2 pools return canonical machine codes per the mining spec
+// (stale-share, low-difficulty-share, invalid-job-id, duplicate-share,
+// unauthorized-worker, not-subscribed, difficulty-too-low), so
+// separators are normalized to spaces before matching — otherwise
+// "low-difficulty-share" fell through to "other" and "invalid-job-id"
+// (a stale work reference, never a chip fault) misfiled as "hardware".
+// The "job" test sits in the stale branch: every job-reference error is
+// a work-obsolescence or desync symptom, not a hardware error.
 func rejectClass(reason string) (category, diagnosis string) {
-	r := strings.ToLower(reason)
+	r := strings.NewReplacer("-", " ", "_", " ").Replace(strings.ToLower(reason))
 	switch {
-	case strings.Contains(r, "stale") || strings.Contains(r, "job not found") || strings.Contains(r, "unknown job"):
+	case strings.Contains(r, "stale") || strings.Contains(r, "job"):
 		return "stale", "likely cause: network latency / stale work"
 	case strings.Contains(r, "duplicate"):
 		return "duplicate", "likely cause: firmware or connectivity (duplicate submission)"
-	case strings.Contains(r, "above") || strings.Contains(r, "target") || strings.Contains(r, "low difficulty") || strings.Contains(r, "high-hash"):
+	case strings.Contains(r, "above") || strings.Contains(r, "target") || strings.Contains(r, "difficulty") || strings.Contains(r, "high hash"):
 		return "difficulty", "likely cause: difficulty configuration or hardware error"
+	case strings.Contains(r, "unauthorized") || strings.Contains(r, "not subscribed"):
+		return "auth", "likely cause: worker credentials rejected — check authorize config"
 	case strings.Contains(r, "invalid") || strings.Contains(r, "bad"):
 		return "hardware", "likely cause: hardware error (failing chip / overheating)"
 	default:
