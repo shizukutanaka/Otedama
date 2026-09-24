@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 293 — Akash 統合経路の設計修正反映)
+
+- **v3.1.0 Akash 統合ターゲットを文書・コードコメントへ反映** —
+  検証ラウンド。`ai_inference.go` の実装 TODO は stale な「query Akash
+  REST API for active bids」だったため、一次検証済みの正しい経路へ修正:
+  `akash-network/chain-sdk`（旧 `akash-api` は archived）経由の
+  market/order クエリ + AEP-64 JWT（Mainnet 14+）を status/lease
+  呼出しに付与。入札は REST ではなく provider daemon の on-chain
+  bidengine が設定から実行するため、イールド取得経路に bid 送信は
+  含まれない。KNOWN_LIMITATIONS §1 の target 記述に同経路を併記。
+- **SRI 適合リファレンスを pin** — ADR-009 が Go SV2 適合性テストの
+  対象として **SRI v1.11.0 (2026-07-08)** を明示（「SRI は alpha」の
+  前提は session 251 で既に訂正済み、月次 cadence のため pin は
+  上流再検証毎に意図的に更新）。
+- **RESEARCH_IMPROVEMENTS 6件を反映済みへ** — AEP-64 JWT (#3)、
+  FIPS 140-3 (#4: `fips140=on` は ChaCha20-Poly1305 Noise 非対応で
+  *設計上不適用* の結論を GODEBUG_NOTES §fips140 に記録済み)、
+  SRI cadence (#9)、akash-api deprecated (#10)、bandit 2024-25
+  引用 (#13: session 251 で ADR-010 へ追加済み)。未検証 [SNIPPET]
+  項目（GPU spot 価格）は兄弟ブランチ側で検証済みのため触れず。
+
 ### Added (session 292 — プロバイダ心拍メトリクス)
 
 - **`otedama_stream_last_quote_unixtime{stream,device}`** —

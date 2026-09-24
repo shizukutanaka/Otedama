@@ -116,7 +116,13 @@ func (p *AkashProvider) publish(ctx context.Context) {
 	}
 
 	// Use mid-point of market range as the current quote.
-	// Real implementation: query Akash REST API for active bids.
+	// Real implementation (v3.1.0, KNOWN_LIMITATIONS §1): query the Akash
+	// provider API via akash-network/chain-sdk — the old akash-api repo is
+	// archived — attaching an AEP-64 JWT (Mainnet 14+) to status/lease
+	// calls. Note the bidding side is NOT a REST call: bids are placed
+	// on-chain by the provider daemon's bidengine from its config, so the
+	// yield numbers here come from market/order queries, not bid submissions
+	// (ADR-010 A4, re-framed session 251).
 	usdPerHour := (p.MinUSDPerHour + p.MaxUSDPerHour) / 2.0
 	// Akash takes ~20% platform fee.
 	netUSDPerHour := usdPerHour * 0.80

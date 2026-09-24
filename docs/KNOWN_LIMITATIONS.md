@@ -52,8 +52,13 @@ when the real integration lands.
 mining path (Stratum V2) is real. If you only want real income today,
 run mining and treat the inference figures as illustrative.
 
-**Target:** v3.1.0 (real Akash REST API). Tracked by ROADMAP v3.1.0 and
+**Target:** v3.1.0 (real Akash integration). Tracked by ROADMAP v3.1.0 and
 ADR-010 (arbitration engine evolution) §A4 (strategic bidding).
+Integration notes (primary-verified session 251): target
+`akash-network/chain-sdk` — `akash-api` is archived — and attach an
+AEP-64 JWT (Mainnet 14+) to provider status/lease calls; bidding itself
+is not a REST call but the provider daemon's on-chain bidengine fed by
+configuration, so yield reads come from market/order queries.
 
 ---
 

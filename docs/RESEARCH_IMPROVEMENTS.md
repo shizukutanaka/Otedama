@@ -782,14 +782,17 @@ Four verified items that *update* earlier entries with newer reality.
    Stratum V2 / open block construction. Updates ADR-009's "~70%" figure and
    strengthens the case for the Job Declaration Client (miner-built templates)
    as the headline v3.x feature. (coindesk.com 2026-05-11)
-3. 🟡 **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
+3. ✅ **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
    Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT Authentication for
    Providers** — token-based auth on the provider APIs. The real
    `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must therefore mint
    and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
    REST endpoint. Fold JWT acquisition into the provider client design.
+   Recorded (session 293): KNOWN_LIMITATIONS §1 target notes + the
+   `ai_inference.go` implementation TODO now name chain-sdk + AEP-64 JWT
+   explicitly, and ADR-010 A4's session-251 re-frame covers the bid side.
    (messari.io State of Akash Q3 2025; akash.network/docs)
-4. 🟡 **Offer an optional FIPS 140-3 mode and document the PQ key exchange
+4. ✅ **Offer an optional FIPS 140-3 mode and document the PQ key exchange
    already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
    enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
    X25519MLKEM768 hybrid PQ key exchange Otedama already turns on via
@@ -798,6 +801,12 @@ Four verified items that *update* earlier entries with newer reality.
    post-quantum key exchange; (b) provide a `fips140=on` build/runtime profile
    for regulated operators; (c) note both in THREAT_MODEL. Pairs with the
    existing godebug block (`GODEBUG_NOTES.md`). (go.dev/blog/fips140)
+   **Resolved (sessions 275/293):** (a)+(c) done — the hybrid
+   X25519MLKEM768 key exchange is documented in GODEBUG_NOTES/THREAT_MODEL;
+   (b) resolves to *not applicable by design* — `fips140=on` would break the
+   ChaCha20-Poly1305 Noise transport, which is not FIPS-listed, so the knob
+   is documented in GODEBUG_NOTES §fips140 with the rationale rather than
+   offered as a runtime profile.
 
 ---
 
@@ -882,17 +891,19 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
-9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
-   ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
-   update the rationale text and pin a specific SRI tag as the interop
-   reference for Go SV2 conformance tests.
+9. ✅ **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+   ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale — corrected
+   (session 251). **Pin executed (session 293):** ADR-009 names
+   **SRI v1.11.0** the conformance reference for Go SV2 compatibility
+   tests; bump the pin deliberately on each upstream re-verification.
    (github.com/stratum-mining/stratum/releases.atom)
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
-    successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
-    work, if scoped against akash-api, would build on an archived protobuf
+10. ✅ **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+    successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0 retargeted
+    (session 251); KNOWN_LIMITATIONS §1 + the `ai_inference.go` TODO now
+    name chain-sdk explicitly (session 293).
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
@@ -916,8 +927,10 @@ month, so the discipline matters.
     non-custodial payout) is the supported model and Render/io.net are out of
     scope, so they aren't naively added later.
     (github.com/rendernetwork/RNPs/blob/main/RNP-005.md; github.com/api-evangelist/io-net)
-13. 🔵 **[FETCHED title-match] ADR-010's bandit direction holds; add a
-    2024-25 citation.** The Mellor & Shapiro 2013 paper ADR-010 cites (Thompson
+13. ✅ **[FETCHED title-match] ADR-010's bandit direction holds; add a
+    2024-25 citation.** Done session 251 — ADR-010's references list
+    Sliding-Window Thompson Sampling (arXiv:2409.05181) and Discounted
+    Thompson Sampling (arXiv:2305.10718) alongside the 2013 basis. The Mellor & Shapiro 2013 paper ADR-010 cites (Thompson
     Sampling + Bayesian change-point) is real (arxiv.org/pdf/1302.3721); recent
     sliding-window / discounted Thompson Sampling results
     (arxiv.org/pdf/2409.05181, .../2305.10718) corroborate the "don't overbuild

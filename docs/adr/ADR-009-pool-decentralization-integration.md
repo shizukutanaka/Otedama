@@ -183,6 +183,8 @@ The implementation reuses `internal/stratum/noise*.go` for the Noise NX handshak
 
 **Cost:** ~150 hours. Protocol parsing + message orchestration + integration with existing Noise NX layer + error recovery semantics. The SRI Rust source serves as a reference implementation but we don't link against it.
 
+**Interop reference (session 293):** SRI is pinned at **v1.11.0 (2026-07-08)** as the conformance target for SV2 compatibility tests — it is past alpha and on a ~monthly cadence, so the conformance suite should diff behavior against this tag rather than "the SRI" in the abstract; bump the pin deliberately when re-verifying upstream (RESEARCH_IMPROVEMENTS June-2026 #9).
+
 **Value/cost rank:** ★★★★★ — this is the canonical decentralized-mining path going forward.
 
 **Non-custodial check:** ✅ Miner declares jobs, pool only accounts shares. No custody.
