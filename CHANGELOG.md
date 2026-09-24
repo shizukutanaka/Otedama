@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 417 — CS 観点: ドロップされた share を Prometheus カウンタ化)
+
+- **`otedama_shares_dropped_total` を新設** — ワーカーの share チャネルが満杯で
+  破棄された「発見済み・未送信」の share を数える。従来は warn ログのみで、
+  metrics.go の help 文自体が「engine only currently logs」と認めていた観測
+  ギャップを閉じる。tick の増分検出点（warn と同じ箇所）で加算。SPECIFICATION
+  §6 と API.md へ追記（API.md は `shares_submitted_total` も未掲載だったため
+  併記）。
+
 ### Refactored (session 416 — CS 観点: arbitration ループの時刻源を統一)
 
 - **仲裁ループ内の全論理時刻を `arbitrationLoopOpts.clk` へ統一** — 第三の時計
