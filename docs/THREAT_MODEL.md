@@ -121,7 +121,7 @@ a panic in the decode path still terminates the miner (DoS, below).
 version.
 
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
+`go.yaml.in/yaml/v3`, and the Go standard library. All GitHub Actions
 pinned by SHA. Dependabot auto-updates with review. govulncheck runs
 in CI. See ADR-003.
 
@@ -212,9 +212,14 @@ into the puzzle so an observer cannot reconstruct or correlate shares)
 Stratum traffic, so the timing/size side channel that infers *earnings*
 (not funds) remains open to a network observer. Funds are not at risk
 (payouts are non-custodial and on-chain/Lightning), but a determined
-on-path adversary can estimate a miner's hashrate and luck. Users who
-need to defeat this should tunnel the pool connection over Tor or a VPN
-(Tor-by-default is planned — ADR-007 B7). Adding traffic shaping or a
+on-path adversary can estimate a miner's hashrate and luck. The same
+class of timing leak exists on the payout side: "Counting Down
+Thunder" (arXiv:2006.12143) shows HTLC-resolution timing on Lightning
+reveals when a payment settles, so an observer correlating Stratum
+share timing with LN settlement timing can attribute earnings to a
+node even without reading payloads. Users who need to defeat this
+should tunnel the pool connection over Tor or a VPN (Tor-by-default is
+planned — ADR-007 B7). Adding traffic shaping or a
 mining-cookie-style construct is tracked as a future hardening item.
 
 ---
@@ -242,6 +247,35 @@ channel-bounded.
 **Residual risk:** Legitimate high-throughput pools may trigger drops.
 The design tradeoff favors freshness (no stale share penalty) over
 completeness (drop old jobs rather than queue indefinitely).
+
+---
+
+**Threat:** A malicious pool performs block-withholding or selfish
+mining against the miner's submitted shares — accepting the work while
+denying the payout — as a denial of *earnings* service rather than of
+compute.
+
+**Context:** Bahrani & Weinberg (arXiv:2309.06847, "Undetectable
+Selfish Mining") prove a withholding strategy whose orphan pattern is
+statistically indistinguishable from honest mining variance, so
+detection at the protocol level is not achievable; Grunspan &
+Pérez-Marco (arXiv:2211.07270, "Block withholding resilience")
+quantify how badly a single-pool miner loses under the same attack.
+The literature's conclusion drives Otedama's stance: withholding
+cannot be *prevented*, only made *observable*.
+
+**Mitigation:** Otedama surfaces withhold-shaped anomalies rather than
+concealing them: `otedama_shares_unaccounted` reconciles locally found
+shares against pool-judged ones, `otedama_shares_rejected_by_reason_total`
+splits benign difficulty-transition rejects (ESP-Miner #212) from real
+rejects so the accept-rate signal stays honest, and configured pool
+failover bounds a single pool's leverage. Multi-pool diversity and
+payout-destination control remain the user's structural defenses.
+
+**Residual risk:** A sophisticated pool can still underpay within
+statistical noise (that is exactly what Bahrani & Weinberg prove
+undetectable). Metrics shift withholding from "invisible" to
+"measurable suspicion" — no more is achievable client-side.
 
 ---
 

@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 255 — Github、論文、Qiita、Zenn、海外技術情報などを参考にさらなる改善。おまかせ。: `docs/RESEARCH_IMPROVEMENTS.md` の検証済みバックログから8項目を実装——アーカイブ済みYAML依存のmaintained fork移行、quarterly toolchain bump、V1 `set_difficulty`推移中シェアのbenign拒否分離、フレーム/Noise長さ計算の境界fuzz、定数時間比較監査)
+
+全ての項目は RESEARCH_IMPROVEMENTS.md 内の既存エントリ（一次ソース検証済みのもの）から選定し、バージョン事実は今セッションでGo module proxy/pkg.go.devに対して再検証した。
+
+**依存・ツールチェーン（一次ソース確認済み）.**
+
+- **`gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3 v3.0.5` 移行**（ADR-003 Erratumの推奨を履行）。上流 `go-yaml/yaml` は2025-04-01にアーカイブされ unmaintained——CLAUDE.md §外部依存 criterion 3「直近1年の意味あるメンテナンス」を失っていた。`go.yaml.in/yaml/v3` はYAML-orgの公式継続でAPI完全互換（import書換は `cmd/otedama/configfile.go` と `internal/config/config_file_test.go` の2箇所のみ）。v4は `v4.0.0-rc.6` のみで安定版がないため、security-fixes-only凍結のv3系は意図的な選択（fallbackではない）。`go.mod` に選定理由をコメント記録（CLAUDE.md規則）。ADR-003 ErratumにResolution節を追記。
+- **`go 1.22` → `go 1.26.0`、`toolchain go1.24.0` → `go1.26.8`**。x/crypto v0.57の `go 1.26` floorが下駄を決定。`toolchain go1.24.0` は GODEBUG_NOTES の `containermaxprocs` 項目が「**未発効**」と記録していたGo 1.25のcontainer-aware GOMAXPROCS（Kubernetesの `cpu: 2` podがホスト64コアを使い切る問題）をようやく実バイナリへ有効化した。go1.27.x（最新stable）は**実測で保留**: golangci-lint v1.64.8のstaticcheckが `export data version 4` を読めないことを本環境で確認し、GODEBUG_NOTESに保留理由を記録した。
+- **`golang.org/x/crypto v0.23.0` → `v0.57.0`**（2026-09-08、31+マイナー遅れを解消）。`x/sys` は推移的に `v0.48.0` へ。Dockerfileは `golang:1.26-alpine`。
+- KNOWN_LIMITATIONS §13 のCI破損記述を新版番号へ更新（推奨 workflow Go版は `1.26.x`）。
+
+**V1 `set_difficulty` 推移中シェアの benign 拒否分離**（ESP-Miner #212、Cat 1/2 #4の残部）。
+
+- `miner.Share` に `Target Hash` を追加——発行時点のプール難易度ターゲットをシェアが保持する。
+- `engine` のV1 submit応答で、難易度系拒否は `isDifficultyTransitionReject` で検査: ハッシュが**発行時ターゲットを満たし現在ターゲットを満たさない**場合のみ benign（難易度引き上げのvardiff race）と判定。発行時ターゲットすら満たさないシェア（壊れたワーカー）は通常の difficulty 拒否のまま。
+- benign 判定された拒否は `otedama_shares_rejected_by_reason_total{reason="difficulty-transition"}` + `otedama_last_reject_seconds` に記録され、`updateShareRates` の受理率・警報閾値からは除外される。`sharesRejected` には引き続きカウントされるため `sharesUnaccounted` のfound-vs-judged整合性は保たれる。推移拒否を警告warn→infoへ降格。
+- V2側（`SubmitSharesError.SequenceNumber` との相関）は未実装——残作業としてRESEARCH_IMPROVEMENTSに記録。
+
+**Fuzz / セキュリティ衛生.**
+
+- `internal/stratum/noise_fuzz_test.go` 新設: `FuzzEncryptedConn_Read`（u16長prefixの境界種——0・1・tag-only・`maxNoiseFrame`・有効frame種でdecrypt+readbuf-drain経路も通る）と `FuzzEncryptedConn_Write`（長チェック不変条件）。既存2 fuzzerには `DefaultMaxFrameSize` 境界の種（0xFFFFFA=受理上限ぴったり・0xFFFFFB=最小超過）を追加。ローカルで計~180万実行、crashなし。
+- `crypto/subtle` 監査（Cat 10 #9）: 本番コードで hash/MAC 比較を `bytes.Equal` しているのは `internal/btccrypto/base58.go` のchecksum1箇所のみ（公開データのため実害なし）だが、慣例統一のため `subtle.ConstantTimeCompare` へ。bech32はpolymod算術、AEADは `Open` 内部で定数時間——残りは全てテスト内のみ。
+
+**脅威モデル・仕様引用の是正（doc-only）.**
+
+- THREAT_MODEL: Bahrani & Weinberg（arXiv:2309.06847、統計的に検出不能な selfish mining の存在証明）と Grunspan & Pérez-Marco（arXiv:2211.07270、block-withholding耐性の定量化）を DoS 節の新規脅威段落に記録——「防止は不能、観測可能化が上限」という正直な残存リスクと共に。LN決済側の HTLC-settlement timing leak（arXiv:2006.12143）を traffic-analysis 残余リスクに1段落でリンク。
+- `stratum-mining/sv2-spec` を正準仕様リポジトリとして ADR-009 References・`internal/stratum/frame.go`・poolproto doc に引用追加。
+
+### Docs (session 255 — 併せて実施: skills/の完了済みタスク記述を是正)
+
+- `skills/quality-pass-sonnet.md` タスク2「依存3件更新」は本セッションで完了したため取り消し線化し、go1.27採用が lint staticcheck の export-data 非対応に阻まれる既知の制約（次セッションへの注意）を記録。
+- `docs/AUDIT_CHECKLIST.md` 項目14・`docs/THREAT_MODEL.md` の監査済み依存一覧を `go.yaml.in/yaml/v3` に更新。
+- `GODEBUG_NOTES.md` — baseline block・`tlsmlkem`/`containermaxprocs` 項目を `go 1.26.0`/`toolchain go1.26.8` に合わせて更新、`containermaxprocs` は「未発効」→「発効中」へ。
+- `docs/SUSTAINABILITY.md` の Go版 pin 行を更新。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -39,7 +39,7 @@ If any row does not pass, open a security advisory.
 | 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | Every `uses:` has `@<40-char-sha>` |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
 | 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
-| 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `gopkg.in/yaml.v3`, stdlib |
+| 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `go.yaml.in/yaml/v3`, stdlib |
 | 15 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
 ## Secrets and credentials

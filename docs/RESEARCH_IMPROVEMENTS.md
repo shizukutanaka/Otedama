@@ -430,8 +430,16 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
+9. ✅ **Constant-time comparison audit** for any secret/MAC comparisons in the
+   handshake and seed paths (use `crypto/subtle`). — **Done (session 255):**
+   audited `internal/btccrypto`, `internal/lightning`, `internal/stratum`,
+   `internal/poolproto` for `bytes.Equal`/manual compares on hash or MAC
+   material. Only one production site existed — the base58 checksum
+   (`internal/btccrypto/base58.go`), public data so not a real timing gap —
+   now `subtle.ConstantTimeCompare` for convention uniformity. All other
+   compares are test-only or inside AEAD (`chacha20poly1305.Open`,
+   AES-GCM `Open`), which authenticate in constant time internally;
+   bech32 uses polymod arithmetic (no byte compare).
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
@@ -512,13 +520,24 @@ endpoint against current vendor documentation. Tags as before
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
-4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
+4. ✅ **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
    difficulty active when issued, validate locally against that, and treat
    the resulting pool rejects as benign (exclude from the reject-rate
    metric). Distinct cause from the existing stale/latency `rejectClass`.
    (bitaxeorg/ESP-Miner #212)
+   — **Completed (session 255):** `miner.Share` now carries `Target` (the
+   share target active when the work was issued). In the V1 submit path,
+   a difficulty-class reject is classified by `isDifficultyTransitionReject`
+   — benign iff the hash met its issue target but not the pool's current
+   target — and tracked as `otedama_shares_rejected_by_reason_total{
+   reason="difficulty-transition"}` instead of alarming operators. Such
+   rejects still count in `sharesRejected` (the pool did reject them) but
+   are excluded from `updateShareRates`' acceptance-rate signal. The V2
+   path is still uncovered (a stricter correlation via
+   `SubmitSharesError.SequenceNumber` + the existing `submitTimes` map is
+   possible and remains a candidate follow-up).
    — **Prerequisite fixed (session 226):** investigating this item surfaced a
    more fundamental bug it presupposes — the V1 path (`applyJob`) was not
    applying `mining.set_difficulty` to the mining target *at all*; every
@@ -557,26 +576,36 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   — **Done (session 255):** `github.com/stratum-mining/sv2-spec` is now
+   cited as the canonical spec source in ADR-009's References,
+   `internal/stratum/frame.go`'s reference comment, and the poolproto
+   package doc.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+8. ✅ **Single-pool concentration enables *undetectable* attacks.** Bahrani &
    Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
    selfish-mining strategy whose orphan pattern is statistically
    indistinguishable from honest mining, profitable from 38.2% hashrate.
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
-   Cat 4 #7.
+   Cat 4 #7. — **Done (session 255):** THREAT_MODEL Denial-of-service
+   section now carries the withholding/selfish-mining threat paragraph
+   citing both papers, with the honest residual risk (observable
+   suspicion, not prevention).
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
    optimum. Otedama can't change the DAA, but `doctor` can track
    pool-acknowledged shares vs. pool-credited blocks over a window and warn
-   on divergence — grounds Cat 1 #10.
+   on divergence — grounds Cat 1 #10. — **Partially done (session 255):**
+   the paper is now cited alongside item 8 in THREAT_MODEL as the
+   quantification of single-pool withholding loss; the `doctor`-side
+   divergence check itself remains open.
 10. 🔵 **Auditable PoW for verifiable share attribution (v4.0+).** Lerner,
     "APoW: Auditable Proof-of-Work Against Block Withholding" (arXiv:
     2601.02496), constructs PoW letting pool participants retroactively
@@ -695,11 +724,13 @@ endpoint against current vendor documentation. Tags as before
     (capacity + degree + age), not the ML model — a small deterministic
     initial liquidity belief feeding Pickhardt-Richter (Cat 11 #6),
     improving first-attempt success without probing.
-27. 🟡 **One countermeasure, two timing channels.** Rohrer & Tschorsch,
+27. ✅ **One countermeasure, two timing channels.** Rohrer & Tschorsch,
     "Counting Down Thunder" (arXiv:2006.12143), show HTLC-resolution timing
     leaks payment endpoints — the LN analogue of the Stratum timing leak
     already in THREAT_MODEL (1703.06545). Note that Tor-by-default (ADR-007
-    B7) mitigates *both*; doc-only linkage.
+    B7) mitigates *both*; doc-only linkage. — **Done (session 255):** the
+    HTLC-timing linkage is recorded in THREAT_MODEL's traffic-analysis
+    residual risk, next to the Tor-by-default mitigation it shares.
 
 ---
 
@@ -707,7 +738,7 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
    is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
    early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
    fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
@@ -718,6 +749,14 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
+   — **Done (session 255):** boundary seeds added to both frame fuzzers
+   (the largest payload claim that still fits `DefaultMaxFrameSize`,
+   0xFFFFFA, and the smallest that overflows it, 0xFFFFFB — the
+   header-valid-but-frame-rejected band), plus two new targets in
+   `internal/stratum/noise_fuzz_test.go`: `FuzzEncryptedConn_Read`
+   (u16 length-prefix math incl. a valid-frame seed so the decrypt and
+   readbuf-drain paths are exercised) and `FuzzEncryptedConn_Write`
+   (length-check invariants). ~1.8M execs clean locally.
 2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
@@ -757,7 +796,7 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
    The `go-yaml/yaml` source repo was archived by its author; the YAML org
    took over at import path `go.yaml.in/yaml`, where v3 is frozen to
    security-fixes-only and active work is in v4. This makes the dependency
@@ -767,7 +806,12 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
-2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+   — **Done (session 255):** migrated to `go.yaml.in/yaml/v3 v3.0.5`
+   (import swaps in `cmd/otedama/configfile.go` and
+   `internal/config/config_file_test.go` only — API-identical fork).
+   ADR-003 Erratum now records the resolution. v4 remains RC-only
+   (`v4.0.0-rc.6`), so the frozen-security-fixes v3 line is deliberate.
+2. ✅ **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
    (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
    are all in the `ssh`/`openpgp` subpackages; Otedama imports only
@@ -775,7 +819,13 @@ month, so the discipline matters.
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+   — **Done (session 255):** bumped to `v0.57.0` (2026-09-08), which
+   transitively pulled `x/sys v0.48.0`. v0.57 declares `go 1.26`, which
+   drove the accompanying `go`/`toolchain` bump. Post-bump
+   `govulncheck ./...` reports **0 reachable**; the only module-level
+   advisory left is GO-2026-5932 (`x/crypto/openpgp` unmaintained-by-design)
+   — unreachable, we do not import `openpgp`.
+3. ✅ **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
    toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
@@ -783,6 +833,12 @@ month, so the discipline matters.
    throttling under cgroup constraints" — describes a benefit not actually
    compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
    own quarterly-toolchain policy. (go.dev/doc/go1.25)
+   — **Done (session 255):** bumped to `go 1.26.0` / `toolchain go1.26.8`
+   (required by x/crypto v0.57; the container-aware GOMAXPROCS from Go 1.25
+   is now compiled in — GODEBUG_NOTES updated). go1.27.x deliberately not
+   taken: golangci-lint v1.64.8's staticcheck cannot decode go1.27 export
+   data (verified empirically: "export data version 4 is greater than
+   maximum supported version 2"). Dockerfile now `golang:1.26-alpine`.
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the
@@ -939,3 +995,48 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+---
+
+## September 2026 increment — session 255 (omakase implementation pass)
+
+This increment was an implementation pass over earlier backlog items rather
+than a new research sweep; version facts below were re-verified this session
+against the Go module proxy (`.info` endpoints) and pkg.go.dev.
+
+**Verified new facts:**
+
+- `go-yaml/yaml` remains archived; the YAML-org successor
+  `go.yaml.in/yaml/v3` is at **v3.0.5** (frozen security-fixes line; v4 is
+  still release-candidate-only at `v4.0.0-rc.6`). Chosen deliberately over
+  RC v4.
+- `golang.org/x/crypto` latest is **v0.57.0** (2026-09-08; declares
+  `go 1.26`). v0.55/v0.56 require `go 1.25`; v0.52+ dropped the removed
+  `x/crypto/ssh` GO-2025-3487-relevant surface unchanged for us.
+- Latest stable Go is **go1.27.1**; go1.26.x is at go1.26.8. Empirically
+  verified in this environment: **golangci-lint v1.64.8's staticcheck
+  cannot decode go1.27 export data** ("export data version 4 is greater
+  than maximum supported version 2"), so go1.26.8 is the newest
+  lint-compatible toolchain. go1.27 toolchain adoption is gated on a lint
+  update, not on Go maturity.
+- `decred/dcrd/dcrec/secp256k1/v4` still tops out at **v4.4.1** — no
+  ElligatorSwift upstream; ADR-011's hand-rolled x-only fallback
+  assessment stands.
+
+**Implemented this session (all listed items flipped to ✅ above):**
+
+| Item | Change |
+|------|--------|
+| Dep hygiene #1 | `gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3 v3.0.5` (ADR-003 erratum resolution) |
+| Dep hygiene #2 | `x/crypto v0.23.0` → `v0.57.0` (+`x/sys v0.48.0`) |
+| Dep hygiene #3 | `go 1.22`→`go 1.26.0`, `toolchain go1.24.0`→`go1.26.8`, Dockerfile `golang:1.26-alpine`; GOMAXPROCS container fix now live |
+| Cat 1/2 #4 | V1 benign difficulty-transition rejects (ESP-Miner #212): `Share.Target` + `isDifficultyTransitionReject` + `transitionRejects` exclusion from acceptance-rate math |
+| June-2026 #1 | Boundary fuzz seeds (0xFFFFFA/0xFFFFFB) + `FuzzEncryptedConn_Read`/`_Write` |
+| Cat 10 #9 | `crypto/subtle` audit; base58 checksum now `ConstantTimeCompare` |
+| Cat 1/2 #7 | `stratum-mining/sv2-spec` cited as canonical spec source (ADR-009, frame.go, poolproto doc) |
+| Cat 4 #8/#9, LN #27 | THREAT_MODEL: block-withholding/selfish-mining threat + HTLC-timing linkage |
+
+**Deferred (recorded honestly):** V2-side transition-reject correlation
+via `SubmitSharesError.SequenceNumber`; `doctor`-side
+share-vs-credited-block divergence check (Cat 4 #9's second half);
+go1.27 toolchain (lint-blocked).

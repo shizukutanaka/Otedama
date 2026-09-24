@@ -191,7 +191,8 @@ func (p *mockPool) handleConn(conn net.Conn) {
 // sendServerMsg encodes and writes a server-to-client Stratum V2 message.
 func sendServerMsg(w io.Writer, msgType uint8, isChannel bool, enc interface {
 	Encode() ([]byte, error)
-}) error {
+},
+) error {
 	payload, err := enc.Encode()
 	if err != nil {
 		return err
@@ -618,6 +619,60 @@ func TestEngineMetrics_UpdateShareRates_ComputesRejectAndStale(t *testing.T) {
 	}
 	if got := m.staleRate.Value(); got != 0.06 {
 		t.Errorf("staleRate = %v, want 0.06", got)
+	}
+}
+
+func TestEngineMetrics_UpdateShareRates_ExcludesTransitionRejects(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// 100 accepted, 8 rejected of which 4 are benign difficulty-transition
+	// rejects (ESP-Miner #212): found locally = 108, pool-judged = 108, so
+	// nothing is unaccounted — but the acceptance signal must use 104
+	// judged, not 108, so the vardiff race does not depress the rate.
+	for range 108 {
+		m.sharesFound.Inc()
+	}
+	for range 100 {
+		m.sharesAccepted.Inc()
+	}
+	for range 8 {
+		m.sharesRejected.Inc()
+	}
+	m.transitionRejects.Add(4)
+
+	rate, judged := m.updateShareRates()
+	if judged != 104 {
+		t.Errorf("judged = %d, want 104 (transition rejects excluded)", judged)
+	}
+	if got, want := rate, 100.0/104.0; got != want {
+		t.Errorf("acceptance rate = %v, want %v", got, want)
+	}
+	// The pool still saw and rejected all 8 — reconciliation is unaffected.
+	if got := m.sharesUnaccounted.Value(); got != 0 {
+		t.Errorf("sharesUnaccounted = %v, want 0 (transition rejects are pool-judged)", got)
+	}
+	if got := m.rejectRate.Value(); got != 4.0/104.0 {
+		t.Errorf("rejectRate = %v, want %v", got, 4.0/104.0)
+	}
+}
+
+func TestEngineMetrics_UpdateShareRates_TransitionClamp(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// transitionRejects can never legitimately exceed sharesRejected
+	// (it is only incremented alongside a sharesRejected increment), but
+	// clamp defensively so a torn read can never drive judged negative.
+	m.sharesRejected.Inc()
+	m.transitionRejects.Add(3)
+
+	rate, judged := m.updateShareRates()
+	if judged != 0 {
+		t.Errorf("judged = %d, want 0 after clamp", judged)
+	}
+	if rate != 1.0 {
+		t.Errorf("acceptance rate = %v, want 1.0 (nothing legitimately rejected)", rate)
 	}
 }
 

@@ -30,8 +30,8 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.22
-toolchain go1.24.0
+go 1.26.0
+toolchain go1.26.8
 
 godebug (
     panicnil=0
@@ -40,16 +40,24 @@ godebug (
 )
 ```
 
-**Why split `go` from `toolchain`:** the `go 1.22` directive declares
+**Why split `go` from `toolchain`:** the `go 1.26` directive declares
 the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **build toolchain** used in CI and
-recommended for users. This split lets users with older toolchains
-(Linux distros, NixOS pinning) still build Otedama, while CI gets
-the latest crypto and runtime fixes.
+`toolchain go1.26.8` is the **build toolchain** used in CI and
+recommended for users. The historical split that let older toolchains
+still build collapsed in practice: `tlsmlkem` is only parseable on
+Go 1.24+, and `golang.org/x/crypto v0.57.0` declares `go 1.26`, so
+the floor is set by dependencies rather than the directive (see
+KNOWN_LIMITATIONS §13).
 
 The `go` line is bumped roughly once a year, six months after each
 Go minor's release, on a dedicated PR. The `toolchain` line is
-bumped quarterly to track the latest stable Go.
+bumped quarterly to track the latest stable Go — **with a tooling
+caveat (session 255):** go1.27.x is deferred even though it is the
+latest stable, because golangci-lint v1.64.8's staticcheck cannot
+decode its export data (`export data version 4 is greater than
+maximum supported version 2`). go1.26.8 is the newest verified
+lint-compatible toolchain; bump further only after the lint chain
+is updated.
 
 ## Active knobs
 
@@ -61,8 +69,8 @@ As of 2026-04-30:
   downstream reviewers and survives future default flips. This knob
   was named `tlskyber` on the Go 1.23 draft (X25519Kyber768) and was
   renamed `tlsmlkem` in Go 1.24 when the construction was
-  standardized; our `toolchain go1.24.0` therefore requires the new
-  name (the old name is an "unknown godebug" build error on 1.24).
+  standardized; our `toolchain go1.26.8` therefore requires the new
+  name (the old name is an "unknown godebug" build error on 1.24+).
 
 - **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
   a synthetic non-nil error from `panic(nil)`, rather than reverting
@@ -129,17 +137,11 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- **Not yet in effect (verified session 251):** `go.mod` still pins
-  `toolchain go1.24.0`, which predates this feature — so the
-  container-aware default is **not compiled into current builds**.
-  A Kubernetes miner today still sees the host's full core count. This
-  benefit only materializes once the `toolchain` line is bumped to
-  go1.25.x (per the quarterly-toolchain policy above; go1.24.0 is now
-  over a year old). The bump was scoped but not performed in session
-  251 because this environment's module proxy denies the Go toolchain
-  download (`sum.golang.org` Forbidden). Tracked in
-  RESEARCH_IMPROVEMENTS session-251 item 3.
-- Otedama impact: positive once the toolchain bump lands — fixes a
+- **In effect since session 255:** `go.mod` now pins
+  `toolchain go1.26.8`, so container-aware `GOMAXPROCS` is compiled
+  into current builds. (The earlier deferral was environmental —
+  session 251's module proxy denied toolchain downloads.)
+- Otedama impact: positive now that the toolchain bump has landed — fixes a
   class of "miner saturates noisy-neighbor pod limit" reports we
   expect from Kubernetes users.
 - Removal risk: very low — this is a fix, not a deprecation. The

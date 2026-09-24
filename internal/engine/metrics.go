@@ -9,6 +9,7 @@ package engine
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/version"
@@ -20,11 +21,20 @@ import (
 // run loop. Grouping them in one struct keeps the hot path free of
 // registry lookups — each metric is a pointer cached at startup.
 type engineMetrics struct {
-	hashrate            *metrics.Gauge
-	sharesFound         *metrics.Counter
-	sharesSubmitted     *metrics.Counter
-	sharesAccepted      *metrics.Counter
-	sharesRejected      *metrics.Counter
+	hashrate        *metrics.Gauge
+	sharesFound     *metrics.Counter
+	sharesSubmitted *metrics.Counter
+	sharesAccepted  *metrics.Counter
+	sharesRejected  *metrics.Counter
+	// transitionRejects counts rejects classified as benign
+	// difficulty-transition rejects (the share met the target in effect
+	// when its work was issued but not the pool's newly raised target —
+	// ESP-Miner #212). Not an exported metric on its own; it is an
+	// accounting input to updateShareRates, which excludes these rejects
+	// from the acceptance-rate signal while still counting them in
+	// sharesRejected (the pool did reject them). Observable via
+	// otedama_shares_rejected_by_reason_total{reason="difficulty-transition"}.
+	transitionRejects   atomic.Uint64
 	poolConnectAttempts *metrics.Counter
 	poolConnectFailures *metrics.Counter
 	arbitrationSwitches *metrics.Counter
@@ -552,17 +562,31 @@ func (m *engineMetrics) setActivePayout(masked string) {
 func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	accepted := m.sharesAccepted.Value()
 	rejected := m.sharesRejected.Value()
-	judged = accepted + rejected
-	rate = acceptanceRate(accepted, rejected)
+	// Benign difficulty-transition rejects (valid under the target in
+	// effect when issued, rejected only because the pool raised
+	// difficulty mid-flight — ESP-Miner #212) are excluded from the
+	// acceptance-rate signal: they reflect a vardiff race, not a miner
+	// fault. They still count in sharesRejected, keeping the found-vs-
+	// judged reconciliation below honest.
+	transition := m.transitionRejects.Load()
+	if transition > rejected {
+		transition = rejected // defensive; cannot exceed total rejects
+	}
+	effRejected := rejected - transition
+	judged = accepted + effRejected
+	rate = acceptanceRate(accepted, effRejected)
 	m.shareAcceptanceRate.Set(rate)
 
-	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
-	// can briefly report more judged than we have locally counted if a stats
-	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
+	// Reconcile: found locally vs judged by the pool. Transition rejects
+	// stay inside poolJudged — the pool did see and reject those shares.
+	// Clamp at 0 — the pool can briefly report more judged than we have
+	// locally counted if a stats tick races a burst of accepts, and a
+	// negative "unaccounted" is meaningless.
 	found := m.sharesFound.Value()
+	poolJudged := accepted + rejected
 	var unaccounted uint64
-	if found > judged {
-		unaccounted = found - judged
+	if found > poolJudged {
+		unaccounted = found - poolJudged
 	}
 	m.sharesUnaccounted.Set(float64(unaccounted))
 
@@ -571,7 +595,7 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		m.staleRate.Set(0)
 		return rate, judged
 	}
-	m.rejectRate.Set(float64(rejected) / float64(judged))
+	m.rejectRate.Set(float64(effRejected) / float64(judged))
 	var stale uint64
 	if c, ok := m.rejectByReason["stale"]; ok {
 		stale = c.Value()

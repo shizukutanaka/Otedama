@@ -514,6 +514,66 @@ func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	}
 }
 
+// ----- isDifficultyTransitionReject: benign vardiff-race rejects (ESP-Miner #212) -----
+
+func TestIsDifficultyTransitionReject(t *testing.T) {
+	oldTarget, err := miner.TargetFromDifficulty(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The pool has since raised difficulty 1024× — the current target is
+	// much stricter.
+	currentTarget, err := miner.TargetFromDifficulty(1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A hash between the two targets: met the issue target, fails the
+	// current one. Constructed as currentTarget+1 (little-endian carry is
+	// safe — the diff-1024 target is far below 2^256).
+	between := currentTarget
+	between[0]++
+
+	tests := []struct {
+		name string
+		hash miner.Hash
+		// issueTarget is what the share's work was ground against.
+		issueTarget miner.Hash
+		want        bool
+	}{
+		{"valid at issue, fails current", between, oldTarget, true},
+		{"meets current target", currentTarget, oldTarget, false},
+		{"never met issue target", func() miner.Hash {
+			h := oldTarget
+			h[31] = 0xFF // exceeds the issue target
+			return h
+		}(), oldTarget, false},
+		{"untagged share", between, miner.Hash{}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			share := miner.Share{Hash: tc.hash, Target: tc.issueTarget}
+			if got := isDifficultyTransitionReject(&share, currentTarget); got != tc.want {
+				t.Errorf("isDifficultyTransitionReject = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsDifficultyTransitionReject_NoDifficultyChange(t *testing.T) {
+	// Without an intervening difficulty raise, an above-target reject is a
+	// real fault, not a transition: same target at issue and now.
+	target, err := miner.TargetFromDifficulty(4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := target
+	h[0]++ // fails the target outright
+	if isDifficultyTransitionReject(&miner.Share{Hash: h, Target: target}, target) {
+		t.Error("reject with unchanged target must not classify as transition")
+	}
+}
+
 func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
 	urls := poolURLs(config.Config{})
 	if len(urls) != 1 {
@@ -2447,6 +2507,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }

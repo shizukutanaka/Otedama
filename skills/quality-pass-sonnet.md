@@ -49,12 +49,15 @@ doc-vs-code整合性の維持**である。
    リカバリフレーズ提示がまさにそれだった（docs 4箇所が「表示される」と
    明記、実装は0件）。**docの主張を見つけたら、その挙動を実際に実行する
    本番コード経路をgrepで確認する**こと。
-2. **依存3件更新**（モジュール取得可能な環境でのみ）: 順に
-   `go get golang.org/x/crypto@latest` → toolchainをgo1.25.xへ →
-   `gopkg.in/yaml.v3`を`go.yaml.in/yaml/v3`へ移行（import書換は
-   internal/config周辺のみの見込み・grepで全数確認・ライセンス確認後）。
-   各ステップで検証ループ。yaml移行の回帰ゲートは`TestConfigFile_*`一式。
-   完了後 govulncheck でゼロ到達を記録。
+2. ~~**依存3件更新**~~ ✅ **session 255で完了。** `gopkg.in/yaml.v3` →
+   `go.yaml.in/yaml/v3 v3.0.5` 移行済み（import書換は
+   `cmd/otedama/configfile.go` と `internal/config/config_file_test.go`
+   の2箇所のみ）。`go 1.22→1.26` / `toolchain go1.24.0→go1.26.8` /
+   `golang.org/x/crypto v0.23.0→v0.57.0` / Dockerfile `golang:1.26-alpine`。
+   **次回更新時の注意**: golangci-lint v1.64.8 のstaticcheckは Go 1.27 の
+   export data (v4) を読めない（"export data version 4 is greater than
+   maximum supported version 2"）——`toolchain` を go1.27.x へ上げるには
+   lintツールの更新が先。lint検証は `GOTOOLCHAIN=go1.26.8` で行う。
 3. **doc相互参照の継続検査**: markdownリンク・backtickファイル参照が実在
    ファイルに解決するか、SPECIFICATIONのギャップ表番号・KNOWN_LIMITATIONSの
    §番号の相互参照が一致するか。（session 253時点で全解決済み — 変更後に再検査。）

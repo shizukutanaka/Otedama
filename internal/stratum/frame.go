@@ -43,6 +43,8 @@
 //
 //   - Stratum V2 specification, chapter 3 (Protocol Overview):
 //     https://stratumprotocol.org/specification/03-protocol-overview/
+//   - Canonical spec repository (source of the rendered chapters):
+//     https://github.com/stratum-mining/sv2-spec
 //   - Stratum Reference Implementation (SRI) framing_sv2 crate for
 //     cross-reference test vectors.
 package stratum

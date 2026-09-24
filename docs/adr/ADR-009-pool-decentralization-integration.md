@@ -616,6 +616,9 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ## References
 
+- Canonical Stratum V2 specification repository (the source that
+  stratumprotocol.org renders; cite this for section stability):
+  https://github.com/stratum-mining/sv2-spec
 - Stratum V2 Working Group expansion (May 7, 2026):
   https://news.bitcoin.com/bitcoin-mining-pool-giants-foundry-antpool-and-f2pool-signal-stratum-v2-shift/
 - Stratum V2 spec (Job Declaration Protocol):

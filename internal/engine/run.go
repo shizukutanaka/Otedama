@@ -50,7 +50,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
-// Engine timing constants. Centralised here so the reconnection and
+// Engine timing constants. Centralized here so the reconnection and
 // re-arbitration cadence is documented in one place rather than buried
 // as magic numbers in the run loops.
 const (
@@ -134,7 +134,7 @@ func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (ne
 	}
 }
 
-// Run starts a full mining session and blocks until ctx is cancelled.
+// Run starts a full mining session and blocks until ctx is canceled.
 // It orchestrates every subsystem: wallet, HAL, providers, arbitration,
 // TUI, and the Stratum V2 pool connection.
 func Run(ctx context.Context, opts Options) error {
@@ -363,7 +363,7 @@ type reconnectOpts struct {
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
-// exponential backoff (capped at reconnectBackoffMax) until ctx is cancelled, a fatal
+// exponential backoff (capped at reconnectBackoffMax) until ctx is canceled, a fatal
 // error occurs, or MaxReconnectAttempts is exceeded.
 func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	pools := poolURLs(r.opts.Config)
@@ -502,7 +502,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
 		}
 		// time.NewTimer + explicit Stop rather than time.After: when ctx is
-		// cancelled (shutdown) the timer is released immediately instead of
+		// canceled (shutdown) the timer is released immediately instead of
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
@@ -567,7 +567,7 @@ func (o sessionOpts) isCurtailed() bool {
 }
 
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,
-// honouring curtailment. While curtailed the miner is intentionally idle, so a
+// honoring curtailment. While curtailed the miner is intentionally idle, so a
 // zero hashrate is *expected*, not a fault: the stall monitor is not advanced
 // (no false "hashrate stalled — check device health" warning) and otedama_up
 // stays 1 (healthy, deliberately paused). otedama_curtailed carries the paused
@@ -600,8 +600,8 @@ type poolMsg struct {
 
 // runSession runs one pool connection: dial, handshake, then stream
 // jobs to workers and shares back to the pool until the connection
-// drops or ctx is cancelled. Returns the error that ended the session
-// (nil if ctx was cancelled cleanly).
+// drops or ctx is canceled. Returns the error that ended the session
+// (nil if ctx was canceled cleanly).
 //
 // Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
 // poolproto.DialURL so the protocol abstraction is load-bearing for V1.
@@ -1149,6 +1149,27 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				} else {
 					category, diagnosis := rejectClass(result.Reason)
+					// A difficulty-class reject whose hash met the target in
+					// effect when its work was issued, but not the pool's
+					// current target, is a benign vardiff race: the pool
+					// raised difficulty via mining.set_difficulty while the
+					// share was in flight (ESP-Miner #212). It is not evidence
+					// of a miner fault, so it must not depress the
+					// acceptance-rate signal or alarm operators — it is
+					// tracked separately as "difficulty-transition".
+					if category == "difficulty" {
+						if cur, derr := miner.TargetFromDifficulty(capturedSess.SuggestedDifficulty()); derr == nil && isDifficultyTransitionReject(&capturedShare, cur) {
+							opts.log("info", fmt.Sprintf("engine: V1 share rejected after difficulty change (benign transition): %s",
+								result.Reason))
+							if opts.m != nil {
+								opts.m.sharesRejected.Inc()
+								opts.m.transitionRejects.Add(1)
+								opts.m.rejectReason("difficulty-transition").Inc()
+								opts.m.touchLastReject("difficulty-transition", time.Now().Unix())
+							}
+							return
+						}
+					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						result.Reason, diagnosis))
 					if opts.m != nil {
@@ -1269,7 +1290,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1307,7 +1329,7 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 // closes — means a worker essentially never produces a share the pool
 // credits, since ordinary hardware cannot solve a real block. A difficulty
 // of 0 (no set_difficulty received yet, e.g. the first job of a session)
-// falls back to the nBits target, matching pre-wiring behaviour. Extracted
+// falls back to the nBits target, matching pre-wiring behavior. Extracted
 // as a pure function so the target-selection logic is unit-testable without
 // a running Worker.
 func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
@@ -1321,6 +1343,22 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 		}
 	}
 	return target, nil
+}
+
+// isDifficultyTransitionReject reports whether a difficulty-class reject is
+// a benign difficulty-transition reject (ESP-Miner #212): the share's hash
+// met the share target in effect when its work was issued (share.Target),
+// but does not meet the pool's current target. Such rejects reflect a
+// vardiff race — mining.set_difficulty raised the bar while the share was
+// in flight — not a miner fault, so updateShareRates excludes them from the
+// acceptance-rate signal. A share that never met its issue target (a
+// corrupt or buggy worker) is not benign and falls through to the normal
+// difficulty classification.
+func isDifficultyTransitionReject(share *miner.Share, currentTarget miner.Hash) bool {
+	if share.Target == (miner.Hash{}) {
+		return false // untagged share — cannot verify what it was issued against
+	}
+	return share.Hash.LessOrEqual(share.Target) && !share.Hash.LessOrEqual(currentTarget)
 }
 
 // applyJob converts a poolproto.Job (the protocol-agnostic job type

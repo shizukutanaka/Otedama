@@ -110,6 +110,12 @@ func TestWorker_FindsSharesWithEasyTarget(t *testing.T) {
 		if !h.Hash.LessOrEqual(makeEasyWork().Target) {
 			t.Errorf("share hash %s does not meet target", h.Hash)
 		}
+		// The share must carry the target it was ground against, so the
+		// engine can distinguish a benign difficulty-transition reject
+		// from a genuine above-target reject (ESP-Miner #212).
+		if h.Target != makeEasyWork().Target {
+			t.Errorf("share.Target does not echo the work's target")
+		}
 	case <-ctx.Done():
 		t.Fatal("no share found within 2 seconds with maximum target")
 	}

@@ -34,6 +34,9 @@
 //     (unix socket, -DENABLE_IPC) letting SV2/other mining software
 //     request templates and submit blocks — a cleaner target than
 //     legacy getblocktemplate for future node integration.
+//   - The canonical SV2 spec source is the stratum-mining/sv2-spec
+//     repository (https://github.com/stratum-mining/sv2-spec);
+//     stratumprotocol.org renders it.
 //   - Job Declaration Protocol production support is limited to
 //     Braiins and DEMAND.
 //

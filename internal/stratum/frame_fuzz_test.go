@@ -37,6 +37,13 @@ func FuzzDecodeHeader(f *testing.F) {
 		{0x01, 0x02, 0x03},
 		// Oversized length claim.
 		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
+		// Length-math boundaries (SRI noise_sv2 overflow lesson): the
+		// largest claim whose total frame size still fits DefaultMaxFrameSize
+		// (0xFFFFFA = 16,777,210 → total 16,777,216 = max exactly), the
+		// smallest claim that overflows it (0xFFFFFB), and the u24 maximum.
+		{0x00, 0x00, 0x00, 0xFA, 0xFF, 0xFF},
+		{0x00, 0x00, 0x00, 0xFB, 0xFF, 0xFF},
+		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -95,6 +102,14 @@ func FuzzDecoder_ReadFrame(f *testing.F) {
 		},
 		// Frame claiming huge payload; truncated before payload delivered.
 		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
+		// Length-math boundaries against the allocation guard (SRI
+		// noise_sv2 overflow lesson): 0xFFFFFA is the largest payload
+		// claim whose total still fits DefaultMaxFrameSize (6 +
+		// 16,777,210 = 16,777,216 = max exactly), 0xFFFFFB is the
+		// smallest that overflows it — header-valid but frame-rejected
+		// claims between (DefaultMaxFrameSize−6) and MaxMessageLength.
+		{0x00, 0x00, 0x00, 0xFA, 0xFF, 0xFF},
+		{0x00, 0x00, 0x00, 0xFB, 0xFF, 0xFF},
 		// Garbage.
 		{0xDE, 0xAD, 0xBE, 0xEF},
 	}

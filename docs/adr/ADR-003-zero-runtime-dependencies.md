@@ -136,6 +136,17 @@ rationale in `go.mod`. Migration was scoped but not performed in session
 lookup (`sum.golang.org` returns Forbidden), so `go get` cannot verify the
 new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
 
+**Resolution (session 255):** migration completed. `gopkg.in/yaml.v3` was
+replaced by `go.yaml.in/yaml/v3 v3.0.5` (the YAML-org-maintained
+continuation recommended above — v3 is frozen to security fixes, which is
+the right stability posture for a config parser). The fork is
+API-identical: only the import path changed, in
+`cmd/otedama/configfile.go` and `internal/config/config_file_test.go`;
+the selection rationale is recorded as a `go.mod` comment per CLAUDE.md.
+v4 remains release-candidate-only (`v4.0.0-rc.6`), so staying on the
+frozen v3 line is deliberate, not a fallback. The archived-module
+footnote in this erratum is kept for the audit trail.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model

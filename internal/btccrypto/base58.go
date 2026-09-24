@@ -17,7 +17,7 @@
 package btccrypto
 
 import (
-	"bytes"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"math/big"
@@ -78,7 +78,10 @@ func ValidateBase58Address(addr string) (AddressType, error) {
 	payload := raw[:21]
 	checksum := raw[21:]
 	sum := Hash256(payload)
-	if !bytes.Equal(sum[:4], checksum) {
+	// The checksum is public data, so timing leaks here carry no secret —
+	// crypto/subtle is used anyway so every hash/MAC comparison in the
+	// codebase follows one constant-time convention.
+	if subtle.ConstantTimeCompare(sum[:4], checksum) != 1 {
 		return AddressUnknown, fmt.Errorf("btccrypto: base58 checksum failed (likely a typo in the address)")
 	}
 	switch payload[0] {
