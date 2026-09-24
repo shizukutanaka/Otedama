@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 375 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: Go toolchain 脆弱性修正)
+
+- **toolchain を go1.25.7 → go1.25.13** — `govulncheck` が本コード到達の stdlib
+  脆弱性15件を検出（GO-2026-4601 net/url IPv6 リテラル（rates/octopus・
+  httpserver 経路）・x509・net/http 等）。1.25 系最新パッチへ pin し
+  reachable 脆弱性 0 件を確認。AUDIT_CHECKLIST row 10 の「clean」主張が
+  実検証で裏付けられた。
+
 ### Fixed (session 374 — Github・論文・Qiita・Zenn、海外技術情報を参考にさらなる改善（おまかせ）: 到達不能コードの除去)
 
 - **deadcode 解析の残2件を除去** — 本番コードの `FetchAgileRatesDefault`（engine が

@@ -2,9 +2,13 @@ module github.com/shizukutanaka/Otedama
 
 go 1.25.0
 
-toolchain go1.25.7
+toolchain go1.25.13
 
 // godebug pins behavior across Go upgrades. See GODEBUG_NOTES.md.
+// go1.25.13 fixes every stdlib vulnerability reachable from this
+// codebase (govulncheck session 375 — e.g. GO-2026-4601 net/url IPv6
+// literal parsing via rates/octopus and httpserver, plus the x509 and
+// net/http issues fixed in the 1.25.9–1.25.13 patch range).
 //   tlsmlkem=1   — enable hybrid PQ key exchange (X25519MLKEM768) in TLS
 //                  handshakes (default-on Go 1.24+). Renamed from the Go 1.23
 //                  draft knob tlskyber when X25519Kyber768 was standardized.
