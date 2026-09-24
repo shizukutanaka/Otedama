@@ -41,7 +41,7 @@ If any of those is a hard requirement, **stay on v2.x**. The
 ### Operational
 - **Binary name:** `otedama` (same).
 - **Binary size:** v2 ~65 MB → v3 ~15 MB (distroless).
-- **Dependencies:** v2 had ~50 Go modules; v3 has 2 (`x/crypto`, `yaml.v3`).
+- **Dependencies:** v2 had ~50 Go modules; v3 has 2 (`x/crypto`, `go.yaml.in/yaml/v3`).
 - **Config format:** still YAML, but schema completely different.
 - **Service installer:** new in v3 (`otedama service install`).
 

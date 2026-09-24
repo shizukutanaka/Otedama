@@ -136,6 +136,12 @@ rationale in `go.mod`. Migration was scoped but not performed in session
 lookup (`sum.golang.org` returns Forbidden), so `go get` cannot verify the
 new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
 
+**Resolved (session 255):** migrated to `go.yaml.in/yaml/v3 v3.0.5` — a
+true drop-in (`NewDecoder`, `KnownFields`, `NewEncoder` unchanged), so
+only the two import sites moved. v3 (frozen, security-fixes-only) was
+chosen over v4 (active development) as the minimal-diff step that
+restores criterion-3 compliance via the YAML org's security maintenance.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model

@@ -10,6 +10,105 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 255 — 難易度上昇中の飛行中シェア拒否を良性分類（ESP-Miner #212）＋ `rejectByReason` マップのデータ競合（致命的なconcurrent-map-write可能性）を修正)
+
+**ESP-Miner #212 相当の良性拒否分離.** プールが `mining.set_difficulty` /
+`SetTarget` で難易度を上げると、旧（より緩い）ターゲットに対して解いた
+飛行中シェアは「above target / low difficulty share」として拒否される。
+このシェアは発行時点では有効であり、**拒否はマイナーの故障ではなく
+プロトコルのタイミング産物**——にもかかわらず従来は
+`sharesRejected`・reject-rate・stale-rateに混入し、採用率が実態より
+悪化して見えた。ESP-Miner #212 が報告する同一レースを、RESEARCH
+_IMPROVEMENTS の session-226 項目4の残件として対応した。
+
+実装: `miner.Share` に `Target`（発行時 `Work.Target`。wire非送信）を
+追加し、`engine.benignTransitionReject` が `hash ≤ share.Target` かつ
+`hash > 現在ターゲット` を厳密に検査する（発行時は有効・上昇後のみ無効
+→良性）。V1は捕捉したshare + `sess.SuggestedDifficulty()`、V2は
+`SubmitSharesError.SequenceNumber` → 新設 `submitShares` マップで相関する。
+良性判定は `sharesRejected` を増やさず、
+`otedama_shares_rejected_by_reason_total{reason="difficulty_transition"}`
+をinfoレベルで記録する。判定は意図的に厳格: 現ターゲットを満たすのに
+拒否されたシェアはプールの誤分類か実害であり、**実 reject として残す**
+（正当な作業の拒否を隠さない）。`shares_unaccounted` の式も
+found−accepted−rejected−transition に更新（見落とし分が永続的に残らない）。
+
+**`rejectByReason` マップのデータ競合修正.** `engineMetrics.rejectReason` が
+`rejectByReason` マップを排他なしにlazy-createしていた。V1 submit経路は
+**応答ごとにgoroutineを生成**するため、2本の並行拒否（例: stale と
+difficulty が同時到着）で `fatal error: concurrent map write` が起き得た
+——クラッシュはfatalでrecover不能。`rejectByReasonMu sync.Mutex` を追加し
+書き込みを保護、読み取り側（`updateShareRates` の stale率・unaccounted
+計算）も `rejectCount` ヘルパ経由でロック下に統一した。
+
+**テスト4件追加.** `TestBenignTransitionReject`（発行時適合＋現在不適合→
+良性、適合継続→実reject、発行時も不適合→実reject、ターゲット不明→保守的に
+実reject）、`TestV1CurrentShareTarget`（難易度0→ゼロHashで保守的判定）、
+`TestRunSessionV1_TransitionRejectCountedBenign`（モックプールが
+set_difficulty=1e9送信後に "low difficulty share" で拒否→
+`sharesRejected=0`・`rejectByReason[difficulty_transition]=1` を確認。
+単一readループが通知を順序通り処理するため決定的）、
+`TestEngineMetrics_UpdateShareRates_TransitionRejectsExcluded`（judged/
+acceptance/rejectRate/unaccounted からの除外を確認）。
+
+### Changed (session 255 — 依存・ツールチェーン衛生: session 251の保留3件を実施)
+
+session 251 が実行環境のモジュールプロキシ制約（`sum.golang.org` Forbidden）
+で保留した3件を実施。検証は全てモジュールプロキシ一次情報:
+
+- **`gopkg.in/yaml.v3` → `go.yaml.in/yaml/v3 v3.0.5`.** 上流
+  `go-yaml/yaml` が2025-04-01にアーカイブ済みでCLAUDE.md §外部依存
+  基準3（直近1年以内の有意なメンテナンス）に違反していた。後継の
+  YAML-org管理 `go.yaml.in/yaml/v3` は完全なドロップイン
+  （`NewDecoder`/`KnownFields`/`NewEncoder` のAPI不変）のため、
+  インポート行2箇所のみ変更。セキュリティ修正のみの凍結v3を、
+  活発開発中のv4より最小差分として選択（ADR-003 erratumを解決済み
+  として更新）。
+- **`golang.org/x/crypto` v0.23.0 → v0.55.0.** `go 1.25` 下で最新
+  （v0.56+/v0.57はgo 1.26要求）。`x/sys` v0.20.0→v0.47.0 を推移で
+  取得。`govulncheck ./...`: 到達可能な脆弱性0（残3件は未使用
+  `ssh`/`openpgp`配下で未到達）。
+- **`go 1.22→1.25.0` + `toolchain go1.24.0→go1.25.7`.** リポジトリの
+  四半期toolchain方針に従い最新安定をpin。**コンテナ対応
+  GOMAXPROCS（Go 1.25導入）が実際にコンパイルされるようになった**
+  ——`GODEBUG_NOTES.md` が「load-bearing」と書きつつ session 251時点
+  では未享受だった機能で、Kubernetesで `cpu: 2` 指定のマイナーが
+  ホスト全コアをスケジュールする問題を解消。`go` 行が `1.25.0`
+  のpatch形式になるのは `x/crypto` の `go >= 1.25.0` 要求に
+  `go mod tidy` が従うためで、裸minor表記はツール側で廃止済み。
+- `.golangci.yml` の `run.go: "1.22"→"1.25"` 追従。`go.mod` の
+  `godebug` pin（`tlsmlkem`/`panicnil`/`randautoseed`）は不変のまま
+  1.25でも有効。
+
+### Docs (session 255 — 記述の実態追従)
+
+- **`docs/SPECIFICATION.md` §6 / `docs/API.md`:** `shares_rejected_
+  by_reason_total` のreason列挙に `difficulty_transition` を追加し、
+  `shares_unaccounted` の式を found−accepted−rejected−transition に
+  更新。`difficulty_transition` は `shares_total{status="rejected"}`
+  に計上されない良性区分である旨を明記。
+- **`GODEBUG_NOTES.md`:** ベースラインブロックを `go 1.25.0` +
+  `toolchain go1.25.7` へ更新。`containermaxprocs` 節の「未享受
+  （session 251確認）」を「session 255で有効化」に書き換え、
+  `GODEBUG=containermaxprocs=0` のrevert手段を追記。
+- **`docs/adr/ADR-003`:** session 251のErratumに「Resolved (session
+  255)」を追記（v3.0.5採用とv4を選ばなかった理由を記録）。
+- **`docs/SUSTAINABILITY.md`・`docs/AUDIT_CHECKLIST.md`・
+  `docs/THREAT_MODEL.md`・`docs/MIGRATING-FROM-V2.md`:** `go 1.22`/
+  `go1.24.0`/`gopkg.in/yaml.v3` の記述を新ベースライン・新import
+  パスへ是正。
+- **`docs/RESEARCH_IMPROVEMENTS.md`:** session-251 items 1/2/3
+  （yaml移行・x/crypto・toolchain）と session-226 由来の
+  ESP-Miner #212 item 4 を ✅ に更新し、実施内容を追記。
+- ADR-005内の `yaml.v3` 言及は当該決定の歴史的記述（依存数3の
+  文脈）として意図的に不変のままとした。
+
+検証: `go build ./...`・`go test ./...`（全パッケージgreen）・
+`go test -race ./internal/engine/`・`GOTOOLCHAIN=go1.25.7
+golangci-lint run`（新規指摘なし、既存指摘は据え置き）・
+`deadcode -test=false ./cmd/otedama`（新規dead codeなし）・
+`govulncheck ./...`（到達可能0）・metrics_doc_test green。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

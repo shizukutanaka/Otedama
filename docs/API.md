@@ -239,8 +239,8 @@ addresses) appear once their first event occurs.
 | `otedama_shares_found_total` | counter | — | Shares found locally (before submission). |
 | `otedama_device_shares_found_total` | counter | `device` | Per-device breakdown of shares found. |
 | `otedama_shares_total` | counter | `status={accepted,rejected}` | Shares acknowledged by pool. |
-| `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
-| `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other}` | Rejections by inferred root cause. |
+| `otedama_shares_unaccounted` | gauge | — | Found locally but not yet judged (found − accepted − rejected − difficulty-transition-rejected, clamped ≥0). A sustained value means shares are not reaching the pool. |
+| `otedama_shares_rejected_by_reason_total` | counter | `reason={stale,duplicate,difficulty,hardware,other,difficulty_transition}` | Rejections by inferred root cause. `difficulty_transition` marks a share that met its issue-time target but was rejected after the pool raised difficulty in flight (benign; excluded from `shares_total{status="rejected"}`). |
 | `otedama_last_reject_seconds` | gauge | `reason=…` | Unix timestamp of the most recent rejection of each category (distinguishes ongoing from cleared problems). |
 | `otedama_share_acceptance_rate` | gauge | — | Accepted / judged (1.0 = all accepted). |
 | `otedama_reject_rate` | gauge | — | Rejected / judged (complement of acceptance; >0.03 investigate). |

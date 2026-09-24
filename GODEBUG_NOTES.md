@@ -30,8 +30,8 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.22
-toolchain go1.24.0
+go 1.25.0
+toolchain go1.25.7
 
 godebug (
     panicnil=0
@@ -40,12 +40,14 @@ godebug (
 )
 ```
 
-**Why split `go` from `toolchain`:** the `go 1.22` directive declares
+**Why split `go` from `toolchain`:** the `go 1.25.0` directive declares
 the **language semantics** Otedama's source assumes, while
-`toolchain go1.24.0` is the **build toolchain** used in CI and
+`toolchain go1.25.7` is the **build toolchain** used in CI and
 recommended for users. This split lets users with older toolchains
 (Linux distros, NixOS pinning) still build Otedama, while CI gets
-the latest crypto and runtime fixes.
+the latest crypto and runtime fixes. (`go mod tidy` writes the `go`
+line in full `1.25.0` patch form because `x/crypto` requires
+`go >= 1.25.0`; the bare-minor convention was retired by the tool.)
 
 The `go` line is bumped roughly once a year, six months after each
 Go minor's release, on a dedicated PR. The `toolchain` line is
@@ -53,7 +55,7 @@ bumped quarterly to track the latest stable Go.
 
 ## Active knobs
 
-As of 2026-04-30:
+As of 2026-09-24:
 
 - **`tlsmlkem=1`** — explicitly enable hybrid post-quantum TLS key
   exchange (X25519MLKEM768) for outbound connections to price feeds.
@@ -61,8 +63,8 @@ As of 2026-04-30:
   downstream reviewers and survives future default flips. This knob
   was named `tlskyber` on the Go 1.23 draft (X25519Kyber768) and was
   renamed `tlsmlkem` in Go 1.24 when the construction was
-  standardized; our `toolchain go1.24.0` therefore requires the new
-  name (the old name is an "unknown godebug" build error on 1.24).
+  standardized; our `toolchain go1.25.7` therefore requires the new
+  name (the old name is an "unknown godebug" build error on 1.24+).
 
 - **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
   a synthetic non-nil error from `panic(nil)`, rather than reverting
@@ -129,19 +131,16 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- **Not yet in effect (verified session 251):** `go.mod` still pins
-  `toolchain go1.24.0`, which predates this feature — so the
-  container-aware default is **not compiled into current builds**.
-  A Kubernetes miner today still sees the host's full core count. This
-  benefit only materializes once the `toolchain` line is bumped to
-  go1.25.x (per the quarterly-toolchain policy above; go1.24.0 is now
-  over a year old). The bump was scoped but not performed in session
-  251 because this environment's module proxy denies the Go toolchain
-  download (`sum.golang.org` Forbidden). Tracked in
-  RESEARCH_IMPROVEMENTS session-251 item 3.
-- Otedama impact: positive once the toolchain bump lands — fixes a
-  class of "miner saturates noisy-neighbor pod limit" reports we
-  expect from Kubernetes users.
+- **In effect since session 255:** the `go.mod` bump to `go 1.25.0`
+  (plus `toolchain go1.25.7`) compiled the container-aware default in.
+  Previously deferred in session 251 because that environment's module
+  proxy denied the toolchain download (`sum.golang.org` Forbidden);
+  the proxy path works now. A Kubernetes miner with `cpu: 2` now
+  schedules ~2 `GOMAXPROCS` instead of the host's full core count.
+  Revert per-process with `GODEBUG=containermaxprocs=0` if a workload
+  legitimately needs host-wide parallelism.
+- Otedama impact: positive — fixes a class of "miner saturates
+  noisy-neighbor pod limit" reports we expect from Kubernetes users.
 - Removal risk: very low — this is a fix, not a deprecation. The
   knob to revert (`containermaxprocs=0`) will exist for years.
 

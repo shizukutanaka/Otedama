@@ -512,7 +512,7 @@ endpoint against current vendor documentation. Tags as before
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
-4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
+4. ✅ **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
    difficulty active when issued, validate locally against that, and treat
@@ -532,6 +532,17 @@ endpoint against current vendor documentation. Tags as before
    as a reject) remains open — the target now updates correctly on every new
    job, but shares in flight when `set_difficulty` changes are not yet
    re-validated against the difficulty active at issue time.
+   — **Done (session 255):** `miner.Share` now carries `Target` (the
+   issue-time `Work.Target`, not on the wire). On a `difficulty`-class
+   reject, `benignTransitionReject` checks `hash ≤ share.Target` AND
+   `hash > current target` — i.e. valid when produced, invalid only
+   after the raise — and routes it to
+   `otedama_shares_rejected_by_reason_total{reason="difficulty_transition"}`
+   at info level instead of `sharesRejected`. V1 correlates via the
+   captured share + `sess.SuggestedDifficulty()`; V2 via
+   `SubmitSharesError.SequenceNumber` → a new `submitShares` map.
+   Deliberately strict: a share meeting the current target but still
+   rejected stays a *real* reject (pool mislabel or bug worth seeing).
 5. ✅ **Handle `client.show_message` and unknown V1 notifications gracefully.**
    ESP-Miner added explicit `client.show_message` handling (pools send
    operator notices this way); an unhandled method can desync a strict
@@ -757,7 +768,7 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
    The `go-yaml/yaml` source repo was archived by its author; the YAML org
    took over at import path `go.yaml.in/yaml`, where v3 is frozen to
    security-fixes-only and active work is in v4. This makes the dependency
@@ -767,22 +778,39 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
-2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
-   (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
+   — **Done (session 255):** migrated to `go.yaml.in/yaml/v3 v3.0.5` —
+   true drop-in (`NewDecoder`/`KnownFields`/`NewEncoder` unchanged), so
+   only the two import lines moved. ADR-003 erratum resolved in place;
+   AUDIT_CHECKLIST/THREAT_MODEL/MIGRATING-FROM-V2 dep lists updated.
+   Stayed on v3 (frozen, security-only) rather than v4 (active dev):
+   v3 is the minimal-diff step and satisfies criterion 3 via the YAML
+   org's security maintenance.
+2. ✅ **[FETCHED] `golang.org/x/crypto` v0.23.0 was ~31 minor versions behind;
+   CVEs since are all unreachable here.**
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
    are all in the `ssh`/`openpgp` subpackages; Otedama imports only
    `chacha20poly1305`, `scrypt`, and `ecdh`, so `govulncheck` should report
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
-   that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
+   — **Done (session 255):** bumped to **v0.55.0** (the newest version
+   compatible with `go 1.25`; v0.56+/v0.57 require go 1.26). Pulled
+   `x/sys` v0.20.0 → v0.47.0 transitively. `govulncheck ./...`: 0
+   reachable vulnerabilities (3 module-level findings remain
+   unreachable, all in unused `ssh`/`openpgp` paths).
+3. ✅ **[SNIPPET→VERIFIED] `toolchain go1.24.0` predated the container-aware
+   GOMAXPROCS that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
    toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
    section — which calls that behavior "load-bearing for correct CPU mining
    throttling under cgroup constraints" — describes a benefit not actually
    compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
    own quarterly-toolchain policy. (go.dev/doc/go1.25)
+   — **Done (session 255):** `go 1.22 → 1.25.0` and
+   `toolchain go1.24.0 → go1.25.7`. The container-aware GOMAXPROCS
+   default is now compiled in (GODEBUG_NOTES.md updated); revert with
+   `GODEBUG=containermaxprocs=0`. `.golangci.yml` `run.go` bumped to
+   match.
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the

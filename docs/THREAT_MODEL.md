@@ -121,7 +121,7 @@ a panic in the decode path still terminates the miner (DoS, below).
 version.
 
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
+`go.yaml.in/yaml/v3`, and the Go standard library. All GitHub Actions
 pinned by SHA. Dependabot auto-updates with review. govulncheck runs
 in CI. See ADR-003.
 
