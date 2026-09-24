@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactored (session 416 — CS 観点: arbitration ループの時刻源を統一)
+
+- **仲裁ループ内の全論理時刻を `arbitrationLoopOpts.clk` へ統一** — 第三の時計
+  バイパス: stale-stream 剪定・reliability `UpdateAt`・`settleLedger`・
+  `DecisionSnapshot.At` が全て `time.Now()` 直読みで、session 414/415 と同型の
+  時刻系分裂を残していた。`Options.Clock` 由来の clk を注入（nil →
+  `clock.System{}`、quote.ts フォールバックを含む）。`recordExplainSnapshot` は
+  直叩き単体テスト経路のため nil 時は実時刻へフォールバック。併せて検証済み:
+  `fanIn` の ctx 双方向処理・`streamsSlice`→Decide の StreamID タイブレークによる
+  順序不変性・`activity` の providers スライス順読み・switch-ledger の
+  counterfactual 解決 — 全て健全。
+
 ### Refactored (session 415 — CS 観点の改善洗い出し（第一原理・ソクラテス問答）: セッションループの時刻源を完全統一)
 
 - **セッションループ内の全論理時刻を `sessionOpts.clk` へ統一** — `rt.tick`・
