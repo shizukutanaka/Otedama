@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/Otedama/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Alpha](https://img.shields.io/badge/Status-Alpha-orange)](CHANGELOG.md)
 
 **遊休計算資源を、非カストディで最大収益化する自律型ソフトウェア層。**
@@ -34,13 +34,13 @@ Otedamaの設計は三つの原則に従います。John Carmackのパフォー�
 
 Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通りです。Stratum V2/V1対応のマイニングクライアント（実際に採掘します。複数プールを明示設定すれば優先順位付きフェイルオーバーが機能し、未設定時は組み込みの既定プール1つにフォールバック）。Lightning関連コードによるBIP-39シードの暗号化保管（決済処理そのものは未実装）。2系統（実採掘・simulated AI推論）のリアルタイム裁定エンジン。CPU自動検出（実マイニング対応）およびGPUプレゼンス検出（Linux・macOS・Windows対応、ただしcompute dispatchは未実装のためGPUでのマイニング・推論は不可）。Prometheus互換のメトリクスエクスポート（`/metrics`・`/healthz`・`/readyz`）。
 
-以下は現時点で未実装、またはv4.0以降の計画のみの機能です：ASIC検出、ZKPベース認証、プラグインアーキテクチャ、Web管理インターフェース、OpenTelemetry分散トレーシング、署名付きバイナリ配布、分散レンダリング、科学計算委託。詳細は `docs/KNOWN_LIMITATIONS.md` を参照してください。
+以下は現時点で未実装、またはv4.0以降の計画のみの機能です：ZKPベース認証、プラグインアーキテクチャ、Web管理インターフェース、OpenTelemetry分散トレーシング、署名付きバイナリ配布、分散レンダリング、科学計算委託。詳細は `docs/KNOWN_LIMITATIONS.md` を参照してください。
 
 ## クイックスタート / Quick Start
 
 ### 必要環境 / Requirements
 
-Go 1.22以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux・macOS・Windows上で検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
+Go 1.25以上、Linux・macOS・Windows・FreeBSDのいずれか、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux・macOS・Windows上で検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは cgminer RPC API 経由のオプトイン検出に対応します（`asic_endpoints` 設定、`docs/KNOWN_LIMITATIONS.md` 参照）。
 
 ### インストール / Installation
 
@@ -85,6 +85,8 @@ otedama <command> [flags]
 | `service status` | サービス状態を表示 / Show background service status |
 | `doctor` | 自己診断チェックを実行 / Run self-diagnostic checks |
 | `arb explain` | 裁定決定の内訳を表示 / Show the latest arbitration decision breakdown |
+| `wallet` | Lightning ウォレットの検証・再暗号化 / Verify or re-encrypt the Lightning wallet |
+| `completion` | シェル補完スクリプトを生成 / Generate shell completions (bash/zsh/fish) |
 | `help` | ヘルプを表示 / Print help |
 
 各コマンドの詳細フラグは `otedama <command> --help` で確認できます。
