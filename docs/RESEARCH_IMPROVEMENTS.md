@@ -1251,6 +1251,36 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 270 increment (rate-feed NaN hardening)
+
+### Implemented
+
+1. ✅ **NaN guard on the rate plausibility band** — fuzz-sweep analysis
+   of the exchange extractors (the next untrusted-input boundary after
+   pool protocols): `strconv.ParseFloat` accepts the tokens "NaN",
+   "Inf", "Infinity" (case-insensitive) where JSON numbers cannot
+   express them, so the string-typed sources (Coinbase `amount`,
+   Kraken `c[0]`) could return NaN. Every ordered comparison against
+   NaN is false, so it slipped through `rate < min || rate > max` into
+   the median and poisoned `f.rate` — corrupting every USD-denominated
+   arbitration comparison downstream. doFetch now drops non-finite
+   readings explicitly (±Inf was already caught by the bounds; only
+   NaN needed the explicit check). Verified end-to-end via httptest.
+
+2. ✅ **`FuzzRateExtractors`** — selector-dispatched fuzz over all
+   three exchange extractors asserting no panic + no non-finite value
+   survives the band. ~1.6M execs/22s, zero failures.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **CoinGecko extractor** — unmarshals into `float64` directly, so
+  NaN/Inf are syntax errors / `1e999` overflow errors at decode time;
+  unreachable for non-finite values. (Parsers that go through
+  ParseFloat were the only gap.)
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 269 increment (V2 message-decoder fuzz)
 
 ### Implemented
@@ -1538,6 +1568,11 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-270 additions (September 2026): the BTC/USD rate feed — the
+last un-audited untrusted-input boundary (HTTP exchange responses) —
+is fuzzed; NaN/Inf readings that ParseFloat admits but JSON cannot
+express are dropped before the median.*
 
 *Session-269 additions (September 2026): SV2 payload decoders get a
 dispatch fuzzer with an encode↔decode round-trip invariant — found a

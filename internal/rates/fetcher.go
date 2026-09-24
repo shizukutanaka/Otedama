@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -298,12 +299,16 @@ func (f *Fetcher) doFetch(ctx context.Context) error {
 			fetchErrs = append(fetchErrs, r.err)
 			continue
 		}
-		if r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
+		if math.IsNaN(r.rate) || r.rate < minPlausibleRateUSD || r.rate > maxPlausibleRateUSD {
 			// A reading outside the sanity band is a unit/parse error or
 			// manipulation, never a real quote. Drop it so it cannot pull the
-			// median. Stay quiet on a plain zero (a source that simply has no
-			// value yet); only flag genuinely implausible non-zero readings.
-			if r.rate != 0 {
+			// median. NaN must be checked explicitly: every ordered comparison
+			// against it is false, so "NaN" parsed by ParseFloat would otherwise
+			// slip through both bounds into the median (±Inf is caught by the
+			// bounds themselves). Stay quiet on a plain zero (a source that
+			// simply has no value yet); only flag genuinely implausible
+			// non-zero readings — including NaN, which is never a real quote.
+			if r.rate != 0 || math.IsNaN(r.rate) {
 				f.logMsg(fmt.Sprintf("rates: ignoring implausible reading %.2f (outside [%.0f, %.0f])",
 					r.rate, minPlausibleRateUSD, maxPlausibleRateUSD))
 			}

@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 270 — レートフィード堅牢化)
+
+**BTC/USD レートの非有限値（NaN）混入を防止** —— 取引所レスポンスの
+エクストラクタ監査で発見した実バグ: `strconv.ParseFloat` は JSON 数値
+では表現できない `"NaN"`/`"Inf"`/`"Infinity"` を受理するため、文字列型
+フィールドを持つ Coinbase（`amount`）・Kraken（`c[0]`）ソース経由で
+NaN が返り得た。NaN は全ての順序比較が false になるため
+`rate < min || rate > max` の健全性帯域を素通りし、median に混入して
+`f.rate` を汚染 —— 下流の USD 建て裁定比較全般を破壊し得た。
+`doFetch` が非有限値を明示的に棄却するよう修正（±Inf は従来の境界で
+捕捉済み、NaN のみ明示チェックが必要だった）。CoinGecko は float64 へ
+直接 unmarshal するため非有限値は構文/オーバーフローエラーとなり非該当。
+
+**`FuzzRateExtractors`** —— 3取引所エクストラクタをセレクタでディスパッチ
+するファズを追加。パニックなし + 帯域を通過する値が必ず有限であることを
+検証（約160万 exec/22秒、失敗ゼロ）。httptest 経由で NaN 棄却の
+エンドツーエンドテストも追加。
+
 ### Fixed (session 269 — V2 デコーダーファズ)
 
 **`FuzzDecodeV2Message` — 全12種の V2 ペイロードデコーダーを網羅する
