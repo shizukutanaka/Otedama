@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 361 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール URL の空白・制御文字拒否)
+
+- **`pools[].url` の空白・制御バイトを検証で拒否** — session 360 の userinfo
+  拒否と同経路の残余面: post-scheme 部に空白や C0 制御バイトを含む URL は
+  従来検証を通過し、TUI ダッシュボード等の非サニタイズ面へ生描画され得た
+  （端末エスケープ注入）上で dial も失敗するだけの値。`unicode.IsSpace` /
+  `IsControl` で起動時に明示拒否。
+
 ### Security (session 360 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール URL の userinfo 拒否)
 
 - **`pools[].url` の `user:pass@` userinfo を検証で拒否** — 認証情報は

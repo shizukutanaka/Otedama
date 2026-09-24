@@ -41,6 +41,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 )
@@ -941,6 +942,14 @@ func validatePoolURL(raw string) error {
 			// before the dial fails anyway.
 			if strings.Contains(rest, "@") {
 				return fmt.Errorf("URL userinfo (user:pass@) is not supported; use the pool's user/password fields")
+			}
+			// Whitespace and control bytes in the host part would render
+			// raw on the TUI dashboard (and in any unsanitised surface)
+			// and can only ever make the dial fail — reject them here.
+			if strings.IndexFunc(rest, func(r rune) bool {
+				return unicode.IsSpace(r) || unicode.IsControl(r)
+			}) >= 0 {
+				return fmt.Errorf("URL must not contain whitespace or control characters")
 			}
 			return nil
 		}

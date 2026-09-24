@@ -253,6 +253,9 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"empty host rejected", "stratum+v2://", true},
 		{"userinfo rejected", "stratum+tcp://worker:secret@pool.example.com:3333", true},
 		{"user-only userinfo rejected", "stratum+tcp://worker@pool.example.com:3333", true},
+		{"embedded space rejected", "stratum+tcp://pool.example.com:3333 extra", true},
+		{"embedded tab rejected", "stratum+tcp://pool.example.com:	3333", true},
+		{"escape byte rejected", "stratum+tcp://\x1b[2Jpool.example.com:3333", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
