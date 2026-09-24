@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 265 — ワーカー名配線)
+
+**`mining.submit` が認証済みワーカー識別を送信するよう修正**.
+Stratum V1 spec では mining.submit の第1パラメータはワーカー名だが、
+コードはリテラル `"otedama"` を送信していた —— `mining.authorize`
+が設定値 `address.worker`/`pool.User` で認証する一方、全シェアが
+別ワーカー名義でプールに届き、リグ別統計・ワーカー別診断が
+機能していなかった。`session.user` が認証済み識別を保持
+（`Negotiate` 非経由のセッションのみ従来の `"otedama"` 既定）。
+新テストでワイヤ上のパラメータを検証。
+
+**是正**: Cat 7 #11（Provider 重複解消）は `pollingProvider` として
+実装済みの stale ⬜ マーカーを ✅ に訂正。Cat 5 #3（プロバイダ
+死活監視）は `streamStaleTimeout` 剪定済みで ✅、Cat 12 #1
+（Noise フレーム長算術ファズ）は session 257–258 で実装済みで ✅。
+
 ### Fixed (session 264 — V2 reject コード分類)
 
 **`rejectClass` が Stratum V2 の canonical エラーコードを正しく分類**

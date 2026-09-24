@@ -114,6 +114,13 @@ type session struct {
 	extranonce1     string
 	extranonce2Size int
 
+	// user is the authorized worker identity sent as mining.submit's
+	// first param — the Stratum V1 spec places the worker name there, and
+	// pools attribute stats/rejects to it. Defaults to the client name so
+	// sessions constructed without Negotiate still send a valid field;
+	// the dialer overwrites it with conn.creds.User after authorize.
+	user string
+
 	// ctx controls the read-loop lifetime; cancelled on Close.
 	ctxCancel context.CancelFunc
 	closeOnce sync.Once
@@ -127,6 +134,7 @@ var (
 
 func newSession(conn *connection) *session {
 	return &session{
+		user:     "otedama",
 		conn:     conn,
 		reader:   bufio.NewReaderSize(conn.raw, maxLineBytes), // bounds readLine
 		jobsCh:   make(chan poolproto.Job, 8),
@@ -339,7 +347,7 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		en2 = strings.Repeat("00", s.extranonce2Size)
 	}
 	params := []any{
-		"otedama", // worker name; configurable in v3.1
+		s.user, // worker name — the identity authorize established
 		sub.JobID,
 		en2,
 		fmt.Sprintf("%08x", sub.NTime),

@@ -290,6 +290,10 @@ type fakePool struct {
 	conn      net.Conn
 	verdict   bool   // result for mining.submit
 	notifyJob string // optional: job ID to send as mining.notify on start
+
+	// paramsCh, when non-nil, receives the params of each mining.submit
+	// request for assertions on the wire format (never blocks the pool).
+	paramsCh chan json.RawMessage
 }
 
 func (p *fakePool) run() {
@@ -314,6 +318,12 @@ func (p *fakePool) run() {
 			continue
 		}
 		if req.Method == "mining.submit" {
+			if p.paramsCh != nil {
+				select {
+				case p.paramsCh <- req.Params:
+				default:
+				}
+			}
 			result := "true"
 			if !p.verdict {
 				result = "false"
@@ -1934,4 +1944,42 @@ func TestDial_SetsTCPNoDelay(t *testing.T) {
 	if val == 0 {
 		t.Error("TCP_NODELAY not set on the pool socket (ESP-Miner #1722)")
 	}
+}
+
+// TestSession_Submit_SendsAuthorizedUser pins the Stratum V1 spec: the
+// first mining.submit param is the worker name, and it must be the
+// identity mining.authorize established — not the client default — or
+// the pool attributes stats (and per-worker reject reasons) to a
+// different worker. The dialer sets sess.user post-authorize; sessions
+// built without Negotiate fall back to the client name.
+func TestSession_Submit_SendsAuthorizedUser(t *testing.T) {
+	run := func(t *testing.T, wantUser string) {
+		t.Helper()
+		clientConn, serverConn := net.Pipe()
+		pool := &fakePool{conn: serverConn, verdict: true, paramsCh: make(chan json.RawMessage, 4)}
+		go pool.run()
+		conn := &connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1}
+		sess := newSession(conn)
+		sess.user = wantUser // as the dialer sets it after authorize
+		sess.start(context.Background())
+		defer sess.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if _, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "J", Nonce: 1, NTime: 1}); err != nil {
+			t.Fatalf("Submit: %v", err)
+		}
+		var params []any
+		select {
+		case raw := <-pool.paramsCh:
+			if err := json.Unmarshal(raw, &params); err != nil {
+				t.Fatalf("params unmarshal: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("no mining.submit params captured")
+		}
+		if len(params) == 0 || params[0] != wantUser {
+			t.Errorf("submit params[0] = %v, want %q", params, wantUser)
+		}
+	}
+	t.Run("authorized identity", func(t *testing.T) { run(t, "bc1qaddr.rig1") })
 }

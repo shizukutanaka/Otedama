@@ -155,6 +155,12 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		_ = sess.Close()
 		return nil, fmt.Errorf("%w: worker not authorized", poolproto.ErrHandshakeFailed)
 	}
+	// mining.submit carries this identity as its worker-name param;
+	// without it every share would arrive attributed to the client
+	// default instead of the authorized user.
+	if user != "" {
+		sess.user = user
+	}
 
 	// Step 3 (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)

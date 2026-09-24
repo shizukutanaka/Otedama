@@ -218,8 +218,12 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 1. 🟡 **Real Akash REST integration** — currently simulated
    (KNOWN_LIMITATIONS §1). The single biggest placeholder.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
+3. ✅ **Provider health/heartbeat** — detect a dead inference provider and
    stop routing GPUs to it (parallels HashrateMonitor for mining).
+   **Done:** `runArbitrationLoop` expires any stream with no quote for
+   `streamStaleTimeout` (3 min) via `pruneStaleStreams`, logs the expiry,
+   and `otedama_arbitration_streams` drops accordingly — a dead provider
+   can no longer keep a routing slot on a stale quote.
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
@@ -305,28 +309,17 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
-11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
+11. ✅ **Deduplicate the two `Provider` implementations** — done: the shared
+    core described here already exists as `pollingProvider` in
+    `internal/provider/polling.go` (embedded by MiningProvider and
+    AkashProvider; shared Stop/launch/loop/send, per-provider publish). (maintainability;
     recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
     ad hoc"). `MiningProvider` and `AkashProvider`
     (`internal/provider/{mining,ai_inference}.go`) share substantial
-    boilerplate: `Stop()` is **byte-identical** (cancel → `wg.Wait()` → nil
-    the cancel → re-create the buffered `quoteCh`); `loop()` is identical
-    except the tick interval (30 s vs 60 s); `Start()` differs only in the
-    device filter (mining accepts all SHA-256d devices, Akash filters to
-    GPUs with `GeneralCompute`); and the channel "drop-oldest when full"
-    send pattern in `publish()` is copied in both. A small shared core — e.g.
-    an unexported `baseProvider` holding `{quoteCh, cancel, wg, mu}` with
-    shared `Stop()`, a `runLoop(interval, publishFn)`, and a `sendQuote()`
-    helper — would remove ~60 LOC and one class of drift bug. **Trade-off to
-    weigh before doing it:** the providers are deliberately simple and
-    independent (Pike: "boring over clever"); a shared base adds an
-    abstraction. A refactor must preserve three load-bearing behaviours: the
-    `quoteCh` re-creation in `Stop()` (so a stopped provider can be
-    restarted — see `TestMiningProvider_StopClearsStateForRestart`), the
-    buffered drop-oldest semantics, and the distinct tick intervals/device
-    filters. Verdict: worth doing as one focused refactor session with the
-    existing provider tests as the safety net; not urgent (no correctness
-    impact today).
+    boilerplate — **all preserved**: `quoteCh` re-creation in `Stop()`
+    (restartable providers), buffered drop-oldest sends, distinct tick
+    intervals (30s mining / 60s AI) and device filters (SHA-256d vs
+    GeneralCompute). (Marker corrected session 265 — the ⬜ was stale.)
 12. ✅ **`TestRunSession_StatsTickAndShareResponses` flakiness under heavy
     CPU contention — resolved** (`internal/engine/run_test.go`; found
     session 239, fixed session 242). It used to assert a "submit latency"
@@ -764,7 +757,7 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
    is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
    early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
    fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
@@ -775,6 +768,12 @@ Four verified items that *update* earlier entries with newer reality.
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
+   — **Done (sessions 257–258, verified 265):** `FuzzDecodeHeader`
+   asserts `MsgLength ≤ MaxMessageLength` + encode/decode round-trip,
+   `FuzzDecoder_ReadFrame` caps iterations + asserts payload/header
+   length agreement, `FuzzEncryptedConn_Read` covers the u16-length +
+   AEAD-reject surface (the arithmetic-overflow class the grant found).
+   ~4.9 M exec, zero crashes.
 2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
    SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
@@ -1243,6 +1242,35 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 265 increment (worker-name plumbing + marker sweep)
+
+### Implemented
+
+1. ✅ **mining.submit sends the authorized worker identity** — the first
+   `mining.submit` param is the worker name per the V1 spec, but the
+   code sent the literal `"otedama"` while `mining.authorize` used the
+   configured `address.worker`/`pool.User` identity — every share was
+   attributed to a different worker than the authorized one, breaking
+   per-rig stats and making per-worker pool diagnostics impossible.
+   `session.user` now carries the authorized identity (default
+   `"otedama"` only for sessions built without `Negotiate`). Test
+   asserts the wire param.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **Cat 7 #11 Provider dedup** — already done: `pollingProvider` in
+  `internal/provider/polling.go` is the shared core (embeds, shared
+  Stop/launch/loop, restartable `quoteCh` re-creation, distinct
+  intervals/filters preserved). Stale ⬜ marker corrected.
+- ✅ **Cat 5 #3 provider heartbeat** — already done: `streamStaleTimeout`
+  pruning in `runArbitrationLoop` + `otedama_arbitration_streams`.
+- ✅ **Cat 12 #1 Noise/frame overflow fuzzing** — already done
+  (sessions 257–258); boundary seeds and invariants present.
+- ❌ **Upstream deltas** — SRI v1.12.0 / ESP-Miner v2.15.3 swept in
+  session 264; nothing newer.
+
+---
+
 ## September 2026 research pass — session 264 increment (V2 reject-code taxonomy)
 
 ### Implemented
@@ -1390,6 +1418,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-265 additions (September 2026): Stratum V1 spec §mining.submit
+worker-name param attribution; provider-lifecycle audit confirming
+pollingProvider/stale-stream coverage.*
 
 *Session-264 additions (September 2026): sv2-spec canonical
 SubmitSharesError codes (stale-share, low-difficulty-share,
