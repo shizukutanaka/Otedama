@@ -4,8 +4,11 @@
 package engine
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -2610,5 +2613,171 @@ func TestHandshake_RejectsMismatchedRequestID(t *testing.T) {
 	_, _, err := handshake(context.Background(), clientConn, dec, "stratum+v2://pool", "user", nil)
 	if err == nil || !strings.Contains(err.Error(), "request id") {
 		t.Fatalf("handshake with mismatched ReqID = %v, want request-id error", err)
+	}
+}
+
+// ============================================================================
+// runSessionV1: pool notices + reconnect directives reach the log
+// ============================================================================
+
+// v1ScriptedPool speaks just enough Stratum V1 over a real TCP listener to
+// complete the dialer's subscribe/authorize handshake, then runs a
+// caller-supplied script (send notifications, hold or close the socket).
+type v1ScriptedPool struct {
+	t    *testing.T
+	ln   net.Listener
+	addr string
+	step func(conn net.Conn, write func(string))
+}
+
+func newV1ScriptedPool(t *testing.T, step func(conn net.Conn, write func(string))) *v1ScriptedPool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("v1ScriptedPool: listen: %v", err)
+	}
+	p := &v1ScriptedPool{t: t, ln: ln, addr: ln.Addr().String(), step: step}
+	go p.serve()
+	return p
+}
+
+func (p *v1ScriptedPool) URL() string { return "stratum+tcp://" + p.addr }
+func (p *v1ScriptedPool) Close()      { p.ln.Close() }
+
+// write sends one JSON-RPC line.
+func (p *v1ScriptedPool) write(conn net.Conn, s string) {
+	conn.Write([]byte(s + "\n")) //nolint:errcheck
+}
+
+func (p *v1ScriptedPool) serve() {
+	conn, err := p.ln.Accept()
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	write := func(s string) { p.write(conn, s) }
+
+	// Answer every JSON-RPC call line: subscribe negotiates the extranonce
+	// pair, authorize accepts, extranonce.subscribe is optional support.
+	// Read line-by-line with a deadline so a stalled client cannot wedge
+	// the pool goroutine past the test's lifetime.
+	dec := bufio.NewReader(conn)
+	for {
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+		line, err := dec.ReadString('\n')
+		if err != nil {
+			return
+		}
+		var req struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			return
+		}
+		if req.Method == "" {
+			continue // share submission responses are not spoken
+		}
+		var reply string
+		switch req.Method {
+		case "mining.subscribe":
+			reply = fmt.Sprintf(`{"id":%s,"result":[[["mining.set_difficulty","deadbeef"],["mining.notify","cafe"]],"01020304",4],"error":null}`, mustJSON(req.ID))
+		case "mining.authorize":
+			reply = fmt.Sprintf(`{"id":%s,"result":true,"error":null}`, mustJSON(req.ID))
+		case "extranonce.subscribe":
+			reply = fmt.Sprintf(`{"id":%s,"result":true,"error":null}`, mustJSON(req.ID))
+		case "mining.configure":
+			reply = fmt.Sprintf(`{"id":%s,"result":{},"error":null}`, mustJSON(req.ID))
+		default:
+			reply = fmt.Sprintf(`{"id":%s,"result":null,"error":null}`, mustJSON(req.ID))
+		}
+		write(reply)
+		if req.Method == "extranonce.subscribe" {
+			// Handshake complete — run the scenario.
+			p.step(conn, write)
+			return
+		}
+	}
+}
+
+// mustJSON renders an unmarshalled JSON id back to its literal form.
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "0"
+	}
+	return string(b)
+}
+
+// A client.show_message notice is operational signal — maintenance windows,
+// bans, advisories. Dropping it on the floor would leave the operator blind
+// to why the pool behaves as it does, so it must reach the log.
+func TestRunSessionV1_PoolNoticeLogged(t *testing.T) {
+	pool := newV1ScriptedPool(t, func(conn net.Conn, write func(string)) {
+		write(`{"id":null,"method":"client.show_message","params":["pool maintenance in 10 min"]}`)
+		time.Sleep(400 * time.Millisecond)
+	})
+	defer pool.Close()
+
+	var mu sync.Mutex
+	var captured []string
+	opts := sessionOpts{
+		poolURL:  pool.URL(),
+		user:     "alice",
+		interval: 50 * time.Millisecond,
+		log: func(level, msg string) {
+			mu.Lock()
+			captured = append(captured, level+":"+msg)
+			mu.Unlock()
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = runSessionV1(ctx, opts)
+
+	mu.Lock()
+	joined := strings.Join(captured, "\n")
+	mu.Unlock()
+	if !strings.Contains(joined, "pool notice: pool maintenance in 10 min") {
+		t.Errorf("pool notice missing from log; got:\n%s", joined)
+	}
+}
+
+// A client.reconnect directive ends the session identically to a TCP drop —
+// but the directive explains why, and the destination is deliberately not
+// followed. The log must carry the directive so a disconnect is diagnosable.
+func TestRunSessionV1_ReconnectDirectiveLogged(t *testing.T) {
+	pool := newV1ScriptedPool(t, func(conn net.Conn, write func(string)) {
+		write(`{"id":null,"method":"client.reconnect","params":["alt.pool.example",4444,10]}`)
+		// The client must close; hold the pipe so the test sees a
+		// client-initiated disconnect, not a pool drop.
+		time.Sleep(500 * time.Millisecond)
+	})
+	defer pool.Close()
+
+	var mu sync.Mutex
+	var captured []string
+	opts := sessionOpts{
+		poolURL:  pool.URL(),
+		user:     "alice",
+		interval: 50 * time.Millisecond,
+		log: func(level, msg string) {
+			mu.Lock()
+			captured = append(captured, level+":"+msg)
+			mu.Unlock()
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	err := runSessionV1(ctx, opts)
+	if err == nil {
+		t.Fatal("runSessionV1 returned nil error after client.reconnect")
+	}
+
+	mu.Lock()
+	joined := strings.Join(captured, "\n")
+	mu.Unlock()
+	if !strings.Contains(joined, "pool requested reconnect to alt.pool.example:4444 (wait 10s)") {
+		t.Errorf("reconnect directive missing from log; got:\n%s", joined)
 	}
 }

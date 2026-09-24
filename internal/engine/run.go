@@ -1166,6 +1166,17 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	// V1 is single-channel; channel ID 0 is the conventional value.
 	const chanID = uint32(0)
 
+	// Pool-sent operator notices (client.show_message) ride the same
+	// connection; without a consumer they are dropped on the floor. Surface
+	// them in the log so an operator sees pool announcements (maintenance
+	// windows, bans, difficulty advisories) rather than wondering at the
+	// next disconnect. A nil channel in select never fires, so protocols
+	// without notices need no special-casing.
+	var notices <-chan string
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		notices = nr.PoolNotices()
+	}
+
 	// estSats is the running estimated earnings shown in the TUI, integrated
 	// from the arbitration expected-yield rate over productive time (satsAcc);
 	// not a per-share tally (KNOWN_LIMITATIONS.md §9).
@@ -1276,8 +1287,28 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 
+		case notice, ok := <-notices:
+			if !ok {
+				// The notice channel closes with the session; disable the
+				// arm so a closed channel cannot spin the loop.
+				notices = nil
+				continue
+			}
+			opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
+
 		case job, ok := <-sess.Jobs():
 			if !ok {
+				// A pool-directed reconnect ends the session the same way a
+				// TCP drop does — but the directive explains *why*, so log
+				// it before returning (the destination is never followed;
+				// the reconnect loop re-dials the configured pool list).
+				if rr, ok2 := sess.(poolproto.PoolReconnectReporter); ok2 {
+					if host, port, wait, seen := rr.PoolReconnect(); seen {
+						opts.log("info", fmt.Sprintf(
+							"engine: pool requested reconnect to %s:%d (wait %ds) — re-dialing configured pool list",
+							host, port, wait))
+					}
+				}
 				return fmt.Errorf("engine: pool closed connection")
 			}
 			// While curtailed, keep workers idle and ignore the job (see the

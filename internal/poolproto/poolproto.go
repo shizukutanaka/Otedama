@@ -259,6 +259,21 @@ type PoolNoticeReceiver interface {
 	PoolNotices() <-chan string
 }
 
+// PoolReconnectReporter is an optional extension to Session implemented by
+// protocols on which the pool can ask the miner to reconnect to another
+// endpoint (client.reconnect in Stratum V1). Callers type-assert a Session
+// to this interface to surface the directive's details — primarily for
+// logs, since a session that received one ends shortly after.
+type PoolReconnectReporter interface {
+	// PoolReconnect returns the last pool-directed reconnect request
+	// (destination host, port, advisory wait in seconds) and whether one
+	// was received this session. The destination is informational only:
+	// Otedama never dials a pool-supplied endpoint (an unauthenticated
+	// redirect is a hashrate-theft vector), so host/port here describe
+	// what the pool asked, not where the miner will go.
+	PoolReconnect() (host string, port, wait int, seen bool)
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.

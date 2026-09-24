@@ -367,6 +367,19 @@ func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 // Implements poolproto.PoolNoticeReceiver.
 func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 
+// PoolReconnect reports the most recent pool-directed reconnect request
+// (client.reconnect / mining.reconnect) seen this session, if any. The
+// destination is informational only — Otedama deliberately never dials a
+// pool-supplied endpoint (see reconnectDirective for the rationale).
+// Implements poolproto.PoolReconnectReporter.
+func (s *session) PoolReconnect() (host string, port, wait int, seen bool) {
+	d := s.lastReconnect.Load()
+	if d == nil {
+		return "", 0, 0, false
+	}
+	return d.Host, d.Port, d.Wait, true
+}
+
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
 // all pending jobs must be discarded immediately — submitting them would

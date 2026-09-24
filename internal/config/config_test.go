@@ -6,6 +6,7 @@ package config
 import (
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -284,6 +285,12 @@ func TestValidate_PoolURLs(t *testing.T) {
 		{"ssh rejected", "ssh://pool.example.com", true},
 		{"no scheme rejected", "pool.example.com:3333", true},
 		{"empty host rejected", "stratum+v2://", true},
+		{"missing port rejected", "stratum+v2://pool.example.com", true},
+		{"empty port rejected", "stratum+v2://pool.example.com:", true},
+		{"trailing path rejected", "stratum+v2://pool.example.com:3333/foo", true},
+		{"userinfo rejected", "stratum+v2://u:p@pool.example.com:3333", true},
+		{"ipv6 host accepted", "stratum+v2://[::1]:3333", false},
+		{"ipv6 without port rejected", "stratum+v2://[::1]", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -330,6 +337,39 @@ func TestValidate_PayoutScheme(t *testing.T) {
 			t.Errorf("error should mention payout_scheme: %v", err)
 		}
 	})
+}
+
+func TestValidate_WorkerNameCharset(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		c.Pools = []PoolConfig{{URL: "stratum+tcp://pool.example.com:3333"}}
+		return c
+	}
+	// Empty stays valid (auto-derive from hostname); common pool-accepted
+	// names are valid; whitespace, control characters, and non-ASCII are
+	// wire-risk names a strict pool rejects at authorize time.
+	for _, name := range []string{"", "rig-1", "rig_01.gpu2", "RIG0", "a"} {
+		t.Run("valid_"+name, func(t *testing.T) {
+			c := base()
+			c.Workers.Name = name
+			if err := c.Validate(); err != nil {
+				t.Errorf("worker_name %q should be valid; got %v", name, err)
+			}
+		})
+	}
+	for _, name := range []string{"my rig", "rig\t1", "rig\n1", "\u30ea\u30b0", strings.Repeat("x", 65)} {
+		t.Run("invalid_"+strconv.Itoa(len(name)), func(t *testing.T) {
+			c := base()
+			c.Workers.Name = name
+			err := c.Validate()
+			if err == nil {
+				t.Errorf("worker_name %q should fail Validate()", name)
+			} else if !strings.Contains(err.Error(), "worker_name") {
+				t.Errorf("error should mention worker_name: %v", err)
+			}
+		})
+	}
 }
 
 func TestValidate_AggregatesMultipleIssues(t *testing.T) {

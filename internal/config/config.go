@@ -35,6 +35,7 @@ package config
 import (
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -605,6 +606,16 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// The worker name rides the wire verbatim in mining.authorize as
+	// "address.name": pools pattern-match it (letters, digits, '.', '_',
+	// '-'), so a name containing whitespace or control characters would
+	// pass this function yet make every authorize fail at handshake.
+	// Catch it at load instead of at the first pool connection.
+	if c.Workers.Name != "" && !validWorkerName(c.Workers.Name) {
+		issues = append(issues, fmt.Sprintf(
+			"worker_name %q may only contain printable non-space ASCII characters (max 64)", c.Workers.Name))
+	}
+
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":
 		// ok
@@ -702,16 +713,52 @@ func validateBitcoinAddress(addr string) error {
 	return nil
 }
 
-// validatePoolURL checks that a pool URL has an acceptable scheme.
+// validWorkerName reports whether s is a wire-safe Stratum worker name:
+// printable non-space ASCII, at most 64 characters — the intersection of
+// what mainstream pools accept in mining.authorize.
+func validWorkerName(s string) bool {
+	if len(s) > 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '!' || s[i] > '~' {
+			return false
+		}
+	}
+	return true
+}
+
+// validatePoolURL checks that a pool URL has an acceptable scheme and a
+// dialable host:port — a bare hostname passes the scheme check but fails
+// only at first dial, so the shape is verified here at config load.
 func validatePoolURL(raw string) error {
 	validSchemes := []string{"stratum+tcp://", "stratum+tls://", "stratum+v2://", "stratum+v2tls://"}
 	for _, s := range validSchemes {
-		if rest, ok := strings.CutPrefix(raw, s); ok {
-			if rest == "" {
-				return fmt.Errorf("URL has no host after scheme")
-			}
-			return nil
+		rest, ok := strings.CutPrefix(raw, s)
+		if !ok {
+			continue
 		}
+		if rest == "" {
+			return fmt.Errorf("URL has no host after scheme")
+		}
+		// Shape the remainder as host:port — SplitHostPort alone still
+		// accepts "host:" (empty port) and "u:p@host:port" (userinfo),
+		// both meaningless to the dialer, so reject separator and
+		// whitespace bytes first and require a numeric port.
+		if strings.ContainsAny(rest, " /@\t\r\n") {
+			return fmt.Errorf("URL must be scheme://host:port")
+		}
+		host, port, err := net.SplitHostPort(rest)
+		if err != nil {
+			return fmt.Errorf("URL must be scheme://host:port: %w", err)
+		}
+		if host == "" {
+			return fmt.Errorf("URL has empty host")
+		}
+		if p, perr := strconv.Atoi(port); perr != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("URL port %q must be a number in 1-65535", port)
+		}
+		return nil
 	}
 	return fmt.Errorf("URL must start with one of: %s", strings.Join(validSchemes, ", "))
 }

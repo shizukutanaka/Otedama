@@ -2417,3 +2417,43 @@ func TestParseSubscribeResult_RejectsUndecodableEN1(t *testing.T) {
 		t.Error("subscribe result with non-hex extranonce1 should fail the handshake")
 	}
 }
+
+// PoolReconnect is the accessor the engine uses to explain a pool-directed
+// disconnect in logs. It must report nothing before a directive arrives and
+// the parsed host/port/wait after one — while the destination itself is
+// deliberately never dialed.
+func TestSession_PoolReconnect_Accessor(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	pool := &reconnectPool{conn: serverConn, method: "client.reconnect", params: `["alt.pool.example",4444,10]`}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	if _, _, _, seen := sess.PoolReconnect(); seen {
+		t.Fatal("PoolReconnect reported a directive before any arrived")
+	}
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Error("expected Jobs channel to close on client.reconnect")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Jobs channel did not close after client.reconnect")
+	}
+
+	host, port, wait, seen := sess.PoolReconnect()
+	if !seen {
+		t.Fatal("PoolReconnect seen=false after client.reconnect")
+	}
+	if host != "alt.pool.example" || port != 4444 || wait != 10 {
+		t.Errorf("PoolReconnect = (%q,%d,%d), want (alt.pool.example,4444,10)", host, port, wait)
+	}
+}

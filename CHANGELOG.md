@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 273 — コンピューターサイエンスの観点から改善点を洗い出す(第18ラウンド): 運用シグナル配送不変条件——プールの運用メッセージが消失する経路 + config 検証が wire パラメータに及ばない2面、計4箇所)
+
+第18ラウンドの Socratic 問いは「**プールからの運用指示・構成パラメータは、到達すべき先に届いているか?**」——シグナルが存在するのに受信側がいない経路と、検証器が存在するのに通さないパラメータは、共に「情報が失われる地点」である。実証4箇所:
+
+- **`client.show_message` 通知がどこにも届かない**(実害): V1 セッションは `PoolNotices()` チャネルに通知を積むが、エンジンが一度も消費しなかった——プールの保守告知・ban・難易度アドバイザリが drop-oldest バッファで静かに消失し、切断の診断手がかりが失われる。`runSessionV1` で `PoolNoticeReceiver` を型検査して select arm を追加し、`opts.log` へ "pool notice:" で配送。
+- **`client.reconnect` 指示が dead store**(実害): `parseReconnect` が指示を `lastReconnect` に格納するが、読み手がどこにもいなかった——TCP drop とプール主導の reconnect がログ上区別不能で、「なぜ切断されたか」が追跡不能。`session.PoolReconnect()` アクセサ + `poolproto.PoolReconnectReporter` インターフェースを新設し、`runSessionV1` の Jobs クローズ経路で宛先(host:port)と wait アドバイザリをログ配送(宛先は引き続き一切辿らない——非認証リダイレクトはハッシュレート窃取経路のため)。
+- **`worker_name` が無検証で authorize に流れる**: `mining.authorize` の `address.name` に空白・制御文字・非ASCIIを含む worker 名は strict プールがパターンマッチで拒否し、全プール handshake が "worker not authorized" で失敗——`config validate` は検出しない。「表示可能非空白 ASCII・64文字以内」の `validWorkerName` を追加しロード時 fail-fast 化。
+- **`validatePoolURL` が host:port 形状を未検証**: `stratum+tcp://pool.example.com`(ポートなし)・空ポート・userinfo・trailing path を受理——dial 時に "missing port" でしか気づけない。`net.SplitHostPort` + 数値ポート(1-65535)+ 区切り文字禁止で config ロード時に捕捉。
+
+**検証手続き(棄却済み候補).** `Submit.ExtraNonce` 長差は呼び出し側が一度も設定しない到達不能の潜在面(merkle 計算は常に zeros と整合)、V1 `suggest_difficulty`/`set_version_mask` は情報提供のみで無視が正当、`merged` の stale シェア submit はプール側判定が正しい契約(拒否として計上)、`mining.set_extranonce` 回転はキュー排出+全ジョブ計算不能で clean、authorize 応答 `result==false` は既に ErrHandshakeFailed で処理、`estSats` の uint64 蓄積は ~5.8×10¹¹年で不成立。
+
+**テスト.** `TestSession_PoolReconnect_Accessor`(指示前 seen=false → 受信後 host/port/wait 正しく取得 + Jobs クローズ)、`TestRunSessionV1_PoolNoticeLogged`(スクリプト化 V1 プールが show_message 送信 → ログに配送)、`TestRunSessionV1_ReconnectDirectiveLogged`(client.reconnect → ログに宛先+wait + session エラー終了)、`TestValidate_PoolURLs` 拡張(ポート欠落/空ポート/パス/userinfo/IPv6)、`TestValidate_WorkerNameCharset`(有効名5件・無効名5件)。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/...,config} 緑、差分行 lint/gofumpt クリーン(runSessionV1 gocyclo 47→52・hugeParam は親時点から閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 272 — コンピューターサイエンスの観点から改善点を洗い出す(第17ラウンド): 要求-応答相関不変条件——応答が我々の送った要求と対応しないことを検出しない3経路 + テストの構成上の偽陽性、計4箇所)
 
 第17ラウンドの Socratic 問いは「**この応答は、我々が送った要求と同一の要求を識別するか?**」——プロトコル状態機械において、相関フィールドを検証しない応答は「要求に対する応答」ではなく「偶然届いたメッセージ」であり、これを採用するとデシンク状態で動作を続ける。全 live 面の再監査で実証3箇所 + テスト1件:
