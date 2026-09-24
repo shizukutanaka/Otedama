@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 358 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: TLS ServerName リグレッション修復 + submit 応答タイムアウト)
+
+- **`stratum+tls://`・`stratum+v2tls://` ダイヤルの ServerName 派生を復旧** —
+  session 353 の deadline 化で `tls.Dial`（アドレスから ServerName をクローン充填）
+  を `tls.Client` 手動化した際、空の ServerName が `tls.Config` に残り、検証有効な
+  全 TLS ダイヤルが "either ServerName or InsecureSkipVerify" で失敗していた。
+  両トランスポートで cfg をクローンしダイヤルアドレスの host を充填（呼出側 cfg は
+  不変）。`TestDialer_PerPoolCAVerifiesSelfSignedPool` が再び成功。
+- **`mining.submit` 応答へ2分のタイムアウト** — ジョブは流し続けるが submit 応答
+  だけ落とす wedged プール（read deadline は通知到着でリセットされるため発火
+  しない）で、未確認シェア毎に pending エントリと goroutine がセッション終了まで
+  蓄積していた。`submitResponseTimeout`（var・テスト書換可）を `Submit` 内で
+  `context.WithTimeout` として適用。
+
 ### Security (session 357 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: config 数値検証の NaN 耐性)
 
 - **全 float 設定フィールドの NaN 拒否** — YAML は `.nan` を合法 float として受理

@@ -83,6 +83,13 @@ const clientAgent = "Otedama/3.0.0"
 // enforces this limit via ReadSlice, which never grows past the buffer.
 const maxLineBytes = 64 << 10 // 64 KiB
 
+// submitResponseTimeout bounds the wait for a pool's verdict on one
+// mining.submit. A healthy pool answers in seconds; two minutes already
+// exceeds any sane latency while still capping the pending-map leak a
+// wedged pool could otherwise build at one entry per submitted share.
+// A var so tests can shrink it.
+var submitResponseTimeout = 2 * time.Minute
+
 // session is one V1 mining channel. Stratum V1 is single-channel per
 // connection, so session and connection are 1:1.
 type session struct {
@@ -448,6 +455,14 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 		// param so the pool can validate rolled shares.
 		params = append(params, fmt.Sprintf("%08x", sub.Version))
 	}
+	// Bound the wait for the pool's verdict: a wedged pool can keep the
+	// session alive (jobs still flow, so the read deadline never trips)
+	// while dropping every submit — without a per-call timeout each
+	// unconfirmed share leaks its pending entry and goroutine until
+	// session end. The share's verdict is then unknown and logged as an
+	// error like any other submit failure.
+	ctx, cancel := context.WithTimeout(ctx, submitResponseTimeout)
+	defer cancel()
 	resp, err := s.call(ctx, id, "mining.submit", params)
 	if err != nil {
 		return poolproto.ShareResult{}, err

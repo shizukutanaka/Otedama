@@ -34,9 +34,9 @@ const dialConnectTimeout = 15 * time.Second
 
 // defaultTLSConfig is the secure baseline for stratum+v2tls://
 // connections: verify the pool's certificate against the system root
-// store and require TLS 1.2 or newer. ServerName is left empty so
-// crypto/tls fills it in from the dial address, verifying against the
-// host actually dialed.
+// store and require TLS 1.2 or newer. ServerName is left empty here;
+// DialTLS derives it from the dial address (tls.Client does not
+// auto-fill it), verifying against the host actually dialed.
 func defaultTLSConfig() *tls.Config {
 	return &tls.Config{MinVersion: tls.VersionTLS12}
 }
@@ -79,6 +79,20 @@ func DialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 	raw, err := (&net.Dialer{Timeout: dialConnectTimeout}).DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err
+	}
+	// tls.Client does not populate ServerName from the address (unlike
+	// tls.Dial, which clones the config and fills it in). An empty
+	// ServerName with verification on fails the handshake outright, so
+	// derive it from the dial address on a clone — never mutate the
+	// caller's config.
+	if cfg.ServerName == "" {
+		host, _, herr := net.SplitHostPort(address)
+		if herr != nil {
+			_ = raw.Close()
+			return nil, fmt.Errorf("stratum: bad address %q: %w", address, herr)
+		}
+		cfg = cfg.Clone()
+		cfg.ServerName = host
 	}
 	conn := tls.Client(raw, cfg)
 	_ = conn.SetDeadline(time.Now().Add(tlsHandshakeTimeout))

@@ -713,6 +713,10 @@ type fakePool struct {
 	// submitParams records the params sent with mining.submit for
 	// later assertion (version echo under negotiated rolling).
 	submitParams []any
+	// silentOnSubmit makes the pool answer every request except
+	// mining.submit — the wedged-pool case the submit response
+	// timeout guards.
+	silentOnSubmit bool
 	// deferredNotify sends notify after authorize, not on connect —
 	// net.Pipe is synchronous, so notify written before the client's
 	// session starts reading would deadlock a full-handshake dial.
@@ -745,6 +749,9 @@ func (p *fakePool) run() {
 		}
 		if req.Method == "mining.submit" {
 			_ = json.Unmarshal(req.Params, &p.submitParams)
+			if p.silentOnSubmit {
+				continue
+			}
 			result := "true"
 			if !p.verdict {
 				result = "false"
@@ -2722,4 +2729,40 @@ func TestSession_E2E_SetExtranonceDuringSubmits(t *testing.T) {
 		}
 	}
 	<-rotateDone
+}
+
+// TestSession_Submit_SilentPoolTimesOut: a wedged pool that keeps the
+// conn alive and streams jobs but never answers mining.submit would
+// otherwise leak one pending entry + goroutine per submitted share
+// until session end. The submit response timeout must error instead.
+func TestSession_Submit_SilentPoolTimesOut(t *testing.T) {
+	old := submitResponseTimeout
+	submitResponseTimeout = 100 * time.Millisecond
+	defer func() { submitResponseTimeout = old }()
+
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true, silentOnSubmit: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	start := time.Now()
+	_, err := sess.Submit(context.Background(), poolproto.ShareSubmission{
+		JobID: "job1",
+		Nonce: 0x1,
+		NTime: 0x68d36c5e,
+	})
+	if err == nil {
+		t.Fatal("Submit on a silent pool must error")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Submit hung for %v — response timeout not applied", elapsed)
+	}
 }
