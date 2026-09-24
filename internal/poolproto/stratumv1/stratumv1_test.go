@@ -309,6 +309,66 @@ func TestSession_ClientGetVersionResponds(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// mining.ping — pool keepalive answered with "pong"
+// ============================================================================
+
+func TestSession_MiningPingRespondsPong(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	_, _ = fmt.Fprintf(serverConn, `{"id":55,"method":"mining.ping","params":[]}`+"\n")
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no ping reply: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply not JSON: %v", err)
+	}
+	if id, _ := resp.ID.(float64); id != 55 {
+		t.Errorf("reply id = %v, want 55", resp.ID)
+	}
+	if resp.Result != "pong" {
+		t.Errorf("reply result = %v, want %q", resp.Result, "pong")
+	}
+	if resp.Error != nil {
+		t.Errorf("reply error = %v, want nil", resp.Error)
+	}
+}
+
+// A ping notification (no id) must not produce a reply.
+func TestSession_MiningPingNotificationSilent(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	_, _ = fmt.Fprintf(serverConn, `{"id":null,"method":"mining.ping","params":[]}`+"\n")
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+	if err == nil {
+		t.Fatalf("unexpected reply to id-less ping: %s", line)
+	}
+}
+
 func TestSession_UnknownMethodWithIDRepliesError(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()

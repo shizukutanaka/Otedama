@@ -27,6 +27,7 @@
 //	pool → client: result: true | false
 //	pool → client: mining.set_difficulty             (notification)
 //	pool → client: mining.notify                     (job)
+//	pool → client: mining.ping                       (keepalive → pong)
 //	client → pool: mining.submit                     (share)
 //	pool → client: result: true | false              (verdict)
 //
@@ -286,6 +287,13 @@ func (s *session) dispatch(line []byte) {
 		// advertise in mining.subscribe.
 		if msg.ID != nil {
 			s.respond(msg.ID, clientAgent)
+		}
+	case "mining.ping":
+		// ckpool-family pools send a keepalive request and drop clients
+		// that stay silent; answer with the conventional "pong" result
+		// (cgminer convention) so the id resolves.
+		if msg.ID != nil {
+			s.respond(msg.ID, "pong")
 		}
 	case "client.reconnect", "mining.reconnect":
 		s.handleReconnect(msg.Params)

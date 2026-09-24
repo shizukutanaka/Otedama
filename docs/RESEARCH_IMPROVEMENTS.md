@@ -1502,6 +1502,12 @@ the extension the DATUM gateway documents as its miner-facing
 protocol ("SV1 + version-rolling"); the earlier audit rows that
 treated the extension as wholly non-applicable are corrected above.
 
+**Session-340 follow-up (V1 mining.ping):** ckpool-family pools send an
+id-bearing `mining.ping` keepalive and drop clients that never resolve
+the id; the dispatcher now answers with the conventional
+`result: "pong"` (cgminer convention) instead of the -32601
+method-not-found fallback. An id-less ping notification stays silent.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

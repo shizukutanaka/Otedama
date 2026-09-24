@@ -178,33 +178,9 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	}
 
 	// Step 3 (optional): mining.configure — negotiate the
-	// version-rolling extension (the cgminer/ESP-Miner convention:
-	// offer mask 1fffe000 with min-bit-count 2). Sent after authorize:
-	// extension negotiation is permitted at any point before mining,
-	// and pools that don't implement the method answer -32601 or close
-	// the call with an error — both ignored since the extension is
-	// opt-in.
-	id = sess.nextID.Add(1)
-	cfgResp, cfgErr := sess.call(ctx, id, "mining.configure",
-		[]any{
-			[]string{"version-rolling"},
-			map[string]any{
-				"version-rolling.mask":          "1fffe000",
-				"version-rolling.min-bit-count": 2,
-			},
-		})
-	if cfgErr == nil && cfgResp.errResult == nil {
-		if res, ok := cfgResp.result.(map[string]any); ok {
-			if en, _ := res["version-rolling"].(bool); en {
-				sess.versionRolling.Store(true)
-				if hexMask, _ := res["version-rolling.mask"].(string); hexMask != "" {
-					if v, err := strconv.ParseUint(hexMask, 16, 32); err == nil {
-						sess.versionMask.Store(uint32(v))
-					}
-				}
-			}
-		}
-	}
+	// version-rolling extension. Sent after authorize: extension
+	// negotiation is permitted at any point before mining.
+	sess.configureVersionRolling(ctx)
 
 	// Step 4 (optional): extranonce.subscribe — announce that we handle
 	// mining.set_extranonce notifications. Write errors (connection dropped)
@@ -222,6 +198,39 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	// resp.errResult ("Method not found") is also silently ignored here.
 
 	return sess, nil
+}
+
+// configureVersionRolling offers the version-rolling extension via
+// mining.configure (the cgminer/ESP-Miner convention: mask 1fffe000,
+// min-bit-count 2). Pools that don't implement the method answer
+// -32601 or fail the call — both ignored since the extension is
+// opt-in.
+func (s *session) configureVersionRolling(ctx context.Context) {
+	id := s.nextID.Add(1)
+	resp, err := s.call(ctx, id, "mining.configure",
+		[]any{
+			[]string{"version-rolling"},
+			map[string]any{
+				"version-rolling.mask":          "1fffe000",
+				"version-rolling.min-bit-count": 2,
+			},
+		})
+	if err != nil || resp.errResult != nil {
+		return
+	}
+	res, ok := resp.result.(map[string]any)
+	if !ok {
+		return
+	}
+	if en, _ := res["version-rolling"].(bool); !en {
+		return
+	}
+	s.versionRolling.Store(true)
+	if hexMask, _ := res["version-rolling.mask"].(string); hexMask != "" {
+		if v, perr := strconv.ParseUint(hexMask, 16, 32); perr == nil {
+			s.versionMask.Store(uint32(v))
+		}
+	}
 }
 
 // ----- connection -----

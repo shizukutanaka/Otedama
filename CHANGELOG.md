@@ -10,9 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 340 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 mining.ping 応答)
+
+- **`mining.ping` へ `result:"pong"` で応答** — ckpool 系プールが生存確認として送る
+  id 付きリクエスト。従来は未知メソッドの -32601 を返していたため無応答扱いで
+  切断対象になり得た。cgminer 慣例どおり同一 id で pong を返す（id 無しの通知には
+  返信しない）。併せて `Negotiate` の mining.configure ブロックを
+  `configureVersionRolling` ヘルパへ抽出（gocyclo 是正）。
+
 ### Added (session 339 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 version-rolling 拡張交渉)
 
-- **V1 ハンドシェイクに `mining.configure` を追加** — subscribe 成功後・authorize 前に
+- **V1 ハンドシェイクに `mining.configure` を追加** — subscribe・authorize 成功後に
   `version-rolling` 拡張（mask `1fffe000`, min-bit-count 2、cgminer/ESP-Miner 慣例）を
   交渉。DATUM Gateway が miner-facing プロトコルとして明記する "SV1 +
   version-rolling" のクライアント側を完成させる。拒否・未実装プールでは従来どおり
