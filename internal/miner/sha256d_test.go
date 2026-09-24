@@ -467,3 +467,81 @@ func TestTargetFromNBits_OverflowReturnsError(t *testing.T) {
 		t.Error("TargetFromNBits with overflow exponent should return error")
 	}
 }
+
+// ----- headerHasher midstate fast-path -----
+
+func TestHeaderHasher_MatchesHashHeader(t *testing.T) {
+	// The midstate fast path must produce byte-identical digests to the
+	// full HashHeader for every input — it is only valid because chunk 1
+	// (bytes 0:64) is invariant under the fields hash() patches (Time,
+	// Nonce). Exercise arbitrary versions/prevhash/merkle/bits plus the
+	// exact roll sequence grind performs (nonce wrap, nTime roll,
+	// version roll rebuilding the hasher).
+	h := Header{
+		Version:    0x20000000,
+		PrevHash:   [32]byte{0xaa, 0xbb, 0xcc},
+		MerkleRoot: [32]byte{0x11, 0x22, 0x33},
+		Time:       0x68000000,
+		Bits:       0x1703a30c,
+	}
+	hh := newHeaderHasher(&h)
+	for i := uint32(0); i < 4096; i++ {
+		h.Nonce = i*7919 + 13 // scrambled nonces, incl. wrap-adjacent
+		if i%37 == 0 {
+			h.Time++ // nTime roll: tail field, no rebuild needed
+		}
+		got := hh.hash(h.Time, h.Nonce)
+		want := HashHeader(h)
+		if got != want {
+			t.Fatalf("nonce %d: midstate hash %x != HashHeader %x", h.Nonce, got, want)
+		}
+	}
+}
+
+func TestHeaderHasher_RebuildOnVersionRoll(t *testing.T) {
+	h := Header{
+		Version:    0x20000000,
+		MerkleRoot: [32]byte{0xde, 0xad},
+		Bits:       0x1d00ffff,
+	}
+	hh := newHeaderHasher(&h)
+	base := hh.hash(h.Time, h.Nonce)
+	if base != HashHeader(h) {
+		t.Fatalf("midstate %x != full %x", base, HashHeader(h))
+	}
+	// A version roll changes chunk-1 bytes: the stale hasher must NOT be
+	// reused — grind drops it and rebuilds, which this emulates.
+	h.Version = (h.Version &^ 0x1fffe000) | 0x00402000
+	hh = newHeaderHasher(&h)
+	got := hh.hash(h.Time, h.Nonce)
+	if got != HashHeader(h) {
+		t.Fatalf("post-roll midstate %x != full %x", got, HashHeader(h))
+	}
+	if got == base {
+		t.Fatal("rolled version produced identical hash — mask application broken")
+	}
+}
+
+func TestHeaderHasher_IndependentInstances(t *testing.T) {
+	// Two hashers (two threads/jobs) must not share buffered state.
+	h1 := Header{Version: 1, MerkleRoot: [32]byte{1}, Bits: 0x1d00ffff}
+	h2 := Header{Version: 2, MerkleRoot: [32]byte{2}, Bits: 0x1d00ffff, Time: 9}
+	hh1, hh2 := newHeaderHasher(&h1), newHeaderHasher(&h2)
+	for i := uint32(0); i < 256; i++ {
+		h1.Nonce, h2.Nonce = i, i+1_000_000
+		if hh1.hash(h1.Time, h1.Nonce) != HashHeader(h1) || hh2.hash(h2.Time, h2.Nonce) != HashHeader(h2) {
+			t.Fatalf("instance crosstalk at nonce %d", i)
+		}
+	}
+}
+
+func BenchmarkHeaderHasher(b *testing.B) {
+	h := Header{Version: 1, Time: 0x60000000, Bits: 0x1d00ffff}
+	hh := newHeaderHasher(&h)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		h.Nonce = uint32(i)
+		_ = hh.hash(h.Time, h.Nonce)
+	}
+}

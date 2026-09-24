@@ -284,6 +284,11 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		verSub   uint32
 		verTried uint64
 		nOff     uint32
+		// hh caches the SHA-256 midstate after the header's constant
+		// first block; nil forces a rebuild. It is invalidated whenever
+		// chunk-1 bytes could differ — on a work reload or a version
+		// roll — while nTime rolls live in the tail and never touch it.
+		hh *headerHasher
 	)
 
 	for {
@@ -302,6 +307,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			verSub = 0       // and re-enumerate version bits for the new mask
 			verTried = 0
 			nOff = 0 // and re-roll nTime from the template value
+			hh = nil // and rebuild the midstate for the new job
 		}
 		w.mu.Unlock()
 
@@ -325,9 +331,11 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if vm := localWork.VersionMask; vm != 0 && verSub != 0 {
 			h.Version = (h.Version &^ vm) | verSub
 		}
+		if hh == nil {
+			hh = newHeaderHasher(&h)
+		}
 		for i := 0; i < batchSize; i++ {
-			h.Nonce = nonce
-			hash := HashHeader(h)
+			hash := hh.hash(h.Time, nonce)
 			w.hashCount.Add(1)
 
 			if hash.LessOrEqual(localWork.Target) {
@@ -372,18 +380,21 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 				if vm := localWork.VersionMask; vm != 0 && verTried+1 < versionRollSpace(vm) {
 					verSub = nextSubmask(verSub, vm)
 					verTried++
-					h.Version = (localWork.Header.Version &^ vm) | verSub
 				} else if int64(localWork.Header.Time)+int64(nOff)+1 > time.Now().Unix()+MaxFutureBlockTimeSecs {
 					exhaustedVer = localWorkVer
 					break
 				} else {
 					nOff++
-					h.Time++
 					verSub = 0
 					verTried = 0
-					h.Version = localWork.Header.Version
 				}
-				next = threadID
+				// The rolled state is grind-scoped, so breaking out of the
+				// batch rebuilds h from the template — and, since a version
+				// change alters the midstate's first block, hh is dropped
+				// to force its rebuild at the next batch top.
+				nonce = threadID
+				hh = nil
+				break
 			}
 			nonce = next
 		}

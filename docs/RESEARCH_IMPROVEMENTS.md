@@ -1251,6 +1251,33 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 306 increment (first-principles CS audit / midstate)
+
+- **CS 第一原理監査（Musk 式・Socrates 式問答）**: 前提を剥がして「この
+  構造は必要か・最適か・正しいか」を分野別に検証 —— (a) 並行性不変条件:
+  `NonceStep` は `Threads` 既定で threadID インターリーブ正（オーバーラップ
+  なし）、`TargetFromDifficulty` は切り捨てで安全側（小さい target＝pool
+  判定より厳しい方向にズレる —— 受理可能シェアの取りこぼしは ulp 級の
+  安全側逸脱で reject 方向には逸脱しない）。(b) 計算量: **SHA-256d の
+  先頭 64B ブロック（version|prevhash|merkle[0:28]）はジョブ+バージョン
+  内で不変なのに毎ハッシュ再圧縮していた** —— 全実用マイナー（cgminer・
+  ESP-Miner・Braiins）が使う midstate 最適化を実装。`crypto/sha256` の
+  `MarshalBinary`/`UnmarshalBinary` でダイジェスト状態をクローン
+  （自前圧縮コード禁止の規約を維持）。16B テイル（merkle[28:32]|time|
+  bits|nonce）のみを毎ハッシュ更新 → 3 圧縮 → 2 圧縮、alloc ゼロ維持。
+- **無効化規則**: version は chunk-1 に含まれるためバージョンロール/
+  ワーク更新で midstate を破棄（hh を nil 化→次バッチ再構築）、nTime
+  ロールはテイル内なので無効化不要 —— コメントで不変条件を明記。ロール
+  時はバッチを抜けて grind スコープ状態から再構築（~4G ハッシュに1回・
+  再構築コスト無視可能）。
+- **実測**: `BenchmarkHashHeader` vs `BenchmarkHeaderHasher` で **107→93
+  ns/op（~13-19%）**、0 B/op、KAT テスト3件（任意 version/prevhash/
+  merkle/bits + nonce wrap・nTime roll・version roll・2 インスタンス独立）
+  で HashHeader との byte 完全一致を実証。
+- **検証済み非該当**: NonceStep/Threads インターリーブ（正）、
+  TargetFromDifficulty 丸め方向（安全側）、digest 同時利用（grind 各
+  goroutine が独立 hh — 共有無し）。
+
 ## September 2026 research pass — session 305 increment (mid-job retarget)
 
 - **set_difficulty / SetTarget の飛行中ジョブ即時反映を実装** —— V2 spec

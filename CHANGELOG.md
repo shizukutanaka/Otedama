@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Performance (session 306 — SHA-256d midstate 最適化)
+
+- **grind ループで SHA-256d の先頭ブロック圧縮を再利用** —— 80B ヘッダの
+  先頭 64B（version|prevhash|merkle[0:28]）はジョブ+バージョン内で不変
+  なのに、毎ハッシュ 3 ブロック全てを再圧縮していた。`crypto/sha256` の
+  Marshal/UnmarshalBinary で midstate をクローンし（自前圧縮コードは書か
+  ない）、16B テイルのみを更新 → ハッシュ毎に 2 圧縮・alloc ゼロ。
+  version ロール/ワーク更新で midstate を無効化（nTime ロールはテイル内
+  のため不要）。実測 107→93ns/op（~13–19%、ベンチマーク併記）。cgminer/
+  ESP-Miner と同型の標準最適化。KAT テストで HashHeader との byte 完全
+  一致を実証。
+
 ### Fixed (session 305 — 難易度変更の飛行中ジョブ即時反映)
 
 - **`mining.set_difficulty` / `SetTarget` が次ジョブまで旧ターゲットで

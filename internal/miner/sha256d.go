@@ -22,9 +22,11 @@ package miner
 
 import (
 	"crypto/sha256"
+	"encoding"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"math"
 	"math/big"
 )
@@ -114,6 +116,65 @@ func SHA256d(data []byte) Hash {
 func HashHeader(h Header) Hash {
 	b := h.Bytes()
 	return SHA256d(b[:])
+}
+
+// headerHasher caches the SHA-256 compression state after the header's
+// first 64-byte block — version|prevhash|merkle[0:28] — which is constant
+// for a given job and rolled version. The remaining 16-byte tail
+// (merkle[28:32]|time|bits|nonce) is the only input that varies per hash,
+// so each nonce costs two block compressions (tail block + outer SHA-256)
+// instead of three, the midstate optimisation every production miner
+// (cgminer, ESP-Miner) uses. State cloning uses the digest's
+// Marshal/UnmarshalBinary — no hand-rolled compression internals.
+type headerHasher struct {
+	hdr  Header                     // construction-time header (fallback only)
+	d    hash.Hash                  // reusable digest, rewound per hash
+	unm  encoding.BinaryUnmarshaler // d's unmarshaler (assertion cached)
+	mid  []byte                     // marshaled state after chunk 1
+	tail [16]byte                   // header bytes [64:80), time/nonce patched
+	buf  [32]byte                   // scratch for the inner digest
+}
+
+// newHeaderHasher builds a hasher bound to h's invariant fields
+// (version, prevhash, merkle root, bits). Time and nonce are supplied
+// per call to hash. If the digest lacks midstate support (never true for
+// crypto/sha256), hash falls back to the full HashHeader path.
+func newHeaderHasher(h *Header) *headerHasher {
+	b := h.Bytes()
+	d := sha256.New()
+	_, _ = d.Write(b[:64])
+	hh := &headerHasher{hdr: *h, d: d}
+	if unm, ok := d.(encoding.BinaryUnmarshaler); ok {
+		hh.unm = unm
+	}
+	if m, ok := d.(encoding.BinaryMarshaler); ok {
+		hh.mid, _ = m.MarshalBinary()
+	}
+	copy(hh.tail[0:4], h.MerkleRoot[28:])
+	binary.LittleEndian.PutUint32(hh.tail[8:12], h.Bits)
+	return hh
+}
+
+// hash returns SHA256d of the constructed header with the given nTime and
+// nonce (the tail fields that roll); every other field is fixed at
+// construction. Identical output to HashHeader of a header whose
+// invariant fields match the constructor's and whose Time/Nonce equal the
+// arguments.
+func (hh *headerHasher) hash(ntime, nonce uint32) Hash {
+	if hh.unm == nil || hh.mid == nil {
+		// Unreachable with crypto/sha256; kept as a defensive fallback so
+		// a midstate-less digest can never produce a wrong digest.
+		full := hh.hdr
+		full.Time, full.Nonce = ntime, nonce
+		return HashHeader(full)
+	}
+	binary.LittleEndian.PutUint32(hh.tail[4:8], ntime)
+	binary.LittleEndian.PutUint32(hh.tail[12:16], nonce)
+	// Rewind to the post-chunk-1 state; UnmarshalBinary fully resets the
+	// digest, so the buffered tail of any previous hash is discarded.
+	_ = hh.unm.UnmarshalBinary(hh.mid)
+	_, _ = hh.d.Write(hh.tail[:])
+	return sha256.Sum256(hh.d.Sum(hh.buf[:0]))
 }
 
 // ----- nBits compact target -----
