@@ -385,3 +385,72 @@ func TestWorker_DeviceID_EmptyWhenNotConfigured(t *testing.T) {
 		t.Errorf("DeviceID() = %q, want empty string", got)
 	}
 }
+
+// ----- nTime rolling on nonce-space exhaustion -----
+
+// TestWorker_RollsNTimeOnNonceWrap forces a nonce wrap every two hashes
+// (NonceStep = MaxUint32 walks 0 → MaxUint32 → wrap) and asserts the
+// worker rolls the header timestamp forward instead of re-hashing the
+// same nonce space — the standard miner behavior that prevents
+// duplicate-share rejects after nonce exhaustion.
+func TestWorker_RollsNTimeOnNonceWrap(t *testing.T) {
+	work := makeEasyWork()
+	work.Header.Time = uint32(time.Now().Unix()) - 60 // comfortably rollable
+
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0xFFFFFFFF})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	w.SetWork(work)
+
+	base := work.Header.Time
+	seenRolled := false
+	deadline := time.After(5 * time.Second)
+	for !seenRolled {
+		select {
+		case s, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed unexpectedly")
+			}
+			if s.NTime > base {
+				seenRolled = true
+			}
+		case <-deadline:
+			t.Fatalf("no rolled-ntime share within timeout (base %d)", base)
+		}
+	}
+}
+
+// TestWorker_StopsWhenNTimeAtCap sets the job timestamp at the
+// MAX_FUTURE_BLOCK_TIME cap; on nonce wrap no further valid hashing
+// space remains, so the worker must stop producing work for this job
+// rather than emit consensus-invalid timestamps.
+func TestWorker_StopsWhenNTimeAtCap(t *testing.T) {
+	work := makeEasyWork()
+	work.Header.Time = uint32(time.Now().Unix()) + maxFutureBlockTimeSecs
+
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 0xFFFFFFFF})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+	w.SetWork(work)
+
+	// Drain any in-flight shares, then let the worker settle.
+	deadline := time.After(500 * time.Millisecond)
+	for draining := true; draining; {
+		select {
+		case <-shares:
+		case <-deadline:
+			draining = false
+		}
+	}
+
+	before := w.Stats().HashesTotal
+	time.Sleep(120 * time.Millisecond)
+	after := w.Stats().HashesTotal
+	if after != before {
+		t.Errorf("worker kept hashing an exhausted job: %d → %d hashes", before, after)
+	}
+}

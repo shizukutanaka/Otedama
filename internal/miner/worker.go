@@ -219,10 +219,17 @@ func (w *Worker) Stats() Stats {
 // grind is the hot loop executed by each worker goroutine.
 // threadID determines the starting nonce offset so that threads do not
 // duplicate work.
+// maxFutureBlockTimeSecs is Bitcoin's MAX_FUTURE_BLOCK_TIME: a block
+// header timestamp may not exceed the network-adjusted current time by
+// more than two hours. Pool-side share validation applies the same
+// bound, so rolling nTime beyond it can only produce rejects.
+const maxFutureBlockTimeSecs = 7200
+
 func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share) {
 	var (
 		localWork    *Work
 		localWorkVer uint64
+		exhaustedVer uint64 // work version whose full search space is used up
 		nonce        = threadID
 	)
 
@@ -242,8 +249,9 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		}
 		w.mu.Unlock()
 
-		if localWork == nil {
-			// No job yet; yield and retry.
+		if localWork == nil || exhaustedVer == localWorkVer {
+			// No job yet, or the current job's search space (nonces ×
+			// remaining nTime roll range) is exhausted; yield and retry.
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
@@ -283,7 +291,24 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
-			nonce += w.cfg.NonceStep
+			next := nonce + w.cfg.NonceStep
+			if next < nonce {
+				// The 32-bit nonce space wrapped. Standard miner
+				// behavior is to roll the header timestamp forward
+				// rather than re-hash the same nonces (which only
+				// yields duplicate-share rejects). Rolling is bounded
+				// by MAX_FUTURE_BLOCK_TIME (2 h ahead of now): a
+				// header timestamp beyond it is consensus-invalid,
+				// so further hashing can only produce rejects — stop
+				// until a fresh job arrives.
+				if int64(h.Time)+1 > time.Now().Unix()+maxFutureBlockTimeSecs {
+					exhaustedVer = localWorkVer
+					break
+				}
+				h.Time++
+				next = threadID
+			}
+			nonce = next
 		}
 	}
 }

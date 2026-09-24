@@ -1251,6 +1251,37 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 272 increment (nTime rolling)
+
+### Implemented
+
+1. ✅ **nTime rolling on nonce-space exhaustion** — the grind loop
+   advanced `nonce += NonceStep` and silently wrapped at 2³², after
+   which every hash duplicated an already-tried (job, nonce) pair —
+   wasted work and duplicate-share rejects at ≥ ~40 MH/s aggregate
+   (≈21 s/cycle/thread at 50 MH/s). Standard miner behaviour is to
+   roll the header timestamp: on wrap, `h.Time++` and restart nonces.
+   Rolling is capped by Bitcoin's `MAX_FUTURE_BLOCK_TIME` (now + 2 h) —
+   a header timestamp beyond it is consensus-invalid and only produces
+   rejects, so the worker then marks the job's search space exhausted
+   and waits for fresh work. The rolled `NTime` flows to the pool
+   unchanged via the existing `submit` path (V1 param, V2 field).
+   Wire-level check first: SRI's `NewMiningJob.min_ntime` is the floor,
+   never a ceiling, so forward rolling is legal.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **`NewMiningJob` wire layout** — verified against SRI
+  `Sv2Option<u32>`: absent `min_ntime` IS the future-job marker (no
+  separate `future_job` field); Otedama's decoder + hold-until-tip
+  semantics are spec-correct.
+- ✅ **SetupConnectionSuccess flags/version** — Otedama proposes
+  Flags=0/MinVersion=MaxVersion=2, so any conformant response is the
+  one expected; mismatches are informational only.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 271 increment (V2 pending-job bound)
 
 ### Implemented
@@ -1602,6 +1633,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-272 additions (September 2026): the CPU grind loop now rolls
+nTime on nonce wrap (capped at MAX_FUTURE_BLOCK_TIME) instead of
+re-hashing the same nonce space into duplicate-share rejects.*
 
 *Session-271 additions (September 2026): the V2 pending-future-job
 set is bounded (oldest-first eviction at 256) so a hostile upstream

@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 272 — nonce 枯渇時の nTime ロール)
+
+**nonce 空間枯渇時にヘッダー nTime をロール** —— grind ループが
+`nonce += NonceStep` で 2³² 境界を黙ってラップし、以降は全ハッシュが
+(job, nonce) の重複トライ → 無駄な計算 + duplicate-share reject を
+増やし得た（≈50 MH/s 集計で 21秒/サイクル/スレッド）。標準的な
+マイナー挙動として、ラップ時に `h.Time++` して nonce を最初から
+やり直す実装に。ロール上限は Bitcoin の `MAX_FUTURE_BLOCK_TIME`
+（現時刻+2h）—— 超過タイムスタンプはコンセンサス無効で reject にしか
+ならないため、上限到達時はジョブの探索空間を枯渇として新規ジョブを
+待機する。ロール済み `NTime` は既存 submit 経路でそのままプールへ
+送達（V1 param / V2 field）。NewMiningJob の `min_ntime` が下界であって
+上界ではないことは SRI 参照実装で確認済み。
+
 ### Security (session 271 — V2 ペンディングジョブ上限)
 
 **`jobState.pending` を 256 エントリに上限化** —— V2 ダイヤラは
