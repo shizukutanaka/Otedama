@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 426 — CS 観点: forecaster StdDev の負分散クランプ)
+
+- **Welford M2 の浮動誤差による負値化→NaN StdDev を原因側でクランプ** —
+  ほぼ一定の yield 系列では online 分散アキュムレータが微小負値にドリフト
+  し `math.Sqrt` が NaN を返す。`markVolatility` が無条件で
+  VolatilityPerDevice へ格納するため、下流（Decide は非有限スキップ済み）
+  への依存ではなく発生点で 0 に丸める防御を追加。
+
 ### Fixed (session 425 — CS 観点: nonce wrap の ntime ロール)
 
 - **nonce 空間 wrap 時にスレッドが自系列を再ハッシュする問題を修正** —
