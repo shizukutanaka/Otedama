@@ -1251,6 +1251,33 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 268 increment (V1 parser fuzz + extranonce2_size bound)
+
+### Implemented
+
+1. ✅ **Fuzz targets for the Stratum V1 parsers** — the V2 framing/Noise
+   path had three fuzz targets; the V1 untrusted-input surface had zero.
+   Six targets over parseNotify, parseDifficulty, parseSetExtranonce,
+   parseReconnect, parseSubscribeResult, parseShowMessage asserting the
+   error-not-panic contract and value invariants (JobID echo, params[0]
+   echo, bounded sizes). ~1M execs per 8s target, no crashes.
+
+2. ✅ **Pool-supplied `extranonce2_size` is now bounded** — a real bug
+   the fuzzing was written to find: `extranonce2_size` from both
+   `mining.subscribe` and `mining.set_extranonce` fed `strings.Repeat`
+   on every submit; a negative value panics the submit path and a huge
+   value forces an unbounded allocation. Both entry points now reject
+   sizes outside [0, 64] (real pools use 4–8) and non-integral sizes in
+   the subscribe envelope. `TestExtranonce2SizeBounds` pins the bound.
+
+### Verified already-done / non-applicable this session
+
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 still latest.
+- ❌ **Cat 4 #7 pool-share awareness** — still gated on a pool-stats
+  data source decision (recorded session 267).
+
+---
+
 ## September 2026 research pass — session 267 increment (job-starvation watchdog)
 
 ### Implemented
@@ -1480,6 +1507,11 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-268 additions (September 2026): Stratum V1 parser fuzz
+coverage parity with the V2 path; extranonce2_size bounds-checking
+class (untrusted length fields must never reach Repeat/allocation
+unvetted).*
 
 *Session-267 additions (September 2026): zombie-session / job-starvation
 detection pattern (connected-but-silent Stratum sessions) — standard

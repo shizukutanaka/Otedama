@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 268 — V1 パーサ堅牢化)
+
+**プール送信 `extranonce2_size` の境界チェック** —— ファズで発見した
+実バグ: `mining.subscribe` と `mining.set_extranonce` が渡す
+extranonce2_size が無検証で `strings.Repeat` に流れており、負値は
+submit パスの panic、巨大値は無制限アロケートを引き起こした。
+両入口で [0, 64] 範囲外と非整数値を拒否（実プールは 4–8）。
+
+**Stratum V1 パーサにファズターゲット6本追加** —— V2 フレーム/Noise
+側には3本あったが V1 側はゼロだった。parseNotify/parseDifficulty/
+parseSetExtranonce/parseReconnect/parseSubscribeResult/
+parseShowMessage が error を返し panic しない契約と値不変条件を
+検証（各 8秒 約100万 exec、クラッシュゼロ）。
+
 ### Added (session 267 — ジョブ枯渇ウォッチドッグ)
 
 **ゾンビセッション（接続中だがジョブが来ない）を検出する警告を追加**
