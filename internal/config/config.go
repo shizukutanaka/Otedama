@@ -34,6 +34,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -797,19 +798,23 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
+	// Numeric checks use !(x >= lo && x < hi) rather than x < lo ||
+	// x >= hi: YAML accepts `.nan` as a float, and NaN fails every
+	// comparison — a NaN threshold would pass validation and then
+	// silently disable the protection it configures.
+	if !(c.ArbitrationHysteresisPct >= 0 && c.ArbitrationHysteresisPct < 1.0) {
 		issues = append(issues, fmt.Sprintf(
 			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
 	}
-	if c.CurtailBelowBTCUSD < 0 {
+	if !(c.CurtailBelowBTCUSD >= 0) {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
 	}
-	if c.CurtailAboveUKCarbon < 0 {
+	if !(c.CurtailAboveUKCarbon >= 0) {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_above_uk_carbon %.2f must be >= 0 (0 = disabled)", c.CurtailAboveUKCarbon))
 	}
-	if c.CurtailAboveTariffPence < 0 {
+	if !(c.CurtailAboveTariffPence >= 0) {
 		issues = append(issues, fmt.Sprintf(
 			"curtail_above_tariff_pence %.2f must be >= 0 (0 = disabled)", c.CurtailAboveTariffPence))
 	}
@@ -817,7 +822,7 @@ func (c Config) Validate() error {
 		issues = append(issues,
 			"curtail_above_tariff_pence is set but electricity_tariff_octopus is empty — the gate has no price feed")
 	}
-	if c.MinYieldSatsPerSec < 0 {
+	if !(c.MinYieldSatsPerSec >= 0) {
 		issues = append(issues, fmt.Sprintf(
 			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
 	}
@@ -828,16 +833,17 @@ func (c Config) Validate() error {
 		issues = append(issues, fmt.Sprintf(
 			"income_mode %q is not one of max, smooth, balanced", c.IncomeMode))
 	}
-	if c.PowerWatts < 0 {
+	if !(c.PowerWatts >= 0) {
 		issues = append(issues, fmt.Sprintf(
 			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
 	}
-	if c.ElectricityPricePerKWh < 0 {
+	if !(c.ElectricityPricePerKWh >= 0) {
 		issues = append(issues, fmt.Sprintf(
 			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
 	}
 	if c.ThermalThrottleAboveCelsius != 0 &&
-		(c.ThermalThrottleAboveCelsius < 20 || c.ThermalThrottleAboveCelsius > 110) {
+		(math.IsNaN(c.ThermalThrottleAboveCelsius) ||
+			c.ThermalThrottleAboveCelsius < 20 || c.ThermalThrottleAboveCelsius > 110) {
 		issues = append(issues, fmt.Sprintf(
 			"thermal_throttle_above_celsius %.1f out of range [20, 110] (0 = disabled)", c.ThermalThrottleAboveCelsius))
 	}

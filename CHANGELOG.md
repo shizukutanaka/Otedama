@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 357 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: config 数値検証の NaN 耐性)
+
+- **全 float 設定フィールドの NaN 拒否** — YAML は `.nan` を合法 float として受理
+  するが NaN は全比較に失敗するため、`x < 0`/`x >= hi` 形の検証を透過していた。
+  `arbitration_hysteresis_pct`・`curtail_below_btc_usd`・`curtail_above_uk_carbon`・
+  `curtail_above_tariff_pence`・`min_yield_sats_per_sec`・`power_watts`・
+  `electricity_price_per_kwh`・`thermal_throttle_above_celsius` を `!(x >= 0)` /
+  `!(lo <= x && x < hi)` / `math.IsNaN` 明示へ変更 — 検証を透過した NaN 閾値は
+  hysteresis なら Decide が毎 tick エラー化、curtail/thermal ならゲートが無言で
+  無効化されていた。
+
 ### Security (session 356 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: cgminer addpool パラメータ境界の検証)
 
 - **`ASICDriver.SwitchPools` がカンマ含有フィールドを拒否** — cgminer は

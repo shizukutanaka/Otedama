@@ -4,6 +4,7 @@
 package config
 
 import (
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -1358,5 +1359,44 @@ func TestValidate_IncomeMode(t *testing.T) {
 	c.IncomeMode = "aggressive"
 	if err := c.Validate(); err == nil {
 		t.Error("unknown income_mode should fail validation")
+	}
+}
+
+// TestValidate_RejectsNaNNumericThresholds: YAML accepts `.nan` as a
+// float, and NaN fails every comparison — a NaN threshold would pass
+// validation and silently disable the protection it configures
+// (NaN hysteresis → Decide errors every tick; NaN curtail/thermal
+// thresholds → the gate never fires). All float fields must reject it.
+func TestValidate_RejectsNaNNumericThresholds(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	nan := math.NaN()
+	checks := []struct {
+		name  string
+		apply func(*Config)
+	}{
+		{"arbitration_hysteresis_pct", func(c *Config) { c.ArbitrationHysteresisPct = nan }},
+		{"curtail_below_btc_usd", func(c *Config) { c.CurtailBelowBTCUSD = nan }},
+		{"curtail_above_uk_carbon", func(c *Config) { c.CurtailAboveUKCarbon = nan }},
+		{"curtail_above_tariff_pence", func(c *Config) { c.CurtailAboveTariffPence = nan }},
+		{"min_yield_sats_per_sec", func(c *Config) { c.MinYieldSatsPerSec = nan }},
+		{"power_watts", func(c *Config) { c.PowerWatts = nan }},
+		{"electricity_price_per_kwh", func(c *Config) { c.ElectricityPricePerKWh = nan }},
+		{"thermal_throttle_above_celsius", func(c *Config) { c.ThermalThrottleAboveCelsius = nan }},
+	}
+	for _, chk := range checks {
+		c := base()
+		chk.apply(&c)
+		err := c.Validate()
+		if err == nil {
+			t.Errorf("%s: NaN passed Validate()", chk.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), chk.name) {
+			t.Errorf("%s: error should name the field: %v", chk.name, err)
+		}
 	}
 }
