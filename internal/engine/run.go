@@ -836,6 +836,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				j := pm.msg.NewMiningJob
 				jobs[j.JobID] = j
 				switch {
+				case j.HasMinNtime && havePrev && active != nil && active.JobID == j.JobID &&
+					active.Version == j.Version && active.MerkleRoot == j.MerkleRoot && active.MinNtime == j.MinNtime:
+					// Identical job re-sent by the pool (ESP-Miner #1731):
+					// the devices already hold this work — skip the wasted
+					// re-dispatch. A same-id job with different content falls
+					// through and is re-armed normally.
+					opts.log("debug", fmt.Sprintf("engine: duplicate job %d ignored", j.JobID))
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
 					// min_ntime supersedes the tip's (it is never older).
@@ -1049,6 +1056,16 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// lastAppliedJobID / lastAppliedDiff record the most recently applied
+	// job so a duplicate mining.notify carrying the same job_id is ignored
+	// rather than re-dispatched to every worker (ESP-Miner #1731: pools can
+	// resend a job already on the ASIC — e.g. a repeated notify after
+	// mining.set_extranonce — and the re-dispatch is wasted work churn).
+	// The difficulty is part of the key: if the pool re-notifies the same
+	// job_id after a set_difficulty change, applyJob must run again so the
+	// worker's share target tracks the new difficulty.
+	var lastAppliedJobID string
+	var lastAppliedDiff float64
 
 	for {
 		select {
@@ -1121,11 +1138,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			// the pool connection remains alive.
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
+			} else if diff := sess.SuggestedDifficulty(); job.JobID == lastAppliedJobID && diff == lastAppliedDiff {
+				// Duplicate job: the pool resent work already on the
+				// devices (ESP-Miner #1731). Skip applyJob — the workers
+				// still hold this job — but count lastJobReceivedAt below:
+				// the pool connection is alive and delivering.
+				opts.log("debug", fmt.Sprintf("engine: V1 duplicate job %s ignored", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				if err := applyJob(opts.workers, job, chanID, diff); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
+				lastAppliedJobID = job.JobID
+				lastAppliedDiff = diff
 				opts.log("info", fmt.Sprintf("engine: V1 job %s nBits=0x%08X", job.JobID, job.NBits))
 			}
 			if opts.m != nil {

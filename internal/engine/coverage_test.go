@@ -1133,6 +1133,95 @@ func TestRunSessionV1_ReceivesJobAndConnects(t *testing.T) {
 	}
 }
 
+// TestRunSessionV1_DuplicateJobIgnored verifies the ESP-Miner #1731
+// behaviour: a mining.notify re-sent with the same job_id (and unchanged
+// difficulty) is skipped rather than re-dispatched to workers — while a
+// subsequent notify with a different job_id is still applied.
+func TestRunSessionV1_DuplicateJobIgnored(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	// clean_jobs=false so the session queues all three notifies — with
+	// clean_jobs=true the stratumv1 session itself purges pending jobs
+	// before enqueueing, and the engine would only ever see the last one.
+	notify := func(id string) string {
+		return `{"id":null,"method":"mining.notify","params":[` +
+			`"` + id + `",` +
+			`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",` +
+			`"","",[],"00000002","1d00ffff","68d36c5e",false]}` + "\n"
+	}
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe (optional step 3)
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		// Same job_id sent twice, then a distinct job — the single read
+		// loop processes them in order.
+		_, _ = conn.Write([]byte(notify("1")))
+		_, _ = conn.Write([]byte(notify("1")))
+		_, _ = conn.Write([]byte(notify("7")))
+		time.Sleep(400 * time.Millisecond)
+	}()
+
+	merged := make(chan miner.Share)
+	defer close(merged)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	var logLines []string
+	logFn := func(_, msg string) {
+		mu.Lock()
+		logLines = append(logLines, msg)
+		mu.Unlock()
+	}
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "worker.1",
+		workers:  nil,
+		merged:   merged,
+		interval: time.Hour,
+		log:      logFn,
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	var applied1, applied7, dup int
+	for _, l := range logLines {
+		switch {
+		case strings.Contains(l, "V1 job 1 "):
+			applied1++
+		case strings.Contains(l, "V1 job 7 "):
+			applied7++
+		case strings.Contains(l, "duplicate job 1"):
+			dup++
+		}
+	}
+	if applied1 != 1 {
+		t.Errorf("job 1 applied %d times, want 1 (log: %v)", applied1, logLines)
+	}
+	if dup != 1 {
+		t.Errorf("duplicate-job skip logged %d times, want 1 (log: %v)", dup, logLines)
+	}
+	if applied7 != 1 {
+		t.Errorf("job 7 applied %d times, want 1 (log: %v)", applied7, logLines)
+	}
+}
+
 // ----- poolPassword wiring (KNOWN_LIMITATIONS.md §10) -----
 //
 // runSessionV1 previously hardcoded the V1 mining.authorize password to
