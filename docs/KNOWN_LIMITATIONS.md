@@ -537,14 +537,20 @@ no-op":
   not exist and is represented only by the YAML examples in
   `docs/DEPLOYMENT.md`).
 - **`release.yml`**'s `build-packages` job (`.deb`/`.rpm` via `fpm`)
-  references `scripts/post-install.sh`, `scripts/pre-remove.sh`,
+  referenced `scripts/post-install.sh`, `scripts/pre-remove.sh`,
   `scripts/otedama.service`, and a root-level `config.yaml` — none of
-  which exist (`scripts/` is not a directory in this repo; there is no
-  root `config.yaml`, only `config.yaml.example`). This job would also
-  fail if it ran (it currently only runs on a `v*` tag push).
+  which existed. Session 390 added the three `scripts/` inputs and
+  `config.production.yaml` (the packaging-config path `.gitignore`
+  already un-ignores; a literal root `config.yaml` must stay ignored —
+  it is a secret-bearing dev path). **Residual:** the workflow still
+  names its config input `./config.yaml` rather than
+  `config.production.yaml`, so the fpm invocation still fails on that
+  input until a workflow edit retargets it (this file cannot be
+  touched). This job only runs on a `v*` tag push.
 - **`ci.yml`**'s `docker-verify`/`docker-verify-windows` jobs run
-  `scripts/verify-docker.sh`/`.ps1` (same nonexistent `scripts/`
-  directory) and poll `http://localhost:8082/health` — but the actual
+  `scripts/verify-docker.sh`/`.ps1` (still absent — `scripts/` exists
+  as of session 390 but not those files) and poll
+  `http://localhost:8082/health` — but the actual
   server only exposes `/healthz`/`/readyz` (`internal/httpserver`), and
   the containers are started with no `--bitcoin-address`/`--http-addr`,
   so (per the Dockerfile's default `CMD ["run", "--help"]`) they just
@@ -619,15 +625,27 @@ required by CLAUDE.md's own testing policy for parser/protocol code —
 is not actually running in CI despite the architecture map implying it
 is.
 
-**Corrected so far:** `release.yml`'s smaller factual errors (session
-245: wrong `MIT` license string vs. the project's actual Apache-2.0;
-a "P2P Mining Pool Software" description CLAUDE.md explicitly forbids
-as mischaracterizing Otedama as a pool operator; a broken deployment-
-guide link) and `security.yml`'s `compliance-check` hardcoded-IP check
-(session 247: changed from a hard failure to a non-fatal `::warning::`,
-since the pattern matches this repo's own legitimate loopback/example
-addresses — `127.0.0.1` in flag help text, `1.1.1.1` in doctor's DNS
-reachability check — not just genuine leaks).
+**Correction history, audited session 390 — earlier entries here
+overclaimed.** Of the items previously recorded as corrected, only the
+deployment-guide link was actually fixed (session 382 created the
+`docs/DEPLOYMENT_GUIDE.md` target the release body links to — the
+link itself lives in the workflow and could not be edited, so the
+missing document was added instead). The other three were never
+applied — the workflow files cannot be edited, so all of these
+**remain present today**:
+
+- `release.yml` still passes `--license "MIT"` (twice, :142/:159)
+  for the `.deb`/`.rpm` package metadata vs. the project's actual
+  Apache-2.0;
+- `release.yml` still passes `--description "Otedama - P2P Mining
+  Pool Software"` (twice, :139/:156) — CLAUDE.md explicitly forbids
+  mischaracterizing Otedama as a pool operator;
+- `security.yml`'s `compliance-check` hardcoded-IP check is still a
+  hard failure (`! grep -rEn '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'`,
+  :177–178) — the pattern matches this repo's own legitimate
+  loopback/example addresses (`127.0.0.1` in flag help text,
+  `1.1.1.1` in doctor's DNS reachability check), not just genuine
+  leaks, so that job fails whenever it runs.
 
 **Not fixed:** everything above lives in `.github/workflows/`, which
 the automation making these corrections cannot push to (the GitHub App
