@@ -49,6 +49,12 @@ type Stats struct {
 	HashRate    float64 // H/s
 	SharesFound uint64
 	SharesSent  uint64
+	// SharesPending is submitted-but-not-yet-judged shares: the count the
+	// pool owes a verdict for. SV2 pools batch share acks, so a non-zero
+	// value is normal there (ESP-Miner #1735 shows the same "+N pending"
+	// badge); a sustained or growing value means submits are not being
+	// answered.
+	SharesPending uint64
 
 	// Pool
 	PoolURL     string
@@ -275,6 +281,9 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 		devs = fmt.Sprintf("%d device(s), %d idle", s.Devices, s.DevicesIdle)
 	}
 	sharesFull := fmt.Sprintf("shares: %d sent / %d found", s.SharesSent, s.SharesFound)
+	if s.SharesPending > 0 {
+		sharesFull += fmt.Sprintf("  +%d pending", s.SharesPending)
+	}
 	switch {
 	case s.Curtailed:
 		// Deliberate price-driven pause: zero hashrate is expected, not a

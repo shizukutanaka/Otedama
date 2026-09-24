@@ -689,6 +689,52 @@ func TestEngineMetrics_UpdateShareRates_TransitionRejectsExcluded(t *testing.T) 
 	}
 }
 
+// TestEngineMetrics_UpdateShareRates_Pending verifies otedama_shares_pending:
+// shares submitted but not yet judged (the SV2 batched-ack visibility from
+// ESP-Miner #1735). Pending counts submitted-minus-judged, so found-but-
+// never-submitted shares (dropped at the worker channel) appear only in
+// shares_unaccounted, not here.
+func TestEngineMetrics_UpdateShareRates_Pending(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// 105 found, 100 submitted (5 dropped at the full worker channel).
+	// Pool judged 90 accepted + 5 rejected + 3 benign transition rejects.
+	// Pending = 100 − (90+5+3) = 2; unaccounted = 105 − 98 = 7.
+	for range 105 {
+		m.sharesFound.Inc()
+	}
+	for range 100 {
+		m.sharesSubmitted.Inc()
+	}
+	for range 90 {
+		m.sharesAccepted.Inc()
+	}
+	for range 5 {
+		m.sharesRejected.Inc()
+	}
+	for range 3 {
+		m.rejectReason(rejectTransition).Inc()
+	}
+
+	m.updateShareRates()
+	if got := m.sharesPending.Value(); got != 2 {
+		t.Errorf("sharesPending = %v, want 2", got)
+	}
+	if got := m.sharesUnaccounted.Value(); got != 7 {
+		t.Errorf("sharesUnaccounted = %v, want 7", got)
+	}
+
+	// Pool judges the remaining two: pending drains to 0.
+	for range 2 {
+		m.sharesAccepted.Inc()
+	}
+	m.updateShareRates()
+	if got := m.sharesPending.Value(); got != 0 {
+		t.Errorf("sharesPending after all judged = %v, want 0", got)
+	}
+}
+
 func TestEngineMetrics_RejectAndStaleRateAppearInOutput(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)

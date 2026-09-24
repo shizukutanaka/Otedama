@@ -45,9 +45,12 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 	// full (see totalDropped): that share is "found" but never reaches
 	// opts.merged, so it is never submitted. See
 	// docs/KNOWN_LIMITATIONS.md §9 (session 236) for the prior approximation.
-	var sharesSent uint64
+	var sharesSent, sharesPending uint64
 	if opts.m != nil {
 		sharesSent = opts.m.sharesSubmitted.Value()
+		// Shares the pool owes us a verdict for (SV2 batched acks make a
+		// baseline of these normal — ESP-Miner #1735's "+N pending" badge).
+		sharesPending = uint64(opts.m.sharesPending.Value())
 		opts.m.uptime.Set(time.Since(opts.startTime).Seconds())
 	}
 
@@ -82,6 +85,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
+		SharesPending:     sharesPending,
 		PoolURL:           opts.poolURL,
 		PoolLatency:       poolLatency,
 		Connected:         true,

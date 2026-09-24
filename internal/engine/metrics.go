@@ -82,6 +82,16 @@ type engineMetrics struct {
 	// reconciliation signal.
 	sharesUnaccounted *metrics.Gauge
 
+	// sharesPending is shares submitted but not yet judged by the pool
+	// (submitted − accepted − rejected − benign-transition-rejected, clamped
+	// at 0): the count the pool owes us an answer for. SV2 pools batch share
+	// acks, so a non-zero value is normal there even in steady state — it is
+	// the visibility gap ESP-Miner #1735 addresses with its "+N pending"
+	// dashboard badge. A sustained or growing value means submits are not
+	// being answered (slow pool, wedged read loop, or submits failing on
+	// the wire).
+	sharesPending *metrics.Gauge
+
 	// productiveSeconds accumulates wall-clock seconds the miner actually
 	// produced hashrate (not stalled, not curtailed). Effective uptime =
 	// productive_seconds_total / uptime_seconds — the reliability number that
@@ -325,6 +335,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"Shares found locally but not yet judged by the pool (found − accepted − "+
 				"rejected, clamped at 0). A sustained or growing value means found shares "+
 				"are not reaching the pool (submission failures or drops).",
+			nil),
+		sharesPending: reg.NewGauge(
+			"otedama_shares_pending",
+			"Shares submitted to the pool but not yet judged (submitted − accepted − "+
+				"rejected − benign-transition-rejected, clamped at 0). SV2 pools batch "+
+				"share acks, so a non-zero value is normal there; a sustained or growing "+
+				"value means submits are not being answered.",
 			nil),
 		productiveSeconds: reg.NewCounter(
 			"otedama_productive_seconds_total",
@@ -588,6 +605,17 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		unaccounted = found - poolJudged
 	}
 	m.sharesUnaccounted.Set(float64(unaccounted))
+
+	// Pending = submitted but not yet judged — the shares the pool owes us a
+	// verdict for (SV2 batched acks make a baseline of these normal). Differs
+	// from unaccounted by the shares that were found but never submitted
+	// (dropped at the full worker channel): unaccounted = pending + dropped.
+	submitted := m.sharesSubmitted.Value()
+	var pending uint64
+	if poolJudged := judged + m.rejectCount(rejectTransition); submitted > poolJudged {
+		pending = submitted - poolJudged
+	}
+	m.sharesPending.Set(float64(pending))
 
 	if judged == 0 {
 		m.rejectRate.Set(0)
