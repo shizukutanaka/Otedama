@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 347 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 外部レートフィードのレスポンスバウンド)
+
+- **octopus/carbon/poolshare 各フィードの応答ボディを 64 KiB でバウンド** —
+  `fetcher.go` は既に `io.LimitReader(64*1024)` で保護されていたが、session 316–318
+  で追加された3本のフィード（Octopus Agile・National Grid 炭素強度・mempool.space
+  プール分布）は無制限 `io.ReadAll`/`json.Decoder` のまま — 敵対的または故障した上流が
+  巨大ボディを返すと無制限アロケーションでメモリ枯渇し得た。実ボディは ~10 KB 程度で
+  十分余裕のある上限。`cmd/otedama arb` のローカル `/arbitration` 読み取りは自前
+  デーモン起点のため対象外。
+
 ### Fixed (session 346 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 巨大 difficulty のアンダーフロー拒否)
 
 - **`set_difficulty`/`suggest_difficulty` のアンダーフロー拒否** — 退化値ガード

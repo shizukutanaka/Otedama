@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -48,5 +49,17 @@ func TestFetchCarbonIntensity_Errors(t *testing.T) {
 	t.Cleanup(srv2.Close)
 	if _, err := fetchCarbonIntensity(context.Background(), srv2.Client(), srv2.URL); err == nil {
 		t.Fatal("expected error on empty data")
+	}
+}
+
+func TestFetchCarbonIntensity_HugeBodyBounded(t *testing.T) {
+	entry := `{"from":"2026-09-23T09:30Z","to":"2026-09-23T10:00Z","intensity":{"forecast":58,"actual":71,"index":"low"}}`
+	big := `{"data":[` + entry + strings.Repeat(","+entry, 4096) + `]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, big)
+	}))
+	t.Cleanup(srv.Close)
+	if _, err := fetchCarbonIntensity(context.Background(), srv.Client(), srv.URL); err == nil {
+		t.Fatal("oversized response should error under the body cap")
 	}
 }

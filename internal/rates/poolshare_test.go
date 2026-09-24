@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -90,5 +91,14 @@ func TestHostLabels(t *testing.T) {
 	}
 	if l := hostLabels("host:3333"); len(l) != 1 || l[0] != "host" {
 		t.Fatalf("port strip: %v", l)
+	}
+}
+
+func TestFetchPoolShare_HugeBodyBounded(t *testing.T) {
+	entry := `{"poolId":1,"name":"P","link":"https://p.example","blockCount":1,"slug":"p"}`
+	big := `{"pools":[` + entry + strings.Repeat(","+entry, 4096) + `],"blockCount":4096}`
+	srv := fixtureServer(t, big)
+	if _, _, err := fetchPoolShare(context.Background(), srv.Client(), srv.URL, "p.example"); err == nil {
+		t.Fatal("oversized response should error under the body cap")
 	}
 }

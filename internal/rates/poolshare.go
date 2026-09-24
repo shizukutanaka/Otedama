@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -78,7 +79,7 @@ func fetchPoolShare(ctx context.Context, client *http.Client, endpoint, poolHost
 		return PoolShare{}, false, fmt.Errorf("poolshare: HTTP %d", resp.StatusCode)
 	}
 	var pr poolsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&pr); err != nil {
 		return PoolShare{}, false, fmt.Errorf("poolshare: decode: %w", err)
 	}
 	if pr.BlockCount <= 0 || len(pr.Pools) == 0 {

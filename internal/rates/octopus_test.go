@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -134,5 +135,15 @@ func TestAgileCurveBounds(t *testing.T) {
 	}
 	if lo, hi, ok := AgileCurveBounds([]AgileRate{mk(7.5)}); !ok || lo != 7.5 || hi != 7.5 {
 		t.Errorf("single slot -> lo=%v hi=%v ok=%v, want 7.5/7.5/true", lo, hi, ok)
+	}
+}
+
+func TestFetchAgileRates_HugeBodyBounded(t *testing.T) {
+	entry := `{"value_inc_vat":1,"valid_from":"2026-09-23T21:00:00Z","valid_to":"2026-09-23T21:30:00Z"}`
+	big := `{"count":1,"results":[` + entry + strings.Repeat(","+entry, 4096) + `]}`
+	// ~380 KiB of valid JSON exceeds the 64 KiB body cap: the bounded
+	// read must surface an error instead of decoding (and allocating) it.
+	if _, _, err := fetchWithStub(t, big, http.StatusOK); err == nil {
+		t.Fatal("oversized response should error under the body cap")
 	}
 }

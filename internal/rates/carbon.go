@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -71,7 +72,7 @@ func fetchCarbonIntensity(ctx context.Context, client *http.Client, endpoint str
 		return CarbonIntensity{}, fmt.Errorf("carbon: HTTP %d", resp.StatusCode)
 	}
 	var cr carbonResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&cr); err != nil {
 		return CarbonIntensity{}, fmt.Errorf("carbon: decode: %w", err)
 	}
 	if len(cr.Data) == 0 {

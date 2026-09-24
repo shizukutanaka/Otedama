@@ -305,6 +305,21 @@ sending them; memory stays bounded.
 
 ---
 
+**Threat:** A hostile or broken upstream data feed (tariff / carbon /
+pool-share HTTP APIs) returns an unbounded body, exhausting memory.
+
+**Mitigation (session 347):** every external read is capped at 64 KiB
+(`io.LimitReader`) — the same bound `rates/fetcher.go` already applied
+to the BTC/USD fetchers. A day's Agile half-hourly rates is ~10 KB;
+mempool.space pool distribution and National Grid carbon responses are
+smaller still.
+
+**Residual risk:** None material — oversized legitimate responses would
+surface as decode errors, which the callers already handle as
+transient fetch failures.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.

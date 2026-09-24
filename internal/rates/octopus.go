@@ -80,7 +80,10 @@ func FetchAgileRates(ctx context.Context, client *http.Client, product, tariff s
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("octopus: unit rates returned HTTP %d", resp.StatusCode)
 	}
-	raw, err := io.ReadAll(resp.Body)
+	// Bound the read like fetcher.go's 64 KiB cap: a hostile or broken
+	// upstream returning an unbounded body would otherwise exhaust
+	// memory. A day's Agile half-hourly rates is ~10 KB.
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
 		return nil, fmt.Errorf("octopus: read unit rates: %w", err)
 	}
