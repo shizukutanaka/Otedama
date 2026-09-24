@@ -173,6 +173,18 @@ const maxExtranonce2Size = 64
 // per-submit padding stays trivial.
 func validExtranonce2Size(sz int) bool { return sz >= 1 && sz <= maxExtranonce2Size }
 
+// validExtranonce1 reports whether en1 is hex-decodable. The session
+// feeds the decoded bytes into the coinbase it hashes (and the pool
+// rebuilds); a value that is not hex cannot be decoded, so every job
+// received under it would carry a merkle root the pool never recomputes
+// — each share ground on it rejected by construction. An empty string
+// decodes to an empty prefix, which stays self-consistent for pools
+// that genuinely use one, so it is accepted.
+func validExtranonce1(en1 string) bool {
+	_, err := hex.DecodeString(en1)
+	return err == nil
+}
+
 // parseSetExtranonce decodes mining.set_extranonce params:
 // [extranonce1_hex, extranonce2_size_int].
 func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
@@ -188,7 +200,7 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	if err := json.Unmarshal(p[1], &sz); err != nil {
 		return "", 0, false
 	}
-	if !validExtranonce2Size(sz) {
+	if !validExtranonce2Size(sz) || !validExtranonce1(en1) {
 		return "", 0, false
 	}
 	return en1, sz, true
@@ -278,6 +290,9 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	en2Size = int(en2SizeF)
 	if !validExtranonce2Size(en2Size) {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range [1,%d]", en2SizeF, maxExtranonce2Size)
+	}
+	if !validExtranonce1(en1) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce1 %q is not hex-decodable", en1)
 	}
 	return en1, en2Size, nil
 }

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 271 — コンピューターサイエンスの観点から改善点を洗い出す(第16ラウンド): merkle root が計算不能なジョブをワーカーへ配布しない——extranonce 未交渉の notify 配送 + 非hex extranonce1 の ingest 受理、計3箇所)
+
+第16ラウンドの Socratic 問いは「**このジョブで掘ったシェアはプールに受理され得るか?**」——受理される必要条件は、ワーカーがハッシュするヘッダとプールがシェア検証時に再構築するヘッダの一致であり、その肝は merkle root を正しく計算できるかどうか。実証3箇所:
+
+- **subscribe 応答前の `mining.notify` が誤った root で配布される**(実害): V1 セッションの read loop は handshake 完了前から動作しており、negotiate 前(extranonce ゼロ値)に届いた notify は `sha256d(coinb1||coinb2)` だけの誤った root を持つジョブとしてキューへ——ワーカーは受理不能なワークを掘り続ける。`sendJob` はコインベース材料を持つジョブについて、extranonce 未交渉(en2Size≤0)または en1 デコード不可なら配送しない。`clean_jobs` の排出は引き続き先に実行——旧先端の無効化通知は新ジョブが配送不能でも敬意する(旧ジョブで掘っても同じく拒否されるため)。
+- **`mining.subscribe` 応答の非hex `extranonce1` で handshake が成功する**: `parseSubscribeResult` は型と en2Size だけを検査し en1 を無検証で保存——非hex値で handshake が成功し、その後の全ジョブがゼロ root で掘られる「正常だが恒常的に全拒否」状態。hex デコード不能な en1 は handshake 失敗にする。
+- **`mining.set_extranonce` の同型受理**: 回転時に非hex en1 を受理するとキュー purge まで行った上で以後のジョブが全て計算不能に。`parseSetExtranonce` で同一の hex 検証を行い、不正値は状態不変で棄却(従来の妥当な extranonce を保持)。
+
+**検証手続き(棄却済み候補).** `Submit` の en2 パディングは `sendJob` 計算と同じ zeros(en2Size) で一致、エンジンの `ShareSubmission.ExtraNonce` は未設定でパディング経路に一致、`call()` の pending は全経路で削除済み、V2 経路は NewMiningJob+SetNewPrevHash 両待ちで clean、リターゲット済みジョブの再適用は extranonce 回転直後でも「新旧どちらでも拒否される」ため追加入れ替え不要、空文字列の en1 は hex デコード可能で自己整合的なため受理を維持。
+
+**テスト.** `TestSendJob_DropsJobBeforeExtranonceNegotiated`(交渉前はドロップ・交渉後は非ゼロrootで配送)、`TestSendJob_DropsJobUnderUndecodableExtranonce`、`TestSendJob_CleanJobsStillDrainsWhenJobUndeliverable`(配送不能でも排出は実行)、`TestParseSetExtranonce_RejectsUndecodableEN1`、`TestParseSubscribeResult_RejectsUndecodableEN1`。既存3件のフィクスチャをプロトコル妥当化(非hex "extranonce1hex"、extranonce未交渉のnotifyフィクスチャ)。`go test ./...` 全24pkg 緑、`-race` ./internal/poolproto/... 緑、差分行 lint/gofumpt クリーン(sendJob hugeParam は Job 200B で親時点からの baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 270 — コンピューターサイエンスの観点から改善点を洗い出す(第15ラウンド): プールのリターゲット通知が配布済みワークに反映されない——set_difficulty の in-flight 未再適用 + set_extranonce のキュー内ジョブ残留、計3箇所)
 
 第15ラウンドの Socratic 問いは「**プールが条件を変えたとき、すでに配った仕事の前提はまだ成り立つか?**」——ジョブ配布時点のスナップショットで焼き付けた値(シェアターゲット・マークルルート)は、プールの後続通知で無効化される。実証3箇所:

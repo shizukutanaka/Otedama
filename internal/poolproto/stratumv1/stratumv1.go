@@ -374,23 +374,38 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
 func (s *session) sendJob(job poolproto.Job) {
+	if job.CleanJobs {
+		// Purge all pending jobs before queueing the new block's work —
+		// the invalidation applies even when this job itself cannot be
+		// delivered (see the return below): grinding stale-flagged jobs
+		// produces rejected shares too.
+		s.drainJobs()
+	}
 	// Compute the merkle root the pool will rebuild when validating
 	// shares: coinbase = coinb1 || extranonce1 || extranonce2 || coinb2,
 	// hashed sha256d, then folded through each branch hash. The
 	// extranonce2 every share is ground and submitted with is all-zeros
 	// of the negotiated size — Submit pads to the identical value — so
 	// the pool's reconstruction is byte-identical to what the worker
-	// hashed. Without this the header grinds a zero merkle root (plus
-	// the prevhash/version fields applyJob now wires), which no pool
-	// can ever validate — every share would be rejected by construction.
-	ex := s.extranonceState()
-	if en1, err := hex.DecodeString(ex.en1); err == nil && len(job.Coinb1) > 0 {
+	// hashed.
+	//
+	// The root is only computable once the extranonce pair is
+	// negotiated: the read loop is already running during the handshake,
+	// so a mining.notify arriving before the subscribe response would
+	// otherwise be queued with a coinbase missing en1/en2 entirely —
+	// a root the pool never rebuilds, making every share ground on it
+	// a guaranteed reject. Delivering such a job burns hashrate on work
+	// that cannot pay, so drop it; the next notify after negotiation
+	// supplies valid work. Jobs carrying no coinbase material already
+	// have (or do not need) a root and pass through untouched.
+	if len(job.Coinb1) > 0 {
+		ex := s.extranonceState()
+		en1, err := hex.DecodeString(ex.en1)
+		if err != nil || ex.en2Size <= 0 {
+			return
+		}
 		en2 := make([]byte, ex.en2Size)
 		job.MerkleRoot = coinbaseMerkleRoot(en1, en2, job.Coinb1, job.Coinb2, job.MerkleBranch)
-	}
-	if job.CleanJobs {
-		// Purge all pending jobs before queueing the new block's work.
-		s.drainJobs()
 	}
 	select {
 	case s.jobsCh <- job:

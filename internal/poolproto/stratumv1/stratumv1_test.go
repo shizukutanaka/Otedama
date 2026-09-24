@@ -339,6 +339,9 @@ func TestSession_E2E_SubscribeNotifySubmitAccepted(t *testing.T) {
 	sess := newSession(conn)
 	sess.start(context.Background())
 	defer sess.Close()
+	// The fake pool pushes notify without a subscribe handshake, so the
+	// session needs a negotiated extranonce for the job to be deliverable.
+	sess.setExtranonce("deadbeef00", 4)
 
 	// Wait for the mining.notify to arrive.
 	select {
@@ -879,6 +882,8 @@ func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 
 func TestSession_Dispatch_FullChannel_DropsOldest(t *testing.T) {
 	sess := makeBareSess()
+	// A valid notify only delivers once the extranonce pair is negotiated.
+	sess.setExtranonce("deadbeef00", 4)
 	// Fill channel to capacity (8) before dispatch.
 	for i := 0; i < cap(sess.jobsCh); i++ {
 		sess.jobsCh <- poolproto.Job{JobID: fmt.Sprintf("fill%d", i)}
@@ -1370,15 +1375,15 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 			[]any{"mining.set_difficulty", "sub1"},
 			[]any{"mining.notify", "sub2"},
 		},
-		"extranonce1hex",
+		"deadbeef00",
 		float64(4),
 	}
 	en1, en2Size, err := parseSubscribeResult(result)
 	if err != nil {
 		t.Fatalf("parseSubscribeResult: %v", err)
 	}
-	if en1 != "extranonce1hex" {
-		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	if en1 != "deadbeef00" {
+		t.Errorf("extranonce1 = %q, want deadbeef00", en1)
 	}
 	if en2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", en2Size)
@@ -2082,6 +2087,7 @@ func TestSession_MalformedLinesSkippedThenJobArrives(t *testing.T) {
 	sess := newSession(conn)
 	sess.start(context.Background())
 	defer sess.Close()
+	sess.setExtranonce("deadbeef00", 4)
 
 	go func() {
 		for i := 0; i < 3; i++ {
@@ -2259,7 +2265,9 @@ func TestSession_SetExtranoncePurgesQueuedJobs(t *testing.T) {
 	sess.start(context.Background())
 	defer sess.Close()
 
-	// Queue a job (jobsCh is buffered; nothing drains it yet).
+	// Queue a job under a negotiated extranonce (jobsCh is buffered;
+	// nothing drains it yet).
+	sess.setExtranonce("deadbeef00", 4)
 	sess.sendJob(poolproto.Job{JobID: "old", Coinb1: []byte{1}, Coinb2: []byte{2}})
 	if len(sess.Jobs()) != 1 {
 		t.Fatalf("precondition: queued job len=%d, want 1", len(sess.Jobs()))
@@ -2282,5 +2290,87 @@ func TestSession_SetExtranoncePurgesQueuedJobs(t *testing.T) {
 			t.Fatalf("queued job survived set_extranonce rotation (len=%d, en1=%q)", len(sess.Jobs()), sess.extranonceState().en1)
 		case <-time.After(10 * time.Millisecond):
 		}
+	}
+}
+
+// ============================================================================
+// merkle-computability gate (session 271) — a job whose coinbase cannot be
+// rebuilt the way the pool rebuilds it produces only rejected shares, so it
+// must never reach the worker.
+// ============================================================================
+
+func TestSendJob_DropsJobBeforeExtranonceNegotiated(t *testing.T) {
+	clientConn, _ := net.Pipe()
+	defer clientConn.Close()
+	sess := newSession(&connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1})
+
+	// The read loop runs during the handshake, so a mining.notify that
+	// arrives before the subscribe response reaches sendJob with no
+	// negotiated extranonce — its coinbase is missing en1/en2 entirely.
+	sess.sendJob(poolproto.Job{JobID: "early", Coinb1: []byte{1}, Coinb2: []byte{2}})
+	if got := len(sess.Jobs()); got != 0 {
+		t.Fatalf("pre-negotiation job enqueued (len=%d): its shares could never be accepted", got)
+	}
+
+	// After negotiation the same job shape is delivered with a computed root.
+	sess.setExtranonce("deadbeef00", 4)
+	sess.sendJob(poolproto.Job{JobID: "post", Coinb1: []byte{1}, Coinb2: []byte{2}})
+	select {
+	case got := <-sess.Jobs():
+		if got.MerkleRoot == ([32]byte{}) {
+			t.Error("post-negotiation job has zero merkle root")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("post-negotiation job never delivered")
+	}
+}
+
+func TestSendJob_DropsJobUnderUndecodableExtranonce(t *testing.T) {
+	clientConn, _ := net.Pipe()
+	defer clientConn.Close()
+	sess := newSession(&connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1})
+
+	// An en1 that is not hex cannot be decoded into the coinbase; every
+	// job under it would carry a root the pool never rebuilds.
+	sess.extranonce.Store(&extranonceState{en1: "not-hex!!", en2Size: 4})
+	sess.sendJob(poolproto.Job{JobID: "bad", Coinb1: []byte{1}, Coinb2: []byte{2}})
+	if got := len(sess.Jobs()); got != 0 {
+		t.Fatalf("job under undecodable extranonce1 enqueued (len=%d)", got)
+	}
+}
+
+func TestSendJob_CleanJobsStillDrainsWhenJobUndeliverable(t *testing.T) {
+	clientConn, _ := net.Pipe()
+	defer clientConn.Close()
+	sess := newSession(&connection{raw: clientConn, remoteAddr: "test:0", protocol: poolproto.ProtocolStratumV1})
+
+	sess.setExtranonce("deadbeef00", 4)
+	sess.sendJob(poolproto.Job{JobID: "valid", Coinb1: []byte{1}, Coinb2: []byte{2}})
+	if len(sess.Jobs()) != 1 {
+		t.Fatal("precondition: job not queued")
+	}
+
+	// A clean_jobs notify the session cannot turn into work still
+	// invalidates the queued job: the pool declared the old tip dead.
+	sess.extranonce.Store(&extranonceState{en1: "", en2Size: 0})
+	sess.sendJob(poolproto.Job{JobID: "newblock", CleanJobs: true, Coinb1: []byte{1}, Coinb2: []byte{2}})
+	if got := len(sess.Jobs()); got != 0 {
+		t.Fatalf("stale job survived clean_jobs drain (len=%d)", got)
+	}
+}
+
+func TestParseSetExtranonce_RejectsUndecodableEN1(t *testing.T) {
+	if en1, sz, ok := parseSetExtranonce(json.RawMessage(`["not-hex!!",4]`)); ok {
+		t.Errorf("non-hex extranonce1 accepted (en1=%q sz=%d)", en1, sz)
+	}
+	if en1, sz, ok := parseSetExtranonce(json.RawMessage(`["deadbeef00",4]`)); !ok || en1 != "deadbeef00" || sz != 4 {
+		t.Errorf("valid extranonce rejected (en1=%q sz=%d ok=%v)", en1, sz, ok)
+	}
+}
+
+func TestParseSubscribeResult_RejectsUndecodableEN1(t *testing.T) {
+	result := []any{[]any{[]any{"mining.notify", "s1"}}, "not-hex!!", float64(4)}
+	if _, _, err := parseSubscribeResult(result); err == nil {
+		t.Error("subscribe result with non-hex extranonce1 should fail the handshake")
 	}
 }
