@@ -619,6 +619,32 @@ cherry-pick 移植。`Options.Input` 経由の stdin 判定・`setupWallet` 配�
 `--no-wallet-backup-check` は現構造へそのまま適合。§16 の残半分
 （事後検証・パスフレーズローテーションの `wallet` サブコマンド）は
 別系 PR #104 に実装済みだが未移植 — 後続ラウンドで移植対象。)*
+### Added (session 273 — サーマルスロットル・カーテルメント: デバイス温度でハッシングを自動停止・再開)
+
+**Awesome Miner の温度トリガーに相当する安全側のゲート.** 新しいオプトイン設定
+`thermal_throttle_above_celsius`（env `OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS`、
+0 で無効、有効範囲 20–110 °C）を設定すると、`internal/hal.ReadThermalSensors`
+が 30 秒毎に Linux hwmon（`/sys/class/hwmon` — k10temp/coretemp/amdgpu/nvme
+など OS が報告する全温度センサ）を走査し、**最も熱いセンサ**が閾値に達した時点で
+全ハッシングを停止する。価格カーテルメント（`curtail_below_btc_usd`）と同一の
+セマンティクス——読み取り不在や閾値無効のときは**絶対に状態を変更しない**
+（データなしで再開することはなく、センサ消失は過熱継続の可能性とみなす）。
+再開は閾値−5 °C のヒステリシス付きで、境界付近の揺動がハッシングを
+チラつかせない。2 つのゲートは `otedama_curtailed` の OR へ統合（片方が
+解除されても他方が保持していれば計測・動作とも停止のまま）。
+
+センサ値は閾値設定の有無にかかわらず `otedama_thermal_sensor_celsius
+{source,label}` でエクスポートされるため、ゲートを入れなくても温度の
+傾向を監視できる。Linux 以外（hwmon 非搭載）では読み取りが空のまま
+ゲートがデータを持たず、安全に無効のままとなる。
+
+RESEARCH_IMPROVEMENTS Cat 1 #6 を部分解決（外部周囲温度センサ・電力
+リミットのデレートは ADR-008 sub-domain 6 / v3.6 スコープとして残置）、
+ADR-008 に実装ノート追記。
+
+*(session 315: 別系チェーンの未マージ PR (#133) に留まっていた本機能を現チェーンへ
+cherry-pick 移植。`IncomeMode`（A5, session-292）との Origins フィールド併記・
+session-283 統合後の `sessionTelemetry.tick` 経路へそのまま適合。)*
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

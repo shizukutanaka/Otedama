@@ -76,6 +76,7 @@ its default, and its validation rule:
 | `income_mode` | `OTEDAMA_INCOME_MODE` | `"max"` | one of `max`, `smooth`, `balanced` (ADR-010 A5) |
 | `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
 | `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
+| `thermal_throttle_above_celsius` | `OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS` | `0` (disabled) | `0` or [20, 110]; resumes 5°C below threshold |
 | `http_addr` | `OTEDAMA_HTTP_ADDR` | `""` (HTTP server disabled) | also settable via `--http-addr`; when set, serves `/metrics`, `/healthz`, `/readyz` |
 
 The path to the config file itself is resolved from `--config`, then
@@ -216,7 +217,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 |---|---|---|
 | `hashrate_hashes_per_second` | gauge | Current aggregate hashrate. |
 | `up` | gauge | 1 = healthy (hashing or curtailed), 0 = stalled when it should hash. |
-| `curtailed` | gauge | 1 = paused below `curtail_below_btc_usd`, else 0. |
+| `curtailed` | gauge | 1 = hashing paused by any curtailment gate (`curtail_below_btc_usd` and/or `thermal_throttle_above_celsius`), else 0. |
+| `thermal_sensor_celsius` | gauge | Latest hwmon temperature reading; labels `source` (chip name e.g. `k10temp`, `amdgpu`) and `label` (e.g. `Tctl`, `edge`). Linux-only series; absent on other platforms. |
 | `productive_seconds_total` | counter | Wall-clock seconds actually producing hashrate. |
 | `power_watts` | gauge | Configured system draw (0 = unset). |
 | `joules_per_terahash` | gauge | watts × 1e12 / hashrate (0 = power unset). |

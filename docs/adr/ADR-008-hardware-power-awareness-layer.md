@@ -265,6 +265,14 @@ Decision rules (v3.6):
 
 **Release:** v3.6.
 
+**Implementation note (session 273, ahead of schedule):** The
+device-temperature half of this sub-domain shipped early under
+`thermal_throttle_above_celsius` — `internal/hal.ReadThermalSensors` scans
+Linux hwmon (no external sensor needed) and `internal/engine` gates hashing
+on the hottest reading with 5 °C resume hysteresis. What remains for v3.6 is
+the *ambient* half (Home Assistant / 1-Wire adapters), humidity, and
+power-limit derating rather than all-stop curtailment.
+
 ### Sub-domain 7 — Solar/battery integration
 
 **State of the art:** Production-ready local APIs from Enphase Envoy (Token-based local API since Envoy firmware D7+), Tesla Powerwall (Local Gateway API), SolarEdge ModBus TCP, Victron Venus OS dbus, SMA Sunny WebBox/Speedwire, Growatt cloud. Forecasting via Solcast (paid) or NREL PVlib (free, requires local computation).

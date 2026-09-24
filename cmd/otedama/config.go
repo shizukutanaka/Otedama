@@ -80,6 +80,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "income_mode:                %s%s\n", incomeModeDisplay(cfg.IncomeMode), tag(origins.IncomeMode))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
 	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
+	fmt.Fprintf(stdout, "thermal_throttle_above_celsius: %g%s\n", cfg.ThermalThrottleAboveCelsius, tag(origins.ThermalThrottleAboveCelsius))
 	fmt.Fprintf(stdout, "http_addr:                  %s%s\n", safeDisplay(cfg.HTTPAddr), tag(origins.HTTPAddr))
 	if len(cfg.Pools) == 0 {
 		fmt.Fprintf(stdout, "pools:           (built-in default)%s\n", tag(origins.Pools))
@@ -106,56 +107,59 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		pools = append(pools, p.URL)
 	}
 	doc := struct {
-		BitcoinAddress           string            `json:"bitcoin_address"`
-		BitcoinAddresses         []string          `json:"bitcoin_addresses,omitempty"`
-		LogLevel                 string            `json:"log_level"`
-		LogFormat                string            `json:"log_format"`
-		Language                 string            `json:"language"`
-		DataDir                  string            `json:"data_dir"`
-		WorkerName               string            `json:"worker_name"`
-		ArbitrationHysteresisPct float64           `json:"arbitration_hysteresis_pct"`
-		CurtailBelowBTCUSD       float64           `json:"curtail_below_btc_usd"`
-		MinYieldSatsPerSec       float64           `json:"min_yield_sats_per_sec"`
-		IncomeMode               string            `json:"income_mode"`
-		PowerWatts               float64           `json:"power_watts"`
-		ElectricityPricePerKWh   float64           `json:"electricity_price_per_kwh"`
-		HTTPAddr                 string            `json:"http_addr"`
-		Pools                    []string          `json:"pools"`
-		Origins                  map[string]string `json:"origins,omitempty"`
+		BitcoinAddress              string            `json:"bitcoin_address"`
+		BitcoinAddresses            []string          `json:"bitcoin_addresses,omitempty"`
+		LogLevel                    string            `json:"log_level"`
+		LogFormat                   string            `json:"log_format"`
+		Language                    string            `json:"language"`
+		DataDir                     string            `json:"data_dir"`
+		WorkerName                  string            `json:"worker_name"`
+		ArbitrationHysteresisPct    float64           `json:"arbitration_hysteresis_pct"`
+		CurtailBelowBTCUSD          float64           `json:"curtail_below_btc_usd"`
+		MinYieldSatsPerSec          float64           `json:"min_yield_sats_per_sec"`
+		IncomeMode                  string            `json:"income_mode"`
+		PowerWatts                  float64           `json:"power_watts"`
+		ElectricityPricePerKWh      float64           `json:"electricity_price_per_kwh"`
+		ThermalThrottleAboveCelsius float64           `json:"thermal_throttle_above_celsius"`
+		HTTPAddr                    string            `json:"http_addr"`
+		Pools                       []string          `json:"pools"`
+		Origins                     map[string]string `json:"origins,omitempty"`
 	}{
-		BitcoinAddress:           cfg.BitcoinAddress,
-		BitcoinAddresses:         cfg.BitcoinAddresses,
-		LogLevel:                 cfg.LogLevel,
-		LogFormat:                cfg.LogFormat,
-		Language:                 cfg.Language,
-		DataDir:                  cfg.DataDir,
-		WorkerName:               cfg.Workers.Name,
-		ArbitrationHysteresisPct: cfg.ArbitrationHysteresisPct,
-		CurtailBelowBTCUSD:       cfg.CurtailBelowBTCUSD,
-		MinYieldSatsPerSec:       cfg.MinYieldSatsPerSec,
-		IncomeMode:               cfg.IncomeMode,
-		PowerWatts:               cfg.PowerWatts,
-		ElectricityPricePerKWh:   cfg.ElectricityPricePerKWh,
-		HTTPAddr:                 cfg.HTTPAddr,
-		Pools:                    pools,
+		BitcoinAddress:              cfg.BitcoinAddress,
+		BitcoinAddresses:            cfg.BitcoinAddresses,
+		LogLevel:                    cfg.LogLevel,
+		LogFormat:                   cfg.LogFormat,
+		Language:                    cfg.Language,
+		DataDir:                     cfg.DataDir,
+		WorkerName:                  cfg.Workers.Name,
+		ArbitrationHysteresisPct:    cfg.ArbitrationHysteresisPct,
+		CurtailBelowBTCUSD:          cfg.CurtailBelowBTCUSD,
+		MinYieldSatsPerSec:          cfg.MinYieldSatsPerSec,
+		IncomeMode:                  cfg.IncomeMode,
+		PowerWatts:                  cfg.PowerWatts,
+		ElectricityPricePerKWh:      cfg.ElectricityPricePerKWh,
+		ThermalThrottleAboveCelsius: cfg.ThermalThrottleAboveCelsius,
+		HTTPAddr:                    cfg.HTTPAddr,
+		Pools:                       pools,
 	}
 	if withOrigins {
 		doc.Origins = map[string]string{
-			"bitcoin_address":            origins.BitcoinAddress.String(),
-			"bitcoin_addresses":          origins.BitcoinAddresses.String(),
-			"log_level":                  origins.LogLevel.String(),
-			"log_format":                 origins.LogFormat.String(),
-			"language":                   origins.Language.String(),
-			"data_dir":                   origins.DataDir.String(),
-			"worker_name":                origins.WorkerName.String(),
-			"arbitration_hysteresis_pct": origins.ArbitrationHysteresisPct.String(),
-			"curtail_below_btc_usd":      origins.CurtailBelowBTCUSD.String(),
-			"min_yield_sats_per_sec":     origins.MinYieldSatsPerSec.String(),
-			"income_mode":                origins.IncomeMode.String(),
-			"power_watts":                origins.PowerWatts.String(),
-			"electricity_price_per_kwh":  origins.ElectricityPricePerKWh.String(),
-			"http_addr":                  origins.HTTPAddr.String(),
-			"pools":                      origins.Pools.String(),
+			"bitcoin_address":                origins.BitcoinAddress.String(),
+			"bitcoin_addresses":              origins.BitcoinAddresses.String(),
+			"log_level":                      origins.LogLevel.String(),
+			"log_format":                     origins.LogFormat.String(),
+			"language":                       origins.Language.String(),
+			"data_dir":                       origins.DataDir.String(),
+			"worker_name":                    origins.WorkerName.String(),
+			"arbitration_hysteresis_pct":     origins.ArbitrationHysteresisPct.String(),
+			"curtail_below_btc_usd":          origins.CurtailBelowBTCUSD.String(),
+			"min_yield_sats_per_sec":         origins.MinYieldSatsPerSec.String(),
+			"income_mode":                    origins.IncomeMode.String(),
+			"power_watts":                    origins.PowerWatts.String(),
+			"electricity_price_per_kwh":      origins.ElectricityPricePerKWh.String(),
+			"thermal_throttle_above_celsius": origins.ThermalThrottleAboveCelsius.String(),
+			"http_addr":                      origins.HTTPAddr.String(),
+			"pools":                          origins.Pools.String(),
 		}
 	}
 	enc := json.NewEncoder(stdout)

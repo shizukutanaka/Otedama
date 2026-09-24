@@ -187,6 +187,16 @@ log_format: "text"
 # net profit. 0 (default) leaves it unset.
 # electricity_price_per_kwh: 0
 
+# thermal_throttle_above_celsius pauses ALL hashing when the hottest OS-reported
+# temperature sensor (Linux hwmon: CPU zones like k10temp/coretemp, amdgpu
+# edge/junction, nvme composite) reaches this value — the safety counterpart of
+# curtail_below_btc_usd's economic pause. Hashing resumes once the hottest sensor
+# cools 5 °C below the threshold. Valid range [20, 110]; 0 (default) disables the
+# gate. Sensor readings are always exported as otedama_thermal_sensor_celsius
+# when metrics are on; on macOS/Windows (no hwmon) the gate sees no data and
+# simply stays off.
+# thermal_throttle_above_celsius: 0
+
 # ── Arbitration ───────────────────────────────────────────────────────────────
 #
 # arbitration_hysteresis_pct is the minimum fractional yield improvement a

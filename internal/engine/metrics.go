@@ -278,6 +278,13 @@ type engineMetrics struct {
 	payoutInfoMu       sync.Mutex
 	payoutInfo         map[string]*metrics.Gauge
 	payoutActiveMasked string
+
+	// thermalSensors tracks otedama_thermal_sensor_celsius{source,label},
+	// one gauge per hwmon sensor (e.g. {source="k10temp",label="Tctl"}).
+	// Created lazily on first observation; the sensor set is bounded to
+	// whatever the OS exposes so cardinality is safe.
+	thermalSensorsMu sync.Mutex
+	thermalSensors   map[string]*metrics.Gauge
 }
 
 func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
@@ -552,6 +559,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		streamDriftShifts:    make(map[string]*metrics.Counter),
 		streamDriftTotalVar:  make(map[string]*metrics.Gauge),
 		payoutInfo:           make(map[string]*metrics.Gauge),
+		thermalSensors:       make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
 	// only its label set does (standard Prometheus `_info` convention).
@@ -790,6 +798,28 @@ func (m *engineMetrics) incSharesFoundForDevice(deviceID string) {
 	}
 	m.sharesFoundPerDeviceMu.Unlock()
 	c.Inc()
+}
+
+// setThermalSensor records the latest temperature reading for one hwmon
+// sensor, exposed as
+// otedama_thermal_sensor_celsius{source="k10temp",label="Tctl"}.
+// Safe for concurrent use; gauges are created lazily per sensor. The map
+// key is source+"/"+label, matching the exported label pair.
+func (m *engineMetrics) setThermalSensor(source, label string, celsius float64) {
+	key := source + "/" + label
+	m.thermalSensorsMu.Lock()
+	g, ok := m.thermalSensors[key]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_thermal_sensor_celsius",
+			"Latest temperature reading from an OS thermal (hwmon) sensor, in "+
+				"degrees Celsius. Feeds the thermal_throttle_above_celsius gate: "+
+				"the hottest series is compared against the configured threshold.",
+			map[string]string{"source": source, "label": label})
+		m.thermalSensors[key] = g
+	}
+	m.thermalSensorsMu.Unlock()
+	g.Set(celsius)
 }
 
 // setActivePayout marks masked as the active payout destination:

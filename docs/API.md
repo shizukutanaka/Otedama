@@ -320,6 +320,7 @@ addresses) appear once their first event occurs.
 | `otedama_power_watts` | gauge | — | Configured system power draw (0 = unset). |
 | `otedama_joules_per_terahash` | gauge | — | Energy efficiency: watts × 1e12 / hashrate. |
 | `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |
+| `otedama_thermal_sensor_celsius` | gauge | `source`, `label` | Latest OS thermal (hwmon) reading per sensor, e.g. `{source="k10temp",label="Tctl"}`; Linux-only, absent on other platforms. |
 
 **Payout (non-custodial transparency)**
 
@@ -333,7 +334,7 @@ addresses) appear once their first event occurs.
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `otedama_up` | gauge | — | 1 if healthy (hashing, or intentionally curtailed), 0 if stalled. |
-| `otedama_curtailed` | gauge | — | 1 if hashing is paused by `curtail_below_btc_usd`, else 0. |
+| `otedama_curtailed` | gauge | — | 1 if hashing is paused by any curtailment gate (`curtail_below_btc_usd` and/or `thermal_throttle_above_celsius`), else 0. |
 | `otedama_productive_seconds_total` | counter | — | Cumulative seconds the miner actually produced hashrate (effective-uptime numerator). |
 | `otedama_clock_skew_seconds` | gauge | — | Max \|local − server\| clock offset from rate-source HTTP Date headers (alert >120). |
 | `otedama_uptime_seconds` | gauge | — | Seconds since engine start. |
