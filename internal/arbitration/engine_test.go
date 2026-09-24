@@ -1694,3 +1694,79 @@ func TestDecide_IncomeModeSmoothHonoursMinYieldFloor(t *testing.T) {
 		t.Fatalf("smooth with floor picked %q, want ai.rich", alloc.Assignments[0].Stream)
 	}
 }
+
+func TestStream_SuitableFor(t *testing.T) {
+	gpu := func(mem int64) *DeviceRef {
+		return &DeviceRef{
+			Identity:     hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU},
+			Capabilities: hal.Capabilities{GeneralCompute: true, MemoryBytes: mem},
+		}
+	}
+	stream := Stream{
+		ID:              "ai.akash",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		MinMemoryBytes:  4 << 30,
+	}
+	cases := []struct {
+		name string
+		dev  *DeviceRef
+		want bool
+	}{
+		{"gpu above floor", gpu(8 << 30), true},
+		{"gpu exactly at floor", gpu(4 << 30), true},
+		{"gpu below floor", gpu(2 << 30), false},
+		{"gpu with unknown memory", gpu(0), true},
+		{"wrong family", &DeviceRef{
+			Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+			Capabilities: hal.Capabilities{GeneralCompute: true, MemoryBytes: 64 << 30},
+		}, false},
+	}
+	for _, tc := range cases {
+		if got := stream.SuitableFor(tc.dev); got != tc.want {
+			t.Errorf("%s: SuitableFor = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	// No requirement declared: any accepted family qualifies regardless
+	// of reported memory.
+	open := Stream{ID: "any", AcceptsFamilies: []hal.Family{hal.FamilyGPU}}
+	if !open.SuitableFor(gpu(1 << 20)) {
+		t.Error("stream with no MinMemoryBytes should accept a 1 MiB GPU")
+	}
+}
+
+func TestDecide_MemoryFloorExcludesUndersizedGPU(t *testing.T) {
+	in := Input{
+		Policy: PolicyMaximizeEarnings,
+		Devices: []DeviceRef{
+			{
+				Identity:     hal.Identity{ID: "gpu-big", Family: hal.FamilyGPU},
+				Capabilities: hal.Capabilities{GeneralCompute: true, MemoryBytes: 16 << 30},
+			},
+			{
+				Identity:     hal.Identity{ID: "gpu-small", Family: hal.FamilyGPU},
+				Capabilities: hal.Capabilities{GeneralCompute: true, MemoryBytes: 2 << 30},
+			},
+		},
+		Streams: []Stream{{
+			ID:              "ai.akash",
+			AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+			MinMemoryBytes:  4 << 30,
+			DefaultYield:    Yield{SatsPerSecond: 1.0, Confidence: 1.0},
+		}},
+	}
+	alloc, err := Decide(in)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	byID := map[string]Assignment{}
+	for _, a := range alloc.Assignments {
+		byID[a.DeviceID] = a
+	}
+	if byID["gpu-big"].Stream != "ai.akash" {
+		t.Errorf("gpu-big assignment = %+v, want ai.akash", byID["gpu-big"])
+	}
+	if !byID["gpu-small"].Idle() {
+		t.Errorf("gpu-small should idle (below VRAM floor); got %+v", byID["gpu-small"])
+	}
+}

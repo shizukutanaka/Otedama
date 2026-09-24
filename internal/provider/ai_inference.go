@@ -37,6 +37,16 @@ import (
 // quote uses the midpoint of the configured [MinUSDPerHour,
 // MaxUSDPerHour] range (no randomness, no time-varying process — see
 // publish() below). Real Akash API integration (bid submission,
+// akashSimMinMemoryBytes is the VRAM floor the simulated inference
+// workload advertises on every quote: 4 GiB, the conventional minimum
+// for a usable quantized model (e.g. a 7B-class net at 4-bit weights).
+// The simulation has no real model to size, so the floor is a fixed
+// parameter — its purpose is to exercise the suitability machinery that
+// keeps positively-too-small GPUs (an amdgpu with <4 GiB VRAM) out of
+// inference assignment. A GPU reporting no VRAM figure (NVIDIA
+// proprietary driver) stays eligible: unknown is not too-small.
+const akashSimMinMemoryBytes = 4 << 30 // 4 GiB
+
 // container management) is planned for v3.1.0 (see ROADMAP.md); it is
 // not implemented today. The provider interface and yield calculation
 // are stable and ready for the full integration.
@@ -102,6 +112,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 			Simulated:        true,
 			At:               time.Now(),
 			Yield:            Yield{Confidence: 0},
+			MinMemoryBytes:   akashSimMinMemoryBytes,
 		})
 		return
 	}
@@ -137,6 +148,7 @@ func (p *AkashProvider) publish(ctx context.Context) {
 			AcceptedFamilies: []hal.Family{hal.FamilyGPU},
 			Simulated:        true,
 			At:               time.Now(),
+			MinMemoryBytes:   akashSimMinMemoryBytes,
 			Yield: Yield{
 				SatsPerSecond:    sats,
 				NetSatsPerSecond: netSats,

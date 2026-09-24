@@ -645,6 +645,31 @@ ADR-008 に実装ノート追記。
 *(session 315: 別系チェーンの未マージ PR (#133) に留まっていた本機能を現チェーンへ
 cherry-pick 移植。`IncomeMode`（A5, session-292）との Origins フィールド併記・
 session-283 統合後の `sessionTelemetry.tick` 経路へそのまま適合。)*
+### Added (session 271 — GPU memory suitability: VRAM-aware workload candidacy)
+
+First slice of "GPU suitability scoring per workload" (RESEARCH_IMPROVEMENTS
+Cat 5 #4). `hal.Capabilities.MemoryBytes` is populated from the amdgpu sysfs
+`mem_info_vram_total` node on Linux; drivers exposing no node (NVIDIA
+proprietary, integrated GPUs reporting unified memory) leave it **0 =
+unknown**, and the arbitration rule treats unknown as *not excluded* — only
+devices positively known to be undersized are rejected, never guessed at.
+`arbitration.Stream` gains `MinMemoryBytes` plus a `SuitableFor` check
+(family + memory), plumbed end-to-end via `provider.Quote.MinMemoryBytes` →
+`updateStream` → the live stream map. The simulated Akash provider advertises
+a 4 GiB floor (`akashSimMinMemoryBytes`, the conventional minimum for a
+usable quantized model), so an amdgpu reporting <4 GiB VRAM is now excluded
+from inference assignment rather than quoted as if it could run the
+workload. Throughput dimensions (FP16/INT8 TFLOPS) stay open — sysfs exposes
+no such figures within the project's zero-CGO constraint — and per-device
+assignment ranking remains ADR-010 A3. Zero new dependencies; tests cover
+sysfs parsing, boundary/exclusion semantics, and Decide-level idling of an
+undersized GPU.
+
+*(session 316: 別系チェーンの未マージ PR (#131) に留まっていた本機能を現チェーンへ
+cherry-pick 移植。`Simulated`（Cat 5 #8, session-291）・`Confirmed`/`VolatilityPerDevice`
+（ADR-010 A7/A5）との struct フィールド併記、updateStream は session-303 で
+reliability map 対応の `updateStreamReliability` に昇格済みのため値渡しのまま維持、
+`inferVendorName` は gpu_vendor.go 移動済みで重複を除去。)*
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

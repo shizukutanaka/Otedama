@@ -228,6 +228,7 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 		ProviderID:       "mining.stratum",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+		MinMemoryBytes:   4 << 30,
 		Yield: provider.Yield{
 			SatsPerSecond:    0.1,
 			NetSatsPerSecond: 0.099,
@@ -243,6 +244,9 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	s, ok := m[key]
 	if !ok {
 		t.Fatalf("key %q not in map; got keys %v", key, mapKeys(m))
+	}
+	if s.MinMemoryBytes != q.MinMemoryBytes {
+		t.Errorf("MinMemoryBytes = %d, want %d", s.MinMemoryBytes, q.MinMemoryBytes)
 	}
 	if string(s.ID) != "mining.stratum" {
 		t.Errorf("Stream.ID = %q, want mining.stratum", s.ID)

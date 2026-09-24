@@ -149,6 +149,15 @@ type Capabilities struct {
 	// (AI inference, rendering, scientific computing). ASIC devices
 	// typically do not have this capability; GPUs and CPUs do.
 	GeneralCompute bool
+
+	// MemoryBytes is the device's dedicated memory capacity — VRAM for
+	// GPUs — as reported by the platform (Linux sysfs
+	// mem_info_vram_total for amdgpu). 0 means "not reported": drivers
+	// that expose no sysfs node (e.g. NVIDIA's proprietary driver,
+	// integrated GPUs reporting unified memory) leave it zero, and
+	// callers MUST NOT treat 0 as "no memory" — a zero value means the
+	// property is unknown, not that the device is memoryless.
+	MemoryBytes int64
 }
 
 // Device is the unified interface implemented by all mining hardware.

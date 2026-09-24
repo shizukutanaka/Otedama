@@ -139,6 +139,13 @@ type Quote struct {
 	// that quote live market prices leave it false (the zero value).
 	Simulated bool
 
+	// MinMemoryBytes is the minimum dedicated memory (VRAM) a device
+	// must report for this quote to apply — e.g. an inference workload
+	// whose model does not fit below a threshold. 0 means no memory
+	// requirement. Devices reporting no memory figure are not excluded
+	// (unknown is not too-small); see arbitration.Stream.MinMemoryBytes.
+	MinMemoryBytes int64
+
 	// At is the wall-clock time the quote was generated.
 	At time.Time
 }

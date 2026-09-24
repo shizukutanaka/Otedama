@@ -394,6 +394,7 @@ func updateStreamReliability(mu *sync.Mutex, m map[string]arbitration.Stream, re
 	existing := m[key]
 	existing.ID = arbitration.StreamID(q.ProviderID)
 	existing.AcceptsFamilies = q.AcceptedFamilies
+	existing.MinMemoryBytes = q.MinMemoryBytes
 	if existing.YieldPerDevice == nil {
 		existing.YieldPerDevice = make(map[string]arbitration.Yield)
 	}

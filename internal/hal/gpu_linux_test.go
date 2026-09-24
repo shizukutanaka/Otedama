@@ -71,7 +71,7 @@ func TestReadSysFile_NonexistentPathReturnsEmpty(t *testing.T) {
 func TestReadSysFile_TrimsTrailingNewlines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "content-with-newline")
-	if err := os.WriteFile(path, []byte("0x10de\n\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("0x10de\n\n"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	got := readSysFile(path)
@@ -86,7 +86,7 @@ func TestReadSysFile_PreservesInternalNewlines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "uevent")
 	content := "DRIVER=amdgpu\nPCI_ID=1002:731F\nMODALIAS=pci:v00001002d0000731F\n"
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	got := readSysFile(path)
@@ -106,14 +106,14 @@ func TestParseGPUDevice_WithValidSysfs(t *testing.T) {
 	// Simulate a sysfs device tree.
 	root := t.TempDir()
 	devicePath := filepath.Join(root, "device")
-	if err := os.MkdirAll(devicePath, 0755); err != nil {
+	if err := os.MkdirAll(devicePath, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de\n"), 0o644); err != nil {
 		t.Fatalf("write vendor: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(devicePath, "uevent"),
-		[]byte("PCI_ID=10DE:2684\n"), 0644); err != nil {
+		[]byte("PCI_ID=10DE:2684\n"), 0o644); err != nil {
 		t.Fatalf("write uevent: %v", err)
 	}
 
@@ -149,13 +149,57 @@ func TestParseGPUDevice_WithValidSysfs(t *testing.T) {
 // device ID. GeneralCompute must stay true: it gates only the
 // already-disclosed simulated Akash inference path, which spawns no
 // worker threads.
+func TestParseGPUDevice_VRAMFromSysfs(t *testing.T) {
+	root := t.TempDir()
+	devicePath := filepath.Join(root, "device")
+	if err := os.MkdirAll(devicePath, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x1002\n"), 0o644); err != nil {
+		t.Fatalf("write vendor: %v", err)
+	}
+	// 16 GiB — what amdgpu reports under mem_info_vram_total.
+	if err := os.WriteFile(filepath.Join(devicePath, "mem_info_vram_total"),
+		[]byte("17163091968\n"), 0o644); err != nil {
+		t.Fatalf("write vram: %v", err)
+	}
+	dev := parseGPUDevice("renderD128", devicePath, nil)
+	if dev == nil {
+		t.Fatal("parseGPUDevice returned nil")
+	}
+	if got := dev.Capabilities().MemoryBytes; got != 17163091968 {
+		t.Errorf("MemoryBytes = %d, want 17163091968", got)
+	}
+}
+
+func TestParseGPUDevice_NoVRAMNodeIsUnknown(t *testing.T) {
+	root := t.TempDir()
+	devicePath := filepath.Join(root, "device")
+	if err := os.MkdirAll(devicePath, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// NVIDIA proprietary driver exposes no mem_info_vram_total — the
+	// capability must stay 0 ("unknown"), which arbitration treats as
+	// "not excluded" rather than "too small".
+	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de\n"), 0o644); err != nil {
+		t.Fatalf("write vendor: %v", err)
+	}
+	dev := parseGPUDevice("renderD128", devicePath, nil)
+	if dev == nil {
+		t.Fatal("parseGPUDevice returned nil")
+	}
+	if got := dev.Capabilities().MemoryBytes; got != 0 {
+		t.Errorf("MemoryBytes = %d, want 0 (unknown) when sysfs node absent", got)
+	}
+}
+
 func TestParseGPUDevice_SHA256dIsFalse(t *testing.T) {
 	root := t.TempDir()
 	devicePath := filepath.Join(root, "device")
-	if err := os.MkdirAll(devicePath, 0755); err != nil {
+	if err := os.MkdirAll(devicePath, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de\n"), 0o644); err != nil {
 		t.Fatalf("write vendor: %v", err)
 	}
 
@@ -179,7 +223,7 @@ func TestParseGPUDevice_MissingVendorFile(t *testing.T) {
 	// (just with unknown vendor).
 	root := t.TempDir()
 	devicePath := filepath.Join(root, "device")
-	_ = os.MkdirAll(devicePath, 0755)
+	_ = os.MkdirAll(devicePath, 0o755)
 
 	dev := parseGPUDevice("renderD129", devicePath, nil)
 	// Even without vendor info, the device should be created.
@@ -305,8 +349,8 @@ func TestParseGPUDevice_LogFnCalledOnValidationFailure(t *testing.T) {
 	// seam fires with the render-node name in the message.
 	dir := t.TempDir()
 	devicePath := filepath.Join(dir, "device")
-	_ = os.MkdirAll(devicePath, 0755)
-	_ = os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de"), 0644)
+	_ = os.MkdirAll(devicePath, 0o755)
+	_ = os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de"), 0o644)
 
 	var logged []string
 	dev := parseGPUDevice("render D128", devicePath, func(msg string) {
@@ -330,7 +374,7 @@ func TestParseGPUDevice_LogFnCalledOnValidationFailure(t *testing.T) {
 func TestInferModel_WithPCIID(t *testing.T) {
 	dir := t.TempDir()
 	uevent := filepath.Join(dir, "uevent")
-	if err := os.WriteFile(uevent, []byte("DRIVER=nvidia\nPCI_ID=10DE:2684\n"), 0644); err != nil {
+	if err := os.WriteFile(uevent, []byte("DRIVER=nvidia\nPCI_ID=10DE:2684\n"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	got := inferModel(dir, "0x10de")
@@ -359,8 +403,8 @@ func TestParseGPUDevice_UsesCorrectRenderNodeInID(t *testing.T) {
 	// Different render nodes produce different IDs (deduplication key).
 	root := t.TempDir()
 	devicePath := filepath.Join(root, "device")
-	_ = os.MkdirAll(devicePath, 0755)
-	_ = os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de"), 0644)
+	_ = os.MkdirAll(devicePath, 0o755)
+	_ = os.WriteFile(filepath.Join(devicePath, "vendor"), []byte("0x10de"), 0o644)
 
 	d1 := parseGPUDevice("renderD128", devicePath, nil)
 	d2 := parseGPUDevice("renderD129", devicePath, nil)
@@ -386,10 +430,10 @@ func TestGPULinuxDriver_Enumerate_WithFakeSysfs_FindsGPUs(t *testing.T) {
 
 	// Create renderD128/device with vendor and uevent files.
 	devDir := filepath.Join(root, "renderD128", "device")
-	if err := os.MkdirAll(devDir, 0755); err != nil {
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -411,14 +455,14 @@ func TestGPULinuxDriver_Enumerate_SkipsNonRenderDEntries(t *testing.T) {
 	defer func() { drmBasePath = orig }()
 
 	// Create a non-renderD entry and one renderD entry.
-	if err := os.MkdirAll(filepath.Join(root, "card0"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "card0"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	devDir := filepath.Join(root, "renderD128", "device")
-	if err := os.MkdirAll(devDir, 0755); err != nil {
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x1002\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x1002\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -442,15 +486,15 @@ func TestGPULinuxDriver_Enumerate_DeduplicatesCanonicalPaths(t *testing.T) {
 
 	// Shared canonical device directory.
 	devDir := filepath.Join(root, "shared-device")
-	if err := os.MkdirAll(devDir, 0755); err != nil {
+	if err := os.MkdirAll(devDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(devDir, "vendor"), []byte("0x10de\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// renderD128/device → symlink to shared-device
-	if err := os.MkdirAll(filepath.Join(root, "renderD128"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "renderD128"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(devDir, filepath.Join(root, "renderD128", "device")); err != nil {
@@ -458,7 +502,7 @@ func TestGPULinuxDriver_Enumerate_DeduplicatesCanonicalPaths(t *testing.T) {
 	}
 
 	// renderD129/device → same symlink target
-	if err := os.MkdirAll(filepath.Join(root, "renderD129"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "renderD129"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(devDir, filepath.Join(root, "renderD129", "device")); err != nil {

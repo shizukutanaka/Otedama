@@ -130,8 +130,25 @@ func parseGPUDevice(renderNode, devicePath string, logFn func(string)) Device {
 		// docs/KNOWN_LIMITATIONS.md for the current disclosure.
 		SHA256d:        false,
 		GeneralCompute: true, // GPU implies general compute capability (used by the simulated Akash provider; spawns no worker threads, so this flag alone causes no oversubscription)
+		MemoryBytes:    readVRAMBytes(devicePath),
 	}
 	return &linuxGPUDevice{id: id, caps: caps}
+}
+
+// readVRAMBytes reads the dedicated VRAM size from the amdgpu sysfs node
+// mem_info_vram_total (bytes). Returns 0 when the node is absent or
+// unreadable — NVIDIA's proprietary driver and integrated GPUs expose no
+// such node, which callers interpret as "unknown", not "zero VRAM".
+func readVRAMBytes(devicePath string) int64 {
+	s := readSysFile(filepath.Join(devicePath, "mem_info_vram_total"))
+	if s == "" {
+		return 0
+	}
+	var n int64
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 // inferModel reads the product name from sysfs, falling back to the

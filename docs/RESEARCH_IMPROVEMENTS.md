@@ -272,10 +272,21 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    before and independently of the prune), keeps its final timestamp after
    pruning as the dead-provider evidence, and stream expiry now logs at
    warn (was info).
-4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
-   so inference jobs map to capable GPUs only.
-   — Implemented in PR #131 (VRAM-aware suitability; sibling branch
-   pending merge).
+4. 🟡 **Partially resolved** (session 316, ported from the session-271
+   sibling branch). The VRAM dimension landed:
+   `hal.Capabilities.MemoryBytes` is populated from amdgpu sysfs
+   `mem_info_vram_total` (0 = unknown — NVIDIA's proprietary driver and
+   iGPUs expose no node, and unknown is never treated as too-small),
+   `arbitration.Stream.MinMemoryBytes` gates candidacy via
+   `Stream.SuitableFor`, and the plumbing runs `Quote.MinMemoryBytes` →
+   `updateStream` → stream. The simulated Akash provider advertises a
+   4 GiB floor, so an amdgpu under 4 GiB is now positively excluded from
+   inference assignment. Still open: FP16/INT8 throughput is not exposed
+   via sysfs (needs a vendor API — out of the zero-CGO constraint), so
+   scoring is capacity-only; and per-device assignment ranking stays
+   ADR-010 A3 (Hungarian). Original finding: "GPU suitability scoring per
+   workload (VRAM, FP16/INT8 throughput) so inference jobs map to capable
+   GPUs only."
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
 6. ✅ **Spot-price volatility guard** — hysteresis exists in arbitration and
    now has a user-configurable knob: `arbitration_hysteresis_pct` (YAML) /
