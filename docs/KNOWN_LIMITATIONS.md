@@ -573,10 +573,12 @@ no-op":
   `go test -tags=security ./tests/security/...` and
   `go test -tags=load -run TestDDoSProtection ./tests/load/...` —
   there is no `tests/` directory anywhere in the repo; both steps fail
-  with "matched no packages." (Its `compliance-check` job's hardcoded-IP
-  grep, a second deterministic failure in the same file caused by
-  legitimate loopback/example addresses in this codebase's own flag
-  help text and doctor checks, was fixed session 247 — see below.)
+  with "matched no packages." Its `compliance-check` job's
+  hardcoded-IP grep is a second deterministic failure in the same file
+  — `! grep` on `\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}` matches
+  this codebase's own legitimate literals (127.0.0.1 in flag help,
+  1.1.1.1 in doctor's DNS check) — and remains unfixed (see the
+  correction-history note below).
 - **`code-review.yml`** is written entirely around a Node.js/npm
   toolchain (ESLint via reviewdog, `npx complexity-report`,
   `npx size-limit`, a `scripts/code-review/generate-comment.js` that
@@ -584,7 +586,13 @@ no-op":
   for this Go-only repo — except its "Setup Node.js" step runs
   unconditionally. Net effect: the workflow never reviews any Go code
   (no golangci-lint/gosec-based inline comments); it only ever posts a
-  static "no Node.js project detected" comment.
+  static "no Node.js project detected" comment. Worse, its two checks
+  that DO show green on every PR are no-ops: `Check Common Issues`
+  scopes its secrets/console.log/TODO greps to `*.js`/`*.json` — files
+  that don't exist in this repo, so nothing is ever checked — and
+  `Performance Impact` runs `npm run test:performance` (no such
+  script) behind `|| echo '{}'`, so it can never fail. The green ticks
+  are false signal, not verification.
 - **CLAUDE.md's own architecture map** describes `test.yml` as
   `test.yml (fuzz+benchmark)`, but the file's actual jobs are `test`,
   `lint`, `security`, `build`, `integration`, `benchmark` — there is no
