@@ -150,6 +150,16 @@ type Config struct {
 	// OTEDAMA_MIN_YIELD_SATS_PER_SEC or config file.
 	MinYieldSatsPerSec float64 `yaml:"min_yield_sats_per_sec"`
 
+	// IncomeMode selects the arbitration decision criterion (ADR-010 A5):
+	//   - "max"      (default) picks the highest expected yield;
+	//   - "smooth"   picks the highest modified Sharpe — (yield −
+	//     min_yield_sats_per_sec) over the realized-yield stddev, so
+	//     steady streams beat spiky ones;
+	//   - "balanced" blends normalized yield and Sharpe half-and-half.
+	// An unset/empty value resolves to "max". Set via OTEDAMA_INCOME_MODE
+	// or config file.
+	IncomeMode string `yaml:"income_mode"`
+
 	// PowerWatts is the user's estimated total system power draw in watts.
 	// When set (> 0), Otedama computes and exposes
 	// `otedama_joules_per_terahash` (J/TH), the single efficiency metric
@@ -306,6 +316,7 @@ type Origins struct {
 	ArbitrationHysteresisPct ValueOrigin
 	CurtailBelowBTCUSD       ValueOrigin
 	MinYieldSatsPerSec       ValueOrigin
+	IncomeMode               ValueOrigin
 	PowerWatts               ValueOrigin
 	ElectricityPricePerKWh   ValueOrigin
 	HTTPAddr                 ValueOrigin
@@ -439,6 +450,12 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.MinYieldSatsPerSec = fromFile.MinYieldSatsPerSec
 		o.MinYieldSatsPerSec = OriginFile
 	}
+	// IncomeMode: an empty string means "unset" outright, so the file
+	// merge needs no zero-value caveat.
+	if fromFile.IncomeMode != "" {
+		cfg.IncomeMode = fromFile.IncomeMode
+		o.IncomeMode = OriginFile
+	}
 	if fromFile.CurtailBelowBTCUSD != 0 {
 		cfg.CurtailBelowBTCUSD = fromFile.CurtailBelowBTCUSD
 		o.CurtailBelowBTCUSD = OriginFile
@@ -482,6 +499,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if v := getEnv("OTEDAMA_DATA_DIR"); v != "" {
 		cfg.DataDir = v
 		o.DataDir = OriginEnv
+	}
+	if v := getEnv("OTEDAMA_INCOME_MODE"); v != "" {
+		cfg.IncomeMode = v
+		o.IncomeMode = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_HTTP_ADDR"); v != "" {
 		cfg.HTTPAddr = v
@@ -647,6 +668,13 @@ func (c Config) Validate() error {
 	if c.MinYieldSatsPerSec < 0 {
 		issues = append(issues, fmt.Sprintf(
 			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+	}
+	switch c.IncomeMode {
+	case "", "max", "smooth", "balanced":
+		// valid — empty resolves to the default "max".
+	default:
+		issues = append(issues, fmt.Sprintf(
+			"income_mode %q is not one of max, smooth, balanced", c.IncomeMode))
 	}
 	if c.PowerWatts < 0 {
 		issues = append(issues, fmt.Sprintf(

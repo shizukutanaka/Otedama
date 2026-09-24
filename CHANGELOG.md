@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 290 — A5 修正シャープ比インカムモード)
+
+- **`income_mode`（`max`/`smooth`/`balanced`）** — ADR-010 A5（修正
+  シャープ比による所得選好）を v3.6 から前倒し実装、CLI フラグではなく
+  設定キー + `OTEDAMA_INCOME_MODE` 環境変数として配線（ヒステリシス
+  ノブの先例通り）。`YieldForecaster` が全観測イールドの Welford
+  平均/分散を累積し `StdDev()`/`HasObservations()` を公開、裁定ループが
+  (provider, device) 毎の σ を `Stream.VolatilityPerDevice` へ転記 —
+  `YieldPerDevice` と同じ device-ID キー。`Decide` は `IncomeMode` に
+  応じてソート・ヒステリシス比較の対象値を切替: `max` は従来どおり生
+  イールド、`smooth` は修正シャープ `(yield − min_yield floor)/σ`、
+  `balanced` は `0.5·正規化イールド + 0.5·正規化シャープ`（ADR 既定の
+  ブレンド）。意図的な解釈2点: ボラティリティ履歴なし = Sharpe 0
+  （*未証明*リスクを最大とみなす — 新規 yield-lure が無限安全に
+  見えないように）、測定済み σ=0（定収入）は準無限 Sharpe でノイズの
+  ある対抗を正当に支配（risk-free 支配の忠実実装）。`ExpectedYield`/
+  `ForegoneSatsPerSec` は生 sat のまま — explain 出力はスコア単位でなく
+  実収入を報告。ゼロ値 `IncomeModeMax` が pre-A5 経路と完全一致するため
+  既存 Decide テストは不変で通過。
+
 ### Added (session 289 — A7 敵対的破壊耐性: k=3 確認ラダー)
 
 - **`Stream.Confirmed` / 確認ラダー** — ADR-010 A7（Lykouris–Mirrokni–Paes

@@ -293,6 +293,10 @@ func Run(ctx context.Context, opts Options) error {
 	activity := make(map[string]float64)
 
 	// Arbitration loop: re-run Decide whenever quotes change.
+	incomeMode, err := arbitration.ParseIncomeMode(opts.Config.IncomeMode)
+	if err != nil {
+		log("warn", fmt.Sprintf("config: %v; falling back to income_mode=max", err))
+	}
 	go runArbitrationLoop(ctx, arbitrationLoopOpts{
 		devRefs:       devRefs,
 		streamsMu:     &streamsMu,
@@ -303,6 +307,7 @@ func Run(ctx context.Context, opts Options) error {
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 		minYield:      opts.Config.MinYieldSatsPerSec,
+		incomeMode:    incomeMode,
 		activityMu:    &activityMu,
 		activity:      activity,
 		explain:       opts.Explain,

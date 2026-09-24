@@ -233,7 +233,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` (env), default 0.05 (5%). Applies
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
-7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
+7. ✅ **Sharpe-ratio preference** to favour stable yield — ADR-010 A5,
+   shipped (session 290): `income_mode` config/`OTEDAMA_INCOME_MODE` env
+   (`max`/`smooth`/`balanced`); modified Sharpe `(yield − min_yield floor)/σ`
+   over Welford variance of observed yields; unproven-volatility streams
+   score Sharpe 0 (unproven risk ≠ zero risk); balanced blends
+   `0.5·normalized-yield + 0.5·normalized-Sharpe`. No CLI flag (hysteresis
+   precedent).
 8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
    conversion path and that simulated vs real yield is never mixed in
    accounting.

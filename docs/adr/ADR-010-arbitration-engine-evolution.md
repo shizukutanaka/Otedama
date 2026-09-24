@@ -169,6 +169,28 @@ if the device count ever grows large enough to warrant it.
 
 **Non-custodial check:** ✅ Pure preference flag.
 
+**Implementation note (session 290):** shipped early, minus the CLI
+flag (config key + env only, matching the hysteresis knob's precedent
+— `income_mode` / `OTEDAMA_INCOME_MODE`, values `max`/`smooth`/
+`balanced`, unset = `max`). `YieldForecaster` now accumulates Welford
+mean/variance over every observed effective yield and exposes
+`StdDev()`/`HasObservations()`; the arbitration loop publishes each
+(provider, device) forecaster's σ onto `Stream.VolatilityPerDevice`,
+keyed by device ID like `YieldPerDevice`. `Decide`'s `IncomeMode`
+selects the comparison value the candidates sort and hysteresis-
+compare on: raw yield (`max`), modified Sharpe `(yield −
+min_yield_sats_per_sec)/σ` (`smooth`), or `0.5·normalized-yield +
+0.5·normalized-Sharpe` across the device's candidate set (`balanced`,
+matching the ADR's default blend). Two deliberate readings: a stream
+with no volatility history scores Sharpe 0 — *unproven* risk treated
+as maximal, so a fresh yield-lure cannot read as infinitely safe —
+and a measured-but-constant stream (σ=0) gets a near-infinite Sharpe,
+the faithful risk-free-dominance case. `ExpectedYield` and
+`ForegoneSatsPerSec` stay raw so the explain output reports real
+satoshis, not score units. No flag was added: policy lives in config,
+and the zero value (`IncomeModeMax`) is wire-compatible with the
+pre-A5 path — every existing Decide test runs unchanged.
+
 ### Feature A6 — Bayesian Beta-Bernoulli calibration (v3.5, ~30h)
 
 **Problem:** Engine needs ground truth. After routing Device X to provider Y, observe actual realized yield and update internal estimate of Y's reliability.

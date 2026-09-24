@@ -1251,7 +1251,7 @@ func TestDecide_MinYieldFloor_ExcludesBelowFloorStreamFromChoice(t *testing.T) {
 
 func TestDecide_MinYieldFloor_ZeroDisablesFloor(t *testing.T) {
 	// With the floor at 0 (default), even a tiny positive yield is assigned —
-	// identical to the pre-floor behaviour.
+	// identical to the pre-floor behavior.
 	cpu := DeviceRef{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}
 	mining := Stream{
 		ID:              "mining.braiins",
@@ -1495,5 +1495,202 @@ func TestDecide_ConfirmedChallengerSwitchesNormally(t *testing.T) {
 	}
 	if a.AwaitingConfirmation {
 		t.Error("AwaitingConfirmation true for a confirmed challenger")
+	}
+}
+
+// ADR-010 A5: ParseIncomeMode maps the config spellings; "" and "max"
+// resolve to the unchanged-default Max, and String round-trips.
+func TestParseIncomeMode(t *testing.T) {
+	cases := map[string]IncomeMode{
+		"":         IncomeModeMax,
+		"max":      IncomeModeMax,
+		"smooth":   IncomeModeSmooth,
+		"balanced": IncomeModeBalanced,
+	}
+	for s, want := range cases {
+		got, err := ParseIncomeMode(s)
+		if err != nil {
+			t.Fatalf("ParseIncomeMode(%q) error: %v", s, err)
+		}
+		if got != want {
+			t.Errorf("ParseIncomeMode(%q) = %v, want %v", s, got, want)
+		}
+		if got.String() != s && s != "" {
+			t.Errorf("IncomeMode(%q).String() = %q, want %q", s, got.String(), s)
+		}
+	}
+	if _, err := ParseIncomeMode("aggressive"); err == nil {
+		t.Error("ParseIncomeMode(aggressive) should error")
+	}
+}
+
+// A5 smooth mode: a steady stream beats a higher-yielding but volatile
+// one — sharpe_steady = (8−0)/0.5 = 16 vs sharpe_spiky = (10−0)/5 = 2.
+func TestDecide_IncomeModeSmoothPrefersSteady(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	steady := Stream{
+		ID:              "mining.steady",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 8, Confidence: 1.0}},
+		Confirmed:       true,
+		VolatilityPerDevice: map[string]float64{
+			"gpu-0": 0.5,
+		},
+	}
+	spiky := Stream{
+		ID:              "ai.spiky",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 10, Confidence: 1.0}},
+		Confirmed:       true,
+		VolatilityPerDevice: map[string]float64{
+			"gpu-0": 5.0,
+		},
+	}
+
+	// max (the default and the pre-A5 behavior) still picks the
+	// highest yield — unchanged semantics.
+	alloc, err := Decide(Input{
+		Devices:    []DeviceRef{gpu},
+		Streams:    []Stream{steady, spiky},
+		Policy:     PolicyMaximizeEarnings,
+		IncomeMode: IncomeModeMax,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "ai.spiky" {
+		t.Fatalf("max mode picked %q, want ai.spiky", alloc.Assignments[0].Stream)
+	}
+
+	// smooth inverts the choice: 2 < 16 on the Sharpe scale.
+	alloc, err = Decide(Input{
+		Devices:    []DeviceRef{gpu},
+		Streams:    []Stream{steady, spiky},
+		Policy:     PolicyMaximizeEarnings,
+		IncomeMode: IncomeModeSmooth,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.steady" {
+		t.Fatalf("smooth mode picked %q, want mining.steady", alloc.Assignments[0].Stream)
+	}
+
+	// balanced: steady = 0.5·(8/10) + 0.5·(16/16) = 0.9 beats
+	// spiky = 0.5·1 + 0.5·(2/16) = 0.5625.
+	alloc, err = Decide(Input{
+		Devices:    []DeviceRef{gpu},
+		Streams:    []Stream{steady, spiky},
+		Policy:     PolicyMaximizeEarnings,
+		IncomeMode: IncomeModeBalanced,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.steady" {
+		t.Fatalf("balanced mode picked %q, want mining.steady", alloc.Assignments[0].Stream)
+	}
+}
+
+// A5 smooth mode treats a stream with no volatility history as unproven
+// risk (Sharpe 0), not zero risk — otherwise the first quote of a yield-
+// lure would read as infinitely safe and displace a proven incumbent.
+func TestDecide_IncomeModeSmoothUnprovenIsNotRiskFree(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	steady := Stream{
+		ID:              "mining.steady",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 8, Confidence: 1.0}},
+		Confirmed:       true,
+		VolatilityPerDevice: map[string]float64{
+			"gpu-0": 0.5, // sharpe 16
+		},
+	}
+	unproven := Stream{
+		ID:              "ai.unproven",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 50, Confidence: 1.0}},
+		Confirmed:       true,
+		// no VolatilityPerDevice — unproven
+	}
+
+	alloc, err := Decide(Input{
+		Devices:    []DeviceRef{gpu},
+		Streams:    []Stream{steady, unproven},
+		Policy:     PolicyMaximizeEarnings,
+		IncomeMode: IncomeModeSmooth,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "mining.steady" {
+		t.Fatalf("unproven 50-sat lure outscored proven steady stream; got %q",
+			alloc.Assignments[0].Stream)
+	}
+}
+
+// A5 balanced mode still honors yield when every candidate is equally
+// (un)risky — the normalized-yield half of the blend dominates when the
+// Sharpe half is all zeros.
+func TestDecide_IncomeModeBalancedFallsBackToYieldWhenNoRisk(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	low := Stream{
+		ID:              "mining.low",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 4, Confidence: 1.0}},
+	}
+	high := Stream{
+		ID:              "ai.high",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 12, Confidence: 1.0}},
+	}
+	alloc, err := Decide(Input{
+		Devices:    []DeviceRef{gpu},
+		Streams:    []Stream{low, high},
+		Policy:     PolicyMaximizeEarnings,
+		IncomeMode: IncomeModeBalanced,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "ai.high" {
+		t.Fatalf("balanced with no risk data picked %q, want ai.high",
+			alloc.Assignments[0].Stream)
+	}
+}
+
+// The Sharpe numerator subtracts the min-yield floor: under smooth mode
+// with a floor, a stream below the floor never becomes attractive merely
+// because it is constant — the floor filters it before scoring.
+func TestDecide_IncomeModeSmoothHonoursMinYieldFloor(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	steadyPoor := Stream{
+		ID:              "mining.poor",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 2, Confidence: 1.0}},
+		VolatilityPerDevice: map[string]float64{
+			"gpu-0": 0.01, // sharpe = (2−5)/0.01 → negative; but filtered anyway
+		},
+	}
+	spikyRich := Stream{
+		ID:              "ai.rich",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 20, Confidence: 1.0}},
+		VolatilityPerDevice: map[string]float64{
+			"gpu-0": 8.0, // sharpe = (20−5)/8 = 1.875
+		},
+	}
+	alloc, err := Decide(Input{
+		Devices:            []DeviceRef{gpu},
+		Streams:            []Stream{steadyPoor, spikyRich},
+		Policy:             PolicyMaximizeEarnings,
+		MinYieldSatsPerSec: 5,
+		IncomeMode:         IncomeModeSmooth,
+	})
+	if err != nil {
+		t.Fatalf("Decide failed: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "ai.rich" {
+		t.Fatalf("smooth with floor picked %q, want ai.rich", alloc.Assignments[0].Stream)
 	}
 }

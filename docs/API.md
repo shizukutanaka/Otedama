@@ -348,8 +348,10 @@ confidence-adjusted quote), and `alt_forecast_sigma_sats_per_sec` (the
 alternative's forecast error scale) — the inputs the rendered
 "Reasoning:" block is built from. A held row additionally carries
 `awaiting_confirmation` when the suppressed candidate was an
-unconfirmed stream (ADR-010 A7 confirmation ladder). Served by
-`otedama arb explain` for terminal rendering.
+unconfirmed stream (ADR-010 A7 confirmation ladder). The snapshot
+header echoes the active `income_mode` (`max`/`smooth`/`balanced` —
+ADR-010 A5) alongside policy, hysteresis, and the min-yield floor.
+Served by `otedama arb explain` for terminal rendering.
 
 - `200 OK` — snapshot JSON.
 - `503 Service Unavailable` — the engine has not recorded its first

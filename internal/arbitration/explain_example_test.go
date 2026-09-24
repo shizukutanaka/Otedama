@@ -29,7 +29,7 @@ func ExampleExplainText() {
 	fmt.Print(ExplainText(snap))
 	// Output:
 	// === Otedama arbitration decision (2027-08-14 14:32:11) ===
-	// Policy: maximize_earnings · hysteresis 5% · min yield 0.01 sat/s
+	// Policy: maximize_earnings · hysteresis 5% · min yield 0.01 sat/s · income max
 	// Devices: 2 · idle: 1 · expected: 1.51 sat/s
 	//
 	// Device  Stream       Yield       Forecast     Reliability             Detail

@@ -77,6 +77,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "arbitration_hysteresis_pct: %g%s\n", cfg.ArbitrationHysteresisPct, tag(origins.ArbitrationHysteresisPct))
 	fmt.Fprintf(stdout, "curtail_below_btc_usd:      %g%s\n", cfg.CurtailBelowBTCUSD, tag(origins.CurtailBelowBTCUSD))
 	fmt.Fprintf(stdout, "min_yield_sats_per_sec:     %g%s\n", cfg.MinYieldSatsPerSec, tag(origins.MinYieldSatsPerSec))
+	fmt.Fprintf(stdout, "income_mode:                %s%s\n", incomeModeDisplay(cfg.IncomeMode), tag(origins.IncomeMode))
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
 	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
 	fmt.Fprintf(stdout, "http_addr:                  %s%s\n", safeDisplay(cfg.HTTPAddr), tag(origins.HTTPAddr))
@@ -115,6 +116,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		ArbitrationHysteresisPct float64           `json:"arbitration_hysteresis_pct"`
 		CurtailBelowBTCUSD       float64           `json:"curtail_below_btc_usd"`
 		MinYieldSatsPerSec       float64           `json:"min_yield_sats_per_sec"`
+		IncomeMode               string            `json:"income_mode"`
 		PowerWatts               float64           `json:"power_watts"`
 		ElectricityPricePerKWh   float64           `json:"electricity_price_per_kwh"`
 		HTTPAddr                 string            `json:"http_addr"`
@@ -131,6 +133,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		ArbitrationHysteresisPct: cfg.ArbitrationHysteresisPct,
 		CurtailBelowBTCUSD:       cfg.CurtailBelowBTCUSD,
 		MinYieldSatsPerSec:       cfg.MinYieldSatsPerSec,
+		IncomeMode:               cfg.IncomeMode,
 		PowerWatts:               cfg.PowerWatts,
 		ElectricityPricePerKWh:   cfg.ElectricityPricePerKWh,
 		HTTPAddr:                 cfg.HTTPAddr,
@@ -148,6 +151,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"arbitration_hysteresis_pct": origins.ArbitrationHysteresisPct.String(),
 			"curtail_below_btc_usd":      origins.CurtailBelowBTCUSD.String(),
 			"min_yield_sats_per_sec":     origins.MinYieldSatsPerSec.String(),
+			"income_mode":                origins.IncomeMode.String(),
 			"power_watts":                origins.PowerWatts.String(),
 			"electricity_price_per_kwh":  origins.ElectricityPricePerKWh.String(),
 			"http_addr":                  origins.HTTPAddr.String(),
@@ -209,4 +213,14 @@ func safeDisplay(v string) string {
 		return "(default)"
 	}
 	return b.String()
+}
+
+// incomeModeDisplay renders the unset case as its effective value so
+// `config show` never prints a blank "income_mode:" line (the zero
+// value resolves to "max" inside arbitration.ParseIncomeMode).
+func incomeModeDisplay(s string) string {
+	if s == "" {
+		return "max"
+	}
+	return s
 }

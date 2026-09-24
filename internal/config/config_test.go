@@ -1188,3 +1188,59 @@ func TestResolveWithOrigins_NumericFileFields(t *testing.T) {
 		t.Errorf("ElectricityPricePerKWh origin = %v, want file", o.ElectricityPricePerKWh)
 	}
 }
+
+// ============================================================================
+// IncomeMode — ADR-010 A5 decision criterion (config/env layers, validation)
+// ============================================================================
+
+func TestIncomeMode_DefaultIsUnsetResolvingToMax(t *testing.T) {
+	cfg := Defaults()
+	if cfg.IncomeMode != "" {
+		t.Errorf("default IncomeMode = %q, want unset (resolves to max downstream)", cfg.IncomeMode)
+	}
+}
+
+func TestIncomeMode_FromConfigFile(t *testing.T) {
+	file := Config{IncomeMode: "smooth"}
+	cfg := Resolve(file, nil, FlagValues{})
+	if cfg.IncomeMode != "smooth" {
+		t.Errorf("IncomeMode = %q, want smooth (from config file)", cfg.IncomeMode)
+	}
+}
+
+func TestIncomeMode_EnvOverridesFile(t *testing.T) {
+	file := Config{IncomeMode: "smooth"}
+	env := map[string]string{"OTEDAMA_INCOME_MODE": "balanced"}
+	cfg := Resolve(file, env, FlagValues{})
+	if cfg.IncomeMode != "balanced" {
+		t.Errorf("IncomeMode = %q, want balanced (env overrides file)", cfg.IncomeMode)
+	}
+}
+
+func TestIncomeMode_EmptyFileDoesNotClobberDefault(t *testing.T) {
+	file := Config{}
+	cfg := Resolve(file, nil, FlagValues{})
+	if cfg.IncomeMode != "" {
+		t.Errorf("IncomeMode = %q, want unset (empty file preserves default)", cfg.IncomeMode)
+	}
+}
+
+func TestValidate_IncomeMode(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, ok := range []string{"", "max", "smooth", "balanced"} {
+		c := base()
+		c.IncomeMode = ok
+		if err := c.Validate(); err != nil {
+			t.Errorf("income_mode %q should be valid: %v", ok, err)
+		}
+	}
+	c := base()
+	c.IncomeMode = "aggressive"
+	if err := c.Validate(); err == nil {
+		t.Error("unknown income_mode should fail validation")
+	}
+}

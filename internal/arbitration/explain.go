@@ -96,10 +96,12 @@ type DecisionSnapshot struct {
 
 	// Policy, HysteresisPct, and MinYieldSatsPerSec echo the Decide inputs
 	// that shaped this allocation so the table can state the knobs it was
-	// produced under.
+	// produced under. IncomeMode is the A5 criterion ("max"/"smooth"/
+	// "balanced"); omitted when empty so old snapshots stay readable.
 	Policy             string  `json:"policy"`
 	HysteresisPct      float64 `json:"hysteresis_pct"`
 	MinYieldSatsPerSec float64 `json:"min_yield_sats_per_sec"`
+	IncomeMode         string  `json:"income_mode,omitempty"`
 
 	// Rows is one ExplainRow per device, in the Allocation's deterministic
 	// DeviceID order. Skipped counts rows with no viable stream.
@@ -110,6 +112,16 @@ type DecisionSnapshot struct {
 	TotalSatsPerSec float64 `json:"total_sats_per_sec"`
 }
 
+// incomeModeOr renders the snapshot's mode for the header line — an
+// empty field (snapshots recorded before A5) displays "max", the value
+// it effectively decided with.
+func incomeModeOr(s string) string {
+	if s == "" {
+		return "max"
+	}
+	return s
+}
+
 // ExplainText renders a DecisionSnapshot as the operator-facing table
 // ADR-010 A9 specifies. It is pure — cmd/otedama formats the result and
 // nothing here touches output handles, so the rendering is testable.
@@ -117,8 +129,8 @@ func ExplainText(s *DecisionSnapshot) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "=== Otedama arbitration decision (%s) ===\n",
 		s.At.Format("2006-01-02 15:04:05"))
-	fmt.Fprintf(&b, "Policy: %s · hysteresis %.0f%% · min yield %.2f sat/s\n",
-		s.Policy, s.HysteresisPct*100, s.MinYieldSatsPerSec)
+	fmt.Fprintf(&b, "Policy: %s · hysteresis %.0f%% · min yield %.2f sat/s · income %s\n",
+		s.Policy, s.HysteresisPct*100, s.MinYieldSatsPerSec, incomeModeOr(s.IncomeMode))
 	fmt.Fprintf(&b, "Devices: %d · idle: %d · expected: %.2f sat/s\n\n",
 		len(s.Rows), s.Skipped, s.TotalSatsPerSec)
 

@@ -149,3 +149,56 @@ func TestYieldForecaster_NoResetWithinNoise(t *testing.T) {
 		}
 	}
 }
+
+// ADR-010 A5: StdDev is the observed-series sample stddev feeding the
+// modified Sharpe ratio — 0 until two observations exist, then the
+// dispersion of every quote seen (including the first-seed).
+func TestYieldForecaster_StdDev(t *testing.T) {
+	f := NewYieldForecaster(0)
+	if got := f.StdDev(); got != 0 {
+		t.Fatalf("StdDev before observations = %v, want 0", got)
+	}
+	f.Update(10)
+	if got := f.StdDev(); got != 0 {
+		t.Fatalf("StdDev with one observation = %v, want 0", got)
+	}
+	// {2,4,6}: sample stddev = sqrt((4+0+4)/(3-1)) = 2.
+	g := NewYieldForecaster(0)
+	for _, v := range []float64{2, 4, 6} {
+		g.Update(v)
+	}
+	if got := g.StdDev(); math.Abs(got-2) > 1e-9 {
+		t.Fatalf("StdDev({2,4,6}) = %v, want 2", got)
+	}
+	// A constant series reports σ=0 — measured risk-free, distinct from
+	// "never observed" via HasObservations.
+	h := NewYieldForecaster(0)
+	for i := 0; i < 10; i++ {
+		h.Update(7)
+	}
+	if got := h.StdDev(); got != 0 {
+		t.Fatalf("StdDev(constant) = %v, want 0", got)
+	}
+}
+
+// The first-seed Update counts as an observation so StdDev/HasObservations
+// reflect it; an A8 regime reset clears the dispersion history too — the
+// pre-break series no longer describes the stream's risk.
+func TestYieldForecaster_HasObservations_ResetClearsDispersion(t *testing.T) {
+	f := NewYieldForecaster(0)
+	if f.HasObservations() {
+		t.Fatal("fresh forecaster reports observations")
+	}
+	f.Update(5)
+	if !f.HasObservations() {
+		t.Fatal("first-seed update should count as an observation")
+	}
+	f.Update(9)
+	f.reset()
+	if f.HasObservations() {
+		t.Fatal("reset should clear the observation history")
+	}
+	if got := f.StdDev(); got != 0 {
+		t.Fatalf("StdDev after reset = %v, want 0", got)
+	}
+}

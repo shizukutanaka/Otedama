@@ -73,6 +73,7 @@ its default, and its validation rule:
 | `arbitration_hysteresis_pct` | `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `0.05` | ∈ [0.0, 1.0) |
 | `curtail_below_btc_usd` | `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `0` (disabled) | ≥ 0 |
 | `min_yield_sats_per_sec` | `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `0` (disabled) | ≥ 0 |
+| `income_mode` | `OTEDAMA_INCOME_MODE` | `"max"` | one of `max`, `smooth`, `balanced` (ADR-010 A5) |
 | `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
 | `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
 | `http_addr` | `OTEDAMA_HTTP_ADDR` | `""` (HTTP server disabled) | also settable via `--http-addr`; when set, serves `/metrics`, `/healthz`, `/readyz` |

@@ -32,6 +32,9 @@ type arbitrationLoopOpts struct {
 	log           func(level, msg string)
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
 	minYield      float64 // 0 disables the per-device profitability floor
+	// incomeMode is ADR-010 A5's decision criterion (max/smooth/balanced).
+	// The zero value IncomeModeMax keeps the pre-A5 behaviour.
+	incomeMode arbitration.IncomeMode
 
 	// activityMu/activity, when both non-nil, receive the TUI-facing
 	// provider status: after each Decide() this loop rewrites activity to
@@ -157,6 +160,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			streams := streamsSlice(opts.streamMap)
 			markConfirmedStreams(streams, providerQuotes)
+			markVolatility(streams, forecasters)
 			opts.streamsMu.Unlock()
 			opts.metrics.activeStreams.Set(float64(len(streams)))
 
@@ -171,6 +175,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				Policy:             arbitration.PolicyMaximizeEarnings,
 				HysteresisMargin:   margin,
 				MinYieldSatsPerSec: opts.minYield,
+				IncomeMode:         opts.incomeMode,
 			})
 			if err != nil {
 				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
@@ -242,6 +247,7 @@ func (opts *arbitrationLoopOpts) recordExplainSnapshot(alloc *arbitration.Alloca
 		Policy:             arbitration.PolicyMaximizeEarnings.String(),
 		HysteresisPct:      margin,
 		MinYieldSatsPerSec: opts.minYield,
+		IncomeMode:         opts.incomeMode.String(),
 		Rows:               make([]arbitration.ExplainRow, 0, len(alloc.Assignments)),
 		Skipped:            alloc.SkippedDevice,
 		TotalSatsPerSec:    alloc.TotalYield,
@@ -388,6 +394,33 @@ func markConfirmedStreams(streams []arbitration.Stream, providerQuotes map[strin
 	}
 }
 
+// markVolatility publishes each (stream, device) forecaster's realized-
+// yield stddev onto the merged stream for ADR-010 A5's income modes.
+// forecasters are keyed "providerID:deviceID"; streams merge per
+// provider, so each forecaster writes into its provider's
+// VolatilityPerDevice under the device ID — matching how YieldPerDevice
+// is keyed inside Decide.
+func markVolatility(streams []arbitration.Stream, forecasters map[string]*arbitration.YieldForecaster) {
+	idx := make(map[string]int, len(streams))
+	for i, s := range streams {
+		idx[string(s.ID)] = i
+	}
+	for key, fc := range forecasters {
+		pid, dev, ok := strings.Cut(key, ":")
+		if !ok {
+			continue
+		}
+		i, ok := idx[pid]
+		if !ok || !fc.HasObservations() {
+			continue
+		}
+		if streams[i].VolatilityPerDevice == nil {
+			streams[i].VolatilityPerDevice = make(map[string]float64)
+		}
+		streams[i].VolatilityPerDevice[dev] = fc.StdDev()
+	}
+}
+
 // streamsSlice flattens the streams map into a slice, de-duplicated by
 // StreamID. The map is keyed "providerID:deviceID", so a provider with N
 // devices produces N entries all sharing the same StreamID. A simple
@@ -406,6 +439,12 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y
+			}
+			for devID, v := range s.VolatilityPerDevice {
+				if rep.VolatilityPerDevice == nil {
+					rep.VolatilityPerDevice = make(map[string]float64)
+				}
+				rep.VolatilityPerDevice[devID] = v
 			}
 		} else {
 			// Deep-copy to avoid aliasing the YieldPerDevice map inside m.

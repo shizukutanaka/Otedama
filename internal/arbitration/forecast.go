@@ -30,6 +30,13 @@ type YieldForecaster struct {
 
 	mae float64 // EWMA of absolute one-step forecast error
 
+	// Welford accumulators over observed values — the realized-yield
+	// dispersion ADR-010 A5's modified Sharpe needs. Tracked separately
+	// from the smoother's residual scale (mae is forecast *error*; this is
+	// the variance of the observed series itself).
+	obsMean, obsM2 float64
+	obsN           int
+
 	// A8 change-point detection (CTS-lite, Mellor & Shapiro 2013): a
 	// rolling window of the last-5 absolute one-step errors. When the
 	// window's median exceeds 2σ (the running MAE above), the smoother is
@@ -64,6 +71,13 @@ func NewYieldForecaster(period int) *YieldForecaster {
 // forecaster initializes — the first observation seeds the level) plus a
 // flag telling whether the observation triggered an A8 regime reset.
 func (f *YieldForecaster) Update(v float64) (err float64, reset bool) {
+	// Welford's online variance over the observed series — survives even
+	// the initial-seed branch so the dispersion reflects every quote seen.
+	f.obsN++
+	delta := v - f.obsMean
+	f.obsMean += delta / float64(f.obsN)
+	f.obsM2 += delta * (v - f.obsMean)
+
 	if !f.initialized {
 		f.level = v
 		f.initialized = true
@@ -120,6 +134,7 @@ func (f *YieldForecaster) reset() {
 	f.initialized = false
 	f.errWin = [5]float64{}
 	f.errPos, f.errWinFilled = 0, 0
+	f.obsMean, f.obsM2, f.obsN = 0, 0, 0
 	// f.updates deliberately survives the reset: the warm-up gate counts
 	// lifetime observations, and a forecaster that already calibrated once
 	// may immediately re-arm after a break.
@@ -161,3 +176,20 @@ func (f *YieldForecaster) Predict(steps int) float64 {
 // Sigma is the running mean-absolute one-step error — the scale ADR-010
 // A8's "5-epoch MA shifts > 2σ" reset compares against.
 func (f *YieldForecaster) Sigma() float64 { return f.mae }
+
+// StdDev is the sample standard deviation of the observed yield series —
+// the realized-yield dispersion in the denominator of ADR-010 A5's modified
+// Sharpe ratio. It returns 0 with fewer than two observations, so callers
+// can distinguish "no risk measured yet" from "constant series" via a
+// separate presence check.
+func (f *YieldForecaster) StdDev() float64 {
+	if f.obsN < 2 {
+		return 0
+	}
+	return math.Sqrt(f.obsM2 / float64(f.obsN-1))
+}
+
+// HasObservations reports whether the smoother has seen any value — used
+// with StdDev to tell "constant so far" (StdDev 0, observed) apart from
+// "never observed" (not observed) for A5's unproven-risk treatment.
+func (f *YieldForecaster) HasObservations() bool { return f.obsN > 0 }

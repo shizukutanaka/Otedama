@@ -119,6 +119,13 @@ type Stream struct {
 	// trigger a switch is held regardless of how far above the hysteresis
 	// threshold it scores.
 	Confirmed bool
+
+	// VolatilityPerDevice is the sample stddev of each device's realized
+	// yield on this stream — the dispersion input of ADR-010 A5's modified
+	// Sharpe score under IncomeModeSmooth/Balanced. Keyed by Identity.ID
+	// like YieldPerDevice; absent entries mean "no risk measured yet",
+	// which smooth modes treat as unproven risk (Sharpe 0), not zero risk.
+	VolatilityPerDevice map[string]float64
 }
 
 // Accepts reports whether this stream will accept work from a device of
@@ -232,7 +239,7 @@ type Assignment struct {
 	// whose suppressed best candidate was an unconfirmed stream — the ladder
 	// (not the margin) kept the incumbent. It distinguishes "declined for
 	// stability" from "declined because the challenger hasn't proven
-	// ConfirmationEpochs quotes yet" so operators can see the lure defence
+	// ConfirmationEpochs quotes yet" so operators can see the lure defense
 	// working (ote­dama_arbitration_confirmation_holds_total).
 	AwaitingConfirmation bool
 }
@@ -251,6 +258,54 @@ type Allocation struct {
 	TotalYield    float64
 	Policy        Policy
 	SkippedDevice int // devices left idle: no compatible stream accepts them, or none clears the MinYieldSatsPerSec floor
+}
+
+// IncomeMode selects the decision criterion applied to stream yields
+// (ADR-010 A5). Max picks the highest expected yield; Smooth picks the
+// highest modified Sharpe (yield minus the min-yield floor, over the
+// realized-yield stddev); Balanced blends normalized yield and Sharpe
+// half-and-half.
+type IncomeMode int
+
+const (
+	// IncomeModeMax maximizes expected yield — the default and the
+	// pre-A5 behavior.
+	IncomeModeMax IncomeMode = iota
+	// IncomeModeSmooth maximizes the modified Sharpe ratio: high
+	// *steady* income preferred over high but spiky income.
+	IncomeModeSmooth
+	// IncomeModeBalanced scores 0.5·normalized-yield + 0.5·normalized-
+	// Sharpe across the device's candidate set — ADR-010's "0.5 × mean +
+	// 0.5 × Sharpe" compromise between the two extremes.
+	IncomeModeBalanced
+)
+
+// String returns the config-file spelling of the mode.
+func (m IncomeMode) String() string {
+	switch m {
+	case IncomeModeSmooth:
+		return "smooth"
+	case IncomeModeBalanced:
+		return "balanced"
+	default:
+		return "max"
+	}
+}
+
+// ParseIncomeMode maps a config string ("", "max", "smooth",
+// "balanced") to its mode; "" resolves to Max so an unset field is the
+// unchanged default.
+func ParseIncomeMode(s string) (IncomeMode, error) {
+	switch s {
+	case "", "max":
+		return IncomeModeMax, nil
+	case "smooth":
+		return IncomeModeSmooth, nil
+	case "balanced":
+		return IncomeModeBalanced, nil
+	default:
+		return IncomeModeMax, fmt.Errorf("arbitration: unknown income_mode %q", s)
+	}
 }
 
 // Input bundles the arguments to Decide.
@@ -290,6 +345,12 @@ type Input struct {
 	// 0 (the default) disables the floor — every positive-yield stream qualifies,
 	// exactly as before this field existed. Must be non-negative.
 	MinYieldSatsPerSec float64
+
+	// IncomeMode selects the decision criterion (ADR-010 A5): the
+	// zero value IncomeModeMax keeps the pre-A5 "highest expected yield"
+	// behavior; Smooth and Balanced fold the realized-yield dispersion
+	// (Stream.VolatilityPerDevice) into the comparison score.
+	IncomeMode IncomeMode
 }
 
 // DeviceRef is a lightweight reference to a Device. We pass references
@@ -350,13 +411,15 @@ func Decide(in Input) (*Allocation, error) {
 		}
 	}
 
+	mode := in.IncomeMode // zero value (Max) is the pre-A5 behavior
+
 	alloc := &Allocation{
 		Assignments: make([]Assignment, 0, len(devices)),
 		Policy:      in.Policy,
 	}
 
 	for _, dev := range devices {
-		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec)
+		a := chooseForDevice(dev, in.Streams, prev[dev.Identity.ID], in.Policy, in.HysteresisMargin, in.MinYieldSatsPerSec, mode)
 		if a.Idle() {
 			alloc.SkippedDevice++
 		}
@@ -376,12 +439,8 @@ func chooseForDevice(
 	policy Policy,
 	hysteresis float64,
 	minYield float64,
+	mode IncomeMode,
 ) Assignment {
-	type candidate struct {
-		stream Stream
-		yield  float64
-	}
-
 	// belowFloor records whether at least one stream accepted this device with a
 	// positive yield that nonetheless failed the minYield floor. It lets the idle
 	// reason distinguish "nothing wanted this device" from "the work on offer was
@@ -400,7 +459,7 @@ func chooseForDevice(
 			belowFloor = true
 			continue
 		}
-		candidates = append(candidates, candidate{stream: s, yield: y})
+		candidates = append(candidates, candidate{stream: s, yield: y, idx: len(candidates)})
 	}
 
 	if len(candidates) == 0 {
@@ -429,11 +488,16 @@ func chooseForDevice(
 		}
 	}
 
+	// ADR-010 A5: under a non-Max income mode the comparison value is the
+	// modified Sharpe (smooth) or a normalized blend (balanced) instead of
+	// raw yield. adj[i] is indexed by candidate.idx — see incomeScores.
+	adj := incomeScores(candidates, dev.Identity.ID, minYield, mode)
+
 	// Sort candidates by policy-adjusted score (descending), then by StreamID for
 	// determinism.
 	slices.SortStableFunc(candidates, func(a, b candidate) int {
-		sa := policyScore(a.stream, a.yield, policy)
-		sb := policyScore(b.stream, b.yield, policy)
+		sa := policyScore(a.stream, adj[a.idx], policy)
+		sb := policyScore(b.stream, adj[b.idx], policy)
 		if sa != sb {
 			return cmp.Compare(sb, sa) // descending: higher score first
 		}
@@ -441,7 +505,7 @@ func chooseForDevice(
 	})
 
 	best := candidates[0]
-	bestScore := policyScore(best.stream, best.yield, policy)
+	bestScore := policyScore(best.stream, adj[best.idx], policy)
 
 	// Hysteresis: if we currently have a previous assignment on a still-
 	// available stream, keep it unless the best candidate beats it by the
@@ -456,7 +520,7 @@ func chooseForDevice(
 	if previous.Stream != "" {
 		for _, c := range candidates {
 			if c.stream.ID == previous.Stream {
-				incScore := policyScore(c.stream, c.yield, policy)
+				incScore := policyScore(c.stream, adj[c.idx], policy)
 				threshold := incScore * (1.0 + hysteresis)
 				// ADR-010 A7's confirmation ladder: an unconfirmed challenger
 				// cannot fast-track past a confirmed incumbent however far
@@ -499,11 +563,15 @@ func chooseForDevice(
 		}
 	}
 
+	reason := fmt.Sprintf("best yield under policy %s", policy)
+	if mode != IncomeModeMax {
+		reason = fmt.Sprintf("best %s score under policy %s", mode, policy)
+	}
 	a := Assignment{
 		DeviceID:           dev.Identity.ID,
 		Stream:             best.stream.ID,
 		ExpectedYield:      best.yield,
-		Reason:             fmt.Sprintf("best yield under policy %s", policy),
+		Reason:             reason,
 		ForegoneSatsPerSec: maxRaw - best.yield,
 	}
 	if maxRawStream != best.stream.ID {
@@ -518,11 +586,66 @@ func chooseForDevice(
 // ConfirmationEpochs is the number of quotes a provider must supply before
 // one of its streams may displace a confirmed incumbent (ADR-010 A7's
 // confirmation ladder, after Lykouris, Mirrokni & Paes Leme's bounded-arm
-// defence). Three ticks ≈ 90 s at the 30 s arbitration cadence: short enough
+// defense). Three ticks ≈ 90 s at the 30 s arbitration cadence: short enough
 // that honest providers clear it quickly, long enough that a lure must
 // sustain its inflated quote — and accrue real epoch observations to the
 // reliability posterior — before it can cause a switch.
 const ConfirmationEpochs = 3
+
+// frac is x/d with a 0 default for d<=0 — the balanced mode's normalized
+// terms collapse gracefully when a whole candidate set shares one scale
+// value (e.g. all Sharpe scores 0 before any volatility history exists).
+func frac(x, d float64) float64 {
+	if d <= 0 {
+		return 0
+	}
+	return x / d
+}
+
+// candidate pairs a stream with its raw effective yield for one device;
+// idx preserves the candidate's slot in the income-adjusted score table
+// (incomeScores output) across the policy sort.
+type candidate struct {
+	stream Stream
+	yield  float64
+	idx    int
+}
+
+// incomeScores computes the per-candidate comparison value Decide sorts
+// on (ADR-010 A5). sharpes[i] is (yield_i − minYield)/σ_i with σ_i the
+// stream's realized-yield stddev for this device; a candidate with no
+// volatility history scores Sharpe 0 (unproven risk treated as maximal).
+// A measured-but-constant stream (σ=0) gets a very large Sharpe — the
+// risk-free-rate case, faithfully dominating noisy alternatives. Under
+// IncomeModeMax (the default) the result is the raw yield itself, so the
+// pre-A5 semantics are preserved exactly.
+func incomeScores(candidates []candidate, deviceID string, minYield float64, mode IncomeMode) []float64 {
+	sharpes := make([]float64, len(candidates))
+	adj := make([]float64, len(candidates))
+	maxY, maxS := 0.0, 0.0
+	for i, c := range candidates {
+		if std, ok := c.stream.VolatilityPerDevice[deviceID]; ok {
+			sharpes[i] = (c.yield - minYield) / math.Max(std, 1e-9)
+		}
+		if c.yield > maxY {
+			maxY = c.yield
+		}
+		if sharpes[i] > maxS {
+			maxS = sharpes[i]
+		}
+	}
+	for i, c := range candidates {
+		switch mode {
+		case IncomeModeSmooth:
+			adj[i] = sharpes[i]
+		case IncomeModeBalanced:
+			adj[i] = 0.5*frac(c.yield, maxY) + 0.5*frac(sharpes[i], maxS)
+		default:
+			adj[i] = c.yield
+		}
+	}
+	return adj
+}
 
 // Scoring constants for policyScore. Extracted so the documented intent and
 // the arithmetic share a single source of truth (the previous inline comment

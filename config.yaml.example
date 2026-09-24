@@ -150,6 +150,18 @@ log_format: "text"
 # 0 (default) disables the floor: every positive-yield stream qualifies.
 # min_yield_sats_per_sec: 0
 
+# income_mode selects the arbitration decision criterion (ADR-010 A5):
+#   "max"      (default) picks the highest expected yield every cycle;
+#   "smooth"   picks the highest modified Sharpe ratio — (yield minus the
+#              min_yield floor) over the realized-yield standard deviation —
+#              preferring steady income over equal-but-spiky quotes;
+#   "balanced" scores candidates 0.5 x normalized-yield + 0.5 x
+#              normalized-Sharpe across each device's candidate set.
+# A stream with no volatility history yet scores Sharpe 0 under smooth —
+# unproven risk counts as maximal risk, so smooth mode prefers proven
+# steady streams until enough quotes have arrived to measure the rest.
+# income_mode: "max"
+
 # power_watts is your rig's measured total power draw, in watts. Setting it
 # enables the energy-efficiency metric otedama_joules_per_terahash.
 # 0 (default) leaves the efficiency/cost metrics off.

@@ -2158,3 +2158,41 @@ func TestMarkConfirmedStreams(t *testing.T) {
 		t.Error("provider with no quotes should stay unconfirmed")
 	}
 }
+
+// ADR-010 A5: each (provider, device) forecaster publishes its realized
+// yield stddev onto the merged stream keyed by device ID — the layout
+// Decide expects on VolatilityPerDevice. Streams without a forecaster
+// keep nil maps; forecasters with no observations publish nothing.
+func TestMarkVolatility(t *testing.T) {
+	steady := arbitration.NewYieldForecaster(0)
+	steady.Update(10)
+	steady.Update(10.5)
+	steady.Update(9.5)
+	fresh := arbitration.NewYieldForecaster(0) // no observations
+
+	streams := []arbitration.Stream{
+		{ID: "mining.steady"},
+		{ID: "ai.unknown"},
+	}
+	forecasters := map[string]*arbitration.YieldForecaster{
+		"mining.steady:gpu-0": steady,
+		"ai.unknown:asic-0":   fresh,
+	}
+	markVolatility(streams, forecasters)
+
+	want := steady.StdDev()
+	if got := streams[0].VolatilityPerDevice["gpu-0"]; got != want {
+		t.Errorf("VolatilityPerDevice[gpu-0] = %v, want %v (forecaster StdDev)", got, want)
+	}
+	if streams[1].VolatilityPerDevice != nil {
+		t.Errorf("stream with unobserved forecaster got map %v, want nil",
+			streams[1].VolatilityPerDevice)
+	}
+
+	// A forecaster keyed to a provider not in the slice is skipped, not fatal.
+	orphans := map[string]*arbitration.YieldForecaster{"ghost:gpu-0": steady}
+	markVolatility(streams, orphans)
+	if got := len(streams[0].VolatilityPerDevice); got != 1 {
+		t.Errorf("orphan forecaster mutated map: len=%d, want 1", got)
+	}
+}
