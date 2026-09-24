@@ -945,3 +945,29 @@ func TestServiceArgs_NoPercentEscape(t *testing.T) {
 		t.Errorf("sc.exe args got systemd %%-escape: %q", args)
 	}
 }
+
+// StandardOutPath/StandardErrorPath embed $HOME-derived paths into the
+// plist — a home directory containing '&' (or any XML special) must be
+// escaped or launchd refuses to load the plist (session 368).
+func TestLaunchdPlist_EscapesLogPathXML(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("launchd plist only generated on macOS")
+	}
+	dir := t.TempDir()
+	// Simulated home containing an XML-significant character.
+	home := filepath.Join(dir, "A&B Home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	m := makeTestManager(t)
+	plist := m.launchdPlist()
+
+	if strings.Contains(plist, "A&B Home") {
+		t.Errorf("unescaped '&' in plist — launchd would reject it:\n%s", plist)
+	}
+	if !strings.Contains(plist, "A&amp;B Home") {
+		t.Errorf("plist missing XML-escaped log path:\n%s", plist)
+	}
+}

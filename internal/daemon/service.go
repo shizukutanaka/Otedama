@@ -319,7 +319,7 @@ func (m *Manager) launchdPlist() string {
     <string>%[4]s</string>
 </dict>
 </plist>
-`, launchdLabel, argEntries.String(), launchdLogPath("otedama.log"), launchdLogPath("otedama.err"))
+`, launchdLabel, argEntries.String(), xmlEscape(launchdLogPath("otedama.log")), xmlEscape(launchdLogPath("otedama.err")))
 }
 
 // launchdLogPath resolves name under ~/Library/Logs — the standard macOS

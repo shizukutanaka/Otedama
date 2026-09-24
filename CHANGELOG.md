@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 368 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: launchd plist ログパスの XML エスケープ)
+
+- **launchd plist の `StandardOutPath`/`StandardErrorPath` を XML エスケープ** —
+  `~/Library/Logs` 由来のパスが未エスケープで埋め込まれており、`&`/`<` を含む
+  ホームディレクトリ名（例 `A&B`）で plist が不正 XML となり launchd が拒否し得た
+  実ギャップを解消。ProgramArguments は既に `xmlEscape` 済み。
+
 ### Fixed (session 367 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: systemd unit の % 指定子エスケープ)
 
 - **systemd unit 生成で `%` を `%%` にエスケープ** — `ExecStart`/`ReadWritePaths`
