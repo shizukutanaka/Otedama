@@ -2704,3 +2704,22 @@ func TestJobCoinbaseID_Distinguishes(t *testing.T) {
 		t.Fatal("fingerprint not deterministic")
 	}
 }
+
+// TestJitteredSleep_Bounds pins the equal-jitter contract: the sleep is
+// always at least half the nominal backoff (a guaranteed minimum
+// spacing, unlike full jitter which can land at ~0) and strictly below
+// the nominal itself.
+func TestJitteredSleep_Bounds(t *testing.T) {
+	for _, backoff := range []time.Duration{
+		reconnectBackoffInitial,
+		4 * time.Second,
+		reconnectBackoffMax,
+	} {
+		for i := 0; i < 64; i++ {
+			got := jitteredSleep(backoff)
+			if got < backoff/2 || got >= backoff {
+				t.Fatalf("jitteredSleep(%v) = %v, want [%v, %v)", backoff, got, backoff/2, backoff)
+			}
+		}
+	}
+}

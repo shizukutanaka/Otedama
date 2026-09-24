@@ -29,11 +29,13 @@ package engine
 
 import (
 	"context"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -69,6 +71,13 @@ const (
 
 	// reconnectBackoffMax caps the exponential reconnect backoff.
 	reconnectBackoffMax = 64 * time.Second
+
+	// reconnectHealthyThreshold: a session alive this long resets the
+	// backoff ladder. The accumulated penalty describes *flapping*
+	// sessions — a connection that ran for a while was healthy work,
+	// so its end is a fresh problem that starts from the initial delay
+	// instead of paying off the previous outage's debt.
+	reconnectHealthyThreshold = 30 * time.Second
 )
 
 // arbitrationInterval is how often the engine re-evaluates the
@@ -431,6 +440,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
+		sessionStart := time.Now()
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:      poolURL,
 			user:         user,
@@ -477,6 +487,12 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		if isFatal(sessionErr) {
 			return sessionErr
 		}
+		// A session that outlived reconnectHealthyThreshold was a working
+		// connection — its end is a fresh problem, so it does not inherit
+		// the backoff accumulated by earlier flapping sessions.
+		if time.Since(sessionStart) >= reconnectHealthyThreshold {
+			backoff = reconnectBackoffInitial
+		}
 
 		// Pool failover (fast): advance to the next pool in priority order
 		// before touching the payout address or backing off. A single-pool
@@ -496,6 +512,13 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// transient pool/network failures are handled by pool failover and
 		// backoff above — so an outage can never silently redirect earnings
 		// to a different address (no session establishes during an outage).
+		// Sleep the backoff with equal jitter — pure doubling made every
+		// stalled fleet reconnect in lockstep at 1s/2s/4s…: when a pool
+		// flaps, all its clients hammer it in the same second on recovery
+		// (the classic thundering-herd — AWS's "Exponential Backoff And
+		// Jitter" guidance). Equal jitter keeps at least half the
+		// intended spacing while decorrelating retries.
+		sleep := jitteredSleep(backoff)
 		switch {
 		case !addrConnected && len(addrs) > 1:
 			prev := addrIdx
@@ -514,18 +537,18 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			addrConnected = false
 			r.log("warn", fmt.Sprintf(
 				"engine: none of the %d configured payout addresses could connect; "+
-					"backing off %v and retrying from the primary", len(addrs), backoff))
+					"backing off %v and retrying from the primary", len(addrs), sleep))
 		case len(pools) > 1:
-			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
+			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), sleep))
 		default:
-			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
+			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, sleep))
 		}
 		// time.NewTimer + explicit Stop rather than time.After: when ctx is
 		// cancelled (shutdown) the timer is released immediately instead of
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
-		timer := time.NewTimer(backoff)
+		timer := time.NewTimer(sleep)
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
@@ -537,6 +560,20 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 	}
 	return ctx.Err()
+}
+
+// jitteredSleep applies equal jitter to a nominal backoff: half the
+// delay plus a uniform spread over the other half, so the result lands
+// in [backoff/2, backoff). Keeps a guaranteed minimum spacing (unlike
+// full jitter, which can sleep ~0) while decorrelating retries across
+// a fleet.
+func jitteredSleep(backoff time.Duration) time.Duration {
+	half := int64(backoff / 2)
+	n, err := crand.Int(crand.Reader, big.NewInt(half))
+	if err != nil {
+		return backoff // no entropy source: sleep the nominal value
+	}
+	return backoff/2 + time.Duration(n.Int64())
 }
 
 // ----- Session -----

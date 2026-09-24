@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 302 — 再接続 backoff の jitter・健全セッション後リセット)
+
+- **再接続 backoff に equal jitter と健全セッション後のリセットを追加** ——
+  純粋な等比級数（1→2→4→…→64s）では、プールフラップ時に全クライアントが
+  同一秒で再接続する thundering-herd が発生し得た（AWS "Exponential
+  Backoff And Jitter" 標準）。`jitteredSleep` で [b/2, b) の equal jitter
+  を適用（crypto/rand.Int による uniform ドローで modulo bias も排除）。
+  あわせて、30 秒以上存続した健全セッションの終了では蓄積済み backoff を
+  初期値へリセット —— 長時間掘ったセッションの終端が最大 64s で再試行
+  していたのを解消。
+
 ### Fixed (session 301 — 応答のないプールへの goroutine/エントリ漏洩を遮断)
 
 - **シェア判定・コール応答に 2 分のタイムアウト（V1+V2）** —— miningcore

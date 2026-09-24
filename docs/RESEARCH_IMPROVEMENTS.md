@@ -1251,6 +1251,27 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 302 increment (reconnect hygiene)
+
+- **再接続 backoff に equal jitter + 健全セッション後のリセットを実装**
+  —— AWS "Exponential Backoff And Jitter" / Google SRE の再接続設計
+  標準を確認し、runReconnectLoop の backoff が (a) 純粋な等比級数
+  （1→2→4→…→64s）で jitter 無し —— プールがフラップすると
+  全クライアントが同じ秒に再接続する thundering-herd、(b) 長時間
+  健全だったセッション終了後も蓄積済み backoff を支払い続ける
+  （30 分掘ったセッションの終端が最大 64s で再試行）の2点で
+  標準から逸脱していたことを確認。`jitteredSleep`（crypto/rand.Int
+  による uniform ドロー —— 数学 rand の lint 警告と modulo bias
+  を回避）で [b/2, b) の equal jitter を適用し、
+  `reconnectHealthyThreshold`（30s）以上存続したセッションで
+  ladder を初期値へリセット。
+- **新規テスト:** `TestJitteredSleep_Bounds`（3 バックオフ値 × 64
+  ドローで [b/2, b) 境界を検証）。
+- **検証済み非該当:** フェイルオーバー経路（pool 優先/アドレス
+  フェイルオーバー）は従来通り即時 `continue` で backoff を通らず
+  変更なし（意図的な高速フェイルオーバー設計を維持）。G404 を
+  crypto/rand.Int で回避し modulo bias も排除した点は lint 清浄。
+
 ## September 2026 research pass — session 301 increment (verdict-timeout parity)
 
 - **シェア判定/コール応答タイムアウト（V1+V2）を実装** —— Bitcoin Wiki
