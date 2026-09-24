@@ -460,6 +460,22 @@ exemplars are per-bucket latest-wins (no cardinality growth) and
 inject lines into the `/metrics` exposition; `effectiveYield` guards
 uptime ≤ 0 and clamps the productive fraction to [0,1].
 
+**Session 424 CS-invariant pass.** Session 423 closed a real gap —
+`provider.Yield.Effective()` lacked the NaN/Inf/clamp guards of its
+arbitration twin, and the loop fed the Holt-Winters forecaster the raw
+`observed * Confidence` product: one non-finite quote poisoned
+level/trend forever (the `err > 2σ` reset can never fire on NaN).
+Verified already-correct: `updateStreamReliability` discounts quote
+confidence by `PosteriorMean()` ∈ (0,1) — the Beta decay is a no-op for
+elapsed ≤ 0 and pulls pseudo-counts toward the Beta(1,1) prior, never
+out of range; `markVolatility` writes `fc.StdDev()` only when the
+forecaster has observations, and Decide skips non-finite stddevs;
+`LatencyTracker` is a mutex-guarded ring whose Quantile sorts a copy —
+exact nearest-rank on the retained window; `updateShareRates` clamps
+unaccounted at 0 and never divides by zero (`judged == 0` early
+return); `publishDifficulty` ignores non-positive difficulties and
+reports 0 share-interval at zero hashrate rather than +Inf.
+
 ---
 
 ### Elevation of privilege (E)
