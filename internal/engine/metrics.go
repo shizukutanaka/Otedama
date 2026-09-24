@@ -597,6 +597,13 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // from rejectClass (stale/duplicate/difficulty/hardware/other), giving
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
+// The additional label "difficulty-change" is emitted not by rejectClass
+// but by the V1 submit path for benign cross-generation rejects: shares
+// honestly mined under the previous share difficulty and rejected because
+// mining.set_difficulty moved the target mid-flight (ESP-Miner #212).
+// Those are counted here for visibility but are NOT added to
+// sharesRejected, so they never inflate otedama_reject_rate.
+//
 // Safe for concurrent use: session submit goroutines resolve verdicts
 // concurrently.
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {

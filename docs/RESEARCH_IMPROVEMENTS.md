@@ -649,13 +649,18 @@ endpoint against current vendor documentation. Tags as before
    `REQUIRES_EXTENDED_CHANNELS` fails the handshake (session 297) and
    extended channels are ADR-009 scope. There is no code path to
    regress, hence no fixture to add.
-4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
-   #212: after difficulty drops, in-flight shares against the old (harder)
-   target are rejected as "above target". Tag outstanding work with the
-   difficulty active when issued, validate locally against that, and treat
-   the resulting pool rejects as benign (exclude from the reject-rate
-   metric). Distinct cause from the existing stale/latency `rejectClass`.
-   (bitaxeorg/ESP-Miner #212)
+4. ✅ **Don't count post-`set_difficulty` "above-target" rejects —
+   RESOLVED (session 320, ported from the session-257 sibling
+   branch).** `internal/engine/difftag.go` tags each applied V1 job
+   with the share difficulty in force at issue time; a difficulty-class
+   pool reject on a share whose job's tag differs from the current
+   `SuggestedDifficulty()` is a cross-generation race and is counted under
+   `otedama_shares_rejected_by_reason_total{reason="difficulty-change"}`
+   for visibility while being excluded from `sharesRejected` /
+   `otedama_reject_rate` (ESP-Miner #212). Original finding: after
+   difficulty drops, in-flight shares against the old (harder) target are
+   rejected as "above target"; distinct cause from the existing
+   stale/latency `rejectClass`. (bitaxeorg/ESP-Miner #212)
    — **Prerequisite fixed (session 226):** investigating this item surfaced a
    more fundamental bug it presupposes — the V1 path (`applyJob`) was not
    applying `mining.set_difficulty` to the mining target *at all*; every

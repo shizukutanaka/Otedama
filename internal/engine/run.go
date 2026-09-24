@@ -770,6 +770,11 @@ type sessionOpts struct {
 	// carbonGate is the parallel gate raised when the UK grid carbon
 	// intensity exceeds curtail_above_uk_carbon; either gate curtails.
 	carbonGate *atomic.Bool
+	// diffTags, when non-nil (V1 sessions only), tags each applied job
+	// with the share difficulty in force so post-set_difficulty rejects
+	// on old-generation shares classify as benign races rather than real
+	// rejects (ESP-Miner #212). Set by runSessionV1.
+	diffTags *difficultyTagger
 	// tlsCAFile is the active pool's optional PEM CA bundle path (PoolConfig
 	// .TLSCAFile), used to verify a private-CA/self-signed stratum+tls:// pool.
 	tlsCAFile string
@@ -1170,9 +1175,13 @@ func dispatchJob(opts *sessionOpts, job *poolproto.Job, chanID uint32, difficult
 	if opts.isCurtailed() {
 		opts.log("debug", fmt.Sprintf("engine: %s job %s ignored (curtailed)", tag, job.JobID))
 	} else {
-		if err := applyJob(opts.workers, *job, chanID, difficulty); err != nil {
+		jobID, err := applyJob(opts.workers, *job, chanID, difficulty)
+		if err != nil {
 			opts.log("warn", err.Error())
 			return
+		}
+		if opts.diffTags != nil {
+			opts.diffTags.tag(jobID, difficulty)
 		}
 		opts.log("info", fmt.Sprintf("engine: %s job %s nBits=0x%08X", tag, job.JobID, job.NBits))
 	}
@@ -1270,6 +1279,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
+	// Tags each applied job with the share difficulty in force so
+	// post-set_difficulty rejects on old-generation shares classify as
+	// benign races rather than real rejects (ESP-Miner #212). Lives on
+	// sessionOpts so both dispatchJob and submitV1Share can see it.
+	opts.diffTags = newDifficultyTagger(64)
 	for {
 		select {
 		case <-ctx.Done():
@@ -1332,6 +1346,21 @@ func submitV1Share(ctx context.Context, sess poolproto.Session, rt *sessionTelem
 	}
 	if !result.Accepted {
 		category, diagnosis := rejectClass(result.Reason)
+		// A difficulty-class reject on a share issued under a different
+		// share difficulty is a cross-generation race: the share honestly
+		// met the target it was issued under and the pool moved the target
+		// mid-flight (var-diff). Count it in the reason breakdown as
+		// "difficulty-change" for visibility, but exclude it from
+		// sharesRejected so it never inflates the reject rate
+		// (ESP-Miner #212).
+		if category == "difficulty" && opts.diffTags != nil &&
+			opts.diffTags.benign(share.JobID, sess.SuggestedDifficulty()) {
+			opts.log("info", fmt.Sprintf("engine: V1 share rejected: %s (benign: share met previous share difficulty; pool target changed mid-flight)", result.Reason))
+			if opts.m != nil {
+				opts.m.rejectReason("difficulty-change").Inc()
+			}
+			return
+		}
 		opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 			result.Reason, diagnosis))
 		if opts.m != nil {
@@ -1392,19 +1421,20 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // session's most recent mining.set_difficulty value (poolproto.Job
 // carries no difficulty field: V1 delivers it on a separate notification
 // that applies to every job until superseded, not attached to
-// mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+// mining.notify). See v1JobTarget for how it is applied. Returns the
+// parsed uint32 job ID so callers can tag cross-generation rejects.
+func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) (uint32, error) {
 	target := miner.Hash(job.Target)
 	if target == (miner.Hash{}) {
 		var err error
 		target, err = v1JobTarget(job.NBits, difficulty)
 		if err != nil {
-			return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
+			return 0, fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 		}
 	}
 	var jobID uint32
 	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
+		return 0, fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
 	}
 	w := &miner.Work{
 		JobID:     jobID,
@@ -1422,7 +1452,7 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 	for _, wr := range workers {
 		wr.SetWork(w)
 	}
-	return nil
+	return jobID, nil
 }
 
 // warnOnPoolShare is the one-shot pool-share-of-hashrate awareness check
