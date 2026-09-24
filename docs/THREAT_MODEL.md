@@ -396,6 +396,25 @@ stubs return `ErrSchemeNotImplemented` everywhere (no false-verify
 surface), and `wallet.dat` permission probing (session 366 family).
 Re-audit warranted only when those code paths change.
 
+
+**Sessions 371–383 follow-up.** Tool-driven re-verification of the
+published claims rather than new surface: `deadcode -test` clean after
+removing the one unreachable wrapper (session 374); toolchain pinned to
+go1.25.13, clearing all 15 govulncheck-reachable stdlib advisories
+including GO-2026-4601 (net/url IPv6) — zero reachable findings remain
+(session 375); `staticcheck` clean after two findings (session 376).
+AUDIT_CHECKLIST rows corrected to reality rather than re-worded claims:
+cosign signing marked *not met* (release.yml has no signing step —
+artefacts ship unsigned), Actions SHA-pinning marked *not met*, Go
+floor corrected to 1.25+ (`go` directive + toolchain pin + tlsmlkem),
+scrypt parameters corrected to the seedstore values (N=2^17). Broken
+release references repaired: README install.sh asset URL (never
+uploaded) and docs/DEPLOYMENT_GUIDE.md (linked from every release
+body). Upstream cross-check: SRI v1.11.1's "do not round up SV1
+difficulties" (ckolivas) was verified against
+`miner.TargetFromDifficulty` — it truncates the big.Float quotient, so
+the rounded direction errs strict (harder shares), matching the fix.
+
 ---
 
 ### Elevation of privilege (E)
