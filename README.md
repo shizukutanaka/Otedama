@@ -51,7 +51,7 @@ cd Otedama
 make build
 
 # または、リリース tarball をダウンロード（例: macOS arm64）
-curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/otedama-macos-arm64.tar.gz | tar xz
+curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/otedama-darwin-arm64.tar.gz | tar xz
 # 注: install.sh と checksums.txt は現時点で release asset として未公開のため
 # リポジトリ内の install.sh は使用できません（KNOWN_LIMITATIONS 参照）。
 ```
