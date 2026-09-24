@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 352 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SV2 ハンドシェイク読み取り・全フレーム書込みの deadline 化)
+
+- **Negotiate 同期 ReadFrame + sendMsg への deadline 適用** — 前セッションの
+  確立済みループ対応で残った2面を解消: (1) Negotiate 内の同期 ReadFrame
+  （SetupConnection/OpenMiningChannel 応答）に deadline・ctx 強制が無く
+  ハンドシェイク中に沈黙するプールで無限待機、(2) sendMsg に書込み deadline
+  が無く送信バッファ枯渇時に submit/UpdateChannel が無限ブロック。前者に
+  `readFrameDeadline`、後者に `writeFrameDeadline`(10s・V1 と同値)を適用。
+
 ### Fixed (session 351 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SV2 静寂プールの無限ハング防止)
 
 - **`stratumv2` readLoop に read deadline を追加** — `ReadFrame` が deadline 無しで
