@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 419 — CS 観点: プロバイダ供給タイムスタンプのクランプ)
+
+- **未来日付の `q.At` が stale-stream 剪定を無効化できるバグを修正** — `q.At` は
+  プロバイダ制御フィールドで、未来日付の quote は `lastQuoteAt` を永久に `now`
+  より先へ保ち、死亡・悪意あるプロバイダの stream が剪定されずデバイスを永続的
+  にルートし続けた。`ts.IsZero() || ts.After(clk.Now())` の場合にローカル時計へ
+  クランプ（session 355 の quote 値サニタイズと同じ防御姿勢）。
+  `TestRunArbitrationLoop_FutureQuoteClamped` で `otedama_stream_last_quote_
+  unixtime` が +1h でなく ~now に留まることを検証。
+
 ### Added (session 417 — CS 観点: ドロップされた share を Prometheus カウンタ化)
 
 - **`otedama_shares_dropped_total` を新設** — ワーカーの share チャネルが満杯で
