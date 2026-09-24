@@ -219,6 +219,29 @@ mining-cookie-style construct is tracked as a future hardening item.
 
 ---
 
+**Threat:** A pool the user mines for withholds blocks selfishly.
+Bahrani & Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847),
+prove a withholding strategy whose orphan pattern is statistically
+indistinguishable from honest mining — profitable for an attacker from
+38.2% of pool hashrate. A client cannot detect it by watching orphan
+rates; the only defence is not being single-pool-dependent.
+
+**Mitigation:** Multi-pool / endpoint diversity is therefore a
+*security* property, not merely a liveness one: the configured failover
+list and the share-vs-credit reconciliation signals
+(`otedama_shares_unaccounted`, `otedama_shares_pending`, per-reason
+reject counters) let an operator notice when a pool consistently
+under-credits work and move hashrate away. This threat is bounded —
+Otedama is non-custodial and holds no pool funds — but extended
+under-crediting is real yield loss.
+
+**Residual risk:** No per-share cryptographic proof of pool credit
+exists in Stratum; detection remains statistical. Auditable-PoW
+constructions (RESEARCH_IMPROVEMENTS Category 4 #10, arXiv:2601.02496)
+are the long-term answer.
+
+---
+
 ### Denial of service (D)
 
 **Threat:** A malicious pool sends oversized frames to exhaust memory.

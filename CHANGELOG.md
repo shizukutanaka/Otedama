@@ -10,6 +10,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 256 — ESP-Miner v2.15.x / SRI v1.10-v1.11.x parity round)
+
+**`otedama_shares_pending` ゲージ＋TUI "+N pending" 表示**
+(ESP-Miner #1735 相当). 従来は submit 済みでまだプールが判定していない
+シェア（SV2はackをバッチ化することが多い）がどの指標にも現れず、
+"sent − found" のギャップとして沈黙していた。`updateShareRates` が
+`pending = submitted − (accepted + rejected + transition)` を公開し、
+TUIのshares行に `+N pending` を追記する。潜伏する転送中作業が
+「採用率低下」や「unaccounted」に誤認されなくなる。
+
+**`docs/THREAT_MODEL.md` に selfish-mining の脅威記述を追加**
+(arXiv:2309.06847). ユーザーが採掘先に選んだプールがブロックを
+秘匿する利己的マイニング戦略（公表閾値38.2%、orphanパターンでは
+検出不能）を記載。緩和策は多様なプール選択をセキュリティ特性と
+明文化し、`shares_unaccounted`/`shares_pending` を観測シグナルとして
+紐付けた。
+
+### Fixed (session 256 — 上流同等修正2件)
+
+**`EncryptedConn.Write` を単一 write 呼び出しに集約**
+(ESP-Miner v2.15 "Send SV2 frames in a single write"). 従来は
+2バイト長プリフィクスと暗号文を別々の `Write` で送出しており、
+`io.Writer` が部分的にしか受け付けない経路（ライトバッファが
+満杯の暗号化ソケット等）で、ピアがハーフフレームを受信しうる
+状態があった。ヘッダ＋暗号文を一つのバッファに組み立てて1回で
+書き、short write は `io.ErrShortWrite` に変換する。
+`noise_test.go` に write 回数とLEプリフィクスを検査する
+`TestEncryptedConn_WriteSingleCall`、及び
+`TestEncryptedConn_Write_ShortWriteError` を追加した。
+
+**Stratum V1 の重複 job 通知を無視** (ESP-Miner #1731 相当).
+上流では `extranonce2 を set_extranonce でリセット` の半分は
+Otedama に非該当（ワーカーは `ShareSubmission.ExtraNonce` を
+設定せず常にゼロ）だが、**重複 `mining.notify` の再適用** には
+対応価値があった。同一プールが同じ `job_id` の notify を再送すると
+engine は無条件にジョブを再適用し、ワーカーの in-flight ハッシュ
+レンジを不要にリセットしていた。`lastAppliedJobID` +
+`lastAppliedDiff` をセッション状態に保持し、JobID と当該時点の
+`SuggestedDifficulty()` が両方一致する通知のみdebugログ付きで
+スキップする（job_idのみだと set_difficulty 先行の再通知を
+取りこぼすため2条件)。SV2側も `NewMiningJob` で JobID +
+Version + MerkleRoot + MinNtime が一致する通知を同様に
+スキップする最初のswitchアームを追加した。
+
+### Documented (session 256)
+
+- **`docs/adr/ADR-009`**: SV2プロトコル参照先を SRI実装コードから
+  `stratum-mining/sv2-spec` レポジトリに固定（上流が "specを正、
+  実装を追随" と明確化したため。検証済みファイル名のみ引用）。
+- **`docs/RESEARCH_IMPROVEMENTS.md`**: session-256リサーチ差分を記録。
+  ESP-Miner #1796 (per-pool require-auth opt-in)、#1913 (reconnect
+  storms)、#1961 (デバイスクラス警告閾値)、Noiseトランスポートが
+  65519バイト超のSV2フレームを複数transport-messageに分割する
+  仕様の未実装、を新規候補として登録。SRI v1.11.1の難易度丸め
+  修正と ESP-Miner #1779 は検証の結果 Otedama 非該当と結論
+  （`TargetFromDifficulty` は難易度を丸めず target 側を切り捨て、
+  シェア判定は生 Hash ターゲット比較で変換を経由しない）。
+- **`docs/SPECIFICATION.md` §6 / `docs/API.md`**:
+  `otedama_shares_pending` ゲージを指標表に追加。
+
+### Verified-correct（変更なし、上流差分の適否を検証）
+
+| 上流項目 | 結論 |
+|---|---|
+| SRI v1.11.1 difficulty rounding | 非該当: `TargetFromDifficulty` は big.Float 除算で target を切り捨て、難易度自体を丸めない |
+| ESP-Miner #1779 fractional difficulty | 非該当: シェア検証は生 `miner.Hash` 比較のみで target→difficulty 変換が存在しない |
+| ESP-Miner #1731 extranonce2 reset | 半分非該当: ワーカーが `ShareSubmission.ExtraNonce` を使わないため |
+| SRI segwit coinbase bug | 非該当: `NewMiningJob` がプール算出 `MerkleRoot` を受領、coinbase組立経路なし |
+
 ### Fixed (session 255 — 難易度上昇中の飛行中シェア拒否を良性分類（ESP-Miner #212）＋ `rejectByReason` マップのデータ競合（致命的なconcurrent-map-write可能性）を修正)
 
 **ESP-Miner #212 相当の良性拒否分離.** プールが `mining.set_difficulty` /

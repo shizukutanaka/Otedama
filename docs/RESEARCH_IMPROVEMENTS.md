@@ -489,6 +489,10 @@ endpoint against current vendor documentation. Tags as before
    (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
    and a per-pool `authority_pubkey` config field.
    (sv2-spec 04-Protocol-Security.md)
+   — **Design update (session 256):** ESP-Miner v2.15.0 shipped the same
+   feature as a *per-pool opt-in* "require authentication" flag (#1796) —
+   model Otedama's the same way: `authority_pubkey` set ⇒ verify and fail
+   closed; unset ⇒ warn once. See session-256 increment item 6.
 2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
@@ -506,12 +510,19 @@ endpoint against current vendor documentation. Tags as before
    field is intentionally not sent (see the dead-field note removed from
    `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
    message is no longer silently unrecognised, which was the blocking gap.
-3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
+3. ❌ **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
+   — **Not applicable (session 256):** verified Otedama never assembles a
+   coinbase. Standard channels deliver `NewMiningJob.MerkleRoot` (a pool-
+   computed [32]byte) straight into `miner.Work.Header.MerkleRoot`
+   (`internal/stratum/messages.go`, `engine.updateWork`); Extended Jobs /
+   JDP coinbase assembly is a template-consumer concern Otedama doesn't
+   implement. There is no witness-serialization path to get wrong — adding
+   a fixture would test a nonexistent code path.
 4. ✅ **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
@@ -568,20 +579,31 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   — **Done (session 256):** ADR-009 References now cite
+   `github.com/stratum-mining/sv2-spec` as the source of truth (the
+   stratumprotocol.org links are its rendered form). Audited existing
+   citations: `internal/stratum/frame.go` already cites spec ch.3 as
+   primary (SRI only for test vectors), ADR-011 cites
+   `04-Protocol-Security.md` directly — no app-code-derived protocol
+   facts remained.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+8. ✅ **Single-pool concentration enables *undetectable* attacks.** Bahrani &
    Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
    selfish-mining strategy whose orphan pattern is statistically
    indistinguishable from honest mining, profitable from 38.2% hashrate.
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
    Cat 4 #7.
+   — **Done (session 256):** added as a Tampering-section threat in
+   THREAT_MODEL (pool-side withholding; mitigation = failover diversity +
+   `shares_unaccounted`/`shares_pending` reconciliation signals;
+   residual = detection stays statistical until auditable PoW lands).
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
@@ -920,6 +942,86 @@ month, so the discipline matters.
   before acting.
 - **Video sources:** none retrievable in a verifiable form in this environment;
   not recorded.
+
+---
+
+## September 2026 research pass — session 256 increment (upstream parity)
+
+SRI and ESP-Miner release notes were re-read against the running code
+(this round was deliberately client-visible-behaviour focused: what the
+reference implementations shipped to operators since July 2026).
+
+### Implemented this session (ESP-Miner v2.15.x parity)
+
+1. ✅ **Pending-share visibility (ESP-Miner #1735).** SV2 pools may batch
+   share acks, so a submitted share gets no feedback until the ack batch
+   arrives — submitted-but-unjudged shares previously appeared only inside
+   the broader `shares_unaccounted` figure. New gauge
+   `otedama_shares_pending` (submitted − accepted − rejected −
+   difficulty-transition-rejected, ≥0) + TUI `+N pending` badge on the
+   mining line. `unaccounted = pending + found-but-never-submitted`, so
+   the two gauges now separate "pool owes us a verdict" from "share was
+   dropped at the local channel". (bitaxeorg/ESP-Miner #1735)
+2. ✅ **One write per Noise transport frame (ESP-Miner v2.15).**
+   `EncryptedConn.Write` previously wrote the 2-byte length prefix and the
+   ciphertext as two separate `Write` calls — two syscalls per frame and
+   a split point where a concurrent writer could interleave bytes mid-
+   frame. Now one buffer, one write, `io.ErrShortWrite` on a short write.
+   (bitaxeorg/ESP-Miner v2.15.0 Stratum section)
+3. ✅ **Ignore duplicate job notifications (ESP-Miner #1731).** V1 pools
+   can resend a `mining.notify` for a job_id already on the devices (e.g.
+   after `mining.set_extranonce`); re-dispatching is wasted work churn.
+   The V1 loop now tracks (job_id, difficulty) of the last applied job and
+   skips identical re-notifies — stricter than upstream's job_id-only key
+   so a same-id re-notify *after* `set_difficulty` still re-arms the new
+   target. V2: identical re-sent `NewMiningJob` skipped in the same way.
+   The `set_extranonce` half of #1731 does not apply: Otedama's workers
+   never consume extranonce2 (submissions carry a zero pad), so there is
+   no counter to reset. (bitaxeorg/ESP-Miner #1731)
+
+### Verified already-correct (no change)
+
+4. ✅ **SRI v1.11.1: "no longer rounds up Stratum V1 difficulty values"
+   (stratum_translation).** Verified Otedama already does the right thing:
+   `miner.TargetFromDifficulty` divides `diff1Target` by the exact float64
+   difficulty and truncates the *target* (big.Float → Int); it never
+   rounds the difficulty operand. Shares are compared against raw `Hash`
+   targets end-to-end. (github.com/stratum-mining/stratum/releases/tag/v1.11.1)
+5. ✅ **ESP-Miner #1779 "keep fractional SV2 pool difficulty".** Their bug
+   was a `double → uint32_t` truncation in target-to-difficulty conversion
+   letting shares in [931, 931.1) be submitted and rejected. Otedama has
+   no target→difficulty conversion on the submit path — shares are checked
+   against the target `Hash` directly, and `SuggestedDifficulty()` stays
+   `float64` throughout. Nothing to fix.
+   (github.com/bitaxeorg/ESP-Miner/pull/1779)
+
+### New candidates (recorded, not implemented)
+
+6. 🟡 **ESP-Miner #1796: per-pool "require authentication" flag.** Upstream
+   now treats SV2 server-auth verification as an opt-in per-pool option —
+   the right shape for Cat 2 #1 (authority-key verification): when the
+   real secp256k1 Noise path lands (ADR-011), model enforcement as a
+   per-pool `require_auth` boolean rather than a global, so pools without
+   published keys still work. (github.com/bitaxeorg/ESP-Miner/pull/1796)
+7. 🟡 **ESP-Miner #1913: reconnect storms caused by slow clients.** Fixed
+   upstream — verify Otedama's read loop can't pile up reconnects when a
+   pool stalls: `runSession`'s reconnect backoff + bounded job channels
+   should cover it, but there is no explicit slow-reader watchdog on the
+   session goroutines. Worth a deliberate test.
+   (github.com/bitaxeorg/ESP-Miner/pull/1913)
+8. 🟡 **SV2 frames larger than one Noise transport message.** A Noise
+   transport message is u16-bounded (65535 incl. tag) but an SV2 frame's
+   length field is u24 — spec-compliant peers may split a big frame across
+   multiple Noise messages. `EncryptedConn.Write` currently rejects
+   plaintext >65519 outright instead of chunking, and `Read` assumes one
+   frame per transport message. Harmless today (every implemented message
+   is small), required if JDP/Extended-Channel work lands.
+   (sv2-spec 03-Protocol-Overview framing section)
+9. 🟡 **ESP-Miner #1961: warnings keyed to device presets.** Upstream now
+   derives low-hashrate warning thresholds from the detected board class.
+   Otedama's HashrateMonitor floor is fixed; a per-device-class floor
+   (CPU vs ASIC vs GPU) would make `otedama_up`/the TUI ⚠ indicator honest
+   on heterogeneous rigs. (github.com/bitaxeorg/ESP-Miner/pull/1961)
 
 ---
 
