@@ -260,6 +260,46 @@ func TestSession_SetTargetNotificationUpdatesDifficulty(t *testing.T) {
 }
 
 // ============================================================================
+// client.get_version — pool-sent request answered with the agent string
+// ============================================================================
+
+func TestSession_ClientGetVersionResponds(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// braiins-family pools probe miner software for stats — it is a
+	// request (id present), so a reply is due on the same id.
+	_, _ = fmt.Fprintf(serverConn, `{"id":77,"method":"client.get_version","params":[]}`+"\n")
+
+	_ = serverConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("no get_version reply: %v", err)
+	}
+	var resp rpcMessage
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("reply not JSON: %v", err)
+	}
+	if id, _ := resp.ID.(float64); id != 77 {
+		t.Errorf("reply id = %v, want 77", resp.ID)
+	}
+	if resp.Result != clientAgent {
+		t.Errorf("reply result = %v, want %q", resp.Result, clientAgent)
+	}
+	if resp.Error != nil {
+		t.Errorf("reply error = %v, want nil", resp.Error)
+	}
+}
+
+// ============================================================================
 // parseSetExtranonce
 // ============================================================================
 

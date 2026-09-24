@@ -62,6 +62,10 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
+// clientAgent is the software identity sent in mining.subscribe and
+// echoed back to pools that probe us with client.get_version.
+const clientAgent = "Otedama/3.0.0"
+
 // ----- session -----
 
 // maxLineBytes caps a single newline-delimited JSON-RPC line from the pool.
@@ -279,6 +283,16 @@ func (s *session) dispatch(line []byte) {
 				}
 			}
 		}
+	case "client.get_version":
+		// A pool request asking which miner software this is (used by
+		// braiins-family and monitoring tooling for stats). It's a
+		// request, not a notification — ignoring it leaves the pool
+		// waiting on an id that never resolves, and some pools drop
+		// unresponsive clients. Answer with the same agent string we
+		// advertise in mining.subscribe.
+		if msg.ID != nil {
+			s.respond(msg.ID, clientAgent)
+		}
 	case "client.reconnect", "mining.reconnect":
 		// The pool is asking us to move to another node (load balancing,
 		// maintenance, failover). Record the directive, then end the
@@ -442,6 +456,26 @@ func (m rpcMessage) uintID() uint64 {
 type rpcResponse struct {
 	result    any
 	errResult any
+}
+
+// respond writes a JSON-RPC response for a pool-sent request
+// (e.g. client.get_version). Unlike call() it registers nothing in
+// pending — it answers rather than asks. Best-effort: a failed write
+// just leaves the pool's request unanswered, same as ignoring it.
+func (s *session) respond(id any, result any) {
+	body, err := json.Marshal(map[string]any{
+		"id":     id,
+		"result": result,
+		"error":  nil,
+	})
+	if err != nil {
+		return
+	}
+	body = append(body, '\n')
+	s.writeMu.Lock()
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_, _ = s.conn.raw.Write(body)
+	s.writeMu.Unlock()
 }
 
 // call sends a JSON-RPC request and waits for the response, honoring ctx.

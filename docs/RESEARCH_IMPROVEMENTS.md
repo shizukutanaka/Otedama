@@ -360,28 +360,16 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
-11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
-    recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
-    ad hoc"). `MiningProvider` and `AkashProvider`
-    (`internal/provider/{mining,ai_inference}.go`) share substantial
-    boilerplate: `Stop()` is **byte-identical** (cancel → `wg.Wait()` → nil
-    the cancel → re-create the buffered `quoteCh`); `loop()` is identical
-    except the tick interval (30 s vs 60 s); `Start()` differs only in the
-    device filter (mining accepts all SHA-256d devices, Akash filters to
-    GPUs with `GeneralCompute`); and the channel "drop-oldest when full"
-    send pattern in `publish()` is copied in both. A small shared core — e.g.
-    an unexported `baseProvider` holding `{quoteCh, cancel, wg, mu}` with
-    shared `Stop()`, a `runLoop(interval, publishFn)`, and a `sendQuote()`
-    helper — would remove ~60 LOC and one class of drift bug. **Trade-off to
-    weigh before doing it:** the providers are deliberately simple and
-    independent (Pike: "boring over clever"); a shared base adds an
-    abstraction. A refactor must preserve three load-bearing behaviours: the
-    `quoteCh` re-creation in `Stop()` (so a stopped provider can be
-    restarted — see `TestMiningProvider_StopClearsStateForRestart`), the
-    buffered drop-oldest semantics, and the distinct tick intervals/device
-    filters. Verdict: worth doing as one focused refactor session with the
-    existing provider tests as the safety net; not urgent (no correctness
-    impact today).
+11. ✅ **Deduplicate the two `Provider` implementations** — resolved by the
+    `pollingProvider` shared lifecycle (`internal/provider/polling.go`,
+    commit e94e9bb): both `MiningProvider` and `AkashProvider` now embed it,
+    preserving the three load-bearing behaviours this item flagged
+    (restart-safe `quoteCh` re-creation in `Stop()`, buffered drop-oldest
+    semantics, distinct tick intervals/device filters). ~~Original item
+    (maintainability; recorded per CLAUDE.md rule I3): byte-identical
+    `Stop()` and near-identical `loop()`/`publish()` plumbing shared
+    between the two providers; verdict was "worth doing as one focused
+    refactor with the provider tests as the safety net".~~
 12. ✅ **`TestRunSession_StatsTickAndShareResponses` flakiness under heavy
     CPU contention — resolved** (`internal/engine/run_test.go`; found
     session 239, fixed session 242). It used to assert a "submit latency"
@@ -1221,6 +1209,17 @@ zero/degenerate guard as the SV2 zero-target lesson;
 too. Verified `mining.suggest_target`'s *request* direction stays
 client→pool per BFGMiner-era spec — we do not send it (the
 `mining.suggest_difficulty` one-shot hint already covers that need).
+
+**Session-306 follow-up (V1 `client.get_version`):** the braiins-family
+version probe is a *request* (id present) expecting a reply on the same
+id — silently dropping it left pools waiting on an unresolved id, and
+some drop unresponsive clients. `session.respond` now writes a JSON-RPC
+response carrying the same `clientAgent` string advertised in
+`mining.subscribe` (extracted to a const shared by both call sites).
+Verified the remaining pool→client request surface: `mining.configure`
+(NiceHash version-rolling negotiation) is deliberately ignored — BIP320
+version rolling is non-applicable to a CPU/GPU end device, and answering
+it would falsely advertise support.
 
 ---
 

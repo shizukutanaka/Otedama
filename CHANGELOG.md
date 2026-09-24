@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 306 — V1 `client.get_version` 応答 + RESEARCH item 11 解消)
+
+- **`client.get_version`（pool→client リクエスト）へ応答** — braiins 系
+  プールのバージョン照会は同一 id で返答を期待するリクエストのため、
+  黙殺すると未解決 id を残しプール側が非応答クライアントを切断し得た。
+  新設の `session.respond` で `mining.subscribe` と同一の `clientAgent`
+  文字列を返却（エージェント文字列を定数化して両箇所で共有）。
+  `mining.configure`（version-rolling 交渉）は BIP320 が CPU/GPU 端末に
+  非該当のため設計どおり無視のまま（RESEARCH session-306 に記録）。
+- **RESEARCH item 11 を ✅ 化** — `pollingProvider` 共有ライフサイクル
+  （e94e9bb）により両 Provider が embed 済み、項目が要求した3挙動
+  （再起動安全な quoteCh 再生成・drop-oldest・個別 interval/filter）を
+  保持したまま解消済みを記録。
+
 ### Added (session 305 — V1 `mining.set_target` 受信対応)
 
 - **V1 `mining.set_target` / `mining.suggest_target`（pool→client）を処理**
