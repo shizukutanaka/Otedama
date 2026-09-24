@@ -737,6 +737,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	silenceBound := sessionSilenceBound
 	var lastFrameAt atomic.Int64
 	lastFrameAt.Store(time.Now().UnixNano())
+	// done lets the producer exit on session teardown even when ctx is
+	// still alive: conn.Close unblocks ReadFrame, but a send into a full
+	// inCh has no exit without it — the session ctx survives across
+	// sessions inside the reconnect loop, so a wedged send would leak
+	// the goroutine (and its conn reference) for the rest of the run.
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		defer close(inCh)
 		for {
@@ -745,6 +752,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				select {
 				case inCh <- poolMsg{err: err}:
 				case <-ctx.Done():
+				case <-done:
 				}
 				return
 			}
@@ -753,6 +761,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			select {
 			case inCh <- poolMsg{msg: msg, decodeErr: err}:
 			case <-ctx.Done():
+				return
+			case <-done:
 				return
 			}
 		}

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 266 — コンピューターサイエンスの観点から改善点を洗い出す(第11ラウンド): ブロックした送信者がコンシューマの死を検知できない——ティアダウン解放欠如×2 + 書き込みデッドライン欠如×1、計3箇所)
+
+第11ラウンドの Socratic 問いは「**送信にブロックされた goroutine は誰が解放するか?**」——`conn.Close` はブロック中の read を解放するが、ブロック中の **send** は解放しない。ctx がセッション寿命を越えて生存する設計(再接続ループが親 ctx を保持)のもとで、「send 側の select が ctx だけを選別する」パターンを網羅監査し、実証3箇所を修正:
+
+- **エンジン `inCh` プロデューサの goroutine リーク**(`engine/run.go`): セッションがエラー終了しても `ctx` は reconnect ループ内で生存し続けるため、`inCh`(cap 32)が満杯の状態で consumer が返ると、プロデューサ goroutine が `inCh <-` で**永久ブロック**——conn.Close は ReadFrame を解放するが、フルバッファへの send には出口がなかった。1セッションごとに最大1 goroutine がリークし、conn/dec への参照を保持。`done` チャネルを defer close し、2箇所の send select に arm を追加。
+- **stratumv2 adapter `emit` 同型**(`dialer.go`): `jobsCh`(cap 8)満杯時の emit は `ctx.Done()` のみを待機——`session.Close()` → `conn.Close()` は readLoop の ReadFrame を解放するが、emit 内の send は解放しない → readLoop が emit 内に張り付き、`jobsCh` が永久に閉じず **`Jobs()` コンシューマが永久待機**。`connection.done` チャネルを `Close()` で閉じる構造を追加し emit に arm を追加。
+- **`sendMsg` の書き込みデッドライン欠如**(`dialer.go`): TCP ウィンドウを stall させたプール(接続は生かすが読まない)への `Submit` 書き込みが**永久ブロック**——ctx キャンセルはブロック中の Write を中断できない。`sendMsgWriteTimeout=10s` を sendMsg 内に適用(handshake の2呼出し + Submit を一点で被覆、エンジンの `run.go:1461` と同一 10s)。handshake 書き込みは Negotiate の read deadline + conn.Close で推移的に境界済みだが、一点化で対称性を復元。
+
+**検証手続き(棄却済み候補).** V1 はジョブ配送が非ブロッキング(drop-oldest)で同型の穴なし、`fanIn` の out send は ctx bound で fanIn の寿命=run 寿命のため clean、全 Dial は `DialContext(ctx)` で ctx bound、V1 `call()` の writeMu+deadline 済み、エンジン emit はチャネル経由せず SetWork 直結で clean、noise handshake は EncodeFrame バッファリングで frame 単位 write。
+
+**テスト.** `TestRunSessionV2_SessionEndReleasesReader`(40 壊フレームで inCh 満杯→セッション終了後 NumGoroutine がベースラインに回復することを検証——pre-fix では goroutine が永久残存)、`TestSession_Jobs_CloseDuringJobSend`(jobsCh 満杯+Close → jobsCh 閉鎖で emit 解放)、`TestSendMsg_WriteDeadline`(無読者 net.Pipe で 50ms deadline で write エラー)。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/stratumv1,poolproto/stratumv2} 緑、差分行 lint/gofumpt クリーン(readLoop gocyclo は親コミット時点 19 で既に閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 265 — コンピューターサイエンスの観点から改善点を洗い出す(第10ラウンド): デコード失敗のエラー意味論不一致——トランスポート死と1フレーム壊れを同一扱いしていた経路を分離、計3箇所)
 
 第10ラウンドの Socratic 問いは「**1フレームの失敗はストリームの死と同じ意味か?**」——プロトコル層で「回復不能(トランスポート断)」と「回復可能(1フレームのデコード失敗)」を区別しなければ、偶発的な壊れで接続が死に(可用性損失)、あるいは逆に無限スキップで「生きたまま耳聾」のセッションが failover に到達不能になる(滞留)。監査の結果、3経路でポリシーが非対称だったことを確認:

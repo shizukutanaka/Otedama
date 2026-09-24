@@ -70,6 +70,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 		remoteAddr: address,
 		protocol:   d.Protocol(),
 		user:       creds.User,
+		done:       make(chan struct{}),
 	}, nil
 }
 
@@ -179,6 +180,10 @@ type connection struct {
 	protocol   poolproto.ProtocolID
 	user       string
 
+	// done is closed by Close so a goroutine blocked on a send — not on
+	// a read — also unwinds: raw.Close alone does not interrupt a
+	// sender, and the session ctx may outlive the session itself.
+	done      chan struct{}
 	closeOnce sync.Once
 	closed    atomic.Bool
 }
@@ -190,6 +195,7 @@ func (c *connection) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
 		c.closed.Store(true)
+		close(c.done)
 		err = c.raw.Close()
 	})
 	return err
@@ -259,6 +265,11 @@ func (s *session) readLoop(ctx context.Context) {
 		case s.jobsCh <- job:
 			return true
 		case <-ctx.Done():
+			return false
+		case <-s.conn.done:
+			// Close while a job send is blocked on a full channel:
+			// without this arm the loop stays pinned here and jobsCh
+			// never closes, so a consumer of Jobs() waits forever.
 			return false
 		}
 	}
@@ -394,6 +405,10 @@ type encodable interface {
 	Encode() ([]byte, error)
 }
 
+// sendMsgWriteTimeout bounds a single frame write to the pool. A var
+// so tests can shorten it.
+var sendMsgWriteTimeout = 10 * time.Second
+
 // sendMsg encodes, frames, and writes a Stratum V2 message. isChannel
 // sets the frame header's channel_msg bit — required for channel-scoped
 // messages (SubmitSharesStandard etc.), absent for connection-scoped
@@ -411,6 +426,12 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	// Bound the write: a pool that stalls the TCP window (opens the
+	// connection, never reads) would otherwise pin a Submit caller
+	// forever — ctx cancellation alone cannot interrupt a blocked
+	// Write. The engine's inline loop applies the same 10s deadline
+	// (run.go).
+	_ = w.SetWriteDeadline(time.Now().Add(sendMsgWriteTimeout))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}

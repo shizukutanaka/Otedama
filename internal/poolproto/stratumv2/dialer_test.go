@@ -563,7 +563,7 @@ func TestSession_SuggestedDifficulty_Default(t *testing.T) {
 
 func TestConnection_Close_IsIdempotent(t *testing.T) {
 	_, c := net.Pipe()
-	conn := &connection{raw: c, remoteAddr: "test"}
+	conn := &connection{raw: c, remoteAddr: "test", done: make(chan struct{})}
 	if err := conn.Close(); err != nil {
 		t.Fatalf("first Close: %v", err)
 	}
@@ -1171,6 +1171,89 @@ func TestSession_ReadLoop_ForeignChannelIgnored(t *testing.T) {
 // readLoop — undecodable-frame bound: sustained garbage must end the
 // session rather than hold it alive-but-deaf
 // ============================================================================
+
+// TestSession_Jobs_CloseDuringJobSend is the Close()-path twin of
+// TestSession_Jobs_ContextCancelDuringJobSend: with jobsCh full, Close()
+// must unblock a wedged emit and let the loop close jobsCh — previously
+// the send only selected on ctx, which outlives the session, so a
+// consumer of Jobs() would wait forever.
+func TestSession_Jobs_CloseDuringJobSend(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, MinNtime: 0x60000000, NBits: 0x1d00ffff}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
+		for i := 0; i < 12; i++ {
+			job := stratum.NewMiningJob{
+				ChannelID:   1,
+				JobID:       uint32(i),
+				HasMinNtime: true,
+				MinNtime:    0x60000000,
+				Version:     0x20000000,
+			}
+			copy(job.MerkleRoot[:], make([]byte, 32))
+			writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		}
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// jobsCh holds 8; 12 jobs pushed. Let the loop fill the buffer and
+	// wedge inside emit, then Close must release it.
+	time.Sleep(20 * time.Millisecond)
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case _, ok := <-sess.Jobs():
+			if !ok {
+				return // jobsCh closed — emit unwound
+			}
+		case <-deadline:
+			t.Fatal("Close did not unblock a wedged emit — Jobs() hangs")
+		}
+	}
+}
+
+// TestSendMsg_WriteDeadline pins the per-write bound: with no reader on
+// the other end of the pipe, a frame write must fail at the deadline
+// rather than block forever — ctx cannot interrupt a blocked Write.
+func TestSendMsg_WriteDeadline(t *testing.T) {
+	old := sendMsgWriteTimeout
+	sendMsgWriteTimeout = 50 * time.Millisecond
+	defer func() { sendMsgWriteTimeout = old }()
+
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close() // never read from server — write stalls
+
+	done := make(chan error, 1)
+	go func() {
+		done <- sendMsg(client, stratum.MsgSubmitSharesStandard, true,
+			stratum.SetupConnectionSuccess{UsedVersion: 2}) // wrong-type payload is fine; write fails first
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("write to an unread pipe succeeded — deadline not applied")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("write blocked past the deadline — no write bound")
+	}
+}
 
 func TestSession_ReadLoop_UndecodableBound(t *testing.T) {
 	pool, clientConn := newPoolSide(t)

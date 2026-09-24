@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2842,4 +2843,50 @@ func TestRunSessionV2_UndecodableBound(t *testing.T) {
 		t.Error("worker armed by a garbage stream")
 	}
 	cancel()
+}
+
+// TestRunSessionV2_SessionEndReleasesReader floods inbound frames past the
+// inCh buffer (32) so the producer goroutine is blocked on send when the
+// session ends. Teardown must release it — previously the send only
+// selected on the session ctx, which stays alive inside the reconnect
+// loop, so the goroutine (and its conn) leaked for the rest of the run.
+func TestRunSessionV2_SessionEndReleasesReader(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	baseline := runtime.NumGoroutine()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runSession(ctx, sessionOpts{
+			// 40 bad frames: the consumer exits at the decode bound while
+			// the producer still has >32 to deliver — its send wedges in
+			// the full inCh unless teardown also releases it.
+			poolURL:  garbageFramePool(t, 40, false),
+			user:     "w",
+			workers:  []*miner.Worker{w},
+			merged:   make(chan miner.Share, 8),
+			interval: 20 * time.Millisecond,
+			log:      func(_, _ string) {},
+			m:        newEngineMetrics(metrics.NewRegistry()),
+		})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("session survived a pure-garbage stream — bound not enforced")
+	}
+	cancel()
+
+	// The producer goroutine must not outlive the session: pre-fix it
+	// stayed blocked forever sending into the full inCh.
+	deadline := time.Now().Add(2 * time.Second)
+	for runtime.NumGoroutine() > baseline {
+		if time.Now().After(deadline) {
+			t.Fatalf("goroutine leak after session end: baseline=%d now=%d", baseline, runtime.NumGoroutine())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
