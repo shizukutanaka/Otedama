@@ -274,17 +274,18 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 	}
 
+	// Bound the steady-state read: a pool that keeps the TCP connection
+	// open but stops delivering anything useful would otherwise hold the
+	// session forever — no failover, no reconnect. The deadline renews
+	// only on a successfully dispatched, recognized message, so a stream
+	// of well-formed but meaningless frames (undecodable payloads or
+	// unknown extension types) does not extend it either.
+	_ = s.conn.raw.SetReadDeadline(time.Now().Add(s.silenceBound))
 	for {
 		if ctx.Err() != nil || s.conn.closed.Load() ||
 			decodeErrs >= maxConsecutiveDecodeErrors {
 			return
 		}
-		// Bound the steady-state read: a pool that keeps the TCP
-		// connection open but stops sending would otherwise hold the
-		// session forever — no failover, no reconnect. The deadline
-		// is refreshed before every read, so it only fires when the
-		// pool has sent nothing at all for silenceBound.
-		_ = s.conn.raw.SetReadDeadline(time.Now().Add(s.silenceBound))
 		f, err := s.dec.ReadFrame()
 		if err != nil {
 			return
@@ -300,6 +301,9 @@ func (s *session) readLoop(ctx context.Context) {
 			continue
 		}
 		decodeErrs = 0
+		if msg.Unknown == nil {
+			_ = s.conn.raw.SetReadDeadline(time.Now().Add(s.silenceBound))
+		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
 			// Channel identity check, mirroring the engine's inline loop:

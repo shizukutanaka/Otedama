@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 267 — コンピューターサイエンスの観点から改善点を洗い出す(第12ラウンド): 沈黙バウンドが「ワイヤ上のバイト」でなく「プロトコル進捗」を測るべき——無意味フレームによるバウンド回避を封鎖、計2箇所)
+
+第12ラウンドの Socratic 問いは「**『生きている』はどう定義するか?**」——session-263 の silence bound は「フレーム到達」を liveness とみなしていたが、**整形式だが無意味なフレームのストリーム**(デコード不能ペイロード、未割当 msg_type の拡張メッセージ)はフレームを供給し続けるためバウンドを永久に回避できた。仕事を一切供給しない zombie プールが fail-safe に到達させない——第8ラウンドが塞いだはずの穴の回避経路。実証2箇所:
+
+- **エンジン `runSession`**(`engine/run.go`): `lastFrameAt` を `ReadFrame` 成功時一律更新から「**DispatchFrame 成功かつ `msg.Unknown == nil`**——認識済みの有意味メッセージ」に限定。これで沈黙バウンドの意味論は「プロトコル進捗なし」と読み替わり、真の沈黙と「ノイズだけの沈黙」の双方を同一定数(30分)で被覆。認識済みだが外部チャネルのフレームは liveness として許容(チャネル混同は session-264 の guard が別途防御)。
+- **stratumv2 adapter readLoop**(`dialer.go`): read deadline を「毎反復で無条件リフレッシュ」から「**recognized メッセージ到達時のみリフレッシュ**」に変更。無意味フレームだけのストリームは deadline を延長せず、沈黙と同じく `readSilenceBound` で readLoop が exit → jobsCh 閉鎖 → コンシューマ解放。余分な arm は追加せず、deadline 設定の移動のみで実装(gocyclo 増加なし)。
+
+**検証手続き(棄却済み候補).** `parseDifficulty`/`TargetFromDifficulty` は非正値・非有限・オーバーフロー全てガード済み、`publishDifficulty` の `<=0` は入力が parse 層で有限保証のため到達不能、V1 `call()` は pendingMu+全パス cleanup+write deadline+callTimeout で有界、`rpcMessage.uintID` の負/NaN id は pending miss → drop に安全収束、updateWork は不変 *Work スナップショット、V1 reconnect の `go s.Close()` は closeOnce で冪等・即終了、`parseJobID` の非数値→0 は V2 の 10進表現と round-trip 整合、`Decoder` は全経路 DefaultMaxFrameSize=16MB。
+
+**テスト.** `TestRunSession_UselessFramesAbandoned`(handshake 後に未割当 0x7F フレームを 5ms 間隔で洪水 → "pool silent" エラーでセッション放棄)、`TestSession_ReadLoop_UselessFramesTimeOut`(同形で jobsCh 閉鎖検証)。既存の `TestRunSession_SilentPoolAbandoned`/`TestSession_ReadLoop_SilenceDeadline` は真沈黙の回帰として緑を維持。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/stratumv1,poolproto/stratumv2} 緑、差分行 lint/gofumpt クリーン(readLoop gocyclo は親時点 19 で既に閾値超過の pre-existing baseline)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 266 — コンピューターサイエンスの観点から改善点を洗い出す(第11ラウンド): ブロックした送信者がコンシューマの死を検知できない——ティアダウン解放欠如×2 + 書き込みデッドライン欠如×1、計3箇所)
 
 第11ラウンドの Socratic 問いは「**送信にブロックされた goroutine は誰が解放するか?**」——`conn.Close` はブロック中の read を解放するが、ブロック中の **send** は解放しない。ctx がセッション寿命を越えて生存する設計(再接続ループが親 ctx を保持)のもとで、「send 側の select が ctx だけを選別する」パターンを網羅監査し、実証3箇所を修正:

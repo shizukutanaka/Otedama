@@ -2521,6 +2521,87 @@ func silentV2Pool(t *testing.T) string {
 	return "stratum+v2://" + ln.Addr().String()
 }
 
+// noiseV2Pool completes the SV2 handshake, then streams well-formed
+// frames of an unassigned message type (0x7F) every few milliseconds.
+// The traffic is real bytes on the wire but no protocol progress — the
+// silence bound must treat it the same as silence.
+func noiseV2Pool(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+
+		if _, err := dec.ReadFrame(); err != nil {
+			return
+		}
+		payload, _ := stratum.SetupConnectionSuccess{UsedVersion: 2}.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(f)
+		if _, err := conn.Write(encoded); err != nil {
+			return
+		}
+		if _, err := dec.ReadFrame(); err != nil {
+			return
+		}
+		succ := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range succ.Target {
+			succ.Target[i] = 0xFF
+		}
+		payload, _ = succ.Encode()
+		f, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(f)
+		if _, err := conn.Write(encoded); err != nil {
+			return
+		}
+
+		// Unassigned msg_type, connection-scoped, empty payload — frame
+		// valid, dispatches to Message.Unknown. Keep streaming so wire
+		// liveness alone can't be the criterion.
+		uf, _ := stratum.WrapMessage(0x7F, false, nil)
+		uenc, _ := stratum.EncodeFrame(uf)
+		for {
+			if _, err := conn.Write(uenc); err != nil {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	return "stratum+v2://" + ln.Addr().String()
+}
+
+// TestRunSession_UselessFramesAbandoned pins the useful-progress
+// semantics of the silence bound: unknown extension frames deliver no
+// work, so they must not keep a job-less session alive.
+func TestRunSession_UselessFramesAbandoned(t *testing.T) {
+	old := sessionSilenceBound
+	sessionSilenceBound = 120 * time.Millisecond
+	defer func() { sessionSilenceBound = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := runSession(ctx, sessionOpts{
+		poolURL:  noiseV2Pool(t),
+		user:     "w",
+		merged:   make(chan miner.Share),
+		interval: 20 * time.Millisecond,
+		log:      func(_, _ string) {},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool silent") {
+		t.Fatalf("expected a pool-silent session error under unknown-frame flood, got %v", err)
+	}
+}
+
 func TestRunSession_SilentPoolAbandoned(t *testing.T) {
 	old := sessionSilenceBound
 	sessionSilenceBound = 120 * time.Millisecond

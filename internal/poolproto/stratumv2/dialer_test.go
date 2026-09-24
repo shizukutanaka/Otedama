@@ -1255,6 +1255,59 @@ func TestSendMsg_WriteDeadline(t *testing.T) {
 	}
 }
 
+// TestSession_ReadLoop_UselessFramesTimeOut pins the useful-progress
+// semantics of the read deadline: a pool streaming only unknown
+// extension message types produces bytes on the wire but no protocol
+// progress, so the deadline must fire exactly as it would for silence.
+func TestSession_ReadLoop_UselessFramesTimeOut(t *testing.T) {
+	old := readSilenceBound
+	readSilenceBound = 100 * time.Millisecond
+	defer func() { readSilenceBound = old }()
+
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go pool.doHandshake(1)
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// Stream unknown-type frames: frame-valid, dispatch to
+	// Message.Unknown, deliver no work. Written from a goroutine —
+	// writes block on the synchronous net.Pipe once the loop exits.
+	go func() {
+		for {
+			f, err := stratum.WrapMessage(0x7F, false, nil)
+			if err != nil {
+				return
+			}
+			data, err := stratum.EncodeFrame(f)
+			if err != nil {
+				return
+			}
+			if _, err := pool.conn.Write(data); err != nil {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Fatal("unexpected job emitted")
+		}
+		// jobsCh closed — the useless stream did not renew the deadline.
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLoop survived a pure-noise stream — useless frames renewed the deadline")
+	}
+}
+
 func TestSession_ReadLoop_UndecodableBound(t *testing.T) {
 	pool, clientConn := newPoolSide(t)
 	d := makeDialer(clientConn)

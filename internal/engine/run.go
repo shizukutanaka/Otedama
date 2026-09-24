@@ -727,11 +727,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 	// Spawn reader goroutine.
 	inCh := make(chan poolMsg, 32)
-	// lastFrameAt records when the reader last delivered a frame. The
+	// lastFrameAt records when the reader last delivered a *useful*
+	// frame — one that decoded into a recognized message type. The
 	// steady-state read has no deadline, so the consumer enforces
 	// sessionSilenceBound against this timestamp: a pool that keeps the
-	// connection open but stops sending must still yield the session,
-	// or failover pools would never be tried.
+	// connection open but stops making protocol progress (no frames at
+	// all, or only garbage/extension traffic) must still yield the
+	// session, or failover pools would never be tried.
 	// silenceBound snapshots the package-level bound: tests shrink it
 	// before calling runSession; the loop never re-reads the global.
 	silenceBound := sessionSilenceBound
@@ -756,8 +758,16 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 				return
 			}
-			lastFrameAt.Store(time.Now().UnixNano())
 			msg, err := stratum.DispatchFrame(f)
+			// The silence bound tracks useful protocol progress, not
+			// mere byte arrival: a pool that streams well-formed but
+			// meaningless frames (undecodable payloads, or unknown
+			// extension message types) must not refresh liveness —
+			// otherwise it can pin a job-less session forever, exactly
+			// the zombie shape the bound exists to kill.
+			if err == nil && msg.Unknown == nil {
+				lastFrameAt.Store(time.Now().UnixNano())
+			}
 			select {
 			case inCh <- poolMsg{msg: msg, decodeErr: err}:
 			case <-ctx.Done():
