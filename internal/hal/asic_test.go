@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -235,5 +236,187 @@ func TestASICDriver_Enumerate_EmptyAndTimeout(t *testing.T) {
 	}
 	if !strings.Contains(drv.Name(), "asic") {
 		t.Error("driver name changed")
+	}
+}
+
+// mgmtFixture is a stateful cgminer peer for the management commands:
+// it records each (command, parameter) pair and answers via a handler
+// that sees the call count, so tests can model "pools empty until
+// addpool lands".
+type mgmtFixture struct {
+	t       *testing.T
+	ln      net.Listener
+	mu      sync.Mutex
+	calls   [][2]string
+	handler func(call int, command, parameter string) string
+}
+
+func newMgmtFixture(t *testing.T, handler func(call int, command, parameter string) string) *mgmtFixture {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	f := &mgmtFixture{t: t, ln: ln, handler: handler}
+	go f.serve()
+	t.Cleanup(func() { f.ln.Close() })
+	return f
+}
+
+func (f *mgmtFixture) addr() string { return f.ln.Addr().String() }
+
+func (f *mgmtFixture) serve() {
+	for {
+		conn, err := f.ln.Accept()
+		if err != nil {
+			return
+		}
+		go func(conn net.Conn) {
+			defer conn.Close()
+			_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+			line, err := bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
+				return
+			}
+			var req struct {
+				Command   string `json:"command"`
+				Parameter string `json:"parameter"`
+			}
+			if json.Unmarshal([]byte(line), &req) != nil {
+				return
+			}
+			f.mu.Lock()
+			f.calls = append(f.calls, [2]string{req.Command, req.Parameter})
+			n := len(f.calls)
+			f.mu.Unlock()
+			if _, err := conn.Write([]byte(f.handler(n, req.Command, req.Parameter) + "\n")); err != nil {
+				return
+			}
+		}(conn)
+	}
+}
+
+func (f *mgmtFixture) recorded() [][2]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][2]string(nil), f.calls...)
+}
+
+const statusOK = `{"STATUS":[{"STATUS":"S","Description":"ok"}],"id":1}`
+
+// TestSwitchPools_ExistingPoolSwitchesOnly: the pool is already in the
+// miner's table — no addpool, straight to switchpool with its index.
+func TestSwitchPools_ExistingPoolSwitchesOnly(t *testing.T) {
+	fx := newMgmtFixture(t, func(_ int, command, _ string) string {
+		switch command {
+		case "pools":
+			return `{"STATUS":[{"STATUS":"S"}],"POOLS":[{"POOL":0,"URL":"stratum+tcp://old:3333"},{"POOL":1,"URL":"stratum+tcp://pool.example:3334"}],"id":1}`
+		default:
+			return statusOK
+		}
+	})
+	d := &ASICDriver{Endpoints: []string{fx.addr()}}
+	switched, errs := d.SwitchPools(context.Background(), "stratum+tcp://pool.example:3334", "u", "x")
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v", errs)
+	}
+	if len(switched) != 1 || switched[0] != fx.addr() {
+		t.Fatalf("switched = %v", switched)
+	}
+	calls := fx.recorded()
+	if len(calls) != 2 || calls[0][0] != "pools" || calls[1][0] != "switchpool" || calls[1][1] != "1" {
+		t.Fatalf("calls = %v, want [pools, switchpool|1]", calls)
+	}
+}
+
+// TestSwitchPools_AddsThenSwitches: pool absent → addpool|URL,USER,PASS
+// first, then switchpool on the index the miner reports afterwards.
+func TestSwitchPools_AddsThenSwitches(t *testing.T) {
+	poolsCalls := 0
+	fx := newMgmtFixture(t, func(_ int, command, parameter string) string {
+		switch command {
+		case "pools":
+			poolsCalls++
+			if poolsCalls == 1 {
+				return `{"STATUS":[{"STATUS":"S"}],"POOLS":[{"POOL":0,"URL":"stratum+tcp://old:3333"}],"id":1}`
+			}
+			return `{"STATUS":[{"STATUS":"S"}],"POOLS":[{"POOL":0,"URL":"stratum+tcp://old:3333"},{"POOL":1,"URL":"stratum+tcp://pool.example:3334"}],"id":1}`
+		case "addpool":
+			if parameter != "stratum+tcp://pool.example:3334,user,pw" {
+				t.Errorf("addpool parameter = %q", parameter)
+			}
+			return statusOK
+		default:
+			return statusOK
+		}
+	})
+	d := &ASICDriver{Endpoints: []string{fx.addr()}}
+	switched, errs := d.SwitchPools(context.Background(), "stratum+tcp://pool.example:3334", "user", "pw")
+	if len(errs) != 0 || len(switched) != 1 {
+		t.Fatalf("switched=%v errs=%v", switched, errs)
+	}
+	calls := fx.recorded()
+	if len(calls) != 4 || calls[0][0] != "pools" || calls[1][0] != "addpool" ||
+		calls[2][0] != "pools" || calls[3][0] != "switchpool" || calls[3][1] != "1" {
+		t.Fatalf("calls = %v, want pools→addpool→pools→switchpool|1", calls)
+	}
+}
+
+// TestSwitchPools_BareHostAndDatumURLs: a bare host:port gets the
+// stratum+tcp:// prefix cgminer needs; datum:// is rewritten the same
+// way (DATUM's downstream protocol is SV1).
+func TestSwitchPools_BareHostAndDatumURLs(t *testing.T) {
+	for _, cfg := range []struct{ in, want string }{
+		{"pool.example:3334", "stratum+tcp://pool.example:3334"},
+		{"datum://ocean.xyz:3334", "stratum+tcp://ocean.xyz:3334"},
+		{"stratum+tls://pool.example:443", "stratum+tls://pool.example:443"},
+	} {
+		if got := poolURLForASIC(cfg.in); got != cfg.want {
+			t.Errorf("poolURLForASIC(%q) = %q, want %q", cfg.in, got, cfg.want)
+		}
+	}
+	fx := newMgmtFixture(t, func(_ int, command, parameter string) string {
+		if command == "pools" {
+			return `{"STATUS":[{"STATUS":"S"}],"POOLS":[{"POOL":0,"URL":"stratum+tcp://ocean.xyz:3334"}],"id":1}`
+		}
+		return statusOK
+	})
+	d := &ASICDriver{Endpoints: []string{fx.addr()}}
+	if _, errs := d.SwitchPools(context.Background(), "datum://ocean.xyz:3334", "u", "x"); len(errs) != 0 {
+		t.Fatalf("datum URL switch errs = %v", errs)
+	}
+	calls := fx.recorded()
+	if calls[len(calls)-1][0] != "switchpool" || calls[len(calls)-1][1] != "0" {
+		t.Fatalf("calls = %v, want switchpool|0 on the datum-mapped URL", calls)
+	}
+}
+
+// TestSwitchPools_DeadEndpointCollects: unreachable miners land in errs
+// without aborting the batch.
+func TestSwitchPools_DeadEndpointCollects(t *testing.T) {
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadAddr := dead.Addr().String()
+	dead.Close()
+	d := &ASICDriver{Endpoints: []string{deadAddr}, Timeout: 200 * time.Millisecond}
+	switched, errs := d.SwitchPools(context.Background(), "stratum+tcp://pool.example:3334", "u", "x")
+	if len(switched) != 0 || len(errs) != 1 {
+		t.Fatalf("switched=%v errs=%v", switched, errs)
+	}
+}
+
+func TestPoolIndexFor(t *testing.T) {
+	var rep cgminerReply
+	if err := json.Unmarshal([]byte(
+		`{"POOLS":[{"POOL":0,"URL":"stratum+tcp://a:1"},{"POOL":1,"URL":"stratum+tcp://B.example:3334/"}]}`), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if id, ok := poolIndexFor(&rep, "stratum+tcp://b.example:3334"); !ok || id != 1 {
+		t.Errorf("poolIndexFor = %d,%v, want 1,true (scheme+case+slash normalised)", id, ok)
+	}
+	if _, ok := poolIndexFor(&rep, "stratum+tcp://missing:1"); ok {
+		t.Error("absent pool reported present")
 	}
 }

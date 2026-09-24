@@ -121,6 +121,18 @@ data_dir: ""
 # asic_endpoints:
 #   - "192.168.1.50"         # implies :4028
 #   - "whatsminer.lan:4028"
+#
+# asic_manage lets the detected miners *follow* Otedama's active pool:
+# every time the engine connects (including failover), the same pool is
+# pushed onto each managed miner via the cgminer addpool + switchpool
+# commands, so a small fleet mines where Otedama does. Default false —
+# the commands rewrite each miner's live pool table, so actuation is
+# strictly opt-in even though detection already probes those hosts.
+# Only Stratum-V1-compatible URLs are pushed (cgminer firmwares speak
+# SV1; datum:// is rewritten to stratum+tcp://); V2 URLs are skipped.
+# Requires asic_endpoints to name the miners to manage.
+#
+# asic_manage: false
 
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
 #

@@ -659,6 +659,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword: poolPassword,
 
 			noPoolShareCheck: r.opts.NoPoolShareCheck,
+			asicManage:       r.opts.Config.ASICManage,
+			asicEndpoints:    r.opts.Config.ASICEndpoints,
 			activityMu:       r.activityMu,
 			activity:         r.activity,
 			onConnected: func() {
@@ -786,6 +788,12 @@ type sessionOpts struct {
 	poolPassword string
 	// noPoolShareCheck mirrors Options.NoPoolShareCheck.
 	noPoolShareCheck bool
+	// asicManage mirrors Config.ASICManage — when set with asicEndpoints,
+	// every successful pool connect pushes the pool onto the managed
+	// cgminer-compatible miners so the fleet follows Otedama's active
+	// endpoint (KNOWN_LIMITATIONS §8's opt-in actuation half).
+	asicManage    bool
+	asicEndpoints []string
 	// onConnected, if set, is called once the handshake completes and the
 	// session is established. The reconnect loop uses it to mark the
 	// active payout address as "known good" so it is not failed over.
@@ -1147,6 +1155,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 	}
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
 	opts.warnOnPoolShare(ctx)
+	opts.manageASICPools(ctx)
 
 	// estSats, latency and friends live on the shared sessionTelemetry
 	// accumulator so both session loops tick identically.
@@ -1292,6 +1301,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	}
 	defer sess.Close()
 	opts.warnOnPoolShare(ctx)
+	opts.manageASICPools(ctx)
 
 	// V1 is single-channel; channel ID 0 is the conventional value.
 	const chanID = uint32(0)
@@ -1520,6 +1530,53 @@ func (opts sessionOpts) warnOnPoolShare(ctx context.Context) {
 					"large-pool concentration enables detection-resistant selfish mining; "+
 					"consider a smaller pool",
 				ps.Name, ps.Share*100))
+		}
+	}()
+}
+
+// manageASICPools pushes the just-connected pool to every managed ASIC
+// (Config.ASICManage + ASICEndpoints) via the cgminer addpool/switchpool
+// pair, so a fleet of standalone miners follows Otedama's active stratum
+// endpoint — including across failovers. Only Stratum-V1-compatible
+// URLs are actuated: cgminer firmwares speak SV1, and pushing a
+// stratum+v2:// URL would strand the miner; datum:// is rewritten to
+// stratum+tcp://, the protocol the DATUM gateway serves downstream.
+// Dedup is by last-pushed host: reconnects to the same pool do not
+// re-issue commands, but a failover onto a different pool does. Runs in
+// a goroutine — actuation must never delay the session's first job.
+func (opts sessionOpts) manageASICPools(ctx context.Context) {
+	if !opts.asicManage || len(opts.asicEndpoints) == 0 || opts.m == nil {
+		return
+	}
+	proto := poolproto.FromURL(opts.poolURL)
+	switch proto {
+	case poolproto.ProtocolStratumV1, poolproto.ProtocolStratumV1TLS, poolproto.ProtocolDATUM:
+	default:
+		opts.log("info", fmt.Sprintf(
+			"engine: asic_manage set but pool %s is not SV1-compatible — managed ASICs left unchanged",
+			opts.poolURL))
+		return
+	}
+	host, err := poolproto.StripScheme(opts.poolURL)
+	if err != nil || host == "" {
+		return
+	}
+	opts.m.asicManagedMu.Lock()
+	if opts.m.asicManagedHost == host {
+		opts.m.asicManagedMu.Unlock()
+		return
+	}
+	opts.m.asicManagedHost = host
+	opts.m.asicManagedMu.Unlock()
+	drv := &hal.ASICDriver{Endpoints: opts.asicEndpoints}
+	go func() {
+		switched, errs := drv.SwitchPools(ctx, opts.poolURL, opts.user, opts.poolPassword)
+		for _, e := range errs {
+			opts.log("warn", "engine: asic_manage: "+e.Error())
+		}
+		if len(switched) > 0 {
+			opts.log("info", fmt.Sprintf(
+				"engine: asic_manage: %d miner(s) switched to %s", len(switched), host))
 		}
 	}()
 }

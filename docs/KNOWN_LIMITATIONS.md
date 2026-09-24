@@ -297,7 +297,7 @@ satoshi/second numbers (which move primarily with BTC price anyway).
 
 ---
 
-## 8. ASIC hardware cannot be dispatched to (detection: partially resolved, session 304)
+## 8. ASIC hardware cannot be dispatched to (detection + opt-in pool-follow resolved; dispatch open)
 
 **What:** Otedama's product definition names ASIC, GPU, and CPU hardware as
 the three classes it arbitrates across. As of session 304, `internal/hal`
@@ -312,20 +312,34 @@ enumerate as `hal.Device`s with family `asic`, a vendor inferred from the
 reported model string, and the firmware-reported hashrate retained on the
 device.
 
+As of session 331, the firmware **control surface** also has a first,
+opt-in use: `asic_manage` pushes each connected pool onto every managed
+miner via the cgminer `addpool` + `switchpool` pair, so a small fleet
+*follows* Otedama's active stratum endpoint — including across failovers.
+Only Stratum-V1-compatible URLs are actuated (cgminer firmwares speak
+SV1; `datum://` is rewritten to `stratum+tcp://`); Stratum V2 URLs are
+skipped rather than stranded. Actuation is strictly opt-in even though
+detection already probes those hosts — it rewrites each miner's live
+pool table.
+
 What remains unimplemented is **dispatch**: detected ASICs report
 `Capabilities{}` with `SHA256d=false`, exactly like detected GPUs, so the
 arbitration engine can see them but cannot send work to them. There is no
-`SubmitWork` path, no firmware control channel, and no yield signal beyond
-the one-shot self-reported figure. `hal.FamilyASIC`'s ≈100 TH/s fallback
-estimate in `internal/provider/mining.go` is still the only mining-yield
-number used in arbitration for the family.
+`SubmitWork` path and no yield signal beyond the one-shot self-reported
+figure — `asic_manage` points a miner at the pool Otedama itself uses,
+but the miner's earnings never flow back into Otedama's accounting.
+`hal.FamilyASIC`'s ≈100 TH/s fallback estimate in
+`internal/provider/mining.go` is still the only mining-yield number used
+in arbitration for the family.
 
 **Impact:** An operator can now list their Antminer/Whatsminer/Avalon/etc.
-in `asic_endpoints` and have Otedama detect and name it — closing the
-discovery half of this limitation. The arbitration half stands: detected
-ASICs contribute identity to the device inventory but earn nothing through
-Otedama, and the arbitration engine still has no ASIC yield or dispatch
-surface. This does not affect CPU/GPU mining or payout correctness.
+in `asic_endpoints`, have Otedama detect and name it, and (opt-in) have
+the fleet track Otedama's pool selection — closing the discovery half and
+a first slice of the control half of this limitation. The arbitration
+half stands: detected ASICs contribute identity to the device inventory
+but earn nothing through Otedama, and the arbitration engine still has no
+ASIC yield or dispatch surface. This does not affect CPU/GPU mining or
+payout correctness.
 
 **Why:** Unlike CPU/GPU, an ASIC is not a local PCI/sysfs device — it is a
 standalone network appliance running its own firmware (stock Bitmain,

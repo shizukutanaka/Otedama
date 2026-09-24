@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -167,6 +168,10 @@ type cgminerReply struct {
 		Model string `json:"Model"`
 	} `json:"STATS"`
 	Summary []map[string]json.RawMessage `json:"SUMMARY"`
+	Pools   []struct {
+		Pool int    `json:"POOL"`
+		URL  string `json:"URL"`
+	} `json:"POOLS"`
 }
 
 // probeCGMiner queries one endpoint and returns a detected device, or an
@@ -206,6 +211,12 @@ func probeCGMiner(ctx context.Context, addr string, timeout time.Duration) (*asi
 // json.Decoder on the raw buffer rather than json.Unmarshal (which would
 // reject the trailing bytes).
 func cgminerCommand(ctx context.Context, addr string, timeout time.Duration, command string, rep *cgminerReply) error {
+	return cgminerCommandParam(ctx, addr, timeout, command, "", rep)
+}
+
+// cgminerCommandParam is cgminerCommand with an optional "parameter"
+// field — management commands (addpool, switchpool) take one.
+func cgminerCommandParam(ctx context.Context, addr string, timeout time.Duration, command, parameter string, rep *cgminerReply) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var dialer net.Dialer
@@ -215,7 +226,11 @@ func cgminerCommand(ctx context.Context, addr string, timeout time.Duration, com
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	if _, err := fmt.Fprintf(conn, `{"command":%q}`+"\n", command); err != nil {
+	payload := fmt.Sprintf(`{"command":%q`, command)
+	if parameter != "" {
+		payload += fmt.Sprintf(`,"parameter":%q`, parameter)
+	}
+	if _, err := fmt.Fprint(conn, payload+"}\n"); err != nil {
 		return err
 	}
 	dec := json.NewDecoder(conn)
@@ -231,6 +246,105 @@ func cgminerCommand(ctx context.Context, addr string, timeout time.Duration, com
 		return fmt.Errorf("hal: %s: cgminer error: %s", addr, rep.Status[0].Description)
 	}
 	return nil
+}
+
+// SwitchPools directs every configured endpoint at poolURL: each
+// cgminer-compatible miner gets the pool added when absent
+// (addpool|URL,USER,PASS) and then switched onto it (switchpool|N).
+// This is the opt-in actuation half of KNOWN_LIMITATIONS §8 — detection
+// probes read-only commands; switching rewrites each miner's active
+// pool, so callers must only invoke it when the operator enabled
+// `asic_manage`. Per-endpoint failures are collected rather than
+// failing the batch; switched lists the endpoints that accepted.
+//
+// Only Stratum-V1-compatible URLs are pushed: cgminer-family firmware
+// speaks SV1, so a stratum+v2:// URL would strand the miner. datum://
+// maps to stratum+tcp:// (the DATUM gateway's miner-facing protocol is
+// SV1); stratum+tls:// passes through for firmwares that support it.
+func (d *ASICDriver) SwitchPools(ctx context.Context, poolURL, user, pass string) (switched []string, errs []error) {
+	timeout := d.Timeout
+	if timeout <= 0 {
+		timeout = DefaultASICProbeTimeout
+	}
+	for _, ep := range d.Endpoints {
+		addr, err := normalizeASICEndpoint(ep)
+		if err != nil {
+			continue // same posture as Enumerate: bad entries are skipped
+		}
+		if err := switchCGMinerPool(ctx, addr, poolURL, user, pass, timeout); err != nil {
+			errs = append(errs, fmt.Errorf("hal: %s: %w", addr, err))
+			continue
+		}
+		switched = append(switched, addr)
+	}
+	return switched, errs
+}
+
+// switchCGMinerPool moves one miner onto poolURL. addpool appends but
+// does not activate, so the sequence is pools → (addpool → pools) →
+// switchpool, keyed off the POOLS table the miner reports.
+func switchCGMinerPool(ctx context.Context, addr, poolURL, user, pass string, timeout time.Duration) error {
+	var rep cgminerReply
+	if err := cgminerCommand(ctx, addr, timeout, "pools", &rep); err != nil {
+		return err
+	}
+	id, found := poolIndexFor(&rep, poolURL)
+	if !found {
+		var add cgminerReply
+		if err := cgminerCommandParam(ctx, addr, timeout, "addpool",
+			poolURLForASIC(poolURL)+","+user+","+pass, &add); err != nil {
+			return fmt.Errorf("addpool: %w", err)
+		}
+		rep = cgminerReply{}
+		if err := cgminerCommand(ctx, addr, timeout, "pools", &rep); err != nil {
+			return err
+		}
+		if id, found = poolIndexFor(&rep, poolURL); !found {
+			return fmt.Errorf("pool %q absent after addpool", poolURL)
+		}
+	}
+	var sw cgminerReply
+	if err := cgminerCommandParam(ctx, addr, timeout, "switchpool",
+		strconv.Itoa(id), &sw); err != nil {
+		return fmt.Errorf("switchpool: %w", err)
+	}
+	return nil
+}
+
+// poolIndexFor returns the cgminer pool index whose stored URL names
+// the same target as poolURL, comparing scheme-normalised host:port.
+func poolIndexFor(rep *cgminerReply, poolURL string) (int, bool) {
+	want := normPoolURLKey(poolURL)
+	for _, p := range rep.Pools {
+		if normPoolURLKey(p.URL) == want {
+			return p.Pool, true
+		}
+	}
+	return 0, false
+}
+
+// poolURLForASIC renders a configured pool URL the way cgminer expects:
+// schemes pass through (datum:// is rewritten to stratum+tcp://, the
+// protocol a DATUM gateway actually serves downstream miners), and a
+// bare host:port gets the stratum+tcp:// prefix cgminer requires.
+func poolURLForASIC(url string) string {
+	switch {
+	case strings.HasPrefix(url, "datum://"):
+		return "stratum+tcp://" + url[len("datum://"):]
+	case strings.Contains(url, "://"):
+		return url
+	default:
+		return "stratum+tcp://" + url
+	}
+}
+
+// normPoolURLKey reduces a pool URL to a comparison key: lowercase
+// host:port with any scheme prefix and trailing slash dropped.
+func normPoolURLKey(url string) string {
+	if i := strings.Index(url, "://"); i >= 0 {
+		url = url[i+3:]
+	}
+	return strings.TrimSuffix(strings.ToLower(url), "/")
 }
 
 // cgminerModel picks the best model string a miner offered.

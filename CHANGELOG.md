@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 331 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: KNOWN_LIMITATIONS §8 制御半分 — opt-in ASIC プール追従)
+
+- **`asic_manage` で検出済み ASIC を接続中プールへ追従.** cgminer RPC API の
+  管理コマンド（`addpool|URL,USER,PASS` + `switchpool|N`）を実装し、プール接続
+  確立毎（V1/V2 両経路、共有 `dialPool` 後の `warnOnPoolShare` と同一点）に
+  `asic_endpoints` 全台へ同一プールを push — フェイルオーバーで別プールへ
+  切替った際も追従（最後に push したホストで重複抑止）。cgminer 系ファームは
+  SV1 のみ話すため `stratum+v2*` URL は push せず、`datum://` は
+  `stratum+tcp://` へ変換（DATUM ゲートウェイの下流プロトコルは SV1）。
+  マイナーの稼働中プール表を書換えるため検出とは別の明示オプトイン —
+  `asic_manage` 設定時に `asic_endpoints` 空なら検証エラー。エンドポイント毎の
+  失敗は収集されるのみでバッチを中断しない。KNOWN_LIMITATIONS §8 の
+  discovery 半分に続く control 半分の第一スライス（dispatch 経路は未実装のまま）。
+
 ### Added (session 330 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 11 #3 解消 — プール最低支払閾値の doctor 可視化)
 
 - **`doctor` に "Pool payout threshold" チェック（Cat 11 #3 解消）.** 設定プールの

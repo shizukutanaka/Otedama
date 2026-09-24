@@ -164,6 +164,13 @@ type engineMetrics struct {
 	// itself is created lazily per pool_host label (like rejectReason).
 	poolShareSeenMu sync.Mutex
 	poolShareSeen   map[string]bool
+	// asicManagedHost records which pool host was last pushed to the
+	// managed ASICs so reconnects to the same pool don't re-issue the
+	// cgminer switchpool — but a failover onto a *different* pool does
+	// push again (the fleet follows the active endpoint). Guarded by
+	// asicManagedMu; "" means nothing pushed yet this run.
+	asicManagedMu   sync.Mutex
+	asicManagedHost string
 	// payoutActiveIndex is the 0-based index of the active payout address
 	// in the configured failover list, so address failover is observable.
 	payoutActiveIndex *metrics.Gauge

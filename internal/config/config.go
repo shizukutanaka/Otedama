@@ -125,6 +125,17 @@ type Config struct {
 	// Otedama has no work-dispatch path to them yet.
 	ASICEndpoints []string `yaml:"asic_endpoints"`
 
+	// ASICManage arms the cgminer management commands (addpool +
+	// switchpool) against every endpoint in ASICEndpoints: each time the
+	// engine connects to a pool, the same pool is pushed to every managed
+	// miner so the fleet follows Otedama's active stratum endpoint —
+	// including failovers. Off by default and requires asic_endpoints:
+	// the commands rewrite each miner's live pool table, so actuation is
+	// strictly opt-in even though detection already probes those hosts.
+	// Only Stratum-V1-compatible URLs are pushed (cgminer firmwares speak
+	// SV1; datum:// maps to stratum+tcp://); V2 URLs are skipped.
+	ASICManage bool `yaml:"asic_manage"`
+
 	// ArbitrationHysteresisPct is the minimum fractional yield improvement
 	// required to switch a device from its current workload (mining → AI or
 	// vice versa). A value of 0.05 means a switch only happens when the new
@@ -742,6 +753,9 @@ func (c Config) Validate() error {
 		if err := validateASICEndpoint(ep); err != nil {
 			issues = append(issues, fmt.Sprintf("asic_endpoints[%d] invalid: %v", i, err))
 		}
+	}
+	if c.ASICManage && len(c.ASICEndpoints) == 0 {
+		issues = append(issues, "asic_manage is set but asic_endpoints is empty — nothing to manage")
 	}
 
 	for i, p := range c.Pools {
