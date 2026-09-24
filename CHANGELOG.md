@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 298 — SV2 Reconnect メッセージ処理)
+
+- **`Reconnect` (msg_type 0x04, common §3.6.5) を実装** — V1
+  `client.reconnect` の V2 対応物が codec 自体に存在せず、プールの
+  再接続要求が黙殺されセッションが終了しなかった。codec + dispatch
+  を追加し、readLoop で directive を記録してセッションを終了 —
+  engine の reconnect loop が**設定済み**プールへ再ダイヤル。
+  プール指定の host:port には従わない（V1 client.reconnect と同一の
+  信頼姿勢：認証なきリダイレクトは hash rate を任意エンドポイントへ
+  渡すベクター）。
+
 ### Fixed (session 297 — SV2 SetupConnectionSuccess flags 検査)
 
 - **`SetupConnectionSuccess.flags` が decode 後未検査だった問題を修正** —

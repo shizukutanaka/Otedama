@@ -242,6 +242,11 @@ type session struct {
 	pending   map[uint32]chan poolproto.ShareResult
 	pendingMu sync.Mutex
 
+	// lastReconnect records the most recent pool-directed Reconnect
+	// (msg_type 0x04, §3.6.5), nil until one is seen. Read race-free;
+	// useful for diagnostics and tests.
+	lastReconnect atomic.Pointer[stratum.Reconnect]
+
 	startOnce sync.Once
 }
 
@@ -316,7 +321,28 @@ func (s *session) readLoop(ctx context.Context) {
 		if msg.SubmitSharesError != nil {
 			s.rejectSubmit(msg.SubmitSharesError)
 		}
+		// A pool-directed Reconnect ends the session — see
+		// noteReconnect. Closing the conn makes the top-of-loop
+		// closed check exit, so no explicit branch is needed here.
+		s.noteReconnect(&msg)
 	}
+}
+
+// noteReconnect records a pool-directed Reconnect (sv2-spec §3.6.5) and
+// ends the session: closing the connection makes the read loop's next
+// closed check / ReadFrame fail and Jobs() close — the signal the
+// engine's reconnect machinery uses to re-dial the configured pool
+// list. The pool is asking us to move to another node (load balancing,
+// maintenance, failover); we deliberately do NOT follow the
+// pool-supplied NewHost:NewPort: an unauthenticated redirect would hand
+// the hash rate to an arbitrary endpoint (the same posture as V1
+// client.reconnect).
+func (s *session) noteReconnect(m *stratum.Message) {
+	if m.Reconnect == nil {
+		return
+	}
+	s.lastReconnect.Store(m.Reconnect)
+	s.conn.Close()
 }
 
 // tipState tracks SV2 job/tip state for the read loop, mirroring the

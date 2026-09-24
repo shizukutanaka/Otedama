@@ -1101,6 +1101,19 @@ fails the handshake (`ErrHandshakeFailed`) when the success flags
 require extended channels; `SetupFlagRequiresExtendedChannels` added
 next to the client-side bit-0 constant.
 
+**Session-298 follow-up (Reconnect, §3.6.5):** the common-protocol
+`Reconnect` (msg_type 0x04, `new_host`/`new_port`) — the V2 analogue of
+V1 `client.reconnect` — was silently dropped: not in the codec at all,
+so a pool-directed redirect never terminated the session. — ✅ **Fixed
+(session 298):** codec + dispatch added, and the read loop records the
+directive then closes the session so the engine's reconnect loop
+re-dials the *configured* pool — the pool-supplied endpoint is NOT
+followed, mirroring the V1 trust posture (an unauthenticated redirect
+would hand the hash rate to an arbitrary endpoint).
+`ChannelEndpointChanged` (0x03, channel_msg) is decode-only on purpose:
+it governs unknown-extension channel state, and Otedama negotiates no
+extensions.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

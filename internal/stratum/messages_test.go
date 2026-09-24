@@ -130,6 +130,45 @@ func TestSetupConnectionError_Roundtrip(t *testing.T) {
 	}
 }
 
+// ----- Reconnect (common protocol §3.6.5) -----
+
+func TestReconnect_Roundtrip(t *testing.T) {
+	orig := Reconnect{NewHost: "alt.pool.example", NewPort: 4444}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeReconnect(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
+	}
+}
+
+// The spec's "reconnect to current" sentinels: empty host / zero port.
+func TestReconnect_RoundtripCurrentEndpoint(t *testing.T) {
+	orig := Reconnect{}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeReconnect(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeReconnect_Short(t *testing.T) {
+	if _, err := DecodeReconnect([]byte{0x03, 'a', 'b'}); err == nil {
+		t.Error("short payload accepted")
+	}
+}
+
 // ----- OpenMiningChannel -----
 
 func TestOpenMiningChannel_Roundtrip(t *testing.T) {

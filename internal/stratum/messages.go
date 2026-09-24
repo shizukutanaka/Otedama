@@ -13,6 +13,7 @@
 //	0x00  SetupConnection        (client → server)
 //	0x01  SetupConnectionSuccess (server → client)
 //	0x02  SetupConnectionError   (server → client)
+//	0x04  Reconnect              (server → client, common protocol §3.6.5)
 //	0x10  OpenMiningChannel      (client → server)
 //	0x11  OpenMiningChannelSuccess
 //	0x12  OpenMiningChannelError
@@ -46,6 +47,7 @@ const (
 	MsgSetupConnection          uint8 = 0x00
 	MsgSetupConnectionSuccess   uint8 = 0x01
 	MsgSetupConnectionError     uint8 = 0x02
+	MsgReconnect                uint8 = 0x04
 	MsgOpenMiningChannel        uint8 = 0x10
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
@@ -379,6 +381,7 @@ type Message struct {
 	SetupConnection          *SetupConnection
 	SetupConnectionSuccess   *SetupConnectionSuccess
 	SetupConnectionError     *SetupConnectionError
+	Reconnect                *Reconnect
 	OpenMiningChannel        *OpenMiningChannel
 	OpenMiningChannelSuccess *OpenMiningChannelSuccess
 	OpenMiningChannelError   *OpenMiningChannelError
@@ -424,6 +427,12 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.SetupConnectionError = &v
+	case MsgReconnect:
+		v, err := DecodeReconnect(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.Reconnect = &v
 	case MsgOpenMiningChannel:
 		v, err := DecodeOpenMiningChannel(f.Payload)
 		if err != nil {

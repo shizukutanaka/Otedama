@@ -1531,3 +1531,50 @@ func TestDialer_Dial_TLSBadCAPEM(t *testing.T) {
 		t.Errorf("error = %q, want TLS dial CA error", err.Error())
 	}
 }
+
+// A pool-directed Reconnect (sv2-spec §3.6.5) must end the session: the
+// read loop records the directive, closes the connection, and Jobs()
+// closes — the signal the engine's reconnect machinery waits on. We
+// deliberately do NOT follow the pool-supplied host:port (same posture
+// as V1 client.reconnect: an unauthenticated redirect would hand the
+// hash rate to an arbitrary endpoint).
+func TestDialer_Session_ReconnectDirectiveEndsSession(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(7)
+		writeMsgTo(pool.t, pool.conn, stratum.MsgReconnect, false,
+			stratum.Reconnect{NewHost: "alt.pool.example", NewPort: 4444})
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			t.Error("Jobs() should close on pool Reconnect, not yield a job")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Jobs() not closed after pool Reconnect")
+	}
+
+	directive := sess.(*session).lastReconnect.Load()
+	if directive == nil {
+		t.Fatal("reconnect directive not recorded")
+	}
+	if directive.NewHost != "alt.pool.example" || directive.NewPort != 4444 {
+		t.Errorf("directive = %+v, want host=alt.pool.example port=4444", directive)
+	}
+}

@@ -170,6 +170,41 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 }
 
 // ------------------------------------------------------------------
+// Reconnect (server → client, msg_type 0x04, common protocol §3.6.5)
+// ------------------------------------------------------------------
+
+// Reconnect is sent by the upstream to redirect the downstream to a new
+// host. An empty NewHost or a zero NewPort asks the downstream to
+// reconnect to the CURRENT endpoint (re-handshake in place).
+type Reconnect struct {
+	NewHost string // STR0_255; empty = current host
+	NewPort uint16 // U16; 0 = current port
+}
+
+// Encode serialises Reconnect.
+func (m Reconnect) Encode() ([]byte, error) {
+	b, err := appendStr0_255(nil, m.NewHost)
+	if err != nil {
+		return nil, err
+	}
+	return appendU16LE(b, m.NewPort), nil
+}
+
+// DecodeReconnect parses Reconnect.
+func DecodeReconnect(payload []byte) (Reconnect, error) {
+	r := newByteReader(payload)
+	var m Reconnect
+	var err error
+	if m.NewHost, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: Reconnect.NewHost: %w", err)
+	}
+	if m.NewPort, err = getU16LE(r); err != nil {
+		return m, fmt.Errorf("stratum: Reconnect.NewPort: %w", err)
+	}
+	return m, nil
+}
+
+// ------------------------------------------------------------------
 // OpenMiningChannel (client → server, msg_type 0x10)
 // ------------------------------------------------------------------
 

@@ -147,6 +147,11 @@ configured pool URLs — each tagged with the layer it was resolved from.
    pool-side var-diff stays authoritative; low-hashrate devices need the
    hint because a pool default tuned for ASICs can be too high for
    var-diff to ever bootstrap. SV2 has no client→pool equivalent.
+   On `Reconnect` (msg_type 0x04, common §3.6.5) the V2 session records
+   the directive and closes — the reconnect loop re-dials the configured
+   pool; the pool-supplied host:port is deliberately NOT followed (same
+   posture as V1 `client.reconnect`: an unauthenticated redirect would
+   hand the hash rate to an arbitrary endpoint).
 6. **Graceful shutdown** on SIGINT/SIGTERM.
 
 ## 5. Transport (Stratum V2)
