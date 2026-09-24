@@ -638,8 +638,7 @@ endpoint against current vendor documentation. Tags as before
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
-   or every share is rejected on a wrong merkle root. Add a segwit-coinbase
-   regression fixture to the path feeding `engine.applyJob`.
+   or every share is rejected on a wrong merkle root (SRI v1.5.0 fix).
    (stratum-mining/stratum v1.5.0)
    — ✅ **Resolved — non-applicable by design (session 302).** Otedama
    never assembles a coinbase anywhere: the V1 path deliberately
@@ -691,11 +690,16 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
-6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
-   fix for hashrate-counter overflow on reconnect; garbage readings would
-   poison `HashrateMonitor` and the arbitration yield estimate. Reset
-   windowed counters on reconnect, use saturating `uint64` accumulators,
-   and test that a reconnect produces no spurious spike or NaN J/TH.
+6. ✅ **Saturate/reset hashrate counters on reconnect — RESOLVED
+   (session 259).** Verified implemented: `internal/engine/stats.go`'s
+   `hashrateWindow` saturates when the cumulative total decreases
+   (workers recreated on reconnect reset their counters — `total <
+   lastTotal` leaves the rate at 0, never negative or NaN), the windowed
+   rate feeds the monitor/gauge/log/TUI, and a fresh `hashrateWindow` is
+   declared per session so a reconnect re-primes the baseline. Existing
+   tests cover the reset/NaN cases. Original finding: ESP-Miner shipped
+   a reconnect overflow fix; garbage readings would poison
+   `HashrateMonitor` and the yield estimate.
    (bitaxeorg/ESP-Miner releases)
    — **Implemented (session 65):** `hashrateWindow` differentiates the
    cumulative hash counter into a *current* windowed rate (the monitor, gauge,
@@ -703,10 +707,14 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
-   SRI split roles into a separate, independently-versioned repo after
-   v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
-   to cite the (stable) spec so the codec tracks the spec, not moving code.
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app
+   code — RESOLVED (session 259).** Verified: no code or doc comment
+   cites the `stratum-mining/stratum` app repo for protocol truth —
+   `internal/stratum/frame.go`, `handshake.go`, and `messages.go` cite
+   stratumprotocol.org spec chapters, ADR-009 references the spec's job
+   declaration/mining-protocol URLs, and ADR-011 + `skills/` already
+   cite `stratum-mining/sv2-spec` directly. The codec already tracks
+   the spec, not moving code.
 
 ### Category 4 — decentralisation (arXiv grounding)
 

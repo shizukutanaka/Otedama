@@ -35,7 +35,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 現チェーンへ cherry-pick 移植。RESEARCH の項目解決は現チェーン側の後続実装
 （session-292 heartbeat ゲージ・session-316 VRAM 適性・session-290/291 Sharpe/
 会計分離）を優先保持、SLO セクション自体は新規適用。)*
-### Docs (session 258 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS session-251 の文書是正系項目を棚卸し)
+
+### Docs (session 259 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS Cat 2/4 の残項目を検証・棚卸し)
+
+- **THREAT_MODEL.md に undetectable selfish mining を追記（Cat 4 #8 解消）.**
+  Bahrani & Weinberg (arXiv:2309.06847) — 正直マイニングと統計的に見分けが
+  つかない selfish mining が ~38.2% のハッシュレートから成立することを
+  「Malicious pool」脅威者項に記載し、マルチプール failover/エンドポイント
+  分散を可用性ではなく**セキュリティ**特性として明文化。
+- **ADR-009 Sub-domain 3 に segwit-coinbase 要件を記録（Cat 2 #3 解消）.**
+  SRI v1.5.0 が修正したバグ（witness 付きシリアライズで merkle root を
+  ハッシュすると全シェアが不正）の回帰フィクスチャを JDC 実装時に必須化。
+  現状 Otedama にはコインベース組立経路が存在しない（V1 はプールが
+  coinb1/coinb2 を送信、SV2 Extended-Job 経路は未実装）ことを調査の上で
+  明記。
+- **RESEARCH_IMPROVEMENTS の検証済み項目を解消済みに更新.** Cat 2 #6
+  （`hashrateWindow` が reconnect 時のカウンタリセットを飽和処理——
+  session 65 実装済み・marker 陳腐化）、Cat 2 #7（プロトコル参照は既に
+  stratumprotocol.org / sv2-spec に pin、SRI アプリコード参照なし）も
+  RESOLVED (session 259) に。
+
+*(session 325: 別系チェーンの未マージ PR (#115) に留まっていた本 docs 更新を
+現チェーンへ cherry-pick 移植。RESEARCH の重複解決は現チェーンの後続実装版を
+優先保持、THREAT_MODEL の undetectable selfish mining 引用と ADR-009 の
+segwit-coinbase 要件は新規適用。)*### Docs (session 258 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS session-251 の文書是正系項目を棚卸し)
 
 **調査由来の是正のうち未反映だった Bitcoin Core v30 IPC を ADR-009 に記録し、
 既適用済みだった残りの項目を RESEARCH_IMPROVEMENTS で解消済みにマーク。**
