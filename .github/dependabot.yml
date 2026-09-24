@@ -31,6 +31,10 @@ updates:
   # requires active maintenance. Dependabot helps stay current.
   - package-ecosystem: "github-actions"
     directory: "/"
+    allow:
+      - dependency-type: "direct"
+    automerge:
+      - dependency-type: "direct"
     schedule:
       interval: "weekly"
       day: "monday"
