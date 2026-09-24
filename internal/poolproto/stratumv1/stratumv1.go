@@ -392,6 +392,19 @@ func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 // Implements poolproto.PoolNoticeReceiver.
 func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 
+// SessionEndInfo reports the pool-stated end cause — the last
+// mining.reconnect / client.reconnect directive if one arrived before
+// the session ended. The redirect target is reported for diagnosis but
+// never followed (see reconnectDirective). Implements
+// poolproto.SessionEndDetail.
+func (s *session) SessionEndInfo() (string, bool) {
+	d := s.lastReconnect.Load()
+	if d == nil {
+		return "", false
+	}
+	return fmt.Sprintf("pool requested reconnect to %s:%d (not followed)", d.Host, d.Port), true
+}
+
 // sendJob enqueues a new job, respecting the clean_jobs flag.
 // When clean_jobs=true the pool signals a new block has been found;
 // all pending jobs must be discarded immediately — submitting them would

@@ -385,6 +385,21 @@ func (s *session) noteReconnect(m *stratum.Message) {
 	s.conn.Close()
 }
 
+// SessionEndInfo reports the pool-stated end cause — a CloseChannel
+// reason code takes precedence over a Reconnect directive since it is
+// the more specific statement of why the session ended. The redirect
+// target is reported for diagnosis but never followed (see
+// noteReconnect). Implements poolproto.SessionEndDetail.
+func (s *session) SessionEndInfo() (string, bool) {
+	if cc := s.lastChannelClose.Load(); cc != nil {
+		return fmt.Sprintf("channel %d closed by pool: %s", cc.ChannelID, cc.ReasonCode), true
+	}
+	if r := s.lastReconnect.Load(); r != nil {
+		return fmt.Sprintf("pool requested reconnect to %s:%d (not followed)", r.NewHost, r.NewPort), true
+	}
+	return "", false
+}
+
 // tipState tracks SV2 job/tip state for the read loop, mirroring the
 // engine's inline loop: a job is emittable only once both NewMiningJob
 // (merkle root + version) and SetNewPrevHash (prev-hash + nBits + ntime)

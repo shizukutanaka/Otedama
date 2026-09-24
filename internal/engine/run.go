@@ -1265,7 +1265,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 			rt.updateChannelHashrate(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
 			if !ok {
-				return fmt.Errorf("engine: pool closed connection")
+				return fmt.Errorf("%s", sessionEndCause(sess))
 			}
 			dispatchJob(opts, &job, chanID, 0, "V2")
 
@@ -1288,6 +1288,20 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 			go submitV2Share(ctx, sess, rt, opts, share)
 		}
 	}
+}
+
+// sessionEndCause enriches the generic "pool closed connection" error
+// with the pool-stated end cause (V1 mining.reconnect, V2 Reconnect /
+// CloseChannel) when the protocol recorded one — turning a bare TCP
+// drop into "closed by pool: <reason>" for diagnostics. The detail is
+// diagnostic only; an unauthenticated pool redirect is never followed.
+func sessionEndCause(sess poolproto.Session) string {
+	if d, ok := sess.(poolproto.SessionEndDetail); ok {
+		if info, ok := d.SessionEndInfo(); ok {
+			return fmt.Sprintf("engine: pool closed connection (%s)", info)
+		}
+	}
+	return "engine: pool closed connection"
 }
 
 // dispatchJob applies one pool job to the workers unless curtailment
@@ -1420,7 +1434,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			rt.updateChannelHashrate(ctx, sess, opts.log)
 		case job, ok := <-sess.Jobs():
 			if !ok {
-				return fmt.Errorf("engine: pool closed connection")
+				return fmt.Errorf("%s", sessionEndCause(sess))
 			}
 			dispatchJob(&opts, &job, chanID, sess.SuggestedDifficulty(), "V1")
 

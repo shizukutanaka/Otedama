@@ -333,6 +333,21 @@ type TLSCertNotAfterer interface {
 	TLSCertNotAfter() (notAfter time.Time, ok bool)
 }
 
+// SessionEndDetail is an optional extension to Session implemented by
+// protocols where the pool can state why a session ended or where it
+// asked the client to go (Stratum V1 mining.reconnect, Stratum V2
+// Reconnect / CloseChannel). Callers type-assert a Session to this
+// interface after the job channel closes; the returned string is
+// diagnostic only — an unauthenticated pool-supplied redirect target is
+// never followed, only reported. Sessions without a pool-stated end
+// cause return ok=false.
+type SessionEndDetail interface {
+	// SessionEndInfo returns a one-line description of the
+	// pool-stated end-of-session detail, or ok=false when the pool
+	// gave none.
+	SessionEndInfo() (info string, ok bool)
+}
+
 // PeerCertNotAfter extracts the leaf certificate's NotAfter from a
 // possibly-TLS connection. Protocol sessions use it to implement
 // TLSCertNotAfterer; ok is false for plaintext conns or TLS peers that

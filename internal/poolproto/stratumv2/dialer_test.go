@@ -1578,6 +1578,13 @@ func TestDialer_Session_ReconnectDirectiveEndsSession(t *testing.T) {
 	if directive.NewHost != "alt.pool.example" || directive.NewPort != 4444 {
 		t.Errorf("directive = %+v, want host=alt.pool.example port=4444", directive)
 	}
+
+	// The recorded directive must surface through SessionEndDetail for
+	// the engine's "pool closed connection" log line.
+	info, ok := sess.(*session).SessionEndInfo()
+	if !ok || !strings.Contains(info, "alt.pool.example:4444") {
+		t.Errorf("SessionEndInfo = (%q, %v), want reconnect detail mentioning alt.pool.example:4444", info, ok)
+	}
 }
 
 // A pool-directed CloseChannel (§5.3.9) ends the channel — the sender
@@ -1623,6 +1630,22 @@ func TestDialer_Session_CloseChannelEndsSession(t *testing.T) {
 	}
 	if closed.ChannelID != 7 || closed.ReasonCode != "channel migrated" {
 		t.Errorf("close record = %+v, want channel 7 reason \"channel migrated\"", closed)
+	}
+
+	// CloseChannel is the more specific end cause and takes precedence
+	// in SessionEndDetail (a Reconnect, if any, is secondary).
+	info, ok := sess.(*session).SessionEndInfo()
+	if !ok || !strings.Contains(info, "channel 7 closed by pool") || !strings.Contains(info, "channel migrated") {
+		t.Errorf("SessionEndInfo = (%q, %v), want CloseChannel detail", info, ok)
+	}
+}
+
+func TestSessionEndInfo_NoPoolStatedCause(t *testing.T) {
+	// A session that never saw Reconnect/CloseChannel reports no end
+	// detail — the engine keeps the plain "pool closed connection".
+	s := &session{}
+	if _, ok := s.SessionEndInfo(); ok {
+		t.Error("SessionEndInfo on a fresh session should be ok=false")
 	}
 }
 

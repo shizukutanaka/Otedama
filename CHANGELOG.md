@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 359 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール提示のセッション終了理由をログへ)
+
+- **`poolproto.SessionEndDetail` 任意インターフェース** — プールがセッション終了の
+  理由・リダイレクト先を提示する経路（V1 `mining.reconnect`、V2 `Reconnect` /
+  `CloseChannel`）は既に記録されていたが読み出し口が無く、終了時は全て
+  "pool closed connection" の一律メッセージだった。`SessionEndInfo()` を実装し
+  （V1: 最後の reconnect 指令、V2: CloseChannel 理由優先→Reconnect）、
+  `runSessionV1/V2` の終了エラーを `(…pool requested reconnect to host:port
+  (not followed))` / `(…channel N closed by pool: reason)` へ拡充。
+  リダイレクト先は診断のみで追従しない姿勢は不変（THREAT_MODEL B4）。
+  プール由来文字列は既存のログサニタイズ経路で制御バイト無害化済み。
+
 ### Fixed (session 358 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: TLS ServerName リグレッション修復 + submit 応答タイムアウト)
 
 - **`stratum+tls://`・`stratum+v2tls://` ダイヤルの ServerName 派生を復旧** —

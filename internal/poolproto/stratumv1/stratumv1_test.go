@@ -1994,6 +1994,22 @@ func TestSession_E2E_ClientReconnect_ClosesSession(t *testing.T) {
 	} else if d.Host != "alt.pool.example" || d.Port != 4444 || d.Wait != 10 {
 		t.Errorf("lastReconnect = %+v, want {alt.pool.example 4444 10}", *d)
 	}
+
+	// The recorded directive must surface through SessionEndDetail for
+	// the engine's "pool closed connection" log line.
+	info, ok := sess.SessionEndInfo()
+	if !ok || !strings.Contains(info, "alt.pool.example:4444") {
+		t.Errorf("SessionEndInfo = (%q, %v), want reconnect detail mentioning alt.pool.example:4444", info, ok)
+	}
+}
+
+func TestSessionEndInfo_NoPoolStatedCause(t *testing.T) {
+	// A session that never saw a pool directive reports no end detail —
+	// the engine keeps the plain "pool closed connection" message.
+	s := &session{}
+	if _, ok := s.SessionEndInfo(); ok {
+		t.Error("SessionEndInfo on a fresh session should be ok=false")
+	}
 }
 
 func TestSession_E2E_MiningReconnect_ClosesSession(t *testing.T) {
