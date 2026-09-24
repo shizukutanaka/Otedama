@@ -49,7 +49,6 @@ import (
 // the CipherState pair ready for symmetric encryption.
 type HandshakeState struct {
 	localEphemeral *ecdh.PrivateKey
-	remoteStatic   *ecdh.PublicKey
 	h              [32]byte // running hash (h)
 	ck             [32]byte // chaining key
 	complete       bool

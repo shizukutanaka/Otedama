@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 376 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: staticcheck 指摘2件)
+
+- **staticcheck を実実行し最後の2件を解消** — `run_test.go` の
+  `sessionTraceID()==sessionTraceID()`（SA4000: 意味は連続 mint 衝突の
+  テストで正しいが同一式比較として検出）を変数展開で明示化、および
+  Noise `HandshakeState` の未使用 `remoteStatic` フィールド（宣言のみ・
+  未使用 scaffold）を削除。`staticcheck ./...` がクリーンに。
+
 ### Security (session 375 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: Go toolchain 脆弱性修正)
 
 - **toolchain を go1.25.7 → go1.25.13** — `govulncheck` が本コード到達の stdlib

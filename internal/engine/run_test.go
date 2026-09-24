@@ -2852,7 +2852,7 @@ func TestSessionTraceID(t *testing.T) {
 			t.Fatalf("sessionTraceID() = %q, want lowercase hex", id)
 		}
 	}
-	if sessionTraceID() == sessionTraceID() {
+	if a, b := sessionTraceID(), sessionTraceID(); a == b {
 		t.Error("two consecutive mints collided")
 	}
 }
