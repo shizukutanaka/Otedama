@@ -12,6 +12,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed (session 307 — V1 dispatch 分割 + 未知リクエスト応答)
 
+### Changed (session 269 — RESEARCH_IMPROVEMENTS 検証・是正パス: GPU spot 一次検証 + LN 設計制約 + アドバイザリ追跡)
+
+**一次検証 (primary verification).** session-251 で 403 に阻まれた
+GPU spot 項目を再検証: variant.fund "Compute as a Commodity"
+(2026-05-14) は GPU 価格の高ボラティリティを確認するも clustering
+には言及せず、より新しい実証系列 (davefriedman.substack 2026-01-02、
+90日スポットデータ) は SKU 依存の regime 構造を示す — 元スニペットの
+"jump-prone with no volatility clustering" は支持されない。価格は
+高ボラかつ regime 推移型であり、A8 change-point 検出の優先度根拠は
+むしろ強化された (item 14 → RESOLVED with correction)。
+
+**THREAT_MODEL 更新3点.**
+- Supply chain: CVE-2025-22871 / GO-2025-3563 (net/http bare-LF chunk
+  smuggling、go1.24.2 で修正済み) をアドバイザリ追跡として記録 —
+  go1.25.7 ツールチェーンピンでカバー済み。govulncheck の hard CI ゲート化は
+  `.github/workflows` 変更が必要なため open のまま (item 24 → partially)。
+- Information disclosure: Stratum タイミングチャネルの LN アナローグ
+  (Rohrer & Tschorsch, arXiv:2006.12143 — HTLC-resolution timing が決済
+  エンドポイントを漏らす) を記録し、Tor-by-default (ADR-007 B7) が両者を
+  緩和すると明記 (item 27 → RESOLVED)。
+- Assumptions: LN ルーティングの設計制約として arXiv:2506.19333
+  (cost-minimising 選択は流動性を dominant hub に集中) を記録 —
+  ADR-001 プール非集権スタンスの LN 版 (LN item 7 → RESOLVED)。
+
+**Sharpening 記録.** Cat 9/10 item 19 (carbon curtailment は average でなく
+marginal intensity を使うべき) に session 268 の実装状況を記録: 無鍵
+ソースは GB national index (AOER 級) のみのため現状は平均指標、
+WattTime MOER は API キー供給待ちで open のまま。
+*(session 326: 別系チェーンの未マージ PR (#129) に留まっていた本 docs 更新を
+現チェーンへ cherry-pick 移植。RESEARCH/THREAT_MODEL 側はクリーン適用。)*
 ### Docs (session 262 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SLO 文書化 + RESEARCH_IMPROVEMENTS 検証棚卸し)
 
 - **docs/API.md に「Service-level objectives (SLO)」セクションを新設

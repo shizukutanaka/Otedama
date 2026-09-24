@@ -576,10 +576,14 @@ comparisons (D-Central, Coin Bureau, Solo Satoshi).
    Richter (arXiv:2107.05322) show optimally-reliable-and-cheap multi-part
    payments are a separable-convex min-cost-flow problem — superior to naive
    shortest-fee-path. Catalogue only; sending is out of alpha scope.
-7. 🟡 **Liquidity-centralisation awareness.** arXiv:2506.19333 shows LN
-   liquidity consolidates into dominant hubs under pure cost minimisation; a
-   future routing layer should resist defaulting to the same hubs, echoing
-   the mining-pool decentralisation stance (ADR-001).
+7. ✅ **Liquidity-centralisation awareness — RESOLVED (session 269).**
+   THREAT_MODEL's Assumptions now records the arXiv:2506.19333 result as a
+   design constraint for any future routing layer: pure cost-minimisation
+   consolidates into dominant hubs, so path selection must resist hub
+   defaults — the LN echo of ADR-001's pool-decentralisation stance (the
+   same reasoning that just landed the ≥30% pool-network-share warning).
+   Original finding: "a future routing layer should resist defaulting to
+   the same hubs, echoing the mining-pool decentralisation stance."
 8. 🔵 **Boltz reverse-swap** for trustless LN→on-chain — ADR-007 B6.
 9. 🔵 **Tor-by-default** for LN/pool connections — ADR-007 B7 (also mitigates
    the Category 10 timing side channel).
@@ -823,6 +827,11 @@ endpoint against current vendor documentation. Tags as before
     "pause to cut emissions" because curtailing changes load at the margin;
     Electricity Maps average (AOER) understates the effect. Sharpens Cat 8
     #10; keep optional (keys required) per ADR-003.
+    — 🟡 **Partially resolved** (session 268): `curtail_above_uk_carbon`
+    shipped the only free keyless source — the UK National Grid *national
+    index* (AOER-class, not MOER) — so the gate exists but on the weaker
+    signal. A MOER feed (WattTime etc.) requires an API key and stays open
+    as the sharpening this item asks for; see SUSTAINABILITY.md §7.
 
 ### Category 9/10 — observability & supply-chain (current real tooling)
 
@@ -865,6 +874,11 @@ endpoint against current vendor documentation. Tags as before
     GO-2025-3563 — and fail the build on any govulncheck finding. CLAUDE.md
     already mandates the tool; the gap is the gate. Record advisory IDs in
     THREAT_MODEL's dependency assumptions.
+    — 🟡 **Partially resolved** (session 269): advisory IDs verified
+    (CVE-2025-22871 / GO-2025-3563 — net/http bare-LF chunk smuggling,
+    fixed in go1.23.8/go1.24.2, covered by the go1.25.7 toolchain pin)
+    and recorded in THREAT_MODEL's supply-chain threat. The hard-CI-gate
+    half stays open — it needs a `.github/workflows` change.
 
 ### Category 11 — Lightning routing & privacy (arXiv grounding)
 
@@ -880,11 +894,13 @@ endpoint against current vendor documentation. Tags as before
     (capacity + degree + age), not the ML model — a small deterministic
     initial liquidity belief feeding Pickhardt-Richter (Cat 11 #6),
     improving first-attempt success without probing.
-27. 🟡 **One countermeasure, two timing channels.** Rohrer & Tschorsch,
-    "Counting Down Thunder" (arXiv:2006.12143), show HTLC-resolution timing
-    leaks payment endpoints — the LN analogue of the Stratum timing leak
-    already in THREAT_MODEL (1703.06545). Note that Tor-by-default (ADR-007
-    B7) mitigates *both*; doc-only linkage.
+27. ✅ **One countermeasure, two timing channels — RESOLVED (session 269).**
+    THREAT_MODEL's Information-disclosure timing paragraph now cites Rohrer
+    & Tschorsch (arXiv:2006.12143) — HTLC-resolution timing leaking payment
+    endpoints — as the LN analogue of the Stratum channel (arXiv:1703.06545),
+    and records that Tor-by-default (ADR-007 B7) is the shared mitigation.
+    Original finding: "show HTLC-resolution timing leaks payment endpoints…
+    Tor-by-default (ADR-007 B7) mitigates *both*; doc-only linkage."
 
 ---
 
@@ -1088,11 +1104,21 @@ month, so the discipline matters.
     (arxiv.org/pdf/2409.05181, .../2305.10718) corroborate the "don't overbuild
     past Holt-Winters + change-point" stance. **Action:** cite one 2024-25
     result alongside the 2013 reference in ADR-010; no design change.
-14. 🟡 **[SNIPPET — do NOT act until primary-verified] GPU compute spot prices
-    described as jump-prone with no volatility clustering**, arguing change-point
-    detection (ADR-010 A8) should be prioritized alongside the forecaster (A1)
-    rather than after it. Sources are real but 403'd the fetcher
-    (variant.fund, SSRN 6926798). Recorded as a lead only.
+14. ✅ **[PRIMARY-VERIFIED — with correction] GPU compute spot prices —
+    RESOLVED (session 269).** Re-fetched the cited sources directly:
+    variant.fund's "Compute as a Commodity" (2026-05-14) scores GPU price
+    volatility 🟢 "highly volatile" but makes no clustering claim at all;
+    the SNIPPET's "jump-prone with no volatility clustering" phrasing is
+    NOT supported by it. A newer empirical series (davefriedman.substack,
+    "Three GPU Markets, Three Volatility Regimes", 2026-01-02; 90 days of
+    spot data) shows volatility IS structured — next-week volatility
+    correlates with utilization (+0.46 for H200), but regime-dependent per
+    SKU (A100 inverted, −0.29). SSRN 6926798 remains unfetchable (403).
+    Corrected claim: prices are highly volatile AND regime-switching —
+    which still argues for change-point detection (A8), already sequenced
+    adjacent to A1 (v3.5/v3.6, shared rolling buffer). Original finding:
+    "GPU compute spot prices described as jump-prone with no volatility
+    clustering… Sources are real but 403'd the fetcher."
 
 ### Lightning
 
