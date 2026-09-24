@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 332 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: ASIC 追従の観測性 + doctor エンドポイント検証 + RESEARCH 正直化)
+
+- **`otedama_asic_pool_switches_total{pool_host}` カウンタ.** session 331 の
+  `asic_manage` 追従が実際に発火した回数（成功 `switchpool` 毎・宛先プール
+  ホスト別）を公開 — フェイルオーバーでプールが変わる毎に増加し、
+  「設定したが actuation していない」状態と区別可能。SPECIFICATION §6 に登録。
+- **`doctor` に "ASIC endpoints" チェック.** `asic_endpoints` 各エンドポイントへ
+  cgminer プローブ（`hal.ASICDriver` と同一経路・2s タイムアウト・並列）を実行し、
+  全台無応答または一部無応答を警告 — IP 打ち間違いや `api-allow` 未設定は検出・
+  `asic_manage` 両方で無言の欠落になるため。`asic_manage` 有効でエンドポイント
+  空の場合も警告。チェック数 18→19。
+- **RESEARCH 正直化.** Cat 9/10 #10（SLO 文書化）は #184 で現チェーンへ移植済みの
+  ため ✅ へ更新。Cat 10 #6（トラフィックシェーピング）は Bedrock mining-cookie
+  がプール側実装でクライアント単独では実装不可と検証 — 実現可能な緩和は既存の
+  Tor（ADR-007 B7）と暗号化トランスポートに限定される設計制約として記録。
+
 ### Added (session 331 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: KNOWN_LIMITATIONS §8 制御半分 — opt-in ASIC プール追従)
 
 - **`asic_manage` で検出済み ASIC を接続中プールへ追従.** cgminer RPC API の

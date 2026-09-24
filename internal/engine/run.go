@@ -1575,6 +1575,11 @@ func (opts sessionOpts) manageASICPools(ctx context.Context) {
 			opts.log("warn", "engine: asic_manage: "+e.Error())
 		}
 		if len(switched) > 0 {
+			opts.m.reg.NewCounter(
+				"otedama_asic_pool_switches_total",
+				"Successful cgminer switchpool pushes to managed ASICs (asic_manage), "+
+					"per destination pool host.",
+				map[string]string{"pool_host": host}).Add(uint64(len(switched)))
 			opts.log("info", fmt.Sprintf(
 				"engine: asic_manage: %d miner(s) switched to %s", len(switched), host))
 		}

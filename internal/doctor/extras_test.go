@@ -1886,3 +1886,54 @@ func TestLookupMinPayout(t *testing.T) {
 		t.Error("unknown pool should not be in the table")
 	}
 }
+
+// TestCheckASICEndpoints exercises the endpoint-probe matrix: skip when
+// unconfigured, warn when asic_manage is armed with no endpoints, warn on
+// zero or partial responders, pass when all answer.
+func TestCheckASICEndpoints(t *testing.T) {
+	defer func(orig func(context.Context, []string) int) { asicEndpointProbe = orig }(asicEndpointProbe)
+	probe := func(n int) { asicEndpointProbe = func(context.Context, []string) int { return n } }
+
+	t.Run("unconfigured skips", func(t *testing.T) {
+		probe(0)
+		r := checkASICEndpoints(config.Config{}).Run(context.Background())
+		if r.Status != StatusSkip {
+			t.Errorf("status = %v, want Skip", r.Status)
+		}
+	})
+
+	t.Run("asic_manage without endpoints warns", func(t *testing.T) {
+		probe(0)
+		r := checkASICEndpoints(config.Config{ASICManage: true}).Run(context.Background())
+		if r.Status != StatusWarn {
+			t.Errorf("status = %v, want Warn", r.Status)
+		}
+	})
+
+	t.Run("all silent warns", func(t *testing.T) {
+		probe(0)
+		cfg := config.Config{ASICEndpoints: []string{"a:4028", "b:4028"}}
+		r := checkASICEndpoints(cfg).Run(context.Background())
+		if r.Status != StatusWarn || !strings.Contains(r.Detail, "0/2") {
+			t.Errorf("status=%v detail=%q, want warn with 0/2", r.Status, r.Detail)
+		}
+	})
+
+	t.Run("partial warns", func(t *testing.T) {
+		probe(1)
+		cfg := config.Config{ASICEndpoints: []string{"a:4028", "b:4028", "c:4028"}}
+		r := checkASICEndpoints(cfg).Run(context.Background())
+		if r.Status != StatusWarn || !strings.Contains(r.Detail, "1/3") {
+			t.Errorf("status=%v detail=%q, want warn with 1/3", r.Status, r.Detail)
+		}
+	})
+
+	t.Run("all answer passes", func(t *testing.T) {
+		probe(2)
+		cfg := config.Config{ASICEndpoints: []string{"a:4028", "b:4028"}}
+		r := checkASICEndpoints(cfg).Run(context.Background())
+		if r.Status != StatusPass || !strings.Contains(r.Detail, "2/2") {
+			t.Errorf("status=%v detail=%q, want pass with 2/2", r.Status, r.Detail)
+		}
+	})
+}

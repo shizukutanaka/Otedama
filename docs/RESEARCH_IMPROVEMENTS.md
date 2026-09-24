@@ -510,10 +510,12 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
+10. ✅ **SLO documentation** (target uptime, p99 submit latency) to make the
     metrics actionable.
-    — Implemented in PR #122 (operator SLO targets published in API.md;
-    sibling branch pending merge).
+    — Implemented in PR #122 and ported to the current chain in PR #184
+    (session 324): API.md's "Service-level objectives (SLO)" section
+    publishes operator targets for reject rate, quote staleness,
+    curtailed state, unaccounted backlog, and clock skew.
 
 ---
 
@@ -554,8 +556,17 @@ arXiv grounding (session 41):
 4. ✅ **gitleaks in CI** (per CLAUDE.md I4).
 5. ✅ **Traffic-analysis side channel documented** in THREAT_MODEL
    (arXiv:1703.06545, session 40).
-6. 🟡 **Traffic shaping / "mining cookie"** to blunt the timing side channel —
-   the paper's own countermeasure; future hardening.
+6. 🔵 **Traffic shaping / "mining cookie"** to blunt the timing side channel —
+   the paper's own countermeasure. **Recorded as a design constraint
+   (session 332):** the arXiv:1703.06545 countermeasure (Bedrock's
+   mining-cookie / traffic shaping) is implemented *pool-side* — a client
+   cannot unilaterally prevent a network observer from timing share
+   submissions, and constant-rate padding is pointless when the channel
+   itself reveals shape. The realistic client-side mitigations are already
+   covered: Tor transport (ADR-007 B7, hides the flow entirely) and
+   encrypted transports (stratum+tls:// / stratum+v2tls://, hides payload
+   but not timing). No further client-side work is implementable; the item
+   stays open only as the ADR-007 B7 Tor scope.
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.

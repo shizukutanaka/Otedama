@@ -25,6 +25,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/hal"
 	"github.com/shizukutanaka/Otedama/internal/rates"
 )
 
@@ -44,6 +45,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkPoolTLSCA(cfg),
 		checkPayoutScheme(cfg),
 		checkPoolPayoutThreshold(cfg),
+		checkASICEndpoints(cfg),
 		checkPowerEconomics(cfg),
 		checkProfitabilityFloor(cfg),
 		checkHardware(),
@@ -735,6 +737,62 @@ func checkPoolPayoutThreshold(cfg config.Config) Check {
 				}
 			}
 			return Result{Status: StatusPass, Detail: detail}
+		},
+	}
+}
+
+// asicEndpointProbe counts how many asic_endpoints answer a cgminer
+// probe; overridable in tests. Bounded by the driver's per-endpoint
+// timeout and run in parallel by Enumerate.
+var asicEndpointProbe = func(ctx context.Context, endpoints []string) int {
+	devs, _ := (&hal.ASICDriver{Endpoints: endpoints, Timeout: 2 * time.Second}).Enumerate(ctx)
+	return len(devs)
+}
+
+// checkASICEndpoints verifies the operator-listed ASIC endpoints
+// actually answer a cgminer probe. Detection (session 304) and the
+// opt-in asic_manage actuation (session 331) both key off the same
+// endpoint list — an entry that does not respond is silently absent
+// from the device list, and under asic_manage silently unmanaged, so a
+// typo'd IP or a miner with api-allow disabled degrades invisibly.
+func checkASICEndpoints(cfg config.Config) Check {
+	return Check{
+		Name: "ASIC endpoints",
+		Run: func(ctx context.Context) Result {
+			n := len(cfg.ASICEndpoints)
+			if n == 0 {
+				if cfg.ASICManage {
+					return Result{
+						Status: StatusWarn,
+						Detail: "asic_manage is set but asic_endpoints is empty — nothing to manage (config validation also rejects this)",
+						Fix:    "list the miners under asic_endpoints, or unset asic_manage",
+					}
+				}
+				return Result{Status: StatusSkip, Detail: "asic_endpoints not configured; ASIC probing disabled"}
+			}
+			answered := asicEndpointProbe(ctx, cfg.ASICEndpoints)
+			if answered == 0 {
+				fix := "check each miner's IP/port (default API port 4028) and that its cgminer API is enabled for this host (api-allow)"
+				if cfg.ASICManage {
+					fix += " — asic_manage is armed but no miner answers, so pool-follow actuates nothing"
+				}
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("0/%d asic_endpoints answer a cgminer probe", n),
+					Fix:    fix,
+				}
+			}
+			if answered < n {
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf("%d/%d asic_endpoints answer a cgminer probe", answered, n),
+					Fix:    "the silent endpoints will be absent from detection and asic_manage — check their cgminer API reachability (api-allow)",
+				}
+			}
+			return Result{
+				Status: StatusPass,
+				Detail: fmt.Sprintf("%d/%d asic_endpoints answer a cgminer probe", answered, n),
+			}
 		},
 	}
 }
