@@ -5,6 +5,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net"
 	"strings"
@@ -223,6 +224,10 @@ type poolSide struct {
 	// setupFlags records the SetupConnection.flags the client sent —
 	// lets tests assert the declared capability bits.
 	setupFlags atomic.Uint32
+
+	// successFlags is written into SetupConnectionSuccess.flags — lets
+	// tests simulate a pool requiring features the client cannot serve.
+	successFlags uint32
 }
 
 // writeMsgTo encodes a Stratum V2 message and writes the framed bytes to w.
@@ -274,7 +279,7 @@ func (p *poolSide) doHandshake(channelID uint32) {
 	p.setupFlags.Store(sc.Flags)
 	// Send SetupConnectionSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgSetupConnectionSuccess, false,
-		stratum.SetupConnectionSuccess{UsedVersion: 2})
+		stratum.SetupConnectionSuccess{UsedVersion: 2, Flags: p.successFlags})
 
 	// Read and discard OpenMiningChannel.
 	if _, err := p.dec.ReadFrame(); err != nil {
@@ -288,6 +293,26 @@ func (p *poolSide) doHandshake(channelID uint32) {
 			ChannelID:       channelID,
 			ExtraNonce2Size: 4,
 		})
+}
+
+// doSetupOnly performs only the SetupConnection exchange: the client is
+// expected to abort the handshake after SetupConnectionSuccess (e.g. an
+// unsupported required-flags reply), so no OpenMiningChannel follows.
+func (p *poolSide) doSetupOnly() {
+	p.t.Helper()
+	f, err := p.dec.ReadFrame()
+	if err != nil {
+		p.t.Errorf("pool: read SetupConnection: %v", err)
+		return
+	}
+	sc, err := stratum.DecodeSetupConnection(f.Payload)
+	if err != nil {
+		p.t.Errorf("pool: decode SetupConnection: %v", err)
+		return
+	}
+	p.setupFlags.Store(sc.Flags)
+	writeMsgTo(p.t, p.conn, stratum.MsgSetupConnectionSuccess, false,
+		stratum.SetupConnectionSuccess{UsedVersion: 2, Flags: p.successFlags})
 }
 
 // newPoolSide creates a poolSide and the client-side net.Conn from net.Pipe.
@@ -374,6 +399,31 @@ func TestDialer_Negotiate_DeclaresRequiresStandardJobs(t *testing.T) {
 	// complete once Negotiate returned, so no wait is needed.
 	if pool.setupFlags.Load()&stratum.SetupFlagRequiresStandardJobs == 0 {
 		t.Errorf("SetupConnection.flags = %#x, REQUIRES_STANDARD_JOBS (bit 0) unset", pool.setupFlags.Load())
+	}
+}
+
+// A pool that sets REQUIRES_EXTENDED_CHANNELS in SetupConnectionSuccess
+// demands group/extended-channel jobs a standard-channel-only end device
+// cannot process — the dialer must fail the handshake instead of
+// proceeding into unusable work.
+func TestDialer_Negotiate_FailsWhenPoolRequiresExtendedChannels(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	pool.successFlags = stratum.SetupFlagRequiresExtendedChannels
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doSetupOnly()
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	if _, err = d.Negotiate(ctx, conn); err == nil {
+		t.Fatal("Negotiate succeeded despite REQUIRES_EXTENDED_CHANNELS")
+	} else if !errors.Is(err, poolproto.ErrHandshakeFailed) {
+		t.Fatalf("Negotiate error = %v, want ErrHandshakeFailed", err)
 	}
 }
 

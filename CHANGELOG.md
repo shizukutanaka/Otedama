@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 297 — SV2 SetupConnectionSuccess flags 検査)
+
+- **`SetupConnectionSuccess.flags` が decode 後未検査だった問題を修正** —
+  sv2-spec §5.3.1 の success 側 capability bits でプールが
+  `REQUIRES_EXTENDED_CHANNELS` (0x02) を要求しても、standard-channel
+  専用のエンドデバイスは処理不能な extended/group jobs を受けるまま
+  ハンドシェイクが継続していた。要求時に `ErrHandshakeFailed` で
+  失敗するよう修正し、`SetupFlagRequiresExtendedChannels` 定数を追加。
+
 ### Fixed (session 296 — SV2 reject 理由の分類)
 
 - **SV2 canonical reject コードが "other" に誤分類される問題を修正** —

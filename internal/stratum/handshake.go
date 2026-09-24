@@ -37,6 +37,13 @@ const (
 	// only a proxy that intends to aggregate standard channels into a
 	// group channel leaves it clear.
 	SetupFlagRequiresStandardJobs uint32 = 0x01
+
+	// SetupFlagRequiresExtendedChannels (SetupConnection.Success.flags
+	// bit 1) is set by the UPSTREAM side when it requires the downstream
+	// to open extended/group channels. A standard-channel-only end
+	// device cannot satisfy that and must fail the handshake rather
+	// than proceed into jobs it cannot process.
+	SetupFlagRequiresExtendedChannels uint32 = 0x02
 )
 
 // SetupConnection is the first message sent by the client to negotiate
@@ -107,7 +114,10 @@ func DecodeSetupConnection(payload []byte) (SetupConnection, error) {
 // and agreed on a protocol version.
 type SetupConnectionSuccess struct {
 	UsedVersion uint16
-	Flags       uint32
+	// Flags carries the §5.3.1 success capability bits — what the
+	// upstream requires of this downstream (e.g.
+	// SetupFlagRequiresExtendedChannels).
+	Flags uint32
 }
 
 // Encode serialises SetupConnectionSuccess.

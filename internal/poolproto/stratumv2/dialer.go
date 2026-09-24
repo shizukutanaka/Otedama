@@ -139,6 +139,14 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	if msg.SetupConnectionSuccess.Flags&stratum.SetupFlagRequiresExtendedChannels != 0 {
+		// The upstream requires extended/group channels, which a
+		// standard-channel-only end device cannot serve (see the
+		// SetupFlagRequiresStandardJobs declaration). Failing the
+		// handshake beats proceeding into jobs we cannot process.
+		return nil, fmt.Errorf("%w: pool requires extended channels (SetupConnectionSuccess.flags=%#x)",
+			poolproto.ErrHandshakeFailed, msg.SetupConnectionSuccess.Flags)
+	}
 
 	// OpenMiningChannel.
 	omc := stratum.OpenMiningChannel{

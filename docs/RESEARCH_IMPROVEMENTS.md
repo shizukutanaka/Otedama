@@ -1092,6 +1092,15 @@ misclassified and skewed the reject-reason counter. — ✅ **Fixed
 matching; all five spec codes now map correctly
 (`unauthorized-worker`/`not-subscribed` → "other" by design).
 
+**Session-297 follow-up (SetupConnectionSuccess.flags):** the success
+side of the same §5.3.1 flags pair was decoded but never inspected — a
+pool setting `REQUIRES_EXTENDED_CHANNELS` (0x02) demands group/extended
+jobs an end device cannot process, yet the dialer proceeded and would
+receive unusable work. — ✅ **Fixed (session 297):** the V2 dialer now
+fails the handshake (`ErrHandshakeFailed`) when the success flags
+require extended channels; `SetupFlagRequiresExtendedChannels` added
+next to the client-side bit-0 constant.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
