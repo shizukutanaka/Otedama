@@ -81,6 +81,7 @@ func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "power_watts:                %g%s\n", cfg.PowerWatts, tag(origins.PowerWatts))
 	fmt.Fprintf(stdout, "electricity_price_per_kwh:  %g%s\n", cfg.ElectricityPricePerKWh, tag(origins.ElectricityPricePerKWh))
 	fmt.Fprintf(stdout, "thermal_throttle_above_celsius: %g%s\n", cfg.ThermalThrottleAboveCelsius, tag(origins.ThermalThrottleAboveCelsius))
+	fmt.Fprintf(stdout, "electricity_tariff_octopus:   %s%s\n", safeDisplay(cfg.ElectricityTariffOctopus), tag(origins.ElectricityTariffOctopus))
 	fmt.Fprintf(stdout, "http_addr:                  %s%s\n", safeDisplay(cfg.HTTPAddr), tag(origins.HTTPAddr))
 	if len(cfg.Pools) == 0 {
 		fmt.Fprintf(stdout, "pools:           (built-in default)%s\n", tag(origins.Pools))
@@ -121,6 +122,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		PowerWatts                  float64           `json:"power_watts"`
 		ElectricityPricePerKWh      float64           `json:"electricity_price_per_kwh"`
 		ThermalThrottleAboveCelsius float64           `json:"thermal_throttle_above_celsius"`
+		ElectricityTariffOctopus    string            `json:"electricity_tariff_octopus"`
 		HTTPAddr                    string            `json:"http_addr"`
 		Pools                       []string          `json:"pools"`
 		Origins                     map[string]string `json:"origins,omitempty"`
@@ -139,6 +141,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 		PowerWatts:                  cfg.PowerWatts,
 		ElectricityPricePerKWh:      cfg.ElectricityPricePerKWh,
 		ThermalThrottleAboveCelsius: cfg.ThermalThrottleAboveCelsius,
+		ElectricityTariffOctopus:    cfg.ElectricityTariffOctopus,
 		HTTPAddr:                    cfg.HTTPAddr,
 		Pools:                       pools,
 	}
@@ -158,6 +161,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 			"power_watts":                    origins.PowerWatts.String(),
 			"electricity_price_per_kwh":      origins.ElectricityPricePerKWh.String(),
 			"thermal_throttle_above_celsius": origins.ThermalThrottleAboveCelsius.String(),
+			"electricity_tariff_octopus":     origins.ElectricityTariffOctopus.String(),
 			"http_addr":                      origins.HTTPAddr.String(),
 			"pools":                          origins.Pools.String(),
 		}

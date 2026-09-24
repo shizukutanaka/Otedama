@@ -218,6 +218,21 @@ type Config struct {
 	// Set via OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS or config file.
 	ThermalThrottleAboveCelsius float64 `yaml:"thermal_throttle_above_celsius"`
 
+	// ElectricityTariffOctopus optionally names an Octopus Energy
+	// electricity tariff as "PRODUCT/TARIFF" (e.g.
+	// "AGILE-24-10-01/E-1R-AGILE-24-10-01-A"). When set, Otedama polls
+	// the public unit-rate API and exposes the current half-hourly price
+	// in pence/kWh on `otedama_electricity_tariff_pence_per_kwh`, the
+	// groundwork for tariff-aware scheduling (ADR-008 sub-domain 4).
+	// It is deliberately a *separate* field from
+	// electricity_price_per_kwh: the feed reports GBP pence, not USD —
+	// conflating them into one value would silently mix currencies.
+	//
+	// "" (default) disables the feed. The value must contain exactly
+	// one "/" separating non-empty product and tariff identifiers.
+	// Set via OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS or config file.
+	ElectricityTariffOctopus string `yaml:"electricity_tariff_octopus"`
+
 	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP
 	// endpoints (see internal/httpserver), for example "127.0.0.1:9090".
 	// Empty (default) disables the HTTP server entirely.
@@ -356,6 +371,7 @@ type Origins struct {
 	PowerWatts                  ValueOrigin
 	ElectricityPricePerKWh      ValueOrigin
 	HTTPAddr                    ValueOrigin
+	ElectricityTariffOctopus    ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -512,6 +528,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.ElectricityPricePerKWh = fromFile.ElectricityPricePerKWh
 		o.ElectricityPricePerKWh = OriginFile
 	}
+	if fromFile.ElectricityTariffOctopus != "" {
+		cfg.ElectricityTariffOctopus = fromFile.ElectricityTariffOctopus
+		o.ElectricityTariffOctopus = OriginFile
+	}
 	if fromFile.HTTPAddr != "" {
 		cfg.HTTPAddr = fromFile.HTTPAddr
 		o.HTTPAddr = OriginFile
@@ -547,6 +567,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if v := getEnv("OTEDAMA_INCOME_MODE"); v != "" {
 		cfg.IncomeMode = v
 		o.IncomeMode = OriginEnv
+	}
+	if v := getEnv("OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS"); v != "" {
+		cfg.ElectricityTariffOctopus = v
+		o.ElectricityTariffOctopus = OriginEnv
 	}
 	if v := getEnv("OTEDAMA_HTTP_ADDR"); v != "" {
 		cfg.HTTPAddr = v
@@ -738,6 +762,17 @@ func (c Config) Validate() error {
 		(c.ThermalThrottleAboveCelsius < 20 || c.ThermalThrottleAboveCelsius > 110) {
 		issues = append(issues, fmt.Sprintf(
 			"thermal_throttle_above_celsius %.1f out of range [20, 110] (0 = disabled)", c.ThermalThrottleAboveCelsius))
+	}
+	if c.ElectricityTariffOctopus != "" {
+		if _, _, ok := strings.Cut(c.ElectricityTariffOctopus, "/"); !ok {
+			issues = append(issues, fmt.Sprintf(
+				"electricity_tariff_octopus %q must look like PRODUCT/TARIFF (e.g. AGILE-24-10-01/E-1R-AGILE-24-10-01-A)",
+				c.ElectricityTariffOctopus))
+		} else if p, t, _ := strings.Cut(c.ElectricityTariffOctopus, "/"); p == "" || t == "" || strings.Contains(t, "/") {
+			issues = append(issues, fmt.Sprintf(
+				"electricity_tariff_octopus %q must look like PRODUCT/TARIFF (e.g. AGILE-24-10-01/E-1R-AGILE-24-10-01-A)",
+				c.ElectricityTariffOctopus))
+		}
 	}
 
 	if len(issues) == 0 {

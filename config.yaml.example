@@ -197,6 +197,15 @@ log_format: "text"
 # simply stays off.
 # thermal_throttle_above_celsius: 0
 
+# electricity_tariff_octopus names an Octopus Energy tariff as
+# "PRODUCT/TARIFF" (e.g. "AGILE-24-10-01/E-1R-AGILE-24-10-01-A" for Agile).
+# When set, Otedama polls the keyless half-hourly unit-rate API every 15 min
+# and publishes the current price on otedama_electricity_tariff_pence_per_kwh —
+# the feed is in GB pence/kWh, which is why it is a separate field from the
+# USD-denominated electricity_price_per_kwh above. Groundwork for
+# tariff-aware scheduling (ADR-008). "" (default) disables the feed.
+# electricity_tariff_octopus: ""
+
 # ── Arbitration ───────────────────────────────────────────────────────────────
 #
 # arbitration_hysteresis_pct is the minimum fractional yield improvement a

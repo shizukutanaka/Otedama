@@ -769,15 +769,23 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 8 — power: real, currently-live feeds
 
-17. 🟡 **Octopus Agile half-hourly REST (no key for read-only rates).**
-    `api.octopus.energy/v1/products/<P>/electricity-tariffs/<T>/standard-unit-rates/?period_from=…`
-    concretises ADR-008 sub-domain 4; a `power/tariff/octopus.go` poller
-    (~30 min) drives the Cat 8 #9 curtailment hook.
-18. 🟡 **Design the tariff interface as a forward *price curve*, not a spot
-    price.** Tibber (GraphQL, once-daily curve) and Amber (REST, 5-min AEMO
-    forecast) cover EU-Nordic and AU. A "return the forward curve" interface
-    accommodates all three and feeds the horizon-aware (Pontryagin) scheduler
-    (ADR-008 #2) — plan curtailment windows ahead instead of reacting to spot.
+17. 🟡 **Partially resolved** (session 270). `internal/rates/octopus.go`
+    implements exactly this endpoint: `FetchAgileRates` returns the keyless
+    half-hourly `standard-unit-rates` curve, and a 15-min engine poll behind
+    `electricity_tariff_octopus = "PRODUCT/TARIFF"` publishes the current
+    slot on `otedama_electricity_tariff_pence_per_kwh` (GB pence — kept
+    separate from the USD `electricity_price_per_kwh`). Still open: feeding
+    the tariff into curtailment/scheduling (Cat 8 #9), and non-GB providers
+    (Tibber/Amber below). Original finding: "Octopus Agile half-hourly REST
+    (no key for read-only rates)."
+18. 🟡 **Partially resolved** (session 270). The fetcher landed returns the
+    forward `[]AgileRate` curve (not a spot price), and `AgileRateAt` does
+    slot lookup — the interface shape this item prescribes. Still open:
+    consuming the curve for horizon-aware scheduling (ADR-008 #2) and
+    extending it to Tibber (GraphQL, once-daily curve) and Amber (REST,
+    5-min AEMO forecast) for EU-Nordic/AU coverage. Original finding:
+    "Design the tariff interface as a forward *price curve*, not a spot
+    price."
 19. 🟡 **For carbon-aware curtailment use *marginal*, not average, intensity.**
     WattTime MOER (5-min marginal emissions) is the correct signal for
     "pause to cut emissions" because curtailing changes load at the margin;

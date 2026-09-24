@@ -504,6 +504,50 @@ func TestResolve_CurtailBelowBTCUSD_InvalidEnvIgnored(t *testing.T) {
 	}
 }
 
+func TestResolve_ElectricityTariffOctopus_EnvOverride(t *testing.T) {
+	env := map[string]string{"OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS": "AGILE-24-10-01/E-1R-AGILE-24-10-01-A"}
+	cfg := Resolve(Config{}, env, FlagValues{})
+	if cfg.ElectricityTariffOctopus != "AGILE-24-10-01/E-1R-AGILE-24-10-01-A" {
+		t.Errorf("ElectricityTariffOctopus = %q", cfg.ElectricityTariffOctopus)
+	}
+}
+
+func TestValidate_ElectricityTariffOctopus(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	for _, v := range []string{
+		"",
+		"AGILE-24-10-01/E-1R-AGILE-24-10-01-A",
+		"AGILE-VAR-24-10-01/E-1R-AGILE-VAR-24-10-01-H",
+	} {
+		c := base()
+		c.ElectricityTariffOctopus = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("ElectricityTariffOctopus=%q should be valid; got %v", v, err)
+		}
+	}
+	for _, v := range []string{
+		"AGILE-24-10-01",         // missing tariff half
+		"/E-1R-AGILE-24-10-01-A", // empty product
+		"AGILE-24-10-01/",        // empty tariff
+		"A/B/C",                  // extra slash
+	} {
+		c := base()
+		c.ElectricityTariffOctopus = v
+		err := c.Validate()
+		if err == nil {
+			t.Errorf("ElectricityTariffOctopus=%q should fail Validate()", v)
+			continue
+		}
+		if !strings.Contains(err.Error(), "electricity_tariff_octopus") {
+			t.Errorf("error should mention electricity_tariff_octopus: %v", err)
+		}
+	}
+}
+
 func TestValidate_MinYieldSatsPerSec(t *testing.T) {
 	base := func() Config {
 		c := Defaults()

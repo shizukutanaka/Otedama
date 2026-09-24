@@ -77,6 +77,7 @@ its default, and its validation rule:
 | `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
 | `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
 | `thermal_throttle_above_celsius` | `OTEDAMA_THERMAL_THROTTLE_ABOVE_CELSIUS` | `0` (disabled) | `0` or [20, 110]; resumes 5°C below threshold |
+| `electricity_tariff_octopus` | `OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS` | `""` (disabled) | empty, or `PRODUCT/TARIFF` (Octopus Energy; GB pence/kWh feed) |
 | `http_addr` | `OTEDAMA_HTTP_ADDR` | `""` (HTTP server disabled) | also settable via `--http-addr`; when set, serves `/metrics`, `/healthz`, `/readyz` |
 
 The path to the config file itself is resolved from `--config`, then
@@ -223,6 +224,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `power_watts` | gauge | Configured system draw (0 = unset). |
 | `joules_per_terahash` | gauge | watts × 1e12 / hashrate (0 = power unset). |
 | `power_cost_usd_per_hour` | gauge | watts/1000 × price/kWh (0 = unset). |
+| `electricity_tariff_pence_per_kwh` | gauge | Current Octopus Energy unit rate (pence/kWh incl. VAT, 15-min poll); populated only when `electricity_tariff_octopus` is set. |
 | `uptime_seconds` | gauge | Seconds since engine start. |
 | `start_time_seconds` | gauge | Unix start timestamp. |
 
