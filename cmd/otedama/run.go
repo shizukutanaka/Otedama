@@ -99,6 +99,8 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 		"(run only) Mount Go pprof profiling at /debug/pprof/ (only on loopback/private addresses).")
 	fs.BoolVar(&f.showOrigin, "origin", false,
 		"(config show only) Annotate each value with the layer that set it (default/file/env/flag).")
+	fs.Float64Var(&f.WorkerThreads, "worker-threads", 0,
+		"(run only) SHA-256d hashing goroutines per device; 0 = one per CPU core.")
 	fs.BoolVar(&f.jsonOut, "json", false,
 		"(config show only) Emit the resolved configuration as a JSON object instead of text.")
 	if err := fs.Parse(args); err != nil {

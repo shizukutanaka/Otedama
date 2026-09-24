@@ -61,9 +61,11 @@ func detectDevices(ctx context.Context, asicEndpoints []string, log func(level, 
 }
 
 // startMinerWorkers spawns one miner worker per SHA256d-capable device,
-// returns the workers and a merged share channel. Returns an error if
-// no SHA256d-capable device is present. The caller owns worker shutdown.
-func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level, msg string)) ([]*miner.Worker, <-chan miner.Share, error) {
+// returns the workers and a merged share channel. threads > 0 overrides
+// the worker's default NumCPU goroutine count (config worker_threads);
+// <= 0 keeps the auto default. Returns an error if no SHA256d-capable
+// device is present. The caller owns worker shutdown.
+func startMinerWorkers(ctx context.Context, devices []hal.Device, threads int, log func(level, msg string)) ([]*miner.Worker, <-chan miner.Share, error) {
 	var workers []*miner.Worker
 	var shareChans []<-chan miner.Share
 	for _, dev := range devices {
@@ -71,6 +73,11 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 			continue
 		}
 		cfg := miner.DefaultWorkerConfig()
+		if threads > 0 {
+			// Explicit --worker-threads/config override; NonceStep stays 0
+			// and re-derives from Threads inside NewWorker.
+			cfg.Threads = threads
+		}
 		cfg.DeviceID = dev.Identity().ID
 		w := miner.NewWorker(cfg)
 		workers = append(workers, w)

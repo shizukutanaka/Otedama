@@ -2521,7 +2521,7 @@ func (d *noSHA256dDevice) Shutdown(_ context.Context) error { return nil }
 func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	ctx := context.Background()
 	devices := []hal.Device{&noSHA256dDevice{}}
-	_, _, err := startMinerWorkers(ctx, devices, func(_, _ string) {})
+	_, _, err := startMinerWorkers(ctx, devices, 0, func(_, _ string) {})
 	if err == nil {
 		t.Fatal("startMinerWorkers: expected error when no SHA256d devices, got nil")
 	}

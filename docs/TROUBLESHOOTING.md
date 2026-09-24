@@ -100,6 +100,10 @@ Limit the number of mining threads:
 otedama run --bitcoin-address bc1q... --worker-threads 4
 ```
 
+(equivalently `worker_threads: 4` in config.yaml or
+`OTEDAMA_WORKER_THREADS=4`; `0` restores the default of one goroutine
+per CPU core)
+
 Or set a CPU limit at the OS level:
 
 - **systemd (Linux):** `CPUQuota=50%` in the service unit.

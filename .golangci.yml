@@ -10,7 +10,7 @@ run:
     - dist
     - bin
   # Go toolchain version.
-  go: "1.22"
+  go: "1.25"
 
 # Output format.
 output:

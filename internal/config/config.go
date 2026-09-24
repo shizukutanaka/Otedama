@@ -276,6 +276,17 @@ type Config struct {
 	// Set via OTEDAMA_ELECTRICITY_TARIFF_OCTOPUS or config file.
 	ElectricityTariffOctopus string `yaml:"electricity_tariff_octopus"`
 
+	// WorkerThreads caps the number of SHA-256d hashing goroutines each
+	// miner worker spawns. 0 (default) means auto — one goroutine per
+	// logical CPU (runtime.NumCPU). A positive integer pins the count,
+	// the documented escape for machines that must stay responsive while
+	// mining (laptops, shared hosts).
+	//
+	// Must be a non-negative integer in [0, 1024]; fractional values and
+	// NaN are rejected by Validate().
+	// Set via --worker-threads, OTEDAMA_WORKER_THREADS, or config file.
+	WorkerThreads float64 `yaml:"worker_threads"`
+
 	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP
 	// endpoints (see internal/httpserver), for example "127.0.0.1:9090".
 	// Empty (default) disables the HTTP server entirely.
@@ -370,6 +381,10 @@ type FlagValues struct {
 	Language       string
 	DataDir        string
 	HTTPAddr       string
+	// WorkerThreads carries --worker-threads. 0 means "flag not given"
+	// and coincides with the auto value, so an explicit -0 needs no
+	// separate presence tracking.
+	WorkerThreads float64
 }
 
 // ValueOrigin indicates which configuration layer provided a particular value.
@@ -419,6 +434,7 @@ type Origins struct {
 	ElectricityPricePerKWh      ValueOrigin
 	HTTPAddr                    ValueOrigin
 	ElectricityTariffOctopus    ValueOrigin
+	WorkerThreads               ValueOrigin
 }
 
 // Resolve combines defaults, a config file (already loaded into fromFile),
@@ -475,6 +491,10 @@ var numericEnvVars = []struct {
 	{"OTEDAMA_ELECTRICITY_PRICE_PER_KWH", func(c *Config, o *Origins, v float64) {
 		c.ElectricityPricePerKWh = v
 		o.ElectricityPricePerKWh = OriginEnv
+	}},
+	{"OTEDAMA_WORKER_THREADS", func(c *Config, o *Origins, v float64) {
+		c.WorkerThreads = v
+		o.WorkerThreads = OriginEnv
 	}},
 }
 
@@ -597,6 +617,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.ElectricityTariffOctopus = fromFile.ElectricityTariffOctopus
 		o.ElectricityTariffOctopus = OriginFile
 	}
+	if fromFile.WorkerThreads != 0 {
+		cfg.WorkerThreads = fromFile.WorkerThreads
+		o.WorkerThreads = OriginFile
+	}
 	if fromFile.HTTPAddr != "" {
 		cfg.HTTPAddr = fromFile.HTTPAddr
 		o.HTTPAddr = OriginFile
@@ -677,6 +701,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	if flags.HTTPAddr != "" {
 		cfg.HTTPAddr = flags.HTTPAddr
 		o.HTTPAddr = OriginFlag
+	}
+	if flags.WorkerThreads != 0 {
+		cfg.WorkerThreads = flags.WorkerThreads
+		o.WorkerThreads = OriginFlag
 	}
 
 	// Layer 4: OS-appropriate default when no higher-priority layer set an
@@ -847,6 +875,12 @@ func (c Config) Validate() error {
 			c.ThermalThrottleAboveCelsius < 20 || c.ThermalThrottleAboveCelsius > 110) {
 		issues = append(issues, fmt.Sprintf(
 			"thermal_throttle_above_celsius %.1f out of range [20, 110] (0 = disabled)", c.ThermalThrottleAboveCelsius))
+	}
+	if c.WorkerThreads != 0 && (math.IsNaN(c.WorkerThreads) ||
+		c.WorkerThreads != math.Trunc(c.WorkerThreads) ||
+		c.WorkerThreads < 0 || c.WorkerThreads > 1024) {
+		issues = append(issues, fmt.Sprintf(
+			"worker_threads %g must be an integer in [0, 1024] (0 = auto)", c.WorkerThreads))
 	}
 	if c.ElectricityTariffOctopus != "" {
 		if _, _, ok := strings.Cut(c.ElectricityTariffOctopus, "/"); !ok {

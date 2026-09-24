@@ -1429,3 +1429,59 @@ func TestValidateASICEndpoint_RejectsControlChars(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_WorkerThreads(t *testing.T) {
+	base := func() Config {
+		c := Defaults()
+		c.BitcoinAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+		return c
+	}
+	// 0 (auto) and positive integers within the cap are valid.
+	for _, v := range []float64{0, 1, 4, 256, 1024} {
+		c := base()
+		c.WorkerThreads = v
+		if err := c.Validate(); err != nil {
+			t.Errorf("WorkerThreads=%g should be valid; got %v", v, err)
+		}
+	}
+	// Negative, fractional, over-cap, and NaN values are rejected.
+	for _, v := range []float64{-1, 2.5, 1025, math.NaN()} {
+		c := base()
+		c.WorkerThreads = v
+		err := c.Validate()
+		if err == nil {
+			t.Errorf("WorkerThreads=%g should fail Validate()", v)
+			continue
+		}
+		if !strings.Contains(err.Error(), "worker_threads") {
+			t.Errorf("WorkerThreads=%g error should mention worker_threads: %v", v, err)
+		}
+	}
+}
+
+func TestResolve_WorkerThreads_Layers(t *testing.T) {
+	// File layer.
+	cfg := Resolve(Config{WorkerThreads: 4}, nil, FlagValues{})
+	if cfg.WorkerThreads != 4 {
+		t.Errorf("file-layer WorkerThreads = %g, want 4", cfg.WorkerThreads)
+	}
+	// Env overrides file.
+	cfg = Resolve(Config{WorkerThreads: 4},
+		map[string]string{"OTEDAMA_WORKER_THREADS": "8"}, FlagValues{})
+	if cfg.WorkerThreads != 8 {
+		t.Errorf("env-layer WorkerThreads = %g, want 8", cfg.WorkerThreads)
+	}
+	// Flag overrides env.
+	cfg = Resolve(Config{WorkerThreads: 4},
+		map[string]string{"OTEDAMA_WORKER_THREADS": "8"},
+		FlagValues{WorkerThreads: 2})
+	if cfg.WorkerThreads != 2 {
+		t.Errorf("flag-layer WorkerThreads = %g, want 2", cfg.WorkerThreads)
+	}
+	// Malformed env leaves the earlier layer standing.
+	cfg = Resolve(Config{WorkerThreads: 4},
+		map[string]string{"OTEDAMA_WORKER_THREADS": "four"}, FlagValues{})
+	if cfg.WorkerThreads != 4 {
+		t.Errorf("malformed env should leave file value 4; got %g", cfg.WorkerThreads)
+	}
+}

@@ -239,6 +239,13 @@ log_format: "text"
 # tariff-aware scheduling (ADR-008). "" (default) disables the feed.
 # electricity_tariff_octopus: ""
 
+# worker_threads caps the SHA-256d hashing goroutines each miner worker spawns.
+# 0 (default) means auto — one goroutine per logical CPU. Pin a small positive
+# integer on machines that must stay responsive while mining (laptops, shared
+# hosts); integer in [0, 1024]. Also settable via --worker-threads or
+# OTEDAMA_WORKER_THREADS.
+# worker_threads: 0
+
 # ── Arbitration ───────────────────────────────────────────────────────────────
 #
 # arbitration_hysteresis_pct is the minimum fractional yield improvement a

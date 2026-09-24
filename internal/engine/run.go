@@ -246,7 +246,7 @@ func Run(ctx context.Context, opts Options) error {
 	log("info", fmt.Sprintf("engine: detected %d device(s)", len(devices)))
 
 	// ----- Phase 3: Miner workers (one per SHA256d-capable device) -----
-	workers, merged, err := startMinerWorkers(ctx, devices, log)
+	workers, merged, err := startMinerWorkers(ctx, devices, int(opts.Config.WorkerThreads), log)
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 401 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: worker_threads 実装)
+
+- **`worker_threads` 設定キー + `--worker-threads` フラグ + `OTEDAMA_WORKER_THREADS`**
+  — TROUBLESHOOTING.md が「100% CPU」の回避策として記載していた
+  `--worker-threads 4` は実在しないフラグ（実行すれば `flag provided but not
+  defined` で失敗）だった実ギャップを、ドキュメント通りに実装して解消。
+  `miner.Config.Threads` は既存だったが、`startMinerWorkers` が常に
+  `DefaultWorkerConfig`（= NumCPU）を使うため制御経路が一切無かった。
+  0=自動（コア数）、整数 [0,1024] を Validate が強制（負・小数・NaN 拒否）。
+  `miner.Worker.Threads()` アクセサ追加で観測可能化。`.golangci.yml` の
+  `run.go: "1.22"` も実態（1.25）へ修正。
+
 ### Fixed (session 376 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: staticcheck 指摘2件)
 
 - **staticcheck を実実行し最後の2件を解消** — `run_test.go` の

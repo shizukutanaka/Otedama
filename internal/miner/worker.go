@@ -179,6 +179,10 @@ func (w *Worker) SetWork(work *Work) {
 // configured with. Empty string means "unidentified device".
 func (w *Worker) DeviceID() string { return w.cfg.DeviceID }
 
+// Threads returns the resolved hashing-goroutine count — the explicit
+// WorkerThreads config value, or runtime.NumCPU() when that was 0.
+func (w *Worker) Threads() int { return w.cfg.Threads }
+
 // HasWork reports whether the worker currently has a job assigned
 // (SetWork was last called with a non-nil Work). Used by callers and
 // tests that need to observe pause/resume state from outside the

@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -252,7 +253,7 @@ func TestStartMinerWorkers_SkipsNonSHA256dDevice(t *testing.T) {
 		caps: hal.Capabilities{SHA256d: false, GeneralCompute: true},
 	}
 
-	workers, shareCh, err := startMinerWorkers(ctx, []hal.Device{nosha, sha}, log)
+	workers, shareCh, err := startMinerWorkers(ctx, []hal.Device{nosha, sha}, 0, log)
 	if err != nil {
 		t.Fatalf("startMinerWorkers: %v", err)
 	}
@@ -276,7 +277,7 @@ func TestStartMinerWorkers_AllNonSHA256d_ReturnsError(t *testing.T) {
 		caps: hal.Capabilities{SHA256d: false, GeneralCompute: true},
 	}
 
-	_, _, err := startMinerWorkers(ctx, []hal.Device{nosha}, func(_, _ string) {})
+	_, _, err := startMinerWorkers(ctx, []hal.Device{nosha}, 0, func(_, _ string) {})
 	if err == nil {
 		t.Error("expected error when no SHA256d-capable devices")
 	}
@@ -1252,7 +1253,7 @@ func TestStartMinerWorkers_NonSHA256dDeviceSkipped(t *testing.T) {
 		id:   hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU},
 		caps: hal.Capabilities{GeneralCompute: true, SHA256d: false},
 	}
-	_, _, err := startMinerWorkers(ctx, []hal.Device{gpuNoHash}, func(_, _ string) {})
+	_, _, err := startMinerWorkers(ctx, []hal.Device{gpuNoHash}, 0, func(_, _ string) {})
 	if err == nil {
 		t.Error("expected error when no SHA256d device is present")
 	}
@@ -1273,7 +1274,7 @@ func TestStartMinerWorkers_MixedDevices(t *testing.T) {
 		id:   hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU},
 		caps: hal.Capabilities{GeneralCompute: true, SHA256d: false},
 	}
-	workers, merged, err := startMinerWorkers(ctx, []hal.Device{gpuNoHash, cpuWithHash}, func(_, _ string) {})
+	workers, merged, err := startMinerWorkers(ctx, []hal.Device{gpuNoHash, cpuWithHash}, 0, func(_, _ string) {})
 	if err != nil {
 		t.Fatalf("startMinerWorkers: %v", err)
 	}
@@ -2371,4 +2372,43 @@ func TestDrainPoolNotices_RelaysAndFloodGuards(t *testing.T) {
 func TestDrainPoolNotices_SkipsSessionsWithoutReceiver(t *testing.T) {
 	opts := sessionOpts{log: func(_, _ string) { t.Error("log should not be called") }}
 	opts.drainPoolNotices(context.Background(), &bareSession{})
+}
+
+func TestStartMinerWorkers_ThreadsOverride(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sha := &cpuDevice{
+		id:   hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU, Vendor: "generic", Model: "test"},
+		caps: hal.Capabilities{SHA256d: true},
+	}
+	workers, _, err := startMinerWorkers(ctx, []hal.Device{sha}, 3, func(_, _ string) {})
+	if err != nil {
+		t.Fatalf("startMinerWorkers: %v", err)
+	}
+	defer func() {
+		for _, w := range workers {
+			w.Stop()
+		}
+	}()
+	if len(workers) != 1 {
+		t.Fatalf("workers = %d, want 1", len(workers))
+	}
+	if got := workers[0].Threads(); got != 3 {
+		t.Errorf("worker Threads() = %d, want 3 (worker_threads override)", got)
+	}
+
+	// threads <= 0 keeps the auto NumCPU default.
+	workers2, _, err := startMinerWorkers(ctx, []hal.Device{sha}, 0, func(_, _ string) {})
+	if err != nil {
+		t.Fatalf("startMinerWorkers(auto): %v", err)
+	}
+	defer func() {
+		for _, w := range workers2 {
+			w.Stop()
+		}
+	}()
+	if got := workers2[0].Threads(); got != runtime.NumCPU() {
+		t.Errorf("worker Threads() = %d, want NumCPU %d (auto)", got, runtime.NumCPU())
+	}
 }
