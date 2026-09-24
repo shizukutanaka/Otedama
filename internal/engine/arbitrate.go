@@ -128,11 +128,11 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				fc = arbitration.NewYieldForecaster(forecastSeasonSteps)
 				forecasters[key] = fc
 			}
-			observed := q.Yield.NetSatsPerSecond
-			if observed <= 0 {
-				observed = q.Yield.SatsPerSecond
-			}
-			err, reset := fc.Update(observed * q.Yield.Confidence)
+			// Effective() sanitises non-finite/out-of-range inputs to 0 —
+			// a raw product would let one NaN/Inf quote poison the smoother
+			// permanently (NaN propagates through level/trend and the
+			// change-point reset's err > 2σ never fires on NaN).
+			err, reset := fc.Update(q.Yield.Effective())
 			stream, device, _ := strings.Cut(key, ":")
 			opts.streamsMu.Unlock()
 			opts.metrics.observeYieldForecast(stream, device, fc.Predict(1))

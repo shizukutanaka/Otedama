@@ -72,6 +72,7 @@ package provider
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -105,12 +106,27 @@ type Yield struct {
 }
 
 // Effective returns the confidence-weighted net yield, which is what
-// the arbitration engine uses for comparison.
+// the arbitration engine uses for comparison. Mirrors
+// arbitration.Yield.Effective's sanitation: Confidence is clamped to
+// [0,1] and any non-finite input or result degrades to 0 — a finite
+// value never poisons downstream smoothers, whereas NaN would
+// propagate through Holt-Winters level/trend forever (the change-point
+// reset compares err > 2σ, and NaN comparisons are always false).
 func (y Yield) Effective() float64 {
-	if y.NetSatsPerSecond <= 0 || y.Confidence <= 0 {
+	if y.NetSatsPerSecond <= 0 || y.Confidence <= 0 ||
+		math.IsNaN(y.NetSatsPerSecond) || math.IsInf(y.NetSatsPerSecond, 0) ||
+		math.IsNaN(y.Confidence) || math.IsInf(y.Confidence, 0) {
 		return 0
 	}
-	return y.NetSatsPerSecond * y.Confidence
+	conf := y.Confidence
+	if conf > 1 {
+		conf = 1
+	}
+	e := y.NetSatsPerSecond * conf
+	if math.IsInf(e, 0) { // finite × finite can still overflow
+		return 0
+	}
+	return e
 }
 
 // Quote is a yield update published by a provider.
