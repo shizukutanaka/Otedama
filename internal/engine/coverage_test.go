@@ -1872,7 +1872,7 @@ func TestRunArbitrationLoop_SwitchMetrics(t *testing.T) {
 		ProviderID:       "streamB",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
-		Yield:            provider.Yield{SatsPerSecond: 300, Confidence: 1.0},
+		Yield:            provider.Yield{SatsPerSecond: 300, NetSatsPerSecond: 300, Confidence: 1.0},
 	}
 
 	// Wait for second tick (cpu-0 switches to streamB → SwitchedFromID set).
@@ -1934,7 +1934,7 @@ func TestRunArbitrationLoop_HoldMetrics(t *testing.T) {
 		ProviderID:       "streamB",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
-		Yield:            provider.Yield{SatsPerSecond: 305, Confidence: 1.0},
+		Yield:            provider.Yield{SatsPerSecond: 305, NetSatsPerSecond: 305, Confidence: 1.0},
 	}
 
 	// Wait for second tick (held on streamA, Held=true).

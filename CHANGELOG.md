@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 309 — 仲裁の比較値を Net 収益に統一)
+
+- **プロバイダ quote の fee 差が仲裁比較から抜け落ちていた経路を解消** ——
+  provider 契約は「仲裁が比較に使うのは Net（fee 控除後）率」と定義するのに、
+  `updateStream` がグロスの `SatsPerSecond` を仲裁 Yield へ流していた。
+  Mining ~1%・Akash ~20% の fee 差が捨てられ、グロス同額なら高 fee 側へ
+  系統的に偏る配分になっていた。`NetSatsPerSecond` を採用（契約上、fee
+  無しプロバイダは Net=gross を設定義務 —— 未設定は net=0 で候補外の
+  安全側）。fixture 整理 + 同 gross で net 差がある仲裁レベルの回帰テスト追加。
+
 ### Fixed (session 308 — 仲裁 HashrateFunc をウィンドウ化率へ)
 
 - **MiningProvider.HashrateFunc がワーカーの生涯平均率を返していた経路を解消** ——

@@ -2070,7 +2070,7 @@ func TestRunArbitrationLoop_PublishesForegoneGauge(t *testing.T) {
 		ProviderID:       "mining.stratum",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
-		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+		Yield:            provider.Yield{SatsPerSecond: 1000, NetSatsPerSecond: 1000, Confidence: 1.0},
 	}
 
 	// Wait for at least one tick to run Decide and publish.
@@ -2120,7 +2120,7 @@ func TestRunArbitrationLoop_PublishesDevicesIdleGauge(t *testing.T) {
 		ProviderID:       "mining.stratum",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
-		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+		Yield:            provider.Yield{SatsPerSecond: 1000, NetSatsPerSecond: 1000, Confidence: 1.0},
 	}
 
 	time.Sleep(40 * time.Millisecond)
@@ -2168,7 +2168,7 @@ func TestRunArbitrationLoop_LogsIdleTransition(t *testing.T) {
 		ProviderID:       "mining.stratum",
 		DeviceID:         "cpu-0",
 		AcceptedFamilies: []hal.Family{hal.FamilyCPU},
-		Yield:            provider.Yield{SatsPerSecond: 1000, Confidence: 1.0},
+		Yield:            provider.Yield{SatsPerSecond: 1000, NetSatsPerSecond: 1000, Confidence: 1.0},
 	}
 
 	// Let several ticks run to confirm the idle line is logged once, not per tick.
@@ -2208,7 +2208,7 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 	quoteCh <- provider.Quote{
 		ProviderID: "mining.stratum",
 		DeviceID:   "cpu-0",
-		Yield:      provider.Yield{SatsPerSecond: 1000, Confidence: 0.9},
+		Yield:      provider.Yield{SatsPerSecond: 1000, NetSatsPerSecond: 1000, Confidence: 0.9},
 	}
 
 	// Wait briefly for the goroutine to consume the quote.

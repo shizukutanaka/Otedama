@@ -251,8 +251,10 @@ func TestUpdateStream_InsertsNewStream(t *testing.T) {
 	if !ok {
 		t.Fatal("YieldPerDevice[cpu-0] missing")
 	}
-	if y.SatsPerSecond != 0.1 {
-		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.1", y.SatsPerSecond)
+	// The arbitration comparison value is the *net* (post-fee) yield —
+	// gross 0.1 with a 1% fee must land as 0.099, not 0.1.
+	if y.SatsPerSecond != 0.099 {
+		t.Errorf("YieldPerDevice[cpu-0].SatsPerSecond = %v, want 0.099 (net)", y.SatsPerSecond)
 	}
 }
 
@@ -278,17 +280,57 @@ func TestUpdateStream_UpdateExistingDevice(t *testing.T) {
 
 	updateStream(&mu, m, provider.Quote{
 		ProviderID: id, DeviceID: dev,
-		Yield: provider.Yield{SatsPerSecond: 0.1, Confidence: 0.9},
+		Yield: provider.Yield{SatsPerSecond: 0.1, NetSatsPerSecond: 0.1, Confidence: 0.9},
 	})
 	updateStream(&mu, m, provider.Quote{
 		ProviderID: id, DeviceID: dev,
-		Yield: provider.Yield{SatsPerSecond: 0.2, Confidence: 0.95}, // updated
+		Yield: provider.Yield{SatsPerSecond: 0.2, NetSatsPerSecond: 0.2, Confidence: 0.95}, // updated
 	})
 
 	s := m[id+":"+dev]
 	y := s.YieldPerDevice[dev]
 	if y.SatsPerSecond != 0.2 {
 		t.Errorf("expected updated yield 0.2, got %v", y.SatsPerSecond)
+	}
+}
+
+func TestUpdateStream_NetYieldWinsOverGrossAtArbitration(t *testing.T) {
+	// Two streams quoting the SAME gross yield must not tie: the one with
+	// the lower fee delivers more net sats. Mining (1% fee) vs a high-fee
+	// stream (20% fee) at gross 1000 → net 990 vs 800. Feeding gross to
+	// the engine would split the difference randomly (StreamID order);
+	// feeding net correctly routes to mining.
+	var mu sync.Mutex
+	m := make(map[string]arbitration.Stream)
+	for _, q := range []provider.Quote{
+		{
+			ProviderID:       "mining.stratum",
+			DeviceID:         "cpu-0",
+			AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+			Yield:            provider.Yield{SatsPerSecond: 1000, NetSatsPerSecond: 990, Confidence: 1.0},
+		},
+		{
+			ProviderID:       "ai.highfee",
+			DeviceID:         "cpu-0",
+			AcceptedFamilies: []hal.Family{hal.FamilyCPU},
+			Yield:            provider.Yield{SatsPerSecond: 1000, NetSatsPerSecond: 800, Confidence: 1.0},
+		},
+	} {
+		updateStream(&mu, m, q)
+	}
+	alloc, err := arbitration.Decide(arbitration.Input{
+		Devices: []arbitration.DeviceRef{{Identity: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}}},
+		Streams: streamsSlice(m),
+		Policy:  arbitration.PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if len(alloc.Assignments) != 1 || alloc.Assignments[0].Stream != "mining.stratum" {
+		t.Fatalf("assignment = %+v, want mining.stratum (higher net)", alloc.Assignments)
+	}
+	if got := alloc.Assignments[0].ExpectedYield; got != 990 {
+		t.Errorf("ExpectedYield = %v, want 990 (net)", got)
 	}
 }
 

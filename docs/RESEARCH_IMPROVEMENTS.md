@@ -1251,6 +1251,35 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 309 increment (CS audit / comparison-unit consistency)
+
+- **ソクラテス式問答 —「比較の両辺は同じ単位・同じ基底か？」**: provider/
+  arbitration の契約監査で**単位不整合**を発見 —— provider 契約
+  （`provider.Yield.Effective` のドキュメント）は「confidence 重み付きの
+  **Net**（fee 控除後）率が仲裁エンジンの比較値」と定義するのに、
+  `updateStream`（arbitrate.go）は `q.Yield.SatsPerSecond`（**グロス**）
+  を仲裁 Yield へ流しており `NetSatsPerSecond` を完全に捨てていた。
+  実害: Mining は ~1% プール fee（net=0.99×gross）、Akash は ~20%
+  プラットフォーム fee（net=0.80×gross）—— グロス比較は 19 ポイントの
+  fee 差を捨て、**高 fee プロバイダへ系統的に偏る**配分になる
+  （gross 同額なら net では 0.99 vs 0.80 で採掘が 23.75% 上）。
+  CS 的には「異なる基底の量を無変換で比較」する型相当の欠陥 ——
+  s289–292 の spec-parity と同型の contract-vs-implementation バグ。
+- **実装**: `updateStream` が `q.Yield.NetSatsPerSecond` を仲裁 Yield に
+  採用（YieldPerDevice・DefaultYield 両方）。契約（fee 無し時 Net=gross
+  必須）に違反して Net 未設定の quote は net=0 → 候補外 —— 契約違反が
+  可視の失敗として出る安全側。
+- **fixture 整理**: バグを固定していた `TestUpdateStream_InsertsNewStream`
+  （gross 0.1/net 0.099 で gross を期待）を net 期待に修正、Net 未設定の
+  テスト quote 7 件に `NetSatsPerSecond` を追加。仲裁レベルの回帰テスト
+  `TestUpdateStream_NetYieldWinsOverGrossAtArbitration` 追加（同 gross
+  1000 で net 990 vs 800 → mining.stratum が選択され ExpectedYield=990）。
+- **検証**: 全 24 パッケージ green、engine `-race -count=2` clean、
+  lint 純増ゼロ（1017=ベースライン）、deadcode 58、govulncheck 0。
+  provider/polling/arbitration の残監査も全てクリーン（polling ライフ
+  サイクル・sendQuote drop-oldest・Decide の hysteresis/Held/Foregone
+  計算・policyScore 決定性）。
+
 ## September 2026 research pass — session 308 increment (CS audit / estimator freshness)
 
 - **ソクラテス式問答 —「仲裁が見ている率は真の現在率か？」**: シェア経路
