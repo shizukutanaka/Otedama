@@ -38,7 +38,7 @@ If any row does not pass, open a security advisory.
 | 11 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
 | 12 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Not met today:** workflows reference tag refs (`@v4`, `@master`), not SHA pins — see KNOWN_LIMITATIONS §13 (workflow changes are also where the env-broken checks live) |
 | 13 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
-| 14 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
+| 14 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Not met today:** release.yml has no cosign/sign-blob/attest step — artefacts ship unsigned |
 | 15 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Direct: `golang.org/x/crypto`, `go.yaml.in/yaml/v3`, `golang.org/x/sys` (+ `x/net`, `x/term`, `x/text` transitives via x/crypto), stdlib |
 | 16 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
