@@ -107,6 +107,21 @@ log_level: "info"
 #
 data_dir: ""
 
+# ── ASIC endpoints ────────────────────────────────────────────────────────────
+#
+# Standalone ASIC miners to detect via the cgminer-compatible RPC API
+# (Antminer/bmminer, Whatsminer, Avalon, Braiins). Detection is opt-in
+# per endpoint — Otedama never scans subnets — so miners must expose
+# their management API (usually TCP 4028) to this host. Entries are
+# "host:port"; a bare host implies the default API port 4028.
+#
+# Detected ASICs appear in the device list and logs for inventory only —
+# Otedama does not dispatch work to them yet (see docs/KNOWN_LIMITATIONS.md §8).
+#
+# asic_endpoints:
+#   - "192.168.1.50"         # implies :4028
+#   - "whatsminer.lan:4028"
+
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
 #
 # Address for Prometheus metrics and health endpoints.

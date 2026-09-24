@@ -575,7 +575,7 @@ func TestCPUDriver_Name(t *testing.T) {
 func TestDetectDevices_ReturnsBuiltinCPU(t *testing.T) {
 	// The built-in CPU driver is always registered, so detection on a live
 	// context must return at least one device and no error.
-	devices, err := detectDevices(context.Background(), func(string, string) {})
+	devices, err := detectDevices(context.Background(), nil, func(string, string) {})
 	if err != nil {
 		t.Fatalf("detectDevices: %v", err)
 	}
@@ -603,7 +603,7 @@ func TestDetectDevices_CancelledContextSurfacesRealCause(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // pre-cancel
 	for i := 0; i < 200; i++ {
-		devices, err := detectDevices(ctx, func(string, string) {})
+		devices, err := detectDevices(ctx, nil, func(string, string) {})
 		switch {
 		case err != nil:
 			if !errors.Is(err, context.Canceled) {

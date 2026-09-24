@@ -23,16 +23,23 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/provider"
 )
 
-// detectDevices initialises the HAL registry, registers CPU and GPU
-// drivers, and runs detection. Returns the list of detected devices,
-// or an error if registration fails or no devices are found.
-func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Device, error) {
+// detectDevices initializes the HAL registry, registers CPU and GPU
+// drivers plus the opt-in ASIC probe driver (registered only when
+// asicEndpoints is non-empty — Otedama never scans subnets), and runs
+// detection. Returns the list of detected devices, or an error if
+// registration fails or no devices are found.
+func detectDevices(ctx context.Context, asicEndpoints []string, log func(level, msg string)) ([]hal.Device, error) {
 	reg := hal.NewRegistry()
 	if err := reg.Register(&cpuDriver{}); err != nil {
 		return nil, fmt.Errorf("engine: register cpu driver: %w", err)
 	}
 	if err := hal.RegisterGPU(reg); err != nil {
 		log("warn", fmt.Sprintf("engine: register gpu driver: %v", err))
+	}
+	if len(asicEndpoints) > 0 {
+		if err := reg.Register(&hal.ASICDriver{Endpoints: asicEndpoints}); err != nil {
+			log("warn", fmt.Sprintf("engine: register asic driver: %v", err))
+		}
 	}
 	detector := hal.NewDetector(reg, func(driver, msg string, err error) {
 		log("warn", fmt.Sprintf("hal: %s: %s: %v", driver, msg, err))

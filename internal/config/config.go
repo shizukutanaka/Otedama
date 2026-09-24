@@ -34,6 +34,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -113,6 +114,16 @@ type Config struct {
 	//   macOS:   $HOME/Library/Application Support/Otedama
 	//   Windows: %APPDATA%\Otedama
 	DataDir string `yaml:"data_dir"`
+
+	// ASICEndpoints lists standalone ASIC miners to detect via the
+	// cgminer-compatible RPC API ("host:port", or a bare host for the
+	// default API port 4028): Antminer/bmminer, Whatsminer, Avalon,
+	// Braiins. Detection is opt-in per endpoint — Otedama never scans
+	// subnets — so an empty list disables ASIC probing entirely and a
+	// miner that does not answer is simply absent from the device list.
+	// Detected ASICs report identity only (docs/KNOWN_LIMITATIONS.md §8);
+	// Otedama has no work-dispatch path to them yet.
+	ASICEndpoints []string `yaml:"asic_endpoints"`
 
 	// ArbitrationHysteresisPct is the minimum fractional yield improvement
 	// required to switch a device from its current workload (mining → AI or
@@ -643,6 +654,12 @@ func (c Config) Validate() error {
 		issues = append(issues, fmt.Sprintf("log_format %q is not one of text, json", c.LogFormat))
 	}
 
+	for i, ep := range c.ASICEndpoints {
+		if err := validateASICEndpoint(ep); err != nil {
+			issues = append(issues, fmt.Sprintf("asic_endpoints[%d] invalid: %v", i, err))
+		}
+	}
+
 	for i, p := range c.Pools {
 		if p.URL == "" {
 			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
@@ -689,6 +706,36 @@ func (c Config) Validate() error {
 		return nil
 	}
 	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
+}
+
+// validateASICEndpoint checks one asic_endpoints entry: "host:port" or a
+// bare host (the cgminer API port is implied). Kept free of hal imports so
+// config stays a leaf package; internal/hal/asic.go normalises the same
+// grammar at probe time.
+func validateASICEndpoint(ep string) error {
+	ep = strings.TrimSpace(ep)
+	if ep == "" {
+		return fmt.Errorf("empty endpoint (want host:port or host)")
+	}
+	if host, port, err := net.SplitHostPort(ep); err == nil {
+		if host == "" || port == "" || strings.ContainsAny(host, "/\t \n") {
+			return fmt.Errorf("%q is not host:port or a bare host", ep)
+		}
+		return nil
+	}
+	host := ep
+	bracketed := strings.HasPrefix(ep, "[") && strings.HasSuffix(ep, "]")
+	if bracketed {
+		host = ep[1 : len(ep)-1]
+	}
+	reject := ":/\t \n"
+	if bracketed {
+		reject = "/\t \n" // ':' is legal inside a bracketed IPv6 literal
+	}
+	if host == "" || strings.ContainsAny(host, reject) {
+		return fmt.Errorf("%q is not host:port or a bare host", ep)
+	}
+	return nil
 }
 
 // validateBitcoinAddress performs a lightweight format check on a Bitcoin

@@ -187,7 +187,7 @@ func Run(ctx context.Context, opts Options) error {
 	walletFingerprint := setupWallet(opts, log)
 
 	// ----- Phase 2: Hardware detection (CPU + GPU) -----
-	devices, err := detectDevices(ctx, log)
+	devices, err := detectDevices(ctx, opts.Config.ASICEndpoints, log)
 	if err != nil {
 		return err
 	}

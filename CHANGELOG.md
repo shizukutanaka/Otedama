@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 304 — KNOWN_LIMITATIONS §8 ASIC 検出 + SRI v1.12.0 監査)
+
+- **オプトイン `asic_endpoints` による ASIC 検出** — `hal.ASICDriver` が
+  設定されたエンドポイントの cgminer 互換 RPC API（`version`/`stats`/
+  `summary`、既定 TCP 4028）を並行プローブし、Antminer(bmminer)/
+  Whatsminer/Avalon/Braiins/Bitaxe 系デバイスを `hal.Device` として
+  インベントリへ列挙。サブネット走査は一切行わず、応答しない
+  エンドポイントは単に不在扱い。モデル文字列からベンダー推定
+  （Bitmain/MicroBT/Canaan/Open-Source/Braiins）、ファームウェア自己申告
+  hashrate（GHS/MHS/KHS av/5s）をデバイスへ保持。dispatch パスは存在
+  しないため `Capabilities{SHA256d:false}` — GPU ドライバと同一の
+  検出限定ポリシー（KNOWN_LIMITATIONS §8 の検出半分を解消、
+  ADR-008 SD1 の dispatch 半分は残置）。
+- **SRI v1.12.0（2026-09-17）監査を記録** — 全所見が対応済みまたは
+  非該当と検証（RESEARCH_IMPROVEMENTS session-304）。
+
 ### Fixed (session 303 — sv2-apps v0.8.0 監査)
 
 - **V1 `mining.set_extranonce` ローテーション経路のデータレースを修正** —

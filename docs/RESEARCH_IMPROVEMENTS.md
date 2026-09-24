@@ -1191,6 +1191,22 @@ extranonce2 padding, with no synchronization. Both fields now move
 together under `enMu` (confirmed by a `-race` regression test that
 fails on the pre-fix code).
 
+**Session-304 follow-up (SRI v1.12.0 + KNOWN_LIMITATIONS §8 detection
+half):** audited the 2026-09-17 stratum-mining SRI v1.12.0 release —
+all findings already covered or non-applicable: `min_ntime` is honoured
+(`dialer.go` tracks `activeNTime`), difficulty arithmetic is guarded
+(`TargetFromDifficulty` rejects ≤0/Inf/overflow), `noise.go` is
+ChaChaPoly-only (matching upstream's AES-GCM removal), and the new
+hyphenated wire error codes (`channel-capacity-exhausted`,
+`protocol-version-mismatch`, …) were already handled by session-296's
+separator normalisation in `rejectClass`. Separately, the ASIC half of
+KNOWN_LIMITATIONS §8 got its detection half: `hal.ASICDriver` probes
+operator-configured cgminer-API endpoints only (opt-in `asic_endpoints`,
+never a subnet scan), reporting identity/vendor/self-reported hashrate
+with `Capabilities{SHA256d:false}` — matching the GPU drivers'
+detection-only posture. Firmware control/dispatch across the five
+dialect families remains the ADR-008 SD1 residual.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

@@ -297,25 +297,35 @@ satoshi/second numbers (which move primarily with BTC price anyway).
 
 ---
 
-## 8. ASIC hardware is not detected at all
+## 8. ASIC hardware cannot be dispatched to (detection: partially resolved, session 304)
 
 **What:** Otedama's product definition names ASIC, GPU, and CPU hardware as
-the three classes it arbitrates across. In v3.0.0-alpha.1, `internal/hal`
-registers exactly two drivers — a built-in CPU driver and a Linux-only GPU
-driver (`gpu_linux.go`/`gpu_stub.go`; see limitation §4). **No ASIC driver
-exists.** `hal.FamilyASIC` and the per-family hashrate constant used as a
-mining-yield fallback (`internal/provider/mining.go`, ≈100 TH/s) are defined,
-but nothing in the codebase ever enumerates an ASIC as a `hal.Device` — the
-family exists only as forward-compatible scaffolding.
+the three classes it arbitrates across. As of session 304, `internal/hal`
+includes `asic.go` — an `ASICDriver` that detects standalone ASIC miners
+through the cgminer-compatible RPC management API (the `version`, `stats`,
+and `summary` commands most firmwares expose on TCP 4028: bmminer/Antminer,
+Whatsminer, Avalon, Braiins OS, and cgminer forks such as Bitaxe class
+devices). Detection is **strictly opt-in**: the driver probes only the
+`asic_endpoints` config list — it never scans subnets — and an endpoint
+that does not answer is simply absent from the device list. Detected ASICs
+enumerate as `hal.Device`s with family `asic`, a vendor inferred from the
+reported model string, and the firmware-reported hashrate retained on the
+device.
 
-**Impact:** A user who owns an Antminer, Whatsminer, or similar standalone
-ASIC cannot have Otedama detect it, report its hashrate, or arbitrate its
-workload — Otedama only ever sees the CPU (and, on Linux, any GPU) of the
-host it runs on. For the majority of real-world Bitcoin hashrate, which is
-ASIC-dominated, this means Otedama's arbitration engine currently has
-nothing to arbitrate on the hardware class its own product definition lists
-first. This does not affect CPU/GPU mining or payout correctness; it means
-the ASIC side of the product definition is unimplemented, not degraded.
+What remains unimplemented is **dispatch**: detected ASICs report
+`Capabilities{}` with `SHA256d=false`, exactly like detected GPUs, so the
+arbitration engine can see them but cannot send work to them. There is no
+`SubmitWork` path, no firmware control channel, and no yield signal beyond
+the one-shot self-reported figure. `hal.FamilyASIC`'s ≈100 TH/s fallback
+estimate in `internal/provider/mining.go` is still the only mining-yield
+number used in arbitration for the family.
+
+**Impact:** An operator can now list their Antminer/Whatsminer/Avalon/etc.
+in `asic_endpoints` and have Otedama detect and name it — closing the
+discovery half of this limitation. The arbitration half stands: detected
+ASICs contribute identity to the device inventory but earn nothing through
+Otedama, and the arbitration engine still has no ASIC yield or dispatch
+surface. This does not affect CPU/GPU mining or payout correctness.
 
 **Why:** Unlike CPU/GPU, an ASIC is not a local PCI/sysfs device — it is a
 standalone network appliance running its own firmware (stock Bitmain,
@@ -329,8 +339,9 @@ channel. This is a larger architectural piece than the CPU/GPU drivers, not
 an oversight.
 
 **Workaround:** Point ASICs at a pool directly (their normal mode of
-operation) rather than through Otedama; run Otedama for CPU/GPU devices and,
-optionally, for wallet/monitoring on the same network.
+operation) rather than through Otedama; list them in `asic_endpoints` if
+you want Otedama's inventory to see them; run Otedama for CPU/GPU devices
+and, optionally, for wallet/monitoring on the same network.
 
 **Target:** v3.5, tracked by ADR-008 (hardware/power awareness layer)
 sub-domain 1 ("ASIC firmware control surface"), scoped there at ~150 hours

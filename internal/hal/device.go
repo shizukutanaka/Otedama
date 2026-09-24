@@ -29,7 +29,11 @@
 //   - cpuDriver (internal/engine, not this package — registered directly
 //     by engine.detectDevices). Always enumerates exactly one CPU device
 //     with real SHA256d support via the pure-Go miner package.
-//   - No ASIC driver exists at all (docs/KNOWN_LIMITATIONS.md §8).
+//   - ASICDriver (this package, asic.go — opt-in cgminer-compatible RPC
+//     probing of operator-configured endpoints only; it never scans
+//     subnets). Reports ASIC identity/firmware vendor but
+//     Capabilities.SHA256d = false: no work-dispatch path to standalone
+//     miners exists yet (docs/KNOWN_LIMITATIONS.md §8).
 //
 // Detectors discover available devices at runtime. The default detector
 // iterates over registered drivers and asks each to enumerate its devices.
@@ -174,7 +178,7 @@ type Device interface {
 // A Driver represents the software responsible for interacting with one
 // family of hardware. Today that means GPULinuxDriver (this package) for
 // GPU presence detection and cpuDriver (internal/engine) for the CPU —
-// see the package doc above for the full, current list; no ASIC or GPU
+// see the package doc above for the full, current list; no GPU
 // compute-dispatch driver exists yet.
 //
 // Drivers are registered with a Registry and invoked by the default
