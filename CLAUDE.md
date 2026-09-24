@@ -49,7 +49,7 @@ Otedama/
 │   ├── tui/                # ANSI ダッシュボード（外部依存ゼロ）
 │   └── version/            # ビルドメタデータ（ldflags 注入）
 ├── docs/adr/               # ADR-001〜011
-├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md
+├── skills/                 # tdd.md / code-review.md / security-audit.md / release-procedure.md / quality-pass-opus.md / quality-pass-sonnet.md
 └── .github/workflows/      # ci.yml / ci-cd.yml / test.yml (fuzz+benchmark) / code-review.yml / security.yml / deploy.yml / release.yml
 
 # 存在しないパス（作成禁止）:
