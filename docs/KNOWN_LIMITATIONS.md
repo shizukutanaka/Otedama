@@ -639,15 +639,19 @@ release target.
 
 ---
 
-## 15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected
+## ~~15. TUI dashboard renders at a fixed 80 columns; real terminal width is never detected~~ ✅ RESOLVED (session 266)
 
-**What:** `internal/tui.Dashboard.SetWidth` lets a caller inject the
-real terminal width, but no production call site ever calls it —
-`engine.Run` constructs the dashboard via `tui.NewDashboard` and never
-calls `SetWidth`, so every real invocation renders at the constructor's
-hardcoded default of 80 columns regardless of the actual terminal
-size (confirmed: `SetWidth` is called only from `internal/tui`'s own
-test files).
+**What (fixed):** `engine.Run` now calls `Dashboard.SetWidth` with the
+real terminal column count whenever the output is a terminal, detected
+via `ioctl(TIOCGWINSZ)` on Unix and `GetConsoleScreenBufferInfo` on
+Windows — the same mechanism `golang.org/x/term.GetSize` uses,
+implemented on stdlib `syscall` with **no new dependency** (the
+mechanism was already established for the session-263 TTY gate). Files,
+pipes, and test writers keep the constructor's 80-column default;
+widths under 40 clamp to 40 inside `SetWidth`.
+
+*Previous state, for the record:* `SetWidth` had no production caller,
+so every invocation rendered at the hardcoded 80-column default.
 
 **Impact:** On a narrower real terminal, output can wrap onto a second
 terminal row, which breaks the dashboard's "cursor home, overwrite in
@@ -662,18 +666,8 @@ both lines now size their variable-length fields from the actual
 `cols` value, so this specific failure mode is closed regardless of
 whether width detection itself is ever wired in.
 
-**Workaround:** Keep the terminal at or above 80 columns for correct
-rendering, or use `--no-tui` for plain log output, which has no width
-assumptions.
-
-**Target:** No committed target. Wiring in real detection needs either
-`golang.org/x/term` (a new direct dependency; the ADR-003 zero-
-dependency stance would need a documented exception, as the package
-doc's own "Design" section already assumed this was solved) or raw
-per-platform syscalls (`golang.org/x/sys/unix` TIOCGWINSZ / `x/sys/windows`
-GetConsoleScreenBufferInfo, both already reachable as an indirect
-dependency via `golang.org/x/crypto`) — a maintainer decision between
-the two is needed before implementation.
+**Workaround (now unnecessary):** kept for history — the fix landed
+with no dependency and no maintainer decision required.
 
 ---
 

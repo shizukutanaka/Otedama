@@ -4,6 +4,7 @@ package engine
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -102,5 +103,27 @@ func TestConfirmSeedBackup_NonTTY(t *testing.T) {
 	}
 	if len(logs) != 0 {
 		t.Errorf("non-TTY run logged %v, want nothing", logs)
+	}
+}
+
+// outputWidth — the dashboard's TTY gate: only a real *os.File terminal
+// returns a width; everything else keeps the 80-column default.
+func TestOutputWidth_NonFileAndNonTTY(t *testing.T) {
+	var buf bytes.Buffer
+	if w, ok := outputWidth(&buf); ok {
+		t.Errorf("buffer writer got width %d, want ok=false", w)
+	}
+	if w, ok := outputWidth(nil); ok {
+		t.Errorf("nil writer got width %d, want ok=false", w)
+	}
+	// A real file is not a terminal: os.CreateTemp gives an *os.File that
+	// must not be mistaken for a TTY.
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if w, ok := outputWidth(f); ok {
+		t.Errorf("plain file got width %d, want ok=false", w)
 	}
 }

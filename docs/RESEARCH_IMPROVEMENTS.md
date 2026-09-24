@@ -1242,6 +1242,30 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 266 increment (terminal-width detection)
+
+### Implemented
+
+1. ✅ **KNOWN_LIMITATIONS §15 — TUI real terminal width** — `SetWidth`
+   had no production caller, so the dashboard always rendered at the
+   hardcoded 80 columns; on narrower terminals lines wrapped and broke
+   the cursor-repaint model. `engine.Run` now feeds the real column
+   count via a new `outputWidth` helper: ioctl(TIOCGWINSZ) on unix,
+   GetConsoleScreenBufferInfo on Windows — the x/term.GetSize mechanism
+   on stdlib syscall, no dependency (same pattern as session-263's
+   TTY gate, which is now unified with it under `ttySize`). Non-file
+   writers (tests, pipes) keep the 80-col default; <40 clamps to 40.
+
+### Verified already-done / non-applicable this session
+
+- ❌ **Upstream deltas** — SRI v1.12.0 / ESP-Miner v2.15.3 swept in
+  session 264; nothing newer this round.
+- ❌ **KNOWN_LIMITATIONS §16 (`wallet` subcommand)** — left open: the
+  doc itself gates it on a maintainer decision (CLI architecture map).
+- ❌ **Qiita/Zenn sweep** — no new stratum-v2 material.
+
+---
+
 ## September 2026 research pass — session 265 increment (worker-name plumbing + marker sweep)
 
 ### Implemented
@@ -1418,6 +1442,11 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-266 additions (September 2026): golang.org/x/term GetSize /
+IsTerminal mechanism (TIOCGWINSZ, GetConsoleScreenBufferInfo)
+replicated via stdlib syscall for TUI width detection — closes
+KNOWN_LIMITATIONS §15 without a new dependency.*
 
 *Session-265 additions (September 2026): Stratum V1 spec §mining.submit
 worker-name param attribution; provider-lifecycle audit confirming

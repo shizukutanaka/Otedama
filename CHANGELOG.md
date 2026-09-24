@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 266 — TUI 端末幅検出)
+
+**KNOWN_LIMITATIONS §15 解消 — TUI が実端末幅でレンダリング**.
+`SetWidth` に本番の呼び出し元がなく、ダッシュボードは常に固定
+80 列で描画されていた —— 狭い端末では行折返しでカーソル再描画
+モデルが崩れ、広い端末では領域を無駄にしていた。`engine.Run` が
+新ヘルパ `outputWidth` で実列数を取得して `SetWidth` に渡す:
+unix は ioctl(TIOCGWINSZ)、Windows は GetConsoleScreenBufferInfo
+—— x/term の GetSize/IsTerminal と同機構を stdlib syscall で実装
+（session 263 の TTY ゲートと `ttySize` に統合、新規依存なし）。
+ファイル・パイプ・テスト用 writer は従来の 80 列既定のまま、
+40 列未満は SetWidth 内でクランプ。新テストで非TTY経路を検証。
+
 ### Fixed (session 265 — ワーカー名配線)
 
 **`mining.submit` が認証済みワーカー識別を送信するよう修正**.

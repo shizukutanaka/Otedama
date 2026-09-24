@@ -314,6 +314,9 @@ func Run(ctx context.Context, opts Options) error {
 	var dashboard *tui.Dashboard
 	if !opts.NoTUI {
 		dashboard = tui.NewDashboard(opts.Output)
+		if cols, ok := outputWidth(opts.Output); ok {
+			dashboard.SetWidth(cols) // real terminal width, not the 80-col default
+		}
 		dashboard.Start()
 		defer dashboard.Stop()
 	}
