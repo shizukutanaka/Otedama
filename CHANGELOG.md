@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 282 — V2 ゾンビセッション対策)
+
+- **V2 readLoop に 5 分 read deadline を追加** —— V1 と同様、TCP が
+  生きたままフレームを止めた wedged プールを read エラー経由で通常の
+  切断→再接続として検出するよう変更。従来は ctx キャンセルか conn
+  close でしか read を抜けず、ゾンビセッションが永久に存続し得た
+  （session 267 の枯渇ウォッチドッグは warn のみで切断しない）。
+
 ### Fixed (session 281 — BIP-310 ローテーション境界 + ラップ安全 cap)
 
 - **`mining.set_version_mask` を交渉済み空間に限定** —— 従来は

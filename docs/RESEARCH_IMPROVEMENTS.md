@@ -1251,6 +1251,21 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 282 increment (V2 read deadline)
+
+- **実装（ゾンビセッション対策）: V2 readLoop に 5 分 read deadline** ——
+  V1 は `SetReadDeadline(5min)` で「TCP は生きたままフレームを送らない
+  wedged プール」を通常の切断→再接続として検出するが、V2 ダイヤラには
+  deadline がなく、ctx キャンセル or conn close でしか read を抜けない
+  ため、同じ状況でゾンビセッションが永久に存続し得た（session 267 の
+  ジョブ枯渇ウォッチドッグは warn のみで切断しない）。V1 と同じ
+  5 分 deadline を `dec.ReadFrame()` 前に追加。
+- **検証:** `TestReadLoop_ArmsReadDeadline` —— deadline 記録する
+  stub conn で readLoop が per-read deadline を設定し、peer close で
+  正常 exit することを確認（5 分待機不要の構成）。
+- **記録:** `extranonce.subscribe` は既に dialer step 3 で単独送信済み
+  （mining.configure 拡張リストへの追加は不要と確認）。
+
 ## September 2026 research pass — session 281 increment (mask-rotation bound + wrap-safe cap)
 
 - **実装（BIP-310 防御）: `set_version_mask` を交渉済み空間に限定** ——

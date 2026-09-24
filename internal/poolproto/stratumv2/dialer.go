@@ -271,6 +271,11 @@ func (s *session) readLoop(ctx context.Context) {
 		if ctx.Err() != nil || s.conn.closed.Load() {
 			return
 		}
+		// Same generous read deadline as the V1 loop: a wedged pool that
+		// keeps the TCP connection open but stops sending frames would
+		// otherwise leave this session a zombie forever — the read error
+		// surfaces as a normal disconnect and the engine reconnects.
+		_ = s.conn.raw.SetReadDeadline(time.Now().Add(5 * time.Minute))
 		f, err := s.dec.ReadFrame()
 		if err != nil {
 			return

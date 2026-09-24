@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -1509,5 +1510,57 @@ func TestJobState_InsertJobOverwriteSameID(t *testing.T) {
 	}
 	if state.pending[7].Version != 2 {
 		t.Errorf("overwrite: Version = %d, want latest 2", state.pending[7].Version)
+	}
+}
+
+// deadlineRecordingConn records SetReadDeadline calls so a test can
+// assert the read loop arms a per-read deadline without waiting the
+// full 5-minute interval.
+type deadlineRecordingConn struct {
+	net.Conn
+	deadlines atomic.Int64
+}
+
+func (c *deadlineRecordingConn) SetReadDeadline(t time.Time) error {
+	c.deadlines.Add(1)
+	return c.Conn.SetReadDeadline(t)
+}
+
+// TestReadLoop_ArmsReadDeadline pins the zombie-session defense: every
+// ReadFrame must be preceded by a read deadline so a pool that keeps
+// the TCP connection open but never sends frames eventually surfaces
+// a read error and the engine reconnects.
+func TestReadLoop_ArmsReadDeadline(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	raw := &deadlineRecordingConn{Conn: client}
+	conn := &connection{raw: raw, remoteAddr: "test", protocol: poolproto.ProtocolStratumV2}
+	sess := &session{
+		conn:   conn,
+		dec:    stratum.NewDecoder(raw),
+		jobsCh: make(chan poolproto.Job, 8),
+		done:   make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sess.readLoop(ctx)
+
+	deadline := time.After(2 * time.Second)
+	for raw.deadlines.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("readLoop never armed a read deadline")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	// Closing the peer must end the loop — the same exit path a
+	// deadline expiry takes.
+	_ = server.Close()
+	select {
+	case <-sess.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readLoop did not exit after connection close")
 	}
 }
