@@ -6,6 +6,7 @@ package stratumv2
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"syscall"
@@ -1442,5 +1443,71 @@ func TestDialer_Dial_SetsTCPNoDelay(t *testing.T) {
 	}
 	if val == 0 {
 		t.Error("TCP_NODELAY not set on the pool socket (ESP-Miner #1722)")
+	}
+}
+
+// ============================================================================
+// jobState pending bound — a hostile/buggy upstream streaming
+// NewMiningJob frames between tips must not grow memory unboundedly.
+// ============================================================================
+
+func TestJobState_PendingBounded(t *testing.T) {
+	s := &session{jobsCh: make(chan poolproto.Job, 4)}
+	state := &jobState{pending: make(map[uint32]*stratum.NewMiningJob)}
+	ctx := context.Background()
+
+	// Flood 2×cap future jobs (HasMinNtime=false → none emit).
+	const total = 2 * maxPendingJobs
+	for i := 0; i < total; i++ {
+		j := &stratum.NewMiningJob{ChannelID: 1, JobID: uint32(i)}
+		if !s.onNewMiningJob(ctx, state, j) {
+			t.Fatalf("onNewMiningJob(%d) returned false", i)
+		}
+	}
+	if got := len(state.pending); got != maxPendingJobs {
+		t.Fatalf("pending size = %d, want capped at %d", got, maxPendingJobs)
+	}
+	if len(state.order) != len(state.pending) {
+		t.Fatalf("order len %d != pending len %d", len(state.order), len(state.pending))
+	}
+	// Oldest evicted, newest retained.
+	if _, ok := state.pending[0]; ok {
+		t.Error("job 0 should have been evicted (oldest)")
+	}
+	newest := uint32(total - 1)
+	if _, ok := state.pending[newest]; !ok {
+		t.Error("newest job evicted — eviction should drop oldest first")
+	}
+
+	// SetNewPrevHash naming the newest must still emit it.
+	p := &stratum.SetNewPrevHash{ChannelID: 1, JobID: newest, MinNtime: 1, NBits: 0x1d00ffff}
+	if !s.onSetNewPrevHash(ctx, state, p) {
+		t.Fatal("onSetNewPrevHash returned false")
+	}
+	select {
+	case job := <-s.jobsCh:
+		if job.JobID != fmt.Sprintf("%d", newest) {
+			t.Errorf("emitted JobID = %q, want %d", job.JobID, newest)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("named job not emitted after SetNewPrevHash")
+	}
+	// After promotion the pending set holds only the named job.
+	if len(state.pending) != 1 {
+		t.Errorf("pending after tip = %d, want 1 (named job retained)", len(state.pending))
+	}
+}
+
+func TestJobState_InsertJobOverwriteSameID(t *testing.T) {
+	state := &jobState{pending: make(map[uint32]*stratum.NewMiningJob)}
+	for i := 0; i < 3; i++ {
+		j := &stratum.NewMiningJob{ChannelID: 1, JobID: 7, Version: uint32(i)}
+		state.insertJob(j)
+	}
+	if len(state.pending) != 1 || len(state.order) != 1 {
+		t.Fatalf("duplicate JobID grew pending: map=%d order=%d", len(state.pending), len(state.order))
+	}
+	if state.pending[7].Version != 2 {
+		t.Errorf("overwrite: Version = %d, want latest 2", state.pending[7].Version)
 	}
 }

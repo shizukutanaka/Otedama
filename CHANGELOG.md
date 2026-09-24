@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 271 — V2 ペンディングジョブ上限)
+
+**`jobState.pending` を 256 エントリに上限化** —— V2 ダイヤラは
+SetNewPrevHash が名前指しするまで受信した全 NewMiningJob を保持するが、
+名前指しされなかったジョブは全て未読破棄されるため、悪意ある/バグの
+ある上流がティップ間でジョブフレームを連投するとマップが無制限に
+膨張し得た。最古優先の挿入順エビクションで `maxPendingJobs = 256` に
+キャップ（実プールの future job 滞留は少数のため十分な余裕）し、
+次の SetNewPrevHash で最も名前指しされやすい最新側を保持する。
+`NewMiningJob` の `min_ntime OPTION[u32]` ワイヤレイアウトは SRI 参照
+実装（`Sv2Option<u32>`/`is_future()`）と突合して spec 準拠を確認済み
+（このメッセージに `future_job` フィールドは存在しない）。
+
+**`client.reconnect` の未消費を記録** —— V1 セッションはプール指示の
+再接続先（host/port/wait）を `lastReconnect` に記録するが、リコネクト
+ループは参照しない。悪意あるリダイレクト対策を含む設計判断が要るため
+ADR 議論向けとして RESEARCH_IMPROVEMENTS に記録（ad hoc 配線は見送り）。
+
 ### Security (session 270 — レートフィード堅牢化)
 
 **BTC/USD レートの非有限値（NaN）混入を防止** —— 取引所レスポンスの

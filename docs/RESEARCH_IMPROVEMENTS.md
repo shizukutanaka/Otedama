@@ -1251,6 +1251,40 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 271 increment (V2 pending-job bound)
+
+### Implemented
+
+1. ✅ **`jobState.pending` bounded to 256** — the V2 dialer holds every
+   NewMiningJob it receives until a SetNewPrevHash names one (all
+   others are discarded unread). Between tips a hostile or buggy
+   upstream could stream job frames indefinitely → unbounded map
+   growth. Now oldest-first insertion-order eviction caps it at
+   `maxPendingJobs = 256` (real pools keep a handful open); newest
+   arrivals — the ones most likely to be named next — are retained.
+   Duplicate job_id overwrite adds no order entries. NewMiningJob's
+   `min_ntime OPTION[u32]` wire layout was verified against the SRI
+   reference (`Sv2Option<u32>`, `is_future()`) before touching the job
+   state machine — the decoder is spec-correct, no `future_job` field
+   exists in this message.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **V2 unknown msg_type forward-compat** — `DispatchFrame` routes
+  unrecognised types to `Message.Unknown` and the read loop continues
+  (channel_msg extension frames are skipped safely).
+- ✅ **verdict `sync.Map`** — bounded by submit rate × wait timeout;
+  entries are deleted on settle and on caller return.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+- 🟡 **`client.reconnect` host/port never consumed** — the V1 session
+  records the directive (`lastReconnect`, diagnostics) but the
+  reconnect loop never retargets host:port. Deliberately deferred:
+  honoring pool-directed redirects is a design decision (a malicious
+  pool could point hashing at an attacker endpoint; reference miners
+  differ). Logged for ADR discussion rather than implemented ad hoc.
+
+---
+
 ## September 2026 research pass — session 270 increment (rate-feed NaN hardening)
 
 ### Implemented
@@ -1568,6 +1602,11 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-271 additions (September 2026): the V2 pending-future-job
+set is bounded (oldest-first eviction at 256) so a hostile upstream
+cannot grow memory between tips; pool-directed client.reconnect
+redirects are logged as an ADR-level design question, not wired ad hoc.*
 
 *Session-270 additions (September 2026): the BTC/USD rate feed — the
 last un-audited untrusted-input boundary (HTTP exchange responses) —

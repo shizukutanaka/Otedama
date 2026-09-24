@@ -305,9 +305,36 @@ func (s *session) readLoop(ctx context.Context) {
 // (NewMiningJob + SetNewPrevHash) into a complete emittable job.
 type jobState struct {
 	pending   map[uint32]*stratum.NewMiningJob
+	order     []uint32 // insertion order of pending keys, for oldest-first eviction
 	prevHash  [32]byte
 	prevNBits uint32
 	havePrev  bool
+}
+
+// maxPendingJobs bounds jobState.pending. Only the job the next
+// SetNewPrevHash names ever becomes minable — every other entry is
+// discarded unread — so a large map only ever holds work that cannot be
+// used. Between tips a hostile or buggy upstream can stream NewMiningJob
+// frames indefinitely; the cap turns that into bounded memory instead of
+// unbounded growth. Real pools keep at most a handful of future jobs
+// open, so 256 is generous headroom.
+const maxPendingJobs = 256
+
+// insertJob records j in the bounded pending set, evicting the oldest
+// unseen job when the cap is reached (the newest arrivals are the most
+// likely to be named by the next SetNewPrevHash).
+func (state *jobState) insertJob(j *stratum.NewMiningJob) {
+	if _, exists := state.pending[j.JobID]; exists {
+		state.pending[j.JobID] = j
+		return
+	}
+	if len(state.pending) >= maxPendingJobs {
+		oldest := state.order[0]
+		state.order = state.order[1:]
+		delete(state.pending, oldest)
+	}
+	state.pending[j.JobID] = j
+	state.order = append(state.order, j.JobID)
 }
 
 // emit enqueues a job without blocking the frame read loop. A slow
@@ -367,7 +394,7 @@ purgeDone:
 // onNewMiningJob holds the job until the tip's prev-hash is known.
 // Returns false when emit rejected a send (session closing).
 func (s *session) onNewMiningJob(ctx context.Context, state *jobState, j *stratum.NewMiningJob) bool {
-	state.pending[j.JobID] = j
+	state.insertJob(j)
 	if j.HasMinNtime && state.havePrev {
 		return s.emit(ctx, state, j, j.MinNtime, false)
 	}
@@ -383,10 +410,12 @@ func (s *session) onSetNewPrevHash(ctx context.Context, state *jobState, p *stra
 	state.havePrev = true
 	named := state.pending[p.JobID]
 	state.pending = map[uint32]*stratum.NewMiningJob{}
+	state.order = state.order[:0]
 	if named == nil {
 		return true
 	}
 	state.pending[p.JobID] = named
+	state.order = append(state.order, p.JobID)
 	ntime := p.MinNtime
 	if named.HasMinNtime && named.MinNtime > ntime {
 		ntime = named.MinNtime
