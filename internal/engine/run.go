@@ -720,9 +720,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// sequence number to the time the share was sent; entries are
 	// settled (and deleted) on SubmitSharesSuccess, and additionally
 	// capped at submitTimesCap below so a pool that never acknowledges
-	// cannot grow the map without bound over a long session.
+	// cannot grow the map without bound over a long session. submitShares
+	// maps the same sequence number to the submitted share so a
+	// SubmitSharesError can be judged against the share's issue-time
+	// target (benignTransitionReject) — both maps share one lifecycle.
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
+	submitShares := make(map[uint32]miner.Share)
 	const submitTimesCap = 1024
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
@@ -902,18 +906,41 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					if seq <= last {
 						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
 						delete(submitTimes, seq)
+						delete(submitShares, seq)
 					}
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
+				errMsg := pm.msg.SubmitSharesError
+				share, known := submitShares[errMsg.SequenceNumber]
+				delete(submitTimes, errMsg.SequenceNumber)
+				delete(submitShares, errMsg.SequenceNumber)
+				reason := errMsg.Error
 				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
-				if opts.m != nil {
-					opts.m.sharesRejected.Inc()
-					opts.m.rejectReason(category).Inc()
-					opts.m.touchLastReject(category, time.Now().Unix())
+				// A share valid under its issue-time target but failing the
+				// pool's now-harder one is a benign difficulty-transition
+				// reject (ESP-Miner #212): the pool raised the share target
+				// while the share was in flight. It is real work the pool will
+				// not credit, but not a fault — excluded from sharesRejected
+				// and the reject-rate gauges so they keep reflecting problems
+				// the operator can act on. An unknown sequence number yields
+				// the zero Share (issue target unset), which never classifies
+				// as benign.
+				if known && category == "difficulty" && benignTransitionReject(&share, shareTarget) {
+					opts.log("info", fmt.Sprintf(
+						"engine: share seq=%d rejected post-target-change (benign): %s",
+						errMsg.SequenceNumber, reason))
+					if opts.m != nil {
+						opts.m.rejectReason(rejectTransition).Inc()
+					}
+				} else {
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						reason, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
+					}
 				}
 			}
 
@@ -944,6 +971,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesSubmitted.Inc()
 			}
 			submitTimes[seqNum] = time.Now()
+			submitShares[seqNum] = share
 			if len(submitTimes) > submitTimesCap {
 				// Pool is not acknowledging; drop the oldest half so the
 				// map stays bounded. Latency for dropped entries is lost,
@@ -952,6 +980,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				for seq := range submitTimes {
 					if seq < cutoff {
 						delete(submitTimes, seq)
+						delete(submitShares, seq)
 					}
 				}
 			}
@@ -1149,6 +1178,19 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				} else {
 					category, diagnosis := rejectClass(result.Reason)
+					// Shares solved under the difficulty active at issue but
+					// rejected after a set_difficulty raise are a benign
+					// timing race (ESP-Miner #212) — excluded from the
+					// reject-rate gauges, counted separately for visibility.
+					if category == "difficulty" && benignTransitionReject(&capturedShare, v1CurrentShareTarget(capturedSess)) {
+						opts.log("info", fmt.Sprintf(
+							"engine: V1 share rejected post-difficulty-change (benign): %s",
+							result.Reason))
+						if opts.m != nil {
+							opts.m.rejectReason(rejectTransition).Inc()
+						}
+						return
+					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						result.Reason, diagnosis))
 					if opts.m != nil {
@@ -1361,6 +1403,25 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// v1CurrentShareTarget returns the share target implied by the V1 session's
+// most recent mining.set_difficulty — the yardstick an in-flight share is
+// judged against after a difficulty change. The zero Hash is returned when
+// the pool has assigned no difficulty this session (no transition could have
+// occurred) or the difficulty cannot be converted, both of which fail the
+// benign-transition check by construction. SuggestedDifficulty is safe to
+// call from the per-share submit goroutines (atomic inside the dialer).
+func v1CurrentShareTarget(sess poolproto.Session) miner.Hash {
+	difficulty := sess.SuggestedDifficulty()
+	if difficulty <= 0 {
+		return miner.Hash{}
+	}
+	target, err := miner.TargetFromDifficulty(difficulty)
+	if err != nil {
+		return miner.Hash{}
+	}
+	return target
 }
 
 func parseHost(url string) (string, error) {

@@ -1447,6 +1447,92 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 	}
 }
 
+func TestRunSessionV1_TransitionRejectCountedBenign(t *testing.T) {
+	// ESP-Miner #212: the pool raises difficulty while a share is in flight
+	// and then rejects it "low difficulty share". The share met the target
+	// at issue time, so the reject is benign — it must not count toward
+	// sharesRejected or the reject-rate gauges.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	submitResponseSent := make(chan struct{})
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.notify","s1"]],"cc",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n')
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		// Raise difficulty to 1e9 before the share arrives. The client's
+		// single read loop processes this notification before it reads the
+		// submit response (messages arrive in order), so by the time the
+		// reject lands the session's current target is far stricter than
+		// the share's issue-time target.
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1000000000]}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+		_, _ = r.ReadString('\n') // mining.submit (id=4)
+		fmt.Fprintf(conn, `{"id":4,"result":false,"error":["23","low difficulty share",null]}`+"\n")
+		close(submitResponseSent)
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	// Share produced at difficulty 1: hash meets the diff-1 target but
+	// fails the diff-1e9 target the pool raised to while it was in flight.
+	issueTarget, err := miner.TargetFromDifficulty(1)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty(1): %v", err)
+	}
+	shareHash, err := miner.TargetFromDifficulty(1_000_000)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty(1e6): %v", err)
+	}
+
+	merged := make(chan miner.Share, 1)
+	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Hash: shareHash, Target: issueTarget}
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var watcherDone sync.WaitGroup
+	watcherDone.Add(1)
+	go func() {
+		defer watcherDone.Done()
+		select {
+		case <-submitResponseSent:
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		case <-time.After(3 * time.Second):
+			cancel()
+		}
+	}()
+
+	_ = runSessionV1(ctx, sessionOpts{
+		poolURL:  "stratum+tcp://" + ln.Addr().String(),
+		user:     "w",
+		merged:   merged,
+		interval: 10 * time.Second,
+		log:      func(_, _ string) {},
+		m:        m,
+	})
+	watcherDone.Wait()
+
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 (reject was a benign difficulty transition)", got)
+	}
+	if got := m.rejectCount(rejectTransition); got != 1 {
+		t.Errorf("rejectByReason[difficulty_transition] = %d, want 1", got)
+	}
+}
+
 func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	// Verify that after a share is accepted (latency recorded), the stats
 	// ticker logs p50/p95/p99.  We must NOT close merged before the Submit

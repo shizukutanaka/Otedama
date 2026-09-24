@@ -37,6 +37,12 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// Target is the share target the hash was validated against at issue
+	// time — Work.Target of the job the worker was grinding when it found
+	// the share. It is not transmitted on the wire; the engine uses it to
+	// judge whether a pool rejection reflects a real validation failure or
+	// a mid-flight difficulty change (the share was valid when produced).
+	Target Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -261,6 +267,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					NTime:     h.Time,
 					Version:   h.Version,
 					Hash:      hash,
+					Target:    localWork.Target,
 					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)

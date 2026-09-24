@@ -76,9 +76,10 @@ type engineMetrics struct {
 	shareAcceptanceRate *metrics.Gauge
 
 	// sharesUnaccounted is shares found locally but not yet judged by the pool
-	// (found − accepted − rejected, clamped at 0). Small values are normal
-	// in-flight latency; a sustained/growing value means found shares are not
-	// reaching the pool — the local-vs-pool reconciliation signal.
+	// (found − accepted − rejected − benign-transition-rejected, clamped at 0).
+	// Small values are normal in-flight latency; a sustained/growing value means
+	// found shares are not reaching the pool — the local-vs-pool
+	// reconciliation signal.
 	sharesUnaccounted *metrics.Gauge
 
 	// productiveSeconds accumulates wall-clock seconds the miner actually
@@ -171,9 +172,15 @@ type engineMetrics struct {
 	estimatedShareIntervalSeconds *metrics.Gauge
 
 	// reg is retained so reject counters can be created lazily, one per
-	// reject category (stale/duplicate/difficulty/hardware/other).
-	reg            *metrics.Registry
-	rejectByReason map[string]*metrics.Counter
+	// reject category (stale/duplicate/difficulty/hardware/other, plus the
+	// benign difficulty_transition reason — see stats.go).
+	// rejectByReasonMu guards rejectByReason: V1 submits run on a goroutine
+	// per share, so two in-flight rejects can otherwise race the lazy
+	// map's read-then-write — a concurrent map write is a fatal, uncatchable
+	// panic, not a recoverable error.
+	reg              *metrics.Registry
+	rejectByReasonMu sync.Mutex
+	rejectByReason   map[string]*metrics.Counter
 
 	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
 	// one per reject category, created lazily on first rejection of that type.
@@ -448,6 +455,8 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
 	if c, ok := m.rejectByReason[category]; ok {
 		return c
 	}
@@ -457,6 +466,17 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// rejectCount returns the current count for a reject category, or 0 when
+// none has been recorded. Safe for concurrent use.
+func (m *engineMetrics) rejectCount(category string) uint64 {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
+	if c, ok := m.rejectByReason[category]; ok {
+		return c.Value()
+	}
+	return 0
 }
 
 // touchLastReject records the current Unix timestamp as the most recent
@@ -559,10 +579,13 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
 	// can briefly report more judged than we have locally counted if a stats
 	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
+	// Benign difficulty-transition rejects ARE pool-judged (they just do not
+	// count toward rejected), so they join judged here or they would inflate
+	// unaccounted forever.
 	found := m.sharesFound.Value()
 	var unaccounted uint64
-	if found > judged {
-		unaccounted = found - judged
+	if poolJudged := judged + m.rejectCount(rejectTransition); found > poolJudged {
+		unaccounted = found - poolJudged
 	}
 	m.sharesUnaccounted.Set(float64(unaccounted))
 
@@ -572,10 +595,6 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		return rate, judged
 	}
 	m.rejectRate.Set(float64(rejected) / float64(judged))
-	var stale uint64
-	if c, ok := m.rejectByReason["stale"]; ok {
-		stale = c.Value()
-	}
-	m.staleRate.Set(float64(stale) / float64(judged))
+	m.staleRate.Set(float64(m.rejectCount("stale")) / float64(judged))
 	return rate, judged
 }

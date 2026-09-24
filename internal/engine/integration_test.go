@@ -652,6 +652,43 @@ func TestEngineMetrics_UpdateShareRates_Reconciliation(t *testing.T) {
 	}
 }
 
+func TestEngineMetrics_UpdateShareRates_TransitionRejectsExcluded(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// 100 found; pool judged 90 accepted + 5 real rejects. 5 further
+	// shares were rejected but only because difficulty moved in flight
+	// (benign difficulty-transition) — they are neither accepted nor
+	// rejected, so judged stays 95 and unaccounted reaches 0.
+	for range 100 {
+		m.sharesFound.Inc()
+	}
+	for range 90 {
+		m.sharesAccepted.Inc()
+	}
+	for range 5 {
+		m.sharesRejected.Inc()
+		m.rejectReason("difficulty").Inc()
+	}
+	for range 5 {
+		m.rejectReason(rejectTransition).Inc()
+	}
+
+	rate, judged := m.updateShareRates()
+	if judged != 95 {
+		t.Fatalf("judged = %d, want 95", judged)
+	}
+	if want := 90.0 / 95.0; rate != want {
+		t.Errorf("acceptance rate = %v, want %v", rate, want)
+	}
+	if want := 5.0 / 95.0; m.rejectRate.Value() != want {
+		t.Errorf("rejectRate = %v, want %v", m.rejectRate.Value(), want)
+	}
+	if got := m.sharesUnaccounted.Value(); got != 0 {
+		t.Errorf("sharesUnaccounted = %v, want 0 (transition rejects accounted)", got)
+	}
+}
+
 func TestEngineMetrics_RejectAndStaleRateAppearInOutput(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)

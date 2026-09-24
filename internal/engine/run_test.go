@@ -754,6 +754,69 @@ func TestRejectClass(t *testing.T) {
 	}
 }
 
+// TestBenignTransitionReject covers the ESP-Miner #212 case: a share that
+// met the pool target when the worker produced it but was rejected
+// "above target" because the pool raised difficulty in flight. Such a
+// reject is not proof of bad work, so it must be told apart from a real
+// invalid share.
+func TestBenignTransitionReject(t *testing.T) {
+	// miner.Hash is little-endian (index 31 is most significant), so a
+	// one-byte write at index 31 sets the whole magnitude.
+	hashMSB := func(v byte) miner.Hash {
+		var h miner.Hash
+		h[31] = v
+		return h
+	}
+	hash := hashMSB(0x05)
+	issueT := hashMSB(0x10)
+	currentT := hashMSB(0x02) // difficulty raised: current < issue
+
+	cases := []struct {
+		name       string
+		share      miner.Share
+		current    miner.Hash
+		wantBenign bool
+	}{
+		{"met issue, fails current", miner.Share{Hash: hash, Target: issueT}, currentT, true},
+		{"met issue, meets current", miner.Share{Hash: hashMSB(0x01), Target: issueT}, currentT, false},
+		{"fails issue target", miner.Share{Hash: hashMSB(0x20), Target: issueT}, currentT, false},
+		{"no issue target recorded", miner.Share{Hash: hash}, currentT, false},
+		{"no current target", miner.Share{Hash: hash, Target: issueT}, miner.Hash{}, false},
+	}
+	for _, tt := range cases {
+		if got := benignTransitionReject(&tt.share, tt.current); got != tt.wantBenign {
+			t.Errorf("%s: benignTransitionReject = %v, want %v", tt.name, got, tt.wantBenign)
+		}
+	}
+}
+
+// v1DifficultyStubSession is a minimal poolproto.Session whose
+// SuggestedDifficulty returns a fixed value, for v1CurrentShareTarget.
+type v1DifficultyStubSession struct{ diff float64 }
+
+func (s v1DifficultyStubSession) Close() error               { return nil }
+func (s v1DifficultyStubSession) Jobs() <-chan poolproto.Job { return nil }
+func (s v1DifficultyStubSession) Submit(context.Context, poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	return poolproto.ShareResult{}, nil
+}
+func (s v1DifficultyStubSession) SuggestedDifficulty() float64 { return s.diff }
+
+func TestV1CurrentShareTarget(t *testing.T) {
+	// No difficulty suggested yet → zero Hash, i.e. "unknown", which makes
+	// benignTransitionReject conservatively answer false.
+	if got := v1CurrentShareTarget(v1DifficultyStubSession{diff: 0}); got != (miner.Hash{}) {
+		t.Errorf("difficulty=0 → %v, want zero Hash", got)
+	}
+	got := v1CurrentShareTarget(v1DifficultyStubSession{diff: 1})
+	want, err := miner.TargetFromDifficulty(1)
+	if err != nil {
+		t.Fatalf("TargetFromDifficulty: %v", err)
+	}
+	if got != want {
+		t.Errorf("difficulty=1 → %v, want %v", got, want)
+	}
+}
+
 func TestLatencyTracker_EmptyReturnsZero(t *testing.T) {
 	l := NewLatencyTracker(16)
 	if got := l.Quantile(0.5); got != 0 {

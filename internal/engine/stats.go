@@ -254,6 +254,13 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 		miner.HashRateString(hashRate), shares))
 }
 
+// rejectTransition is the rejectByReason label value for shares the pool
+// rejected only because its difficulty rose while the share was in flight
+// (see benignTransitionReject). Kept outside rejectClass's five-value
+// taxonomy because it is not a fault category: the count is excluded from
+// sharesRejected (and thus the reject-rate gauges) by design.
+const rejectTransition = "difficulty_transition"
+
 // rejectClass categorises a pool's share-rejection reason. The category
 // string is short and stable, suitable as a metric label; the diagnosis
 // is the human-readable hint for logs. Both derive from the same
@@ -274,6 +281,33 @@ func rejectClass(reason string) (category, diagnosis string) {
 	default:
 		return "other", "cause unclassified — check pool documentation"
 	}
+}
+
+// benignTransitionReject reports whether a "difficulty"-class pool rejection
+// is the benign product of a mid-flight difficulty change rather than a real
+// share-validation failure. A pool that raises its share difficulty
+// (mining.set_difficulty / SetTarget) rejects in-flight shares solved against
+// the superseded, easier target as "above target" — ESP-Miner #212 documents
+// the same race. The work was valid when produced, so the reject is a
+// protocol-level timing artefact, not a miner fault: it is counted under
+// rejectTransition and excluded from sharesRejected.
+//
+// The check is strict: the share's hash must meet the target it was issued
+// against (share.Target, carried from the Work actually hashed) and fail the
+// pool's *current* target. A share that fails even its own issue target is a
+// genuine validation error; a share still meeting the current target was
+// rejected for some other reason the pool mislabelled. A zero share.Target or
+// zero currentTarget means no issue-time reference exists (e.g. no
+// set_difficulty/SetTarget ever received — nothing could have transitioned),
+// so the reject counts as real.
+func benignTransitionReject(share *miner.Share, currentTarget miner.Hash) bool {
+	if share.Target == (miner.Hash{}) || currentTarget == (miner.Hash{}) {
+		return false
+	}
+	if !share.Hash.LessOrEqual(share.Target) {
+		return false
+	}
+	return !share.Hash.LessOrEqual(currentTarget)
 }
 
 // acceptanceRate computes the share acceptance rate — accepted /
