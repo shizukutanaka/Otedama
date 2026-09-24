@@ -30,12 +30,58 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.24
+go 1.23
 toolchain go1.24.0
 ```
 
-No `godebug` block. That is the point of the baseline, and it took a
-measurement to get here.
+plus one directive file, `cmd/otedama/godebug_go124.go`:
+
+```go
+//go:build go1.24
+
+//go:debug default=go1.24
+
+package main
+```
+
+No `godebug` block in `go.mod`.
+
+**Why 1.23 and not 1.24 (session 267).** Every Go job in `test.yml` and
+`ci.yml` runs Go 1.23.x with `GOTOOLCHAIN=local`. The `go 1.24` line
+adopted in session 266 stopped all of them at load:
+`go.mod requires go >= 1.24 (running go 1.23.12; GOTOOLCHAIN=local)`.
+Session 266 had written that fixing CI needed a workflow edit only a
+maintainer could make. That was never tested. The code needs nothing
+newer than Go 1.22: `go vet`'s stdversion analyzer, run with Go 1.25.1,
+finds no post-1.22 standard-library symbol on linux, windows or darwin,
+and flags a planted `strings.Lines` (the negative control). Go 1.24.7's
+own vet is useless for this, because its symbol table stops at 1.23 and
+it passes the planted call silently. 1.23 rather than 1.22 keeps CI's tests
+on the Go 1.23 timer semantics, which are the ones release builds ship with.
+
+**Why the directive file.** A lower `go` line lowers the default baseline
+too. Measured with `go version -m`:
+
+| `go.mod` / directive | go1.24.7 build | go1.25.1 build |
+|---|---|---|
+| `go 1.24` (session 266) | empty | Go 1.25's changes only |
+| `go 1.23`, no file | `tlsmlkem=0 rsa1024min=0 x509rsacrt=0 x509usepolicies=0 multipathtcp=0 randseednop=0 gotestjsonbuildtext=1` | the same, plus Go 1.25's |
+| `go 1.23` + `godebug_go124.go` | empty | Go 1.25's changes only |
+
+So the file makes a Go 1.24+ build identical to what `go 1.24` gave,
+post-quantum TLS included. The build constraint keeps Go 1.23 from reading
+`default=go1.24`, which it would refuse as newer than itself: go/build
+ignores `//go:debug` in constraint-excluded files. That was measured on
+go1.24.7 with an unknown key in an excluded file (builds) and the same
+file included (fails). Go 1.23 itself is not downloadable here, so its
+behaviour is confirmed only by the first CI run.
+`TestDefaultGODEBUG_KeepsGo124Baseline` (cmd/otedama) fails if the file is
+removed (mutation-tested).
+
+**When to undo it:** once every workflow runs Go 1.24+ or drops
+`GOTOOLCHAIN=local`, set `go 1.24` and delete the file.
+
+The history below explains why there is no `godebug` block.
 
 Until session 266 the module declared `go 1.22` and pinned three settings.
 GODEBUG defaults follow the `go` directive, so a `go 1.22` module compiled
@@ -51,7 +97,8 @@ winsymlink=0  x509keypairleaf=0  x509negativeserial=1  x509rsacrt=0
 x509usepolicies=0
 ```
 
-Under `go 1.24` with no pins at all, the same command reports
+Under `go 1.24` with no pins at all (and today under `go 1.23` plus the
+directive file, on a Go 1.24 toolchain), the same command reports
 **`DefaultGODEBUG=` — empty**: every setting sits at the toolchain's current
 default, including `tlsmlkem=1`. Fourteen of the seventeen actually change
 value; the three that do not are exactly the three that used to be pinned,
@@ -73,8 +120,9 @@ policy below.
 
 ## Active knobs
 
-**None.** As of session 266 the module pins nothing, and that is the
-desired state: a pin is a divergence from the toolchain's judgement and
+**None.** The module pins no individual setting. The one directive,
+`default=go1.24` in `cmd/otedama/godebug_go124.go`, pins a whole baseline
+and exists only while CI is on Go 1.23 (see above). That is the desired state: a pin is a divergence from the toolchain's judgement and
 should exist only while it buys something.
 
 The three that used to be here, and why each is gone:

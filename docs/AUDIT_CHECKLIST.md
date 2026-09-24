@@ -38,18 +38,19 @@ left for the auditor to run.
 
 | # | Claim | Where to look | Verification | Status |
 |---|-------|---------------|--------------|--------|
-| 1 | Source builds with the Go toolchain the module requires | repo root | `go build ./...` | **PASS** — `go.mod` declares `go 1.24`, so Go 1.24+ is required and the requirement is now stated honestly (it was `go 1.22` with a godebug block that made 1.22 and 1.23 fail anyway) |
+| 1 | Source builds with the Go toolchain the module requires | repo root | `go build ./...` | **PASS** — `go.mod` declares `go 1.23`, the newest line CI's `GOTOOLCHAIN=local` Go 1.23.x runners can load, and the code needs nothing newer (`go vet` stdversion under Go 1.25.1: no post-1.22 symbol). Go 1.24+ builds keep Go 1.24's GODEBUG defaults via `cmd/otedama/godebug_go124.go`, guarded by a test |
 | 2 | Tests pass with the race detector | repo root | `go test -race -timeout 5m ./...` | **PASS** (24 packages) |
 | 3 | `go vet` is clean | repo root | `go vet ./...` | **PASS** |
 | 4 | `staticcheck` is clean | repo root | `staticcheck ./...` | **—** not installed in the verifying environment, and **not run by any CI workflow** |
-| 5 | `golangci-lint` is clean | `.golangci.yml` | `golangci-lint run` | **FAIL to run** on golangci-lint v2.x: the config is in v1 format and v2 rejects it with `unsupported version of the configuration: ""`. CI pins v1.55.2, so CI is unaffected; a fresh local install is |
+| 5 | `golangci-lint` is clean | `.golangci.yml` | `golangci-lint run` | **FAIL to run** on golangci-lint v2.x: the config is in v1 format and v2 rejects it with `unsupported version of the configuration: ""`. `test.yml`'s Lint job requests `latest`, which golangci-lint-action@v3 resolves to v1.64.8 (CI log), so CI reads the v1 config. It has never got past `go.mod` load, so how many findings that config produces is unknown |
 | 6 | No `TODO`/`FIXME`/`XXX` in committed non-test code | — | `git grep -En 'TODO\|FIXME\|XXX' -- '*.go' ':!*_test.go'` | **PASS** (no matches) |
 | 7 | Test:implementation line ratio ≥ 1.0 | — | see the script below | **PASS** — 36,343 test lines : 20,552 implementation lines = **1.77** |
 | 8 | Exported symbols are documented | `internal/`, `cmd/` | `go doc <pkg> <symbol>` for the packages you care about; there is no repo-wide command that proves this (`go doc -all ./...` is not a valid invocation) | **—** spot-check; not machine-enforced |
 | 9 | SPDX-License-Identifier on every Go file | — | `find internal cmd -name '*.go' -exec sh -c 'head -3 "$1" \| grep -q SPDX \|\| echo "$1"' _ {} \;` | **PASS** (no output) |
 
-**On the Go version.** `go.mod` declares `go 1.24` and pins no godebug
-settings. It previously declared `go 1.22` while carrying
+**On the Go version.** `go.mod` declares `go 1.23` and pins no godebug
+settings (see `GODEBUG_NOTES.md` for why it is 1.23 and not 1.24: a
+`go 1.24` line stopped every `GOTOOLCHAIN=local` Go 1.23 CI job at load). It previously declared `go 1.22` while carrying
 `godebug tlsmlkem=1`, a key Go 1.24 introduced — and listing a godebug key
 the toolchain does not recognise is a hard error at `go.mod` load, so the
 declared minimum could not actually build the module:

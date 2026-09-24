@@ -40,10 +40,10 @@ Otedama v3.0.0-alpha.1が現時点で実際に提供する機能は次の通り�
 
 ### 必要環境 / Requirements
 
-Go 1.24以上（`go.mod` は `go 1.22` を宣言していますが `godebug tlsmlkem=1` を含み、このキーは
-Go 1.24 で追加されたため、それより古いツールチェーンは `GOTOOLCHAIN` を既定の `auto` にして
-`toolchain go1.24.0` へ自動切替させる必要があります。`GOTOOLCHAIN=local` の古いツールチェーンでは
-`go.mod` の読み込み時点で失敗します）、Linux・macOS・Windows のいずれか
+Go 1.23以上（`go.mod` は `go 1.23` を宣言。既定の `GOTOOLCHAIN=auto` なら `toolchain go1.24.0`
+へ自動切替し、Go 1.24 以降でビルドしたバイナリは `cmd/otedama/godebug_go124.go` により Go 1.24 の
+既定値（ハイブリッド耐量子TLS鍵交換、RSA 1024bit下限など）を保ちます / Go 1.23 or newer; Go 1.24+
+builds keep Go 1.24's defaults via `cmd/otedama/godebug_go124.go`）、Linux・macOS・Windows のいずれか
 （FreeBSD 向けにはクロスコンパイルが通ることのみ確認済みで、リリースバイナリは提供しておらず、
 実機テストもしていません）、インターネット接続、そして実際に採掘するにはAVX2対応のx86_64 CPUまたはNEON対応のARM64 CPU（現時点で唯一の実マイニング対応デバイス）。GPUはLinux上でのみ検出されますが、現時点ではプレゼンス検出のみでマイニング・AI推論のいずれにも使用されません。ASICデバイスは検出されません（`docs/KNOWN_LIMITATIONS.md` 参照）。
 

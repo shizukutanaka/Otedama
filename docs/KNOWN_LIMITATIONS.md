@@ -764,14 +764,26 @@ exactly, so a maintainer can apply it in one pass:
   toolchain, and an unknown key is an error at `go.mod` load. Nothing in
   this diagnosis rests on inference any more.
 
-  **What changed underneath it (session 266):** `go.mod` now declares
-  `go 1.24` and pins nothing. That does not fix CI — a 1.23 runner with
-  `GOTOOLCHAIN: local` still fails — but it changes the failure to an
-  unambiguous `go.mod requires go >= 1.24`, and it removes the trap where
-  deleting one `godebug` line silently disabled post-quantum TLS
-  (`GODEBUG_NOTES.md` has the before/after `DefaultGODEBUG` measurements).
-  The fix for CI is unchanged and still needs a maintainer push: drop
-  `GOTOOLCHAIN: local`, or raise the pins to 1.24.x.
+  **What changed underneath it (session 266, then 267).** Session 266 set
+  `go 1.24` and wrote that fixing CI "still needs a maintainer push". That
+  was never tested, and it was wrong: the first CI run on this branch showed
+  `go.mod requires go >= 1.24 (running go 1.23.12; GOTOOLCHAIN=local)`, and
+  the same result can be had from the `go.mod` side. Session 267 declares
+  `go 1.23`, which the code supports: `go vet` stdversion under Go 1.25.1,
+  with a negative control, finds no post-1.22 symbol on linux, windows or
+  darwin. It also adds `cmd/otedama/godebug_go124.go` (`//go:build go1.24`,
+  `//go:debug default=go1.24`), so Go 1.24+ builds keep exactly the
+  `DefaultGODEBUG` a `go 1.24` line gave. That was measured on go1.24.7 and
+  go1.25.1, and a test fails if the file is removed. `test.yml` and the
+  1.23.x legs of `ci.yml` can now load the module. Unverified until CI
+  runs, since no Go 1.23 toolchain is downloadable here: that Go 1.23's
+  go/build ignores the excluded file's directive, as go1.24.7's does
+  (measured, with a positive control).
+
+  **Still a maintainer fix:** `ci.yml`'s `1.22.x` matrix leg cannot load a
+  `go 1.23` module under `GOTOOLCHAIN: local`, and it tests a Go release that
+  is already out of support, so drop it. When the pins move to 1.24.x, set
+  `go 1.24` and delete `godebug_go124.go`.
 
 - **`release.yml` produces unversioned binaries** (found session 266).
   Its build step passes `-X main.Version=...`, `-X main.BuildTime=...`

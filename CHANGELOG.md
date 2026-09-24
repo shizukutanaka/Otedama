@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 267: a "needs a maintainer" label turned out to be untested, and CI can load the module again)
+
+**Where it started.** The branch's first CI run (PR #338, later closed without merging) failed
+every `test.yml` job at `go.mod` load: `go.mod requires go >= 1.24 (running go 1.23.12;
+GOTOOLCHAIN=local)`. Master fails at the same step with `unknown godebug "tlsmlkem"`. Session 266
+had called this "a workflow fix only a maintainer can push". That was never tested, and it was wrong.
+
+- **`go.mod`: `go 1.24` → `go 1.23`.** The code needs nothing newer. `go vet` stdversion,
+  run with Go 1.25.1, finds no post-1.22 symbol on linux, windows or darwin, and flags a planted
+  `strings.Lines` as the negative control. Go 1.24.7's vet passes that planted call, because its
+  symbol table stops at 1.23, so that check alone would have been vacuous.
+- **`cmd/otedama/godebug_go124.go`** (`//go:build go1.24` + `//go:debug default=go1.24`). Without
+  it, a Go 1.24+ build of a go-1.23 module silently sets `tlsmlkem=0` (no post-quantum TLS) and
+  `rsa1024min=0`, among others. With it, `DefaultGODEBUG` on go1.24.7 and go1.25.1 is identical
+  to what `go 1.24` gave. `TestDefaultGODEBUG_KeepsGo124Baseline` fails if the file is removed
+  (mutation-tested).
+- **`internal/tui`: a width past int32 no longer wraps.** `SetWidth(math.MaxInt)` stored -1
+  through a bare `int32()` conversion. That was one of the two gosec G115 findings this branch
+  added (master had 23; the branch's CI showed 25). Both sites now go through `clampCols`, with a
+  regression test that fails on the old conversion.
+- Go-version claims corrected in README, CONTRIBUTING, AUDIT_CHECKLIST (also: CI's Lint job
+  resolves `latest` to golangci-lint v1.64.8, not v1.55.2), SUSTAINABILITY, KNOWN_LIMITATIONS §13
+  and GODEBUG_NOTES.
+
+**Still needs a maintainer (workflow files, which this App cannot write):** `ci.yml`'s
+end-of-life `1.22.x` leg; `security.yml`'s `./tests/security/...` step, which points at a path
+that does not exist; the Security Report job's missing `issues: write` permission (403 posting its
+comment). Beyond those, gosec's 23 findings that predate this branch, and a Lint job that has
+never run, so its backlog is unknown.
+
 ### Fixed / Docs (session 266 — **自分が設けた反証条件で自分の主張を反証した**: 未監査5文書の全文読了、既定プールの実測、§13 診断の訂正)
 
 **発端.** session 265 は完成宣言に反証条件を付けた——「証拠まで辿れない肯定的記述が1つでもあれば

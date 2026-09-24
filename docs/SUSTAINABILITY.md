@@ -25,9 +25,10 @@ The single highest-leverage observation: **the cost of building these foundation
 **研究結論:** Go の6ヶ月リリース・Russ Cox/Austin Clements/Cherry Mui の制度的継続性・Go 1互換性保証により、Go 2のhard breakは2036年まで実質ゼロ。GODEBUG knobによる behavior pinning が2021年以降強化された。
 
 **Otedamaの判断:**
-- `go 1.22` をベースライン、`toolchain go1.24.0` を最低toolchain pin（FIPS 140-3 + tool directive機能取得）。
-- `go.mod` の `godebug` directive で `tlsmlkem=1`, `panicnil=0`, `randautoseed=1` を明示固定
-  （`tlsmlkem`はGo 1.24でのX25519Kyber768標準化に伴い、旧`tlskyber`から改名された値）。
+- `go 1.23` をベースライン（CI の Go 1.23.x・`GOTOOLCHAIN=local` が読める上限）、`toolchain go1.24.0`。
+- `go.mod` に `godebug` ブロックは置かない（Go 1.23 は未知のキーで `go.mod` 読み込みに失敗するため。
+  旧 `tlsmlkem=1` がまさにそれで master の CI を止めていた）。Go 1.24 以降でのビルドは
+  `cmd/otedama/godebug_go124.go`（`//go:build go1.24` + `//go:debug default=go1.24`）で Go 1.24 の既定値を保つ。
 - `GOEXPERIMENT` 機能（`greenteagc`, `jsonv2`等）はproductionで使用しない。
 - `GODEBUG_NOTES.md` に依存knobの一覧と廃止予定日を記録。
 
