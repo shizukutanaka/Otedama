@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 343 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: SV2 ペンディングジョブマップのバウンド)
+
+- **`tipState.pending` の上限化** — SV2 の `NewMiningJob` は `SetNewPrevHash` が指名するまで
+  保留マップに蓄積されるが、クリア経路が `SetNewPrevHash` のみのため、悪意/障害のある
+  プールがジョブ洪水を送ると無制限にメモリが増大し得た（長期稼働での緩慢な DoS）。
+  上限64件（誠実なプールの通常滞留数の十分な上位）＋満杯時は任意エントリを追放して
+  最新ジョブ（次の SetNewPrevHash が最も指名しそうなもの）を保持する形に変更。
+  THREAT_MODEL DoS 節に脅威・緩和・残余リスクを記録。V1 はバウンド済みチャネル経由のため
+  同型問題なし。
+
 ### Fixed (session 342 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: mining.notify の破損フィールドで採掘しない)
 
 - **`parseNotify` の厳格化** — `version`/`nbits`/`ntime`/`prevhash` の hex パース失敗や

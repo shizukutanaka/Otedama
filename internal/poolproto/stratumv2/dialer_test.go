@@ -1725,3 +1725,29 @@ func TestDialer_Session_UpdateChannelErrorIsAdvisory(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 }
+
+func TestTipState_PendingBounded(t *testing.T) {
+	// A pool flooding NewMiningJob frames must not grow the pending map
+	// without limit — entries are only cleared by SetNewPrevHash.
+	tip := newTipState()
+	for i := uint32(1); i <= 3*maxPendingJobs; i++ {
+		tip.feed(&stratum.Message{NewMiningJob: &stratum.NewMiningJob{JobID: i}})
+	}
+	if got := len(tip.pending); got > maxPendingJobs {
+		t.Fatalf("pending grew past bound: %d > %d", got, maxPendingJobs)
+	}
+	// The newest job is always retained, so a SetNewPrevHash naming it
+	// still emits it as a clean job.
+	last := uint32(3 * maxPendingJobs)
+	job, _, clean := tip.feed(&stratum.Message{SetNewPrevHash: &stratum.SetNewPrevHash{
+		JobID:    last,
+		NBits:    0x1d00ffff,
+		MinNtime: 100,
+	}})
+	if job == nil {
+		t.Fatal("SetNewPrevHash naming the newest job emitted nothing")
+	}
+	if job.JobID != last || !clean {
+		t.Fatalf("emitted job = %+v clean=%v, want job %d clean", job, clean, last)
+	}
+}

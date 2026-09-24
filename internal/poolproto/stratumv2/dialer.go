@@ -386,6 +386,15 @@ func newTipState() *tipState {
 	return &tipState{pending: make(map[uint32]*stratum.NewMiningJob)}
 }
 
+// maxPendingJobs bounds tipState.pending: entries are only cleared by
+// SetNewPrevHash, so a pool flooding NewMiningJob frames with distinct
+// IDs would otherwise grow the map without limit. Honest pools keep a
+// handful of future jobs in flight between prev-hash updates; 64 is
+// generous headroom. When full we evict an arbitrary entry rather than
+// the newcomer — the newest job is the one most likely to be named by
+// the next SetNewPrevHash.
+const maxPendingJobs = 64
+
 // feed consumes one decoded message and returns the job to emit, if
 // any: NewMiningJob emits immediately when it carries min_ntime and a
 // tip is known, otherwise it is held; SetNewPrevHash clears stale jobs
@@ -393,6 +402,12 @@ func newTipState() *tipState {
 func (t *tipState) feed(msg *stratum.Message) (job *stratum.NewMiningJob, ntime uint32, clean bool) {
 	if msg.NewMiningJob != nil {
 		j := msg.NewMiningJob
+		if len(t.pending) >= maxPendingJobs {
+			for id := range t.pending {
+				delete(t.pending, id)
+				break
+			}
+		}
 		t.pending[j.JobID] = j
 		if j.HasMinNtime && t.havePrev {
 			t.active, t.activeNTime = j, j.MinNtime

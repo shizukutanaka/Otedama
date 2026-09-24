@@ -287,6 +287,24 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** A malicious pool floods `NewMiningJob` frames whose jobs are
+never named by a `SetNewPrevHash`, growing the client's pending-job map
+without limit (memory exhaustion over days of uptime — the map is only
+cleared by `SetNewPrevHash`).
+
+**Mitigation (session 343):** `tipState.pending` is capped at 64
+entries — generous headroom over the handful honest pools keep in
+flight between prev-hash updates. At capacity an arbitrary entry is
+evicted so the newest job (the one most likely to be named next) is
+retained. The V1 path has no equivalent: jobs flow through the bounded
+job channel directly.
+
+**Residual risk:** A pool could evict real future jobs by flooding —
+worst case is those jobs never emit, identical to the pool simply not
+sending them; memory stays bounded.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.
