@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 297 — ワーカー別 extranonce2 分割)
+
+- **マルチデバイスで探索空間が完全重複していた問題を解消**
+  —— 全ワーカーに同一 Work（en2=0 で畳んだ merkle root）を配布して
+  いたため、SHA256d 対応デバイスが複数ある環境では全ワーカーが
+  同一ヘッダ空間を掘り、発見したシェアが全員分重複していた。
+  V1 の extranonce2 をワーカー毎に分割（末尾バイトに big-endian
+  インデックス）し、`applyJob` がワーカー専用 merkle root を
+  fold して配布。submit はワーカー割当 en2 を wire へ返却
+  （従来は常時ゼロ）。ジョブ dedup キーは coinbase 指紋に切替。
+
 ### Fixed (session 296 — V1 ハッシュ wire バイトオーダー)
 
 - **`prevhash`/`merkle_branch` を per-u32 スワップで内部 LE 順に変換**

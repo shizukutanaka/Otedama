@@ -5,6 +5,7 @@ package stratumv1
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -17,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -1823,11 +1823,11 @@ func TestSendJob_PurgesAllPendingJobsWhenCleanJobs(t *testing.T) {
 	}
 }
 
-// TestSendJob_ReconstructsMerkleRoot verifies the V1 coinbase fold:
-// coinbase = coinb1|en1|en2(zeros)|coinb2, then Hash256 chained through
-// each merkle_branch element. A zero root would make every share fail
-// the pool's own reconstruction.
-func TestSendJob_ReconstructsMerkleRoot(t *testing.T) {
+// TestSendJob_StampsExtranonce verifies sendJob attaches the session
+// extranonce material to the job rather than folding the coinbase —
+// the engine folds per worker so each device mines a disjoint slice
+// of the en2 space.
+func TestSendJob_StampsExtranonce(t *testing.T) {
 	s := makeTestSession(4)
 	en1 := "c0ffee"
 	s.extranonce1.Store(&en1)
@@ -1842,31 +1842,24 @@ func TestSendJob_ReconstructsMerkleRoot(t *testing.T) {
 	})
 	j := <-s.jobsCh
 
-	coinbase := []byte{0xaa, 0xc0, 0xff, 0xee, 0, 0, 0, 0, 0xbb}
-	want := btccrypto.Hash256(coinbase)
-	var pair [64]byte
-	for _, br := range [][32]byte{br1, br2} {
-		copy(pair[:32], want[:])
-		copy(pair[32:], br[:])
-		want = btccrypto.Hash256(pair[:])
+	wantEN1 := []byte{0xc0, 0xff, 0xee}
+	if !bytes.Equal(j.Extranonce1, wantEN1) {
+		t.Fatalf("Extranonce1 = %x, want %x", j.Extranonce1, wantEN1)
 	}
-	if j.MerkleRoot != want {
-		t.Fatalf("MerkleRoot = %x, want %x", j.MerkleRoot, want)
-	}
-	if j.MerkleRoot == ([32]byte{}) {
-		t.Fatal("MerkleRoot left zero — shares would fail pool reconstruction")
+	if j.Extranonce2Size != 4 {
+		t.Fatalf("Extranonce2Size = %d, want 4", j.Extranonce2Size)
 	}
 }
 
-// TestSendJob_MerkleRootSkippedWithoutExtranonce1 pins the safe fallback:
-// before subscribe completes there is no en1, so reconstruction is
-// skipped rather than hashing a bogus coinbase.
-func TestSendJob_MerkleRootSkippedWithoutExtranonce1(t *testing.T) {
+// TestSendJob_NoExtranonceBeforeSubscribe pins the safe fallback:
+// before subscribe completes there is no en1, so no extranonce
+// material is stamped and no bogus coinbase can be folded.
+func TestSendJob_NoExtranonceBeforeSubscribe(t *testing.T) {
 	s := makeTestSession(4)
 	s.sendJob(poolproto.Job{JobID: "j1", Coinb1: []byte{0xaa}})
 	j := <-s.jobsCh
-	if j.MerkleRoot != ([32]byte{}) {
-		t.Fatalf("MerkleRoot = %x, want zero (no en1 yet)", j.MerkleRoot)
+	if j.Extranonce1 != nil {
+		t.Fatalf("Extranonce1 = %x, want nil (no en1 yet)", j.Extranonce1)
 	}
 }
 

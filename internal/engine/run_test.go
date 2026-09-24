@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -2585,5 +2586,118 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestApplyJob_PartitionsExtranonce2 covers the V1 multi-device path:
+// the job's coinbase halves and session extranonces fold per worker,
+// so each device grinds a disjoint extranonce2 slice — without this,
+// every worker hashes the identical coinbase space and shares collide
+// upstream as duplicates.
+func TestApplyJob_PartitionsExtranonce2(t *testing.T) {
+	w1 := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	w2 := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+
+	var br [32]byte
+	br[0] = 0x77
+	job := poolproto.Job{
+		JobID:           "j1",
+		NBits:           0x1d00ffff,
+		Coinb1:          []byte{0xaa},
+		Coinb2:          []byte{0xbb},
+		MerkleBranch:    [][32]byte{br},
+		Extranonce1:     []byte{0xc0, 0xff, 0xee},
+		Extranonce2Size: 4,
+	}
+	if err := applyJob([]*miner.Worker{w1, w2}, job, miner.Hash{}); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+
+	en2a := partitionExtranonce2(0, 4)
+	en2b := partitionExtranonce2(1, 4)
+	if len(en2a) != 4 || len(en2b) != 4 {
+		t.Fatalf("en2 lengths = %d/%d, want 4/4", len(en2a), len(en2b))
+	}
+	if bytes.Equal(en2a, en2b) {
+		t.Fatal("workers share one en2 — duplicate coinbase space")
+	}
+	if en2b[3] != 1 {
+		t.Fatalf("worker 1 en2 = %x, want trailing index byte 01", en2b)
+	}
+	// Worker count exceeding the en2 space can't happen (device count
+	// is bounded), but the encoding must never truncate the size.
+	if got := partitionExtranonce2(300, 4); len(got) != 4 || got[0] != 0 || got[3] != 0x2c {
+		t.Fatalf("en2 for idx 300 = %x, want 0000012c", got)
+	}
+
+	// Fold math: Hash256(coinb1|en1|en2|coinb2) through each branch
+	// element — verified against an independent recomputation.
+	coinbase := []byte{0xaa, 0xc0, 0xff, 0xee}
+	coinbase = append(coinbase, en2a...)
+	coinbase = append(coinbase, 0xbb)
+	root := btccrypto.Hash256(coinbase)
+	var pair [64]byte
+	copy(pair[:32], root[:])
+	copy(pair[32:], br[:])
+	root = btccrypto.Hash256(pair[:])
+	if got := foldMerkle(&job, en2a); got != root {
+		t.Fatalf("foldMerkle = %x, want %x", got, root)
+	}
+	if foldMerkle(&job, en2a) == foldMerkle(&job, en2b) {
+		t.Fatal("same merkle root for different en2 — workers not disjoint")
+	}
+}
+
+// TestApplyJob_ShareEchoesWorkerExtranonce proves the full path end to
+// end: a share found by worker 0 carries that worker's en2 slice, so
+// Submit can send the exact value the pool needs to rebuild the header.
+func TestApplyJob_ShareEchoesWorkerExtranonce(t *testing.T) {
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	job := poolproto.Job{
+		JobID:           "j1",
+		NBits:           0x1d00ffff,
+		Coinb1:          []byte{0xaa},
+		Coinb2:          []byte{0xbb},
+		Extranonce1:     []byte{0xde, 0xad},
+		Extranonce2Size: 4,
+	}
+	var easiest miner.Hash
+	for i := range easiest {
+		easiest[i] = 0xFF
+	}
+	if err := applyJob([]*miner.Worker{w}, job, easiest); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	select {
+	case s := <-shares:
+		if want := partitionExtranonce2(0, 4); !bytes.Equal(s.ExtraNonce, want) {
+			t.Fatalf("share ExtraNonce = %x, want %x", s.ExtraNonce, want)
+		}
+	case <-ctx.Done():
+		t.Fatal("no share within 3s at the easiest target")
+	}
+}
+
+// TestJobCoinbaseID_Distinguishes covers the dedup fingerprint: V1 jobs
+// are told apart by their coinbase material (the folded root differs
+// only through it), V2 jobs by their pool-sent MerkleRoot.
+func TestJobCoinbaseID_Distinguishes(t *testing.T) {
+	v2 := poolproto.Job{JobID: "v2", MerkleRoot: [32]byte{0x42}}
+	if id := jobCoinbaseID(&v2); id != v2.MerkleRoot {
+		t.Fatalf("V2 fingerprint = %x, want the pool-sent root %x", id, v2.MerkleRoot)
+	}
+	v1a := poolproto.Job{Coinb1: []byte{0xaa}, Coinb2: []byte{0xbb}}
+	v1b := poolproto.Job{Coinb1: []byte{0xaa}, Coinb2: []byte{0xcc}}
+	if jobCoinbaseID(&v1a) == jobCoinbaseID(&v1b) {
+		t.Fatal("distinct coinbases produced the same fingerprint")
+	}
+	id1 := jobCoinbaseID(&v1a)
+	if jobCoinbaseID(&v1a) != id1 {
+		t.Fatal("fingerprint not deterministic")
 	}
 }

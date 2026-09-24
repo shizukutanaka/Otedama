@@ -29,6 +29,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +40,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
@@ -711,7 +714,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 	var lastAppliedTarget miner.Hash
 	var lastAppliedVersion uint32
 	var lastAppliedVersionMask uint32
-	var lastAppliedMerkle [32]byte
+	var lastAppliedCoinbase [32]byte
 	var lastAppliedPrevHash [32]byte
 	var lastAppliedNTime uint32
 	var lastAppliedNBits uint32
@@ -869,7 +872,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				opts.log("debug", fmt.Sprintf("engine: job %s ignored (curtailed)", job.JobID))
 			} else if job.JobID == lastAppliedJobID && shareTarget == lastAppliedTarget &&
 				job.Version == lastAppliedVersion && job.VersionMask == lastAppliedVersionMask &&
-				job.MerkleRoot == lastAppliedMerkle && job.PrevHash == lastAppliedPrevHash &&
+				jobCoinbaseID(&job) == lastAppliedCoinbase && job.PrevHash == lastAppliedPrevHash &&
 				job.NTime == lastAppliedNTime && job.NBits == lastAppliedNBits {
 				// Duplicate job: the pool resent work already on the
 				// devices (ESP-Miner #1731). The key spans every field that
@@ -893,7 +896,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				lastAppliedTarget = shareTarget
 				lastAppliedVersion = job.Version
 				lastAppliedVersionMask = job.VersionMask
-				lastAppliedMerkle = job.MerkleRoot
+				lastAppliedCoinbase = jobCoinbaseID(&job)
 				lastAppliedPrevHash = job.PrevHash
 				lastAppliedNTime = job.NTime
 				lastAppliedNBits = job.NBits
@@ -943,10 +946,11 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID:   capturedShare.JobID,
-					Nonce:   capturedShare.Nonce,
-					NTime:   capturedShare.NTime,
-					Version: capturedShare.Version,
+					JobID:      capturedShare.JobID,
+					Nonce:      capturedShare.Nonce,
+					NTime:      capturedShare.NTime,
+					Version:    capturedShare.Version,
+					ExtraNonce: capturedShare.ExtraNonce,
 				})
 				// Milliseconds at microsecond precision: a sub-ms loopback
 				// RTT still produces a nonzero latency sample, keeping the
@@ -1049,24 +1053,100 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, shareTarget miner.Hash
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
-	w := &miner.Work{
-		JobID:     job.JobID,
-		ChannelID: job.ChannelID,
-		Header: miner.Header{
-			Version:    job.Version,
-			PrevHash:   job.PrevHash,
-			MerkleRoot: job.MerkleRoot,
-			Time:       job.NTime,
-			Bits:       job.NBits,
-		},
-		NBits:       job.NBits,
-		Target:      target,
-		VersionMask: job.VersionMask,
-	}
+	// Per-worker fold: a V1 job carries the coinbase halves and the
+	// session extranonces, so each worker gets a distinct extranonce2
+	// slice — disjoint coinbase space per device — and the merkle root
+	// computed from its own en2 (a V1 pool validates each share by
+	// rebuilding the exact header the miner hashed). Without en1 the
+	// fold is impossible; the pool-sent root is used as-is (it is zero
+	// for a V1 pool that never subscribed us — unrecoverable anyway).
+	hasCoinb := job.Coinb1 != nil || job.Coinb2 != nil || job.MerkleBranch != nil
+	canFold := hasCoinb && job.Extranonce1 != nil
+	var wi uint32
 	for _, wr := range workers {
+		w := &miner.Work{
+			JobID:     job.JobID,
+			ChannelID: job.ChannelID,
+			Header: miner.Header{
+				Version:    job.Version,
+				PrevHash:   job.PrevHash,
+				MerkleRoot: job.MerkleRoot,
+				Time:       job.NTime,
+				Bits:       job.NBits,
+			},
+			NBits:       job.NBits,
+			Target:      target,
+			VersionMask: job.VersionMask,
+		}
+		if canFold {
+			w.ExtraNonce = partitionExtranonce2(wi, job.Extranonce2Size)
+			w.Header.MerkleRoot = foldMerkle(&job, w.ExtraNonce)
+			wi++
+		}
 		wr.SetWork(w)
 	}
 	return nil
+}
+
+// partitionExtranonce2 carves the negotiated extranonce2 space across
+// workers: worker i's slice is its index big-endian in the trailing
+// bytes, zeros elsewhere — the en2 bytes read as a counter whose low
+// words hold the worker index. V1 pools expect any en2 of the
+// negotiated size; disjoint slices are the mechanism by which one
+// connection serves many miners without overlap. Returns nil when the
+// pool negotiated a zero-size en2.
+func partitionExtranonce2(workerIdx uint32, size int) []byte {
+	if size <= 0 {
+		return nil
+	}
+	en2 := make([]byte, size)
+	var idxb [4]byte
+	binary.BigEndian.PutUint32(idxb[:], workerIdx)
+	if size >= 4 {
+		copy(en2[size-4:], idxb[:])
+	} else {
+		copy(en2, idxb[4-size:])
+	}
+	return en2
+}
+
+// foldMerkle computes the header merkle root for one worker's
+// extranonce2 slice: Hash256(coinb1|en1|en2|coinb2) folded through the
+// notify-supplied branch.
+func foldMerkle(job *poolproto.Job, en2 []byte) [32]byte {
+	coinbase := make([]byte, 0, len(job.Coinb1)+len(job.Extranonce1)+len(en2)+len(job.Coinb2))
+	coinbase = append(coinbase, job.Coinb1...)
+	coinbase = append(coinbase, job.Extranonce1...)
+	coinbase = append(coinbase, en2...)
+	coinbase = append(coinbase, job.Coinb2...)
+	root := btccrypto.Hash256(coinbase)
+	var pair [64]byte
+	for _, br := range job.MerkleBranch {
+		copy(pair[:32], root[:])
+		copy(pair[32:], br[:])
+		root = btccrypto.Hash256(pair[:])
+	}
+	return root
+}
+
+// jobCoinbaseID fingerprints a job's coinbase material for the dedup
+// key. Identical notify params imply an identical merkle root
+// (extranonces are session-scoped), so hashing the parts distinguishes
+// jobs just as the folded root did. V2 jobs have no coinb parts —
+// their pool-sent MerkleRoot is the fingerprint itself.
+func jobCoinbaseID(j *poolproto.Job) [32]byte {
+	if j.Coinb1 == nil && j.Coinb2 == nil && j.MerkleBranch == nil {
+		return j.MerkleRoot
+	}
+	h := sha256.New()
+	h.Write(j.Coinb1)
+	h.Write(j.Coinb2)
+	for _, b := range j.MerkleBranch {
+		h.Write(b[:])
+	}
+	var fp [32]byte
+	h.Sum(fp[:0])
+	return fp
 }
 
 // sessionShareTarget returns the share target an in-flight share is

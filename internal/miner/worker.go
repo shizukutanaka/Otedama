@@ -34,6 +34,15 @@ type Work struct {
 	// per-job search space by roughly 2^popcount(mask). The masked bits
 	// are reported on submission (Stratum V1 submit param 6).
 	VersionMask uint32
+
+	// ExtraNonce is this worker's assigned extranonce2 slice (V1): the
+	// engine partitions the negotiated en2 space across workers so no two
+	// devices grind the same coinbase — without it, every worker would
+	// hash the identical header space and each share would be found by
+	// all of them (duplicates upstream). Echoed back on each Share for
+	// submission. Empty on V2 (standard channels fix the pool-side
+	// extranonce_prefix) or when the pool negotiated zero en2 bytes.
+	ExtraNonce []byte
 }
 
 // Share is a found solution: a Header whose hash meets the target.
@@ -60,6 +69,11 @@ type Share struct {
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
+	// ExtraNonce echoes Work.ExtraNonce of the job that produced this
+	// share — the worker's assigned extranonce2 slice, which the submit
+	// layer must send so the pool can reconstruct the exact coinbase
+	// header the worker hashed.
+	ExtraNonce []byte
 }
 
 // WorkerConfig controls the behaviour of a Worker.
@@ -318,14 +332,15 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 
 			if hash.LessOrEqual(localWork.Target) {
 				share := Share{
-					ChannelID: localWork.ChannelID,
-					JobID:     localWork.JobID,
-					Nonce:     nonce,
-					NTime:     h.Time,
-					Version:   h.Version,
-					Hash:      hash,
-					Target:    localWork.Target,
-					DeviceID:  w.cfg.DeviceID,
+					ChannelID:  localWork.ChannelID,
+					JobID:      localWork.JobID,
+					Nonce:      nonce,
+					NTime:      h.Time,
+					Version:    h.Version,
+					Hash:       hash,
+					Target:     localWork.Target,
+					DeviceID:   w.cfg.DeviceID,
+					ExtraNonce: localWork.ExtraNonce,
 				}
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share

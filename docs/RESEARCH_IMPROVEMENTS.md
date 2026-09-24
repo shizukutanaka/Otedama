@@ -1251,6 +1251,38 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 297 increment (per-worker extranonce2 partition)
+
+- **実バグ（探索空間の重複）: 全ワーカーが同一 coinbase 空間を採掘** ——
+  `applyJob` は同一 `miner.Work`（en2=0 で畳んだ merkle root）を全
+  ワーカーに配布していたため、SHA256d 対応デバイスが複数ある環境
+  （CPU+GPU 等）では全ワーカーが**完全に同一のヘッダ空間**を掘り
+  続けていた。ワーカー内スレッドは nonce 分割されるが、ワーカー
+  間の分割機構が存在せず、ワーカーAが見つけたシェアはワーカーBも
+  発見 → 上流で duplicate reject、実質ハッシュレートが倍増しない
+  構造的無駄。Stratum V1 の extranonce2 は本来このための機構で
+  ある（slushpool 元仕様: 「miner はこのフィールドの全バイトを
+  自由に変更できる」）。
+- **実装**: `poolproto.Job` に `Extranonce1`/`Extranonce2Size` を追加し
+  セッションがスタンプ（`sendJob` はセッション単位の en1 解決のみ。
+  fold をセッションから engine へ移動: `applyJob` がワーカー毎に
+  `partitionExtranonce2(i, en2Size)` で末尾バイトに big-endian
+  インデックスを刻んだ en2 を割当て、`foldMerkle` で各ワーカー
+  専用の merkle root を計算。`miner.Work.ExtraNonce` →
+  `Share.ExtraNonce` → `ShareSubmission.ExtraNonce` で submit が
+  ワーカー割当値を wire へ（従来は常時ゼロ埋め）。ジョブ dedup
+  キーは MerkleRoot から `jobCoinbaseID`（coinb1|coinb2|branch の
+  sha256 指紋; V2 は pool 指定 MerkleRoot 自身）に切替。
+- **新規テスト:** `TestApplyJob_PartitionsExtranonce2`（en2 分割 +
+  fold 数学を独立再計算で検証）、`TestApplyJob_ShareEchoesWorker
+  Extranonce`（share が割当 en2 を保持）、`TestJobCoinbaseID_
+  Distinguishes`（dedup 指紋）。stratumv1 側2テストを新契約に更新。
+- **記録（V2 側）:** SV2 標準チャネルは SubmitSharesStandard に
+  extranonce フィールドが無く pool 側 `extranonce_prefix` で固定 —
+  V2 での同等分割には extended channels が必要で現スコープ外
+  （デバイス当たり1チャネル方針転換が前提）。en2 サイズ0 の
+  プールでは分割不能（en2 空）— 記録のみ。
+
 ## September 2026 research pass — session 296 increment (V1 hash wire-order fix)
 
 - **実バグ（構造的シェア不正・s288 と同型）: V1 `prevhash`/`merkle_branch` のバイトオーダー** ——

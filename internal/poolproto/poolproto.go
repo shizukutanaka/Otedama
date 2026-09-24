@@ -203,12 +203,22 @@ type Job struct {
 	// A V1 pool sends the coinbase in two halves around the miner-supplied
 	// extranonces, so the client — not the pool — must fold
 	// Hash256(coinb1|en1|en2|coinb2) through the branch to obtain the
-	// header's merkle root; the emitting session computes it at send
-	// time (extranonces are session-scoped). Empty on V2/JD paths, where
-	// MerkleRoot arrives from the pool directly.
+	// header's merkle root; the engine computes it per worker at apply
+	// time (extranonce2 partitions across devices). Empty on V2/JD paths,
+	// where MerkleRoot arrives from the pool directly.
 	Coinb1       []byte
 	Coinb2       []byte
 	MerkleBranch [][32]byte
+
+	// Extranonce1/Extranonce2Size carry the V1 session-scoped extranonce
+	// material from the mining.subscribe handshake. The engine folds
+	// coinb1|en1|en2|coinb2 through MerkleBranch per worker — partitioning
+	// the en2 space so no two devices grind the same coinbase — which is
+	// why the session stamps the raw material rather than a single folded
+	// MerkleRoot. Zero values on V2/JD paths, where the pool fixes the
+	// coinbase extranonce itself.
+	Extranonce1     []byte
+	Extranonce2Size int
 
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
