@@ -1,7 +1,10 @@
 # .goreleaser.yaml — Otedama release configuration.
 #
 # Run locally with: goreleaser release --snapshot --clean
-# Production run is triggered by the release.yml GitHub Action on tag push.
+# Status: dormant — no workflow invokes this config yet. release.yml
+# currently builds/uploads assets via hand-rolled steps instead
+# (see docs/KNOWN_LIMITATIONS.md §13); wiring goreleaser into CI is a
+# maintainer decision since .github/workflows/ cannot be edited here.
 #
 # References:
 #   https://goreleaser.com/customization/

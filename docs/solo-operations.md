@@ -617,15 +617,16 @@ Otedamaがその罠に入らないために：
 ```
 今週（1-2時間で完了）：
 □ GitHub Private Vulnerability Reportingの有効化
-□ Dependabotの有効化（.github/dependabot.yml）
+☑ Dependabotの有効化（.github/dependabot.yml）— 設定済み
 □ mainブランチのブランチ保護ルール設定
-□ CODEOWNERSファイル作成
+☑ CODEOWNERSファイル作成 — 作成済み
 
 今月（5-10時間で完了）：
-□ goreleaser の設定とリリースワークフロー
+□ goreleaser の設定とリリースワークフロー — .goreleaser.yaml は存在するが
+  未配線（release.yml は手組みステップで稼働中・§13 参照）
 □ cosign によるバイナリ署名
 □ DCO ワークフローの設定
-□ SECURITY.md の完成（Private Reporting のリンク付き）
+☑ SECURITY.md の完成（Private Reporting のリンク付き）— 作成済み
 □ GitHub Discussions の有効化とカテゴリ設定
 □ Lightning tipjarアドレスをREADMEに追加
 
