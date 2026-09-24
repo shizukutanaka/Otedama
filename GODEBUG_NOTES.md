@@ -31,7 +31,7 @@ References:
 
 ```
 go 1.25.0
-toolchain go1.25.7
+toolchain go1.25.13
 
 godebug (
     panicnil=0
@@ -42,7 +42,7 @@ godebug (
 
 **Why split `go` from `toolchain`:** the `go` directive declares
 the **language semantics** Otedama's source assumes, while
-`toolchain go1.25.7` is the **build toolchain** used in CI and
+`toolchain go1.25.13` is the **build toolchain** used in CI and
 recommended for users. This split lets users with older toolchains
 (Linux distros, NixOS pinning) still build Otedama, while CI gets
 the latest crypto and runtime fixes.
@@ -71,7 +71,7 @@ As of 2026-04-30:
   downstream reviewers and survives future default flips. This knob
   was named `tlskyber` on the Go 1.23 draft (X25519Kyber768) and was
   renamed `tlsmlkem` in Go 1.24 when the construction was
-  standardized; the `toolchain go1.25.7` line therefore requires the
+  standardized; the `toolchain go1.25.13` line therefore requires the
   new name (the old name is an "unknown godebug" build error on
   1.24+).
 
@@ -166,7 +166,7 @@ NumCPU goroutines for the host's 64 cores. We rely on this for
 correct CPU mining throttling under cgroup constraints.
 
 - Added: Go 1.25 (Aug 2025).
-- **In effect since session 256:** `toolchain go1.25.7` is pinned in
+- **In effect since session 256:** `toolchain go1.25.13` is pinned in
   `go.mod`, so the container-aware default is compiled into current
   builds. (Verified before the bump in session 251 that it was *not*
   compiled in under `toolchain go1.24.0`; the deferral reason then —
