@@ -12,6 +12,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed (session 307 — V1 dispatch 分割 + 未知リクエスト応答)
 
+### Security (session 260 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: Noise フレーム長の算術ファズ + June-2026 pass 全項目の棚卸し)
+
+**SRI の noise_sv2 算術オーバーフロー事例（24/7 ファズで発見、Lucas
+Balieiro）に対応する自前の長さ算術面をファズで網羅**
+
+- `internal/stratum/noise_fuzz_test.go` を新設 — 暗号フレームの u16 長さ
+  プレフィックスを狙う2ターゲット: `FuzzEncryptedConn_Read`（任意ストリーム
+  + 実行時生成の正当フレーム; panic なし・readbuf が1フレーム超を保持
+  しないことを検証）、`FuzzEncryptedConn_Read_LengthPrefixArithmetic`
+  （攻撃者の u16 宣言長 × 任意ボディ; 境界シード 0/1/15/16/17/65519/65535）。
+- `frame_fuzz_test.go` にオーバーフロー境界シードを追加（U24 最大値
+  0xFFFFFF / 0xFFFFFE、MinimumChannelPayload ±1、extension ビット）。
+- `internal/poolproto/stratumv1/parse_fuzz_test.go` を新設 —
+  `FuzzSession_ReadLine`（改行なしストリームが maxLineBytes=64KiB 上限に
+  到達すること、巨大行で無制限にメモリが伸びないこと）と
+  `FuzzParseNotification`（notify/difficulty/set_extranonce/show_message/
+  reconnect の全5パーサに任意バイト列）。4ターゲット合計 ~500万 exec で
+  panic・異常リテンションなし。
+- **RESEARCH_IMPROVEMENTS June-2026 セクションを全項目解消.**
+  #1（本ファズ群）、#2（ADR-009 の「70%」を coindesk 2026-05-11 会計の
+  ~75% に更新）、#3（AEP-64 JWT が既に ADR-010 A4 に記録済みと検証）、
+  #4（GODEBUG_NOTES.md に `fips140` エントリ追加 — opt-in ランタイム
+  プロファイルとして文書化し go.mod にはピンしない; THREAT_MODEL に
+  PQ 鍵交換 X25519MLKEM768 と FIPS プロファイルを記載）。
+
+### Docs (session 259 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH_IMPROVEMENTS Cat 2/4 の残項目を検証・棚卸し)
+*(session 321: 別系チェーンの未マージ PR (#119) に留まっていた本ファズ群を
+現チェーンへ cherry-pick 移植。対象 API（`internal/stratum` のフレーム長算術・
+`stratumv1` の JSON-RPC リーダ）は post-#283 リファクタ後も同一形のため無改変で
+適用。)*
 - **id 付きの未知メソッドへ "Method not found" エラー応答** — pool→client
   で id を伴う未実装メソッド（例: `mining.configure` 等の調査系プローブ）
   を黙殺すると、session-306 で get_version に施したのと同じ「未解決 id

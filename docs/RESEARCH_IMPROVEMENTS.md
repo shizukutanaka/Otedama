@@ -874,23 +874,32 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
-   is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
-   early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
-   fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
-   the `sv1_api` translator parser is the next fuzz target. Otedama has a
-   directly analogous surface (`internal/stratum/noise.go` length math,
-   `frame.go` `MsgLength`/`DefaultMaxFrameSize`, the V1 JSON-RPC reader). Add
-   overflow-focused fuzz seeds to the existing `FuzzDecodeHeader` /
-   `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
-   length prefix; assert no `int`/`uint32` overflow or huge allocation.
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson) —
+   RESOLVED (session 260).** `internal/stratum/noise_fuzz_test.go` adds two
+   targets over the encrypted-frame length prefix:
+   `FuzzEncryptedConn_Read` (arbitrary streams incl. runtime-seeded valid
+   frames; asserts no panic and `readbuf` never exceeds one frame) and
+   `FuzzEncryptedConn_Read_LengthPrefixArithmetic` (attacker-chosen u16
+   length vs arbitrary body; boundary seeds 0/1/15/16/17/65519/65535).
+   `frame_fuzz_test.go` seeds gained U24 boundary values (0xFFFFFE,
+   0xFFFFFF, MinimumChannelPayload ±1, extension-bit patterns).
+   `internal/poolproto/stratumv1/parse_fuzz_test.go` adds
+   `FuzzSession_ReadLine` (maxLineBytes ceiling on newline-free streams)
+   and `FuzzParseNotification` (all five JSON-RPC notification parsers).
+   ~5M execs across the four targets: no panics, no unbounded retention.
+   Original finding: SRI v1.6.0 / noise_sv2 arithmetic overflow found via
+   24/7 fuzzing (Lucas Balieiro); Otedama's analogous surface is
+   `internal/stratum` length math + the V1 JSON-RPC reader.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
-2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
-   committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
-   SpiderPool, MARA, Block, DMND) — ~75% of network hashrate — agreed to adopt
-   Stratum V2 / open block construction. Updates ADR-009's "~70%" figure and
-   strengthens the case for the Job Declaration Client (miner-built templates)
-   as the headline v3.x feature. (coindesk.com 2026-05-11)
+2. ✅ **JDC/template decentralisation just got more urgent: ~75% of hashrate
+   committed to SV2 (May 2026) — RESOLVED (session 260).** ADR-009's
+   Context now reads "roughly 75% of network hashrate (per the
+   coindesk.com 2026-05-11 accounting of the seven signatories)",
+   updating its original "~70%" figure. Original finding: seven pools
+   (~75% of network hashrate) agreed to adopt SV2 / open block
+   construction, strengthening the JDC case as the headline v3.x
+   feature. (coindesk.com 2026-05-11)
+
 3. ✅ **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
    Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT Authentication for
    Providers** — token-based auth on the provider APIs. The real

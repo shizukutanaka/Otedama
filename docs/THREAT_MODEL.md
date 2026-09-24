@@ -82,6 +82,15 @@ CoinGecko) are queried in parallel and the median is used. An attacker
 must compromise at least two sources simultaneously for their value to
 influence the outcome.
 
+Transport hardening on these connections: outbound TLS negotiates the
+hybrid post-quantum key exchange **X25519MLKEM768** (Go's `tlsmlkem=1`
+godebug, pinned in `go.mod`), so recorded price-feed traffic resists
+future harvest-now-decrypt-later attacks. Operators in regulated
+environments can additionally run with `GODEBUG=fips140=on`, which
+routes crypto through Go 1.24's FIPS 140-3-validated module — the
+X25519MLKEM768 exchange is part of that validated set. Both knobs are
+documented in `GODEBUG_NOTES.md`.
+
 **Residual risk:** If all three sources return nonsense, Otedama falls
 back to a hard-coded fallback ($95,000). This is conservative (does not
 favor any provider) but stale values may cause suboptimal arbitration.
