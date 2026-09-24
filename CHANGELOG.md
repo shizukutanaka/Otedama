@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 354 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 再接続バックオフへのフルジッター適用)
+
+- **再接続スリープを `[0, backoff]` 一様分布へ** — 従来の決定論的指数バックオフ
+  （1s→64s 倍々）では、同一プール障害で切断された全ノードがロックステップで
+  再試行し、復旧直後のプールへ同期バーストを送る thundering-herd 状態になり得た
+  （Marc Brooker "Exponential Backoff And Jitter" の教訓）。実際の sleep を
+  `jitteredBackoff` で `[0, backoff]` から一様抽出し、ログには実 sleep 値を出力。
+
 ### Fixed (session 353 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: TLS ハンドシェイクの deadline 化)
 
 - **`stratum.DialTLS` / `stratumv1.dialTLS` のハンドシェイクを時間制限** — 従来の

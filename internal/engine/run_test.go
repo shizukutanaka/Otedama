@@ -2910,3 +2910,20 @@ func TestSanitizeLogText(t *testing.T) {
 		t.Errorf("UTF-8 mangled: %q", got)
 	}
 }
+
+// TestJitteredBackoff covers the full-jitter draw: every sample must land
+// inside [0, backoff] and the distribution must actually vary (a fixed
+// return would reintroduce lockstep retries).
+func TestJitteredBackoff(t *testing.T) {
+	seen := make(map[time.Duration]bool)
+	for i := 0; i < 200; i++ {
+		got := jitteredBackoff(64 * time.Second)
+		if got < 0 || got > 64*time.Second {
+			t.Fatalf("jitteredBackoff returned out-of-range %v", got)
+		}
+		seen[got] = true
+	}
+	if len(seen) < 50 {
+		t.Fatalf("jitter is degenerate: only %d distinct values over 200 draws", len(seen))
+	}
+}

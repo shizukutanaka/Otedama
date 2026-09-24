@@ -750,6 +750,11 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		// transient pool/network failures are handled by pool failover and
 		// backoff above — so an outage can never silently redirect earnings
 		// to a different address (no session establishes during an outage).
+		// Full jitter (Brooker, "Exponential Backoff And Jitter"): a
+		// deterministic backoff makes every node whose session died in the
+		// same pool outage retry in lockstep — sleep is drawn uniformly
+		// from [0, backoff] so retries spread across the whole window.
+		sleep := jitteredBackoff(backoff)
 		switch {
 		case !addrConnected && len(addrs) > 1:
 			prev := addrIdx
@@ -768,18 +773,18 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			addrConnected = false
 			r.log("warn", fmt.Sprintf(
 				"engine: none of the %d configured payout addresses could connect; "+
-					"backing off %v and retrying from the primary", len(addrs), backoff))
+					"backing off %v and retrying from the primary", len(addrs), sleep))
 		case len(pools) > 1:
-			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
+			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), sleep))
 		default:
-			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
+			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, sleep))
 		}
 		// time.NewTimer + explicit Stop rather than time.After: when ctx is
-		// cancelled (shutdown) the timer is released immediately instead of
+		// canceled (shutdown) the timer is released immediately instead of
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
-		timer := time.NewTimer(backoff)
+		timer := time.NewTimer(sleep)
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
@@ -1124,6 +1129,23 @@ func sessionTraceID() string {
 		return "0000000000000000"
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// jitteredBackoff draws a sleep uniformly from [0, backoff] — full jitter
+// per Brooker's "Exponential Backoff And Jitter": plain exponential
+// backoff makes every node that lost its session in the same pool outage
+// retry in lockstep, hammering the recovering pool in synchronized
+// bursts; a uniform draw over the whole window decorrelates retries.
+func jitteredBackoff(backoff time.Duration) time.Duration {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return backoff / 2
+	}
+	v := uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
+		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
+	// 53-bit fraction — the largest integer range float64 covers exactly.
+	frac := float64(v>>11) / (1 << 53)
+	return time.Duration(frac * float64(backoff))
 }
 
 // traceLog wraps a session logger so every line emitted for one pool
