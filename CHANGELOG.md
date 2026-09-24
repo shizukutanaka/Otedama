@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 261 — カウンタ再整合: shares_pending ドレイン)
+
+**`otedama_shares_pending` がセッション切断後に永久に残る不具合を修正**
+(RESEARCH_IMPROVEMENTS Cat 1 #10 の完結). `sharesSubmitted` は送信時に
+計上されるが、`Submit` が応答なく失敗したシェア（切断で飛行中喪失・
+ctx キャンセル）は pending 計算から一度も減じられていなかった
+—— プールはそのシェアの verdict を二度と返せないため、切断のたびに
+ゲージが >0 のまま張り付き、本来の警告信号を隠していた。
+新カウンタ `otedama_shares_submit_failures_total` を pending 式
+（`submitted − judged − transition − submit-failed`, ≥0 クランプ）から
+減算する。失敗シェアは `shares_unaccounted` 側には残る
+（発見はされたがプール判定は一度もないため:
+`unaccounted = pending + dropped + submit-failed`）。
+`docs/SPECIFICATION.md` のメトリクス表とヘルプ文言を整合。
+
+**検証/是正**: Cat 1 #10・Cat 2 #6・Cat 2 #8 の古いステータスマーカー
+（🟡/🔵）を実装済みの ✅ に訂正。ESP-Miner v2.15.1 #1913（slow client
+由来の再接続ストーム）は session 257 で実装済みと確認。
+v2.15.2rc0 の残差分（BM1372/BM1373 ASIC ドライバ・WPA/表示/UI 修正）は
+ハードウェア固有で非該当。SRI v1.11.1 の難易度丸め修正は引き続き
+非該当（生 U256 ターゲット運搬のため丸める経路が存在しない）。
+
 ### Fixed (session 260 — upstream parity: TCP_NODELAY)
 
 **プールソケット全経路で Nagle を無効化**（ESP-Miner #1722 parity；

@@ -858,6 +858,13 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 				elapsed := float64(time.Since(sendTime).Microseconds()) / 1e3
 				if err != nil {
 					opts.log("warn", fmt.Sprintf("engine: submit: %v", err))
+					if opts.m != nil {
+						// The pool can never judge this share — subtract it
+						// from pending via the failures counter or a dead
+						// session pins shares_pending >0 for the rest of the
+						// run. It stays inside shares_unaccounted.
+						opts.m.sharesSubmitFailures.Inc()
+					}
 					// Still record the latency on error: a p99 spike caused by
 					// a pool disconnect is a signal worth surfacing, not hiding.
 					if elapsed > 0 {

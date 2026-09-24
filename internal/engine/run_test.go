@@ -2441,10 +2441,13 @@ func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 		})
 	}()
 
-	// Poll for the deterministic signal that the stats-ticker branch has
-	// actually executed with a recorded latency sample, rather than
-	// waiting a fixed duration and hoping. 10s ceiling is itself generous;
-	// in the unstarved case this resolves within milliseconds.
+	// Poll for the deterministic signals this test asserts on: a recorded
+	// submit-latency sample (stats-ticker branch executed) AND at least one
+	// pool-judged reject (SubmitSharesError handler ran). Canceling as soon
+	// as the first accept's latency lands races share #2's verdict against
+	// ctx.Done — under -race that race is lost often enough to flake, so
+	// wait for both conditions. 10s ceiling is itself generous; in the
+	// unstarved case this resolves within milliseconds.
 	deadline := time.After(10 * time.Second)
 	poll := time.NewTicker(5 * time.Millisecond)
 	defer poll.Stop()
@@ -2453,7 +2456,7 @@ waitLoop:
 	for {
 		select {
 		case <-poll.C:
-			if m.submitLatencyP95.Value() > 0 {
+			if m.submitLatencyP95.Value() > 0 && m.sharesRejected.Value() > 0 {
 				latencyObserved = true
 				break waitLoop
 			}

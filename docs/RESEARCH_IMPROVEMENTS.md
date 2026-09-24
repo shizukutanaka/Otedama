@@ -43,9 +43,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is
    SHA-256d/Bitcoin-only by ADR-002.
-10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
+10. ✅ **"Trust the pool's numbers" reconciliation.** Local counters drift
     from pool-side truth; a periodic reconciliation against pool stats
     (where the pool exposes them) would catch silent miscounting.
+    — **Done (sessions 61/256/261):** `updateShareRates` reconciles
+    found-vs-pool-judged into `otedama_shares_unaccounted` and
+    `otedama_shares_pending` (the only reconciliation possible — V1/V2
+    pool protocols expose no server-side share totals to compare
+    against). Session 261 closed the last gap: submit failures
+    (disconnect mid-flight) were subtracted from pending so a dead
+    session cannot pin the gauge >0 forever.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers
@@ -87,8 +94,10 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    exported as `otedama_submit_latency_milliseconds{quantile=...}`. Since
    stale shares are latency-driven, this tells operators when to switch to
    a closer pool *before* it costs them in the reject rate.
-8. 🔵 **engine→poolproto wiring** (the dialers aren't imported yet, so
-   `init()` doesn't register them) — KNOWN_LIMITATIONS §3, step 3b.
+8. ✅ **engine→poolproto wiring** — KNOWN_LIMITATIONS §3, step 3b.
+   — **Done (session 259):** engine blank-imports both dialers;
+   `runSession` dispatches `stratum-v2[-tls]` to `runPoolSession`, the
+   same loop that drives V1 (reconnect, curtailment, benign-reject, latency).
 9. ✅ **Graceful handling of the V1 `clean_jobs` flag** (session 97).
    `stratumv1.sendJob` now drains ALL pending jobs when `clean_jobs=true`
    (new block found), preventing stale-share submissions. Previously only
@@ -567,7 +576,7 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
-6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
+6. ✅ **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset
    windowed counters on reconnect, use saturating `uint64` accumulators,
@@ -1219,6 +1228,36 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 261 increment (counter-reconciliation fix)
+
+### Implemented
+
+1. ✅ **`otedama_shares_pending` drains on submit failure** (Cat 1 #10
+   completion). `sharesSubmitted` is incremented at send time, but a
+   share whose `Submit` then fails outright (session dropped mid-flight,
+   ctx canceled) was never subtracted from the pending gauge — the pool
+   can never return a verdict for it, so `shares_pending` pinned above
+   zero for the rest of the run after any disconnect, hiding the very
+   signal the gauge exists to show. New counter
+   `otedama_shares_submit_failures_total` is subtracted in the pending
+   formula (`pending = submitted − judged − transition − submit-failed`,
+   clamped ≥0); failed submits still count inside `shares_unaccounted`
+   (they were found but never pool-judged — `unaccounted = pending +
+   dropped + submit-failed`). `docs/SPECIFICATION.md` metric table and
+   the gauge/counter help text updated to match.
+
+### Verified already-done / non-applicable this session
+
+- ✅ **ESP-Miner v2.15.1 #1913 (reconnect storms from slow clients)** —
+  implemented in session 257 (non-blocking V2 job emit, drop-oldest +
+  clean-purge). v2.15.2rc0's remaining delta is BM1372/BM1373 ASIC
+  driver code + WPA/display/UI fixes — hardware/firmware-specific, N/A.
+- ✅ **Stale status markers corrected** — Cat 1 #10 (done this session),
+  Cat 2 #6 (implemented session 65, marker was stale 🟡), Cat 2 #8
+  (done session 259, marker was stale 🔵).
+- ❌ **SRI releases** — v1.11.1 remains latest; its difficulty-rounding
+  fix stays non-applicable (raw U256 transport, no float conversion).
+
 ---
 
 ## Highest-leverage next actions (cross-category synthesis)
@@ -1235,12 +1274,11 @@ Ranked by impact on the path to a real v3.1.0:
    61/255); remainder is per-reason pool histogram polish.
 4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
    placeholder; larger effort, external API.
-5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable. V2 verdict
-   correlation (259) made submit latency honest on both protocols;
-   pool-state gauges (Cat 9 #5/#7) verified already present (260); the
-   Nagle fix (260) cut submit RTT floor. Remaining: reconnect-aware
-   counter semantics on the reject histogram.
+5. ~~**Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)**~~ —
+   ✅ done: V2 verdict correlation (259) made submit latency honest;
+   pool-state gauges verified present (260); Nagle fix cut the RTT floor
+   (260); pending gauge now drains on submit failure (261), so the
+   reconciliation set is complete and honest across reconnects.
 
 Items 3 and 5 are the cheapest real-code wins with no dependency or
 external-API risk, and are the natural next implementation targets after the
@@ -1254,6 +1292,11 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-261 additions (September 2026): bitaxeorg/ESP-Miner v2.15.1 +
+v2.15.2rc0 deltas (#1913 verified done in session 257; BM137x ASIC
+drivers, WPA/display/UI fixes N/A); Cat 1 #10 reconciliation completed
+via the submit-failures counter.*
 
 *Session-260 additions (September 2026): bitaxeorg/ESP-Miner release
 v2.15.0 delta (#1722 TCP_NODELAY, #1799, #1796, #1779); bitcoin/bitcoin

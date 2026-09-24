@@ -164,8 +164,9 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
 | `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). A sixth value, `difficulty_transition`, is emitted instead of a `shares_total{status="rejected"}` count when the share met its issue-time target but the pool raised difficulty in flight (ESP-Miner #212 — benign, not a miner fault). |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
+| `shares_submit_failures_total` | counter | Shares whose transmission or verdict wait failed outright (disconnect mid-flight, ctx canceled). The pool can never judge these — subtracted from `shares_pending`, retained inside `shares_unaccounted`. |
 | `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected−difficulty-transition-rejected, ≥0). |
-| `shares_pending` | gauge | Submitted but not yet judged (submitted−accepted−rejected−difficulty-transition-rejected, ≥0) — the shares the pool owes a verdict. SV2 pools batch acks, so a non-zero baseline is normal there (ESP-Miner #1735). unaccounted = pending + found-but-never-submitted. |
+| `shares_pending` | gauge | Submitted but not yet judged (submitted−accepted−rejected−difficulty-transition-rejected−submit-failed, ≥0) — the shares the pool owes a verdict. SV2 pools batch acks, so a non-zero baseline is normal there (ESP-Miner #1735). unaccounted = pending + found-but-never-submitted + submit-failed. |
 | `share_acceptance_rate` | gauge | accepted / judged. |
 | `reject_rate` | gauge | rejected / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |

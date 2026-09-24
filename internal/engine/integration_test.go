@@ -736,6 +736,37 @@ func TestEngineMetrics_UpdateShareRates_Pending(t *testing.T) {
 	}
 }
 
+// TestEngineMetrics_UpdateShareRates_PendingDrainsOnSubmitFailure pins the
+// session-261 fix: a share counted submitted at send time whose Submit call
+// then fails outright (disconnect mid-flight, ctx canceled) must not hold
+// otedama_shares_pending >0 — the pool can never return a verdict for it.
+// It stays inside shares_unaccounted instead.
+func TestEngineMetrics_UpdateShareRates_PendingDrainsOnSubmitFailure(t *testing.T) {
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	// 3 shares found and submitted; the pool judged the first, the second
+	// and third died in flight when the session dropped.
+	for range 3 {
+		m.sharesFound.Inc()
+		m.sharesSubmitted.Inc()
+	}
+	m.sharesAccepted.Inc()
+	for range 2 {
+		m.sharesSubmitFailures.Inc()
+	}
+
+	m.updateShareRates()
+	if got := m.sharesPending.Value(); got != 0 {
+		t.Errorf("sharesPending = %v, want 0 (submit failures must drain pending)", got)
+	}
+	// All three were found but only one was pool-judged: the two dead
+	// submissions remain unaccounted.
+	if got := m.sharesUnaccounted.Value(); got != 2 {
+		t.Errorf("sharesUnaccounted = %v, want 2", got)
+	}
+}
+
 func TestEngineMetrics_RejectAndStaleRateAppearInOutput(t *testing.T) {
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
