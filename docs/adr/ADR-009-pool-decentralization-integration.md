@@ -179,7 +179,7 @@ func (c *Client) Run(ctx context.Context) error
 var _ TemplateSource = (*Client)(nil)
 ```
 
-The implementation reuses `internal/stratum/noise*.go` for the Noise NX handshake (already production-ready in Otedama since v3.0.0-alpha.1).
+The implementation reuses `internal/stratum/noise*.go` for the Noise NX handshake — **with an erratum:** that claim of "production-ready since v3.0.0-alpha.1" is stale. As catalogued in docs/KNOWN_LIMITATIONS.md §2, the Noise code is currently (a) dead code — zero callers outside its own tests, (b) built on P-256 rather than the spec-mandated secp256k1 + ElligatorSwift, and (c) structurally incomplete (a DH-less key-derivation fallback in `ReadMessage2`, a discarded HKDF cipher key, and no responder-static authentication — the defining property of "NX"). "Reuse" therefore means "rework against the same package surface", gated on the ADR-011 secp256k1 dependency decision; the ~150-hour estimate below must absorb that rework, not just wiring.
 
 **Cost:** ~150 hours. Protocol parsing + message orchestration + integration with existing Noise NX layer + error recovery semantics. The SRI Rust source serves as a reference implementation but we don't link against it.
 

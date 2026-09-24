@@ -824,11 +824,14 @@ month, so the discipline matters.
    `datum://` as an SV1-transport dialer reusing `poolproto/stratumv1`). Ignore
    a stray snippet claiming GPL-3.0 — the README says MIT.
    (raw.githubusercontent.com/OCEAN-xyz/datum_gateway/master/README.md)
-9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.11.0, 2026-07-08).**
+9. 🟡 **[FETCHED] SRI is past 1.x, monthly cadence (v1.12.0, 2026-09-17).**
    ROADMAP v3.2.0's premise that "SV2 SRI is alpha" is stale. **Action:**
    update the rationale text and pin a specific SRI tag as the interop
    reference for Go SV2 conformance tests.
-   (github.com/stratum-mining/stratum/releases.atom)
+   (github.com/stratum-mining/stratum/releases — re-verified 2026-09-24:
+   v1.12.0 released 2026-09-17, supersedes the session-251 v1.11.0 tag;
+   v1.11.1 shipped in between. The `poolproto.go` snapshot comment was
+   updated to match.)
 
 ### AI-compute / arbitration engine
 
@@ -939,3 +942,22 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+---
+
+*September 2026 audit pass (first-principles + Socratic review): primary-source
+re-verified the SV2 wire layout (SetupConnection fields incl. endpoint_port,
+OpenStandardMiningChannel max_target, Success.group_channel_id,
+SubmitSharesSuccess.new_submits_accepted batch counter) against
+stratum-mining/sv2-spec 05-Mining-Protocol.md, and the Stratum V1 wire facts
+(per-word prevhash byte order in mining.notify, mandatory client-side
+coinbase/merkle reconstruction, opaque string job_id echo, %08x numeric u32
+submit params) against bitaxeorg/ESP-Miner components/stratum/stratum_api.c.
+Every mining-correctness defect this audit re-derived independently was
+already fixed in an unmerged queued branch (V2 wire conformance, V1 share
+validity, batch-ack accounting, wrapped-nonce lanes, extranonce races) —
+strong convergence evidence that those queued fixes address real,
+spec-verified bugs rather than style nits. Net new changes this pass:
+SRI tag refresh to v1.12.0 (Cat 2 #9), poolproto.go snapshot comment, and
+an ADR-009 erratum correcting its "noise*.go already production-ready"
+claim against KNOWN_LIMITATIONS §2.*

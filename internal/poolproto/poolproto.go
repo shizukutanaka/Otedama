@@ -26,10 +26,11 @@
 //     Foundry and AntPool (combined ~50% of hashrate) still primarily
 //     SV1.
 //   - SV2 Reference Implementation (SRI) has moved past its early-alpha
-//     phase: v1.11.0 (2026-07-08), roughly monthly release cadence
-//     (verified session 251; supersedes this comment's earlier "v1.5,
-//     alpha" snapshot). No production-quality Go SV2 implementation
-//     exists yet, which is still the gap this package addresses.
+//     phase: v1.12.0 (2026-09-17), roughly monthly release cadence
+//     (verified 2026-09-24 via github.com/stratum-mining/stratum/releases;
+//     supersedes this comment's earlier "v1.5, alpha" and "v1.11.0"
+//     snapshots). No production-quality Go SV2 implementation exists
+//     yet, which is still the gap this package addresses.
 //   - Bitcoin Core 30 shipped an experimental IPC Mining Interface
 //     (unix socket, -DENABLE_IPC) letting SV2/other mining software
 //     request templates and submit blocks — a cleaner target than
