@@ -334,11 +334,21 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if hh == nil {
 			hh = newHeaderHasher(&h)
 		}
+		// Hash count is flushed once per batch: a shared atomic add on the
+		// same cache line from every grind thread each hash serializes
+		// the hottest loop on cache-line contention, which costs a
+		// measurable share of the ~90ns hash on multi-thread workers.
+		var batchCount uint64
 		for i := 0; i < batchSize; i++ {
 			hash := hh.hash(h.Time, nonce)
-			w.hashCount.Add(1)
+			batchCount++
 
 			if hash.LessOrEqual(localWork.Target) {
+				// Flush on a share too, so consumers observing a share
+				// always see its hash included in Stats — shares are rare
+				// in production, so this stays off the hot path.
+				w.hashCount.Add(batchCount)
+				batchCount = 0
 				share := Share{
 					ChannelID:  localWork.ChannelID,
 					JobID:      localWork.JobID,
@@ -398,6 +408,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 			nonce = next
 		}
+		w.hashCount.Add(batchCount)
 	}
 }
 

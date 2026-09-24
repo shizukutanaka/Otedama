@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Performance (session 307 — grind ホットループの共有カウンタ競合解消)
+
+- **毎ハッシュの `hashCount` atomic 加算をバッチ単位のローカル加算に** ——
+  全 grind スレッドが同一 `atomic.Uint64`（同一キャッシュライン）を毎
+  ハッシュ競合更新していたため、8 スレッドではループがそのラインに直列化
+  し、ハッシュ計算そのものより競合コストが支配的だった（false sharing /
+  contended counter の典型 —— LongAdder・percpu_counter と同型）。バッチ
+  単位で flush し、シェア発行時にも flush（シェアを観測した消費者が
+  Stats でそのハッシュを必ず見られる整合）。実測 M4 Pro・8 スレッド:
+  **18.7M → 78.7M hashes/s（~4.2x）**。
+
 ### Performance (session 306 — SHA-256d midstate 最適化)
 
 - **grind ループで SHA-256d の先頭ブロック圧縮を再利用** —— 80B ヘッダの

@@ -1251,6 +1251,24 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 307 increment (CS audit / shared-counter contention)
+
+- **第一原理・計算量監査の続き（Musk 式・Socrates 式問答）**: ホットループ
+  で「本当にハッシュ毎に必要な作業は何か」を洗うと、`w.hashCount.Add(1)`
+  が毎ハッシュ実行される共有 `atomic.Uint64` 加算だった —— 全 grind
+  スレッドが同一キャッシュラインを競合更新し、8 スレッドではループ全体
+  がそのラインに直列化される（CS の典型的 false sharing / contended
+  counter パターン —— Java LongAdder、Linux percpu_counter と同じ問題）。
+- **実装**: バッチ（1024 ハッシュ）単位でローカルに数えて一回だけ flush、
+  シェア発行時にも flush（シェアを観測した消費者が Stats でそのハッシュを
+  必ず見られる整合 —— シェアは実運用で稀なのでホットパスに影響しない）。
+- **実測（M4 Pro・8 スレッド・未達ターゲット・1s 計測）**: 毎ハッシュ
+  atomic 18.7M h/s → バッチ加算 **78.7M h/s（~4.2x）** —— s306 の
+  midstate（~1.15x）より遥かに大きい支配的ボトルネックだった。
+- **検証済み非該当**: `w.mu` のバッチ毎ロック（~95µs に1回で無視可能）、
+  `LessOrEqual` の先頭バイト早期脱出（既に効率的）、nTime ロール境界
+  （job 基準時刻から MAX_FUTURE まで一方向・正）。
+
 ## September 2026 research pass — session 306 increment (first-principles CS audit / midstate)
 
 - **CS 第一原理監査（Musk 式・Socrates 式問答）**: 前提を剥がして「この
