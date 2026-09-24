@@ -125,6 +125,9 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, false, &sc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send SetupConnection: %w", err)
 	}
+	// Handshake reads use the same deadline policy as the steady-state
+	// read loop: a pool that accepts then goes silent must fail, not hang.
+	_ = conn.raw.SetReadDeadline(time.Now().Add(readFrameDeadline))
 	f, err := dec.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: read SetupConnection response: %w", err)
@@ -158,6 +161,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
 	}
+	_ = conn.raw.SetReadDeadline(time.Now().Add(readFrameDeadline))
 	f, err = dec.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: read OpenMiningChannel response: %w", err)
@@ -259,6 +263,12 @@ type session struct {
 // policy as stratumv1's read loop. It is a package variable so tests can
 // shorten it.
 var readFrameDeadline = 5 * time.Minute
+
+// writeFrameDeadline bounds each blocking frame write so a wedged send
+// buffer (full TCP window, dead peer) cannot hang a submit forever —
+// the same 10-second policy as stratumv1's writes. Package variable so
+// tests can shorten it.
+var writeFrameDeadline = 10 * time.Second
 
 // start launches the read loop that decodes NewMiningJob frames and
 // forwards them onto jobsCh. The loop exits on read error, ctx
@@ -607,6 +617,7 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	_ = w.SetWriteDeadline(time.Now().Add(writeFrameDeadline))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}

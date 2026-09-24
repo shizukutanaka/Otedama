@@ -6,6 +6,7 @@ package stratumv2
 import (
 	"context"
 	"errors"
+	"io"
 	"math"
 	"net"
 	"strings"
@@ -1786,5 +1787,70 @@ func TestSession_Jobs_SilentPoolTimesOut(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("readLoop did not exit within the read deadline")
+	}
+}
+
+// ============================================================================
+// Negotiate — wedged pools fail via deadlines instead of hanging
+// ============================================================================
+
+func TestDialer_Negotiate_SilentPoolTimesOut(t *testing.T) {
+	// Pool drains our writes but never responds: the handshake read must
+	// fail via the deadline, not block forever.
+	old := readFrameDeadline
+	readFrameDeadline = 50 * time.Millisecond
+	defer func() { readFrameDeadline = old }()
+
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	// Drain the client's writes so sendMsg completes, then stay silent.
+	go func() { _, _ = io.Copy(io.Discard, server) }()
+
+	d := makeDialer(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, err := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	if _, err := d.Negotiate(ctx, conn); err == nil {
+		t.Fatal("Negotiate should fail when the pool never answers SetupConnection")
+	}
+}
+
+func TestDialer_Negotiate_UnreadingPoolWriteTimesOut(t *testing.T) {
+	// Pool never reads: the handshake write must fail via the write
+	// deadline rather than block on a full pipe.
+	old := writeFrameDeadline
+	writeFrameDeadline = 50 * time.Millisecond
+	defer func() { writeFrameDeadline = old }()
+
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	// No reader goroutine: the client's Write blocks immediately.
+
+	d := makeDialer(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, err := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := d.Negotiate(ctx, conn)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Negotiate should fail when the pool never reads")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Negotiate write blocked past the write deadline")
 	}
 }
