@@ -5,6 +5,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net"
 	"testing"
@@ -543,13 +544,21 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 	submitted := make(chan stratum.Frame, 1)
 	go func() {
 		pool.doHandshake(1)
-		// Read the SubmitSharesStandard frame the client sends.
+		// Read the SubmitSharesStandard frame the client sends, then ack it.
 		f, err := pool.dec.ReadFrame()
 		if err != nil {
 			pool.t.Logf("pool: read submit: %v", err)
 			return
 		}
 		submitted <- f
+		if ss, err := stratum.DecodeSubmitSharesStandard(f.Payload); err == nil {
+			writeMsgTo(pool.t, pool.conn, stratum.MsgSubmitSharesSuccess, true,
+				stratum.SubmitSharesSuccess{
+					ChannelID:          ss.ChannelID,
+					LastSequenceNumber: ss.SequenceNumber,
+					NewSubmitsAccepted: 1,
+				})
+		}
 	}()
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
@@ -980,7 +989,7 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 }
 
 // ============================================================================
-// readLoop — unrecognised frame causes continue (not return)
+// readLoop — unrecognized frame causes continue (not return)
 // ============================================================================
 
 func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
@@ -1091,5 +1100,301 @@ func TestFloat64FromBits(t *testing.T) {
 		} else if got != want {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
+	}
+}
+
+// ============================================================================
+// Session — verdict correlation, SetTarget, initial target (session 259)
+// ============================================================================
+
+// TestSession_Submit_VerdictAccepted: Submit waits for the pool's
+// SubmitSharesSuccess correlated by SequenceNumber and reports Accepted.
+func TestSession_Submit_VerdictAccepted(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		f, err := pool.dec.ReadFrame()
+		if err != nil {
+			return
+		}
+		ss, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+		if err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSubmitSharesSuccess, true,
+			stratum.SubmitSharesSuccess{
+				ChannelID:          ss.ChannelID,
+				LastSequenceNumber: ss.SequenceNumber,
+				NewSubmitsAccepted: 1,
+			})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "1", Nonce: 7, NTime: 1})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !res.Accepted {
+		t.Error("SubmitSharesSuccess should report Accepted=true")
+	}
+}
+
+// TestSession_Submit_VerdictRejected: SubmitSharesError reports
+// Accepted=false with the pool's error string as the reason.
+func TestSession_Submit_VerdictRejected(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		f, err := pool.dec.ReadFrame()
+		if err != nil {
+			return
+		}
+		ss, err := stratum.DecodeSubmitSharesStandard(f.Payload)
+		if err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSubmitSharesError, true,
+			stratum.SubmitSharesError{
+				ChannelID:      ss.ChannelID,
+				SequenceNumber: ss.SequenceNumber,
+				Error:          "low-difficulty-share",
+			})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "1", Nonce: 7, NTime: 1})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if res.Accepted {
+		t.Error("SubmitSharesError should report Accepted=false")
+	}
+	if res.Reason != "low-difficulty-share" {
+		t.Errorf("Reason = %q, want pool error string", res.Reason)
+	}
+}
+
+// TestSession_Submit_NoVerdict_CancelReturnsCtxErr: with no pool verdict,
+// Submit blocks until ctx cancellation surfaces ctx.Err rather than the
+// misleading provisional accept the pre-259 code returned immediately.
+func TestSession_Submit_NoVerdict_CancelReturnsCtxErr(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		// Read and ignore the submit frame; never send a verdict.
+		_, _ = pool.dec.ReadFrame()
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	subCtx, subCancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer subCancel()
+	_, err = sess.Submit(subCtx, poolproto.ShareSubmission{JobID: "1", Nonce: 7})
+	if err == nil {
+		t.Fatal("Submit with no verdict should fail on ctx cancel")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Submit should return ctx.Err (deadline), got %v", err)
+	}
+}
+
+// TestSession_SetTarget_UpdatesShareTargetAndDifficulty: a live SetTarget
+// message re-points ShareTarget and SuggestedDifficulty mid-session.
+func TestSession_SetTarget_UpdatesShareTargetAndDifficulty(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var tgt [32]byte
+	for i := range tgt {
+		tgt[i] = 0xFF
+	}
+	go func() {
+		pool.doHandshake(1)
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetTarget, true,
+			stratum.SetTarget{ChannelID: 1, MaxTarget: tgt})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	st, ok := sess.(interface{ ShareTarget() [32]byte })
+	if !ok {
+		t.Fatal("session does not expose ShareTarget")
+	}
+	deadline := time.After(2 * time.Second)
+	for st.ShareTarget() != tgt {
+		select {
+		case <-deadline:
+			t.Fatal("SetTarget never updated ShareTarget")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if sess.SuggestedDifficulty() <= 0 {
+		t.Error("SetTarget should update SuggestedDifficulty")
+	}
+}
+
+// TestNegotiate_InitialShareTarget_FromOpenMiningChannelSuccess: the
+// OpenMiningChannelSuccess.target is the initial share target —
+// zero target stays unassigned (jobs fall back to nBits).
+func TestNegotiate_InitialShareTarget_FromOpenMiningChannelSuccess(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var tgt [32]byte
+	tgt[31] = 0x7F // small nonzero target
+	go func() {
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 9, Target: tgt, ExtraNonce2Size: 4})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	st := sess.(interface{ ShareTarget() [32]byte })
+	if st.ShareTarget() != tgt {
+		t.Error("ShareTarget should equal the OpenMiningChannelSuccess target")
+	}
+	if sess.SuggestedDifficulty() <= 0 {
+		t.Error("SuggestedDifficulty should reflect the initial target")
+	}
+}
+
+// TestNegotiate_ZeroInitialTarget_StaysUnassigned: a zero
+// OpenMiningChannelSuccess.target leaves ShareTarget unset so the engine
+// applies the nBits block target.
+func TestNegotiate_ZeroInitialTarget_StaysUnassigned(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go pool.doHandshake(1) // zero Target
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	st := sess.(interface{ ShareTarget() [32]byte })
+	if st.ShareTarget() != ([32]byte{}) {
+		t.Error("zero initial target must leave ShareTarget unassigned")
+	}
+	if sess.SuggestedDifficulty() != 0 {
+		t.Error("zero initial target must leave SuggestedDifficulty at 0")
+	}
+}
+
+// TestSession_Jobs_StampedWithChannelAndTarget: emitted jobs carry the
+// channel ID and the current share target (the poolproto.Job fields the
+// engine consumes).
+func TestSession_Jobs_StampedWithChannelAndTarget(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	var tgt [32]byte
+	for i := range tgt {
+		tgt[i] = 0xFF
+	}
+	go func() {
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
+			stratum.SetupConnectionSuccess{UsedVersion: 2})
+		if _, err := pool.dec.ReadFrame(); err != nil {
+			return
+		}
+		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
+			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 5, Target: tgt, ExtraNonce2Size: 4})
+		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true,
+			stratum.NewMiningJob{ChannelID: 5, JobID: 42, Version: 0x20000000})
+		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true,
+			stratum.SetNewPrevHash{ChannelID: 5, JobID: 42})
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		if job.ChannelID != 5 {
+			t.Errorf("job.ChannelID = %d, want 5", job.ChannelID)
+		}
+		if !job.TargetAssigned {
+			t.Error("job.TargetAssigned should be true (initial target set)")
+		}
+		if job.ShareTarget != tgt {
+			t.Error("job.ShareTarget should equal the assigned target")
+		}
+		if job.JobID != "42" {
+			t.Errorf("job.JobID = %q, want 42", job.JobID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no job emitted after SetNewPrevHash")
 	}
 }

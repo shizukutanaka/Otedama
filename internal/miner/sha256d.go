@@ -246,6 +246,27 @@ func TargetFromDifficulty(difficulty float64) (Hash, error) {
 	return out, nil
 }
 
+// DifficultyFromTarget is the inverse of TargetFromDifficulty: it converts
+// a U256 maximum_target (little-endian, MSB at index 31 — the byte order
+// Stratum V2's SetTarget and OpenMiningChannelSuccess carry) back into the
+// pool-assigned share difficulty, computed as diff1Target / target. A zero
+// target is unsatisfiable rather than "infinite difficulty", so it returns
+// 0 — callers treat 0 as "no valid target assigned".
+func DifficultyFromTarget(h Hash) float64 {
+	var be Hash
+	for i := 0; i < 32; i++ {
+		be[i] = h[31-i]
+	}
+	target := new(big.Int).SetBytes(be[:])
+	if target.Sign() <= 0 {
+		return 0
+	}
+	q := new(big.Float).SetPrec(64).SetInt(diff1Target)
+	q.Quo(q, new(big.Float).SetPrec(64).SetInt(target))
+	f, _ := q.Float64()
+	return f
+}
+
 // MeetsTarget reports whether the given hash value meets the difficulty
 // target represented by nBits.
 func MeetsTarget(hash Hash, nBits uint32) (bool, error) {

@@ -10,6 +10,76 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 259 — CS第一原理監査: engine→poolproto V2 一本化)
+
+**エンジン V2 パスの重複実装を撤去し poolproto ダイヤラへ一本化**
+(RESEARCH_IMPROVEMENTS Cat 2 #8, 次善策リスト #2). 第一原理の問い
+「プール接続が提供すべき最小契約は何か」への答えは「ジョブ・
+シェアターゲット・判定結果（verdict）」——しかしエンジンは
+約600行のインライン Stratum V2 handshake/read/submit ループを
+抱え、`stratumv2` ダイヤラは呼び出し元のないデッドコードだった。
+`runSession` はプロトコル分岐（`stratum-v2[-tls]`）のみを行い、
+V1/V2 共通の単一セッションループ `runPoolSession`
+（旧 `runSessionV1`）が両プロトコルを駆動する。これにより以下が
+構造的に V2 にも適用される（コピーではなく設計として）:
+`mining.reconnect` 処理・カーテイルメントゲート・
+良性難易度遷移リジェクト判定・提出レイテンシ計測。
+
+**シェア判定（verdict）の相関を実装.** V2 `Submit` は従来、書き込み
+直後に暫定の `Accepted=true` を即返していた —— `sharesAccepted`/
+`sharesRejected`・提出レイテンシ quantile が V2 では意味を持たない
+偽信号だった。`SequenceNumber` をキーに verdict スロットを登録し
+プールの判定を待つ: `SubmitSharesSuccess` は累積ACK（seq ≤
+`LastSequenceNumber` を一括確定）、`SubmitSharesError` は対象 seq の
+みを `Accepted=false`+プール理由付きで確定、ctx キャンセルは
+`ctx.Err()` を正直に返す。期限切れ待ちへの遅延 verdict は seq キー
+で安全にドロップ（位置キューではないため破壊的なずれは起きない）。
+
+**プール割当シェアターゲットを全精度で運搬.** 256bit の
+`SetTarget`/`OpenMiningChannelSuccess.target` を float64
+`SuggestedDifficulty` に丸めて復元すると ~200bit が失われ、
+ワーカーが掘るターゲットが静かに変わる。`poolproto.Job` は
+`ShareTarget [32]byte` + `TargetAssigned`（生 U256、`miner.Hash` と
+同じ LE バイト順）を持ち、共有ループがそのまま適用する。
+`miner.DifficultyFromTarget` は float64 の表示・メトリクス系
+（情報用途）にのみ使われる。ゼロターゲット割当は警告1回+
+ブロックターゲットフォールバック（従来の振る舞いを維持）。
+
+### Fixed (session 259)
+
+- **`stratum+v2tls://` が実際に TLS を張る**: `useTLS` を無視して
+  平文ダイヤルしていた欠陥を修正 —
+  `TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)` → `stratum.DialTLS`
+  （平文への暗黙フォールバックはしない）。
+- **ダイヤラ未登録の連鎖 bug**: `cmd/otedama` が `stratumv1` のみを
+  blank-import していたため、engine のインラインパスを通らない
+  経路ではデフォルトプール URL `stratum+v2://` が
+  `unknown protocol` で落ちた。engine が両ダイヤラを blank-import
+  し、リンク先に関わらず自己充足するようにした。
+- **シェアの `version` をプールへ伝達**: `Submit` がハッシュ済み
+  ヘッダの `Version` を `SubmitSharesStandard.NVersion` に載せる
+  （従来は 0 固定でバージョンローリング対応プール上で判定齟齬）。
+- **`isFatal` がラップ済みエラーを辿る**: `errors.As` +
+  `errors.Is(ErrHandshakeFailed)` に変更。`SetupConnectionError` /
+  `OpenMiningChannelError` のプール側拒否は「このセッションは
+  成立しない」宣言なので再接続ループがリトライしない
+  （`OpenMiningChannelError` は従来再接続上限まで再試行していた
+  —— 意図的な挙動の引き締め）。
+- **重複ジョブ抑止キーを拡張**: (JobID, shareTarget, Version,
+  MerkleRoot, PrevHash) で判定 — 同一 job_id が新しい tip で
+  再アームされる場合に誤スキップしない。
+- **提出レイテンシを μs 精度で記録**: loopback 等で <1ms の RTT が
+  0 に丸められて quantile が常に 0 になるのを防止。
+
+### Documented (session 259)
+
+- **`docs/SPECIFICATION.md` G3**: 「engine が poolproto 抽象を
+  バイパス」を Fixed（session 259）に更新。
+- **`docs/RESEARCH_IMPROVEMENTS.md`**: session-259 差分 —
+  CS第一原理監査の方法論、実装7件、Noise NX 配線の延期理由
+  （P-256 スタブを「暗号化」として配線するのは security theatre、
+  ADR-011 の secp256k1 依存決定が前提）、最高レバレッジ一覧の更新。
+
 ### Added (session 258 — session-52 backlog sweep)
 
 **Noiseトランスポート読みパスのファズターゲット**

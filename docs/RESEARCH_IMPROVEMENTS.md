@@ -1111,6 +1111,84 @@ deltas). Session-52 backlog items resolved.
 
 ---
 
+## September 2026 research pass — session 259 increment (CS first-principles sweep)
+
+Methodology this round: a computer-science first-principles /
+Socratic audit rather than an upstream-diff sweep — "what is the minimal
+contract a pool connection must provide, and where does the code violate
+its own axioms?" Four violations surfaced, all on the V2 path.
+
+### Implemented this session
+
+1. ✅ **engine→poolproto V2 wiring (Cat 2 #8 — the #2 highest-leverage
+   item).** The engine carried a ~600-line inline Stratum V2
+   handshake/read/submit loop that duplicated — and diverged from — the
+   `stratumv2` dialer (dead code: no caller). `runSession` now dispatches
+   every scheme to `poolproto.DialURL` and both protocols share the one
+   `runPoolSession` session loop. Deleting the duplicate removed the
+   two-paths-disagree bug class outright (V1's `mining.reconnect`
+   handling, curtailment gate, benign-reject check, and latency
+   accounting now apply to V2 by construction rather than by copy).
+2. ✅ **Dialer registration was load-bearing-broken.** `cmd/otedama`
+   blank-imported only `stratumv1`, so `poolproto.DialURL` reported
+   "unknown protocol" for `stratum+v2://` — the *default* pool URL —
+   in any binary that did not link the engine's inline path. The
+   engine now blank-imports both dialers, making the package
+   self-sufficient wherever it is linked.
+3. ✅ **Share-verdict correlation.** V2 `Submit` previously returned a
+   provisional `Accepted=true` immediately after the write — a fake
+   signal that made `sharesAccepted`/`sharesRejected` and the
+   submit-latency quantile meaningless on V2. `Submit` now registers a
+   `SequenceNumber`-keyed verdict slot and waits for the pool's
+   verdict: `SubmitSharesSuccess` is cumulative (settles all seq ≤
+   `LastSequenceNumber`), `SubmitSharesError` settles its exact seq
+   (returns `Accepted=false` + pool reason), and ctx-cancel surfaces
+   `ctx.Err()` honestly. Late verdicts for expired waits drop safely —
+   the map is keyed by seq, not positional, so no queue corruption.
+4. ✅ **Full-precision pool-assigned share target.** Routing the 256-bit
+   `SetTarget`/`OpenMiningChannelSuccess.target` through the float64
+   `SuggestedDifficulty` and back would lose ~200 bits of precision —
+   silently changing what the worker hashes. `poolproto.Job` now
+   carries `ShareTarget [32]byte` + `TargetAssigned` (raw U256, same
+   LE byte order as `miner.Hash`), applied verbatim by the shared loop;
+   `DifficultyFromTarget` exists only for the float64 metrics/readouts
+   where precision is informational. Zero-target assignment still
+   warns once and falls back to the nBits block target.
+5. ✅ **Real TLS for `stratum+v2tls://`.** The scheme previously dialed
+   plaintext (the dialer ignored `useTLS`); it now builds
+   `TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)` and does a real TLS
+   handshake — never a silent plaintext fallback (KNOWN_LIMITATIONS §2
+   workaround text stays accurate).
+6. ✅ **Handshake rejection is uniformly fatal.** `isFatal` now unwraps
+   (`errors.As` + `errors.Is(ErrHandshakeFailed)`): a pool that rejects
+   `SetupConnection` *or* `OpenMiningChannel` is telling us the session
+   can never work — retrying just hammers it. Documented behavior
+   tightening: `OpenMiningChannelError` previously retried until the
+   reconnect cap.
+7. ✅ **Share `version` surfaced to the pool.** `Submit` forwards the
+   hashed header `Version` (was dropped → `NVersion: 0`), so
+   `SubmitSharesStandard` echoes the version actually mined — required
+   for correct share accounting on version-rolling-aware pools.
+
+### Verified non-applicable / deferred this session
+
+8. ❌ **Wiring the Noise NX handshake into V2 transport** — deferred:
+   the current Noise implementation is a P-256 stub (ADR-011); wiring a
+   stub as "encryption" is security theatre. Blocked on the secp256k1
+   dependency decision (highest-leverage item #1), not on effort.
+9. ✅ **dedup key extended** — the duplicate-job skip key now spans
+   (JobID, share target, Version, MerkleRoot, PrevHash) so a same-ID
+   job re-armed on a new tip is applied, not silently skipped.
+
+### Socratic findings recorded for later rounds
+
+- "What does a share submitter need?" → a job, a target, and an honest
+  verdict — now the `Session` interface's exact shape.
+- "Where can a u16-length prefix lie?" → chunking + fuzz coverage
+  already landed (sessions 257–258); no new surface added this round.
+
+---
+
 ## Highest-leverage next actions (cross-category synthesis)
 
 Ranked by impact on the path to a real v3.1.0:
@@ -1118,16 +1196,17 @@ Ranked by impact on the path to a real v3.1.0:
 1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
    channel; library identified, licence compatible. Needs an ADR for the
    dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — makes the V2 dialer and job
-   bridge (already built and tested) actually load-bearing; removes the
-   dead-code state.
+2. ~~**engine→poolproto wiring (Cat 2 #8)**~~ — ✅ done (session 259).
 3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
    — small, high-value observability win that directly reflects miner
-   profitability and needs no new dependency.
+   profitability and needs no new dependency. Largely landed (sessions
+   61/255); remainder is per-reason pool histogram polish.
 4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
    placeholder; larger effort, external API.
 5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable.
+   makes the new failover and stale-share story observable. The V2 verdict
+   correlation just made V2 submit latency real — the p50/p95/p99 series
+   is now honest on both protocols.
 
 Items 3 and 5 are the cheapest real-code wins with no dependency or
 external-API risk, and are the natural next implementation targets after the

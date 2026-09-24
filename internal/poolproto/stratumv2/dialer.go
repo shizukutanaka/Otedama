@@ -15,6 +15,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -22,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 	"github.com/shizukutanaka/Otedama/internal/stratum"
 )
@@ -56,9 +58,30 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	}
 	dialFn := d.dialFn
 	if dialFn == nil {
-		dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-			var dialer net.Dialer
-			return dialer.DialContext(ctx, "tcp", address)
+		if d.useTLS {
+			// Build the verifier up front so a malformed per-pool CA bundle
+			// fails here rather than mid-handshake. An empty bundle means
+			// system roots only — never a plaintext fallback (this replaces
+			// the engine-side v2tls:// TLS dial that KNOWN_LIMITATIONS §2
+			// documented).
+			cfg, err := stratum.TLSConfigWithExtraCAs(creds.TLSRootCAsPEM)
+			if err != nil {
+				return nil, fmt.Errorf("stratumv2: %w", err)
+			}
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				c, err := stratum.DialTLS(ctx, address, cfg)
+				if err != nil {
+					// Name TLS in the error so callers can tell a real
+					// handshake failure from a silent plaintext fallback.
+					return nil, fmt.Errorf("TLS handshake: %w", err)
+				}
+				return c, nil
+			}
+		} else {
+			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "tcp", address)
+			}
 		}
 	}
 	raw, err := dialFn(ctx, address)
@@ -143,6 +166,16 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		jobsCh: make(chan poolproto.Job, 8),
 		done:   make(chan struct{}),
 	}
+	// The channel's initial share target arrives in the success response;
+	// a zero target means the pool assigned none — recorded as
+	// unassigned so the engine falls back without warning.
+	omcs := msg.OpenMiningChannelSuccess
+	if omcs.Target != ([32]byte{}) {
+		sess.shareTarget = omcs.Target
+		sess.targetAssigned = true
+		sess.diff.Store(math.Float64bits(
+			miner.DifficultyFromTarget(miner.Hash(omcs.Target))))
+	}
 	sess.start(ctx)
 	return sess, nil
 }
@@ -181,6 +214,15 @@ type session struct {
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
+	// targetMu guards shareTarget/targetAssigned, read by emit (same
+	// goroutine as the writers) and by Submit callers via ShareTarget.
+	targetMu       sync.RWMutex
+	shareTarget    [32]byte // current pool-assigned share target (LE U256)
+	targetAssigned bool     // pool explicitly sent a target (incl. zero)
+
+	seq      atomic.Uint32 // submit sequence numbers (1-based)
+	verdicts sync.Map      // seq uint32 → chan poolproto.ShareResult (cap 1)
+
 	done      chan struct{} // closed when readLoop exits
 	startOnce sync.Once
 }
@@ -209,62 +251,11 @@ func (s *session) start(ctx context.Context) {
 func (s *session) readLoop(ctx context.Context) {
 	defer close(s.jobsCh)
 	defer close(s.done)
-	// SV2 job/tip state, mirroring the engine's inline loop: a job is
+	// SV2 job/tip state, mirroring the engine's old inline loop: a job is
 	// emittable only once both NewMiningJob (merkle root + version) and
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
-	pending := make(map[uint32]*stratum.NewMiningJob)
-	var prevHash [32]byte
-	var prevNBits uint32
-	havePrev := false
-
-	// emit enqueues a job without blocking the frame read loop. A slow
-	// consumer must never stall this loop: while blocked it would miss
-	// further NewMiningJob/SetNewPrevHash frames (making everything it
-	// later dequeues stale anyway) — the slow-client pile-up ESP-Miner
-	// fixed in #1913. Same policy as the V1 session's sendJob: when the
-	// new job makes pending work obsolete (clean=true, a new tip), purge
-	// all queued jobs first; when the channel is full, drop the oldest —
-	// the newest job is always the most current work. Return false only
-	// on shutdown so the loop exits.
-	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
-		job := poolproto.Job{
-			JobID:      fmt.Sprintf("%d", j.JobID),
-			Version:    j.Version,
-			PrevHash:   prevHash,
-			MerkleRoot: j.MerkleRoot,
-			NTime:      ntime,
-			NBits:      prevNBits,
-			CleanJobs:  clean,
-			ReceivedAt: time.Now(),
-		}
-		if ctx.Err() != nil {
-			return false
-		}
-		if clean {
-			for {
-				select {
-				case <-s.jobsCh:
-				default:
-					goto purgeDone
-				}
-			}
-		}
-	purgeDone:
-		select {
-		case s.jobsCh <- job:
-		default:
-			select {
-			case <-s.jobsCh:
-			default:
-			}
-			select {
-			case s.jobsCh <- job:
-			default:
-			}
-		}
-		return true
-	}
+	state := &jobState{pending: make(map[uint32]*stratum.NewMiningJob)}
 
 	for {
 		if ctx.Err() != nil || s.conn.closed.Load() {
@@ -278,38 +269,153 @@ func (s *session) readLoop(ctx context.Context) {
 		if err != nil {
 			continue // skip undecodable frame, keep reading
 		}
-		if msg.NewMiningJob != nil {
-			j := msg.NewMiningJob
-			pending[j.JobID] = j
-			if j.HasMinNtime && havePrev {
-				if !emit(j, j.MinNtime, false) {
-					return
-				}
+		switch {
+		case msg.NewMiningJob != nil:
+			if !s.onNewMiningJob(ctx, state, msg.NewMiningJob) {
+				return
 			}
-			// Future job (or no tip yet): held until SetNewPrevHash.
-		}
-		if msg.SetNewPrevHash != nil {
-			p := msg.SetNewPrevHash
-			prevHash = p.PrevHash
-			prevNBits = p.NBits
-			havePrev = true
-			named := pending[p.JobID]
-			pending = map[uint32]*stratum.NewMiningJob{}
-			if named != nil {
-				pending[p.JobID] = named
-				ntime := p.MinNtime
-				if named.HasMinNtime && named.MinNtime > ntime {
-					ntime = named.MinNtime
-				}
-				if !emit(named, ntime, true) {
-					return
-				}
+		case msg.SetNewPrevHash != nil:
+			if !s.onSetNewPrevHash(ctx, state, msg.SetNewPrevHash) {
+				return
 			}
+		case msg.SetTarget != nil:
+			s.onSetTarget(msg.SetTarget)
+		case msg.SubmitSharesSuccess != nil:
+			s.settleVerdicts(msg.SubmitSharesSuccess.LastSequenceNumber, true,
+				poolproto.ShareResult{Accepted: true})
+		case msg.SubmitSharesError != nil:
+			e := msg.SubmitSharesError
+			s.settleVerdicts(e.SequenceNumber, false,
+				poolproto.ShareResult{Accepted: false, Reason: e.Error})
 		}
-		// Note: SetTarget (share difficulty) has no carrier on
-		// poolproto.Job; the engine's inline V2 loop handles it. This
-		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
 	}
+}
+
+// jobState accumulates the two-piece SV2 job announcement
+// (NewMiningJob + SetNewPrevHash) into a complete emittable job.
+type jobState struct {
+	pending   map[uint32]*stratum.NewMiningJob
+	prevHash  [32]byte
+	prevNBits uint32
+	havePrev  bool
+}
+
+// emit enqueues a job without blocking the frame read loop. A slow
+// consumer must never stall the loop: while blocked it would miss
+// further NewMiningJob/SetNewPrevHash frames (making everything it
+// later dequeues stale anyway) — the slow-client pile-up ESP-Miner
+// fixed in #1913. Same policy as the V1 session's sendJob: when the
+// new job makes pending work obsolete (clean=true, a new tip), purge
+// all queued jobs first; when the channel is full, drop the oldest —
+// the newest job is always the most current work. Return false only
+// on shutdown so the loop exits.
+func (s *session) emit(ctx context.Context, state *jobState, j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
+	s.targetMu.RLock()
+	target, assigned := s.shareTarget, s.targetAssigned
+	s.targetMu.RUnlock()
+	job := poolproto.Job{
+		JobID:          fmt.Sprintf("%d", j.JobID),
+		Version:        j.Version,
+		PrevHash:       state.prevHash,
+		MerkleRoot:     j.MerkleRoot,
+		NTime:          ntime,
+		NBits:          state.prevNBits,
+		CleanJobs:      clean,
+		ChannelID:      s.chanID,
+		ShareTarget:    target,
+		TargetAssigned: assigned,
+		ReceivedAt:     time.Now(),
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	if clean {
+		for {
+			select {
+			case <-s.jobsCh:
+			default:
+				goto purgeDone
+			}
+		}
+	}
+purgeDone:
+	select {
+	case s.jobsCh <- job:
+	default:
+		select {
+		case <-s.jobsCh:
+		default:
+		}
+		select {
+		case s.jobsCh <- job:
+		default:
+		}
+	}
+	return true
+}
+
+// onNewMiningJob holds the job until the tip's prev-hash is known.
+// Returns false when emit rejected a send (session closing).
+func (s *session) onNewMiningJob(ctx context.Context, state *jobState, j *stratum.NewMiningJob) bool {
+	state.pending[j.JobID] = j
+	if j.HasMinNtime && state.havePrev {
+		return s.emit(ctx, state, j, j.MinNtime, false)
+	}
+	// Future job (or no tip yet): held until SetNewPrevHash.
+	return true
+}
+
+// onSetNewPrevHash installs the new tip and emits the job it names.
+// Returns false when emit rejected a send (session closing).
+func (s *session) onSetNewPrevHash(ctx context.Context, state *jobState, p *stratum.SetNewPrevHash) bool {
+	state.prevHash = p.PrevHash
+	state.prevNBits = p.NBits
+	state.havePrev = true
+	named := state.pending[p.JobID]
+	state.pending = map[uint32]*stratum.NewMiningJob{}
+	if named == nil {
+		return true
+	}
+	state.pending[p.JobID] = named
+	ntime := p.MinNtime
+	if named.HasMinNtime && named.MinNtime > ntime {
+		ntime = named.MinNtime
+	}
+	return s.emit(ctx, state, named, ntime, true)
+}
+
+// onSetTarget applies a live pool target change: the raw U256 becomes
+// the share target for subsequent jobs, and SuggestedDifficulty is
+// re-derived for the metrics paths that still speak float64.
+func (s *session) onSetTarget(st *stratum.SetTarget) {
+	s.targetMu.Lock()
+	s.shareTarget = st.MaxTarget
+	s.targetAssigned = true
+	s.targetMu.Unlock()
+	s.diff.Store(math.Float64bits(
+		miner.DifficultyFromTarget(miner.Hash(st.MaxTarget))))
+}
+
+// settleVerdicts delivers share verdicts to the Submit callers waiting on
+// them. SubmitSharesSuccess is cumulative: it settles every outstanding
+// sequence number ≤ LastSequenceNumber. SubmitSharesError settles exactly
+// the one sequence it names. Unknown or already-settled sequence numbers
+// (a late verdict after a Submit's ctx expired) are dropped silently —
+// correctness is preserved because each submit owns a distinct seq key,
+// never a positional queue.
+func (s *session) settleVerdicts(lastSeq uint32, cumulative bool, res poolproto.ShareResult) {
+	s.verdicts.Range(func(k, v any) bool {
+		seq, ok1 := k.(uint32)
+		ch, ok2 := v.(chan poolproto.ShareResult)
+		if !ok1 || !ok2 {
+			return true
+		}
+		if (cumulative && seq <= lastSeq) || (!cumulative && seq == lastSeq) {
+			ch <- res // buffered cap 1: never blocks
+			s.verdicts.Delete(seq)
+		}
+		return true
+	})
 }
 
 // Jobs returns the channel of incoming jobs.
@@ -323,9 +429,13 @@ func (s *session) Jobs() <-chan poolproto.Job { return s.jobsCh }
 // lands, this becomes a request/response correlation.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
 	jobID := parseJobID(sub.JobID)
+	seq := s.seq.Add(1)
+	verdictCh := make(chan poolproto.ShareResult, 1)
+	s.verdicts.Store(seq, verdictCh)
+	defer s.verdicts.Delete(seq)
 	ss := stratum.SubmitSharesStandard{
 		ChannelID:      s.chanID,
-		SequenceNumber: 0,
+		SequenceNumber: seq,
 		JobID:          jobID,
 		Nonce:          sub.Nonce,
 		NTime:          sub.NTime,
@@ -337,12 +447,35 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	if err := sendMsg(s.conn.raw, stratum.MsgSubmitSharesStandard, true, &ss); err != nil {
 		return poolproto.ShareResult{}, fmt.Errorf("stratumv2: submit share: %w", err)
 	}
-	return poolproto.ShareResult{Accepted: true}, nil
+	// Wait for the pool's verdict so the caller's accept/reject accounting
+	// sees the real outcome — the previous return-immediately behavior
+	// dropped every verdict. Expiry means "submitted but unconfirmed"
+	// (the share may still be judged upstream; the shares_pending gauge
+	// captures the gap). Session teardown unblocks a waiting Submit the
+	// same way ctx cancellation does.
+	select {
+	case res := <-verdictCh:
+		return res, nil
+	case <-ctx.Done():
+		return poolproto.ShareResult{}, ctx.Err()
+	case <-s.done:
+		return poolproto.ShareResult{}, errors.New("stratumv2: session closed before verdict")
+	}
 }
 
 // SuggestedDifficulty returns the current target difficulty.
 func (s *session) SuggestedDifficulty() float64 {
 	return float64FromBits(s.diff.Load())
+}
+
+// ShareTarget returns the raw pool-assigned share target (LE U256), or
+// all-zero when none has been assigned. Callers needing the exact target
+// (the engine's benign-transition check) read this rather than re-deriving
+// it from the float64 difficulty, which cannot represent all 256 bits.
+func (s *session) ShareTarget() [32]byte {
+	s.targetMu.RLock()
+	defer s.targetMu.RUnlock()
+	return s.shareTarget
 }
 
 // Close terminates the session's underlying connection.

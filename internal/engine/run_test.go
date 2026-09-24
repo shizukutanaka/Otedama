@@ -304,6 +304,8 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 }
 
 func TestParseHost(t *testing.T) {
+	// parseHost was inlined into the runSession dispatcher; this exercises
+	// poolproto.StripScheme — the scheme-stripper every protocol path calls.
 	tests := []struct {
 		url      string
 		wantHost string
@@ -317,12 +319,12 @@ func TestParseHost(t *testing.T) {
 		{"", "", true},
 	}
 	for _, tt := range tests {
-		got, err := parseHost(tt.url)
+		got, err := poolproto.StripScheme(tt.url)
 		if (err != nil) != tt.wantErr {
-			t.Errorf("parseHost(%q): err=%v, wantErr=%v", tt.url, err, tt.wantErr)
+			t.Errorf("StripScheme(%q): err=%v, wantErr=%v", tt.url, err, tt.wantErr)
 		}
 		if !tt.wantErr && got != tt.wantHost {
-			t.Errorf("parseHost(%q): got %q, want %q", tt.url, got, tt.wantHost)
+			t.Errorf("StripScheme(%q): got %q, want %q", tt.url, got, tt.wantHost)
 		}
 	}
 }
@@ -347,37 +349,44 @@ func TestDefaultPoolURL_FallsBackToDefault(t *testing.T) {
 	}
 }
 
-// TestUpdateWork_PopulatesFullHeaderAndShareTarget pins the core fix for
-// the SV2 data path: updateWork must fill ALL five header inputs
+// TestApplyJob_PopulatesFullHeaderAndShareTarget pins the core fix for
+// the SV2 data path: applyJob must fill ALL five header inputs
 // (version, prev-hash, merkle root, time, bits) and hand the workers the
 // POOL-ASSIGNED share target, not the network target. It runs a real
 // worker against the easiest possible target and asserts the found share
 // echoes the exact version and ntime that were hashed.
-func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
+func TestApplyJob_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	shares := w.Start(ctx)
 	defer w.Stop()
 
-	job := &stratum.NewMiningJob{
-		ChannelID: 1,
-		JobID:     42,
-		Version:   0x20000004,
-	}
-	for i := range job.MerkleRoot {
-		job.MerkleRoot[i] = byte(i * 7)
+	var merkle [32]byte
+	for i := range merkle {
+		merkle[i] = byte(i * 7)
 	}
 	var prevHash [32]byte
 	for i := range prevHash {
 		prevHash[i] = byte(i + 1)
+	}
+	job := poolproto.Job{
+		JobID:      "42",
+		ChannelID:  1,
+		Version:    0x20000004,
+		PrevHash:   prevHash,
+		MerkleRoot: merkle,
+		NTime:      0x60000000,
+		NBits:      0x1d00ffff,
 	}
 	var easiest miner.Hash
 	for i := range easiest {
 		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
 	}
 
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+	if err := applyJob([]*miner.Worker{w}, job, easiest); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
 
 	select {
 	case s := <-shares:
@@ -395,17 +404,23 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 	}
 }
 
-// TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget covers the case
-// where the pool assigns no share target at all (zero value): updateWork
-// must fall back to the network target derived from prevNBits rather
+// TestApplyJob_ZeroShareTargetFallsBackToNetworkTarget covers the case
+// where the pool assigns no share target at all (zero value): applyJob
+// must fall back to the network target derived from nBits rather
 // than mining against an all-zero (impossible) target.
-func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
+func TestApplyJob_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
-	job := &stratum.NewMiningJob{ChannelID: 1, JobID: 1, Version: 0x20000000}
-	var prevHash [32]byte
+	job := poolproto.Job{
+		JobID:   "1",
+		Version: 0x20000000,
+		NTime:   0x495fab29,
+		NBits:   0x1d00ffff,
+	}
 
 	// Must not panic; genesis nBits is a valid (very hard) target.
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
+	if err := applyJob([]*miner.Worker{w}, job, miner.Hash{}); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -418,7 +433,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, job, miner.Hash{}); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +446,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, job, miner.Hash{})
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,33 +458,37 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, job, miner.Hash{})
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
 }
 
-// ----- applyJob / v1JobTarget: pool-assigned share difficulty overrides nBits target -----
+// ----- applyJob / jobTarget: pool-assigned share target overrides nBits target -----
 
-func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
-	// applyJob must accept a positive difficulty without error (SetWork is
-	// safe without Start; behavioural proof that the right target is chosen
-	// lives in TestV1JobTarget below, which tests the pure decision function).
+func TestApplyJob_ShareTarget_NoError(t *testing.T) {
+	// applyJob must accept a pool-assigned share target without error
+	// (SetWork is safe without Start; behavioral proof that the right
+	// target is chosen lives in TestJobTarget below).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
-		t.Fatalf("applyJob(difficulty=0.001): %v", err)
+	shareTgt, err := miner.TargetFromDifficulty(0.001)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyJob([]*miner.Worker{w}, job, shareTgt); err != nil {
+		t.Fatalf("applyJob(share target): %v", err)
 	}
 }
 
-func TestV1JobTarget_ZeroDifficulty_FallsBackToNBitsTarget(t *testing.T) {
+func TestJobTarget_ZeroDifficultyAndNoTarget_FallsBackToNBitsTarget(t *testing.T) {
 	// Before any mining.set_difficulty, SuggestedDifficulty() is 0. The
 	// target must be the nBits-derived block target, matching pre-wiring
-	// behaviour.
+	// behavior.
 	const nBits = 0x1d00ffff
-	got, err := v1JobTarget(nBits, 0)
+	got, err := jobTarget(nBits, miner.Hash{}, 0)
 	if err != nil {
-		t.Fatalf("v1JobTarget(difficulty=0): %v", err)
+		t.Fatalf("jobTarget(no target): %v", err)
 	}
 	want, err := miner.TargetFromNBits(nBits)
 	if err != nil {
@@ -480,7 +499,7 @@ func TestV1JobTarget_ZeroDifficulty_FallsBackToNBitsTarget(t *testing.T) {
 	}
 }
 
-func TestV1JobTarget_PositiveDifficulty_UsesShareTarget(t *testing.T) {
+func TestJobTarget_PositiveDifficulty_UsesShareTarget(t *testing.T) {
 	// Once the pool has assigned a share difficulty, the target must be the
 	// (far easier) share target instead of the full nBits block target —
 	// otherwise a V1 worker would essentially never produce a submittable
@@ -488,9 +507,9 @@ func TestV1JobTarget_PositiveDifficulty_UsesShareTarget(t *testing.T) {
 	const nBits = 0x1d00ffff // genesis (very hard) block target
 	const shareDifficulty = 0.001
 
-	got, err := v1JobTarget(nBits, shareDifficulty)
+	got, err := jobTarget(nBits, miner.Hash{}, shareDifficulty)
 	if err != nil {
-		t.Fatalf("v1JobTarget(difficulty=%v): %v", shareDifficulty, err)
+		t.Fatalf("jobTarget(difficulty=%v): %v", shareDifficulty, err)
 	}
 	wantShare, err := miner.TargetFromDifficulty(shareDifficulty)
 	if err != nil {
@@ -508,9 +527,27 @@ func TestV1JobTarget_PositiveDifficulty_UsesShareTarget(t *testing.T) {
 	}
 }
 
-func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
-	if _, err := v1JobTarget(0x00000000, 0.001); err == nil {
-		t.Error("v1JobTarget should reject invalid nBits even with a valid difficulty")
+func TestJobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
+	if _, err := jobTarget(0x00000000, miner.Hash{}, 0.001); err == nil {
+		t.Error("jobTarget should reject invalid nBits even with a valid difficulty")
+	}
+}
+
+func TestJobTarget_RawShareTargetWins(t *testing.T) {
+	// A pool-assigned raw target (V2 stamp) takes precedence over the
+	// difficulty parameter — the V2 path resolves the target before
+	// applyJob, so no float64 round-trip can degrade it.
+	const nBits = 0x1d00ffff
+	shareTgt, err := miner.TargetFromDifficulty(0.5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := jobTarget(nBits, shareTgt, 9001)
+	if err != nil {
+		t.Fatalf("jobTarget: %v", err)
+	}
+	if got != shareTgt {
+		t.Error("jobTarget must prefer the raw share target over difficulty")
 	}
 }
 
@@ -791,7 +828,7 @@ func TestBenignTransitionReject(t *testing.T) {
 }
 
 // v1DifficultyStubSession is a minimal poolproto.Session whose
-// SuggestedDifficulty returns a fixed value, for v1CurrentShareTarget.
+// SuggestedDifficulty returns a fixed value, for sessionShareTarget.
 type v1DifficultyStubSession struct{ diff float64 }
 
 func (s v1DifficultyStubSession) Close() error               { return nil }
@@ -804,10 +841,10 @@ func (s v1DifficultyStubSession) SuggestedDifficulty() float64 { return s.diff }
 func TestV1CurrentShareTarget(t *testing.T) {
 	// No difficulty suggested yet → zero Hash, i.e. "unknown", which makes
 	// benignTransitionReject conservatively answer false.
-	if got := v1CurrentShareTarget(v1DifficultyStubSession{diff: 0}); got != (miner.Hash{}) {
+	if got := sessionShareTarget(v1DifficultyStubSession{diff: 0}); got != (miner.Hash{}) {
 		t.Errorf("difficulty=0 → %v, want zero Hash", got)
 	}
-	got := v1CurrentShareTarget(v1DifficultyStubSession{diff: 1})
+	got := sessionShareTarget(v1DifficultyStubSession{diff: 1})
 	want, err := miner.TargetFromDifficulty(1)
 	if err != nil {
 		t.Fatalf("TargetFromDifficulty: %v", err)
@@ -1218,8 +1255,8 @@ func TestCurtailDecision(t *testing.T) {
 // ============================================================================
 // sessionOpts.isCurtailed — curtailment gate predicate (session 115)
 //
-// This predicate guards both job-application call sites in runSession /
-// runSessionV1: when it returns true, an incoming pool job must NOT be armed
+// This predicate guards the job-application call site in the shared
+// session loop: when it returns true, an incoming pool job must NOT be armed
 // onto the workers (they stay idle from the curtailment goroutine's
 // SetWork(nil)). The un-curtailed path (nil gate -> jobs applied -> shares
 // reach the pool) is covered end-to-end by TestEngine_Integration_HandshakeSucceeds.
@@ -1272,14 +1309,18 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TargetFromNBits: %v", err)
 	}
-	job := &stratum.NewMiningJob{JobID: 7, Version: 0x20000000}
-	var prevHash [32]byte
+	job := poolproto.Job{
+		JobID:   "7",
+		Version: 0x20000000,
+		NTime:   0x60000000,
+		NBits:   0x207fffff,
+	}
 
 	apply := func() {
 		if opts.isCurtailed() {
-			return // mirror runSession: skip arming while curtailed
+			return // mirror the shared session loop: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
+		_ = applyJob(opts.workers, job, target)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work
@@ -2510,6 +2551,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }

@@ -50,14 +50,13 @@ func TestIsFatal_FalseForNil(t *testing.T) {
 	}
 }
 
-func TestIsFatal_FalseForWrappedFatal(t *testing.T) {
-	// A wrapped fatalError should NOT currently be detected as fatal
-	// (isFatal uses type assertion, not errors.As). This documents the
-	// current behavior; if we later switch to errors.As, flip this test.
+func TestIsFatal_WrappedFatal(t *testing.T) {
+	// isFatal unwraps via errors.As: a fatalError inside fmt.Errorf %w
+	// is still fatal — the reconnect loop must not retry it.
 	inner := &fatalError{msg: "inner"}
 	wrapped := fmt.Errorf("outer: %w", inner)
-	if isFatal(wrapped) {
-		t.Error("isFatal currently does not unwrap; change this test if that changes")
+	if !isFatal(wrapped) {
+		t.Error("wrapped fatalError should be detected as fatal")
 	}
 }
 

@@ -163,6 +163,27 @@ type Job struct {
 	// CleanJobs, when true, indicates older jobs may be discarded.
 	CleanJobs bool
 
+	// ChannelID is the mining channel this job belongs to. Stratum V2
+	// assigns a channel per OpenMiningChannel; V1 is single-channel and
+	// leaves this 0.
+	ChannelID uint32
+
+	// ShareTarget is the pool-assigned share target (U256, little-endian,
+	// MSB at index 31 — the same byte order SetTarget carries) in force
+	// when the job was emitted. The engine uses it directly rather than
+	// re-deriving it from a float64 difficulty, so a V2 target's full
+	// 256 bits survive the trip to the workers. Zero means no per-job
+	// stamp — see TargetAssigned; V1 sessions leave both unset and the
+	// engine uses SuggestedDifficulty instead.
+	ShareTarget [32]byte
+
+	// TargetAssigned reports whether the pool explicitly assigned a share
+	// target this session (V2 OpenMiningChannelSuccess/SetTarget). A
+	// true value with a zero ShareTarget is the unsatisfiable-target
+	// case (max_target = 0): the engine warns and falls back to the
+	// nBits block target rather than mining nothing.
+	TargetAssigned bool
+
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
 	ReceivedAt time.Time
