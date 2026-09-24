@@ -682,6 +682,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		sessionErr := runSession(ctx, sessionOpts{
 			poolURL:      poolURL,
 			user:         user,
+			clk:          r.opts.Clock,
 			workers:      r.workers,
 			merged:       r.merged,
 			interval:     statsInterval,
@@ -803,6 +804,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 type sessionOpts struct {
 	poolURL    string
 	user       string
+	clk        clock.Clock
 	workers    []*miner.Worker
 	merged     <-chan miner.Share
 	interval   time.Duration
@@ -927,6 +929,10 @@ type sessionTelemetry struct {
 	hashrateNotified      bool
 	hashrateNotifiedValue float64
 	hashrateNotifiedAt    time.Time
+
+	// clk feeds the debounce timestamps so tests can drive them with a
+	// fake clock instead of sleeping.
+	clk clock.Clock
 }
 
 // updateChannelMinInterval debounces SV2 UpdateChannel re-notifications
@@ -941,12 +947,17 @@ const (
 	updateChannelDriftDown = 0.75
 )
 
-func newSessionTelemetry(log func(string, string)) *sessionTelemetry {
+func newSessionTelemetry(log func(string, string), clk clock.Clock) *sessionTelemetry {
+	if clk == nil {
+		clk = clock.System{}
+	}
 	return &sessionTelemetry{
 		hashMon: NewHashrateMonitor(0, 3, log),
 		latency: NewLatencyTracker(256),
 
 		unaccountedMon: newUnaccountedWatchdog(log),
+
+		clk: clk,
 	}
 }
 
@@ -1073,7 +1084,7 @@ func (t *sessionTelemetry) updateChannelHashrate(ctx context.Context, sess poolp
 	if !ok || t.lastHashrate <= 0 {
 		return
 	}
-	now := time.Now()
+	now := t.clk.Now()
 	if t.hashrateNotified {
 		if now.Sub(t.hashrateNotifiedAt) < updateChannelMinInterval {
 			return
@@ -1250,7 +1261,7 @@ func runSessionV2(ctx context.Context, opts *sessionOpts) error {
 
 	// estSats, latency and friends live on the shared sessionTelemetry
 	// accumulator so both session loops tick identically.
-	rt := newSessionTelemetry(opts.log)
+	rt := newSessionTelemetry(opts.log, opts.clk)
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 
@@ -1414,7 +1425,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 
 	// estSats, latency and friends live on the shared sessionTelemetry
 	// accumulator so both session loops tick identically.
-	rt := newSessionTelemetry(opts.log)
+	rt := newSessionTelemetry(opts.log, opts.clk)
 	statsTicker := time.NewTicker(opts.interval)
 	defer statsTicker.Stop()
 

@@ -2576,7 +2576,7 @@ func (f *fakePlainSession) Submit(_ context.Context, _ poolproto.ShareSubmission
 func (f *fakePlainSession) SuggestedDifficulty() float64 { return 0 }
 
 func TestSuggestDifficultyOnce_WaitsForMeasuredHashrate(t *testing.T) {
-	rt := newSessionTelemetry(func(_, _ string) {})
+	rt := newSessionTelemetry(func(_, _ string) {}, clock.System{})
 	sess := newFakeSuggestSession()
 	ctx := context.Background()
 
@@ -2611,7 +2611,7 @@ func TestSuggestDifficultyOnce_WaitsForMeasuredHashrate(t *testing.T) {
 }
 
 func TestSuggestDifficultyOnce_SkipsSessionsWithoutMechanism(t *testing.T) {
-	rt := newSessionTelemetry(func(_, _ string) {})
+	rt := newSessionTelemetry(func(_, _ string) {}, clock.System{})
 	rt.lastHashrate = 1e6
 	// A session that does not implement DifficultySuggester (SV2) marks
 	// the flag without panicking and never suggests.
@@ -2623,7 +2623,7 @@ func TestSuggestDifficultyOnce_SkipsSessionsWithoutMechanism(t *testing.T) {
 }
 
 func TestSuggestDifficultyOnce_SuggesterErrorIsInformational(t *testing.T) {
-	rt := newSessionTelemetry(func(_, _ string) {})
+	rt := newSessionTelemetry(func(_, _ string) {}, clock.System{})
 	rt.lastHashrate = 1e6
 	sess := newFakeSuggestSession()
 	sess.suggErr = errors.New("write: broken pipe")
@@ -2677,7 +2677,8 @@ func (f *fakeUpdateSession) UpdateNominalHashrate(_ context.Context, hps float64
 }
 
 func TestUpdateChannelHashrate_DriftRenotify(t *testing.T) {
-	rt := newSessionTelemetry(func(_, _ string) {})
+	fk := clock.NewFake(time.Now())
+	rt := newSessionTelemetry(func(_, _ string) {}, fk)
 	sess := newFakeUpdateSession()
 	ctx := context.Background()
 	drain := func() {
@@ -2715,7 +2716,7 @@ func TestUpdateChannelHashrate_DriftRenotify(t *testing.T) {
 	}
 
 	// Same rate, well past the debounce window — no re-notify.
-	rt.hashrateNotifiedAt = time.Now().Add(-2 * time.Minute)
+	fk.Advance(2 * time.Minute)
 	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
 	expectNone("steady rate")
 
@@ -2726,11 +2727,11 @@ func TestUpdateChannelHashrate_DriftRenotify(t *testing.T) {
 
 	// +50% drift inside the debounce window — suppressed until the
 	// minute is up, then fires once.
-	rt.hashrateNotifiedAt = time.Now()
+	rt.hashrateNotifiedAt = fk.Now()
 	rt.lastHashrate = 1.5e6
 	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
 	expectNone("drift inside debounce")
-	rt.hashrateNotifiedAt = time.Now().Add(-2 * time.Minute)
+	fk.Advance(2 * time.Minute)
 	rt.updateChannelHashrate(ctx, sess, func(_, _ string) {})
 	select {
 	case h := <-sess.hashCh:
@@ -2743,7 +2744,7 @@ func TestUpdateChannelHashrate_DriftRenotify(t *testing.T) {
 	drain()
 
 	// Sessions without the mechanism (V1) return immediately.
-	rtPlain := newSessionTelemetry(func(_, _ string) {})
+	rtPlain := newSessionTelemetry(func(_, _ string) {}, clock.System{})
 	rtPlain.lastHashrate = 1e6
 	rtPlain.updateChannelHashrate(ctx, &fakePlainSession{}, func(_, _ string) {})
 	if rtPlain.hashrateNotified {

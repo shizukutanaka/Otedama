@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Refactored (session 414 — CS 観点の改善洗い出し（第一原理・ソクラテス問答）: sessionTelemetry に clock 注入)
+
+- **`sessionTelemetry` が `clock.Clock` を受け取るようになり、SV2 `UpdateChannel`
+  の debounce 判定が決定的にテスト可能に** — `updateChannelHashrate` の 1 分
+  デバウンスが `time.Now()` 直接参照で、`sessionOpts.clk`（`Options.Clock` 由来）
+  を介さない唯一の時刻依存だった。`newSessionTelemetry(log, clk)` へ変更し
+  `runSession`/`runSessionV2` から `sessionOpts.clk` を伝搬（nil → `clock.System{}`
+  フォールバック）。`TestUpdateChannelHashrate_DriftRenotify` は実時刻の
+  バックデート依存をやめ `clock.NewFake` + `Advance` で駆動する決定的テストへ。
+
 ### Added (session 401 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: worker_threads 実装)
 
 - **`worker_threads` 設定キー + `--worker-threads` フラグ + `OTEDAMA_WORKER_THREADS`**
