@@ -415,6 +415,27 @@ difficulties" (ckolivas) was verified against
 `miner.TargetFromDifficulty` — it truncates the big.Float quotient, so
 the rounded direction errs strict (harder shares), matching the fix.
 
+**Sessions 414–417 CS-invariant pass.** First-principles review of the
+engine's own invariants rather than published claims: session 414–416
+unified every *logical* timestamp onto the injected `clock.Clock`
+(session-loop tick/reject/liveness stamps, arbitration-loop stale
+pruning/reliability epochs/ledger/snapshot) so a test clock governs one
+time base end-to-end; measured wall time (submit RTT `sendTime`) stays
+on the real clock deliberately. Verified already-correct invariants:
+`Decide` is pure (no clock/RNG) and order-independent (score sort +
+StreamID tie-break); `fanIn` observes ctx in both directions and closes
+on drain; `streamsSlice` order cannot leak into user-visible output
+(`activity` reads by ordered providers slice; ExplainRows follow
+`alloc.Assignments`); share drops are deliberate non-blocking sends,
+counted per-worker and — session 417 — exposed as
+`otedama_shares_dropped_total` (previously log-only); `hashrateWindow`
+differentiates delta/dt with reset+backward-time guards; `driftTracker`
+uses relative shift bands with `expire` map pruning; `settleVerdicts`
+resolves counterfactuals per (stream, device); `pendingSwitchCap` (64)
+bounds the ledger; `rejectClass` normalises separators across V1/V2
+spellings; `acceptanceRate` returns 1.0 at 0/0 rather than a spurious 0%
+alarm.
+
 ---
 
 ### Elevation of privilege (E)
