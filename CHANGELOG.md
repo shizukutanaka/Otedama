@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 355 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 裁定エンジンの非有限値サニタイズ)
+
+- **プロバイダの異常クォートを `Effective()` で無害化** — `NaN` は `<= 0` ガードを
+  透過して候補に混入し、`+Inf` はソート首位に座って健全な incumbent を永久追放・
+  `TotalYield` を Inf 汚染していた。`SatsPerSecond`/`Confidence` の NaN・±Inf を
+  0 扱いに、`Confidence` の [0,1] 契約超過をクランプ化。
+- **`incomeScores` の非有限 σ を除外** — `math.Max(NaN, 1e-9)` が 1e-9 を返すため
+  NaN 分散を σ≈0 の「リスクフリー」と誤判定し、Smooth/Balanced モードで巨大
+  Sharpe を獲得していた。非有限 σ は履歴なし扱い（Sharpe 0）。
+- **`Decide` の入力検証を `!(x >= 0)` 形へ** — NaN は全比較に失敗するため
+  `x < 0` チェックを透過し、hysteresis/floor を無言で無効化していた。
+
 ### Fixed (session 354 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 再接続バックオフへのフルジッター適用)
 
 - **再接続スリープを `[0, backoff]` 一様分布へ** — 従来の決定論的指数バックオフ

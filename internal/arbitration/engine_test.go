@@ -5,6 +5,7 @@ package arbitration
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -1768,5 +1769,110 @@ func TestDecide_MemoryFloorExcludesUndersizedGPU(t *testing.T) {
 	}
 	if !byID["gpu-small"].Idle() {
 		t.Errorf("gpu-small should idle (below VRAM floor); got %+v", byID["gpu-small"])
+	}
+}
+
+// TestYieldEffectiveNonFinite covers out-of-contract quote values: NaN
+// and ±Inf must degrade to zero rather than slip through the <=0 guard
+// (NaN) or sort first (+Inf); a confidence above its [0,1] contract is
+// clamped rather than trusted.
+func TestYieldEffectiveNonFinite(t *testing.T) {
+	cases := []struct {
+		name string
+		y    Yield
+		want float64
+	}{
+		{"nan sats", Yield{SatsPerSecond: math.NaN(), Confidence: 1}, 0},
+		{"+inf sats", Yield{SatsPerSecond: math.Inf(1), Confidence: 1}, 0},
+		{"-inf sats", Yield{SatsPerSecond: math.Inf(-1), Confidence: 1}, 0},
+		{"nan confidence", Yield{SatsPerSecond: 5, Confidence: math.NaN()}, 0},
+		{"+inf confidence", Yield{SatsPerSecond: 5, Confidence: math.Inf(1)}, 0},
+		{"confidence >1 clamped", Yield{SatsPerSecond: 5, Confidence: 3}, 5},
+		{"huge confidence clamped", Yield{SatsPerSecond: 1e300, Confidence: 1e300}, 1e300},
+		{"ordinary", Yield{SatsPerSecond: 5, Confidence: 0.5}, 2.5},
+	}
+	for _, c := range cases {
+		if got := c.y.Effective(); got != c.want {
+			t.Errorf("%s: Effective() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestDecideInfYieldCannotDisplaceIncumbent: a provider quoting +Inf
+// yield must not displace a healthy incumbent — before sanitisation the
+// Inf quote sorted first and won every comparison.
+func TestDecideInfYieldCannotDisplaceIncumbent(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	incumbent := Stream{
+		ID:              "pool",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: 10, Confidence: 1}},
+	}
+	lure := Stream{
+		ID:              "lure",
+		AcceptsFamilies: []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:  map[string]Yield{"gpu-0": {SatsPerSecond: math.Inf(1), Confidence: 1}},
+	}
+	prev := &Allocation{Assignments: []Assignment{
+		{DeviceID: "gpu-0", Stream: "pool", ExpectedYield: 10},
+	}}
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu}, Streams: []Stream{incumbent, lure},
+		Previous: prev, Policy: PolicyMaximizeEarnings,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if alloc.Assignments[0].Stream != "pool" {
+		t.Fatalf("Inf-yield stream displaced the incumbent: %+v", alloc.Assignments[0])
+	}
+	if math.IsInf(alloc.TotalYield, 0) || math.IsNaN(alloc.TotalYield) {
+		t.Fatalf("TotalYield poisoned: %v", alloc.TotalYield)
+	}
+}
+
+// TestDecideRejectsNonFiniteInput: NaN margins/floors must error rather
+// than silently disable the configured protection.
+func TestDecideRejectsNonFiniteInput(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	base := Input{Devices: []DeviceRef{gpu}, Policy: PolicyMaximizeEarnings}
+	base.HysteresisMargin = math.NaN()
+	if _, err := Decide(base); err == nil {
+		t.Fatal("NaN HysteresisMargin accepted")
+	}
+	base.HysteresisMargin = 0
+	base.MinYieldSatsPerSec = math.NaN()
+	if _, err := Decide(base); err == nil {
+		t.Fatal("NaN MinYieldSatsPerSec accepted")
+	}
+}
+
+// TestSmoothIgnoresNonFiniteVolatility: a NaN stddev must degrade to
+// "unproven risk" (Sharpe 0) rather than divide by ~1e-9 and produce a
+// stratospheric Sharpe under IncomeModeSmooth.
+func TestSmoothIgnoresNonFiniteVolatility(t *testing.T) {
+	gpu := DeviceRef{Identity: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}}
+	steady := Stream{
+		ID:                  "steady",
+		AcceptsFamilies:     []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:      map[string]Yield{"gpu-0": {SatsPerSecond: 8, Confidence: 1}},
+		VolatilityPerDevice: map[string]float64{"gpu-0": 2},
+	}
+	lure := Stream{
+		ID:                  "lure",
+		AcceptsFamilies:     []hal.Family{hal.FamilyGPU},
+		YieldPerDevice:      map[string]Yield{"gpu-0": {SatsPerSecond: 9, Confidence: 1}},
+		VolatilityPerDevice: map[string]float64{"gpu-0": math.NaN()},
+	}
+	alloc, err := Decide(Input{
+		Devices: []DeviceRef{gpu}, Streams: []Stream{steady, lure},
+		Policy: PolicyMaximizeEarnings, IncomeMode: IncomeModeSmooth,
+	})
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	// steady has a real Sharpe (8-0)/2 = 4; lure's NaN sigma → Sharpe 0.
+	if alloc.Assignments[0].Stream != "steady" {
+		t.Fatalf("NaN-volatility stream won under smooth: %+v", alloc.Assignments[0])
 	}
 }

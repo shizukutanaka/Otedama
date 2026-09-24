@@ -88,12 +88,28 @@ type Yield struct {
 }
 
 // Effective returns the confidence-adjusted yield. A quote with zero
-// confidence is treated as zero yield.
+// confidence is treated as zero yield. Values outside the Yield
+// contract are sanitized rather than trusted: Confidence is clamped to
+// its documented [0, 1] range, and any non-finite input or result (NaN
+// or ±Inf from a misbehaving provider's quote parsing) degrades to 0 —
+// a finite value compares below every real quote, whereas NaN slips
+// past the `<= 0` guard and +Inf would sort first and displace every
+// incumbent.
 func (y Yield) Effective() float64 {
-	if y.SatsPerSecond <= 0 || y.Confidence <= 0 {
+	if y.SatsPerSecond <= 0 || y.Confidence <= 0 ||
+		math.IsNaN(y.SatsPerSecond) || math.IsInf(y.SatsPerSecond, 0) ||
+		math.IsNaN(y.Confidence) || math.IsInf(y.Confidence, 0) {
 		return 0
 	}
-	return y.SatsPerSecond * y.Confidence
+	conf := y.Confidence
+	if conf > 1 {
+		conf = 1
+	}
+	e := y.SatsPerSecond * conf
+	if math.IsInf(e, 0) { // finite × finite can still overflow
+		return 0
+	}
+	return e
 }
 
 // Stream is a revenue source's quote for what it will pay for each
@@ -412,10 +428,12 @@ func Decide(in Input) (*Allocation, error) {
 	if !in.Policy.Valid() {
 		return nil, fmt.Errorf("arbitration: invalid Policy %v", in.Policy)
 	}
-	if in.HysteresisMargin < 0 {
+	// !(x >= 0) rather than x < 0: NaN fails every comparison, so a NaN
+	// margin or floor would silently disable the check it configures.
+	if !(in.HysteresisMargin >= 0) {
 		return nil, errors.New("arbitration: HysteresisMargin must be non-negative")
 	}
-	if in.MinYieldSatsPerSec < 0 {
+	if !(in.MinYieldSatsPerSec >= 0) {
 		return nil, errors.New("arbitration: MinYieldSatsPerSec must be non-negative")
 	}
 
@@ -656,8 +674,14 @@ func incomeScores(candidates []candidate, deviceID string, minYield float64, mod
 	sharpes := make([]float64, len(candidates))
 	adj := make([]float64, len(candidates))
 	maxY, maxS := 0.0, 0.0
-	for i, c := range candidates {
-		if std, ok := c.stream.VolatilityPerDevice[deviceID]; ok {
+	for i := range candidates {
+		c := &candidates[i]
+		// A non-finite stddev is skipped like an absent one rather than
+		// trusted: math.Max(NaN, 1e-9) resolves to 1e-9, which would
+		// divide the yield by ~zero and award a misbehaving stream a
+		// stratospheric Sharpe.
+		if std, ok := c.stream.VolatilityPerDevice[deviceID]; ok &&
+			!math.IsNaN(std) && !math.IsInf(std, 0) {
 			sharpes[i] = (c.yield - minYield) / math.Max(std, 1e-9)
 		}
 		if c.yield > maxY {
@@ -667,7 +691,8 @@ func incomeScores(candidates []candidate, deviceID string, minYield float64, mod
 			maxS = sharpes[i]
 		}
 	}
-	for i, c := range candidates {
+	for i := range candidates {
+		c := &candidates[i]
 		switch mode {
 		case IncomeModeSmooth:
 			adj[i] = sharpes[i]
