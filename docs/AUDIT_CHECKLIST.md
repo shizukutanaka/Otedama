@@ -20,7 +20,7 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 1 | Source builds without warnings on Go 1.22+ | `go build ./...` at repo root | Exit code 0, no output |
+| 1 | Source builds without warnings on Go 1.25+ | `go build ./...` at repo root | Exit code 0, no output — `go 1.25.0` directive + `toolchain go1.25.13` pin (tlsmlkem needs Go 1.24+) |
 | 2 | Tests pass with the race detector | `go test -race -timeout 5m ./...` | Exit code 0 |
 | 3 | `go vet` is clean | `go vet ./...` | Exit code 0 |
 | 4 | `staticcheck` is clean | `staticcheck ./...` | Exit code 0 |
@@ -49,7 +49,7 @@ If any row does not pass, open a security advisory.
 | 17 | No secrets in repository history | `git log -p \| grep -iE 'password=\|api_key=\|secret='` plus GitHub secret scanning | No hits |
 | 18 | Wallet file written with 0600 perms | `internal/lightning/wallet.go` `os.WriteFile(..., 0600)` | Perm 0600 enforced |
 | 19 | Mnemonic never logged | `grep -r 'mnemonic' internal/logger/ internal/lightning/` | Displayed once on stdout, never logged |
-| 20 | Passphrase accepted via env, not flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference |
+| 20 | Passphrase accepted via env, preferred over flag | `docs/API.md` recommends `OTEDAMA_WALLET_PASSPHRASE` | Documented preference — `--wallet-passphrase` exists but leaks to process lists |
 | 21 | No default password or pre-shared key | Grep for hardcoded strings | None found |
 
 ## Cryptography
