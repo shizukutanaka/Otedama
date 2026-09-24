@@ -139,11 +139,18 @@ Get-EventLog -LogName Application -Source Otedama -Newest 50
 
 ### Image
 
-Pull the official image (built from `Dockerfile`):
+Build the image locally from `Dockerfile`:
 
 ```bash
-docker pull ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
+docker build -t otedama:local .
 ```
+
+No registry image is published yet — the `ghcr.io` push jobs live in
+the CI workflows that are currently non-functional (see
+`docs/KNOWN_LIMITATIONS.md` §13), so a `docker pull` of
+`ghcr.io/shizukutanaka/otedama` does not resolve today. The examples
+below use the local tag `otedama:local`; when a published image lands,
+swap it for the registry name.
 
 Images are built on a distroless base. Cosign/Sigstore image signing is
 **not yet implemented** — it is a planned v3.1.0 item
@@ -161,7 +168,7 @@ docker run -d \
   -p 127.0.0.1:9090:9090 \
   -e OTEDAMA_BITCOIN_ADDRESS=bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
   -e OTEDAMA_DATA_DIR=/var/lib/otedama \
-  ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1 \
+  otedama:local \
   run --http-addr=0.0.0.0:9090
 ```
 
@@ -176,7 +183,7 @@ lost on recreate.
 ```yaml
 services:
   otedama:
-    image: ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
+    image: otedama:local
     restart: unless-stopped
     command:
       - run
@@ -228,7 +235,7 @@ spec:
     spec:
       containers:
       - name: otedama
-        image: ghcr.io/shizukutanaka/otedama:v3.0.0-alpha.1
+        image: otedama:local
         args:
         - run
         - --http-addr=0.0.0.0:9090
