@@ -1207,6 +1207,21 @@ with `Capabilities{SHA256d:false}` — matching the GPU drivers'
 detection-only posture. Firmware control/dispatch across the five
 dialect families remains the ADR-008 SD1 residual.
 
+**Session-305 follow-up (V1 `mining.set_target`):** RESEARCH item 5's
+V1-extension handling covered the client→pool direction
+(`suggest_difficulty`, session 294) and `set_difficulty` inbound, but
+the pool→client *target form* — `mining.set_target` (zip-0301
+canonical; braiins/bosminer, ckpool- and BFGMiner-family vardiff
+variant carrying a 256-bit big-endian hex target instead of a
+difficulty number) — was silently ignored, leaving
+`SuggestedDifficulty()` stale on pools that speak it. Now parsed and
+converted through `miner.DifficultyFromTarget` with the same
+zero/degenerate guard as the SV2 zero-target lesson;
+`mining.suggest_target` in the same notification shape is accepted
+too. Verified `mining.suggest_target`'s *request* direction stays
+client→pool per BFGMiner-era spec — we do not send it (the
+`mining.suggest_difficulty` one-shot hint already covers that need).
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

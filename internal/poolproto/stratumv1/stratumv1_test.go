@@ -163,6 +163,103 @@ func TestParseDifficulty_Malformed(t *testing.T) {
 }
 
 // ============================================================================
+// parseSetTarget (mining.set_target / mining.suggest_target params)
+// ============================================================================
+
+func TestParseSetTarget_DifficultyOne(t *testing.T) {
+	// The Bitcoin "difficulty 1" target (0xffff << 208) as a big-endian
+	// 64-hex string — what a braiins-style pool sends as set_target.
+	d, ok := parseSetTarget(json.RawMessage(`["00000000ffff0000000000000000000000000000000000000000000000000000"]`))
+	if !ok {
+		t.Fatal("parseSetTarget returned !ok for diff1 target")
+	}
+	if d < 0.999 || d > 1.001 {
+		t.Errorf("difficulty = %v, want ~1.0", d)
+	}
+}
+
+func TestParseSetTarget_CommonVardiffTarget(t *testing.T) {
+	// 0x000000000000ffff followed by 48 zeros = diff1 >> 16 — a
+	// low-difficulty vardiff target. Proves the big-endian read: a
+	// little-endian mis-parse would yield a vanishingly small or
+	// absurdly large difficulty.
+	d, ok := parseSetTarget(json.RawMessage(`["000000000000ffff000000000000000000000000000000000000000000000000"]`))
+	if !ok {
+		t.Fatal("parseSetTarget returned !ok")
+	}
+	// diff1 / (0xffff << 192) = 2^16 = 65536.
+	if d < 65000 || d > 66000 {
+		t.Errorf("difficulty = %v, want ~65536 (big-endian parse)", d)
+	}
+}
+
+func TestParseSetTarget_RejectsInvalid(t *testing.T) {
+	cases := []string{
+		`[]`,           // empty params
+		`[""]`,         // empty hex
+		`["0000ffff"]`, // too short
+		`["zzzz0000ffff0000000000000000000000000000000000000000000000000000"]`,  // non-hex
+		`["0000000000000000000000000000000000000000000000000000000000000000"]`,  // zero target → +Inf
+		`["fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"]`, // 65 chars
+		`not json`,
+		`[12345]`, // number, not string
+	}
+	for _, c := range cases {
+		if d, ok := parseSetTarget(json.RawMessage(c)); ok {
+			t.Errorf("parseSetTarget(%s) = %v, want !ok", c, d)
+		}
+	}
+}
+
+func TestSession_SetTargetNotificationUpdatesDifficulty(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// A braiins-style pool announces vardiff via a raw 256-bit target
+	// rather than set_difficulty's difficulty number: diff1 → ~1.0.
+	_, _ = fmt.Fprintf(serverConn, `{"id":null,"method":"mining.set_target","params":["00000000ffff0000000000000000000000000000000000000000000000000000"]}`+"\n")
+
+	deadline := time.After(2 * time.Second)
+	for sess.SuggestedDifficulty() == 0 {
+		select {
+		case <-deadline:
+			t.Fatalf("SuggestedDifficulty = %v, want ~1.0 after set_target", sess.SuggestedDifficulty())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if d := sess.SuggestedDifficulty(); d < 0.999 || d > 1.001 {
+		t.Errorf("SuggestedDifficulty = %v, want ~1.0", d)
+	}
+
+	// mining.suggest_target in the same notification shape is accepted
+	// too: diff1 >> 16 → ~65536.
+	_, _ = fmt.Fprintf(serverConn, `{"id":null,"method":"mining.suggest_target","params":["000000000000ffff000000000000000000000000000000000000000000000000"]}`+"\n")
+	deadline = time.After(2 * time.Second)
+	for sess.SuggestedDifficulty() < 60000 {
+		select {
+		case <-deadline:
+			t.Fatalf("SuggestedDifficulty = %v, want ~65536 after suggest_target", sess.SuggestedDifficulty())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	// A malformed target must not clobber the stored value.
+	_, _ = fmt.Fprintf(serverConn, `{"id":null,"method":"mining.set_target","params":["zz"]}`+"\n")
+	time.Sleep(50 * time.Millisecond)
+	if d := sess.SuggestedDifficulty(); d < 60000 || d > 70000 {
+		t.Errorf("SuggestedDifficulty = %v after malformed target, want preserved ~65536", d)
+	}
+}
+
+// ============================================================================
 // parseSetExtranonce
 // ============================================================================
 

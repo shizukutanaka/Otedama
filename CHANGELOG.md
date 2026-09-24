@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 305 — V1 `mining.set_target` 受信対応)
+
+- **V1 `mining.set_target` / `mining.suggest_target`（pool→client）を処理**
+  — braiins/bosminer・ckpool・BFGMiner 系プールが set_difficulty の代わりに
+  送る vardiff 別形式（256bit ビッグエンディアン hex ターゲット）が未処理
+  で、該当プールでは `SuggestedDifficulty()` が初期値のまま残り低難度
+  シェア拒否につながり得た。`miner.DifficultyFromTarget` で難度数値へ変換
+  して同一フィールドに格納（ゼロターゲット等の縮退値は SV2 と同一ガード
+  で拒否）。
+
 ### Added (session 304 — KNOWN_LIMITATIONS §8 ASIC 検出 + SRI v1.12.0 監査)
 
 - **オプトイン `asic_endpoints` による ASIC 検出** — `hal.ASICDriver` が

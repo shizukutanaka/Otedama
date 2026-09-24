@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/miner"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
@@ -99,6 +100,40 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 		return 0, false
 	}
 	return p[0], true
+}
+
+// parseSetTarget decodes a pool→client target notification's params:
+// [target_hex] — the vardiff variant some pools (braiins/bosminer,
+// ckpool-family, BFGMiner-era software) send instead of set_difficulty,
+// as mining.set_target (and occasionally mining.suggest_target in the
+// same notification shape). The wire value is a 256-bit target as 64
+// hex digits in BIG-endian order (zip-0301 §mining.set_target); we
+// convert it to the difficulty number our callers expect from
+// SuggestedDifficulty(). A malformed or zero/degenerate target is
+// rejected (a zero target would mean infinite difficulty — the same
+// guard as the SV2 zero-target lesson).
+func parseSetTarget(raw json.RawMessage) (float64, bool) {
+	var p []string
+	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
+		return 0, false
+	}
+	hexStr := p[0]
+	if len(hexStr) != 64 {
+		return 0, false
+	}
+	be, err := hex.DecodeString(hexStr)
+	if err != nil || len(be) != 32 {
+		return 0, false
+	}
+	var h miner.Hash
+	for i := 0; i < 32; i++ {
+		h[i] = be[31-i] // wire is big-endian; Hash/DifficultyFromTarget expect little-endian
+	}
+	d := miner.DifficultyFromTarget(h)
+	if math.IsInf(d, 0) || math.IsNaN(d) || d <= 0 {
+		return 0, false
+	}
+	return d, true
 }
 
 // parseSetExtranonce decodes mining.set_extranonce params:

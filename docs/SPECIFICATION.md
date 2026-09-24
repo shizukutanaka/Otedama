@@ -154,6 +154,11 @@ configured pool URLs — each tagged with the layer it was resolved from.
    no difficulty request, so var-diff likewise stays pool-side. A
    pool's `UpdateChannel.Error` (0x17) reply is advisory and does not
    disturb the session.
+   On **V1 sessions**, pool→client difficulty updates are accepted in
+   both wire forms: `mining.set_difficulty` (a difficulty number) and
+   `mining.set_target` / `mining.suggest_target` (a 256-bit big-endian
+   hex target, the braiins/ckpool/BFGMiner-family vardiff variant),
+   converted to the same stored difficulty.
    On `Reconnect` (msg_type 0x04, common §3.6.5) the V2 session records
    the directive and closes — the reconnect loop re-dials the configured
    pool; the pool-supplied host:port is deliberately NOT followed (same
