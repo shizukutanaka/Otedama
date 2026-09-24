@@ -11,7 +11,8 @@
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
 #   2. Downloads the matching Otedama binary from GitHub Releases.
-#   3. Verifies the SHA-256 checksum against the published checksums.txt.
+#   3. Verifies the SHA-256 checksum via the Releases API per-asset digest
+#      (falls back to checksums.txt if it is ever published).
 #   4. Optionally verifies the cosign signature of the checksums file.
 #   5. Installs the binary to $PREFIX/bin (default: /usr/local/bin, or
 #      $HOME/.local/bin if /usr/local is not writable).
@@ -124,10 +125,6 @@ log "downloading ${ARCHIVE}..."
 curl -sSfL "${BASE_URL}/${ARCHIVE}" -o "${TMPDIR}/${ARCHIVE}" \
     || die "download failed"
 
-log "downloading checksums..."
-curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" \
-    || die "checksums download failed"
-
 # ---------- SHA-256 verification ----------
 
 if [[ "$SKIP_VERIFY" == "1" ]]; then
@@ -135,15 +132,34 @@ if [[ "$SKIP_VERIFY" == "1" ]]; then
 else
     log "verifying SHA-256..."
     cd "$TMPDIR"
-    if command -v sha256sum >/dev/null 2>&1; then
-        grep " ${ARCHIVE}$" checksums.txt | sha256sum -c - >/dev/null 2>&1 \
-            || die "SHA-256 verification FAILED. Download may be tampered."
-    else
-        expected=$(grep " ${ARCHIVE}$" checksums.txt | awk '{print $1}')
-        actual=$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')
-        [[ "$expected" == "$actual" ]] \
-            || die "SHA-256 mismatch: expected $expected, got $actual"
+    expected=""
+    # Primary source: the per-asset digest exposed by the Releases API.
+    # checksums.txt is not currently published as a release asset (the
+    # release workflow's asset list omits it), so it is only a fallback.
+    release_json=$(curl -sSfL \
+        "https://api.github.com/repos/${REPO}/releases/tags/${VERSION}" 2>/dev/null || true)
+    if [[ -n "$release_json" ]]; then
+        expected=$(printf '%s' "$release_json" \
+            | awk -F'\\},\\{' '{for(i=1;i<=NF;i++) print $i}' \
+            | grep "\"name\"[[:space:]]*:[[:space:]]*\"${ARCHIVE}\"" \
+            | grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]*"' \
+            | sed -E 's/.*sha256:([0-9a-f]+).*/\1/' \
+            | head -n1)
     fi
+    if [[ -z "$expected" ]] \
+        && curl -sSfL "${BASE_URL}/checksums.txt" -o checksums.txt 2>/dev/null; then
+        expected=$(grep " ${ARCHIVE}$" checksums.txt | awk '{print $1}')
+    fi
+    [[ -z "$expected" ]] \
+        && die "no checksum source for ${ARCHIVE} (API digest absent and checksums.txt unpublished)"
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
+    else
+        actual=$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')
+    fi
+    [[ "$expected" == "$actual" ]] \
+        || die "SHA-256 mismatch: expected $expected, got $actual"
+    log "SHA-256 verified."
     cd - >/dev/null
 fi
 
@@ -154,7 +170,9 @@ if command -v cosign >/dev/null 2>&1; then
     cd "$TMPDIR"
     if curl -sSfL "${BASE_URL}/checksums.txt.sig" -o checksums.txt.sig 2>/dev/null \
         && curl -sSfL "${BASE_URL}/checksums.txt.pem" -o checksums.txt.pem 2>/dev/null; then
-        if cosign verify-blob \
+        [[ -f checksums.txt ]] \
+            || curl -sSfL "${BASE_URL}/checksums.txt" -o checksums.txt 2>/dev/null || true
+        if [[ -f checksums.txt ]] && cosign verify-blob \
             --certificate checksums.txt.pem \
             --signature checksums.txt.sig \
             --certificate-identity-regexp "https://github.com/${REPO}/.github/workflows/.*" \
