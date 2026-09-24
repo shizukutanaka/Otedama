@@ -1511,6 +1511,11 @@ Also in session 340: `parseDifficulty` now rejects degenerate
 `set_difficulty`/`suggest_difficulty` values (zero, negative, NaN,
 +Inf) — the same guard the set_target path already has — because
 storing one would make `TargetFromDifficulty` fail every share.
+And `parseSubscribeResult`/`parseSetExtranonce` now bound the
+extranonce pair (`validExtranonce`): a negative `extranonce2_size`
+would panic `strings.Repeat` on the next submit, and non-hex or
+oversized extranonce1 previously failed only at share time — a
+hostile pool could crash the handshake or mid-session submit.
 
 ---
 

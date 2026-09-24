@@ -1989,15 +1989,15 @@ func TestParseSubscribeResult_Valid(t *testing.T) {
 			[]any{"mining.set_difficulty", "sub1"},
 			[]any{"mining.notify", "sub2"},
 		},
-		"extranonce1hex",
+		"01a2b3c4",
 		float64(4),
 	}
 	en1, en2Size, err := parseSubscribeResult(result)
 	if err != nil {
 		t.Fatalf("parseSubscribeResult: %v", err)
 	}
-	if en1 != "extranonce1hex" {
-		t.Errorf("extranonce1 = %q, want extranonce1hex", en1)
+	if en1 != "01a2b3c4" {
+		t.Errorf("extranonce1 = %q, want 01a2b3c4", en1)
 	}
 	if en2Size != 4 {
 		t.Errorf("extranonce2Size = %d, want 4", en2Size)
@@ -2046,6 +2046,52 @@ func TestParseSubscribeResult_Extranonce2SizeNotNumber(t *testing.T) {
 	_, _, err := parseSubscribeResult(result)
 	if err == nil {
 		t.Error("non-number extranonce2_size should error")
+	}
+}
+
+func TestParseSubscribeResult_DegenerateExtranonce(t *testing.T) {
+	// Bounds: en2_size <= 0 would panic strings.Repeat at submit time,
+	// and absurd sizes are impossible inside a coinbase script. en1 must
+	// be even-length hex when present. A hostile pool's garbage must fail
+	// the handshake, not the session mid-share.
+	cases := []struct {
+		name  string
+		en1   string
+		en2sz float64
+	}{
+		{"negative en2 size", "aabb", -1},
+		{"zero en2 size", "aabb", 0},
+		{"huge en2 size", "aabb", 1 << 20},
+		{"fractional en2 size", "aabb", 4.5},
+		{"odd-length en1", "abc", 4},
+		{"non-hex en1", "extranonce1hex", 4},
+		{"overlong en1", strings.Repeat("aa", 129), 4},
+	}
+	for _, tc := range cases {
+		result := []any{[]any{}, tc.en1, tc.en2sz}
+		if _, _, err := parseSubscribeResult(result); err == nil {
+			t.Errorf("%s: want error", tc.name)
+		}
+	}
+}
+
+func TestParseSetExtranonce_DegenerateRejected(t *testing.T) {
+	// Same bounds applied mid-session: a hostile pool could push a
+	// negative en2 size and panic strings.Repeat on the next submit.
+	for _, raw := range []string{
+		`["aabb", -1]`,
+		`["aabb", 0]`,
+		`["aabb", 1000]`,
+		`["nothexzz", 4]`,
+		`["abc", 4]`,
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(raw)); ok {
+			t.Errorf("parseSetExtranonce(%s) should be !ok", raw)
+		}
+	}
+	// Legitimate rotation still parses.
+	if en1, sz, ok := parseSetExtranonce(json.RawMessage(`["deadbeef01", 8]`)); !ok || en1 != "deadbeef01" || sz != 8 {
+		t.Errorf("parseSetExtranonce valid = %q,%d,%v", en1, sz, ok)
 	}
 }
 

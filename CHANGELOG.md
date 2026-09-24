@@ -21,7 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   NaN/+Inf を受理すると `TargetFromDifficulty` が以後の全シェアで失敗し、バグまたは
   悪意のあるプールによるセッション DoS になり得た。`set_target` のゼロガードと
   同等の防御を difficulty 経路にも適用（既存値は保護される）。
-
+- **extranonce 値の境界検証（`validExtranonce`）** — subscribe の `extranonce2_size` と
+  `mining.set_extranonce` の中間ローテーション双方で、負値・非整数・巨大値・
+  非 hex/奇数長の extranonce1 を拒否。負のサイズは submit 時の
+  `strings.Repeat` を panic させ、巨大値は過剰メモリを要求し得たため、悪意のある
+  プールがハンドシェイク/セッションを落とせた実バグを解消。
 
 ### Added (session 339 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V1 version-rolling 拡張交渉)
 

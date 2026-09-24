@@ -157,6 +157,9 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	if err := json.Unmarshal(p[1], &sz); err != nil {
 		return "", 0, false
 	}
+	if !validExtranonce(en1, sz) {
+		return "", 0, false
+	}
 	return en1, sz, true
 }
 
@@ -262,7 +265,33 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
 	}
+	if en2SizeF != math.Trunc(en2SizeF) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not an integer: %v", en2SizeF)
+	}
+	if !validExtranonce(en1, int(en2SizeF)) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce values out of range (en1 len=%d, en2_size=%v)", len(en1), en2SizeF)
+	}
 	return en1, int(en2SizeF), nil
+}
+
+// validExtranonce bounds the extranonce pair at subscribe time and on
+// mining.set_extranonce pushes. Bounds: extranonce2 lives inside the
+// coinbase script (≤100 bytes total with extranonce1), and a negative
+// size would panic strings.Repeat at submit time — a hostile pool could
+// crash the session. Pools in the wild use 4–8; 64 is the generous
+// ceiling. extranonce1 is hex-encoded when present.
+func validExtranonce(en1 string, en2Size int) bool {
+	if en2Size < 1 || en2Size > 64 {
+		return false
+	}
+	if en1 == "" {
+		return true
+	}
+	if len(en1) > 128 || len(en1)%2 != 0 {
+		return false
+	}
+	_, err := hex.DecodeString(en1)
+	return err == nil
 }
 
 // ----- helpers -----
