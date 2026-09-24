@@ -1877,3 +1877,51 @@ func TestDialer_Negotiate_UnreadingPoolWriteTimesOut(t *testing.T) {
 		t.Fatal("Negotiate write blocked past the write deadline")
 	}
 }
+
+// A wedged pool that completes the handshake but never answers share
+// verdicts must not pin the pending entry and goroutine until session
+// end: Submit returns via submitResponseTimeout with the provisional
+// unconfirmed result (jobs still flow, so the read deadline never
+// trips — same class as the V1 fix in session 358).
+func TestSession_Submit_SilentPoolTimesOut(t *testing.T) {
+	old := submitResponseTimeout
+	submitResponseTimeout = 100 * time.Millisecond
+	defer func() { submitResponseTimeout = old }()
+
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(1)
+		// Read the submit frame so the client's write completes
+		// (net.Pipe is synchronous), then stay silent — no verdict.
+		_, _ = pool.dec.ReadFrame()
+		<-ctx.Done()
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	start := time.Now()
+	res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "42", Nonce: 1})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !res.Unconfirmed {
+		t.Errorf("result = %+v, want Unconfirmed=true (verdict never arrived)", res)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("Submit took %v, want ~100ms via submitResponseTimeout", elapsed)
+	}
+}

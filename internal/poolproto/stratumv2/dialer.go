@@ -270,6 +270,12 @@ var readFrameDeadline = 5 * time.Minute
 // tests can shorten it.
 var writeFrameDeadline = 10 * time.Second
 
+// submitResponseTimeout bounds the wait for a pool's share verdict —
+// a wedged pool that keeps streaming jobs (so the read deadline never
+// trips) while dropping verdicts would otherwise leak one pending entry
+// and one goroutine per share until session end. var for tests.
+var submitResponseTimeout = 2 * time.Minute
+
 // start launches the read loop that decodes NewMiningJob frames and
 // forwards them onto jobsCh. The loop exits on read error, ctx
 // cancellation, or connection close, closing jobsCh on the way out.
@@ -540,6 +546,8 @@ func (s *session) ChannelID() uint32 { return s.chanID }
 // but unconfirmed — the provisional result is Accepted=true, per the
 // Session contract.
 func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (poolproto.ShareResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, submitResponseTimeout)
+	defer cancel()
 	jobID := parseJobID(sub.JobID)
 	n := s.seq.Add(1)
 	resultCh := make(chan poolproto.ShareResult, 1)

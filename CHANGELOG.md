@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 364 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V2 submit 応答タイムアウト)
+
+- **V2 `Submit` へ2分の応答タイムアウト** — session 358 で V1 に適用したのと同じ
+  wedged-pool リーク面が V2 にも残っていた: ジョブを流し続ける（read deadline が
+  発火しない）プールが判定を落とすと、`pending` エントリと goroutine がシェア毎に
+  セッション終了まで蓄積。`submitResponseTimeout`（var・テスト書換可）を `Submit`
+  内で `context.WithTimeout` として適用 — ctx 期限切れ時は既存の Session 契約どおり
+  provisional `Unconfirmed` を返す。
+
 ### Security (session 363 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: asic_endpoints・bitcoin_address の制御文字拒否)
 
 - **`asic_endpoints` の C0 制御バイト拒否** — 手書き文法の reject 集合は
