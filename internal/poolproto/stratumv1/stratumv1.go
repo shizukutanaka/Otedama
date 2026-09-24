@@ -61,6 +61,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
+	"github.com/shizukutanaka/Otedama/internal/version"
 )
 
 // ----- session -----
@@ -353,8 +354,21 @@ func (s *session) dispatch(line []byte) {
 			s.lastReconnect.Store(&d)
 		}
 		go s.Close()
-		// Unhandled notifications are silently ignored;
-		// forward-compatible with pool extensions.
+	case "client.get_version":
+		// Pool asks our agent string (fingerprinting). Reply with
+		// "otedama/<semver>" — the same "name/version" shape cgminer and
+		// slushpool clients send. Only meaningful as a request (with id).
+		if msg.ID != nil {
+			s.answerPoolRequest(msg.ID, "otedama/"+version.Version, nil)
+		}
+	default:
+		// Unhandled notifications are silently ignored —
+		// forward-compatible with pool extensions. A *request* (method
+		// WITH id), though, must not go unanswered: strict pools log or
+		// disconnect clients that never reply. Answer method-not-found.
+		if msg.ID != nil {
+			s.answerPoolRequest(msg.ID, nil, []any{-32601, "Method not found", nil})
+		}
 	}
 }
 
@@ -549,13 +563,7 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		s.pendingMu.Unlock()
 		return rpcResponse{}, err
 	}
-	body = append(body, '\n')
-
-	s.writeMu.Lock()
-	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	_, err = s.conn.raw.Write(body)
-	s.writeMu.Unlock()
-	if err != nil {
+	if err := s.writeLine(body); err != nil {
 		s.pendingMu.Lock()
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
@@ -574,6 +582,33 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		s.pendingMu.Unlock()
 		return rpcResponse{}, ctx.Err()
 	}
+}
+
+// writeLine sends one newline-terminated JSON-RPC message on the wire.
+// Serialized by writeMu and bounded by a 10-second deadline — the same
+// policy call() used inline.
+func (s *session) writeLine(body []byte) error {
+	body = append(body, '\n')
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_, err := s.conn.raw.Write(body)
+	return err
+}
+
+// answerPoolRequest replies to a pool→client JSON-RPC request. V1
+// requests are rare — client.get_version is the only method we serve —
+// but an unanswered request is logged or punished by strict pools, so
+// unknown requests get a standard method-not-found error instead of
+// silence. Write failures are dropped: the read loop surfaces a broken
+// connection on its own.
+func (s *session) answerPoolRequest(id, result, rpcErr any) {
+	resp := map[string]any{"id": id, "result": result, "error": rpcErr}
+	body, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	_ = s.writeLine(body)
 }
 
 // ----- registration -----

@@ -1251,6 +1251,25 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 295 increment (V1 pool-request answer policy)
+
+- **実装（interop）: プール→クライアント JSON-RPC リクエストへの応答ポリシー** ——
+  V1 ディスパッチはメソッド+id を持つリクエスト（`client.get_version`
+  等）を通知と同じ黙殺で処理していたため、厳格なプールで「応答の
+  ないクライアント」としてログ/切断される余地があった。
+  `client.get_version` は `otedama/<semver>` のエージェント文字列を
+  結果返却（cgminer/slushpool の name/version 形式）、他の未知
+  リクエストは JSON-RPC `[-32601, "Method not found"]` エラー応答
+  （id なし通知は引き続き無視 —— 前方互換維持）。`call` の書込
+  パスを `writeLine` ヘルパに抽出して応答経路と共通化。
+- **新規テスト:** `TestSession_PoolRequests_AnswerPolicy` —— net.Pipe
+  経由で get_version 応答（`otedama/` 接頭辞）、未知リクエストの
+  -32601 応答、id なし通知の沈黙を検証。
+- **検証済み記録:** `mining.get_transactions`/`client.reconnect` の
+  消費は ADR 議論継続、`mining.suggest_difficulty` は送信値の妥当な
+  根拠（hashrate 推定）が handshake 時点で存在せず vardiff 収束に
+  依存する現状でマージナル —— 両者とも記録のみ。
+
 ## September 2026 research pass — session 294 increment (PoolNotices wiring)
 
 - **実装（配線欠落）: `PoolNotices` を engine が排出** —— `poolproto.

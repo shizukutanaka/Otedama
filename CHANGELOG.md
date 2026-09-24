@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 295 — V1 プールリクエスト応答ポリシー)
+
+- **プール→クライアント JSON-RPC リクエストに応答** —— `client.
+  get_version` は `otedama/<semver>` を返却、未知メソッド+id は
+  JSON-RPC `-32601` エラー応答で「応答しないクライアント」扱いを
+  解消（id なし通知は従来通り無視 —— 前方互換）。
+
 ### Fixed (session 294 — PoolNotices 配線)
 
 - **engine が `PoolNotices` を排出して運営通知をログに出す** ——

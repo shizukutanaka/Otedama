@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -2386,5 +2387,75 @@ func TestNegotiate_VersionRollingRejected(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if got := sess.(*session).VersionMask(); got != 0 {
 		t.Errorf("VersionMask = %#x after rejected configure, want 0", got)
+	}
+}
+
+// Pool→client requests: client.get_version gets an agent-string result;
+// unknown methods get a JSON-RPC method-not-found error; a method sent
+// as a notification (no id) stays silent.
+func TestSession_PoolRequests_AnswerPolicy(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	br := bufio.NewReader(serverConn)
+
+	if _, err := serverConn.Write([]byte(`{"id":42,"method":"client.get_version","params":[]}` + "\n")); err != nil {
+		t.Fatalf("write get_version: %v", err)
+	}
+	line, err := br.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read get_version response: %v", err)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	result, _ := resp["result"].(string)
+	if !strings.HasPrefix(result, "otedama/") {
+		t.Errorf("client.get_version result = %v, want otedama/<version>", resp["result"])
+	}
+	if resp["error"] != nil {
+		t.Errorf("client.get_version error = %v, want nil", resp["error"])
+	}
+
+	if _, err := serverConn.Write([]byte(`{"id":43,"method":"pool.unknown_thing","params":[]}` + "\n")); err != nil {
+		t.Fatalf("write unknown request: %v", err)
+	}
+	line, err = br.ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read unknown-request response: %v", err)
+	}
+	resp = map[string]any{}
+	if err := json.Unmarshal(line, &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	errArr, ok := resp["error"].([]any)
+	if !ok || len(errArr) == 0 || errArr[0] != float64(-32601) {
+		t.Errorf("unknown request error = %v, want [-32601, ...]", resp["error"])
+	}
+
+	// Unknown notification (no id) must produce NO wire output.
+	if _, err := serverConn.Write([]byte(`{"id":null,"method":"pool.unknown_thing","params":[]}` + "\n")); err != nil {
+		t.Fatalf("write unknown notification: %v", err)
+	}
+	_ = serverConn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	line, err = br.ReadBytes('\n')
+	_ = serverConn.SetReadDeadline(time.Time{})
+	if err == nil {
+		t.Errorf("notification produced response %s, want silence", line)
+	} else {
+		var nerr net.Error
+		if !errors.As(err, &nerr) || !nerr.Timeout() {
+			t.Fatalf("expected read timeout, got %v", err)
+		}
 	}
 }
