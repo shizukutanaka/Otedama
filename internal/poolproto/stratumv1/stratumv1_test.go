@@ -206,6 +206,22 @@ func TestParseDifficulty_DegenerateRejected(t *testing.T) {
 	}
 }
 
+func TestParseDifficulty_UnderflowRejected(t *testing.T) {
+	// A huge-but-finite difficulty (≥ diff1Target ≈ 2.7e67) underflows
+	// the share target to zero — TargetFromDifficulty then fails every
+	// share. parseDifficulty must reject it rather than store it.
+	for _, raw := range []string{`[2.7e67]`, `[1e70]`, `[1e300]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) underflows to zero target — should be !ok", raw)
+		}
+	}
+	// The largest still-usable difficulty (diff1Target ≈ 2.6959e67,
+	// producing target=1) is absurd but converts, so it stays accepted.
+	if _, ok := parseDifficulty(json.RawMessage(`[2.69e67]`)); !ok {
+		t.Error("difficulty just below diff1Target should still parse (target=1)")
+	}
+}
+
 func TestSession_DegenerateDifficultyDoesNotClobber(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	defer serverConn.Close()

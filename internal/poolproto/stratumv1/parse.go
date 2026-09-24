@@ -124,7 +124,13 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 		return 0, false
 	}
 	if d := p[0]; d > 0 && !math.IsInf(d, 0) && !math.IsNaN(d) {
-		return d, true
+		// Also require the value to convert into a usable share
+		// target: a huge-but-finite difficulty (≥ diff1Target)
+		// underflows target to zero, silently dead-stopping mining —
+		// every subsequent share fails TargetFromDifficulty.
+		if _, err := miner.TargetFromDifficulty(d); err == nil {
+			return d, true
+		}
 	}
 	return 0, false
 }

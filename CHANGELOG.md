@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 346 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 巨大 difficulty のアンダーフロー拒否)
+
+- **`set_difficulty`/`suggest_difficulty` のアンダーフロー拒否** — 退化値ガード
+  （0/負/NaN/+Inf、session 340）は残るが、**巨大だが有限**な difficulty（≧ diff1Target
+  ≈ 2.696e67）は通過してしまい、保存後は全シェアが `TargetFromDifficulty` のターゲット
+  ゼロアンダーフローで失敗する黙れた採掘停止になり得た。パース時に実変換を試行し、
+  変換不能値を拒否するよう変更（既存難度は保護）。session 340 のガードと同型。
+
 ### Added (session 345 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: プール運営通知のログリレー)
 
 - **`drainPoolNotices`** — V1 `client.show_message`（例: 「maintenance in 10 min」）は
