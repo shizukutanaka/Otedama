@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 285 — V2 channel_id フィルタ)
+
+- **V2 channel_msg を自チャネル宛に限定** —— 他チャネル宛の SetTarget /
+  NewMiningJob / SetNewPrevHash / SubmitSharesSuccess /
+  SubmitSharesError を受理していたため、混線・敵意的プールが
+  シェアターゲットを乗っ取りジョブ・verdict 状態を汚染し得た。
+  全 channel_msg を `chanID` でフィルタするよう変更。
+
 ### Added (session 284 — SV2 CloseChannel 0x19)
 
 - **V2 `CloseChannel` メッセージ対応** —— プールが正規のチャネル終了を

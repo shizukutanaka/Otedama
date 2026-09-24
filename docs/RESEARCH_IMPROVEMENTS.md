@@ -1251,6 +1251,19 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 285 increment (channel_id filtering)
+
+- **実装（防御）: V2 channel_msg の channel_id 検証** —— セッションは
+  コネクション上で1チャネルのみ所有するが、readLoop が channel_id を
+  検証せず全 channel_msg を受理していた。他チャネル宛の SetTarget で
+  シェアターゲットを乗っ取られ、他チャネルのジョブ/verdict が状態を
+  汚染し得た（混線プール・敵意的プール）。NewMiningJob /
+  SetNewPrevHash / SetTarget / SubmitSharesSuccess /
+  SubmitSharesError / CloseChannel を `s.chanID` でフィルタ。
+- **検証:** `TestReadLoop_ForeignChannelFiltered` —— 他チャネル宛
+  SetTarget でターゲット不変、他チャネル宛ジョブ+prevhash で
+  jobsCh 非送出。
+
 ## September 2026 research pass — session 284 increment (SV2 CloseChannel)
 
 - **実装（spec 準拠）: `CloseChannel` (0x19) のデコード + readLoop

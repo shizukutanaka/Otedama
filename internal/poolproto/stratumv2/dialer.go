@@ -284,17 +284,26 @@ func (s *session) readLoop(ctx context.Context) {
 		if err != nil {
 			continue // skip undecodable frame, keep reading
 		}
+		// Channel messages are filtered on channel_id: this session owns
+		// exactly one channel on the connection, so a frame addressed to
+		// any other id can only come from a confused or hostile pool —
+		// accepting it would let a foreign SetTarget hijack our share
+		// difficulty or foreign jobs/verdicts corrupt our state.
 		switch {
 		case msg.NewMiningJob != nil:
-			if !s.onNewMiningJob(ctx, state, msg.NewMiningJob) {
+			if msg.NewMiningJob.ChannelID == s.chanID &&
+				!s.onNewMiningJob(ctx, state, msg.NewMiningJob) {
 				return
 			}
 		case msg.SetNewPrevHash != nil:
-			if !s.onSetNewPrevHash(ctx, state, msg.SetNewPrevHash) {
+			if msg.SetNewPrevHash.ChannelID == s.chanID &&
+				!s.onSetNewPrevHash(ctx, state, msg.SetNewPrevHash) {
 				return
 			}
 		case msg.SetTarget != nil:
-			s.onSetTarget(msg.SetTarget)
+			if msg.SetTarget.ChannelID == s.chanID {
+				s.onSetTarget(msg.SetTarget)
+			}
 		case msg.CloseChannel != nil:
 			// The pool closed the channel: pending jobs are dead and
 			// further submits reject. This session only ever holds one
@@ -306,12 +315,15 @@ func (s *session) readLoop(ctx context.Context) {
 				return
 			}
 		case msg.SubmitSharesSuccess != nil:
-			s.settleVerdicts(msg.SubmitSharesSuccess.LastSequenceNumber, true,
-				poolproto.ShareResult{Accepted: true})
+			if msg.SubmitSharesSuccess.ChannelID == s.chanID {
+				s.settleVerdicts(msg.SubmitSharesSuccess.LastSequenceNumber, true,
+					poolproto.ShareResult{Accepted: true})
+			}
 		case msg.SubmitSharesError != nil:
-			e := msg.SubmitSharesError
-			s.settleVerdicts(e.SequenceNumber, false,
-				poolproto.ShareResult{Accepted: false, Reason: e.Error})
+			if e := msg.SubmitSharesError; e.ChannelID == s.chanID {
+				s.settleVerdicts(e.SequenceNumber, false,
+					poolproto.ShareResult{Accepted: false, Reason: e.Error})
+			}
 		}
 	}
 }

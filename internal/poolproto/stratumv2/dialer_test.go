@@ -1619,3 +1619,64 @@ func TestReadLoop_CloseChannelEndsSession(t *testing.T) {
 		t.Fatal("readLoop did not exit after CloseChannel for its channel")
 	}
 }
+
+// TestReadLoop_ForeignChannelFiltered pins the channel_id guard: a
+// channel_msg addressed to a channel this session does not own is
+// ignored — a foreign SetTarget must not move our share target, and a
+// foreign job must never reach the job channel.
+func TestReadLoop_ForeignChannelFiltered(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	conn := &connection{raw: client, remoteAddr: "test", protocol: poolproto.ProtocolStratumV2}
+	sess := &session{
+		conn:   conn,
+		dec:    stratum.NewDecoder(client),
+		chanID: 7,
+		jobsCh: make(chan poolproto.Job, 8),
+		done:   make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sess.readLoop(ctx)
+
+	writeMsg := func(msgType uint8, payload []byte) {
+		t.Helper()
+		f, err := stratum.WrapMessage(msgType, true, payload)
+		if err != nil {
+			t.Fatalf("WrapMessage: %v", err)
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			t.Fatalf("EncodeFrame: %v", err)
+		}
+		if _, err := server.Write(data); err != nil {
+			t.Fatalf("write msg 0x%02X: %v", msgType, err)
+		}
+	}
+
+	// Foreign SetTarget (channel 42): must not touch our target.
+	var tgt [32]byte
+	tgt[0] = 0xFF
+	st, _ := stratum.SetTarget{ChannelID: 42, MaxTarget: tgt}.Encode()
+	writeMsg(stratum.MsgSetTarget, st)
+
+	// Foreign future job + prevhash (channel 42): must not emit.
+	j, _ := stratum.NewMiningJob{ChannelID: 42, JobID: 9, Version: 0x20000000}.Encode()
+	writeMsg(stratum.MsgNewMiningJob, j)
+	ph, _ := stratum.SetNewPrevHash{ChannelID: 42, JobID: 9, MinNtime: 1, NBits: 0x1d00ffff}.Encode()
+	writeMsg(stratum.MsgSetNewPrevHash, ph)
+
+	// Give the loop a moment to process the three frames.
+	select {
+	case job := <-sess.jobsCh:
+		t.Fatalf("foreign-channel job emitted: %+v", job)
+	case <-time.After(300 * time.Millisecond):
+	}
+	sess.targetMu.RLock()
+	assigned := sess.targetAssigned
+	sess.targetMu.RUnlock()
+	if assigned {
+		t.Fatal("foreign SetTarget assigned our share target")
+	}
+	_ = server.Close()
+}
