@@ -33,6 +33,7 @@ otedama run [flags]
 | `--wallet-mnemonic-passphrase` | string | (empty) | Optional BIP-39 "25th word" passphrase, applied only when a *new* wallet is created. Distinct from `--wallet-passphrase` (which encrypts the seed at rest); this changes which seed the recovery mnemonic derives to. Not needed again after first run. |
 | `--no-wallet-backup-check` | bool | false | (run only) Skip the interactive recovery-phrase backup check on first wallet creation. The check only ever runs on an interactive terminal — unattended runs already skip it — so this flag exists for scripted interactive sessions and demos. |
 | `--http-addr` | string | (empty) | HTTP address for metrics/health endpoints. Empty = disabled. |
+| `--pprof` | bool | `false` | (run only) Mount Go pprof profiling endpoints under `/debug/pprof/` on the same `--http-addr` listener. Restricted to loopback/private addresses; a non-loopback bind logs a warning. |
 | `--dry-run` | bool | `false` | Validate configuration and exit without mining. |
 
 **Exit codes:**
@@ -348,6 +349,12 @@ addresses) appear once their first event occurs.
 
 Minimal HTML landing page linking to the endpoints. Useful for
 human operators verifying the server is up.
+
+### `GET /debug/pprof/*`
+
+Only mounted when `--pprof` is passed — serves the standard Go pprof handlers
+(`index`, `cmdline`, `profile`, `symbol`, `trace`, plus `heap`/`goroutine`/etc.
+under `/debug/pprof/<name>`). Intended for loopback/private binds.
 
 ### `GET /arbitration`
 
