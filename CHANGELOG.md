@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 310 — TUI sats/day の採掘収益二重計上を解消)
+
+- **収益表示が採掘ストリームを2つの推定量で二重計上していた経路を解消** ——
+  `earningsLine` が `HashRate × defaultSatsPerHash`（ローカル推定）に加えて
+  active な `mining.stratum` provider の quote（同一収益源）も加算しており、
+  採掘中の sats/day 表示が実収益の約2倍になっていた。`ProviderStats.Mining`
+  フラグを追加し、mining provider が active のときはその quote（net・
+  confidence 反映済み）を採用してローカル推定項をスキップ —— 非 active
+  時は従来通り hashrate 推定がフォールバック。
+
 ### Fixed (session 309 — 仲裁の比較値を Net 収益に統一)
 
 - **プロバイダ quote の fee 差が仲裁比較から抜け落ちていた経路を解消** ——

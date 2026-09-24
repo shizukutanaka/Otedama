@@ -505,3 +505,43 @@ func TestVisibleLen_IncompleteEscapeAtEnd(t *testing.T) {
 		t.Errorf("visibleLen on truncated escape = %d", got)
 	}
 }
+
+func TestDashboard_EarningsLine_MiningNotDoubleCounted(t *testing.T) {
+	// Mining yield must appear exactly once: the mining provider's own
+	// (net, confidence-adjusted) quote when active, NOT plus the
+	// hashrate-derived estimate — the same revenue stream counted twice.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	// Mining quote: 10 sats/s → 864000 sats/day. HashRate 1e15 also yields
+	// ~44928 sats/day via the local estimate — a double-counted total of
+	// ~908928 would appear if both terms were added.
+	line := d.earningsLine(Stats{
+		HashRate: 1e15,
+		Providers: []ProviderStats{
+			{Name: "Bitcoin Mining", Mining: true, SatsPerSecond: 10, Active: true},
+		},
+	})
+	if !strings.Contains(line, "864000 sats/day") {
+		t.Errorf("earningsLine = %q, want exactly 864000 sats/day (mining quote only)", line)
+	}
+	if strings.Contains(line, "908928") {
+		t.Errorf("earningsLine double-counted mining (quote + hashrate estimate): %q", line)
+	}
+}
+
+func TestDashboard_EarningsLine_HashrateFallbackWhenMiningInactive(t *testing.T) {
+	// With the mining provider idle (or unwired), the local hashrate
+	// estimate still stands in — the display never shows 0 while hashing.
+	var buf bytes.Buffer
+	d := NewDashboard(&buf)
+	line := d.earningsLine(Stats{
+		HashRate: 1e15,
+		Providers: []ProviderStats{
+			{Name: "Bitcoin Mining", Mining: true, SatsPerSecond: 10, Active: false},
+		},
+	})
+	// 1e15 H/s * defaultSatsPerHash * 86400 = 45000 sats/day.
+	if !strings.Contains(line, "45000 sats/day") {
+		t.Errorf("earningsLine = %q, want 45000 sats/day (hashrate fallback)", line)
+	}
+}

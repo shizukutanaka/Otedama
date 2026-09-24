@@ -19,6 +19,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/metrics"
 	"github.com/shizukutanaka/Otedama/internal/miner"
+	"github.com/shizukutanaka/Otedama/internal/provider"
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
@@ -71,6 +72,11 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 	var providerStats []tui.ProviderStats
 	for _, p := range opts.providers {
 		ps := tui.ProviderStats{Name: p.Name()}
+		// Mining marks the stream whose yield is also estimable from the
+		// local hashrate — the TUI counts it exactly once (earningsLine).
+		if _, ok := p.(*provider.MiningProvider); ok {
+			ps.Mining = true
+		}
 		if opts.activityMu != nil {
 			opts.activityMu.Lock()
 			yield, active := opts.activity[p.ID()]

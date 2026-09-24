@@ -1251,6 +1251,31 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 310 increment (CS audit / counting consistency)
+
+- **ソクラテス式問答 —「各収益源は一度だけ数えられているか？」**: TUI
+  `earningsLine` の勘定監査で**同一収益源の二重計上**を発見 ——
+  `s.HashRate × defaultSatsPerHash()`（ローカル採掘収益推定）を足した上で、
+  active な provider の `SatsPerSecond` を全て加算していた。しかし
+  `mining.stratum` の provider quote はその採掘収益そのもの（s308 で
+  ウィンドウ化率を供給する HashrateFunc から生成）—— ワーカーが採掘中は
+  **同じ収益ストリームが2つの独立推定量として二重に表示**され、表示値は
+  実収益の約2倍になる。簿記の第一原則「一つの取引は一つの科目に一度だけ」
+  の違反 —— s309（比較単位の一致）と同型で、今回は**加算基底の一意性**。
+- **実装**: `ProviderStats.Mining` フラグ追加（buildStats が
+  `*provider.MiningProvider` 型判定で設定 —— マジック文字列なし）。
+  `earningsLine` は active provider の yield を集計し、mining provider が
+  active のときはローカル推定項をスキップ（net・confidence 反映済みの quote
+  側を採用 —— 情報量の多い方を優先）。mining provider 非 active 時
+  （仲裁前・未配線・アイドル）は従来通り hashrate 推定がフォールバック ——
+  採掘中に 0 表示になる回帰なし。
+- **検証**: 全 24 パッケージ green、tui+engine `-race -count=2` clean、
+  lint 純増ゼロ、deadcode 58、govulncheck 0、新テスト2件（active mining で
+  quote 値のみ表示・非 active で hashrate フォールバック）。あわせて
+  metrics.go（レジストリ・sortable key・escape・cross-type ガード）と
+  worker.go ライフサイクル全量（SetWork/grind/シェア排出/サブマスク列挙/
+  nonce ラップ検出）はクリーンと確認。
+
 ## September 2026 research pass — session 309 increment (CS audit / comparison-unit consistency)
 
 - **ソクラテス式問答 —「比較の両辺は同じ単位・同じ基底か？」**: provider/

@@ -104,6 +104,9 @@ type ProviderStats struct {
 	Name          string
 	SatsPerSecond float64
 	Active        bool
+	// Mining marks the Bitcoin mining provider. earningsLine uses it to
+	// avoid counting mining revenue twice (see earningsLine).
+	Mining bool
 }
 
 // Dashboard renders a live terminal dashboard.
@@ -348,14 +351,25 @@ func truncateToBudget(s string, budget int) string {
 }
 
 func (d *Dashboard) earningsLine(s Stats) string {
-	satsPerSec := s.HashRate * defaultSatsPerHash()
-	satsPerDay := satsPerSec * 86400
-
-	// Add AI inference yield from active providers.
+	// Every revenue stream must be counted exactly once: the mining
+	// provider's own quote IS the mining yield (confidence-adjusted,
+	// net of pool fee), so when it is active the hashrate-derived mining
+	// estimate must be dropped — adding both counts the same revenue
+	// stream twice and inflates the sats/day figure ~2x in the normal
+	// mining case. When no mining provider is active (pre-arbitration,
+	// no provider wired, or the mining stream idled), the local estimate
+	// stands in for the stream's contribution.
+	var satsPerDay float64
+	miningQuoted := false
 	for _, p := range s.Providers {
-		if p.Active {
-			satsPerDay += p.SatsPerSecond * 86400
+		if !p.Active {
+			continue
 		}
+		satsPerDay += p.SatsPerSecond * 86400
+		miningQuoted = miningQuoted || p.Mining
+	}
+	if !miningQuoted {
+		satsPerDay += s.HashRate * defaultSatsPerHash() * 86400
 	}
 
 	total := bold + yellow + fmt.Sprintf("%.0f sats/day", satsPerDay) + reset
