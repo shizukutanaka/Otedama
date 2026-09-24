@@ -85,7 +85,7 @@ Actual CI coverage verified against `.github/workflows/` (session 385):
 - `go build` cross-compile for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64 — in ci-cd.yml
 - `staticcheck ./...` — **Not met today:** absent from every workflow (run manually; verified clean session 376)
 - `govulncheck ./...` — **Not met today:** absent from every workflow (run manually; verified clean session 375)
-- `go test -race -timeout 5m ./...` — **Not met today:** absent from every workflow (run manually; scoped race runs clean)
+- `go test -race` — in ci.yml + test.yml as `go test -v -timeout 10m -race ./...` (timeout is 10m, not the 5m this list previously claimed)
 - Nightly 30-min fuzz of `FuzzDecodeHeader`/`FuzzDecoder_ReadFrame` — **Not met today:** no fuzz step exists in any workflow
 - PR-time benchmark comparison vs main (5% regression threshold)
 
