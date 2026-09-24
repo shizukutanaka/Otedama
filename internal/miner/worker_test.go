@@ -376,6 +376,88 @@ func TestShare_DeviceID_EmptyWhenNotSet(t *testing.T) {
 	}
 }
 
+// ----- Nonce space exhaustion -----
+
+func TestWorker_NonceSpaceExhaustion_Idles(t *testing.T) {
+	// With NonceStep=2^31 and one thread, the nonce sequence is
+	// {0, 2^31} — after the second advance it wraps mod 2^32 and every
+	// nonce in the residue class has been hashed for this job. The
+	// worker must idle rather than re-grind already-proven
+	// (header, nonce) pairs, which would emit duplicate shares the
+	// pool counts as rejects.
+	w := NewWorker(WorkerConfig{Threads: 1, NonceStep: 1 << 31})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	shares := w.Start(ctx)
+	defer w.Stop()
+
+	w.SetWork(makeEasyWork())
+
+	// Exactly two hashes are possible before wrap; with the max target
+	// both are shares. Drain them.
+	for i := 0; i < 2; i++ {
+		select {
+		case _, ok := <-shares:
+			if !ok {
+				t.Fatal("share channel closed")
+			}
+		case <-ctx.Done():
+			t.Fatalf("expected share %d of 2", i+1)
+		}
+	}
+
+	// No further hashes or shares: hashCount must plateau at 2 and the
+	// channel must stay silent.
+	time.Sleep(150 * time.Millisecond)
+	if got := w.Stats().HashesTotal; got != 2 {
+		t.Errorf("HashesTotal after exhaustion = %d, want 2 (worker re-ground visited nonces)", got)
+	}
+	select {
+	case s := <-shares:
+		t.Errorf("share after nonce-space exhaustion (nonce=%d) — duplicate submission", s.Nonce)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// A new job resets the space: shares must flow again.
+	job2 := makeEasyWork()
+	job2.JobID = 2
+	w.SetWork(job2)
+	waitFor(t, ctx, shares, func(s Share) bool { return s.JobID == 2 })
+}
+
+func TestWorker_FleetNoncePartition(t *testing.T) {
+	// The fleet partition layout: W workers of T threads grinding the
+	// same job use NonceStart = d*T and NonceStep = W*T, so worker d
+	// covers residue classes d*T+t mod W*T. Two single-thread workers
+	// must therefore emit shares on disjoint nonce parities — device 0
+	// even, device 1 odd — never colliding on a (header, nonce) pair.
+	work := makeEasyWork()
+	for d := uint32(0); d < 2; d++ {
+		w := NewWorker(WorkerConfig{
+			Threads:    1,
+			NonceStart: d,
+			NonceStep:  2,
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		shares := w.Start(ctx)
+		defer w.Stop()
+		w.SetWork(work)
+
+		for i := 0; i < 8; i++ {
+			select {
+			case s := <-shares:
+				if s.Nonce%2 != d {
+					t.Fatalf("worker %d share nonce %d — parity %d, want %d (fleet partition violated)",
+						d, s.Nonce, s.Nonce%2, d)
+				}
+			case <-ctx.Done():
+				t.Fatalf("worker %d produced only %d shares", d, i)
+			}
+		}
+	}
+}
+
 // ----- DeviceID method -----
 
 func TestWorker_DeviceID_ReturnsConfigValue(t *testing.T) {

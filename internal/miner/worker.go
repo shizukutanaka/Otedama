@@ -65,7 +65,21 @@ type WorkerConfig struct {
 	// starting offset, which would silently discard most of the
 	// available hash rate (each of Threads goroutines redundantly
 	// grinding the same nonces instead of partitioning the nonce space).
+	//
+	// To partition the nonce space across a fleet of workers all
+	// grinding the same job, set NonceStep to threads×workers and give
+	// each worker a distinct NonceStart (see below).
 	NonceStep uint32
+
+	// NonceStart is the nonce offset added to every thread's starting
+	// position. With W workers of T threads each grinding the same job,
+	// worker d should use NonceStart = d*T and NonceStep = W*T: thread t
+	// of device d then covers the residue class (d*T + t) mod W*T, so
+	// the fleet partitions the 32-bit nonce space instead of every
+	// device redundantly grinding the identical sequence (and emitting
+	// duplicate shares at the same nonces). Zero preserves the
+	// single-worker behaviour.
+	NonceStart uint32
 
 	// DeviceID is the HAL identity of the hardware device this worker
 	// runs on (e.g. "cpu-0"). Propagated to every Share the worker
@@ -225,7 +239,8 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 	var (
 		localWork    *Work
 		localWorkVer uint64
-		nonce        = threadID
+		nonce        = w.cfg.NonceStart + threadID
+		exhausted    bool
 	)
 
 	for {
@@ -240,12 +255,14 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		if w.work != localWork || w.workVer != localWorkVer {
 			localWork = w.work
 			localWorkVer = w.workVer
-			nonce = threadID // restart nonce from thread offset on new job
+			nonce = w.cfg.NonceStart + threadID // restart nonce from offset on new job
+			exhausted = false
 		}
 		w.mu.Unlock()
 
-		if localWork == nil {
-			// No job yet; yield and retry.
+		if localWork == nil || exhausted {
+			// No job yet — or the nonce space for the current job is
+			// exhausted; yield and retry.
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
@@ -265,8 +282,9 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		// is reported, the hashes spent finding it are visible to Stats()
 		// before the share is; the remainder is charged at batch end.
 		block := localWork.Header.Bytes()
-		var counted uint64
+		var counted, ran uint64
 		for i := uint64(0); i < batchSize; i++ {
+			ran = i + 1
 			binary.LittleEndian.PutUint32(block[76:80], nonce)
 			hash := SHA256d(block[:])
 
@@ -281,8 +299,8 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					Target:    localWork.Target,
 					DeviceID:  w.cfg.DeviceID,
 				}
-				w.hashCount.Add(i + 1 - counted)
-				counted = i + 1
+				w.hashCount.Add(ran - counted)
+				counted = ran
 				w.shareCount.Add(1)
 				// Non-blocking send: if the consumer is full, the share
 				// is dropped rather than blocking the miner. A larger
@@ -296,9 +314,20 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
+			prev := nonce
 			nonce += w.cfg.NonceStep
+			if nonce < prev {
+				// The arithmetic sequence start+k*step has wrapped mod
+				// 2^32: every nonce in this thread's residue class has
+				// been hashed for this job. Continuing would re-grind
+				// already-proven (header, nonce) pairs — wasted hash rate
+				// plus duplicate share submissions the pool counts as
+				// rejects. Idle until a new job arrives instead.
+				exhausted = true
+				break
+			}
 		}
-		w.hashCount.Add(batchSize - counted)
+		w.hashCount.Add(ran - counted)
 	}
 }
 

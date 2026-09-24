@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 268 — コンピューターサイエンスの観点から改善点を洗い出す(第13ラウンド): nonce 空間の算術不変条件——巡回検出の欠如 + フリート横断パーティションの欠如、計2箇所)
+
+第13ラウンドの Socratic 問いは「**同一の (header, nonce) 対は二度ハッシュされないか?**」——nonce 列は `start + k*step (mod 2^32)` の周期列であり、この不変条件が2箇所で破れていた。実証2箇所:
+
+- **nonce ラップで訪問済み領域を再掘削**(実害: ハッシュレート浪費 + 重複シェア送信): `nonce += NonceStep` が `uint32` オーバーフローを検出せず、ラップ後は同じ剰余類を再走査——同じ (header, nonce) を再ハッシュし、同じハッシュ値の「重複シェア」を pool に再 submit(pool は重複を拒否として計上 → 受容率シグナル汚染)。CPU 規模(~10MH/s、8スレッド)でも1ジョブあたりの nonce 空間を約430秒で使い切り、平均ブロック間隔600秒を下回る——長命ブロックでは通常運転でも到達する経路。ラップ検出(`nonce < prev`)で当該ジョブを掘削完了とみなし、次ジョブまでアイドル化。実ファームウェアの exhaustion 報告と同型の意味論——重複 submit より掘削停止が常に正しい。
+- **フリート横断の nonce パーティション欠如**(実害: 全デバイスが完全に同一の探索列を再掘削): `updateWork`/`applyJob` は全ワーカーに同一の `Work` を配布し、各ワーカーの `NonceStep=Threads`・開始 nonce=threadID はワーカー内部のみを分割する——**device d=0 の thread 0 と device d=1 の thread 0 は完全に同一列を掘削**し、N 台構成の実効ハッシュレートは sum ではなく max(デバイス数に比例する完全な重複 + 同一 nonce での重複シェア submit)。`WorkerConfig.NonceStart` を追加し、`startMinerWorkers` が `NonceStart=d*Threads`・`NonceStep=nWorkers*Threads` を割当て——thread t of device d が剰余類 (d*T+t) mod N*T をカバーし、フリート全体で 2^32 空間を完全分割。
+
+**検証手続き(棄却済み候補).** V1 経路も同一 Worker を経由するため掘削層の修正で双方被覆、`poolproto.Job.MerkleRoot` は pool 構築済みで en2 分割は抽象化の外に存在(現設計では nonce 分割が唯一の正しい層)、SharesFound/hashCount の加算整合は早期 break 時も `ran` カウンタで正確、単一デバイス構成(nWorkers=1)は従来配置と同一のため無影響。
+
+**テスト.** `TestWorker_NonceSpaceExhaustion_Idles`(NonceStep=2^31 で2ハッシュ後に停滞・重複シェアなし・新ジョブで再開を検証)、`TestWorker_FleetNoncePartition`(2ワーカーで nonce 偶奇が完全分離を検証)。`go test ./...` 全24pkg 緑、`-race` ./internal/{miner,engine} 緑、差分行 lint/gofumpt クリーン(G115 は有界性を明示した nolint で対応、prealloc は関数内で解消)、deadcode ベースライン(72)、govulncheck 到達可能0件。
+
 ### Fixed (session 267 — コンピューターサイエンスの観点から改善点を洗い出す(第12ラウンド): 沈黙バウンドが「ワイヤ上のバイト」でなく「プロトコル進捗」を測るべき——無意味フレームによるバウンド回避を封鎖、計2箇所)
 
 第12ラウンドの Socratic 問いは「**『生きている』はどう定義するか?**」——session-263 の silence bound は「フレーム到達」を liveness とみなしていたが、**整形式だが無意味なフレームのストリーム**(デコード不能ペイロード、未割当 msg_type の拡張メッセージ)はフレームを供給し続けるためバウンドを永久に回避できた。仕事を一切供給しない zombie プールが fail-safe に到達させない——第8ラウンドが塞いだはずの穴の回避経路。実証2箇所:

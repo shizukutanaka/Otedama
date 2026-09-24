@@ -57,14 +57,34 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 // returns the workers and a merged share channel. Returns an error if
 // no SHA256d-capable device is present. The caller owns worker shutdown.
 func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level, msg string)) ([]*miner.Worker, <-chan miner.Share, error) {
-	var workers []*miner.Worker
-	var shareChans []<-chan miner.Share
+	// Every worker receives the same Work per job, so the fleet's
+	// effective hash rate is bounded by the nonce-space partition —
+	// giving every worker an identical nonce sequence (the default
+	// NonceStep=Threads layout) would have all devices grinding the
+	// same (header, nonce) pairs and emitting duplicate shares at the
+	// same nonces. Partition the space instead: with N workers of T
+	// threads, worker d covers residue classes d*T+t (mod N*T).
+	var nWorkers int
+	for _, dev := range devices {
+		if dev.Capabilities().SHA256d {
+			nWorkers++
+		}
+	}
+	workers := make([]*miner.Worker, 0, nWorkers)
+	shareChans := make([]<-chan miner.Share, 0, nWorkers)
 	for _, dev := range devices {
 		if !dev.Capabilities().SHA256d {
 			continue
 		}
 		cfg := miner.DefaultWorkerConfig()
 		cfg.DeviceID = dev.Identity().ID
+		if nWorkers > 1 {
+			d := len(workers)
+			// d*Threads and nWorkers*Threads are bounded by device count
+			// × NumCPU — far below 2^32 — so the conversions cannot wrap.
+			cfg.NonceStart = uint32(d * cfg.Threads)       //nolint:gosec // bounded above
+			cfg.NonceStep = uint32(nWorkers * cfg.Threads) //nolint:gosec // bounded above
+		}
 		w := miner.NewWorker(cfg)
 		workers = append(workers, w)
 		shareChans = append(shareChans, w.Start(ctx))
