@@ -348,6 +348,40 @@ transient fetch failures.
 
 ---
 
+**Threat:** A wedged or malicious pool keeps the session alive — jobs
+and notifications still flow, so the per-frame read deadline never
+trips — while silently dropping every share verdict, leaking one
+pending-map entry and one goroutine per submitted share until session
+end.
+
+**Mitigation (sessions 358, 364):** both transports bound the verdict
+wait with a two-minute `submitResponseTimeout`. On expiry the share is
+reported `Unconfirmed` (it did leave; its verdict is unknown) and the
+pending entry is freed, matching the Session contract. V2 additionally
+resolves backlogs wholesale: every `SubmitSharesSuccess` acks all
+sequence numbers up to `last_sequence_number`, so one verdict drains
+the map.
+
+**Residual risk:** None — a pool that stops acking entirely just ends
+the session through the normal error path.
+
+---
+
+**Audit coverage (session 365).** The following surfaces were audited
+and verified bounded; re-audit is only warranted when their code
+changes: V1/V2 job channels (depth 8), `noticeCh` (8, drop-oldest),
+switch-verdict ledger (cap 64), extranonce rotation bounds (en2
+1–64, even-length hex en1), `set_difficulty`/`suggest_difficulty`
+degenerate-value rejection, `mining.ping` answered, `authorize` result
+verified, V1 read deadline (5 min), V2 read/write/handshake deadlines,
+TLS handshake deadline, submit-verdict timeouts (both), metric label
+cardinality (no pool-controlled label values), `hashrateWindow` is O(1)
+state, cgminer `addpool` field boundaries, `config show` masks
+credentials and strips control bytes via `safeDisplay`, Octopus tariff
+feed URL-escapes product and tariff codes.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.

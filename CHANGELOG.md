@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 365 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: DoS 監査記録 + 検証済み表面の棚卸し)
+
+- **THREAT_MODEL の DoS 節を拡充** — wedged-pool 判定待ちリークの緩和記録
+  （session 358/364 の `submitResponseTimeout` 両伝搬）を追記し、本巡目で検証済み
+  と判明した表面を一覧化（ジョブ/通知チャネル上限・extranonce/難度の退化値拒否・
+  読み書き+ハンドシェイク deadline・メトリクスラベル基数・cgminer フィールド境界・
+  `config show` の制御文字除去・Octopus URL エスケープ）。将来の重複監査を防ぐ。
+
 ### Fixed (session 364 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: V2 submit 応答タイムアウト)
 
 - **V2 `Submit` へ2分の応答タイムアウト** — session 358 で V1 に適用したのと同じ
