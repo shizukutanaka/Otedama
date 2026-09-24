@@ -31,14 +31,14 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
 
 | 短所 | ブロック要因 |
 |---|---|
-| CI全Goジョブ赤: workflowはGo 1.23.x/1.21ピン、go.modの`tlsmlkem`はGo 1.24 knob → parse即失敗。コードは1.24.7でgreen | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） |
+| CI全Goジョブ赤: workflowはGo 1.23.x/1.21ピン → go.modの`go 1.25.0`ディレクティブでparse即失敗（tlsmlkemに届く前）。コードはgo1.25.13でgreen | `.github/workflows/`へのpush権限なし（GitHub App、複数回検証済み） — §13 |
 | Noise NX未配線（既定`stratum+v2://`は平文） | CODEOWNERS + 監査済みellswift Go実装が世に存在しない（ADR-011 Erratum） |
 | secp256k1がスタブ（decred v4はBIP-340でもellswiftでもない — EC-Schnorr-DCRv0） | 依存追加が環境制約で不可 + v3.1.0スコープ |
-| 依存陳腐化: yaml.v3アーカイブ済（後継go.yaml.in）、x/crypto 31版遅れ（CVEはssh/openpgp配下で到達不能）、toolchain 1.24（containermaxprocs未享受） | 実行環境がsum.golang.orgをForbiddenで拒否 |
+| ~~依存陳腐化: yaml.v3アーカイブ済、x/crypto 31版遅れ、toolchain 1.24~~ ✅ session 322/375で解消（go.yaml.in移行・x/crypto v0.54.0・toolchain go1.25.13、govulncheck reachable 0件） | — |
 | Akash統合はシミュレーション。実APIは廃止akash-apiでなく`chain-sdk`、入札はon-chain Bidengine | v3.1.0・設計判断（ADR-010 A4再フレーム済み） |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
-| DATUM未実装／ASIC検出なし／TUI 80カラム固定／CIにfuzzなし | KNOWN_LIMITATIONS §14/§8/§15/§13 |
+| ~~`wallet`サブコマンドなし~~ ✅ session 314/373で解消（`wallet verify`/`change-passphrase` 実装+dispatch、§16 RESOLVED） | — |
+| ~~DATUM未実装~~（miner面は§14解消、upstream template は ADR-009）／~~ASIC検出なし~~（cgminer検出+pool-follow解消、残りはdispatch=ADR-008）／~~TUI 80カラム固定~~（§15解消）／CIにfuzzなし（§13、コーパス6件は健全） | ADR-009/ADR-008/§13 |
 
 ## 2. Opus優先タスクキュー（深い推論を要するもの）
 
@@ -51,7 +51,7 @@ docsが実装を超える主張をしない「誠実な自己開示」状態が�
    BIP324の64バイトellswift、2-level PKIサーバ認証）。監査済みGo実装が存在しない
    ため手書き移植になる — bitcoin-core `examples/ellswift.c` のベクタで
    クロステスト必須。ADR-011 Erratumに全論点記録済み。工数見積の再提示から着手。
-3. **tlsmlkemピンの設計判断の起案**: go.modの`tlsmlkem=1`はGo1.24未満での
+3. **tlsmlkemピンの設計判断の起案**: go.modの`tlsmlkem=1`+`go 1.25.0`+toolchain go1.25.13はGo1.25未満での
    ビルドを不可能にし、GODEBUG_NOTES.mdの「旧toolchainでもビルド可能」意図と
    矛盾（KNOWN_LIMITATIONS §13に記録済み）。維持/緩和の判断材料を整理し
    メンテナに提示するADR/Erratum草案を書く。**独断で変更しない**。

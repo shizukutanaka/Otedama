@@ -30,12 +30,12 @@ doc-vs-code整合性の維持**である。
 
 | 短所 | ブロック要因 |
 |---|---|
-| CI全Goジョブ赤（Go 1.23.x/1.21ピン vs go.modの`tlsmlkem`=Go 1.24 knob） | `.github/workflows/`へのpush権限なし |
-| 依存陳腐化（yaml.v3アーカイブ済／x/crypto 31版遅れ・CVE到達不能／toolchain 1.24でcontainermaxprocs未享受） | 実行環境がsum.golang.orgを拒否しgo get不可 |
+| CI全Goジョブ赤（Go 1.23.x/1.21ピン vs go.modの`go 1.25.0`ディレクティブ、toolchain go1.25.13） | `.github/workflows/`へのpush権限なし — §13 |
+| ~~依存陳腐化~~ ✅ session 322/375で解消（go.yaml.in移行・x/crypto v0.54.0・go1.25.13・govulncheck reachable 0件） | — |
 | ~~skills/code-review.md・security-audit.mdの存在しないパス記述~~ ✅ session 254で是正済み | — |
-| `wallet`サブコマンドがなく、書き取ったリカバリフレーズを検証できない／実装済みの`ChangePassphrase`に本番導線がない | CLIアーキテクチャマップに関わるためメンテナ判断（KNOWN_LIMITATIONS §16） |
-| Noise NX未配線／secp256k1スタブ／Akashシミュレーション／DATUM未実装 | CODEOWNERS or v3.1.0+スコープ（Opus側タスク） |
-| TUI 80カラム固定／ASIC検出なし／CIにfuzzなし | KNOWN_LIMITATIONS §15/§8/§13 |
+| ~~`wallet`サブコマンドなし~~ ✅ session 314/373で解消（§16 RESOLVED） | — |
+| Noise NX未配線／secp256k1スタブ／Akashシミュレーション／~~DATUM未実装~~（miner面は§14解消、upstream template はADR-009残） | CODEOWNERS or v3.1.0+/ADRスコープ（Opus側タスク） |
+| ~~TUI 80カラム固定~~（§15解消）／~~ASIC検出なし~~（検出+pool-follow解消、dispatchはADR-008残）／CIにfuzzなし（§13） | ADR-008/§13 |
 
 ## 2. Sonnet優先タスクキュー（手順が明確なもの）
 
@@ -49,12 +49,8 @@ doc-vs-code整合性の維持**である。
    リカバリフレーズ提示がまさにそれだった（docs 4箇所が「表示される」と
    明記、実装は0件）。**docの主張を見つけたら、その挙動を実際に実行する
    本番コード経路をgrepで確認する**こと。
-2. **依存3件更新**（モジュール取得可能な環境でのみ）: 順に
-   `go get golang.org/x/crypto@latest` → toolchainをgo1.25.xへ →
-   `gopkg.in/yaml.v3`を`go.yaml.in/yaml/v3`へ移行（import書換は
-   internal/config周辺のみの見込み・grepで全数確認・ライセンス確認後）。
-   各ステップで検証ループ。yaml移行の回帰ゲートは`TestConfigFile_*`一式。
-   完了後 govulncheck でゼロ到達を記録。
+2. ~~**依存3件更新**~~ ✅ **session 322/375で完了。** go.yaml.in/yaml/v3 移行・
+   x/crypto v0.54.0・toolchain go1.25.13 pin 全て適用済み（govulncheck reachable 0件）。
 3. **doc相互参照の継続検査**: markdownリンク・backtickファイル参照が実在
    ファイルに解決するか、SPECIFICATIONのギャップ表番号・KNOWN_LIMITATIONSの
    §番号の相互参照が一致するか。（session 253時点で全解決済み — 変更後に再検査。）
