@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 420 — CS 観点: opaque job_id の verbatim echo)
+
+- **非 10 進 job_id で採掘が停止していた相互運用バグを修正** — Stratum 仕様
+  では `job_id` は opaque 文字列で `mining.submit` に逐語 echo する契約だが、
+  `applyJob` が `fmt.Sscanf("%d")` で 10 進数パースを強制し、英数字 job_id
+  （"not-a-number" 等）を送るプールではジョブ適用が失敗して採掘が停止してい
+  た（さらに `"12abc"` は部分パースで 12 として受理される誤 echo も起きた）。
+  `miner.Work`/`miner.Share` に verbatim 文字列 `JobKey` を伝搬し、
+  `submitV1Share` は `JobKey` をそのまま送信。内部タグ（metrics/reject 分類用
+  uint32）は非 10 進 id に FNV-32a ハッシュを適用しジョブ失敗を解消。
+  既存テスト 2 件を修正後契約へ更新（非 10 進 id が適用・ハッシュされること、
+  セッションでジョブが採掘されることを検証）。
+
 ### Fixed (session 419 — CS 観点: プロバイダ供給タイムスタンプのクランプ)
 
 - **未来日付の `q.At` が stale-stream 剪定を無効化できるバグを修正** — `q.At` は
