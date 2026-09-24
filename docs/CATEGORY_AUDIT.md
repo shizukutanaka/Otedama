@@ -1555,3 +1555,40 @@ session 265 も長所・短所を表にした。**その表は差し替えなけ
 `go list -deps ./cmd/otedama`、`grep -c "^## " docs/KNOWN_LIMITATIONS.md`、そして
 `otedama doctor --json`。**次にこの表を更新する者は、引用ではなくコマンドから始めること**——
 session 265 の表が差し替えになったのは、当時の文書を信頼したからである。
+
+### Addendum (2026-09-24) — the work was invisible, and one of my own PASS rows was wrong
+
+The container was recreated and this clone's branch had been rebuilt from
+`master`; the real branch was restored from the remote with nothing lost.
+Checking where it stood among the repository's pull requests found the
+largest remaining defect in this whole effort, and it was not in the code:
+**the branch had no pull request.** 333 PRs exist, five have ever merged,
+and the rest are open work from parallel agents. Everything recorded in
+this entry — the dead default removed, `go 1.24`, the unwired runtime
+collector, the unreachable-code guard, forty-odd documentation
+corrections — was invisible to the one person who can merge it. A draft PR
+now exists.
+
+Reconciling with `master` produced three results, each measured:
+
+- **A prediction of mine was wrong.** I expected pushing a merge that
+  carries master's workflow changes to be refused for lack of the
+  `workflows` permission. It was accepted. The boundary refuses *authoring*
+  workflow content that does not exist in the repository, not moving a
+  branch onto content that does. §13 now says so.
+- **A suspicion of mine was wrong.** PR #5 called its v3→v4 bumps
+  "drop-in-safe"; I suspected `upload-artifact@v4`'s refusal of duplicate
+  names across matrix legs. Every matrix-leg upload in the workflows uses a
+  matrix-derived name or is gated to one leg. The claim holds there.
+- **A PASS row of mine was wrong.** `docs/AUDIT_CHECKLIST.md` rated
+  Dependabot PASS because `.github/dependabot.yml` is well-formed. A search
+  for pull requests authored by Dependabot in this repository returns
+  zero, ever. The file existing is not the control operating — the exact
+  error this checklist was rewritten to eliminate, made in the rewrite. The
+  row and four other documents repeating it are corrected; whether PR #6's
+  new `automerge:` key is valid schema is left as 調査が必要, because the
+  reference documentation is unreachable from here.
+
+The standard held, and it applied to the author as much as to the
+documents: two confident expectations and one PASS verdict, all mine, did
+not survive contact with a measurement.

@@ -159,7 +159,7 @@ version.
 **Mitigation:** a deliberately tiny dependency surface — three external
 modules are linked (`golang.org/x/crypto`, `golang.org/x/sys`,
 `gopkg.in/yaml.v3`) plus the standard library; `go mod verify` passes;
-Dependabot is configured for Go modules, Actions and Docker. See ADR-003.
+Dependabot is configured for Go modules, Actions and Docker — but has never opened a pull request in this repository (checked 2026-09-24), so it is not shown to be operating as a control (§21). See ADR-003.
 
 **Corrected session 266:** this section also claimed "All GitHub Actions
 pinned by SHA" and "govulncheck runs in CI". **Neither is true.** Every

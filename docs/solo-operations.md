@@ -239,7 +239,7 @@ jobs:
 ```
 
 **Scorecard で監視する項目（OpenSSF Security Scorecard）** — 括弧内は session 266 時点の実状：
-- Dependency-Update-Tool（**Dependabot は設定済み**。Renovate は未導入）
+- Dependency-Update-Tool（**Dependabot は設定ファイルのみ**。PR を開いた実績は0件＝稼働未確認。Renovate は未導入）
 - Signed-Releases（**未設定**。cosign はリポジトリに存在しない）
 - Branch-Protection（設定必要）
 - Token-Permissions（設定必要）
@@ -704,7 +704,7 @@ AES-256-GCM + scrypt による保管のみで、Lightning ノードは実装さ�
 - 全 Action を SHA ピン留め — **未実施**。`.github/workflows/` の `uses:` は現在すべてタグまたは
   ブランチ参照であり、本節が挙げた tj-actions 型の攻撃に対して無防備である（§21）。
   以前ここには「ci.yml で実施済み」と書いてあったが、そのファイルを読めば1行目から反証される
-- `Dependabot for Actions` を有効化して自動更新 — **実施済み**（`.github/dependabot.yml`）
+- `Dependabot for Actions` を有効化して自動更新 — **設定のみ**（`.github/dependabot.yml`）。PR を開いた実績は0件で、稼働は未確認（§21）
 - SBOM を全リリースに同梱 — 未実施
 
 ### リスク4：規制変更

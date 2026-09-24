@@ -97,7 +97,7 @@ CLAUDE.md は現段階での量子耐性着手を明確に禁止している（v
 - OSS-Fuzz 統合申請（無料、Google運用）。
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
-**実装状況（session 266 で訂正）:** **実装済みは Dependabot のみ**（`.github/dependabot.yml`、
+**実装状況（session 266 で訂正）:** **設定済みなのは Dependabot のみ、しかも稼働は未確認**——設定ファイルはあるが、このリポジトリで Dependabot が PR を開いた記録は**一度も無い**（2026-09-24 検索、0件。§21）。（`.github/dependabot.yml`、
 gomod/actions/docker の週次）。**SHA pinning は1件も無く**（`.github/workflows/` の `uses:` は全て
 タグまたはブランチ — `actions/checkout@v4`、`securego/gosec@master` 等）、**cosign 署名も存在しない**
 （`cosign` の文字列がリポジトリ内に1件も無い）。すなわちリリース成果物は未署名である。
@@ -117,7 +117,7 @@ tj-actions 事件そのものに対して無防備なままだった。詳細と
 - `actions/stale@v9` (issue 90/30、PR 60/21、`pinned`/`security`/`good-first-issue` 例外)。
 - 週時間予算: 3h reviews + 3h features + 1h triage + 1h release + 1h docs + 1h community。
 
-**実装状況:** `MAINTAINERS.md`, `GOVERNANCE.md` 作成済み。Dependabot 配置済み (Renovate へのswapはv3.3.0)。
+**実装状況:** `MAINTAINERS.md`, `GOVERNANCE.md` 作成済み。Dependabot は設定ファイルのみ配置済みで、PR を開いた実績は0件（2026-09-24 確認）。Renovate へのswapはv3.3.0。
 
 ### 7. Observability の安定モデル / Observability Stability Model
 

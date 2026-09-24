@@ -792,6 +792,19 @@ exactly, so a maintainer can apply it in one pass:
   the `build-packages` job that contains it is the job this section
   already recommends deleting.
 
+### Refined after the fact: what the boundary actually refuses
+
+Two write paths were refused (below). A third was **accepted**: merging
+`master` into this branch — which brought master's already-committed
+changes to `ci.yml`, `test.yml` and `dependabot.yml` into the branch — was
+pushed without error on 2026-09-24. The prediction recorded beforehand was
+that it would be refused; it was not. So the boundary is narrower than
+"this App cannot change workflow files on a branch": it refuses
+**authoring** workflow content that does not yet exist in the repository,
+and permits moving a branch onto workflow content that does. That still
+blocks every fix in this section — each one is new content — but it means
+a maintainer's workflow change on `master` can flow into this branch.
+
 ### Re-tested in session 266: the REST API is refused too, and the corrected `release.yml` is below
 
 Session 264 established the blocker through `git push`. Session 266
@@ -1404,10 +1417,18 @@ consumer. Dependency vulnerabilities are caught only when someone runs
 `govulncheck` by hand.
 
 **Blocker:** all three fixes are edits to `.github/workflows/`, which the
-GitHub App used by these sessions may delete but not modify (§13). The
-Dependabot config, which *is* in place and does cover
-`github-actions`, will keep pinned SHAs current once they are set — the
-`# v4.2.2` trailer convention makes the diffs readable.
+GitHub App used by these sessions may delete but not modify (§13).
+
+**Dependabot is configured but has never been shown to work** (checked
+2026-09-24). `.github/dependabot.yml` covers `gomod`, `github-actions` and
+`docker`, yet a search for pull requests authored by `app/dependabot` in
+this repository returns **zero** — ever. Earlier revisions of this entry
+and of `docs/AUDIT_CHECKLIST.md` counted Dependabot as an existing
+control; the file existing is not the control operating. Master's PR #6
+added an `automerge:` key to the `github-actions` entry; whether that key
+is valid Dependabot schema is **調査が必要** (the reference documentation
+is unreachable from the verifying environment). Until a Dependabot PR is
+actually observed, treat dependency and action updates as manual.
 
 **What to do:** pin every `uses:` to a SHA with the tag in a trailing
 comment; add a `cosign sign-blob` step to `release.yml` alongside
