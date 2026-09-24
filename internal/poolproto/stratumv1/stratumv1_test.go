@@ -172,6 +172,52 @@ func TestParseDifficulty_Malformed(t *testing.T) {
 	}
 }
 
+func TestParseDifficulty_DegenerateRejected(t *testing.T) {
+	// A zero/negative/overflowed difficulty stored on the session would
+	// make TargetFromDifficulty reject every later share — the same
+	// class of fault the set_target zero guard covers.
+	for _, raw := range []string{`[0]`, `[-4]`, `[1e400]`} {
+		if _, ok := parseDifficulty(json.RawMessage(raw)); ok {
+			t.Errorf("parseDifficulty(%s) should be !ok", raw)
+		}
+	}
+	// A real positive difficulty still parses.
+	if d, ok := parseDifficulty(json.RawMessage(`[0.001]`)); !ok || d != 0.001 {
+		t.Errorf("parseDifficulty([0.001]) = %v,%v, want 0.001,true", d, ok)
+	}
+}
+
+func TestSession_DegenerateDifficultyDoesNotClobber(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	// Establish a sane difficulty first.
+	_, _ = fmt.Fprintf(serverConn, `{"id":null,"method":"mining.set_difficulty","params":[512]}`+"\n")
+	deadline := time.After(2 * time.Second)
+	for sess.SuggestedDifficulty() != 512 {
+		select {
+		case <-deadline:
+			t.Fatalf("difficulty = %v, want 512", sess.SuggestedDifficulty())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	// A degenerate push must not clobber the stored value.
+	_, _ = fmt.Fprintf(serverConn, `{"id":null,"method":"mining.set_difficulty","params":[0]}`+"\n")
+	time.Sleep(50 * time.Millisecond)
+	if d := sess.SuggestedDifficulty(); d != 512 {
+		t.Errorf("difficulty = %v after zero push, want preserved 512", d)
+	}
+}
+
 // ============================================================================
 // parseSetTarget (mining.set_target / mining.suggest_target params)
 // ============================================================================

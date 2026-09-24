@@ -94,12 +94,18 @@ func parseNotify(raw json.RawMessage) (poolproto.Job, error) {
 }
 
 // parseDifficulty decodes mining.set_difficulty params: [diff].
+// Degenerate values (zero, negative, NaN, +Inf) are rejected: storing
+// one would make TargetFromDifficulty fail on every subsequent share,
+// letting a buggy or hostile pool DoS the session.
 func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	var p []float64
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
 		return 0, false
 	}
-	return p[0], true
+	if d := p[0]; d > 0 && !math.IsInf(d, 0) && !math.IsNaN(d) {
+		return d, true
+	}
+	return 0, false
 }
 
 // parseSetTarget decodes a pool→client target notification's params:
