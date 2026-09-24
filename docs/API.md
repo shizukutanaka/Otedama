@@ -289,6 +289,7 @@ addresses) appear once their first event occurs.
 | `otedama_estimated_share_interval_seconds` | gauge | — | Expected seconds between shares (difficulty × 2³² / hashrate). |
 | `otedama_last_job_received_seconds` | gauge | — | Unix timestamp of the most recent pool job (stale-connection detector). |
 | `otedama_pool_tls_cert_not_after_unixtime` | gauge | `pool_host=…` | Leaf certificate expiry of the connected pool (TLS transports only: `stratum+tls://`, `stratum+v2tls://`). Alert before `time()` reaches it — an expiring pool cert surfaces as sudden dial failures at the next reconnect. |
+| `otedama_asic_pool_switches_total` | counter | `pool_host=…` | Successful cgminer `switchpool` pushes to managed ASICs (`asic_manage`), per destination pool host; each successful endpoint switch counts once. |
 
 **Arbitration**
 
@@ -301,6 +302,7 @@ addresses) appear once their first event occurs.
 | `otedama_arbitration_switch_verdicts_total` | counter | `verdict` | Switches scored one settle window (2 min) later: `paid_off` = realized yield ≥ the abandoned stream's current offer; `churn` = abandoned stream now offers more (the switch cost yield); `unverifiable` = abandoned stream no longer quotes. The `churn` rate is the empirical input for tuning `arbitration_hysteresis_pct`. |
 | `otedama_arbitration_last_switch_realized_gain_sats_per_second` | gauge | — | Realized gain of the most recent verifiable switch verdict (negative = churned). |
 | `otedama_arbitration_expected_yield_sats_per_second` | gauge | — | The engine's forecast REAL earning rate (summed ExpectedYield of the chosen allocation restricted to live-market streams — simulated streams publish to `_simulated_yield_sats_per_second` instead). Compare against realized earnings to judge quote accuracy; × BTC rate for expected $/day. Feeds the TUI's lifetime-sats accumulator, so modeled revenue can never accrue as fake income. |
+| `otedama_effective_yield_sats_per_second` | gauge | — | Expected yield × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `otedama_arbitration_simulated_yield_sats_per_second` | gauge | �� | Forecast earning rate of assignments on simulated streams only (providers quoting modeled prices, e.g. ai.akash). Reads 0 on rigs with no devices routed to simulated providers. |
 | `otedama_stream_yield_shifts_total` | counter | `stream`, `device` | Significant yield shifts per stream-device — a change exceeding 2% of the prior level, or a zero/positive transition. The S (switches) drift measure; a high shifts/variation ratio means the stream moves in regime steps and suits change-point handling. |
 | `otedama_stream_yield_drift_sats_per_second` | gauge | `stream`, `device` | Accumulated \|Δyield\| per stream-device since startup — the V_T (total variation) drift measure. High drift with few shifts = smooth wandering suited to a forecaster; many shifts = jumps. |
@@ -324,6 +326,8 @@ addresses) appear once their first event occurs.
 | `otedama_power_cost_usd_per_hour` | gauge | — | Electricity cost: watts/1000 × electricity price. |
 | `otedama_thermal_sensor_celsius` | gauge | `source`, `label` | Latest OS thermal (hwmon) reading per sensor, e.g. `{source="k10temp",label="Tctl"}`; Linux-only, absent on other platforms. |
 | `otedama_electricity_tariff_pence_per_kwh` | gauge | — | Current Octopus Energy unit rate (pence/kWh incl. VAT); populated only when `electricity_tariff_octopus` is set. |
+| `otedama_electricity_tariff_forward_min_pence_per_kwh` | gauge | — | Minimum unit price across the fetched forward Agile curve (~24h of half-hourly slots) — the cheapest upcoming slot. |
+| `otedama_electricity_tariff_forward_max_pence_per_kwh` | gauge | — | Maximum unit price across the fetched forward Agile curve — alert when it exceeds `curtail_above_tariff_pence` for lead time on a coming curtail window. |
 
 **Payout (non-custodial transparency)**
 
