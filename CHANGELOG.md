@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 367 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: systemd unit の % 指定子エスケープ)
+
+- **systemd unit 生成で `%` を `%%` にエスケープ** — `ExecStart`/`ReadWritePaths`
+  の値は systemd の指定子展開（`%h`→home・`%i`→インスタンス等）の対象のため、
+  `%` を含むパス（`/home/user%d/otedama` 等）で unit が破損し得た実ギャップを解消。
+  `systemdEscape` を新設 — Windows sc.exe は `%VAR%` 展開が仕様のため従来のまま。
+
 ### Security (session 366 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: 設定ファイルパーミッションの doctor 検査)
 
 - **doctor "Configuration" チェックが config.yaml のパーミッションを検査** —

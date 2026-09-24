@@ -142,7 +142,7 @@ func (m *Manager) systemdUnitPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, ".config", "systemd", "user")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, systemdUnitName), nil
@@ -155,7 +155,7 @@ func (m *Manager) installSystemd() error {
 	}
 
 	unit := m.systemdUnit()
-	if err := os.WriteFile(path, []byte(unit), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("daemon: write systemd unit: %w", err)
 	}
 	// Reload daemon and enable the unit.
@@ -193,7 +193,7 @@ func (m *Manager) statusSystemd() (ServiceStatus, error) {
 }
 
 func (m *Manager) systemdUnit() string {
-	args := m.serviceArgs()
+	args := m.serviceArgsFor(systemdEscape)
 	// ProtectHome=read-only blocks writes anywhere under /home, including
 	// the wallet.dat the service must create/update at startup. Without an
 	// explicit exception, a data dir under $HOME (the documented default —
@@ -208,7 +208,7 @@ func (m *Manager) systemdUnit() string {
 	}
 	readWritePaths := ""
 	if effectiveDataDir != "" {
-		readWritePaths = fmt.Sprintf("ReadWritePaths=%s\n", quoteToken(effectiveDataDir))
+		readWritePaths = fmt.Sprintf("ReadWritePaths=%s\n", systemdEscape(effectiveDataDir))
 	}
 	return fmt.Sprintf(`[Unit]
 Description=Otedama — non-custodial compute arbitration
@@ -231,7 +231,7 @@ PrivateTmp=true
 %s
 [Install]
 WantedBy=default.target
-`, quoteToken(m.binaryPath), args, readWritePaths)
+`, systemdEscape(m.binaryPath), args, readWritePaths)
 }
 
 // ----- macOS / launchd -----
@@ -244,7 +244,7 @@ func (m *Manager) launchdPlistPath() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, "Library", "LaunchAgents")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, launchdLabel+".plist"), nil
@@ -256,7 +256,7 @@ func (m *Manager) installLaunchd() error {
 		return err
 	}
 	plist := m.launchdPlist()
-	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(plist), 0o644); err != nil {
 		return fmt.Errorf("daemon: write plist: %w", err)
 	}
 	return runCmd("launchctl", "load", "-w", path)
@@ -336,7 +336,7 @@ func launchdLogPath(name string) string {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	dir := filepath.Join(home, "Library", "Logs")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return filepath.Join(string(filepath.Separator), "tmp", name)
 	}
 	return filepath.Join(dir, name)
@@ -415,16 +415,29 @@ func (m *Manager) serviceArgv() []string {
 }
 
 // serviceArgs joins serviceArgv into a single command-line string, quoting
-// only the elements that need it. Used by systemd (ExecStart=) and Windows
-// (sc.exe binPath=), which parse their own quoting; launchd uses serviceArgv
-// directly.
+// only the elements that need it. Used by Windows (sc.exe binPath=) and —
+// via serviceArgsFor with systemdEscape — systemd (ExecStart=); launchd uses
+// serviceArgv directly.
 func (m *Manager) serviceArgs() string {
+	return m.serviceArgsFor(quoteToken)
+}
+
+func (m *Manager) serviceArgsFor(escape func(string) string) string {
 	argv := m.serviceArgv()
 	parts := make([]string, len(argv))
 	for i, a := range argv {
-		parts[i] = quoteToken(a)
+		parts[i] = escape(a)
 	}
 	return strings.Join(parts, " ")
+}
+
+// systemdEscape applies quoteToken and then escapes literal '%' as '%%':
+// systemd expands %-specifiers (%h, %i, %d, ...) inside unit directives, so a
+// path containing a bare percent — e.g. /home/user%d/otedama — would corrupt
+// ExecStart or ReadWritePaths. Windows' binPath is NOT given this treatment:
+// sc.exe treats %VAR% expansion as a feature.
+func systemdEscape(s string) string {
+	return strings.ReplaceAll(quoteToken(s), "%", "%%")
 }
 
 // quoteToken wraps s in Go-style double quotes (which both systemd ExecStart=

@@ -399,7 +399,7 @@ func TestUninstallSystemd_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemdUnitPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("[Unit]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[Unit]\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -503,7 +503,7 @@ func TestUninstallLaunchd_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("launchdPlistPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("<plist/>"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -666,7 +666,7 @@ func TestUninstall_Linux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemdUnitPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("[Unit]\n"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("[Unit]\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -702,7 +702,7 @@ func blockConfigDir(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, ".config"), []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".config"), []byte("block"), 0o644); err != nil {
 		t.Fatalf("blockConfigDir WriteFile: %v", err)
 	}
 }
@@ -713,7 +713,7 @@ func blockLibraryDir(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := os.WriteFile(filepath.Join(home, "Library"), []byte("block"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "Library"), []byte("block"), 0o644); err != nil {
 		t.Fatalf("blockLibraryDir WriteFile: %v", err)
 	}
 }
@@ -790,7 +790,7 @@ func TestInstallSystemd_WriteFileError(t *testing.T) {
 	// Create a DIRECTORY where the unit FILE must go — os.WriteFile returns
 	// "is a directory" even as root, which covers the error branch.
 	unitPath := filepath.Join(home, ".config", "systemd", "user", systemdUnitName)
-	if err := os.MkdirAll(unitPath, 0755); err != nil {
+	if err := os.MkdirAll(unitPath, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -807,7 +807,7 @@ func TestInstallLaunchd_WriteFileError(t *testing.T) {
 	t.Setenv("HOME", home)
 	// Create a DIRECTORY at the plist path to force WriteFile to fail.
 	plistPath := filepath.Join(home, "Library", "LaunchAgents", launchdLabel+".plist")
-	if err := os.MkdirAll(plistPath, 0755); err != nil {
+	if err := os.MkdirAll(plistPath, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	mockRunCmd(t, func(name string, args ...string) error { return nil })
@@ -858,7 +858,7 @@ func TestUninstall_DarwinDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("launchdPlistPath: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("<plist/>"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	if err := m.Uninstall(); err != nil {
@@ -909,5 +909,39 @@ func TestStatus_UnsupportedPlatform(t *testing.T) {
 	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
 	if _, err := m.Status(); err == nil {
 		t.Error("Status on unsupported platform should return error")
+	}
+}
+
+// A '%' in a path or arg must be escaped as '%%' for systemd — unit
+// directives expand %-specifiers (%h, %i, %d, ...), so a bare percent in
+// ExecStart/ReadWritePaths would corrupt the unit (session 367).
+func TestSystemdUnit_EscapesPercentSpecifiers(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd unit test only relevant on Linux")
+	}
+	m := makeTestManager(t)
+	m.binaryPath = "/home/u%d/bin/otedama"
+	m.dataDir = "/home/u%i/data"
+
+	unit := m.systemdUnit()
+
+	if strings.Contains(unit, "/home/u%d/") || strings.Contains(unit, "/home/u%i/") {
+		t.Errorf("bare %% survived into the unit — systemd would expand it:\n%s", unit)
+	}
+	if !strings.Contains(unit, "/home/u%%d/bin/otedama") {
+		t.Errorf("ExecStart missing %%d→%%%%d escape:\n%s", unit)
+	}
+	if !strings.Contains(unit, "/home/u%%i/data") {
+		t.Errorf("ReadWritePaths missing %%i→%%%%i escape:\n%s", unit)
+	}
+}
+
+// The sc.exe path must NOT receive the systemd escape — Windows treats
+// %VAR% expansion in binPath as a feature, so '%%' would be wrong there.
+func TestServiceArgs_NoPercentEscape(t *testing.T) {
+	m := makeTestManager(t)
+	m.binaryPath = "/opt/otedama%d/bin"
+	if args := m.serviceArgs(); strings.Contains(args, "%%") {
+		t.Errorf("sc.exe args got systemd %%-escape: %q", args)
 	}
 }
