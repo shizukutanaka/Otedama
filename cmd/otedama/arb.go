@@ -65,6 +65,12 @@ then OTEDAMA_HTTP_ADDR, then config.yaml's http_addr.
 // HTTP endpoint, then render. It talks to a separate running process, so
 // all failure modes are environmental (daemon down, HTTP disabled, no
 // decision ticked yet) and map to exitRuntime with a plain-language hint.
+// arbResponseLimit bounds the /arbitration body — a snapshot is a few
+// KB; a hostile --http-addr endpoint streaming garbage would otherwise
+// exhaust memory (same bound class as the rates/cgminer fetchers,
+// sessions 347/348).
+const arbResponseLimit = 1 << 20 // 1 MiB
+
 func cmdArbExplain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("arb explain", flag.ContinueOnError)
 	httpAddr := fs.String("http-addr", "", "Daemon HTTP address (e.g. 127.0.0.1:9090). Resolved from config when empty.")
@@ -101,14 +107,14 @@ func cmdArbExplain(args []string, stdout, stderr io.Writer) int {
 		if *jsonOut {
 			// Pass the snapshot through untouched — scripting consumers
 			// get the exact JSON the daemon serves.
-			if _, err := io.Copy(stdout, resp.Body); err != nil {
+			if _, err := io.Copy(stdout, io.LimitReader(resp.Body, arbResponseLimit)); err != nil {
 				fmt.Fprintf(stderr, "otedama: read /arbitration: %v\n", err)
 				return exitRuntime
 			}
 			return exitOK
 		}
 		var snap arbitration.DecisionSnapshot
-		if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
+		if err := json.NewDecoder(io.LimitReader(resp.Body, arbResponseLimit)).Decode(&snap); err != nil {
 			fmt.Fprintf(stderr, "otedama: malformed /arbitration response: %v\n", err)
 			return exitRuntime
 		}

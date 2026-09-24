@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 369 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: arb explain 応答ボディ上限)
+
+- **`arb explain` の `/arbitration` 応答を 1 MiB に上限化** — デコード・
+  `--json` パススルー双方の読み取りが無上限で、`--http-addr` が指す悪意の
+  エンドポイントがメモリを枯渇させ得た実ギャップを解消（session 347/348 の
+  rates/cgminer と同クラス）。DecisionSnapshot は数 KB。
+
 ### Fixed (session 368 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: launchd plist ログパスの XML エスケープ)
 
 - **launchd plist の `StandardOutPath`/`StandardErrorPath` を XML エスケープ** —

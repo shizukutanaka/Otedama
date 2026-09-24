@@ -153,3 +153,22 @@ func TestCmdArbExplain_Help(t *testing.T) {
 		t.Errorf("exit = %d, want %d", code, exitOK)
 	}
 }
+
+// A hostile --http-addr endpoint streaming an unbounded body must not
+// exhaust memory — the reader is capped at arbResponseLimit (session 369).
+func TestArbExplain_BoundedResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// Stream well past the 1 MiB cap.
+		for i := 0; i < 3; i++ {
+			_, _ = w.Write(make([]byte, 1<<20))
+		}
+	}))
+	defer srv.Close()
+
+	var out, errb bytes.Buffer
+	code := cmdArbExplain([]string{"--http-addr", strings.TrimPrefix(srv.URL, "http://")}, &out, &errb)
+	if code == exitOK {
+		t.Errorf("oversized malformed body should fail, got exitOK with output %q", out.String())
+	}
+}
