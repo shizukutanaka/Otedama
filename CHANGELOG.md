@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 300 — SV2 UpdateChannel)
+
+- **`UpdateChannel` (0x16, §5.3.7) の送信経路を実装** — チャネル開設時の
+  `nominal_hash_rate = 0` のまま更新されず、プールがデバイスの実測
+  hashrate を把握できなかった（`mining.suggest_difficulty` の SV2
+  対応物）。新 `poolproto.NominalHashrateUpdater` オプション
+  インタフェースを V2 セッションが実装し、初回実測 hashrate 時の
+  既存トリガから送信。`maximum_target` は unbounded 広告で var-diff は
+  プール権威のまま。`UpdateChannel.Error` (0x17) も codec+dispatch 追加
+  （受信は advisory、セッションは継続）。
+
 ### Added (session 299 — SV2 channel ライフサイクル)
 
 - **`CloseChannel` (0x18, §5.3.9) を実装** — codec 欠落のため、プールが

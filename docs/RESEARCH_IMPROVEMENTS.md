@@ -1125,6 +1125,20 @@ applied to the session — standard-channel submits carry only
 nonce/ntime/version and the pool supplies merkle roots, so no
 miner-built coinbase consumes the prefix.
 
+**Session-300 follow-up (client→server channel update):** `UpdateChannel`
+(0x16, §5.3.7) — the client→server message that updates a channel's
+nominal hashrate — had no codec; the channel was opened with
+`nominal_hash_rate = 0` and never revised, leaving the pool blind to the
+device's real rate (the SV2 counterpart of V1
+`mining.suggest_difficulty`, wired in session 294). — ✅ **Fixed
+(session 300):** codec + dispatch added (with `UpdateChannel.Error`
+0x17), new `poolproto.NominalHashrateUpdater` optional interface
+implemented by the V2 session, and the engine's existing
+first-measurement trigger now notifies V2 sessions too —
+`maximum_target` advertised unbounded so var-diff stays
+pool-authoritative. Per the spec's proxy note, updates may repeat
+(debounced ≤1/s); a drift-triggered re-notify is a possible follow-up.
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

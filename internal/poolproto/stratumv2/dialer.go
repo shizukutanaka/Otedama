@@ -530,6 +530,23 @@ func (s *session) SuggestedDifficulty() float64 {
 	return float64FromBits(s.diff.Load())
 }
 
+// UpdateNominalHashrate implements poolproto.NominalHashrateUpdater:
+// sends UpdateChannel (msg_type 0x16, §5.3.7) with the measured
+// hashrate — the SV2 counterpart of V1 mining.suggest_difficulty.
+// MaximumTarget is advertised unbounded (no device-side request), same
+// posture as OpenMiningChannel: var-diff stays pool-authoritative.
+func (s *session) UpdateNominalHashrate(_ context.Context, hashrate float64) error {
+	uc := stratum.UpdateChannel{
+		ChannelID:       s.chanID,
+		NominalHashRate: float32(hashrate),
+		MaximumTarget:   stratum.MaxTargetUnbounded,
+	}
+	if err := sendMsg(s.conn.raw, stratum.MsgUpdateChannel, true, uc); err != nil {
+		return fmt.Errorf("stratumv2: update channel: %w", err)
+	}
+	return nil
+}
+
 // Close terminates the session's underlying connection.
 func (s *session) Close() error { return s.conn.Close() }
 

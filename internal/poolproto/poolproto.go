@@ -287,6 +287,22 @@ type DifficultySuggester interface {
 	SuggestDifficulty(ctx context.Context, diff float64) error
 }
 
+// NominalHashrateUpdater is an optional extension to Session implemented
+// by protocols that let the client update the channel's nominal hashrate
+// after session start (Stratum V2's UpdateChannel, msg_type 0x16 —
+// §5.3.7). Callers should type-assert a Session to this interface;
+// protocols without a channel hashrate concept (V1 has the analogous
+// mining.suggest_difficulty instead — see DifficultySuggester) do not
+// implement it. The update is advisory: the pool uses nominal hashrate
+// for job sizing and var-diff but remains authoritative.
+type NominalHashrateUpdater interface {
+	// UpdateNominalHashrate reports the device's measured hashrate in
+	// H/s. It carries no difficulty request (the channel's
+	// maximum_target stays pool-assigned); spec debounce is ≤1/s and the
+	// engine currently notifies once per session.
+	UpdateNominalHashrate(ctx context.Context, hashrate float64) error
+}
+
 // ChannelIdentifier is an optional extension to Session implemented by
 // protocols whose mining channel carries a negotiated numeric ID that
 // consumers need when constructing share submissions or labelling work

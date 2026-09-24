@@ -141,12 +141,18 @@ configured pool URLs — each tagged with the layer it was resolved from.
    classify the reason (`rejectClass` → stale/duplicate/difficulty/hardware/
    other; V1 free-form text and SV2's hyphenated canonical codes both
    normalise to the same classes) and increment the per-reason counter.
-   On **V1 sessions** the client additionally sends a one-shot
-   `mining.suggest_difficulty` hint once the local hashrate is first
-   measured (targeting a ~15 s share interval) — advisory only, so the
+   Once the local hashrate is first measured, the client sends a
+   one-shot notification: on **V1 sessions** a
+   `mining.suggest_difficulty` hint (targeting a ~15 s share interval)
+   — advisory only, so the
    pool-side var-diff stays authoritative; low-hashrate devices need the
    hint because a pool default tuned for ASICs can be too high for
-   var-diff to ever bootstrap. SV2 has no client→pool equivalent.
+   var-diff to ever bootstrap. The SV2 counterpart is `UpdateChannel`
+   (0x16, §5.3.7): sent once per session with the measured nominal
+   hashrate (F32) and an unbounded `maximum_target` — the device makes
+   no difficulty request, so var-diff likewise stays pool-side. A
+   pool's `UpdateChannel.Error` (0x17) reply is advisory and does not
+   disturb the session.
    On `Reconnect` (msg_type 0x04, common §3.6.5) the V2 session records
    the directive and closes — the reconnect loop re-dials the configured
    pool; the pool-supplied host:port is deliberately NOT followed (same

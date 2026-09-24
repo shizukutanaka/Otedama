@@ -1312,3 +1312,44 @@ func TestDispatchFrame_SetupConnection_Malformed(t *testing.T) {
 		t.Error("DispatchFrame with 1-byte SetupConnection payload must return a decode error")
 	}
 }
+
+// ----- UpdateChannel / UpdateChannelError (§5.3.7/5.3.8) -----
+
+func TestUpdateChannel_Roundtrip(t *testing.T) {
+	orig := UpdateChannel{ChannelID: 7, NominalHashRate: 1234.5, MaximumTarget: MaxTargetUnbounded}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if len(payload) != 40 {
+		t.Fatalf("payload len = %d, want 40", len(payload))
+	}
+	got, err := DecodeUpdateChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeUpdateChannel_Short(t *testing.T) {
+	if _, err := DecodeUpdateChannel(make([]byte, 39)); err == nil {
+		t.Error("short payload accepted")
+	}
+}
+
+func TestUpdateChannelError_Roundtrip(t *testing.T) {
+	orig := UpdateChannelError{ChannelID: 7, ErrorCode: "invalid-channel"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeUpdateChannelError(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("roundtrip: got %+v, want %+v", got, orig)
+	}
+}

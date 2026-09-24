@@ -698,36 +698,47 @@ func (t *sessionTelemetry) tick(now time.Time, opts *sessionOpts, suggestedDiffi
 	}
 }
 
-// suggestDifficultyOnce sends the Stratum V1 mining.suggest_difficulty
-// hint exactly once per session, on the first tick after the local
-// hashrate has actually been measured — a suggestion made at handshake
-// time (hashrate 0/unknown) would ask for an arbitrarily tiny
-// difficulty. It targets a share every desiredShareIntervalSeconds at
-// the measured rate; low-hashrate devices benefit most, since a pool
-// default difficulty calibrated for ASICs can otherwise be so high that
-// the pool-side var-diff never observes a share rate to bootstrap from.
-// Sessions without a client→pool suggestion mechanism (SV2) mark the
-// flag and skip; pools that do not support the method answer
-// "Method not found", which the adapter maps to a nil error.
+// suggestDifficultyOnce sends the pool a one-shot measured-hashrate
+// notification per session, on the first tick after the local hashrate
+// has actually been measured — a notification made at handshake time
+// (hashrate 0/unknown) would be meaningless. V1 sessions send
+// mining.suggest_difficulty (targeting a share every
+// desiredShareIntervalSeconds at the measured rate; low-hashrate
+// devices benefit most, since a pool default difficulty calibrated for
+// ASICs can otherwise be so high that the pool-side var-diff never
+// observes a share rate to bootstrap from); V2 sessions send
+// UpdateChannel with the measured nominal hashrate. Sessions with
+// neither mechanism mark the flag and skip.
 func (t *sessionTelemetry) suggestDifficultyOnce(ctx context.Context, sess poolproto.Session, log func(string, string)) {
 	if t.difficultySuggested || t.lastHashrate <= 0 {
 		return
 	}
 	t.difficultySuggested = true
-	suggester, ok := sess.(poolproto.DifficultySuggester)
-	if !ok {
-		return
+	if suggester, ok := sess.(poolproto.DifficultySuggester); ok {
+		diff := t.lastHashrate * desiredShareIntervalSeconds / 4294967296
+		go func() {
+			if err := suggester.SuggestDifficulty(ctx, diff); err != nil {
+				log("info", fmt.Sprintf("engine: share-difficulty suggestion failed: %v", err))
+				return
+			}
+			log("info", fmt.Sprintf(
+				"engine: suggested share difficulty %.4g to pool (measured %.3g H/s, target share interval %ds — advisory, pool var-diff decides)",
+				diff, t.lastHashrate, desiredShareIntervalSeconds))
+		}()
 	}
-	diff := t.lastHashrate * desiredShareIntervalSeconds / 4294967296
-	go func() {
-		if err := suggester.SuggestDifficulty(ctx, diff); err != nil {
-			log("info", fmt.Sprintf("engine: share-difficulty suggestion failed: %v", err))
-			return
-		}
-		log("info", fmt.Sprintf(
-			"engine: suggested share difficulty %.4g to pool (measured %.3g H/s, target share interval %ds — advisory, pool var-diff decides)",
-			diff, t.lastHashrate, desiredShareIntervalSeconds))
-	}()
+	// SV2 counterpart: UpdateChannel carries the measured nominal
+	// hashrate (no difficulty request — maximum_target advertised
+	// unbounded, var-diff stays pool-side).
+	if u, ok := sess.(poolproto.NominalHashrateUpdater); ok {
+		hashrate := t.lastHashrate
+		go func() {
+			if err := u.UpdateNominalHashrate(ctx, hashrate); err != nil {
+				log("info", fmt.Sprintf("engine: nominal-hashrate update failed: %v", err))
+				return
+			}
+			log("info", fmt.Sprintf("engine: notified pool of measured nominal hashrate %.3g H/s (SV2 UpdateChannel — advisory)", hashrate))
+		}()
+	}
 }
 
 func runSession(ctx context.Context, opts sessionOpts) error {

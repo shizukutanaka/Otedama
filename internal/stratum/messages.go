@@ -18,6 +18,8 @@
 //	0x11  OpenMiningChannelSuccess
 //	0x12  OpenMiningChannelError
 //	0x15  NewMiningJob           (server → client, channel_msg)
+//	0x16  UpdateChannel          (client → server, channel_msg)
+//	0x17  UpdateChannelError     (server → client, channel_msg)
 //	0x18  CloseChannel           (server → client, channel_msg)
 //	0x19  SetExtranoncePrefix    (server → client, channel_msg)
 //	0x1a  SubmitSharesStandard   (client → server, channel_msg)
@@ -30,7 +32,7 @@
 //	BOOL:   1 byte, 0x00 false / 0x01 true.
 //	STR0_255: 1-byte length prefix followed by UTF-8 bytes (max 255).
 //	B0_255:   1-byte length prefix followed by raw bytes (max 255).
-//	B0_32:    32 raw bytes (fixed, no length prefix).
+//	B0_32:    1-byte length prefix followed by raw bytes (max 32).
 //	B0_16M:  3-byte little-endian length prefix followed by raw bytes.
 //
 // Otedama does not implement all fields of every message; fields that
@@ -54,6 +56,8 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgUpdateChannel            uint8 = 0x16
+	MsgUpdateChannelError       uint8 = 0x17
 	MsgCloseChannel             uint8 = 0x18
 	MsgSetExtranoncePrefix      uint8 = 0x19
 	MsgSubmitSharesStandard     uint8 = 0x1a
@@ -235,6 +239,75 @@ func DecodeSetTarget(payload []byte) (SetTarget, error) {
 	var m SetTarget
 	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
 	copy(m.MaxTarget[:], payload[4:36])
+	return m, nil
+}
+
+// ------------------------------------------------------------------
+// UpdateChannel (client → server, msg_type 0x16, channel_msg, §5.3.7)
+// ------------------------------------------------------------------
+
+// UpdateChannel notifies the pool about changes on the channel — for an
+// end mining device, the measured nominal hashrate. Payload: channel_id
+// U32 + nominal_hash_rate F32 + maximum_target U256. The spec debounces
+// updates at once per second; the engine sends it once per session when
+// the local hashrate is first measured (the SV2 counterpart of V1
+// mining.suggest_difficulty). MaximumTarget is the device's *request* —
+// MaxTargetUnbounded advertises no constraint, leaving var-diff
+// pool-side.
+type UpdateChannel struct {
+	ChannelID       uint32
+	NominalHashRate float32
+	MaximumTarget   [32]byte
+}
+
+// Encode serialises UpdateChannel.
+func (m UpdateChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 40), m.ChannelID)
+	b = appendU32LE(b, float32bits(m.NominalHashRate))
+	return append(b, m.MaximumTarget[:]...), nil
+}
+
+// DecodeUpdateChannel parses an UpdateChannel payload.
+func DecodeUpdateChannel(payload []byte) (UpdateChannel, error) {
+	const need = 4 + 4 + 32
+	if len(payload) < need {
+		return UpdateChannel{}, fmt.Errorf("stratum: UpdateChannel: short payload (%d < %d)", len(payload), need)
+	}
+	var m UpdateChannel
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	m.NominalHashRate = float32frombits(binary.LittleEndian.Uint32(payload[4:8]))
+	copy(m.MaximumTarget[:], payload[8:40])
+	return m, nil
+}
+
+// UpdateChannelError (server → client, msg_type 0x17, channel_msg,
+// §5.3.8) reports an invalid UpdateChannel. Sent only on rejection —
+// acceptance is silent.
+type UpdateChannelError struct {
+	ChannelID uint32
+	ErrorCode string
+}
+
+// Encode serialises UpdateChannelError.
+func (m UpdateChannelError) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 4+1+len(m.ErrorCode)), m.ChannelID)
+	return appendStr0_255(b, m.ErrorCode)
+}
+
+// DecodeUpdateChannelError parses an UpdateChannelError payload.
+func DecodeUpdateChannelError(payload []byte) (UpdateChannelError, error) {
+	const need = 4 + 1
+	if len(payload) < need {
+		return UpdateChannelError{}, fmt.Errorf("stratum: UpdateChannelError: short payload (%d < %d)", len(payload), need)
+	}
+	var m UpdateChannelError
+	m.ChannelID = binary.LittleEndian.Uint32(payload[0:4])
+	r := newByteReader(payload[4:])
+	s, err := getStr0_255(r)
+	if err != nil {
+		return m, fmt.Errorf("stratum: UpdateChannelError.ErrorCode: %w", err)
+	}
+	m.ErrorCode = s
 	return m, nil
 }
 
@@ -462,6 +535,8 @@ type Message struct {
 	OpenMiningChannelSuccess *OpenMiningChannelSuccess
 	OpenMiningChannelError   *OpenMiningChannelError
 	NewMiningJob             *NewMiningJob
+	UpdateChannel            *UpdateChannel
+	UpdateChannelError       *UpdateChannelError
 	SetNewPrevHash           *SetNewPrevHash
 	SetTarget                *SetTarget
 	CloseChannel             *CloseChannel
@@ -547,6 +622,18 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.SetTarget = &v
+	case MsgUpdateChannel:
+		v, err := DecodeUpdateChannel(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.UpdateChannel = &v
+	case MsgUpdateChannelError:
+		v, err := DecodeUpdateChannelError(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.UpdateChannelError = &v
 	case MsgCloseChannel:
 		v, err := DecodeCloseChannel(f.Payload)
 		if err != nil {

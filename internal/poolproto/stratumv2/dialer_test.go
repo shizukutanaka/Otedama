@@ -1624,3 +1624,104 @@ func TestDialer_Session_CloseChannelEndsSession(t *testing.T) {
 		t.Errorf("close record = %+v, want channel 7 reason \"channel migrated\"", closed)
 	}
 }
+
+// UpdateNominalHashrate (poolproto.NominalHashrateUpdater) serialises
+// UpdateChannel (msg_type 0x16, channel_msg) with the channel's ID, the
+// measured hashrate as F32, and an unbounded maximum_target — the
+// device makes no difficulty request; var-diff stays pool-side.
+func TestDialer_Session_UpdateNominalHashrate(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	frameCh := make(chan stratum.Frame, 1)
+	go func() {
+		pool.doHandshake(7)
+		f, err := pool.dec.ReadFrame()
+		if err == nil {
+			frameCh <- f
+		}
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	u, ok := sess.(poolproto.NominalHashrateUpdater)
+	if !ok {
+		t.Fatal("session does not implement NominalHashrateUpdater")
+	}
+	if err := u.UpdateNominalHashrate(ctx, 1234.5); err != nil {
+		t.Fatalf("UpdateNominalHashrate: %v", err)
+	}
+
+	var f stratum.Frame
+	select {
+	case f = <-frameCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pool never received UpdateChannel")
+	}
+	if f.Header.MsgType != stratum.MsgUpdateChannel {
+		t.Fatalf("msg_type = %#x, want %#x (UpdateChannel)", f.Header.MsgType, stratum.MsgUpdateChannel)
+	}
+	if !f.Header.ChannelMsg() {
+		t.Error("channel_msg bit not set on UpdateChannel")
+	}
+	uc, err := stratum.DecodeUpdateChannel(f.Payload)
+	if err != nil {
+		t.Fatalf("DecodeUpdateChannel: %v", err)
+	}
+	if uc.ChannelID != 7 {
+		t.Errorf("channel_id = %d, want 7", uc.ChannelID)
+	}
+	if uc.NominalHashRate != float32(1234.5) {
+		t.Errorf("nominal_hash_rate = %v, want 1234.5", uc.NominalHashRate)
+	}
+	if uc.MaximumTarget != stratum.MaxTargetUnbounded {
+		t.Error("maximum_target not advertised unbounded")
+	}
+}
+
+// An UpdateChannelError reply (the pool rejected our update) decodes
+// cleanly and does not disturb the session — acceptance is silent, a
+// rejection is advisory only.
+func TestDialer_Session_UpdateChannelErrorIsAdvisory(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	go func() {
+		pool.doHandshake(7)
+		writeMsgTo(pool.t, pool.conn, stratum.MsgUpdateChannelError, true,
+			stratum.UpdateChannelError{ChannelID: 7, ErrorCode: "invalid-channel"})
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	// Session must survive: Jobs() stays open (no close before timeout).
+	select {
+	case _, ok := <-sess.Jobs():
+		if !ok {
+			t.Error("Jobs() closed on advisory UpdateChannelError")
+		}
+	case <-time.After(300 * time.Millisecond):
+	}
+}
