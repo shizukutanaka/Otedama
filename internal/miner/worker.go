@@ -230,6 +230,14 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		localWork    *Work
 		localWorkVer uint64
 		nonce        = threadID
+		// ntimeOffset rolls the header time forward by one second each
+		// time the nonce space wraps: the nonce domain is periodic mod
+		// 2^32, so without a domain shift a wrapped thread rehashes
+		// nonces it already covered — wasted work and deterministic
+		// duplicate-share rejects on slow-refresh pools (cgminer/
+		// ESP-Miner roll ntime the same way; the pool accepts ntime
+		// drift within its window).
+		ntimeOffset uint32
 	)
 
 	for {
@@ -245,6 +253,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			localWork = w.work
 			localWorkVer = w.workVer
 			nonce = threadID // restart nonce from thread offset on new job
+			ntimeOffset = 0
 		}
 		w.mu.Unlock()
 
@@ -260,6 +269,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		const batchSize = 1024
 
 		h := localWork.Header
+		h.Time += ntimeOffset
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
 			hash := HashHeader(h)
@@ -289,7 +299,14 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 			}
 
 			// Advance nonce by step (interleaves threads' nonce ranges).
+			prev := nonce
 			nonce += w.cfg.NonceStep
+			if nonce < prev {
+				// Wrapped past 2^32: the nonce sequence is periodic, so roll
+				// ntime instead of rehashing covered space (see ntimeOffset).
+				ntimeOffset++
+				h.Time++
+			}
 		}
 	}
 }
