@@ -1996,3 +1996,45 @@ func TestSession_SuggestDifficulty_MethodNotFoundIsInformational(t *testing.T) {
 		t.Fatalf("SuggestDifficulty on unsupported pool: %v", err)
 	}
 }
+
+func TestSession_E2E_SetExtranonceDuringSubmits(t *testing.T) {
+	// A pool may rotate extranonce while shares are in flight: the
+	// mid-session update (readLoop) and the padding read in Submit must
+	// be synchronised — this test exists to be run under -race.
+	clientConn, serverConn := net.Pipe()
+	pool := &fakePool{conn: serverConn, verdict: true}
+	go pool.run()
+
+	conn := &connection{
+		raw:        clientConn,
+		remoteAddr: "test:0",
+		protocol:   poolproto.ProtocolStratumV1,
+	}
+	sess := newSession(conn)
+	sess.start(context.Background())
+	defer sess.Close()
+
+	rotateDone := make(chan struct{})
+	go func() {
+		defer close(rotateDone)
+		for i := 0; i < 200; i++ {
+			msg := `{"id":null,"method":"mining.set_extranonce","params":["deadbeef01",4]}` + "\n"
+			if _, err := serverConn.Write([]byte(msg)); err != nil {
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < 200; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		res, err := sess.Submit(ctx, poolproto.ShareSubmission{JobID: "J", Nonce: uint32(i), NTime: 1})
+		cancel()
+		if err != nil {
+			t.Fatalf("Submit %d: %v", i, err)
+		}
+		if !res.Accepted {
+			t.Fatalf("Submit %d rejected", i)
+		}
+	}
+	<-rotateDone
+}

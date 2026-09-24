@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 303 — sv2-apps v0.8.0 監査)
+
+- **V1 `mining.set_extranonce` ローテーション経路のデータレースを修正** —
+  readLoop が `extranonce1`/`extranonce2Size` を書き換える一方、Submit が
+  extranonce2 パディング用にサイズを無同期で読んでいた。両フィールドを
+  `enMu` 下でペア整合に（`-race` リグレッションテストが旧コードで失敗
+  することを確認済み）。v0.8.0 監査の他項目は対応済みまたは非該当と
+  検証（RESEARCH_IMPROVEMENTS session-303 に記録）。
+
 ### Added (session 302 — UpdateChannel drift 再通知 + 課題棚卸し)
 
 - **SV2 `UpdateChannel` を drift 駆動で再通知** — #160 の1回送信から

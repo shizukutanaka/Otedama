@@ -1168,6 +1168,28 @@ first-measurement trigger now notifies V2 sessions too —
 `maximum_target` advertised unbounded so var-diff stays
 pool-authoritative. Per the spec's proxy note, updates may repeat
 (debounced ≤1/s); a drift-triggered re-notify is a possible follow-up.
+— ✅ **Follow-up done (session 302):** the engine now re-notifies when
+the measured rate drifts ±25% from the last notified value, debounced
+at once a minute (far below the spec's ≤1/s proxy bound).
+
+**Session-303 follow-up (sv2-apps v0.8.0, Loupe-audit release):** the
+2026-09-17 release is a security-hardening pass driven by the Loupe
+audit. Verified against Otedama — already covered: non-setup messages
+during the SV2 handshake are rejected (`Negotiate` fails on any
+unexpected msg_type), `Decoder.MaxFrameSize` caps frame allocation,
+`extranonce.subscribe` opt-in + `mining.set_extranonce` handling exist,
+and Go's dialer already iterates every resolved DNS address.
+Non-applicable: BIP323 version-rolling mask (an end CPU/GPU device
+has nothing to roll — `mining.set_version_mask` is correctly ignored),
+JDC/Pool-side items (extranonce allocator exhaustion, share-cache
+ordering, `SeenSharesBudgetExhausted`, `max_past_jobs`) are upstream
+scope, and the `noise_sv2` hardening applies to the unwired Noise path
+(ADR-011). One real finding fixed — ✅ **Fixed (session 303):** the
+`set_extranonce` rotation path itself raced — `readLoop` wrote
+`extranonce1`/`extranonce2Size` while `Submit` read the size for
+extranonce2 padding, with no synchronization. Both fields now move
+together under `enMu` (confirmed by a `-race` regression test that
+fails on the pre-fix code).
 
 ---
 

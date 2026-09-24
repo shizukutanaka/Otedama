@@ -110,7 +110,10 @@ type session struct {
 	// for diagnostics and tests.
 	lastReconnect atomic.Pointer[reconnectDirective]
 
-	// extranonce1, extranonce2Size are negotiated at subscribe time.
+	// extranonce1, extranonce2Size are negotiated at subscribe time and
+	// may be rotated mid-session by mining.set_extranonce (readLoop
+	// writes, Submit reads) — both fields move together under enMu.
+	enMu            sync.RWMutex
 	extranonce1     string
 	extranonce2Size int
 
@@ -245,8 +248,10 @@ func (s *session) dispatch(line []byte) {
 	case "mining.set_extranonce":
 		// Some pools rotate extranonce mid-session. Update our copy.
 		if en1, sz, ok := parseSetExtranonce(msg.Params); ok {
+			s.enMu.Lock()
 			s.extranonce1 = en1
 			s.extranonce2Size = sz
+			s.enMu.Unlock()
 		}
 	case "client.show_message":
 		// Pool is sending an operator notice (e.g. "maintenance in 10 min").
@@ -337,7 +342,9 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
 		// Pad to extranonce2_size if the worker passed empty.
+		s.enMu.RLock()
 		en2 = strings.Repeat("00", s.extranonce2Size)
+		s.enMu.RUnlock()
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1
