@@ -136,6 +136,15 @@ rationale in `go.mod`. Migration was scoped but not performed in session
 lookup (`sum.golang.org` returns Forbidden), so `go get` cannot verify the
 new module here; tracked in RESEARCH_IMPROVEMENTS session-251 item 1.
 
+**Resolution (session 256):** the recommended migration landed. Both
+import sites (`cmd/otedama/configfile.go`,
+`internal/config/config_file_test.go`) now use `go.yaml.in/yaml/v3
+v3.0.5`, and `go.mod` records the selection rationale as required by
+CLAUDE.md §外部依存. `go.yaml.in/yaml/v3` was chosen over the actively
+developed `go.yaml.in/yaml/v4` because v3 is API-identical to the
+`gopkg.in/yaml.v3` call sites — the dependency *count* and the ADR's
+acceptance are unchanged; only the import path and maintainer moved.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model
