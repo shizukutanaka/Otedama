@@ -492,6 +492,16 @@ the estimate never runs backwards or accrues while idle/stalled/
 curtailed (`ratePerSec > 0` also filters NaN); `hashrateWindow`
 saturates at 0 on counter reset instead of going negative.
 
+**Session 428 CS-invariant pass.** httpserver bounds verified: fixed
+10s Read/Write timeouts on the mux, `/arbitration` encodes a bounded
+snapshot, pprof mounts only behind the private-bind gate. Stratum V2
+adapter verified: `tipState.pending` capped at `maxPendingJobs` (64)
+with newest-kept eviction, `SetNewPrevHash` clears stale jobs;
+in-flight submits resolve via verdict, `submitResponseTimeout` (2min),
+or `drainPending` on session end — no pending-entry leak path; read and
+write frame deadlines bound wedged-pool hangs. Sequence-number wrap at
+2³² is unreachable (pending entries live at most the submit timeout).
+
 ---
 
 ### Elevation of privilege (E)
