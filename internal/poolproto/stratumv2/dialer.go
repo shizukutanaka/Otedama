@@ -78,6 +78,14 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 // shorten it.
 var negotiateReadTimeout = 30 * time.Second
 
+// readSilenceBound bounds how long readLoop tolerates a pool that
+// keeps the connection open without sending any frame — the same
+// liveness hole the engine's sessionSilenceBound closes on the inline
+// path. Frames arrive irregularly (at most once per new block via
+// SetNewPrevHash), so the bound is generous: ~3× the nominal block
+// interval. A var so tests can shorten it.
+var readSilenceBound = 30 * time.Minute
+
 // Negotiate performs the Stratum V2 handshake (SetupConnection +
 // OpenMiningChannel) and returns a Session that streams jobs.
 func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolproto.Session, error) {
@@ -201,6 +209,11 @@ type session struct {
 
 	diff atomic.Uint64 // suggested difficulty as math.Float64bits
 
+	// silenceBound is the steady-state read deadline, snapshotted at
+	// start() so the loop never re-reads the package-level
+	// readSilenceBound (which tests may override).
+	silenceBound time.Duration
+
 	startOnce sync.Once
 }
 
@@ -209,6 +222,7 @@ type session struct {
 // cancellation, or connection close, closing jobsCh on the way out.
 func (s *session) start(ctx context.Context) {
 	s.startOnce.Do(func() {
+		s.silenceBound = readSilenceBound
 		go s.readLoop(ctx)
 	})
 }
@@ -247,6 +261,12 @@ func (s *session) readLoop(ctx context.Context) {
 		if ctx.Err() != nil || s.conn.closed.Load() {
 			return
 		}
+		// Bound the steady-state read: a pool that keeps the TCP
+		// connection open but stops sending would otherwise hold the
+		// session forever — no failover, no reconnect. The deadline
+		// is refreshed before every read, so it only fires when the
+		// pool has sent nothing at all for silenceBound.
+		_ = s.conn.raw.SetReadDeadline(time.Now().Add(s.silenceBound))
 		f, err := s.dec.ReadFrame()
 		if err != nil {
 			return

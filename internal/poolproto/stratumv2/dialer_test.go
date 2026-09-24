@@ -1077,3 +1077,40 @@ func TestNegotiate_SilentPool_TimesOut(t *testing.T) {
 		t.Fatal("Negotiate should fail when the pool never answers the handshake")
 	}
 }
+
+// ============================================================================
+// readLoop — steady-state silence deadline: a live-but-silent peer must
+// not pin the session (mirrors the engine's sessionSilenceBound)
+// ============================================================================
+
+func TestSession_ReadLoop_SilenceDeadline(t *testing.T) {
+	old := readSilenceBound
+	readSilenceBound = 100 * time.Millisecond
+	defer func() { readSilenceBound = old }()
+
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	go pool.doHandshake(1)
+
+	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+
+	// The pool completes the handshake then never sends a frame while
+	// keeping the connection open. Without the rolling read deadline the
+	// loop would block for the session's life; it must close jobsCh.
+	select {
+	case _, ok := <-sess.Jobs():
+		if ok {
+			for range sess.Jobs() {
+			}
+		}
+	case <-time.After(3 * time.Second):
+		t.Error("jobsCh not closed after silent pool exceeded readSilenceBound")
+	}
+}

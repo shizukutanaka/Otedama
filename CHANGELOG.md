@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 263 — コンピューターサイエンスの観点から改善点を洗い出す(第8ラウンド): 定常状態の沈黙バウンドが欠けていた経路を閉塞——計2件)
+
+第8ラウンドの Socratic 問いは「**セッションを終了させるものは何か?**」——runSession が返らなければ reconnect ループは failover 到達不能。第5ラウンドは handshake・RPC 応答の無期限化を境界化したが、**定常状態の read だけがピア応答にのみ依存**していた:V1 は 5 分の read deadline があるのに対し V2 インライン経路にはデッドラインが存在しない(TCP keepalive は死んだピアのみ有効、**生きているが送信しない zombie プール**は不検出)。
+
+- **V2 定常状態 ReadFrame の沈黙バウンド欠如**(`engine/run.go` runSession): TCP open を維持したまま一切送信しないプールはセッションを**永遠に**保持——ワーカーは最後のジョブを掘り続ける(または一切届かなければアイドル)し failover プールに進まない。`lastFrameAt` タイムスタンプ(reader がフレーム毎に更新)+ statsTicker arm で `sessionSilenceBound`(30分≒名目ブロック間隔3倍、疎な signet チェーンでも誤発火しない余裕)を超過したら session error で返却→ reconnect ループが同一プール再試行/次プールへ failover。
+- **stratumv2 adapter readLoop の同形の穴**(`poolproto/stratumv2/dialer.go`): dormant 経路だが第5ラウンド Negotiate と同じ方針で封鎖——live 化時に同じ穴を踏ませない。`readSilenceBound`(30分)を per-read のローリング deadline として適用(フレーム毎に期限を更新、30分間何も届かなければ ReadFrame が失敗→jobsCh close→セッション終了)。`silenceBound` を `start()` でスナップショット化し、残存 readLoop goroutine がパッケージ var を読み続ける race を構造的に排除(第8ラウンドの -race で検出)。
+
+**検証手続き(棄却済み候補).** 経路単位で clean と確認: `rejectClass` のラベル値は bounded 5分類 + `escapeLabel` で exposition 注入防御済み、3つの time-accountant(hashrateWindow/uptimeAccountant/satsAccountant)は `elapsed<=0` 全ガード済み(時計逆行安全)、`time.NewTicker` の interval は `<=0→10s` フォールバック、reconnect backoff は floor 1s/cap 64s/接続時リセット済み、fanIn チャネル cap≤64+ctx-aware、V1 行長 64KiB cap、stratum frame U24 cap、SetTarget 途中更新は bounded、rates HTTP client 10s timeout、stratumv1 pending map は submitSlots で実効 bounded。
+
+**テスト.** `TestRunSession_SilentPoolAbandoned`(handshake 後に黙るスクリプト化プール——120ms 縮小 bound で "pool silent" エラー返却を検証)、`TestSession_ReadLoop_SilenceDeadline`(net.Pipe で handshake 後沈黙→jobsCh close を検証)。`go test ./...` 全24pkg 緑、`-race` ./internal/{engine,poolproto/stratumv2} 緑、差分行 lint/gofumpt クリーン、deadcode ベースライン、govulncheck 到達可能0件。
+
 ### Fixed (session 262 — コンピューターサイエンスの観点から改善点を洗い出す(第7ラウンド): プール制御レートへの並行度上界 + NaN 盲点ガード——計4件)
 
 第7ラウンドの Socratic 問いは「この産出レートは誰が制御するか?」——シェア産出率は完全にプール制御(set_difficulty ≈ 0 や V2 の SetTarget.MaxTarget で全ハッシュが適格)であり、シェアごとの goroutine 生成に cap がなければ、プールの選択したレートで goroutine と pending map が無制限に増大する。監査で V1 経路のみがこの cap を欠き、V2 はインライン submit(10s write deadline)で既に有界と確認。併せて `<= 0` ガードの NaN 盲点を全 provider に再掃討した。

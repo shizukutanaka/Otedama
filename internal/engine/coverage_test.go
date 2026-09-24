@@ -2460,3 +2460,81 @@ func TestRunSessionV1_SubmitBudgetDropsUnderFlood(t *testing.T) {
 		t.Errorf("pool received %d submits, exceeds cap %d", got, maxConcurrentSubmits)
 	}
 }
+
+// ============================================================================
+// run.go — V2 steady-state silence bound: a pool that keeps the TCP
+// connection open but never sends a frame must not pin the session
+// ============================================================================
+
+// silentV2Pool completes the SV2 handshake (SetupConnection +
+// OpenMiningChannelSuccess with an all-0xFF target), then holds the
+// connection open while never sending another frame — the zombie-peer
+// case the session silence bound exists to unstick.
+func silentV2Pool(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		dec := stratum.NewDecoder(conn)
+		dec.MaxFrameSize = 1 << 20
+
+		if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		payload, _ := stratum.SetupConnectionSuccess{UsedVersion: 2}.Encode()
+		f, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(f)
+		if _, err := conn.Write(encoded); err != nil {
+			return
+		}
+		if _, err := dec.ReadFrame(); err != nil { // OpenMiningChannel
+			return
+		}
+		succ := stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtraNonce2Size: 4}
+		for i := range succ.Target {
+			succ.Target[i] = 0xFF
+		}
+		payload, _ = succ.Encode()
+		f, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(f)
+		if _, err := conn.Write(encoded); err != nil {
+			return
+		}
+		// Silence: read (and drop) anything the client sends until the
+		// session bound closes the connection from our side.
+		for {
+			if _, err := dec.ReadFrame(); err != nil {
+				return
+			}
+		}
+	}()
+	return "stratum+v2://" + ln.Addr().String()
+}
+
+func TestRunSession_SilentPoolAbandoned(t *testing.T) {
+	old := sessionSilenceBound
+	sessionSilenceBound = 120 * time.Millisecond
+	defer func() { sessionSilenceBound = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := runSession(ctx, sessionOpts{
+		poolURL:  silentV2Pool(t),
+		user:     "w",
+		merged:   make(chan miner.Share),
+		interval: 20 * time.Millisecond,
+		log:      func(_, _ string) {},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pool silent") {
+		t.Fatalf("expected a pool-silent session error, got %v", err)
+	}
+}

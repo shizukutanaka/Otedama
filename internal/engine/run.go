@@ -62,6 +62,20 @@ const (
 	reconnectBackoffMax = 64 * time.Second
 )
 
+// sessionSilenceBound is the longest interval the V2 session loop
+// tolerates without any frame arriving from the pool before
+// declaring the connection dead. Steady-state reads carry no
+// deadline by design — V2 frames arrive irregularly, at most once
+// per new block via SetNewPrevHash — so without this bound a pool
+// that keeps the TCP connection open but never sends would pin the
+// session forever: workers would grind the last job (or idle)
+// indefinitely and failover pools would never be tried. TCP
+// keepalive covers a dead peer; this covers a silent live one.
+// 30 minutes is ~3× the nominal block interval — headroom enough
+// that sparse signet/testnet chains cannot false-trigger.
+// A var so tests can shorten it.
+var sessionSilenceBound = 30 * time.Minute
+
 // arbitrationInterval is how often the engine re-evaluates the
 // device→stream assignment in the absence of a fresh quote.
 // It is a var (not const) so tests can shrink it to milliseconds.
@@ -700,6 +714,16 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 
 	// Spawn reader goroutine.
 	inCh := make(chan poolMsg, 32)
+	// lastFrameAt records when the reader last delivered a frame. The
+	// steady-state read has no deadline, so the consumer enforces
+	// sessionSilenceBound against this timestamp: a pool that keeps the
+	// connection open but stops sending must still yield the session,
+	// or failover pools would never be tried.
+	// silenceBound snapshots the package-level bound: tests shrink it
+	// before calling runSession; the loop never re-reads the global.
+	silenceBound := sessionSilenceBound
+	var lastFrameAt atomic.Int64
+	lastFrameAt.Store(time.Now().UnixNano())
 	go func() {
 		defer close(inCh)
 		for {
@@ -711,6 +735,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 				return
 			}
+			lastFrameAt.Store(time.Now().UnixNano())
 			msg, err := stratum.DispatchFrame(f)
 			select {
 			case inCh <- poolMsg{msg: msg, err: err}:
@@ -802,6 +827,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
 					dropped-lastDropped))
 				lastDropped = dropped
+			}
+			// Liveness bound: the reader's steady-state ReadFrame carries
+			// no deadline, so a pool that keeps the TCP connection open
+			// but stops sending frames would otherwise hold this session
+			// forever. Ending it returns control to the reconnect loop,
+			// which retries the same pool or fails over to the next.
+			if since := time.Since(time.Unix(0, lastFrameAt.Load())); since > silenceBound {
+				return fmt.Errorf("engine: pool silent for %s — abandoning session", since.Truncate(time.Second))
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
 			// Accumulate estimated earnings before building the dashboard
