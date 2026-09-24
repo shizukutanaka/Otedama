@@ -721,6 +721,14 @@ func TestRejectClass(t *testing.T) {
 		{"Invalid solution", "hardware", "hardware"},
 		{"bad nonce", "hardware", "hardware"},
 		{"some unknown pool error", "other", "unclassified"},
+		// SV2 canonical SubmitSharesError codes are hyphenated — they
+		// must classify the same as their space-separated V1 phrasings.
+		{"stale-share", "stale", "latency"},
+		{"duplicate-share", "duplicate", "firmware"},
+		{"low-difficulty-share", "difficulty", "difficulty"},
+		{"job_not_found", "stale", "latency"},
+		{"unauthorized-worker", "other", "unclassified"},
+		{"not-subscribed", "other", "unclassified"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)

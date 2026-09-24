@@ -138,7 +138,8 @@ configured pool URLs — each tagged with the layer it was resolved from.
    (`SubmitSharesStandard`); on `SubmitSharesSuccess` settle
    submit→accept latency and increment accepted; on `SubmitSharesError`
    classify the reason (`rejectClass` → stale/duplicate/difficulty/hardware/
-   other) and increment the per-reason counter.
+   other; V1 free-form text and SV2's hyphenated canonical codes both
+   normalise to the same classes) and increment the per-reason counter.
    On **V1 sessions** the client additionally sends a one-shot
    `mining.suggest_difficulty` hint once the local hashrate is first
    measured (targeting a ~15 s share interval) — advisory only, so the

@@ -1082,6 +1082,16 @@ downstream). — ✅ **Fixed (session 295):**
 `stratum.SetupFlagRequiresStandardJobs` is now declared on the V2
 dialer's SetupConnection.
 
+**Session-296 follow-up (SV2 error-code taxonomy):** while auditing the
+canonical `SubmitSharesError` codes against `rejectClass`, found SV2's
+hyphenated strings fell through to "other" — the classifier was written
+for V1 free-form text ("low difficulty" with spaces), so
+`low-difficulty-share` (the most common var-diff-related rejection)
+misclassified and skewed the reject-reason counter. — ✅ **Fixed
+(session 296):** `rejectClass` normalises `-`/`_` separators before
+matching; all five spec codes now map correctly
+(`unauthorized-worker`/`not-subscribed` → "other" by design).
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

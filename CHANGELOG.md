@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 296 — SV2 reject 理由の分類)
+
+- **SV2 canonical reject コードが "other" に誤分類される問題を修正** —
+  `rejectClass` は V1 自由形式テキスト向けに書かれており、SV2 の
+  hyphenated コード `low-difficulty-share`（var-diff 系で最も一般的な
+  拒否理由）がどの case にもマッチせず reject-reason カウンタを歪めて
+  いた。`-`/`_` を空白に正規化してからマッチするよう修正し、spec の
+  全5コード（stale/duplicate/low-difficulty/unauthorized/not-subscribed）
+  を正しく分類（後2つは設計上 "other"）。
+
 ### Fixed (session 295 — SV2 SetupConnection capability 宣言)
 
 - **`SetupConnection.flags` に `REQUIRES_STANDARD_JOBS` を宣言** —

@@ -261,13 +261,18 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 // stale→latency, duplicate→firmware, above-target→difficulty,
 // invalid→hardware.
 func rejectClass(reason string) (category, diagnosis string) {
+	// Reason codes arrive from both protocols: V1 pools send free-form
+	// text ("Job not found") while SV2 sends canonical hyphenated codes
+	// ("low-difficulty-share"). Normalise separators so hyphenated and
+	// underscored spellings match the same phrases.
 	r := strings.ToLower(reason)
+	r = strings.NewReplacer("-", " ", "_", " ").Replace(r)
 	switch {
 	case strings.Contains(r, "stale") || strings.Contains(r, "job not found") || strings.Contains(r, "unknown job"):
 		return "stale", "likely cause: network latency / stale work"
 	case strings.Contains(r, "duplicate"):
 		return "duplicate", "likely cause: firmware or connectivity (duplicate submission)"
-	case strings.Contains(r, "above") || strings.Contains(r, "target") || strings.Contains(r, "low difficulty") || strings.Contains(r, "high-hash"):
+	case strings.Contains(r, "above") || strings.Contains(r, "target") || strings.Contains(r, "difficulty") || strings.Contains(r, "high hash"):
 		return "difficulty", "likely cause: difficulty configuration or hardware error"
 	case strings.Contains(r, "invalid") || strings.Contains(r, "bad"):
 		return "hardware", "likely cause: hardware error (failing chip / overheating)"
