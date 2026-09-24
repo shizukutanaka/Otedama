@@ -502,6 +502,16 @@ or `drainPending` on session end — no pending-entry leak path; read and
 write frame deadlines bound wedged-pool hangs. Sequence-number wrap at
 2³² is unreachable (pending entries live at most the submit timeout).
 
+**Session 429 CS-invariant pass.** TUI rendering verified: width
+auto-detects per render tick (SetWidth <40 ignored for unusable
+terminals); `shortenURL`/`truncateToBudget` byte-truncate pool URLs —
+cosmetic mid-rune cuts possible but pool URLs are operator-supplied
+config values already rejected for control bytes (session 361), so no
+terminal-injection vector; hashrate/sats renderers degrade on NaN/Inf
+sources that upstream guards make unreachable in practice
+(`ratePerSec > 0` filters NaN in satsAccountant). ANSI codes in
+miningLine are fixed internal constants, never provider/pool data.
+
 ---
 
 ### Elevation of privilege (E)
