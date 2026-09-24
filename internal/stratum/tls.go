@@ -24,6 +24,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"time"
 )
 
 // defaultTLSConfig is the secure baseline for stratum+v2tls://
@@ -55,6 +56,12 @@ func TLSConfigWithExtraCAs(pem []byte) (*tls.Config, error) {
 	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 }
 
+// dialConnectTimeout bounds the TCP connect inside DialTLS — the
+// caller's ctx is the engine run context (unbounded), so without this
+// a dial to a blackholed pool hangs until the kernel's TCP retry
+// budget (~2min on Linux). Same 30s bound as the V1/V2 TCP dialers.
+const dialConnectTimeout = 30 * time.Second
+
 // DialTLS opens a certificate-verified TLS connection to address. When
 // cfg is nil the secure default is used. It performs the TLS handshake
 // before returning (tls.Dialer.DialContext blocks until the handshake
@@ -64,7 +71,7 @@ func DialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 	if cfg == nil {
 		cfg = defaultTLSConfig()
 	}
-	dialer := &tls.Dialer{Config: cfg}
+	dialer := &tls.Dialer{NetDialer: &net.Dialer{Timeout: dialConnectTimeout}, Config: cfg}
 	conn, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err

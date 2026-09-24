@@ -80,7 +80,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			}
 		} else {
 			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-				var dialer net.Dialer
+				dialer := net.Dialer{Timeout: dialConnectTimeout}
 				conn, err := dialer.DialContext(ctx, "tcp", address)
 				if err != nil {
 					return nil, err
@@ -138,6 +138,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if err := sendMsg(conn.raw, stratum.MsgSetupConnection, false, &sc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send SetupConnection: %w", err)
 	}
+	_ = conn.raw.SetReadDeadline(time.Now().Add(negotiateReadTimeout))
 	f, err := dec.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: read SetupConnection response: %w", err)
@@ -167,6 +168,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if err := sendMsg(conn.raw, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
 		return nil, fmt.Errorf("stratumv2: send OpenMiningChannel: %w", err)
 	}
+	_ = conn.raw.SetReadDeadline(time.Now().Add(negotiateReadTimeout))
 	f, err = dec.ReadFrame()
 	if err != nil {
 		return nil, fmt.Errorf("stratumv2: read OpenMiningChannel response: %w", err)
@@ -373,6 +375,21 @@ type jobState struct {
 // unbounded growth. Real pools keep at most a handful of future jobs
 // open, so 256 is generous headroom.
 const maxPendingJobs = 256
+
+// dialConnectTimeout bounds the TCP/TLS connect phase — same bound as
+// V1's dialConnectTimeout. The caller's ctx is the engine run context
+// (unbounded), so without this a dial to a blackholed pool hangs until
+// the kernel's TCP retry budget (~2min on Linux) — stalling the whole
+// failover ladder on one dead address.
+const dialConnectTimeout = 30 * time.Second
+
+// negotiateReadTimeout bounds each handshake ReadFrame during
+// Negotiate (SetupConnection.Success, OpenMiningChannel.Success). The
+// 5-minute read deadline only arms inside readLoop, which starts after
+// Negotiate returns — a pool that completes the Noise handshake but
+// never answers the first message otherwise hangs Negotiate on the
+// unbounded caller ctx. Variable (not const) so tests can shorten it.
+var negotiateReadTimeout = 30 * time.Second
 
 // verdictTimeout bounds how long Submit waits for the pool's
 // SubmitSharesSuccess/SubmitSharesError when the caller's ctx does not

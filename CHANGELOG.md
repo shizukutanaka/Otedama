@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 303 — 全ダイヤル経路の接続タイムアウト + V2 handshake deadline)
+
+- **ブラックホール化したプールへの connect/ハンドシェイク待機を遮断** ——
+  s301 の応答タイムアウトの延長で、更に上流の 2 箇所が caller の無期限
+  run ctx にのみ依存する無期限待機だった: (a) V1-TCP / V1-TLS / V2-TCP /
+  V2-TLS の全ダイヤラが `Timeout` 未設定 —— connect がカーネルの TCP
+  リトライ予算（~127s）まで停止し、フェイルオーバー梯子全体が 1 つの
+  死んだアドレスで停滯。4 経路に `dialConnectTimeout` = 30s を設定。
+  (b) V2 `Negotiate` の handshake `ReadFrame`（SetupConnection /
+  OpenMiningChannel 応答読み）に deadline 無し —— Noise handshake
+  完了後に最初のメッセージを返さないプールで無期限停止。readLoop の
+  5 分 deadline は Negotiate 復帰後に初めてアームされるため効かず、
+  `negotiateReadTimeout` = 30s を各 handshake 読みへアーム。
+
 ### Fixed (session 302 — 再接続 backoff の jitter・健全セッション後リセット)
 
 - **再接続 backoff に equal jitter と健全セッション後のリセットを追加** ——

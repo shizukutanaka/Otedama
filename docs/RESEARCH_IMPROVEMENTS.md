@@ -1251,6 +1251,29 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 303 increment (dial/handshake timeouts)
+
+- **全ダイヤル経路に 30 秒の接続タイムアウト + V2 ハンドシェイク read
+  deadline を実装** —— s301 の応答タイムアウト監査の継続で、更に上流の
+  2 箇所が無期限待機だったことを確認: (a) 全 `net.Dialer`/`tls.Dialer`
+  が `Timeout` 未設定 —— caller の ctx はエンジン run ctx（無期限）の
+  ため、ブラックホール化したプールへの connect は Linux カーネルの
+  TCP リトライ予算（~127 秒）まで停止し、フェイルオーバー梯子全体が
+  1 つの死んだアドレスで停滯。V1-TCP / V1-TLS（NetDialer）/ V2-TCP /
+  V2-TLS（`internal/stratum.DialTLS`）の 4 経路に `dialConnectTimeout`
+  =30s を設定。(b) V2 `Negotiate` の 2 回の handshake `ReadFrame`
+  （SetupConnection.Success / OpenMiningChannel.Success）に deadline
+  無し —— 5 分 read deadline は Negotiate 復帰後の readLoop で初めて
+  アームされるため、Noise handshake 完了後に最初のメッセージへ応答
+  しないプールで Negotiate が無期限停止。`negotiateReadTimeout`=30s
+  （var —— テスト短縮可）を各 handshake 読みへアーム。
+- **新規テスト:** `TestNegotiate_ArmsHandshakeReadDeadline`（無応答
+  プールで deadline アーム + 実際に timeout で返却することを実証
+  —— 150ms 短縮版で ~150ms 終了）。
+- **検証済み非該当:** V1 Negotiate の call は s301 の `callTimeout`
+  で既に bounded（ctx 未到達でも 2 分で返却）。V1-TCP の NoDelay は
+  Dial 復帰後の `setNoDelay(conn)` で両経路適用済み。
+
 ## September 2026 research pass — session 302 increment (reconnect hygiene)
 
 - **再接続 backoff に equal jitter + 健全セッション後のリセットを実装**

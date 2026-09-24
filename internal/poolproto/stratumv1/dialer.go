@@ -22,6 +22,13 @@ import (
 
 // ----- Public registration -----
 
+// dialConnectTimeout bounds the TCP/TLS connect phase. The caller's
+// ctx is the engine run context (unbounded), so without this a dial to
+// a blackholed pool hangs until the kernel's TCP retry budget (~2min
+// on Linux) — stalling the whole failover ladder on one dead address.
+// 30s is generous for a miner expected to fail over promptly.
+const dialConnectTimeout = 30 * time.Second
+
 // Dialer is the V1 implementation of poolproto.Dialer. It is registered
 // at package init time for both plaintext and TLS variants; users never
 // instantiate it directly.
@@ -76,7 +83,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			}
 		} else {
 			dialFn = func(ctx context.Context, address string) (net.Conn, error) {
-				var dialer net.Dialer
+				dialer := net.Dialer{Timeout: dialConnectTimeout}
 				return dialer.DialContext(ctx, "tcp", address)
 			}
 		}

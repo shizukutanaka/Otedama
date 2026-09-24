@@ -60,7 +60,7 @@ func dialTLS(ctx context.Context, address string, cfg *tls.Config) (net.Conn, er
 	if cfg == nil {
 		cfg = defaultTLSConfig()
 	}
-	dialer := &tls.Dialer{Config: cfg}
+	dialer := &tls.Dialer{NetDialer: &net.Dialer{Timeout: dialConnectTimeout}, Config: cfg}
 	conn, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return nil, err

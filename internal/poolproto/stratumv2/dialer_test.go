@@ -1790,3 +1790,46 @@ func TestSubmit_VerdictTimeoutDrainsPending(t *testing.T) {
 		return false
 	})
 }
+
+// TestNegotiate_ArmsHandshakeReadDeadline pins the handshake timeout: a
+// pool that completes the Noise handshake but never answers
+// SetupConnection must not hang Negotiate on the unbounded caller ctx —
+// the two handshake ReadFrames each arm a bounded deadline (the
+// readLoop's 5-minute deadline only starts after Negotiate returns).
+func TestNegotiate_ArmsHandshakeReadDeadline(t *testing.T) {
+	prev := negotiateReadTimeout
+	negotiateReadTimeout = 150 * time.Millisecond
+	defer func() { negotiateReadTimeout = prev }()
+
+	server, client := net.Pipe()
+	defer server.Close()
+	raw := &deadlineRecordingConn{Conn: client}
+	conn := &connection{raw: raw, remoteAddr: "test:3333", protocol: poolproto.ProtocolStratumV2}
+	d := &Dialer{}
+
+	// The pool side reads our SetupConnection but never replies.
+	go func() {
+		buf := make([]byte, 512)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := d.Negotiate(ctx, conn); done <- err }()
+
+	deadline := time.After(2 * time.Second)
+	for raw.deadlines.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("Negotiate never armed a handshake read deadline")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	<-done // ctx expiry releases the blocked Negotiate
+}
