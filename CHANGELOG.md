@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 329 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 9/10 #3 部分解消 — プール接続試行のトレース相関タグ)
+
+- **接続試行ごとの `trace=` 相関タグ（Cat 9/10 #3 部分解消）.** OTel スパンが
+  一切存在しないことを検証し、ゼロ依存の代替半分を実装 — プール接続試行毎に
+  ランダムな `trace=<16hex>` を発行しセッションロガーをラップ、接続→
+  ハンドシェイク→チャネル開設→ジョブ→シェア提出の全行が同一タグを持つため
+  `grep trace=<id>` でスパンを再構成可能。OTel SDK 本導入（エクスポート済み
+  スパン・W3C 伝搬・exemplar 結合）は `go.opentelemetry.io` 依存が必要で
+  ADR-003 予算修正案待ちのため open のまま。
+
 ### Docs (session 328 — Github・論文・Qiita・Zenn・海外技術情報を参考にさらなる改善（おまかせ）: RESEARCH Cat 10 #10 解消 — 直接依存のピン/チェックサム検証を THREAT_MODEL に記録)
 
 - **サプライチェーン緩和策の記録是正（Cat 10 #10 解消）.** THREAT_MODEL の

@@ -483,8 +483,18 @@ arXiv grounding (session 41):
 1. ✅ **Prometheus text-format `/metrics`** without a client dependency
    (ADR-005).
 2. ✅ **Health endpoint** + `ServeError()` accessor (session 31).
-3. 🟡 **OpenTelemetry traces** for the connect→handshake→mine span — ADR
-   mentions OTel; confirm spans exist on pool dial and submit.
+3. 🟡 **Partially resolved — OpenTelemetry traces** for the
+   connect→handshake→mine span (session 329). Verification found **no
+   spans exist** — nothing instruments the pool dial or submit path.
+   The zero-dependency half landed: each pool connection attempt mints
+   a random `trace=<16-hex>` span-style identifier and wraps the session
+   logger so every line in that attempt's lifecycle (connect →
+   handshake → channel open → jobs → submits) carries the same tag —
+   `grep trace=<id>` reconstructs the span today. The OTel-SDK half
+   (exported spans, W3C context propagation, exemplar-linked trace IDs
+   joining the session-311 histogram exemplars) stays open: it needs
+   `go.opentelemetry.io/otel` + SDK + exporter, an ADR-003 dependency-
+   budget amendment beyond this item's scope.
 4. ✅ **Reject-rate & stale-rate gauges** (ties to Category 1). — session 101:
    `otedama_reject_rate` (rejected/judged) and `otedama_stale_rate`
    (stale-rejected/judged) gauges, recomputed each stats tick via

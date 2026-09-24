@@ -2839,3 +2839,37 @@ func TestUnaccountedWatchdog_NilLog(t *testing.T) {
 		t.Errorf("watchdog not reset after drain: warned=%v streak=%d", w.warned, w.streak)
 	}
 }
+
+// TestSessionTraceID exercises the correlation tag minted per pool
+// connection attempt: 16 lowercase hex chars, unique across mints.
+func TestSessionTraceID(t *testing.T) {
+	id := sessionTraceID()
+	if len(id) != 16 {
+		t.Fatalf("len(sessionTraceID()) = %d, want 16 hex chars", len(id))
+	}
+	for _, c := range id {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			t.Fatalf("sessionTraceID() = %q, want lowercase hex", id)
+		}
+	}
+	if sessionTraceID() == sessionTraceID() {
+		t.Error("two consecutive mints collided")
+	}
+}
+
+// TestTraceLog verifies the wrapped logger appends a stable trace suffix
+// so one connection attempt's lines are grep-able.
+func TestTraceLog(t *testing.T) {
+	var got []string
+	log := traceLog(func(_, msg string) { got = append(got, msg) }, "deadbeefcafef00d")
+	log("info", "engine: connected")
+	log("warn", "engine: submit failed")
+	if len(got) != 2 {
+		t.Fatalf("wrapped log produced %d lines, want 2", len(got))
+	}
+	for i, msg := range got {
+		if !strings.HasSuffix(msg, " trace=deadbeefcafef00d") {
+			t.Errorf("line %d missing trace suffix: %q", i, msg)
+		}
+	}
+}

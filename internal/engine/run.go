@@ -29,6 +29,8 @@ package engine
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -1059,6 +1061,24 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	return fmt.Errorf("engine: no dialer for pool URL %q", opts.poolURL)
 }
 
+// sessionTraceID mints a random span-style identifier that tags one pool
+// connection attempt's log lines (connect → handshake → mine → submit),
+// giving operators a grep-able correlation key without pulling the
+// OpenTelemetry SDK (ADR-003's dependency budget).
+func sessionTraceID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "0000000000000000"
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// traceLog wraps a session logger so every line emitted for one pool
+// connection attempt carries the same ` trace=<id>` suffix.
+func traceLog(log func(string, string), trace string) func(string, string) {
+	return func(level, msg string) { log(level, msg+" trace="+trace) }
+}
+
 // dialPool builds the session credentials (user, password, optional TLS
 // CA bundle), dials the pool via the poolproto registry, and performs
 // the shared post-connect bookkeeping (connected log, connection-state
@@ -1067,6 +1087,9 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 // file degrades to system roots (which cleanly fails for a private-CA
 // pool) — it never falls back to plaintext.
 func dialPool(ctx context.Context, opts *sessionOpts, password, protoLabel string) (poolproto.Session, error) {
+	if opts.log != nil {
+		opts.log = traceLog(opts.log, sessionTraceID())
+	}
 	creds := poolproto.Credentials{User: opts.user, Password: password}
 	if opts.tlsCAFile != "" {
 		pem, rerr := os.ReadFile(opts.tlsCAFile)
