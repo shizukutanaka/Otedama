@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 273 — V1 job ID を不透明文字列として透過)
+
+**プールの job_id を文字列のまま submit でエコー** —— engine が job_id を
+`Sscanf("%d")` で数値化し、失敗時はジョブごとドロップ、成功しても
+`Sprintf("%d")` で再構成して送り返していた。しかし V1 の job_id は
+10進数とは限らず（Braiins・F2Pool・public-pool は英数字 ID を発行）、
+該当プールでは全 `mining.notify` が破棄され無言の停止に。さらに別値に
+解釈された場合は全シェアが invalid-job-id で reject される経路だった。
+`miner.Work.JobID`/`miner.Share.JobID` を `string` に変更し、プールの
+送った値をそのまま submit でエコーするよう修正（V2 は job_id が実数値
+u32 のため影響なし）。
+
 ### Fixed (session 272 — nonce 枯渇時の nTime ロール)
 
 **nonce 空間枯渇時にヘッダー nTime をロール** —— grind ループが

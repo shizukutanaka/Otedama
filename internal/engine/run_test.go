@@ -390,8 +390,8 @@ func TestApplyJob_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 
 	select {
 	case s := <-shares:
-		if s.JobID != 42 {
-			t.Errorf("share JobID = %d, want 42", s.JobID)
+		if s.JobID != "42" {
+			t.Errorf("share JobID = %q, want \"42\"", s.JobID)
 		}
 		if s.Version != 0x20000004 {
 			t.Errorf("share Version = 0x%08X, want 0x20000004 (must echo the hashed header version)", s.Version)
@@ -440,15 +440,17 @@ func TestApplyJob_ValidJob(t *testing.T) {
 	// without Start).
 }
 
-func TestApplyJob_UnparseableJobID(t *testing.T) {
+func TestApplyJob_AlphanumericJobIDAccepted(t *testing.T) {
+	// V1 job IDs are opaque strings — Braiins, F2Pool and public-pool all
+	// send non-decimal identifiers. They must reach the workers (and echo
+	// back on submit verbatim); rejecting them stalls every notify.
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{
-		JobID: "not-a-number",
+		JobID: "0f4a",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, miner.Hash{})
-	if err == nil {
-		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
+	if err := applyJob([]*miner.Worker{w}, job, miner.Hash{}); err != nil {
+		t.Errorf("applyJob(alphanumeric job ID) = %v, want nil", err)
 	}
 }
 
@@ -1861,7 +1863,7 @@ func TestApplyAllocation_IdleDevice(t *testing.T) {
 func TestApplyAllocation_OnlyPausesTargetDevice(t *testing.T) {
 	target := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
 	bystander := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-1"})
-	work := &miner.Work{JobID: 1}
+	work := &miner.Work{JobID: "1"}
 	target.SetWork(work)
 	bystander.SetWork(work)
 

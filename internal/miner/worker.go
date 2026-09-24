@@ -16,7 +16,11 @@ import (
 // The Worker hashes block headers derived from this work looking for
 // a Nonce that satisfies the difficulty target.
 type Work struct {
-	JobID     uint32
+	// JobID is the pool-supplied job identifier, kept as an opaque
+	// string: Stratum V1 job IDs are not decimal (Braiins, F2Pool,
+	// public-pool all send alphanumeric IDs), so it must echo back on
+	// submit verbatim rather than round-tripping through a uint32.
+	JobID     string
 	ChannelID uint32
 	Header    Header // template; Nonce field will be overwritten
 	NBits     uint32 // network compact target (from SetNewPrevHash / mining.notify)
@@ -32,11 +36,12 @@ type Work struct {
 // recomputes a different hash and rejects the share).
 type Share struct {
 	ChannelID uint32
-	JobID     uint32
-	Nonce     uint32
-	NTime     uint32
-	Version   uint32
-	Hash      Hash
+	// JobID echoes Work.JobID of the job that produced this share.
+	JobID   string
+	Nonce   uint32
+	NTime   uint32
+	Version uint32
+	Hash    Hash
 	// Target is the share target the hash was validated against at issue
 	// time — Work.Target of the job the worker was grinding when it found
 	// the share. It is not transmitted on the wire; the engine uses it to

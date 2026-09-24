@@ -883,7 +883,7 @@ func runPoolSession(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID:   fmt.Sprintf("%d", capturedShare.JobID),
+					JobID:   capturedShare.JobID,
 					Nonce:   capturedShare.Nonce,
 					NTime:   capturedShare.NTime,
 					Version: capturedShare.Version,
@@ -976,10 +976,10 @@ func jobTarget(nBits uint32, shareTarget miner.Hash, difficulty float64) (miner.
 // delivered by poolproto.Session.Jobs()) into a miner.Work and pushes
 // it to every worker. This is the bridge that lets the engine consume
 // jobs from the poolproto abstraction rather than from a raw stratum
-// decoder. The job's string JobID is parsed back to the uint32 the miner
-// uses; an unparseable ID yields job 0, which the pool will reject on
-// submit, surfacing the problem rather than silently mining a malformed
-// job.
+// decoder. The JobID is carried opaquely as the pool sent it — V1 pools
+// routinely issue non-decimal IDs (Braiins, F2Pool, public-pool), and
+// Submit must echo the same string back or every share is rejected with
+// invalid-job-id.
 //
 // shareTarget is the resolved pool-assigned share target — the raw V2
 // stamp (job.ShareTarget) or the V1 difficulty-derived value; zero falls
@@ -989,12 +989,8 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, shareTarget miner.Hash
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
 	}
-	var jobID uint32
-	if _, err := fmt.Sscanf(job.JobID, "%d", &jobID); err != nil {
-		return fmt.Errorf("engine: unparseable job ID %q: %w", job.JobID, err)
-	}
 	w := &miner.Work{
-		JobID:     jobID,
+		JobID:     job.JobID,
 		ChannelID: job.ChannelID,
 		Header: miner.Header{
 			Version:    job.Version,

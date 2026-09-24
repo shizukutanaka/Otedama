@@ -1251,6 +1251,37 @@ its own axioms?" Four violations surfaced, all on the V2 path.
 - ❌ **Qiita/Zenn sweep** — no new stratum-v2 / ASIC-firmware material
   since session 259.
 
+## September 2026 research pass — session 273 increment (opaque V1 job IDs)
+
+### Implemented
+
+1. ✅ **`Work.JobID`/`Share.JobID` are now opaque strings** — the engine
+   parsed the pool's `job_id` with `Sscanf("%d")` and dropped the job on
+   failure, and `Submit` echoed `Sprintf("%d", parsed)` back. But V1 job
+   IDs are not decimal: Braiins, F2Pool and public-pool issue
+   alphanumeric identifiers, so on those pools every `mining.notify`
+   was discarded (zero work, silent stall) — and any ID that parsed to
+   a different value would have produced invalid-job-id rejects on
+   every share. The JobID is now carried verbatim end-to-end and
+   echoed on submit exactly as the pool sent it (V2 is unaffected: its
+   job IDs are real u32s the dialer formats/parses itself). The
+   test that pinned the reject (`TestApplyJob_UnparseableJobID`) was
+   inverted to assert acceptance; `TestRunSessionV1_ApplyJobError` now
+   exercises the error path via an invalid nBits target instead.
+   (stratum v1 protocol docs; ESP-Miner treats job_id as an opaque
+   string the same way.)
+
+### Verified already-done / non-applicable this session
+
+- ✅ **`mining.set_difficulty` non-positive values** — `parseDifficulty`
+   cannot produce NaN/Inf (JSON has no literal for them); `<=0` flows
+   to the existing "no target assigned" fallback, not a zero target.
+- ✅ **`extranonce1` echo path** — bounded by the session's 64 KiB line
+   cap and only ever echoed inside a same-bounded submit line.
+- ❌ **Upstream** — SRI v1.12.0 / ESP-Miner v2.15.3 remain latest.
+
+---
+
 ## September 2026 research pass — session 272 increment (nTime rolling)
 
 ### Implemented
@@ -1633,6 +1664,10 @@ GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
 Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
+
+*Session-273 additions (September 2026): pool job IDs are now opaque
+strings echoed verbatim on submit — non-decimal V1 job IDs (Braiins,
+F2Pool, public-pool) no longer stall every notify.*
 
 *Session-272 additions (September 2026): the CPU grind loop now rolls
 nTime on nonce wrap (capped at MAX_FUTURE_BLOCK_TIME) instead of

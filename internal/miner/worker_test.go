@@ -22,7 +22,7 @@ func makeEasyWork() *Work {
 	// Use nBits 0x207fffff which is the largest valid compact target.
 	// We provide the pre-computed Hash directly, bypassing nBits.
 	return &Work{
-		JobID:     1,
+		JobID:     "1",
 		ChannelID: 0,
 		Header: Header{
 			Version: 1,
@@ -149,13 +149,13 @@ func TestWorker_SetWorkJobChange(t *testing.T) {
 	shares := w.Start(ctx)
 
 	job1 := makeEasyWork()
-	job1.JobID = 1
+	job1.JobID = "1"
 	w.SetWork(job1)
 
 	// Wait for at least one share from job 1.
 	var job1share Share
 	waitFor(t, ctx, shares, func(s Share) bool {
-		if s.JobID == 1 {
+		if s.JobID == "1" {
 			job1share = s
 			return true
 		}
@@ -165,12 +165,12 @@ func TestWorker_SetWorkJobChange(t *testing.T) {
 
 	// Now switch to job 2.
 	job2 := makeEasyWork()
-	job2.JobID = 2
+	job2.JobID = "2"
 	w.SetWork(job2)
 
 	// We should eventually get a share from job 2.
 	waitFor(t, ctx, shares, func(s Share) bool {
-		return s.JobID == 2
+		return s.JobID == "2"
 	})
 }
 
@@ -314,7 +314,7 @@ func TestShare_DeviceID_PropagatedFromConfig(t *testing.T) {
 		t.Fatalf("TargetFromNBits: %v", err)
 	}
 	w.SetWork(&Work{
-		JobID:  1,
+		JobID:  "1",
 		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x207fffff},
 		Target: target,
 	})
@@ -349,7 +349,7 @@ func TestShare_DeviceID_EmptyWhenNotSet(t *testing.T) {
 		t.Fatalf("TargetFromNBits: %v", err)
 	}
 	w.SetWork(&Work{
-		JobID:  1,
+		JobID:  "1",
 		Header: Header{Version: 1, Time: 0x60000000, Bits: 0x207fffff},
 		Target: target,
 	})

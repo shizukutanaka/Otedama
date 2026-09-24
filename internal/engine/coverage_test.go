@@ -1140,7 +1140,7 @@ func TestRunSessionV1_ShareSubmitAccepted(t *testing.T) {
 	// Keep merged open; one share in buffer.  Closing it would cause
 	// runSessionV1 to return before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	merged <- miner.Share{JobID: "1", Nonce: 0x12345678, NTime: 0x68d36c5e}
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1214,7 +1214,7 @@ func TestRunSessionV1_ShareSubmitRejected(t *testing.T) {
 	}()
 
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
+	merged <- miner.Share{JobID: "1", Nonce: 0xdeadbeef, NTime: 0x68d36c5e}
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1297,7 +1297,7 @@ func TestRunSessionV1_TransitionRejectCountedBenign(t *testing.T) {
 	}
 
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Hash: shareHash, Target: issueTarget}
+	merged <- miner.Share{JobID: "1", Nonce: 0xdeadbeef, NTime: 0x68d36c5e, Hash: shareHash, Target: issueTarget}
 
 	reg := metrics.NewRegistry()
 	m := newEngineMetrics(reg)
@@ -1369,7 +1369,7 @@ func TestRunSessionV1_LatencyRecordedInStatsTicker(t *testing.T) {
 	// One share in buffer; keep merged open so runSessionV1 doesn't return
 	// via the "merged closed" path before the Submit goroutine finishes.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 1, NTime: 1}
+	merged <- miner.Share{JobID: "1", Nonce: 1, NTime: 1}
 
 	var mu sync.Mutex
 	var logLines []string
@@ -1922,8 +1922,9 @@ func TestRunSessionV1_CurtailmentIgnoresJob(t *testing.T) {
 }
 
 // TestRunSessionV1_ApplyJobError covers run.go:869–871: applyJob returns an
-// error when the pool sends a non-numeric job ID, triggering the warn log and
-// continue.
+// error when the pool sends a job whose nBits cannot form a valid target,
+// triggering the warn log and continue. (Job IDs are opaque strings — a
+// non-numeric ID is legal and reaches the workers.)
 func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -1944,12 +1945,13 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
 		_, _ = r.ReadString('\n') // extranonce.subscribe
 		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
-		// Send job with non-numeric ID → applyJob returns "unparseable job ID" error.
+		// Send job with an nBits that decodes to an invalid target
+		// (mantissa 0) → applyJob returns a "bad target" error.
 		fmt.Fprintf(conn,
 			`{"id":null,"method":"mining.notify","params":[`+
-				`"not-a-number",`+
+				`"7",`+
 				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
-				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+				`"","",[],"00000002","00000000","68d36c5e",true]}`+"\n")
 		time.Sleep(200 * time.Millisecond) // stay alive so the engine reads the job
 	}()
 
@@ -1977,8 +1979,8 @@ func TestRunSessionV1_ApplyJobError(t *testing.T) {
 	logMu.Lock()
 	joined := strings.Join(logLines, " ")
 	logMu.Unlock()
-	if !strings.Contains(joined, "unparseable") {
-		t.Errorf("expected applyJob 'unparseable job ID' warn; got: %v", logLines)
+	if !strings.Contains(joined, "bad target") {
+		t.Errorf("expected applyJob 'bad target' warn; got: %v", logLines)
 	}
 }
 
@@ -2016,7 +2018,7 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 
 	// Pre-queue one share so the merged case fires and Submit is called.
 	merged := make(chan miner.Share, 1)
-	merged <- miner.Share{JobID: 1, Nonce: 0x12345678, NTime: 0x68d36c5e}
+	merged <- miner.Share{JobID: "1", Nonce: 0x12345678, NTime: 0x68d36c5e}
 
 	var logMu sync.Mutex
 	var logLines []string

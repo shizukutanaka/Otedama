@@ -69,9 +69,9 @@ func TestMergeShares_SingleChannel(t *testing.T) {
 	defer cancel()
 
 	src := make(chan miner.Share, 3)
-	src <- miner.Share{JobID: 1, Nonce: 100}
-	src <- miner.Share{JobID: 1, Nonce: 101}
-	src <- miner.Share{JobID: 1, Nonce: 102}
+	src <- miner.Share{JobID: "1", Nonce: 100}
+	src <- miner.Share{JobID: "1", Nonce: 101}
+	src <- miner.Share{JobID: "1", Nonce: 102}
 	close(src)
 
 	merged := mergeShares(ctx, []<-chan miner.Share{src})
@@ -94,25 +94,25 @@ func TestMergeShares_MultipleChannels(t *testing.T) {
 	src1 := make(chan miner.Share, 2)
 	src2 := make(chan miner.Share, 2)
 	src3 := make(chan miner.Share, 2)
-	src1 <- miner.Share{JobID: 1}
-	src1 <- miner.Share{JobID: 1}
-	src2 <- miner.Share{JobID: 2}
-	src2 <- miner.Share{JobID: 2}
-	src3 <- miner.Share{JobID: 3}
-	src3 <- miner.Share{JobID: 3}
+	src1 <- miner.Share{JobID: "1"}
+	src1 <- miner.Share{JobID: "1"}
+	src2 <- miner.Share{JobID: "2"}
+	src2 <- miner.Share{JobID: "2"}
+	src3 <- miner.Share{JobID: "3"}
+	src3 <- miner.Share{JobID: "3"}
 	close(src1)
 	close(src2)
 	close(src3)
 
 	merged := mergeShares(ctx, []<-chan miner.Share{src1, src2, src3})
 
-	counts := map[uint32]int{}
+	counts := map[string]int{}
 	for s := range merged {
 		counts[s.JobID]++
 	}
-	for id, want := range map[uint32]int{1: 2, 2: 2, 3: 2} {
+	for id, want := range map[string]int{"1": 2, "2": 2, "3": 2} {
 		if counts[id] != want {
-			t.Errorf("JobID=%d got %d shares, want %d", id, counts[id], want)
+			t.Errorf("JobID=%q got %d shares, want %d", id, counts[id], want)
 		}
 	}
 }
