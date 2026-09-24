@@ -270,40 +270,62 @@ type EncryptedConn struct {
 // to 65535 minus the 16-byte Poly1305 tag.
 const maxNoiseFrame = 65535
 
+// maxNoisePlaintext is the largest plaintext chunk one transport
+// message carries. The SV2 frame header lives inside the plaintext
+// stream, so a frame longer than this simply spans consecutive
+// transport messages — the receiver reads them as a byte stream and
+// needs no chunk-boundary signalling.
+const maxNoisePlaintext = maxNoiseFrame - 16 // 65519
+
 // NewEncryptedConn wraps rw with the given cipher states.
 func NewEncryptedConn(rw io.ReadWriter, send, recv *CipherState) *EncryptedConn {
 	return &EncryptedConn{rw: rw, send: send, recv: recv}
 }
 
-// Write encrypts p and writes it as a length-prefixed frame.
+// Write encrypts p and writes it as length-prefixed transport
+// messages.
 //
-// The ciphertext (plaintext + 16-byte tag) must fit the u16 length
-// prefix; a payload that would overflow it is rejected rather than
-// silently truncated, which would desynchronise the stream.
+// A single Noise transport message carries at most
+// maxNoisePlaintext (65519) bytes of plaintext; larger payloads are
+// split across consecutive transport messages. That is legal because
+// SV2 framing is defined on the decrypted byte stream, not on Noise
+// message boundaries — the receiver concatenates plaintext chunks
+// and locates the frame by its 3-byte length header. This matters for
+// JDP/Extended-Channel-sized frames: rejecting >65519 outright would
+// make the conn unusable once such messages land.
 //
-// The length prefix and ciphertext go out in a single Write call —
-// not two — so one frame maps to one write() syscall and one TCP
-// segment when rw is a raw net.Conn (ESP-Miner v2.15 did the same:
-// "Send SV2 frames in a single write"). Besides halving the syscall
-// count per frame, it removes the split-point at which a second
-// writer would otherwise interleave bytes inside our frame.
+// Each transport message (length prefix + ciphertext) goes out in a
+// single Write call — not two — so one transport message maps to one
+// write() syscall and one TCP segment when rw is a raw net.Conn
+// (ESP-Miner v2.15 did the same: "Send SV2 frames in a single
+// write"). Besides halving the syscall count per frame, it removes
+// the split-point at which a second writer would otherwise
+// interleave bytes inside our frame.
 func (c *EncryptedConn) Write(p []byte) (int, error) {
-	ct, err := c.send.Encrypt(nil, p)
-	if err != nil {
-		return 0, err
+	written := 0
+	for off := 0; ; {
+		end := off + maxNoisePlaintext
+		if end > len(p) {
+			end = len(p)
+		}
+		ct, err := c.send.Encrypt(nil, p[off:end])
+		if err != nil {
+			return written, err
+		}
+		frame := make([]byte, 2+len(ct))
+		binary.LittleEndian.PutUint16(frame, uint16(len(ct)))
+		copy(frame[2:], ct)
+		if n, err := c.rw.Write(frame); err != nil {
+			return written, err
+		} else if n != len(frame) {
+			return written, io.ErrShortWrite
+		}
+		written += end - off
+		off = end
+		if off >= len(p) {
+			return written, nil
+		}
 	}
-	if len(ct) > maxNoiseFrame {
-		return 0, fmt.Errorf("noise: message too large: %d-byte ciphertext exceeds %d (plaintext %d)", len(ct), maxNoiseFrame, len(p))
-	}
-	frame := make([]byte, 2+len(ct))
-	binary.LittleEndian.PutUint16(frame, uint16(len(ct)))
-	copy(frame[2:], ct)
-	if n, err := c.rw.Write(frame); err != nil {
-		return 0, err
-	} else if n != len(frame) {
-		return 0, io.ErrShortWrite
-	}
-	return len(p), nil
 }
 
 // Read returns decrypted plaintext. It first drains any plaintext left

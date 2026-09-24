@@ -326,17 +326,94 @@ func (s shortWriteReadWriter) Read(p []byte) (int, error) {
 	return 0, errors.New("not implemented")
 }
 
-func TestEncryptedConn_Write_PayloadExceedsMaxFrame(t *testing.T) {
-	var buf bytes.Buffer
-	var key [32]byte
-	conn := NewEncryptedConn(&buf, &CipherState{key: key}, &CipherState{key: key})
+func TestEncryptedConn_Write_ChunksOversizePayload(t *testing.T) {
+	var k1 [32]byte
+	for i := range k1 {
+		k1[i] = byte(i)
+	}
+	rw := &countingReadWriter{}
+	conn := NewEncryptedConn(rw, &CipherState{key: k1}, &CipherState{key: k1})
 
-	// Plaintext > maxNoiseFrame - poly1305 tag (16 B) = 65519 B produces
-	// a ciphertext > 65535 which overflows the u16 length prefix.
-	bigPayload := make([]byte, maxNoiseFrame) // 65535 plaintext → 65551-byte CT
-	_, err := conn.Write(bigPayload)
-	if err == nil {
-		t.Error("Write with payload exceeding maxNoiseFrame should return error")
+	// A payload larger than one transport message (65519 plaintext
+	// bytes) must be sent as consecutive transport messages: SV2
+	// framing lives in the decrypted stream, not on Noise message
+	// boundaries.
+	for _, tc := range []struct {
+		name       string
+		size       int
+		wantWrites int
+	}{
+		{"exactly one chunk", maxNoisePlaintext, 1},
+		{"one byte over", maxNoisePlaintext + 1, 2},
+		{"two full chunks plus tail", 2*maxNoisePlaintext + 7, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rw.writes = 0
+			rw.written = rw.written[:0]
+			payload := make([]byte, tc.size)
+			n, err := conn.Write(payload)
+			if err != nil {
+				t.Fatalf("Write: %v", err)
+			}
+			if n != tc.size {
+				t.Fatalf("Write returned %d, want %d", n, tc.size)
+			}
+			if rw.writes != tc.wantWrites {
+				t.Fatalf("underlying Write calls = %d, want %d", rw.writes, tc.wantWrites)
+			}
+			// Every chunk's u16 prefix must fit the ciphertext it names,
+			// and total written = Σ(2 + chunk + 16).
+			wantTotal := 0
+			left := tc.size
+			for left > 0 {
+				chunk := min(left, maxNoisePlaintext)
+				wantTotal += 2 + chunk + 16
+				left -= chunk
+			}
+			if len(rw.written) != wantTotal {
+				t.Fatalf("written bytes = %d, want %d", len(rw.written), wantTotal)
+			}
+			// No single transport message may exceed the u16 bound.
+			off := 0
+			for off < len(rw.written) {
+				seg := int(binary.LittleEndian.Uint16(rw.written[off:]))
+				if seg > maxNoiseFrame {
+					t.Fatalf("transport message ciphertext = %d, exceeds %d", seg, maxNoiseFrame)
+				}
+				off += 2 + seg
+			}
+			if off != len(rw.written) {
+				t.Fatalf("framing walked to %d, want %d", off, len(rw.written))
+			}
+		})
+	}
+}
+
+// TestEncryptedConn_Write_ChunkedRoundTrip verifies a chunked write
+// reassembles to the original plaintext on the read side.
+func TestEncryptedConn_Write_ChunkedRoundTrip(t *testing.T) {
+	var k1 [32]byte
+	for i := range k1 {
+		k1[i] = byte(i)
+	}
+	var buf bytes.Buffer
+	writer := NewEncryptedConn(&buf, &CipherState{key: k1}, &CipherState{key: k1})
+
+	payload := make([]byte, 2*maxNoisePlaintext+123)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	if _, err := writer.Write(payload); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	reader := NewEncryptedConn(&buf, &CipherState{key: k1}, &CipherState{key: k1})
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(reader, got); err != nil {
+		t.Fatalf("ReadFull: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Error("chunked write did not reassemble to original payload")
 	}
 }
 

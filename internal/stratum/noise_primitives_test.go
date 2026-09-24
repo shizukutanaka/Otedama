@@ -5,6 +5,7 @@ package stratum
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"testing"
 )
@@ -406,26 +407,38 @@ func TestEncryptedConn_ReadReassemblesAcrossSmallBuffers(t *testing.T) {
 	}
 }
 
-// TestEncryptedConn_WriteRejectsOversize verifies that a message whose
-// ciphertext would overflow the u16 length prefix is rejected with an error
-// rather than silently truncating the prefix (which would desync the stream).
-func TestEncryptedConn_WriteRejectsOversize(t *testing.T) {
+// TestEncryptedConn_Write_ChunksOversize verifies that a payload larger
+// than one Noise transport message is sent as multiple length-prefixed
+// transport messages rather than rejected: SV2 framing is defined on the
+// decrypted stream, so peers that chunk big frames are spec-compliant.
+func TestEncryptedConn_Write_ChunksOversize(t *testing.T) {
 	var key [32]byte
 	var buf bytes.Buffer
 	conn := NewEncryptedConn(&buf, &CipherState{key: key}, &CipherState{key: key})
 
-	// 65520 plaintext + 16-byte tag = 65536 > 65535 (the u16 max).
+	// 65520 plaintext = 65519 + 1 → two transport messages on the wire.
 	big := make([]byte, 65520)
-	if _, err := conn.Write(big); err == nil {
-		t.Error("Write of an oversize message should return an error, not truncate")
+	if _, err := conn.Write(big); err != nil {
+		t.Fatalf("Write of a chunked payload should succeed: %v", err)
 	}
-	if buf.Len() != 0 {
-		t.Errorf("nothing should be written on the oversize-error path; wrote %d bytes", buf.Len())
+	// Both messages must be individually u16-framed; total written is
+	// (2 + 65519 + 16) + (2 + 1 + 16) = 65556.
+	if buf.Len() != 65556 {
+		t.Errorf("chunked write bytes = %d, want 65556", buf.Len())
+	}
+	got := binary.LittleEndian.Uint16(buf.Bytes()[:2])
+	if got != 65535 {
+		t.Errorf("first transport message = %d bytes, want 65535 (full chunk)", got)
 	}
 
-	// The largest plaintext that still fits (65519 + 16 = 65535) must succeed.
+	// The largest plaintext that still fits in one message (65519 + 16
+	// = 65535) stays a single transport message.
+	buf.Reset()
 	atLimit := make([]byte, 65519)
 	if _, err := conn.Write(atLimit); err != nil {
 		t.Errorf("Write at the size limit should succeed: %v", err)
+	}
+	if buf.Len() != 2+65535 {
+		t.Errorf("single-message write = %d bytes, want %d", buf.Len(), 2+65535)
 	}
 }
