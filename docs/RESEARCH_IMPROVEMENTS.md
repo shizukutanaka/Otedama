@@ -205,8 +205,13 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
 1. 🟡 **Real Akash REST integration** — currently simulated
    (KNOWN_LIMITATIONS §1). The single biggest placeholder.
 2. 🔵 **Strategic bidding on Akash** — ADR-010 A4.
-3. 🟡 **Provider health/heartbeat** — detect a dead inference provider and
-   stop routing GPUs to it (parallels HashrateMonitor for mining).
+3. ✅ **Provider health/heartbeat** (session 258): a provider that stops
+   quoting is now detectable two ways — its streams are expired from
+   arbitration after `streamStaleTimeout` (3 min) so routing stops, and
+   `otedama_provider_last_quote_seconds{provider}` exposes the last-quote
+   timestamp per provider so the silence is directly alertable
+   (`time() − value > 2×` the 30 s quote interval), alongside the existing
+   `active_streams` drop and prune log line.
 4. 🟡 **GPU suitability scoring per workload** (VRAM, FP16/INT8 throughput)
    so inference jobs map to capable GPUs only.
 5. 🔵 **Per-device suitability assignment** — ADR-010 A3 (Hungarian).
@@ -385,8 +390,12 @@ arXiv grounding (session 41):
 8. ✅ **Structured JSON logs** with level filtering.
 9. ✅ **Build-info metric** (session 93): `otedama_build_info{version,commit,
    goversion}` — standard Prometheus `_info` convention for fleet tracking.
-10. 🟡 **SLO documentation** (target uptime, p99 submit latency) to make the
-    metrics actionable.
+10. ✅ **SLO documentation** — SPECIFICATION.md §6 gained an SLO-guidance
+    table (session 258): per-objective metric, target, and alert condition
+    for `otedama_up`, productive/uptime fraction, share acceptance,
+    stale rate, p99 submit latency, job arrival, provider liveness,
+    rate-feed freshness/redundancy, and clock skew — mirroring the warn
+    thresholds the engine itself emits.
 
 ---
 
@@ -1117,6 +1126,45 @@ for x/crypto v0.56.0/v0.57.0, x/sys v0.48.0); GitHub releases
 (stratum-mining/stratum v1.12.0 notes + mining_sv2/common_messages_sv2
 error-code constants, bitaxeorg/ESP-Miner v2.15.x); sv2-spec
 03-Protocol-Overview §3.5 + 05-Mining-Protocol.*
+
+## September 2026 research pass — session 258 increment
+
+1. ✅ **Cat-5 item 3 closed (provider dead-detection):** the "heartbeat"
+   half already existed (stale streams expire at `streamStaleTimeout` and
+   `active_streams` drops with a log line); the missing piece was a
+   per-provider, alertable signal. Added
+   `otedama_provider_last_quote_seconds{provider}` — lazy labeled gauge
+   set on every quote, bounded by the configured provider set — so a
+   provider that silently stops quoting is alertable at
+   `time() − value > 2×` `MinQuoteInterval` (30 s) instead of only
+   inferable from the aggregate stream count.
+2. ✅ **Cat-9 item 10 closed (SLO documentation):** SPECIFICATION.md §6
+   gained an SLO-guidance table — objective/metric/target/alert rows for
+   `otedama_up`, productive/uptime fraction, share acceptance, stale
+   rate, p99 submit latency, job arrival, provider liveness, rate-feed
+   freshness/redundancy, and clock skew, mirroring the warn thresholds
+   the engine itself emits (acceptance <97% after ≥20 judged; the
+   D-Central reject bands).
+3. ✅ **[FETCHED] Ecosystem steady since session 257:** SRI v1.12.0 and
+   ESP-Miner v2.15.3 remain newest (release atom feeds — the GitHub REST
+   API is rate-limited unauthenticated); go.dev/dl unchanged at
+   go1.27.1/go1.26.8; x/crypto @latest unchanged at v0.57.0. No new
+   advisories surfaced for the imported surface.
+4. 🔍 **[OBSERVED] Two timing-dependent test flakes surfaced in
+   full-suite runs this session (both pass in isolation, code paths
+   unchanged):** `TestRunSession_RetargetRejectExcludedFromRejectRate`
+   can count a genuine `difficulty` reject when the fake pool rejects a
+   share issued *after* the retarget (issued == current → not benign —
+   correct classification, test races); and
+   `TestSetupWallet_MnemonicNeverReachesLogger` can false-positive when a
+   randomly generated BIP39 word (24/2048 draws) collides with fixed log
+   prose such as "recovery phrase" (~10% per run). Recorded as an issue
+   rather than patched: candidate fixes are excluding the static log
+   strings from the word-collision check and constraining the fake
+   pool's reject window to pre-retarget shares — maintainer decision.
+
+*Session-258 sources: github.com/*/releases.atom feeds (stratum-mining/
+stratum, bitaxeorg/ESP-Miner), go.dev/dl mode=json, proxy.golang.org.*
 
 ---
 

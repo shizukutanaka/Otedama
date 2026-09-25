@@ -214,11 +214,31 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `arbitration_expected_yield_sats_per_second` | gauge | Engine forecast earning rate. |
 | `effective_yield_sats_per_second` | gauge | `arbitration_expected_yield_sats_per_second` × lifetime productive fraction (`productive_seconds_total / uptime_seconds`) — folds downtime into a single gross-minus-losses estimate. |
 | `active_streams` | gauge | Live revenue streams after stale-pruning. |
+| `provider_last_quote_seconds{provider}` † | gauge | Unix time of the most recent yield quote per provider. A value that stops advancing means the provider has gone silent (alert at `time() − value > 2×` the 30s expected quote interval) — the per-provider, alertable form of `active_streams` dropping after TTL prune. |
 | `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |
 | `rate_sources_ok` / `rate_sources_total` | gauge | Healthy vs configured price sources. |
 | `clock_skew_seconds` | gauge | Max offset vs rate-source HTTP `Date` headers. |
+
+**SLO guidance.** The catalogue above becomes actionable when read against
+targets rather than raw values. The defaults below are starting points for a
+single-miner deployment — tighten or relax per fleet size; they mirror the
+warn thresholds the engine itself emits (share acceptance <97% after ≥20
+judged shares logs a warn; the D-Central reject-rate bands).
+
+| Objective | Metric | Target | Alert when |
+|---|---|---|---|
+| Miner is hashing | `otedama_up` | 1 | 0 for > 5 min while not curtailed |
+| Effective uptime | `otedama_productive_seconds_total / otedama_uptime_seconds` | ≥ 0.99 | < 0.95 over 24 h |
+| Share acceptance | `otedama_share_acceptance_rate` | ≥ 0.97 | < 0.95 after ≥ 100 judged |
+| Stale fraction | `otedama_stale_rate` | < 0.01 | > 0.02 sustained — check latency/route |
+| Submit latency | `otedama_submit_latency_milliseconds{quantile="0.99"}` | < 2000 ms | > 5000 ms — pathological WAN/loss |
+| Jobs arriving | `otedama_last_job_received_seconds` | advancing | `time() − value > 120 s` — dead pool conn |
+| Provider alive | `otedama_provider_last_quote_seconds{provider}` | advancing | `time() − value > 60 s` (2× the 30 s quote interval) |
+| Price feed fresh | `otedama_btc_rate_age_seconds` | < 600 s | > 600 s — all rate sources failing |
+| Price redundancy | `otedama_rate_sources_ok` | = `otedama_rate_sources_total` | < total — silent redundancy erosion |
+| Clock sanity | `otedama_clock_skew_seconds` | < 120 s | ≥ 120 s — TLS/nTime judgements break |
 
 ## 7. Known limitations
 

@@ -193,6 +193,16 @@ type engineMetrics struct {
 	sharesFoundPerDeviceMu sync.Mutex
 	sharesFoundPerDevice   map[string]*metrics.Counter
 
+	// providerLastQuote holds otedama_provider_last_quote_seconds{provider=...}
+	// gauges, one per provider ID, created lazily on first quote. The value is
+	// the Unix timestamp of the most recent quote that provider published, so
+	// a provider that silently stops quoting is directly alertable
+	// (time() − value > 2× MinQuoteInterval) rather than only inferable from
+	// the activeStreams count dropping once the stale-stream TTL prunes it.
+	// Cardinality is bounded by the configured provider set.
+	providerLastQuoteMu sync.Mutex
+	providerLastQuote   map[string]*metrics.Gauge
+
 	// payoutInfo exposes the active payout destination as
 	// otedama_payout_info{address="bc1q…mdq"} — the series valued 1 is the
 	// masked address currently receiving rewards. It lets an operator confirm,
@@ -434,6 +444,7 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		rejectByReason:       make(map[string]*metrics.Counter),
 		lastRejectByReason:   make(map[string]*metrics.Gauge),
 		sharesFoundPerDevice: make(map[string]*metrics.Counter),
+		providerLastQuote:    make(map[string]*metrics.Gauge),
 		payoutInfo:           make(map[string]*metrics.Gauge),
 	}
 	// build_info is a constant series; its value carries no information,
@@ -517,6 +528,30 @@ func (m *engineMetrics) incSharesFoundForDevice(deviceID string) {
 	}
 	m.sharesFoundPerDeviceMu.Unlock()
 	c.Inc()
+}
+
+// touchProviderQuote records ts as the most recent quote time for
+// providerID, exposed as otedama_provider_last_quote_seconds{provider=...}.
+// The gauge is created lazily on first quote; subsequent calls update the
+// value. Safe for concurrent use.
+func (m *engineMetrics) touchProviderQuote(providerID string, ts int64) {
+	if providerID == "" {
+		return
+	}
+	m.providerLastQuoteMu.Lock()
+	g, ok := m.providerLastQuote[providerID]
+	if !ok {
+		g = m.reg.NewGauge(
+			"otedama_provider_last_quote_seconds",
+			"Unix timestamp of the most recent yield quote published by this provider. "+
+				"A value that stops advancing means the provider has gone silent — "+
+				"alert when time() - value exceeds 2× the provider's expected "+
+				"quote interval (MinQuoteInterval, 30s).",
+			map[string]string{"provider": providerID})
+		m.providerLastQuote[providerID] = g
+	}
+	m.providerLastQuoteMu.Unlock()
+	g.Set(float64(ts))
 }
 
 // setActivePayout marks masked as the active payout destination:

@@ -10,6 +10,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 258 — バックログ消化パス: **プロバイダ死活監視の明示メトリクス化 + SLO ガイダンス文書化**)
+
+外部一次情報（SRI・ESP-Miner の release atom feed、go.dev/dl、
+proxy.golang.org）を再検証 —— セッション257以降に新規リリース・
+アドバイザリはなし —— の上で、滞留していたバックログ項目2件を実装。
+
+**1. `otedama_provider_last_quote_seconds{provider}`**（RESEARCH_IMPROVEMENTS
+Cat-5 item 3 → ✅）。Provider 契約は「到達不能時は黙るのではなく
+zero-yield quote を発行せよ」と定めるが、プロバイダ自体のバグ/異常で
+沈黙した場合の検知面は「stale stream が 3 分 TTL で刈られ
+`active_streams` が落ちる＋ログ」のみ —— プロバイダ名を持つ
+alertable な信号がなかった。引用到着ごとに per-provider の
+Unix timestamp を記録する lazy labeled gauge を新設（カーディナリティは
+設定済みプロバイダ数で bounded）。`time() − value > 2×MinQuoteInterval`
+(30s) で沈黙プロバイダを直接アラート可能に。
+
+**2. SLO ガイダンス表**（Cat-9 item 10 → ✅）。SPECIFICATION.md §6 の
+メトリクス・カタログ末尾に SLO 表を追加 —— `otedama_up`、
+productive/uptime 比、share acceptance（エンジン自体の warn 閾値
+≥97%/20 judged と同根拠）、stale rate、p99 submit latency、job 到着、
+provider 死活、rate feed 鮮度/冗長性、clock skew の各 objective に
+metric・target・alert 条件を対応付け、メトリクスを actionable に。
+
 ### Changed (session 257 — 一次情報源検証パス: **go1.25 EOL に伴う go1.26 系移行（x/crypto v0.57.0 + tlssecpmlkem ピン）、SRI v1.12.0 の bounded-storage / 標準エラーコードをクライアント側へ適用**)
 
 外部一次情報（go.dev/dl・godebug 文書、proxy.golang.org の go

@@ -80,6 +80,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				ts = time.Now()
 			}
 			lastQuoteAt[key] = ts
+			opts.metrics.touchProviderQuote(q.ProviderID, ts.Unix())
 		case <-ticker.C:
 			opts.streamsMu.Lock()
 			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
