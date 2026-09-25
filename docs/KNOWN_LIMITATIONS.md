@@ -500,7 +500,7 @@ no-op":
 - **`ci-cd.yml`** is a second, largely duplicate "CI/CD Pipeline"
   (same workflow name as `ci.yml`) that appears to be superseded dead
   weight: it hardcodes `GO_VERSION: '1.21'` and a `go: ['1.20', '1.21']`
-  matrix, both below `go.mod`'s `go 1.22` minimum (so those legs cannot
+  matrix, both below `go.mod`'s `go 1.24.0` minimum (so those legs cannot
   even satisfy the module declaration), and it applies
   `k8s/deployment.yaml` — the same nonexistent path again.
 - **`security.yml`**'s `security-tests` job runs
@@ -528,7 +528,7 @@ no-op":
   (confirmed live on PR CI, session 252).** Every workflow pins an old
   Go: `ci.yml`/`test.yml`/`release.yml` use `1.23.x`, `ci-cd.yml`/
   `security.yml` use `1.21`, all with `GOTOOLCHAIN=local`. But `go.mod`
-  declares `toolchain go1.24.0` and — decisively — a `godebug` block
+  declares `go 1.24.0` and — decisively — a `godebug` block
   containing `tlsmlkem=1`, which is a **Go 1.24** knob (X25519MLKEM768,
   standardized in 1.24). Go 1.23/1.21 with `GOTOOLCHAIN=local` refuses
   to download the newer toolchain and fails immediately with
@@ -538,11 +538,15 @@ no-op":
   internally consistent for Go 1.24+ (it builds and passes all 24
   packages' tests locally on Go 1.24.7). It is purely that CI pins a Go
   older than the module's own `tlsmlkem` godebug requires. Note the
-  latent tension it exposes: GODEBUG_NOTES.md says the `go 1.22` /
-  `toolchain go1.24.0` split exists so "older toolchains can still
-  build Otedama," but the `tlsmlkem=1` godebug (a 1.24 knob) already
-  makes `go.mod` unparseable by any toolchain < 1.24 — so that stated
-  intent is not actually achievable as long as the godebug is pinned.
+  latent tension it exposed: GODEBUG_NOTES.md previously described a
+  `go 1.22` / `toolchain go1.24.0` split existing so "older toolchains
+  can still build Otedama" — but the `tlsmlkem=1` godebug (a 1.24 knob)
+  already made `go.mod` unparseable by any toolchain < 1.24, so that
+  stated intent was never actually achievable. Session 255 resolved the
+  tension honestly: the `go` directive is now `go 1.24.0` outright
+  (required by x/crypto v0.48.0), and the redundant `toolchain` line
+  was dropped. The CI failure mode is unchanged — Go < 1.24 still
+  cannot parse `go.mod`.
 
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to

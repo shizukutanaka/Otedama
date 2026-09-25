@@ -723,6 +723,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// cannot grow the map without bound over a long session.
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
+	// submitTargets maps a submitted share's SequenceNumber to the share
+	// target it was produced under (miner.Share.Target). Read on
+	// SubmitSharesError to detect retarget rejects (transitionReject),
+	// and reaped alongside submitTimes so the map stays bounded.
+	submitTargets := make(map[uint32]miner.Hash)
 	const submitTimesCap = 1024
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
@@ -902,18 +907,35 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					if seq <= last {
 						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
 						delete(submitTimes, seq)
+						delete(submitTargets, seq)
 					}
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
 				reason := pm.msg.SubmitSharesError.Error
+				seq := pm.msg.SubmitSharesError.SequenceNumber
+				issued, tracked := submitTargets[seq]
+				delete(submitTargets, seq)
 				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
-				if opts.m != nil {
-					opts.m.sharesRejected.Inc()
-					opts.m.rejectReason(category).Inc()
-					opts.m.touchLastReject(category, time.Now().Unix())
+				if tracked && transitionReject(category, issued, shareTarget) {
+					// ESP-Miner #212: the share was ground under a target the
+					// pool has since replaced via SetTarget — a retarget
+					// artifact, not a real reject. Counted in the per-reason
+					// breakdown only, never in the reject-rate counters.
+					opts.log("info", fmt.Sprintf(
+						"engine: share rejected under superseded share target: %s (excluded from reject rate)",
+						reason))
+					if opts.m != nil {
+						opts.m.rejectReason("difficulty-transition").Inc()
+					}
+				} else {
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						reason, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
+					}
 				}
 			}
 
@@ -944,6 +966,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.sharesSubmitted.Inc()
 			}
 			submitTimes[seqNum] = time.Now()
+			submitTargets[seqNum] = share.Target
 			if len(submitTimes) > submitTimesCap {
 				// Pool is not acknowledging; drop the oldest half so the
 				// map stays bounded. Latency for dropped entries is lost,
@@ -952,6 +975,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				for seq := range submitTimes {
 					if seq < cutoff {
 						delete(submitTimes, seq)
+						delete(submitTargets, seq)
 					}
 				}
 			}
@@ -1149,6 +1173,22 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 					}
 				} else {
 					category, diagnosis := rejectClass(result.Reason)
+					// ESP-Miner #212: a share rejected as above-target may
+					// have been ground under a difficulty the pool has
+					// since replaced via set_difficulty — a retarget
+					// artifact, not a real reject. Compare the share's
+					// issue-time target against the current share target;
+					// counted in the per-reason breakdown only.
+					if current, ok := v1ShareTarget(capturedSess.SuggestedDifficulty()); ok &&
+						transitionReject(category, capturedShare.Target, current) {
+						opts.log("info", fmt.Sprintf(
+							"engine: V1 share rejected under superseded difficulty epoch: %s (excluded from reject rate)",
+							result.Reason))
+						if opts.m != nil {
+							opts.m.rejectReason("difficulty-transition").Inc()
+						}
+						return
+					}
 					opts.log("warn", fmt.Sprintf("engine: V1 share rejected: %s (%s)",
 						result.Reason, diagnosis))
 					if opts.m != nil {
@@ -1321,6 +1361,24 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 		}
 	}
 	return target, nil
+}
+
+// v1ShareTarget resolves the share target implied by the pool's latest
+// mining.set_difficulty value — the "current" side of a transitionReject
+// comparison. ok is false when no difficulty has been assigned yet
+// (difficulty 0, meaning workers fall back to the nBits target via
+// v1JobTarget) or the difficulty fails conversion; either way the pool's
+// current target epoch cannot be established and a reject must take the
+// ordinary path.
+func v1ShareTarget(difficulty float64) (miner.Hash, bool) {
+	if difficulty <= 0 {
+		return miner.Hash{}, false
+	}
+	t, err := miner.TargetFromDifficulty(difficulty)
+	if err != nil {
+		return miner.Hash{}, false
+	}
+	return t, true
 }
 
 // applyJob converts a poolproto.Job (the protocol-agnostic job type

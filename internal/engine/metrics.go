@@ -172,8 +172,9 @@ type engineMetrics struct {
 
 	// reg is retained so reject counters can be created lazily, one per
 	// reject category (stale/duplicate/difficulty/hardware/other).
-	reg            *metrics.Registry
-	rejectByReason map[string]*metrics.Counter
+	reg              *metrics.Registry
+	rejectByReasonMu sync.Mutex
+	rejectByReason   map[string]*metrics.Counter
 
 	// lastRejectByReason holds otedama_last_reject_seconds{reason="..."} gauges,
 	// one per reject category, created lazily on first rejection of that type.
@@ -448,6 +449,8 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 // operators a breakdown of *why* shares are being rejected — the signal
 // that maps directly to the fix (latency vs hardware vs config).
 func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
 	if c, ok := m.rejectByReason[category]; ok {
 		return c
 	}
@@ -457,6 +460,18 @@ func (m *engineMetrics) rejectReason(category string) *metrics.Counter {
 		map[string]string{"reason": category})
 	m.rejectByReason[category] = c
 	return c
+}
+
+// rejectReasonValue reads the counter for a reject category without
+// creating it — used by rate reconciliation, where a not-yet-seen
+// category must count as 0 rather than registering an empty series.
+func (m *engineMetrics) rejectReasonValue(category string) uint64 {
+	m.rejectByReasonMu.Lock()
+	defer m.rejectByReasonMu.Unlock()
+	if c, ok := m.rejectByReason[category]; ok {
+		return c.Value()
+	}
+	return 0
 }
 
 // touchLastReject records the current Unix timestamp as the most recent
@@ -559,10 +574,14 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 	// Reconcile: found locally vs judged by the pool. Clamp at 0 — the pool
 	// can briefly report more judged than we have locally counted if a stats
 	// tick races a burst of accepts, and a negative "unaccounted" is meaningless.
+	// "difficulty-transition" rejects are settled judgments too — they just
+	// are excluded from `rejected` above, so they must still subtract from
+	// the outstanding count here (ESP-Miner #212).
 	found := m.sharesFound.Value()
+	settled := judged + m.rejectReasonValue("difficulty-transition")
 	var unaccounted uint64
-	if found > judged {
-		unaccounted = found - judged
+	if found > settled {
+		unaccounted = found - settled
 	}
 	m.sharesUnaccounted.Set(float64(unaccounted))
 
@@ -572,10 +591,6 @@ func (m *engineMetrics) updateShareRates() (rate float64, judged uint64) {
 		return rate, judged
 	}
 	m.rejectRate.Set(float64(rejected) / float64(judged))
-	var stale uint64
-	if c, ok := m.rejectByReason["stale"]; ok {
-		stale = c.Value()
-	}
-	m.staleRate.Set(float64(stale) / float64(judged))
+	m.staleRate.Set(float64(m.rejectReasonValue("stale")) / float64(judged))
 	return rate, judged
 }

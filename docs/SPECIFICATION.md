@@ -130,7 +130,12 @@ configured pool URLs — each tagged with the layer it was resolved from.
    (`SubmitSharesStandard`); on `SubmitSharesSuccess` settle
    submit→accept latency and increment accepted; on `SubmitSharesError`
    classify the reason (`rejectClass` → stale/duplicate/difficulty/hardware/
-   other) and increment the per-reason counter.
+   other) and increment the per-reason counter. An "above-target" reject
+   for a share ground under a target the pool has since replaced
+   (`SetTarget` / `set_difficulty` while the share was in flight —
+   ESP-Miner #212) is counted only as `difficulty-transition` in the
+   per-reason breakdown and is excluded from `shares_total{rejected}` and
+   `reject_rate`, since the work was valid under its issue epoch.
 6. **Graceful shutdown** on SIGINT/SIGTERM.
 
 ## 5. Transport (Stratum V2)
@@ -162,7 +167,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `device_shares_found_total{device}` † | counter | Per-device breakdown of shares found. |
 | `shares_submitted_total` | counter | Shares actually transmitted to the pool, counted at send time regardless of the eventual accept/reject response. Distinct from `shares_found_total`: a found share is never submitted if its worker's share channel was full. |
 | `shares_total{status}` | counter | Shares judged by the pool (`accepted`/`rejected`). |
-| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other). |
+| `shares_rejected_by_reason_total{reason}` † | counter | Rejects by inferred cause (stale/duplicate/difficulty/hardware/other/difficulty-transition). `difficulty-transition` is the benign retarget case (§4): it does not enter `shares_total{rejected}` or `reject_rate`. |
 | `last_reject_seconds{reason}` † | gauge | Unix time of the most recent reject in each category. |
 | `shares_unaccounted` | gauge | Found locally but not yet judged (found−accepted−rejected, ≥0). |
 | `share_acceptance_rate` | gauge | accepted / judged. |

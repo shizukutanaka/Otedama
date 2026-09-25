@@ -564,7 +564,7 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 1. **JDP spec is still evolving (May 2026).** Working Group expansion brings new requirements. Mitigate by tracking the spec versions in `internal/poolproto/sv2jdc/spec_version.go` and supporting at least the current and previous minor versions.
 
-2. **Bitcoin Core 30+ deprecation of `getblocktemplate`?** No deprecation announced as of May 2026, but Core has discussed alternatives (`getblocktemplate light` proposal). We monitor and version-pin.
+2. **Bitcoin Core 30+ deprecation of `getblocktemplate`?** No deprecation announced as of May 2026, but Core has discussed alternatives (`getblocktemplate` light proposal). We monitor and version-pin. **Update (session 255):** Bitcoin Core **v30.0 ships an experimental IPC Mining Interface** (`bitcoin -m node -ipcbind=unix`, gated by the `-DENABLE_IPC` build option and a separate `bitcoin-node` multiprocess binary): SV2 and other mining software can request block templates and submit blocks over a unix socket via Cap'n Proto instead of legacy JSON-RPC `getblocktemplate`. This is the cleaner long-term target for Track D's node integration — template submission is a designed-for purpose there, not an RPC side effect. The IPC interface is experimental in v30.0, so the v3.5 `getblocktemplate` path remains the compatibility baseline; the IPC adapter is the follow-on once the interface stabilizes. (bitcoin/bitcoin v30.0 release notes, doc/multiprocess.md)
 
 3. **DATUM is OCEAN-controlled.** OCEAN could change the wire format. Mitigate by treating DATUM client as a versioned protocol and committing to OCEAN compat for at least 6 months after any breaking change.
 

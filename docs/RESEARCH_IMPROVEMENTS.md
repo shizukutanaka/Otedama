@@ -292,9 +292,11 @@ arXiv grounding (collected sessions 40–41 and here):
     documented in the package godoc `# Exit codes` section and printed by
     `otedama help`. `TestExitCodeConstants_Values` pins the numeric values
     to prevent silent breakage.
-11. ⬜ **Deduplicate the two `Provider` implementations** (maintainability;
+11. ✅ **Deduplicate the two `Provider` implementations** (maintainability;
     recorded per CLAUDE.md rule I3 — "log duplication as an issue, don't fix
-    ad hoc"). `MiningProvider` and `AkashProvider`
+    ad hoc"). — **Done (commit e94e9bb, June 2026 session):** extracted a
+    shared `pollingProvider` base (`internal/provider/polling.go`) that
+    both providers build on; the status here was never updated. `MiningProvider` and `AkashProvider`
     (`internal/provider/{mining,ai_inference}.go`) share substantial
     boilerplate: `Stop()` is **byte-identical** (cancel → `wg.Wait()` → nil
     the cancel → re-create the buffered `quoteCh`); `loop()` is identical
@@ -512,13 +514,27 @@ endpoint against current vendor documentation. Tags as before
    or every share is rejected on a wrong merkle root. Add a segwit-coinbase
    regression fixture to the path feeding `engine.applyJob`.
    (stratum-mining/stratum v1.5.0)
-4. 🟡 **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
+4. ✅ **Don't count post-`set_difficulty` "above-target" rejects.** ESP-Miner
    #212: after difficulty drops, in-flight shares against the old (harder)
    target are rejected as "above target". Tag outstanding work with the
    difficulty active when issued, validate locally against that, and treat
    the resulting pool rejects as benign (exclude from the reject-rate
    metric). Distinct cause from the existing stale/latency `rejectClass`.
    (bitaxeorg/ESP-Miner #212)
+   — **Done (session 255, both protocols):** `miner.Share` now carries
+   `Target` (the share target it was ground under, copied from the Work at
+   issue time). On reject, `engine.transitionReject` fires when the reason
+   classifies as `difficulty` AND the share's issue-time target differs
+   from the pool's current target — V2 compares against the latest
+   `SetTarget`/`OpenMiningChannelSuccess` target (tracked per-sequence in
+   `submitTargets`), V1 against `TargetFromDifficulty(SuggestedDifficulty())`.
+   Benign rejects increment only
+   `otedama_shares_rejected_by_reason_total{reason="difficulty-transition"}`
+   — never `shares_total{rejected}`, `reject_rate`, or `last_reject_seconds`
+   — while `shares_unaccounted` still subtracts them as settled judgments.
+   Covered by `TestTransitionReject`, `TestV1ShareTarget`,
+   `TestRunSessionV1_TransitionRejectBenign` (V1, fake pool), and
+   `TestRunSession_RetargetRejectExcludedFromRejectRate` (V2, fake pool).
    — **Prerequisite fixed (session 226):** investigating this item surfaced a
    more fundamental bug it presupposes — the V1 path (`applyJob`) was not
    applying `mining.set_difficulty` to the mining target *at all*; every
@@ -757,7 +773,12 @@ month, so the discipline matters.
 
 ### Dependency & toolchain hygiene
 
-1. 🟡 **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+1. ✅ **[FETCHED] `gopkg.in/yaml.v3` is archived/unmaintained since 2025-04-01.**
+   — **Done (session 255):** migrated both imports (`cmd/otedama/configfile.go`,
+   `internal/config/config_file_test.go`) to `go.yaml.in/yaml/v3` v3.0.5 —
+   same API, the YAML-org maintained line. `gopkg.in/yaml.v3` fully out of
+   go.mod/go.sum; dep-selection rationale recorded in the go.mod require
+   block per CLAUDE.md.
    The `go-yaml/yaml` source repo was archived by its author; the YAML org
    took over at import path `go.yaml.in/yaml`, where v3 is frozen to
    security-fixes-only and active work is in v4. This makes the dependency
@@ -767,8 +788,15 @@ month, so the discipline matters.
    is maintenance status, not an active vuln. **Action:** plan migration to
    `go.yaml.in/yaml/v3` (near drop-in, YAML-org maintained) and correct
    ADR-003. (github.com/go-yaml/yaml; pkg.go.dev/go.yaml.in/yaml/v4)
-2. 🟡 **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
+2. ✅ **[FETCHED] `golang.org/x/crypto` v0.23.0 is ~31 minor versions behind
    (latest v0.54.0, 2026-07-08); CVEs since are all unreachable here.**
+   — **Done at the floor (session 255):** bumped to **v0.48.0**, the last
+   release whose `go` directive stays ≤ 1.24 — v0.49+ requires go1.25 and
+   v0.57 requires go1.26, both above the project's declared floor. The
+   bump raised `go 1.22` → `go 1.24.0` in go.mod (matching the effective
+   floor `tlsmlkem` already imposed) and transitively raised x/sys
+   v0.20.0 → v0.41.0. x/crypto v0.54.0+ remains reachable only after the
+   planned go1.25.x toolchain floor lands (item 3).
    GO-2025-3487 / CVE-2025-22869 and the May-2026 batch (CVE-2026-39827…39835)
    are all in the `ssh`/`openpgp` subpackages; Otedama imports only
    `chacha20poly1305`, `scrypt`, and `ecdh`, so `govulncheck` should report
@@ -783,6 +811,10 @@ month, so the discipline matters.
    throttling under cgroup constraints" — describes a benefit not actually
    compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
    own quarterly-toolchain policy. (go.dev/doc/go1.25)
+   — Updated premise (session 255): the `go` directive itself is now
+   `go 1.24.0` (x/crypto v0.48.0 required it) and the `toolchain` line
+   was dropped as redundant; re-adding `toolchain go1.25.x` is now a
+   clean floor-vs-recommended split again.
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the
@@ -810,13 +842,17 @@ month, so the discipline matters.
    alone would not give the network ML-DSA, which is gated on a later,
    not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
    / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
-7. 🟡 **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
+7. ✅ **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
    Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
    `-DENABLE_IPC`), it lets SV2/other mining software request templates and
    submit blocks over a unix socket — a cleaner target than legacy
    getblocktemplate for ROADMAP Track D node integration. **Action:** note the
    v30 IPC interface (Cap'n Proto / multiprocess `bitcoin-node` binary) in
    ADR-009 / ROADMAP Track D. (raw.githubusercontent.com/bitcoin/bitcoin/v30.0/doc/release-notes.md)
+   — **Done (session 255):** recorded in ADR-009 §Risks item 2 — the
+   `getblocktemplate` JSON-RPC path stays the v3.5 baseline, the IPC
+   adapter is the follow-on once the interface stabilizes. ROADMAP's
+   session-251 note now points at real ADR-009 text.
 8. ✅ **[FETCHED] DATUM confirmed MIT / BETA / SV1-transport-only.** The DATUM
    Gateway README states MIT license, public beta, requires a full node, and
    miners connect via Stratum V1 with version-rolling — it does NOT support
@@ -829,6 +865,13 @@ month, so the discipline matters.
    update the rationale text and pin a specific SRI tag as the interop
    reference for Go SV2 conformance tests.
    (github.com/stratum-mining/stratum/releases.atom)
+   — Re-verified session 255: latest is now **v1.11.1**; the ROADMAP
+   session-251 correction is in place. The tag-pin for conformance tests
+   remains open. Two v1.x behaviors worth noting while pinning: SRI
+   rounds SV1 difficulty UP from mining.suggest_difficulty (Otedama
+   truncates via `TargetFromDifficulty` — consistent, more conservative),
+   and SRI's share-reject accounting splits per `error_code` (the model
+   Otedama's `rejectClass` categories follow).
 
 ### AI-compute / arbitration engine
 
@@ -916,6 +959,60 @@ Ranked by impact on the path to a real v3.1.0:
 Items 3 and 5 are the cheapest real-code wins with no dependency or
 external-API risk, and are the natural next implementation targets after the
 research-only passes.
+
+---
+
+## September 2026 research pass — session 255 increment
+
+Re-verified the mining ecosystem (SRI, ESP-Miner, sv2-spec, Bitcoin Core)
+plus Go dependency hygiene against primary sources. Items landed this
+session are marked with their ✅ status above; only genuinely new findings
+are listed here.
+
+### Stratum V2 / spec drift
+
+1. 🟡 **[FETCHED] sv2-spec: `coinbase_witness_commitment` field added to
+   `NewTemplate` (JDP), and BIP320 renamed BIP323.** The Job Declaration
+   spec now carries an explicit witness-commitment field for the
+   miner's coinbase assembly (relevant to ADR-009's JDC + template
+   work in v3.5–v3.6), and the version-rolling BIP reference moved from
+   BIP320 to BIP323. **Action (when v3.5/3.6 lands):** build the JDC coinbase
+   assembly against the current spec fields, and cite BIP323 — not BIP320 —
+   in docs that touch version-rolling. (stratum-mining/sv2-spec)
+2. 🟡 **[FETCHED] sv2-spec PR #203: non-custodial JDP payouts** — the Job
+   Declaration Protocol direction ADR-009 plans now has explicit spec work
+   for paying the miner directly (non-custodial), aligning the planned
+   v3.6 JDC with ADR-001's payout model rather than a pool-custodial one.
+   **Action:** when scoping v3.6 JDC, design the payout-declaration path
+   against PR #203's model so the JDC isn't architected custodial-first.
+   (github.com/stratum-mining/sv2-spec/pull/203)
+3. ✅ **[FETCHED] SRI v1.9.0+ rejects are accounted per `error_code`, and
+   `max_target` is clamped per-channel.** Otedama's `rejectClass` category
+   model already follows the per-error-code accounting pattern (item stays
+   consistent, no action); the `max_target` clamp confirms Otedama's
+   choice to leave `OpenMiningChannel.max_target` unset and accept the
+   pool-assigned target as authoritative.
+   (github.com/stratum-mining/stratum releases)
+4. ✅ **[FETCHED] ESP-Miner v2.15.x reconnect-storm handling matches
+   Otedama's backoff.** ESP-Miner's fix for reconnect loops on pool-side
+   errors mirrors the engine's existing 1 s → 64 s exponential backoff with
+   `reconnectBackoffMax` honoured between full cycles (SPECIFICATION §4).
+   No delta needed — consistency check only.
+   (github.com/bitaxeorg/ESP-Miner releases)
+
+### Go / Japanese-source findings
+
+5. ✅ **Qiita/Zenn sweep produced no new actionable item.** Current Go-mining
+   and Stratum coverage on both platforms is educational (summary/how-to
+   articles), not novel implementation findings; the SRI/ESP-Miner/Core
+   primary sources above remain the authoritative inputs.
+6. 🟡 **`govulncheck` binary is not installed in this environment.** The
+   dep bump (x/crypto v0.48.0) is confirmed free of reachable-vuln
+   *categories* by the CVE database review already cited in item 2 above
+   (all ssh/openpgp subpackage CVEs; Otedama imports only
+   chacha20poly1305/scrypt/ecdh), but a live `govulncheck ./...` run to
+   document the zero-reachable result should be done where the tool can
+   fetch the vuln DB. (go.dev/security/vuln)
 
 ---
 

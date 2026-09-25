@@ -95,6 +95,12 @@ func FuzzDecoder_ReadFrame(f *testing.F) {
 		},
 		// Frame claiming huge payload; truncated before payload delivered.
 		{0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF},
+		// Boundary: MsgLength == DefaultMaxFrameSize (16 MiB). Accepted at
+		// the header layer; the read then fails on the missing payload.
+		{0x00, 0x00, 0x00, 0x00, 0x00, 0x01},
+		// Boundary: MsgLength == DefaultMaxFrameSize + 1. Must be rejected
+		// outright — one byte past the cap is where off-by-one bugs live.
+		{0x00, 0x00, 0x00, 0x01, 0x00, 0x01},
 		// Garbage.
 		{0xDE, 0xAD, 0xBE, 0xEF},
 	}
@@ -127,6 +133,109 @@ func FuzzDecoder_ReadFrame(f *testing.F) {
 					frame.Header.MsgLength, len(frame.Payload))
 				return
 			}
+		}
+	})
+}
+
+// FuzzEncryptedConn_Read feeds arbitrary bytes into the Noise transport
+// reader: random 2-byte length prefixes plus random ciphertext. Must
+// never panic and never return plaintext for an unauthenticated frame —
+// every forged ciphertext must fail Poly1305 verification with an error.
+// A real Noise peer can only send frames this connection encrypted, so
+// the failure mode being exercised is the corrupted/MitM stream, the
+// same class the SRI fuzzers target on their framing layer.
+func FuzzEncryptedConn_Read(f *testing.F) {
+	seeds := [][]byte{
+		// Zero-length frame (ctLen=0): decrypt must fail (no tag).
+		{0x00, 0x00},
+		// ctLen=1..16: all too short to carry a Poly1305 tag.
+		{0x01, 0x00, 0xAA},
+		{
+			0x10, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11,
+			0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+		},
+		// ctLen=17: smallest structurally possible frame (1B pt + 16B tag)
+		// with garbage contents — must fail auth.
+		{
+			0x11, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11,
+			0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00,
+		},
+		// ctLen=0xFFFF: maximum claim, truncated body.
+		{0xFF, 0xFF, 0xAA, 0xBB},
+		// Two frames back to back: first fails auth, read must stop there.
+		{
+			0x11, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11,
+			0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00,
+			0x11, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11,
+			0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00,
+		},
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	var recvKey [32]byte
+	for i := range recvKey {
+		recvKey[i] = byte(i)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("EncryptedConn.Read panicked on input %x: %v", data, r)
+			}
+		}()
+
+		ec := NewEncryptedConn(bytes.NewBuffer(data), nil, &CipherState{key: recvKey})
+		buf := make([]byte, 8) // small reader buffer exercises readbuf draining
+		for i := 0; i < 100; i++ {
+			if _, err := ec.Read(buf); err != nil {
+				return // auth failure or EOF — the expected outcomes
+			}
+		}
+	})
+}
+
+// FuzzHandshake_ReadMessage2 feeds arbitrary responder payloads into the
+// Noise NX message-2 parser, covering the 65-byte uncompressed, 33-byte
+// compressed, and 32-byte x-only public-key branches. Must never panic;
+// when it succeeds the handshake must be complete and Transport() must
+// yield cipher states.
+func FuzzHandshake_ReadMessage2(f *testing.F) {
+	seeds := [][]byte{
+		{},               // empty
+		{0x00},           // 1 byte
+		make([]byte, 32), // x-only path, all zeros
+		append([]byte{0x02}, make([]byte, 32)...), // 33B compressed candidate
+		append([]byte{0x04}, make([]byte, 64)...), // 65B uncompressed candidate
+		bytes.Repeat([]byte{0xFF}, 100),           // overlong, no valid key
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("ReadMessage2 panicked on input %x: %v", data, r)
+			}
+		}()
+
+		hs, err := NewHandshakeInitiator()
+		if err != nil {
+			t.Fatalf("NewHandshakeInitiator: %v", err)
+		}
+		if _, err := hs.WriteMessage1(); err != nil {
+			t.Fatalf("WriteMessage1: %v", err)
+		}
+		if err := hs.ReadMessage2(data); err != nil {
+			return // malformed responder message — the expected outcome
+		}
+		if !hs.Complete() {
+			t.Error("ReadMessage2 succeeded but handshake not complete")
+		}
+		if _, _, err := hs.Transport(); err != nil {
+			t.Errorf("ReadMessage2 succeeded but Transport() failed: %v", err)
 		}
 	})
 }

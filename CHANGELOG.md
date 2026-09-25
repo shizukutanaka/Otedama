@@ -10,6 +10,79 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 255 — 一次情報源検証パス: **難易度遷移中の「リジェクト過剰計上」を是正し、依存の保守状態を実害が出る前に是正**)
+
+外部一次情報（stratum-mining/stratum SRIリリース、bitaxeorg/ESP-Miner、
+sv2-spec、Bitcoin Core v30 リリースノート、go-yaml / x/crypto の
+モジュール索引）を再検証し、セッション251の調査で未着手だった項目と、
+新たに確認した整合性・乖離を一括して反映した。
+
+**1. ESP-Miner #212 の「リターゲット過渡リジェクト」を V1/V2 双方で良性扱いに**
+（RESEARCH_IMPROVEMENTS Cat 1/2 #4 → ✅）。プールが難易度を更新
+（V1 `mining.set_difficulty` / V2 `SetTarget`）してから、旧ターゲットで掘った
+進行中シェアが "above target" で弾かれると、実害のない過渡イベントが
+`otedama_shares_total{status="rejected"}`・`reject_rate`・
+`last_reject_seconds` に本来の不良リジェクトとして混入していた。
+`miner.Share` に `Target`（発行時点のシェアターゲット）を持たせ、
+`engine.transitionReject` が「理由が difficulty 系 **かつ** 発行時ターゲットが
+プールの現ターゲットと異なる」場合のみ良性判定する。良性リジェクトは
+`otedama_shares_rejected_by_reason_total{reason="difficulty-transition"}`
+だけを増やし（breakdown には出る＝可視性は保持）、レート系カウンタには
+入れない。`shares_unaccounted` 側は「プールが判定済み」の数に含めて
+差し引くため、帳尻が崩れない設計。V2 は `submitTargets`（seq→発行時
+ターゲット、submitTimes と同じ上限で刈り込み）、V1 は `v1ShareTarget`
+（`SuggestedDifficulty()` → share target、`0`・変換失敗時は通常経路）で
+現行エポックを解決する。
+
+**2. Noise トランスポートの fuzz カバレッジ追加**（SRI が framing 層で
+実践しているクラスを同レベルに引き上げ）。`FuzzDecoder_ReadFrame` に
+境界値シード（`MsgLength == DefaultMaxFrameSize` ちょうど16MiBと
++1バイトのオーバー——off-by-one が最も潜む位置）を追加。新設
+`FuzzEncryptedConn_Read`（u16長プレフィックス＋認証タグ偽造列を
+Poly1305 が必ず棄却するか、0〜65535 の全長帯）と
+`FuzzHandshake_ReadMessage2`（65B非圧縮/33B圧縮/32B x-only の
+公開鍵3分岐、成功時は `Complete()` と `Transport()` が整合することを
+不変条件化）を追加。seed corpus + 各15秒の実ファズを PASS 確認。
+
+**3. 依存の保守状態是正（一次ソース検証済み・CVEではなくメンテ状況が理由）**.
+`gopkg.in/yaml.v3` は 2025-04 にアーカイブ済みで CLAUDE.md 外部依存基準3
+（直近1年の有意なメンテ）を満たさない——`go.yaml.in/yaml/v3` v3.0.5
+（YAML-org 継続ライン、API互換の drop-in）へ `cmd/otedama/configfile.go`
+と `internal/config/config_file_test.go` の両importを移行し、
+`gopkg.in/yaml.v3` を go.mod/go.sum から完全に除去。
+`golang.org/x/crypto` は **v0.48.0**（go ディレクティブ ≤1.24 を維持する
+最終版。v0.49+は go1.25、v0.57は go1.26 を要求）へ v0.23.0 から更新。
+この更新が `go.mod` の `go 1.22` を `go 1.24.0` に引き上げ、`toolchain`
+行は冗長として go tool が除去——「`tlsmlkem` が既に事実上1.24を要求して
+いた」という GODEBUG_NOTES の潜在外れを正直に解消した。x/sys は
+推移的に v0.20.0 → v0.41.0。依存選定理由は CLAUDE.md 規則通り
+`go.mod` の require ブロックにコメントで記録。
+
+**4. 仕様・ADR の先行記述を実態に追従**. `docs/SPECIFICATION.md` §4/§6 に
+`difficulty-transition` の語彙と「レート系カウンタから除外」の意味論を
+追加。ROADMAP session-251 の注記が「ADR-009 に記録済み」としていた
+Bitcoin Core v30.0 **experimental IPC Mining Interface**
+（`bitcoin -m node -ipcbind=unix`、Cap'n Proto multiprocess）を、実際には
+未記述だった ADR-009 §Risks item 2 に追記——v3.5 の
+`getblocktemplate` JSON-RPC 経路は基線維持、IPC アダプタは IF 安定化後の
+後続対応と明記。`docs/RESEARCH_IMPROVEMENTS.md` の stale 状態を修正
+（Cat 7 #11 provider dedup ⬜→✅ e94e9bb、Cat 1/2 #4、deps 項目1/2/7、
+SRI タグ検証 v1.11.1）し、sv2-spec の新規乖離
+（`NewTemplate.coinbase_witness_commitment`、BIP320→BIP323改称、
+PR #203 非カストディ JDP 支払い）を 🟡 として session-255
+セクションに記録。
+
+**テスト追加4件**（修正を外すと失敗することを確認済み）:
+`TestTransitionReject`・`TestV1ShareTarget`（純粋関数）、
+`TestRunSessionV1_TransitionRejectBenign`（V1: フェイクプールが
+set_difficulty→submit→難易度更新→above-target拒否を逐語実行、
+`sharesRejected==0`/`difficulty-transition==1`/`difficulty==0`を主張）、
+`TestRunSession_RetargetRejectExcludedFromRejectRate`（V2:
+SetTarget(0xFE)+Above-target拒否→以降全承認、`sharesRejected==0`
+をセッション全体の不変条件として主張）。
+
+---
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

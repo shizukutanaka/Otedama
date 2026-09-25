@@ -276,6 +276,29 @@ func rejectClass(reason string) (category, diagnosis string) {
 	}
 }
 
+// transitionReject reports whether a share rejection is a retarget
+// artifact rather than a genuine reject (ESP-Miner #212): the share was
+// produced under a different target than the pool's current share target,
+// meaning the pool changed difficulty/target while the share was in
+// flight, and the reason falls in the "above target" family (rejectClass
+// "difficulty"). The work was valid under the difficulty epoch it was
+// issued in, so the reject is benign: it is excluded from the reject-rate
+// counters and surfaced only in the per-reason breakdown as
+// "difficulty-transition".
+//
+// issued is the share's issue-time target (miner.Share.Target); current
+// is the pool's latest share target. A zero issued target (synthetic or
+// pre-field shares) cannot establish the epoch and is not eligible.
+func transitionReject(category string, issued, current miner.Hash) bool {
+	if category != "difficulty" {
+		return false
+	}
+	if issued == (miner.Hash{}) {
+		return false
+	}
+	return issued != current
+}
+
 // acceptanceRate computes the share acceptance rate — accepted /
 // (accepted + rejected) — as a fraction in [0,1]. This is the metric
 // that maps to "net BTC retained": every rejected share is work the
