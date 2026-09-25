@@ -1006,13 +1006,13 @@ are listed here.
    and Stratum coverage on both platforms is educational (summary/how-to
    articles), not novel implementation findings; the SRI/ESP-Miner/Core
    primary sources above remain the authoritative inputs.
-6. 🟡 **`govulncheck` binary is not installed in this environment.** The
-   dep bump (x/crypto v0.48.0) is confirmed free of reachable-vuln
-   *categories* by the CVE database review already cited in item 2 above
-   (all ssh/openpgp subpackage CVEs; Otedama imports only
-   chacha20poly1305/scrypt/ecdh), but a live `govulncheck ./...` run to
-   document the zero-reachable result should be done where the tool can
-   fetch the vuln DB. (go.dev/security/vuln)
+6. ✅ **Live `govulncheck ./...` run confirms the zero-reachable claim.**
+   Post-bump scan (x/crypto v0.48.0, go.yaml.in v3.0.5, x/sys v0.41.0):
+   **0 vulnerabilities in code and in imported packages**; 17 module-level
+   advisories exist in `require`d modules but none are reachable (the
+   ssh/openpgp-package pattern already documented). `govulncheck` itself
+   was missing from the environment — install added to the blueprint's
+   initialize steps. (go.dev/security/vuln)
 
 ---
 
