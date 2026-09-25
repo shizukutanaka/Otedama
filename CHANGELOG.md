@@ -10,6 +10,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 257 — 一次情報源検証パス: **go1.25 EOL に伴う go1.26 系移行（x/crypto v0.57.0 + tlssecpmlkem ピン）、SRI v1.12.0 の bounded-storage / 標準エラーコードをクライアント側へ適用**)
+
+外部一次情報（go.dev/dl・godebug 文書、proxy.golang.org の go
+ディレクティブ、stratum-mining/stratum v1.12.0 リリースノートと
+mining_sv2/common_messages_sv2 のエラーコード定数、sv2-spec、
+ESP-Miner リリース）を再検証し、ツールチェイン移行と SRI v1.12.0
+由来のクライアント側対応物2件を実装した。
+
+**1. `go 1.26.0` + `toolchain go1.26.8` + x/crypto v0.57.0 +
+`tlssecpmlkem=1`**。Go 1.25 は Go 1.27 のリリース（2026-08）をもって
+EOL —— Go プロジェクトは最新2メジャーのみを保守対象とし、
+go.dev/dl の安定版リストは `go1.27.1`/`go1.26.8` のみ。1.26 は未だ
+修正が供給される最古のフロアであり、本バンプは依存側からも**必須**:
+x/crypto v0.56.0+ は `go 1.26.0` を要求し、v0.57.0（2026-09-08）は
+session-256 で到達不能と確認した ssh DoS 修正（CVE-2026-56855 /
+-78662）を初めて含む —— 到達不能のままだが、モジュールレベルの
+アドバイザリ一覧を無償で削減できる。Go 1.26 追加の godebug
+`tlssecpmlkem`（SecP256r1MLKEM768 / SecP384r1MLKEM1024、本フロアで
+既定ONのハイブリッド耐量子鍵交換）を `tlsmlkem` と並べて明示ピン。
+同リリースの他の新ノブ（`httpcookiemaxnum`、`urlmaxqueryparams`、
+`urlstrictcolons`、`tracebacklabels`）は Otedama の面に触れず既定値が
+そのまま正しいため未ピン。GODEBUG_NOTES のベースライン・履歴・
+Active knobs を同期、KNOWN_LIMITATIONS の Go 参照を ≥1.26 へ更新
+（CI 失敗モードは不変 —— Go <1.26 は `go.mod` を parse できない）。
+
+**2. 未処理ジョブ保持の上限制御**（SRI v1.12.0 の client-side analog）。
+SRI v1.12.0（2026-09-17）の channels_sv2 強化はジョブ記憶域を
+**全軸で bounded** 化（future templates・過去ジョブ・拒否/既見シェア）。
+Otedama の `jobs` マップは `SetNewPrevHash` ごとの全消去を除き無制限
+だったため、tip を回さず `NewMiningJob` を洪水させるプールは
+メモリを無制限に成長させ得た。`jobsCap=64` + `storeJob` の FIFO
+eviction（最古を逐次追放 —— 将来の tip が指名するジョブはほぼ常に
+最新のもので、採掘中ジョブは別参照から生き残る）で上限制御し、
+追放時は warn を出す。`TestStoreJob_BoundsOutstandingJobs` を追加
+（cap 到達/追放順/同一 ID の in-place 更新）。
+
+**3. 標準化エラーコードの正確な分類**（SRI v1.12.0 → `rejectClass`）。
+v1.12.0 で標準化された `SubmitSharesError` の canonical error_code
+をサブストリングヒューリスティクス**の前に**明示分類: これまで
+`invalid-job-id`/`invalid-channel-id` は "invalid" 含有で
+hardware（実体はプール側で退役した文脈 = stale 系）、
+`difficulty-too-low` は "low difficulty" 部分一致せず other、
+`bad-extranonce-size`/version-rolling 系は hardware に誤分類されて
+いた。修正で `difficulty-too-low` が difficulty カテゴリとなり
+session-255 の benign-retarget（ESP-Miner #212）経路にも正しく乗る。
+`TestRejectClass` に canonical コード9件を追加。
+
 ### Changed (session 256 — 一次情報源検証パス: **go1.25 系ツールチェイン移行でコンテナ認識 GOMAXPROCS を有効化し、プール割当ターゲットの下限サニティを実装**)
 
 外部一次情報（go.dev/doc/go1.25・godebug 文書、proxy.golang.org の

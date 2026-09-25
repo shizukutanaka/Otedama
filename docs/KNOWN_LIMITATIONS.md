@@ -500,7 +500,7 @@ no-op":
 - **`ci-cd.yml`** is a second, largely duplicate "CI/CD Pipeline"
   (same workflow name as `ci.yml`) that appears to be superseded dead
   weight: it hardcodes `GO_VERSION: '1.21'` and a `go: ['1.20', '1.21']`
-  matrix, both below `go.mod`'s `go 1.25.0` minimum (so those legs cannot
+  matrix, both below `go.mod`'s `go 1.26.0` minimum (so those legs cannot
   even satisfy the module declaration), and it applies
   `k8s/deployment.yaml` — the same nonexistent path again.
 - **`security.yml`**'s `security-tests` job runs
@@ -528,14 +528,15 @@ no-op":
   (confirmed live on PR CI, session 252).** Every workflow pins an old
   Go: `ci.yml`/`test.yml`/`release.yml` use `1.23.x`, `ci-cd.yml`/
   `security.yml` use `1.21`, all with `GOTOOLCHAIN=local`. But `go.mod`
-  declares `go 1.25.0` + `toolchain go1.25.7` and — decisively — a `godebug` block
-  containing `tlsmlkem=1` (a **Go 1.24** knob, X25519MLKEM768) plus
-  `containermaxprocs=1`/`updatemaxprocs=1` (**Go 1.25** knobs). Go
+  declares `go 1.26.0` + `toolchain go1.26.8` and — decisively — a `godebug` block
+  containing `tlsmlkem=1` (a **Go 1.24** knob, X25519MLKEM768),
+  `containermaxprocs=1`/`updatemaxprocs=1` (**Go 1.25** knobs), and
+  `tlssecpmlkem=1` (a **Go 1.26** knob). Go
   1.23/1.21 with `GOTOOLCHAIN=local` refuses to download the newer
   toolchain and fails immediately with an `unknown godebug` parse
   error at the very first `go mod download` step — so the Test, Build,
   Lint, Benchmark, and gosec jobs never even compile the code. This is
-  not a code defect; the module is internally consistent for Go 1.25+
+  not a code defect; the module is internally consistent for Go 1.26+
   (it builds and passes all 24 packages' tests locally on Go 1.27.1).
   It is purely that CI pins a Go older than the module's own godebug
   knobs require. Note the latent tension it exposed: GODEBUG_NOTES.md
@@ -546,9 +547,11 @@ no-op":
   achievable. Session 255 resolved the tension honestly (`go 1.24.0`
   outright, redundant `toolchain` dropped); session 256 raised the
   floor to `go 1.25.0` + `toolchain go1.25.7` (required by x/crypto
-  v0.55.0 and wanted for the container-aware GOMAXPROCS defaults).
-  The CI failure mode is unchanged — Go < 1.25 still cannot parse
-  `go.mod`.
+  v0.55.0 and wanted for the container-aware GOMAXPROCS defaults);
+  session 257 raised it to `go 1.26.0` + `toolchain go1.26.8` (go1.25
+  went end-of-life when go1.27 shipped, and x/crypto v0.57.0 requires
+  `go 1.26.0`). The CI failure mode is unchanged — Go < 1.26 still
+  cannot parse `go.mod`.
 
 **Impact:** `deploy.yml`, `ci-cd.yml`, and parts of `ci.yml` make CI
 status red on ordinary development pushes/PRs for reasons unrelated to
@@ -557,7 +560,7 @@ mistake for a real regression. Most severely, the Go-version mismatch
 above means the flagship **Test/Build/Lint jobs are red on every PR**
 before a single test runs — so CI provides no real signal on Go code
 health at all right now, even though the code itself is green on a
-correct (Go 1.25+) toolchain. `release.yml`'s packaging job and
+correct (Go 1.26+) toolchain. `release.yml`'s packaging job and
 `security.yml`'s `security-tests` job would fail if actually triggered.
 `code-review.yml` gives the appearance of automated Go code review
 while doing none. The `test.yml`/CLAUDE.md mismatch means fuzzing —
@@ -581,9 +584,9 @@ lacks the `workflows` permission — verified repeatedly this session).
 Each item also carries a maintainer decision:
 
 - **The Go-version mismatch is the one-line, highest-value fix:** set
-  every workflow's Go version to **`1.25.x`** (matching `go.mod`'s
-  `toolchain go1.25.7`), or drop `GOTOOLCHAIN=local` so the runner is
-  allowed to fetch the 1.25 toolchain the module already declares. That
+  every workflow's Go version to **`1.26.x`** (matching `go.mod`'s
+  `toolchain go1.26.8`), or drop `GOTOOLCHAIN=local` so the runner is
+  allowed to fetch the 1.26 toolchain the module already declares. That
   single change turns the Test/Build/Lint jobs from "red before
   compiling" to actually exercising the (already-green) code. The
   deeper question — whether to keep the `tlsmlkem=1` godebug pin (which

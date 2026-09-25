@@ -802,6 +802,19 @@ func TestRejectClass(t *testing.T) {
 		{"Invalid solution", "hardware", "hardware"},
 		{"bad nonce", "hardware", "hardware"},
 		{"some unknown pool error", "other", "unclassified"},
+		// Canonical SV2 SubmitSharesError codes (sv2-spec §3.5 /
+		// mining_sv2): the substring heuristics misclassify several of
+		// these — a retired job/channel is staleness, not hardware, and
+		// "difficulty-too-low" never contains "low difficulty".
+		{"stale-share", "stale", "latency"},
+		{"invalid-job-id", "stale", "latency"},
+		{"invalid-channel-id", "stale", "latency"},
+		{"duplicate-share", "duplicate", "firmware"},
+		{"difficulty-too-low", "difficulty", "difficulty"},
+		{"invalid-share", "hardware", "hardware"},
+		{"bad-extranonce-size", "other", "protocol"},
+		{"version-rolling-not-allowed", "other", "protocol"},
+		{"invalid-non-rollable-version-bit", "other", "protocol"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)
@@ -2767,5 +2780,53 @@ waitLoop:
 
 	if got := m.sharesAccepted.Value(); got == 0 {
 		t.Error("sharesAccepted = 0 — engine ground an impossible share target instead of clamping to the block target")
+	}
+}
+
+func TestStoreJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var fifo []uint32
+
+	// Fill to capacity: nothing evicted.
+	for i := uint32(1); i <= jobsCap; i++ {
+		var evicted uint32
+		var didEvict bool
+		fifo, evicted, didEvict = storeJob(jobs, fifo, &stratum.NewMiningJob{JobID: i})
+		if didEvict {
+			t.Fatalf("insert %d evicted job %d before the cap", i, evicted)
+		}
+	}
+	if len(jobs) != jobsCap || len(fifo) != jobsCap {
+		t.Fatalf("at cap: len(jobs)=%d len(fifo)=%d, want %d each", len(jobs), len(fifo), jobsCap)
+	}
+
+	// One past the cap evicts the oldest only; the newest (the job a tip
+	// will name) survives.
+	fifo2, evicted, didEvict := storeJob(jobs, fifo, &stratum.NewMiningJob{JobID: jobsCap + 1})
+	fifo = fifo2
+	if !didEvict || evicted != 1 {
+		t.Fatalf("evicted=%d didEvict=%v, want job 1 evicted", evicted, didEvict)
+	}
+	if _, ok := jobs[1]; ok {
+		t.Error("job 1 should have been evicted")
+	}
+	if jobs[jobsCap+1] == nil {
+		t.Error("newest job must be retained")
+	}
+	if len(jobs) != jobsCap || len(fifo) != jobsCap {
+		t.Fatalf("post-eviction: len(jobs)=%d len(fifo)=%d, want %d each", len(jobs), len(fifo), jobsCap)
+	}
+
+	// Re-sending an existing ID updates in place — no second FIFO slot,
+	// no early eviction.
+	fifo, evicted, didEvict = storeJob(jobs, fifo, &stratum.NewMiningJob{JobID: jobsCap + 1, MinNtime: 42})
+	if didEvict {
+		t.Fatalf("re-inserting an existing ID evicted job %d", evicted)
+	}
+	if len(fifo) != jobsCap {
+		t.Fatalf("re-insert grew fifo to %d, want %d", len(fifo), jobsCap)
+	}
+	if jobs[jobsCap+1].MinNtime != 42 {
+		t.Error("re-insert should update the stored job in place")
 	}
 }

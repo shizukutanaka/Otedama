@@ -1,8 +1,8 @@
 module github.com/shizukutanaka/Otedama
 
-go 1.25.0
+go 1.26.0
 
-toolchain go1.25.7
+toolchain go1.26.8
 
 // godebug pins behavior across Go upgrades. See GODEBUG_NOTES.md.
 //   tlsmlkem=1   — enable hybrid PQ key exchange (X25519MLKEM768) in TLS
@@ -14,11 +14,15 @@ toolchain go1.25.7
 //                  go1.25+; pinned so the behavior survives directive bumps).
 //   updatemaxprocs=1 — GOMAXPROCS re-reads cgroup limits periodically
 //                  (default-on go1.25+; same rationale).
+//   tlssecpmlkem=1 — keep go1.26's hybrid PQ key exchanges
+//                  (SecP256r1MLKEM768 / SecP384r1MLKEM1024) enabled alongside
+//                  tlsmlkem's X25519MLKEM768.
 godebug (
 	containermaxprocs=1
 	panicnil=0
 	randautoseed=1
 	tlsmlkem=1
+	tlssecpmlkem=1
 	updatemaxprocs=1
 )
 
@@ -31,9 +35,10 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5
 	// golang.org/x/crypto — ChaCha20-Poly1305 for the Noise NX transport
 	// cipher. Audited crypto only (CLAUDE.md forbids self-rolled ciphers).
-	// Pinned at the last go1.25-compatible release; v0.56+ requires
-	// go1.26, which is above the project's go directive floor.
-	golang.org/x/crypto v0.55.0
+	// v0.57.0 is the newest release and the first carrying the x/crypto/ssh
+	// DoS fixes (CVE-2026-56855/-78662); both require go1.26, which the
+	// module floor now provides.
+	golang.org/x/crypto v0.57.0
 )
 
-require golang.org/x/sys v0.47.0 // indirect
+require golang.org/x/sys v0.48.0 // indirect

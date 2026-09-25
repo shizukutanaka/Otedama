@@ -30,15 +30,16 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.25.0
+go 1.26.0
 
-toolchain go1.25.7
+toolchain go1.26.8
 
 godebug (
     containermaxprocs=1
     panicnil=0
     randautoseed=1
     tlsmlkem=1
+    tlssecpmlkem=1
     updatemaxprocs=1
 )
 ```
@@ -63,13 +64,23 @@ knobs are pinned explicitly so they cannot silently flip on a future
 bump. Users on toolchains older than 1.25 can no longer build Otedama
 — though in practice they could not since `tlsmlkem` landed anyway.
 
+In session 257 the directive moved to `go 1.26.0` + `toolchain`
+`go1.26.8`: Go 1.25 went end-of-life when Go 1.27 shipped in Aug 2026
+(the Go project supports only the two newest majors — go.dev/dl lists
+`go1.27.1` and `go1.26.8` alone), so 1.26.0 is the oldest floor still
+receiving fixes. The bump is also *required* by the x/crypto update:
+v0.56.0+ declares `go 1.26.0` and v0.57.0 carries the x/crypto/ssh DoS
+fixes (CVE-2026-56855/-78662 — unreachable for Otedama either way, but
+keeping the advisory list clean is free). One new knob is pinned:
+`tlssecpmlkem=1` (see Active knobs).
+
 The `go` line is bumped roughly once a year, six months after each
 Go minor's release, on a dedicated PR. A `toolchain` line tracks the
 recommended build toolchain whenever it diverges from the `go` floor.
 
 ## Active knobs
 
-As of 2026-04-30:
+As of 2026-09-25:
 
 - **`tlsmlkem=1`** — explicitly enable hybrid post-quantum TLS key
   exchange (X25519MLKEM768) for outbound connections to price feeds.
@@ -77,8 +88,14 @@ As of 2026-04-30:
   downstream reviewers and survives future default flips. This knob
   was named `tlskyber` on the Go 1.23 draft (X25519Kyber768) and was
   renamed `tlsmlkem` in Go 1.24 when the construction was
-  standardized; our `go 1.25.0` floor therefore requires the new
+  standardized; our `go 1.26.0` floor therefore requires the new
   name (the old name is an "unknown godebug" build error on 1.24+).
+
+- **`tlssecpmlkem=1`** — keep Go 1.26's two additional hybrid
+  post-quantum TLS key exchanges (SecP256r1MLKEM768 and
+  SecP384r1MLKEM1024) enabled. They are default-on under a `go 1.26`
+  floor; the pin is explicit so the choice is visible to reviewers
+  alongside `tlsmlkem` and cannot silently flip on a future bump.
 
 - **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
   a synthetic non-nil error from `panic(nil)`, rather than reverting
@@ -131,7 +148,7 @@ pinned remote endpoint cannot tolerate the larger ClientHello, set
 on the default (`1`).
 
 - Added: Go 1.23 (Aug 2024) as `tlskyber`; renamed `tlsmlkem` in
-  Go 1.24 (Feb 2025). On the `go1.25.7` toolchain only `tlsmlkem`
+  Go 1.24 (Feb 2025). On the `go1.26.8` toolchain only `tlsmlkem`
   is recognized — `tlskyber` is a hard "unknown godebug" error.
 - Otedama impact: outbound TLS to Coinbase / Kraken / CoinGecko
   for price feeds. All three handle hybrid PQ ClientHello correctly

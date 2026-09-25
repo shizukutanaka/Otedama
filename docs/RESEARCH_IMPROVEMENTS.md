@@ -1075,6 +1075,49 @@ v0.48–v0.57 ceilings; GitHub releases (stratum-mining/stratum v1.11.1,
 bitaxeorg/ESP-Miner v2.15.x, stratum-mining/sv2-ui); Fedora/GHSA advisory
 text for CVE-2026-56855 / CVE-2026-78662.*
 
+## September 2026 research pass — session 257 increment
+
+1. ✅ **[FETCHED] `go 1.26.0` + `toolchain go1.26.8` + x/crypto v0.57.0 +
+   `tlssecpmlkem=1`.** Go 1.25 went end-of-life when Go 1.27 shipped
+   (Aug 2026) — the Go project supports only the two newest majors and
+   go.dev/dl now lists `go1.27.1`/`go1.26.8` alone — so 1.26 is the
+   oldest still-patched floor. The bump is also required: x/crypto
+   v0.56.0+ declares `go 1.26.0`, and v0.57.0 (2026-09-08) carries the
+   ssh DoS fixes noted unreachable in session 256, shrinking the
+   module-level advisory list for free. Go 1.26's new `tlssecpmlkem`
+   knob (SecP256r1MLKEM768 / SecP384r1MLKEM1024, default-on at this
+   floor) is pinned alongside `tlsmlkem`; the release's other new knobs
+   (`httpcookiemaxnum`, `urlmaxqueryparams`, `urlstrictcolons`,
+   `tracebacklabels`) don't touch Otedama's surfaces and default
+   correctly. (go.dev/dl, go.dev/doc/godebug, proxy.golang.org)
+2. ✅ **[FETCHED] SRI v1.12.0 applied client-side.** The 2026-09-17
+   release's channels_sv2 work bounds job storage **on every axis**
+   (future templates, past jobs, rejected/seen shares) and enforces
+   min_ntime bounds on validate_share for all channel types. Otedama's
+   analogues shipped this session: `jobsCap`/`storeJob` bounds the
+   outstanding-job map (a pool flooding `NewMiningJob` without rotating
+   the tip previously grew it unbounded — FIFO-evicting oldest-first
+   keeps the job a future tip will name), and `rejectClass` now
+   classifies the canonical `SubmitSharesError` error_codes SRI
+   standardized (`invalid-job-id`/`invalid-channel-id` → stale — the
+   pool retired the context, not a hardware fault; `difficulty-too-low`
+   → difficulty — the substring heuristic missed it entirely, and it is
+   now also eligible for the session-255 benign-retarget path;
+   `bad-extranonce-size`/version-rolling policy codes → other).
+   noise_sv2's v1.12.0 drop of AES-256-GCM leaving ChaCha20-Poly1305 as
+   the sole cipher confirms Otedama's existing single-cipher choice.
+3. ✅ **[FETCHED] ESP-Miner v2.15.3 — no structural delta.** Newest tag
+   (v2.15.2/v2.15.1 precede it); the difficulty-conversion and
+   reconnect-storm behaviors tracked since session 255 remain the
+   operative deltas.
+
+*Session-257 sources: go.dev/dl (supported-release list), go.dev/doc/
+godebug (Go 1.26/1.27 history), proxy.golang.org (@latest + go directives
+for x/crypto v0.56.0/v0.57.0, x/sys v0.48.0); GitHub releases
+(stratum-mining/stratum v1.12.0 notes + mining_sv2/common_messages_sv2
+error-code constants, bitaxeorg/ESP-Miner v2.15.x); sv2-spec
+03-Protocol-Overview §3.5 + 05-Mining-Protocol.*
+
 ---
 
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,

@@ -736,7 +736,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// known. Jobs without min_ntime are *future jobs*: they activate only
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
+	// The map is bounded at jobsCap via storeJob + jobFIFO so a pool that
+	// floods jobs without rotating the tip cannot grow memory unbounded.
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var jobFIFO []uint32
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -835,7 +838,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				var evicted uint32
+				var didEvict bool
+				jobFIFO, evicted, didEvict = storeJob(jobs, jobFIFO, j)
+				if didEvict {
+					opts.log("warn", fmt.Sprintf(
+						"engine: evicting job %d — outstanding pool jobs exceed %d", evicted, jobsCap))
+				}
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -873,8 +882,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
+				jobFIFO = jobFIFO[:0]
 				if named != nil {
 					jobs[p.JobID] = named
+					jobFIFO = append(jobFIFO, p.JobID)
 					ntime := p.MinNtime
 					if named.HasMinNtime && named.MinNtime > ntime {
 						ntime = named.MinNtime
@@ -1338,6 +1349,34 @@ func clampShareTarget(t miner.Hash, nBits uint32, havePrev bool) (miner.Hash, bo
 		return block, true
 	}
 	return t, false
+}
+
+// jobsCap bounds how many outstanding pool jobs the engine tracks at
+// once. A tip cycle realistically holds a handful of jobs (one active
+// plus the future jobs a pool pre-sends); SRI v1.12.0 bounds job storage
+// on every axis for the same reason — a pool flooding NewMiningJob
+// without rotating the tip must not grow memory without bound.
+const jobsCap = 64
+
+// storeJob inserts j into the bounded job set, returning the updated
+// insertion-order FIFO plus the evicted job's ID when the cap forced an
+// eviction. Eviction is oldest-first: the job a future SetNewPrevHash
+// will name is almost always the most recently sent one, and a job that
+// already started hashing keeps hashing from its own reference — losing
+// a map entry only means a later tip cannot name it. Re-sending an
+// existing job ID updates in place without consuming a second slot.
+func storeJob(jobs map[uint32]*stratum.NewMiningJob, fifo []uint32, j *stratum.NewMiningJob) (newFIFO []uint32, evicted uint32, didEvict bool) {
+	if _, seen := jobs[j.JobID]; !seen {
+		fifo = append(fifo, j.JobID)
+	}
+	jobs[j.JobID] = j
+	if len(fifo) > jobsCap {
+		evict := fifo[0]
+		fifo = fifo[1:]
+		delete(jobs, evict)
+		return fifo, evict, true
+	}
+	return fifo, 0, false
 }
 
 // updateWork points every worker at the given job, hashed against the

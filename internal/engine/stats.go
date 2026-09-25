@@ -254,6 +254,23 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 		miner.HashRateString(hashRate), shares))
 }
 
+// canonicalRejectReasons maps the standardized SubmitSharesError
+// error_code values (sv2-spec §3.5 / mining_sv2 lib.rs) to
+// (category, diagnosis). A job or channel the pool has retired is
+// staleness, not a hardware fault; version-rolling and extranonce-size
+// rejects are protocol-level, likewise not hardware.
+var canonicalRejectReasons = map[string][2]string{
+	"stale-share":                      {"stale", "likely cause: network latency / stale work"},
+	"invalid-job-id":                   {"stale", "likely cause: network latency / stale work"},
+	"invalid-channel-id":               {"stale", "likely cause: network latency / stale work"},
+	"duplicate-share":                  {"duplicate", "likely cause: firmware or connectivity (duplicate submission)"},
+	"difficulty-too-low":               {"difficulty", "likely cause: difficulty configuration or hardware error"},
+	"invalid-share":                    {"hardware", "likely cause: hardware error (failing chip / overheating)"},
+	"bad-extranonce-size":              {"other", "protocol-level reject — check pool configuration"},
+	"version-rolling-not-allowed":      {"other", "protocol-level reject — check pool configuration"},
+	"invalid-non-rollable-version-bit": {"other", "protocol-level reject — check pool configuration"},
+}
+
 // rejectClass categorises a pool's share-rejection reason. The category
 // string is short and stable, suitable as a metric label; the diagnosis
 // is the human-readable hint for logs. Both derive from the same
@@ -262,6 +279,14 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 // invalid→hardware.
 func rejectClass(reason string) (category, diagnosis string) {
 	r := strings.ToLower(reason)
+	// Canonical SubmitSharesError error_code values (sv2-spec §3.5 /
+	// mining_sv2 lib.rs): classify these by their protocol semantics
+	// rather than substring heuristics — e.g. "invalid-job-id" means the
+	// pool retired the job (staleness), not that hardware produced bad
+	// work, and "difficulty-too-low" does not contain "low difficulty".
+	if d, ok := canonicalRejectReasons[r]; ok {
+		return d[0], d[1]
+	}
 	switch {
 	case strings.Contains(r, "stale") || strings.Contains(r, "job not found") || strings.Contains(r, "unknown job"):
 		return "stale", "likely cause: network latency / stale work"
