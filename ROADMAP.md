@@ -108,15 +108,13 @@ BOLT12 受信器から、外部ノード制御 → 埋め込み LDK Node sidecar
 
 これらは **特定の外部イベント** が起きた時に着手します。今コミットしません。
 
-### v4.0.0 — Post-Quantum readiness (trigger: BIP-360 activation)
+### v4.0.0 — Post-Quantum readiness (trigger: post-quantum signature BIP activation)
 
-
-
-研究調査によれば BIP-360 (Pay-to-Quantum-Resistance) のBitcoin Core実装と活性化は **2028-2032** （±2年）。これが活性化したら:
+**訂正 (session 256, 検証済み)**: 本節が従来トリガーとしていた「BIP-360 (Pay-to-Quantum-Resistance) 活性化」は二重に誤り。BIP-360 の実体は **Pay-to-Merkle-Root (P2MR)** —— key-path spend を除いた Taproot 類似 output であり、**PQ 署名を一切規定しない**（BIP-360 本文が「PQ 署名は別提案で行う」と明記）。正しいトリガーは BIP-360 の後続として見込まれる**未執筆の別 BIP**（PQ 署名 spend path）の Bitcoin Core 実装と活性化であり、時期は **2028-2032**（±2年）と見積もられる（§v3.5 の crypto/mldsa 項の訂正と同一根拠）。これが活性化したら:
 
 - **default scheme を hybrid Schnorr+ML-DSA-65** に切替（v4.0）。
 - **legacy ECDSA address の生成を deprecation warning** 化、活性化+18ヶ月後に廃止。
-- **新規ウォレットは P2MR (Post-quantum Multi-Resistant) アドレス** をデフォルト発行。
+- **新規ウォレットは当該 BIP が規定する PQ 署名 output type** をデフォルト発行（従来記載の「P2MR (Post-quantum Multi-Resistant)」は誤り —— P2MR = Pay-to-Merkle-Root であり、それ自体に量子耐性はない）。
 
 研究レポートで明示されている通り、SHA-256d採掘自体はGroverアルゴリズムでも quadratic speedup しか得られず、量子コンピュータでも実機ASICの1000分の1程度。**採掘ホットパスはPQ移行の影響なし**。署名と鍵交換のレイヤのみ。
 

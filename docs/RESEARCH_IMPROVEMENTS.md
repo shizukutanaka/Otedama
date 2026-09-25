@@ -491,7 +491,7 @@ endpoint against current vendor documentation. Tags as before
    (ADR-011) add `VerifyServerCert(cert, authorityPubKey, clock.Now())`
    and a per-pool `authority_pubkey` config field.
    (sv2-spec 04-Protocol-Security.md)
-2. 🟡 **Clamp the channel target to `max_target` on every vardiff update.**
+2. ✅ **Clamp the channel target to `max_target` on every vardiff update.**
    SRI v1.5.0 fixed a real bug where low-hashrate miners got "stuck"
    because vardiff produced a target *easier* than the channel's declared
    `max_target`. In the V2 channel/job path clamp the effective target into
@@ -502,12 +502,17 @@ endpoint against current vendor documentation. Tags as before
    `internal/stratum/messages.go` now decodes `SetTarget{ChannelID,
    MaxTarget}`; the engine's session loop updates the live share target
    and re-issues the active job so workers compare against it immediately.
-   The clamp-to-`[min, max_target]` behavior this item originally asked
-   for is not yet implemented — Otedama accepts whatever target the pool
-   sends outright, since `OpenMiningChannel`'s `max_target` preference
-   field is intentionally not sent (see the dead-field note removed from
-   `OpenMiningChannel` in `internal/stratum/handshake.go`) — but the
-   message is no longer silently unrecognised, which was the blocking gap.
+   — ✅ **Client-side sanity bound implemented (session 256):** the original
+   item's `[min, max_target]` clamp is pool-side logic (SRI clamps vardiff
+   output to the channel's declared `max_target`; Otedama intentionally
+   sends no `max_target` preference, so that bound does not exist
+   client-side). The client-side analogue is now implemented:
+   `engine.clampShareTarget` bounds every pool-assigned target — both the
+   channel-open value (applied once the first `SetNewPrevHash` reveals
+   nBits) and each `SetTarget` — against the block target, since a zero
+   target or a target harder than a block solution can never be a
+   legitimate vardiff instruction. Covered by `TestClampShareTarget`
+   (unit) and `TestRunSession_SetTargetClampedToBlockTarget` (fake pool).
 3. 🟡 **Strip BIP141 (segwit) fields from the coinbase on Extended Jobs.**
    Also fixed in SRI v1.5.0: a client assembling the coinbase from
    `coinbase_tx_prefix`/`suffix` must hash the *non-witness* serialization
@@ -561,7 +566,7 @@ endpoint against current vendor documentation. Tags as before
    oldest notice rather than blocking the read loop. Unknown notifications
    (e.g. `mining.set_version_mask`) remain silently ignored. `parseShowMessage`
    is the pure decode function.
-6. 🟡 **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
+6. ✅ **Saturate/reset hashrate counters on reconnect.** ESP-Miner shipped a
    fix for hashrate-counter overflow on reconnect; garbage readings would
    poison `HashrateMonitor` and the arbitration yield estimate. Reset
    windowed counters on reconnect, use saturating `uint64` accumulators,
@@ -803,7 +808,7 @@ month, so the discipline matters.
    zero reachable vulnerabilities even at v0.23.0. **Action:** bump to v0.54.0
    as routine hygiene and re-run govulncheck to document the zero-reachable
    result. (pkg.go.dev/golang.org/x/crypto?tab=versions; pkg.go.dev/vuln/GO-2025-3487)
-3. 🟡 **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
+3. ✅ **[SNIPPET] `toolchain go1.24.0` predates the container-aware GOMAXPROCS
    that GODEBUG_NOTES.md relies on.** Container-aware `GOMAXPROCS` (reads the
    cgroup CPU limit on Linux) shipped in Go 1.25 (Aug 2025); the pinned
    toolchain is 1.24 (Feb 2025), so GODEBUG_NOTES.md's `containermaxprocs`
@@ -811,10 +816,11 @@ month, so the discipline matters.
    throttling under cgroup constraints" — describes a benefit not actually
    compiled in today. **Action:** bump `toolchain` to go1.25.x per the repo's
    own quarterly-toolchain policy. (go.dev/doc/go1.25)
-   — Updated premise (session 255): the `go` directive itself is now
-   `go 1.24.0` (x/crypto v0.48.0 required it) and the `toolchain` line
-   was dropped as redundant; re-adding `toolchain go1.25.x` is now a
-   clean floor-vs-recommended split again.
+   — **Done (session 256):** `go` directive → `go 1.25.0` +
+   `toolchain go1.25.7` re-added. Verified on go.dev/doc/godebug that only
+   the `go` directive compiles the new defaults — a toolchain line alone
+   never does — so the bump itself activates `containermaxprocs` and
+   `updatemaxprocs`, both also pinned explicitly in the godebug block.
 4. ✅ **[FETCHED] x/crypto stays mandatory — confirms ADR-003.** `crypto/pbkdf2`,
    `crypto/hkdf`, `crypto/mlkem` landed in stdlib (Go 1.24), but
    `chacha20poly1305` and `scrypt` remain x/crypto-only through Go 1.26, so the
@@ -824,7 +830,7 @@ month, so the discipline matters.
 
 ### Stratum V2 / Bitcoin (corrects roadmap/limitations wording)
 
-5. 🟡 **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
+5. ✅ **[FETCHED] decred secp256k1 v4.4.1 gives the curve ops but neither
    BIP-340 nor ElligatorSwift.** Its Schnorr subpackage is EC-Schnorr-DCRv0
    (Decred-custom), not BIP-340, and no ellswift package exists. SV2 mandates
    `Noise_NX_Secp256k1+EllSwift_ChaChaPoly_SHA256` (BIP324 64-byte ellswift
@@ -834,7 +840,10 @@ month, so the discipline matters.
    Go implementation exists)**, materially raising the estimate. **Action:**
    record this in an ADR-011 Erratum. (pkg.go.dev/github.com/decred/dcrd/dcrec/secp256k1/v4;
    raw.githubusercontent.com/stratum-mining/sv2-spec/main/04-Protocol-Security.md)
-6. 🟡 **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
+   — **Done (session 256 flip):** the ADR-011 Erratum ("added session 251,
+   does not alter the accepted decision") already records both gaps and the
+   raised estimate — the 🟡 marker was stale.
+6. ✅ **[FETCHED] BIP-360 is Status: Draft and specifies NO post-quantum
    signatures.** It is "Pay-to-Merkle-Root (P2MR)" — a Taproot-like output with
    the key-path spend removed — and explicitly defers PQ signatures to "a
    separate proposal." So coupling "BIP-360 activation" with "ML-DSA / P2MR
@@ -842,6 +851,12 @@ month, so the discipline matters.
    alone would not give the network ML-DSA, which is gated on a later,
    not-yet-written BIP — widening §5's uncertainty. **Action:** correct the §5
    / roadmap wording. (raw.githubusercontent.com/bitcoin/bips/master/bip-0360.mediawiki)
+   — **Done (sessions 251 + 256):** KNOWN_LIMITATIONS §5 and ROADMAP's
+   mldsa note corrected earlier; session 256 fixed the last stale remnant —
+   ROADMAP's v4.0.0 section still named the trigger "BIP-360
+   (Pay-to-Quantum-Resistance) activation" and expanded P2MR as
+   "Post-quantum Multi-Resistant". Now reads "post-quantum signature BIP
+   activation" with the P2MR misnomer corrected.
 7. ✅ **[FETCHED] Bitcoin Core v30.0 ships an experimental IPC Mining
    Interface.** Started via `bitcoin -m node -ipcbind=unix` (gated by
    `-DENABLE_IPC`), it lets SV2/other mining software request templates and
@@ -916,12 +931,16 @@ month, so the discipline matters.
 
 ### Lightning
 
-15. 🔵 **[FETCHED] LDK Node v0.7.0 (2025-12-03) adds experimental splicing +
+15. ✅ **[FETCHED] LDK Node v0.7.0 (2025-12-03) adds experimental splicing +
     async payments; BOLT12 already shipped.** Depends on rust-lightning v0.2,
     MSRV rustc 1.85. **Action:** target the v3.7 embedded sidecar at LDK Node
     ≥ v0.7.0 and record in ADR-007 that it is a Rust subprocess/FFI sidecar
     (not in-Go). (github.com/lightningdevkit/ldk-node/releases;
     lightningdevkit.org/blog/bolt12-has-arrived/)
+    — **Done (session 256 flip):** ADR-007's "Version target (session 251,
+    primary-source verified)" note already records ≥ v0.7.0 and the
+    sidecar-not-in-Go framing — the 🔵 marker was stale. The v3.7
+    implementation itself remains ADR-tracked.
 
 ### Could not verify (recorded honestly per CLAUDE.md "調査が必要")
 
@@ -1013,6 +1032,48 @@ are listed here.
    ssh/openpgp-package pattern already documented). `govulncheck` itself
    was missing from the environment — install added to the blueprint's
    initialize steps. (go.dev/security/vuln)
+
+## September 2026 research pass — session 256 increment
+
+1. ✅ **[FETCHED] `go 1.25.0` + `toolchain go1.25.7` + x/crypto v0.55.0.**
+   The session-251 item 3 action landed: the `go` directive was raised to
+   `go 1.25.0` (verified via go.dev/doc/go1.25 + go.dev/doc/godebug that
+   **only the `go` directive compiles new defaults** — a toolchain line
+   alone never activates them), activating container-aware `GOMAXPROCS`
+   (`containermaxprocs`) and its periodic re-read (`updatemaxprocs`), both
+   additionally pinned in the godebug block. x/crypto bumped to v0.55.0 —
+   the last go1.25-compatible release (v0.56.0+ requires `go 1.26.0`,
+   verified via the module proxy `go` directives); x/sys transitive to
+   v0.47.0.
+2. ✅ **[FETCHED] New x/crypto ssh CVEs are unreachable for Otedama.**
+   CVE-2026-56855 and CVE-2026-78662 (x/crypto/ssh DoS via crafted
+   channel messages, fixed in v0.56.0) sit in `ssh`/`agent` subpackages;
+   Otedama imports only `chacha20poly1305`, `scrypt`, and `ecdh` — the
+   same unreachable-module pattern as the earlier GO-2025-3487 batch.
+   Staying on the go1.25-compatible v0.55.0 line therefore carries no
+   reachable vuln. (Fedora/GHSA advisories via web search)
+3. ✅ **[FETCHED] SRI unchanged at v1.11.1; ESP-Miner v2.15.x has no
+   structural delta for Otedama.** Re-verified latest tags: SRI
+   v1.11.1 (2026-07-22, still newest) and ESP-Miner v2.15.2rc0/v2.15.1 —
+   the reconnect-storm and difficulty-conversion behaviors noted in
+   session 255 remain the operative deltas. Ecosystem note: a
+   `stratum-mining/sv2-ui` monitoring/wizard dashboard now exists —
+   informational only, no action.
+4. ✅ **Stale-marker corrections:** session-251 items 5 (ADR-011 Erratum
+   already records secp256k1 v4.4.1's BIP-340/ElligatorSwift gaps) and 15
+   (ADR-007's LDK ≥ v0.7.0 note) plus item 6 (BIP-360 → ROADMAP's last
+   "Pay-to-Quantum-Resistance" remnant fixed this session) and Category 9
+   item 6 (hashrate counters, implemented session 65) flipped 🟡/🔵 → ✅.
+5. ✅ **Cat-10 item 2 closed client-side:** `engine.clampShareTarget`
+   bounds pool-assigned share targets against the block target (zero or
+   harder-than-block values clamp with a warn) — the client counterpart
+   of SRI's server-side `max_target` clamp. See the item's own text.
+
+*Session-256 sources: go.dev/doc/go1.25, go.dev/doc/godebug (semantics of
+go-directive-gated defaults); proxy.golang.org go directives for x/crypto
+v0.48–v0.57 ceilings; GitHub releases (stratum-mining/stratum v1.11.1,
+bitaxeorg/ESP-Miner v2.15.x, stratum-mining/sv2-ui); Fedora/GHSA advisory
+text for CVE-2026-56855 / CVE-2026-78662.*
 
 ---
 

@@ -30,12 +30,16 @@ References:
 ## Otedama's `go.mod` baseline
 
 ```
-go 1.24.0
+go 1.25.0
+
+toolchain go1.25.7
 
 godebug (
+    containermaxprocs=1
     panicnil=0
     randautoseed=1
     tlsmlkem=1
+    updatemaxprocs=1
 )
 ```
 
@@ -46,14 +50,22 @@ pinned the build toolchain. In session 255 (Sep 2026) the `golang.org/x/crypto`
 bump to v0.48.0 — the last go1.24-compatible release — forced the `go`
 directive itself to `go 1.24.0`, and the Go tool dropped the `toolchain`
 line as now-redundant (a `toolchain` directive can only raise, never
-lower, the floor the `go` line sets). Users on toolchains older than
-1.24 can therefore no longer build Otedama — though in practice they
-could not since `tlsmlkem` landed anyway.
+lower, the floor the `go` line sets).
+
+In session 256 the `go` directive was raised to `go 1.25.0` — the
+ecosystem drift six-plus months after Go 1.25's release, matching the
+annual-bump cadence below — with `toolchain go1.25.7` re-added to pin
+the recommended build toolchain. The bump activates two runtime
+defaults Otedama wants (see `containermaxprocs`/`updatemaxprocs`
+under Active knobs): crucially, **only the `go` directive compiles new
+defaults in** — a `toolchain` line alone never changes them — and both
+knobs are pinned explicitly so they cannot silently flip on a future
+bump. Users on toolchains older than 1.25 can no longer build Otedama
+— though in practice they could not since `tlsmlkem` landed anyway.
 
 The `go` line is bumped roughly once a year, six months after each
-Go minor's release, on a dedicated PR. A `toolchain` line is re-added
-whenever the recommended build toolchain diverges from the `go` floor
-again (e.g. the planned go1.25.x bump for `containermaxprocs`, below).
+Go minor's release, on a dedicated PR. A `toolchain` line tracks the
+recommended build toolchain whenever it diverges from the `go` floor.
 
 ## Active knobs
 
@@ -65,8 +77,8 @@ As of 2026-04-30:
   downstream reviewers and survives future default flips. This knob
   was named `tlskyber` on the Go 1.23 draft (X25519Kyber768) and was
   renamed `tlsmlkem` in Go 1.24 when the construction was
-  standardized; our `go 1.24.0` floor therefore requires the new
-  name (the old name is an "unknown godebug" build error on 1.24).
+  standardized; our `go 1.25.0` floor therefore requires the new
+  name (the old name is an "unknown godebug" build error on 1.24+).
 
 - **`panicnil=0`** — keep Go 1.21+'s behavior of `recover()` returning
   a synthetic non-nil error from `panic(nil)`, rather than reverting
@@ -82,6 +94,19 @@ As of 2026-04-30:
   for anything security-relevant (`crypto/rand` is used there;
   `math/rand/v2` only for non-security uses), so this pin also has no
   observable effect today — same visibility rationale as `panicnil`.
+
+- **`containermaxprocs=1`** — `GOMAXPROCS` respects cgroup CPU limits
+  (Go 1.25+, default-on for `go` directives ≥1.25). A Kubernetes pod
+  with `cpu: 2` now schedules two P's instead of the host's core
+  count — directly relevant to CPU-mining throttling in containers.
+  The pin only makes the default explicit so a future `go`-directive
+  bump cannot silently flip it.
+
+- **`updatemaxprocs=1`** — the runtime periodically re-reads cgroup
+  CPU limits and adjusts `GOMAXPROCS` (Go 1.25+, default-on for `go`
+  directives ≥1.25), so a pod whose CPU limit is resized mid-flight
+  re-tunes its workers without a restart. Same explicit-pin
+  rationale as `containermaxprocs`.
 
 ## Knobs we may need in the next 10 years
 
@@ -106,7 +131,7 @@ pinned remote endpoint cannot tolerate the larger ClientHello, set
 on the default (`1`).
 
 - Added: Go 1.23 (Aug 2024) as `tlskyber`; renamed `tlsmlkem` in
-  Go 1.24 (Feb 2025). On the `go1.24.0` toolchain only `tlsmlkem`
+  Go 1.24 (Feb 2025). On the `go1.25.7` toolchain only `tlsmlkem`
   is recognized — `tlskyber` is a hard "unknown godebug" error.
 - Otedama impact: outbound TLS to Coinbase / Kraken / CoinGecko
   for price feeds. All three handle hybrid PQ ClientHello correctly
@@ -124,29 +149,6 @@ not need to know.
 - Added: Go 1.24.
 - Otedama impact: theoretical only.
 - Removal risk: medium-term (Go 1.27+).
-
-### `containermaxprocs` — `GOMAXPROCS` from container limits
-
-Go 1.25 introduced container-aware `GOMAXPROCS` defaults so that
-Otedama running in Kubernetes with `cpu: 2` no longer schedules
-NumCPU goroutines for the host's 64 cores. We rely on this for
-correct CPU mining throttling under cgroup constraints.
-
-- Added: Go 1.25 (Aug 2025).
-- **Not yet in effect (verified session 251; updated 255):** the `go`
-  directive is now `go 1.24.0` (raised in session 255 for x/crypto
-  v0.48.0), which still predates this feature — so the container-aware
-  default is **not compiled into current builds**. A Kubernetes miner
-  today still sees the host's full core count. This benefit only
-  materializes once a `toolchain go1.25.x` line is re-added (which is
-  now cleanly expressible, since the floor and the recommended toolchain
-  would genuinely diverge again). Tracked in RESEARCH_IMPROVEMENTS
-  session-251 item 3.
-- Otedama impact: positive once the toolchain bump lands — fixes a
-  class of "miner saturates noisy-neighbor pod limit" reports we
-  expect from Kubernetes users.
-- Removal risk: very low — this is a fix, not a deprecation. The
-  knob to revert (`containermaxprocs=0`) will exist for years.
 
 ### `winreadlinkvolume` — Windows symlink target paths
 

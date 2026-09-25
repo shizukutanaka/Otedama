@@ -10,6 +10,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 256 — 一次情報源検証パス: **go1.25 系ツールチェイン移行でコンテナ認識 GOMAXPROCS を有効化し、プール割当ターゲットの下限サニティを実装**)
+
+外部一次情報（go.dev/doc/go1.25・godebug 文書、proxy.golang.org の
+go ディレクティブ、stratum-mining/stratum・ESP-Miner リリース、
+x/crypto 脆弱性アドバイザリ）を再検証し、セッション251以来滞留していた
+toolchain 項目を実装、あわせて Cat-10 item 2 のクライアント側対応物を
+設計・実装した。
+
+**1. `go 1.25.0` + `toolchain go1.25.7` + x/crypto v0.55.0**（session-251
+item 3 → ✅）。go.dev/doc/go1.25 と godebug 文書で一次検証した通り、
+コンテナ認識 `GOMAXPROCS`（`containermaxprocs`）とその定期再読込
+（`updatemaxprocs`）の新デフォルトは **`go` ディレクティブ ≥1.25 の
+場合のみコンパイル時に有効化**され、`toolchain` 行単独では絶対に
+有効にならない —— よって本バンプ自体が GODEBUG_NOTES が「入っている
+前提」で記述していた利益を初めて実際に有効化する（cgroup CPU limit
+配下の Kubernetes pod がホストの全コア数ではなく limit 分の P を
+スケジュールし、limit の途中変更も再起動なしで反映される）。両ノブは
+将来の `go` バンプで既定値が暗黙に反転しないよう godebug ブロックにも
+明示ピンした。x/crypto は **v0.55.0**（go ≤1.25 を維持する最終版 —
+v0.56+ は `go 1.26.0` 要求を proxy の go ディレクティブで確認）へ
+v0.48.0 から更新、x/sys は推移的に v0.41.0 → v0.47.0。新規に公表された
+ssh 系 CVE（CVE-2026-56855 / CVE-2026-78662、v0.56.0 修正）は
+`ssh`/`agent` サブパッケージのみで、Otedama の import は
+`chacha20poly1305`/`scrypt`/`ecdh` のみのため到達不能 —— 既存パターンと
+同じく v0.55.0 維持で実害なし。
+
+**2. プール割当シェアターゲットの下限サニティ**（RESEARCH_IMPROVEMENTS
+Cat-10 item 2 → ✅、SRI v1.5.0 max_target クランプのクライアント側対応物）。
+SRI はサーバ側で vardiff 出力をチャネル宣言の `max_target` にクランプする
+（Otedama は `OpenMiningChannel.max_target` を意図的に送らないため同じ
+境界は存在しない）が、クライアント側に意味のある境界は **ブロック
+ターゲット** —— ゼロ値やブロック解より厳しいターゲットは正当な
+vardiff 指示になりえない。`engine.clampShareTarget` が全プール割当
+ターゲット（チャネル開始値は最初の `SetNewPrevHash` で nBits が判明
+した時点、以降の `SetTarget` は受信都度）をブロックターゲットに対し
+検査し、超過時はブロックターゲットへクランプして warn ログを出す。
+従来は `updateWork` のゼロフォールバックだけが存在し、`shareTarget`
+変数そのものがセンチネル値を保持し続けてリジェクト分類とも不整合に
+なり得た。**テスト追加2件**: `TestClampShareTarget`（ユニット —
+easier/block/harder/zero/no-prev/invalid-nBits の7ケース）と
+`TestRunSession_SetTargetClampedToBlockTarget`（フェイクプールが
+`2^248`（nBits 0x207fffff のブロックターゲット ~2^255 より厳しい）の
+SetTarget を送信 —— クランプなしならシェアが出ない条件で、
+`sharesAccepted > 0` をセッション不変条件として主張）。
+
+**3. ドキュメント乖離の解消**. ROADMAP §v4.0.0 の最後に残っていた
+「BIP-360 (Pay-to-Quantum-Resistance)」呼称と「P2MR (Post-quantum
+Multi-Resistant)」誤展開を修正 —— BIP-360 の実体は Pay-to-Merkle-Root
+（PQ 署名は別 BIP と明記）であり、トリガーは「post-quantum signature
+BIP activation」へ訂正（§v3.5 mldsa 項・KNOWN_LIMITATIONS §5 の訂正と
+同一根拠）。GODEBUG_NOTES のベースライン節を `go 1.25.0`+`toolchain
+go1.25.7` 構成へ書換え、`containermaxprocs` を「未発効」節から
+Active knobs へ移動し `updatemaxprocs` を新設。KNOWN_LIMITATIONS の
+Go バージョン参照を ≥1.25 へ更新（CI 失敗モードは不変 —— Go <1.25 は
+`go.mod` を parse できない）。RESEARCH_IMPROVEMENTS の stale marker を
+修正（items 3/5/6/15、Cat-9 #6、Cat-10 #2 → ✅）し、session-256
+インクリメント節を追記（x/crypto 版上限、新 ssh CVE 到達不能、SRI
+v1.11.1 不変、ESP-Miner v2.15.x、sv2-ui の存在）。
+
+---
+
 ### Fixed (session 255 — 一次情報源検証パス: **難易度遷移中の「リジェクト過剰計上」を是正し、依存の保守状態を実害が出る前に是正**)
 
 外部一次情報（stratum-mining/stratum SRIリリース、bitaxeorg/ESP-Miner、

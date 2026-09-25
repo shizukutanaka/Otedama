@@ -863,6 +863,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				prevHash = p.PrevHash
 				prevNBits = p.NBits
 				havePrev = true
+				// The channel-open share target was assigned before the
+				// tip's nBits was known, so the harder-than-block sanity
+				// bound can only be applied now.
+				if clamped, changed := clampShareTarget(shareTarget, prevNBits, true); changed {
+					shareTarget = clamped
+					opts.log("warn", "engine: channel share target harder than block target; clamped to block target")
+				}
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
@@ -886,7 +893,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SetTarget != nil {
-				shareTarget = miner.Hash(pm.msg.SetTarget.MaxTarget)
+				t := miner.Hash(pm.msg.SetTarget.MaxTarget)
+				if clamped, changed := clampShareTarget(t, prevNBits, havePrev); changed {
+					opts.log("warn", "engine: pool share target harder than block target; clamped to block target")
+					shareTarget = clamped
+				} else {
+					shareTarget = t
+				}
 				if active != nil && havePrev {
 					// Re-issue the current job so workers compare against
 					// the new share target immediately.
@@ -1293,6 +1306,40 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 	return err
 }
 
+// clampShareTarget bounds a pool-assigned share target against the block
+// target implied by the tip's nBits. Pool share targets are normally far
+// easier than the block target, but a zero value or a target harder than
+// the block target can never be a legitimate vardiff instruction —
+// grinding hashes above the block target pays the pool nothing the block
+// target itself would not. Both clamp to the block target; values at or
+// easier than it pass through unchanged. (The zero case also matches the
+// "unset" sentinel updateWork already falls back on; clamping here keeps
+// the engine-wide shareTarget free of sentinel values so reject
+// classification compares against the real bound.) Evaluating the bound
+// needs the tip's nBits, so callers pass havePrev=false before the first
+// SetNewPrevHash and the pool value is taken as-is — including when nBits
+// itself fails to decode.
+//
+// This is the client-side counterpart of the SRI v1.5.0 channels_sv2 fix
+// that clamps vardiff output to the declared channel max_target: SRI
+// clamps server-side, Otedama clamps the incoming value.
+func clampShareTarget(t miner.Hash, nBits uint32, havePrev bool) (miner.Hash, bool) {
+	if !havePrev {
+		return t, false
+	}
+	block, err := miner.TargetFromNBits(nBits)
+	if err != nil {
+		return t, false
+	}
+	// block.LessOrEqual(t) means t is easier than or equal to the block
+	// target — the whole legitimate range. Anything below it (including a
+	// zero target) is harder than a block solution and clamps up.
+	if !block.LessOrEqual(t) {
+		return block, true
+	}
+	return t, false
+}
+
 // updateWork points every worker at the given job, hashed against the
 // current chain tip (prevHash + network prevNBits) at timestamp ntime,
 // comparing hashes against shareTarget — the POOL-ASSIGNED share
@@ -1309,7 +1356,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

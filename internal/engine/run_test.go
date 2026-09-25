@@ -2198,6 +2198,13 @@ type responsivePool struct {
 	// easy epoch) followed by SubmitSharesError("Above target") — a
 	// mid-flight retarget reject; every later share is accepted.
 	retargetRejects bool
+	// impossibleRetarget sends a SetTarget whose max_target is *harder*
+	// than the block target (nBits 0x207fffff ≈ 2^255) right after the
+	// channel's first prev-hash — a value no legitimate vardiff would
+	// ever produce. The engine's clampShareTarget must bound it to the
+	// block target so shares keep flowing; without the clamp the workers
+	// would grind an effectively-impossible target and submit nothing.
+	impossibleRetarget bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2297,6 +2304,16 @@ func (fp *responsivePool) serve() {
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
+
+	if fp.impossibleRetarget {
+		// MaxTarget[31] is the most significant byte: 0x01 << 248 is
+		// harder than the block target derived from nBits 0x207fffff
+		// (~2^255), i.e. a target no real pool would ever assign.
+		st := stratum.SetTarget{ChannelID: 1}
+		st.MaxTarget[31] = 0x01
+		payload, _ = st.Encode()
+		fp.emit(conn, stratum.MsgSetTarget, true, payload)
+	}
 
 	// Read shares and respond accordingly
 	shareCount := 0
@@ -2627,6 +2644,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2644,5 +2662,110 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestClampShareTarget covers the client-side sanity bound on
+// pool-assigned share targets (the counterpart of SRI v1.5.0's
+// server-side clamp to the channel max_target): a zero target and a
+// target harder than the block target both clamp to the block target,
+// while every legitimate value passes through — and nothing is bounded
+// before the tip's nBits is known.
+func TestClampShareTarget(t *testing.T) {
+	const nBits = 0x207fffff // regtest-style easiest target (~2^255)
+	block, err := miner.TargetFromNBits(nBits)
+	if err != nil {
+		t.Fatalf("TargetFromNBits(%#x): %v", nBits, err)
+	}
+
+	var easy miner.Hash
+	for i := range easy {
+		easy[i] = 0xFF
+	}
+	harder := block
+	harder[31]-- // one MSB below the block target = harder than a block solve
+
+	cases := []struct {
+		name        string
+		t           miner.Hash
+		nBits       uint32
+		havePrev    bool
+		want        miner.Hash
+		wantChanged bool
+	}{
+		{"easy target passes through", easy, nBits, true, easy, false},
+		{"block target passes through", block, nBits, true, block, false},
+		{"harder-than-block clamps", harder, nBits, true, block, true},
+		{"zero clamps to block", miner.Hash{}, nBits, true, block, true},
+		{"no prev yet: passes through", harder, nBits, false, harder, false},
+		{"no prev yet: zero passes through", miner.Hash{}, nBits, false, miner.Hash{}, false},
+		{"invalid nBits: passes through", harder, 0x01, true, harder, false},
+	}
+	for _, c := range cases {
+		got, changed := clampShareTarget(c.t, c.nBits, c.havePrev)
+		if got != c.want || changed != c.wantChanged {
+			t.Errorf("%s: clampShareTarget = (%x, %v), want (%x, %v)",
+				c.name, got, changed, c.want, c.wantChanged)
+		}
+	}
+}
+
+// TestRunSession_SetTargetClampedToBlockTarget exercises the clamp end to
+// end: the pool pushes a SetTarget harder than the block target, and the
+// session must keep producing shares because the engine bounds the pool's
+// value to the block target instead of grinding the impossible one.
+func TestRunSession_SetTargetClampedToBlockTarget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	fp.impossibleRetarget = true
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.sharesAccepted.Value() > 0 {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if got := m.sharesAccepted.Value(); got == 0 {
+		t.Error("sharesAccepted = 0 — engine ground an impossible share target instead of clamping to the block target")
 	}
 }
