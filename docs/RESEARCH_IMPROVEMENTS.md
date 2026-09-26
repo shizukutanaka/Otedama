@@ -1413,6 +1413,29 @@ github.com/stratum-mining/sv2-spec, stratumprotocol.org [both 200].*
 
 ---
 
+## September 2026 research pass — session 265 increment
+
+1. ✅ **Second unbounded job store closed (SRI v1.12.0 lesson,
+   continued from session 257):** the `stratumv2` adapter's readLoop
+   `pending` map — which collects NewMiningJob frames between
+   SetNewPrevHash tips — had no bound. A hostile/compromised pool
+   (Noise encrypts the transport, so the threat actor is the pool
+   itself, not a MitM) flooding distinct JobIDs without rotating the
+   tip could grow memory without limit. Bounded at `pendingCap` = 64
+   with the same oldest-first FIFO eviction as the engine's
+   `storeJob`; tip rotation still resets the map, and the named job is
+   re-inserted so a just-evicted ID cannot wedge emission. Threat
+   model's job-flood entry now covers both stores.
+   Tests: `TestStorePending_BoundsMap`, `TestReadLoop_FloodedPendingJobs`
+   (real read loop over net.Pipe, flood + tip, newest job still emits).
+2. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8, x/crypto v0.57.0 — unchanged since session 264.
+
+*Session-265 sources: github.com/stratum-mining/stratum releases.atom,
+bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin

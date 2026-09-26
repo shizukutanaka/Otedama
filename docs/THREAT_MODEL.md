@@ -267,7 +267,13 @@ configuration.
 
 **Mitigation:** Job channel is bounded (buffer size 32). The worker
 picks the newest job, dropping older ones. Share submission is also
-channel-bounded.
+channel-bounded. Every job *store* upstream of the channel is bounded
+too: the engine's jobs map is capped at `jobsCap` = 64 with oldest-first
+eviction (session 257), and the `stratumv2` adapter's `pending` map —
+which collects NewMiningJob frames between SetNewPrevHash tips — is
+capped at the same `pendingCap` = 64 (session 265), so a pool flooding
+distinct job IDs without rotating the tip cannot grow memory without
+bound.
 
 **Residual risk:** Legitimate high-throughput pools may trigger drops.
 The design tradeoff favors freshness (no stale share penalty) over

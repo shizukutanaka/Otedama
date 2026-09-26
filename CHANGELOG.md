@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 265 — **stratumv2 アダプタの pending マップを bounded 化（SRI v1.12.0 のジョブ格納上限を第二のストアへも適用）**)
+
+- `internal/poolproto/stratumv2` の read loop が持つ `pending` マップ
+  （SetNewPrevHash 間の NewMiningJob 待避所）は無制限だった ——
+  異なる JobID で NewMiningJob を連投し tip を回さない敵対・
+  侵害済みプールがメモリを無制限に膨張させ得た（Noise 暗号化
+  経路のため純粋な経路改竄では不可 —— 脅威主体はプール側）。
+  エンジン側 `jobsCap` と同じ 64・最古優先追放（`storePending`）で
+  上限化。テスト: `TestStorePending_BoundsMap`（ヘルパー境界）＋
+  `TestReadLoop_FloodedPendingJobs`（net.Pipe 越しの実 read loop
+  でフラッド後に最新ジョブが発行されることを確認）。
+
 ### Docs (session 264 — 一次情報源検証パス: **リサーチ項目の統合・グラウンディング一括着地 — 8項目 → ✅**)
 
 arXiv 一次情報を全件再検証（6 ID すべて arxiv.org で題名一致）した上で、

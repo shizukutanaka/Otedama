@@ -5,6 +5,7 @@ package stratumv2
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
 	"testing"
@@ -184,6 +185,110 @@ func TestNegotiate_EmitsJobOnlyAfterSetNewPrevHash(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("no job emitted within 3s after SetNewPrevHash")
+	}
+}
+
+// TestStorePending_BoundsMap asserts the pending map never exceeds
+// pendingCap regardless of how many distinct job IDs arrive, that
+// eviction is oldest-first, and that re-sending a known ID updates in
+// place without consuming a slot.
+func TestStorePending_BoundsMap(t *testing.T) {
+	pending := make(map[uint32]*stratum.NewMiningJob)
+	var fifo []uint32
+
+	for id := uint32(1); id <= pendingCap+10; id++ {
+		fifo = storePending(pending, fifo, &stratum.NewMiningJob{JobID: id})
+	}
+	if len(pending) != pendingCap {
+		t.Fatalf("len(pending) = %d, want %d", len(pending), pendingCap)
+	}
+	if len(fifo) != pendingCap {
+		t.Fatalf("len(fifo) = %d, want %d", len(fifo), pendingCap)
+	}
+	if _, ok := pending[1]; ok {
+		t.Error("oldest job 1 should have been evicted")
+	}
+	if _, ok := pending[pendingCap+10]; !ok {
+		t.Error("newest job should have been kept")
+	}
+
+	// Re-sending an existing ID updates in place — no extra slot.
+	last := pending[pendingCap+10]
+	fifo = storePending(pending, fifo, &stratum.NewMiningJob{JobID: pendingCap + 10, Version: 0x20000002})
+	if len(pending) != pendingCap || len(fifo) != pendingCap {
+		t.Fatalf("re-insert grew the set: pending=%d fifo=%d", len(pending), len(fifo))
+	}
+	if pending[pendingCap+10] == last {
+		t.Error("re-insert should replace the stored job")
+	}
+}
+
+// TestReadLoop_FloodedPendingJobs drives the real read loop over a
+// net.Pipe: a hostile pool sends pendingCap+10 distinct NewMiningJob
+// frames and never rotates the tip — then names the most recent job in
+// a SetNewPrevHash. The most recent job must still be emittable (the
+// flood must not silently drop live work) and the loop must not hang.
+func TestReadLoop_FloodedPendingJobs(t *testing.T) {
+	client, server := net.Pipe()
+	sess := &session{
+		conn:   &connection{raw: client, remoteAddr: "fake:3336", protocol: poolproto.ProtocolStratumV2},
+		dec:    stratum.NewDecoder(client),
+		jobsCh: make(chan poolproto.Job, 8),
+	}
+
+	writeJob := func(id uint32) {
+		job := stratum.NewMiningJob{ChannelID: 7, JobID: id, Version: 0x20000000}
+		payload, err := job.Encode()
+		if err != nil {
+			return
+		}
+		f, err := stratum.WrapMessage(stratum.MsgNewMiningJob, true, payload)
+		if err != nil {
+			return
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			return
+		}
+		_, _ = server.Write(data)
+	}
+
+	go func() {
+		for id := uint32(1); id <= pendingCap+10; id++ {
+			writeJob(id)
+		}
+		prev := stratum.SetNewPrevHash{
+			ChannelID: 7, JobID: pendingCap + 10,
+			MinNtime: 0x66000000, NBits: 0x1d00ffff,
+		}
+		payload, err := prev.Encode()
+		if err != nil {
+			return
+		}
+		f, err := stratum.WrapMessage(stratum.MsgSetNewPrevHash, true, payload)
+		if err != nil {
+			return
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			return
+		}
+		_, _ = server.Write(data)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	sess.start(ctx)
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		want := fmt.Sprintf("%d", pendingCap+10)
+		if job.JobID != want {
+			t.Errorf("JobID = %q, want %q (newest job must survive the flood)", job.JobID, want)
+		}
+	case <-ctx.Done():
+		t.Fatal("most recent job was not emittable after a pending flood")
 	}
 }
 

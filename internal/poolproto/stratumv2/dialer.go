@@ -183,6 +183,30 @@ type session struct {
 	startOnce sync.Once
 }
 
+// pendingCap bounds how many unanswered NewMiningJob frames can sit in
+// the read loop's pending map between SetNewPrevHash tips. The ceiling
+// matches the engine's jobsCap: a pool flooding distinct job IDs
+// without rotating the tip must not grow memory without bound (SRI
+// v1.12.0 bounds job storage on every axis for the same reason).
+const pendingCap = 64
+
+// storePending inserts j into the bounded pending set, returning the
+// updated insertion-order FIFO. Eviction is oldest-first: the job a
+// future SetNewPrevHash will name is almost always the most recently
+// sent one. Re-sending an existing job ID updates in place without
+// consuming a second slot.
+func storePending(pending map[uint32]*stratum.NewMiningJob, fifo []uint32, j *stratum.NewMiningJob) []uint32 {
+	if _, seen := pending[j.JobID]; !seen {
+		fifo = append(fifo, j.JobID)
+	}
+	pending[j.JobID] = j
+	if len(fifo) > pendingCap {
+		delete(pending, fifo[0])
+		fifo = fifo[1:]
+	}
+	return fifo
+}
+
 // start launches the read loop that decodes NewMiningJob frames and
 // forwards them onto jobsCh. The loop exits on read error, ctx
 // cancellation, or connection close, closing jobsCh on the way out.
@@ -199,6 +223,7 @@ func (s *session) readLoop(ctx context.Context) {
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
 	pending := make(map[uint32]*stratum.NewMiningJob)
+	var pendingFIFO []uint32
 	var prevHash [32]byte
 	var prevNBits uint32
 	havePrev := false
@@ -236,7 +261,7 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
-			pending[j.JobID] = j
+			pendingFIFO = storePending(pending, pendingFIFO, j)
 			if j.HasMinNtime && havePrev {
 				if !emit(j, j.MinNtime, false) {
 					return
@@ -251,8 +276,10 @@ func (s *session) readLoop(ctx context.Context) {
 			havePrev = true
 			named := pending[p.JobID]
 			pending = map[uint32]*stratum.NewMiningJob{}
+			pendingFIFO = pendingFIFO[:0]
 			if named != nil {
 				pending[p.JobID] = named
+				pendingFIFO = append(pendingFIFO, named.JobID)
 				ntime := p.MinNtime
 				if named.HasMinNtime && named.MinNtime > ntime {
 					ntime = named.MinNtime
