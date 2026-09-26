@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 274 — 一次情報源検証パス: **SV2 バッチ受理の `shares_accepted` 過少計上**)
+
+- `internal/engine`: `SubmitSharesSuccess` 1 件を常に受理+1 と
+  カウントしていた問題を修正 —— プールは 1 メッセージで複数 submit を
+  まとめて受理できる（`NewSubmitsAccepted`）。明示カウントがあれば
+  それを、なければローカルで ack 済みと観測した件数を計上。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

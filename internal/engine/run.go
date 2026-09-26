@@ -890,19 +890,31 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.log("info", "engine: share target updated by pool")
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
-				opts.log("info", "engine: share accepted")
-				if opts.m != nil {
-					opts.m.sharesAccepted.Inc()
-				}
 				// Settle round-trip latency for every submitted share up
-				// to LastSequenceNumber, then drop those entries.
+				// to LastSequenceNumber, then drop those entries. The
+				// pool may batch-acknowledge: NewSubmitsAccepted carries
+				// how many submits this message accepts, so counting one
+				// accept per message would undercount.
 				now := time.Now()
 				last := pm.msg.SubmitSharesSuccess.LastSequenceNumber
+				var settled uint64
 				for seq, sent := range submitTimes {
 					if seq <= last {
 						latency.Record(float64(now.Sub(sent).Microseconds()) / 1000.0)
 						delete(submitTimes, seq)
+						settled++
 					}
+				}
+				n := uint64(pm.msg.SubmitSharesSuccess.NewSubmitsAccepted)
+				if n == 0 {
+					// Pool sent no explicit count; locally observed
+					// settlements are the floor — every acked share was
+					// accepted even if the field is unpopulated.
+					n = settled
+				}
+				opts.log("info", fmt.Sprintf("engine: share accepted (+%d)", n))
+				if opts.m != nil && n > 0 {
+					opts.m.sharesAccepted.Add(n)
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
@@ -1269,7 +1281,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

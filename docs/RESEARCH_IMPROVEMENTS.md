@@ -926,6 +926,18 @@ Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
 
+## September 2026 research pass — session 274 increment
+
+1. ✅ **[OBSERVED→FIXED] SV2 batch-accept undercount:** each
+   `SubmitSharesSuccess` incremented `shares_accepted` by 1, but a pool
+   may batch-acknowledge N submits per message — `NewSubmitsAccepted`
+   carries the count (sv2-spec MiningProtocol). Now credited correctly;
+   falls back to locally-observed settled sequence numbers when the
+   field is unpopulated.
+2. ✅ **[FETCHED] Ecosystem check:** unchanged.
+
+---
+
 *Session-51 additions (June 2026): arXiv (2309.06847 undetectable selfish
 mining; 2211.07270 block-withholding resilience; 2601.02496 APoW; 2601.14612
 ROSS randomized spot scheduling; 2601.09042 SCaLE switching-cost bandit;
