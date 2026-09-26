@@ -32,6 +32,18 @@ type arbitrationLoopOpts struct {
 	hysteresisPct float64 // 0 uses defaultHysteresisPct
 	minYield      float64 // 0 disables the per-device profitability floor
 
+	// powerWatts/powerPricePerKWh/rateSource, when all set, add a derived
+	// profitability floor on top of minYield: the per-device share of the
+	// configured power draw is converted to sats/sec at the current BTC/USD
+	// rate and arbitration must clear max(minYield, that breakeven) before
+	// routing a device to a stream. It is the reward-vs-constraint half of
+	// the bi-criteria formulation — yield is maximized only subject to the
+	// power-cost constraint (RESEARCH_IMPROVEMENTS Category 6 item 6).
+	// rateSource may be nil; the derived floor is then always 0.
+	powerWatts       float64
+	powerPricePerKWh float64
+	rateSource       provider.RateSource
+
 	// activityMu/activity, when both non-nil, receive the TUI-facing
 	// provider status: after each Decide() this loop rewrites activity to
 	// exactly the providers with a live (non-idle) assignment this cycle,
@@ -55,6 +67,32 @@ const defaultHysteresisPct = 0.05
 // exists (RESEARCH_IMPROVEMENTS Category 5 item 3). The window is generous
 // (3–6× the quote cadence) so ordinary jitter never prunes a live provider.
 const streamStaleTimeout = 3 * time.Minute
+
+// powerFloor returns the per-device power-breakeven yield floor in
+// sats/sec: the configured system power cost (powerWatts/1000 × price
+// $/kWh, in USD/hour) is converted to sats/sec at the current BTC/USD
+// rate and split evenly across the devices arbitration manages. Returns
+// 0 — no floor — when power data is unconfigured, no rate is available,
+// or there are no devices. Splitting evenly is exact for a single-device
+// rig and an approximation for heterogeneous multi-device rigs (per-device
+// power draw is not yet measured; document power_watts as the dominant
+// device's draw if strict per-device gating is needed).
+func (o *arbitrationLoopOpts) powerFloor() float64 {
+	if o.powerWatts <= 0 || o.powerPricePerKWh <= 0 || len(o.devRefs) == 0 {
+		return 0
+	}
+	var rate float64
+	if o.rateSource != nil {
+		rate, _ = o.rateSource.BTCUSDRate()
+	}
+	if rate <= 0 {
+		return 0
+	}
+	usdPerHour := o.powerWatts / 1000 * o.powerPricePerKWh
+	floor := provider.SatsPerSecond(usdPerHour, rate) / float64(len(o.devRefs))
+	o.metrics.powerBreakevenFloor.Set(floor)
+	return floor
+}
 
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
 // or whenever a fresh quote arrives. Blocks until ctx is cancelled or
@@ -96,13 +134,17 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if margin == 0 {
 				margin = defaultHysteresisPct
 			}
+			minYield := opts.minYield
+			if pf := opts.powerFloor(); pf > minYield {
+				minYield = pf
+			}
 			alloc, err := arbitration.Decide(arbitration.Input{
 				Devices:            opts.devRefs,
 				Streams:            streams,
 				Previous:           prevAlloc,
 				Policy:             arbitration.PolicyMaximizeEarnings,
 				HysteresisMargin:   margin,
-				MinYieldSatsPerSec: opts.minYield,
+				MinYieldSatsPerSec: minYield,
 			})
 			if err != nil {
 				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
@@ -143,7 +185,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			if alloc.SkippedDevice != prevSkipped {
 				if alloc.SkippedDevice > 0 {
 					opts.log("info", fmt.Sprintf(
-						"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
+						"arbitration: %d device(s) now idle (no viable stream, or below the effective profitability floor)",
 						alloc.SkippedDevice))
 				} else {
 					opts.log("info", "arbitration: all devices now have a viable stream")

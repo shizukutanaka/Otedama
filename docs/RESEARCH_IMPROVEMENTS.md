@@ -228,9 +228,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to all workload switches (mining ↔ AI). Validation rejects values outside
    [0.0, 1.0). (session 108)
 7. 🔵 **Sharpe-ratio preference** to favour stable yield — ADR-010 A5.
-8. 🟡 **Inference revenue is denominated/settled correctly** — verify USD→BTC
-   conversion path and that simulated vs real yield is never mixed in
-   accounting.
+8. ✅ **Inference revenue is denominated/settled correctly** — verified
+   (session 261): both providers emit sats/sec; the mining path is BTC-native
+   (hashrate share × block reward, no USD involvement — the fetched rate only
+   feeds quote freshness/confidence), and Akash converts USD/hour → sats/sec
+   via the tested `SatsPerSecond` helper. Simulated yield is never mixed
+   silently: the provider name carries a load-bearing "(simulated)" suffix
+   shown in the TUI/logs/`config show`, and its fixed-midpoint quote is
+   documented in KNOWN_LIMITATIONS. Cleaned up the dead rate fallback in
+   `MiningProvider.publish`.
 9. 🔵 **Akash bid/lease lifecycle management** (deposit, close) — ADR-010 A4.
 10. ❌ **Custodial escrow of inference earnings** — out (non-custodial).
 
@@ -252,10 +258,17 @@ arXiv grounding (collected sessions 40–41 and here):
    near-logarithmic regret for bipartite user↔resource matching with
    Markov state; directly models device↔stream assignment when yields are
    autocorrelated. New grounding for A3's dynamics.
-6. 🟡 **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
+6. ✅ **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
    transforms offline bi-criteria approximations into online CMAB with
    sublinear regret *and* sublinear constraint violation; the right frame
    if Otedama ever optimises yield subject to a hard power cap.
+   **Landed the constraint half** (session 261): `power_watts` ×
+   `electricity_price_per_kwh` ÷ BTC/USD now derives a per-device yield
+   floor (sats/sec), applied as `max(min_yield_sats_per_sec, floor)` in the
+   arbitration loop each round, so yield is maximised *subject to* the
+   power-cost constraint without hand-computing thresholds. Exposed as
+   `otedama_power_breakeven_floor_sats_per_second`. A hard wattage cap
+   (throttling) remains out of scope pending the 7-stage workflow.
 7. 🔵 **Holt-Winters short-horizon forecaster** — ADR-010 A1 (chosen over ML).
 8. 🔵 **Switching-cost ledger** — ADR-010 A2 (don't churn for tiny gains).
 9. 🔵 **Beta-Bernoulli calibration** — ADR-010 A6.
@@ -448,8 +461,14 @@ arXiv grounding (session 41):
 7. 🔵 **Tor-by-default transport** — ADR-007 B7, also mitigates item 6.
 8. 🔵 **Post-quantum scheme scaffolding** (ML-DSA/SPHINCS+) — ADR-006,
    conditional on BIP-360.
-9. 🟡 **Constant-time comparison audit** for any secret/MAC comparisons in the
-   handshake and seed paths (use `crypto/subtle`).
+9. ✅ **Constant-time comparison audit** (session 261): audited the
+   handshake, seed, and crypto paths — no `==`/`bytes.Equal` comparison on
+   secrets or MACs exists anywhere. AEAD tag checks live inside the audited
+   primitives (`chacha20poly1305.Open`, AES-GCM `Open`); the fingerprint HMAC
+   is never compared; `bytes.Equal` appears only on the non-secret Base58
+   checksum; the secp256k1 backend is a stub returning
+   `ErrSchemeNotImplemented`, so no verification path exists yet. Nothing to
+   change; revisit when item 1 (real secp256k1) lands.
 10. 🟡 **Supply-chain: pin and verify the one new crypto dep** (item 1) with a
     checksum and `go.sum`, and document it in THREAT_MODEL's dependency
     assumptions.
@@ -1212,6 +1231,42 @@ go.dev/dl mode=json, proxy.golang.org.*
 
 *Session-260 sources: sv2-spec 05-Mining-Protocol.md §5.3.13,
 github.com/*/releases.atom feeds, go.dev/dl, proxy.golang.org.*
+
+---
+
+## September 2026 research pass — session 261 increment
+
+1. ✅ **Cat-6 item 6 — power-cost constraint landed** (bi-criteria bandit,
+   arXiv:2503.12285): `power_watts` and `electricity_price_per_kwh`
+   previously fed metrics only — a rig could mine at a power loss unless
+   the operator hand-computed `curtail_below_btc_usd` or
+   `min_yield_sats_per_sec`. Now `arbitrationLoopOpts.powerFloor()`
+   derives the per-device breakeven (`powerWatts/1000 × price $/h` →
+   sats/sec via `provider.SatsPerSecond` ÷ managed devices) and the loop
+   applies `max(minYield, floor)` each round — recomputed live so a BTC
+   drawdown tightens the constraint automatically. New gauge
+   `otedama_power_breakeven_floor_sats_per_second`. Tests:
+   `TestArbitrationLoopOpts_PowerFloor` (6 disabled-input cases +
+   arithmetic + even-split) and
+   `TestRunArbitrationLoop_PowerFloorIdlesDevice` (stream below breakeven
+   → `otedama_devices_idle` = 1).
+2. ✅ **Cat-5 item 8 — denomination audit passed:** mining yield is
+   BTC-native (hashrate/network × reward), Akash USD/hour → sats/sec via
+   the tested `SatsPerSecond`; "(simulated)" suffix prevents mixing
+   simulated and real yield. Removed the dead `rate` fallback in
+   `MiningProvider.publish` (the rate was fetched, clamped, then
+   discarded — only freshness drives confidence).
+3. ✅ **Cat-10 item 9 — constant-time comparison audit passed:** no
+   secret/MAC comparison outside audited primitives exists (AEAD `Open`
+   internally constant-time; fingerprint HMAC never compared; Base58
+   `bytes.Equal` is non-secret; secp256k1 is a stub). Revisit when the
+   real secp256k1 backend lands (Cat-10 item 1).
+4. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8, x/crypto v0.57.0 — unchanged since session 258.
+
+*Session-261 sources: arXiv:2503.12285 (bi-criteria CMAB grounding),
+repo-internal audits (denomination path, secret-comparison surface),
+github.com/*/releases.atom feeds.*
 
 ---
 

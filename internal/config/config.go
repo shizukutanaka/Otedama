@@ -145,9 +145,15 @@ type Config struct {
 	// whose best available workload is below the floor — useful on mixed rigs
 	// where a weak device should stop while stronger ones keep earning.
 	//
-	// 0 disables the floor (default): every positive-yield stream qualifies.
-	// Negative values are rejected by Validate(). Set via
-	// OTEDAMA_MIN_YIELD_SATS_PER_SEC or config file.
+	// The effective floor is max(this value, the power-breakeven floor derived
+	// from PowerWatts × ElectricityPricePerKWh ÷ BTC/USD): setting the power
+	// fields alone is enough to stop devices that cannot cover their share of
+	// the electricity bill, without hand-computing a sats/sec threshold.
+	//
+	// 0 disables the static floor (default): every positive-yield stream
+	// qualifies unless the derived power floor is higher. Negative values are
+	// rejected by Validate(). Set via OTEDAMA_MIN_YIELD_SATS_PER_SEC or config
+	// file.
 	MinYieldSatsPerSec float64 `yaml:"min_yield_sats_per_sec"`
 
 	// PowerWatts is the user's estimated total system power draw in watts.
@@ -157,8 +163,15 @@ type Config struct {
 	// Power measurement from hardware sensors is not yet available; this
 	// field lets users enter their measured TDP or wall-meter reading.
 	//
-	// 0 disables the metric (default). Negative values are rejected.
-	// Set via OTEDAMA_POWER_WATTS or config file.
+	// Together with ElectricityPricePerKWh it also derives a per-device
+	// arbitration floor: a stream must clear the device's share of the
+	// electricity bill (in sats/sec at the current BTC/USD rate) before a
+	// device is routed to it — see `otedama_power_breakeven_floor_sats_per_second`.
+	// On multi-device rigs the configured draw is split evenly across devices;
+	// set it to the dominant device's draw for strict per-device gating.
+	//
+	// 0 disables the metrics and the derived floor (default). Negative values
+	// are rejected. Set via OTEDAMA_POWER_WATTS or config file.
 	PowerWatts float64 `yaml:"power_watts"`
 
 	// ElectricityPricePerKWh is the user's electricity price in USD per
@@ -170,8 +183,12 @@ type Config struct {
 	// lacks — "valuable" workload selection is measured in gross sats, but what
 	// the operator keeps is revenue minus power cost.
 	//
-	// 0 disables the cost metric (default). Negative values are rejected.
-	// Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config file.
+	// With PowerWatts also set, the pair derives the power-breakeven
+	// profitability floor described on MinYieldSatsPerSec.
+	//
+	// 0 disables the cost metric and the derived floor (default). Negative
+	// values are rejected. Set via OTEDAMA_ELECTRICITY_PRICE_PER_KWH or config
+	// file.
 	ElectricityPricePerKWh float64 `yaml:"electricity_price_per_kwh"`
 
 	// HTTPAddr is the address for the /metrics, /healthz, and /readyz HTTP

@@ -10,6 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 261 — 一次情報源検証パス: **電力コスト由来の収益フロアを裁定に導入（Cat-6 item 6 → ✅）＋ 2件の監査完了**)
+
+`power_watts` と `electricity_price_per_kwh` はこれまでメトリクス専用
+だったため、ユーザーが `curtail_below_btc_usd`（損益分岐BTC価格）や
+`min_yield_sats_per_sec`（損益分岐 sats/s）を手計算しない限り、電気代
+割れの採掘を止める手段がなかった。bi-criteria bandit（arXiv:2503.12285、
+報酬＋制約違反）の「制約」側を実装：
+
+- `arbitrationLoopOpts.powerFloor()` がデバイス毎の損益分岐フロアを
+  導出（powerWatts/1000 × price $/h → `provider.SatsPerSecond` で
+  sats/sec 換算 → 管理デバイス数で等分）。裁定ループは各ラウンドで
+  `max(min_yield_sats_per_sec, floor)` を適用 —— BTC 価格変動で制約が
+  自動的に追随する。
+- 新メトリクス `otedama_power_breakeven_floor_sats_per_second`（未設定時
+  0）。SPECIFICATION §3.1/§6 同期済み。
+- テスト: `TestArbitrationLoopOpts_PowerFloor`（無効入力6ケース＋
+  算術＋等分割）、`TestRunArbitrationLoop_PowerFloorIdlesDevice`
+  （損益分岐未満のストリームはデバイスをアイドル化）。
+
+監査2件（いずれも問題なしでクローズ）：
+
+- Cat-5 item 8 ✅ 収益の建値監査: 採掘収量は BTC 建てネイティブ、
+  Akash は USD/h → sats/s 変換（`SatsPerSecond` テスト済み）、
+  「(simulated)」接尾辞で模擬収益の混同を防止。`MiningProvider.publish`
+  の未使用 rate フォールバックを除去。
+- Cat-10 item 9 ✅ 恒定時間比較監査: 秘密情報/MAC の `==`/`bytes.Equal`
+  比較は存在せず（AEAD `Open` は内部で恒定時間、指紋 HMAC は比較対象外、
+  Base58 チェックサムは非秘密、secp256k1 はスタブ）。Cat-10 item 1
+  （実 secp256k1 実装）着地時に再監査。
+
 ### Changed (session 260 — 一次情報源検証パス: **SV2 SubmitSharesSuccess のバッチ受理カウントを正しく処理（Cat-1 item 10 → ✅）**)
 
 sv2-spec §5.3.13 を再検証: `new_submits_accepted_count` はバッチ単位
