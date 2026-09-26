@@ -237,7 +237,11 @@ configuration.
 
 **Mitigation:** Job channel is bounded (buffer size 32). The worker
 picks the newest job, dropping older ones. Share submission is also
-channel-bounded.
+channel-bounded. Outstanding V2 job state is likewise bounded:
+`jobsCap` (engine loop) and `pendingCap` (stratumv2 adapter) cap the
+outstanding-job maps at 64 with oldest-first eviction, so a pool
+flooding distinct `NewMiningJob` IDs without rotating the tip cannot
+grow memory without limit.
 
 **Residual risk:** Legitimate high-throughput pools may trigger drops.
 The design tradeoff favors freshness (no stale share penalty) over

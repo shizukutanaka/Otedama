@@ -724,6 +724,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	latency := NewLatencyTracker(256)
 	submitTimes := make(map[uint32]time.Time)
 	const submitTimesCap = 1024
+	// jobsCap bounds outstanding pool-supplied jobs; a flood of distinct
+	// NewMiningJob IDs without a matching SetNewPrevHash is otherwise an
+	// unbounded memory growth vector.
+	const jobsCap = 64
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -732,6 +736,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// when a SetNewPrevHash names their job_id. SetNewPrevHash also
 	// invalidates every other outstanding job (they extend a stale tip).
 	jobs := make(map[uint32]*stratum.NewMiningJob)
+	// jobFIFO tracks insertion order so storeJob can evict the oldest job
+	// once jobsCap is reached; a pool flooding distinct job IDs without
+	// rotating the tip cannot grow memory without limit.
+	var jobFIFO []uint32
 	var active *stratum.NewMiningJob // job the workers are currently hashing
 	var prevHash [32]byte
 	var prevNBits uint32
@@ -830,7 +838,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
-				jobs[j.JobID] = j
+				var evicted uint32
+				var didEvict bool
+				jobFIFO, evicted, didEvict = storeJob(jobs, jobFIFO, j, jobsCap)
+				if didEvict {
+					opts.log("warn", fmt.Sprintf(
+						"engine: evicting job %d — outstanding pool jobs exceed %d", evicted, jobsCap))
+				}
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -861,8 +875,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				// The new tip invalidates every job except the one it names.
 				named := jobs[p.JobID]
 				jobs = map[uint32]*stratum.NewMiningJob{}
+				jobFIFO = jobFIFO[:0]
 				if named != nil {
 					jobs[p.JobID] = named
+					jobFIFO = append(jobFIFO, p.JobID)
 					ntime := p.MinNtime
 					if named.HasMinNtime && named.MinNtime > ntime {
 						ntime = named.MinNtime
@@ -1269,7 +1285,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1369,6 +1386,24 @@ func parseHost(url string) (string, error) {
 		return "", fmt.Errorf("engine: %w", err)
 	}
 	return host, nil
+}
+
+// storeJob inserts j into the bounded outstanding-jobs map, evicting the
+// oldest entry (FIFO) once the cap is reached. Returns the updated fifo
+// and the evicted job's ID. A re-sent job ID refreshes in place without
+// counting twice against the cap.
+func storeJob(jobs map[uint32]*stratum.NewMiningJob, fifo []uint32, j *stratum.NewMiningJob, limit int) (newFIFO []uint32, evicted uint32, didEvict bool) {
+	if _, exists := jobs[j.JobID]; !exists {
+		fifo = append(fifo, j.JobID)
+	}
+	jobs[j.JobID] = j
+	for len(fifo) > limit {
+		evictID := fifo[0]
+		fifo = fifo[1:]
+		delete(jobs, evictID)
+		evicted, didEvict = evictID, true
+	}
+	return fifo, evicted, didEvict
 }
 
 func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }

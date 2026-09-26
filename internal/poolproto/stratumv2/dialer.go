@@ -199,6 +199,9 @@ func (s *session) readLoop(ctx context.Context) {
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
 	pending := make(map[uint32]*stratum.NewMiningJob)
+	// pendingFIFO tracks insertion order so a flood of distinct job IDs
+	// without a tip rotation can be bounded at pendingCap.
+	var pendingFIFO []uint32
 	var prevHash [32]byte
 	var prevNBits uint32
 	havePrev := false
@@ -236,7 +239,14 @@ func (s *session) readLoop(ctx context.Context) {
 		}
 		if msg.NewMiningJob != nil {
 			j := msg.NewMiningJob
+			if _, exists := pending[j.JobID]; !exists {
+				pendingFIFO = append(pendingFIFO, j.JobID)
+			}
 			pending[j.JobID] = j
+			for len(pendingFIFO) > pendingCap {
+				delete(pending, pendingFIFO[0])
+				pendingFIFO = pendingFIFO[1:]
+			}
 			if j.HasMinNtime && havePrev {
 				if !emit(j, j.MinNtime, false) {
 					return
@@ -251,8 +261,10 @@ func (s *session) readLoop(ctx context.Context) {
 			havePrev = true
 			named := pending[p.JobID]
 			pending = map[uint32]*stratum.NewMiningJob{}
+			pendingFIFO = pendingFIFO[:0]
 			if named != nil {
 				pending[p.JobID] = named
+				pendingFIFO = append(pendingFIFO, p.JobID)
 				ntime := p.MinNtime
 				if named.HasMinNtime && named.MinNtime > ntime {
 					ntime = named.MinNtime
@@ -305,6 +317,11 @@ func (s *session) SuggestedDifficulty() float64 {
 func (s *session) Close() error { return s.conn.Close() }
 
 // ----- helpers -----
+
+// pendingCap bounds the adapter's outstanding-job map; a pool flooding
+// distinct NewMiningJob IDs without rotating the tip cannot grow memory
+// without limit. Matches the engine loop's jobsCap.
+const pendingCap = 64
 
 // Compile-time interface satisfaction checks.
 var (

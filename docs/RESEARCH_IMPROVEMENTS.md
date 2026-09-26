@@ -926,6 +926,19 @@ Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
 
+## September 2026 research pass — session 273 increment
+
+1. ✅ **[OBSERVED→FIXED] V2 outstanding-job maps bounded:** both stores
+   keyed by pool-controlled job_id were unbounded — the engine's live V2
+   loop `jobs` map and the stratumv2 adapter's `pending` map. A hostile
+   pool flooding distinct `NewMiningJob` IDs without rotating the tip
+   could grow memory without limit (Noise encrypts the wire, so the
+   actor is the pool itself). `jobsCap`/`pendingCap` = 64 with
+   oldest-first FIFO eviction + warn log.
+2. ✅ **[FETCHED] Ecosystem check:** unchanged.
+
+---
+
 *Session-51 additions (June 2026): arXiv (2309.06847 undetectable selfish
 mining; 2211.07270 block-withholding resilience; 2601.02496 APoW; 2601.14612
 ROSS randomized spot scheduling; 2601.09042 SCaLE switching-cost bandit;

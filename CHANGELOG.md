@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 273 — 一次情報源検証パス: **V2 未処理ジョブ map の無制限化をバウンド**)
+
+- `internal/engine` + `internal/poolproto/stratumv2`: プール制御
+  `job_id` でキー付けされる V2 未処理ジョブ map（live loop の `jobs`、
+  adapter の `pending`）が無制限だった問題を修正 —— tip を回さず
+  異なる `NewMiningJob` を連投する悪意プールによるメモリ枯渇。
+  `jobsCap`/`pendingCap` = 64、最古 FIFO 追放＋warn。THREAT_MODEL に記録。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

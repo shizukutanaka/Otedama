@@ -2447,6 +2447,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2464,5 +2465,46 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestStoreJob_BoundsOutstandingJobs covers the FIFO eviction that keeps a
+// pool flooding distinct NewMiningJob IDs from growing the jobs map
+// without limit.
+func TestStoreJob_BoundsOutstandingJobs(t *testing.T) {
+	jobs := make(map[uint32]*stratum.NewMiningJob)
+	var fifo []uint32
+	const limit = 4
+
+	for i := uint32(0); i < limit+3; i++ {
+		var didEvict bool
+		fifo, _, didEvict = storeJob(jobs, fifo, &stratum.NewMiningJob{JobID: i}, limit)
+		if i < limit && didEvict {
+			t.Fatalf("job %d: unexpected eviction below cap", i)
+		}
+	}
+	if len(jobs) != limit {
+		t.Errorf("len(jobs) = %d, want %d", len(jobs), limit)
+	}
+	if len(fifo) != limit {
+		t.Errorf("len(fifo) = %d, want %d", len(fifo), limit)
+	}
+	// Oldest evicted first: jobs 0,1,2 gone; 3..6 retained.
+	for _, gone := range []uint32{0, 1, 2} {
+		if _, ok := jobs[gone]; ok {
+			t.Errorf("job %d should have been evicted", gone)
+		}
+	}
+	for _, kept := range []uint32{3, 4, 5, 6} {
+		if _, ok := jobs[kept]; !ok {
+			t.Errorf("job %d should be retained", kept)
+		}
+	}
+
+	// Re-sending an existing ID refreshes in place without a second fifo slot.
+	before := len(fifo)
+	fifo, _, didEvict := storeJob(jobs, fifo, &stratum.NewMiningJob{JobID: 4}, limit)
+	if didEvict || len(fifo) != before || len(jobs) != limit {
+		t.Errorf("re-send of job 4: didEvict=%v fifo=%d jobs=%d", didEvict, len(fifo), len(jobs))
 	}
 }
