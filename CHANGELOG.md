@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 262 — 一次情報源検証パス: **V1 `extranonce2_size` のメモリDoS修正 ＋ パーサファズ新設（SRI lessons item 1 → ✅）**)
+
+SRI の fuzz 助成金で発見された noise_sv2 算術オーバーフロー事例を
+クライアント側の等価面へ適用した監査で、実バグを発見・修正：
+
+- Stratum V1 の `extranonce2_size`（`mining.subscribe` 応答と
+  `mining.set_extranonce` 通知の両入口）が無制限のまま
+  `strings.Repeat("00", size)` へ流れ、Submit 毎に巨大メモリアロケート
+  可能だった（悪意あるプール／平文V1上のMitMにより submit 毎 ~2GiB）。
+  `maxExtranonce2Size = 64`（実プールは 4–8 バイト、coinbase scriptSig
+  上限 100B に十分な余裕）で両パーサと Submit の二度防御で範囲外を拒否。
+- V1 パーサ群にファズを新設（`FuzzV1Parsers`）: parseNotify /
+  parseDifficulty / parseSetExtranonce / parseShowMessage /
+  parseReconnect / parseSubscribeResult —— 30秒 620万 exec、クラッシュなし、
+  サイズ不変条件を全入力で検証。
+- THREAT_MODEL.md の DoS 節に脅威・緩和策・残存リスクを追記。
+- ユニットテスト: `TestParseSetExtranonce_SizeBounds` /
+  `TestParseSubscribeResult_SizeBounds`（0/4/64/65/−1/1GiB 境界）。
+
 ### Changed (session 261 — 一次情報源検証パス: **電力コスト由来の収益フロアを裁定に導入（Cat-6 item 6 → ✅）＋ 2件の監査完了**)
 
 `power_watts` と `electricity_price_per_kwh` はこれまでメトリクス専用

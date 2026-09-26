@@ -763,7 +763,7 @@ endpoint against current vendor documentation. Tags as before
 
 Four verified items that *update* earlier entries with newer reality.
 
-1. 🟡 **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
+1. ✅ **Fuzz the Noise/frame length arithmetic for overflow (SRI lesson).** SRI
    is now at v1.6.0 with roles split into `stratum-mining/sv2-apps`, and an
    early-2026 security-tooling grant (Lucas Balieiro) found — via 24/7
    fuzzing — an **arithmetic overflow in the `noise_sv2` crate**, since fixed;
@@ -773,6 +773,14 @@ Four verified items that *update* earlier entries with newer reality.
    overflow-focused fuzz seeds to the existing `FuzzDecodeHeader` /
    `FuzzDecoder_ReadFrame` and a new fuzz target over the encrypted-frame
    length prefix; assert no `int`/`uint32` overflow or huge allocation.
+   **Session 262:** audited the Noise length path (u16 length prefix is
+   inherently ≤ `maxNoiseFrame` — no overflow reachable) and added
+   `FuzzV1Parsers` covering every V1 server→client parser. The audit found a
+   real bug in the class SRI warned about: pool-controlled
+   `extranonce2_size` flowed unbounded into `strings.Repeat` on every
+   `mining.submit` — a per-submit memory-exhaustion vector. Bounded at both
+   negotiation entry points (`maxExtranonce2Size` = 64) plus a defense-in-depth
+   sink guard in `Submit`; boundary + huge-value unit tests added.
    (opensats.org/projects/stratumv2; github.com/stratum-mining/sv2-apps)
 2. 🔵 **JDC/template decentralisation just got more urgent: ~75% of hashrate
    committed to SV2 (May 2026).** Seven pools (Foundry, AntPool, F2Pool,
@@ -1267,6 +1275,32 @@ github.com/*/releases.atom feeds, go.dev/dl, proxy.golang.org.*
 *Session-261 sources: arXiv:2503.12285 (bi-criteria CMAB grounding),
 repo-internal audits (denomination path, secret-comparison surface),
 github.com/*/releases.atom feeds.*
+
+---
+
+## September 2026 research pass — session 262 increment
+
+1. ✅ **June-session item 1 closed — and it found a real bug.** Auditing
+   the surfaces the SRI noise_sv2 overflow warning named: the Noise
+   length path is provably safe (u16 prefix ≤ `maxNoiseFrame`; the
+   existing `FuzzEncryptedConn_Read` covers it), so the remaining gap was
+   the V1 JSON-RPC parser layer — which had no fuzz coverage at all.
+   New `FuzzV1Parsers` exercises `parseNotify`, `parseDifficulty`,
+   `parseSetExtranonce`, `parseShowMessage`, `parseReconnect`, and
+   `parseSubscribeResult` with panic-freedom + bounded-size invariants.
+   The audit — not the fuzzer — surfaced the vulnerability:
+   pool-controlled `extranonce2_size` reached `strings.Repeat("00", sz)`
+   in `Submit` unbounded → a hostile pool (or MitM on cleartext V1)
+   could force a ~2 GiB allocation per share submit. Fixed by bounding
+   `[0, maxExtranonce2Size]` (=64) in both parsers plus a sink-side
+   guard; unit tests cover 0/4/64/65/−1/1 GiB boundaries on both entry
+   points. THREAT_MODEL documents it under Denial of Service.
+2. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8, x/crypto v0.57.0 — unchanged since session 258.
+
+*Session-262 sources: repo-internal audit of `internal/poolproto/stratumv1`
+length arithmetic (SRI fuzz-grant lesson applied to the client-side
+analogue), github.com/*/releases.atom feeds.*
 
 ---
 

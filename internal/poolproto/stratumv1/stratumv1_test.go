@@ -617,6 +617,54 @@ func TestParseSetExtranonce_P1NonInt_NotOK(t *testing.T) {
 	}
 }
 
+// Session 262: extranonce2_size reaches strings.Repeat on every Submit —
+// an unbounded pool-supplied value is a per-submit memory-exhaustion
+// vector, so sizes outside [0, maxExtranonce2Size] must be rejected.
+func TestParseSetExtranonce_SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		ok   bool
+		sz   int
+	}{
+		{"zero", `["abc", 0]`, true, 0},
+		{"typical", `["abc", 4]`, true, 4},
+		{"boundary", `["abc", 64]`, true, 64},
+		{"over boundary", `["abc", 65]`, false, 0},
+		{"negative", `["abc", -1]`, false, 0},
+		{"huge (DoS)", `["abc", 1073741824]`, false, 0},
+	} {
+		_, sz, ok := parseSetExtranonce(json.RawMessage(tc.raw))
+		if ok != tc.ok {
+			t.Errorf("%s: ok = %v, want %v", tc.name, ok, tc.ok)
+			continue
+		}
+		if ok && sz != tc.sz {
+			t.Errorf("%s: size = %d, want %d", tc.name, sz, tc.sz)
+		}
+	}
+}
+
+func TestParseSubscribeResult_SizeBounds(t *testing.T) {
+	// Boundary and over-boundary sizes on the subscribe-response path.
+	okResult := []any{[]any{[]any{"mining.notify", "id1"}}, "aabb", float64(64)}
+	if _, sz, err := parseSubscribeResult(okResult); err != nil || sz != 64 {
+		t.Errorf("size 64: sz=%d err=%v, want 64/nil", sz, err)
+	}
+	badResult := []any{[]any{[]any{"mining.notify", "id1"}}, "aabb", float64(65)}
+	if _, _, err := parseSubscribeResult(badResult); err == nil {
+		t.Error("size 65 should be rejected")
+	}
+	negResult := []any{[]any{[]any{"mining.notify", "id1"}}, "aabb", float64(-2)}
+	if _, _, err := parseSubscribeResult(negResult); err == nil {
+		t.Error("negative size should be rejected")
+	}
+	hugeResult := []any{[]any{[]any{"mining.notify", "id1"}}, "aabb", float64(1e9)}
+	if _, _, err := parseSubscribeResult(hugeResult); err == nil {
+		t.Error("1e9 size should be rejected")
+	}
+}
+
 // ============================================================================
 // Dialer — extra error paths
 // ============================================================================

@@ -245,6 +245,26 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** A malicious pool negotiates an absurd `extranonce2_size`
+(Stratum V1 `mining.subscribe` / `mining.set_extranonce`), which the
+client then repeats into a hex padding string on every share submit —
+a per-submit memory-exhaustion vector (e.g. size = 1 GiB → ~2 GiB
+allocation per `mining.submit`).
+
+**Mitigation:** `extranonce2_size` is bounded at both negotiation entry
+points (`parseSetExtranonce`, `parseSubscribeResult`) to
+`[0, maxExtranonce2Size]` where `maxExtranonce2Size` = 64 — generous
+headroom over the 4–8 bytes real pools use, since the value lives
+inside the ≤100-byte coinbase scriptSig. `Submit` re-checks the bound
+before allocating (defense in depth). `FuzzV1Parsers` asserts no parser
+ever yields an out-of-range size.
+
+**Residual risk:** A pool negotiated within the bound can still send
+marginal values (e.g. 64 bytes) that produce odd shares the pool then
+rejects — a reject-rate signal, not a memory risk.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.

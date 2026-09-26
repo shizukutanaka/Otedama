@@ -335,7 +335,15 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
-		// Pad to extranonce2_size if the worker passed empty.
+		// Pad to extranonce2_size if the worker passed empty. The size is
+		// pool-controlled: refuse to allocate when it escaped the parse-time
+		// bound (defense in depth — both parsers already enforce
+		// maxExtranonce2Size, but a future writer must not reach Repeat).
+		if s.extranonce2Size < 0 || s.extranonce2Size > maxExtranonce2Size {
+			return poolproto.ShareResult{}, fmt.Errorf(
+				"stratumv1: negotiated extranonce2_size %d out of range [0, %d]",
+				s.extranonce2Size, maxExtranonce2Size)
+		}
 		en2 = strings.Repeat("00", s.extranonce2Size)
 	}
 	params := []any{

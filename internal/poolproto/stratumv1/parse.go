@@ -101,8 +101,18 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	return p[0], true
 }
 
+// maxExtranonce2Size bounds the negotiated extranonce2 byte count. Real
+// pools use 4–8 bytes (it lives inside the ≤100-byte coinbase scriptSig);
+// 64 is generous headroom. The bound matters because the value flows into
+// strings.Repeat on every share submit — an unbounded pool-supplied size
+// is a per-submit memory-exhaustion vector (SRI noise_sv2 overflow lesson,
+// RESEARCH_IMPROVEMENTS session-262 item 1).
+const maxExtranonce2Size = 64
+
 // parseSetExtranonce decodes mining.set_extranonce params:
-// [extranonce1_hex, extranonce2_size_int].
+// [extranonce1_hex, extranonce2_size_int]. Sizes outside
+// [0, maxExtranonce2Size] are rejected — the notification is ignored and
+// the previously negotiated size stays in force.
 func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 	var p []json.RawMessage
 	if err := json.Unmarshal(raw, &p); err != nil || len(p) < 2 {
@@ -114,6 +124,9 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 		return "", 0, false
 	}
 	if err := json.Unmarshal(p[1], &sz); err != nil {
+		return "", 0, false
+	}
+	if sz < 0 || sz > maxExtranonce2Size {
 		return "", 0, false
 	}
 	return en1, sz, true
@@ -200,7 +213,11 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
 	}
-	return en1, int(en2SizeF), nil
+	en2Size = int(en2SizeF)
+	if en2Size < 0 || en2Size > maxExtranonce2Size {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %d out of range [0, %d]", en2Size, maxExtranonce2Size)
+	}
+	return en1, en2Size, nil
 }
 
 // ----- helpers -----
