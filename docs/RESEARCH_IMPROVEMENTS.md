@@ -1150,21 +1150,41 @@ error-code constants, bitaxeorg/ESP-Miner v2.15.x); sv2-spec
    API is rate-limited unauthenticated); go.dev/dl unchanged at
    go1.27.1/go1.26.8; x/crypto @latest unchanged at v0.57.0. No new
    advisories surfaced for the imported surface.
-4. 🔍 **[OBSERVED] Two timing-dependent test flakes surfaced in
-   full-suite runs this session (both pass in isolation, code paths
-   unchanged):** `TestRunSession_RetargetRejectExcludedFromRejectRate`
-   can count a genuine `difficulty` reject when the fake pool rejects a
-   share issued *after* the retarget (issued == current → not benign —
-   correct classification, test races); and
-   `TestSetupWallet_MnemonicNeverReachesLogger` can false-positive when a
-   randomly generated BIP39 word (24/2048 draws) collides with fixed log
-   prose such as "recovery phrase" (~10% per run). Recorded as an issue
-   rather than patched: candidate fixes are excluding the static log
-   strings from the word-collision check and constraining the fake
-   pool's reject window to pre-retarget shares — maintainer decision.
+4. ✅ **[OBSERVED→FIXED in session 259] Two timing-dependent test flakes
+   surfaced in full-suite runs:** (a) `responsivePool`'s
+   `retargetRejects`/`impossibleRetarget` flags were plain bools written
+   by the test goroutine while `serve()` reads them on its own
+   goroutine — a genuine data race (now `atomic.Bool`); and
+   (b) `TestSetupWallet_MnemonicNeverReachesLogger` could false-positive
+   when a random BIP39 word (24/2048 draws) collided with fixed log
+   prose — "phrase" matching "recovery phrase" (~10% per run); the test
+   now strips the two constant wallet-setup lines before scanning, so a
+   real leak in any dynamic log line is still caught.
 
 *Session-258 sources: github.com/*/releases.atom feeds (stratum-mining/
 stratum, bitaxeorg/ESP-Miner), go.dev/dl mode=json, proxy.golang.org.*
+
+## September 2026 research pass — session 259 increment
+
+1. ✅ **Fixed the two test flakes recorded as session-258 OBSERVED item
+   4:** (a) `responsivePool.retargetRejects`/`impossibleRetarget` are now
+   `atomic.Bool` — the test goroutine arms them while `serve()` reads
+   them on its own goroutine, a real data race on a `-race` suite;
+   (b) `TestSetupWallet_MnemonicNeverReachesLogger` strips the two
+   constant wallet-setup log lines before the whole-word scan, so a
+   random BIP39 draw colliding with fixed prose ("recovery phrase")
+   can't false-positive while a genuine leak in dynamic output still
+   trips the test. Verified: both tests green ×10 under `-race`.
+2. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0 and ESP-Miner v2.15.3
+   remain newest; go.dev/dl unchanged (go1.27.1/go1.26.8); x/crypto
+   @latest v0.57.0. New since last pass: DATUM Gateway v0.4.1beta
+   (bugfix-only release, nothing affecting Otedama's poolproto surface)
+   and Bitcoin Core v32.0rc2 — a release *candidate*, tracked for the
+   mining-IPC changes when v32 final ships.
+
+*Session-259 sources: github.com/*/releases.atom feeds (stratum-mining/
+stratum, bitaxeorg/ESP-Miner, OCEAN-xyz/datum_gateway, bitcoin/bitcoin),
+go.dev/dl mode=json, proxy.golang.org.*
 
 ---
 

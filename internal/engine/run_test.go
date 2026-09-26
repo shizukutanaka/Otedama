@@ -1569,7 +1569,22 @@ func TestSetupWallet_MnemonicNeverReachesLogger(t *testing.T) {
 		t.Fatal("precondition failed: no 24-word phrase was printed")
 	}
 
-	joined := strings.Join(logs, "\n")
+	// The fixed wallet-setup messages are constant strings that already
+	// contain BIP-39 vocabulary ("phrase" in "recovery phrase", "wallet",
+	// "created", ...): a random 24-word draw colliding with that prose is
+	// a false positive, not a leak — the messages carry no mnemonic
+	// content. Strip the static lines so only dynamic log content is
+	// scanned; a genuine leak reproduces mnemonic words in messages that
+	// interpolate them.
+	var dynamic []string
+	for _, line := range logs {
+		if line == "wallet: new wallet created — back up your recovery phrase" ||
+			strings.HasPrefix(line, "wallet: fingerprint ") {
+			continue
+		}
+		dynamic = append(dynamic, line)
+	}
+	joined := strings.Join(dynamic, "\n")
 	for _, word := range strings.Fields(phraseLine) {
 		// Match whole words only: BIP-39 words are common English and
 		// could otherwise collide with substrings of ordinary log prose.
@@ -2210,14 +2225,18 @@ type responsivePool struct {
 	// scenario: the first submitted share gets a SetTarget (new, still
 	// easy epoch) followed by SubmitSharesError("Above target") — a
 	// mid-flight retarget reject; every later share is accepted.
-	retargetRejects bool
+	//
+	// The flags are atomic: tests arm them after construction while
+	// serve() is already running on its own goroutine, so a plain bool
+	// write would race that read.
+	retargetRejects atomic.Bool
 	// impossibleRetarget sends a SetTarget whose max_target is *harder*
 	// than the block target (nBits 0x207fffff ≈ 2^255) right after the
 	// channel's first prev-hash — a value no legitimate vardiff would
 	// ever produce. The engine's clampShareTarget must bound it to the
 	// block target so shares keep flowing; without the clamp the workers
 	// would grind an effectively-impossible target and submit nothing.
-	impossibleRetarget bool
+	impossibleRetarget atomic.Bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2318,7 +2337,7 @@ func (fp *responsivePool) serve() {
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
 
-	if fp.impossibleRetarget {
+	if fp.impossibleRetarget.Load() {
 		// MaxTarget[31] is the most significant byte: 0x01 << 248 is
 		// harder than the block target derived from nBits 0x207fffff
 		// (~2^255), i.e. a target no real pool would ever assign.
@@ -2344,7 +2363,7 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		shareCount++
-		if fp.retargetRejects {
+		if fp.retargetRejects.Load() {
 			if shareCount == 1 {
 				// ESP-Miner #212: retarget mid-flight, then reject the
 				// share that was ground under the superseded target. The
@@ -2522,7 +2541,7 @@ func TestRunSession_RetargetRejectExcludedFromRejectRate(t *testing.T) {
 	}
 
 	fp := newResponsivePool(t)
-	fp.retargetRejects = true
+	fp.retargetRejects.Store(true)
 	defer fp.Close()
 	<-fp.started
 
@@ -2733,7 +2752,7 @@ func TestRunSession_SetTargetClampedToBlockTarget(t *testing.T) {
 	}
 
 	fp := newResponsivePool(t)
-	fp.impossibleRetarget = true
+	fp.impossibleRetarget.Store(true)
 	defer fp.Close()
 	<-fp.started
 

@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 259 — テストフレーク根絶パス: **responsivePool フラグのデータレース解消 + BIP39 衝突誤検出の除去**)
+
+外部一次情報（SRI・ESP-Miner・DATUM・Bitcoin Core の release atom feed、
+go.dev/dl、proxy.golang.org）を再検証 —— エコシステムに変動なし
+（DATUM v0.4.1beta はバグ修正のみ、Bitcoin Core v32.0rc2 は RC 段階で
+追跡対象）—— の上で、セッション258で記録した2件のテストフレークを修正。
+
+**1. `responsivePool` のフラグ競合を解消。** `retargetRejects` /
+`impossibleRetarget` はテスト goroutine が構築直後に書き込み、
+`serve()` goroutine が読み取る plain bool —— データレースだった。
+`atomic.Bool` 化で同期。
+
+**2. `TestSetupWallet_MnemonicNeverReachesLogger` の誤検出を除去。**
+ランダム生成される BIP39 ニーモニック（2048語から24語）が固定ログ文
+（"wallet: new wallet created — back up your recovery phrase"、
+"wallet: fingerprint ..."）中の英単語と衝突し ~10%/run で誤落ちして
+いた。静的定型文をスキャン対象から除外 —— 動的メッセージへの真の
+リークは引き続き検出される。両テスト `-race` ×10 回で緑。
+
 ### Changed (session 258 — バックログ消化パス: **プロバイダ死活監視の明示メトリクス化 + SLO ガイダンス文書化**)
 
 外部一次情報（SRI・ESP-Miner の release atom feed、go.dev/dl、
