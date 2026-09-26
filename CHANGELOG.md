@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 267, continued: two test-reliability defects, traced to root causes rather than retried)
+
+- **`stratumv2` test data race.** Mock-pool goroutines could call `t.Logf` after their test
+  returned, racing `testing`'s unlocked `t.done` write. Go leaves that write unlocked precisely so
+  the race detector catches this. It appeared about once in 400 contended `-race` runs.
+  `poolSide` now tracks its goroutines, and the cleanup waits for them after closing the pipes.
+  Afterwards: 0 races in 190 contended runs.
+- **`TestRunSession_StatsTickAndShareResponses`.** This was attributed to ticker starvation, but
+  the real cause was eviction. The fake pool acknowledged only share #1, and `runSession` drops
+  submit timestamps beyond `submitTimesCap`, which is correct behaviour, so under load the test's
+  only latency sample could vanish. Holding the first ack until 1,100 more shares have been read
+  reproduces it every time. The pool now acknowledges every share but the second, and the test
+  passes with that delay injected. Full suite since the change: 14 of 15 runs clean. The one
+  failure (12.9s) was not captured and has not recurred in 8 further runs. It is the failure rate
+  that was measured, not a cause, so it is recorded here as unresolved rather than as fixed.
+  Neither go line affects it (0 of 4 runs failed under each).
+
 ### Fixed (session 267, continued: the gosec G115 findings on master, read one by one)
 
 Of the 14 integer-conversion findings gosec reports on master, **two were real** and are fixed
