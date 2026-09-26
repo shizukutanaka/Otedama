@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 269 — 一次情報源検証パス: **`doctor` が `wallet.dat` のファイルモードを監査**)
+
+- 従来のデータディレクトリ権限チェックは新規インストールしかカバー
+  しない —— scp/rsync/バックアップ tarball から復元した wallet.dat は
+  0700 の親ディレクトリ内でも 0644 で着地し、暗号化シードを他ローカル
+  ユーザーへ晒す。`checkWallet` が `wallet.dat` のモードを検査し、
+  group/other readable なら `chmod 0600` の Fix 付きで warn（Unix のみ、
+  Windows はスキップ）。
+
 ### Added (session 268 — 一次情報源検証パス: **ネットワークハッシュレートフィードの観測可能性（session-266 の後始末）**)
 
 - `otedama_network_hashrate_hashes_per_second`: yield 計算が実際に

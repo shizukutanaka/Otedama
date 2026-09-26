@@ -220,7 +220,7 @@ func checkDataDir(dir string) Check {
 			// On Unix, verify the permissions are restrictive (wallet lives here).
 			if runtime.GOOS != "windows" {
 				perm := info.Mode().Perm()
-				if perm&0077 != 0 {
+				if perm&0o077 != 0 {
 					return Result{
 						Status: StatusWarn,
 						Detail: fmt.Sprintf("%s has permissions %04o (world/group readable)", dir, perm),
@@ -261,7 +261,8 @@ func checkWallet(dataDir string) Check {
 			}
 
 			walletPath := filepath.Join(dir, walletDatFile)
-			if _, err := os.Stat(walletPath); errors.Is(err, os.ErrNotExist) {
+			winfo, err := os.Stat(walletPath)
+			if errors.Is(err, os.ErrNotExist) {
 				return Result{
 					Status: StatusWarn,
 					Detail: "no wallet found in " + dir,
@@ -272,6 +273,20 @@ func checkWallet(dataDir string) Check {
 					Status: StatusFail,
 					Detail: fmt.Sprintf("cannot stat %s: %v", walletPath, err),
 					Fix:    "check filesystem permissions",
+				}
+			}
+
+			// The file itself must be owner-only: a wallet restored via
+			// scp/rsync or extracted from a backup tarball lands 0644,
+			// exposing the encrypted seed to other local users even though
+			// the enclosing directory check already covers fresh installs.
+			if runtime.GOOS != "windows" {
+				if perm := winfo.Mode().Perm(); perm&0o077 != 0 {
+					return Result{
+						Status: StatusWarn,
+						Detail: fmt.Sprintf("%s has permissions %04o (group/other readable)", walletPath, perm),
+						Fix:    fmt.Sprintf("run: chmod 0600 %s", walletPath),
+					}
 				}
 			}
 

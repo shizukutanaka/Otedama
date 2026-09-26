@@ -1501,6 +1501,21 @@ bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
 
 ---
 
+## September 2026 research pass — session 269 increment
+
+1. ✅ **`otedama doctor` now audits `wallet.dat` file mode:** the existing
+   data-directory permission check (warn when the dir is group/other
+   readable) only covers fresh installs — a wallet restored via
+   scp/rsync or unpacked from a backup tarball lands 0644 inside a
+   correctly-moded 0700 directory, silently exposing the encrypted seed
+   to other local users. `checkWallet` now warns with the offending
+   mode and a `chmod 0600` fix (Unix only; skipped on Windows). Tests:
+   `TestCheckWallet_GroupReadableWalletDat_Warns` +
+   `TestCheckWallet_OwnerOnlyWalletDat_StillShowsFingerprint`.
+2. ✅ **[FETCHED] Ecosystem steady:** unchanged since session 268.
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
