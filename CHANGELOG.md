@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 271 — 一次情報源検証パス: **サーバー→クライアント入力面の残監査（全て bounded 確認）**)
+
+- V1: `client.reconnect` はプール指定 host:port を踏まず自前のプール
+  リストへ再接続（リダイレクト攻撃防御）＋指数バックオフで再接続
+  フラッドも bounded。`client.show_message` は drop-oldest bounded
+  チャネル、`set_version_mask` は無視が正解（BIP310 rolling は任意）。
+- V2: `DispatchFrame` が未知/新しいメッセージ型を `Unknown` へ写像し
+  前方互換スキップ —— `SetExtranoncePrefix` 等の拡張メッセージで
+  セッションは落ちない。両ジョブ store（live loop `jobsCap` /
+  adapter `pendingCap`）とも bounded 確認。
+- コード変更なし —— 監査判定のみ記録＋既存 gofumpt ニット除去。
+
 ### Added (session 270 — 一次情報源検証パス: **プール難易度操作の検知トリップワイヤ＋THREAT_MODEL 追補**)
 
 - V1 `mining.set_difficulty`（平文・MitM/悪意プール制御入力）の両方向監査:

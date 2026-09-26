@@ -1535,6 +1535,25 @@ bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
 
 ---
 
+## September 2026 research pass — session 271 increment
+
+1. ✅ **Server→client input audit — V1 notifications & V2 frame dispatch,
+   all bounded:** `client.reconnect`/`mining.reconnect` is honored but the
+   pool-supplied host:port is deliberately not followed (redirect-attack
+   defense) and the exponential reconnect backoff bounds a reconnect
+   flood; `client.show_message` is a drop-oldest bounded channel;
+   `set_extranonce` carries the session-262 size bound; `set_version_mask`
+   (BIP310) is ignored — correct, rolling is opt-in and never required.
+   V2 `DispatchFrame` maps unknown/newer message types to `Unknown`
+   (forward-compatible skip), so a pool sending e.g. `SetExtranoncePrefix`
+   cannot fatal the session; only malformed *known* frames end it. Both
+   V2 job stores are bounded (live loop `jobsCap`, adapter `pendingCap`).
+   No code change needed — verdicts recorded, plus a pre-existing gofumpt
+   nit in `integration_test.go` cleaned.
+2. ✅ **[FETCHED] Ecosystem steady:** unchanged since session 270.
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin
