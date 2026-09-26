@@ -926,6 +926,19 @@ Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
 
+## September 2026 research pass — session 275 increment
+
+1. ✅ **[OBSERVED→FIXED] Canonical SV2 reject codes classified first:**
+   `rejectClass` substring heuristics mis-classified the spec's canonical
+   codes — `invalid-job-id`/`invalid-channel-id` matched "invalid" →
+   hardware, though they are stale-class (job superseded / channel
+   closed). Canonical codes now checked before heuristics:
+   stale-share/invalid-job-id/invalid-channel-id → stale,
+   difficulty-too-low → difficulty.
+2. ✅ **[FETCHED] Ecosystem check:** unchanged.
+
+---
+
 *Session-51 additions (June 2026): arXiv (2309.06847 undetectable selfish
 mining; 2211.07270 block-withholding resilience; 2601.02496 APoW; 2601.14612
 ROSS randomized spot scheduling; 2601.09042 SCaLE switching-cost bandit;
