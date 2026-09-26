@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 260 — 一次情報源検証パス: **SV2 SubmitSharesSuccess のバッチ受理カウントを正しく処理（Cat-1 item 10 → ✅）**)
+
+sv2-spec §5.3.13 を再検証: `new_submits_accepted_count` はバッチ単位
+（「counters MUST be reset when a new batch starts」）であり、エラーは
+1シェア=1レスポンス —— しかしエンジンは成功レスポンス1メッセージ毎に
+`sharesAccepted.Inc()` していたため、プールが K シェアを1レスポンスに
+バッチ受理すると K−1 個のシェアが `shares_unaccounted` に永久滞留し
+`share_acceptance_rate` も歪むバグがあった。
+
+- `sharesAccepted` はプール報告のバッチ受理数を累積
+  (`Add(NewSubmitsAccepted)`)。1シェア=1ack の一般ケースでは従来と
+  同一動作。
+- 「プールの数字を信頼する」照合を追加: 累積受理数が投入シェア数を
+  超えることは正常系ではあり得ない → `poolAccepted > seqNum` で warn。
+- リグレッションテスト `TestRunSession_BatchAcceptCountsShares` ＋
+  responsivePool に `batchAccepts` モード（2シェアを1ackで受理）。
+
 ### Changed (session 259 — テストフレーク根絶パス: **responsivePool フラグのデータレース解消 + BIP39 衝突誤検出の除去**)
 
 外部一次情報（SRI・ESP-Miner・DATUM・Bitcoin Core の release atom feed、

@@ -729,6 +729,10 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	// and reaped alongside submitTimes so the map stays bounded.
 	submitTargets := make(map[uint32]miner.Hash)
 	const submitTimesCap = 1024
+	// poolAccepted is the running sum of the pool-reported
+	// new_submits_accepted_count fields — the pool's own truth, compared
+	// against seqNum (shares submitted) to catch pool-side miscounting.
+	var poolAccepted uint64
 
 	// SV2 job / chain-tip state. A block header cannot be hashed until
 	// BOTH a job (merkle root + version, via NewMiningJob) and the chain
@@ -920,8 +924,25 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			}
 			if pm.msg.SubmitSharesSuccess != nil {
 				opts.log("info", "engine: share accepted")
+				// new_submits_accepted_count is per-batch (sv2-spec §5.3.13:
+				// counters reset when a new batch starts), while rejects
+				// are per-share — so the honest accepted-share count is the
+				// sum of the pool's reported batch counts, not a count of
+				// acknowledgment messages. A pool that batches K accepts
+				// into one response would otherwise leave K-1 shares
+				// phantom-"unaccounted" forever.
+				n := pm.msg.SubmitSharesSuccess.NewSubmitsAccepted
 				if opts.m != nil {
-					opts.m.sharesAccepted.Inc()
+					opts.m.sharesAccepted.Add(uint64(n))
+				}
+				// "Trust the pool's numbers" reconciliation (RESEARCH_
+				// IMPROVEMENTS Cat-1 item 10): cumulative pool-reported
+				// accepts can never legitimately exceed shares submitted.
+				poolAccepted += uint64(n)
+				if poolAccepted > uint64(seqNum) {
+					opts.log("warn", fmt.Sprintf(
+						"engine: pool reports %d accepted shares but only %d submitted — pool-side miscounting or local submit-tracking loss",
+						poolAccepted, seqNum))
 				}
 				// Settle round-trip latency for every submitted share up
 				// to LastSequenceNumber, then drop those entries.

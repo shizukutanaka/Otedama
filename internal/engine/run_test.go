@@ -2237,6 +2237,12 @@ type responsivePool struct {
 	// block target so shares keep flowing; without the clamp the workers
 	// would grind an effectively-impossible target and submit nothing.
 	impossibleRetarget atomic.Bool
+	// batchAccepts acknowledges the first two shares with a single
+	// SubmitSharesSuccess carrying new_submits_accepted_count=2 — the
+	// batched-acknowledgement path where the pool's reported share count
+	// differs from the number of response messages. Later shares are held
+	// unacknowledged so the accepted count stays exactly 2.
+	batchAccepts atomic.Bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2363,6 +2369,19 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		shareCount++
+		if fp.batchAccepts.Load() {
+			if shareCount != 2 {
+				continue // hold share 1 for the batch ack; hold 3+ forever
+			}
+			resp := stratum.SubmitSharesSuccess{
+				ChannelID:          share.ChannelID,
+				LastSequenceNumber: share.SequenceNumber,
+				NewSubmitsAccepted: 2, // one acknowledgement covers shares 1 and 2
+			}
+			payload, _ = resp.Encode()
+			fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+			continue
+		}
 		if fp.retargetRejects.Load() {
 			if shareCount == 1 {
 				// ESP-Miner #212: retarget mid-flight, then reject the
@@ -2607,6 +2626,72 @@ waitLoop:
 	}
 	if got := m.rejectReason("difficulty").Value(); got != 0 {
 		t.Errorf("rejectReason(difficulty) = %d, want 0 — retarget rejects must not masquerade as difficulty rejects", got)
+	}
+}
+
+// TestRunSession_BatchAcceptCountsShares pins the spec semantics of
+// new_submits_accepted_count (sv2-spec §5.3.13: a per-batch counter, reset
+// each batch): when the pool acknowledges two submitted shares with a
+// single SubmitSharesSuccess reporting 2 accepts, the engine's accepted
+// counter must reach 2 — counting acknowledgment *messages* instead of
+// acknowledged *shares* would leave the second share permanently
+// "unaccounted" (the pool-vs-local drift this metric exists to expose).
+func TestRunSession_BatchAcceptCountsShares(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	fp.batchAccepts.Store(true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	// Poll for two submitted shares both judged by a single batched
+	// acknowledgement: sharesAccepted reaching 2 proves the count came
+	// from new_submits_accepted_count, not from the number of responses.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			if m.sharesAccepted.Value() >= 2 {
+				cancel()
+				<-runDone
+				if got := m.sharesAccepted.Value(); got != 2 {
+					t.Errorf("sharesAccepted = %d, want exactly 2 (one batch-ack covering two submits)", got)
+				}
+				return
+			}
+		case <-deadline:
+			cancel()
+			<-runDone
+			t.Fatalf("sharesAccepted = %d after 10s, want 2 — batched acknowledgement not credited per-share", m.sharesAccepted.Value())
+		}
 	}
 }
 

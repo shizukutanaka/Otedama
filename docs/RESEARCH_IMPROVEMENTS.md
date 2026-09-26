@@ -43,9 +43,16 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    submission when Bitcoin Core is present). Tracked in ADR-009.
 9. ❌ **Multi-algorithm (Scrypt/Ethash) support** — out of scope; Otedama is
    SHA-256d/Bitcoin-only by ADR-002.
-10. 🟡 **"Trust the pool's numbers" reconciliation.** Local counters drift
-    from pool-side truth; a periodic reconciliation against pool stats
-    (where the pool exposes them) would catch silent miscounting.
+10. ✅ **"Trust the pool's numbers" reconciliation** (session 260): SV2
+    *does* expose the pool-side number — `new_submits_accepted_count` in
+    SubmitSharesSuccess (per-batch per spec §5.3.13). Two fixes: (a) the
+    accepted counter now sums the pool's reported batch counts instead of
+    incrementing once per acknowledgment message, so a batched accept of
+    K shares no longer leaves K−1 phantom entries in `shares_unaccounted`;
+    (b) cumulative pool-reported accepts are reconciled against shares
+    submitted — `poolAccepted > seqNum` warns, since a pool can never
+    legitimately accept more than it was sent. Regression test:
+    `TestRunSession_BatchAcceptCountsShares`.
 11. 🔵 **ASIC hardware is not detected at all** (found via Socratic review,
     session 232). Otedama's own product definition names ASIC first among
     the three hardware classes it arbitrates, but `internal/hal` registers
@@ -1185,6 +1192,26 @@ stratum, bitaxeorg/ESP-Miner), go.dev/dl mode=json, proxy.golang.org.*
 *Session-259 sources: github.com/*/releases.atom feeds (stratum-mining/
 stratum, bitaxeorg/ESP-Miner, OCEAN-xyz/datum_gateway, bitcoin/bitcoin),
 go.dev/dl mode=json, proxy.golang.org.*
+
+## September 2026 research pass — session 260 increment
+
+1. ✅ **Cat-1 item 10 closed (pool-number reconciliation):** sv2-spec
+   §5.3.13 [FETCHED] defines `new_submits_accepted_count` as per-batch
+   (counters reset each batch) — the engine was counting *response
+   messages* (`sharesAccepted.Inc()` per SubmitSharesSuccess), so a pool
+   that batches K accepts into one response left K−1 shares permanently
+   "unaccounted" and acceptance_rate silently wrong under batching.
+   Now `sharesAccepted.Add(n)` plus a cumulative reconciliation:
+   `poolAccepted > seqNum` (accepted > ever-submitted) is impossible
+   for a well-behaved pool → warn. Regression:
+   `TestRunSession_BatchAcceptCountsShares` via a new `batchAccepts`
+   mode on responsivePool (one ack covering two submits).
+2. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go.dev/dl (go1.27.1/1.26.8), x/crypto v0.57.0 unchanged since session
+   258.
+
+*Session-260 sources: sv2-spec 05-Mining-Protocol.md §5.3.13,
+github.com/*/releases.atom feeds, go.dev/dl, proxy.golang.org.*
 
 ---
 
