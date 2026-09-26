@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 新機能 (session 387)
+
+- 初回ウォレット作成時、回復フレーズの記録確認としてランダム3箇所の単語再入力プロンプトを追加（対話端末のみ — systemd・docker・パイプ stdin では一切表示しない TTY ゲート）。誤入力・空入力は「未確認」の警告を出し、フレーズ再表示はしない（一度だけ表示の契約は維持）。`Options.Input io.Reader`（既定 os.Stdin）を追加し、埋め込み側から駆動・抑止可能。(closed #379 の再デリバー)
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
