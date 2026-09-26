@@ -342,6 +342,29 @@ func TestRunner_ExecutesAllChecks(t *testing.T) {
 	}
 }
 
+func TestCheckCryptoCompliance_DefaultMode(t *testing.T) {
+	// fips140 cannot be toggled mid-process; the default test binary runs
+	// with FIPS mode off, so the check must report pass.
+	c := checkCryptoCompliance()
+	res := c.Run(context.Background())
+	if res.Status != StatusPass {
+		t.Errorf("crypto compliance check: status = %v, want pass (detail: %s)", res.Status, res.Detail)
+	}
+	if res.Detail == "" {
+		t.Error("crypto compliance check returned empty detail")
+	}
+}
+
+func TestCheckCryptoCompliance_PresentInDefaultChecks(t *testing.T) {
+	checks := DefaultChecks(config.Config{}, "")
+	for _, c := range checks {
+		if c.Name == "Crypto compliance" {
+			return
+		}
+	}
+	t.Error("DefaultChecks missing \"Crypto compliance\"")
+}
+
 // ----- DefaultChecks integration -----
 
 func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {

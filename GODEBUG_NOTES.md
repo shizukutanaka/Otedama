@@ -179,18 +179,35 @@ does, document the knob here.
 
 ### `fips140` — FIPS 140-3 compliance mode
 
-Go 1.24 introduced `fips140=on` which restricts crypto algorithms
-to the validated subset. Otedama's Stratum V2 Noise NX transport
-(`internal/stratum/noise.go`) uses ChaCha20-Poly1305 (not FIPS-
-listed); enabling FIPS would break it. (The wallet's own encryption,
-`internal/lightning/seedstore.go`, uses AES-256-GCM, which *is*
-FIPS-140 validated — this knob is about the Noise transport, not
-wallet-at-rest encryption.) **Do not enable.** Document for users
-who ask: Otedama is not FIPS-compliant by design — see
-`docs/THREAT_MODEL.md` for the rationale.
+Go 1.24 introduced the runtime `fips140` GODEBUG option and the
+`crypto/fips140` package (`Enabled()`, `Enforced()`, `Version()`);
+`GOFIPS140` selects the module version at build time.
+(go.dev/doc/security/fips140)
+
+Verified semantics against the go1.26.8 source:
+
+- `fips140=on` puts `crypto/tls` into approved-only negotiation but
+  does **not** block calls to non-approved algorithms elsewhere — the
+  V2 Noise transport (ChaCha20-Poly1305) keeps working; it simply is
+  not FIPS-approved, so Otedama as a whole cannot claim compliance.
+  TLS key exchanges `X25519MLKEM768`, `SecP256r1MLKEM768`, and
+  `SecP384r1MLKEM1024` *are* in the FIPS-approved curve set
+  (`crypto/tls/fips140_test.go:isFIPSCurve`), so hybrid post-quantum
+  key exchange — already pinned on via `tlsmlkem=1`/`tlssecpmlkem=1` —
+  survives in both modes.
+- `fips140=only` makes every non-approved crypto call error or panic —
+  the Noise AEAD and the wallet's scrypt KDF would crash. Go documents
+  `only` as a testing/assessment mode, not a production configuration.
+  **Do not use.**
+
+Otedama is not FIPS-compliant by design (`docs/THREAT_MODEL.md`).
+`otedama doctor`'s "Crypto compliance" check reports the live mode and
+warns when `fips140=only` is active, so a compliance flag set by the
+operator's environment cannot silently take the miner down.
 
 - Added: Go 1.24.
-- Otedama impact: opting in would break us.
+- Otedama impact: `=on` is safe but changes nothing for us; `=only`
+  would break the Noise transport and the wallet KDF.
 - Removal risk: zero — FIPS is permanent.
 
 ## Process for adding a knob

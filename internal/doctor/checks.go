@@ -10,6 +10,7 @@ package doctor
 
 import (
 	"context"
+	"crypto/fips140"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -48,6 +49,7 @@ func DefaultChecks(cfg config.Config, configPath string) []Check {
 		checkNetwork(),
 		checkClockSkew(),
 		checkEnvVars(),
+		checkCryptoCompliance(),
 	}
 }
 
@@ -636,6 +638,47 @@ func checkProfitabilityFloor(cfg config.Config) Check {
 					"min_yield_sats_per_sec = %.4g sat/s; devices whose best stream yields less will idle",
 					cfg.MinYieldSatsPerSec),
 				Fix: "if more devices idle than you expect, watch the otedama_devices_idle metric and lower the floor",
+			}
+		},
+	}
+}
+
+// checkCryptoCompliance surfaces the FIPS 140-3 posture of the running
+// binary. Go's crypto module can operate in FIPS mode via GOFIPS140 at
+// build time or GODEBUG=fips140 at run time (go.dev/doc/security/fips140).
+// Otedama itself is not FIPS-compliant by design — the V2 Noise transport
+// uses ChaCha20-Poly1305, which is not in the FIPS service set — but the
+// check answers two operator questions honestly: whether a compliance
+// flag somebody set will break the miner (fips140=only panics on
+// non-approved calls, including the Noise AEAD and the wallet's scrypt
+// KDF), and whether TLS pool connections still negotiate hybrid
+// post-quantum key exchange (X25519MLKEM768 et al. are inside the
+// module, so they are offered in both plain and FIPS modes).
+func checkCryptoCompliance() Check {
+	return Check{
+		Name: "Crypto compliance",
+		Run: func(_ context.Context) Result {
+			switch {
+			case fips140.Enforced():
+				return Result{
+					Status: StatusWarn,
+					Detail: fmt.Sprintf(
+						"GODEBUG=fips140=only is active (module %s); non-approved crypto calls panic — the V2 Noise transport (ChaCha20-Poly1305) and wallet scrypt KDF will crash",
+						fips140.Version()),
+					Fix: "unset the fips140=only debug option; it is a testing mode, not a supported production configuration — see GODEBUG_NOTES.md",
+				}
+			case fips140.Enabled():
+				return Result{
+					Status: StatusPass,
+					Detail: fmt.Sprintf(
+						"FIPS 140-3 mode active (module %s); TLS pools will only negotiate approved suites — hybrid PQ key exchange still offered; Noise transport unaffected",
+						fips140.Version()),
+				}
+			default:
+				return Result{
+					Status: StatusPass,
+					Detail: "FIPS 140-3 mode off (default); TLS pool connections still negotiate hybrid post-quantum key exchange when the peer offers it",
+				}
 			}
 		},
 	}

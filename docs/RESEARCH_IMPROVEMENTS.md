@@ -254,10 +254,13 @@ arXiv grounding (collected sessions 40–41 and here):
 4. 🔵 **Combinatorial-MAB logarithmic-regret budget allocation** — Zuo &
    Joe-Wong (arXiv:2105.04373); CUCB-DRA treats "allocate budget a to
    resource k" as a base arm and needs no closed-form reward model.
-5. 🟡 **Markovian-reward matching** — Tekin & Liu (arXiv:1012.3005) prove
+5. ✅ **Markovian-reward matching** — Tekin & Liu (arXiv:1012.3005) prove
    near-logarithmic regret for bipartite user↔resource matching with
    Markov state; directly models device↔stream assignment when yields are
-   autocorrelated. New grounding for A3's dynamics.
+   autocorrelated. New grounding for A3's dynamics. — **Grounded
+   (session 263):** ADR-010 A3's theoretical-grounding paragraph and
+   references now carry the rested/restless-bandit result as the model
+   for device↔stream assignment under autocorrelated yields.
 6. ✅ **Bi-criteria bandit (reward + constraint violation)** — arXiv:2503.12285
    transforms offline bi-criteria approximations into online CMAB with
    sublinear regret *and* sublinear constraint violation; the right frame
@@ -795,7 +798,7 @@ Four verified items that *update* earlier entries with newer reality.
    and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
    REST endpoint. Fold JWT acquisition into the provider client design.
    (messari.io State of Akash Q3 2025; akash.network/docs)
-4. 🟡 **Offer an optional FIPS 140-3 mode and document the PQ key exchange
+4. ✅ **Offer an optional FIPS 140-3 mode and document the PQ key exchange
    already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
    enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
    X25519MLKEM768 hybrid PQ key exchange Otedama already turns on via
@@ -804,6 +807,17 @@ Four verified items that *update* earlier entries with newer reality.
    post-quantum key exchange; (b) provide a `fips140=on` build/runtime profile
    for regulated operators; (c) note both in THREAT_MODEL. Pairs with the
    existing godebug block (`GODEBUG_NOTES.md`). (go.dev/blog/fips140)
+   — **Landed (session 263):** verified semantics against the go1.26.8
+   source (`crypto/tls/fips140_test.go:isFIPSCurve` — the three MLKEM
+   hybrids *are* in the FIPS-approved set; `fips140=on` gates TLS
+   negotiation only, `fips140=only` panics on non-approved calls and is
+   the real hazard). New `otedama doctor` "Crypto compliance" check
+   reports `crypto/fips140` mode + module version and warns on
+   `fips140=only` (Noise AEAD + wallet scrypt would panic). GODEBUG_NOTES
+   `fips140` entry corrected (`on` ≠ break) and now references the check;
+   THREAT_MODEL assumptions carry the PQ-KX/FIPS posture. A dedicated
+   FIPS build profile stays out: `=on` changes no Otedama behaviour and
+   `=only` is documented-unsupported — documented opt-in only.
 
 ---
 
@@ -1301,6 +1315,36 @@ github.com/*/releases.atom feeds.*
 *Session-262 sources: repo-internal audit of `internal/poolproto/stratumv1`
 length arithmetic (SRI fuzz-grant lesson applied to the client-side
 analogue), github.com/*/releases.atom feeds.*
+
+---
+
+## September 2026 research pass — session 263 increment
+
+1. ✅ **FIPS 140-3 posture surfaced + documented (June-pass item 4 → ✅).**
+   Verified against the go1.26.8 source rather than docs alone:
+   `crypto/tls/fips140_test.go:isFIPSCurve` keeps `X25519MLKEM768`,
+   `SecP256r1MLKEM768`, `SecP384r1MLKEM1024` in the FIPS-approved set, so
+   the hybrid PQ key exchange Otedama pins on survives `fips140=on`;
+   `fips140=only` (test mode per go.dev/doc/security/fips140) is the
+   hazard — it panics on the Noise AEAD and wallet scrypt KDF. New
+   `otedama doctor` "Crypto compliance" check reports
+   `crypto/fips140.Enabled()/Enforced()/Version()` and warns on `=only`.
+   GODEBUG_NOTES' `fips140` entry corrected (it claimed `on` "would
+   break" Noise — it doesn't) and THREAT_MODEL's TLS assumption now
+   names the hybrid KEX set + FIPS posture. Deliberately no dedicated
+   build profile: `=on` changes no Otedama behaviour, `=only` is
+   unsupported — opt-in stays documented-only.
+2. ✅ **Markovian-reward grounding (Cat-6 item 5 → ✅):** ADR-010 A3 now
+   cites Tekin & Liu (arXiv:1012.3005) as the model for device↔stream
+   assignment under autocorrelated (non-i.i.d.) yields.
+3. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8, x/crypto v0.57.0 — unchanged since session 258.
+   Also fixed a stale THREAT_MODEL line: runtime deps are now two
+   (`x/crypto` + `go.yaml.in/yaml/v3`), not "three … gopkg.in/yaml.v3".
+
+*Session-263 sources: go.dev/doc/security/fips140 [FETCHED],
+crypto/tls/fips140_test.go in go1.26.8 GOROOT [OBSERVED],
+arXiv:1012.3005 (Tekin & Liu).*
 
 ---
 

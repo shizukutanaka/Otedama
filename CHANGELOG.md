@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 263 — 一次情報源検証パス: **FIPS 140-3 ステータスの doctor 可視化（SRI lessons item 4 → ✅）＋ ADR-010 グラウンディング**)
+
+- `otedama doctor` に "Crypto compliance" チェックを追加:
+  `crypto/fips140` の `Enabled()`/`Enforced()`/`Version()` を報告し、
+  `GODEBUG=fips140=only` が設定されている場合は警告 —— 非承認暗号呼出が
+  panic するため V2 Noise トランスポート(ChaCha20-Poly1305)とウォレットの
+  scrypt KDF がクラッシュする。FIPS=on/off いずれでも TLS プール接続は
+  ハイブリッド PQ 鍵交換(X25519MLKEM768 等、FIPS 承認曲線セット内)を
+  ネゴシエートすることを明示。
+- GODEBUG_NOTES の `fips140` 項を go1.26.8 ソースで検証し修正:
+  `on` は TLS ネゴシエーション制限のみ(Noise は壊れない)、`only` が
+  実害。ドクターチェックへの参照を追記。
+- THREAT_MODEL: 前提節に TLS ハイブリッド PQ KX＋FIPS ポスチャを追記、
+  依存リストの陳腐化(`gopkg.in/yaml.v3`→`go.yaml.in/yaml/v3`)を修正。
+- ADR-010 A3: Tekin & Liu (arXiv:1012.3005) の rested/restless bandit
+  によるマルコフ報酬マッチングをデバイス↔ストリーム割当の理論基盤
+  として追記(Cat-6 item 5 → ✅)。
+
 ### Security (session 262 — 一次情報源検証パス: **V1 `extranonce2_size` のメモリDoS修正 ＋ パーサファズ新設（SRI lessons item 1 → ✅）**)
 
 SRI の fuzz 助成金で発見された noise_sv2 算術オーバーフロー事例を

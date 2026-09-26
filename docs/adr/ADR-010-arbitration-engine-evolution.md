@@ -120,7 +120,13 @@ regret for allocating a discrete or continuous budget across arms. We
 do not need their full machinery at Otedama's scale (a handful of
 devices), but these results confirm the greedy/Hungarian assignment is
 a principled approximation, and they define the regret-optimal target
-if the device count ever grows large enough to warrant it.
+if the device count ever grows large enough to warrant it. When a
+stream's yield is autocorrelated rather than i.i.d. — the realistic
+case for inference spot markets and mining luck alike — the
+device↔stream assignment is better modelled as matching with
+Markov-evolving arm rewards: Tekin & Liu (arXiv:1012.3005) prove
+near-logarithmic regret for that rested/restless setting, which grounds
+A3's dynamics under non-i.i.d. yields.
 
 **Cost:** ~60h.
 
@@ -322,6 +328,10 @@ Every feature is pure local computation on user's own observations and devices. 
 - Zuo & Joe-Wong, "Combinatorial Multi-armed Bandits for Resource
   Allocation" (arXiv:2105.04373) — logarithmic-regret budget allocation
   across arms, the regret-optimal target for A3 at scale.
+- Tekin & Liu, "Online Learning of Rested and Restless Bandits"
+  (arXiv:1012.3005) — near-logarithmic regret for bipartite matching
+  with Markov-evolving rewards; grounding for A3 when stream yields
+  are autocorrelated.
 - Mellor & Shapiro, "Thompson Sampling in Switching Environments with
   Bayesian Online Change Detection," 2013 (arXiv:1302.3721) — basis for A8.
 - (Added session 251, corroborating the non-stationary-bandit direction

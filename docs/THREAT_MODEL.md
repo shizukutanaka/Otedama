@@ -120,10 +120,10 @@ a panic in the decode path still terminates the miner (DoS, below).
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
-**Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
-pinned by SHA. Dependabot auto-updates with review. govulncheck runs
-in CI. See ADR-003.
+**Mitigation:** Only two runtime dependencies: `golang.org/x/crypto`
+and `go.yaml.in/yaml/v3`, plus the Go standard library. All GitHub
+Actions pinned by SHA. Dependabot auto-updates with review. govulncheck
+runs in CI. See ADR-003.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
 one of the two direct dependencies remains possible. We have no
@@ -295,7 +295,14 @@ GitHub Actions runtime," which is actively monitored.
 - The user's shell history and screen lock are reasonable.
 - The Go compiler does not contain a backdoor.
 - The Go runtime's random number generator is cryptographically secure.
-- TLS via `golang.org/x/crypto` is correctly implemented.
+- TLS via `crypto/tls` is correctly implemented — including the hybrid
+  post-quantum key exchanges (`X25519MLKEM768`/`SecP256r1MLKEM768`/
+  `SecP384r1MLKEM1024`) that Otedama enables by default via the
+  `tlsmlkem=1`/`tlssecpmlkem=1` godebug pins (see `GODEBUG_NOTES.md`).
+  These hybrids remain in the approved set under `GODEBUG=fips140=on`;
+  `otedama doctor`'s "Crypto compliance" check reports the live FIPS
+  140-3 mode and warns on `fips140=only`, which would panic on the
+  non-approved Noise AEAD and wallet scrypt KDF.
 
 Any violation of these assumptions is outside Otedama's security
 boundary. Users with elevated threat models (nation-state adversaries)
