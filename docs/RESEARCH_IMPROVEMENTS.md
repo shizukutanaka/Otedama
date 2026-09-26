@@ -1486,6 +1486,21 @@ bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
 
 ---
 
+## September 2026 research pass — session 268 increment
+
+1. ✅ **Network-hashrate feed observability (session-266 follow-through):**
+   `otedama_network_hashrate_hashes_per_second` exposes the live estimate
+   the mining-yield math consumes, and
+   `otedama_network_hashrate_fetch_age_seconds` makes a dead feed directly
+   alertable (the session-258 `provider_last_quote` / `btc_rate_age`
+   staleness pattern). `HashrateFetcher` gained `FetchAge()
+   (age, fetched)` mirroring the price fetcher's `RateAge`. Published on
+   the same 30 s tick as `publishBTCRate`; SPECIFICATION §6 SLO row +
+   API.md metric rows added.
+2. ✅ **[FETCHED] Ecosystem steady:** unchanged since session 267.
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin

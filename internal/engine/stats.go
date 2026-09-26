@@ -543,6 +543,30 @@ func publishBTCRate(m *engineMetrics, f rateStats) {
 	}
 }
 
+// networkHashrateStats is the read-only view of the network-hashrate
+// fetcher that publishNetworkHashrate needs, mirroring rateStats.
+// *rates.HashrateFetcher satisfies it.
+type networkHashrateStats interface {
+	CurrentHashrate() (hps float64, fresh bool)
+	FetchAge() (age time.Duration, fetched bool)
+}
+
+// publishNetworkHashrate copies the live network-hashrate estimate into its
+// gauge and publishes the fetch age so a dead feed is visible even while the
+// yield math keeps the last value. Only set once a fetch has succeeded;
+// before that both gauges sit at 0.
+func publishNetworkHashrate(m *engineMetrics, f networkHashrateStats) {
+	if m == nil || f == nil {
+		return
+	}
+	if hps, _ := f.CurrentHashrate(); hps > 0 {
+		m.networkHashrate.Set(hps)
+	}
+	if age, fetched := f.FetchAge(); fetched {
+		m.networkHashrateFetchAgeSeconds.Set(age.Seconds())
+	}
+}
+
 // publishDifficulty updates the pool-difficulty and estimated-share-interval
 // gauges. diff is the pool's current share difficulty (from
 // Session.SuggestedDifficulty). hashrate is in hashes per second. Either

@@ -1729,6 +1729,62 @@ func TestVerifyBackupPhrase_Guards(t *testing.T) {
 	}
 }
 
+// fakeHashStats is a configurable networkHashrateStats for exercising
+// publishNetworkHashrate's publish/guard paths without network I/O.
+type fakeHashStats struct {
+	hps     float64
+	age     time.Duration
+	fetched bool
+}
+
+func (f fakeHashStats) CurrentHashrate() (float64, bool) { return f.hps, f.fetched }
+func (f fakeHashStats) FetchAge() (time.Duration, bool)  { return f.age, f.fetched }
+
+// TestPublishNetworkHashrate covers: never-fetched publishes nothing; a
+// successful fetch publishes both the estimate and its age; a stale cache
+// (fresh=false) still publishes the last value — staleness is signalled by
+// the age gauge, not by zeroing the estimate.
+func TestPublishNetworkHashrate(t *testing.T) {
+	reg := metrics.NewRegistry()
+
+	m := newEngineMetrics(reg)
+	publishNetworkHashrate(m, fakeHashStats{hps: 0, fetched: false})
+	if got := m.networkHashrate.Value(); got != 0 {
+		t.Errorf("never-fetched hashrate gauge = %v, want 0", got)
+	}
+	if got := m.networkHashrateFetchAgeSeconds.Value(); got != 0 {
+		t.Errorf("never-fetched age gauge = %v, want 0", got)
+	}
+
+	m2 := newEngineMetrics(metrics.NewRegistry())
+	publishNetworkHashrate(m2, fakeHashStats{hps: 9.3e20, age: 42 * time.Second, fetched: true})
+	if got := m2.networkHashrate.Value(); got != 9.3e20 {
+		t.Errorf("hashrate gauge = %v, want 9.3e20", got)
+	}
+	if got := m2.networkHashrateFetchAgeSeconds.Value(); got != 42 {
+		t.Errorf("fetch-age gauge = %v, want 42", got)
+	}
+
+	// Stale-but-fetched: the last value stays published (fresh ignored).
+	publishNetworkHashrate(m2, fakeHashStats{hps: 8e20, age: time.Hour, fetched: true})
+	if got := m2.networkHashrate.Value(); got != 8e20 {
+		t.Errorf("stale fetch still publishes last value; got %v", got)
+	}
+
+	// nil guards must not panic.
+	publishNetworkHashrate(nil, fakeHashStats{hps: 1, fetched: true})
+	publishNetworkHashrate(m2, nil)
+}
+
+// TestHashrateFetcher_FetchAge pins the never-fetched vs fetched
+// distinction the publish layer relies on.
+func TestHashrateFetcher_FetchAge(t *testing.T) {
+	f := rates.NewHashrateFetcher()
+	if age, ok := f.FetchAge(); ok || age != 0 {
+		t.Errorf("never-fetched FetchAge = (%v, %v), want (0, false)", age, ok)
+	}
+}
+
 // ============================================================================
 // totalHashes / totalDropped — worker stat aggregation
 // ============================================================================

@@ -244,6 +244,7 @@ func Run(ctx context.Context, opts Options) error {
 				return
 			case <-t.C:
 				publishBTCRate(m, rateFetcher)
+				publishNetworkHashrate(m, hashFetcher)
 				threshold := opts.Config.CurtailBelowBTCUSD
 				rate, fresh := rateFetcher.BTCUSDRate()
 				next, changed := curtailDecision(curtailGate.Load(), rate, fresh, threshold)

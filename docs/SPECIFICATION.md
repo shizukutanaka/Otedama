@@ -220,6 +220,8 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |
 | `rate_sources_ok` / `rate_sources_total` | gauge | Healthy vs configured price sources. |
+| `network_hashrate_hashes_per_second` | gauge | Live network-hashrate estimate (H/s) feeding mining-yield math; 0 until first fetch. |
+| `network_hashrate_fetch_age_seconds` | gauge | Seconds since the hashrate estimate was last fetched (staleness detector). |
 | `clock_skew_seconds` | gauge | Max offset vs rate-source HTTP `Date` headers. |
 
 **SLO guidance.** The catalogue above becomes actionable when read against
@@ -238,6 +240,7 @@ judged shares logs a warn; the D-Central reject-rate bands).
 | Jobs arriving | `otedama_last_job_received_seconds` | advancing | `time() − value > 120 s` — dead pool conn |
 | Provider alive | `otedama_provider_last_quote_seconds{provider}` | advancing | `time() − value > 60 s` (2× the 30 s quote interval) |
 | Price feed fresh | `otedama_btc_rate_age_seconds` | < 600 s | > 600 s — all rate sources failing |
+| Hashrate feed fresh | `otedama_network_hashrate_fetch_age_seconds` | < 1200 s | > 1200 s — both hashrate sources failing |
 | Price redundancy | `otedama_rate_sources_ok` | = `otedama_rate_sources_total` | < total — silent redundancy erosion |
 | Clock sanity | `otedama_clock_skew_seconds` | < 120 s | ≥ 120 s — TLS/nTime judgements break |
 

@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 268 — 一次情報源検証パス: **ネットワークハッシュレートフィードの観測可能性（session-266 の後始末）**)
+
+- `otedama_network_hashrate_hashes_per_second`: yield 計算が実際に
+  消費しているライブ推定値を公開。
+- `otedama_network_hashrate_fetch_age_seconds`: フィード停止を
+  アラート可能に —— 推定値が最終取得成功値に張り付いたままでも
+  stale を可視化（`otedama_btc_rate_age_seconds` と同パターン）。
+  `HashrateFetcher` に `FetchAge()` を追加（価格 fetcher の
+  `RateAge` と同一規約）。SPECIFICATION §6 SLO 行 + API.md 追記。
+
 ### Added (session 267 — 一次情報源検証パス: **初回起動時のシードバックアップ検証フロー（Cat-8 #8 → ✅）**)
 
 - 新規ウォレット作成時（TTY のみ）、一度限りのニーモニック表示直後に

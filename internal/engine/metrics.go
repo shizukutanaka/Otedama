@@ -163,6 +163,16 @@ type engineMetrics struct {
 	rateSourcesOK    *metrics.Gauge
 	rateSourcesTotal *metrics.Gauge
 
+	// networkHashrate is the live Bitcoin network hashrate estimate (H/s) fed
+	// into the mining-yield calculation — the same median-of-sources value the
+	// provider consumes. 0 until the first successful fetch.
+	networkHashrate *metrics.Gauge
+	// networkHashrateFetchAgeSeconds is how long ago the network-hashrate
+	// estimate was last successfully fetched. 0 until the first success.
+	// Rises during a feed outage while the yield estimate silently keeps the
+	// last value; alert when this exceeds ~2× the fetch interval.
+	networkHashrateFetchAgeSeconds *metrics.Gauge
+
 	// poolDifficulty is the current share difficulty assigned by the pool via
 	// mining.set_difficulty. 0 until the first set_difficulty is received. A
 	// drop signals the pool is giving the miner easier work (lost var-diff
@@ -435,6 +445,21 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_rate_sources_total",
 			"Number of BTC/USD price sources configured. The denominator for "+
 				"otedama_rate_sources_ok.",
+			nil),
+
+		networkHashrate: reg.NewGauge(
+			"otedama_network_hashrate_hashes_per_second",
+			"Estimated Bitcoin network hashrate (H/s) used in mining-yield math: "+
+				"median of the configured hashrate sources. 0 until the first "+
+				"successful fetch; falls back to a compile-time constant when no "+
+				"feed is wired.",
+			nil),
+		networkHashrateFetchAgeSeconds: reg.NewGauge(
+			"otedama_network_hashrate_fetch_age_seconds",
+			"Seconds since the network-hashrate estimate was last successfully "+
+				"fetched. 0 until the first success. Alert when this exceeds ~2× "+
+				"the fetch interval — the yield estimate is running on a stale "+
+				"network size.",
 			nil),
 
 		poolDifficulty: reg.NewGauge(

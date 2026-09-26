@@ -131,6 +131,18 @@ func (f *HashrateFetcher) CurrentHashrate() (hps float64, fresh bool) {
 	return f.hashrate, time.Since(f.fetchedAt) < HashrateCacheDuration
 }
 
+// FetchAge returns the age of the last successful fetch and whether a
+// fetch has ever succeeded. Before the first fetch it returns (0, false)
+// so callers can distinguish "never fetched" from "just fetched".
+func (f *HashrateFetcher) FetchAge() (age time.Duration, fetched bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.fetchedAt.IsZero() {
+		return 0, false
+	}
+	return time.Since(f.fetchedAt), true
+}
+
 // Fetch queries all sources in parallel and caches the median of
 // successful, in-band readings.
 func (f *HashrateFetcher) Fetch(ctx context.Context) error {
