@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 266 — 一次情報源検証パス: **ライブ・ネットワークハッシュレートフィード（KNOWN_LIMITATIONS §7 の v3.1.0 項目を前倒し着地）**)
+
+- `internal/rates.HashrateFetcher` 新設: mempool.space
+  (`/api/v1/mining/hashrate/1d` の `currentHashrate`) と
+  blockchain.info (`/q/hashrate`, GH/s) の二公開エンドポイントを
+  並列取得・中央値化し、[1e18, 1e23] H/s の妥当性帯で除外。
+  ボディ上限は価格フェッチャと同じ 64 KiB。
+- `MiningProvider.NetworkHashrateFunc`（新フィールド）経由で、
+  fresh な実測値がコンパイル時定数 1e21 H/s（≈1000 EH/s）を置換。
+  stale/未配線時は定数にフォールバック —— オフライン起動を壊さない。
+  エンジンは 10 分間隔でポーリング開始（run.go Phase 4）。
+- 効果: マイニング収益見積もりの絶対値が実ネットワーク規模に追従
+  （定数は 2026 実測 930 EH/s に対し既に +7% ずれ、かつ年々拡大）。
+  テスト: rates 側 4 本（JSON/平文パース・中央値・帯域除外・
+  全失敗）＋ provider 側の live-vs-stale 比較テスト。
+
 ### Security (session 265 — **stratumv2 アダプタの pending マップを bounded 化（SRI v1.12.0 のジョブ格納上限を第二のストアへも適用）**)
 
 - `internal/poolproto/stratumv2` の read loop が持つ `pending` マップ

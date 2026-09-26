@@ -136,6 +136,46 @@ loop:
 	}
 }
 
+// TestMiningProvider_LiveNetworkHashrate pins the KNOWN_LIMITATIONS §7
+// wiring: a fresh NetworkHashrateFunc reading replaces the compile-time
+// 1e21 H/s constant in the yield estimate; a stale or nil source keeps
+// the constant.
+func TestMiningProvider_LiveNetworkHashrate(t *testing.T) {
+	devices := []hal.Device{
+		&mockDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+	}
+
+	readQuote := func(t *testing.T, p *MiningProvider) Quote {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := p.Start(ctx, devices); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		defer p.Stop()
+		select {
+		case q := <-p.Quotes():
+			return q
+		case <-ctx.Done():
+			t.Fatal("no quote within 2s")
+			return Quote{}
+		}
+	}
+
+	live := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	live.NetworkHashrateFunc = func() (float64, bool) { return 5e20, true } // half the constant → double yield
+	liveQ := readQuote(t, live)
+
+	stale := NewMiningProvider("stratum+v2://pool.example.com:3336", StaticRateSource{Rate: 95000})
+	stale.NetworkHashrateFunc = func() (float64, bool) { return 5e20, false } // stale → constant path
+	staleQ := readQuote(t, stale)
+
+	if liveQ.Yield.SatsPerSecond != 2*staleQ.Yield.SatsPerSecond {
+		t.Errorf("live hashrate yield %e, want exactly 2× the constant-path yield %e",
+			liveQ.Yield.SatsPerSecond, staleQ.Yield.SatsPerSecond)
+	}
+}
+
 func TestMiningProvider_SkipsNonSHA256dDevices(t *testing.T) {
 	// A device with SHA256d=false must not receive a mining quote.
 	rates := StaticRateSource{Rate: 95000}

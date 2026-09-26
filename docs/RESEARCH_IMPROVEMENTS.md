@@ -1436,6 +1436,27 @@ bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
 
 ---
 
+## September 2026 research pass — session 266 increment
+
+1. ✅ **Live network-hashrate feed (KNOWN_LIMITATIONS §7 residual →
+   landed):** `rates.HashrateFetcher` polls mempool.space
+   (`currentHashrate`, H/s) + blockchain.info (`/q/hashrate`, GH/s) —
+   both endpoints fetched and shape-verified live this session (they
+   agree: ~930 EH/s vs the 1e21 constant, already +7% stale). Median
+   of in-band readings, [1e18, 1e23] H/s plausibility band, 64 KiB
+   body cap, 10-min poll, 30-min freshness window. Wired through
+   `provider.NetworkHashrateSource` → `MiningProvider.NetworkHashrateFunc`
+   → run.go Phase 4; stale/unwired keeps the compile-time constant so
+   offline start still works.
+   Tests: `TestHashrateFetcher_*` ×4 + `TestMiningProvider_LiveNetworkHashrate`.
+2. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8, x/crypto v0.57.0 — unchanged since session 264.
+
+*Session-266 sources: mempool.space + blockchain.info live API fetches
+[VERIFIED 2026-09-25: responses and field shapes as implemented].*
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin

@@ -264,9 +264,13 @@ branch of the static estimate is therefore unreachable today and exists only
 as forward-compatible scaffolding for a future GPU SHA256d driver.
 
 The remaining static input — the compile-time network-hashrate constant (≈ 1000 EH/s) —
-is addressed by a live difficulty feed, which remains a v3.1.0 item. That does not affect
-the relative arbitration accuracy on a given machine; it affects only the absolute
-satoshi/second numbers (which move primarily with BTC price anyway).
+was addressed by a live feed in session 266: `internal/rates.HashrateFetcher` polls
+mempool.space (`/api/v1/mining/hashrate/1d`, `currentHashrate`) and blockchain.info
+(`/q/hashrate`, GH/s), takes the median of in-band readings, and feeds
+`MiningProvider.NetworkHashrateFunc`. A fresh reading replaces the constant in the yield
+estimate; stale/absent readings fall back to it, so the compile-time constant remains as
+the offline path. That still leaves absolute satoshi/second numbers approximate — they
+move primarily with BTC price and pool-side difficulty anyway.
 
 ---
 

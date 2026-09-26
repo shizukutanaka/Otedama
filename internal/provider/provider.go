@@ -164,6 +164,14 @@ type RateSource interface {
 	BTCUSDRate() (rate float64, fresh bool)
 }
 
+// NetworkHashrateSource reports a live estimate of the Bitcoin
+// network's total hashrate (H/s) and a freshness flag. Implemented by
+// rates.HashrateFetcher; the mining provider uses it in place of its
+// compile-time constant when fresh (KNOWN_LIMITATIONS §7).
+type NetworkHashrateSource interface {
+	CurrentHashrate() (hps float64, fresh bool)
+}
+
 // SatsPerSecond converts a USD-per-hour yield to sat/s using rate.
 // If rate is zero or negative, returns 0.
 func SatsPerSecond(usdPerHour, btcUSDRate float64) float64 {
