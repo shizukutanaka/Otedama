@@ -1610,6 +1610,126 @@ func TestPrintRecoveryPhrase_NoOutputCases(t *testing.T) {
 }
 
 // ============================================================================
+// first-run backup verification (Cat-8 #8)
+// ============================================================================
+
+func TestStdinIsTerminal_NonFile(t *testing.T) {
+	if stdinIsTerminal(bytes.NewBufferString("word\n")) {
+		t.Error("bytes.Buffer is not a terminal — prompt must not appear")
+	}
+	if stdinIsTerminal(nil) {
+		t.Error("nil reader is not a terminal")
+	}
+}
+
+func TestPickWordPositions(t *testing.T) {
+	for trial := 0; trial < 200; trial++ {
+		pos := pickWordPositions(24, backupCheckCount)
+		if len(pos) != backupCheckCount {
+			t.Fatalf("len = %d, want %d", len(pos), backupCheckCount)
+		}
+		seen := map[int]bool{}
+		prev := -1
+		for _, p := range pos {
+			if p < 0 || p >= 24 {
+				t.Fatalf("position %d out of range [0,24)", p)
+			}
+			if seen[p] {
+				t.Fatalf("duplicate position %d", p)
+			}
+			if p <= prev {
+				t.Fatalf("positions not ascending: %v", pos)
+			}
+			seen[p] = true
+			prev = p
+		}
+	}
+	// k >= n returns every index.
+	if got := pickWordPositions(3, 5); len(got) != 3 {
+		t.Errorf("pickWordPositions(3,5) len = %d, want 3", len(got))
+	}
+	if got := pickWordPositions(0, 3); got != nil {
+		t.Errorf("pickWordPositions(0,3) = %v, want nil", got)
+	}
+}
+
+// TestVerifyBackupPhrase exercises the prompt over an in-memory stdin:
+// correct re-entry passes, a wrong word fails, and a blank answer is a
+// "not backed up" fail rather than a false pass.
+func TestVerifyBackupPhrase(t *testing.T) {
+	words := []string{
+		"abandon", "ability", "able", "about", "above", "absent",
+		"absorb", "abstract", "absurd", "abuse", "access", "accident",
+	}
+	mnemonic := lightning.Mnemonic(words)
+
+	// Deterministic positions (the live path draws them from crypto/rand):
+	// feed the exact correct answers, including mixed case and padding.
+	var out bytes.Buffer
+	in := bytes.Buffer{}
+	for _, pos := range []int{2, 7, 10} {
+		in.WriteString("  " + strings.ToUpper(words[pos]) + " \n")
+	}
+	if !verifyBackupPositions(&in, &out, mnemonic, []int{2, 7, 10}) {
+		t.Error("correct answers should verify; output:\n" + out.String())
+	}
+	if !strings.Contains(out.String(), "Backup verified") {
+		t.Errorf("expected success notice; got:\n%s", out.String())
+	}
+}
+
+// Wrong-word and blank-answer paths must both report NOT verified.
+func TestVerifyBackupPhrase_Failures(t *testing.T) {
+	mnemonic := lightning.Mnemonic{"alpha", "beta", "gamma", "delta"}
+	positions := []int{0, 1, 3}
+
+	var out bytes.Buffer
+	in := bytes.Buffer{}
+	for range positions {
+		in.WriteString("wrong\n")
+	}
+	if verifyBackupPositions(&in, &out, mnemonic, positions) {
+		t.Error("wrong answers should fail verification")
+	}
+	if !strings.Contains(out.String(), "NOT verified") {
+		t.Errorf("expected failure warning; got:\n%s", out.String())
+	}
+
+	out.Reset()
+	in.Reset()
+	for range positions {
+		in.WriteString("\n") // a blank line counts as not backed up
+	}
+	if verifyBackupPositions(&in, &out, mnemonic, positions) {
+		t.Error("blank answers should fail verification, not silently pass")
+	}
+
+	// An out-of-range position must fail closed, not panic.
+	out.Reset()
+	in.Reset()
+	if verifyBackupPositions(&in, &out, mnemonic, []int{99}) {
+		t.Error("out-of-range position should fail closed")
+	}
+}
+
+// A nil writer, empty mnemonic, or empty position list must not panic
+// or block on stdin.
+func TestVerifyBackupPhrase_Guards(t *testing.T) {
+	var in bytes.Buffer
+	if verifyBackupPhrase(&in, nil, lightning.Mnemonic{"x"}) {
+		t.Error("nil writer should fail closed")
+	}
+	var out bytes.Buffer
+	if verifyBackupPhrase(&in, &out, nil) {
+		t.Error("empty mnemonic should fail closed")
+	}
+	out.Reset()
+	if verifyBackupPositions(&in, &out, lightning.Mnemonic{"x"}, nil) {
+		t.Error("empty positions should fail closed")
+	}
+}
+
+// ============================================================================
 // totalHashes / totalDropped — worker stat aggregation
 // ============================================================================
 

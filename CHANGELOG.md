@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 267 — 一次情報源検証パス: **初回起動時のシードバックアップ検証フロー（Cat-8 #8 → ✅）**)
+
+- 新規ウォレット作成時（TTY のみ）、一度限りのニーモニック表示直後に
+  3 ワードのランダム位置再入力チェックを実施 —— 紙バックアップ未作成
+  /転記ミスによる資金喪失を防ぐ。正誤・空欄（= 未バックアップ）とも
+  失敗時は "Backup NOT verified" を明示出力＋ warn ログ。
+- stdin がターミナルでない場合（systemd・docker・パイプ）はプロンプト
+  非表示 —— ヘッドレス起動は遮断しない。`engine.Options` に
+  `Input io.Reader`（デフォルト `os.Stdin`）を追加。
+- 失敗時にフレーズの再表示は行わない —— "表示は一度限り" の契約を維持。
+  テスト: 位置選択の一意性/昇順/範囲（200 試行）、正答・誤答・空欄・
+  ガード系を網羅。
+
 ### Added (session 266 — 一次情報源検証パス: **ライブ・ネットワークハッシュレートフィード（KNOWN_LIMITATIONS §7 の v3.1.0 項目を前倒し着地）**)
 
 - `internal/rates.HashrateFetcher` 新設: mempool.space

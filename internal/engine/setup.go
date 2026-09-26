@@ -11,10 +11,16 @@
 package engine
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
+	"math/big"
+	"os"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -137,6 +143,11 @@ func setupWallet(opts Options, log func(level, msg string)) string {
 	if wm.IsNew() {
 		log("info", "wallet: new wallet created — back up your recovery phrase")
 		printRecoveryPhrase(opts.Output, wm.Mnemonic(), fingerprint)
+		if stdinIsTerminal(opts.Input) {
+			if !verifyBackupPhrase(opts.Input, opts.Output, wm.Mnemonic()) {
+				log("warn", "wallet: recovery-phrase backup NOT verified — funds are unrecoverable if wallet.dat is lost")
+			}
+		}
 	}
 	log("info", fmt.Sprintf("wallet: fingerprint %s", fingerprint))
 	return fingerprint
@@ -197,6 +208,115 @@ func printRecoveryPhrase(w io.Writer, mnemonic lightning.Mnemonic, fingerprint s
 ========================================================================
 
 `, mnemonic.String(), fingerprint, len(mnemonic))
+}
+
+// ----- first-run backup verification (RESEARCH_IMPROVEMENTS Cat-8 #8) -----
+
+// stdinIsTerminal reports whether r is an interactive terminal. Non-file
+// readers (tests, pipes) and non-character devices are non-interactive —
+// the verification prompt must never appear on a headless start, where it
+// would block forever or silently consume piped input.
+func stdinIsTerminal(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// backupCheckCount is how many distinct word positions the user is asked
+// to re-enter on first run — enough to catch an unwritten or transposed
+// backup without turning onboarding into a quiz.
+const backupCheckCount = 3
+
+// pickWordPositions returns k distinct, ascending word indices in
+// [0, n), drawn from crypto/rand. n < k returns every index.
+func pickWordPositions(n, k int) []int {
+	if n <= 0 || k <= 0 {
+		return nil
+	}
+	if k >= n {
+		k = n
+	}
+	seen := make(map[int]struct{}, k)
+	out := make([]int, 0, k)
+	for len(out) < k {
+		i64, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+		if err != nil {
+			// crypto/rand failing is a broken-machine condition; fall back
+			// to an evenly-spread selection rather than aborting the run.
+			fallback := make([]int, 0, k)
+			for i := 0; i < k; i++ {
+				fallback = append(fallback, i*n/k)
+			}
+			return fallback
+		}
+		i := int(i64.Int64())
+		if _, dup := seen[i]; dup {
+			continue
+		}
+		seen[i] = struct{}{}
+		out = append(out, i)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// verifyBackupPhrase asks the user to re-enter backupCheckCount randomly
+// chosen words of the mnemonic they were just shown — the fund-loss
+// prevention step RESEARCH_IMPROVEMENTS Cat-8 #8 calls for. A blank line
+// skips a position (and fails verification overall): we would rather the
+// user see a loud "NOT verified" warning than a false sense of safety.
+// Returns true only when every prompted word matches.
+func verifyBackupPhrase(in io.Reader, out io.Writer, mnemonic lightning.Mnemonic) bool {
+	return verifyBackupPositions(in, out, mnemonic, pickWordPositions(len(mnemonic), backupCheckCount))
+}
+
+// verifyBackupPositions is the position-explicit core of
+// verifyBackupPhrase — split out so tests can drive a deterministic
+// quiz instead of predicting crypto/rand.
+func verifyBackupPositions(in io.Reader, out io.Writer, mnemonic lightning.Mnemonic, positions []int) bool {
+	if out == nil || len(mnemonic) == 0 || len(positions) == 0 {
+		return false
+	}
+	fmt.Fprintf(out, `
+------------------------------------------------------------------------
+  BACKUP VERIFICATION — re-enter %d of the %d words to confirm you
+  wrote them down. An empty answer counts as "not backed up".
+------------------------------------------------------------------------
+`, len(positions), len(mnemonic))
+
+	reader := bufio.NewReader(in)
+	verified := true
+	for _, pos := range positions {
+		if pos < 0 || pos >= len(mnemonic) {
+			verified = false
+			continue
+		}
+		fmt.Fprintf(out, "  Word #%d: ", pos+1)
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			verified = false
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(line), mnemonic[pos]) {
+			verified = false
+		}
+	}
+	if !verified {
+		fmt.Fprintf(out, `
+  Backup NOT verified. The phrase above is the ONLY recovery path —
+  it is not stored on disk and cannot be shown again. If your written
+  copy is wrong or missing, your funds are unrecoverable when
+  wallet.dat is lost.
+------------------------------------------------------------------------
+
+`)
+	} else {
+		fmt.Fprintln(out, "  Backup verified.")
+	}
+	return verified
 }
 
 // defaultPoolURL returns the first configured pool URL, or the built-in

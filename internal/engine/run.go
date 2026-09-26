@@ -28,6 +28,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -72,6 +73,12 @@ type Options struct {
 	Config config.Config
 	Clock  clock.Clock
 	Output io.Writer // where TUI writes; defaults to os.Stdout
+
+	// Input reads interactive confirmations; defaults to os.Stdin.
+	// Today it is consulted only by the first-run wallet backup
+	// verification, and only when it is a terminal — headless starts
+	// (systemd, docker, piped stdin) never see a prompt.
+	Input  io.Reader
 	Logger func(level, msg string)
 	NoTUI  bool // disable the terminal dashboard
 
@@ -144,6 +151,7 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.Output == nil {
 		opts.Output = os.Stdout
 	}
+	opts.Input = cmp.Or[io.Reader](opts.Input, os.Stdin)
 	log := opts.Logger
 	if log == nil {
 		log = func(_, _ string) {}

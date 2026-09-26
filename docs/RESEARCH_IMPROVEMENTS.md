@@ -148,8 +148,15 @@ Comparables: cgminer, bfgminer, Braiins OS+, Awesome Miner, ESP-Miner (Bitaxe).
    to show `initialized, fingerprint: <8-hex>` so operators can cross-verify
    against a hardware wallet. Warns when no wallet is initialized.
 7. 🔵 **PSBT export for hardware-wallet payout addresses** — ADR-007 B10.
-8. 🟡 **Seed backup reminder / verification flow** on first run (ask the user
+8. ✅ **Seed backup reminder / verification flow** on first run (ask the user
    to re-enter N words) — reduces fund-loss from un-backed-up seeds.
+   — session 266-b: after the one-time phrase display, TTY stdin gets a
+   3-word spot-check (`verifyBackupPhrase`, positions from crypto/rand);
+   blank/wrong answers print a loud NOT-verified warning and log a warn.
+   Non-terminal stdin (systemd/docker/pipes) never sees the prompt — the
+   prompt gate is `stdinIsTerminal` (`os.ModeCharDevice`), so headless
+   starts are unaffected. Engine `Options` gained an `Input io.Reader`
+   (defaults `os.Stdin`).
 9. 🔵 **Output descriptor / xpub import** so payouts go to a watch-only
    wallet the user controls.
 10. ✅ **Address-type validation breadth** — bech32m (P2TR) is accepted, not
@@ -1454,6 +1461,28 @@ bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
 
 *Session-266 sources: mempool.space + blockchain.info live API fetches
 [VERIFIED 2026-09-25: responses and field shapes as implemented].*
+
+---
+
+## September 2026 research pass — session 267 increment
+
+1. ✅ **Seed-backup verification on first run (Cat-8 #8 → ✅):** after
+   the one-time mnemonic display, interactive terminals get a
+   3-position re-entry check (`verifyBackupPhrase` →
+   `verifyBackupPositions`, positions drawn from crypto/rand, sorted
+   ascending). Wrong or blank answers print a loud "Backup NOT
+   verified" warning + log warn — never a false pass. The gate is
+   `stdinIsTerminal` (`*os.File` + `ModeCharDevice`), so systemd /
+   docker / piped stdin never block on a prompt. `engine.Options`
+   gained `Input io.Reader` (default `os.Stdin`). Deliberately does
+   NOT re-show the phrase on failure — the "shown once" contract
+   stands; a failed check tells the user their paper copy is wrong
+   while it can still be re-copied during that session's scrollback.
+   Tests: `TestPickWordPositions` (distinct/ascending/in-range ×200
+   trials + edge cases), `TestVerifyBackupPhrase{,_Failures,_Guards}`,
+   `TestStdinIsTerminal_NonFile`.
+2. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8 — unchanged since session 264.
 
 ---
 
