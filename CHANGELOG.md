@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 270 — 一次情報源検証パス: **プール難易度操作の検知トリップワイヤ＋THREAT_MODEL 追補**)
+
+- V1 `mining.set_difficulty`（平文・MitM/悪意プール制御入力）の両方向監査:
+  下方向（diff→0 で submit 嵐）は既存の bounded share channel が
+  ドロップ＋ログで防護済み。上方向（天文学的 difficulty で収益が
+  静かにゼロ化 —— reject も切断もなく収入だけ消える）はゲージのみで
+  検知不能だったため、期待 share 間隔 > 1 時間でエピソード毎に1回
+  warn（回復で再アーム）。`estimatedShareInterval()` を抽出し
+  `publishDifficulty` と共有。
+- THREAT_MODEL: 両方向の脅威・既存緩和・残存リスク（期待 share 間隔
+  ベースの submit レート上限 —— 弱いデバイス向け sub-1 difficulty と
+  衝突するため候補として記録）を文書化。
+
 ### Added (session 269 — 一次情報源検証パス: **`doctor` が `wallet.dat` のファイルモードを監査**)
 
 - 従来のデータディレクトリ権限チェックは新規インストールしかカバー

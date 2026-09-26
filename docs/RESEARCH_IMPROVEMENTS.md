@@ -1516,6 +1516,25 @@ bitaxeorg/ESP-Miner releases.atom, go.dev/dl JSON.*
 
 ---
 
+## September 2026 research pass — session 270 increment
+
+1. ✅ **Pool-difficulty manipulation tripwire + THREAT_MODEL entry:**
+   `mining.set_difficulty` is a pool/MitM-controlled input on cleartext
+   V1. Audit verdict: downward floods (diff → 0) already degrade to
+   bounded CPU burn via the capped share channel; upward starvation
+   (diff so high no share is ever found — no rejects, no disconnect,
+   just no income) had only the gauge, no operator-visible signal.
+   Added a once-per-episode warn when the expected share interval
+   exceeds 1 h at the observed hashrate, re-armed on recovery.
+   `estimatedShareInterval()` extracted so `publishDifficulty` and the
+   tripwire share one formula. THREAT_MODEL documents both directions
+   and records the residual: a submit-rate cap keyed to expected share
+   interval (candidate — false-positive surface for legit sub-1
+   difficulties on weak devices).
+2. ✅ **[FETCHED] Ecosystem steady:** unchanged since session 269.
+
+---
+
 *Sources: arXiv (1703.06545, 1811.12852, 2105.04373, 2411.11119, 2505.00303,
 1012.3005, 2405.05950, 2503.12285, 2107.05322, 2506.19333, 2410.13784);
 GitHub (decred/dcrd secp256k1, bitaxeorg/ESP-Miner #1383); D-Central, Coin

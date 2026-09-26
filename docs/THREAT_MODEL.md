@@ -301,6 +301,32 @@ rejects — a reject-rate signal, not a memory risk.
 
 ---
 
+**Threat:** A malicious pool — or a MitM on cleartext Stratum V1 —
+manipulates `mining.set_difficulty` in either direction. Pushed
+absurdly low, nearly every hash "meets" the share target and the miner
+floods itself generating submits (CPU burn, log spam, likely pool ban).
+Pushed absurdly high, the miner silently earns nothing — no rejects,
+no disconnect, just no shares.
+
+**Mitigation:** Upward: `clampShareTarget` (session 256) bounds the
+share target by the block target so an oversized difficulty cannot be
+weaponised into block-solve grinding, and the engine warns once per
+episode when the pool's difficulty implies an expected share interval
+> 1 h at the observed hashrate ("revenue starvation" warn, session
+270) — the tripwire the `otedama_estimated_share_interval_seconds`
+gauge already exposes. Downward: the per-worker share channel is
+bounded and drops excess found shares (logged as "dropped N found
+share(s)"), so a flood degrades to bounded CPU burn on the submit loop
+rather than memory growth or unbounded pool traffic.
+
+**Residual risk:** A submit-rate cap keyed to expected share interval
+(e.g. refuse effective diff that implies > N submits/s) would bound
+the downward direction tighter, at the cost of a false-positive surface
+for pools legitimately assigning sub-1 difficulties to weak devices —
+recorded as a candidate rather than implemented unilaterally.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.

@@ -576,10 +576,15 @@ func publishDifficulty(m *engineMetrics, diff, hashrate float64) {
 		return
 	}
 	m.poolDifficulty.Set(diff)
-	if hashrate > 0 {
-		// E[seconds between shares] = D × 2^32 / hashrate
-		m.estimatedShareIntervalSeconds.Set(diff * 4294967296 / hashrate)
-	} else {
-		m.estimatedShareIntervalSeconds.Set(0)
+	m.estimatedShareIntervalSeconds.Set(estimatedShareInterval(diff, hashrate))
+}
+
+// estimatedShareInterval returns E[seconds between shares] =
+// difficulty × 2^32 / hashrate. 0 when either input is non-positive
+// (unknown difficulty or an idle/unmeasured hashrate).
+func estimatedShareInterval(diff, hashrate float64) float64 {
+	if diff <= 0 || hashrate <= 0 {
+		return 0
 	}
+	return diff * 4294967296 / hashrate
 }

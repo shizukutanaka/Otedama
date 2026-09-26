@@ -1111,6 +1111,9 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// diffUnserveable latches once per "too-high difficulty" episode so the
+	// warn fires on entry and again only after recovery, not every tick.
+	var diffUnserveable bool
 
 	for {
 		select {
@@ -1162,6 +1165,20 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// operators can distinguish "hardware is slow" from "the pool
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
+				// Revenue-denial tripwire: a pool (or a MitM on cleartext
+				// V1) assigning a difficulty so high that the expected
+				// share interval exceeds an hour is silently starving the
+				// miner — no rejects, no disconnect, just no income. Warn
+				// once per episode rather than every tick.
+				if interval := estimatedShareInterval(sess.SuggestedDifficulty(), currentHashRate); interval > 3600 && !diffUnserveable {
+					diffUnserveable = true
+					opts.log("warn", fmt.Sprintf(
+						"engine: pool difficulty %.0f implies ~%.0f min between shares at %.0f H/s — revenue starvation (check pool or switch)",
+						sess.SuggestedDifficulty(), interval/60, currentHashRate))
+				} else if interval > 0 && interval <= 3600 && diffUnserveable {
+					diffUnserveable = false
+					opts.log("info", "engine: pool difficulty back in serveable range")
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(

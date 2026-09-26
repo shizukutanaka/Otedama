@@ -1174,6 +1174,29 @@ func TestPublishDifficulty_ZeroDifficultyIsNoOp(t *testing.T) {
 	}
 }
 
+// estimatedShareInterval is the shared E[seconds between shares] helper
+// the revenue-starvation tripwire (session 270) and the gauge both use —
+// pin its guard behaviour so neither caller divides by a dead input.
+func TestEstimatedShareInterval_Guards(t *testing.T) {
+	if got := estimatedShareInterval(512, 0); got != 0 {
+		t.Errorf("zero hashrate = %v, want 0", got)
+	}
+	if got := estimatedShareInterval(0, 1e9); got != 0 {
+		t.Errorf("zero difficulty = %v, want 0", got)
+	}
+	if got := estimatedShareInterval(-1, 1e9); got != 0 {
+		t.Errorf("negative difficulty = %v, want 0", got)
+	}
+	// diff 1024 at 1 GH/s → ~4398 s — above the 1 h starvation tripwire.
+	if got := estimatedShareInterval(1024, 1e9); got <= 3600 {
+		t.Errorf("1024-diff @1GH/s interval = %v, want > 3600", got)
+	}
+	// diff 256 at 1 TH/s → ~1.1 s — comfortably serveable.
+	if got := estimatedShareInterval(256, 1e12); got >= 3600 || got <= 0 {
+		t.Errorf("256-diff @1TH/s interval = %v, want serveable range", got)
+	}
+}
+
 // ============================================================================
 // curtailDecision — pure price-curtailment decision (session 116)
 //
