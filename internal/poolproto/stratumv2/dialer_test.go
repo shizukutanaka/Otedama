@@ -15,6 +15,7 @@ import (
 	"math"
 	"math/big"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -225,6 +226,7 @@ type poolSide struct {
 	conn net.Conn
 	dec  *stratum.Decoder
 	t    *testing.T
+	wg   sync.WaitGroup
 }
 
 // writeMsgTo encodes a Stratum V2 message and writes the framed bytes to w.
@@ -288,13 +290,32 @@ func (p *poolSide) doHandshake(channelID uint32) {
 func newPoolSide(t *testing.T) (*poolSide, net.Conn) {
 	t.Helper()
 	server, client := net.Pipe()
-	t.Cleanup(func() { server.Close(); client.Close() })
 	p := &poolSide{
 		conn: server,
 		dec:  stratum.NewDecoder(server),
 		t:    t,
 	}
+	// Closing both ends unblocks any pool goroutine still reading or writing;
+	// waiting for it keeps its t.Errorf/t.Logf calls inside the test's
+	// lifetime. Without the wait, a goroutine logging after the test returned
+	// raced the testing package marking it done (testing.go leaves t.done
+	// unlocked precisely so the race detector reports this).
+	t.Cleanup(func() {
+		server.Close()
+		client.Close()
+		p.wg.Wait()
+	})
 	return p, client
+}
+
+// run starts fn as the mock pool's goroutine, tracked so that newPoolSide's
+// cleanup can wait for it.
+func (p *poolSide) run(fn func()) {
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		fn()
+	}()
 }
 
 // makeDialer returns a Dialer that uses the given conn instead of a real TCP
@@ -364,7 +385,7 @@ func TestDialer_Negotiate_PoolRejectsSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		// Read SetupConnection.
 		if _, err := pool.dec.ReadFrame(); err != nil {
 			return
@@ -372,7 +393,7 @@ func TestDialer_Negotiate_PoolRejectsSetup(t *testing.T) {
 		// Respond with SetupConnectionError.
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionError, false,
 			stratum.SetupConnectionError{Error: "version not supported"})
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
 	_, err := d.Negotiate(ctx, conn)
@@ -388,7 +409,7 @@ func TestDialer_Negotiate_PoolRejectsChannel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		// Read SetupConnection, reply success.
 		if _, err := pool.dec.ReadFrame(); err != nil {
 			return
@@ -401,7 +422,7 @@ func TestDialer_Negotiate_PoolRejectsChannel(t *testing.T) {
 		}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelError, false,
 			stratum.OpenMiningChannelError{ReqID: 1, Error: "unauthorized"})
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
 	_, err := d.Negotiate(ctx, conn)
@@ -422,7 +443,7 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 	defer cancel()
 
 	const chanID = uint32(1)
-	go func() {
+	pool.run(func() {
 		pool.doHandshake(chanID)
 		// Send a future job (no min_ntime), then the SetNewPrevHash that
 		// activates it — the SV2 pair required before a job is emittable.
@@ -442,7 +463,7 @@ func TestSession_Jobs_DeliversNewMiningJob(t *testing.T) {
 			NBits:     0x170d21b4,
 		}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
 	sess, err := d.Negotiate(ctx, conn)
@@ -475,7 +496,7 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 	defer cancel()
 
 	submitted := make(chan stratum.Frame, 1)
-	go func() {
+	pool.run(func() {
 		pool.doHandshake(1)
 		// Read the SubmitSharesStandard frame the client sends.
 		f, err := pool.dec.ReadFrame()
@@ -484,7 +505,7 @@ func TestSession_Submit_SendsFrame(t *testing.T) {
 			return
 		}
 		submitted <- f
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
 	sess, err := d.Negotiate(ctx, conn)
@@ -645,10 +666,10 @@ func TestDialer_Negotiate_ReadSetupResponseFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck — discard
 		pool.conn.Close()
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -667,11 +688,11 @@ func TestDialer_Negotiate_SetupResponseGarbage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck
 		// msg_type=0x01 (SetupConnectionSuccess), payload_length=0.
 		pool.conn.Write([]byte{0x00, 0x00, 0x01, 0x00, 0x00, 0x00}) //nolint:errcheck
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -688,12 +709,12 @@ func TestDialer_Negotiate_UnexpectedMsgDuringSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck
 		// Send OpenMiningChannelSuccess instead of SetupConnectionSuccess/Error.
 		writeMsgTo(pool.t, pool.conn, stratum.MsgOpenMiningChannelSuccess, false,
 			stratum.OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, GroupChannelID: 4})
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -711,12 +732,12 @@ func TestDialer_Negotiate_SendOpenMiningChannelFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
 			stratum.SetupConnectionSuccess{UsedVersion: 2})
 		pool.conn.Close() // close right after success reply
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -733,13 +754,13 @@ func TestDialer_Negotiate_ReadOpenMiningResponseFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
 			stratum.SetupConnectionSuccess{UsedVersion: 2})
 		pool.dec.ReadFrame() //nolint:errcheck
 		pool.conn.Close()
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -755,14 +776,14 @@ func TestDialer_Negotiate_OpenMiningResponseGarbage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
 			stratum.SetupConnectionSuccess{UsedVersion: 2})
 		pool.dec.ReadFrame() //nolint:errcheck
 		// OpenMiningChannelSuccess (0x11) with 0-byte payload → DispatchFrame error.
 		pool.conn.Write([]byte{0x00, 0x00, 0x11, 0x00, 0x00, 0x00}) //nolint:errcheck
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -778,7 +799,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringChannelOpen(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.dec.ReadFrame() //nolint:errcheck
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
 			stratum.SetupConnectionSuccess{UsedVersion: 2})
@@ -786,7 +807,7 @@ func TestDialer_Negotiate_UnexpectedMsgDuringChannelOpen(t *testing.T) {
 		// Send SetupConnectionSuccess (unexpected during channel-open phase).
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetupConnectionSuccess, false,
 			stratum.SetupConnectionSuccess{UsedVersion: 2})
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	_, err := d.Negotiate(ctx, conn)
@@ -874,7 +895,7 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 	// fill the buffer, then cancel ctx so the readLoop's select fires ctx.Done().
 	// SetNewPrevHash first establishes havePrev so each job (HasMinNtime=true)
 	// emits immediately instead of waiting as a future job.
-	go func() {
+	pool.run(func() {
 		pool.doHandshake(1)
 		prev := stratum.SetNewPrevHash{ChannelID: 1, JobID: 0, MinNtime: 0x60000000, NBits: 0x1d00ffff}
 		writeMsgTo(pool.t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
@@ -889,7 +910,7 @@ func TestSession_Jobs_ContextCancelDuringJobSend(t *testing.T) {
 			copy(job.MerkleRoot[:], make([]byte, 32))
 			writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
 		}
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)
@@ -928,7 +949,7 @@ func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go func() {
+	pool.run(func() {
 		pool.doHandshake(1)
 		// SubmitSharesSuccess (0x1c) with 0-byte payload → DispatchFrame error.
 		pool.conn.Write([]byte{0x00, 0x00, 0x1c, 0x00, 0x00, 0x00}) //nolint:errcheck
@@ -940,7 +961,7 @@ func TestSession_Jobs_MalformedFrameSkipped(t *testing.T) {
 		job := stratum.NewMiningJob{ChannelID: 1, JobID: 77, HasMinNtime: true, MinNtime: 0x60000000, Version: 0x20000000}
 		copy(job.MerkleRoot[:], make([]byte, 32))
 		writeMsgTo(pool.t, pool.conn, stratum.MsgNewMiningJob, true, job)
-	}()
+	})
 
 	conn, _ := d.Dial(ctx, "stratum+v2://x:3336", poolproto.Credentials{})
 	sess, err := d.Negotiate(ctx, conn)

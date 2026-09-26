@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"testing"
@@ -265,6 +266,17 @@ func TestRPCMessage_UintID_FromInt(t *testing.T) {
 	m := rpcMessage{ID: int(42)}
 	if got := m.uintID(); got != 42 {
 		t.Errorf("uintID() = %d, want 42", got)
+	}
+}
+
+// uint64() truncates and wraps, so a pool answering {"id":1.9} used to
+// have its reply delivered to request 1. Ids that cannot be ours map to 0,
+// which nextID never assigns.
+func TestRPCMessage_UintID_RejectsIdsThatCannotBeOurs(t *testing.T) {
+	for _, id := range []any{1.9, -1.0, math.NaN(), math.Inf(1), 1e20, int(-1), int64(-5)} {
+		if got := (rpcMessage{ID: id}).uintID(); got != 0 {
+			t.Errorf("uintID(%v) = %d, want 0", id, got)
+		}
 	}
 }
 

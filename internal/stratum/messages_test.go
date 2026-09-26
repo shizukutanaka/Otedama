@@ -6,6 +6,7 @@ package stratum
 import (
 	"bytes"
 	"encoding/binary"
+	"strconv"
 	"testing"
 )
 
@@ -990,6 +991,24 @@ func TestWrapMessage_OversizedPayloadReturnsError(t *testing.T) {
 	payload := make([]byte, MaxMessageLength+1)
 	if _, err := WrapMessage(MsgSetupConnection, false, payload); err == nil {
 		t.Error("WrapMessage should reject payload exceeding MaxMessageLength")
+	}
+}
+
+// A payload of 4 GiB or more used to be converted to uint32 before the
+// length check, so 1<<32+10 bytes became MsgLength 10 and passed Validate:
+// a frame whose header disagrees with its payload.
+func TestPayloadLength_PastUint32IsRejectedNotWrapped(t *testing.T) {
+	if strconv.IntSize < 64 {
+		t.Skip("a length past uint32 needs a 64-bit int")
+	}
+	n := 1
+	n <<= 32
+	n += 10
+	if got, err := payloadLength(n); err == nil {
+		t.Errorf("payloadLength(%d) = %d, want an error", n, got)
+	}
+	if got, err := payloadLength(MaxMessageLength); err != nil || got != MaxMessageLength {
+		t.Errorf("payloadLength(MaxMessageLength) = %d, %v; want %d, nil", got, err, MaxMessageLength)
 	}
 }
 

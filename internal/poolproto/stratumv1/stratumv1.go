@@ -53,6 +53,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -502,13 +503,27 @@ type rpcMessage struct {
 	Error  any             `json:"error"`
 }
 
+// uintID returns the response's id as a request id, or 0 (never assigned:
+// nextID starts at 1) when it cannot be one. A fractional or negative id
+// must not match: uint64(1.9) is 1, which would hand a malformed reply to
+// request 1, and a negative int wraps to a huge value.
 func (m rpcMessage) uintID() uint64 {
 	switch v := m.ID.(type) {
 	case float64:
+		// 1<<64 is exactly representable; anything at or above it overflows.
+		if v < 0 || v >= 1<<64 || v != math.Trunc(v) {
+			return 0
+		}
 		return uint64(v)
 	case int:
+		if v < 0 {
+			return 0
+		}
 		return uint64(v)
 	case int64:
+		if v < 0 {
+			return 0
+		}
 		return uint64(v)
 	case string:
 		n, _ := strconv.ParseUint(v, 10, 64)

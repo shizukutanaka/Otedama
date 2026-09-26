@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 267, continued: the gosec G115 findings on master, read one by one)
+
+Of the 14 integer-conversion findings gosec reports on master, **two were real** and are fixed
+with regression tests that fail on the old code:
+
+- **`stratum.WrapMessage`** converted `len(payload)` to `uint32` *before* the length check, so a
+  payload of 4 GiB or more (`1<<32+10` bytes) became `MsgLength 10` and passed `Validate`, a frame
+  whose header disagrees with its payload. It now checks the length first, as `EncodeFrame`
+  already did.
+- **`stratumv1` response-id matching** used `uint64(v)` on the pool's JSON id, so `{"id":1.9}` was
+  delivered to request 1, and `-1`, `NaN` and `+Inf` became huge ids. Only whole, non-negative ids
+  now match; anything else maps to 0, which `nextID` never assigns.
+
+The other twelve are bounded by a check on the line before, by construction, or by protocol, and
+were left unchanged:
+
+| Site | Why it cannot overflow |
+|---|---|
+| `wire.go:32`, `:60` | length checked `<= 255` just before |
+| `wire.go:96` | length checked `<= 32` just before |
+| `frame.go:182-184` | deliberate byte split of a U24, after `Validate` caps it at 2^24-1 |
+| `frame.go:199` | `EncodeFrame` checks `len > MaxMessageLength` just before |
+| `sha256d.go:194` | at most 33 bytes |
+| `worker.go:126`, `:151` | thread count from `runtime.NumCPU()` or config |
+| `noise.go:292` | checked against `maxNoiseFrame` (65535) just before; CODEOWNERS-gated, not touched |
+
+The 9 G101 hits are the non-English i18n message catalogs, UI strings that hold no credentials.
+None of these were annotated with `#nosec`, because gosec cannot be installed here
+(`sum.golang.org` is blocked) to confirm where it expects the annotation. A maintainer with gosec
+can add them, using this table as the justification.
+
 ### Fixed (session 267: a "needs a maintainer" label turned out to be untested, and CI can load the module again)
 
 **Where it started.** The branch's first CI run (PR #338, later closed without merging) failed

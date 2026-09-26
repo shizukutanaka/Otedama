@@ -370,10 +370,24 @@ func DecodeSubmitSharesError(payload []byte) (SubmitSharesError, error) {
 // Helper: wrap a message in a Frame
 // ------------------------------------------------------------------
 
+// payloadLength converts a payload length to the U24 header field. It checks
+// before converting: a bare uint32() would wrap a payload of 4 GiB or more to
+// a small length that Header.Validate then accepts.
+func payloadLength(n int) (uint32, error) {
+	if n > MaxMessageLength {
+		return 0, fmt.Errorf("stratum: payload length %d exceeds U24 maximum %d", n, MaxMessageLength)
+	}
+	return uint32(n), nil
+}
+
 // WrapMessage creates a Frame for the given message type and encoded payload.
 // For channel messages, the payload must already include the 4-byte channel_id
 // prefix (it is part of the encoded payload, not the frame header).
 func WrapMessage(msgType uint8, isChannelMsg bool, payload []byte) (Frame, error) {
+	n, err := payloadLength(len(payload))
+	if err != nil {
+		return Frame{}, err
+	}
 	ext := uint16(0)
 	if isChannelMsg {
 		ext = channelMsgBit
@@ -381,7 +395,7 @@ func WrapMessage(msgType uint8, isChannelMsg bool, payload []byte) (Frame, error
 	h := Header{
 		ExtensionType: ext,
 		MsgType:       msgType,
-		MsgLength:     uint32(len(payload)),
+		MsgLength:     n,
 	}
 	if err := h.Validate(); err != nil {
 		return Frame{}, err
