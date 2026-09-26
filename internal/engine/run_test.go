@@ -2198,8 +2198,8 @@ func TestRunArbitrationLoop_QuoteUpdatesStreamMap(t *testing.T) {
 // ============================================================================
 
 // responsivePool does a full Stratum V2 handshake, sends a trivially-easy
-// mining job, and then responds to shares: the first share gets a
-// SubmitSharesSuccess, the second gets a SubmitSharesError. It stays open
+// mining job, and then responds to shares: the second share gets a
+// SubmitSharesError and every other share a SubmitSharesSuccess. It stays open
 // until the client disconnects, which allows multiple stats-tick cycles to
 // run inside runSession.
 type responsivePool struct {
@@ -2324,9 +2324,21 @@ func (fp *responsivePool) serve() {
 		}
 		shareCount++
 		switch shareCount {
-		case 1:
-			// First share: acknowledge. Exercises SubmitSharesSuccess handler
-			// and the latency-recording path.
+		default:
+			// Every share but the second: acknowledge. Exercises the
+			// SubmitSharesSuccess handler and the latency-recording path.
+			//
+			// This used to acknowledge only the first share, which made the
+			// test's single latency sample depend on a race: the trivially
+			// easy target floods shares, and once more than submitTimesCap
+			// (1024) are outstanding runSession drops the oldest entries,
+			// by design. Under CPU contention the first ack could arrive
+			// after its entry was dropped, leaving no sample at all. That
+			// was the "submitLatencyP95 never became nonzero" failure, and
+			// it reproduces deterministically by holding the first ack
+			// until 1,100 more shares have been read. An ack settles every
+			// outstanding share up to its sequence number, so acknowledging
+			// each one always leaves samples to record.
 			resp := stratum.SubmitSharesSuccess{
 				ChannelID:          share.ChannelID,
 				LastSequenceNumber: share.SequenceNumber,
@@ -2372,6 +2384,13 @@ func (fp *responsivePool) serve() {
 // of passively hoping a fixed window catches it. The test now succeeds as
 // soon as the condition is actually true rather than racing a guess at how
 // long that might take under unknown contention.
+//
+// Polling did not remove the failure (session 267 saw it in 3 of about 5
+// full-suite runs), because starvation was not the cause. The fake pool
+// acknowledged only the first share, and runSession drops submit timestamps
+// past submitTimesCap, so under load that one sample could be dropped before
+// its ack arrived. See the note in responsivePool.serve; the pool now
+// acknowledges every share but the second.
 func TestRunSession_StatsTickAndShareResponses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
