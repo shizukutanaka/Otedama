@@ -926,6 +926,20 @@ Bureau, Solo Satoshi, Simple Mining 2026 pool comparisons on payout schemes
 (FPPS/PPLNS/TIDES) and net-yield/reliability; cgminer/bfgminer/Awesome Miner
 feature comparisons.*
 
+## September 2026 research pass — session 272 increment
+
+1. ✅ **[OBSERVED→FIXED] `extranonce2_size` memory-exhaustion bound:** the
+   pool-controlled V1 `extranonce2_size` (from `mining.subscribe` or
+   `mining.set_extranonce`) flowed unbounded into `strings.Repeat` on every
+   `mining.submit` — a hostile pool or MitM on cleartext V1 could force
+   gigabyte-scale allocations per share. Bounded to [0, 64] at both
+   negotiation entry points plus a defensive clamp in `Submit`.
+   THREAT_MODEL documents threat/mitigation. (Fix first landed in the
+   closed session-262 branch; re-delivered on master.)
+2. ✅ **[FETCHED] Ecosystem check:** unchanged since session 271.
+
+---
+
 *Session-51 additions (June 2026): arXiv (2309.06847 undetectable selfish
 mining; 2211.07270 block-withholding resilience; 2601.02496 APoW; 2601.14612
 ROSS randomized spot scheduling; 2601.09042 SCaLE switching-cost bandit;

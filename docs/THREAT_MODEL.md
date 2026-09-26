@@ -245,6 +245,18 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat:** A malicious pool — or a MitM on cleartext Stratum V1 —
+negotiates an enormous `extranonce2_size` (via `mining.subscribe` or
+`mining.set_extranonce`), turning the `strings.Repeat` padding on every
+`mining.submit` into a memory-exhaustion vector.
+
+**Mitigation:** `extranonce2_size` is bounded to [0, 64] at both
+negotiation entry points (`parseSubscribeResult`,
+`parseSetExtranonce`); `Submit` additionally clamps defensively so no
+future entry point can re-open the vector. Real pools use 4–8.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.

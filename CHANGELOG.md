@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 272 — 一次情報源検証パス: **プール制御 `extranonce2_size` のメモリ枯渇バインド**)
+
+- `internal/poolproto/stratumv1`: 平文 V1 の `mining.subscribe` /
+  `mining.set_extranonce` で交渉される `extranonce2_size` が
+  `mining.submit` 毎の `strings.Repeat` パディングへ無制限で流入
+  していた問題を修正 —— 悪意プール/MitM が巨大な値を要求すると
+  submit 毎にメモリ枯渇。両入口で [0, 64] にバインドし、Submit 側にも
+  防御的クランプを追加。THREAT_MODEL に脅威・緩和を記録。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

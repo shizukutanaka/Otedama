@@ -618,6 +618,44 @@ func TestParseSetExtranonce_P1NonInt_NotOK(t *testing.T) {
 }
 
 // ============================================================================
+// extranonce2_size bounds — a hostile/MitM pool could request a huge
+// padding size that strings.Repeat would turn into gigabytes per submit.
+// ============================================================================
+
+func TestParseSetExtranonce_SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`["abc", 0]`, true},
+		{`["abc", 4]`, true},
+		{`["abc", 64]`, true},
+		{`["abc", 65]`, false},
+		{`["abc", -1]`, false},
+		{`["abc", 1073741824]`, false},
+	} {
+		if _, _, ok := parseSetExtranonce(json.RawMessage(tc.raw)); ok != tc.want {
+			t.Errorf("parseSetExtranonce(%s) ok=%v, want %v", tc.raw, ok, tc.want)
+		}
+	}
+}
+
+func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
+	for _, tc := range []struct {
+		sz   float64
+		want bool
+	}{
+		{0, true}, {8, true}, {64, true}, {65, false}, {-1, false}, {1e9, false},
+	} {
+		result := []any{[]any{}, "abc", tc.sz}
+		_, _, err := parseSubscribeResult(result)
+		if (err == nil) != tc.want {
+			t.Errorf("parseSubscribeResult en2_size=%v err=%v, wantErr=%v", tc.sz, err, !tc.want)
+		}
+	}
+}
+
+// ============================================================================
 // Dialer — extra error paths
 // ============================================================================
 

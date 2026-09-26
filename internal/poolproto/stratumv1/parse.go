@@ -101,6 +101,16 @@ func parseDifficulty(raw json.RawMessage) (float64, bool) {
 	return p[0], true
 }
 
+// maxExtranonce2Size bounds the pool-supplied extranonce2_size. The value
+// flows into strings.Repeat on every mining.submit, so an unbounded value
+// is a memory-exhaustion vector on cleartext V1 (hostile pool or MitM).
+// Real pools use 4–8; 64 leaves generous headroom for pool-side schemes
+// while capping the padding at 128 hex chars.
+const maxExtranonce2Size = 64
+
+// extranonce2SizeOK reports whether sz is a usable extranonce2_size.
+func extranonce2SizeOK(sz int) bool { return sz >= 0 && sz <= maxExtranonce2Size }
+
 // parseSetExtranonce decodes mining.set_extranonce params:
 // [extranonce1_hex, extranonce2_size_int].
 func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
@@ -114,6 +124,9 @@ func parseSetExtranonce(raw json.RawMessage) (string, int, bool) {
 		return "", 0, false
 	}
 	if err := json.Unmarshal(p[1], &sz); err != nil {
+		return "", 0, false
+	}
+	if !extranonce2SizeOK(sz) {
 		return "", 0, false
 	}
 	return en1, sz, true
@@ -200,7 +213,11 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
 	}
-	return en1, int(en2SizeF), nil
+	en2Size = int(en2SizeF)
+	if !extranonce2SizeOK(en2Size) {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %d out of range [0, %d]", en2Size, maxExtranonce2Size)
+	}
+	return en1, en2Size, nil
 }
 
 // ----- helpers -----

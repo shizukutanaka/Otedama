@@ -335,8 +335,11 @@ func (s *session) Submit(ctx context.Context, sub poolproto.ShareSubmission) (po
 
 	en2 := hex.EncodeToString(sub.ExtraNonce)
 	if en2 == "" {
-		// Pad to extranonce2_size if the worker passed empty.
-		en2 = strings.Repeat("00", s.extranonce2Size)
+		// Pad to extranonce2_size if the worker passed empty. The parser
+		// bounds the field at negotiation and set_extranonce; clamp here
+		// too so a future entry point can never turn Repeat into a memory
+		// exhaustion vector.
+		en2 = strings.Repeat("00", min(max(s.extranonce2Size, 0), maxExtranonce2Size))
 	}
 	params := []any{
 		"otedama", // worker name; configurable in v3.1
