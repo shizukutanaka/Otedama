@@ -78,6 +78,12 @@ Decision rule replaces 5% hysteresis with: `switch iff (predicted_yield_b - pred
 
 **Formal framing:** Markov Decision Process with switching cost, equivalent to the energy-arbitrage formulation in arXiv 2601.12081.
 
+**Learned-cost direction (session 264 grounding):** SCaLE (arXiv:2601.09042)
+handles ℓ2 switching costs under noisy bandit feedback with no known
+cost structure and sub-linear dynamic regret — justification for making
+the ledger *learned from observed switch events* rather than a fixed
+calibration constant; it is the regret-optimal target for A2.
+
 **Cost:** ~30h.
 
 **Value/cost rank:** ★★★★★.
@@ -215,6 +221,17 @@ func (r *ProviderReliability) PosteriorMean() float64 {
 
 **Mechanism:** CTS-lite (Mellor & Shapiro 2013): trigger forecaster reset when 5-epoch moving average shifts > 2σ.
 
+**Non-stationarity grounding (session 264):** the drift the forecaster must
+survive is not one thing — difficulty steps are discrete switches,
+hashprice volatility is total-variation drift, and Akash diurnal cycles
+are path-length drift. "Non-stationary Bandit Convex Optimization"
+(arXiv:2506.02980, NeurIPS 2025) parameterises regret bounds by exactly
+these three measures; use them to pick which signal drives the reset
+threshold rather than a single σ rule for all drift types. Sliding-Window
+Thompson Sampling (arXiv:2409.05181) corroborates the A1+A8 combination
+as the right scale of machinery — a windowed posterior refreshed on
+detected change points, nothing heavier.
+
 **Cost:** ~25h. Necessary glue between A1 and A2.
 
 **Value/cost rank:** ★★★.
@@ -334,6 +351,18 @@ Every feature is pure local computation on user's own observations and devices. 
   are autocorrelated.
 - Mellor & Shapiro, "Thompson Sampling in Switching Environments with
   Bayesian Online Change Detection," 2013 (arXiv:1302.3721) — basis for A8.
+- "ROSS" — Exploiting Spot Instances for Time-Critical Cloud Workloads
+  Using Optimal Randomized Strategies (arXiv:2601.14612): deterministic
+  deadline policies are stuck at Ω(K) while a randomized reserve rule
+  achieves √K (~30% savings). Competitive-analysis counterpart to A1/A6;
+  load-bearing only if deadline-constrained inference streams exist.
+- "SCaLE: Switching Cost aware Learning and Exploration"
+  (arXiv:2601.09042): ℓ2 switching costs under noisy bandit feedback,
+  sub-linear dynamic regret — the learned-cost target for A2.
+- "Non-stationary Bandit Convex Optimization: A Comprehensive Study"
+  (arXiv:2506.02980, NeurIPS 2025): regret bounds parameterised by
+  switches / total-variation / path-length — the three drift types the
+  A1+A8 forecaster self-tunes against.
 - (Added session 251, corroborating the non-stationary-bandit direction
   with current literature, verified by title match; arXiv PDFs 403'd the
   fetcher so bodies not read line-by-line): Sliding-Window Thompson

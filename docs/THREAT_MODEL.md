@@ -117,6 +117,30 @@ a panic in the decode path still terminates the miner (DoS, below).
 
 ---
 
+**Threat:** The chosen pool itself mines selfishly against the user's
+submitted work — withholding found blocks to gain an advantage. Unlike
+share stealing, this is *undetectable*: Bahrani & Weinberg prove a
+selfish-mining strategy whose orphan pattern is statistically
+indistinguishable from honest mining and profitable from 38.2% of
+network hashrate (arXiv:2309.06847). No client-side observation can
+prove or disprove it.
+
+**Mitigation:** None direct — the attack is definitionally invisible to
+the miner. What Otedama provides is *cheap defection*: multi-pool
+failover and endpoint diversity (`otedama doctor`'s pool-diversity
+checks) keep the cost of leaving a pool low, and the pool-vs-local
+share reconciliation (session 260) surfaces sustained payout-vs-work
+divergence that, while it cannot distinguish selfish mining from bad
+luck, is the closest observable signal.
+
+**Residual risk:** A miner on a selfish-mining pool loses revenue and
+cannot know it. The honest advice is to prefer pools whose own revenue
+model disincentivises withholding (PPLNS-family schemes penalise
+withheld blocks; FPPS pools absorb the risk instead) and to rotate
+periodically — both are operator choices, not code.
+
+---
+
 **Threat:** Supply chain: a dependency is replaced with a malicious
 version.
 
@@ -216,6 +240,12 @@ on-path adversary can estimate a miner's hashrate and luck. Users who
 need to defeat this should tunnel the pool connection over Tor or a VPN
 (Tor-by-default is planned — ADR-007 B7). Adding traffic shaping or a
 mining-cookie-style construct is tracked as a future hardening item.
+
+The same class of timing channel exists on the payout side: Rohrer &
+Tschorsch, "Counting Down Thunder" (arXiv:2006.12143), show that
+HTLC-resolution timing leaks payment endpoints in payment-channel
+networks — the Lightning analogue of the Stratum leak above.
+Tor-by-default (ADR-007 B7) mitigates both channels at once.
 
 ---
 
@@ -330,3 +360,8 @@ The minimum review interval is once per major version.
 - Recabarren & Carbunar, "Hardening Stratum, the Bitcoin Pool Mining
   Protocol" (arXiv:1703.06545) — basis for the traffic-analysis
   side-channel threat in the Information-disclosure section.
+- Bahrani & Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847)
+  — basis for the pool-selfishness threat in the Tampering section.
+- Rohrer & Tschorsch, "Counting Down Thunder: Timing Attacks on
+  Privacy in Payment Channel Networks" (arXiv:2006.12143) — the
+  Lightning analogue of the Stratum timing side channel.

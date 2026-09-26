@@ -10,6 +10,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 264 — 一次情報源検証パス: **リサーチ項目の統合・グラウンディング一括着地 — 8項目 → ✅**)
+
+arXiv 一次情報を全件再検証（6 ID すべて arxiv.org で題名一致）した上で、
+滞留していた調査項目をドキュメントへ着地：
+
+- SV2 仕様の正典を `stratum-mining/sv2-spec` リポジトリへピン
+  （`internal/stratum/messages.go` ＋ ADR-009 参照節）。
+- KNOWN_LIMITATIONS §1 の Akash 統合像を実態へ修正: chain-sdk
+  （旧 akash-api は 2026-01 廃止）＋ オンチェーン Bidengine ポリシー
+  ＋ AEP-64 JWT（ステータス/リース REST 面）。
+- THREAT_MODEL: Bahrani–Weinberg の「検出不能な selfish mining」
+  （38.2% 閾値）を Tampering 節に新設 —— 正直な回答として
+  「直接緩和なし、安価な離脱（multi-pool フェイルオーバー）＋
+  session-260 の支払乖離シグナル」を記載。LN 側の対応攻撃
+  （Rohrer & Tschorsch, arXiv:2006.12143）も接続。
+- ADR-010: A2 に SCaLE（学習型スイッチコスト）、A8 に三種類の
+  非定常性シグナル＋ Sliding-Window TS 引用を追記。ROSS の
+  √K 競争比を参考文献へ（デッドラインワークロード前提の留保付き）。
+- Cat-4 #9（orphan-aware 照合）は意図的に未完了のまま —— 記載の
+  実装案（プールの採用ブロック数を doctor で追跡）はプールが
+  その情報を報告しないため不可能、と調査結果を明記。
+
 ### Added (session 263 — 一次情報源検証パス: **FIPS 140-3 ステータスの doctor 可視化（SRI lessons item 4 → ✅）＋ ADR-010 グラウンディング**)
 
 - `otedama doctor` に "Crypto compliance" チェックを追加:

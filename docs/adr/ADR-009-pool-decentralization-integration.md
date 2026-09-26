@@ -622,6 +622,10 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
   https://stratumprotocol.org/specification/06-job-declaration-protocol/
 - Stratum V2 spec (Mining Protocol):
   https://stratumprotocol.org/specification/05-mining-protocol/
+- Stratum V2 specification, canonical source (independently versioned
+  from the SRI roles code since v1.5.0 — stratumprotocol.org renders
+  this repo):
+  https://github.com/stratum-mining/sv2-spec
 - OCEAN DATUM Gateway (C, GPL):
   https://github.com/OCEAN-xyz/datum_gateway
 - OCEAN DATUM docs:

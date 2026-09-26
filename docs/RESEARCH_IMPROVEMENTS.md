@@ -616,20 +616,26 @@ endpoint against current vendor documentation. Tags as before
    lifetime-average rate could never reach the stall floor. Saturating on
    counter reset — no negative/NaN/spurious-spike readings. See SPECIFICATION.md
    G14.
-7. 🟡 **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
+7. ✅ **Pin protocol truth to `stratum-mining/sv2-spec`, not the app code.**
    SRI split roles into a separate, independently-versioned repo after
    v1.5.0; update the SV2 reference links in ADR-009 / poolproto comments
    to cite the (stable) spec so the codec tracks the spec, not moving code.
+   **Landed (session 264):** `internal/stratum/messages.go` and
+   ADR-009's references now name github.com/stratum-mining/sv2-spec as
+   the canonical spec source that stratumprotocol.org renders.
 
 ### Category 4 — decentralisation (arXiv grounding)
 
-8. 🟡 **Single-pool concentration enables *undetectable* attacks.** Bahrani &
+8. ✅ **Single-pool concentration enables *undetectable* attacks.** Bahrani &
    Weinberg, "Undetectable Selfish Mining" (arXiv:2309.06847), prove a
    selfish-mining strategy whose orphan pattern is statistically
    indistinguishable from honest mining, profitable from 38.2% hashrate.
    Document in THREAT_MODEL to justify the multi-pool / endpoint-diversity
    defaults as a *security* (not merely liveness) property; strengthens
-   Cat 4 #7.
+   Cat 4 #7. — **Landed (session 264):** new THREAT_MODEL Tampering
+   entry records the undetectable pool-selfishness threat, the honest
+   "no direct mitigation — only cheap defection" answer, and the
+   session-260 pool-vs-local reconciliation as the closest observable.
 9. 🟡 **Orphan-aware reconciliation has a fairness rationale.** Grunspan &
    Pérez-Marco, "Block withholding resilience" (arXiv:2211.07270, rev.
    Feb 2025), show accounting for orphans makes honest mining the unique
@@ -671,23 +677,28 @@ endpoint against current vendor documentation. Tags as before
 
 ### Category 6 — arbitration / online optimisation (arXiv grounding)
 
-14. 🟡 **Randomized deadline-aware spot policy with √K competitive ratio.**
+14. ✅ **Randomized deadline-aware spot policy with √K competitive ratio.**
     "ROSS" (arXiv:2601.14612) proves deterministic deadline policies are
     stuck at Ω(K) (K = reliable/spot cost ratio) while a randomized reserve
     rule achieves √K (~30% savings). The competitive-analysis counterpart to
     ADR-010 A1/A6; load-bearing only if deadline-constrained inference
-    exists.
-15. 🟡 **Adaptive, learned switching cost with sub-linear dynamic regret.**
+    exists. — **Grounded (session 264):** ADR-010 references carry it
+    with the same caveat.
+15. ✅ **Adaptive, learned switching cost with sub-linear dynamic regret.**
     "SCaLE" (arXiv:2601.09042) handles ℓ2 switching costs under noisy bandit
     feedback with no known cost structure. Justifies making ADR-010 A2's
     switch-cost ledger *learned / non-stationary* rather than a fixed
-    calibration; the regret-optimal target for A2.
-16. 🟡 **Track which non-stationarity the engine self-tunes against.**
+    calibration; the regret-optimal target for A2. — **Grounded
+    (session 264):** A2's formal framing now records the learned-cost
+    direction explicitly.
+16. ✅ **Track which non-stationarity the engine self-tunes against.**
     "Non-stationary Bandit Convex Optimization" (arXiv:2506.02980, NeurIPS
     2025) gives regret bounds parameterised by switches / total-variation /
     path-length — exactly the three drift types in hashprice/Akash yield
     (difficulty steps, volatility, diurnal). Use its measures to choose the
     self-tuning signal for the Holt-Winters reset threshold (A1+A8).
+    — **Grounded (session 264):** ADR-010 A8's mechanism note names the
+    three drift types and the per-type reset-signal choice.
 
 ### Category 8 — power: real, currently-live feeds
 
@@ -754,11 +765,13 @@ endpoint against current vendor documentation. Tags as before
     (capacity + degree + age), not the ML model — a small deterministic
     initial liquidity belief feeding Pickhardt-Richter (Cat 11 #6),
     improving first-attempt success without probing.
-27. 🟡 **One countermeasure, two timing channels.** Rohrer & Tschorsch,
+27. ✅ **One countermeasure, two timing channels.** Rohrer & Tschorsch,
     "Counting Down Thunder" (arXiv:2006.12143), show HTLC-resolution timing
     leaks payment endpoints — the LN analogue of the Stratum timing leak
     already in THREAT_MODEL (1703.06545). Note that Tor-by-default (ADR-007
-    B7) mitigates *both*; doc-only linkage.
+    B7) mitigates *both*; doc-only linkage. — **Landed (session 264):**
+    the linkage is now written into THREAT_MODEL's traffic-analysis
+    residual and its References list.
 
 ---
 
@@ -791,13 +804,16 @@ Four verified items that *update* earlier entries with newer reality.
    Stratum V2 / open block construction. Updates ADR-009's "~70%" figure and
    strengthens the case for the Job Declaration Client (miner-built templates)
    as the headline v3.x feature. (coindesk.com 2026-05-11)
-3. 🟡 **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
+3. ✅ **Real Akash provider API now requires JWT auth (AEP-64, Mainnet 14).**
    Akash Mainnet 14 (2025-10-28) shipped **AEP-64 JWT Authentication for
    Providers** — token-based auth on the provider APIs. The real
    `AkashProvider` (session 51 #11 / KNOWN_LIMITATIONS §1) must therefore mint
    and attach a JWT to provider `GetStatus`/lease calls, not just hit an open
    REST endpoint. Fold JWT acquisition into the provider client design.
    (messari.io State of Akash Q3 2025; akash.network/docs)
+   — **Documented (session 264):** KNOWN_LIMITATIONS §1's integration-shape
+   note now names AEP-64 JWT for the status/lease REST surface; no provider
+   client exists yet to fold it into (the provider is simulated).
 4. ✅ **Offer an optional FIPS 140-3 mode and document the PQ key exchange
    already negotiated.** Go 1.24+ ships a FIPS 140-3-validated crypto module
    enabled with `GODEBUG=fips140=on` (or the go.mod godebug), and the
@@ -947,14 +963,17 @@ month, so the discipline matters.
 
 ### AI-compute / arbitration engine
 
-10. 🟡 **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
+10. ✅ **[FETCHED] `akash-network/akash-api` is DEPRECATED (2026-01-05);
     successor is `akash-network/chain-sdk`.** ROADMAP v3.1.0's "Akash REST API"
     work, if scoped against akash-api, would build on an archived protobuf
     module. **Action:** retarget v3.1.0 to `chain-sdk`, and weigh its Go client
     against ADR-003 (generating only the needed market/provider protobufs may
     be lighter than vendoring the whole SDK). (github.com/akash-network/akash-api;
-    github.com/akash-network/chain-sdk)
-11. 🟡 **[FETCHED] Akash bidding is done on-chain by the provider daemon's
+    github.com/akash-network/chain-sdk) — **Done (session 264):**
+    KNOWN_LIMITATIONS §1 now names the chain-sdk target, the on-chain
+    Bidengine mechanism, and the AEP-64 JWT status surface; ADR-010 A4
+    already carried the chain-sdk retarget from session 251.
+11. ✅ **[FETCHED] Akash bidding is done on-chain by the provider daemon's
     "Bidengine", not a REST bid-submit call.** ADR-010 Feature A4 ("Strategic
     Akash bidding") currently models a per-order REST sealed-bid submission;
     the real auction is on-chain and mediated by the provider daemon's bid
@@ -963,7 +982,9 @@ month, so the discipline matters.
     (github.com/akash-network/provider) — note: this supersedes the session-52
     #3 "JWT on GetStatus" framing insofar as the *bidding* mechanism is
     on-chain; JWT (AEP-64) still applies to the provider *status/lease* REST
-    surface.
+    surface. — **Done (session 264):** A4's session-251 re-framing already
+    records the on-chain Bidengine model; KNOWN_LIMITATIONS §1 now repeats
+    it so a reader of the limitations doc gets the correct shape.
 12. ✅ **[FETCHED] Render / io.net have no open provider-side bidding API and
     are custodial/centrally-priced.** Render intermediates payouts in RNDR
     (burn-and-mint); io.net centrally determines pricing with staking-based
@@ -973,13 +994,16 @@ month, so the discipline matters.
     non-custodial payout) is the supported model and Render/io.net are out of
     scope, so they aren't naively added later.
     (github.com/rendernetwork/RNPs/blob/main/RNP-005.md; github.com/api-evangelist/io-net)
-13. 🔵 **[FETCHED title-match] ADR-010's bandit direction holds; add a
+13. ✅ **[FETCHED title-match] ADR-010's bandit direction holds; add a
     2024-25 citation.** The Mellor & Shapiro 2013 paper ADR-010 cites (Thompson
     Sampling + Bayesian change-point) is real (arxiv.org/pdf/1302.3721); recent
     sliding-window / discounted Thompson Sampling results
     (arxiv.org/pdf/2409.05181, .../2305.10718) corroborate the "don't overbuild
     past Holt-Winters + change-point" stance. **Action:** cite one 2024-25
     result alongside the 2013 reference in ADR-010; no design change.
+    — **Done (session 264):** ADR-010 A8's mechanism note now cites
+    Sliding-Window Thompson Sampling (arXiv:2409.05181) as corroborating
+    the A1+A8 machinery scale.
 14. 🟡 **[SNIPPET — do NOT act until primary-verified] GPU compute spot prices
     described as jump-prone with no volatility clustering**, arguing change-point
     detection (ADR-010 A8) should be prioritized alongside the forecaster (A1)
@@ -1345,6 +1369,47 @@ analogue), github.com/*/releases.atom feeds.*
 *Session-263 sources: go.dev/doc/security/fips140 [FETCHED],
 crypto/tls/fips140_test.go in go1.26.8 GOROOT [OBSERVED],
 arXiv:1012.3005 (Tekin & Liu).*
+
+---
+
+## September 2026 research pass — session 264 increment
+
+Consolidation round: every arXiv ID re-verified against arxiv.org
+listing pages this session (all six resolve with matching titles:
+2309.06847, 2006.12143, 2601.14612, 2601.09042, 2506.02980,
+2409.05181).
+
+1. ✅ **SV2 canonical spec pinned (June-pass item 7 → ✅):**
+   `internal/stratum/messages.go` and ADR-009 references now name
+   github.com/stratum-mining/sv2-spec as the source of truth that
+   stratumprotocol.org renders.
+2. ✅ **Akash integration shape corrected in KNOWN_LIMITATIONS §1
+   (July items 10/11 + June item 3 → ✅):** chain-sdk (not the archived
+   akash-api), on-chain Bidengine policy (not per-order REST), AEP-64
+   JWT on the status/lease surface.
+3. ✅ **Undetectable-selfish-mining threat recorded (Cat-4 #8 → ✅):**
+   THREAT_MODEL Tampering gains the Bahrani–Weinberg entry — honest
+   answer is "no direct mitigation; cheap defection + session-260
+   payout divergence signal is the closest observable".
+4. ✅ **LN timing-channel linkage (Cat-11 #27 → ✅):** Rohrer &
+   Tschorsch (2006.12143) added to the traffic-analysis residual +
+   References — Tor-by-default mitigates both channels.
+5. ✅ **Arbitration grounding sweep (Cat-6 #14/#15/#16 + July #13 →
+   ✅):** ADR-010 A2 gains the SCaLE learned-cost direction; A8 gains
+   the three-drift-type non-stationarity note (switches /
+   total-variation / path-length) and the Sliding-Window TS citation;
+   References carry ROSS (√K bound, caveat: no deadline workloads yet).
+6. 🟡 **Deliberately left open:** Cat-4 #9 (orphan-aware reconciliation)
+   — its action as written ("doctor tracks pool-credited blocks") is
+   infeasible: pools never report credited blocks to miners. The
+   fairness rationale stays as grounding; the observability half is
+   already covered by session-260 share reconciliation. Cat-6 #13
+   (preemption pricing) stays open until the A2 ledger exists.
+7. ✅ **[FETCHED] Ecosystem steady:** SRI v1.12.0, ESP-Miner v2.15.3,
+   go1.27.1/1.26.8 — unchanged since session 258.
+
+*Session-264 sources: arxiv.org/abs/* listing pages (six IDs verified),
+github.com/stratum-mining/sv2-spec, stratumprotocol.org [both 200].*
 
 ---
 
