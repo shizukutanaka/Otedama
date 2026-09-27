@@ -939,3 +939,22 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 341 — pprof public-exposure warning
+
+**Non-loopback pprof [FIXED — warning].** `--pprof` mounts heap and
+goroutine-profile endpoints on whatever `--http-addr` says; the flag
+help and httpserver godoc caution "loopback only" but nothing enforced
+it — `--http-addr 0.0.0.0:9090 --pprof` exposed heap contents (which
+can include secret material) to the network. `startHTTPServer` now
+warns on stderr when pprof is combined with a non-loopback bind
+(`isLoopbackAddr` covers 127/8, ::1, "localhost"; wildcard/empty host
+and DNS names warn conservatively). Warning rather than refusal:
+private-LAN binds are legitimate. `TestIsLoopbackAddr` covers the
+host forms.
+
+**HTTP surface audit [AUDITED — clean].** `/healthz`, `/readyz`,
+`/metrics`, `/` plus optional pprof are the only routes; all timeouts
+set (slowloris-mitigated); empty `http_addr` disables the server.
+Wallet `mnemonic` field is single-read (nil after `Mnemonic()`);
+`Fingerprint`/`Seed` accessors return copies.

@@ -8,8 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
@@ -312,6 +314,9 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 		return nil, nil
 	}
 	reg := metrics.NewRegistry()
+	if pprofEnabled && !isLoopbackAddr(httpAddr) {
+		fmt.Fprintf(stderr, "warning: --pprof on non-loopback address %s publicly exposes heap/goroutine profiles\n", httpAddr)
+	}
 	srv := httpserver.New(httpAddr, reg, pprofEnabled)
 	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "warning: cannot start HTTP server: %v\n", err)
@@ -319,4 +324,19 @@ func startHTTPServer(ctx context.Context, httpAddr string, pprofEnabled bool, st
 	}
 	fmt.Fprintf(stdout, "[info] http: listening on %s\n", httpAddr)
 	return reg, srv
+}
+
+// isLoopbackAddr reports whether addr ("host:port" or bare host)
+// resolves to a loopback interface — 127.0.0.0/8, ::1, or "localhost".
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

@@ -617,3 +617,18 @@ func TestService_Install_DoesNotCrash(t *testing.T) {
 		t.Errorf("service install: unexpected exit code %d (out=%s err=%s)", code, out.String(), errb.String())
 	}
 }
+
+func TestIsLoopbackAddr(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"127.0.0.1:9090": true, "127.34.0.1:9090": true,
+		"localhost:9090": true, "LOCALHOST:9090": true,
+		"[::1]:9090": true, "::1": true,
+		"0.0.0.0:9090": false, ":9090": false, "": false,
+		"192.168.1.5:9090": false, "example.com:9090": false,
+		"[::]:9090": false,
+	} {
+		if got := isLoopbackAddr(addr); got != want {
+			t.Errorf("isLoopbackAddr(%q) = %v, want %v", addr, got, want)
+		}
+	}
+}
