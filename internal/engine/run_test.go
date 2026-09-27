@@ -2133,19 +2133,29 @@ type responsivePool struct {
 	ln      net.Listener
 	addr    string
 	started chan struct{}
+	// bogusReject makes serve() emit a SubmitSharesError for a
+	// SequenceNumber the client never used (future seq), right after
+	// activating the job — exercising the engine's bogus-seq guard.
+	bogusReject bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
+	t.Helper()
+	return newResponsivePoolOpt(t, false)
+}
+
+func newResponsivePoolOpt(t *testing.T, bogusReject bool) *responsivePool {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("responsivePool: listen: %v", err)
 	}
 	fp := &responsivePool{
-		t:       t,
-		ln:      ln,
-		addr:    ln.Addr().String(),
-		started: make(chan struct{}),
+		t:           t,
+		ln:          ln,
+		addr:        ln.Addr().String(),
+		started:     make(chan struct{}),
+		bogusReject: bogusReject,
 	}
 	go fp.serve()
 	return fp
@@ -2232,6 +2242,19 @@ func (fp *responsivePool) serve() {
 	}
 	payload, _ = prev.Encode()
 	fp.emit(conn, stratum.MsgSetNewPrevHash, true, payload)
+
+	if fp.bogusReject {
+		// Reject a SequenceNumber far beyond anything the client could
+		// have sent. A hostile pool can inject these freely; the engine
+		// must not count them.
+		resp := stratum.SubmitSharesError{
+			ChannelID:      1,
+			SequenceNumber: 9999,
+			Error:          "low-difficulty share",
+		}
+		payload, _ = resp.Encode()
+		fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+	}
 
 	// Read shares and respond accordingly
 	shareCount := 0
@@ -2447,6 +2470,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
@@ -2464,5 +2488,94 @@ func TestStartMinerWorkers_NoSHA256dDevices(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SHA256d") {
 		t.Errorf("error = %q, want SHA256d mention", err.Error())
+	}
+}
+
+// TestRunSessionV2_FutureSeqRejectIgnored verifies that a SubmitSharesError
+// carrying a SequenceNumber beyond anything the client sent is dropped at
+// debug level and never reaches sharesRejected — SV2 assigns one response
+// per seq, so a future seq is unambiguously bogus, and counting it would
+// let a hostile pool inflate the reject rate and trip curtailment at will.
+func TestRunSessionV2_FutureSeqRejectIgnored(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePoolOpt(t, true)
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var logs []string
+	logf := func(level, msg string) {
+		mu.Lock()
+		logs = append(logs, level+" "+msg)
+		mu.Unlock()
+	}
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:    fp.URL(),
+			user:       "bc1qtest000000000000000000000000000000000",
+			workers:    []*miner.Worker{w},
+			merged:     merged,
+			interval:   5 * time.Millisecond,
+			m:          m,
+			powerWatts: 100.0,
+			log:        logf,
+		})
+	}()
+
+	// The deterministic signals: the bogus frame produces a "future seq"
+	// debug line, and the pool's genuine reject of share 2 must still
+	// register exactly once (rejects aren't silently swallowed wholesale).
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	sawBogus, sawRealReject := false, false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			for _, l := range logs {
+				if strings.Contains(l, "future seq 9999") {
+					sawBogus = true
+				}
+			}
+			mu.Unlock()
+			if m.sharesRejected.Value() > 0 {
+				sawRealReject = true
+			}
+			if sawBogus && sawRealReject {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if !sawBogus {
+		t.Error("bogus future-seq reject was not observed/dropped via debug log")
+	}
+	if !sawRealReject {
+		t.Error("genuine reject (share 2) was not counted — guard swallowed real errors")
+	}
+	if got := m.sharesRejected.Value(); got != 1 {
+		t.Errorf("sharesRejected = %d, want exactly 1 (bogus seq 9999 must not count)", got)
 	}
 }

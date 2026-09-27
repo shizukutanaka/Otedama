@@ -906,14 +906,33 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				}
 			}
 			if pm.msg.SubmitSharesError != nil {
-				reason := pm.msg.SubmitSharesError.Error
-				category, diagnosis := rejectClass(reason)
-				opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
-					reason, diagnosis))
-				if opts.m != nil {
-					opts.m.sharesRejected.Inc()
-					opts.m.rejectReason(category).Inc()
-					opts.m.touchLastReject(category, time.Now().Unix())
+				e := pm.msg.SubmitSharesError
+				if e.SequenceNumber > seqNum {
+					// The pool rejected a submit that never happened —
+					// SV2 assigns one response per SequenceNumber, so a
+					// seq beyond what we sent is unambiguously bogus.
+					// A hostile pool could otherwise inflate the reject
+					// rate and trip the curtailment gate at will.
+					opts.log("debug", fmt.Sprintf(
+						"engine: share reject with future seq %d ignored (sent %d)",
+						e.SequenceNumber, seqNum))
+				} else {
+					// Settle the outstanding submit if still tracked: an
+					// error is the share's final response too, and leaving
+					// the entry would leak it until some later success.
+					if sent, ok := submitTimes[e.SequenceNumber]; ok {
+						latency.Record(float64(time.Since(sent).Microseconds()) / 1000.0)
+						delete(submitTimes, e.SequenceNumber)
+					}
+					reason := e.Error
+					category, diagnosis := rejectClass(reason)
+					opts.log("warn", fmt.Sprintf("engine: share rejected: %s (%s)",
+						reason, diagnosis))
+					if opts.m != nil {
+						opts.m.sharesRejected.Inc()
+						opts.m.rejectReason(category).Inc()
+						opts.m.touchLastReject(category, time.Now().Unix())
+					}
 				}
 			}
 
@@ -1269,7 +1288,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

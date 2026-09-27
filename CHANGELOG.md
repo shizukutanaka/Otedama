@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 277 — SV2 の偽 reject フレームを計数しない: `SequenceNumber` が未送信の reject は curtailment トリガーを歪める)
+
+`SubmitSharesError` は受信するたびに `shares_rejected` / reject-rate を
+無条件でインクリメントしていた。SV2 では1シェア=1応答のため、送信済み
+`seqNum` を超える `SequenceNumber` の reject は明確に不正 —— 悪意ある
+プールが reject フレームを垂れ流して reject 率を水増しし、curtailment
+ゲート（収益喪失の DoS）を任意に誘発できた。`seq > seqNum` の reject は
+debug ログに落として計数しない。また error を当該シェアの最終応答として
+扱い、`submitTimes` から settle・往復遅延を記録する（従来は後続の success
+が来るまで滞留し、reject のみ続く場合は事実上リークしていた）。
+
+併せて監査判定を記録: V1 `mining.notify` の `clean_jobs` フラグは
+`sendJob` で正しく flush 済み（stale ジョブはキュームから除去される）。
+V1 jobsCh/noticeCh はともに cap=8 の bounded チャネル。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -939,3 +939,25 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 277 — SV2 reject-frame validation + V1 audit completion
+
+### Landed this session
+
+- ✅ **`SubmitSharesError` counted only for plausible seqs.** SV2 assigns
+  one response per `SequenceNumber`; a reject with seq > `seqNum` (never
+  sent) is unambiguously bogus. Previously every reject frame incremented
+  `shares_rejected` + reject-rate, so a hostile pool could inject frames
+  and trip the curtailment gate — denial of revenue. Bogus seqs now log
+  at debug and skip all counters. Errors also settle their seq in
+  `submitTimes` (latency recorded + entry deleted; previously errored
+  submits lingered until a success arrived). [OBSERVED]
+
+### Audit verdicts (no change needed)
+
+- **V1 `clean_jobs` honored** — `sendJob` drains jobsCh on clean_jobs=true,
+  drops oldest on full channel otherwise. [OBSERVED]
+- **V1 queues bounded** — `jobsCh`, `noticeCh` both `cap=8`. [OBSERVED]
+- **V2 `SubmitSharesSuccess`** settles seq ≤ `LastSequenceNumber`; a
+  forged success only inflates accept metrics (pool gains nothing — it
+  cannot fake payouts), so no seq validation added there. [OBSERVED]
