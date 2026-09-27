@@ -828,6 +828,13 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if pm.err != nil {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
+			// Channel-scoped frames must name our channel. A frame
+			// addressed to a different channel would corrupt job,
+			// prev-hash, or share-target state.
+			if cid, ok := channelIDOf(pm.msg); ok && cid != chanID {
+				opts.log("warn", fmt.Sprintf("engine: frame for foreign channel %d ignored (channel %d)", cid, chanID))
+				continue
+			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
 				jobs[j.JobID] = j
@@ -1230,6 +1237,25 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 }
 
 // ----- Shared helpers -----
+
+// channelIDOf reports the channel_id carried by a channel-scoped SV2
+// message. ok is false for frames with no channel field (unknown or
+// connection-scoped types), which callers should let through.
+func channelIDOf(m stratum.Message) (uint32, bool) {
+	switch {
+	case m.NewMiningJob != nil:
+		return m.NewMiningJob.ChannelID, true
+	case m.SetNewPrevHash != nil:
+		return m.SetNewPrevHash.ChannelID, true
+	case m.SetTarget != nil:
+		return m.SetTarget.ChannelID, true
+	case m.SubmitSharesSuccess != nil:
+		return m.SubmitSharesSuccess.ChannelID, true
+	case m.SubmitSharesError != nil:
+		return m.SubmitSharesError.ChannelID, true
+	}
+	return 0, false
+}
 
 type encodable interface{ Encode() ([]byte, error) }
 
