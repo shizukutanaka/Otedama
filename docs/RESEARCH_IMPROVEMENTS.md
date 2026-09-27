@@ -939,3 +939,22 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 376 — audit-checklist row verification (continued)
+
+[AUDITED — clean] i18n completeness is test-enforced:
+`TestAllLanguages_CoverAllEnglishIDs` asserts `MissingTranslations()`
+is empty for the full built-in bundle, so a dropped catalog entry is a
+CI failure, not a silent fallback.
+
+[AUDITED — clean] Checklist rows verified true: #14 (go.mod contains
+only `x/crypto` + `yaml.v3` + stdlib), #7 (test:impl line ratio 1.74
+≥ 1.0), doctor count (17 checks = CLAUDE.md claim), ADR-001..011 all
+present, SECURITY.md + CODE_OF_CONDUCT.md present.
+
+[FIXED] `.goreleaser.yaml` release header referenced a nonexistent
+`docs/verify-release.md` (dead link in every future release note) and
+named the checksums file `checksums.txt` while the configured
+`checksum.name_template` emits `otedama_<ver>_checksums.txt`. Both
+corrected; the link is now an absolute URL to DEPLOYMENT.md (relative
+links in release bodies do not resolve to repo files).
