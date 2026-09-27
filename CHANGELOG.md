@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 282 — プール難易度による収益飢餓のトリップワイヤ警告: 期待シェア間隔が 1 時間超で一度だけ warn)
+
+**検証済みの欠落.** `mining.set_difficulty` / `SetTarget` でプールが採掘側の
+ハッシュレートを大きく上回る難易度を割り当てると、reject も切断も発生せず
+収益が静かにゼロ化する —— `otedama_estimated_share_interval_seconds` は
+既に算出・公開済みだが、人間向けの警告経路がなかった（closed #382 で設計済み
+だったが未マージのため master へ再デリバー）。
+
+**修正.** V1 stats tick で `estimatedShareIntervalSeconds > 3600` かつ未警告の
+場合に一度だけ warn を出し、間隔が回復したらエピソードを再アームする
+（`starvedWarned` はセッション局所）。新テスト `fakeV1PoolHighDiff` +
+`TestRunSessionV1_StarvationWarnsOnce` が難易度 1e15 で警告が
+ちょうど 1 回出ることを検証。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

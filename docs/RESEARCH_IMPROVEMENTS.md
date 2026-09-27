@@ -939,3 +939,23 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 282 — difficulty-starvation tripwire (re-delivers closed #382)
+
+**Finding [OBSERVED — code-verified].** The pool-assigned difficulty can
+starve income silently: at a difficulty far above what the miner's hashrate
+can serve, no rejects and no disconnect occur — shares simply never arrive.
+The `otedama_estimated_share_interval_seconds` gauge was already computed
+and published (session 135), but nothing surfaced the state to a human. This
+was built once on the closed #382 branch and never merged — re-delivered
+standalone.
+
+**Fix [OBSERVED].** In the V1 stats tick, `estimatedShareIntervalSeconds >
+3600` warns once per episode (`starvedWarned` re-arms on recovery). A new
+fake-pool variant emits `set_difficulty` 1e15; the test asserts exactly one
+warning fires across many ticks.
+
+**Audit note [OBSERVED].** V2 is untouched: `SetTarget` flows through the
+same `publishDifficulty` gauge, but the V2 loop's stats tick does not call
+`publishDifficulty` at all — worth wiring symmetrically if the V2 path gains
+a difficulty reader.

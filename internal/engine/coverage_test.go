@@ -1085,6 +1085,108 @@ func fakeV1Pool(t *testing.T, sendJob bool) string {
 	return ln.Addr().String()
 }
 
+// fakeV1PoolHighDiff is fakeV1Pool plus a mining.set_difficulty of 1e15 —
+// large enough that the expected share interval exceeds the 1-hour
+// starvation tripwire at any CPU hashrate.
+func fakeV1PoolHighDiff(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("fakeV1PoolHighDiff listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		r := bufio.NewReader(conn)
+
+		_, _ = r.ReadString('\n') // subscribe
+		fmt.Fprintf(conn, `{"id":1,"result":[[["mining.set_difficulty","s1"],["mining.notify","s2"]],"c0ffee",4],"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // authorize
+		fmt.Fprintf(conn, `{"id":2,"result":true,"error":null}`+"\n")
+		_, _ = r.ReadString('\n') // extranonce.subscribe
+		fmt.Fprintf(conn, `{"id":3,"result":null,"error":[38,"Method not found",null]}`+"\n")
+
+		fmt.Fprintf(conn, `{"id":null,"method":"mining.set_difficulty","params":[1e15]}`+"\n")
+		fmt.Fprintf(conn,
+			`{"id":null,"method":"mining.notify","params":[`+
+				`"1",`+
+				`"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000",`+
+				`"","",[],"00000002","1d00ffff","68d36c5e",true]}`+"\n")
+		// Stay connected so the stats ticker keeps firing.
+		time.Sleep(10 * time.Second)
+	}()
+
+	return ln.Addr().String()
+}
+
+func TestRunSessionV1_StarvationWarnsOnce(t *testing.T) {
+	addr := fakeV1PoolHighDiff(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	var mu sync.Mutex
+	var warns int
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSessionV1(ctx, sessionOpts{
+			poolURL:  "stratum+tcp://" + addr,
+			user:     "worker.1",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log: func(level, msg string) {
+				if level == "warn" && strings.Contains(msg, "between shares") {
+					mu.Lock()
+					warns++
+					mu.Unlock()
+				}
+			},
+		})
+	}()
+
+	deadline := time.After(3 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		select {
+		case <-poll.C:
+			mu.Lock()
+			n := warns
+			mu.Unlock()
+			if n > 0 {
+				goto asserted
+			}
+		case <-deadline:
+			goto asserted
+		}
+	}
+asserted:
+	cancel()
+	<-runDone
+	mu.Lock()
+	defer mu.Unlock()
+	if warns == 0 {
+		t.Fatal("expected starvation warning (difficulty 1e15 → interval > 1h)")
+	}
+	if warns > 1 {
+		t.Fatalf("starvation warning fired %d times, want exactly 1 per episode", warns)
+	}
+}
+
 func TestRunSessionV1_PoolClosesAfterHandshake(t *testing.T) {
 	addr := fakeV1Pool(t, false) // closes immediately after authorize
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
