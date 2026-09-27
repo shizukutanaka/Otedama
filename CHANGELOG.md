@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 377)
+
+- `make fuzz` が機能していなかった問題を修正 — `go list` の出力はインポートパスであり `{}/*.go` グロブがファイルシステム上のディレクトリに一致せずループが常に空回りしていた。ファイルシステムから fuzz テストを発見し、ターゲット毎に `-fuzz=^Name$` で30秒実行するよう変更（1パッケージ複数 fuzz 関数での "matches more than one" 失敗も解消）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

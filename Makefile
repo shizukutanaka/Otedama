@@ -138,10 +138,15 @@ bench: ## Run benchmarks
 
 .PHONY: fuzz
 fuzz: ## Run fuzz tests for 30 seconds per target
-	@for pkg in $$($(GO) list ./... | xargs -I {} sh -c 'grep -l "func Fuzz" {}/*.go 2>/dev/null | head -1'); do \
-		echo "Fuzzing $$pkg..."; \
-		$(GO) test -fuzz=. -fuzztime=30s $$pkg || exit 1; \
-	done
+	@found=0; \
+	for dir in $$(grep -rln 'func Fuzz' --include='*_test.go' internal cmd | xargs -n1 dirname | sort -u); do \
+		for fn in $$(grep -hoE 'func (Fuzz[A-Za-z0-9_]+)' $$dir/*_test.go | sed 's/^func //'); do \
+			found=1; \
+			echo "Fuzzing ./$$dir -run=$$fn..."; \
+			$(GO) test -fuzz="^$$fn$$" -fuzztime=30s ./$$dir || exit 1; \
+		done; \
+	done; \
+	[ $$found -eq 1 ] || echo "No fuzz tests found."
 
 # --------------------------------------------------------------------------
 # Quality
