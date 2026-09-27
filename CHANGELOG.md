@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 276 — client.reconnect の `wait_seconds` を実際に尊重: プール指定の再接続待機が記録されるだけで適用されていなかった)
+
+`client.reconnect` / `mining.reconnect` 通知の `wait` フィールド（再接続前の
+待機秒数）は `reconnectDirective` に記録されていたが、どのコードパスからも
+読まれていなかった。負荷分散・メンテナンス目的でプールが送る正規の指示であり、
+無視するとプールの意図したドレイン時間を踏み倒す。
+
+`poolproto.ReconnectWaiter` インターフェースを新設し、V1 セッションが
+`ReconnectWait()` を実装（返却値は `[0, 300s]` にクランプ——悪意あるプールが
+`wait=1e9` でセッションを無期限に駐車する DoS を防止）。`runSessionV1` の
+セッション終了経路で、再接続ループへ制御を返す前にこの待機を
+`ctx.Done()` キャンセル可能な形で適用する。プール指定の Host:Port は
+引き続きフォローしない（リダイレクト攻撃対策、従来どおり）。
+
+併せて V1 サーバー→クライアント入力面の残監査を完了: `mining.notify` の
+非16進 version/nBits/nTime が暗黙 0 化する経路は下流で拒否されることを確認
+（`TargetFromNBits` が nBits=0 を `exp<3`/ゼロ仮数で弾き、`applyJob` が
+unparseable JobID を弾く）。ワイヤ行上限 64 KiB も健在。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

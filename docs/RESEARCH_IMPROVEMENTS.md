@@ -939,3 +939,36 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+---
+
+## Session 276 — pool-controlled input audit (master), reconnect-wait honoring
+
+Continuation of the V1/V2 server→client input-surface audit on master.
+Verdicts below are **[OBSERVED]** — verified directly in the tree this
+session; no external fetch required.
+
+### Landed this session
+
+- ✅ **`client.reconnect`/`mining.reconnect` `wait_seconds` now honored.**
+  The directive's `Wait` field was parsed and stored but never read
+  (dead write). New `poolproto.ReconnectWaiter` interface; V1 session
+  implements `ReconnectWait()` clamped to `[0, 300s]`; `runSessionV1`
+  applies it on the session-end path, cancellable via `ctx` so shutdown
+  stays instant. Pool-supplied `Host:Port` remains deliberately ignored
+  (unauthenticated redirect defense) — only the wait is honored.
+  [OBSERVED]
+
+### Audit verdicts (no change needed)
+
+- **`mining.notify` malformed hex → safe downstream.** Non-hex
+  version/nBits/nTime parse to 0 via `strconv` best-effort; the job then
+  fails at `TargetFromNBits` (nBits=0 → `exp<3`/zero-mantissa reject)
+  or `applyJob` (unparseable JobID) — the error surfaces rather than
+  mining a silently-malformed header. [OBSERVED]
+- **V1 wire reader bound intact** — 64 KiB `bufio` cap + `ErrBufferFull`
+  on oversize lines. [OBSERVED]
+- **rates/doctor HTTP bodies bounded** — 64 KiB / 8 KiB `LimitReader`s
+  on master. [OBSERVED]
+- **`mining.set_version_mask` ignored = correct** — BIP310 rolling is
+  opt-in; no action. [OBSERVED]
