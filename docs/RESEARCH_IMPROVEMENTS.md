@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 312 — surface client.show_message pool notices to the log (re-delivers closed #405)
+
+**Finding [OBSERVED — code-verified].** V1 `client.show_message` was
+parsed and delivered on `PoolNotices()` but had no consumer — pool
+operator notices ("maintenance in 10 min") were silently lost on a dead
+channel.
+
+**Fix [OBSERVED].** `runSessionV1` pulls the notices channel via
+`poolproto.PoolNoticeReceiver` and forwards each notice to the info log
+(slog escapes/attributes — ANSI injection impossible).
+
+**Tests [OBSERVED].** `TestRunSessionV1_PoolNoticeLogged`.

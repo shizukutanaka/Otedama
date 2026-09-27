@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 312 — client.show_message のオペレータ通知をログに配線)
+
+**問題.** V1 の `client.show_message` は解析済みで `PoolNotices()` まで
+届いていたが消費者がおらず dead channel 化していた——プールの
+「10 分後メンテ」等の通知が失われていた。closed #405 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `runSessionV1` で `PoolNoticeReceiver` から通知チャネルを取得し
+info ログへ転送（slog 経由のため ANSI 注入は不可）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
