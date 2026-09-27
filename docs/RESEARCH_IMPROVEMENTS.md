@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 299 — bound pool-controlled extranonce2_size (re-delivers closed #398 + its review fix)
+
+**Finding [OBSERVED — code-verified].** The pool-supplied `extranonce2_size`
+flowed unbounded into `strings.Repeat` on every `mining.submit` — a hostile
+pool or MitM on cleartext V1 could force multi-gigabyte allocations per
+share (memory exhaustion).
+
+**Fix [OBSERVED].** `maxExtranonce2Size = 64` enforced at both negotiation
+entry points (out-of-range subscribe results abort the dial; out-of-range
+`set_extranonce` notifications are dropped) plus a defensive clamp in
+`Submit`. Validation happens on the float64 — `int()` truncation would let
+64.5 pass as 64 (review fix from #398).
+
+**Tests [OBSERVED].** Boundary unit tests on both entry points including
+fractional and negative sizes.

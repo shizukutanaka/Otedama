@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 299 — `extranonce2_size` の無制限値でメモリ枯渇できた問題を修正)
+
+**問題.** プール制御の `extranonce2_size` が `strings.Repeat` に無制限で
+流れ、cleartext V1 上の悪意プール/MitM が submit 毎に数 GiB の確保を
+強制できた。closed #398 の未マージ修正（fractional en2_size による
+int 切り捨て迂回の対策込み）を master へ再デリバー。
+
+**修正.** `maxExtranonce2Size = 64` を導入し、subscribe 結果と
+`mining.set_extranonce` の両入口で範囲外を拒否（範囲外の subscribe は
+dial 中止、set_extranonce は drop）。`Submit` も [0, 64] にクランプ。
+float64 ドメインで検証するため 64.5/-0.5 のような小数も拒否される。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
