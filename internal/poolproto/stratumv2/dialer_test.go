@@ -1019,3 +1019,34 @@ func TestFloat64FromBits(t *testing.T) {
 		}
 	}
 }
+
+// TestSendMsg_WriteDeadline exercises the stall guard: a pool that keeps
+// the TCP connection open but never reads must not block sendMsg
+// forever — the write deadline fires and the session loop can error out
+// to the reconnect path instead of hanging silently.
+func TestSendMsg_WriteDeadline(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	orig := writeTimeout
+	writeTimeout = 50 * time.Millisecond
+	defer func() { writeTimeout = orig }()
+
+	// Nobody reads server; kernel send buffer fills and the deadline
+	// must bound the write.
+	start := time.Now()
+	sc := stratum.SetupConnection{
+		Protocol:   stratum.MiningProtocol,
+		MinVersion: 2,
+		MaxVersion: 2,
+		Endpoint:   "pool.invalid:34254",
+	}
+	err := sendMsg(client, stratum.MsgSetupConnection, false, &sc)
+	if err == nil {
+		t.Fatal("sendMsg on an unread pipe should fail once the write deadline fires")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("sendMsg blocked %v — write deadline not applied", elapsed)
+	}
+}

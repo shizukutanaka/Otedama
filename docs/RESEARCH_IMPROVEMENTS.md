@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 324 — SV2 write path lacked a deadline (write-side stall fix)
+
+**Finding [OBSERVED — code-verified].** `sendMsg` wrote to the pool
+socket with no `SetWriteDeadline`. A pool that keeps the TCP connection
+open but stops reading leaves a blocked `Write` once the kernel send
+buffer fills — the whole V2 runSession stalls silently: no jobs
+processed, no shares out. V1 already bounds writes at 10 s; the V2 path
+had no equivalent.
+
+**Fix [OBSERVED].** `writeTimeout` (10 s, matching V1) applied via
+`SetWriteDeadline` inside `sendMsg`, covering SetupConnection,
+OpenMiningChannel, and every SubmitSharesStandard write.
+
+**Tests [OBSERVED].** `TestSendMsg_WriteDeadline` writes to an unread
+net.Pipe with a shortened timeout and asserts a prompt i/o timeout.

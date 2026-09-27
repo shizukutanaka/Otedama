@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 324 — SV2 書き込み deadline の追加)
+
+**問題.** V2 の `sendMsg` は `net.Conn.Write` を deadline なしで呼んで
+いた——プールが TCP を開いたまま読み止めると、カーネル送信バッファ
+満杯時に `Write` が無期限ブロックし runSession 全体がサイレントに
+stall した。V1 には 10s の write deadline があり非対称だった。
+
+**修正.** `writeTimeout`（10s、V1 と同値）を全 V2 書き込みに適用。
+新テスト `TestSendMsg_WriteDeadline` が未読 net.Pipe で timeout
+を確認。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
