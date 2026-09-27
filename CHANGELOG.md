@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 360 — ファイル書込み/カタログ整合)
+
+設定ファイルは書き込み経路なし（read-only）。daemon unit 0644 は
+機密フラグ非含有で安全。ログファイル 0600。SPEC §6 と登録済み
+40 メトリクスの整合を検証（差分ゼロ）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -939,3 +939,29 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 360 — file-write hygiene + catalogue drift verdicts
+
+**Config file writes [AUDITED — none exist].** `cmd/otedama` and
+`internal/config` contain zero `os.WriteFile`/`os.Create` call sites —
+config.yaml is strictly user-authored (read-only + KnownFields). No
+generated-file permission surface exists to harden.
+
+**Daemon unit files [AUDITED — safe at 0644].** systemd user units and
+launchd plists are written 0644, the platform convention; the embedded
+flags (`--bitcoin-address`, `--log-level`, `--log-format`,
+`--language`) carry no secrets — the payout address is public by
+design. Hardening directives verified present: NoNewPrivileges,
+ProtectHome=read-only, PrivateTmp, ReadWritePaths carve-out for the
+data dir (s342 quoting fix in-flight on #454).
+
+**Log file [AUDITED — 0600].** `--log-file` opens O_CREATE|O_APPEND
+with mode 0600 — no group/world read on log lines that may contain
+pool-supplied text.
+
+**SPEC §6 catalogue drift [AUDITED — zero].** Cross-checked all 40
+`otedama_*` registrations in `internal/engine/metrics.go`,
+`internal/metrics/runtime.go`, and `internal/engine/run.go` against
+§6's table: every metric is documented, including all † lazy-labelled
+series. The previously-flagged `submit_latency_milliseconds` unit
+inconsistency remains the one open naming decision (§8 G18).
