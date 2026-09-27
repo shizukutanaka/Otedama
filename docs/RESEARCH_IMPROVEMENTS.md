@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 300 — bound outstanding V2 job maps (re-delivers closed #397)
+
+**Finding [OBSERVED — code-verified].** Two unbounded job maps on the V2
+path: the engine's `jobs` map and the adapter's `pending` map. A hostile or
+compromised pool flooding distinct `NewMiningJob` IDs without rotating the
+tip could grow memory without limit (Noise encrypts the wire, so the actor
+is the pool itself).
+
+**Fix [OBSERVED].** `jobsCap`/`pendingCap` = 64, oldest-first eviction with a
+debug log; `SetNewPrevHash`'s full-job discard also resets the eviction
+order queue.
+
+**Tests [OBSERVED].** `TestStoreBoundedJob_BoundsOutstandingJobs` +
+`TestSession_PendingJobsBounded` — flood 70 future jobs, newest still emits.

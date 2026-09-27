@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 300 — V2 ジョブ map の無制限化でメモリ枯渇できた問題を修正)
+
+**問題.** V2 経路の未処理ジョブ map（engine の `jobs` と adapter の
+`pending`）が無制限で、悪意/侵害されたプールが `NewMiningJob` を連投して
+メモリを枯渇させられた。closed #397 の未マージ修正を master へ再デリバー。
+
+**修正.** engine 側 `jobsCap`=64、adapter 側 `pendingCap`=64 の FIFO
+境界（最古を追放し debug ログ）。`SetNewPrevHash` の全ジョブ破棄時は
+追放順序キューもリセット。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

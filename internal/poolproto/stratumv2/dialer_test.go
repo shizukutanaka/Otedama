@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -1018,4 +1019,62 @@ func TestFloat64FromBits(t *testing.T) {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
 	}
+}
+
+// TestSession_PendingJobsBounded floods the read loop with distinct future
+// job IDs past pendingCap, then confirms the newest job still emits when
+// SetNewPrevHash names it — the bound must not drop the flood-tail jobs.
+func TestSession_PendingJobsBounded(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		pool.doHandshake(7)
+
+		// Flood pendingJobs far past pendingCap — all future jobs (no
+		// min_ntime), so they sit in the map waiting for a tip.
+		for i := uint32(1); i <= pendingCap+6; i++ {
+			job := stratum.NewMiningJob{ChannelID: 7, JobID: i, Version: 0x20000000}
+			for k := range job.MerkleRoot {
+				job.MerkleRoot[k] = byte(i)
+			}
+			writeMsgTo(t, pool.conn, stratum.MsgNewMiningJob, true, job)
+		}
+
+		// Activate the NEWEST job: if FIFO eviction kept it, it emits.
+		prev := stratum.SetNewPrevHash{
+			ChannelID: 7,
+			JobID:     pendingCap + 6,
+			MinNtime:  0x60000000,
+			NBits:     0x207fffff,
+		}
+		writeMsgTo(t, pool.conn, stratum.MsgSetNewPrevHash, true, prev)
+		// Keep the conn open until the client has had time to emit.
+		time.Sleep(200 * time.Millisecond)
+	}()
+
+	conn, err := d.Dial(ctx, "stratum+v2://127.0.0.1:1", poolproto.Credentials{User: "u"})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	defer sess.Close()
+
+	select {
+	case job := <-sess.Jobs():
+		if job.JobID != strconv.Itoa(int(pendingCap)+6) {
+			t.Errorf("emitted job %q, want newest %d", job.JobID, pendingCap+6)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("newest job was evicted — pendingCap eviction is not FIFO")
+	}
+	<-done
 }
