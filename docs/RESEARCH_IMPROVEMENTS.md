@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 350 — remaining pool-text log sites
+
+**V1 job ID in log lines [FIXED].** `job.JobID` (pool-controlled
+`mining.notify` string) was logged with `%s` on both the curtailed-debug
+and job-active lines — a pool could embed ANSI escapes or newlines to
+forge log entries. Both sites now use `%q`, which escapes control
+bytes and makes unusual content visible. The `applyJob` error paths
+already used `%q` and were verified safe.
+
+**Remaining pool-text audit [AUDITED — clean].** `engine: V1 submit:
+%v` logs only transport/call errors (the pool's reject text travels in
+`ShareResult.Reason`, covered by PR #461's sanitizer); `loc`/`host`/
+`poolURL` log operands come from the operator's own pool configuration,
+not the wire; V2 job lines log numeric JobID. No other unquoted
+pool-derived strings reach the log.
