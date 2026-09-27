@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 295 — publish V2 share-target difficulty + starvation warn (re-delivers closed #395)
+
+**Finding [OBSERVED — code-verified].** `publishDifficulty` ran only in the
+V1 stats tick: V2 sessions never updated `otedama_pool_difficulty` and never
+emitted the starvation warn — the V1/V2 observability paths were asymmetric.
+
+**Fix [OBSERVED].** `miner.DifficultyFromTarget` converts the V2 share target
+(a raw U256 from OpenMiningChannelSuccess/SetTarget) into a Stratum
+difficulty (diff1Target / target; zero target → +Inf). The V2 stats tick
+publishes it and runs the same >3600s starvation tripwire as V1.
+
+**Tests [OBSERVED].** `DifficultyFromTarget` unit table (diff1 → 1.0,
+halving, zero → +Inf); V2 stats tick publishes; warn fires once per episode.
