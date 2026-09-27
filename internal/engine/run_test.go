@@ -742,6 +742,12 @@ func TestRejectClass(t *testing.T) {
 		{"Invalid solution", "hardware", "hardware"},
 		{"bad nonce", "hardware", "hardware"},
 		{"some unknown pool error", "other", "unclassified"},
+		// Canonical SV2 SubmitSharesError codes (sv2-spec MiningProtocol):
+		// "invalid-job-id"/"invalid-channel-id" are stale-class, NOT hardware.
+		{"stale-share", "stale", "stale"},
+		{"invalid-job-id", "stale", "stale"},
+		{"invalid-channel-id", "stale", "stale"},
+		{"difficulty-too-low", "difficulty", "difficulty"},
 	}
 	for _, tt := range cases {
 		cat, diag := rejectClass(tt.reason)
