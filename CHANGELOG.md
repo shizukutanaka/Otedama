@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 303 — 採掘収益推定が固定ハッシュレート定数を使っていた問題を修正)
+
+**問題.** mining-yield 推定がコンパイル時のネットワークハッシュレート
+定数（1e21 H/s、実測と乖離）に依存していた。closed #378 の未マージ修正を
+master へ再デリバー。
+
+**修正.** `rates.HashrateFetcher` が mempool.space + blockchain.info を
+ポーリングし、妥当性バンド内の中央値でライブ推定に差し替える
+（`MiningProvider.NetworkHashrateFunc` 経由）。フィード停止・未配線時は
+従来の定数へフォールバックするためオフライン起動は不変。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

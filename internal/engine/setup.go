@@ -84,8 +84,11 @@ func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level
 // When non-empty, a closure over workers is set on the MiningProvider's
 // HashrateFunc so each publish() call samples the live worker.Stats().HashRate
 // rather than using the static per-family constant (KNOWN_LIMITATIONS §7).
-func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
+func startProviders(ctx context.Context, cfg config.Config, rateFetcher provider.RateSource, hashSource provider.NetworkHashrateSource, devices []hal.Device, workers []*miner.Worker, log func(level, msg string)) (*provider.MiningProvider, *provider.AkashProvider) {
 	miningProvider := provider.NewMiningProvider(defaultPoolURL(cfg), rateFetcher)
+	if hashSource != nil {
+		miningProvider.NetworkHashrateFunc = hashSource.CurrentHashrate
+	}
 	if len(workers) > 0 {
 		// Capture workers by value so the closure stays valid after this
 		// function returns. Each call samples the current hashrate; no

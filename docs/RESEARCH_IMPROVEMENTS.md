@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 303 — live network-hashrate feed replaces static mining-yield constant (re-delivers closed #378)
+
+**Finding [OBSERVED — code-verified].** The mining-yield estimate consumed a
+compile-time network-hashrate constant (~1e21 H/s) that drifts from reality;
+KNOWN_LIMITATIONS §7 had already scoped a live feed as deferred work.
+
+**Fix [OBSERVED].** `rates.HashrateFetcher` polls mempool.space +
+blockchain.info (endpoints fetched and shape-verified live — ~930 EH/s vs the
+stale constant), takes the median inside a plausibility band, and replaces the
+constant via `MiningProvider.NetworkHashrateFunc`. Stale/unwired falls back to
+the constant, so offline start is unaffected.
+
+**Tests [OBSERVED].** `hashrate_test.go` — band rejection, median selection,
+stale fallback; `provider_test.go` — `TestMiningProvider_LiveNetworkHashrate`.
