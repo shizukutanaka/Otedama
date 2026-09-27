@@ -939,3 +939,25 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 344 — V1 set_difficulty value validation
+
+**Non-positive/non-finite difficulty [FIXED].** `parseDifficulty`
+stored `params[0]` unchecked: `d <= 0` collapses the share target to
+accept-every-hash (a share flood from a hostile pool or MitM on
+cleartext V1), and non-finite values poisoned the target math
+downstream (same class as the s325 `Yield.Effective` and s331 hysteresis
+non-finite fixes). NaN/±Inf cannot arrive via JSON literals but
+`1e999` decodes to +Inf without error — all now rejected. Fractional
+and subnormal difficulties stay valid (ESP-Miner #1594/#1779 show real
+pools use them).
+
+**Ecosystem re-check [FETCHED].** SRI v1.12.0 (Sep 17) unchanged since
+s329. ESP-Miner v2.15.3 (Sep 20) is a UI-only patch; the v2.15.x stratum
+changes (fractional SV2 difficulty, duplicate-jobId drop,
+submit-response-only share counting, TCP_NODELAY) are all behaviours
+Otedama already matches — recorded. Go advisory batch (Sep 2) — the
+reachable classes (crypto/tls KeyUpdate DoS CVE-2026-56862,
+net/url quadratic CVE-2026-56860) are fixed in go1.26.8 which the
+toolchain already requires; encoding/xml recursion and unencrypted-HTTP/2
+do not apply (no xml decode, no h2c listener).

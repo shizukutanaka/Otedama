@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 344 — 非正 difficulty の拒否)
+
+`mining.set_difficulty` の値が `d <= 0`（NaN/±Inf 含む）の場合に
+拒否するよう修正。従来は無検証で格納され、シェアターゲットが
+「全ハッシュ受理」に縮退して submit フラッドが可能だった
+（平文 V1 上の MitM/悪意プール）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
