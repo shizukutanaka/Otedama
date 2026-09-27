@@ -262,6 +262,15 @@ func logStats(workers []*miner.Worker, hashRate float64, log func(string, string
 // invalid→hardware.
 func rejectClass(reason string) (category, diagnosis string) {
 	r := strings.ToLower(reason)
+	// Canonical SV2 SubmitSharesError error codes (sv2-spec MiningProtocol):
+	// check them before substring heuristics — e.g. "invalid-job-id" would
+	// otherwise match "invalid" → hardware, but it is a stale-class reject.
+	switch r {
+	case "stale-share", "invalid-job-id", "invalid-channel-id":
+		return "stale", "likely cause: stale work (job superseded or channel closed)"
+	case "difficulty-too-low":
+		return "difficulty", "likely cause: share below negotiated difficulty"
+	}
 	switch {
 	case strings.Contains(r, "stale") || strings.Contains(r, "job not found") || strings.Contains(r, "unknown job"):
 		return "stale", "likely cause: network latency / stale work"
