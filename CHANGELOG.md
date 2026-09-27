@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 297 — canonical SV2 拒否コードが誤分類されていた問題を修正)
+
+**問題.** `rejectClass` の部分一致ヒューリスティックのせいで
+`invalid-job-id`/`invalid-channel-id`（実際は stale 系）が hardware に、
+`difficulty-too-low` が other に落ちていた。closed #399 の未マージ修正を
+master へ再デリバー。
+
+**修正.** 標準 SV2 エラーコードの完全一致分類をヒューリスティックより
+先に評価する。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

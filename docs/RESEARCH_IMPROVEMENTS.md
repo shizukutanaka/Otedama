@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 297 — classify canonical SV2 reject codes before substring heuristics (re-delivers closed #399)
+
+**Finding [OBSERVED — code-verified].** `rejectClass`'s substring heuristics
+misclassified the canonical sv2-spec error codes: `invalid-job-id` and
+`invalid-channel-id` landed in `hardware` when they're stale-class, and
+`difficulty-too-low` matched nothing so it fell to `other`.
+
+**Fix [OBSERVED].** An exact-match switch on the canonical codes runs before
+the substring fallback — `invalid-job-id`/`invalid-channel-id`/`stale-share`
+→ stale, `difficulty-too-low` → difficulty.
+
+**Tests [OBSERVED].** `TestRejectClass` table — all four canonical codes plus
+representative heuristics.
