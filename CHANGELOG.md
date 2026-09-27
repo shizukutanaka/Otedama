@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 326 — 衛生スイープ結果の記録)
+
+`govulncheck`（go1.26.8）を最新実行: **到達可能な脆弱性 0**
+（module-level advisory 22件は全て非到達）。`deadcode` の指摘は
+全てテスト専用/将来向けのエクスポート API 面であり実質デッド
+コードなし——削除対象とせず判定を記録。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
