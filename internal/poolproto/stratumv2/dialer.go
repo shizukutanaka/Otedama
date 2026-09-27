@@ -106,7 +106,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, err
 	}
 	if msg.SetupConnectionError != nil {
-		return nil, fmt.Errorf("%w: %s", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
+		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.SetupConnectionError.Error)
 	}
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
@@ -130,7 +130,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		return nil, err
 	}
 	if msg.OpenMiningChannelError != nil {
-		return nil, fmt.Errorf("%w: %s", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
+		return nil, fmt.Errorf("%w: %q", poolproto.ErrHandshakeFailed, msg.OpenMiningChannelError.Error)
 	}
 	if msg.OpenMiningChannelSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during channel open", f.Header.MsgType)
