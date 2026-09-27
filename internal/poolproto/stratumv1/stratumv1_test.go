@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -866,11 +867,11 @@ func TestSession_Dispatch_NotifyParseError_IsIgnored(t *testing.T) {
 func TestSession_Dispatch_SetExtranonce_UpdatesFields(t *testing.T) {
 	sess := makeBareSess()
 	sess.dispatch([]byte(`{"method":"mining.set_extranonce","params":["deadbeef01",4]}`))
-	if sess.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sess.extranonce1)
+	if got := sess.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sess.extranonce2Size != 4 {
-		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size)
+	if sess.extranonce2Size.Load() != 4 {
+		t.Errorf("extranonce2Size = %d, want 4", sess.extranonce2Size.Load())
 	}
 }
 
@@ -1524,11 +1525,11 @@ func TestNegotiate_Success_ExtranonceParsed(t *testing.T) {
 	defer sess.Close()
 
 	sv1 := sess.(*session)
-	if sv1.extranonce1 != "deadbeef01" {
-		t.Errorf("extranonce1 = %q, want deadbeef01", sv1.extranonce1)
+	if got := sv1.extranonce1.Load(); got == nil || *got != "deadbeef01" {
+		t.Errorf("extranonce1 = %v, want deadbeef01", got)
 	}
-	if sv1.extranonce2Size != 8 {
-		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size)
+	if sv1.extranonce2Size.Load() != 8 {
+		t.Errorf("extranonce2Size = %d, want 8", sv1.extranonce2Size.Load())
 	}
 }
 
@@ -1888,4 +1889,30 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 	if len(sess.noticeCh) != 0 {
 		t.Error("unknown method enqueued a notice")
 	}
+}
+
+// set_extranonce runs on the read goroutine while Submit reads
+// extranonce2Size on the caller's — exercise both concurrently so the
+// race detector catches a regression to plain fields.
+func TestSession_SetExtranonce_ConcurrentReaders(t *testing.T) {
+	sess := makeBareSess()
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				sess.dispatch([]byte(fmt.Sprintf(
+					`{"method":"mining.set_extranonce","params":["%08x",%d]}`,
+					i*1000+j, j%65)))
+			}
+		}(i)
+	}
+	for i := 0; i < 2000; i++ {
+		_ = sess.extranonce2Size.Load()
+		if p := sess.extranonce1.Load(); p != nil {
+			_ = *p
+		}
+	}
+	wg.Wait()
 }
