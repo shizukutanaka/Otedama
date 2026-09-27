@@ -952,3 +952,34 @@ fields (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`,
 `min_yield_sats_per_sec`, `power_watts`,
 `electricity_price_per_kwh`). Table-driven test covers NaN, +Inf,
 -Inf on each field.
+
+## Session 380 — stratum encode-side + stats-math audit; ecosystem re-check
+
+[FIXED — re-delivery] Cherry-picked closed-unmerged #473 (session 361):
+`Config.Validate` rejected non-finite floats only via `x < 0` / `x >= 1`
+comparisons — all false for NaN — so `.nan`/`NaN`/`Inf` config values
+flowed into arbitration math. Now explicit `IsNaN`/`IsInf` rejection on
+all five float fields; table-driven tests cover NaN/+Inf/−Inf each.
+
+[AUDITED — clean] Stratum encode side (fuzz covers the decode side):
+`appendStr0_255`/`appendB0_255`/`appendB0_32` all bound the length-prefix
+payload and every caller propagates the error; `WrapMessage`/`EncodeFrame`
+validate the U24 MsgLength bound. stats.go divisions are all guarded:
+hashrateWindow (`dt>0`, counter-reset safe), acceptanceRate (0/0→1.0),
+effectiveYield (`uptime<=0`→0, fraction clamped [0,1]), publishDifficulty
+(`diff<=0` no-op, `hashrate<=0`→0). Noise internals re-read end-to-end:
+the `ReadMessage2` x-only fallback's secret-less completion is a real
+structural gap but already documented verbatim in KNOWN_LIMITATIONS §2
+item 3 (alpha stub, zero callers outside tests — left for the v3.1.0
+full-message-flow rework rather than churned now). `stratum/tls.go`
+dialer verified: TLS1.2+, system roots + optional extra CAs, handshake
+performed before return, never falls back to plaintext. `setup.go`
+wiring clean (worker-per-device, provider Start errors non-fatal,
+mnemonic printed only to opts.Output pre-TUI).
+
+[FETCHED] Ecosystem unchanged since s375 re-check: SRI v1.12.0 (2026-09-17)
+remains latest (noise_sv2 AES-256-GCM removal is server-side; Otedama
+implements only the ChaChaPoly half already); ESP-Miner v2.15.3
+prerelease (2026-09-20) is preset-scoped frequency warnings only — no
+stratum changes. Go advisories: go1.26.8 toolchain still clears the
+Sept advisories.
