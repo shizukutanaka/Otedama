@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 378)
+
+- `otedama doctor` の Pool reachability チェックが `pools[0]` のみをプローブしていたため、フェイルオーバー先プールの障害を検出できなかった問題を修正 — 全プール（最大8）を並行 TCP プローブし、一部到達不可は Warn・全滅は Fail に。
+- `checkWallet` が wallet.fingerprint の内容を無検証でレポートに埋め込んでいた問題を修正 — 期待形式（8文字小文字 hex）以外は表示せず「malformed」と通知（破損・改ざんファイル由来の制御文字注入を遮断）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -939,3 +939,27 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 378 — doctor check-suite audit
+
+[FIXED] `checkPoolReachability` probed only `Pools[0]`: a dead
+secondary/tertiary pool — the exact thing `checkPoolDiversity` pushes
+operators to configure — was never tested until a real failover. The
+check now probes every configured pool concurrently (bounded at 8, 5s
+dial timeout each, caller ctx honoured): all reachable → Pass; any
+unreachable or unparseable → Warn naming them; zero reachable → Fail.
+
+[FIXED] `checkWallet` embedded the `wallet.fingerprint` file content in
+the report verbatim. A corrupt or tampered file could inject control
+characters into doctor output. The fingerprint is now printed only when
+it matches the shape the wallet writes (8 lowercase hex chars —
+`HMAC-SHA256("otedama-fingerprint-v1", seed)[:4]`); otherwise the check
+reports the file as malformed instead of echoing it.
+
+[AUDITED — clean] The remaining 15 checks: bounded timeouts on every
+network probe (5s pool dial, 3s 1.1.1.1, 5s clock skew incl. bounded
+body drain for keep-alive reuse), address checksums verified for both
+primary and failover lists, data-dir permission warning, pool
+encryption/CA/diversity/scheme checks, env-var lint, profitability
+floor advisory. Results are indexed back into report order, so output
+is deterministic despite concurrent execution.
