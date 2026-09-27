@@ -72,8 +72,8 @@ its default, and its validation rule:
 | `arbitration_hysteresis_pct` | `OTEDAMA_ARBITRATION_HYSTERESIS_PCT` | `0.05` | ∈ [0.0, 1.0) |
 | `curtail_below_btc_usd` | `OTEDAMA_CURTAIL_BELOW_BTC_USD` | `0` (disabled) | ≥ 0 |
 | `min_yield_sats_per_sec` | `OTEDAMA_MIN_YIELD_SATS_PER_SEC` | `0` (disabled) | ≥ 0 |
-| `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0 |
-| `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0 |
+| `power_watts` | `OTEDAMA_POWER_WATTS` | `0` (disabled) | ≥ 0; with `electricity_price_per_kwh` also derives the per-device power-breakeven yield floor — `otedama_power_breakeven_floor_sats_per_second` (§6) |
+| `electricity_price_per_kwh` | `OTEDAMA_ELECTRICITY_PRICE_PER_KWH` | `0` (disabled) | ≥ 0; see `power_watts` |
 | `http_addr` | `OTEDAMA_HTTP_ADDR` | `""` (HTTP server disabled) | also settable via `--http-addr`; when set, serves `/metrics`, `/healthz`, `/readyz` |
 
 The path to the config file itself is resolved from `--config`, then
@@ -181,6 +181,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `power_watts` | gauge | Configured system draw (0 = unset). |
 | `joules_per_terahash` | gauge | watts × 1e12 / hashrate (0 = power unset). |
 | `power_cost_usd_per_hour` | gauge | watts/1000 × price/kWh (0 = unset). |
+| `power_breakeven_floor_sats_per_second` | gauge | Per-device yield floor derived from power cost ÷ BTC/USD, split evenly over managed devices; folded into `min_yield_sats_per_sec` via max(). 0 = power data unset. |
 | `uptime_seconds` | gauge | Seconds since engine start. |
 | `start_time_seconds` | gauge | Unix start timestamp. |
 

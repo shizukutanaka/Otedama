@@ -300,8 +300,13 @@ func Run(ctx context.Context, opts Options) error {
 		log:           log,
 		hysteresisPct: opts.Config.ArbitrationHysteresisPct,
 		minYield:      opts.Config.MinYieldSatsPerSec,
-		activityMu:    &activityMu,
-		activity:      activity,
+		powerWatts:    opts.Config.PowerWatts,
+		// powerPricePerKWh completes the power-breakeven floor; both must be
+		// set for the derived constraint to engage (see arbitrationLoopOpts).
+		powerPricePerKWh: opts.Config.ElectricityPricePerKWh,
+		rateSource:       rateFetcher,
+		activityMu:       &activityMu,
+		activity:         activity,
 	})
 
 	// ----- Phase 7: TUI dashboard -----

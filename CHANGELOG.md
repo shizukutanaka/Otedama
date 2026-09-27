@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 304 — 電力コスト由来の収益フローを裁定に導入)
+
+**問題.** `power_watts`/`electricity_price_per_kwh` はメトリクス専用で、
+電気代割れの採掘を止める手段が `curtail_below_btc_usd` の手計算しか
+なかった。closed #373 の未マージ修正を master へ再デリバー。
+
+**修正.** `arbitrationLoopOpts.powerFloor()` がデバイス毎の損益分岐
+フロアを導出（powerWatts/1000 × price $/h → `SatsPerSecond` で sats/sec
+換算 → 管理デバイス数で等分）。裁定ループは各ラウンドで
+`max(min_yield_sats_per_sec, floor)` を適用。新メトリクス
+`otedama_power_breakeven_floor_sats_per_second`（未設定時 0）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

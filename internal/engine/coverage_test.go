@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -533,6 +534,104 @@ func TestRunArbitrationLoop_HysteresisPctIsUsed(t *testing.T) {
 	if len(gotErrs) > 0 {
 		t.Errorf("unexpected arbitration errors with hysteresisPct=0.20: %v", gotErrs)
 	}
+}
+
+// TestArbitrationLoopOpts_PowerFloor covers the derived per-device
+// power-breakeven floor: disabled inputs return 0; a configured
+// powerWatts × price ÷ BTC/USD converts to sats/sec and splits evenly
+// across managed devices.
+func TestArbitrationLoopOpts_PowerFloor(t *testing.T) {
+	m := newEngineMetrics(metrics.NewRegistry())
+	devs := []arbitration.DeviceRef{{Identity: hal.Identity{ID: "cpu-0"}}}
+
+	// Disabled inputs: no power, no price, no devices, no rate source.
+	for name, o := range map[string]arbitrationLoopOpts{
+		"zero power":    {powerWatts: 0, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+		"zero price":    {powerWatts: 3000, powerPricePerKWh: 0, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+		"no devices":    {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: nil, metrics: m},
+		"nil rate":      {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: nil, devRefs: devs, metrics: m},
+		"nonpos rate":   {powerWatts: 3000, powerPricePerKWh: 0.10, rateSource: provider.StaticRateSource{Rate: 0}, devRefs: devs, metrics: m},
+		"negative both": {powerWatts: -1, powerPricePerKWh: -1, rateSource: provider.StaticRateSource{Rate: 100000}, devRefs: devs, metrics: m},
+	} {
+		if got := o.powerFloor(); got != 0 {
+			t.Errorf("%s: powerFloor() = %v, want 0", name, got)
+		}
+	}
+
+	// 3000 W × $0.10/kWh = $0.30/h → at $100,000/BTC = 0.30/100000×1e8/3600
+	// ≈ 0.0833 sats/s for the single device; halves across two devices.
+	want := 0.30 / 100000 * 1e8 / 3600
+	o := arbitrationLoopOpts{
+		powerWatts:       3000,
+		powerPricePerKWh: 0.10,
+		rateSource:       provider.StaticRateSource{Rate: 100000},
+		devRefs:          devs,
+		metrics:          m,
+	}
+	if got := o.powerFloor(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("powerFloor() = %v, want ~%v", got, want)
+	}
+	if got := m.powerBreakevenFloor.Value(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("power_breakeven_floor gauge = %v, want ~%v", got, want)
+	}
+	o.devRefs = append(o.devRefs, arbitration.DeviceRef{Identity: hal.Identity{ID: "gpu-0"}})
+	if got := o.powerFloor(); math.Abs(got-want/2) > 1e-9 {
+		t.Errorf("powerFloor() with 2 devices = %v, want ~%v", got, want/2)
+	}
+}
+
+// TestRunArbitrationLoop_PowerFloorIdlesDevice verifies the derived floor
+// reaches Decide: a stream below the power-breakeven leaves the device
+// idle even when min_yield_sats_per_sec is unset.
+func TestRunArbitrationLoop_PowerFloorIdlesDevice(t *testing.T) {
+	old := arbitrationInterval
+	arbitrationInterval = 5 * time.Millisecond
+	defer func() { arbitrationInterval = old }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	m := newEngineMetrics(metrics.NewRegistry())
+	streamMap := map[string]arbitration.Stream{
+		"mining.stratum:cpu-0": {
+			ID:              "mining.stratum",
+			IsBitcoinMining: true,
+			AcceptsFamilies: []hal.Family{hal.FamilyCPU},
+			YieldPerDevice:  map[string]arbitration.Yield{"cpu-0": {SatsPerSecond: 0.01, Confidence: 1.0}},
+			DefaultYield:    arbitration.Yield{SatsPerSecond: 0.01, Confidence: 1.0},
+		},
+	}
+	opts := arbitrationLoopOpts{
+		devRefs: []arbitration.DeviceRef{{
+			Identity:     hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU},
+			Capabilities: hal.Capabilities{SHA256d: true},
+		}},
+		streamsMu:        &sync.Mutex{},
+		streamMap:        streamMap,
+		quoteCh:          make(chan provider.Quote),
+		metrics:          m,
+		log:              func(_, _ string) {},
+		powerWatts:       3000,
+		powerPricePerKWh: 0.10,
+		rateSource:       provider.StaticRateSource{Rate: 100000},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runArbitrationLoop(ctx, opts)
+		close(done)
+	}()
+
+	// Floor ≈ 0.0833 sats/s > yield 0.01 sats/s → the device must idle.
+	deadline := time.After(250 * time.Millisecond)
+	for m.devicesIdle.Value() != 1 {
+		select {
+		case <-deadline:
+			t.Fatalf("devicesIdle = %v, want 1 (yield below power breakeven)", m.devicesIdle.Value())
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	<-done
 }
 
 // ============================================================================
