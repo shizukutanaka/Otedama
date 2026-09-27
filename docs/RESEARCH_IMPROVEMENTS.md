@@ -939,3 +939,24 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 330 — ecosystem + Japanese-source scan verdicts
+
+**internal/hal GPU sysfs [OBSERVED — clean].** sysfs reads bounded by
+kernel-managed files; Identity.Validate() gates every parsed device;
+SHA256d=false hardcoded with rationale (no compute dispatch exists) —
+prevents GPU-attributed CPU-pool oversubscription.
+
+**Qiita/Zenn scan [FETCHED].** No new actionable findings: Zenn hits
+were ONF Stratum (SDN switch OS, unrelated). Found `0xf0xx0/stratumv2`
+(Go SV2 codec library) as comparable prior art — MIT-licensed, covers
+frame+mining messages only; Otedama's internal/stratum already covers
+its scope plus Noise NX, so no adoption rationale (would add a dep for
+no new capability; CLAUDE.md dep criteria unmet).
+
+**SRI roles repo confirmed [FETCHED].** sv2-apps carries pool/JD-client
+/translator roles; `stratum-mining/stratum` keeps library crates only —
+the channels_sv2 1.12.0 hardening (share validation, bounded job
+storage, consensus-defect coinbase fixes) is pool-server-side, all
+mirrored client-side in our already-landed bounds (#385/#397/#429) and
+coinbase rebuild (#417, still open).
