@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 302 — doctor audits wallet.dat file mode (re-delivers closed #381)
+
+**Finding [OBSERVED — code-verified].** A `wallet.dat` restored via
+scp/rsync or unpacked from a tarball lands 0644 inside a correctly-moded
+0700 directory — silently exposing the encrypted seed to other users. The
+doctor's wallet checks covered the directory but not the file itself.
+
+**Fix [OBSERVED].** `doctor` now audits `wallet.dat`'s own file mode
+(Unix-only) and warns with the `chmod 0600` fix when it's group/world
+readable.
+
+**Tests [OBSERVED].** `extras_test.go` cases — 0600 clean, 0644 warns with
+the chmod hint, missing file unaffected.

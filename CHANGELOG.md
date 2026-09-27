@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 302 — `doctor` が wallet.dat のファイルモードを監査しなかった問題を修正)
+
+**問題.** scp/rsync 復元や tarball 展開で 0644 になった wallet.dat が、
+正しく 0700 のディレクトリ内にあっても暗号化シードを他ユーザーへ晒し
+うる——監査対象から漏れていた。closed #381 の未マージ修正を master へ
+再デリバー。
+
+**修正.** `doctor` が wallet.dat 自体の mode を確認し、緩い場合は
+`chmod 0600` の修正方法つきで warn を出す（Unix のみ）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
