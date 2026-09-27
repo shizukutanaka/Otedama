@@ -10,6 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 314 — stale ntime を現在時刻へロール（SRI 1.12.0 nTime 境界対応）)
+
+**問題.** V1 `mining.notify` の ntime・V2 の min_ntime/SetNewPrevHash ntime が
+検証なしにブロックヘッダへ直行し、ジョブが古くなるほど提出シェアの
+タイムスタンプが陳腐化。SRI 1.12.0（2026-09-17）が min_ntime/nTime
+境界のシェア検証を全チャネル型で強制したため、stale ntime のシェアは
+サーバーで一律拒否＝ハッシュレートの空費。
+
+**修正.** `rollNTime()` で stale な宣言 ntime をローカル時刻へ前倒し
+（ntime rolling は標準的マイナー挙動で実効 nonce 空間の一部）。
+未来 ntime は min_ntime 下限として原文のまま保持——現在時刻への
+丸め込みは逆に reject になるため。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

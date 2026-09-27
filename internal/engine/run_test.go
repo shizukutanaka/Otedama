@@ -287,8 +287,8 @@ func TestEngine_SubmittedShareEchoesJobVersion(t *testing.T) {
 			if s.NVersion != 0x20000004 {
 				t.Errorf("submitted NVersion = 0x%08X, want 0x20000004 (the job's version)", s.NVersion)
 			}
-			if s.NTime != 0x60000000 {
-				t.Errorf("submitted NTime = 0x%08X, want 0x60000000 (SetNewPrevHash min_ntime)", s.NTime)
+			if s.NTime < 0x60000000 {
+				t.Errorf("submitted NTime = 0x%08X, want >= 0x60000000 (SetNewPrevHash min_ntime floor; stale values roll forward — see rollNTime)", s.NTime)
 			}
 			if s.JobID != 1 {
 				t.Errorf("submitted JobID = %d, want 1", s.JobID)
@@ -387,8 +387,8 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 		if s.Version != 0x20000004 {
 			t.Errorf("share Version = 0x%08X, want 0x20000004 (must echo the hashed header version)", s.Version)
 		}
-		if s.NTime != 0x60000000 {
-			t.Errorf("share NTime = 0x%08X, want 0x60000000", s.NTime)
+		if s.NTime < 0x60000000 {
+			t.Errorf("share NTime = 0x%08X, want >= 0x60000000 (min_ntime floor; stale ntime rolls to wall clock — see rollNTime)", s.NTime)
 		}
 	case <-ctx.Done():
 		t.Fatal("no share within 3s at the easiest share target — share target not honored")
@@ -459,6 +459,33 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
 	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
+	}
+}
+
+func TestRollNTime(t *testing.T) {
+	now := uint32(time.Now().Unix())
+	for _, tc := range []struct {
+		name     string
+		declared uint32
+		wantAt   string // "now" | "declared"
+	}{
+		{"stale ntime rolls forward to now", now - 3600, "now"},
+		{"future ntime kept verbatim (min_ntime floor)", now + 3600, "declared"},
+		{"exactly now unchanged", now, "declared"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rollNTime(tc.declared)
+			switch tc.wantAt {
+			case "now":
+				if got < now {
+					t.Errorf("rollNTime(%d) = %d, want >= now=%d", tc.declared, got, now)
+				}
+			case "declared":
+				if got != tc.declared {
+					t.Errorf("rollNTime(%d) = %d, want %d", tc.declared, got, tc.declared)
+				}
+			}
+		})
 	}
 }
 
