@@ -1127,9 +1127,10 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			go func() {
 				sendTime := time.Now()
 				result, err := capturedSess.Submit(ctx, poolproto.ShareSubmission{
-					JobID: fmt.Sprintf("%d", capturedShare.JobID),
-					Nonce: capturedShare.Nonce,
-					NTime: capturedShare.NTime,
+					JobID:      fmt.Sprintf("%d", capturedShare.JobID),
+					Nonce:      capturedShare.Nonce,
+					NTime:      capturedShare.NTime,
+					ExtraNonce: capturedShare.ExtraNonce,
 				})
 				elapsed := float64(time.Since(sendTime).Milliseconds())
 				if err != nil {
@@ -1269,7 +1270,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1354,8 +1356,9 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 			Time:       job.NTime,
 			Bits:       job.NBits,
 		},
-		NBits:  job.NBits,
-		Target: target,
+		NBits:      job.NBits,
+		Target:     target,
+		ExtraNonce: job.ExtraNonce,
 	}
 	for _, wr := range workers {
 		wr.SetWork(w)

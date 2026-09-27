@@ -939,3 +939,33 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 279 — V1 share verification defect (deepest remaining mining correctness gap)
+
+**Finding [OBSERVED — code-verified].** On the Stratum V1 path, `parseNotify`
+discarded `coinb1`, `coinb2` and `merkle_branch` (parse.go: "the pool computes
+it"), so `Job.MerkleRoot` was always zero; and `mining.submit` sent a constant
+zero-padded `extranonce2` because `ShareSubmission.ExtraNonce` was never
+populated upstream. Every V1 share was therefore **structurally unverifiable**:
+the pool could not rebuild the coinbase the header was hashed against.
+
+**Fix [OBSERVED].** The session now reconstructs the coinbase per notify
+(`coinb1 ‖ en1 ‖ en2 ‖ coinb2`, SHA-256d, then `Hash256(merkle ‖ branch_i)`
+fold in standard stratum order) and stores the result in `Job.MerkleRoot`.
+`en2` rolls per job via an atomic counter placed big-endian at the tail of the
+en2 field; the same bytes flow Job → Work → Share → ShareSubmission → the wire.
+Pool-controlled `extranonce2_size > 64` or unset falls back to the prior
+behaviour (no fold, zero-pad) rather than allocating a pool-dictated buffer
+per job — the unbounded `extranonce2_size` bound itself sits on the closed
+session-272 branch (#384) and is intentionally not re-delivered here beyond
+this guard.
+
+**Residual [OBSERVED — recorded].** With a fixed en2 per job, a worker whose
+nonce space wraps within one job can emit a duplicate share (same header, same
+en2). Pools treat these as benign dupes; a per-job nonce-wrap counter would be
+the next improvement if it proves observable in practice.
+
+**Audit verdicts [OBSERVED].** V1 share-rate DoS via `set_difficulty → 0`
+remains bounded by the capped share channel (session-270 note). V2 leaves
+`Coinb1/Coinb2/MerkleBranch/ExtraNonce` empty — the pool supplies a ready
+`MerkleRoot` there, so no parallel fix was needed.

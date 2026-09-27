@@ -10,6 +10,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 279 — V1 シェアが構造上検証不能だった欠陥を修正: `mining.notify` の coinb1/coinb2/merkle_branch を破棄して `MerkleRoot` が常にゼロだった)
+
+**検証済みの実装欠落.** Stratum V1 経路で `parseNotify` は通知パラメータの
+`coinb1`/`coinb2`/`merkle_branch` を常に捨てており（「プールが計算する」という
+コメント付き）、`Job.MerkleRoot` はゼロ値のままだった。同時に `mining.submit` の
+`extranonce2` は常に固定のゼロパディングだった——`ShareSubmission.ExtraNonce`
+が上流で一度も設定されなかったためである。結果として V1 シェアの coinbase を
+プール側で再構成しても採掘ヘッダと一致せず、**すべての V1 シェアが検証不可能**
+（実用上は常に reject 相当）だった。
+
+**修正.** セッションが通知を受けるたびにコインベースを再構成するようにした:
+`coinbase = coinb1 ‖ extranonce1 ‖ extranonce2 ‖ coinb2` を SHA-256d に通し、
+`merkle = Hash256(merkle ‖ branch_i)` の順に merkle ブランチを畳み込む
+（Stratum 標準順）。`extranonce2` は `en2Counter`（atomic.Uint64）でジョブ毎に
+ロールし、en2 フィールド末尾にビッグエンディアンで配置する。新規フィールド:
+`poolproto.Job{ExtraNonce, Coinb1, Coinb2, MerkleBranch}`、
+`miner.Work.ExtraNonce`、`miner.Share.ExtraNonce`（全て V1 限定・V2 では空）。
+`mining.submit` はジョブと同一の en2 をそのまま送り返すため、プールは同一の
+coinbase を再構成してシェアを検証できる。
+
+**安全側の境界.** `extranonce2_size` はプール制御値のため、`> 64` または未交渉
+（`<= 0`）の場合は従来動作にフォールバック（merkle 未計算・en2 ゼロパディング）
+しており、通知毎のプール指定サイズの割当てによる悪用を防ぐ。コインベース部品の
+hex が壊れている場合も同様にフォールバックする。nonce ラップ時に同一 en2 内で
+重複シェアが出うる残留事象は THREAT_MODEL に記録。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
