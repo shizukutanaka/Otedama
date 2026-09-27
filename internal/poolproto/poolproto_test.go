@@ -6,6 +6,7 @@ package poolproto
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -478,5 +479,32 @@ func TestStripScheme_ConsistentWithFromURL(t *testing.T) {
 		if FromURL(url) == ProtocolUnknown {
 			t.Errorf("FromURL(%q) = Unknown but StripScheme accepted it", url)
 		}
+	}
+}
+
+func TestSanitizePoolText_StripsControlChars(t *testing.T) {
+	got := SanitizePoolText("stale\x1b[2J\x1b[H\nforged line")
+	if strings.ContainsAny(got, "\x1b\n\r\t") {
+		t.Errorf("control characters survived: %q", got)
+	}
+	if !strings.Contains(got, "stale") || !strings.Contains(got, "forged line") {
+		t.Errorf("printable content lost: %q", got)
+	}
+}
+
+func TestSanitizePoolText_PreservesUnicodeAndTruncates(t *testing.T) {
+	if got := SanitizePoolText("メンテナンス"); got != "メンテナンス" {
+		t.Errorf("unicode mangled: %q", got)
+	}
+	got := SanitizePoolText(strings.Repeat("x", maxPoolTextRunes*2))
+	if len([]rune(got)) != maxPoolTextRunes {
+		t.Errorf("len = %d runes, want %d", len([]rune(got)), maxPoolTextRunes)
+	}
+}
+
+func TestSanitizePoolText_StripsC1AndDEL(t *testing.T) {
+	got := SanitizePoolText("a\x7fb\u0085c\u009fd")
+	if got != "abcd" {
+		t.Errorf("C1/DEL not stripped: %q", got)
 	}
 }

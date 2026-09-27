@@ -65,6 +65,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // ----- Protocol identifiers -----
@@ -366,3 +367,28 @@ var (
 	// soft rejections that come back inside ShareResult).
 	ErrShareRejected = errors.New("poolproto: share rejected")
 )
+
+// maxPoolTextRunes caps sanitized pool-controlled text. Pool strings end
+// up in logs (and potentially the TUI); an unbounded string is a
+// log-flooding vector.
+const maxPoolTextRunes = 256
+
+// SanitizePoolText removes Unicode control characters (C0, DEL, C1 —
+// including ANSI escape introducers) from pool-controlled text and
+// truncates it to 256 runes. Callers use it before logging or rendering
+// any string the pool supplied (share-reject reasons, error objects,
+// job IDs), so escape sequences cannot manipulate the terminal or forge
+// log lines.
+func SanitizePoolText(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	runes := []rune(clean)
+	if len(runes) > maxPoolTextRunes {
+		clean = string(runes[:maxPoolTextRunes])
+	}
+	return clean
+}
