@@ -939,3 +939,30 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 373 — wallet lifecycle audit + docs-code drift fix
+
+[AUDITED — clean] `internal/lightning` wallet lifecycle: wallet.dat writes
+are fully atomic (tempfile + Sync + Close + pre-rename chmod 0600 + Rename
+into a 0700 data dir); decrypt errors are deliberately opaque ("wallet
+unlock failed"); the WalletManager is short-lived in the engine
+(`setupWallet` keeps only the fingerprint string, so the BIP-39 mnemonic
+is collectable after first-run display).
+
+[AUDITED — clean] BIP-39 wordlist + derivation: `GenerateEntropy`
+restricts to valid bit widths and requires a full read; `MnemonicToEntropy`
+rejects invalid word counts and enforces the checksum (transcription
+errors caught); `Fingerprint` is an HMAC so it reveals nothing about the
+seed. Intermediate derivation buffers are zeroed (session 340, PR #452).
+
+[FIXED] Docs-code drift on the wallet KDF work factor: THREAT_MODEL and
+AUDIT_CHECKLIST claimed `scrypt N=32768`; the actual constant is
+`scryptN = 1 << 17` = 131072 in `internal/lightning/seedstore.go`
+(4x understatement — the brute-force residual-risk paragraph materially
+understates the real work factor). AUDIT_CHECKLIST also pointed item 22
+at `internal/lightning/seed.go`; the call site is `seedstore.go`.
+Corrected both. `docs/API.md` already documented N=2^17 correctly.
+
+[AUDITED — clean] THREAT_MODEL channel bound: the SV2 reader channel is
+`make(chan poolMsg, 32)` (run.go), matching the documented "Job channel
+is bounded (buffer size 32)" claim.

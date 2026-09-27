@@ -99,7 +99,7 @@ The file is written atomically (tempfile + rename) so a crash during
 write cannot corrupt the existing file.
 
 **Residual risk:** Root can delete the file (no Otedama-side
-mitigation). The encryption's key derivation uses scrypt (N=32768);
+mitigation). The encryption's key derivation uses scrypt (N=2^17 = 131072);
 a determined offline attacker with a modern GPU cluster can brute-force
 weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 
