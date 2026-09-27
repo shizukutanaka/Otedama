@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 332 — yaml.v3 maintained-continuation migration
+
+**gopkg.in/yaml.v3 archived [FETCHED + FIXED].** The gopkg.in yaml repo
+was archived April 2025; the Yaml project continues it as
+`go.yaml.in/yaml/v3` (v3.0.5). Violated CLAUDE.md external-dependency
+criterion 3 (meaningful maintenance within the last year). API-identical
+drop-in: only the two import sites changed (cmd/otedama/configfile.go,
+internal/config/config_file_test.go). Re-delivers the dep-swap portion
+of closed #367.

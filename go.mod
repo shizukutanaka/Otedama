@@ -17,8 +17,11 @@ godebug (
 )
 
 require (
+	// yaml.v3 lives at go.yaml.in now: gopkg.in/yaml.v3 was archived in
+	// April 2025 and fails CLAUDE.md's maintained-dependency criterion;
+	// go.yaml.in/yaml/v3 is the Yaml project's maintained continuation.
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.23.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require golang.org/x/sys v0.20.0 // indirect

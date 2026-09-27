@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Chore (session 332 — yaml.v3 のメンテ先へ移行)
+
+`gopkg.in/yaml.v3`（2025年4月にアーカイブ、CLAUDE.md の依存
+メンテ基準を満たさない）を、Yaml プロジェクトの正式な継続先
+`go.yaml.in/yaml/v3` v3.0.5 へ移行。API 互換のためコード変更は
+import パスのみ（configfile.go / config_file_test.go）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
