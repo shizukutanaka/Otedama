@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 313 — MnemonicNeverReachesLogger prose-collision flake fix (partial re-delivery of closed #371)
+
+**Finding [OBSERVED — code-verified].**
+`TestSetupWallet_MnemonicNeverReachesLogger` scanned the whole-word log
+stream including the two constant wallet-setup lines ("wallet: new wallet
+created — back up your recovery phrase", "wallet: fingerprint …"); a
+random 24-word BIP-39 draw colliding with that prose false-positived.
+
+**Fix [OBSERVED].** Constant lines are stripped before the whole-word
+scan — a real leak interpolating mnemonic words still trips it. (The
+responsivePool atomic.Bool half of #371 stays queued: master's
+`responsivePool` lacks the `retargetRejects`/`impossibleRetarget` fields
+the flag race lives on — they arrive with #368's clampShareTarget.)
+
+**Tests [OBSERVED].** `-count=10` green.

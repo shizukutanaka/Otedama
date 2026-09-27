@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 313 — MnemonicNeverReachesLogger の prose-collision フレーク解消)
+
+**問題.** `TestSetupWallet_MnemonicNeverReachesLogger` が固定ログ行
+（"wallet: new wallet created — back up your recovery phrase" 等）を含めて
+全語スキャンしており、ランダム BIP-39 ドローがその散文と衝突すると
+誤検知フレークになった。closed #371 の該当部分を master へ再デリバー。
+
+**修正.** 定数ログ行を除外し動的出力のみをスキャン——実際のリークは
+ニーモニックを補間するメッセージで依然検出される。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
