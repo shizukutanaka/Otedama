@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 296 — warn once per episode when a connected pool goes silent (re-delivers closed #396)
+
+**Finding [OBSERVED — code-verified].** A pool that stops delivering jobs
+while keeping the connection open starves revenue identically to extreme
+difficulty — but with no rejects, no disconnect, and no metric edge. The
+clock starts at session start so a pool that never sends a first job is
+equally covered.
+
+**Fix [OBSERVED].** `jobStallWarnAfter` (10 min, var for tests) — on each
+stats tick, if `time.Since(lastJobAt) > jobStallWarnAfter` and not
+curtailed, warn once per episode (`jobStarvedWarned`), re-arming when jobs
+resume. Wired on both V1 and V2 paths.
+
+**Tests [OBSERVED].** `TestRunSession_JobStallWarnsOnce` + V1 variant —
+silent fake pool past the threshold logs exactly one warn.

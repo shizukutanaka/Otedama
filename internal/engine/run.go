@@ -67,6 +67,12 @@ const (
 // It is a var (not const) so tests can shrink it to milliseconds.
 var arbitrationInterval = 30 * time.Second
 
+// jobStallWarnAfter is how long the engine tolerates a connected pool not
+// delivering any job before warning once per episode — a silent pool starves
+// revenue the same way extreme difficulty does, but without rejects. It is a
+// var (not const) so tests can shrink it to milliseconds.
+var jobStallWarnAfter = 10 * time.Minute
+
 // Options configures a Run session.
 type Options struct {
 	Config config.Config
@@ -711,6 +717,11 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	var hashWindow hashrateWindow
 	// Accumulate productive (actually-hashing) time for effective-uptime accounting.
 	var uptime uptimeAccountant
+	// Tripwire for a silent pool: jobs stop arriving while the connection
+	// stays open. The clock starts at session start — a pool that never
+	// sends a first job is equally starved.
+	lastJobAt := time.Now()
+	var jobStarvedWarned bool
 
 	// Track dropped shares so a consumer that cannot keep up surfaces as a
 	// warning rather than silently losing found shares.
@@ -809,6 +820,18 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
 						rate*100, opts.m.sharesAccepted.Value(), judged))
 				}
+				// A pool that stops sending jobs starves the same way but
+				// silently: warn once per episode until jobs resume.
+				if quiet := time.Since(lastJobAt); !opts.isCurtailed() && quiet > jobStallWarnAfter {
+					if !jobStarvedWarned {
+						jobStarvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: no new job from pool in %v — hashing continues on stale work; the pool may be starving this connection",
+							quiet.Truncate(time.Second)))
+					}
+				} else {
+					jobStarvedWarned = false
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
@@ -831,6 +854,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
 				jobs[j.JobID] = j
+				lastJobAt = time.Now()
 				switch {
 				case j.HasMinNtime && havePrev:
 					// Job for the current chain tip: mine it now. Its own
@@ -1020,6 +1044,11 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var uptime uptimeAccountant
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
+	// Tripwire for a silent pool: jobs stop arriving while the connection
+	// stays open. The clock starts at session start — a pool that never
+	// sends a first job is equally starved.
+	lastJobAt := time.Now()
+	var jobStarvedWarned bool
 
 	for {
 		select {
@@ -1071,6 +1100,18 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				// operators can distinguish "hardware is slow" from "the pool
 				// assigned more difficulty than our hashrate can serve".
 				publishDifficulty(opts.m, sess.SuggestedDifficulty(), currentHashRate)
+				// A pool that stops sending jobs starves the same way but
+				// silently: warn once per episode until jobs resume.
+				if quiet := time.Since(lastJobAt); !opts.isCurtailed() && quiet > jobStallWarnAfter {
+					if !jobStarvedWarned {
+						jobStarvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: no new job from pool in %v — hashing continues on stale work; the pool may be starving this connection",
+							quiet.Truncate(time.Second)))
+					}
+				} else {
+					jobStarvedWarned = false
+				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
@@ -1102,6 +1143,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.m != nil {
 				opts.m.lastJobReceivedAt.Set(float64(time.Now().Unix()))
 			}
+			lastJobAt = time.Now()
 
 		case share, ok := <-opts.merged:
 			if !ok {
@@ -1269,7 +1311,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
