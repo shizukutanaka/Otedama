@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 294 — warn once per episode on difficulty starvation (re-delivers closed #394)
+
+**Finding [OBSERVED — code-verified].** A pool-assigned difficulty so high the
+expected share interval exceeds an hour starves income silently — no rejects,
+no disconnect, nothing credited. Operators can't distinguish it from a dead
+pool.
+
+**Fix [OBSERVED].** On each V1 stats tick, when `estimatedShareIntervalSeconds`
+exceeds 3600 the engine logs a warn once per episode (`starvedWarned`),
+re-arming when the interval recovers. Downward floods stay bounded by the
+capped share channel (audit verdict, session-270 lineage).
+
+**Tests [OBSERVED].** `TestRunSessionV1_StarvationWarnsOnce` — fake pool sets a
+starving difficulty; exactly one warn fires across repeated ticks.

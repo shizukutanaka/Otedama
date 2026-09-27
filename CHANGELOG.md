@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 294 — プール難易度の飢餓がサイレントだった問題に警告を追加)
+
+**問題.** プールが割当てた難易度が高すぎて期待シェア間隔が 1 時間を
+超える場合、reject も切断もないまま収益が実質ゼロになる——オペレータに
+気づかれない飢餓。closed #394 の未マージ修正を master へ再デリバー。
+
+**修正.** V1 統計ティックで `estimatedShareIntervalSeconds` > 3600 のとき
+エピソードごと一度だけ warn を出し、間隔が回復したら再アームする。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
