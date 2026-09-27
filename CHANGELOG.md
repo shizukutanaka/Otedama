@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 293 — `client.show_message` のプール通知がログに届かなかった問題を解消)
+
+**問題.** V1 プールの `client.show_message`（メンテナンス予告・資格情報
+エラー・移行ヒント等のオペレータ通知）がパース済みのまま消費者ゼロの
+dead channel に溜まるだけで、オペレータに一切届かなかった。closed #390
+の未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.PoolNoticeReceiver` を実装するセッションの
+`PoolNotices()` を V1 メインループの select に接続し `info` ログへ転送
+（slog 経由のため ANSI 注入不可）。チャネル close で nil 化して以後
+select から外れる。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

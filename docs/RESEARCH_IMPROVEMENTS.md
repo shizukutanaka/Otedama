@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 293 — wire client.show_message notices to the log (re-delivers closed #390)
+
+**Finding [OBSERVED — code-verified].** V1 `client.show_message` notifications
+were parsed into a channel with no consumer — operator notices (maintenance
+windows, credential errors, migration hints) never reached the log; the dead
+channel dropped oldest on overflow.
+
+**Fix [OBSERVED].** `runSessionV1` selects on `PoolNotices()` when the session
+implements `poolproto.PoolNoticeReceiver` (nil-safe: a nil channel is never
+ready; closed channel is nilled out) and forwards each notice to `info` log —
+slog framed, so no ANSI injection.
+
+**Tests [OBSERVED].** `TestRunSessionV1_PoolNoticeLogged` + `fakeV1PoolWithNotice`.
