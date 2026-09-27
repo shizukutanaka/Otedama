@@ -163,6 +163,20 @@ type Job struct {
 	// CleanJobs, when true, indicates older jobs may be discarded.
 	CleanJobs bool
 
+	// ExtraNonce is the extranonce2 the MerkleRoot was computed with.
+	// V1 only: the session picks a fresh value per job and folds it into
+	// the coinbase; shares must echo it back so the pool can rebuild the
+	// same coinbase. Empty for protocols that don't use it (V2).
+	ExtraNonce []byte
+
+	// Coinb1, Coinb2 and MerkleBranch are the raw Stratum V1 coinbase
+	// parts from mining.notify. The session folds them into MerkleRoot
+	// (with Extranonce) before handing the job to the engine. V2 leaves
+	// them empty — the pool supplies a ready MerkleRoot there.
+	Coinb1       []byte
+	Coinb2       []byte
+	MerkleBranch [][]byte
+
 	// ReceivedAt is when Otedama received this job (for stale
 	// detection in the worker).
 	ReceivedAt time.Time

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 305 — V1 シェアがコインベース/マークル再構築なしで検証不能だった問題を修正)
+
+**問題.** V1 ジョブのコインベース（coinb1‖en1‖en2‖coinb2）とマークル
+ブランチが保持されず、submit 前に share の二重 SHA-256d 検証が不可能
+だった（プール reject まで無効シェアの見分けが付かない）。closed #401
+の未マージ修正を master へ再デリバー。
+
+**修正.** `poolproto.Job` に `ExtraNonce`/`Coinb1`/`Coinb2`/`MerkleBranch`
+（V1 のみ）、`miner.Work`/`Share` に `ExtraNonce` を通線。`en2Counter`
+（BE カウンタ）+ `completeV1Job()` でジョブ毎にコインベースを畳み込み
+（`btccrypto.Hash256` + per-branch `Hash256(merkle‖branch)`）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
