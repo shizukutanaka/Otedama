@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 306 — 研究バックログの ADR/THREAT_MODEL/KNOWN_LIMITATIONS への整理統合)
+
+**変更.** closed #376 の未マージ docs consolidation を master へ再デリバー:
+sv2-spec リポジトリを SV2 の正典ソースとしてピン（messages.go + ADR-009）、
+KNOWN_LIMITATIONS の Akash 形状を修正（chain-sdk + on-chain Bidengine +
+AEP-64 JWT）、THREAT_MODEL に selfish-mining 脅威（「対策なし — 安価な
+背信」を正直に記載）+ LN HTLC タイミング連関を追加、ADR-010 に SCaLE
+学習スイッチコスト（A2）・3 種ドリフトの非定常性 grounding + Sliding-
+Window TS（A8）・ROSS を refs へ。Cat-4 #9 は「プールが採掘ブロックを
+報告しないため記載どおりの行動は不可能」として意図的に open のまま記録。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

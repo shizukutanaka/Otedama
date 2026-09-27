@@ -8,6 +8,11 @@
 // implements in v3.0.0. Job Declaration and Template Distribution
 // are deferred to a later milestone.
 //
+// The specification's source of truth is the independently-versioned
+// repository github.com/stratum-mining/sv2-spec (SRI split the roles
+// code out after v1.5.0); stratumprotocol.org renders it. When the
+// codec and the site disagree, trust the repo.
+//
 // # Message numbering (from the official specification)
 //
 //	0x00  SetupConnection        (client → server)
