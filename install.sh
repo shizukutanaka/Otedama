@@ -11,7 +11,8 @@
 # What this script does:
 #   1. Detects OS (Linux or macOS) and architecture (x86_64 or arm64).
 #   2. Downloads the matching Otedama binary from GitHub Releases.
-#   3. Verifies the SHA-256 checksum against the published checksums.txt.
+#   3. Verifies the SHA-256 checksum against the published checksums file
+#      (when one is published — some release paths do not produce one).
 #   4. Optionally verifies the cosign signature of the checksums file.
 #   5. Installs the binary to $PREFIX/bin (default: /usr/local/bin, or
 #      $HOME/.local/bin if /usr/local is not writable).
@@ -113,33 +114,60 @@ mkdir -p "$INSTALL_BIN"
 
 # ---------- Download + verify ----------
 
-ARCHIVE="otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+# The repo has more than one release pipeline and they disagree on asset
+# naming: .goreleaser.yaml produces "otedama_<ver>_<os>_<arch>.tar.gz",
+# release.yml produces "otedama-<os>-<arch>.tar.gz", and ci-cd.yml uploads
+# the bare binary "otedama-<os>-<arch>". Try each convention in turn so
+# the installer works regardless of which pipeline produced the release.
 BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
+CANDIDATES=(
+    "otedama_${VERSION}_${OS}_${ARCH}.tar.gz"
+    "otedama-${OS}-${ARCH}.tar.gz"
+    "otedama-${OS}-${ARCH}"
+)
 
 # Temporary workspace cleaned up on exit.
 TMPDIR=$(mktemp -d)
 trap "rm -rf '$TMPDIR'" EXIT
 
-log "downloading ${ARCHIVE}..."
-curl -sSfL "${BASE_URL}/${ARCHIVE}" -o "${TMPDIR}/${ARCHIVE}" \
-    || die "download failed"
+ARCHIVE=""
+for name in "${CANDIDATES[@]}"; do
+    log "trying ${name}..."
+    if curl -sSfL "${BASE_URL}/${name}" -o "${TMPDIR}/${name}"; then
+        ARCHIVE="$name"
+        break
+    fi
+done
+[[ -n "$ARCHIVE" ]] || die "no release asset matched (tried: ${CANDIDATES[*]})"
+log "downloaded ${ARCHIVE}"
 
 log "downloading checksums..."
-curl -sSfL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt" \
-    || die "checksums download failed"
+# goreleaser publishes "otedama_<ver>_checksums.txt"; ci-cd publishes
+# plain "checksums.txt". Absence is a warning, not a failure — some
+# release paths do not produce one.
+CHECKSUMS_FILE=""
+for cs in "checksums.txt" "otedama_${VERSION}_checksums.txt"; do
+    if curl -sSfL "${BASE_URL}/${cs}" -o "${TMPDIR}/${cs}" 2>/dev/null; then
+        CHECKSUMS_FILE="${TMPDIR}/${cs}"
+        break
+    fi
+done
 
 # ---------- SHA-256 verification ----------
 
 if [[ "$SKIP_VERIFY" == "1" ]]; then
     log "SKIPPING checksum verification (--skip-verify)"
+elif [[ -z "$CHECKSUMS_FILE" ]]; then
+    log "WARNING: no checksums file published for this release; skipping SHA-256 check"
 else
     log "verifying SHA-256..."
     cd "$TMPDIR"
     if command -v sha256sum >/dev/null 2>&1; then
-        grep " ${ARCHIVE}$" checksums.txt | sha256sum -c - >/dev/null 2>&1 \
+        grep " ${ARCHIVE}$" "$(basename "$CHECKSUMS_FILE")" | sha256sum -c - >/dev/null 2>&1 \
             || die "SHA-256 verification FAILED. Download may be tampered."
     else
-        expected=$(grep " ${ARCHIVE}$" checksums.txt | awk '{print $1}')
+        CSNAME="$(basename "$CHECKSUMS_FILE")"
+        expected=$(grep " ${ARCHIVE}$" "$CSNAME" | awk '{print $1}')
         actual=$(shasum -a 256 "${ARCHIVE}" | awk '{print $1}')
         [[ "$expected" == "$actual" ]] \
             || die "SHA-256 mismatch: expected $expected, got $actual"
@@ -149,17 +177,18 @@ fi
 
 # ---------- Cosign verification (optional, skipped if cosign missing) ----------
 
-if command -v cosign >/dev/null 2>&1; then
+if command -v cosign >/dev/null 2>&1 && [[ -n "$CHECKSUMS_FILE" ]]; then
     log "verifying cosign signature..."
+    CSNAME="$(basename "$CHECKSUMS_FILE")"
     cd "$TMPDIR"
-    if curl -sSfL "${BASE_URL}/checksums.txt.sig" -o checksums.txt.sig 2>/dev/null \
-        && curl -sSfL "${BASE_URL}/checksums.txt.pem" -o checksums.txt.pem 2>/dev/null; then
+    if curl -sSfL "${BASE_URL}/${CSNAME}.sig" -o "${CSNAME}.sig" 2>/dev/null \
+        && curl -sSfL "${BASE_URL}/${CSNAME}.pem" -o "${CSNAME}.pem" 2>/dev/null; then
         if cosign verify-blob \
-            --certificate checksums.txt.pem \
-            --signature checksums.txt.sig \
+            --certificate "${CSNAME}.pem" \
+            --signature "${CSNAME}.sig" \
             --certificate-identity-regexp "https://github.com/${REPO}/.github/workflows/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            checksums.txt >/dev/null 2>&1; then
+            "$CSNAME" >/dev/null 2>&1; then
             log "cosign verification OK"
         else
             die "cosign verification FAILED"
@@ -172,8 +201,16 @@ fi
 
 # ---------- Install ----------
 
-log "extracting..."
-tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$TMPDIR"
+# ci-cd releases ship the bare binary (no tarball); goreleaser and
+# release.yml ship tarballs containing the binary at their root.
+if [[ "$ARCHIVE" == *.tar.gz ]]; then
+    log "extracting..."
+    tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$TMPDIR"
+else
+    log "release asset is a bare binary; no extraction needed"
+    mv "${TMPDIR}/${ARCHIVE}" "${TMPDIR}/otedama"
+    chmod +x "${TMPDIR}/otedama"
+fi
 
 [[ -f "${TMPDIR}/otedama" ]] || die "otedama binary not found in archive"
 

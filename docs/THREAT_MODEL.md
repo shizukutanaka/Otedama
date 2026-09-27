@@ -99,7 +99,7 @@ The file is written atomically (tempfile + rename) so a crash during
 write cannot corrupt the existing file.
 
 **Residual risk:** Root can delete the file (no Otedama-side
-mitigation). The encryption's key derivation uses scrypt (N=32768);
+mitigation). The encryption's key derivation uses scrypt (N=2^17 = 131072);
 a determined offline attacker with a modern GPU cluster can brute-force
 weak passphrases. Use a strong passphrase; see CONTRIBUTING.md.
 
@@ -121,9 +121,13 @@ a panic in the decode path still terminates the miner (DoS, below).
 version.
 
 **Mitigation:** Only three runtime dependencies: `golang.org/x/crypto`,
-`gopkg.in/yaml.v3`, and the Go standard library. All GitHub Actions
-pinned by SHA. Dependabot auto-updates with review. govulncheck runs
-in CI. See ADR-003.
+`gopkg.in/yaml.v3`, and the Go standard library. Dependabot auto-updates
+with review. govulncheck runs in CI. See ADR-003.
+
+**Residual risk (CI supply chain):** GitHub Actions are referenced by
+release tags (`@v4`, `@v5`, …), not commit SHAs, so a compromised or
+re-tagged upstream action could execute in CI. Pinning `uses:` entries
+to full-length SHAs is a tracked hardening item.
 
 **Residual risk:** Compromise of the Go toolchain, the Go proxy, or
 one of the two direct dependencies remains possible. We have no
@@ -261,13 +265,21 @@ OS-level bugs (kernel CVEs), which are out of scope for Otedama.
 
 **Threat:** Malicious code in the binary itself.
 
-**Mitigation:** Release artifacts are cosign-signed. The `install.sh`
-script verifies SHA-256 and, when cosign is installed, verifies the
-signature. Reproducible builds via `-trimpath` and fixed `-ldflags`.
+**Mitigation:** Release artifacts ship a `checksums.txt` file that
+`install.sh` verifies with SHA-256 before installing. `install.sh`
+also supports optional cosign `verify-blob` against
+`checksums.txt.sig`/`.pem` when a signature is published, and is
+written to skip that step cleanly when none exists. Reproducible
+builds via `-trimpath` and fixed `-ldflags`.
 
-**Residual risk:** The signing key can be stolen. GitHub's OIDC-based
-keyless signing via Sigstore reduces this to "compromise of the
-GitHub Actions runtime," which is actively monitored.
+**Residual risk:** As of this writing the release workflow does not
+yet publish cosign signatures, so checksum verification is the only
+binary-integrity check — a compromised release pipeline could ship
+tampered archives. Publishing keyless Sigstore signatures (OIDC
+identity bound to the release workflow) remains a release-hardening
+item; when enabled, `install.sh` picks it up automatically and
+`--certificate-identity-regexp` pins the signer identity to this
+repository's workflows.
 
 ## Assumptions
 
