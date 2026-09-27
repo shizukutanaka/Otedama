@@ -36,9 +36,9 @@ type runFlags struct {
 	walletPassphrase         string
 	walletMnemonicPassphrase string
 	pprofEnabled             bool
-	logFile                  string // --log-file: audit-trail path, written even under the TUI
-	showOrigin               bool   // --origin: annotate config show output with value sources
-	jsonOut                  bool   // --json: emit config show output as JSON
+	logFile                  string          // --log-file: audit-trail path, written even under the TUI
+	showOrigin               bool            // --origin: annotate config show output with value sources
+	jsonOut                  bool            // --json: emit config show output as JSON
 	setFlags                 map[string]bool // flag names explicitly given on argv (fs.Visit)
 }
 
