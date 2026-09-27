@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 285 — SV2 未処理ジョブマップの無制限メモリ増大を FIFO 境界化)
+
+**検証済みの脆弱性.** Stratum V2 の `NewMiningJob` フラッド —— チェーン先端を
+回さずに一意の job_id を送り続ける悪意ある/バグのあるプール —— が engine 側
+`jobs` マップと stratumv2 アダプタの `pending` マップを無制限に肥大化させた
+（フレーム単位の `MaxFrameSize` は個数に効かない。Noise 暗号は MitM ではなく
+プール自体を信頼するため無関係）。closed #385 に設計済みだったが未マージのため
+master へ再デリバー。
+
+**修正.** 両マップを 64 エントリの FIFO 境界化（engine: `jobsCap` +
+`storeBoundedJob` 挿入順スライス、アダプタ: `pendingCap` + `pendingOrder`）。
+`SetNewPrevHash` の map 再構築は挿入順も同時リセット。最新ジョブ（次の
+SetNewPrevHash で命名されやすいもの）が生存するよう FIFO 追放。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
