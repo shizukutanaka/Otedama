@@ -939,3 +939,26 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 359 — miner hot path + backpressure verdicts
+
+**Worker inner loop [AUDITED — zero-alloc].** `grind` copies the header
+once per 1024-nonce batch, hashes on the stack (`HashHeader` →
+`sha256.Sum256` ×2, no allocations), and interleaves threads via
+`NonceStep`. Share sends are non-blocking with `dropCount` accounting
+— the miner never stalls on a slow consumer.
+
+**V1 `jobsCh` backpressure [AUDITED — bounded].** `sendJob` purges all
+queued jobs on `clean_jobs=true` and drop-oldest's on a full 8-deep
+channel otherwise — the pool read loop can never block on a slow
+worker consumer.
+
+**Arbitration loop maps [AUDITED — bounded].** `streamMap` and
+`lastQuoteAt` are keyed provider:device (bounded by configured
+providers × discovered devices); `pruneStaleStreams` expires entries
+past `streamStaleTimeout`, so dead providers cannot grow state.
+
+With sessions 348–359 the audit now covers every wire-input parser,
+every pool-controlled log/format string, all four timeout surfaces,
+both protocols' in-flight maps, the miner's hot loop, and the metrics/
+HTTP/i18n sinks — the remaining deltas live exclusively on open PRs.
