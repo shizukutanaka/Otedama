@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -1017,5 +1018,27 @@ func TestFloat64FromBits(t *testing.T) {
 		} else if got != want {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
+	}
+}
+
+func TestDialer_DialTimeout(t *testing.T) {
+	prev := dialTimeout
+	dialTimeout = 50 * time.Millisecond
+	defer func() { dialTimeout = prev }()
+
+	d := &Dialer{dialFn: func(ctx context.Context, address string) (net.Conn, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	start := time.Now()
+	_, err := d.Dial(context.Background(), "stratum+v2://127.0.0.1:1", poolproto.Credentials{})
+	if err == nil {
+		t.Fatal("Dial should fail when the dial attempt times out")
+	}
+	if !strings.Contains(err.Error(), "dial timeout") {
+		t.Errorf("expected dial-timeout error, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("Dial took %v; want <5s", elapsed)
 	}
 }

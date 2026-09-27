@@ -11,15 +11,23 @@ package stratumv1
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // ----- Public registration -----
+
+// dialTimeout bounds one pool dial attempt — TCP connect plus, for TLS,
+// the handshake — so failover is not stalled by a blackhole endpoint
+// when the caller's context carries no deadline. Var (not const) so tests
+// can shorten it.
+var dialTimeout = 15 * time.Second
 
 // Dialer is the V1 implementation of poolproto.Dialer. It is registered
 // at package init time for both plaintext and TLS variants; users never
@@ -56,6 +64,12 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 	if err != nil {
 		return nil, err
 	}
+	// Bound the whole attempt — TCP connect plus, for TLS, the handshake —
+	// with its own deadline. Without it a blackhole endpoint stalls failover
+	// for the OS SYN-retry default (~2 min on Linux) when the caller's ctx
+	// has no deadline of its own.
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
 	dialFn := d.dialFn
 	if dialFn == nil {
 		if d.useTLS {
@@ -80,7 +94,14 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 			}
 		}
 	}
-	conn, err := dialFn(ctx, address)
+	conn, err := dialFn(dctx, address)
+	if err != nil {
+		// A deadline from our own timeout surfaces as context errors from
+		// the dialer; report it as a dial timeout, not a connection refusal.
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("dial timeout after %s", dialTimeout)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("stratumv1: dial %s: %w", address, err)
 	}

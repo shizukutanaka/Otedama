@@ -939,3 +939,20 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 345 — per-attempt dial timeout on pool connections
+
+**Blackhole dial stall [FIXED].** Both dialers called `DialContext` with
+only the caller's context — which the engine session loop supplies
+without a deadline — so a pool endpoint that swallows SYNs stalled each
+failover hop for the OS TCP default (~127 s on Linux). Both `Dial`
+implementations now wrap the attempt in a 15 s `dialTimeout` (covers the
+TLS handshake on `stratum+tls://`), report it as a clear "dial timeout"
+error, and keep the caller's deadline when it is tighter. `TestDialer_
+DialTimeout` covers both protocols via a dialFn that blocks on ctx.
+
+**Credentials-in-URL audit [AUDITED — clean].** `Credentials` are passed
+separately from the pool URL; `StripScheme`/`DialURL` never splice user
+material into URLs, so dial errors that embed the URL cannot leak a
+password. Userinfo in a pool URL (`stratum+tcp://u:p@host`) is not
+parsed — it reaches the resolver as literal text and fails fast.

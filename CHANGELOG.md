@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 345 — プール接続タイムアウト)
+
+V1/V2 ダイアラが 1 回の接続試行を 15 秒で打ち切るよう変更（TCP
+コネクト + TLS ハンドシェイク）。呼び出し側 ctx に期限がない場合、
+ブラックホール端点が OS の SYN 再送既定（Linux 約2分）まで
+フェイルオーバー全体を停滞させていた。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
