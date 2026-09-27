@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 331 — 非有限な裁定パラメータの拒否)
+
+`arbitration_hysteresis_pct` / `min_yield_sats_per_sec` に NaN や
+±Inf を設定できてしまい（YAML `.nan`、env `nan`/`inf` は
+ParseFloat を通過）、`< 0` チェックをすり抜けてヒステリシスが
+無効化・ incumbent 固定・フロア無効化が静かに起きていた問題を
+修正。`Decide` が非有限値を明示的にエラー拒否するようになり
+設定ミスが警告として可視化される。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
