@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 339 — V1 ハンドシェイクのタイムアウト)
+
+`Negotiate`（subscribe/authorize/extranonce.subscribe）に
+`handshakeTimeout` = 30s の `context.WithTimeout` を適用。定常状態の
+5分/行 read deadline では、応答しないが行は流すプールが dial ループを
+永久に占有しえた。s327（V2 側）と同型の修正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
