@@ -5,6 +5,7 @@ package arbitration
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -55,6 +56,13 @@ func TestYield_Effective(t *testing.T) {
 		{"zero confidence", Yield{100, 0}, 0},
 		{"negative sats treated as zero", Yield{-50, 1.0}, 0},
 		{"negative confidence treated as zero", Yield{100, -0.5}, 0},
+		// A provider computing 0/0 upstream can hand back NaN; it must
+		// not win the sort or poison TotalYield — collapse to zero yield.
+		{"NaN sats treated as zero", Yield{math.NaN(), 1.0}, 0},
+		{"NaN confidence treated as zero", Yield{100, math.NaN()}, 0},
+		{"+Inf sats treated as zero", Yield{math.Inf(1), 1.0}, 0},
+		{"+Inf confidence treated as zero", Yield{100, math.Inf(1)}, 0},
+		{"-Inf sats treated as zero", Yield{math.Inf(-1), 1.0}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
