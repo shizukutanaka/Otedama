@@ -15,6 +15,7 @@ package stratumv1
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -195,6 +196,9 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	en1, ok = arr[1].(string)
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce1 not a string: %T", arr[1])
+	}
+	if en1 == "" {
+		return "", 0, errors.New("stratumv1: empty extranonce1")
 	}
 	en2SizeF, ok := arr[2].(float64)
 	if !ok {

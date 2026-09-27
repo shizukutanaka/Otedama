@@ -939,3 +939,35 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 366 — rates NaN injection + parser fuzz
+
+**Fixed [FIXED — real reachable bug].** `strconv.ParseFloat` accepts the
+literals `"NaN"`, `"Infinity"`, `"-Inf"` with nil error, and the doFetch
+sanity band `rate < min || rate > max` cannot reject NaN (every
+comparison against NaN is false). A price source returning
+`{"data":{"amount":"NaN"}}` (Coinbase shape) or `{"c":["NaN",…]}`
+(Kraken shape) — compromised endpoint or a proxy sitting inside TLS —
+injected NaN into the median, producing a NaN BTC/USD rate that
+poisons every downstream yield estimate. Two-layer fix: a `parseRate`
+helper rejects non-finite values at the extractor, and the band check
+is now a negated in-range test (`!(x >= lo && x <= hi)`) so NaN fails
+closed for any future source. New `FuzzSourceExtract` asserts every
+extractor's contract: no panic, and err==nil implies a finite rate —
+1.9M execs clean.
+
+**Fixed [FIXED — fuzzer-found].** `parseSubscribeResult` accepted an
+empty `extranonce1` (`[[], "", 0]` — found by the new fuzzer on its
+first pass): shares built on an empty extranonce are guaranteed
+invalid, silently burning accepted-looking work. Empty en1 now errors,
+terminating the handshake instead.
+
+**New fuzz coverage [FIXED — CLAUDE.md parity].** `FuzzDispatchLine`
+drives the session's JSON-RPC dispatcher (mining.notify /
+set_difficulty / set_extranonce / show_message / reconnect /
+response-id routing) over net.Pipe with arbitrary lines — 1.7M execs,
+no panic/block. `FuzzParseSubscribeResult` covers the subscribe
+response shape; its crash seed lives in testdata as a regression
+input. This brings the cleartext V1 wire — the most exposed parser in
+the codebase — under the fuzz mandate alongside the SV2 frame
+fuzzers.
