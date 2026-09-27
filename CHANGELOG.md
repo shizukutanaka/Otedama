@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 368 — v2tls サイレントダウングレード)
+
+`stratum+v2tls://` を処理する poolproto adapter が `useTLS` を無視して
+平文 TCP を張っていた問題を修正（engine のライブ経路は既に正しく
+TLS 化済みだったが、adapter 配線時にサイレント降格となる設計罠を排除）。
+非信頼証明書で検証エラーを確認するテストを追加。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
