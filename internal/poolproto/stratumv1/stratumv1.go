@@ -125,6 +125,11 @@ var (
 	_ poolproto.PoolNoticeReceiver = (*session)(nil)
 )
 
+// callTimeout bounds how long call waits for a pool response before
+// releasing the pending entry and the waiting goroutine. Var so tests
+// can shorten it.
+var callTimeout = 60 * time.Second
+
 func newSession(conn *connection) *session {
 	return &session{
 		conn:     conn,
@@ -443,6 +448,12 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		return rpcResponse{}, fmt.Errorf("stratumv1: write: %w", err)
 	}
 
+	// Bound the wait itself: a pool that keeps the TCP connection alive
+	// but stops answering would otherwise leak this goroutine and the
+	// pending[id] entry for the whole session. 60 s is far beyond any
+	// legitimate submit latency while still releasing the goroutine.
+	timer := time.NewTimer(callTimeout)
+	defer timer.Stop()
 	select {
 	case r, ok := <-respCh:
 		if !ok {
@@ -454,6 +465,11 @@ func (s *session) call(ctx context.Context, id uint64, method string, params []a
 		delete(s.pending, id)
 		s.pendingMu.Unlock()
 		return rpcResponse{}, ctx.Err()
+	case <-timer.C:
+		s.pendingMu.Lock()
+		delete(s.pending, id)
+		s.pendingMu.Unlock()
+		return rpcResponse{}, fmt.Errorf("stratumv1: %s timed out after %s", method, callTimeout)
 	}
 }
 
