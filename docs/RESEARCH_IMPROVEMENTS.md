@@ -939,3 +939,23 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 358 — engine V2 handshake deadline
+
+**Live V2 handshake had no read bound [FIXED].** The engine's inline
+`handshake()` (the *actual* V2 connect path — the `poolproto/stratumv2`
+adapter remains unwired per KNOWN_LIMITATIONS §3) performed two
+`dec.ReadFrame()` calls with no deadline. A pool that accepts TCP but
+never answers SetupConnection held the failover loop forever; on
+net.Pipe-style silent peers the write deadline alone fired after 10 s,
+but a reader-draining silent peer never returned at all. A shared
+`handshakeTimeout = 15 s` (var, test-overridable) now covers the whole
+exchange via `conn.SetDeadline`, cleared on return so steady-state
+session reads stay unbounded — matching the adapter-side `Negotiate`
+deadline from session 327 (PR #439) that never applied to this path.
+
+**V2 mid-session silence [OBSERVED — covered by #408].** The inline
+reader goroutine exits cleanly on `ctx.Done` via `defer conn.Close()`
+unblocking `ReadFrame`; a *live-but-silent* pool mid-session is a
+detection problem already addressed by the pool-silence warning on
+open PR #408 — deliberately not duplicated.
