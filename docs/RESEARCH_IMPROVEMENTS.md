@@ -661,8 +661,8 @@ endpoint against current vendor documentation. Tags as before
     (`go_goroutines`, `go_info{version}`, `go_memstats_*`, `go_gc_*`) using only
     stdlib `runtime` — no new dependency (ADR-003/005 preserved). Names match
     `prometheus/client_golang` so existing Grafana dashboards work unmodified.
-    `otedama_build_info` (commit/goversion labels) deferred to next session.
-    (session 107)
+    `otedama_build_info` (commit/goversion labels) shipped in session 54;
+    SPECIFICATION §6 has the catalogue row. (session 107)
 22. 🔵 **SLSA Build L3 provenance + Sigstore keyless signing for releases.**
     `actions/attest-build-provenance` + cosign keyless (Fulcio OIDC, Rekor)
     is the current bar for a non-custodial money-handling binary users must
@@ -939,3 +939,36 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 323 — server→client input audit verdicts, round 3
+
+Re-audit of pool-controlled inputs left uncovered by sessions 271/309
+plus this stretch's upstream drift check (SRI 1.12.0 still latest;
+ESP-Miner v2.15.1/v2.15.2rc0 reviewed — the only mining-relevant fix,
+"prevent reconnect storms from slow clients" #1913, is pool-server-side
+machinery Otedama doesn't run; the client-side equivalent — exponential
+reconnect backoff 1s→64s + address failover — already exists in
+runReconnectLoop).
+
+**Verdicts [OBSERVED — code-verified this session].**
+
+- `mining.notify` coinb1/coinb2/merkle_branch: never unmarshalled on
+  master (coinbase reconstruction is #417's scope, still open); the raw
+  frame is bounded by the 64 KiB line limit — no unbounded input.
+- CPU worker nonce space: `NonceStep` defaults to `Threads` so threads
+  interleave disjoint nonce sequences — no duplicate-work partition bug.
+- `TargetFromNBits`: rejects negative-mantissa bit, exponent < 3, zero
+  mantissa, and >256-bit targets. `TargetFromDifficulty` rejects d<=0,
+  NaN, ±Inf, and overflowing targets. Both bounded.
+- `mining.set_version_mask` / unknown notifications: forward-compatibly
+  ignored — no state touched.
+- `client.show_message` notice channel: bounded drop-oldest queue.
+- Terminal/log injection: no pool-controlled string reaches the TUI
+  (pool URL + provider names are operator config; wallet fingerprint is
+  hex-only). Pool notices go to slog (session-278/#424) — slog text
+  output passes control bytes through for string values containing
+  newlines, so a hostile pool could forge log lines; recorded as a
+  residual in THREAT_MODEL terms, cosmetic severity.
+- `otedama_build_info`: backlog line claiming "deferred" was stale — the
+  gauge shipped in session 54 and is catalogued in SPECIFICATION §6;
+  corrected.

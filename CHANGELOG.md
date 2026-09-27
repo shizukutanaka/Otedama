@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 323 — サーバー→クライアント入力監査 verdicts 第3弾)
+
+`mining.notify` 残パラメータ（64KiB 行上限で bounded）、CPU nonce
+分割の disjoint 性、`TargetFromNBits`/`TargetFromDifficulty` の異常値
+拒否、`set_version_mask` の前方互換無視、notice キュー境界、
+TUI へのプール制御文字列不到達を全て確認・記録。ESP-Miner
+v2.15.1/v2.15.2rc0 はクライアント側に該当変更なし（#1913 は
+プール側機能）。stale な `otedama_build_info` backlog 行も訂正
+（session 54 で実装済み）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
