@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 340 — シード派生の中間バッファ消去)
+
+`EntropyToMnemonic`/`MnemonicToEntropy` の `bits`（エントロピー
+ビット列）と `MnemonicToSeed` の `password`（ニーモニック平文）/
+`seed`（PBKDF2 出力）を既存の `zeroBytes` で消去。秘密素材が
+GC 回収までヒープに残る経路を閉塞。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

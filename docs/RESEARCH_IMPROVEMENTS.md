@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 340 — BIP-39 intermediate-buffer zeroization
+
+**Secret-material wipe [FIXED].** `EntropyToMnemonic` and
+`MnemonicToEntropy` built the mnemonic/entropy through a `bits` slice
+holding the full secret bitstream (one byte per bit) that was left for
+the GC; `MnemonicToSeed` left the mnemonic-derived `password` and raw
+PBKDF2 `seed` buffers likewise. All are wiped via the package's
+existing `zeroBytes` on every return path (defer). Residual: the
+`m.String()` mnemonic string itself and `salt` are Go strings —
+immutable, unzeroable — an accepted language limitation now recorded.
+Touched `internal/lightning` — CODEOWNERS maintainer review applies.
