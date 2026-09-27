@@ -939,3 +939,31 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 357 — metrics, httpserver, i18n, setup verdicts
+
+**Prometheus exposition [AUDITED — complete escaping].**
+`internal/metrics` validates every label *name* at registration
+(`validateLabelNames`, panics on malformed — one bad label would
+corrupt the whole scrape), escapes `\`, `"`, `\n` in label *values*
+(`escapeLabel`), and escapes `\` + `\n` in HELP lines (`escapeHelp`).
+Label values are operator-config (provider names, pool host) or
+numbers — no pool-controlled string reaches a label.
+
+**HTTP server timeouts [AUDITED — full suite].** `httpserver`
+configures `ReadHeaderTimeout` 5 s (slowloris), `ReadTimeout` 10 s,
+`WriteTimeout` 10 s, `IdleTimeout` 60 s — all four fields set.
+
+**i18n catalogs [AUDITED — static].** Message catalogs are compiled-in
+Go files validated at load (language tag, message ID, duplicate
+detection); templates parse/execute against static strings, never
+wire-derived text. Untrusted input can only appear as template *data*.
+
+**Engine setup pool URL [AUDITED — operator-controlled].**
+`defaultPoolURL` reads only config (operator-set); the built-in
+default is a compile-time constant. No remote source influences it.
+
+The pool-controlled-text sweep that ran sessions 348–353 is therefore
+closed: show_message (s348), reject reasons V1+V2 (s349), job IDs
+(s350), engine + dialer handshake errors (s351/s353), and every
+metrics/HTTP/i18n sink audited clean this round.
