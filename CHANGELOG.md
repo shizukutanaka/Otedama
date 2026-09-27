@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 367 — SV2 メッセージ decode fuzz)
+
+SV2 型付きメッセージデコーダ6種と STR0_255/B0_255/U16/U32 ワイヤ
+プリミティブに fuzz カバレッジを追加（270万 exec クリーン）。
+短いペイロードの境界契約を単体テストでも固定。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
