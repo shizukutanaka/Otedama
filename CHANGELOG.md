@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 354 — V2 dialer 書き込み期限)
+
+`stratumv2` dialer の `sendMsg` に呼び出し毎の 10 秒 write deadline
+を追加 — wedged プール接続で Submit が無期限ブロックし
+セッションループが停滞する問題を修正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

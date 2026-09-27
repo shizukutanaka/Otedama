@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 354 — poolproto V2 sendMsg write deadline
+
+**Unbounded pool write in the dialer path [FIXED].** `stratumv2`'s
+package-local `sendMsg` wrote with no deadline — a wedged/half-open
+pool socket would block `Submit` (and the negotiate sends) until the
+OS TCP write timeout (~15 min) or forever, stalling the session loop
+and piling up shares. A fresh 10 s `SetWriteDeadline` per call matches
+the engine's `sendMsg` and the V1 submit path.
+
+**V1 pending-RPC map [AUDITED — clean].** `call` deletes its
+`pending[id]` entry on every exit path (response, write failure, ctx
+cancel) — no leak from abandoned calls.

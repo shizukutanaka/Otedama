@@ -337,6 +337,10 @@ func sendMsg(w net.Conn, msgType uint8, isChannel bool, enc encodable) error {
 	if err != nil {
 		return err
 	}
+	// A fresh absolute deadline per call, so a wedged pool connection
+	// fails the write instead of blocking forever (matches the engine's
+	// sendMsg and the V1 submit path).
+	_ = w.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if _, err := w.Write(data); err != nil {
 		return err
 	}
