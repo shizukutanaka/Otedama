@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 286 — `extranonce2_size` の上限未チェックによるメモリ枯渇を遮断)
+
+**検証済みの脆弱性.** 平文 Stratum V1 でプール（または MitM）が制御する
+`extranonce2_size` が `strings.Repeat` へ無制限に流れ、mining.submit ごとに
+巨大アロケーションを強制できた（例: 2 GiB/share）。closed #384 に設計済み
+だったが未マージのため master へ再デリバー。
+
+**修正.** `maxExtranonce2Size = 64` を導入し、`mining.subscribe` 応答と
+`mining.set_extranonce` 通知の両入口で範囲外値を拒否（実プールは 4–8）。
+`Submit` のパディングにも防御的クランプを追加し、将来の新入口が Repeat を
+メモリ枯渇経路に戻さないようにした。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

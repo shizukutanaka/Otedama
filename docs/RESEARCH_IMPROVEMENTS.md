@@ -939,3 +939,21 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 286 — bound pool-controlled extranonce2_size (re-delivers closed #384)
+
+**Finding [OBSERVED — code-verified].** `extranonce2_size` is fully
+pool-controlled on Stratum V1 and flowed unbounded into
+`strings.Repeat("00", extranonce2Size)` on every `mining.submit` — a hostile
+pool or MitM on cleartext V1 could force ~2 GiB of allocation per share. Both
+entry points were unguarded: the `mining.subscribe` response and mid-session
+`mining.set_extranonce`.
+
+**Fix [OBSERVED].** `maxExtranonce2Size = 64` (real pools use 4–8) enforced at
+both entry points — out-of-range subscribe results are a dial error,
+out-of-range `set_extranonce` notifications are dropped — plus a defensive
+`min(max(..., 0), 64)` clamp in `Submit` so no future entry point can re-open
+the vector.
+
+**Tests [OBSERVED].** Boundary tables on both parsers: 0/4/8/64 accepted,
+65/-1/1e9/2^30 rejected.
