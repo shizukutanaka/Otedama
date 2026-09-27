@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 362 — btccrypto + dependency-posture verdicts
+
+**btccrypto [AUDITED — clean].** Bech32: BIP-173 length cap (90),
+mixed-case rejection, charset validation, witness version ≤ 16, and
+BIP-350 checksum-constant selection. Base58Check: alphabet check,
+decoded-length check, checksum verify, version-byte whitelist.
+secp256k1 schemes are honest stubs returning `ErrSchemeNotImplemented`
+— no fake crypto satisfies a caller silently.
+
+**Dependency posture [FETCHED — zero reachable].** `govulncheck ./...`
+on master under go1.26.8: 0 vulnerabilities reachable in Otedama code;
+22 module-level findings exist in required modules but none are in
+called paths (module updates still worth landing via #444's yaml
+migration).
