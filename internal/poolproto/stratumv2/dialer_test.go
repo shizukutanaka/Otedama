@@ -5,6 +5,7 @@ package stratumv2
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net"
 	"testing"
@@ -1017,5 +1018,44 @@ func TestFloat64FromBits(t *testing.T) {
 		} else if got != want {
 			t.Errorf("float64FromBits(0x%016X) = %v, want %v", bits, got, want)
 		}
+	}
+}
+
+// TestNegotiate_HandshakeTimeout exercises the handshake read deadline: a
+// peer that accepts TCP but never answers SetupConnection must fail
+// promptly rather than hang DialURL (and the engine's reconnect loop)
+// forever. net.Pipe gives an in-memory full-duplex pair with no reader.
+func TestNegotiate_HandshakeTimeout(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
+	// The pool drains our writes but never answers — it went silent after
+	// TCP accept (net.Pipe writes block until read, so drain them).
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	old := handshakeTimeout
+	handshakeTimeout = 50 * time.Millisecond
+	defer func() { handshakeTimeout = old }()
+
+	conn := &connection{raw: client, remoteAddr: "pool.invalid:34254", protocol: poolproto.ProtocolStratumV2, user: "w.user"}
+	start := time.Now()
+	var d Dialer
+	_, err := d.Negotiate(context.Background(), conn)
+	if err == nil {
+		t.Fatal("Negotiate succeeded against a silent peer")
+	}
+	var nerr net.Error
+	if !errors.As(err, &nerr) || !nerr.Timeout() {
+		t.Fatalf("expected i/o timeout, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Negotiate blocked %v (deadline not applied)", elapsed)
 	}
 }

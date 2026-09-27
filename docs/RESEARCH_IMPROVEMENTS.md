@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 327 — V2 handshake read deadline (real fix)
+
+**Negotiate reads unbounded [OBSERVED + FIXED].** The dialer's two
+handshake `ReadFrame` calls ran with no deadline and no ctx wiring —
+unlike `sendMsg` (write deadline, s324) and the steady-state read loop
+(unblocked by Close/ctx). A pool that accepts TCP then goes silent hung
+`DialURL` inside the engine's synchronous reconnect loop: no backoff, no
+failover, and shutdown could not cancel it. `handshakeTimeout` = 15 s now
+bounds the phase (cleared on return — steady state stays
+Close/ctx-governed). Test: `TestNegotiate_HandshakeTimeout` (net.Pipe,
+draining-but-silent peer) fails Negotiate in 50 ms.
