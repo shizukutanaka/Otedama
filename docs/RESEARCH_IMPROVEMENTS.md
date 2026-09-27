@@ -939,3 +939,30 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 335 — transition-reject fix re-delivered (from closed #367)
+
+**Benign retarget rejects [PORTED].** `miner.Share.Target` carries the
+issue-time share target; `transitionReject` classifies a difficulty
+reject as `difficulty-transition` only when the share was issued under
+a different, since-replaced target. V1 compares captured vs current
+suggested difficulty; V2 tracks `submitTargets` (SequenceNumber →
+issue target, same 1024 cap/reap as submitTimes). Benign rejects skip
+reject_rate/sharesRejected/last_reject_seconds and log at info; the
+rejectByReason map race fix (rejectByReasonMu + rejectReasonValue)
+came along. Verified `-race` clean on the ported tests.
+
+## Session 336 — pool show_message delivery re-delivered (from closed #405/#424)
+
+**client.show_message [PORTED].** The V1 session parsed operator
+notices into `PoolNotices()` (buffered 8, drop-oldest) but master had
+no consumer. `runSessionV1` now type-asserts `poolproto.PoolNoticeReceiver`
+and forwards each notice to `opts.log("info", …)`. slog's TextHandler
+writes values verbatim, so a hostile/MitM pool could inject ANSI
+sequences or newlines into a terminal — noted as accepted residual
+(also true of every other logged field); escapes are not stripped
+because slog output is already conventionally machine-consumed.
+**TUI injection surface [AUDITED — clean].** Dashboard renders only
+user-configured `PoolURL` (scheme-validated), engine-computed
+fingerprints, and internal provider names — no pool-supplied string
+reaches `internal/tui`.
