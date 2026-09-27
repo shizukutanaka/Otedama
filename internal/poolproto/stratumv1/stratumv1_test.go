@@ -1889,3 +1889,27 @@ func TestSession_Dispatch_UnknownNotification_SilentlyIgnored(t *testing.T) {
 		t.Error("unknown method enqueued a notice")
 	}
 }
+
+func TestReconnectWait_Clamped(t *testing.T) {
+	sess := makeBareSess()
+	if got := sess.ReconnectWait(); got != 0 {
+		t.Fatalf("no directive: got %s, want 0", got)
+	}
+	for _, tc := range []struct {
+		name string
+		wait int
+		want time.Duration
+	}{
+		{"positive", 5, 5 * time.Second},
+		{"negative", -3, 0},
+		{"capped", 99999, maxReconnectWaitSeconds * time.Second},
+		{"boundary", maxReconnectWaitSeconds, maxReconnectWaitSeconds * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess.lastReconnect.Store(&reconnectDirective{Wait: tc.wait})
+			if got := sess.ReconnectWait(); got != tc.want {
+				t.Fatalf("wait=%d: got %s, want %s", tc.wait, got, tc.want)
+			}
+		})
+	}
+}

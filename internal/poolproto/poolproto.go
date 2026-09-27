@@ -241,6 +241,19 @@ type PoolNoticeReceiver interface {
 	PoolNotices() <-chan string
 }
 
+// ReconnectWaiter is implemented by sessions whose protocol supports a
+// pool-directed reconnect delay (client.reconnect's wait_seconds in
+// Stratum V1). Callers should type-assert a Session to this interface;
+// protocols without the concept are simply absent. The returned duration
+// is already clamped by the implementation — never negative, capped to a
+// sane ceiling — so a hostile pool cannot hang the caller indefinitely.
+type ReconnectWaiter interface {
+	// ReconnectWait reports how long the pool asked us to pause before
+	// reconnecting. Zero means no directive was received (or it carried
+	// no wait field).
+	ReconnectWait() time.Duration
+}
+
 // Dialer establishes a Connection to a pool. Different protocols
 // register different Dialers; the registry maps URL schemes to
 // implementations.
