@@ -939,3 +939,33 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 346 — ecosystem re-check + wallet/metrics audit verdicts
+
+**Ecosystem [FETCHED].** No drift since session 344: SRI v1.12.0 remains
+the latest release (Sep 17); ESP-Miner v2.15.3 (Sep 20) is a
+prerelease-scoped UI warning fix with no stratum changes. SRI v1.11.1's
+"do not round up SV1 difficulties" fix was verified against our client
+path: `TargetFromDifficulty` divides `diff1Target` by the pool value
+with 256-bit `big.Float` precision and truncates — never rounds up.
+A difficulty so small the target exceeds 256 bits returns an error, and
+`v1JobTarget` then falls back to the nBits block target (the strictly
+harder bound — fails safe toward starvation, never toward
+accept-everything).
+
+**Audit verdicts [AUDITED — clean].**
+
+- `stratumv1.parseAddress` returns the host:port remainder unvalidated,
+  but malformed values fail fast in the (now 15 s-bounded) dial — a
+  config-error surface, not an injection path; credentials are passed
+  separately and never spliced into the URL, so URL-bearing errors
+  cannot leak a password.
+- `btccrypto.ValidateAddress` verifies the checksum (bech32/bech32m or
+  Base58Check) and is enforced on every pool payout address at config
+  load — a mistyped address fails startup rather than mining to a dead
+  destination.
+- `hashrateWindow.observe` saturates: a counter reset on reconnect
+  yields rate 0, never negative or NaN; the first sample only primes.
+- `printRecoveryPhrase` writes the mnemonic exclusively to
+  `opts.Output` (stdout on first run) — it is never passed to the
+  logger; wallet.dat stores only the encrypted seed.
