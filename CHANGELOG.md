@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 370 — ntime roll)
+
+nonce 空間枯渇時にヘッダ時刻をロール前進 — 同一 (header, nonce) の
+再ハッシュと重複シェア拒否を防止（ntime roll、V1/V2 両経路で
+ロール値が送信されることを確認済み）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

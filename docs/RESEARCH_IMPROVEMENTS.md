@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 370 — nonce-space exhaustion (ntime roll)
+
+**[FIXED]** `miner.Worker.grind` wrapped `nonce` past 2^32 with no
+compensation: once a thread finished its stride slice it silently
+re-hashed identical (header, nonce) pairs for the rest of the job —
+wasted power plus *duplicate* shares the pool rejects. Now each wrap
+increments `ntimeRoll` and rolls `Header.Time` forward (standard stratum
+ntime roll; V1 submit and SV2 `SubmitSharesStandard.ntime` both carry
+`Share.NTime` so the rolled value is what the pool sees; forward rolls
+stay ≥ SV2 `min_ntime`). Verified by `TestWorker_NonceWrapRollsNTime`
+(`NonceStep=2^31` forces a wrap every other iteration).
+
+**Audited clean.** Share→submit ntime plumbing (`run.go` 934/1132,
+`stratumv1.go` `%08x`) propagates the rolled value on both protocols.
