@@ -73,6 +73,11 @@ type engineMetrics struct {
 	submitLatencyP95 *metrics.Gauge
 	submitLatencyP99 *metrics.Gauge
 
+	// sharesSubmitInFlight is the depth of the submit→ack pending set
+	// (len(submitTimes)); a sustained/growing depth means the pool is slow
+	// or not acknowledging submits at all.
+	sharesSubmitInFlight *metrics.Gauge
+
 	shareAcceptanceRate *metrics.Gauge
 
 	// sharesUnaccounted is shares found locally but not yet judged by the pool
@@ -308,6 +313,12 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 			"otedama_submit_latency_milliseconds",
 			"Share-submission round-trip latency (submit→accept).",
 			map[string]string{"quantile": "0.99"}),
+		sharesSubmitInFlight: reg.NewGauge(
+			"otedama_shares_submit_in_flight",
+			"Shares submitted to the pool but not yet judged (in flight). "+
+				"A sustained or growing depth means the pool is slow or not "+
+				"acknowledging submits.",
+			nil),
 
 		shareAcceptanceRate: reg.NewGauge(
 			"otedama_share_acceptance_rate",

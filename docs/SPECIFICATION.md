@@ -169,6 +169,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `reject_rate` | gauge | rejected / judged. |
 | `stale_rate` | gauge | stale-rejected / judged. |
 | `submit_latency_milliseconds{quantile}` | gauge | submit→accept RTT at q=0.5/0.95/0.99. Note: milliseconds, not the seconds base unit used by every other time metric — see §8 G18. |
+| `shares_submit_in_flight` | gauge | Shares submitted but not yet judged (SV2 pending-set depth; 0 on V1, which submits synchronously). |
 
 **Hashrate, health & power**
 
