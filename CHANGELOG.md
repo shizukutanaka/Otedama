@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 356 — hal/V1 ディスパッチ)
+
+GPU sysfs 列挙（kernel 生成・root 壁外）と V1 サーバ→クライアント
+dispatch（6 メソッド全網羅・未知メソッド安全に無視）を監査済みと
+記録。Noise トランスポート未配線は KNOWN_LIMITATIONS §3 の
+文書化済み事項として再確認。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
