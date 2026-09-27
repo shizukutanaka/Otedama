@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 364 — wire-format + shutdown verdicts
+
+**V1 share serialization [AUDITED — correct].** `mining.submit` emits
+ntime and nonce as `%08x` big-endian hex — the stratum convention —
+while `Header.Bytes()` hashes the little-endian field order Bitcoin
+requires. The two representations are consistent: the share the pool
+verifies reconstructs the same 80-byte header. `extranonce2` is
+raw-hex (verbatim bytes the pool split off), correct per spec.
+
+**Shutdown path [AUDITED — complete].** `signal.NotifyContext`
+(Interrupt + SIGTERM) → engine ctx → `defer conn.Close()` unblocks
+`ReadFrame`/`call` waits → workers' inner ctx cancels → providers'
+Stop is deferred after engine exit. Every blocking surface audited in
+s354–s358 reaches a ctx or conn close; no orphaned goroutine survives
+a clean shutdown.
