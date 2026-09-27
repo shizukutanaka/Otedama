@@ -1918,7 +1918,16 @@ func TestParseSubscribeResult_Extranonce2SizeBounds(t *testing.T) {
 		sz   float64
 		want bool
 	}{
-		{0, true}, {8, true}, {64, true}, {65, false}, {-1, false}, {1e9, false},
+		{0, true},
+		{8, true},
+		{64, true},
+		{65, false},
+		{-1, false},
+		{1e9, false},
+		// Fractional values must not pass via int() truncation.
+		{64.5, false},
+		{-0.5, false},
+		{4.5, false},
 	} {
 		result := []any{[]any{}, "abc", tc.sz}
 		_, _, err := parseSubscribeResult(result)

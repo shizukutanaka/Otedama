@@ -213,11 +213,12 @@ func parseSubscribeResult(result any) (en1 string, en2Size int, err error) {
 	if !ok {
 		return "", 0, fmt.Errorf("stratumv1: extranonce2_size not a number: %T", arr[2])
 	}
-	en2Size = int(en2SizeF)
-	if !extranonce2SizeOK(en2Size) {
-		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %d out of range [0, %d]", en2Size, maxExtranonce2Size)
+	// Validate on the float: int() truncation would let 64.5 or -0.5 pass
+	// the bounds check below as 64 or 0.
+	if en2SizeF != math.Trunc(en2SizeF) || en2SizeF < 0 || en2SizeF > maxExtranonce2Size {
+		return "", 0, fmt.Errorf("stratumv1: extranonce2_size %v out of range [0, %d]", en2SizeF, maxExtranonce2Size)
 	}
-	return en1, en2Size, nil
+	return en1, int(en2SizeF), nil
 }
 
 // ----- helpers -----
