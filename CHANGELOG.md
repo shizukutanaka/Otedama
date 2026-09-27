@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security (session 290 — difficulty→0 による submit フラッドをレート上限で遮断)
+
+**脅威.** プール（または平文 V1 の MitM）が `mining.set_difficulty` で難易度を
+極小にすると、全 nonce がシェア条件を満たし submit 嵐になる —— 帯域/CPU
+枯渇とプール側のレート制限トリップを招く。closed #392 の未マージ修正を
+master へ再デリバー。
+
+**修正.** セッション毎のトークンバケット（8/s + burst 32、初期満タン）を
+V1/V2 両 submit パスに追加。超過シェアはドロップして
+`otedama_shares_submit_dropped_total` に計上（SPECIFICATION §6 / API.md に
+メトリクス行追加）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

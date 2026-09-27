@@ -939,3 +939,19 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 290 — per-session submit rate cap (re-delivers closed #392)
+
+**Finding [OBSERVED — code-verified].** A pool driving `mining.set_difficulty`
+toward 0 (or a MitM forging it on cleartext V1) makes every nonce a share —
+an outbound submit flood exhausting bandwidth/CPU and tripping pool-side rate
+limits. The session-270 note documented the share channel as bounded, but the
+*submit* path itself had no rate bound.
+
+**Fix [OBSERVED].** Per-session token bucket on both submit paths: 8/s +
+burst 32, starts full. Excess shares are dropped and counted on
+`otedama_shares_submit_dropped_total` (catalogued in SPECIFICATION §6 and
+API.md).
+
+**Tests [OBSERVED].** `TestSubmitLimiter_BurstThenRefill` covers burst
+exhaustion and refill rate.
