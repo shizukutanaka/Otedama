@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 298 — count pool-reported batch accepts in SubmitSharesSuccess (re-delivers closed #400)
+
+**Finding [OBSERVED — code-verified].** Each `SubmitSharesSuccess` credited
+`shares_accepted` once regardless of how many submits it acknowledged — on
+batching pools the acceptance rate drifted low, making a healthy session
+look lossy.
+
+**Fix [OBSERVED].** Credit `NewSubmitsAccepted` (the pool-reported count).
+When the field is 0, fall back to the locally observed settle count — every
+acked share was accepted even if the field is unpopulated.
+
+**Tests [OBSERVED].** `TestRunSession_BatchAcceptCreditsPoolCount` — fake
+pool batch-acks 3 shares; `sharesAccepted` == 3.
