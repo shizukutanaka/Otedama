@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 291 — validate SubmitSharesSuccess.LastSequenceNumber (re-delivers closed #393)
+
+**Finding [OBSERVED — code-verified].** A `SubmitSharesSuccess` whose
+`LastSequenceNumber` exceeds every sequence number sent was credited anyway:
+`sharesAccepted` incremented and `submitTimes` settled — a bogus or misrouted
+frame could inflate the acceptance rate (the mirror of session-277's forged
+reject, which skewed it downward).
+
+**Fix [OBSERVED].** `last > seqNum` (acknowledging a share never sent) is
+dropped with a debug log; only real acks settle latency and credit the
+counter — symmetric with the SubmitSharesError seq check.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqAcceptIgnored`: fake pool
+acks a future seq → `sharesAccepted` stays 0.

@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 291 — `SubmitSharesSuccess` の未来 seq 受理を遮断)
+
+**検証済み.** SV2 プールが `LastSequenceNumber` に未送信の seq を入れた
+受理フレームを送ると、Otedama はそれを信用して `sharesAccepted` を
+インクリメントし `submitTimes` を settle していた —— 受理率とレイテンシの
+水増しが可能だった（reject 側の seq 検証と対になる欠陥）。closed #393 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `last > seqNum`（未送信 seq を ack）の受理を debug ログのみで
+落とす。reject 側 (#389 由来の同一パターン) と対称の検証。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
