@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 321 — SV2 バッチ受理数の正しい計上)
+
+**問題.** `SubmitSharesSuccess` の受理を常に +1 で数えていた——
+プールが `NewSubmitsAccepted`（バッチ受理数）を報告しても無視し、
+受理率が実際より低くドリフトした。closed #386/#400/#410 の
+未マージ修正を master へ再デリバー。
+
+**修正.** `shares_accepted` が `NewSubmitsAccepted` を計上。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
