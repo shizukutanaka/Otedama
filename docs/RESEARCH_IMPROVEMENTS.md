@@ -939,3 +939,24 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 283 — V2 difficulty observability (publishes difficulty + starvation warn)
+
+**Finding [OBSERVED — code-verified].** Session 282's starvation tripwire only
+wired the V1 path: `runSession` (V2) never called `publishDifficulty`, so the
+`otedama_pool_difficulty` / `otedama_estimated_share_interval_seconds` gauges
+and the >1h starvation warning were absent for SV2 connections — exactly where
+a hostile `SetTarget` retarget matters most (SV2 can raise difficulty at any
+time over the encrypted channel).
+
+**Fix [OBSERVED].** Added `miner.DifficultyFromTarget` — the exact inverse of
+`TargetFromDifficulty` (`difficulty = diff1Target / target`, big.Float at 128-bit
+precision, zero target → +Inf) — and wired the V2 stats tick to publish the
+share target's difficulty and run the same once-per-episode starvation warn.
+`responsivePool` now takes a configurable share target so tests can starve
+share production deterministically (`target = 1` → warns exactly once across
+hundreds of ticks).
+
+**Round-trip verified [OBSERVED].** `DifficultyFromTarget(TargetFromDifficulty(d))`
+recovers d within 0.1% across {0.0000001 … 1e15}; the genesis target maps to
+difficulty 1.0 exactly.

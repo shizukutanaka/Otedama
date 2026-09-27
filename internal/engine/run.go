@@ -711,6 +711,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	var hashWindow hashrateWindow
 	// Accumulate productive (actually-hashing) time for effective-uptime accounting.
 	var uptime uptimeAccountant
+	// Tripwire for pool-assigned difficulty starving share production.
+	var starvedWarned bool
 
 	// Track dropped shares so a consumer that cannot keep up surfaces as a
 	// warning rather than silently losing found shares.
@@ -808,6 +810,23 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
 						rate*100, opts.m.sharesAccepted.Value(), judged))
+				}
+				// Publish pool difficulty and estimated share interval so
+				// operators can distinguish "hardware is slow" from "the pool
+				// assigned more difficulty than our hashrate can serve".
+				// V2's share target arrives as a raw U256 from
+				// OpenMiningChannelSuccess/SetTarget — convert it to the
+				// same Stratum difficulty the V1 path publishes.
+				publishDifficulty(opts.m, miner.DifficultyFromTarget(shareTarget), currentHashRate)
+				if iv := opts.m.estimatedShareIntervalSeconds.Value(); iv > 3600 {
+					if !starvedWarned {
+						starvedWarned = true
+						opts.log("warn", fmt.Sprintf(
+							"engine: pool difficulty implies ~%.0f min between shares — income is effectively zero; the pool should lower difficulty or retarget",
+							iv/60))
+					}
+				} else {
+					starvedWarned = false
 				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
@@ -1269,7 +1288,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

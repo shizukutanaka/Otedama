@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 283 — V2 経路の難易度観測性: `publishDifficulty` と収益飢餓警告を V2 セッションにも配線)
+
+**検証済みの非対称.** Stratum V2 の stats tick は `publishDifficulty` を呼ばず、
+`otedama_pool_difficulty` / `otedama_estimated_share_interval_seconds` ゲージと
+収益飢餓警告（session 282）は V1 経路にのみ有効だった —— V2 では
+`SetTarget` / `OpenMiningChannelSuccess` の U256 MaxTarget が数値変換されず
+死蔵していた。
+
+**修正.** `miner.DifficultyFromTarget`（`TargetFromDifficulty` の逆変換、
+difficulty = diff1Target / target、ゼロターゲットは +Inf）を追加し、V2 stats
+tick で `shareTarget` を Stratum difficulty に変換して同じゲージ・警告経路に
+乗せる。`responsivePool` テストプールが任意のシェアターゲットを送出可能になり、
+`TestRunSession_StarvationWarnsOnce` が極小ターゲット下で警告がちょうど
+1 回出ることを検証。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
