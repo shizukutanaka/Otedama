@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 336 — pool show_message 通知をログへ)
+
+Stratum V1 の `client.show_message`（メンテナンス予告、資格情報
+エラー、移行告知などプール運営者通知）が解析済みながら消費者ゼロ
+の dead channel で破棄されていた問題を修正。`PoolNoticeReceiver`
+経由で notices を取得し info ログへ転送。#405/#424 由来の再
+デリバー。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
