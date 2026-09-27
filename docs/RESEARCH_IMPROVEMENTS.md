@@ -939,3 +939,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 333 — wallet.dat size bound (real fix)
+
+**UnmarshalEncryptedSeed unbounded alloc [OBSERVED + FIXED].** The
+parser `make([]byte, len(b)-29)`'d whatever `os.ReadFile` returned —
+a corrupt or oversized wallet.dat forced a matching allocation. The
+v1 payload is exactly 80 bytes (64-byte seed + 16-byte tag); added a
+4 KiB cap (generous headroom for future versions) at the single parse
+choke point both loadExisting and ChangePassphrase flow through.
+Test: `TestUnmarshalEncryptedSeed_RejectsOversizedInput`. Touches
+internal/lightning — fund-adjacent, CODEOWNERS review applies.
