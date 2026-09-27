@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (session 309 — server→client 入力面の監査判定を記録)
+
+**内容.** Stratum V1/V2 でサーバー→クライアント方向の入力面
+（reconnect/version_mask/未知フレーム/backoff/notify 各フィールド）を
+全て監査し、全項目が bounded であることを RESEARCH_IMPROVEMENTS に
+判定記録。closed #383 の未マージ変更を master へ再デリバー。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
