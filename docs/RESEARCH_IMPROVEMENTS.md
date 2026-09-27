@@ -939,3 +939,23 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 368/369 — wallet KDF + address-parser fuzz + dep freshness
+
+**Audited clean.** wallet.dat scrypt params are compile-time constants
+(N=1<<17, r=8, p=1) — a tampered wallet file cannot request a
+memory-exhausting KDF; decrypt path is bounded and checksum-gated.
+V1 TLS dialer verified: MinVersion TLS 1.2, no InsecureSkipVerify,
+extra-CA PEM merge preserves verification.
+
+**Coverage [FIXED].** `FuzzValidateAddress` + direct bech32/base58
+drives the payout-address parsers with operator-supplied strings
+(1.4M execs clean): no panic, and a nil error always implies a
+checksum-verified structure.
+
+**Observed [OBSERVED — deferred].** `golang.org/x/crypto` is pinned at
+v0.23.0 vs latest v0.57.0 and `x/sys`/`x/term`/`x/text` are similarly
+behind; `govulncheck` shows zero reachable vulns (s362), and a bump
+raises the go.mod `go` directive, colliding with CI's pinned Go —
+deferred until the toolchain pin is resolved. yaml.v3 migration is
+already tracked on #444.

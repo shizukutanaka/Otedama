@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 369 — btccrypto fuzz)
+
+payout アドレスの bech32/bech32m + Base58Check バリデータに fuzz 追加
+（140万 exec クリーン）。wallet.dat scrypt パラメータがコンパイル時
+定数であること（ファイル経由の KDF DoS 不可）を監査済みと記録。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
