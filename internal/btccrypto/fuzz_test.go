@@ -14,11 +14,11 @@ import (
 // checksum-invalid address silently routes rewards to a dead key.
 func FuzzValidateAddress(f *testing.F) {
 	seeds := []string{
-		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",            // canonical P2PKH
-		"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",            // P2SH
-		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",   // BIP-173 v0 example
-		"BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",   // upper-case form
-		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kg3g4ty",   // invalid checksum
+		"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",          // canonical P2PKH
+		"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",          // P2SH
+		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",  // BIP-173 v0 example
+		"BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",  // upper-case form
+		"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kg3g4ty",  // invalid checksum
 		"bc1qr33j0zedavp4m4l6f5e0h6a2x0e7tq2xvp6u7k8", // speculative v1 shape
 		"bc1", "", "1", "3", "bc", "0", "bc1pz",
 		strings.Repeat("q", 200),             // over the 90-char BIP-173 cap
