@@ -39,6 +39,7 @@ type runFlags struct {
 	logFile                  string // --log-file: audit-trail path, written even under the TUI
 	showOrigin               bool   // --origin: annotate config show output with value sources
 	jsonOut                  bool   // --json: emit config show output as JSON
+	setFlags                 map[string]bool // flag names explicitly given on argv (fs.Visit)
 }
 
 // parseRunFlags builds the flag set shared by `run`, `config show`, and
@@ -90,6 +91,8 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 	if err := fs.Parse(args); err != nil {
 		return runFlags{}, err
 	}
+	f.setFlags = make(map[string]bool)
+	fs.Visit(func(fl *flag.Flag) { f.setFlags[fl.Name] = true })
 	return f, nil
 }
 
@@ -128,6 +131,15 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	applyRunEnvFallbacks(&f)
+
+	// A passphrase passed on argv is visible to every process on the host
+	// via /proc/<pid>/cmdline (ps aux). Docs prefer the env vars; warn at
+	// runtime for operators who never read that guidance.
+	if f.setFlags["wallet-passphrase"] || f.setFlags["wallet-mnemonic-passphrase"] {
+		fmt.Fprintln(stderr, "warning: a wallet passphrase given on the command line is visible in "+
+			"process lists; prefer the OTEDAMA_WALLET_PASSPHRASE / OTEDAMA_WALLET_MNEMONIC_PASSPHRASE "+
+			"environment variables")
+	}
 
 	// Auto-disable the TUI when stdout is not an interactive terminal
 	// (redirected to a file/pipe, or captured by a service manager like

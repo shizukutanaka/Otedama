@@ -939,3 +939,21 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 372 — argv secret hygiene + residual audits
+
+**[FIXED] argv passphrase warning.** `--wallet-passphrase` /
+`--wallet-mnemonic-passphrase` place the wallet passphrase in the
+process list (`/proc/<pid>/cmdline`, `ps aux`) — readable by every
+process on the host. Docs already prefer the OTEDAMA_WALLET_*_ env
+vars (THREAT_MODEL §Information-disclosure); `run` now emits a stderr
+warning when either flag is explicitly given (fs.Visit tracking), so
+the guidance reaches operators who never read the docs. The env-var
+path and `config show`/`validate` do not warn.
+
+**Audited clean.** curtailment gate (stale/failed price holds last
+trusted state — never curtails or resumes on untrusted data);
+TargetFromNBits (negative mantissa / exp<3 / zero mantissa / >256-bit
+overflow all rejected); hashrateWindow / uptime / sats accountants
+(dt≤0, counter reset, productive gating all guarded); SV2
+SetNewPrevHash future-job activation (unknown job → workers paused).
