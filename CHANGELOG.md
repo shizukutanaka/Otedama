@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 350 — V1 ジョブIDのログクォート)
+
+`mining.notify` の `job.JobID`（プール制御文字列）をログ出力する
+2箇所で `%s` → `%q` に変更。ANSI エスケープ・改行による
+ログ偽造を防止。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
