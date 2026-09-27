@@ -939,3 +939,21 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 280 — submit-rate cap (session-270 residual, landed)
+
+**Finding [OBSERVED — code-verified].** Session 270's `set_difficulty` audit
+recorded a residual: the share channel is bounded, but shares that pass it
+spawned an unbounded `Submit` goroutine + wire frame each — a difficulty→0
+flood reached the pool at full send rate.
+
+**Fix [OBSERVED].** Per-session `submitLimiter` token bucket: one token per
+125 ms (8 submits/s sustained), burst 32, starts full. Excess shares drop
+before the wire and count on `otedama_shares_submit_dropped_total`
+(SPECIFICATION §6 + API.md catalogued). Applied to both the V1 goroutine
+Submit path and the V2 SubmitSharesStandard path. Unit test covers burst,
+exhaustion, and refill; existing submit tests pass unchanged (bucket starts
+full so normal rates are untouched).
+
+**Residual [OBSERVED — recorded in THREAT_MODEL].** Hashing itself is still
+wasted at difficulty ~0; a difficulty-floor disconnect is the next step.

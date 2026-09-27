@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 280 — プール難易度が ~0 に崩れた際の submit フラッドを阻止: セッション毎の submit レート上限を追加)
+
+**検証済みの欠落.** `mining.set_difficulty` / `SetTarget` を ~0 に制御できる
+プール（平文 V1 では MitM を含む）は、ワーカーがハードウェア速度でシェアを
+量産する状態を作れる。従来これを受けるのは上限付き share チャネルだけで、
+**wire への submit 発行自体は無制限**だった——発見シェアごとに Submit
+goroutine とフレームが生成され、本ホストの CPU/帯域を浪費し、プール側で
+アカウントの rate-limit や BAN を招きうる。
+
+**修正.** セッション毎のトークンバケット `submitLimiter` を追加:
+125ms 毎に 1 トークン補充（持続 8 submit/s）、バースト 32、初期満杯。
+超過シェアは wire に届く前にドロップし
+`otedama_shares_submit_dropped_total` に計上。上限は正直なプールの
+credit 率を大幅に上回り、超過分は送信時点で stale 相当のため実損なし。
+V1/V2 両経路に適用。SPECIFICATION §6 / API.md のメトリクス表と
+THREAT_MODEL（脅威 + 残留: 難易度 ~0 での無駄ハッシュ自体は継続）を更新。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
