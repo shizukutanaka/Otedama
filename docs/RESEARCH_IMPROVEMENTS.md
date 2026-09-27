@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 288 — credit pool-reported batch accepts (re-delivers closed #386)
+
+**Finding [OBSERVED — code-verified].** `SubmitSharesSuccess` credited
+`sharesAccepted` +1 per message. Pools may batch-acknowledge: one message
+carrying `NewSubmitsAccepted=N` accepts N submits, so the acceptance rate
+drifted low on batching pools.
+
+**Fix [OBSERVED].** Credit `NewSubmitsAccepted` directly; when the field is
+unpopulated (0), fall back to the count of locally settled submits — every
+acked share was necessarily accepted. Latency settlement for seq ≤
+LastSequenceNumber is unchanged.
+
+**Tests [OBSERVED].** `TestRunSession_BatchAcceptCreditsPoolCount`: a fake
+pool batch-acks 3 in one message → `sharesAccepted == 3`.
