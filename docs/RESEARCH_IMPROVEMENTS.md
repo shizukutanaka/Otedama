@@ -939,3 +939,23 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+## Session 284 — silent-pool (job starvation) tripwire on both protocols
+
+**Finding [OBSERVED — code-verified].** A pool connection that stays open but
+stops delivering jobs starves revenue exactly like extreme difficulty (session
+282/283) — but with no rejects, no disconnect, and (previously) no warning.
+The `otedama_last_job_received_seconds` gauge existed for alert-side detection;
+nothing surfaced it to the operator.
+
+**Fix [OBSERVED].** Both stats ticks (V1 `runSessionV1`, V2 `runSession`) now
+warn once per episode when `time.Since(lastJobAt) > jobStallWarnAfter`
+(default 10 min, test-shrinkable var like `arbitrationInterval`). The clock
+starts at session start so a pool that never sends a first job is covered too;
+the warn is gated on `!isCurtailed()` since curtailment is intentional idle.
+New `fakeV1PoolSilent` holds a V1 connection open without jobs; tests pin
+exactly-one-warn on both paths.
+
+**Audit note [OBSERVED].** The V2 loop updates `lastJobAt` on `NewMiningJob`
+receipt — `SetNewPrevHash` alone (tip change without new work) does not reset
+the clock, matching V1's notify-only semantics.
+

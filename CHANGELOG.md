@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 284 — 無言プール（ジョブ停滞）のトリップワイヤ警告: 接続が開いたままジョブが途絶えた場合に一度だけ warn)
+
+**検証済みの欠落.** プール接続が生きたまま `mining.notify` / `NewMiningJob` が
+途絶えると、収益は reject も切断もなく静かにゼロ化する ——
+`otedama_last_job_received_seconds` ゲージは既存だが、人間向けの警告経路が
+なかった（難易度飢餓の検知と同じ欠落のジョブ版）。
+
+**修正.** 両 stats tick（V1/V2 対称）で最終ジョブ受信から
+`jobStallWarnAfter`（デフォルト 10 分、テスト用 var）超過かつ非カーテイル時に
+一度だけ warn を出し、ジョブ到着でエピソードを再アームする。カーテイル中は
+意図的アイドルなので警告しない。新テスト `fakeV1PoolSilent`（ハンドシェイク後
+無言で保持）+ `TestRunSessionV1_JobStallWarnsOnce` /
+`TestRunSession_JobStallWarnsOnce` が V1・V2 双方で警告がちょうど 1 回
+出ることを検証。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
