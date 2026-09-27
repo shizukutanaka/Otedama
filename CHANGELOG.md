@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 278 — client.show_message のオペレータ通知をログに配線: 解析済みだが消費者ゼロだった dead channel を解消)
+
+V1 の `client.show_message`（メンテナンス予告・認証エラー・移行ヒント等の
+プール運営者メッセージ）は `noticeCh` に解析・格納されていたが、読み出す
+コードパスが存在せずユーザーには一切見えなかった。`runSessionV1` が
+`poolproto.PoolNoticeReceiver` を満たすセッションから notices チャネルを
+取り出し、`engine: pool notice: ...` として info ログへ流す。
+`noticeCh` 自身は cap=8・drop-oldest の bounded チャネルのまま。
+slog TextHandler 経由のため端末制御シーケンスは自動的にクォートされる。
+
+併せて監査判定を記録: プロバイダー Quote の入力面は健全（mining/akash とも
+yield 計算の全入力が定数または内部クランプ済み、`SatsPerSecond` が
+usdPerHour≤0 / rate≤0 を 0 にガード）。HTTP サーバの Slowloris 対策
+（ReadHeader/Read/Write/Idle timeouts）は設定済み。メトリクスラベルは
+Prometheus エスケープ済み。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

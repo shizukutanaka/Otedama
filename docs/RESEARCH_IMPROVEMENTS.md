@@ -939,3 +939,29 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 278 — operator-notice wiring + remaining input-surface audit
+
+### Landed this session
+
+- ✅ **`client.show_message` notices now reach the user.** Parsed into
+  `noticeCh` since session 64 but never consumed — a dead channel.
+  `runSessionV1` drains `PoolNoticeReceiver.PoolNotices()` to the info
+  log (`engine: pool notice: ...`). slog TextHandler quotes non-printable
+  bytes, so ANSI-escape injection through notice text is not live.
+  [OBSERVED]
+
+### Audit verdicts (no change needed)
+
+- **Provider yield inputs bounded** — mining/akash yields compute from
+  constants or internally-clamped values; `SatsPerSecond` guards
+  `usdPerHour<=0 || rate<=0` → 0; `MinUSDPerHour`/`MaxUSDPerHour` are
+  code-internal defaults (not config-wired). No NaN/negative path.
+  [OBSERVED]
+- **httpserver timeouts set** — ReadHeader 5s / Read 10s / Write 10s /
+  Idle 60s; no Slowloris gap. [OBSERVED]
+- **Metrics exposition escapes label/help bytes** per Prometheus format.
+  [OBSERVED]
+- **Reject reasons flow through slog** (structured; control bytes
+  quoted). TUI renders only enum-like reject categories, not raw pool
+  strings. [OBSERVED]

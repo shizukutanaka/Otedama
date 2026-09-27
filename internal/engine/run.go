@@ -1021,10 +1021,25 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 	var lastDropped uint64
 	latency := NewLatencyTracker(256)
 
+	// Pools send operator notices via client.show_message (maintenance
+	// windows, credential errors, migration hints). Nil channel when the
+	// session type has no notices — a nil case channel is never ready.
+	var notices <-chan string
+	if nr, ok := sess.(poolproto.PoolNoticeReceiver); ok {
+		notices = nr.PoolNotices()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+
+		case notice, ok := <-notices:
+			if !ok {
+				notices = nil // pool is gone; never ready again
+			} else {
+				opts.log("info", fmt.Sprintf("engine: pool notice: %s", notice))
+			}
 
 		case <-statsTicker.C:
 			currentHashRate := hashWindow.observe(totalHashes(opts.workers), time.Now())
@@ -1269,7 +1284,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
