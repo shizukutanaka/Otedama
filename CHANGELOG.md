@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 308 — 初回ウォレットのバックアップ検証がなかった問題を修正)
+
+**問題.** 初回起動でニーモニックを一度表示するだけで、ユーザーが実際に
+記録したか確認できず——非カストディの中核的約束が未検証のままだった。
+closed #379 の未マージ修正を master へ再デリバー。
+
+**修正.** TTY 対話端末のみ、表示後にランダム 3 単語の再入力チェック
+（crypto/rand で位置選択）。誤答・空入力は「未検証」の大きめ警告を出す
+——誤った検証済み表示はしない。パイプ/systemd/docker では TTY ゲートで
+ブロックしない。`Options.Input`（既定 os.Stdin）で組み込み側から駆動可。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

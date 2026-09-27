@@ -939,3 +939,21 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 308 — first-run wallet backup verification (re-delivers closed #379)
+
+**Finding [OBSERVED — code-verified].** The one-time mnemonic display never
+verified the user recorded it — the non-custodial core promise ("only the
+user can restore") shipped unverified. Cat-8 #8.
+
+**Fix [OBSERVED].** After the mnemonic display, interactive terminals get a
+3-word re-entry check (crypto/rand positions); wrong/blank answers log a
+loud NOT-verified warning — never a false pass. TTY-gated via
+`os.ModeCharDevice` so systemd/docker/piped stdin never block;
+`Options.Input` (default `os.Stdin`) lets embedders drive it.
+
+**Tests [OBSERVED].** `TestVerifyBackupPhrase{,_Failures,_Guards}` +
+`TestSetupWallet_MnemonicNeverReachesLogger`.
+
+Note: touches the `internal/lightning`-adjacent fund-safety flow — CODEOWNERS
+maintainer review applies per CLAUDE.md.
