@@ -939,3 +939,25 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 289 — V1 share verification defect (re-delivers closed #391)
+
+**Finding [OBSERVED — code-verified].** On the Stratum V1 path, `parseNotify`
+discarded `coinb1`, `coinb2` and `merkle_branch`, so `Job.MerkleRoot` stayed
+zero; and `mining.submit` sent a constant zero-padded `extranonce2` because
+`ShareSubmission.ExtraNonce` was never populated upstream. Every V1 share was
+structurally unverifiable: the pool could not rebuild the coinbase the header
+was hashed against.
+
+**Fix [OBSERVED].** The session reconstructs the coinbase per notify
+(`coinb1 ‖ en1 ‖ en2 ‖ coinb2`, SHA-256d, then `Hash256(merkle ‖ branch_i)`
+in standard stratum order) into `Job.MerkleRoot`. `en2` rolls per job via
+`en2Counter` placed big-endian at the tail; the same bytes flow Job → Work →
+Share → ShareSubmission → the wire. `extranonce2_size > 64` or unnegotiated
+falls back to prior behaviour rather than allocating a pool-dictated buffer
+(the dedicated bound lives on #398, closed unmerged — the guard here is the
+defensive floor).
+
+**Residual [OBSERVED — recorded].** Fixed en2 per job means a worker whose
+nonce space wraps inside one job can emit a duplicate share; pools treat
+dupes as benign. A per-job nonce-wrap en2 bump is the next step if observable.

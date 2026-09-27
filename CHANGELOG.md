@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 289 — V1 シェアが構造上検証不能だった欠陥を修正)
+
+**検証済みの実装欠落.** Stratum V1 経路で `mining.notify` の
+`coinb1`/`coinb2`/`merkle_branch` が常に破棄され `Job.MerkleRoot` は
+ゼロ値のまま、かつ `mining.submit` の `extranonce2` も固定ゼロパディング
+だったため、プールがコインベースを再構成しても採掘ヘッダと一致せず
+**すべての V1 シェアが検証不可能**だった。closed #391 の未マージ修正を
+master へ再デリバー。
+
+**修正.** ジョブ毎に `coinb1 ‖ extranonce1 ‖ extranonce2 ‖ coinb2` を
+SHA-256d し merkle ブランチを標準順で畳み込んで `MerkleRoot` を完成。
+`extranonce2` は `en2Counter` でジョブ毎にロール（en2 末尾に BE 配置）、
+Job → Work → Share → ShareSubmission → wire で同一値を往復。
+`extranonce2_size > 64` や未交渉時は従来動作にフォールバック
+（プール指定バッファの悪用防止）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
