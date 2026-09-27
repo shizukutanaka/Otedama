@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 292 — validate SubmitSharesError.SequenceNumber (re-delivers closed #389)
+
+**Finding [OBSERVED — code-verified].** A `SubmitSharesError` naming a
+sequence number never sent was counted like a real reject: `sharesRejected`
+and `rejectReason` incremented, skewing the acceptance rate downward — a
+hostile pool could trip the curtailment gate at will. Error responses also
+never settled `submitTimes`, leaking entries until a later success.
+
+**Fix [OBSERVED].** `SequenceNumber > seqNum` rejects are dropped with a
+debug log. Real rejects now settle their `submitTimes` entry — the share's
+final response either way.
+
+**Tests [OBSERVED].** `TestRunSessionV2_FutureSeqRejectIgnored`: fake pool
+rejects an unsent seq → `sharesRejected` stays 0.
