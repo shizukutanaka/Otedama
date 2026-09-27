@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Docs (session 330 — エコシステム+日本語ソース走査判定)
+
+internal/hal GPU sysfs 監査完了（Identity.Validate ゲート・
+SHA256d=false 固定で GPU 誤帰属なし）。Qiita/Zenn 走査: 新規
+知見なし、`0xf0xx0/stratumv2`（Go SV2 codec）は先行実装として
+記録（Otedama internal/stratum が scope を包含するため依存追加
+根拠なし）。SRI roles → sv2-apps 分離と 1.12.0 強化（プール側）は
+当方クライアント側バウンドで既にミラー済み。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
