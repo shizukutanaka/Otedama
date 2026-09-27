@@ -617,3 +617,40 @@ func TestService_Install_DoesNotCrash(t *testing.T) {
 		t.Errorf("service install: unexpected exit code %d (out=%s err=%s)", code, out.String(), errb.String())
 	}
 }
+
+// ----- argv-passphrase warning -----
+
+// A passphrase on the command line is visible in process lists; run must
+// warn (docs prefer the OTEDAMA_WALLET_PASSPHRASE env var).
+func TestRun_WalletPassphraseFlag_WarnsProcessListExposure(t *testing.T) {
+	var out, err bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--wallet-passphrase", "test-passphrase",
+		"--dry-run",
+	}, &out, &err)
+	if code != exitOK {
+		t.Fatalf("code=%d err=%s", code, err.String())
+	}
+	if !strings.Contains(err.String(), "process lists") {
+		t.Errorf("expected argv-exposure warning on stderr, got %q", err.String())
+	}
+}
+
+// The env var path is the recommended one — it must NOT warn.
+func TestRun_WalletPassphraseEnv_NoWarning(t *testing.T) {
+	t.Setenv("OTEDAMA_WALLET_PASSPHRASE", "env-passphrase")
+	var out, err bytes.Buffer
+	code := run([]string{
+		"run",
+		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+		"--dry-run",
+	}, &out, &err)
+	if code != exitOK {
+		t.Fatalf("code=%d err=%s", code, err.String())
+	}
+	if strings.Contains(err.String(), "process lists") {
+		t.Errorf("env-supplied passphrase must not warn, got %q", err.String())
+	}
+}
