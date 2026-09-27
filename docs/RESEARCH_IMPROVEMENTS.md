@@ -957,3 +957,14 @@ TargetFromNBits (negative mantissa / exp<3 / zero mantissa / >256-bit
 overflow all rejected); hashrateWindow / uptime / sats accountants
 (dt≤0, counter reset, productive gating all guarded); SV2
 SetNewPrevHash future-job activation (unknown job → workers paused).
+
+## Session 381 — re-delivery of #484 (argv secret hygiene)
+
+[FIXED — re-delivery] Cherry-picked closed-unmerged #484 (session 372)
+unchanged onto current master: `--wallet-passphrase` /
+`--wallet-mnemonic-passphrase` on argv now emit a stderr warning
+(fs.Visit-tracked, so env/config paths stay silent) pointing at the
+OTEDAMA_WALLET_*_PASSPHRASE environment variables — argv is world-
+readable via /proc/<pid>/cmdline. The session-372 audit verdicts
+(curtailment gate, TargetFromNBits edges, stats accountants, SV2
+SetNewPrevHash pause) arrive with it.
