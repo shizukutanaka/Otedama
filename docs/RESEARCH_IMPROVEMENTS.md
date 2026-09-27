@@ -959,3 +959,19 @@ reader goroutine exits cleanly on `ctx.Done` via `defer conn.Close()`
 unblocking `ReadFrame`; a *live-but-silent* pool mid-session is a
 detection problem already addressed by the pool-silence warning on
 open PR #408 — deliberately not duplicated.
+
+## Session 365 — re-delivery + ecosystem
+
+**Re-delivered [FIXED].** The live-path V2 handshake deadline
+(originally session 358, PR #470, closed unmerged in review flow) is
+re-delivered standalone on master. `handshake()` — the engine's real
+V2 connect path (`poolproto/stratumv2` adapter is unwired per
+KNOWN_LIMITATIONS §3) — set no deadline on its two `ReadFrame` waits,
+letting a TCP-accepting-but-silent pool hold the failover hop
+forever. `var handshakeTimeout = 15 * time.Second` bounds both reads;
+the deadline is cleared on return so mid-session reads stay governed
+by ctx/keepalive, not a stale timer.
+
+**Ecosystem [FETCHED — steady].** SRI release train unchanged from
+the v1.12.0 line (sv2-apps repo carries app roles post v1.6.0 split);
+ESP-Miner v2.15.x line unchanged. No new alignment gaps.
