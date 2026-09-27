@@ -2157,3 +2157,136 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
 	}
 }
+
+// ============================================================================
+// runReconnectLoop — backoff resets after a session that established
+// ============================================================================
+
+// dropAfterHandshakePool accepts every connection, completes the SV2
+// handshake (SetupConnection + OpenMiningChannel), then immediately closes
+// the connection — simulating a pool that establishes sessions and drops
+// them. Each accept runs on its own goroutine so reconnects can proceed.
+type dropAfterHandshakePool struct {
+	ln   net.Listener
+	addr string
+}
+
+func newDropAfterHandshakePool(t *testing.T) *dropAfterHandshakePool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("dropAfterHandshakePool: listen: %v", err)
+	}
+	fp := &dropAfterHandshakePool{ln: ln, addr: ln.Addr().String()}
+	go fp.serve()
+	return fp
+}
+
+func (fp *dropAfterHandshakePool) URL() string { return "stratum+v2://" + fp.addr }
+func (fp *dropAfterHandshakePool) Close()      { fp.ln.Close() }
+
+func (fp *dropAfterHandshakePool) serve() {
+	for {
+		conn, err := fp.ln.Accept()
+		if err != nil {
+			return
+		}
+		go fp.handle(conn)
+	}
+}
+
+func (fp *dropAfterHandshakePool) handle(conn net.Conn) {
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	dec := stratum.NewDecoder(conn)
+	dec.MaxFrameSize = 1 << 20
+	emit := func(msgType uint8, isChannel bool, payload []byte) bool {
+		f, err := stratum.WrapMessage(msgType, isChannel, payload)
+		if err != nil {
+			return false
+		}
+		data, err := stratum.EncodeFrame(f)
+		if err != nil {
+			return false
+		}
+		_, err = conn.Write(data)
+		return err == nil
+	}
+	if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+		return
+	}
+	succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+	payload, _ := succ.Encode()
+	if !emit(stratum.MsgSetupConnectionSuccess, false, payload) {
+		return
+	}
+	f, err := dec.ReadFrame() // OpenMiningChannel
+	if err != nil {
+		return
+	}
+	omc, err := stratum.DecodeOpenMiningChannel(f.Payload)
+	if err != nil {
+		return
+	}
+	omcSucc := stratum.OpenMiningChannelSuccess{
+		ReqID:           omc.ReqID,
+		ChannelID:       1,
+		ExtraNonce2Size: 4,
+	}
+	for i := range omcSucc.Target {
+		omcSucc.Target[i] = 0xFF
+	}
+	payload, _ = omcSucc.Encode()
+	emit(stratum.MsgOpenMiningChannelSuccess, true, payload)
+	// Close on return — the session ends as soon as the engine notices EOF.
+}
+
+// TestRunReconnectLoop_BackoffResetsAfterConnectedSession: a session that
+// completed its handshake resets the exponential backoff to the initial
+// value — a healthy hours-long session dropping should not inherit the
+// backoff grown by an earlier dead-endpoint episode. Without the reset the
+// third reconnect log would already read "reconnecting in 4s".
+func TestRunReconnectLoop_BackoffResetsAfterConnectedSession(t *testing.T) {
+	fp := newDropAfterHandshakePool(t)
+	defer fp.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3400*time.Millisecond)
+	defer cancel()
+
+	var logs []string
+	var logMu sync.Mutex
+	log := func(_, m string) {
+		logMu.Lock()
+		logs = append(logs, m)
+		logMu.Unlock()
+	}
+
+	r := reconnectOpts{
+		opts: Options{
+			Config: config.Config{
+				BitcoinAddress: "bc1qtest0000000000000000000000000test00",
+				Pools:          []config.PoolConfig{{URL: fp.URL()}},
+			},
+			MaxReconnectAttempts: 10,
+		},
+		metrics: newEngineMetrics(metrics.NewRegistry()),
+		log:     log,
+	}
+
+	runReconnectLoop(ctx, r) //nolint:errcheck
+
+	logMu.Lock()
+	defer logMu.Unlock()
+	reconnects := 0
+	for _, m := range logs {
+		if strings.Contains(m, "reconnecting in") {
+			reconnects++
+			if !strings.Contains(m, "reconnecting in 1s") {
+				t.Fatalf("backoff did not reset after an established session: %q (all: %v)", m, logs)
+			}
+		}
+	}
+	if reconnects < 2 {
+		t.Fatalf("expected >=2 reconnect logs in window, got %d: %v", reconnects, logs)
+	}
+}
