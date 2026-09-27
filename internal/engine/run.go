@@ -201,9 +201,17 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}()
 
-	// ----- Phase 4: Price feed -----
+	// ----- Phase 4: Price + network-stat feeds -----
 	rateFetcher := rates.NewFetcher(95000) // $95k fallback
 	rateFetcher.StartBackground(ctx, 5*time.Minute)
+
+	// Network hashrate feed (KNOWN_LIMITATIONS §7): supplies the mining
+	// provider's yield estimate with the live network size instead of the
+	// compile-time ~1000 EH/s constant. Poll every 10 min — difficulty
+	// retargets are ~fortnightly, so freshness needs are modest.
+	hashFetcher := rates.NewHashrateFetcher()
+	hashFetcher.SetLogger(func(msg string) { log("debug", msg) })
+	hashFetcher.StartBackground(ctx, 10*time.Minute)
 
 	// curtailGate is the single source of truth for whether hashing is
 	// paused by the curtail_below_btc_usd threshold. The price goroutine
@@ -258,7 +266,7 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	// ----- Phase 5: Providers -----
-	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, devices, workers, log)
+	miningProvider, akashProvider := startProviders(ctx, opts.Config, rateFetcher, hashFetcher, devices, workers, log)
 	defer miningProvider.Stop()
 	defer akashProvider.Stop()
 
