@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 281 — `SubmitSharesSuccess` の seq 検証: 未送信 seq の偽受理フレームが受理率を水増しできた)
+
+**検証済みの欠落.** V2 の `SubmitSharesSuccess` ハンドラは
+`LastSequenceNumber` を一切検証せず、フレーム到着のたびに
+`sharesAccepted` を +1 し、`seq ≤ LastSequenceNumber` の全 submitTimes
+エントリを確定削除していた。プール（または Noise ハンドシェイクを通過した
+侵害プール）が `LastSequenceNumber = 9999` のような未送信 seq の成功
+フレームを送ると、受理率が水増しされ、レイテンシ map が実 ack なしに
+排出された —— session-277 で reject 側に入れた seq 検証の鏡像欠陥。
+
+**修正.** `last > seqNum`（未送信 seq）の成功フレームは debug ログを残して
+無視する —— 受理計上も submitTimes 確定も行わない。`last ≤ seqNum` の
+正当なフレームは従来通り。`newResponsivePoolOpt(t, bogusAccept)` で
+回帰テスト追加（"future seq 9999" デバッグ行 + `sharesAccepted == 0` を検証）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

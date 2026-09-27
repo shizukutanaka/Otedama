@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 281 — SubmitSharesSuccess seq validation (mirror of session-277)
+
+**Finding [OBSERVED — code-verified].** `runSession`'s V2 accept handler
+credited `sharesAccepted` and settled every `submitTimes` entry
+`≤ LastSequenceNumber` without checking that seq was ever sent. A forged or
+misrouted success frame inflated acceptance rate and drained the latency
+map without real acknowledgements — the exact mirror of the forged-reject
+skew fixed in session 277 (PR #389).
+
+**Fix [OBSERVED].** `LastSequenceNumber > seqNum` (highest sent) drops the
+frame with a debug log: no accept credit, no settle. Legitimate frames
+(`last ≤ seqNum`) behave as before. Regression test via a fake-pool
+`bogusAccept` flag emitting seq=9999 asserts the debug marker fires and
+`sharesAccepted` stays 0.
