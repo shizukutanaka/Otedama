@@ -939,3 +939,26 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 352 — wallet-write, TUI, doctor audit verdicts (all clean)
+
+**Wallet save path [AUDITED — hardened].** `wallet.dat` is written via
+`CreateTemp` + `Sync` + `Chmod 0600` (before rename, so the file is
+never world-readable even momentarily) + atomic `Rename` on the same
+filesystem — a mid-write kill cannot corrupt the wallet. The public
+fingerprint file is a best-effort convenience write (0600, recoverable
+from the seed); `loadExisting` caps the input (session 333) and returns
+an opaque error on wrong passphrase — no oracle.
+
+**TUI render path [AUDITED — clean].** The dashboard renders only
+operator-config strings (pool URL) and numeric stats; `shortenURL`
+byte-truncates for narrow terminals. No wire-derived text reaches the
+dashboard. (The show_message notice would arrive sanitized by the
+session-348 parser change.)
+
+**Doctor checks [AUDITED — clean].** All 17 checks reviewed; the only
+network probe is `checkPoolReachability` — `net.Dialer{Timeout: 5s}`,
+ctx-aware, closes the connection, and quotes the URL with `%q`. The
+host string logged is the operator's own config value. Clock-skew and
+rates probes were hardened in earlier sessions (no redirects, bounded
+bodies).
