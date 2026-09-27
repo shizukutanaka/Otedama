@@ -514,6 +514,66 @@ func TestV1JobTarget_BadNBits_ErrorsRegardlessOfDifficulty(t *testing.T) {
 	}
 }
 
+// ----- transitionReject / v1ShareTarget: benign retarget rejects (ESP-Miner #212) -----
+
+func TestV1ShareTarget(t *testing.T) {
+	// difficulty 0 means no mining.set_difficulty has been seen yet — the
+	// pool's current target epoch cannot be established.
+	if _, ok := v1ShareTarget(0); ok {
+		t.Error("v1ShareTarget(0): ok = true, want false")
+	}
+	if _, ok := v1ShareTarget(-1); ok {
+		t.Error("v1ShareTarget(-1): ok = true, want false")
+	}
+	const d = 0.001
+	got, ok := v1ShareTarget(d)
+	if !ok {
+		t.Fatalf("v1ShareTarget(%v): ok = false, want true", d)
+	}
+	want, err := miner.TargetFromDifficulty(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("v1ShareTarget(%v) = %x, want %x", d, got, want)
+	}
+}
+
+func TestTransitionReject(t *testing.T) {
+	oldT, err := miner.TargetFromDifficulty(0.001) // easy epoch
+	if err != nil {
+		t.Fatal(err)
+	}
+	newT, err := miner.TargetFromDifficulty(1000) // harder epoch
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldT == newT {
+		t.Fatal("test targets unexpectedly equal")
+	}
+	tests := []struct {
+		name     string
+		category string
+		issued   miner.Hash
+		current  miner.Hash
+		want     bool
+	}{
+		{"retarget while in flight", "difficulty", oldT, newT, true},
+		{"same epoch is a real reject", "difficulty", oldT, oldT, false},
+		{"stale is never a transition", "stale", oldT, newT, false},
+		{"duplicate is never a transition", "duplicate", oldT, newT, false},
+		{"hardware is never a transition", "hardware", oldT, newT, false},
+		{"other is never a transition", "other", oldT, newT, false},
+		{"zero issued target ineligible", "difficulty", miner.Hash{}, newT, false},
+	}
+	for _, tt := range tests {
+		if got := transitionReject(tt.category, tt.issued, tt.current); got != tt.want {
+			t.Errorf("%s: transitionReject(%q, ...) = %v, want %v",
+				tt.name, tt.category, got, tt.want)
+		}
+	}
+}
+
 func TestPoolURLs_EmptyReturnsDefault(t *testing.T) {
 	urls := poolURLs(config.Config{})
 	if len(urls) != 1 {
@@ -2133,6 +2193,11 @@ type responsivePool struct {
 	ln      net.Listener
 	addr    string
 	started chan struct{}
+	// retargetRejects changes the share policy to the ESP-Miner #212
+	// scenario: the first submitted share gets a SetTarget (new, still
+	// easy epoch) followed by SubmitSharesError("Above target") — a
+	// mid-flight retarget reject; every later share is accepted.
+	retargetRejects bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2249,6 +2314,39 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		shareCount++
+		if fp.retargetRejects {
+			if shareCount == 1 {
+				// ESP-Miner #212: retarget mid-flight, then reject the
+				// share that was ground under the superseded target. The
+				// new epoch stays nearly-max so workers keep producing
+				// shares under it.
+				st := stratum.SetTarget{ChannelID: share.ChannelID}
+				for i := range st.MaxTarget {
+					st.MaxTarget[i] = 0xFE
+				}
+				payload, _ = st.Encode()
+				fp.emit(conn, stratum.MsgSetTarget, true, payload)
+
+				resp := stratum.SubmitSharesError{
+					ChannelID:      share.ChannelID,
+					SequenceNumber: share.SequenceNumber,
+					Error:          "Above target",
+				}
+				payload, _ = resp.Encode()
+				fp.emit(conn, stratum.MsgSubmitSharesError, true, payload)
+			} else {
+				// Every share after the retarget reject is accepted, so
+				// the only reject in the whole session is the benign one.
+				resp := stratum.SubmitSharesSuccess{
+					ChannelID:          share.ChannelID,
+					LastSequenceNumber: share.SequenceNumber,
+					NewSubmitsAccepted: 1,
+				}
+				payload, _ = resp.Encode()
+				fp.emit(conn, stratum.MsgSubmitSharesSuccess, true, payload)
+			}
+			continue
+		}
 		switch shareCount {
 		case 1:
 			// First share: acknowledge. Exercises SubmitSharesSuccess handler
@@ -2378,6 +2476,88 @@ waitLoop:
 	}
 	if !latencyObserved {
 		t.Error("submitLatencyP95 never became nonzero within 10s; latency-quantile stats-tick path not covered")
+	}
+}
+
+// TestRunSession_RetargetRejectExcludedFromRejectRate exercises the
+// ESP-Miner #212 benign-reject path end to end over a real SV2 session:
+// the pool retargets the channel while a share is in flight, then rejects
+// it as "Above target". The reject must appear only in the per-reason
+// breakdown as "difficulty-transition" and never in the reject-rate
+// counters, while every later share (ground under the new epoch) is
+// accepted — so sharesRejected stays exactly 0 for the whole session.
+func TestRunSession_RetargetRejectExcludedFromRejectRate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	fp := newResponsivePool(t)
+	fp.retargetRejects = true
+	defer fp.Close()
+	<-fp.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
+	merged := w.Start(ctx)
+	defer w.Stop()
+
+	reg := metrics.NewRegistry()
+	m := newEngineMetrics(reg)
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_ = runSession(ctx, sessionOpts{
+			poolURL:  fp.URL(),
+			user:     "bc1qtest000000000000000000000000000000000",
+			workers:  []*miner.Worker{w},
+			merged:   merged,
+			interval: 5 * time.Millisecond,
+			m:        m,
+			log:      func(_, _ string) {},
+		})
+	}()
+
+	// Poll for the deterministic signals: the transition counter becoming
+	// nonzero proves the #212 path ran, and a subsequent accepted share
+	// proves the session kept mining under the new epoch.
+	deadline := time.After(10 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	transitionObserved, acceptedObserved := false, false
+waitLoop:
+	for {
+		select {
+		case <-poll.C:
+			if m.rejectReason("difficulty-transition").Value() > 0 {
+				transitionObserved = true
+			}
+			if m.sharesAccepted.Value() > 0 {
+				acceptedObserved = true
+			}
+			if transitionObserved && acceptedObserved {
+				break waitLoop
+			}
+		case <-deadline:
+			break waitLoop
+		}
+	}
+	cancel()
+	<-runDone
+
+	if !transitionObserved {
+		t.Error("difficulty-transition counter stayed 0; mid-flight retarget path not exercised")
+	}
+	if !acceptedObserved {
+		t.Error("sharesAccepted stayed 0; session did not keep mining under the new epoch")
+	}
+	if got := m.sharesRejected.Value(); got != 0 {
+		t.Errorf("sharesRejected = %d, want 0 — benign retarget rejects must not enter the reject-rate counters", got)
+	}
+	if got := m.rejectReason("difficulty").Value(); got != 0 {
+		t.Errorf("rejectReason(difficulty) = %d, want 0 — retarget rejects must not masquerade as difficulty rejects", got)
 	}
 }
 

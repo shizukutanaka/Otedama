@@ -37,6 +37,11 @@ type Share struct {
 	NTime     uint32
 	Version   uint32
 	Hash      Hash
+	// Target is the share target the hash was produced under, copied from
+	// the Work active at issue time. The engine compares it against the
+	// pool's current target to distinguish a mid-flight retarget reject
+	// (ESP-Miner #212) from a genuine bad share.
+	Target Hash
 	// DeviceID is the HAL identity of the device whose worker found this
 	// share. Set from WorkerConfig.DeviceID; empty when not configured.
 	DeviceID string
@@ -261,6 +266,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 					NTime:     h.Time,
 					Version:   h.Version,
 					Hash:      hash,
+					Target:    localWork.Target,
 					DeviceID:  w.cfg.DeviceID,
 				}
 				w.shareCount.Add(1)
