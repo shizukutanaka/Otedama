@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 361 — config NaN/±Inf rejection
+
+**Non-finite float fields passed Validate [FIXED].** Every float range
+check used `x < 0`/`x >= 1.0` — both false for NaN, so
+`arbitration_hysteresis_pct: .nan` in config.yaml or
+`OTEDAMA_...=NaN` via env validated cleanly and poisoned the
+arbitration math downstream. An explicit `math.IsNaN ||
+math.IsInf` sweep now rejects non-finite values on all five float
+fields (`arbitration_hysteresis_pct`, `curtail_below_btc_usd`,
+`min_yield_sats_per_sec`, `power_watts`,
+`electricity_price_per_kwh`). Table-driven test covers NaN, +Inf,
+-Inf on each field.
