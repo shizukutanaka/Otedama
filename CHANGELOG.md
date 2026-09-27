@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (session 315 — SV2 submit インフライト深さゲージ)
+
+**追加.** `otedama_shares_submit_in_flight` ゲージを新設——`submitTimes`
+の未判定深さ（submit→ack のペンディング数）を 30s ティックで公開。
+ESP-Miner v2.15.0 の「pending SV2 shares」ダッシュボードと同じ観測面:
+持続的に増える深さはプールの ack 遅延・停止を意味する。
+V1 は同期 submit のため常に 0。SPECIFICATION §6 カタログ行を追加済み。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
