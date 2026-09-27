@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 318 — honor pool-requested reconnect wait (re-delivers closed #388/#413)
+
+**Finding [OBSERVED — code-verified].** `client.reconnect`/
+`mining.reconnect` `wait_seconds` was parsed and recorded but never
+applied — a dead write; pools asking for drain time before reconnect got
+an immediate re-dial.
+
+**Fix [OBSERVED].** New `poolproto.ReconnectWaiter` interface + V1
+`ReconnectWait()` clamped to [0, 300 s]; `runSessionV1` waits
+ctx-cancellably before erroring out to the reconnect loop. Host:Port
+still deliberately not followed (redirect defence).
+
+**Tests [OBSERVED].** Session-close + wait-clamp cases green.
