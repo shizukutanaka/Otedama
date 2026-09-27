@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 363 — provider ライフサイクル)
+
+pollingProvider の bounded チャネル・drop-oldest・ctx 対応・
+WaitGroup  teardown を監査済みと記録。Stop→Start 再起動時の
+quoteCh 置換 caveat は未到達パスとして文書化。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
