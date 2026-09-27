@@ -2157,3 +2157,22 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
 	}
 }
+
+// TestRunSession_UnimplementedSchemeFailsFast pins the datum:// dispatch
+// fix: datum:// is recognised by poolproto (ADR-009, OCEAN's SV1-transport
+// variant) but has no implementation, so runSession must reject it with a
+// clear error rather than dial an OCEAN-style pool and emit binary SV2
+// frames — which would only surface as a confusing handshake timeout.
+func TestRunSession_UnimplementedSchemeFailsFast(t *testing.T) {
+	err := runSession(context.Background(), sessionOpts{
+		poolURL:  "datum://ocean.example.com:3334",
+		log:      func(_, _ string) {},
+		interval: time.Second,
+	})
+	if err == nil {
+		t.Fatal("runSession accepted an unimplemented datum:// URL")
+	}
+	if !strings.Contains(err.Error(), "unsupported protocol") {
+		t.Errorf("error should name the unimplemented protocol, got: %v", err)
+	}
+}

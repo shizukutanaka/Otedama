@@ -939,3 +939,21 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 371 — unimplemented schemes + live V2 dial bound
+
+**[FIXED] Unimplemented scheme fail-fast.** `datum://` is recognised by
+`poolproto.FromURL` (ADR-009, OCEAN's SV1-transport variant) but has no
+implementation — it previously fell through to the plaintext SV2 branch
+and emitted binary V2 frames to a pool expecting DATUM, surfacing only
+as a confusing connect/handshake timeout. `runSession` now rejects any
+protocol that is not V1-family/V2 with a named error; regular (non-fatal)
+error so pool failover still rotates past the unusable entry to
+configured alternatives.
+
+**[FIXED] Live V2 dial bound.** The engine's inline V2 path dialled with
+a bare `net.Dialer` (and `stratum.DialTLS` for v2tls) — no connect
+timeout, so a blackholed endpoint stalled each failover hop for the OS
+TCP timeout (~127s on Linux). `poolDialTimeout` (15s, test-overridable
+var) now bounds the TCP connect; for `stratum+v2tls://` a derived ctx
+bounds connect + TLS handshake together.

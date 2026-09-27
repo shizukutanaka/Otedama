@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 371 — scheme dispatch + dial bound)
+
+`datum://`（ADR-009 で認識されるが未実装）を fail-fast で拒否 —
+従来は平文 SV2 経路へフォールスルーし DATUM プールへバイナリ V2
+フレームを送出していた。フェイルオーバー経路のライブ V2 ダイアルに
+15 秒の接続タイムアウトを追加（TCP 接続＋TLS ハンドシェイク）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
