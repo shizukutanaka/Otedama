@@ -939,3 +939,11 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 469
+
+Fixed a config-footgun: `loadConfigFile` silently ignored a missing
+file even when the path was user-named (`--config` / `OTEDAMA_CONFIG`)
+— a typo meant Otedama ran on defaults while the operator believed
+their pools were loaded. Explicit paths now warn on `IsNotExist`; the
+default location stays silent. Regression tests for both halves.

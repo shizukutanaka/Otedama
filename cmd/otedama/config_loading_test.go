@@ -331,3 +331,35 @@ func TestSafeDisplay_AllControlCharsBecomesDefault(t *testing.T) {
 		t.Errorf("safeDisplay(all-control) = %q, want '(default)'", got)
 	}
 }
+
+// TestLoadConfigFile_ExplicitMissingWarns pins the footgun fix: a
+// user-named path (--config / OTEDAMA_CONFIG) that does not exist must
+// warn rather than silently fall back to defaults, while the default
+// location stays quiet.
+func TestLoadConfigFile_ExplicitMissingWarns(t *testing.T) {
+	var buf bytes.Buffer
+	cfg := loadConfigFile(filepath.Join(t.TempDir(), "nope.yaml"), &buf)
+	if buf.Len() == 0 {
+		t.Error("explicit missing config path produced no warning")
+	}
+	if cfg.BitcoinAddress != "" {
+		t.Error("missing file should still yield defaults")
+	}
+}
+
+func TestLoadConfigFile_DefaultMissingSilent(t *testing.T) {
+	t.Setenv("OTEDAMA_CONFIG", "")
+	// No explicit path: resolves the default location. With
+	// OTEDAMA_CONFIG cleared, defaultConfigPath points at
+	// ~/.config/otedama/config.yaml — which may exist in CI, so only
+	// assert the no-warn contract when it is absent.
+	p := defaultConfigPath()
+	if _, err := os.Stat(p); err == nil {
+		t.Skip("default config exists on this machine")
+	}
+	var buf bytes.Buffer
+	loadConfigFile("", &buf)
+	if buf.Len() != 0 {
+		t.Errorf("absent default config should not warn, got: %q", buf.String())
+	}
+}

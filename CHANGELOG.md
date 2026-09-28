@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 469)
+
+1. `--config`/`OTEDAMA_CONFIG` で指定した設定ファイルが存在しない場合
+   に警告なくデフォルト値で起動していた問題を修正 — 指定パス欠落は
+   warning を出力（デフォルトパス欠落は従来どおり静か）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
