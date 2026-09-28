@@ -165,3 +165,6 @@ temp/
 cpu.pprof
 mem.pprof
 trace.out
+
+# Per-machine agent settings (shared settings live in .claude/settings.json)
+.claude/settings.local.json
