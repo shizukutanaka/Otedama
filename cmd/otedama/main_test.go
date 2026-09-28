@@ -324,8 +324,10 @@ func TestLoadConfigFile_NonExistent(t *testing.T) {
 	if cfg.BitcoinAddress != "" {
 		t.Errorf("expected empty config")
 	}
-	if e.Len() > 0 {
-		t.Errorf("unexpected stderr for missing file: %s", e.String())
+	// An explicit path that does not exist must warn — silently falling
+	// back to defaults would hide the typo/mount failure.
+	if e.Len() == 0 {
+		t.Error("explicit missing config path should warn")
 	}
 }
 
