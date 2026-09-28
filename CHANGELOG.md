@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 478)
+
+1. コード変更なし（エコシステム照合ラウンド）: SRI 1.12.0 との差分を
+   照合 — BIP323（nVersion 5-28bit を追加 nonce 空間として予約）を
+   spec アンカーとして記録。nonce ラップ対応は open #482 の担当域、
+   BIP323 版 version rolling を将来の推奨方向として明記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

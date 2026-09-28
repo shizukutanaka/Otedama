@@ -939,3 +939,27 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 478
+
+Ecosystem-drift round — SRI 1.12.0 (2026-09-17) verified against master:
+
+- **BIP323 (new spec anchor)**: reserves nVersion bits 5-28 as extra
+  nonce space, lifting the standard-channel HOM hashrate ceiling from
+  ~280 TH/s to ~72 PH/s and deprecating nTime-as-nonce hackery. Relevant
+  to Otedama's nonce-wrap site (`internal/miner/worker.go`: `nonce +=
+  step` wraps uint32 silently, re-scanning the same nTime/version
+  space). Today's wrap fix is owned by open #482 (roll nTime forward);
+  BIP323-aligned version-bit rolling is the preferable long-term
+  direction once that lands — recorded here so the follow-up has its
+  spec anchor.
+- `channels_sv2` share validation now enforces min_ntime/nTime bounds —
+  pool-side concern (Otedama is the client); client side already
+  verified aligned in session 448.
+- Job storage bounded on every axis — client-side equivalent (engine
+  `jobs` map bound) is covered by open #377/#385/#397/#412/#429 family.
+- Codec/framing refactor is SRI-internal, not wire-visible. AES-256-GCM
+  removal from noise_sv2 already recorded by #441.
+- sv2-apps repo split noted in the same #441 entry.
+
+No new actionable drift beyond owned territory.
