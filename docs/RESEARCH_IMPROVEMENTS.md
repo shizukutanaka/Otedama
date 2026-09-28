@@ -939,3 +939,22 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 438 — dedupe Issue #3 解消: doctor → poolproto 委譲 [FIX]
+
+- **修正**: `internal/doctor/checks.go` の `stripScheme` が
+  `poolproto.StripScheme` へ委譲（err → `""` で reachability 意味論を
+  保持）。CATEGORY_AUDIT Issue #3（session 76 記録の
+  「poolproto にスキーム追加で doctor が静かに desync」）を
+  恒久的に閉じる — `knownSchemes` への追加が自動伝播。
+- **poolproto は stdlib-only leaf** のため依存追加の循環リスクゼロ
+  （層判断の唯一の懸案を実測で解消）。
+- **意味差分**: `datum://` が strip されるようになる
+  （poolproto 正規スキーム・KNOWN_LIMITATIONS §14 の reserved 扱い
+  に整合）— `config.validatePoolURL` が上流で datum を拒否するため
+  到達不能だが、テストで pin 済み。
+- 残る dedupe 残件: Issue #2（doctor/engine maskAddress —
+  共有 home 不在で層判断要）と config/poolproto スキーム表
+  （「認識済みか」vs「今日使えるか」の別目的 — 台帳に開設記録）。
+- audit clean 確認: V1 フェイクプールは coverage_test で既カバー
+  （fake pool E2E + 5 dark-path テスト）、testdata/corpus なし。

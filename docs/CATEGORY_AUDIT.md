@@ -418,12 +418,26 @@ Triage so future sessions do not re-investigate:
   static-key check, or genuinely vestigial).
 
 ### Duplicate code recorded as Issue #3 (session 76, per CLAUDE.md rule 3)
+✅ **Fixed (session 438).** `doctor.stripScheme` now delegates to
+`poolproto.StripScheme` (the canonical scheme table), mapping its error
+to `""` to preserve doctor's reachability semantics. The desync class is
+closed permanently: new schemes in `poolproto.knownSchemes` propagate to
+doctor automatically. Semantic delta pinned by test: `datum://` now
+strips (it is a recognised-but-reserved scheme per KNOWN_LIMITATIONS
+§14; unreachable in practice since `config.validatePoolURL` rejects it
+upstream). `poolproto` is a stdlib-only leaf, so the new import carries
+no cycle risk. https://github.com/shizukutanaka/Otedama/issues/3
+
+<details><summary>original record</summary>
+
 `internal/doctor/doctor.go stripScheme` (returns `""` on unknown scheme)
 near-duplicates `poolproto.StripScheme` (returns error). Same prefix
 list, divergent failure semantics; a future scheme added to poolproto
 would silently desync `otedama doctor`. Consolidation = dependency
 decision (doctor currently does not import poolproto; no cycle if it
-did). https://github.com/shizukutanaka/Otedama/issues/3
+did).
+
+</details>
 
 ### Single-sourced the default pool URL (session 78)
 `stratum+v2://public.stratum.slushpool.com:3336` was copy-pasted in four
@@ -433,13 +447,18 @@ leaf already imported by all three consumers); literal now in one place.
 
 ### Duplication family — scheme list & address validators (session 79)
 Recorded, not fixed (rule 3; consolidation is a layering decision):
-- **Scheme-prefix list triplicated** — `poolproto.knownSchemes`
-  (canonical), `config.validatePoolURL` (validation, error-returning),
-  `doctor.stripScheme` (reachability, `""`-returning). Extends Issue #3
-  (which had noted only the latter two). Verified: `config` is a pure
-  leaf and `poolproto` does not import `config`, so neither importing the
-  other would cycle — the blocker is purely whether the config resolver
-  should depend on the protocol layer.
+- **Scheme-prefix list: now duplicated (was triplicated)** — doctor's
+  copy was eliminated in session 438 (`stripScheme` delegates to
+  `poolproto.StripScheme`; see Issue #3 above). Remaining pair:
+  `poolproto.knownSchemes` (canonical, 5 schemes incl. `datum://`) vs
+  `config.validatePoolURL` (4 schemes, error-returning — deliberately
+  excludes the reserved `datum://` until a dialer exists; the two lists
+  answer different questions: "is this scheme recognised" vs "is this
+  pool usable today"). Still open only if the maintainer wants
+  `config.validatePoolURL` driven from `poolproto`'s table with an
+  allowlist filter — a layering decision, not a defect.
+  Verified: `config` is a pure leaf and `poolproto` does not import
+  `config`, so neither importing the other would cycle.
 - **Bitcoin-address validators duplicated** — `config.validateBitcoinAddress`
   (len 26–90 + prefix 1/3/bc1, descriptive errors) vs
   `doctor.isLikelyBitcoinAddress` (same bounds + prefix set, **plus**

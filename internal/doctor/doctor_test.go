@@ -72,6 +72,7 @@ func TestStripScheme(t *testing.T) {
 		{"stratum+v2://pool.example.com:3336", "pool.example.com:3336"},
 		{"stratum+v2tls://secure.example.com:34254", "secure.example.com:34254"},
 		{"stratum+tcp://old.example.com:3333", "old.example.com:3333"},
+		{"datum://ocean.example.com:3334", "ocean.example.com:3334"},
 		{"https://web.example.com", ""},
 		{"", ""},
 	}

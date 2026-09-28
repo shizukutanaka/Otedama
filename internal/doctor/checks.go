@@ -25,6 +25,7 @@ import (
 
 	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
+	"github.com/shizukutanaka/Otedama/internal/poolproto"
 )
 
 // DefaultChecks returns the built-in check set for a config.
@@ -904,15 +905,11 @@ func maskAddress(s string) string {
 }
 
 func stripScheme(url string) string {
-	for _, p := range []string{
-		"stratum+v2tls://", "stratum+v2://",
-		"stratum+tls://", "stratum+tcp://",
-	} {
-		if rest, ok := strings.CutPrefix(url, p); ok {
-			return rest
-		}
+	host, err := poolproto.StripScheme(url)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return host
 }
 
 // (Report.Results is already deterministic: Runner.Run writes results

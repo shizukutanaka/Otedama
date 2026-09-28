@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 438 — dedupe Issue #3: doctor.stripScheme → poolproto.StripScheme)
+
+- `internal/doctor/checks.go`: 重複スキーム表を排除し poolproto 正規
+  実装へ委譲 — poolproto へのスキーム追加が doctor に自動伝播する
+  形に（`datum://` strip の意味差分はテストで pin・上流の config
+  バリデーションで到達不能）。poolproto は stdlib-only leaf で
+  循環リスクなし。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
