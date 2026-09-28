@@ -939,3 +939,24 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 471
+
+Audit-surface verification round (verdicts only, no code change):
+
+- `internal/daemon` status paths clean: `statusWindowsService`'s
+  sc.exe-query failure → "not installed" matches `statusLaunchd`'s
+  convention; unit/plist identities are fixed names so uninstall/status
+  correctly take no config/data-dir flags.
+- Config layering fully verified: all 14 top-level yaml fields surface
+  in `config show` (+origins); `EnvWarnings` is wired at all three call
+  sites (run, config, doctor); nested PoolConfig secrets (password)
+  correctly excluded from display. Flags covering only the operational
+  subset is the documented zero-config design, not a gap.
+- Phantom-subcommand sweep: `otedama lightning|template|power|device|
+  arb` in docs are all inside **Proposed** ADR-007/008/009/010 UX
+  sections — legitimate proposals, not drift. `otedama mask` in
+  CATEGORY_AUDIT is a historical record of removed code.
+- CATEGORY_AUDIT row L (no did-you-mean) is open PR #531's territory.
+- Master's doctor Run remains unbounded-wg.Wait — closed #542's
+  territory; per house rule not re-delivered.

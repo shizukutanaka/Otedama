@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 471)
+
+1. 監査検証ラウンド（コード変更なし）— daemon status 経路・config
+   レイヤリング・ドキュメント内 phantom サブコマンド（全て Proposed
+   ADR 内の正当な提案）を検証、既知の残件は open #531・closed #542
+   の担当域を確認。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
