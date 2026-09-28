@@ -219,7 +219,21 @@ func (r *Report) WriteJSON(w io.Writer) error {
 // Runner executes a set of checks and produces a Report.
 type Runner struct {
 	Checks []Check
+
+	// CheckTimeout bounds each check's wall-clock time. A check that
+	// cannot honour ctx (for example os.Stat on an unresponsive network
+	// filesystem) would otherwise stall Run — and the whole doctor
+	// invocation — past the caller's deadline. On timeout the check is
+	// reported as a warning; the abandoned goroutine may continue
+	// running but cannot block the report. Zero defaults to
+	// defaultCheckTimeout.
+	CheckTimeout time.Duration
 }
+
+// defaultCheckTimeout bounds a single check when Runner.CheckTimeout is
+// unset. It sits well under the doctor command's 30-second budget so
+// even a chain of timed-out checks cannot exhaust it.
+const defaultCheckTimeout = 10 * time.Second
 
 // Run executes all checks concurrently and returns the Report.
 // The order of results in the Report matches the order of Checks.
@@ -228,15 +242,32 @@ func (r *Runner) Run(ctx context.Context) *Report {
 	results := make([]Result, len(r.Checks))
 	var wg sync.WaitGroup
 
+	timeout := r.CheckTimeout
+	if timeout <= 0 {
+		timeout = defaultCheckTimeout
+	}
+
 	for i, c := range r.Checks {
 		wg.Add(1)
 		go func(idx int, chk Check) {
 			defer wg.Done()
 			t0 := time.Now()
-			res := chk.Run(ctx)
-			res.Name = chk.Name
-			res.Elapsed = time.Since(t0)
-			results[idx] = res
+			resCh := make(chan Result, 1)
+			go func() { resCh <- chk.Run(ctx) }()
+			select {
+			case res := <-resCh:
+				res.Name = chk.Name
+				res.Elapsed = time.Since(t0)
+				results[idx] = res
+			case <-time.After(timeout):
+				results[idx] = Result{
+					Name:    chk.Name,
+					Status:  StatusWarn,
+					Detail:  fmt.Sprintf("check did not complete within %s", timeout),
+					Fix:     "the check may be blocked on an unresponsive filesystem or device",
+					Elapsed: time.Since(t0),
+				}
+			}
 		}(i, c)
 	}
 	wg.Wait()

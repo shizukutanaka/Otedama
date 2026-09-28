@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 460)
+
+1. `doctor.Runner` に `CheckTimeout`（0 → 10s デフォルト）を追加 —
+   ctx を無視してハングするチェック（死亡 NFS/FUSE 上の os.Stat 等の
+   割り込み不能 syscall）が `otedama doctor` 全体を 30s 予算超えで
+   永久停止させる問題を解消。タイムアウトは Warn 結果として報告。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

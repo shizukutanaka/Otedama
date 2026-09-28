@@ -939,3 +939,21 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 460
+
+Doctor-runner audit found one real gap, now fixed: Runner.Run waited
+on wg.Wait() with only the caller's ctx as a bound — but a check stuck
+in an uninterruptible syscall (os.Stat on a dead NFS/FUSE data-dir
+mount is the classic case, and data dirs are commonly network-mounted
+on mining rigs) ignores ctx, so one hung check stalled `otedama
+doctor` forever past its 30-second budget. Added Runner.CheckTimeout
+(zero → 10s default, well under the CLI budget): each check now runs
+in an inner goroutine behind a select; on timeout the result is a
+Warn — "check did not complete within Ns" with a blocked-syscall Fix
+hint — and the report still returns. The abandoned goroutine may keep
+running (Go cannot kill it) but cannot hold the report hostage.
+Check probes themselves audited clean: every network probe already
+carries its own tighter timeout (5s pool dial, 3s connectivity,
+5s clock-skew ctx with bounded body drain), parallel fan-out writes
+to disjoint result indices, and 17-check order is preserved.

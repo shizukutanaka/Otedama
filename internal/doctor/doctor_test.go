@@ -365,3 +365,33 @@ func TestDefaultChecks_ReturnsAllExpectedChecks(t *testing.T) {
 		}
 	}
 }
+
+// TestRunner_CheckTimeout bounds a check that ignores ctx: a hung
+// syscall cannot be cancelled, so Runner bounds each check's wall
+// clock and reports a warning instead of stalling forever.
+func TestRunner_CheckTimeout(t *testing.T) {
+	release := make(chan struct{})
+	r := &Runner{
+		CheckTimeout: 20 * time.Millisecond,
+		Checks: []Check{{
+			Name: "hung",
+			Run: func(_ context.Context) Result {
+				<-release // simulates an uninterruptible syscall
+				return Result{Status: StatusPass}
+			},
+		}},
+	}
+	rep := r.Run(context.Background())
+	close(release)
+
+	if rep.Duration > 5*time.Second {
+		t.Fatalf("Run took %s; the hung check should have timed out", rep.Duration)
+	}
+	got := rep.Results[0]
+	if got.Status != StatusWarn {
+		t.Errorf("timed-out check Status = %v, want Warn", got.Status)
+	}
+	if !strings.Contains(got.Detail, "did not complete") {
+		t.Errorf("timed-out check Detail = %q, want timeout notice", got.Detail)
+	}
+}
