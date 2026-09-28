@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 472)
+
+1. ADR-002（Accepted）にエラッタを追加 — 「V2 専用・V1 非対応」の
+   記述が v3.0.0-alpha.1 で再導入された `internal/poolproto/stratumv1`
+   の実装と矛盾していたため、決定の残存部分（V2 優先・脅威分析）と
+   コードが置き換えた部分（V1 絶対禁止）を明記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

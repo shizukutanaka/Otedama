@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 472
+
+Recorded an ADR-002 erratum: the Accepted ADR still asserted "Otedama
+speaks Stratum V2 only — no V1 fallback" and listed three Rejected V1
+alternatives, but `internal/poolproto/stratumv1/` has shipped since
+v3.0.0-alpha.1 (import commit 106aebc) with the engine dispatching V1
+URLs to `runSessionV1`. The erratum preserves the original threat
+analysis (V1 is plaintext/hijackable — disclosed in KNOWN_LIMITATIONS)
+while recording which parts of the decision the code superseded.
+Arbitration Decide() verified clean this pass (dedup, hysteresis in
+policy-score space, min-yield floor); non-finite-yield collapse is
+open PR #437's territory.

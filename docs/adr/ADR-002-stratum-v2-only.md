@@ -83,6 +83,40 @@ The question is settled once.
 - `internal/stratum/noise_pool.go` reduces allocation pressure during
   frequent reconnection.
 
+## Erratum (added session 472, supersedes the "no V1" absolute)
+
+Per `docs/adr/README.md`'s immutability rule this is recorded as an
+erratum rather than an edit, but the code has since outgrown the
+decision's absolute form: **v3.0.0-alpha.1 (import commit `106aebc`)
+reintroduced a bounded Stratum V1 dialer** at
+`internal/poolproto/stratumv1/`, and the engine dispatches V1 pool URLs
+to it (`runSessionV1`; KNOWN_LIMITATIONS records the rollout in
+sessions 90-91).
+
+What survives of the original decision:
+
+- **V2 remains the preferred and default protocol** — the built-in
+  `DefaultPoolURL` is `stratum+v2://`, docs steer operators to
+  V2-capable pools, and every security claim above (Noise NX,
+  pool authentication, encrypted shares) still holds for V2
+  connections.
+- **The threat analysis was not wrong** — V1 is plaintext and
+  hijackable. The v3 re-add accepts that consciously: pool coverage
+  (the "Negative" consequence — most pools were V1-only) outweighed
+  protocol purity for a miner that earns nothing without a pool.
+  V1's residual risk is disclosed in KNOWN_LIMITATIONS rather than
+  denied.
+
+What is superseded:
+
+- "No V1 fallback is provided, either as a configuration option or as
+  a compatibility shim" — a V1 compatibility path exists today,
+  confined behind the `poolproto` abstraction so no V1 code leaks
+  into the engine or TUI.
+- The three "Rejected" alternatives below (V1+V2 negotiation, V1 with
+  warning, planned V1 in v4) — the shipped shape is closest to the
+  third, arrived at v3.0.0 rather than v4.
+
 ## Related
 
 - ADR-001 — Non-custodial wallet model
