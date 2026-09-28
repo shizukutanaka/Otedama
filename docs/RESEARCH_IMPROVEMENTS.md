@@ -897,25 +897,27 @@ month, so the discipline matters.
 
 ## Highest-leverage next actions (cross-category synthesis)
 
-Ranked by impact on the path to a real v3.1.0:
+Ranked by impact on the path to a real v3.1.0 — **status updated session
+463** (the original list predates the sessions that shipped several items):
 
-1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — unblocks the real SV2 encrypted
-   channel; library identified, licence compatible. Needs an ADR for the
-   dependency decision.
-2. **engine→poolproto wiring (Cat 2 #8)** — makes the V2 dialer and job
-   bridge (already built and tested) actually load-bearing; removes the
-   dead-code state.
+1. **secp256k1 (Cat 10 #1 / Cat 2 #3)** — **open**. The Noise NX handshake
+   still stubs secp256k1+ElligatorSwift with P-256 (`internal/stratum/noise.go`);
+   scheduled for v3.1.0, needs an ADR for the dependency decision.
+2. **engine→poolproto wiring (Cat 2 #8)** — **largely done**. Both V1
+   (`poolproto.DialURL`) and V2 (stratumv2 dialer) sessions are wired through
+   `run.go`; the abstraction is load-bearing.
 3. **Reject-reason classification + reject-rate metric (Cat 1 #1–2, Cat 9 #4)**
-   — small, high-value observability win that directly reflects miner
-   profitability and needs no new dependency.
-4. **Real Akash REST (Cat 5 #1)** — removes the largest remaining "simulated"
-   placeholder; larger effort, external API.
-5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — cheap,
-   makes the new failover and stale-share story observable.
+   — **done**. `otedama_share_reject_rate` plus per-category reject counters
+   (stale/duplicate/difficulty/hardware/other) live in
+   `internal/engine/metrics.go`.
+4. **Real Akash REST (Cat 5 #1)** — **open**. The provider is still the
+   simulated AkashProvider; external-API work.
+5. **Submit-latency + pool-state metrics (Cat 2 #7, Cat 9 #5/#7)** — **done**.
+   `otedama_submit_latency_milliseconds` (seq→ack RTT) and the connection/
+   rate-source gauges are registered in `internal/engine/metrics.go`.
 
-Items 3 and 5 are the cheapest real-code wins with no dependency or
-external-API risk, and are the natural next implementation targets after the
-research-only passes.
+Items 3 and 5 were shipped in the intervening sessions; the remaining open
+items are 1 and 4.
 
 ---
 
@@ -939,3 +941,14 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 463
+
+Audited the stale "Highest-leverage next actions" tail list against
+current master — items 3 (reject classification + metric) and 5
+(submit-latency + pool-state gauges) have shipped since it was written,
+item 2 (engine→poolproto wiring) is largely done, items 1 (secp256k1,
+v3.1.0 scope) and 4 (real Akash REST) remain open. Annotated each entry
+with its current status instead of rewriting the dated list. hal GPU
+sysfs enumeration audited clean (bounded reads, identity validation,
+documented SHA256d:false caps).
