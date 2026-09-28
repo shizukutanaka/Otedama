@@ -667,7 +667,9 @@ LDKに重大な脆弱性が発見された場合、
 前述のtj-actions事件のように、使用するGitHub Actionsへの攻撃。
 
 対策：
-- 全ActionをSHAピン留め（ci.ymlで実施済み）
+- 全ActionをSHAピン留め（**未実施** — 現状は全 `uses:` がタグ/ブランチ参照、
+  `trivy-action@master`・`gosec@master` のような移動ブランチ参照を含む。
+  SUSTAINABILITY.md §5 が引用する TeamPCP 型攻撃の形態そのものへの露出）
 - `Dependabot for Actions` を有効化して自動更新
 - SBOMを全リリースに同梱
 

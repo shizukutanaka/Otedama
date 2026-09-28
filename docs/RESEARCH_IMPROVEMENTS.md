@@ -939,3 +939,12 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 479
+
+Corrected a stale supply-chain claim in solo-operations.md: the
+mitigation list asserted "全ActionをSHAピン留め（ci.ymlで実施済み）" —
+in fact every `uses:` across all workflows is a tag/branch reference
+(worst: `trivy-action@master`, `gosec@master` — moving branches). Same
+overclaim class already corrected in SUSTAINABILITY.md §5 by #530;
+this was the remaining instance.
