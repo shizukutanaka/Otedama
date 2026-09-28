@@ -94,11 +94,15 @@ level; nobody is pressured to ascend.
 
 Two pieces of key material exist for Otedama releases:
 
-1. **Cosign keyless signing** (preferred). Per-release ephemeral keys
-   issued by Sigstore via GitHub OIDC. No long-lived secret to
-   manage; verification uses
-   `--certificate-identity-regexp` against the GitHub Actions OIDC
-   subject. This is the default path and requires no key custody.
+1. **Cosign keyless signing** (planned, not active). Per-release
+   ephemeral keys issued by Sigstore via GitHub OIDC. Verification
+   would use `--certificate-identity-regexp` against the GitHub
+   Actions OIDC subject. **Not the default path today**: `release.yml`
+   builds and uploads binaries directly (`go build` +
+   `upload-release-asset`) and never invokes goreleaser, so the
+   `signs:`/`sboms:` configuration in `.goreleaser.yaml` is dead code —
+   current releases ship no `.sig`/`.pem`/`.bundle`, no `checksums.txt`,
+   and no SBOM. No long-lived secret to manage once enabled.
 
 2. **Maintainer GPG key for `git tag -s`**. Long-lived. Currently
    held by the lead. The fingerprint is published on the lead's

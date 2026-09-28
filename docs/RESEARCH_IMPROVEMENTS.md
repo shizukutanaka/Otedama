@@ -939,3 +939,25 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 480
+
+Found and documented two release-pipeline defects (maintainer territory —
+`.github/` uneditable, recorded in KNOWN_LIMITATIONS):
+
+1. `release.yml` injects `-X main.Version/BuildTime/GitCommit` — symbols
+   that do not exist (real path: `internal/version.*`). `-X` silently
+   no-ops → every release binary reports the in-code dev default,
+   `unknown` commit, `unknown` build date; `ci.yml`'s Git-Commit verify
+   step can never pass on a real tag.
+2. `release.yml` never invokes goreleaser → `.goreleaser.yaml`'s cosign
+   `signs:` + `sboms:` are dead code; releases ship no signatures,
+   checksums, or SBOMs (VERIFY.md procedure unfollowable; that file's
+   correction is owned by open #518).
+
+Also corrected MAINTAINERS.md's "Cosign keyless signing is the default
+path" claim to reflect that it is configured-but-inactive.
+
+Verified clean this round: httpserver timeouts/gates, `SetReady` wiring
+on both V1 and V2 session paths, stratum frame-decoder bounds,
+AkashProvider "(simulated)" labeling, `otedama` binary gitignored.

@@ -497,6 +497,23 @@ no-op":
   not exist. `ci.yml` also has its own `deploy-staging`/
   `deploy-production` jobs applying `k8s/*.yaml`, the same nonexistent/
   forbidden path as `deploy.yml`.
+
+- **`release.yml` injects version metadata into symbols that do not
+  exist.** Its `go build` lines pass `-X main.Version=...`
+  `-X main.BuildTime=...` `-X main.GitCommit=...`, but those variables
+  live at `internal/version.Version|BuildDate|Commit` (the path the
+  Makefile and `.goreleaser.yaml` use). `-X` silently no-ops on missing
+  symbols, so every release binary reports `otedama version` as
+  `<in-code default> (unknown) built unknown` — the tag name and commit
+  are never embedded, and `ci.yml`'s release-verify step asserting
+  `Git Commit: ${{ github.sha }}` can never observe it. Maintainer
+  workflow fix required (`.github/` is outside contributor edit scope).
+- **`release.yml` never runs goreleaser**, so `.goreleaser.yaml`'s
+  cosign `signs:` and `sboms:` sections are dead configuration: releases
+  ship only `otedama-<os>-<arch>.tar.gz` + deb/rpm — no `checksums.txt`,
+  no `.sig`/`.pem`/`.bundle`, no SBOM — making the cryptographic-
+  provenance procedure in `VERIFY.md` unfollowable today (tracked for
+  correction there as well).
 - **`ci-cd.yml`** is a second, largely duplicate "CI/CD Pipeline"
   (same workflow name as `ci.yml`) that appears to be superseded dead
   weight: it hardcodes `GO_VERSION: '1.21'` and a `go: ['1.20', '1.21']`
