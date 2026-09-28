@@ -939,3 +939,10 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 475
+
+Fixed a README command-table omission: `completion` (a real dispatch
+verb — bash/zsh/fish script generation) was absent from the listed
+subcommands. Category C 🚩 noise rows and remaining ⏸ rows re-verified
+as legitimately open (CODEOWNERS-gated, maintainer-flagged).

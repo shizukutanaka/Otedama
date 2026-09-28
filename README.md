@@ -84,6 +84,7 @@ otedama <command> [flags]
 | `service uninstall` | サービス登録を解除 / Uninstall the background service |
 | `service status` | サービス状態を表示 / Show background service status |
 | `doctor` | 自己診断チェックを実行 / Run self-diagnostic checks |
+| `completion` | シェル補完スクリプトを生成 / Generate shell completion scripts (bash, zsh, fish) |
 | `help` | ヘルプを表示 / Print help |
 
 各コマンドの詳細フラグは `otedama <command> --help` で確認できます。
