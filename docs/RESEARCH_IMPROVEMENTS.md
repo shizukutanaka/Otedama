@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 441 — post-dedupe hygiene sweep [BEST-PRACTICE]
+
+With the CATEGORY_AUDIT duplication ledger fully closed (sessions
+438–440), ran the tool-assisted hygiene surfaces once more against
+master: `deadcode` reports only the already-recorded candidates
+(unused-export API-shape decisions: noise crypto scaffolding, clock.Fake,
+lightning future wallet API, metrics.RegisterCollector, miner
+property-test helpers, logger context plumbing, tui exports) — nothing
+new to act on. `misspell` found one real typo: SUSTAINABILITY.md's
+"offline verifyable" → "verifiable". `go vet ./...` clean,
+`go mod tidy` produces no diff, `govulncheck` reports 0 reachable
+vulnerabilities (22 unreachables in required modules only).

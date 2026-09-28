@@ -77,7 +77,7 @@ The single highest-leverage observation: **the cost of building these foundation
 **Otedamaの判断:**
 - SLSA L3 Go builder workflow を v3.5.0 で導入。
 - `cyclonedx-gomod` (Go深度) + Syft SPDX (license compliance) 両方発行。
-- `cosign sign-blob --bundle --new-bundle-format --use-signed-timestamps` で offline verifyable に。`VERIFY.md` に identity/issuer明記。
+- `cosign sign-blob --bundle --new-bundle-format --use-signed-timestamps` で offline verifiable に。`VERIFY.md` に identity/issuer明記。
 - 全 third-party action を 40-char SHA で pin、`sethvargo/ratchet` で `# v1.2.3` trailer 維持。
 - StepSecurity Harden-Runner audit mode (OSS無料)、repo-level "require SHA pinning" 有効化。
 - govulncheck + osv-scanner + Dependency Review を全 PR で実行。
