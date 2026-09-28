@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 476)
+
+1. TROUBLESHOOTING.md の CPU 飽和対策で存在しない `--worker-threads`
+   フラグを案内していた問題を修正 — `GOMAXPROCS` による並列度制限に
+   訂正（session 407 で他箇所を直したクラスの残件）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

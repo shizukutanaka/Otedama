@@ -939,3 +939,11 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 476
+
+Fixed a phantom flag in TROUBLESHOOTING.md: the CPU-saturation fix told
+users to pass `--worker-threads 4`, a flag that does not exist (same
+class as session 407's correction elsewhere). Replaced with
+`GOMAXPROCS=4`, which caps runnable goroutines against the worker's
+`runtime.NumCPU()` spawns.
