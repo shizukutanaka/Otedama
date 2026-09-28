@@ -94,6 +94,9 @@ func TestSubcommandHelp_ExitsZeroOnStdout(t *testing.T) {
 		{"service install", []string{"service", "install", "--help"}},
 		{"config show", []string{"config", "show", "--help"}},
 		{"config validate", []string{"config", "validate", "--help"}},
+		{"wallet", []string{"wallet", "--help"}},
+		{"wallet verify", []string{"wallet", "verify", "--help"}},
+		{"wallet change-passphrase", []string{"wallet", "change-passphrase", "--help"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,6 +125,7 @@ func TestSubcommandUnknownFlag_StillExitsUsageOnStderr(t *testing.T) {
 		{"doctor", "--not-a-real-flag"},
 		{"version", "--not-a-real-flag"},
 		{"service", "install", "--not-a-real-flag"},
+		{"wallet", "verify", "--not-a-real-flag"},
 	}
 	for _, args := range cases {
 		var out, errBuf bytes.Buffer
@@ -171,7 +175,8 @@ func TestConfigValidate_MissingAddress(t *testing.T) {
 
 func TestConfigValidate_ValidAddress(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{"config", "validate",
+	code := run([]string{
+		"config", "validate",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}, &out, &err)
 	if code != exitOK {
@@ -432,7 +437,7 @@ func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
 		t.Fatalf("stat log file: %v", err)
 	}
 	// The log file may contain pool URLs / worker names — keep it owner-only.
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("log file perms = %04o, want 0600", perm)
 	}
 }
