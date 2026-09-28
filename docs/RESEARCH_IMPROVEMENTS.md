@@ -1132,3 +1132,17 @@ did-you-mean 未実装は現状のまま。
 （CODEOWNERS Noise 4項・secp256k1 依存判断・依存追加を要する TUI
 width・Issue #2/#3 統合・workflow 群）のみ残存 — 一方的実装可能な
 項目は枯渇。
+
+## Session 436 — share-RTT 計測は実装済みと検証 [AUDIT]
+
+ESP-Miner v2.14.0b4 の "Measure SV2 share response time per-share"
+(#1720) を Otedama へ輸入する検討 → **実装済みと確認**: `submitTimes`
+(seq→送信時刻, submitTimesCap=1024 有界) が `SubmitSharesSuccess.
+LastSequenceNumber` でバッチ settle し `latency.Record`（256窓の
+quantile 追跡）→ `otedama_submit_latency_milliseconds` ゲージで
+公開。上流実装より厳密（未 ack map に上限 + in-flight 深度ゲージも
+別途存在）。検証のみ、コード変更なし。
+
+残る輸入候補は全て判断待ち or 非適用: TCP_NODELAY は Go デフォルト
+true（lwIP 固有の修正）、dial timeout は open #457/#483 が担当、
+hashtrate counter overflow は ESP32 ファームウェア固有。
