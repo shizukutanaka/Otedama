@@ -53,6 +53,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `cmd/demo`・WSL パス・ethereum 依存等、全て非実在）を削除し
   gitignore に追加 — settings.local.json は規約上マシンローカル。
 
+### 修正 (session 431 — Dockerfile の無効宣言とビルドコンテキスト)
+
+- `EXPOSE 0` を削除 — 0 は有効ポート宣言ではなく（Podman は build を
+  拒否）、`--http-addr` は固定ポートではないため EXPOSE 自体不要。
+- `.dockerignore` を新設 — `COPY . .` が `.git/`・`wallet.dat`・
+  `config.yaml` 等を build context にアップロードしていた問題を解消。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

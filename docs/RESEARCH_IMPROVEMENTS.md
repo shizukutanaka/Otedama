@@ -1044,3 +1044,27 @@ Sources: `Makefile`, `.github/workflows/ci.yml` (release job),
 
 Sources: `internal/i18n/messages/*.go`, `.claude/settings.local.json`,
 `CODE_OF_CONDUCT.md`, `skills/quality-pass-*.md`.
+
+## Session 431 — Dockerfile + PR 間コンフリクトマップ [HYGIENE]
+
+- `Dockerfile` の `EXPOSE 0` を削除 — 0 は有効ポート宣言ではなく
+  （Podman は build 時に "cannot expose 0" で拒否、Docker でも無意味な
+  メタデータ）。`--http-addr` は静的に宣言できる固定ポートではないため
+  EXPOSE 自体不要。
+- `.dockerignore` を新設 — `COPY . .` が `.git/`・`wallet.dat`・
+  `config.yaml`・ビルド成果物を build context として daemon に
+  アップロードしていた（中間レイヤに秘密情報が残り得る + キャッシュ
+  無効化）。イメージが必要とするのは go.mod/go.sum/LICENSE/NOTICE/
+  cmd/internal のみ。
+- open PR コンフリクトマップ（git merge-tree --write-tree）: 全ペアが
+  CHANGELOG/RESEARCH_IMPROVEMENTS の EOF 追記で機械的衝突。実質衝突は
+  lint 三部作 #526↔#527（doctor/checks・miner/sha256d・stratum/handshake・
+  provider_test）、#527↔#528 と #526↔#528（arbitration/engine・
+  engine/arbitrate・engine/run）、#526↔#529（lightning/wallet.go）。
+  推奨マージ順: #526 → #527 → #528 → #529 → #530（後続ほど再基盤化が軽い）。
+- Clean-verdict: i18n 10言語キー完全パリティ、CODE_OF_CONDUCT 通報経路実在、
+  Dockerfile 残部（distroless nonroot・ldflags は正しい
+  internal/version パッケージ — release.yml の `-X main.Version` バグとは別）。
+
+Sources: `Dockerfile`, `.github/workflows/ci.yml` (release asset steps),
+`git merge-tree --write-tree` 全ペア, `internal/i18n/messages/*.go`.
