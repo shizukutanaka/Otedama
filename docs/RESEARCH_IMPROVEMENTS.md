@@ -1089,3 +1089,26 @@ Sources: `Dockerfile`, `.github/workflows/ci.yml` (release asset steps),
 
 Sources: `internal/engine/run.go`, `internal/poolproto/{,stratumv1,
 stratumv2}/`, `docs/KNOWN_LIMITATIONS.md` §3, `ROADMAP.md`.
+
+## Session 433 — CATEGORY_AUDIT バックログの再検証 [HYGIENE]
+
+`docs/CATEGORY_AUDIT.md`（608行・最後の未精読ドキュメント）の
+deferred/flagged 行を全件 master と再照合。3行が陳腐化:
+
+- Windows `Status()`「unsupported platform」→ `statusWindowsService`
+  が `sc.exe query Otedama` を parse して実装済み。
+- `sc.exe binPath=` quoting 脆弱性 → `serviceArgv` カノニカル argv
+  再設計で解消済み。
+- `OpenMiningChannel.MaxTargetNBits`「spec 確認待ち」→ spec 照合済み・
+  意図的非実装（プール割当 target を受理するため dead config）として
+  文書化・フィールド削除済み。
+- DATUM「現在形でサポートと誤記・未開示」→ poolproto/stratumv1 とも
+  "is planned" 表記に訂正済み + KNOWN_LIMITATIONS §14 で開示済み。
+
+検証済み引き続き正確な項目: secp256k1 は ErrSchemeNotImplemented
+スタブのまま、Noise 4フラグ（非 atomic n・exhaustion guard なし・
+x-only fallback・custom hmacSHA256）は全て CODEOWNERS 判断待ちのまま、
+hmacSHA256Pooled は設計どおり未配線、maskAddress/stripScheme 二重化・
+did-you-mean 未実装は現状のまま。
+
+これで docs/ 配下の全ファイル精読・実装照合が完結。

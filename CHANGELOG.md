@@ -69,6 +69,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   コメントは陳腐（§3 resolved・Step 3b 完了済み、ダイアラ存在）—
   実態（engine 配線が残件）に訂正。
 
+### 修正 (session 433 — CATEGORY_AUDIT バックログの陳腐行)
+
+- `docs/CATEGORY_AUDIT.md`: deferred/flagged 行を master と再照合し
+  3件を解決済みに更新 — Windows `Status()`（sc.exe query 実装済み）、
+  `sc.exe binPath=` quoting（serviceArgv 再設計で解消）、
+  `MaxTargetNBits`（spec 照合済み・意図的非実装として文書化）、
+  DATUM 現在形誤記（"is planned" 表記へ訂正済み・§14 で開示済み）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
