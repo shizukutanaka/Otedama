@@ -2197,7 +2197,11 @@ type responsivePool struct {
 	// scenario: the first submitted share gets a SetTarget (new, still
 	// easy epoch) followed by SubmitSharesError("Above target") — a
 	// mid-flight retarget reject; every later share is accepted.
-	retargetRejects bool
+	//
+	// The flag is atomic: tests arm it after construction while serve()
+	// is already running on its own goroutine, so a plain bool write
+	// would race that read.
+	retargetRejects atomic.Bool
 }
 
 func newResponsivePool(t *testing.T) *responsivePool {
@@ -2314,7 +2318,7 @@ func (fp *responsivePool) serve() {
 			continue
 		}
 		shareCount++
-		if fp.retargetRejects {
+		if fp.retargetRejects.Load() {
 			if shareCount == 1 {
 				// ESP-Miner #212: retarget mid-flight, then reject the
 				// share that was ground under the superseded target. The
@@ -2492,7 +2496,7 @@ func TestRunSession_RetargetRejectExcludedFromRejectRate(t *testing.T) {
 	}
 
 	fp := newResponsivePool(t)
-	fp.retargetRejects = true
+	fp.retargetRejects.Store(true)
 	defer fp.Close()
 	<-fp.started
 
