@@ -32,6 +32,8 @@ otedama <command> [flags]
 | `config validate` | Validate the effective configuration; print `configuration is valid` or the issues. |
 | `service install\|uninstall\|status` | Manage the background service (systemd/launchd/Task Scheduler). |
 | `doctor` | Run self-diagnostic checks. |
+| `wallet verify` | Verify a written-down recovery phrase against the stored wallet by public fingerprint — reads the phrase from stdin, never decrypts `wallet.dat`. |
+| `wallet change-passphrase` | Re-encrypt `wallet.dat` under a new passphrase; both passphrases come from `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE`, never argv. |
 | `completion bash\|zsh\|fish` | Emit a shell-completion script. |
 | `help` / `--help` / `-h` | Print usage. |
 
