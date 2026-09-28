@@ -269,6 +269,16 @@ signature. Reproducible builds via `-trimpath` and fixed `-ldflags`.
 keyless signing via Sigstore reduces this to "compromise of the
 GitHub Actions runtime," which is actively monitored.
 
+## Posture notes
+
+- **FIPS 140-3:** Otedama is not FIPS-compliant by design. The
+  Stratum V2 Noise NX transport uses ChaCha20-Poly1305, which is not
+  in the FIPS-approved algorithm list, so running with `fips140=on`
+  would break pool connections. (Wallet-at-rest encryption —
+  AES-256-GCM — *is* a FIPS-validated construction; the gap is the
+  transport.) Environments with a hard FIPS requirement should not
+  deploy Otedama. See `GODEBUG_NOTES.md`.
+
 ## Assumptions
 
 - The user's operating system and filesystem are trustworthy.
