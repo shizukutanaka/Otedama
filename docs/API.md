@@ -220,7 +220,8 @@ All environment variables are prefixed `OTEDAMA_`.
 | `OTEDAMA_LOG_FORMAT` | `--log-format` | |
 | `OTEDAMA_LANGUAGE` | `--language` | |
 | `OTEDAMA_WALLET_PASSPHRASE` | `--wallet-passphrase` | Preferred over flag in production — flag is visible in process lists. |
-| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Only consulted on first run (new wallet creation). |
+| `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` | `--wallet-mnemonic-passphrase` | Same process-list caveat as above. Consulted on first run (new wallet creation) and by `otedama wallet verify`. |
+| `OTEDAMA_WALLET_NEW_PASSPHRASE` | — | New passphrase for `otedama wallet change-passphrase`. Environment variable only — never accepted as a flag, so it cannot leak through process lists. |
 | `OTEDAMA_HTTP_ADDR` | `--http-addr` | |
 
 ---
