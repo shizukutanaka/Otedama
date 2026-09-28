@@ -939,3 +939,9 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 384 — pool-URL credential redaction
+
+[FIXED] **Userinfo in pool URLs could leak into logs and status surfaces** (`internal/poolproto/poolproto.go` + call sites): a `scheme://user:pass@host` pool URL was echoed verbatim by the connect log (`connecting to %s`), the bad-URL error, the V1 connected log, the TUI `PoolURL` field, `config show` (text + JSON), and four doctor `Detail` strings. `poolproto.StripUserinfo` removes the authority-section userinfo at every display boundary (dial-path parsing unchanged — `StripScheme` semantics untouched). Malformed URLs pass through so redaction cannot corrupt diagnostics. Defense-in-depth regardless of upstream userinfo validation. Test: `TestStripUserinfo` (9 cases incl. path-`@`, multi-`@`, no-scheme edge cases).
+
+[AUDITED — clean] V2 handshake `OpenMiningChannelSuccess` consumption: `ExtraNonce2Size` is legitimately unused — Otedama uses standard channels where the pool supplies the merkle root and the miner varies only nonce/ntime, so extranonce2 never participates. `ReqID` echo unchecked (cosmetic; ChannelID is authoritative). V1 `mining.authorize` is a mandatory handshake step — rejection is `ErrHandshakeFailed`, not silent. `internal/daemon` `launchdLogPath`/`systemdUnitName` take literals only — no name-traversal surface.
