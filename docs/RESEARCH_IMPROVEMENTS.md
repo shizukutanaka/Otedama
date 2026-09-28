@@ -939,3 +939,9 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 391 — fuzz for the config-file decode boundary
+
+[FIXED — session 391] **YAML config-file fuzz** (`cmd/otedama/fuzz_test.go`): `loadConfigFile` turns arbitrary on-disk bytes into a `config.Config` — the last input-facing boundary without fuzz coverage. `FuzzLoadConfigFile` writes each input to a temp file and asserts the decode+`KnownFields`+`Validate` path returns without panic on non-UTF8 bytes, deep nesting, self-referential aliases, binary junk, and unknown-field documents. 98K execs clean (slower rate is per-exec file I/O by design — the load path is file-backed). With this landed plus #478/#479/#481/#499/#500, every untrusted-input surface — V1 wire, SV2 frames and typed messages, payout addresses, pool difficulty/nBits, numeric env vars, arbitration inputs, and config files — has fuzz or property coverage.
+
+[AUDITED — clean] Session-level sweep recorded: all packages 92–99% statement coverage (≥90% bar met); zero TODO/FIXME/`unsafe` in non-test code; hot paths benchmarked.

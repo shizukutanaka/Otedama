@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 391)
+
+- `cmd/otedama` に `FuzzLoadConfigFile` を追加 — 任意バイト列の YAML 設定ファイルがロード経路で panic/ハングせず、デコード失敗は常に「警告 + 空 Config」へ縮退することを検証（非UTF8・深いネスト・alias・バイナリ・未知フィールドを含む入力、98K exec でクリーン）。これで非信頼入力を受ける全パーサ/境界に fuzz または property カバレッジが揃った。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
