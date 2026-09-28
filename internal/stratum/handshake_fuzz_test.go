@@ -10,6 +10,7 @@
 package stratum
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -64,7 +65,7 @@ func FuzzHandshakeDecoders(f *testing.F) {
 		}
 		if again.ReqID != succ.ReqID || again.ChannelID != succ.ChannelID ||
 			again.Target != succ.Target || again.ExtraNonce2Size != succ.ExtraNonce2Size ||
-			string(again.Extranonce) != string(succ.Extranonce) {
+			!bytes.Equal(again.Extranonce, succ.Extranonce) {
 			t.Fatal("OpenMiningChannelSuccess round-trip not stable")
 		}
 	})
