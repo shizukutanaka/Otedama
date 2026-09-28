@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 411)
+
+GODEBUG_NOTES が参照していた THREAT_MODEL の FIPS 根拠節が実在
+しなかった問題を修正 — FIPS 140-3 の非対応理由（Noise NX の
+ChaCha20-Poly1305 が FIPS リスト外、wallet AES-256-GCM は適合）
+を「Posture notes」として追記。GODEBUG_NOTES 自体の記述は
+go.mod と完全整合を確認済み。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
