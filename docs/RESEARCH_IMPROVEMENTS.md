@@ -939,3 +939,25 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 405 — release-config drift fixed [FIXED]
+
+**`.goreleaser.yaml` referenced two paths that don't exist [FIXED].**
+
+- Archive `files:` glob `docs/locales/*.toml` — no such directory;
+  the i18n catalog lives as Go source in `internal/i18n/messages/`
+  (compile-time strings, not runtime-loaded .toml). The glob silently
+  matched nothing on every release. Removed from the archive list.
+- Release `header:` linked `[docs/verify-release.md]` — the actual
+  file is `VERIFY.md` at the repo root. Every published GitHub release
+  would have shipped a dead link in its body. Corrected.
+
+**Verified consistent while here:** doctor exposes exactly the 17
+parallel health checks CLAUDE.md claims; `otedama completion`
+bash/zsh/fish scripts enumerate only real subcommands and sub-verbs
+(config show/validate, service install/uninstall/status); API.md's
+`/healthz` `/readyz` `/metrics` `/` table matches `httpserver`'s mux;
+DEPLOYMENT.md's systemd unit fields (Type=simple, Restart=on-failure,
+RestartSec=10s, hardening directives) match `daemon/service.go`'s
+generated unit; solo-operations.md's goreleaser excerpt is illustrative
+and its cosign/SBOM steps do exist (superset in the real file).
