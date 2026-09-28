@@ -348,3 +348,22 @@ func TestWindowsService_NotLinuxOrDarwin(t *testing.T) {
 	// but we verify the method exists and is callable.
 	_ = m
 }
+
+// TestLaunchdPlist_LogPathsAreEscaped pins the xmlEscape on
+// StandardOutPath/StandardErrorPath: launchdLogPath derives from the
+// user's home directory, which may contain XML-significant characters
+// (e.g. "O&M"). Unescaped output would produce malformed plist XML.
+func TestLaunchdPlist_LogPathsAreEscaped(t *testing.T) {
+	m := &Manager{binaryPath: "/usr/local/bin/otedama"}
+	plist := m.launchdPlist()
+	if strings.Contains(plist, "StandardOutPath") {
+		// Whatever path launchdLogPath returned must appear escaped.
+		logPath := launchdLogPath("otedama.log")
+		if strings.Contains(plist, logPath) && logPath != xmlEscape(logPath) {
+			t.Fatalf("log path embedded unescaped: %q", logPath)
+		}
+		if !strings.Contains(plist, xmlEscape(logPath)) {
+			t.Fatalf("escaped log path missing from plist: %q", plist)
+		}
+	}
+}

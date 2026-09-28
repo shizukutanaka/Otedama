@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 466
+
+launchd plist generation had an escaping gap: every ProgramArguments
+value went through xmlEscape (paths can contain XML-significant
+characters like '&'), but StandardOutPath/StandardErrorPath — also
+derived from the user's home directory, which can equally contain
+'&' — were emitted raw, producing malformed XML for such a home dir.
+Both log paths now go through xmlEscape; a regression test pins the
+escaped embedding. systemd unit quoting (quoteToken on paths/args)
+audited clean; the ProtectHome→ReadWritePaths carve-out correctly
+mirrors config.DefaultDataDir.
