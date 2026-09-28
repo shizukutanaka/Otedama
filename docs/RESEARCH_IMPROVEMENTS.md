@@ -939,3 +939,11 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 388 — arbitration property tests + ecosystem re-check
+
+[FETCHED — 2026-09-25] Stratum V2 SRI: v1.12.0 (2026-09-17) remains the latest release — channels_sv2 hardening pass, codec_sv2/framing_sv2 refactor (Frame enum → MessageFrame/SerializedFrame), BIP323 adaptations, AES-256-GCM dropped from noise_sv2 leaving ChaCha20-Poly1305 sole cipher. All mapped onto Otedama in earlier sessions (this client never implemented AES-256-GCM; framing is Otedama's own). ESP-Miner v2.15.3 (2026-09-20) remains latest; no new stratum-facing changes to chase.
+
+[FIXED — session 388] **Arbitration property tests** (`internal/arbitration/fuzz_test.go`): the `Decide` doc comment has always claimed its invariants "are verified by property-based tests" but no such test existed — a doc/code drift and a real coverage gap on the package CLAUDE.md explicitly requires property tests for. `FuzzDecide` generates randomized devices/streams/policies/margins/previous-allocations (seeded `math/rand` over a fuzz `int64`) and asserts on every run: bijective DeviceID assignment in sorted order; no assignment to an unknown or family-incompatible stream; idle only when no compatible stream both yields >0 and clears MinYieldSatsPerSec; `TotalYield` == exact IEEE-754 sum of ExpectedYield; `ForegoneSatsPerSec` >= 0; byte-identical determinism via a second `Decide` call; and — on a quarter of runs that force PolicyMaximizeEarnings + zero hysteresis + no Previous — the documented greedy-optimality invariant (TotalYield equals the per-device max). 13.5M execs in 90s, zero violations.
+
+[AUDITED — clean] Open-PR review-comment sweep: #495, #496, #497, #498 all mergeable, zero unresolved reviewer/Devin-Review comments. Re-delivery queue stays exhausted (audit recorded in session-387 entry).

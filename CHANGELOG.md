@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 388)
+
+- `internal/arbitration` に `FuzzDecide` プロパティテストを追加 — Decide の文書化済み不変条件（デバイス割当の全単射・ソート順、互換ストリーム限定、TotalYield の総和一致、ForegoneSatsPerSec 非負、決定性、MaximizeEarnings 無ヒステリシス時のグリーディ最適性）をランダム入力で検証。従来は「プロパティテストで検証済み」との記載のみで実物が存在しなかったギャップを解消（90秒・1350万 exec でクリーン）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
