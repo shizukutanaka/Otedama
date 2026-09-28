@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 454
+
+Tooling drift: CI's golangci-lint warned on two deprecated config keys
+(`run.skip-dirs`, `output.format`) that become hard errors under v2;
+migrated both to the v1-supported forms (`issues.exclude-dirs`,
+`output.formats` array) — `config verify` passes. Surface sweep:
+`go mod tidy` is clean, govulncheck reports zero reachable
+vulnerabilities, every remaining lint finding maps onto classes owned
+by the open lint PRs, and the cmd/doctor+version wrappers, hal
+enumeration/dedup, frame-encode bounds, and LatencyTracker
+nearest-rank math were all audited clean.
