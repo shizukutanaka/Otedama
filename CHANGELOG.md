@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 399)
+
+マルチデバイス構成で全ワーカーが同一 nonce 空間を掘っていた問題を修正 — 同一
+(header, nonce) を各デバイスが重複計算し、後着シェアが duplicate 拒否されていた。
+`WorkerConfig.NonceOffset` を追加し、エンジンがワーカー i に `i*Threads` オフセット・
+共有ステップ `next-pow2(threads×workers)` を割当 — 各 (worker, thread) がジョブ全期間で
+互いに素な剰余類を所有。単一デバイス時の挙動は不変。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

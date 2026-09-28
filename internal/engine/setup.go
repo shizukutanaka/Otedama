@@ -57,21 +57,42 @@ func detectDevices(ctx context.Context, log func(level, msg string)) ([]hal.Devi
 // returns the workers and a merged share channel. Returns an error if
 // no SHA256d-capable device is present. The caller owns worker shutdown.
 func startMinerWorkers(ctx context.Context, devices []hal.Device, log func(level, msg string)) ([]*miner.Worker, <-chan miner.Share, error) {
-	var workers []*miner.Worker
-	var shareChans []<-chan miner.Share
+	var sha256d []hal.Device
 	for _, dev := range devices {
-		if !dev.Capabilities().SHA256d {
-			continue
+		if dev.Capabilities().SHA256d {
+			sha256d = append(sha256d, dev)
 		}
+	}
+	if len(sha256d) == 0 {
+		return nil, nil, fmt.Errorf("engine: no SHA256d-capable devices found")
+	}
+	workers := make([]*miner.Worker, 0, len(sha256d))
+	shareChans := make([]<-chan miner.Share, 0, len(sha256d))
+	for i, dev := range sha256d {
 		cfg := miner.DefaultWorkerConfig()
 		cfg.DeviceID = dev.Identity().ID
+		// Partition the nonce space across workers: without this,
+		// every device grinds the same job from nonce=threadID with
+		// the same step — identical (header, nonce) work duplicated
+		// per device and the loser's shares all rejected as
+		// duplicates. Worker i starts each thread at i*Threads with
+		// a shared step of next-pow2(threads×workers), so every
+		// (worker, thread) pair owns a residue class forever.
+		// total can never exceed the nonce space: stride stays a power
+		// of two ≤ 2^31 and every offset is < total.
+		if total := cfg.Threads * len(sha256d); len(sha256d) > 1 && total <= 1<<31 {
+			stride := uint32(1)
+			for uint64(stride) < uint64(total) {
+				stride <<= 1
+			}
+			//nolint:gosec // i*Threads < total ≤ 2^31 per the guard above
+			cfg.NonceOffset = uint32(i * cfg.Threads)
+			cfg.NonceStep = stride
+		}
 		w := miner.NewWorker(cfg)
 		workers = append(workers, w)
 		shareChans = append(shareChans, w.Start(ctx))
 		log("info", fmt.Sprintf("engine: worker for %s", dev.Identity()))
-	}
-	if len(workers) == 0 {
-		return nil, nil, fmt.Errorf("engine: no SHA256d-capable devices found")
 	}
 	return workers, mergeShares(ctx, shareChans), nil
 }
