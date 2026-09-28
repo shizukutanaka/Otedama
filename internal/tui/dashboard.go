@@ -41,6 +41,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/shizukutanaka/Otedama/internal/miner"
 )
 
 // Stats is a snapshot of live engine metrics passed to the dashboard.
@@ -267,7 +269,7 @@ func (d *Dashboard) writeSection(sb *strings.Builder, label string, cols int) {
 }
 
 func (d *Dashboard) miningLine(s Stats, cols int) string {
-	rate := formatHashRate(s.HashRate)
+	rate := miner.HashRateString(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	if s.DevicesIdle > 0 {
 		// Show the floor-idle count inline so TUI-only operators see it
@@ -416,22 +418,6 @@ func (d *Dashboard) showCursor() {
 
 // ----- Formatting helpers -----
 
-// formatHashRate formats a hash/s value in human-readable form.
-func formatHashRate(hps float64) string {
-	switch {
-	case hps >= 1e12:
-		return fmt.Sprintf("%.2f TH/s", hps/1e12)
-	case hps >= 1e9:
-		return fmt.Sprintf("%.2f GH/s", hps/1e9)
-	case hps >= 1e6:
-		return fmt.Sprintf("%.2f MH/s", hps/1e6)
-	case hps >= 1e3:
-		return fmt.Sprintf("%.2f kH/s", hps/1e3)
-	default:
-		return fmt.Sprintf("%.0f H/s", hps)
-	}
-}
-
 // formatDuration formats a duration in human-readable form.
 func formatDuration(d time.Duration) string {
 	h := int(d.Hours())
@@ -549,7 +535,7 @@ func (d *Dashboard) SetWidth(cols int) {
 }
 
 // FormatHashRate is exported for use in the CLI status line.
-func FormatHashRate(hps float64) string { return formatHashRate(hps) }
+func FormatHashRate(hps float64) string { return miner.HashRateString(hps) }
 
 // FormatDuration is exported for use in the CLI status line.
 func FormatDuration(dur time.Duration) string { return formatDuration(dur) }

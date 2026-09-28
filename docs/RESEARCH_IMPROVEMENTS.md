@@ -939,3 +939,57 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 440 — dedupe round 3: display-formatter family [BEST-PRACTICE]
+
+Closed the last recorded code duplication in the CATEGORY_AUDIT ledger:
+`tui.formatHashRate` (dashboard.go) was **byte-identical** to
+`miner.HashRateString` — the same switch, units, and format verbs — yet the
+TUI carried its own copy plus an exported wrapper ("for the CLI status line"
+that never materialised) while `engine/stats.go` already called the miner
+version. A future unit-format change (e.g. adding EH/s for a 2027 ASIC)
+would have updated one copy and left the other rendering stale units.
+Now `tui.FormatHashRate` and the dashboard's live call site both delegate
+to `miner.HashRateString` — zero output change (the functions were already
+identical), one source of truth in the package that owns hash-rate
+semantics.
+
+The other two exports flagged in the same bullet — `tui.FormatDuration`,
+`tui.SatsToDisplay` — have no canonical twin to consolidate into and
+remain as the "unused export" deadcode candidates (deletion stays an
+API-shape decision for the maintainer). The address-validator pair
+(`config.validateBitcoinAddress` vs `doctor.isLikelyBitcoinAddress`) was
+re-examined and left as-is deliberately: they answer different questions —
+config does strict checksum validation at load (`btccrypto.ValidateAddress`,
+already canonical), doctor does a cheap heuristic pre-check to give a
+friendlier two-tier diagnostic before the checksum stage. Collapsing them
+would need a new exported `btccrypto` pre-check API to preserve the
+diagnostic tiers — a negative-ROI addition for a 15-line helper; recorded
+as a layering decision, not a defect.
+
+## Session 440 — dedupe round 3: display-formatter family [BEST-PRACTICE]
+
+Closed the last recorded code duplication in the CATEGORY_AUDIT ledger:
+`tui.formatHashRate` (dashboard.go) was **byte-identical** to
+`miner.HashRateString` — the same switch, units, and format verbs — yet the
+TUI carried its own copy plus an exported wrapper ("for the CLI status line"
+that never materialised) while `engine/stats.go` already called the miner
+version. A future unit-format change (e.g. adding EH/s for a 2027 ASIC)
+would have updated one copy and left the other rendering stale units.
+Now `tui.FormatHashRate` and the dashboard's live call site both delegate
+to `miner.HashRateString` — zero output change (the functions were already
+identical), one source of truth in the package that owns hash-rate
+semantics.
+
+The other two exports flagged in the same bullet — `tui.FormatDuration`,
+`tui.SatsToDisplay` — have no canonical twin to consolidate into and
+remain as the "unused export" deadcode candidates (deletion stays an
+API-shape decision for the maintainer). The address-validator pair
+(`config.validateBitcoinAddress` vs `doctor.isLikelyBitcoinAddress`) was
+re-examined and left as-is deliberately: they answer different questions —
+config does strict checksum validation at load (`btccrypto.ValidateAddress`,
+already canonical), doctor does a cheap heuristic pre-check to give a
+friendlier two-tier diagnostic before the checksum stage. Collapsing them
+would need a new exported `btccrypto` pre-check API to preserve the
+diagnostic tiers — a negative-ROI addition for a 15-line helper; recorded
+as a layering decision, not a defect.

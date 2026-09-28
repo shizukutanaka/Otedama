@@ -385,10 +385,11 @@ Triage so future sessions do not re-investigate:
 - `logger.IntoContext/FromContext/SetDefault` — context-logger plumbing;
   the codebase settled on explicit log-func injection instead. Tested but
   unused; removal would be API-shape decision.
-- `tui.FormatHashRate/FormatDuration/SatsToDisplay` — "exported for the
-  CLI status line" which never materialised; note `tui.FormatHashRate`
-  overlaps `miner.HashRateString` (display-formatter duplication family,
-  same class as Issue #2/#3).
+- `tui.FormatHashRate` — ✅ **Fixed (session 440).** The private
+  `formatHashRate` was byte-identical to `miner.HashRateString`; the
+  exported wrapper and the dashboard's live call site now delegate to it.
+  `FormatDuration`/`SatsToDisplay` remain "exported for the CLI status
+  line" which never materialised — unused-export deferral unchanged.
 - `lightning.WalletManager.Seed/Mnemonic/ChangePassphrase`,
   `MnemonicToEntropy`, `WordList.Index` — obvious future wallet-UX API
   (backup phrase display, passphrase rotation); CODEOWNERS territory,
