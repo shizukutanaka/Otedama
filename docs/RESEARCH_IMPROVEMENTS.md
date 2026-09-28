@@ -1068,3 +1068,24 @@ Sources: `internal/i18n/messages/*.go`, `.claude/settings.local.json`,
 
 Sources: `Dockerfile`, `.github/workflows/ci.yml` (release asset steps),
 `git merge-tree --write-tree` 全ペア, `internal/i18n/messages/*.go`.
+
+## Session 432 — ROADMAP のステータスドリフト [HYGIENE]
+
+- `internal/engine/run.go` のコメントが「V2 poolproto ダイアラの
+  Step 3b 完了待ち」を主張していたが、§3 は session 90–91 で RESOLVED・
+  Step 3b も完了済み — `poolproto/stratumv2` ダイアラは既に存在する。
+  実際の残件は「engine のセッションループへの V2 ダイアラ組込み」
+  という別ギャップ — コメントを実態に訂正。
+- `ROADMAP.md` v3.1.0/v3.2.0 のステータス欄を実装に整合:
+  - 「engine → poolproto 統合（現状 raw TCP 直結）」→ V1 は DialURL
+    経由で完了、V2 残件、と部分完了に訂正。
+  - 「Stratum V1 互換の追加」→ 実装済み（stratumv1 ダイアラ +
+    runSessionV1・TLS 対応）で完了マーク。
+  - 「poolproto 抽象化レイヤ完全分離」→ パッケージ分離・両ダイアラ
+    存在で部分完了、残件は V2 engine 配線 + DATUM。
+- 検証済み正確な残存項目: Akash は依然 simulated quotes、DATUM は
+  scheme 予約のみ（§14）、JDP 未実装、secp256k1 は P-256 スタブのまま
+  （noise.go L96「v3.1.0 で置換予定」— ROADMAP v3.1 項と整合）。
+
+Sources: `internal/engine/run.go`, `internal/poolproto/{,stratumv1,
+stratumv2}/`, `docs/KNOWN_LIMITATIONS.md` §3, `ROADMAP.md`.

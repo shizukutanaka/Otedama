@@ -60,6 +60,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `.dockerignore` を新設 — `COPY . .` が `.git/`・`wallet.dat`・
   `config.yaml` 等を build context にアップロードしていた問題を解消。
 
+### 修正 (session 432 — ROADMAP のステータスドリフト)
+
+- `ROADMAP.md`: 「Stratum V1 互換の追加」は実装済み（stratumv1 ダイアラ
+  + `runSessionV1`）、「engine → poolproto 統合」と「poolproto 完全
+  分離」は V1 経路で完了・V2 配線が残件 — 完了/部分完了マークに訂正。
+- `internal/engine/run.go`: 「V2 poolproto ダイアラ Step 3b 待ち」の
+  コメントは陳腐（§3 resolved・Step 3b 完了済み、ダイアラ存在）—
+  実態（engine 配線が残件）に訂正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
