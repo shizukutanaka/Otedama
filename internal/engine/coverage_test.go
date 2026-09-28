@@ -734,7 +734,7 @@ func TestHandshake_WriteSetupConnFails(t *testing.T) {
 	clientConn, serverConn := net.Pipe()
 	serverConn.Close() // closed before any read; client Write will fail
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	clientConn.Close()
 	if err == nil {
 		t.Error("handshake: expected error when server pipe closed immediately")
@@ -754,7 +754,7 @@ func TestHandshake_ReadSetupResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup frame")
 	}
@@ -778,7 +778,7 @@ func TestHandshake_SetupResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed SetupConnectionSuccess payload")
 	}
@@ -802,7 +802,7 @@ func TestHandshake_SetupConnectionError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on SetupConnectionError")
 	}
@@ -835,7 +835,7 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on unexpected setup response")
 	}
@@ -859,7 +859,7 @@ func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after setup success")
 	}
@@ -884,7 +884,7 @@ func TestHandshake_ReadChannelResponseFails(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when server closes after OMC")
 	}
@@ -913,7 +913,7 @@ func TestHandshake_ChannelResponseDecodeError(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error on malformed OpenMiningChannelSuccess")
 	}
@@ -941,7 +941,7 @@ func TestHandshake_ChannelOpenFailed(t *testing.T) {
 	}()
 
 	dec := stratum.NewDecoder(clientConn)
-	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil)
+	_, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", nil, 0)
 	if err == nil {
 		t.Error("handshake: expected error when channel open response is wrong type")
 	}
@@ -2155,5 +2155,97 @@ func TestRunSessionV1_SubmitError(t *testing.T) {
 	logMu.Unlock()
 	if !strings.Contains(joined, "V1 submit") {
 		t.Errorf("expected 'V1 submit' error log; got: %v", logLines)
+	}
+}
+
+// ============================================================================
+// handshake — nominal_hashrate declaration (session 383)
+// ============================================================================
+
+// handshakeCaptureNominal drives the server side of an SV2 handshake over
+// net.Pipe and returns the NominalHashrate the client declared in
+// OpenMiningChannel.
+func handshakeCaptureNominal(t *testing.T, serverConn net.Conn) <-chan float32 {
+	t.Helper()
+	got := make(chan float32, 1)
+	go func() {
+		defer serverConn.Close()
+		dec := stratum.NewDecoder(serverConn)
+
+		if _, err := dec.ReadFrame(); err != nil { // SetupConnection
+			return
+		}
+		scs := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := scs.Encode()
+		outF, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		encoded, _ := stratum.EncodeFrame(outF)
+		if _, err := serverConn.Write(encoded); err != nil {
+			return
+		}
+
+		f, err := dec.ReadFrame() // OpenMiningChannel
+		if err != nil {
+			return
+		}
+		msg, err := stratum.DispatchFrame(f)
+		if err != nil || msg.OpenMiningChannel == nil {
+			return
+		}
+		got <- msg.OpenMiningChannel.NominalHashrate
+
+		omcs := stratum.OpenMiningChannelSuccess{ReqID: msg.OpenMiningChannel.ReqID, ChannelID: 1, ExtraNonce2Size: 4}
+		payload, _ = omcs.Encode()
+		outF, _ = stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, false, payload)
+		encoded, _ = stratum.EncodeFrame(outF)
+		serverConn.Write(encoded) //nolint:errcheck
+	}()
+	return got
+}
+
+// TestHandshake_DeclaresNominalHashrateWhenWorkersCold: on a fresh session
+// every worker reports ~0 H/s (nothing hashed yet), so OpenMiningChannel
+// must declare the capability-derived nominal estimate instead of 0 — pools
+// seed vardiff from it.
+func TestHandshake_DeclaresNominalHashrateWhenWorkersCold(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	got := handshakeCaptureNominal(t, serverConn)
+	w := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"}) // never started: HashRate == 0
+
+	dec := stratum.NewDecoder(clientConn)
+	chanID, _, err := handshake(clientConn, dec, "stratum+v2://localhost:3336", "user", []*miner.Worker{w}, 10e6)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 1 {
+		t.Errorf("channel id = %d, want 1", chanID)
+	}
+	select {
+	case declared := <-got:
+		if declared != float32(10e6) {
+			t.Errorf("nominal_hashrate = %v, want %v (capability estimate, not live 0)", declared, 10e6)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server never received OpenMiningChannel")
+	}
+}
+
+// TestNominalMiningHashrate: per-worker capability lookup — SHA256d-capable
+// devices' families map to the default estimates; unknown families → 0.
+func TestNominalMiningHashrate(t *testing.T) {
+	devices := []hal.Device{
+		&cpuDevice{id: hal.Identity{ID: "cpu-0", Family: hal.FamilyCPU}, caps: hal.Capabilities{SHA256d: true}},
+		&cpuDevice{id: hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}, caps: hal.Capabilities{SHA256d: false, GeneralCompute: true}},
+	}
+	wCPU := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "cpu-0"})
+	wGhost := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "no-such-device"})
+
+	got := nominalMiningHashrate(devices, []*miner.Worker{wCPU, wGhost})
+	if want := provider.DefaultHashrates[hal.FamilyCPU]; got != want {
+		t.Errorf("nominalMiningHashrate = %v, want %v (only cpu-0; ghost device contributes 0)", got, want)
+	}
+	if got := nominalMiningHashrate(devices, nil); got != 0 {
+		t.Errorf("nominalMiningHashrate(no workers) = %v, want 0", got)
 	}
 }

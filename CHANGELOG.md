@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 383)
+
+- Stratum V2 `OpenMiningChannel` の `nominal_hashrate` が、ハンドシェイク時点ではまだハッシュを実行していないワーカーのライブ統計（常に約0）で宣言されていた問題を修正。プールはこの値で vardiff の初期難易度を決めるため、0 宣言は実機デバイスに不当に低い難易度シードを与えていた。ライブレートが 0 の場合はデバイス能力由来の名目推定値（`provider.DefaultHashrates` のファミリ別値）を宣言し、再接続時などライブレートが非ゼロの場合はそちらを優先する。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

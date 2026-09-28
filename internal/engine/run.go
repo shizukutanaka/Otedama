@@ -195,6 +195,11 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+
+	// Nominal hashrate for the SV2 OpenMiningChannel handshake: live worker
+	// stats are ~0 at handshake time because no job has been hashed yet, so
+	// the declared value comes from device capability families instead.
+	nominalHR := nominalMiningHashrate(devices, workers)
 	defer func() {
 		for _, w := range workers {
 			w.Stop()
@@ -322,19 +327,20 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	return runReconnectLoop(ctx, reconnectOpts{
-		opts:        opts,
-		workers:     workers,
-		merged:      merged,
-		dashboard:   dashboard,
-		startTime:   startTime,
-		wallet:      walletFingerprint,
-		deviceN:     len(devices),
-		providers:   []provider.Provider{miningProvider, akashProvider},
-		metrics:     m,
-		log:         log,
-		curtailGate: curtailGate,
-		activityMu:  &activityMu,
-		activity:    activity,
+		opts:            opts,
+		workers:         workers,
+		merged:          merged,
+		dashboard:       dashboard,
+		startTime:       startTime,
+		wallet:          walletFingerprint,
+		deviceN:         len(devices),
+		providers:       []provider.Provider{miningProvider, akashProvider},
+		metrics:         m,
+		log:             log,
+		curtailGate:     curtailGate,
+		nominalHashrate: nominalHR,
+		activityMu:      &activityMu,
+		activity:        activity,
 	})
 }
 
@@ -355,6 +361,9 @@ type reconnectOpts struct {
 	// curtail_below_btc_usd threshold; the session loop must not apply
 	// incoming pool jobs while it is raised.
 	curtailGate *atomic.Bool
+	// nominalHashrate is the capability-derived hashrate estimate declared
+	// in OpenMiningChannel when live worker stats are still zero.
+	nominalHashrate float64
 	// activityMu/activity: see sessionOpts. Threaded through unchanged
 	// across reconnects since the arbitration loop (the writer) runs for
 	// the lifetime of Run(), independent of any one pool session.
@@ -413,24 +422,25 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
-			poolURL:      poolURL,
-			user:         user,
-			workers:      r.workers,
-			merged:       r.merged,
-			interval:     statsInterval,
-			dashboard:    r.dashboard,
-			startTime:    r.startTime,
-			wallet:       r.wallet,
-			devices:      r.deviceN,
-			log:          r.log,
-			providers:    r.providers,
-			m:            r.metrics,
-			powerWatts:   r.opts.Config.PowerWatts,
-			curtailGate:  r.curtailGate,
-			tlsCAFile:    poolTLSCAFile,
-			poolPassword: poolPassword,
-			activityMu:   r.activityMu,
-			activity:     r.activity,
+			poolURL:         poolURL,
+			user:            user,
+			workers:         r.workers,
+			merged:          r.merged,
+			interval:        statsInterval,
+			dashboard:       r.dashboard,
+			startTime:       r.startTime,
+			wallet:          r.wallet,
+			devices:         r.deviceN,
+			log:             r.log,
+			providers:       r.providers,
+			m:               r.metrics,
+			powerWatts:      r.opts.Config.PowerWatts,
+			curtailGate:     r.curtailGate,
+			nominalHashrate: r.nominalHashrate,
+			tlsCAFile:       poolTLSCAFile,
+			poolPassword:    poolPassword,
+			activityMu:      r.activityMu,
+			activity:        r.activity,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -558,6 +568,9 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// nominalHashrate is the capability-derived hashrate estimate used in
+	// OpenMiningChannel when live worker stats are still zero.
+	nominalHashrate float64
 }
 
 // isCurtailed reports whether hashing is currently paused by the
@@ -659,7 +672,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	opts.log("info", fmt.Sprintf("engine: connected to %s", host))
 
 	dec := stratum.NewDecoder(conn)
-	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers)
+	chanID, shareTarget, err := handshake(conn, dec, opts.poolURL, opts.user, opts.workers, opts.nominalHashrate)
 	if err != nil {
 		return err
 	}
@@ -1170,7 +1183,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // workers must grind to: it is far easier than the block target, and a hash
 // meeting it is exactly what the pool credits. A zero target means the pool
 // did not assign one; the caller falls back to the block target.
-func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
+func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker, nominalHashrate float64) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
@@ -1203,6 +1216,14 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	var hashRate float32
 	for _, w := range workers {
 		hashRate += float32(w.Stats().HashRate)
+	}
+	// Workers have not hashed anything on a fresh session, so their live
+	// rate is ~0; declaring 0 would tell the pool to seed vardiff for a
+	// zero-rate miner. Fall back to the capability-derived nominal estimate
+	// (on reconnect the live rate is non-zero and wins, reflecting the
+	// sustained — possibly thermally throttled — throughput).
+	if hashRate <= 0 {
+		hashRate = float32(nominalHashrate)
 	}
 	omc := stratum.OpenMiningChannel{
 		ReqID:           1,
