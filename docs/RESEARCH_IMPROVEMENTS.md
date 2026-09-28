@@ -939,3 +939,25 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 437 — ADR-011 依存先の上流進展: btcec/v2 が ellswift を同梱 [RESEARCH]
+
+- **発見**: `github.com/btcsuite/btcd/btcec/v2@v2.5.0`（2026-05-15,
+  Go 1.25, ISC）が `ellswift` パッケージを上流マージ済み
+  （btcsuite/btcd commit d79d37d・BIP-324 公式テストベクタ付き）。
+  エクスポート API は SV2 Noise NX に必要な全面をカバー:
+  `EllswiftCreate`・`XSwiftEC`/`XElligatorSwift`/`XSwiftECInv`・
+  `EllswiftECDHXOnly`・`V2Ecdh`（`bip324_ellswift_xonly_ecdh`
+  タグ付きハッシュの x-only ECDH）。
+- **意味**: ADR-011 の前回 erratum が記録した「Go の監査済み
+  ellswift 実装が存在しない → 手移植必須（Option B と同等の DIY
+  リスク）」が解消。Option A は `btcec/v2` 単一依存で curve +
+  encoding + ECDH ヘルパまで完結する形に収束（btcec 自体が
+  decred/dcrd 系譜のため審査根拠は同一・推移的に dcrec/v4 に依存
+  するため追加面積も最小）。ADR-011 へ Erratum 2 を追記。
+- **残件（不変）**: SV2 spec の "2-level PKI server authentication"
+  のメッセージフロー実装 — ellswift は DH エンコードのみで、
+  レスポンダ固定鍵認証は別件（CODEOWNERS・Noise 領域）。
+- 併せて検証: closed PR #371 の responsivePool flag-race は master
+  に吸収済み（atomic gate + started chan）、prose-collision flake は
+  open #425 が担当済み — 再デリバリー不要。
