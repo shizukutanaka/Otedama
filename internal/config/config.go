@@ -212,8 +212,8 @@ type PoolConfig struct {
 	PayoutScheme string `yaml:"payout_scheme"`
 
 	// TLSCAFile is an optional path to a PEM file of certificate authorities
-	// to trust for this pool's stratum+tls:// connection, in addition to the
-	// system root store. Use it for a pool that presents a private-CA or
+	// to trust for this pool's stratum+tls:// or stratum+v2tls:// connection,
+	// in addition to the system root store. Use it for a pool that presents a private-CA or
 	// self-signed certificate, so the connection can be verified rather than
 	// either failing or being run in the clear. Empty means "system roots
 	// only". It has no effect on non-TLS schemes. Certificate verification is
@@ -663,10 +663,11 @@ func (c Config) Validate() error {
 	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
 }
 
-// validateBitcoinAddress performs a lightweight format check on a Bitcoin
-// address. Full cryptographic validation (checksum verification) is
-// performed by the lightning package when the address is first used;
-// this function only catches obvious typos and wrong-chain addresses.
+// validateBitcoinAddress validates a Bitcoin address at config load:
+// length and mainnet-prefix shape plus full checksum verification via
+// btccrypto.ValidateAddress, so a typo that stays inside the character
+// set is caught before mining begins rather than silently misdirecting
+// earnings.
 func validateBitcoinAddress(addr string) error {
 	if len(addr) < 26 {
 		return fmt.Errorf("address is too short (%d characters)", len(addr))
@@ -684,10 +685,8 @@ func validateBitcoinAddress(addr string) error {
 	default:
 		return fmt.Errorf("address does not start with '1', '3', or 'bc1'; testnet addresses are not supported in this configuration")
 	}
-	// Verify the address checksum (bech32/bech32m for bc1…, Base58Check for
-	// 1…/3…) so a transcription error that stays inside the character set —
-	// which would otherwise pass the prefix/length check and silently
-	// misdirect earnings — is rejected at config load, before mining begins.
+	// Checksum verification: bech32/bech32m for bc1…, Base58Check for
+	// 1…/3….
 	if _, err := btccrypto.ValidateAddress(addr); err != nil {
 		return fmt.Errorf("checksum verification failed (likely a typo in the address): %w", err)
 	}

@@ -939,3 +939,24 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 409 — SPECIFICATION validation-section drift [FIXED]
+
+**Understated validation claims corrected [FIXED].**
+- §3.3 claimed the payout-address checksum is "*not* verified here" —
+  `validateBitcoinAddress` has called `btccrypto.ValidateAddress`
+  (bech32/bech32m + Base58Check) at config load for a long time. Both
+  §3.3 and the §3.1 rows corrected. The function's own godoc was stale
+  in the same way (claimed checksums deferred to the lightning package
+  while the body verified them) — rewrote to describe actual behaviour.
+- §3.1 `tls_ca_file` row: "honoured only for `stratum+tls://`" — it is
+  also honoured for `stratum+v2tls://` (engine loads the PEM for both
+  TLS dial paths; unreadable → warn + system roots, never plaintext).
+  Field godoc corrected too.
+
+**Audited — clean:** §3.1 schema table covers every yaml key (pools
+sub-fields url/user/password/payout_scheme/tls_ca_file, workers.name,
+all scalar fields + env vars); §2.1 exit-code contract matches
+exitUsage=64/exitConfig=78; payout_scheme enum validation matches;
+config.yaml.example ranges match config.go checks; command table
+matches main.go dispatch.
