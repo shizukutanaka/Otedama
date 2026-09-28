@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 400)
+
+プール不通中も `MiningProvider` が採掘 yield を満額 quote する機会損失ギャップを
+発見・記録（電力無駄なし: ジョブなしワーカーはアイドル待機。AI 再配分は設計判断
+項目 — HealthyFunc 案/ヒステリシス緩和/予約継続の三択として記録）。`publish()`
+の収益計算・信頼度・フォールバックは監査 clean。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
