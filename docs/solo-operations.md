@@ -560,18 +560,23 @@ Otedamaがその罠に入らないために：
 ### 7.1 CODEOWNERS の設計
 
 ```
-# .github/CODEOWNERS
+# .github/CODEOWNERS — 実ファイルと同じ構成（2026-09 時点）
 # Global fallback: メンテナが全PRをレビュー
 *                           @shizukutanaka
 
 # セキュリティ領域：メンテナ必須（将来は2名以上）
-/internal/security/         @shizukutanaka
 /internal/lightning/        @shizukutanaka
-/internal/auth/             @shizukutanaka
+/internal/btccrypto/        @shizukutanaka
+/internal/poolproto/        @shizukutanaka
+/internal/stratum/noise*    @shizukutanaka
 
-# ドキュメント：コミュニティコントリビューターで対応可
-/docs/                      @shizukutanaka
+# CI/リリース自動化
+/.github/                   @shizukutanaka
 ```
+
+注: `/internal/security/`・`/internal/auth/` というパッケージは存在しない
+（CLAUDE.md のアーキテクチャマップで作成禁止パスとして明記）。CODEOWNERS に
+記載してもマッチしないため、実ファイルは存在するパスのみを列挙している。
 
 ### 7.2 コアコントリビューター昇格基準
 
