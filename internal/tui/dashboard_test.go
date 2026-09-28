@@ -200,7 +200,7 @@ func TestDashboard_RenderDoesNotPanic(t *testing.T) {
 	}
 
 	// render should not panic even with empty/nil fields.
-	d.render(s)
+	d.render(&s)
 
 	output := buf.String()
 	if !strings.Contains(output, "2.50 MH/s") {
@@ -220,7 +220,7 @@ func TestDashboard_MiningLine_IdleDevicesShown(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	d.SetWidth(120)
-	d.render(Stats{
+	d.render(&Stats{
 		HashRate:    1e9,
 		Devices:     4,
 		DevicesIdle: 2,
@@ -241,7 +241,7 @@ func TestDashboard_MiningLine_NoIdleWhenZero(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	d.SetWidth(120)
-	d.render(Stats{HashRate: 1e9, Devices: 4, Connected: true})
+	d.render(&Stats{HashRate: 1e9, Devices: 4, Connected: true})
 	out := buf.String()
 	if strings.Contains(out, "idle") {
 		t.Errorf("render with DevicesIdle=0 must not contain 'idle'; output:\n%s", out)
@@ -251,7 +251,7 @@ func TestDashboard_MiningLine_NoIdleWhenZero(t *testing.T) {
 func TestDashboard_RenderZeroState(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
-	d.render(Stats{}) // must not panic even with zero-value Stats
+	d.render(&Stats{}) // must not panic even with zero-value Stats
 }
 
 func TestDashboard_SetWidth_MinimumEnforced(t *testing.T) {
@@ -273,7 +273,7 @@ func TestDashboard_Update_NonBlocking(t *testing.T) {
 
 	// Fill the channel buffer.
 	for i := 0; i < 20; i++ {
-		d.Update(Stats{HashRate: float64(i)})
+		d.Update(&Stats{HashRate: float64(i)})
 	}
 	// None of the above calls must block or panic.
 }
@@ -313,7 +313,7 @@ func TestDashboard_Footer_GapClampedAtMinimum(t *testing.T) {
 	var buf bytes.Buffer
 	d := NewDashboard(&buf)
 	d.SetWidth(40)
-	d.render(Stats{Uptime: 1_000_000 * time.Hour})
+	d.render(&Stats{Uptime: 1_000_000 * time.Hour})
 	if !strings.Contains(buf.String(), "uptime:") {
 		t.Error("footer must contain 'uptime:' even when gap is clamped to 1")
 	}
@@ -331,7 +331,7 @@ func TestDashboard_RenderLoop_UpdateAndTick(t *testing.T) {
 
 	// Deliver stats updates so renderLoop drains updateCh (lines 156-159).
 	for i := 0; i < 3; i++ {
-		d.Update(Stats{HashRate: 1.5e6, Connected: true, Devices: 1})
+		d.Update(&Stats{HashRate: 1.5e6, Connected: true, Devices: 1})
 		time.Sleep(10 * time.Millisecond)
 	}
 

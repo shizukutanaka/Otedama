@@ -86,7 +86,7 @@ func TestHeader_Bytes_Roundtrip(t *testing.T) {
 	}
 
 	b := orig.Bytes()
-	got := ParseHeader(b)
+	got := ParseHeader(&b)
 
 	if got.Version != orig.Version {
 		t.Errorf("Version: got 0x%08X, want 0x%08X", got.Version, orig.Version)
@@ -354,7 +354,7 @@ func BenchmarkHashHeader(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		h.Nonce = uint32(i)
-		_ = HashHeader(h)
+		_ = HashHeader(&h)
 	}
 }
 

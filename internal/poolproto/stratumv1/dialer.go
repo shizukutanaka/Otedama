@@ -51,7 +51,7 @@ func (d *Dialer) Protocol() poolproto.ProtocolID {
 // stratum+tcp://host:port (or stratum+tls://host:port for the TLS
 // dialer). Credentials are stashed on the returned Connection so that
 // Negotiate can use them without requiring a second credentials argument.
-func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentials) (poolproto.Connection, error) {
+func (d *Dialer) Dial(ctx context.Context, url string, creds *poolproto.Credentials) (poolproto.Connection, error) {
 	address, err := parseAddress(url)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (d *Dialer) Dial(ctx context.Context, url string, creds poolproto.Credentia
 		raw:        conn,
 		remoteAddr: address,
 		protocol:   d.Protocol(),
-		creds:      creds,
+		creds:      *creds,
 	}, nil
 }
 

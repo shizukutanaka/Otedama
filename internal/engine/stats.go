@@ -34,7 +34,7 @@ import (
 //
 // stalled reflects HashrateMonitor.Stalled(); true renders the ⚠ stalled
 // indicator in the TUI so operators see the warning immediately.
-func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) tui.Stats {
+func buildStats(opts *sessionOpts, hashRate float64, estSats uint64, latency *LatencyTracker, stalled bool) *tui.Stats {
 	var sharesFound uint64
 	for _, w := range opts.workers {
 		sharesFound += w.Stats().SharesFound
@@ -78,7 +78,7 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 		providerStats = append(providerStats, ps)
 	}
 
-	return tui.Stats{
+	return &tui.Stats{
 		HashRate:          hashRate,
 		SharesFound:       sharesFound,
 		SharesSent:        sharesSent,
@@ -105,8 +105,8 @@ func buildStats(opts sessionOpts, hashRate float64, estSats uint64, latency *Lat
 // it correctly; nothing was ever driving it). Hashrate/shares/earnings are
 // left at zero rather than echoing stale pre-disconnect values, since this
 // snapshot does not know the true current state of any of them.
-func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) tui.Stats {
-	return tui.Stats{
+func disconnectedStats(poolURL, wallet string, startTime time.Time, devices int) *tui.Stats {
+	return &tui.Stats{
 		PoolURL:           poolURL,
 		Connected:         false,
 		WalletFingerprint: wallet,
@@ -439,7 +439,8 @@ func (m *HashrateMonitor) Observe(hashrate float64) {
 				m.log("warn", fmt.Sprintf(
 					"engine: hashrate stalled at %s for %d consecutive samples — "+
 						"check device health, cooling, and pool connection",
-					miner.HashRateString(hashrate), m.stallCount))
+					miner.HashRateString(hashrate), m.stallCount,
+				))
 			}
 		}
 		return

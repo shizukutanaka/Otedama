@@ -236,7 +236,7 @@ func (s *session) dispatch(line []byte) {
 		if err != nil {
 			return
 		}
-		s.sendJob(job)
+		s.sendJob(&job)
 	case "mining.set_difficulty":
 		if d, ok := parseDifficulty(msg.Params); ok {
 			s.difficulty.Store(float64ToUint64(d))
@@ -296,7 +296,7 @@ func (s *session) PoolNotices() <-chan string { return s.noticeCh }
 // produce stale (rejected) shares, which is the #1 reject cause after
 // network latency. When clean_jobs=false, only the oldest job is dropped
 // if the worker cannot keep up (the new job is always more current).
-func (s *session) sendJob(job poolproto.Job) {
+func (s *session) sendJob(job *poolproto.Job) {
 	if job.CleanJobs {
 		// Purge all pending jobs before queueing the new block's work.
 		for {
@@ -309,7 +309,7 @@ func (s *session) sendJob(job poolproto.Job) {
 	}
 send:
 	select {
-	case s.jobsCh <- job:
+	case s.jobsCh <- *job:
 	default:
 		// Channel still full (clean_jobs=false, slow worker):
 		// drop oldest, push newest.
@@ -318,7 +318,7 @@ send:
 		default:
 		}
 		select {
-		case s.jobsCh <- job:
+		case s.jobsCh <- *job:
 		default:
 		}
 	}
@@ -393,7 +393,7 @@ type rpcMessage struct {
 	Error  any             `json:"error"`
 }
 
-func (m rpcMessage) uintID() uint64 {
+func (m *rpcMessage) uintID() uint64 {
 	switch v := m.ID.(type) {
 	case float64:
 		return uint64(v)

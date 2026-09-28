@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 416 — lint 債務フォローアップ: hugeParam クラス全滅)
+
+- 内部 API の大きい構造体 (80–200B: `Config`, `Stats`, `Job`, `Input`,
+  `Credentials`, `SetupConnection` 等) を値渡しからポインタ渡しへ一括変換 —
+  gocritic `hugeParam` 53件全て解消。ホットパスの `HashHeader`(nonce 毎),
+  `Decide`, `sendQuote`, TUI 描画経路を含む。
+- チャネル (`jobsCh`, `updateCh`, `quoteCh`) は意図的に値意味論を維持 —
+  送受境界でのみポインタ化し、プロデューサ/コンシューマ間のエイリアシングを回避。
+- `Decide` に nil `Input` ガードを追加。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

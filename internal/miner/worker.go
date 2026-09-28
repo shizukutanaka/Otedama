@@ -250,7 +250,7 @@ func (w *Worker) grind(ctx context.Context, threadID uint32, shares chan<- Share
 		h := localWork.Header
 		for i := 0; i < batchSize; i++ {
 			h.Nonce = nonce
-			hash := HashHeader(h)
+			hash := HashHeader(&h)
 			w.hashCount.Add(1)
 
 			if hash.LessOrEqual(localWork.Target) {

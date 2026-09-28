@@ -155,7 +155,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	for _, w := range config.EnvWarnings(nil) {
 		fmt.Fprintf(stderr, "config: warning: %s\n", w)
 	}
-	cfg := config.Resolve(fromFile, nil, f.FlagValues)
+	cfg := config.Resolve(&fromFile, nil, &f.FlagValues)
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return exitConfig
@@ -198,7 +198,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	// Build the structured logger. closeLog flushes/closes the --log-file.
-	structlog, closeLog := buildLogger(f, cfg, stdout)
+	structlog, closeLog := buildLogger(&f, &cfg, stdout)
 	defer closeLog()
 
 	// Start HTTP health/metrics server if requested.
@@ -262,14 +262,14 @@ func isTerminal(f *os.File) bool {
 //
 // A file that cannot be opened is a warning, not a fatal error: the run
 // proceeds without the audit trail rather than refusing to mine.
-func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logger, func()) {
+func buildLogger(f *runFlags, cfg *config.Config, stdout io.Writer) (*logger.Logger, func()) {
 	cleanup := func() {}
 
 	var fileW io.Writer
 	if f.logFile != "" {
 		// 0600: logs can include pool URLs and worker names; match the
 		// restrictive posture used for the wallet and data directory.
-		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
 		} else {

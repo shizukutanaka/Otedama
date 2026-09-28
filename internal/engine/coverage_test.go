@@ -49,7 +49,7 @@ func TestBuildStats_WithWorkersAndMetrics(t *testing.T) {
 		m:         m,
 		providers: nil,
 	}
-	stats := buildStats(opts, 500.0, 10, nil, false)
+	stats := buildStats(&opts, 500.0, 10, nil, false)
 	if stats.HashRate != 500.0 {
 		t.Errorf("HashRate = %v, want 500.0", stats.HashRate)
 	}
@@ -84,7 +84,7 @@ func TestBuildStats_ProviderActiveReflectsArbitrationAssignment(t *testing.T) {
 		activity:   activity,
 	}
 
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if len(stats.Providers) != 2 {
 		t.Fatalf("Providers len = %d, want 2", len(stats.Providers))
 	}
@@ -110,7 +110,7 @@ func TestBuildStats_ProviderInactiveWithNilActivityMap(t *testing.T) {
 		startTime: time.Now(),
 		providers: []provider.Provider{mining},
 	}
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if len(stats.Providers) != 1 {
 		t.Fatalf("Providers len = %d, want 1", len(stats.Providers))
 	}
@@ -168,7 +168,7 @@ func TestBuildStats_SharesSentReflectsSubmittedCounter_NotFoundCount(t *testing.
 	// cannot represent, proving SharesSent is now its own signal.
 	m.sharesSubmitted.Add(3)
 
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if stats.SharesFound != 0 {
 		t.Errorf("SharesFound = %d, want 0 (fresh worker)", stats.SharesFound)
 	}
@@ -186,7 +186,7 @@ func TestBuildStats_SharesSentIsZeroWithNilMetrics(t *testing.T) {
 		poolURL:   "stratum+v2://pool.example.com:3336",
 		startTime: time.Now(),
 	}
-	stats := buildStats(opts, 0, 0, nil, false)
+	stats := buildStats(&opts, 0, 0, nil, false)
 	if stats.SharesSent != 0 {
 		t.Errorf("SharesSent = %d, want 0 (opts.m is nil)", stats.SharesSent)
 	}

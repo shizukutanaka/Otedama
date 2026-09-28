@@ -510,7 +510,7 @@ func TestPollingProvider_SendQuoteReturnsFalseOnCancelledContext(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if p.sendQuote(ctx, Quote{ProviderID: "new"}) {
+	if p.sendQuote(ctx, &Quote{ProviderID: "new"}) {
 		t.Error("sendQuote returned true on a cancelled context; should report failure")
 	}
 }

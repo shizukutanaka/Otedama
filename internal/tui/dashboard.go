@@ -160,9 +160,9 @@ func (d *Dashboard) Stop() {
 
 // Update delivers a new stats snapshot. Non-blocking: if the dashboard
 // update queue is full the oldest entry is discarded.
-func (d *Dashboard) Update(s Stats) {
+func (d *Dashboard) Update(s *Stats) {
 	select {
-	case d.updateCh <- s:
+	case d.updateCh <- *s:
 	default:
 		// Drain one stale entry then enqueue.
 		select {
@@ -170,7 +170,7 @@ func (d *Dashboard) Update(s Stats) {
 		default:
 		}
 		select {
-		case d.updateCh <- s:
+		case d.updateCh <- *s:
 		default:
 		}
 	}
@@ -194,7 +194,7 @@ func (d *Dashboard) renderLoop() {
 			d.mu.Lock()
 			s := d.lastStats
 			d.mu.Unlock()
-			d.render(s)
+			d.render(&s)
 		}
 	}
 }
@@ -219,7 +219,7 @@ const (
 	restoreCursor = "\x1b[u"
 )
 
-func (d *Dashboard) render(s Stats) {
+func (d *Dashboard) render(s *Stats) {
 	var sb strings.Builder
 	cols := d.cols
 
@@ -266,7 +266,7 @@ func (d *Dashboard) writeSection(sb *strings.Builder, label string, cols int) {
 	d.writeLine(sb, line, cols)
 }
 
-func (d *Dashboard) miningLine(s Stats, cols int) string {
+func (d *Dashboard) miningLine(s *Stats, cols int) string {
 	rate := formatHashRate(s.HashRate)
 	devs := fmt.Sprintf("%d device(s)", s.Devices)
 	if s.DevicesIdle > 0 {
@@ -297,7 +297,7 @@ func (d *Dashboard) miningLine(s Stats, cols int) string {
 	}
 }
 
-func (d *Dashboard) poolLine(s Stats, cols int) string {
+func (d *Dashboard) poolLine(s *Stats, cols int) string {
 	statusPlain := "✗ disconnected"
 	status := red + statusPlain + reset
 	if s.Connected {
@@ -339,7 +339,7 @@ func truncateToBudget(s string, budget int) string {
 	return s[:budget-3] + "..."
 }
 
-func (d *Dashboard) earningsLine(s Stats) string {
+func (d *Dashboard) earningsLine(s *Stats) string {
 	satsPerSec := s.HashRate * defaultSatsPerHash()
 	satsPerDay := satsPerSec * 86400
 
@@ -364,7 +364,7 @@ func (d *Dashboard) providerLine(p ProviderStats) string {
 	return fmt.Sprintf("  %-30s  %-12s  %s", p.Name, rate, active)
 }
 
-func (d *Dashboard) walletLine(s Stats) string {
+func (d *Dashboard) walletLine(s *Stats) string {
 	fp := s.WalletFingerprint
 	if fp == "" {
 		fp = "not initialized"
@@ -372,7 +372,7 @@ func (d *Dashboard) walletLine(s Stats) string {
 	return fmt.Sprintf("  Fingerprint: %s%s%s", cyan, fp, reset)
 }
 
-func (d *Dashboard) footer(s Stats, cols int) string {
+func (d *Dashboard) footer(s *Stats, cols int) string {
 	uptime := formatDuration(s.Uptime)
 	hint := dim + "Ctrl+C to exit" + reset
 	left := fmt.Sprintf("  uptime: %s", uptime)

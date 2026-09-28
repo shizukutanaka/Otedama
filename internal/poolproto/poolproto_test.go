@@ -71,7 +71,7 @@ type stubDialer struct {
 
 func (d *stubDialer) Protocol() ProtocolID { return d.id }
 
-func (d *stubDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *stubDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return nil, errors.New("stub: Dial not implemented")
 }
 
@@ -214,7 +214,7 @@ func TestRegistry_ConcurrentLookupSafe(t *testing.T) {
 func TestDialURL_UnknownSchemeReturnsError(t *testing.T) {
 	withTestRegistry(t)
 
-	_, err := DialURL(context.Background(), "ftp://nope", Credentials{})
+	_, err := DialURL(context.Background(), "ftp://nope", &Credentials{})
 	if !errors.Is(err, ErrUnknownProtocol) {
 		t.Errorf("err = %v, want ErrUnknownProtocol", err)
 	}
@@ -225,7 +225,7 @@ func TestDialURL_KnownSchemeNoDialerReturnsError(t *testing.T) {
 
 	// Scheme is recognized by FromURL but no dialer is registered.
 	_, err := DialURL(context.Background(),
-		"stratum+tcp://pool.example.com:3333", Credentials{})
+		"stratum+tcp://pool.example.com:3333", &Credentials{})
 	if !errors.Is(err, ErrUnknownProtocol) {
 		t.Errorf("err = %v, want ErrUnknownProtocol", err)
 	}
@@ -236,7 +236,7 @@ type dialFailingDialer struct{}
 
 func (d *dialFailingDialer) Protocol() ProtocolID { return ProtocolStratumV1 }
 
-func (d *dialFailingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *dialFailingDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return nil, errors.New("simulated network error")
 }
 
@@ -251,7 +251,7 @@ func TestDialURL_DialFailurePropagates(t *testing.T) {
 
 	Register(&dialFailingDialer{})
 	_, err := DialURL(context.Background(),
-		"stratum+tcp://pool.example.com:3333", Credentials{})
+		"stratum+tcp://pool.example.com:3333", &Credentials{})
 	if err == nil {
 		t.Fatal("expected error from failing Dial")
 	}
@@ -267,7 +267,7 @@ type negotiateFailingDialer struct {
 
 func (d *negotiateFailingDialer) Protocol() ProtocolID { return ProtocolStratumV2 }
 
-func (d *negotiateFailingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *negotiateFailingDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return &fakeConn{onClose: func() { d.closeCalled = true }}, nil
 }
 
@@ -290,7 +290,7 @@ func TestDialURL_NegotiateFailureClosesConnection(t *testing.T) {
 	Register(d)
 
 	_, err := DialURL(context.Background(),
-		"stratum+v2://pool.example.com:3336", Credentials{})
+		"stratum+v2://pool.example.com:3336", &Credentials{})
 	if err == nil {
 		t.Fatal("expected negotiation error")
 	}
@@ -317,7 +317,7 @@ type succeedingDialer struct {
 
 func (d *succeedingDialer) Protocol() ProtocolID { return ProtocolStratumV2 }
 
-func (d *succeedingDialer) Dial(_ context.Context, _ string, _ Credentials) (Connection, error) {
+func (d *succeedingDialer) Dial(_ context.Context, _ string, _ *Credentials) (Connection, error) {
 	return &fakeConn{onClose: func() { d.closeCalled = true }}, nil
 }
 
@@ -333,7 +333,7 @@ func TestDialURL_SuccessReturnsSessionAndKeepsConnectionOpen(t *testing.T) {
 	Register(d)
 
 	sess, err := DialURL(context.Background(),
-		"stratum+v2://pool.example.com:3336", Credentials{})
+		"stratum+v2://pool.example.com:3336", &Credentials{})
 	if err != nil {
 		t.Fatalf("DialURL on a fully-succeeding dialer returned error: %v", err)
 	}
@@ -411,8 +411,10 @@ func TestCredentials_HoldsLargePubKey(t *testing.T) {
 }
 
 // Compile-time assertion that stubDialer satisfies Dialer.
-var _ Dialer = (*stubDialer)(nil)
-var _ Connection = (*fakeConn)(nil)
+var (
+	_ Dialer     = (*stubDialer)(nil)
+	_ Connection = (*fakeConn)(nil)
+)
 
 // Sanity: registry isolation actually works across tests.
 // (If withTestRegistry leaks, this test would observe stale state.)
