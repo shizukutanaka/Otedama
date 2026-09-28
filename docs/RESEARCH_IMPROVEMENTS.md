@@ -939,3 +939,9 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 396 — fuzz for the SV2 handshake decoders
+
+[FIXED — session 396] **Handshake-decoder fuzz** (`internal/stratum/handshake_fuzz_test.go`): `FuzzHandshakeDecoders` covers the five connection-phase decoders — the first wire bytes a pool controls after TCP accept (`SetupConnection`/`+Success`/`+Error`, `OpenMiningChannel`/`+Success`). Real `Encode()` outputs seed the corpus so mutations start past the length guards into the STR0_255/B0_255 field reads. `OpenMiningChannelSuccess` additionally asserts decode→encode→decode is stable (8.1M execs clean). With #479's steady-state decoders, every SV2 server→client message type has fuzz coverage.
+
+[AUDITED — clean] `decode→encode` for a leniently-decoded `Extranonce` >32B correctly fails strict `appendB0_32` (documented Postel asymmetry) — verified by the round-trip guard.

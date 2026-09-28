@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 396)
+
+- `internal/stratum` のハンドシェイク層デコーダに fuzz を追加 — `SetupConnection`/`SetupConnectionSuccess`/`SetupConnectionError`/`OpenMiningChannel`/`OpenMiningChannelSuccess`（接続直後にプールが送る最初のワイヤ入力）。実 Encode 出力をシードに長さガードを突破する変異を検証し、`OpenMiningChannelSuccess` は decode→encode→decode の round-trip 安定性を不変条件として固定（810万 exec クリーン）。#479 と併せて SV2 全サーバ→クライアントメッセージに fuzz 網羅。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
