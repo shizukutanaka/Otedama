@@ -150,7 +150,7 @@ func SplitHostPort(addr string) (host string, port uint16) {
 		// A dialable service name (e.g. ":http" — the dialer resolves it)
 		// must still map to its numeric port for the wire field.
 		if portNum, lerr := net.LookupPort("tcp", p); lerr == nil && portNum >= 0 && portNum <= 65535 {
-			return h, uint16(portNum)
+			return h, uint16(portNum) //nolint:gosec // bounded to [0, 65535] above
 		}
 		return h, 0
 	}
