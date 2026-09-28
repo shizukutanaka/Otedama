@@ -1009,3 +1009,16 @@ UNKNOWN rather than CONFLICTING, so the trigger comment is silently
 skipped. The canonical fix is a bounded poll loop until mergeable !=
 UNKNOWN (per GitHub docs). Not user-visible today (the job goes green
 either way) — it just fails to fire on a fraction of conflicting PRs.
+
+## Session 459
+
+Engine submit-accounting audit: submitTimes is correctly bounded —
+the "drop oldest half" eviction fires only when len > 1024, which is
+unreachable before seqNum >= 1024, so the `seqNum - cap/2` uint32
+subtraction cannot underflow. Batch settle drops exactly the acked
+prefix; unacked entries honestly lose their (never-measured) latency.
+Found-share drops on a full merged channel are logged with counts, as
+the shares_submitted help text promises. Remaining hardening in this
+path is all owned by open PRs: LastSequenceNumber validation (#393/
+#403/#422), canonical reject classification (#387/#399/#434),
+submit-rate caps (#392/#402/#419), in-flight depth gauge (#427).
