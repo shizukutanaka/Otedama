@@ -160,7 +160,15 @@ and flagged, not changed this session:
   "accept any pool-assigned target" — the honest encoding of the old
   no-preference intent), and the success struct uses spec field names/types
   `ExtranoncePrefix` (B0_32 strict-encode, lenient-decode) + `GroupChannelID`
-  U32. Verified vs sv2-spec `main` and SRI's `mining_sv2` crate.
+  U32. Verified vs sv2-spec `main` and SRI's `mining_sv2` crate. The
+  follow-on sweep over every implemented message found and fixed two more
+  drifts: `SetupConnection` lacked the mandatory `endpoint_port` U16 (and
+  crammed `host:port` into `endpoint_host`; `poolproto.SplitHostPort` now
+  splits the dial target onto the spec fields) and `SubmitSharesSuccess`'s
+  `new_shares_sum` was U32 where the spec defines U64. All remaining
+  messages (NewMiningJob/OPTION, SetNewPrevHash, SetTarget,
+  SubmitSharesStandard/.Error, SetupConnection.Success/.Error,
+  OpenMiningChannelError) match the spec field-for-field.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

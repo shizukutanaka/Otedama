@@ -270,8 +270,8 @@ func (p *poolSide) doHandshake(channelID uint32) {
 	// Send OpenMiningChannelSuccess.
 	writeMsgTo(p.t, p.conn, stratum.MsgOpenMiningChannelSuccess, false,
 		stratum.OpenMiningChannelSuccess{
-			ReqID:           1,
-			ChannelID:       channelID,
+			ReqID:          1,
+			ChannelID:      channelID,
 			GroupChannelID: 4,
 		})
 }
@@ -965,7 +965,7 @@ func TestSendMsg_WriteError(t *testing.T) {
 
 	err := sendMsg(client, stratum.MsgSetupConnection, false, &stratum.SetupConnection{
 		Protocol: stratum.MiningProtocol, MinVersion: 2, MaxVersion: 2,
-		Endpoint: "x:1", Vendor: "test",
+		Endpoint: "x", EndpointPort: 1, Vendor: "test",
 	})
 	if err == nil {
 		t.Error("sendMsg to closed conn should return error")

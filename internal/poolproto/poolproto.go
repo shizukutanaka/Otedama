@@ -62,6 +62,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -130,6 +132,24 @@ func StripScheme(url string) (host string, err error) {
 		}
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnknownProtocol, url)
+}
+
+// SplitHostPort splits a host:port dial target (as returned by
+// StripScheme) into its host and numeric port. Unparseable input
+// degrades to the whole string as host with port 0 — these end up in
+// informational wire fields (e.g. SV2 SetupConnection's
+// endpoint_host/endpoint_port), so a malformed address must not block
+// the handshake; the dial itself already validates the address.
+func SplitHostPort(addr string) (host string, port uint16) {
+	h, p, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr, 0
+	}
+	port64, err := strconv.ParseUint(p, 10, 16)
+	if err != nil {
+		return h, 0
+	}
+	return h, uint16(port64)
 }
 
 // ----- Core types -----

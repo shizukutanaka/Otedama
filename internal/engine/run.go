@@ -1172,11 +1172,13 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 // did not assign one; the caller falls back to the block target.
 func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, workers []*miner.Worker) (uint32, miner.Hash, error) {
 	host, _ := parseHost(poolURL)
+	epHost, epPort := poolproto.SplitHostPort(host)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        host,
+		Endpoint:        epHost,
+		EndpointPort:    epPort,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",

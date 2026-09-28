@@ -84,11 +84,13 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	dec := stratum.NewDecoder(conn.raw)
 
 	// SetupConnection.
+	epHost, epPort := poolproto.SplitHostPort(conn.remoteAddr)
 	sc := stratum.SetupConnection{
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
-		Endpoint:        conn.remoteAddr,
+		Endpoint:        epHost,
+		EndpointPort:    epPort,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",

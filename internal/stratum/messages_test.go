@@ -17,7 +17,8 @@ func TestSetupConnection_Roundtrip(t *testing.T) {
 		MinVersion:      2,
 		MaxVersion:      2,
 		Flags:           0,
-		Endpoint:        "pool.example.com:3336",
+		Endpoint:        "pool.example.com",
+		EndpointPort:    3336,
 		Vendor:          "Otedama",
 		HardwareVersion: "v3.0.0",
 		Firmware:        "main",
@@ -39,6 +40,9 @@ func TestSetupConnection_Roundtrip(t *testing.T) {
 	}
 	if got.Endpoint != orig.Endpoint {
 		t.Errorf("Endpoint: got %q, want %q", got.Endpoint, orig.Endpoint)
+	}
+	if got.EndpointPort != orig.EndpointPort {
+		t.Errorf("EndpointPort: got %d, want %d", got.EndpointPort, orig.EndpointPort)
 	}
 	if got.DeviceID != orig.DeviceID {
 		t.Errorf("DeviceID: got %q, want %q", got.DeviceID, orig.DeviceID)
@@ -166,8 +170,8 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 
 func TestOpenMiningChannelSuccess_Roundtrip(t *testing.T) {
 	orig := OpenMiningChannelSuccess{
-		ReqID:           42,
-		ChannelID:       1,
+		ReqID:          42,
+		ChannelID:      1,
 		GroupChannelID: 4,
 	}
 	// Set a non-zero target
@@ -394,11 +398,11 @@ func TestSubmitSharesStandard_Roundtrip(t *testing.T) {
 // ----- SubmitSharesSuccess -----
 
 func TestDecodeSubmitSharesSuccess_Basic(t *testing.T) {
-	buf := make([]byte, 16)
+	buf := make([]byte, 20)
 	binary.LittleEndian.PutUint32(buf[0:4], 1)   // ChannelID
 	binary.LittleEndian.PutUint32(buf[4:8], 3)   // LastSeq
 	binary.LittleEndian.PutUint32(buf[8:12], 2)  // Accepted
-	binary.LittleEndian.PutUint32(buf[12:16], 5) // Summed
+	binary.LittleEndian.PutUint64(buf[12:20], 5) // Summed
 
 	got, err := DecodeSubmitSharesSuccess(buf)
 	if err != nil {

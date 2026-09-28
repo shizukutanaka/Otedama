@@ -411,8 +411,10 @@ func TestCredentials_HoldsLargePubKey(t *testing.T) {
 }
 
 // Compile-time assertion that stubDialer satisfies Dialer.
-var _ Dialer = (*stubDialer)(nil)
-var _ Connection = (*fakeConn)(nil)
+var (
+	_ Dialer     = (*stubDialer)(nil)
+	_ Connection = (*fakeConn)(nil)
+)
 
 // Sanity: registry isolation actually works across tests.
 // (If withTestRegistry leaks, this test would observe stale state.)
@@ -460,6 +462,29 @@ func TestStripScheme_EmptyHost(t *testing.T) {
 	_, err := StripScheme("stratum+v2://")
 	if !errors.Is(err, ErrUnknownProtocol) {
 		t.Errorf("StripScheme(bare scheme) error = %v, want ErrUnknownProtocol", err)
+	}
+}
+
+func TestSplitHostPort(t *testing.T) {
+	cases := []struct {
+		addr     string
+		wantHost string
+		wantPort uint16
+	}{
+		{"pool.example.com:3336", "pool.example.com", 3336},
+		{"127.0.0.1:34255", "127.0.0.1", 34255},
+		{"[::1]:3336", "::1", 3336},
+		{"pool.example.com:0", "pool.example.com", 0},
+		{"pool.example.com", "pool.example.com", 0},          // no port → host + 0
+		{"pool.example.com:notaport", "pool.example.com", 0}, // non-numeric port → 0
+		{"pool.example.com:99999", "pool.example.com", 0},    // out of range → 0
+		{"", "", 0},
+	}
+	for _, c := range cases {
+		host, port := SplitHostPort(c.addr)
+		if host != c.wantHost || port != c.wantPort {
+			t.Errorf("SplitHostPort(%q) = (%q, %d), want (%q, %d)", c.addr, host, port, c.wantHost, c.wantPort)
+		}
 	}
 }
 

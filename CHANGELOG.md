@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### 修正 (session 443)
 
-- **SV2 wire ドリフト修正（実バグ）**: `OpenMiningChannel` が spec 必須の `max_target`(U256) を未送信だった問題（フレーム32バイト不足で規格適合プールが解釈不能）— `MaxTargetAny()`(全0xFF「任意のターゲット受理」)を送信に追加。`OpenMiningChannelSuccess` も旧リビジョンの `extranonce_size`(U16) ではなく現行 spec の `group_channel_id`(U32) を読むよう修正（sv2-spec main + SRI mining_sv2 crate で検証済み）。
+- **SV2 wire ドリフト修正（実バグ3件）**: 全実装メッセージを sv2-spec main + SRI `mining_sv2` crate と照合し3件のドリフトを修正。(1) `OpenMiningChannel` が spec 必須の `max_target`(U256) を未送信（フレーム32バイト不足）→ `MaxTargetAny()`(全0xFF) を追加。(2) `OpenMiningChannelSuccess` が旧リビジョンの `extranonce_size`(U16) を読んでいた問題 → 現行 spec の `group_channel_id`(U32) に修正。(3) `SetupConnection` が必須の `endpoint_port`(U16) を持たず host:port を `endpoint_host` に混在させていた問題 + `SubmitSharesSuccess` の `new_shares_sum` が U32 だった問題（spec は U64 — バッチ難易度合計が 2^32 超で誤読）→ 各々 spec レイアウトに修正。
 
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
