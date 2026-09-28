@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 404)
+
+TROUBLESHOOTING.md が存在しない `--worker-threads` フラグを推奨していた問題を
+修正 — スレッド数は `runtime.NumCPU()` 固定のため、実際の制限手段である
+`GOMAXPROCS`（並列実行スレッドの上限）に訂正。docs/ 配下のその他全サブコマンド・
+フラグ参照は実装と整合（監査 clean）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
