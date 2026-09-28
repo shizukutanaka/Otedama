@@ -108,39 +108,14 @@ func convertBits(data []int, from, to uint, pad bool) ([]int, error) {
 // (legacy base58 "1.../3...") return ErrNotBech32 so callers can fall back to
 // their own legacy handling.
 func ValidateBech32Address(addr string) (AddressType, error) {
-	if !strings.HasPrefix(addr, "bc1") && !strings.HasPrefix(addr, "BC1") {
-		return AddressUnknown, ErrNotBech32
-	}
-	// BIP-173: reject mixed case; normalise to lower for decoding.
-	if addr != strings.ToLower(addr) && addr != strings.ToUpper(addr) {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 address has mixed case")
-	}
-	s := strings.ToLower(addr)
-
-	if len(s) > 90 {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 address too long (%d > 90)", len(s))
-	}
-	pos := strings.LastIndexByte(s, '1')
-	if pos < 1 {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 address has no separator")
-	}
-	hrp := s[:pos]
-	if hrp != "bc" {
-		return AddressUnknown, fmt.Errorf("btccrypto: unsupported human-readable part %q (mainnet 'bc' only)", hrp)
-	}
-	dataPart := s[pos+1:]
-	// 1 witness-version char + >=1 program + 6 checksum chars.
-	if len(dataPart) < 8 {
-		return AddressUnknown, fmt.Errorf("btccrypto: bech32 data part too short")
+	hrp, dataPart, err := parseBech32Parts(addr)
+	if err != nil {
+		return AddressUnknown, err
 	}
 
-	data := make([]int, 0, len(dataPart))
-	for _, c := range dataPart {
-		idx := strings.IndexRune(bech32Charset, c)
-		if idx < 0 {
-			return AddressUnknown, fmt.Errorf("btccrypto: invalid bech32 character %q", c)
-		}
-		data = append(data, idx)
+	data, err := decodeBech32Data(dataPart)
+	if err != nil {
+		return AddressUnknown, err
 	}
 
 	// The witness version is the first data value; it selects which checksum
@@ -167,6 +142,58 @@ func ValidateBech32Address(addr string) (AddressType, error) {
 		return AddressUnknown, fmt.Errorf("btccrypto: witness program length %d out of range", len(program))
 	}
 
+	return classifyWitnessProgram(version, program)
+}
+
+// parseBech32Parts performs the structural checks (prefix, casing, length,
+// separator, HRP, minimum data size) and returns the lowercased HRP and data
+// part. Inputs that are not bech32 at all yield ErrNotBech32.
+func parseBech32Parts(addr string) (hrp, dataPart string, err error) {
+	if !strings.HasPrefix(addr, "bc1") && !strings.HasPrefix(addr, "BC1") {
+		return "", "", ErrNotBech32
+	}
+	// BIP-173: reject mixed case; normalise to lower for decoding.
+	if addr != strings.ToLower(addr) && addr != strings.ToUpper(addr) {
+		return "", "", fmt.Errorf("btccrypto: bech32 address has mixed case")
+	}
+	s := strings.ToLower(addr)
+
+	if len(s) > 90 {
+		return "", "", fmt.Errorf("btccrypto: bech32 address too long (%d > 90)", len(s))
+	}
+	pos := strings.LastIndexByte(s, '1')
+	if pos < 1 {
+		return "", "", fmt.Errorf("btccrypto: bech32 address has no separator")
+	}
+	hrp = s[:pos]
+	if hrp != "bc" {
+		return "", "", fmt.Errorf("btccrypto: unsupported human-readable part %q (mainnet 'bc' only)", hrp)
+	}
+	dataPart = s[pos+1:]
+	// 1 witness-version char + >=1 program + 6 checksum chars.
+	if len(dataPart) < 8 {
+		return "", "", fmt.Errorf("btccrypto: bech32 data part too short")
+	}
+	return hrp, dataPart, nil
+}
+
+// decodeBech32Data maps each character of the data part to its 5-bit value.
+func decodeBech32Data(dataPart string) ([]int, error) {
+	data := make([]int, 0, len(dataPart))
+	for _, c := range dataPart {
+		idx := strings.IndexRune(bech32Charset, c)
+		if idx < 0 {
+			return nil, fmt.Errorf("btccrypto: invalid bech32 character %q", c)
+		}
+		data = append(data, idx)
+	}
+	return data, nil
+}
+
+// classifyWitnessProgram maps a decoded witness version + program to the
+// concrete address type. A valid checksum with a future witness version
+// yields AddressUnknown rather than a guessed type.
+func classifyWitnessProgram(version int, program []int) (AddressType, error) {
 	switch version {
 	case 0:
 		switch len(program) {

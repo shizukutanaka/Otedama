@@ -405,83 +405,44 @@ type UnknownMessage struct {
 // which is a requirement for forward compatibility with future pool software.
 func DispatchFrame(f Frame) (Message, error) {
 	var m Message
-	switch f.Header.MsgType {
-	case MsgSetupConnection:
-		v, err := DecodeSetupConnection(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SetupConnection = &v
-	case MsgSetupConnectionSuccess:
-		v, err := DecodeSetupConnectionSuccess(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SetupConnectionSuccess = &v
-	case MsgSetupConnectionError:
-		v, err := DecodeSetupConnectionError(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SetupConnectionError = &v
-	case MsgOpenMiningChannel:
-		v, err := DecodeOpenMiningChannel(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.OpenMiningChannel = &v
-	case MsgOpenMiningChannelSuccess:
-		v, err := DecodeOpenMiningChannelSuccess(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.OpenMiningChannelSuccess = &v
-	case MsgOpenMiningChannelError:
-		v, err := DecodeOpenMiningChannelError(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.OpenMiningChannelError = &v
-	case MsgNewMiningJob:
-		v, err := DecodeNewMiningJob(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.NewMiningJob = &v
-	case MsgSetNewPrevHash:
-		v, err := DecodeSetNewPrevHash(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SetNewPrevHash = &v
-	case MsgSetTarget:
-		v, err := DecodeSetTarget(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SetTarget = &v
-	case MsgSubmitSharesStandard:
-		v, err := DecodeSubmitSharesStandard(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SubmitSharesStandard = &v
-	case MsgSubmitSharesSuccess:
-		v, err := DecodeSubmitSharesSuccess(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SubmitSharesSuccess = &v
-	case MsgSubmitSharesError:
-		v, err := DecodeSubmitSharesError(f.Payload)
-		if err != nil {
-			return m, err
-		}
-		m.SubmitSharesError = &v
-	default:
+	dec, ok := frameDecoders[f.Header.MsgType]
+	if !ok {
 		m.Unknown = &UnknownMessage{MsgType: f.Header.MsgType, Payload: f.Payload}
+		return m, nil
 	}
-	return m, nil
+	return dec(f.Payload)
+}
+
+// frameDecoders maps each known MsgType to a decoder producing a Message with
+// the matching field populated. Unknown types fall through to Message.Unknown
+// in DispatchFrame.
+var frameDecoders = map[uint8]func([]byte) (Message, error){
+	MsgSetupConnection:          decodeInto(DecodeSetupConnection, func(m *Message, v *SetupConnection) { m.SetupConnection = v }),
+	MsgSetupConnectionSuccess:   decodeInto(DecodeSetupConnectionSuccess, func(m *Message, v *SetupConnectionSuccess) { m.SetupConnectionSuccess = v }),
+	MsgSetupConnectionError:     decodeInto(DecodeSetupConnectionError, func(m *Message, v *SetupConnectionError) { m.SetupConnectionError = v }),
+	MsgOpenMiningChannel:        decodeInto(DecodeOpenMiningChannel, func(m *Message, v *OpenMiningChannel) { m.OpenMiningChannel = v }),
+	MsgOpenMiningChannelSuccess: decodeInto(DecodeOpenMiningChannelSuccess, func(m *Message, v *OpenMiningChannelSuccess) { m.OpenMiningChannelSuccess = v }),
+	MsgOpenMiningChannelError:   decodeInto(DecodeOpenMiningChannelError, func(m *Message, v *OpenMiningChannelError) { m.OpenMiningChannelError = v }),
+	MsgNewMiningJob:             decodeInto(DecodeNewMiningJob, func(m *Message, v *NewMiningJob) { m.NewMiningJob = v }),
+	MsgSetNewPrevHash:           decodeInto(DecodeSetNewPrevHash, func(m *Message, v *SetNewPrevHash) { m.SetNewPrevHash = v }),
+	MsgSetTarget:                decodeInto(DecodeSetTarget, func(m *Message, v *SetTarget) { m.SetTarget = v }),
+	MsgSubmitSharesStandard:     decodeInto(DecodeSubmitSharesStandard, func(m *Message, v *SubmitSharesStandard) { m.SubmitSharesStandard = v }),
+	MsgSubmitSharesSuccess:      decodeInto(DecodeSubmitSharesSuccess, func(m *Message, v *SubmitSharesSuccess) { m.SubmitSharesSuccess = v }),
+	MsgSubmitSharesError:        decodeInto(DecodeSubmitSharesError, func(m *Message, v *SubmitSharesError) { m.SubmitSharesError = v }),
+}
+
+// decodeInto adapts a typed payload decoder to the frameDecoders signature:
+// decode p, then assign the result into the matching Message field.
+func decodeInto[T any](dec func([]byte) (T, error), set func(*Message, *T)) func([]byte) (Message, error) {
+	return func(p []byte) (Message, error) {
+		var m Message
+		v, err := dec(p)
+		if err != nil {
+			return m, err
+		}
+		set(&m, &v)
+		return m, nil
+	}
 }
 
 // ------------------------------------------------------------------

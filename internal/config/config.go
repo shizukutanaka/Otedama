@@ -378,7 +378,8 @@ func EnvWarnings(env map[string]string) []string {
 		}
 		if _, err := strconv.ParseFloat(v, 64); err != nil {
 			warnings = append(warnings, fmt.Sprintf(
-				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v))
+				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v,
+			))
 		}
 	}
 	return warnings
@@ -391,7 +392,27 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 	cfg := Defaults()
 	var o Origins
 
-	// Layer 1: config file overrides defaults where set.
+	applyFileLayer(&cfg, &o, fromFile)
+	applyEnvLayer(&cfg, &o, env)
+	applyFlagLayer(&cfg, &o, flags)
+
+	// Layer 4: OS-appropriate default when no higher-priority layer set an
+	// explicit DataDir. This is what actually implements the per-platform
+	// paths documented on Config.DataDir's doc comment; without it, a user
+	// who never passes --data-dir/OTEDAMA_DATA_DIR/data_dir gets an empty
+	// DataDir, which silently disables Lightning wallet initialisation
+	// (engine.setupWallet treats "" as "no data dir configured" and skips
+	// it entirely — see docs/KNOWN_LIMITATIONS.md). o.DataDir intentionally
+	// stays OriginDefault (its zero value) in this case.
+	if cfg.DataDir == "" {
+		cfg.DataDir = DefaultDataDir()
+	}
+
+	return cfg, o
+}
+
+// applyFileLayer implements layer 1: config file values override defaults.
+func applyFileLayer(cfg *Config, o *Origins, fromFile Config) {
 	if fromFile.BitcoinAddress != "" {
 		cfg.BitcoinAddress = fromFile.BitcoinAddress
 		o.BitcoinAddress = OriginFile
@@ -455,8 +476,10 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.HTTPAddr = fromFile.HTTPAddr
 		o.HTTPAddr = OriginFile
 	}
+}
 
-	// Layer 2: environment variables override config file.
+// applyEnvLayer implements layer 2: environment variables override the file.
+func applyEnvLayer(cfg *Config, o *Origins, env map[string]string) {
 	getEnv := func(key string) string {
 		if env != nil {
 			return env[key]
@@ -495,11 +518,13 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		// A malformed value is left for EnvWarnings to surface; here it is
 		// simply not applied (the default/file/earlier-layer value stands).
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			spec.apply(&cfg, &o, f)
+			spec.apply(cfg, o, f)
 		}
 	}
+}
 
-	// Layer 3: flags override environment variables.
+// applyFlagLayer implements layer 3: flags override environment variables.
+func applyFlagLayer(cfg *Config, o *Origins, flags FlagValues) {
 	if flags.BitcoinAddress != "" {
 		cfg.BitcoinAddress = flags.BitcoinAddress
 		o.BitcoinAddress = OriginFlag
@@ -524,20 +549,6 @@ func ResolveWithOrigins(fromFile Config, env map[string]string, flags FlagValues
 		cfg.HTTPAddr = flags.HTTPAddr
 		o.HTTPAddr = OriginFlag
 	}
-
-	// Layer 4: OS-appropriate default when no higher-priority layer set an
-	// explicit DataDir. This is what actually implements the per-platform
-	// paths documented on Config.DataDir's doc comment; without it, a user
-	// who never passes --data-dir/OTEDAMA_DATA_DIR/data_dir gets an empty
-	// DataDir, which silently disables Lightning wallet initialisation
-	// (engine.setupWallet treats "" as "no data dir configured" and skips
-	// it entirely — see docs/KNOWN_LIMITATIONS.md). o.DataDir intentionally
-	// stays OriginDefault (its zero value) in this case.
-	if cfg.DataDir == "" {
-		cfg.DataDir = DefaultDataDir()
-	}
-
-	return cfg, o
 }
 
 // DefaultDataDir returns the OS-appropriate default directory for
@@ -585,23 +596,8 @@ func DefaultDataDir() string {
 // rather than one error per run.
 func (c Config) Validate() error {
 	var issues []string
-
-	if c.BitcoinAddress == "" && len(c.BitcoinAddresses) == 0 {
-		issues = append(issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
-	} else if c.BitcoinAddress != "" {
-		if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
-			issues = append(issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
-		}
-	}
-	// Validate every failover address too, so a typo in a backup is caught
-	// at config time rather than only when failover actually reaches it.
-	for i, a := range c.BitcoinAddresses {
-		if a == "" {
-			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] is empty", i))
-		} else if err := validateBitcoinAddress(a); err != nil {
-			issues = append(issues, fmt.Sprintf("bitcoin_addresses[%d] invalid: %v", i, err))
-		}
-	}
+	c.validateAddresses(&issues)
+	c.validatePools(&issues)
 
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":
@@ -622,45 +618,73 @@ func (c Config) Validate() error {
 		issues = append(issues, fmt.Sprintf("log_format %q is not one of text, json", c.LogFormat))
 	}
 
-	for i, p := range c.Pools {
-		if p.URL == "" {
-			issues = append(issues, fmt.Sprintf("pools[%d].url is empty", i))
-		} else if err := validatePoolURL(p.URL); err != nil {
-			issues = append(issues, fmt.Sprintf("pools[%d].url invalid: %v", i, err))
-		}
-		switch p.PayoutScheme {
-		case "", "fpps", "pplns", "tides", "solo":
-			// valid
-		default:
-			issues = append(issues, fmt.Sprintf("pools[%d].payout_scheme %q is not one of fpps, pplns, tides, solo", i, p.PayoutScheme))
-		}
-	}
-
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
-			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct,
+		))
 	}
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD,
+		))
 	}
 	if c.MinYieldSatsPerSec < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec,
+		))
 	}
 	if c.PowerWatts < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts,
+		))
 	}
 	if c.ElectricityPricePerKWh < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh,
+		))
 	}
 
 	if len(issues) == 0 {
 		return nil
 	}
 	return fmt.Errorf("config validation failed:\n  - %s", strings.Join(issues, "\n  - "))
+}
+
+// validateAddresses checks the primary and failover payout addresses.
+func (c Config) validateAddresses(issues *[]string) {
+	if c.BitcoinAddress == "" && len(c.BitcoinAddresses) == 0 {
+		*issues = append(*issues, "bitcoin_address is required (set via --bitcoin-address, OTEDAMA_BITCOIN_ADDRESS, or config file)")
+	} else if c.BitcoinAddress != "" {
+		if err := validateBitcoinAddress(c.BitcoinAddress); err != nil {
+			*issues = append(*issues, fmt.Sprintf("bitcoin_address invalid: %v", err))
+		}
+	}
+	// Validate every failover address too, so a typo in a backup is caught
+	// at config time rather than only when failover actually reaches it.
+	for i, a := range c.BitcoinAddresses {
+		if a == "" {
+			*issues = append(*issues, fmt.Sprintf("bitcoin_addresses[%d] is empty", i))
+		} else if err := validateBitcoinAddress(a); err != nil {
+			*issues = append(*issues, fmt.Sprintf("bitcoin_addresses[%d] invalid: %v", i, err))
+		}
+	}
+}
+
+// validatePools checks each configured pool URL and payout scheme.
+func (c Config) validatePools(issues *[]string) {
+	for i, p := range c.Pools {
+		if p.URL == "" {
+			*issues = append(*issues, fmt.Sprintf("pools[%d].url is empty", i))
+		} else if err := validatePoolURL(p.URL); err != nil {
+			*issues = append(*issues, fmt.Sprintf("pools[%d].url invalid: %v", i, err))
+		}
+		switch p.PayoutScheme {
+		case "", "fpps", "pplns", "tides", "solo":
+			// valid
+		default:
+			*issues = append(*issues, fmt.Sprintf("pools[%d].payout_scheme %q is not one of fpps, pplns, tides, solo", i, p.PayoutScheme))
+		}
+	}
 }
 
 // validateBitcoinAddress performs a lightweight format check on a Bitcoin

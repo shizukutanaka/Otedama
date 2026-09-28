@@ -81,75 +81,95 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			}
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
-			opts.streamsMu.Lock()
-			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
-				opts.log("info", fmt.Sprintf(
-					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
-					key, streamStaleTimeout))
-			}
-			streams := streamsSlice(opts.streamMap)
-			opts.streamsMu.Unlock()
-			opts.metrics.activeStreams.Set(float64(len(streams)))
+			prevAlloc = arbitrationTick(opts, prevAlloc, lastQuoteAt)
+		}
+	}
+}
 
-			margin := opts.hysteresisPct
-			if margin == 0 {
-				margin = defaultHysteresisPct
-			}
-			alloc, err := arbitration.Decide(arbitration.Input{
-				Devices:            opts.devRefs,
-				Streams:            streams,
-				Previous:           prevAlloc,
-				Policy:             arbitration.PolicyMaximizeEarnings,
-				HysteresisMargin:   margin,
-				MinYieldSatsPerSec: opts.minYield,
-			})
-			if err != nil {
-				opts.log("warn", fmt.Sprintf("arbitration: %v", err))
+// arbitrationTick runs one Decide cycle: prune stale streams, decide, publish
+// metrics/activity, log idle transitions, and apply the allocation. It returns
+// the allocation that becomes the next tick's hysteresis baseline — or the
+// unchanged previous one when Decide fails.
+func arbitrationTick(
+	opts arbitrationLoopOpts,
+	prevAlloc *arbitration.Allocation,
+	lastQuoteAt map[string]time.Time,
+) *arbitration.Allocation {
+	opts.streamsMu.Lock()
+	for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
+		opts.log("info", fmt.Sprintf(
+			"arbitration: stream %q expired (no quote in %s); no longer routing to it",
+			key, streamStaleTimeout,
+		))
+	}
+	streams := streamsSlice(opts.streamMap)
+	opts.streamsMu.Unlock()
+	opts.metrics.activeStreams.Set(float64(len(streams)))
+
+	margin := opts.hysteresisPct
+	if margin == 0 {
+		margin = defaultHysteresisPct
+	}
+	alloc, err := arbitration.Decide(arbitration.Input{
+		Devices:            opts.devRefs,
+		Streams:            streams,
+		Previous:           prevAlloc,
+		Policy:             arbitration.PolicyMaximizeEarnings,
+		HysteresisMargin:   margin,
+		MinYieldSatsPerSec: opts.minYield,
+	})
+	if err != nil {
+		opts.log("warn", fmt.Sprintf("arbitration: %v", err))
+		return prevAlloc
+	}
+	// Capture the previous idle count before overwriting prevAlloc, so a
+	// transition can be logged once (not every tick) for operators who
+	// watch logs rather than the otedama_devices_idle gauge.
+	prevSkipped := 0
+	if prevAlloc != nil {
+		prevSkipped = prevAlloc.SkippedDevice
+	}
+	publishArbitrationMetrics(opts, alloc)
+	if alloc.SkippedDevice != prevSkipped {
+		if alloc.SkippedDevice > 0 {
+			opts.log("info", fmt.Sprintf(
+				"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
+				alloc.SkippedDevice,
+			))
+		} else {
+			opts.log("info", "arbitration: all devices now have a viable stream")
+		}
+	}
+	applyAllocation(alloc, opts.workers, opts.log)
+	return alloc
+}
+
+// publishArbitrationMetrics exports the allocation's gauges/counters and the
+// per-stream activity snapshot.
+func publishArbitrationMetrics(opts arbitrationLoopOpts, alloc *arbitration.Allocation) {
+	var foregone float64
+	for _, a := range alloc.Assignments {
+		if a.SwitchedFromID != "" {
+			opts.metrics.arbitrationSwitches.Inc()
+		}
+		if a.Held {
+			opts.metrics.arbitrationHolds.Inc()
+		}
+		foregone += a.ForegoneSatsPerSec
+	}
+	opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
+	opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
+	opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
+	if opts.activityMu != nil && opts.activity != nil {
+		opts.activityMu.Lock()
+		clear(opts.activity)
+		for _, a := range alloc.Assignments {
+			if a.Idle() {
 				continue
 			}
-			// Capture the previous idle count before overwriting prevAlloc, so a
-			// transition can be logged once (not every tick) for operators who
-			// watch logs rather than the otedama_devices_idle gauge.
-			prevSkipped := 0
-			if prevAlloc != nil {
-				prevSkipped = prevAlloc.SkippedDevice
-			}
-			prevAlloc = alloc
-			var foregone float64
-			for _, a := range alloc.Assignments {
-				if a.SwitchedFromID != "" {
-					opts.metrics.arbitrationSwitches.Inc()
-				}
-				if a.Held {
-					opts.metrics.arbitrationHolds.Inc()
-				}
-				foregone += a.ForegoneSatsPerSec
-			}
-			opts.metrics.arbitrationForegoneSatsPerSec.Set(foregone)
-			opts.metrics.arbitrationExpectedYieldSatsPerSec.Set(alloc.TotalYield)
-			opts.metrics.devicesIdle.Set(float64(alloc.SkippedDevice))
-			if opts.activityMu != nil && opts.activity != nil {
-				opts.activityMu.Lock()
-				clear(opts.activity)
-				for _, a := range alloc.Assignments {
-					if a.Idle() {
-						continue
-					}
-					opts.activity[string(a.Stream)] += a.ExpectedYield
-				}
-				opts.activityMu.Unlock()
-			}
-			if alloc.SkippedDevice != prevSkipped {
-				if alloc.SkippedDevice > 0 {
-					opts.log("info", fmt.Sprintf(
-						"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
-						alloc.SkippedDevice))
-				} else {
-					opts.log("info", "arbitration: all devices now have a viable stream")
-				}
-			}
-			applyAllocation(alloc, opts.workers, opts.log)
+			opts.activity[string(a.Stream)] += a.ExpectedYield
 		}
+		opts.activityMu.Unlock()
 	}
 }
 

@@ -939,3 +939,58 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 417 — lint backlog finale: decompose all gocyclo findings [REFACTOR]
+
+Session 415 (PR #526) cleared the mechanical lint classes, session 416
+(PR #527) eliminated the 53 `hugeParam` findings, and this session decomposes
+the last remaining class: **all 12 `gocyclo` findings** (cyclomatic
+complexity > 15) — the lint backlog is now fully cleared across sessions
+415–417.
+
+The complex functions were concentrated in the session/connection loops and
+protocol dispatchers. All decompositions are semantics-preserving
+extractions — no behaviour change, verified by the existing test suite
+including `-race`:
+
+- `internal/engine/run.go` (`runReconnectLoop`, `runSession`, `runSessionV1`
+  — the three worst, at 65/36/36+):
+  - `failoverCursor` + `failover()` — the pool→address failover state
+    machine extracted from `runReconnectLoop`.
+  - `runAttempt()` — the per-attempt log/metrics/session lifecycle.
+  - `uptimeTicker`, `curtailLoop` — timer goroutines out of `run()`.
+  - `dialV2Pool()` — the v2tls-TLS / plaintext-V2 dial decision.
+  - `readFrames()` — the frame-reader goroutine.
+  - `v2Session` — a state struct for the V2 loop's ~10 mutable locals
+    (jobs map, chain tip, share target, seq numbers, trackers), with
+    per-message handlers `onNewMiningJob` / `onSetNewPrevHash` /
+    `onSetTarget` / `onSubmitSuccess` / `onSubmitError` / `submitShare`.
+  - `sessionTrackers` — the bookkeeping shared by the V1 and V2 session
+    loops (hashrate window, stall monitor, uptime/sats accountants,
+    latency tracker); `statsTick` now takes an optional per-protocol
+    metrics hook (V1 publishes pool difficulty).
+  - `submitShareV1`, `noteConnected` — the V1 submit goroutine and the
+    shared post-handshake announcement.
+- `internal/config/config.go` (`ResolveWithOrigins`, `Validate`): the
+  four-layer merge split into `applyFileLayer` / `applyEnvLayer` /
+  `applyFlagLayer`; validation split into `validateAddresses` /
+  `validatePools`.
+- `internal/engine/arbitrate.go`: `arbitrationTick` +
+  `publishArbitrationMetrics` extracted from the ticker loop.
+- `internal/arbitration/engine.go` (`chooseForDevice`): `hysteresisHold`
+  extracted; `streamCandidate` pairs each candidate with its score.
+- `internal/btccrypto/bech32.go` (`ValidateBech32Address`):
+  `parseBech32Parts` (structure/case/HRP), `decodeBech32Data` (charset),
+  `classifyWitnessProgram` (version→AddressType mapping).
+- `internal/stratum/messages.go` (`DispatchFrame`): a `frameDecoders` table
+  indexed by MsgType plus a generic `decodeInto` adapter — adding a message
+  type is now a one-line map entry.
+- `internal/poolproto/stratumv1`: `dispatchResponse` / `dispatchNotification`
+  / `pushNotice` extracted from the read loop.
+- `internal/poolproto/stratumv2/dialer.go` (`readLoop`): `v2JobState`
+  groups the pending-job map + last prev-hash/nBits with `jobFor` and
+  `handle` methods.
+
+*Evidence: `golangci-lint run` gocyclo count 12 → 0 repo-wide (the only
+class left after #526/#527); `go vet` clean; `go test ./...` all 24 packages
+green; `-race` green on engine + both stratum dialers + stratum.*

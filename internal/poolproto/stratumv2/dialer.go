@@ -198,24 +198,11 @@ func (s *session) readLoop(ctx context.Context) {
 	// emittable only once both NewMiningJob (merkle root + version) and
 	// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
 	// (no min_ntime) wait for the SetNewPrevHash that names them.
-	pending := make(map[uint32]*stratum.NewMiningJob)
-	var prevHash [32]byte
-	var prevNBits uint32
-	havePrev := false
+	st := &v2JobState{pending: make(map[uint32]*stratum.NewMiningJob)}
 
 	emit := func(j *stratum.NewMiningJob, ntime uint32, clean bool) bool {
-		job := poolproto.Job{
-			JobID:      fmt.Sprintf("%d", j.JobID),
-			Version:    j.Version,
-			PrevHash:   prevHash,
-			MerkleRoot: j.MerkleRoot,
-			NTime:      ntime,
-			NBits:      prevNBits,
-			CleanJobs:  clean,
-			ReceivedAt: time.Now(),
-		}
 		select {
-		case s.jobsCh <- job:
+		case s.jobsCh <- st.jobFor(j, ntime, clean):
 			return true
 		case <-ctx.Done():
 			return false
@@ -234,38 +221,72 @@ func (s *session) readLoop(ctx context.Context) {
 		if err != nil {
 			continue // skip undecodable frame, keep reading
 		}
-		if msg.NewMiningJob != nil {
-			j := msg.NewMiningJob
-			pending[j.JobID] = j
-			if j.HasMinNtime && havePrev {
-				if !emit(j, j.MinNtime, false) {
-					return
-				}
-			}
-			// Future job (or no tip yet): held until SetNewPrevHash.
-		}
-		if msg.SetNewPrevHash != nil {
-			p := msg.SetNewPrevHash
-			prevHash = p.PrevHash
-			prevNBits = p.NBits
-			havePrev = true
-			named := pending[p.JobID]
-			pending = map[uint32]*stratum.NewMiningJob{}
-			if named != nil {
-				pending[p.JobID] = named
-				ntime := p.MinNtime
-				if named.HasMinNtime && named.MinNtime > ntime {
-					ntime = named.MinNtime
-				}
-				if !emit(named, ntime, true) {
-					return
-				}
-			}
+		if !st.handle(msg, emit) {
+			return
 		}
 		// Note: SetTarget (share difficulty) has no carrier on
 		// poolproto.Job; the engine's inline V2 loop handles it. This
 		// adapter is not yet the live V2 path (KNOWN_LIMITATIONS §3).
 	}
+}
+
+// v2JobState tracks SV2 job/tip state inside the read loop: a job is
+// emittable only once both NewMiningJob (merkle root + version) and
+// SetNewPrevHash (prev-hash + nBits + ntime) are known. Future jobs
+// (no min_ntime) wait for the SetNewPrevHash that names them.
+type v2JobState struct {
+	pending   map[uint32]*stratum.NewMiningJob
+	prevHash  [32]byte
+	prevNBits uint32
+	havePrev  bool
+}
+
+// jobFor assembles a poolproto.Job for emission from the tracked state.
+func (t *v2JobState) jobFor(j *stratum.NewMiningJob, ntime uint32, clean bool) poolproto.Job {
+	return poolproto.Job{
+		JobID:      fmt.Sprintf("%d", j.JobID),
+		Version:    j.Version,
+		PrevHash:   t.prevHash,
+		MerkleRoot: j.MerkleRoot,
+		NTime:      ntime,
+		NBits:      t.prevNBits,
+		CleanJobs:  clean,
+		ReceivedAt: time.Now(),
+	}
+}
+
+// handle applies one decoded frame to the job state, emitting via emit as
+// needed. It returns false when emit failed (the caller should return).
+func (t *v2JobState) handle(msg stratum.Message, emit func(*stratum.NewMiningJob, uint32, bool) bool) bool {
+	if msg.NewMiningJob != nil {
+		j := msg.NewMiningJob
+		t.pending[j.JobID] = j
+		if j.HasMinNtime && t.havePrev {
+			if !emit(j, j.MinNtime, false) {
+				return false
+			}
+		}
+		// Future job (or no tip yet): held until SetNewPrevHash.
+	}
+	if msg.SetNewPrevHash != nil {
+		p := msg.SetNewPrevHash
+		t.prevHash = p.PrevHash
+		t.prevNBits = p.NBits
+		t.havePrev = true
+		named := t.pending[p.JobID]
+		t.pending = map[uint32]*stratum.NewMiningJob{}
+		if named != nil {
+			t.pending[p.JobID] = named
+			ntime := p.MinNtime
+			if named.HasMinNtime && named.MinNtime > ntime {
+				ntime = named.MinNtime
+			}
+			if !emit(named, ntime, true) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Jobs returns the channel of incoming jobs.

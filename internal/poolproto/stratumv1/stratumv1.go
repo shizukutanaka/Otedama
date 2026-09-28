@@ -218,18 +218,27 @@ func (s *session) dispatch(line []byte) {
 	}
 	// Response (has id, no method).
 	if msg.Method == "" && msg.ID != nil {
-		id := msg.uintID()
-		s.pendingMu.Lock()
-		ch, ok := s.pending[id]
-		delete(s.pending, id)
-		s.pendingMu.Unlock()
-		if ok {
-			ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
-			close(ch)
-		}
+		s.dispatchResponse(msg)
 		return
 	}
-	// Notification or request from pool.
+	s.dispatchNotification(msg)
+}
+
+// dispatchResponse resolves a pending call() with the server's reply.
+func (s *session) dispatchResponse(msg rpcMessage) {
+	id := msg.uintID()
+	s.pendingMu.Lock()
+	ch, ok := s.pending[id]
+	delete(s.pending, id)
+	s.pendingMu.Unlock()
+	if ok {
+		ch <- rpcResponse{result: msg.Result, errResult: msg.Error}
+		close(ch)
+	}
+}
+
+// dispatchNotification routes a pool-sent notification or request.
+func (s *session) dispatchNotification(msg rpcMessage) {
 	switch msg.Method {
 	case "mining.notify":
 		job, err := parseNotify(msg.Params)
@@ -252,18 +261,7 @@ func (s *session) dispatch(line []byte) {
 		// Surface it via PoolNotices(); if the caller is not draining the
 		// channel, drop the oldest notice to avoid blocking the read loop.
 		if notice, ok := parseShowMessage(msg.Params); ok && notice != "" {
-			select {
-			case s.noticeCh <- notice:
-			default:
-				select {
-				case <-s.noticeCh:
-				default:
-				}
-				select {
-				case s.noticeCh <- notice:
-				default:
-				}
-			}
+			s.pushNotice(notice)
 		}
 	case "client.reconnect", "mining.reconnect":
 		// The pool is asking us to move to another node (load balancing,
@@ -279,6 +277,23 @@ func (s *session) dispatch(line []byte) {
 		go s.Close()
 		// Other notifications (mining.set_version_mask, etc.) are
 		// silently ignored; forward-compatible with pool extensions.
+	}
+}
+
+// pushNotice delivers a pool notice, evicting the oldest queued notice if the
+// caller is not draining the channel so the read loop never blocks.
+func (s *session) pushNotice(notice string) {
+	select {
+	case s.noticeCh <- notice:
+	default:
+		select {
+		case <-s.noticeCh:
+		default:
+		}
+		select {
+		case s.noticeCh <- notice:
+		default:
+		}
 	}
 }
 

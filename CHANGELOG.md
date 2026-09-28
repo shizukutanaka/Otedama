@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 417 — lint 債務最終段: gocyclo クラス全滅)
+
+- 循環複雑度 >15 の関数12件を意味論保存の抽出リファクタで分解 — gocyclo
+  0件。session 415 (雑多クラス), 416 (hugeParam), 417 (gocyclo) で lint
+  バックログが全クラス解消。
+- `engine/run.go` の3つの大型ループ (runReconnectLoop 65 / runSession /
+  runSessionV1) を `failoverCursor`+`failover`, `runAttempt`, `dialV2Pool`,
+  `readFrames`, `v2Session` (ジョブ/チェーン先端/シェアターゲット状態機械),
+  `sessionTrackers` (V1/V2 共有簿記) 等へ分割。
+- `stratum.DispatchFrame` を `frameDecoders` テーブル駆動化 — メッセージ型
+  の追加がマップ1行に。
+- `config` の4層マージを `applyFileLayer`/`applyEnvLayer`/`applyFlagLayer`、
+  `Validate` を `validateAddresses`/`validatePools` に分割。
+- `stratumv1` のディスパッチを `dispatchResponse`/`dispatchNotification`/
+  `pushNotice` に、`stratumv2` の readLoop を `v2JobState` に分離。
+- `btccrypto.ValidateBech32Address` を `parseBech32Parts`/`decodeBech32Data`/
+  `classifyWitnessProgram` に、`arbitration.chooseForDevice` から
+  `hysteresisHold` を抽出。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
