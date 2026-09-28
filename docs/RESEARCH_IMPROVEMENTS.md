@@ -987,3 +987,25 @@ a malformed `//nolint:errcheck` directive on dialer_test.go:641 (the
 un-suppressing it) replaced with an explicit `_, _ =` discard.
 httpserver endpoints audited clean: full timeout set (ReadHeader 5s
 slowloris), pprof gated, index 404s non-root paths.
+
+## Session 458
+
+Three clean verdicts plus one maintainer-flagged finding:
+
+- i18n template-argument parity: all 8 templated keys carry identical
+  {{.var}} sets across the 10 catalogs (key parity was session 430;
+  arg parity was the un-audited invariant). All 3 RenderWith call
+  sites (run.go logln) supply exactly the keys their templates need —
+  the missingkey=error path (PR #540) cannot fire today.
+- internal/logger + internal/version audited clean: race-free atomic
+  singleton with nil guards, correct Discard threshold; ldflags
+  injection paths in Makefile and .goreleaser.yaml both correct.
+
+FLAGGED (maintainer action — .github/workflows is outside my edit
+scope): devin-direct-merge.yml's check-conflict-and-comment reads
+`gh pr view --json mergeable` once. GitHub computes mergeability
+asynchronously; immediately after `synchronize` the API often returns
+UNKNOWN rather than CONFLICTING, so the trigger comment is silently
+skipped. The canonical fix is a bounded poll loop until mergeable !=
+UNKNOWN (per GitHub docs). Not user-visible today (the job goes green
+either way) — it just fails to fire on a fraction of conflicting PRs.

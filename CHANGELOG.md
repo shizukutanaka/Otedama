@@ -37,6 +37,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    修正 — directive 後の `—` 継続は nolint 構文外で lint が発動しない
    状態になっていた。
 
+### 修正 (session 458)
+
+1. i18n テンプレート変数 parity・RenderWith 引数整合・logger/version/ldflags
+   を機械監査（全 clean）。`devin-direct-merge.yml` の mergeable 即時参照が
+   GitHub 非同期計算で UNKNOWN を返し得る問題を RESEARCH_IMPROVEMENTS に
+   メンテナ向け記録（workflows 編集範囲外）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
