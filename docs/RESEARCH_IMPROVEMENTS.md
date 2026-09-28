@@ -972,3 +972,18 @@ to the Prometheus text exposition format. One latent gap fixed:
 RuntimeCollector's HELP lines bypassed escapeHelp — harmless today
 (constant help strings) but a scrape-corruption trap for any future
 help containing a newline or backslash.
+
+## Session 457
+
+New-detector-class sweep (linters the repo config does not enable):
+staticcheck SA — three SA9003 empty branches, all deliberate
+comment-only no-ops in tests (no masked assertions); nilerr — one hit
+in daemon/statusWindowsService that is documented design (missing
+service = Status's normal "not found"); perfsprint/unconvert/unparam/
+bodyclose/usestdlibvars — only cosmetic fmt.Errorf→errors.New and
+single-arg Sprintf→concat hits, out of configured scope. One real fix:
+a malformed `//nolint:errcheck` directive on dialer_test.go:641 (the
+`—` continuation put the comment outside nolint syntax, silently
+un-suppressing it) replaced with an explicit `_, _ =` discard.
+httpserver endpoints audited clean: full timeout set (ReadHeader 5s
+slowloris), pprof gated, index 404s non-root paths.

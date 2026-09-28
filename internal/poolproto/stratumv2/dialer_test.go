@@ -638,7 +638,7 @@ func TestDialer_Negotiate_ReadSetupResponseFails(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		pool.dec.ReadFrame() //nolint:errcheck — discard
+		_, _ = pool.dec.ReadFrame()
 		pool.conn.Close()
 	}()
 

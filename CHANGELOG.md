@@ -31,6 +31,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    将来の help 文字列に `\n`/`\\` が混入した場合に scrape 破損を招く
    潜伏的不整合を解消。
 
+### 修正 (session 457)
+
+1. `dialer_test.go` の不正な `//nolint:errcheck` コメントを `_ =` 破棄に
+   修正 — directive 後の `—` 継続は nolint 構文外で lint が発動しない
+   状態になっていた。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
