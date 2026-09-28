@@ -89,6 +89,7 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
+		Flags:           stratum.FlagRequiresStandardJobs,
 		Endpoint:        epHost,
 		EndpointPort:    epPort,
 		Vendor:          "Otedama",

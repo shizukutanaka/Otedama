@@ -65,6 +65,17 @@ const (
 	MiningProtocol Protocol = 0
 )
 
+// SetupConnection.flags bits for the Mining Protocol (sv2-spec §5.3.1).
+// Otedama is an end mining device that opens standard channels and
+// cannot process extended jobs, so every SetupConnection it sends
+// carries FlagRequiresStandardJobs — matching the reference
+// implementation (SRI's device sends flags=1).
+const (
+	FlagRequiresStandardJobs   uint32 = 1 << 0
+	FlagRequiresWorkSelection  uint32 = 1 << 1
+	FlagRequiresVersionRolling uint32 = 1 << 2
+)
+
 // ------------------------------------------------------------------
 // NewMiningJob (server → client, msg_type 0x15, channel_msg)
 // ------------------------------------------------------------------

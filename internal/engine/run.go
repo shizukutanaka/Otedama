@@ -1177,6 +1177,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		Protocol:        stratum.MiningProtocol,
 		MinVersion:      2,
 		MaxVersion:      2,
+		Flags:           stratum.FlagRequiresStandardJobs,
 		Endpoint:        epHost,
 		EndpointPort:    epPort,
 		Vendor:          "Otedama",
