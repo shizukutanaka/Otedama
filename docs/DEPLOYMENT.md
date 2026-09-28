@@ -379,6 +379,9 @@ Minimal alert set:
 4. Use the same wallet passphrase; seeds are forward-compatible
    across minor versions.
 
+`wallet.fingerprint` needs no backup — the daemon recreates it the
+first time it opens a wallet.dat that lacks one.
+
 ---
 
 ## Backup and recovery

@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   誤作成しない（`NewWalletManager` は不在時に新規作成する契約のため）。
 - データディレクトリは `run` と同一の4層優先（flag > env > config.yaml >
   プラットフォーム既定）で解決。
+- バックアップ復元（wallet.dat 単体コピー）で欠落した `wallet.fingerprint`
+  を既存ウォレット open 時に再生成 — フィンガープリント照合が復元後も
+  復号不要で動作する。既存ファイルは上書きしない（不一致は改竄シグナル）。
 
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
