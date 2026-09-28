@@ -1,12 +1,16 @@
 # Verifying Otedama Release Artifacts
 
-Every Otedama release ships with cryptographic provenance. This document
-explains how to verify that the binary you downloaded was built by the
-Otedama project's GitHub Actions, was not tampered with in transit, and
-contains the source code documented in the corresponding tag.
+> **Status: the signed-release pipeline described below is not yet live.**
+> The current `release.yml` workflow builds plain tarballs — it does not
+> produce `checksums.txt`, cosign signatures, or SBOMs. The `.goreleaser.yaml`
+> config that would generate them exists but is not wired into CI. Until a
+> release actually ships those assets, the only available verification is
+> rebuilding from source (see "Verifying the source matches the release").
+> Do not trust a downloaded artifact you cannot verify.
 
-If any verification step fails, **do not run the binary**. Open a
-security advisory per `SECURITY.md`.
+This document describes the **intended** verification flow once the
+goreleaser pipeline is live, plus the source-rebuild check that works
+today.
 
 ## What to verify
 
@@ -27,24 +31,27 @@ For each release, four artifacts can be verified:
 # Pick the version you downloaded.
 VERSION="v3.0.0-alpha.1"
 ARCHIVE="otedama_${VERSION}_linux_amd64.tar.gz"
+# The checksums asset is named per .goreleaser.yaml's name_template:
+# "{{ .ProjectName }}_{{ .Version }}_checksums.txt".
+CHECKSUMS="otedama_${VERSION}_checksums.txt"
 
 # 1. Download the artifact, the checksums, and the signature.
 gh release download "${VERSION}" --repo shizukutanaka/Otedama \
   -p "${ARCHIVE}" \
-  -p "checksums.txt" \
-  -p "checksums.txt.sig" \
-  -p "checksums.txt.pem"
+  -p "${CHECKSUMS}" \
+  -p "${CHECKSUMS}.sig" \
+  -p "${CHECKSUMS}.pem"
 
-# 2. Verify the signature on checksums.txt.
+# 2. Verify the signature on the checksums file.
 cosign verify-blob \
   --certificate-identity-regexp 'https://github.com/shizukutanaka/Otedama/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --signature checksums.txt.sig \
-  --certificate checksums.txt.pem \
-  checksums.txt
+  --signature "${CHECKSUMS}.sig" \
+  --certificate "${CHECKSUMS}.pem" \
+  "${CHECKSUMS}"
 
 # 3. Verify the binary matches its checksum.
-sha256sum --check --ignore-missing checksums.txt
+sha256sum --check --ignore-missing "${CHECKSUMS}"
 ```
 
 If both `cosign verify-blob` and `sha256sum --check` exit 0, the
@@ -59,15 +66,15 @@ verification work without contacting Rekor or Fulcio at runtime.
 # Use the all-in-one bundle file instead of separate .sig + .pem.
 gh release download "${VERSION}" --repo shizukutanaka/Otedama \
   -p "${ARCHIVE}" \
-  -p "checksums.txt" \
-  -p "checksums.txt.bundle"
+  -p "${CHECKSUMS}" \
+  -p "${CHECKSUMS}.bundle"
 
 cosign verify-blob \
   --certificate-identity-regexp 'https://github.com/shizukutanaka/Otedama/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --bundle checksums.txt.bundle \
+  --bundle "${CHECKSUMS}.bundle" \
   --offline \
-  checksums.txt
+  "${CHECKSUMS}"
 ```
 
 The `--offline` flag tells cosign to verify using only the bundle's
@@ -88,7 +95,7 @@ same `cosign verify-blob` invocation above.
 To check the binary you have for known vulnerabilities:
 
 ```bash
-osv-scanner --sbom sbom.cyclonedx.json
+osv-scanner --sbom "otedama_${VERSION}_linux_amd64.sbom.cyclonedx.json"
 ```
 
 ## Identity values: how to know what to use
