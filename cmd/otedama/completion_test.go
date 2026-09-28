@@ -5,6 +5,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -78,5 +80,56 @@ func TestJoinOr_TwoItemsUsesOr(t *testing.T) {
 	got := joinOr([]string{"bash", "zsh"})
 	if !strings.Contains(got, "bash") || !strings.Contains(got, "zsh") || !strings.Contains(got, "or") {
 		t.Errorf("joinOr([bash,zsh]) = %q, want 'bash or zsh' form", got)
+	}
+}
+
+// TestCompletion_VerbListsMatchDispatch pins the sync the file header
+// demands: the three static completion scripts list subcommands
+// verbatim, so adding a dispatch case without updating them produces
+// scripts that can never complete it (the class of drift that let a
+// subcommand ship un-completable). Parses the canonical verbs out of
+// run()'s switch and asserts each script's verb list covers them.
+func TestCompletion_VerbListsMatchDispatch(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	// Canonical verbs = the first bare (non-dash) word of each case's
+	// quoted alternatives in the dispatch switch on args[0].
+	dispatch := map[string]bool{}
+	for _, m := range regexp.MustCompile(`case\s+"([a-z][a-z-]*)"`).FindAllStringSubmatch(string(src), -1) {
+		dispatch[m[1]] = true
+	}
+	if len(dispatch) < 5 {
+		t.Fatalf("dispatch verb extraction found only %v — main.go layout changed?", dispatch)
+	}
+
+	// bash/zsh declare their verb list on one commands= line each;
+	// fish lists one -a <verb> entry per line.
+	scripts := map[string][]string{
+		"bash": regexp.MustCompile(`local commands="([^"]+)"`).FindStringSubmatch(bashCompletion)[1:2],
+		"zsh":  regexp.MustCompile(`commands=\(([^)]+)\)`).FindStringSubmatch(zshCompletion)[1:2],
+	}
+	bashVerbs := strings.Fields(scripts["bash"][0])
+	zshVerbs := strings.Fields(scripts["zsh"][0])
+	fishVerbs := []string{}
+	for _, m := range regexp.MustCompile(`-a (\w+)\s+-d `).FindAllStringSubmatch(fishCompletion, -1) {
+		fishVerbs = append(fishVerbs, m[1])
+	}
+	for shell, verbs := range map[string][]string{"bash": bashVerbs, "zsh": zshVerbs, "fish": fishVerbs} {
+		set := map[string]bool{}
+		for _, v := range verbs {
+			set[v] = true
+		}
+		for v := range dispatch {
+			if !set[v] {
+				t.Errorf("%s completion missing dispatch verb %q", shell, v)
+			}
+		}
+		for v := range set {
+			if !dispatch[v] {
+				t.Errorf("%s completion lists %q but no such subcommand exists", shell, v)
+			}
+		}
 	}
 }

@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 467
+
+Added a mechanical sync guard for the completion-script verb lists:
+the three static scripts (bash/zsh/fish) enumerate subcommands
+verbatim and the file header demands they track run()'s dispatch
+switch — but nothing enforced it, which is exactly the drift class
+that let a subcommand ship un-completable.
+TestCompletion_VerbListsMatchDispatch parses the canonical verbs out
+of the dispatch switch and asserts each script's list covers exactly
+that set — a future subcommand added to dispatch without updating
+the scripts now fails CI's test leg instead of shipping a gap.
+httpserver re-audited clean (timeouts, pprof gating, ServeError seam,
+graceful shutdown); all yaml fields are covered by
+config.yaml.example.
