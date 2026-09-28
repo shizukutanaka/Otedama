@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 426 — .gitignore の v2 遺構除去)
+
+- 存在しないツリーを対象とする8セクションを削除: `web/`（Node.js 系 —
+  CLAUDE.md の作成禁止パス）、`scripts/`（Python 系）、docs サイト生成物
+  （.docusaurus/.vuepress — SSG 未導入）、Lightning ノードファイル
+  （channel.db/neutrino.db/lnd.conf — `internal/lightning` は BIP-39 シード
+  保管庫でありノードではない）、Bitcoin Core データ（プール接続のみ）、
+  docker-compose override（compose ファイル自体が非存在）、v2 クリーンアップ
+  残骸（fix_*.sh）、マイニングキャッシュ（work-cache/ 等 — 生成コード無し）。
+- 死んだ許可リスト項目 `!config.production.yaml` / `!SHA256SUMS.example` と
+  SHA256SUMS グロブを削除 — リリースのチェックサムは `otedama_v*_checksums.txt`。
+- 実際に生成される全て（wallet.dat、config.yaml、coverage、prof、リリース
+  アーカイブ、ビルドバイナリ）は引き続き除外済み。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

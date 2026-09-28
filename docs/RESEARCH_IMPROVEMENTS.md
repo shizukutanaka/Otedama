@@ -939,3 +939,37 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 426 — .gitignore: strip vestigial v2 sections [HYGIENE]
+
+The ignore file still described the pre-reset repository, not this one —
+eight sections covered trees that do not exist and per CLAUDE.md cannot
+be created:
+
+- `web/` Node.js section (node_modules, .next, …) — `web/` is on the
+  forbidden-path list; advertising it here contradicts the architecture
+  map.
+- `scripts/` Python section — no scripts/ directory exists (the release
+  workflow's deb/rpm job already fails on exactly this).
+- Docs-site outputs (docs/.docusaurus, site/, .vuepress) — docs/ is plain
+  Markdown; no SSG is wired.
+- Lightning node files (channel.db, neutrino.db, lnd.conf, ldk-node/) —
+  Otedama's `internal/lightning` is a BIP-39 seed vault, not an LDK/LND
+  node; it writes none of these (wallet.dat is covered separately).
+- Bitcoin Core data dirs (blocks/, chainstate/, peers.dat) — the miner
+  talks to pools; no Core instance is embedded.
+- docker-compose overrides — no compose file exists.
+- "Legacy v2 cleanup artifacts" (fix_*.sh, remove_*.sh) — the reset
+  already happened.
+- Dead allowlist entries `!config.production.yaml` / `!SHA256SUMS.example`
+  — neither file exists; release checksums are named
+  `otedama_v*_checksums.txt`, so the SHA256SUMS glob was removed too.
+- Mining caches (work-cache/, share-cache/, benchmark-results/) — no code
+  writes these paths.
+
+Kept: everything the codebase can actually produce (wallet.dat,
+config.yaml, coverage, profiling output, release archives, the built
+binary) plus generic editor/OS shields.
+
+Sources for what does not exist: CLAUDE.md architecture map, the repo
+tree itself, and .goreleaser.yaml's nfpms/archives file lists.
