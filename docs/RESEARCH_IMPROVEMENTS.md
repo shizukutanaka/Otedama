@@ -939,3 +939,12 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 474
+
+Batch CATEGORY_AUDIT correction — three stale deferred rows updated to
+resolved: Windows Status() (statusWindowsService + sc.exe query ships),
+sc.exe binPath quoting (quoteToken %q-wraps whitespace values),
+OpenMiningChannel.MaxTargetNBits (spec-verified: max_target U256
+intentionally omitted — pool assigns the target; never-serialized
+field removed and documented in handshake.go).

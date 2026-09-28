@@ -74,11 +74,13 @@ finding was re-verified against the code before any change.
   args. Introduced a canonical `serviceArgv() []string` consumed directly by
   launchd (one `<string>` per element), with XML-escaping of values; `serviceArgs`
   (systemd/Windows) now joins it with selective quoting. (tests added.)
-- ⏸ Windows `Status()` returns "unsupported platform" though install/uninstall
-  work on Windows — incomplete. Deferred (needs `sc.exe query` parsing; can't be
-  exercised from the Linux CI).
-- ⏸ Windows `sc.exe binPath=` quoting of values with spaces is fragile —
-  deferred with the Windows-status work.
+- ✅ Windows `Status()` returns "unsupported platform" though install/uninstall
+  work on Windows — FIXED: `statusWindowsService` queries SCM via `sc.exe query`
+  and reports Installed/Running (missing service → "not installed", matching
+  statusLaunchd's convention).
+- ✅ Windows `sc.exe binPath=` quoting of values with spaces — FIXED by the
+  `serviceArgv`/`quoteToken` work recorded above: whitespace/quote-containing
+  elements are `%q`-quoted, which sc.exe's binPath parser accepts.
 
 ### O — Metrics
 - ✅ **HELP text not escaped (Prometheus spec violation).** A help string with a
@@ -149,11 +151,10 @@ and flagged, not changed this session:
 - ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
   V2 read loop `continue`s silently — adding a debug log would aid attack
   triage. Deferred (forward-compat behaviour is intentional).
-- ⏸ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding: an audit pass
-  suggested a missing field, but the exact SV2 field set must be confirmed
-  against the spec before touching the working round-trip — not changed (the
-  project forbids acting on an unverified spec claim). Tracked for the secp256k1
-  work which revisits the channel messages.
+- ✅ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding — RESOLVED:
+  spec-verified; `max_target` (U256) is intentionally not implemented since
+  Otedama accepts the pool-assigned target, and the never-serialized
+  `MaxTargetNBits` field was removed. Documented in handshake.go.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

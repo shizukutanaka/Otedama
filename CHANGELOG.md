@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 474)
+
+1. CATEGORY_AUDIT の陳腐化行3件を一括訂正 — Windows Status()（
+   statusWindowsService 実装済み）・sc.exe binPath クォーティング
+   （quoteToken で解決済み）・OpenMiningChannel.MaxTargetNBits
+   （spec 照合済み・意図的省略を明記）を resolved に更新。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
