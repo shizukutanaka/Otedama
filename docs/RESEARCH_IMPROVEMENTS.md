@@ -939,3 +939,11 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 390 — wallet temp-file sweep + save() failure-path tests
+
+[FIXED — session 390] **Stale wallet temp files swept at startup** (`internal/lightning/wallet.go`): `save()`'s atomic write (CreateTemp → write → fsync → chmod → rename) leaves a `.wallet-*.tmp` file behind if the process is killed mid-write or a late step fails. Nothing ever removed them, so every failed save accumulated a permanent ciphertext fragment in the data dir — confusing operators and backup tooling. `sweepStaleTempFiles` runs once in `NewWalletManager` after `MkdirAll` and removes only files older than `staleTempMaxAge` (1 min): a live save holds its tmp for milliseconds, so the age gate both guarantees the file is abandoned and prevents unlinking a temp file mid-write in a second process sharing the data dir. Best-effort — a sweep error never blocks startup. Changes in `internal/lightning` are CODEOWNERS-reviewed per repo policy.
+
+[FIXED — session 390] **save() failure-path coverage**: three tests — stale/fresh/decoy sweep behavior, encrypt-failure leaves zero temp files (`failAfterNReader` exhausting after the 32-byte entropy read), read-only data dir propagates a wrapped CreateTemp error. Lightning package coverage improves at the lowest-covered function (save 62%).
+
+[AUDITED — clean] Coverage sweep: every package sits at 92–99% (above the 90% bar); zero TODO/FIXME/XXX/`unsafe` in non-test code; benchmarks exist on all hot paths (miner grind, sha256d, metrics write, noise HMAC, clock, version). Japanese-source scan this week: no new Qiita/Zenn mining-ops posts relevant to Otedama's stratum layer.

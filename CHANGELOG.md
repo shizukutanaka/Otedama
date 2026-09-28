@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 390)
+
+- save() のクラッシュ/失敗で残った `.wallet-*.tmp` がデータディレクトリに永久蓄積していた問題を修正 — NewWalletManager 起動時に mtime が1分超の古い temp ファイルのみ掃除（インフライトの save() や他プロセスの新規 tmp は保全、best-effort で起動を阻害しない）。併せて `save()` の失敗経路（暗号化エラー・書き込み不可ディレクトリ・tmp 残留なし）のテストを追加。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
