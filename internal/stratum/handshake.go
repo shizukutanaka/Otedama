@@ -153,16 +153,27 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 // OpenMiningChannel requests a new mining channel on an established
 // connection. Each channel corresponds to one "mining device".
 //
-// Note: the SV2 spec's max_target (U256) field is intentionally not
-// implemented — Otedama accepts whatever share target the pool assigns
-// (OpenMiningChannelSuccess.Target, later adjusted via SetTarget), so
-// advertising a preference would be dead configuration. A previous
-// version of this struct carried a MaxTargetNBits field that Encode
-// never serialized; it was removed rather than left silently dropped.
+// The spec field set (OpenStandardMiningChannel, msg_type 0x10) is
+// request_id, user_identity, nominal_hash_rate, max_target — the U256
+// max_target MUST be on the wire, so the struct carries it even though
+// Otedama has no difficulty preference: callers set MaxTargetAny()
+// (all-0xFF) to encode "accept whatever target the pool assigns".
 type OpenMiningChannel struct {
-	ReqID           uint32  // caller-assigned, echoed in response
-	User            string  // STR0_255: worker identifier (usually Bitcoin address)
-	NominalHashrate float32 // H/s, informational
+	ReqID           uint32   // caller-assigned, echoed in response
+	User            string   // STR0_255: worker identifier (usually Bitcoin address)
+	NominalHashrate float32  // H/s, informational
+	MaxTarget       [32]byte // U256: highest (easiest) share target accepted
+}
+
+// MaxTargetAny returns the U256 maximum — a share target of all-0xFF
+// accepts any pool-assigned difficulty, which is what Otedama always
+// wants (the pool's target is applied verbatim; see
+// OpenMiningChannelSuccess.Target and SetTarget).
+func MaxTargetAny() (t [32]byte) {
+	for i := range t {
+		t[i] = 0xFF
+	}
+	return t
 }
 
 // Encode serialises OpenMiningChannel.
@@ -173,7 +184,9 @@ func (m OpenMiningChannel) Encode() ([]byte, error) {
 		return nil, err
 	}
 	// NominalHashrate: IEEE 754 float32 little-endian.
-	return appendU32LE(b, float32bits(m.NominalHashrate)), nil
+	b = appendU32LE(b, float32bits(m.NominalHashrate))
+	// max_target: U256, fixed 32 bytes, no length prefix.
+	return append(b, m.MaxTarget[:]...), nil
 }
 
 // DecodeOpenMiningChannel parses OpenMiningChannel.
@@ -192,6 +205,9 @@ func DecodeOpenMiningChannel(payload []byte) (OpenMiningChannel, error) {
 		return m, fmt.Errorf("stratum: OpenMiningChannel.NominalHashrate: %w", err)
 	}
 	m.NominalHashrate = float32frombits(binary.LittleEndian.Uint32(f[:]))
+	if _, err := io.ReadFull(r, m.MaxTarget[:]); err != nil {
+		return m, fmt.Errorf("stratum: OpenMiningChannel.MaxTarget: %w", err)
+	}
 	return m, nil
 }
 
@@ -201,32 +217,39 @@ func DecodeOpenMiningChannel(payload []byte) (OpenMiningChannel, error) {
 
 // OpenMiningChannelSuccess is sent by the pool to confirm the channel
 // and provide the initial difficulty target.
+//
+// Spec field set (OpenStandardMiningChannel.Success, msg_type 0x11):
+// request_id, channel_id, target, extranonce_prefix, group_channel_id.
 type OpenMiningChannelSuccess struct {
 	ReqID     uint32   // echoes OpenMiningChannel.ReqID
 	ChannelID uint32   // assigned by pool
 	Target    [32]byte // U256 (fixed 32 bytes, no length prefix): initial target hash
-	// Extranonce is B0_32 per the SV2 spec (1-byte length prefix, max 32
-	// bytes). Postel's law applies here: Encode is strict (appendB0_32
-	// rejects >32 bytes, since a value Otedama generates must be
-	// conformant), but Decode stays lenient (getB0_255 below) — a
-	// non-conformant pool sending a 33..255-byte extranonce is still
-	// bounded and allocation-safe, so we accept and use it rather than
-	// dropping an otherwise-working connection over a spec-length nit.
-	Extranonce      []byte
-	ExtraNonce2Size uint16
+	// ExtranoncePrefix is B0_32 per the SV2 spec (1-byte length prefix,
+	// max 32 bytes). Postel's law applies here: Encode is strict
+	// (appendB0_32 rejects >32 bytes, since a value Otedama generates
+	// must be conformant), but Decode stays lenient (getB0_255 below) — a
+	// non-conformant pool sending a 33..255-byte prefix is still bounded
+	// and allocation-safe, so we accept and use it rather than dropping
+	// an otherwise-working connection over a spec-length nit.
+	ExtranoncePrefix []byte
+	// GroupChannelID identifies the group channel the new channel
+	// belongs to (spec: SetGroupChannel). Otedama mines a single
+	// standard channel and does not consume group assignments, but the
+	// field is part of the wire layout and must be parsed.
+	GroupChannelID uint32
 }
 
 // Encode serialises OpenMiningChannelSuccess.
 func (m OpenMiningChannelSuccess) Encode() ([]byte, error) {
-	b := make([]byte, 0, 4+4+32+1+len(m.Extranonce)+2)
+	b := make([]byte, 0, 4+4+32+1+len(m.ExtranoncePrefix)+4)
 	b = appendU32LE(b, m.ReqID)
 	b = appendU32LE(b, m.ChannelID)
 	b = append(b, m.Target[:]...)
-	b, err := appendB0_32(b, m.Extranonce)
+	b, err := appendB0_32(b, m.ExtranoncePrefix)
 	if err != nil {
 		return nil, err
 	}
-	return appendU16LE(b, m.ExtraNonce2Size), nil
+	return appendU32LE(b, m.GroupChannelID), nil
 }
 
 // DecodeOpenMiningChannelSuccess parses OpenMiningChannelSuccess.
@@ -243,13 +266,13 @@ func DecodeOpenMiningChannelSuccess(payload []byte) (OpenMiningChannelSuccess, e
 	if _, err := io.ReadFull(r, m.Target[:]); err != nil {
 		return m, fmt.Errorf("stratum: OpenMiningChannelSuccess.Target: %w", err)
 	}
-	// Extranonce is spec'd B0_32, but we read it with getB0_255 on purpose
-	// (lenient decode; see the field comment above). A conformant pool
-	// never exceeds 32 bytes anyway.
-	if m.Extranonce, err = getB0_255(r); err != nil {
+	// extranonce_prefix is spec'd B0_32, but we read it with getB0_255 on
+	// purpose (lenient decode; see the field comment above). A conformant
+	// pool never exceeds 32 bytes anyway.
+	if m.ExtranoncePrefix, err = getB0_255(r); err != nil {
 		return m, err
 	}
-	if m.ExtraNonce2Size, err = getU16LE(r); err != nil {
+	if m.GroupChannelID, err = getU32LE(r); err != nil {
 		return m, err
 	}
 	return m, nil

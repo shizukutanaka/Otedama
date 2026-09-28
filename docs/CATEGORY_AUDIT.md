@@ -149,11 +149,18 @@ and flagged, not changed this session:
 - ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
   V2 read loop `continue`s silently — adding a debug log would aid attack
   triage. Deferred (forward-compat behaviour is intentional).
-- ⏸ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding: an audit pass
-  suggested a missing field, but the exact SV2 field set must be confirmed
-  against the spec before touching the working round-trip — not changed (the
-  project forbids acting on an unverified spec claim). Tracked for the secp256k1
-  work which revisits the channel messages.
+- ✅ **`OpenMiningChannel`/`OpenMiningChannelSuccess` wire drift — verified
+  against the live spec and fixed (session 443).** The deferred suspicion was
+  real and worse than recorded: sv2-spec's `OpenStandardMiningChannel` (0x10)
+  carries a mandatory `max_target` U256 that Otedama omitted entirely (frame
+  32 bytes short — a spec-conformant pool cannot parse it), and `.Success`
+  (0x11) carries `group_channel_id` U32 where Otedama read a U16
+  `extranonce_size` (a pre-group-channel spec revision's layout). Fixed:
+  `MaxTarget` is now on the wire (callers send `MaxTargetAny()` = all-0xFF,
+  "accept any pool-assigned target" — the honest encoding of the old
+  no-preference intent), and the success struct uses spec field names/types
+  `ExtranoncePrefix` (B0_32 strict-encode, lenient-decode) + `GroupChannelID`
+  U32. Verified vs sv2-spec `main` and SRI's `mining_sv2` crate.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

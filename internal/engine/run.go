@@ -1207,6 +1207,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	omc := stratum.OpenMiningChannel{
 		ReqID:           1,
 		User:            user,
+		MaxTarget:       stratum.MaxTargetAny(),
 		NominalHashrate: hashRate,
 	}
 	if err := sendMsg(conn, stratum.MsgOpenMiningChannel, false, &omc); err != nil {
@@ -1269,7 +1270,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)

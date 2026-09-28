@@ -939,3 +939,28 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+
+## Session 443 — SV2 spec verification: OpenMiningChannel field drift [GIT-UPSTREAM, SPEC]
+
+Took the audit's only remaining ⏸ wire-encoding item to the source. The
+sv2-spec's `OpenStandardMiningChannel` (msg_type 0x10) defines four
+fields — request_id, user_identity, nominal_hash_rate, **max_target
+(U256)** — and Otedama's encoder sent only three: a frame 32 bytes short
+that no spec-conformant pool can parse. Likewise
+`OpenStandardMiningChannel.Success` (0x11) ends in `group_channel_id`
+(U32), where Otedama decoded a U16 `extranonce_size` — the layout of a
+pre-group-channel spec revision. Verified both against sv2-spec `main`
+and the reference implementation's `mining_sv2` crate (which serialises
+max_target and group_channel_id verbatim), so this is an interop defect,
+not a stylistic one: the simulated round-trip tests masked it because
+both sides used the same stale layout.
+
+Fix: `OpenMiningChannel.MaxTarget` is now on the wire; both construction
+sites (engine SV2 path, poolproto dialer) send `stratum.MaxTargetAny()`
+— all-0xFF, the honest encoding of "accept whatever target the pool
+assigns" that the previous comment claimed. `OpenMiningChannelSuccess`
+fields renamed to spec (ExtranoncePrefix keeping the B0_32 strict /
+B0_255 lenient Postel split; GroupChannelID U32). Fields are parsed but
+not consumed — engine uses only ChannelID + Target, same as before.
+Tests updated; `go test ./internal/{stratum,engine,poolproto/...}` green.

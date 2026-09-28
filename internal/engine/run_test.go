@@ -105,7 +105,7 @@ func (fp *fakePool) serve() {
 	omcSucc := stratum.OpenMiningChannelSuccess{
 		ReqID:           omc.ReqID,
 		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		GroupChannelID: 4,
 		// All-0xFF target = easiest possible, so the CPU will find shares.
 	}
 	for i := range omcSucc.Target {
@@ -2200,7 +2200,7 @@ func (fp *responsivePool) serve() {
 	omcSucc := stratum.OpenMiningChannelSuccess{
 		ReqID:           omc.ReqID,
 		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		GroupChannelID: 4,
 	}
 	for i := range omcSucc.Target {
 		omcSucc.Target[i] = 0xFF

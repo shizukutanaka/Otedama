@@ -137,6 +137,7 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 		ReqID:           42,
 		User:            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 		NominalHashrate: 1e6, // 1 MH/s
+		MaxTarget:       MaxTargetAny(),
 	}
 	payload, err := orig.Encode()
 	if err != nil {
@@ -156,6 +157,9 @@ func TestOpenMiningChannel_Roundtrip(t *testing.T) {
 	if diff := got.NominalHashrate - orig.NominalHashrate; diff > 1e4 || diff < -1e4 {
 		t.Errorf("NominalHashrate: got %f, want %f", got.NominalHashrate, orig.NominalHashrate)
 	}
+	if got.MaxTarget != orig.MaxTarget {
+		t.Error("MaxTarget mismatch")
+	}
 }
 
 // ----- OpenMiningChannelSuccess -----
@@ -164,13 +168,13 @@ func TestOpenMiningChannelSuccess_Roundtrip(t *testing.T) {
 	orig := OpenMiningChannelSuccess{
 		ReqID:           42,
 		ChannelID:       1,
-		ExtraNonce2Size: 4,
+		GroupChannelID: 4,
 	}
 	// Set a non-zero target
 	for i := range orig.Target {
 		orig.Target[i] = byte(i)
 	}
-	orig.Extranonce = []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	orig.ExtranoncePrefix = []byte{0xDE, 0xAD, 0xBE, 0xEF}
 
 	payload, err := orig.Encode()
 	if err != nil {
@@ -187,11 +191,11 @@ func TestOpenMiningChannelSuccess_Roundtrip(t *testing.T) {
 	if got.Target != orig.Target {
 		t.Error("Target mismatch")
 	}
-	if !bytes.Equal(got.Extranonce, orig.Extranonce) {
-		t.Errorf("Extranonce: got %X, want %X", got.Extranonce, orig.Extranonce)
+	if !bytes.Equal(got.ExtranoncePrefix, orig.ExtranoncePrefix) {
+		t.Errorf("ExtranoncePrefix: got %X, want %X", got.ExtranoncePrefix, orig.ExtranoncePrefix)
 	}
-	if got.ExtraNonce2Size != orig.ExtraNonce2Size {
-		t.Errorf("ExtraNonce2Size: got %d, want %d", got.ExtraNonce2Size, orig.ExtraNonce2Size)
+	if got.GroupChannelID != orig.GroupChannelID {
+		t.Errorf("GroupChannelID: got %d, want %d", got.GroupChannelID, orig.GroupChannelID)
 	}
 }
 
@@ -779,7 +783,7 @@ func TestSubmitSharesError_Encode_EmptyError(t *testing.T) {
 // ============================================================================
 
 func TestDispatchFrame_OpenMiningChannelSuccess(t *testing.T) {
-	orig := OpenMiningChannelSuccess{ReqID: 7, ChannelID: 3, ExtraNonce2Size: 4}
+	orig := OpenMiningChannelSuccess{ReqID: 7, ChannelID: 3, GroupChannelID: 4}
 	payload, err := orig.Encode()
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -858,11 +862,11 @@ func TestOpenMiningChannel_Encode_LongUser(t *testing.T) {
 // extranonce, 33 must be rejected. (This tightened from the earlier 255-byte
 // bound when the field was corrected from B0_255 to its spec type, B0_32.)
 func TestOpenMiningChannelSuccess_Encode_ExtranonceB0_32Boundary(t *testing.T) {
-	ok := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: make([]byte, 32)}
+	ok := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtranoncePrefix: make([]byte, 32)}
 	if _, err := ok.Encode(); err != nil {
 		t.Errorf("Encode should accept a 32-byte extranonce (B0_32 max): %v", err)
 	}
-	tooLong := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: make([]byte, 33)}
+	tooLong := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtranoncePrefix: make([]byte, 33)}
 	if _, err := tooLong.Encode(); err == nil {
 		t.Error("Encode should reject a 33-byte extranonce (exceeds B0_32 max of 32)")
 	}
@@ -881,18 +885,18 @@ func TestOpenMiningChannelSuccess_Decode_LenientExtranonce(t *testing.T) {
 	payload = append(payload, make([]byte, 32)...) // Target (U256)
 	payload = append(payload, 40)                  // extranonce length prefix = 40 (> B0_32 max)
 	payload = append(payload, make([]byte, 40)...) // 40 extranonce bytes
-	payload = appendU16LE(payload, 4)              // ExtraNonce2Size
+	payload = appendU32LE(payload, 4)              // GroupChannelID
 
 	m, err := DecodeOpenMiningChannelSuccess(payload)
 	if err != nil {
 		t.Fatalf("Decode should tolerate a 40-byte extranonce (lenient decode): %v", err)
 	}
-	if len(m.Extranonce) != 40 {
-		t.Errorf("decoded Extranonce = %d bytes, want 40", len(m.Extranonce))
+	if len(m.ExtranoncePrefix) != 40 {
+		t.Errorf("decoded ExtranoncePrefix = %d bytes, want 40", len(m.ExtranoncePrefix))
 	}
-	if m.ReqID != 7 || m.ChannelID != 9 || m.ExtraNonce2Size != 4 {
-		t.Errorf("surrounding fields mis-decoded: ReqID=%d ChannelID=%d ExtraNonce2Size=%d",
-			m.ReqID, m.ChannelID, m.ExtraNonce2Size)
+	if m.ReqID != 7 || m.ChannelID != 9 || m.GroupChannelID != 4 {
+		t.Errorf("surrounding fields mis-decoded: ReqID=%d ChannelID=%d GroupChannelID=%d",
+			m.ReqID, m.ChannelID, m.GroupChannelID)
 	}
 }
 
@@ -920,12 +924,12 @@ func TestDecodeSubmitSharesStandard_ShortPayload(t *testing.T) {
 	}
 }
 
-func TestDecodeOpenMiningChannel_TruncatedAtHashrate(t *testing.T) {
-	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6}
+func TestDecodeOpenMiningChannel_TruncatedAtMaxTarget(t *testing.T) {
+	orig := OpenMiningChannel{ReqID: 1, User: "alice", NominalHashrate: 1e6, MaxTarget: MaxTargetAny()}
 	payload, _ := orig.Encode()
-	// Remove last 3 bytes to cut into the 4-byte float32 field.
+	// Remove last 3 bytes to cut into the trailing 32-byte max_target.
 	if _, err := DecodeOpenMiningChannel(payload[:len(payload)-3]); err == nil {
-		t.Error("expected error for payload truncated at NominalHashrate")
+		t.Error("expected error for payload truncated at MaxTarget")
 	}
 }
 
@@ -948,13 +952,13 @@ func TestDecodeOpenMiningChannelSuccess_TruncatedAtTarget(t *testing.T) {
 	}
 }
 
-func TestDecodeOpenMiningChannelSuccess_TruncatedAtExtraNonce2Size(t *testing.T) {
-	// Build a valid payload then chop the last ExtraNonce2Size bytes.
-	orig := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, Extranonce: []byte{0x01}, ExtraNonce2Size: 4}
+func TestDecodeOpenMiningChannelSuccess_TruncatedAtGroupChannelID(t *testing.T) {
+	// Build a valid payload then chop into the trailing GroupChannelID.
+	orig := OpenMiningChannelSuccess{ReqID: 1, ChannelID: 1, ExtranoncePrefix: []byte{0x01}, GroupChannelID: 4}
 	payload, _ := orig.Encode()
-	// Remove the last 2 bytes (ExtraNonce2Size is uint16).
+	// Remove the last 2 bytes (GroupChannelID is uint32).
 	if _, err := DecodeOpenMiningChannelSuccess(payload[:len(payload)-2]); err == nil {
-		t.Error("expected error for payload missing ExtraNonce2Size")
+		t.Error("expected error for payload missing GroupChannelID")
 	}
 }
 
