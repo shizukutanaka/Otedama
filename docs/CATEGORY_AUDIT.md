@@ -537,7 +537,7 @@ code, or requires a product/infra decision before code can be written.**
 
 | Cat | Finding | Priority | Ref |
 |---|---|---|---|
-| I | 🚩 `internal/btccrypto` secp256k1 Verify/PublicKeyFromBytes/SignatureFromBytes are namespace-reserving stubs returning `ErrSchemeNotImplemented`; ADR-006 ("Accepted") describes them as "concrete implementations" — doc contradicts code. Real dependency (`decred/dcrd/dcrec/secp256k1`) not yet in `go.mod` (ADR-011, Accepted-but-pending). | **High** — core Bitcoin signing is unimplemented | KNOWN_LIMITATIONS §5 |
+| I | 🚩 `internal/btccrypto` secp256k1 Verify/PublicKeyFromBytes/SignatureFromBytes are namespace-reserving stubs returning `ErrSchemeNotImplemented`; real dependency (`decred/dcrd/dcrec/secp256k1`) not yet in `go.mod` (ADR-011, Accepted-but-pending). ~~ADR-006 doc contradiction~~ — resolved session 248 via ADR-006 erratum; remaining gap is code-only. | **High** — core Bitcoin signing is unimplemented | KNOWN_LIMITATIONS §5 |
 | C | 🚩 Noise NX not wired into any live connection except `stratum+v2tls://`; default `stratum+v2://` is plaintext. | **High** — funds/privacy adjacent | KNOWN_LIMITATIONS §2 |
 | D | ⏸ `poolproto` package doc and `stratumv1.go` describe DATUM as a present-tense supported protocol ("Otedama can speak... DATUM"); reality: `ProtocolDATUM` is a URL-scheme constant only, no `Dialer` registered, no `internal/poolproto/datum` package exists. Not yet disclosed in KNOWN_LIMITATIONS. | Medium | found session 246, unfixed |
 | V | ⏸ `.github/workflows/deploy.yml` — non-Go npm/Helm pipeline fails on every push/PR; references forbidden/nonexistent `kubernetes/helm/`. | High (false-negative CI signal on every push) | KNOWN_LIMITATIONS §13 |

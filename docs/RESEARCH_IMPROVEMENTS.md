@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 473
+
+CATEGORY_AUDIT ledger correction (same class as session 468's row-D
+fix): row I claimed ADR-006 still described the secp256k1 schemes as
+"concrete implementations", but the session-248 ADR-006 erratum already
+corrected that — the schemes are ErrSchemeNotImplemented stubs. Row I
+now reflects that the remaining gap is code-only (real secp256k1 dep
+not yet in go.mod; ADR-011 pending maintainer decision). Remaining
+Accepted ADRs re-verified: ADR-001 wallet model ✓, ADR-003 dep count
+matches go.mod (x/crypto + yaml.v3 + permissive secp256k1 amendment) ✓,
+ADR-004 TUI primitives all present ✓, ADR-005 metrics API ✓.

@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 473)
+
+1. CATEGORY_AUDIT 行I の陳腐化修正 — 「ADR-006 が secp256k1 を具体
+   実装と記述・文書とコード矛盾」とされていたが、session 248 の
+   ADR-006 エラッタで文書側は解決済み。残存ギャップはコード側のみ
+   （依存未追加、ADR-011 係留）として帳簿を更新。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
