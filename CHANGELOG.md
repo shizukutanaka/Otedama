@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### セキュリティ (session 410)
+
+THREAT_MODEL.md の虚偽緩和記述を訂正: 「V1 フォールバック非対応→
+ダウングレード不可能」（V1 は実装済み — スキーム選択依存、`stratum://`
+は認証なしの残余リスクを明記）、「fuzz は nightly 実行」（CI ジョブ
+非存在 — `make fuzz` のみ）、「リリースは cosign 署名済み」（未配線）、
+依存数の記述。ADR-002 は ADR-006 で部分 supersede と注記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
