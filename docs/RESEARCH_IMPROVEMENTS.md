@@ -939,3 +939,26 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 477
+
+Audit-verdict round — every remaining surface verified clean:
+
+- `internal/poolproto/stratumv1` read loop: bounded on all axes
+  (5-minute read deadline, `maxLineBytes` ceiling via `ReadSlice`, ctx
+  checks each iteration, `cancelPending` fan-out on close). The V1 side
+  carries the same bounds the V2 sweep established.
+- `config.Validate` field coverage: all fail-fast fields checked
+  (addresses incl. every failover entry, log_level/format, pool url +
+  payout_scheme, all five numeric env-backed fields with ranges).
+  Unvalidated fields (`http_addr`, `data_dir`, `language`) degrade
+  gracefully at their own call sites — documented behavior.
+- Env-var inventory: the only doc-only vars are
+  `OTEDAMA_DATABASE_DRIVER`/`_CONNECTION_STRING`, already disclosed in
+  KNOWN_LIMITATIONS as describing a CI job testing a nonexistent
+  feature — not a doc bug.
+- `.github/CODEOWNERS` paths all resolve to real files/dirs.
+- `internal/lightning` wallet write: temp+sync+chmod(0600)+rename
+  atomic path, correct on every error branch.
+- `internal/clock`: System/Fake abstractions are sound; engine wires
+  `clock.System{}` when unset.

@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 477)
+
+1. コード変更なし（監査検証ラウンド）: V1 セッション読み取り経路・
+   `config.Validate` 網羅性・env 変数棚卸し・CODEOWNERS・ウォレット
+   書き込み原子性・clock 抽象の全件照合、いずれも整合を確認。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
