@@ -46,6 +46,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `SHA256SUMS*` グロブを復元 — release ジョブが `artifacts/*/SHA256SUMS`
   を生成するため除去は誤り（Devin Review 指摘）。
 
+### 修正 (session 430 — v2 時代のエージェント許可ファイルを untrack)
+
+- 追跡されていた `.claude/settings.local.json`（v2 の木を対象とする
+  ~100件の許可エントリ — `internal/mining`・`internal/pool`・
+  `cmd/demo`・WSL パス・ethereum 依存等、全て非実在）を削除し
+  gitignore に追加 — settings.local.json は規約上マシンローカル。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

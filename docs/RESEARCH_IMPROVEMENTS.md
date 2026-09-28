@@ -1025,3 +1025,22 @@ Clean-verdict: `audit`（8 ステップ・30-item 表記は master の実数と�
 
 Sources: `Makefile`, `.github/workflows/ci.yml` (release job),
 `.github/ISSUE_TEMPLATE/*.yml`, `git check-ignore`.
+
+## Session 430 — i18n キー整合 + .claude 設定ファイル [HYGIENE]
+
+- i18n 監査: 全10言語（en/ja/zh/ko/es/ru/ar/fr/de/pt）が同一15キーセット
+  を完全保持 — multi-language ファイル内の言語別 map も個別検証。clean。
+- `CODE_OF_CONDUCT.md`: 実在の Security Advisories URL を通報経路として
+  記載 — clean。
+- 実修正: 追跡されていた `.claude/settings.local.json` が v2 時代の
+  ~100件の許可リスト（`internal/mining`・`internal/pool`・`internal/crypto`・
+  `internal/database`・`internal/monitoring`・`internal/security`・
+  `cmd/demo`・`cmd/improvements*`・`otedama_*.exe`・幻影スクリプト群・
+  WSL `go.exe` パス・ethereum 依存取得コマンド — 全て非実在）を保持。
+  settings.local.json は規約上マシンローカルのため untrack + gitignore。
+- `skills/quality-pass-{opus,sonnet}.md`: 過去セッション修正の
+  元帳として正確（各 G 項目は Fixed 済みの記録）、タスクキューも
+  ブロック要因つきで正直 — clean。
+
+Sources: `internal/i18n/messages/*.go`, `.claude/settings.local.json`,
+`CODE_OF_CONDUCT.md`, `skills/quality-pass-*.md`.
