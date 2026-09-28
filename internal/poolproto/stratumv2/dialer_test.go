@@ -537,6 +537,55 @@ func TestSession_Close_ClosesJobsChannel(t *testing.T) {
 	}
 }
 
+func TestSession_Close_SendsCloseChannel(t *testing.T) {
+	pool, clientConn := newPoolSide(t)
+	d := makeDialer(clientConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	received := make(chan stratum.Frame, 1)
+	go func() {
+		pool.doHandshake(7)
+		// The frame after the handshake should be the client's
+		// CloseChannel teardown (sv2-spec 5.3.9).
+		f, err := pool.dec.ReadFrame()
+		if err != nil {
+			pool.t.Logf("pool: read close frame: %v", err)
+			return
+		}
+		received <- f
+	}()
+
+	conn, _ := d.Dial(ctx, "stratum+v2://pool.example.com:3336", poolproto.Credentials{User: "alice"})
+	sess, err := d.Negotiate(ctx, conn)
+	if err != nil {
+		t.Fatalf("Negotiate: %v", err)
+	}
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	select {
+	case f := <-received:
+		if f.Header.MsgType != stratum.MsgCloseChannel {
+			t.Fatalf("pool received MsgType 0x%02X, want CloseChannel 0x%02X", f.Header.MsgType, stratum.MsgCloseChannel)
+		}
+		cc, err := stratum.DecodeCloseChannel(f.Payload)
+		if err != nil {
+			t.Fatalf("DecodeCloseChannel: %v", err)
+		}
+		if cc.ChannelID != 7 {
+			t.Errorf("CloseChannel.ChannelID = %d, want 7", cc.ChannelID)
+		}
+		if cc.Reason == "" {
+			t.Error("CloseChannel.Reason is empty")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pool did not receive CloseChannel within 2s")
+	}
+}
+
 func TestSession_SuggestedDifficulty_Default(t *testing.T) {
 	pool, clientConn := newPoolSide(t)
 	d := makeDialer(clientConn)
