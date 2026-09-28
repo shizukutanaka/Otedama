@@ -723,12 +723,52 @@ compare fingerprints, print match/mismatch) and `otedama wallet
 change-passphrase` (wiring the existing, already-tested
 `ChangePassphrase`) would close both halves without new dependencies.
 
+**Status note:** being addressed by PR #529 — `otedama wallet verify`
+(stdin mnemonic → BIP-39 checksum → fingerprint comparison, no wallet.dat
+decryption needed) and `otedama wallet change-passphrase` (wiring the
+existing `ChangePassphrase`), plus a fingerprint-sidecar self-heal so
+`verify` works after restoring a bare wallet.dat backup.
+
+---
+
+## 17. Stratum V1 shares are structurally invalid — every V1 share is rejected at the pool
+
+**What:** the V1 job→work path (`engine.applyJob`, internal/engine/run.go)
+populates only `MerkleRoot`, `Time`, and `Bits` on the block header —
+leaving `Version` and `PrevHash` at zero. And `MerkleRoot` is zero
+regardless: `parseNotify` (internal/poolproto/stratumv1/parse.go) parses
+`mining.notify` but discards `coinb1`, `coinb2`, and `merkle_branch`
+(params 2–4), so the merkle root can never be reconstructed for a real
+job. `job.PrevHash` *is* parsed but is never consulted by `applyJob`.
+
+This is the same defect class as the V2 pre-repair state (§11, resolved
+session 238): the header being hashed is structurally invalid regardless
+of what the pool sent. In V1's case it is three fields at zero.
+
+**Impact:** a V1 pool reconstructs the *real* header (real coinbase +
+extranonce + merkle branch) when validating `mining.submit`, and it can
+never match a hash computed over `Version=0, PrevHash=0, MerkleRoot=0`.
+Every V1 share is pool-side invalid. The V1 session connects, receives
+jobs, and appears to mine — but earns nothing. V2 (`stratum+v2://` /
+`stratum+v2tls://`) is unaffected.
+
+**Workaround:** use the Stratum V2 path — `stratum+v2://` or
+`stratum+v2tls://` pools. There is no V1 workaround.
+
+**Target:** the fix exists but was declined — PR #391 (closed unmerged)
+reconstructed the coinbase and merkle branch per job from `coinb1` /
+`coinb2` / `merkle_branch` so V1 headers hash to pool-valid values, and
+handled the V1 prevhash word-swap convention. The change touches the V1
+job→work path (engine + stratumv1), so revival is a maintainer call.
+
 ---
 
 ## How to verify the real vs. simulated boundary yourself
 
 - **Mining (real):** `otedama run --bitcoin-address bc1q...` connects to
-  a real Stratum pool and submits real shares.
+  a real Stratum pool and submits real shares — with the §17 caveat that
+  V1 (`stratum+tcp://`/`stratum+tls://`) shares are structurally invalid
+  at the pool; use `stratum+v2://`/`stratum+v2tls://` to actually earn.
 - **Inference (simulated):** any provider whose name ends in
   "(simulated)" is modelled, not live.
 - **Self-check:** `otedama doctor` runs diagnostic checks; `otedama

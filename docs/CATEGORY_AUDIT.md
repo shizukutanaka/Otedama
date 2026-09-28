@@ -149,6 +149,15 @@ and flagged, not changed this session:
 - ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
   V2 read loop `continue`s silently — adding a debug log would aid attack
   triage. Deferred (forward-compat behaviour is intentional).
+- 🔴 **`engine.applyJob` / `parseNotify` — V1 header structurally invalid
+  (recorded as KNOWN_LIMITATIONS §17, session 445).** The V1 job→work path
+  leaves `Version`/`PrevHash`/`MerkleRoot` at zero (the §11.3 defect class
+  fixed for V2 in session 238); `parseNotify` discards `coinb1`/`coinb2`/
+  `merkle_branch` so the merkle can't be reconstructed at all, and the
+  parsed `job.PrevHash` is never consulted. Every V1 share is
+  pool-side-invalid — the pool validates against the real header. A fix
+  exists (PR #391, closed unmerged: reconstruct coinbase+merkle per job) —
+  revival is a maintainer call.
 - ⏸ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding: an audit pass
   suggested a missing field, but the exact SV2 field set must be confirmed
   against the spec before touching the working round-trip — not changed (the

@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 445 — V1 share-validity audit: KNOWN_LIMITATIONS §17 [BEST-PRACTICE]
+
+Extending the session-443/444 spec-conformance sweep to the V1
+job→work path surfaced a live defect already documented by a rejected
+fix: `engine.applyJob` leaves `Version`, `PrevHash`, and `MerkleRoot`
+all zero (identical defect class to the §11 pre-repair V2 state fixed
+in session 238), and `stratumv1.parseNotify` discards `coinb1`/`coinb2`/
+`merkle_branch` so the merkle root can never be reconstructed. Every
+V1 `mining.submit` is pool-side-invalid — the session connects and
+"mines" but earns nothing on a real pool. A fix exists (PR #391, closed
+unmerged), so per the closed-PR-is-rejection convention the deliverable
+is honest documentation: new KNOWN_LIMITATIONS §17 with a V2-only
+workaround and a pointer to the rejected fix, plus the "submits real
+shares" verification bullet corrected for V1. No code change this round.
