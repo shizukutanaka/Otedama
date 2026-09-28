@@ -14,19 +14,20 @@
 //  2. Overwrites all lines with fresh data.
 //  3. Saves the cursor position again for the next refresh.
 //
-// # Terminal width (not yet auto-detected)
+// # Terminal width
 //
-// SetWidth lets a caller inject the real terminal width (intended
-// source: TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows),
-// but no caller in this codebase actually calls it in production —
-// engine.Run's dashboard always runs at the NewDashboard default of 80
-// columns, regardless of the real terminal size. See
-// docs/KNOWN_LIMITATIONS.md §15. What IS handled correctly regardless
-// of the real width: every
-// line is truncated to fit whatever width is configured, and the most
-// important field on each line (pool connection status, in particular)
-// is sized from a dynamic budget rather than a fixed offset, so it
-// cannot be silently cut off even at the documented 40-column minimum.
+// When the output writer is a real terminal file (os.Stdout in
+// production), each render tick queries the kernel for the live column
+// count — TIOCGWINSZ on Unix, GetConsoleScreenBufferInfo on Windows —
+// so the dashboard tracks both the initial size and later resizes.
+// SetWidth overrides detection (used by tests and non-terminal callers);
+// a non-file writer or a failed query falls back to the NewDashboard
+// default of 80 columns. What is handled correctly regardless of the
+// real width: every line is truncated to fit whatever width is
+// configured, and the most important field on each line (pool
+// connection status, in particular) is sized from a dynamic budget
+// rather than a fixed offset, so it cannot be silently cut off even
+// at the documented 40-column minimum.
 //
 // # Thread safety
 //
@@ -37,6 +38,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -103,13 +105,16 @@ type ProviderStats struct {
 
 // Dashboard renders a live terminal dashboard.
 type Dashboard struct {
-	w         io.Writer
-	mu        sync.Mutex
-	started   atomic.Bool
-	updateCh  chan Stats
-	doneCh    chan struct{}
-	cols      int
-	lastStats Stats
+	w        io.Writer
+	mu       sync.Mutex
+	started  atomic.Bool
+	updateCh chan Stats
+	doneCh   chan struct{}
+	cols     int
+	// widthLocked is set by SetWidth: tests and embedders pin a width and
+	// disable the per-tick auto-detection that would otherwise override it.
+	widthLocked bool
+	lastStats   Stats
 	// wg tracks the render loop goroutine so Stop can block until it has
 	// genuinely exited before Stop itself writes to w (showCursor /
 	// Fprintln below) — without this, Stop's writes could race an
@@ -220,6 +225,7 @@ const (
 )
 
 func (d *Dashboard) render(s Stats) {
+	d.detectWidth()
 	var sb strings.Builder
 	cols := d.cols
 
@@ -538,12 +544,35 @@ func shortenURL(url string, maxLen int) string {
 	return url[:maxLen-3] + "..."
 }
 
-// ----- Width detection stub -----
+// ----- Width detection -----
 
-// SetWidth allows callers to inject the terminal width.
-// If never called, defaults to 80 columns.
+// SetWidth injects the terminal width and locks it, disabling
+// auto-detection — for tests and embedders writing somewhere other than
+// a terminal file. Values below the documented 40-column minimum are
+// rejected; the previous width stands.
 func (d *Dashboard) SetWidth(cols int) {
 	if cols >= 40 {
+		d.cols = cols
+		d.widthLocked = true
+	}
+}
+
+// detectWidth refreshes d.cols from the kernel when the dashboard is
+// writing to a terminal file. It is a no-op when the width was pinned
+// via SetWidth, when w is not an *os.File (tests use buffers), or when
+// the platform query fails or reports a degenerate width — in every
+// case the previous value stands, so a transient failure never collapses
+// the layout. Called once per render tick so a terminal resize between
+// ticks is picked up without a SIGWINCH handler.
+func (d *Dashboard) detectWidth() {
+	if d.widthLocked {
+		return
+	}
+	f, ok := d.w.(*os.File)
+	if !ok {
+		return
+	}
+	if cols := terminalWidth(f); cols >= 40 {
 		d.cols = cols
 	}
 }

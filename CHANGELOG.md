@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 385)
+
+- TUI ダッシュボードが常に80カラム固定で描画され、実端末幅を一切検出していなかった既知の制限（KNOWN_LIMITATIONS §15）を解消。`internal/tui` が描画ティック毎にカーネルへ端末幅を問い合わせ（Unix: `TIOCGWINSZ`、Windows: `GetConsoleScreenBufferInfo`）、端末リサイズにも追従。出力先が端末ファイルでない場合やクエリ失敗時は従来の80カラムにフォールバックし、`SetWidth` による固定指定も従来通り優先される。`golang.org/x/sys` を间接依存から直接依存へ昇格（BSD・Go チーム保守・既存 module graph 内のため新規モジュール追加なし）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
