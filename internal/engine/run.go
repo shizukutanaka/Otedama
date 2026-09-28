@@ -1218,7 +1218,7 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 		return 0, miner.Hash{}, err
 	}
 	if msg.SetupConnectionError != nil {
-		return 0, miner.Hash{}, &fatalError{"pool rejected: " + msg.SetupConnectionError.Error}
+		return 0, miner.Hash{}, &fatalError{"pool rejected: " + msg.SetupConnectionError.Detail()}
 	}
 	if msg.SetupConnectionSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)

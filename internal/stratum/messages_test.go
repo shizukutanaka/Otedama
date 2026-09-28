@@ -114,6 +114,18 @@ func TestSetupConnectionSuccess_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSetupConnectionError_Detail(t *testing.T) {
+	plain := SetupConnectionError{Flags: 0, Error: "version rejected"}
+	if got := plain.Detail(); got != "version rejected" {
+		t.Errorf("flags=0 Detail = %q, want bare reason", got)
+	}
+	flagged := SetupConnectionError{Flags: 1, Error: "unsupported-feature"}
+	want := "unsupported-feature (unsupported flags: 0x00000001)"
+	if got := flagged.Detail(); got != want {
+		t.Errorf("Detail = %q, want %q", got, want)
+	}
+}
+
 func TestSetupConnection_ValidateSuccess(t *testing.T) {
 	sc := SetupConnection{MinVersion: 2, MaxVersion: 2}
 	if err := sc.ValidateSuccess(SetupConnectionSuccess{UsedVersion: 2}); err != nil {

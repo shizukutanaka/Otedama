@@ -172,6 +172,18 @@ func DecodeSetupConnectionError(payload []byte) (SetupConnectionError, error) {
 	return m, nil
 }
 
+// Detail returns the rejection reason annotated with the unsupported-
+// flag bitmask the server must include per sv2-spec §3.6.3 — a nonzero
+// value pinpoints exactly which required features the pool cannot
+// honour (e.g. REQUIRES_STANDARD_JOBS), while zero means the refusal is
+// unrelated to requested features.
+func (m SetupConnectionError) Detail() string {
+	if m.Flags == 0 {
+		return m.Error
+	}
+	return fmt.Sprintf("%s (unsupported flags: 0x%08X)", m.Error, m.Flags)
+}
+
 // ------------------------------------------------------------------
 // OpenMiningChannel (client → server, msg_type 0x10)
 // ------------------------------------------------------------------
