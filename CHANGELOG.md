@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 401)
+
+最後の未個別監査ファイル `internal/lightning/seedstore.go` を監査 clean —
+空パスフレーズ拒否・`ErrWrongPassphrase` の不可分性（復号オラクル防止）・
+秘密バッファ全経路ゼロ化・バージョン付きバイナリ形式。`Decoder.ReadFrame`
+は確保前に `MaxFrameSize` 境界検査（メモリ枯渇 DoS 防御）。`WalletManager`
+の単一スレッドライフサイクルを文書化。これで `internal/` + `cmd/` 配下の
+全ファイル監査網羅が完了。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
