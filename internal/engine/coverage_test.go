@@ -841,6 +841,87 @@ func TestHandshake_UnexpectedSetupResponse(t *testing.T) {
 	}
 }
 
+// TestHandshake_SetupConnectionWireFields verifies the outbound
+// SetupConnection carries the spec-mandated fields: channel_msg bit
+// clear, REQUIRES_STANDARD_JOBS flag, and the endpoint split into
+// host + port (sv2-spec §3.6.2) — plus that the returned share target
+// comes from OpenMiningChannelSuccess.max_target.
+func TestHandshake_SetupConnectionWireFields(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+
+	got := make(chan stratum.SetupConnection, 1)
+	go func() {
+		sDec := stratum.NewDecoder(serverConn)
+		f, err := sDec.ReadFrame()
+		if err != nil {
+			return
+		}
+		if f.Header.MsgType != stratum.MsgSetupConnection {
+			t.Errorf("pool received MsgType 0x%02X, want SetupConnection", f.Header.MsgType)
+			return
+		}
+		if f.Header.ChannelMsg() {
+			t.Error("SetupConnection must not set the channel_msg bit")
+		}
+		sc, err := stratum.DecodeSetupConnection(f.Payload)
+		if err != nil {
+			t.Errorf("DecodeSetupConnection: %v", err)
+			return
+		}
+		got <- sc
+
+		succ := stratum.SetupConnectionSuccess{UsedVersion: 2}
+		payload, _ := succ.Encode()
+		sf, _ := stratum.WrapMessage(stratum.MsgSetupConnectionSuccess, false, payload)
+		data, _ := stratum.EncodeFrame(sf)
+		serverConn.Write(data) //nolint:errcheck
+
+		sDec.ReadFrame() //nolint:errcheck // OpenMiningChannel
+		var tgt [32]byte
+		tgt[31] = 0x7F // easy share target
+		omcs := stratum.OpenMiningChannelSuccess{
+			ReqID:     1,
+			ChannelID: 42,
+			Target:    tgt,
+		}
+		payload, _ = omcs.Encode()
+		of, _ := stratum.WrapMessage(stratum.MsgOpenMiningChannelSuccess, true, payload)
+		data, _ = stratum.EncodeFrame(of)
+		serverConn.Write(data) //nolint:errcheck
+	}()
+
+	dec := stratum.NewDecoder(clientConn)
+	chanID, shareTarget, err := handshake(clientConn, dec, "stratum+v2://pool.example.com:4444", "user", nil)
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if chanID != 42 {
+		t.Errorf("chanID = %d, want 42", chanID)
+	}
+	if shareTarget[31] != 0x7F {
+		t.Errorf("shareTarget not taken from max_target: got %x", shareTarget)
+	}
+
+	select {
+	case sc := <-got:
+		if sc.Flags&stratum.FlagRequiresStandardJobs == 0 {
+			t.Error("SetupConnection.Flags missing REQUIRES_STANDARD_JOBS")
+		}
+		if sc.Endpoint != "pool.example.com" {
+			t.Errorf("Endpoint = %q, want pool.example.com", sc.Endpoint)
+		}
+		if sc.EndpointPort != 4444 {
+			t.Errorf("EndpointPort = %d, want 4444", sc.EndpointPort)
+		}
+		if sc.MinVersion != 2 || sc.MaxVersion != 2 {
+			t.Errorf("version range = %d–%d, want 2–2", sc.MinVersion, sc.MaxVersion)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pool did not receive SetupConnection")
+	}
+}
+
 // TestHandshake_OpenMiningChannelWriteFails covers line 640–642: sendMsg for
 // OpenMiningChannel fails because the server closed after sending setup success.
 func TestHandshake_OpenMiningChannelWriteFails(t *testing.T) {
