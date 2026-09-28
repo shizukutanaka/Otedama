@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 468
+
+Corrected a stale CATEGORY_AUDIT backlog row: row D ("poolproto doc
+and stratumv1.go describe DATUM as present-tense, not yet disclosed")
+was fixed back in session 248 — the package doc now states plainly
+that ProtocolDATUM is a reserved scheme with no Dialer, stratumv1.go
+says "not implemented", and KNOWN_LIMITATIONS §14 discloses the
+ErrUnknownProtocol behavior. The ledger now records it resolved.
+Reconnect-loop audit: backoff reset on established sessions is open
+PR #491's territory (not duplicated); failover/backoff logic itself
+verified bounded and correct on master.
