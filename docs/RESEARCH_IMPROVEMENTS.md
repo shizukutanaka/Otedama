@@ -966,3 +966,30 @@ Corrected both. `docs/API.md` already documented N=2^17 correctly.
 [AUDITED — clean] THREAT_MODEL channel bound: the SV2 reader channel is
 `make(chan poolMsg, 32)` (run.go), matching the documented "Job channel
 is bounded (buffer size 32)" claim.
+
+## Session 382 — re-delivery of #485 + arbitration pause persistence fix
+
+[FETCHED] Re-delivered the closed-unmerged #485 (docs-code drift on the
+wallet scrypt work factor: THREAT_MODEL/AUDIT_CHECKLIST said N=32768;
+implementation is `scryptN = 1 << 17` = 131072) — cherry-picked onto
+master verbatim; no equivalent open PR exists.
+
+[FIXED] Arbitration device pause was defeated by the next pool job:
+`applyAllocation` pauses below-floor/idle/AI-routed workers with
+`SetWork(nil)`, but `updateWork`/`applyJob` re-armed *every* worker on
+each new pool job — undoing the pause for the ~30 s until the next Decide
+tick. Introduced `pauseSet` (sync.Map), the per-device counterpart of
+`curtailGate`: `reconcileArbPauses` rewrites the set after every Decide
+(before applyAllocation), and both job-dispatch paths skip paused device
+IDs. Hashing resumes on the next job after arbitration routes the device
+back to a mining stream.
+
+[FIXED] `updateLiveness` now treats "every worker arbitration-paused" the
+same as curtailment — stall monitor not advanced, `otedama_up` stays 1 —
+preventing false "hashrate stalled" warnings while the rig is
+deliberately idle below the yield floor. Partial pause still stalls
+normally (a nominally-mining device at 0 rate is a real fault).
+
+[AUDITED — clean] fanIn share-merge backpressure: buffer 4·N capped at
+64; when full during a reconnect the producers block and workers drop
+shares via the dropped-share counter — bounded loss, no unbounded queue.
