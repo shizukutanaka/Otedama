@@ -50,6 +50,7 @@ const (
 	MsgOpenMiningChannelSuccess uint8 = 0x11
 	MsgOpenMiningChannelError   uint8 = 0x12
 	MsgNewMiningJob             uint8 = 0x15
+	MsgCloseChannel             uint8 = 0x18
 	MsgSubmitSharesStandard     uint8 = 0x1a
 	MsgSubmitSharesSuccess      uint8 = 0x1c
 	MsgSubmitSharesError        uint8 = 0x1e
@@ -399,6 +400,7 @@ type Message struct {
 	SubmitSharesStandard     *SubmitSharesStandard
 	SubmitSharesSuccess      *SubmitSharesSuccess
 	SubmitSharesError        *SubmitSharesError
+	CloseChannel             *CloseChannel
 	Unknown                  *UnknownMessage
 }
 
@@ -406,6 +408,38 @@ type Message struct {
 type UnknownMessage struct {
 	MsgType uint8
 	Payload []byte
+}
+
+// ------------------------------------------------------------------
+// CloseChannel (server → client / client → server, msg_type 0x18)
+// ------------------------------------------------------------------
+
+// CloseChannel terminates a channel. When the pool sends it, the client
+// must stop submitting work on the channel; when the client sends it,
+// the server must stop sending messages for it (sv2-spec §5.3.9).
+type CloseChannel struct {
+	ChannelID uint32
+	Reason    string // STR0_255 reason_code; printable-ASCII, no control chars
+}
+
+// Encode serialises CloseChannel.
+func (m CloseChannel) Encode() ([]byte, error) {
+	b := appendU32LE(make([]byte, 0, 8), m.ChannelID)
+	return appendStr0_255(b, m.Reason)
+}
+
+// DecodeCloseChannel parses a CloseChannel payload.
+func DecodeCloseChannel(payload []byte) (CloseChannel, error) {
+	r := newByteReader(payload)
+	var m CloseChannel
+	var err error
+	if m.ChannelID, err = getU32LE(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.ChannelID: %w", err)
+	}
+	if m.Reason, err = getStr0_255(r); err != nil {
+		return m, fmt.Errorf("stratum: CloseChannel.Reason: %w", err)
+	}
+	return m, nil
 }
 
 // DispatchFrame decodes the payload of f into the appropriate Message field.
@@ -489,6 +523,12 @@ func DispatchFrame(f Frame) (Message, error) {
 			return m, err
 		}
 		m.SubmitSharesError = &v
+	case MsgCloseChannel:
+		v, err := DecodeCloseChannel(f.Payload)
+		if err != nil {
+			return m, err
+		}
+		m.CloseChannel = &v
 	default:
 		m.Unknown = &UnknownMessage{MsgType: f.Header.MsgType, Payload: f.Payload}
 	}

@@ -168,7 +168,11 @@ and flagged, not changed this session:
   `new_shares_sum` was U32 where the spec defines U64. All remaining
   messages (NewMiningJob/OPTION, SetNewPrevHash, SetTarget,
   SubmitSharesStandard/.Error, SetupConnection.Success/.Error,
-  OpenMiningChannelError) match the spec field-for-field.
+  OpenMiningChannelError) match the spec field-for-field. Same sweep:
+  `SetupConnection.flags` now declares REQUIRES_STANDARD_JOBS
+  (bit 0 — matches SRI's reference device), and the previously-undecoded
+  `CloseChannel` (0x18) is handled: a pool's channel close ends the
+  session instead of leaving the engine submitting on a dead channel.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

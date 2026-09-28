@@ -477,6 +477,7 @@ func TestSplitHostPort(t *testing.T) {
 		{"pool.example.com:0", "pool.example.com", 0},
 		{"pool.example.com", "pool.example.com", 0},          // no port → host + 0
 		{"pool.example.com:notaport", "pool.example.com", 0}, // non-numeric port → 0
+		{"pool.example.com:http", "pool.example.com", 80},    // service name → resolved
 		{"pool.example.com:99999", "pool.example.com", 0},    // out of range → 0
 		{"", "", 0},
 	}

@@ -519,6 +519,41 @@ func TestSubmitSharesSuccess_Encode_ShortPayload(t *testing.T) {
 	}
 }
 
+// ----- CloseChannel -----
+
+func TestCloseChannel_Roundtrip(t *testing.T) {
+	orig := CloseChannel{ChannelID: 7, Reason: "killed by pool"}
+	payload, err := orig.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := DecodeCloseChannel(payload)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got != orig {
+		t.Errorf("got %+v, want %+v", got, orig)
+	}
+}
+
+func TestDecodeCloseChannel_Truncated(t *testing.T) {
+	if _, err := DecodeCloseChannel(make([]byte, 2)); err == nil {
+		t.Error("Decode accepted short payload")
+	}
+}
+
+func TestDispatchFrame_CloseChannel(t *testing.T) {
+	payload, _ := (CloseChannel{ChannelID: 3, Reason: "idle"}).Encode()
+	f := Frame{Header: Header{MsgType: MsgCloseChannel, MsgLength: uint32(len(payload))}, Payload: payload}
+	msg, err := DispatchFrame(f)
+	if err != nil {
+		t.Fatalf("DispatchFrame: %v", err)
+	}
+	if msg.CloseChannel == nil || msg.CloseChannel.Reason != "idle" {
+		t.Errorf("CloseChannel not populated: %+v", msg.CloseChannel)
+	}
+}
+
 // ----- SubmitSharesError -----
 
 func TestDecodeSubmitSharesError_Basic(t *testing.T) {

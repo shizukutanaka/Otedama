@@ -828,6 +828,14 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if pm.err != nil {
 				return fmt.Errorf("engine: pool read: %w", pm.err)
 			}
+			if pm.msg.CloseChannel != nil {
+				// The pool closed the channel (sv2-spec §5.3.9): no more
+				// jobs or share accepts will arrive — every submit on it
+				// is doomed. Treat as a session end so the reconnect loop
+				// re-opens a fresh channel.
+				return fmt.Errorf("engine: pool closed channel %d: %s",
+					pm.msg.CloseChannel.ChannelID, pm.msg.CloseChannel.Reason)
+			}
 			if pm.msg.NewMiningJob != nil {
 				j := pm.msg.NewMiningJob
 				jobs[j.JobID] = j
