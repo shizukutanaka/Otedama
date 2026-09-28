@@ -158,6 +158,16 @@ func NewWalletManager(dataDir, passphrase string, reader io.Reader, wordList *Wo
 		if err := wm.loadExisting(passphrase); err != nil {
 			return nil, err
 		}
+		// A wallet.dat restored from backup may arrive without its
+		// wallet.fingerprint sidecar (DEPLOYMENT.md's procedure copies
+		// only wallet.dat). Recreate it so fingerprint-based identity
+		// checks keep working without a decrypt. Best-effort like at
+		// creation, and never overwrites an existing file — a fingerprint
+		// that disagrees with wallet.dat is a signal, not a bug to mask.
+		fpPath := filepath.Join(wm.dataDir, fingerprintFile)
+		if _, err := os.Stat(fpPath); os.IsNotExist(err) {
+			_ = os.WriteFile(fpPath, []byte(wm.Fingerprint()), 0o600)
+		}
 	}
 
 	return wm, nil
