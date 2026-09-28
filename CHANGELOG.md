@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 追加 (session 418 — KNOWN_LIMITATIONS §16 解消: `otedama wallet` サブコマンド)
+
+- `otedama wallet verify`: 書き留めたリカバリフレーズを stdin から読み
+  （argv 経由禁止 — プロセスリスト漏洩防止）、BIP-39 チェックサム検証後に
+  派生シードの公開フィンガープリントを `wallet.fingerprint` と比較。
+  `wallet.dat` の復号不要。mnemonic パスフレーズ付きウォレットは
+  `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE` で対応。フィンガープリントファイル
+  不在時は `OTEDAMA_WALLET_PASSPHRASE` による wallet.dat 復号へフォールバック。
+- `otedama wallet change-passphrase`: 既実装・テスト済みだが未接続だった
+  `WalletManager.ChangePassphrase` を CLI へ配線。パスフレーズは
+  `OTEDAMA_WALLET_PASSPHRASE` / `OTEDAMA_WALLET_NEW_PASSPHRASE` 環境変数経由。
+- 両 verb は `wallet.dat` を事前 stat — `--data-dir` のタイポで空ウォレットを
+  誤作成しない（`NewWalletManager` は不在時に新規作成する契約のため）。
+- データディレクトリは `run` と同一の4層優先（flag > env > config.yaml >
+  プラットフォーム既定）で解決。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

@@ -939,3 +939,40 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 418 — close KNOWN_LIMITATIONS §16: the `wallet` subcommand [FEATURE]
+
+The last open CLI-facing limitation: no way to verify a written-down
+recovery phrase or rotate the wallet passphrase without starting the engine.
+The limitation entry itself prescribed the minimal fix — this session
+implements exactly it.
+
+New `otedama wallet` subcommand (`cmd/otedama/wallet.go`):
+
+- `otedama wallet verify` — reads a recovery phrase from **stdin** (never
+  argv: `ps aux` exposes it to every local process), validates the BIP-39
+  checksum via `MnemonicToEntropy`, derives the seed with
+  `MnemonicToSeed`, and compares its public `Fingerprint` against the
+  stored `wallet.fingerprint` file. `wallet.dat` is never decrypted, so a
+  wallet passphrase is not required; the `OTEDAMA_WALLET_MNEMONIC_PASSPHRASE`
+  env var covers wallets created with a BIP-39 "25th word". When the
+  fingerprint file is absent (older builds), verify falls back to unlocking
+  `wallet.dat` with `OTEDAMA_WALLET_PASSPHRASE`.
+- `otedama wallet change-passphrase` — wires the already-implemented,
+  already-tested `WalletManager.ChangePassphrase` to the CLI. Both
+  passphrases come from env vars (`OTEDAMA_WALLET_PASSPHRASE` /
+  `OTEDAMA_WALLET_NEW_PASSPHRASE`), matching the argv-leak guidance added
+  in session 372.
+
+Safety details: both verbs stat `wallet.dat` before calling
+`NewWalletManager` (whose contract is "create when absent"), so a mistyped
+`--data-dir` can never silently mint an empty wallet. The wallet directory
+resolves through the same four-layer precedence as `run`
+(`--data-dir` > `OTEDAMA_DATA_DIR` > `config.yaml` > platform default).
+New minimal exports `lightning.WalletFilePath` / `FingerprintFilePath`
+expose the on-disk names without leaking internals. `internal/lightning`
+is funds-adjacent — CODEOWNERS review applies (disclosed in the PR).
+
+*Evidence: 9 new cmd tests cover match/mismatch/invalid-phrase/no-wallet/
+no-create/fallback-decrypt/env-required paths; `go test ./...` all 24
+packages green; lint introduces zero new findings.*
