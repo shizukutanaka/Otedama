@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### セキュリティ (session 407)
+
+VERIFY.md が現行 `release.yml` が生成しないアセット（checksums.txt・
+cosign 署名・SBOM）の検証手順を記載していた問題を修正 — 現状は
+ソース再ビルドのみ検証可能である旨の警告を冒頭に追加し、全アセット名を
+goreleaser の実テンプレート名に訂正。併せて release.yml の実欠陥
+（ldflags 注入先 `main.Version` の誤り・死リンク `DEPLOYMENT_GUIDE.md`・
+非実在 `scripts/` 参照・MIT ライセンス誤記・homebrew tap org 誤り）を
+発見・記録（workflow ファイルのため修正はメンテナ判断）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
