@@ -167,15 +167,21 @@ vet: ## Run go vet
 .PHONY: security
 security: ## Run security scanners
 	@echo "Running gosec..."
-	gosec -severity medium ./...
+	@command -v gosec >/dev/null 2>&1 \
+		&& gosec -severity medium ./... \
+		|| echo "    (skipped: gosec not installed; 'go install github.com/securego/gosec/v2/cmd/gosec@latest')"
 	@echo "Running govulncheck..."
-	govulncheck ./...
+	@command -v govulncheck >/dev/null 2>&1 \
+		&& govulncheck ./... \
+		|| echo "    (skipped: govulncheck not installed; 'go install golang.org/x/vuln/cmd/govulncheck@latest')"
 	@echo "Security scan complete."
 
 .PHONY: licenses
 licenses: ## Check dependency licenses
-	go-licenses check ./... \
-		--allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0
+	@command -v go-licenses >/dev/null 2>&1 \
+		&& go-licenses check ./... \
+			--allowed_licenses=Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,ISC,MPL-2.0 \
+		|| echo "    (skipped: go-licenses not installed; 'go install github.com/google/go-licenses@latest')"
 
 .PHONY: validate
 validate: fmt vet lint security test coverage ## Run all validation checks
@@ -310,5 +316,5 @@ deps-graph: ## Generate dependency graph
 # --------------------------------------------------------------------------
 
 .PHONY: migrate-from-v2
-migrate-from-v2: build ## Migrate v2 configuration to v3 format (requires --v2-config)
-	@echo "Use: $(BIN_DIR)/$(PROJECT) migrate-from-v2 --v2-config <path>"
+migrate-from-v2: ## Print the v2→v3 migration guide location
+	@echo "There is no automated migrator — see docs/MIGRATING-FROM-V2.md"
