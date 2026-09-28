@@ -939,3 +939,23 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 412 — SECURITY.md phantom command + ADR audit [FIXED]
+
+**Phantom command reference removed [FIXED].** SECURITY.md told v2
+users "`otedama migrate-from-v2`コマンドが移行を支援します" — the
+subcommand does not exist (never implemented; session 402 already
+scrubbed it from skills/release-procedure.md — that fix is live in
+open #513). Replaced with a pointer to `docs/MIGRATING-FROM-V2.md`,
+which is the actual migration path. A security-policy document
+pointing at a nonexistent command is the worst place for drift —
+a v2 user with an active issue gets a flag-parse error instead of
+guidance.
+
+**Audited — clean:** ADR-006's transport/crypto abstraction text
+matches the shipped code (V1 shipped first behind `poolproto`,
+btccrypto scheme registry exists, JDP deferred as stated); ADR-011
+secp256k1-for-Noise status is honestly marked; SECURITY.md's scope
+section correctly notes `web/` and plugin system don't exist;
+reporting paths (Private Vulnerability Reporting → MAINTAINERS.md
+fallback) are real.
