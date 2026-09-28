@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 461
+
+Makefile audit found one real drift, fixed: the `migrate-from-v2`
+target printed `otedama migrate-from-v2 --v2-config <path>` — a
+subcommand that does not exist in main.go's dispatch table (it hits
+the unknown-subcommand exit-64 path). This is the same phantom-command
+class that SECURITY.md's wording had before PR #523's correction —
+the Makefile instance was the last un-swept reference. The target now
+points at docs/MIGRATING-FROM-V2.md, the actual manual migration path.
+(The `fuzz` target's package-path/dir mix-up is real too but belongs
+to open PR #489 — not duplicated here.) Rates fetcher audited clean:
+single-flight coalescing, even-count median averaging, plausibility
+band, bounded body, per-source skew tracking all correct; outbound
+redirect policy is open PR #455's domain.

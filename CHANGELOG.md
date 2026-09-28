@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 461)
+
+1. Makefile の `migrate-from-v2` ターゲットが非実在の
+   `otedama migrate-from-v2 --v2-config` を案内していた問題を修正 —
+   docs/MIGRATING-FROM-V2.md（実際の手動移行手順）を指すように。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

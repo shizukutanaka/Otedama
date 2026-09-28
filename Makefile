@@ -310,5 +310,6 @@ deps-graph: ## Generate dependency graph
 # --------------------------------------------------------------------------
 
 .PHONY: migrate-from-v2
-migrate-from-v2: build ## Migrate v2 configuration to v3 format (requires --v2-config)
-	@echo "Use: $(BIN_DIR)/$(PROJECT) migrate-from-v2 --v2-config <path>"
+migrate-from-v2: ## Print the v2→v3 migration guide location
+	@echo "There is no 'migrate-from-v2' subcommand — migration is manual."
+	@echo "See docs/MIGRATING-FROM-V2.md for the step-by-step guide."
