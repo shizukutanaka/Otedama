@@ -24,6 +24,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - 実際に生成される全て（wallet.dat、config.yaml、coverage、prof、リリース
   アーカイブ、ビルドバイナリ）は引き続き除外済み。
 
+### 修正 (session 428 — 監査文書の検証済み虚偽記述を訂正)
+
+- `BENCHMARKS.md`: 「>5% リグレッションで CI 失敗」は未実装（CI は実行+
+  アーティファクト保存のみ）— 実態に訂正し、未コミットの
+  `BenchmarkDecoder_ReadFrame` 参照と「CI で継続 fuzz」記述も訂正。
+- `AUDIT_CHECKLIST.md` 項目11/13: 「全 action SHA-pin」「cosign 署名済み」の
+  検証欄は虚偽（全 `uses:` がタグ参照、trivy-action は `@master` 追尾、
+  release.yml は署名非生成）— Gap 表記に訂正。
+- `SUSTAINABILITY.md` 実装状況: §2 SV1/SV2「v3.2.0 スコープ」→ 実装済み、
+  §5 「SHA pinning + cosign 実装済み」→ 未実施、に訂正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

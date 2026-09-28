@@ -973,3 +973,30 @@ binary) plus generic editor/OS shields.
 
 Sources for what does not exist: CLAUDE.md architecture map, the repo
 tree itself, and .goreleaser.yaml's nfpms/archives file lists.
+
+## Session 428 — audit-checklist/SUSTAINABILITY/BENCHMARKS verification claims [DOCS]
+
+While auditing the last unvisited docs, three "verified" claims turned out
+to describe controls that do not exist — the same verification-theatre
+class as VERIFY.md's cosign section (session 407):
+
+- `BENCHMARKS.md` asserted "a PR that regresses >5% fails automatically".
+  Reality: the benchmark jobs only run `go test -bench` and upload an
+  artifact; the "Performance Impact" job is a Node-only template whose
+  every step skips in this Go repo. Reworded as regression-*visible*.
+- Same file pointed reproduce instructions at `BenchmarkDecoder_ReadFrame`,
+  which was never committed, and claimed the decoder "is fuzzed
+  continuously in CI" — no fuzz job exists. `FuzzDecoder_ReadFrame` is
+  real; the doc now says to run it locally.
+- `AUDIT_CHECKLIST` item 11 recorded "Every `uses:` has @<40-char-sha>".
+  Reality: all workflow `uses:` are tag refs, including
+  `aquasecurity/trivy-action@master` — a moving branch ref, the exact
+  shape of the TeamPCP attack SUSTAINABILITY §5 itself cites. Item 13's
+  cosign verification was likewise aspirational. Both rows now show the
+  gap instead of a false pass.
+- `SUSTAINABILITY.md` 実装状況: §2 claimed SV1/SV2 implementation was
+  v3.2.0 scope — both dialers already exist under `internal/poolproto/`.
+  §5 claimed SHA pinning + cosign "実装済み" — neither is wired.
+
+Sources: `.github/workflows/*.yml`, `internal/stratum/*_test.go`,
+`internal/poolproto/`, go.mod.
