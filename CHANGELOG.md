@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 監査判定 (session 403)
+
+CONTRIBUTING.md の DCO（`git commit -s`）要件が直近50コミットで1件も
+遵守されていないドリフトを発見・記録（メンテナ自身のコミットを含む）。
+CI DCO チェック導入かドキュメント削除かはメンテナのポリシー判断として
+記録 — 法的アテステーション要件の一方的削除は行わず。README.md と
+CONTRIBUTING.md のコマンド参照（make setup/build/test/lint）は監査 clean。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
