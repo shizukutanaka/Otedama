@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 465
+
+Corrected a false portability claim in GODEBUG_NOTES.md: it said the
+go/toolchain split "lets users with older toolchains still build" —
+but `toolchain go1.24.0` already makes Go >=1.24 mandatory, and the
+pinned `godebug tlsmlkem` fails to parse under older toolchains on
+top of that (the exact "unknown godebug" error seen on CI's 1.23.x
+legs). The note now states plainly that Go 1.24+ is required while
+the `go 1.22` line only governs language defaults. Audited clean:
+config.yaml.example covers every yaml field; docs/API.md's five
+missing OTEDAMA_ env vars are open PR #517's territory (not
+duplicated); ADR set has no other phantom references.

@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 465)
+
+1. GODEBUG_NOTES.md の「go/toolchain 分離で古いツールチェーンでも
+   ビルド可能」とする誤記を訂正 — `toolchain go1.24.0` と
+   `godebug tlsmlkem` の両方が Go 1.24+ を必須にするため、実際の
+   最小ツールチェーン要件を明記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
