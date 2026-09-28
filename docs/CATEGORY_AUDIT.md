@@ -173,6 +173,8 @@ and flagged, not changed this session:
   (bit 0 — matches SRI's reference device), and the previously-undecoded
   `CloseChannel` (0x18) is handled: a pool's channel close ends the
   session instead of leaving the engine submitting on a dead channel.
+  Session 447: negotiated `used_version` is now validated against the
+  advertised [min,max] range at both handshake sites.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

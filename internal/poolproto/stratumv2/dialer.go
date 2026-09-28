@@ -114,6 +114,9 @@ func (d *Dialer) Negotiate(ctx context.Context, c poolproto.Connection) (poolpro
 	if msg.SetupConnectionSuccess == nil {
 		return nil, fmt.Errorf("stratumv2: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	if err := sc.ValidateSuccess(*msg.SetupConnectionSuccess); err != nil {
+		return nil, fmt.Errorf("stratumv2: %w", err)
+	}
 
 	// OpenMiningChannel.
 	omc := stratum.OpenMiningChannel{

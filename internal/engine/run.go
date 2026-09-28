@@ -1210,6 +1210,9 @@ func handshake(conn net.Conn, dec *stratum.Decoder, poolURL, user string, worker
 	if msg.SetupConnectionSuccess == nil {
 		return 0, miner.Hash{}, fmt.Errorf("engine: unexpected msg 0x%02X during setup", f.Header.MsgType)
 	}
+	if err := sc.ValidateSuccess(*msg.SetupConnectionSuccess); err != nil {
+		return 0, miner.Hash{}, fmt.Errorf("engine: %w", err)
+	}
 
 	var hashRate float32
 	for _, w := range workers {

@@ -127,6 +127,21 @@ func DecodeSetupConnectionSuccess(payload []byte) (SetupConnectionSuccess, error
 	}, nil
 }
 
+// ValidateSuccess checks the pool's negotiated version against the range
+// this SetupConnection advertised (sv2-spec §3.6.2): used_version is the
+// server-selected version "used on the connection for the rest of its
+// life" — a value outside [min_version, max_version] means the peer
+// cannot actually speak our protocol, so the handshake must fail.
+// (Success.flags are the server's own feature namespace — bit 0/1 —
+// not an echo of the client's requirements, so they are not asserted.)
+func (m SetupConnection) ValidateSuccess(s SetupConnectionSuccess) error {
+	if s.UsedVersion < m.MinVersion || s.UsedVersion > m.MaxVersion {
+		return fmt.Errorf("stratum: pool selected unsupported version %d (advertised %d-%d)",
+			s.UsedVersion, m.MinVersion, m.MaxVersion)
+	}
+	return nil
+}
+
 // ------------------------------------------------------------------
 // SetupConnectionError (server → client, msg_type 0x02)
 // ------------------------------------------------------------------

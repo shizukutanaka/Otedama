@@ -114,6 +114,19 @@ func TestSetupConnectionSuccess_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSetupConnection_ValidateSuccess(t *testing.T) {
+	sc := SetupConnection{MinVersion: 2, MaxVersion: 2}
+	if err := sc.ValidateSuccess(SetupConnectionSuccess{UsedVersion: 2}); err != nil {
+		t.Errorf("in-range version rejected: %v", err)
+	}
+	if err := sc.ValidateSuccess(SetupConnectionSuccess{UsedVersion: 3}); err == nil {
+		t.Error("out-of-range version accepted")
+	}
+	if err := sc.ValidateSuccess(SetupConnectionSuccess{UsedVersion: 1}); err == nil {
+		t.Error("below-min version accepted")
+	}
+}
+
 func TestDecodeSetupConnectionSuccess_Short(t *testing.T) {
 	if _, err := DecodeSetupConnectionSuccess([]byte{0x01, 0x02}); err == nil {
 		t.Error("short payload accepted")
