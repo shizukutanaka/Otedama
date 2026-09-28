@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 414)
+
+competitive-analysis.md の現時形の過大記述を修正 — ZKP 認証・LDK
+ウォレット生成・プール自動選択を「実装済み」風の記述から v4.0 構想/
+ADR-007 Proposed へ格下げし、実装実態（BIP-39 ローカルウォレット・
+`config.DefaultPoolURL` 単一フォールバック）を明記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
