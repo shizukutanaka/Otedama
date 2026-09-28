@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 413)
+
+solo-operations.md の CODEOWNERS サンプルが非実在パス
+（`/internal/security/`・`/internal/auth/` — CLAUDE.md の作成禁止
+パス）を参照していた問題を実ファイルと同じ構成に訂正。
+`.github/dependabot.yml` の無効な `automerge` キー（Dependabot に
+存在しないオプション — 自動マージは発動していなかった）を除去し
+実際の仕組みを注記。KNOWN_LIMITATIONS §N 相互参照は全て整合。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
