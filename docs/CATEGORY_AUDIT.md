@@ -174,7 +174,12 @@ and flagged, not changed this session:
   `CloseChannel` (0x18) is handled: a pool's channel close ends the
   session instead of leaving the engine submitting on a dead channel.
   Session 447: negotiated `used_version` is now validated against the
-  advertised [min,max] range at both handshake sites.
+  advertised [min,max] range at both handshake sites. Session 448
+  closes the sweep: all still-undispatched message types
+  (UpdateChannel(.Error), SetExtranoncePrefix, ChannelEndpointChanged,
+  0x22-0x25) verified as correctly ignored — each is extended-channel,
+  proxy-extension, or group-channel scope that a standard-channel end
+  device never legitimately receives.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active
