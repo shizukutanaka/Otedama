@@ -110,13 +110,13 @@ func checkBitcoinAddress(addr string) Check {
 			if _, err := btccrypto.ValidateAddress(strings.TrimSpace(addr)); err != nil {
 				return Result{
 					Status: StatusFail,
-					Detail: fmt.Sprintf("%s: %v", maskAddress(addr), err),
+					Detail: fmt.Sprintf("%s: %v", btccrypto.MaskAddress(addr), err),
 					Fix:    "re-check the address character by character; the checksum does not match (likely a typo)",
 				}
 			}
 			return Result{
 				Status: StatusPass,
-				Detail: fmt.Sprintf("%s (%s, likely valid)", maskAddress(addr), addressKind(addr)),
+				Detail: fmt.Sprintf("%s (%s, likely valid)", btccrypto.MaskAddress(addr), addressKind(addr)),
 			}
 		},
 	}
@@ -167,7 +167,7 @@ func checkFailoverAddresses(addrs []string) Check {
 				if _, err := btccrypto.ValidateAddress(strings.TrimSpace(a)); err != nil {
 					return Result{
 						Status: StatusFail,
-						Detail: fmt.Sprintf("bitcoin_addresses[%d] %s: %v", i, maskAddress(a), err),
+						Detail: fmt.Sprintf("bitcoin_addresses[%d] %s: %v", i, btccrypto.MaskAddress(a), err),
 						Fix:    "re-check the failover address; its checksum does not match (likely a typo)",
 					}
 				}
@@ -894,13 +894,6 @@ func isBech32Char(c rune) bool {
 func isBase58Char(c rune) bool {
 	const charset = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 	return strings.ContainsRune(charset, c)
-}
-
-func maskAddress(s string) string {
-	if len(s) <= 10 {
-		return s
-	}
-	return s[:6] + strings.Repeat("·", 3) + s[len(s)-4:]
 }
 
 func stripScheme(url string) string {

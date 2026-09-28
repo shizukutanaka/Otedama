@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/hal"
@@ -902,7 +903,7 @@ func TestPayoutAddresses_ListOnlyNoPrimary(t *testing.T) {
 
 func TestMaskAddr_HidesMiddle(t *testing.T) {
 	full := "bc1qjaet6jgpk08la46jelmlpgsz84luc4lc0tnwr5"
-	m := maskAddr(full)
+	m := btccrypto.MaskAddress(full)
 	if m == full {
 		t.Error("maskAddr should not return the full address")
 	}
@@ -1644,15 +1645,15 @@ func TestNewHashrateMonitor_DefaultMaxStallWhenZero(t *testing.T) {
 
 func TestMaskAddr_ShortAddressReturnedAsIs(t *testing.T) {
 	short := "bc1q1234"
-	if got := maskAddr(short); got != short {
-		t.Errorf("maskAddr(%q) = %q, want unchanged (len≤12)", short, got)
+	if got := btccrypto.MaskAddress(short); got != short {
+		t.Errorf("btccrypto.MaskAddress(%q) = %q, want unchanged (len≤12)", short, got)
 	}
 }
 
 func TestMaskAddr_ExactlyTwelveCharsReturnedAsIs(t *testing.T) {
 	addr := "123456789012" // exactly 12 chars
-	if got := maskAddr(addr); got != addr {
-		t.Errorf("maskAddr(%q) = %q, want unchanged (len==12)", addr, got)
+	if got := btccrypto.MaskAddress(addr); got != addr {
+		t.Errorf("btccrypto.MaskAddress(%q) = %q, want unchanged (len==12)", addr, got)
 	}
 }
 

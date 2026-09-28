@@ -260,15 +260,6 @@ func sessionUser(poolUser, addr, worker string) string {
 	return addr
 }
 
-// maskAddr renders a payout address for logs without printing it in full,
-// so operator logs do not needlessly expose the complete address.
-func maskAddr(a string) string {
-	if len(a) <= 12 {
-		return a
-	}
-	return a[:6] + "…" + a[len(a)-4:]
-}
-
 // ----- Built-in CPU driver -----
 
 type cpuDriver struct{}

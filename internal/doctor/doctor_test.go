@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
 
@@ -47,7 +48,7 @@ func TestIsLikelyBitcoinAddress(t *testing.T) {
 
 func TestMaskAddress(t *testing.T) {
 	in := "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-	out := maskAddress(in)
+	out := btccrypto.MaskAddress(in)
 	if !strings.HasPrefix(out, "bc1qar") {
 		t.Errorf("prefix lost: %q", out)
 	}
@@ -58,7 +59,7 @@ func TestMaskAddress(t *testing.T) {
 
 func TestMaskAddress_ShortInput(t *testing.T) {
 	// Short addresses are returned as-is.
-	if got := maskAddress("abc"); got != "abc" {
+	if got := btccrypto.MaskAddress("abc"); got != "abc" {
 		t.Errorf("short address changed: %q", got)
 	}
 }

@@ -335,13 +335,26 @@ calls `rejectClass` directly; only the wrapper's own test referenced it.
 Function and test deleted.
 
 ### Duplicate code recorded as Issue #2 (session 75, per CLAUDE.md rule 3)
+✅ **Fixed (session 439).** Both survivors consolidated onto
+`btccrypto.MaskAddress` — CLAUDE.md already designates `internal/btccrypto`
+as the Bitcoin abstraction home (the audit's own recommendation for the
+address validator family below), so no new path was created: the shared
+home existed all along. Canonical semantics adopt the engine form
+(`≤12 → unchanged`, `s[:6]+"…"+s[-4:]`) — one ellipsis, the form engine
+logs already emit; doctor's `···` variant and the 11–12 char boundary
+difference are unified (the divergent behaviour this Issue flagged).
+https://github.com/shizukutanaka/Otedama/issues/2
+
+<details><summary>original record</summary>
+
 Three near-duplicate address-masking helpers: `cmd/otedama/main.go:499
 maskAddress`, `internal/doctor/doctor.go:471 maskAddress` (byte-identical
 to cmd), `internal/engine/setup.go maskAddr` (threshold ≤12 vs ≤10,
 `…` vs `···` — same address renders differently in doctor output vs
 engine logs). Not fixed: consolidation needs an architecture decision on
-a shared home (no existing path fits; new paths need review). See
-https://github.com/shizukutanaka/Otedama/issues/2.
+a shared home (no existing path fits; new paths need review).
+
+</details>
 
 ### Whole-program dead-code triage (session 76)
 `golang.org/x/tools/cmd/deadcode ./...` reports ~120 unreachable functions.

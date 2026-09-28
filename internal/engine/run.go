@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"github.com/shizukutanaka/Otedama/internal/arbitration"
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/clock"
 	"github.com/shizukutanaka/Otedama/internal/config"
 	"github.com/shizukutanaka/Otedama/internal/metrics"
@@ -409,7 +410,7 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 		r.metrics.poolActiveIndex.Set(float64(poolIdx))
 		r.metrics.payoutActiveIndex.Set(float64(addrIdx))
 		if addrIdx < len(addrs) {
-			r.metrics.setActivePayout(maskAddr(addrs[addrIdx]))
+			r.metrics.setActivePayout(btccrypto.MaskAddress(addrs[addrIdx]))
 		}
 		r.metrics.poolConnectionState.Set(1) // connecting
 		sessionErr := runSession(ctx, sessionOpts{
@@ -486,8 +487,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 				r.log("warn", fmt.Sprintf(
 					"engine: payout address %s (%d/%d) could not establish a session on any pool; "+
 						"failing over to %s (%d/%d)",
-					maskAddr(addrs[prev]), prev+1, len(addrs),
-					maskAddr(addrs[addrIdx]), addrIdx+1, len(addrs)))
+					btccrypto.MaskAddress(addrs[prev]), prev+1, len(addrs),
+					btccrypto.MaskAddress(addrs[addrIdx]), addrIdx+1, len(addrs)))
 				continue // try next address immediately, no backoff
 			}
 			// Wrapped through every address; none connected. Back off and

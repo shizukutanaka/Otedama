@@ -939,3 +939,20 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 439 — dedupe Issue #2 解消: MaskAddress → btccrypto [FIX]
+
+- **修正**: `btccrypto.MaskAddress` を新設し、`doctor.maskAddress`
+  （≤10・`···`）と `engine.maskAddr`（≤12・`…`）の両ローカルを
+  削除 — CATEGORY_AUDIT Issue #2（「同じアドレスが doctor 出力と
+  engine ログで別表示」）を解消。共有 home は CLAUDE.md が
+  `btccrypto` を Bitcoin 抽象化 home と指定する点から新設不要と
+  判断（監査自身のアドレス validator 提案と同根拠）。
+- **canonical 意味論**: engine 形を採用（`≤12 → unchanged`、
+  単一 `…`）— engine ログが既に出力する形式。doctor 側の
+  boundary テスト（11→masked）を ≤12 意味論の 13→masked に更新
+  — 意図的な統合による差分（PR 説明参照）。
+- これで CATEGORY_AUDIT の dedupe Issue #2/#3 は双方解消。残る
+  dedupe 残件は config/poolproto スキーム表（別目的の二表 — 層判断
+  要、欠陥ではない）と `config/doctor` アドレス validator
+  （`btccrypto.ValidateMainnetAddress` 新設が前提 — 層判断要）。

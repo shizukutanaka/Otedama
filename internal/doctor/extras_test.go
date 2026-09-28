@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shizukutanaka/Otedama/internal/btccrypto"
 	"github.com/shizukutanaka/Otedama/internal/config"
 )
 
@@ -188,7 +189,7 @@ func TestStripScheme_RejectsUnknownScheme(t *testing.T) {
 
 func TestMaskAddress_PreservesStructure(t *testing.T) {
 	long := "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
-	masked := maskAddress(long)
+	masked := btccrypto.MaskAddress(long)
 	if !strings.HasPrefix(masked, long[:6]) {
 		t.Errorf("prefix lost: %q", masked)
 	}
@@ -203,17 +204,17 @@ func TestMaskAddress_PreservesStructure(t *testing.T) {
 func TestMaskAddress_BoundaryLength10(t *testing.T) {
 	// At exactly 10 chars, returns unchanged.
 	in := "abcdefghij" // 10 chars
-	if got := maskAddress(in); got != in {
+	if got := btccrypto.MaskAddress(in); got != in {
 		t.Errorf("10-char input changed: %q", got)
 	}
 }
 
-func TestMaskAddress_BoundaryLength11(t *testing.T) {
-	// 11 chars → masked.
-	in := "abcdefghijk"
-	got := maskAddress(in)
+func TestMaskAddress_BoundaryLength13(t *testing.T) {
+	// 13 chars → masked (canonical threshold: ≤12 returned unchanged).
+	in := "abcdefghijklm"
+	got := btccrypto.MaskAddress(in)
 	if got == in {
-		t.Errorf("11-char input should be masked; got unchanged: %q", got)
+		t.Errorf("13-char input should be masked; got unchanged: %q", got)
 	}
 }
 

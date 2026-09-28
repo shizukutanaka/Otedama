@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 439 — dedupe Issue #2: MaskAddress → btccrypto)
+
+- `internal/btccrypto/mask.go` 新設（`MaskAddress` 共通実装）、
+  `doctor.maskAddress` と `engine.maskAddr` のローカル重複を削除 —
+  同じペイアウトアドレスが doctor 出力と engine ログで別表示
+  （≤10/`···` vs ≤12/`…`）だった divergence を engine 形に統一。
+  Issue #3 (session 438) と併せて CATEGORY_AUDIT の dedupe 案件は
+  全解消。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
