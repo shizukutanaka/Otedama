@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 389)
+
+- `internal/miner` に `FuzzTargetFromNBits`/`FuzzTargetFromDifficulty`/`FuzzTargetFromDifficultyMonotonic` を追加 — プール供給の nBits/難易度変換の不変条件（受理値は正ターゲット・再エンコード往復・ゼロハッシュ恒真・単調性、不正値はエラー）をランダム検証。
+- `internal/config` に `FuzzResolveNumericEnv` を追加 — 数値系 OTEDAMA_* 環境変数の「パース成功時は値適用+env origin、失敗時は警告1件+値不変」の契約を任意文字列で検証。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
