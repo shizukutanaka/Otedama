@@ -939,3 +939,22 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 434 — サブコマンド did-you-mean 提案 [UX]
+
+CATEGORY_AUDIT session-250 で「実在・低重要度・deferred」と記録されていた
+唯一のコード補完可能項目を実装: `otedama verson` 等の誤記時に
+`did you mean "version"?` を stderr に提案（exit 64 は不変）。
+
+- `suggestSubcommand`: 全サブコマンド名との Levenshtein 距離 ≤2 で
+  最近接を提案 — transposition（rnu→run）・脱字（srvce→service）・
+  打ち違い（doktor→doctor）をカバーし、無関係入力（xyzzy-plugh）には
+  提案しない。先頭ダッシュは除去（`--versio` → version）。
+- 既存の静的リスト慣例（completion スクリプトと同型）に倣い
+  `knownSubcommands` を dispatch switch と同期コメント付きで定義。
+- 新規依存ゼロ（stdlib `min` + 2行 DP）。テスト3件追加
+  （dispatch 統合2件 + 距離表10ケース）。
+
+注意: open の #529 が `wallet` を switch に追加するため、そちらが先に
+マージされた場合 `knownSubcommands` への追記が必要（#529 側で対応可、
+または本 PR マージ後の一行フォローアップ）。

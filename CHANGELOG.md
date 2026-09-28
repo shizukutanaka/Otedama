@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 追加 (session 434 — サブコマンド did-you-mean 提案)
+
+- `otedama verson` 等の誤記時に stderr へ `did you mean "version"?` を
+  提案（Levenshtein 距離 ≤2 の最近接。exit 64 は不変、無関係入力には
+  提案なし、先頭ダッシュは無視）。新規依存なし。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
