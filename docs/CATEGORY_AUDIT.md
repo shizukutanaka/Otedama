@@ -147,9 +147,13 @@ and flagged, not changed this session:
   than `n` bytes remain. Malformed input is rejected, not over-read.
 - ❎ Frame `MsgLength` int conversion overflow — safe on the 64-bit platform
   minimum; the existing bounds check guards allocation.
-- ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
-  V2 read loop `continue`s silently — adding a debug log would aid attack
-  triage. Deferred (forward-compat behaviour is intentional).
+- ✅ `DispatchFrame` decode errors — re-verified (session 435): the
+  description was stale. A malformed *known* message's decode error reaches
+  the session loop as `poolMsg.err` and is returned fatally
+  (`engine: pool read: %w`, run.go) — the session dies with the error
+  logged and reconnects, which is stricter than the proposed debug log,
+  not silently continued. Only *unknown* message types are tolerated
+  (routed to `Message.Unknown`). No fix needed.
 - ✅ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding — resolved:
   investigated against the spec; `max_target` (U256) is intentionally not
   implemented because Otedama accepts the pool-assigned target

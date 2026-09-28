@@ -76,6 +76,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `sc.exe binPath=` quoting（serviceArgv 再設計で解消）、
   `MaxTargetNBits`（spec 照合済み・意図的非実装として文書化）、
   DATUM 現在形誤記（"is planned" 表記へ訂正済み・§14 で開示済み）。
+  さらに `DispatchFrame` decode error の「無言 continue」記述も陳腐
+  と訂正 — 実際は `engine: pool read` でセッション死亡する fail-fast
+  （提案の debug ログより厳格）。
 
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 

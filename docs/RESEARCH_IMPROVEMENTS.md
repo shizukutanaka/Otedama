@@ -1112,3 +1112,23 @@ hmacSHA256Pooled は設計どおり未配線、maskAddress/stripScheme 二重化
 did-you-mean 未実装は現状のまま。
 
 これで docs/ 配下の全ファイル精読・実装照合が完結。
+
+## Session 435 — エコシステム追跡 + 監査残件の最終検証 [AUDIT]
+
+- CATEGORY_AUDIT `DispatchFrame` 行が陳腐: decode error は
+  `poolMsg.err` → `engine: pool read` でセッション死亡・再接続
+  （fail-fast — 提案 debug ログより厳格）。unknown 型のみ Unknown
+  へルーティングされ許容。行を解決済みに更新。
+- ESP-Miner v2.14.0b4 調査（SV2 submit 改善の上流参照元）:
+  `TCP_NODELAY` 設定は Go では `net.TCPConn` デフォルト true のため
+  Otedama では不要（lwIP/ESP32 固有の修正）。dial timeout 不在は
+  open の #457/#483 が担当済み、KeepAlive は Go デフォルト有効
+  （15s）。ESPM の SV2 実装マージ（Noise_NX + libsecp256k1）は
+  Otedama の Noise NX 方向を裏付け。per-share RTT 計測は候補として
+  記録（seq→時刻相関の配線が必要）。
+- SRI v1.12.0 (2026-09-17) 引き続き最新 — ChaChaPoly 整合維持。
+
+これで CATEGORY_AUDIT の actionable backlog はメンテナ判断待ち項目
+（CODEOWNERS Noise 4項・secp256k1 依存判断・依存追加を要する TUI
+width・Issue #2/#3 統合・workflow 群）のみ残存 — 一方的実装可能な
+項目は枯渇。
