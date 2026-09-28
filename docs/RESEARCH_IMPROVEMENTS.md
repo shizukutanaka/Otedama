@@ -951,3 +951,13 @@ vulnerabilities, every remaining lint finding maps onto classes owned
 by the open lint PRs, and the cmd/doctor+version wrappers, hal
 enumeration/dedup, frame-encode bounds, and LatencyTracker
 nearest-rank math were all audited clean.
+
+## Session 455
+
+Prometheus naming-convention audit of the full metric catalogue
+(engine/metrics.go + API.md + SPECIFICATION.md §6 cross-checked):
+every counter carries `_total`, every gauge carries its unit — except
+one real violation: `otedama_rate_sources_total` was a Gauge named with
+the counter-reserved suffix (PromQL `rate()` would have returned
+nonsense). Renamed to `otedama_rate_sources`; the doc-parity guard
+test keeps catalog and code in lockstep.

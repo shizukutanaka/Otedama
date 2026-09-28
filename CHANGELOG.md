@@ -17,6 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    golangci-lint v2 で硬エラー化する前方互換ドリフトを解消
    （`golangci-lint config verify` 合格）。
 
+### 修正 (session 455)
+
+1. メトリクス名 `otedama_rate_sources_total` を `otedama_rate_sources` に
+   改名 — `_total` は Prometheus 規約上 monotonic counter 予約語であり、
+   gauge への付与は `rate()` が無意味な値を返す等の誤用を招く。
+   SPECIFICATION.md §6・API.md のカタログを同期（breaking: メトリクス名変更）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

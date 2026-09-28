@@ -405,13 +405,15 @@ func newEngineMetrics(reg *metrics.Registry) *engineMetrics {
 		rateSourcesOK: reg.NewGauge(
 			"otedama_rate_sources_ok",
 			"Number of BTC/USD price sources that returned a usable in-band reading "+
-				"in the last fetch. Compare with otedama_rate_sources_total: ok < total "+
+				"in the last fetch. Compare with otedama_rate_sources: ok < sources "+
 				"means the median is running on degraded redundancy (alert before ok=0).",
 			nil),
 		rateSourcesTotal: reg.NewGauge(
-			"otedama_rate_sources_total",
+			"otedama_rate_sources",
 			"Number of BTC/USD price sources configured. The denominator for "+
-				"otedama_rate_sources_ok.",
+				"otedama_rate_sources_ok. (Named without the _total suffix because "+
+				"_total is reserved for monotonic counters in the Prometheus naming "+
+				"convention — this gauge can decrease when sources drop out.)",
 			nil),
 
 		poolDifficulty: reg.NewGauge(

@@ -1045,7 +1045,7 @@ func TestPublishBTCRate_SourceHealthGaugesUntouchedBeforeFetch(t *testing.T) {
 		t.Errorf("rate_sources_ok before fetch = %v, want unchanged (-1)", got)
 	}
 	if got := m.rateSourcesTotal.Value(); got != -1 {
-		t.Errorf("rate_sources_total before fetch = %v, want unchanged (-1)", got)
+		t.Errorf("rate_sources before fetch = %v, want unchanged (-1)", got)
 	}
 }
 

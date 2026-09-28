@@ -212,7 +212,7 @@ first relevant event, with a bounded label set. HTTP endpoints: `/metrics`,
 | `devices_idle` | gauge | Devices left idle this cycle (no compatible stream, or none clearing `min_yield_sats_per_sec`). |
 | `btc_usd_rate` | gauge | BTC/USD from source consensus (last good value). |
 | `btc_rate_age_seconds` | gauge | Seconds since the last successful rate fetch. |
-| `rate_sources_ok` / `rate_sources_total` | gauge | Healthy vs configured price sources. |
+| `rate_sources_ok` / `rate_sources` | gauge | Healthy vs configured price sources. |
 | `clock_skew_seconds` | gauge | Max offset vs rate-source HTTP `Date` headers. |
 
 ## 7. Known limitations
