@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 405)
+
+`.goreleaser.yaml` の実在しないパス2件を修正 — アーカイブ同梱 glob
+`docs/locales/*.toml`（i18n は `internal/i18n/messages/` の Go ソース
+内蔵で当該ディレクトリなし、全リリースで空一致）と、リリース本文の
+死リンク `docs/verify-release.md`（正しくは `VERIFY.md`）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
