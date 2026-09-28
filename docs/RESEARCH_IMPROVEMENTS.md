@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 470
+
+Fixed a real cross-platform behavioral gap in `service install`:
+`installWindowsService` ran `sc.exe create ... start= auto` which only
+schedules the service for the next boot — unlike `systemctl enable
+--now` (Linux) and `launchctl load -w` + RunAtLoad (macOS), the Windows
+service was registered but left stopped, while the CLI printed
+"installed and started" on every platform. Install now runs
+`sc.exe start` after create; a start failure surfaces a clear
+"registered but failed to start" error with the recovery command.
+Regression tests cover both the create→start order and the
+start-failure error path.

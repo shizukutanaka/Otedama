@@ -553,6 +553,42 @@ func TestInstallWindowsService_Error(t *testing.T) {
 	}
 }
 
+func TestInstallWindowsService_StartsAfterCreate(t *testing.T) {
+	var ops []string
+	mockRunCmd(t, func(name string, args ...string) error {
+		ops = append(ops, args[0])
+		return nil
+	})
+
+	m := &Manager{binaryPath: `C:\otedama.exe`}
+	if err := m.installWindowsService(); err != nil {
+		t.Fatalf("installWindowsService: %v", err)
+	}
+	if len(ops) != 2 || ops[0] != "create" || ops[1] != "start" {
+		t.Errorf("expected create then start, got %v", ops)
+	}
+}
+
+func TestInstallWindowsService_StartError(t *testing.T) {
+	call := 0
+	mockRunCmd(t, func(name string, args ...string) error {
+		call++
+		if call == 2 {
+			return errors.New("sc start: service did not respond")
+		}
+		return nil
+	})
+
+	m := &Manager{binaryPath: `C:\otedama.exe`}
+	err := m.installWindowsService()
+	if err == nil {
+		t.Fatal("expected error when sc.exe start fails")
+	}
+	if !strings.Contains(err.Error(), "failed to start") {
+		t.Errorf("error should say the service was registered but failed to start, got: %v", err)
+	}
+}
+
 // ----- uninstallWindowsService -----
 
 func TestUninstallWindowsService_StopErrorIsIgnored(t *testing.T) {

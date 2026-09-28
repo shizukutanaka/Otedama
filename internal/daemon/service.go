@@ -346,10 +346,18 @@ func launchdLogPath(name string) string {
 
 func (m *Manager) installWindowsService() error {
 	args := fmt.Sprintf(`"%s" %s`, m.binaryPath, m.serviceArgs())
-	return runCmd("sc.exe", "create", "Otedama",
+	if err := runCmd("sc.exe", "create", "Otedama",
 		"binPath=", args,
 		"start=", "auto",
-		"DisplayName=", "Otedama Mining Service")
+		"DisplayName=", "Otedama Mining Service"); err != nil {
+		return err
+	}
+	// "start= auto" only schedules the service for the next boot —
+	// unlike systemctl --now / launchctl load -w it does not start it.
+	if err := runCmd("sc.exe", "start", "Otedama"); err != nil {
+		return fmt.Errorf("daemon: service registered but failed to start (try 'sc start Otedama'): %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) uninstallWindowsService() error {

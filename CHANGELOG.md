@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 470)
+
+1. Windows の `service install` が `start= auto` の登録のみでサービスを
+   開始していなかった問題を修正 — 他OS（systemd `--now`・launchd
+   RunAtLoad）と同様にインストール直後から起動するよう `sc.exe start`
+   を追加し、起動失敗時は明確なエラーを報告。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
