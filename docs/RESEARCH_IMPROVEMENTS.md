@@ -939,3 +939,18 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 398 — SV2 encode-side round-trip fuzz
+
+**`FuzzMessageRoundTrip` [FIXED — coverage gap].** The six steady-state
+mining-channel messages (`NewMiningJob`, `SetNewPrevHash`, `SetTarget`,
+`SubmitSharesStandard`, `SubmitSharesSuccess`, `SubmitSharesError`)
+previously had decode-only fuzzers (#479): arbitrary bytes never wedge
+the parser, but nothing proved the encode direction is correct or
+canonical. The new fuzzer builds every message from fuzz input and
+asserts three invariants per type: Encode never fails, Decode of the
+output returns an identical value, and re-encoding is byte-identical
+(canonical-form stability in both directions). 60 s / 8.7 M execs clean
+(`internal/stratum/roundtrip_fuzz_test.go`). With this, both directions
+of every SV2 message type Otedama emits or consumes have property
+coverage.

@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### テスト (session 398)
+
+`FuzzMessageRoundTrip` を追加 — SV2 steady-state メッセージ6種（NewMiningJob /
+SetNewPrevHash / SetTarget / SubmitSharesStandard / SubmitSharesSuccess /
+SubmitSharesError）のエンコード方向を検証: Encode 不敗・decode 完全一致・
+再エンコード byte 一致（canonical-form 安定性）。decode 側 fuzz（#479）の補完として
+双方向のプロパティカバレッジを完成。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
