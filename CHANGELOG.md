@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 406)
+
+API.md の環境変数テーブルに実装済みの5変数（`OTEDAMA_ARBITRATION_HYSTERESIS_PCT`・
+`OTEDAMA_CURTAIL_BELOW_BTC_USD`・`OTEDAMA_MIN_YIELD_SATS_PER_SEC`・
+`OTEDAMA_POWER_WATTS`・`OTEDAMA_ELECTRICITY_PRICE_PER_KWH`）が欠落していた問題を
+修正 — config.yaml キー名と有効化されるメトリクスを明記。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
