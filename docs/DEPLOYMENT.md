@@ -405,8 +405,10 @@ recoverable from mnemonic. A lost mnemonic AND wallet.dat is not.
 
 For production deployments:
 
-- [ ] Binary SHA-256 verified against published checksums.
-- [ ] Binary cosign signature verified.
+- [ ] Binary SHA-256 verified against published checksums (once signed
+      releases ship — checksums are not yet published; see VERIFY.md).
+- [ ] Binary cosign signature verified (once signed releases ship —
+      see VERIFY.md).
 - [ ] Running as a dedicated, non-root user.
 - [ ] Wallet passphrase passed via secret store (not `--wallet-passphrase` on command line).
 - [ ] Data directory permissions are 0700.

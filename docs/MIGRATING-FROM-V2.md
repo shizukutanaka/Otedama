@@ -23,7 +23,6 @@ whether v3 is right for them and how to migrate if so.
   operator.
 - Custodial accumulation (user A and user B share a balance managed
   by the pool). v3 is single-user by design.
-- Stratum V1 compatibility. v3 has no V1 fallback.
 - KYC/AML features. v3 is designed around self-custody.
 
 If any of those is a hard requirement, **stay on v2.x**. The
@@ -36,7 +35,8 @@ If any of those is a hard requirement, **stay on v2.x**. The
   a client that routes earnings directly to the user's address.
 - **Algorithms:** v2 supported Scrypt, Ethash, RandomX, and others;
   v3 is SHA-256d only.
-- **Protocol:** v2 spoke Stratum V1 primarily; v3 is V2-only.
+- **Protocol:** v2 spoke Stratum V1; v3 speaks both V1 (`stratum://`,
+  `stratum+tls://`) and V2 (`stratum+v2://`, `stratum+v2tls://`).
 
 ### Operational
 - **Binary name:** `otedama` (same).
@@ -48,8 +48,10 @@ If any of those is a hard requirement, **stay on v2.x**. The
 ### Security
 - **Noise encryption:** Stratum V2 handshake on every pool connection.
 - **Wallet:** BIP-39 seed encrypted with scrypt + AES-256-GCM.
-- **CI:** SHA-pinned GitHub Actions, Dependabot, nightly fuzz, cosign
-  signing.
+- **CI:** SHA-pinned GitHub Actions, Dependabot, scheduled gosec/
+  CodeQL/Trivy/TruffleHog/Semgrep scans. Fuzzers ship in-repo
+  (`make fuzz`); cosign release signing is planned (ROADMAP v3.1.0)
+  but not yet wired — see `VERIFY.md`.
 
 ## Migration procedure
 
@@ -85,7 +87,8 @@ under `[payout]`. Copy the address — you will paste it into v3.
 curl -sSL https://github.com/shizukutanaka/Otedama/releases/latest/download/install.sh | bash
 ```
 
-Or download from [releases][releases] and verify the signature.
+Or download from [releases][releases] and verify the artifact per
+`VERIFY.md` (source rebuild — release signing is not live yet).
 
 [releases]: https://github.com/shizukutanaka/Otedama/releases
 
@@ -137,7 +140,8 @@ Fields that have been **removed**:
 
 - `algorithms:` — v3 is SHA-256d only.
 - `pool_operator:` — v3 is not a pool.
-- `[stratum_v1]` — no V1 support.
+- `[stratum_v1]` — v3 selects the protocol per-pool from the URL
+  scheme in `pools[].url` instead.
 - `[custody]` — non-custodial only.
 - `[kyc]` / `[aml]` — no KYC infrastructure.
 

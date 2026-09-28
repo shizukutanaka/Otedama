@@ -939,3 +939,28 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 408 — migration guide drift vs code reality [FIXED]
+
+**MIGRATING-FROM-V2.md claims corrected [FIXED].**
+The guide told v2 users "v3 has no V1 fallback" / "v3 is V2-only" /
+"[stratum_v1] — no V1 support" — all false: v3 has full Stratum V1
+support (`internal/poolproto/stratumv1`, `stratum://`+`stratum+tls://`
+schemes, `v1PoolWorker` in engine). Corrected to describe dual-protocol
+support and the per-pool URL-scheme selection. Also corrected the CI
+boast: "nightly fuzz, cosign signing" — no workflow runs fuzzers (they
+exist + `make fuzz` works, but no scheduled job) and cosign is not
+wired into release.yml (session 407). "verify the signature" in the
+install step → pointed at VERIFY.md's current-reality flow.
+DEPLOYMENT.md's hardening checklist now marks the checksum/cosign items
+as pending signed releases instead of implying they exist.
+
+**Also found [SURFACED]:** CLAUDE.md's architecture map itself lists
+`test.yml (fuzz+benchmark)` — test.yml has benchmarks but no fuzz job.
+CLAUDE.md changes require maintainer agreement per its own update
+clause, so recorded rather than edited.
+
+**Audited — clean:** config.yaml.example value ranges match config.go
+validation ([0,1) hysteresis, ≥0 floors); doctor `--bitcoin-address`
+flag exists as documented; AUDIT_CHECKLIST scrypt claim (N=32768 vs
+actual 1<<17) already corrected in open #494 — no re-delivery needed.
