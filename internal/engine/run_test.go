@@ -1521,6 +1521,18 @@ func TestPrintRecoveryPhrase_NoOutputCases(t *testing.T) {
 	}
 }
 
+// TestPrintRecoveryPhrase_PointsToWalletVerify guards the one place users
+// ever see their phrase: the banner must name the command that checks a
+// written-down backup, or `otedama wallet verify` stays undiscoverable at
+// the exact moment it is needed.
+func TestPrintRecoveryPhrase_PointsToWalletVerify(t *testing.T) {
+	var out bytes.Buffer
+	printRecoveryPhrase(&out, lightning.Mnemonic{"abandon", "ability"}, "deadbeef")
+	if !strings.Contains(out.String(), "otedama wallet verify") {
+		t.Errorf("recovery-phrase banner should point at `otedama wallet verify`; got:\n%s", out.String())
+	}
+}
+
 // ============================================================================
 // totalHashes / totalDropped — worker stat aggregation
 // ============================================================================
@@ -2447,6 +2459,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }
