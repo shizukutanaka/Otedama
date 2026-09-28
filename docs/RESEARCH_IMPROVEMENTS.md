@@ -939,3 +939,9 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 393 — non-loopback HTTP listener warning
+
+[FIXED — session 393] **`--http-addr` non-loopback warning** (`cmd/otedama/run.go`): a metrics listener bound to `0.0.0.0`/`::`/LAN addresses (share counts, hashrate telemetry, `/healthz` presence) exposed itself silently — only a pprof-enabled bind was ever flagged (open PR #453). `startHTTPServer` now warns on stderr for any non-loopback bind, and names pprof profile exposure explicitly when `--pprof` is on. Supersedes #453's narrower warning (identical `isLoopbackAddr` helper, wider trigger). Tests: address table (v4/v6/hostname/bare/empty), warn-on-0.0.0.0 with and without pprof, silent-on-loopback.
+
+[AUDITED — clean] Ecosystem re-check: SRI v1.12.0 (2026-09-17) remains latest — AES-256-GCM drop, codec refactor, BIP323 adaptations confirmed unchanged since session 388; sv2-apps v0.4.0. Coverage sweep of low spots: `config.DefaultDataDir` (platform branches), `miner.HasWork` (trivial exported getter), `doctor.checkHardware` (sysfs/darwin-limited) — all verified benign or already covered by open PRs (#501 for `lightning save()`).
