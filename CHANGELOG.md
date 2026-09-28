@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 409)
+
+SPECIFICATION.md の検証記述を実装に訂正: ペイアウトアドレスの
+チェックサムは config 読み込み時に実際に検証される（旧記述は
+「未検証」と誤記）、`tls_ca_file` は `stratum+v2tls://` にも適用。
+`validateBitcoinAddress`・`TLSCAFile` の古い godoc も同様に訂正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
