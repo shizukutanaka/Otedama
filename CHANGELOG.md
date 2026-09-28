@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 442)
+
+- CATEGORY_AUDIT の古い deferred 記述を訂正 — V2 read loop は decode エラーで無言 continue せず、セッション終了＋接続層ログ出力（実コード確認済み）。無言パスは未知メッセージ型の `UnknownMessage` 保存のみ（意図的な前方互換）。
+
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

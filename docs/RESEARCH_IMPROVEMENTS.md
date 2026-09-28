@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 442 — stale-audit-entry correction: V2 decode errors [BEST-PRACTICE]
+
+Verified the deferred CATEGORY_AUDIT item claiming the V2 read loop
+"`continue`s silently" on `DispatchFrame` decode errors. The premise was
+wrong: `poolproto`-side reader forwards every decode error as
+`poolMsg{err}` and the engine's main select returns
+`engine: pool read: %w` — a malformed *known-type* frame terminates the
+session, and the wrapped error surfaces at the connect-retry log (so the
+proposed "debug log for attack triage" already exists). The path that is
+genuinely silent is unrecognised msg types, which `DispatchFrame` maps to
+`UnknownMessage` (payload retained) — the intentional, correct
+forward-compat behaviour. Entry rewritten to describe the verified code
+path rather than leaving a phantom fix queued.

@@ -146,9 +146,14 @@ and flagged, not changed this session:
   than `n` bytes remain. Malformed input is rejected, not over-read.
 - ❎ Frame `MsgLength` int conversion overflow — safe on the 64-bit platform
   minimum; the existing bounds check guards allocation.
-- ⏸ `DispatchFrame` returns a decode error for malformed *known* messages and the
-  V2 read loop `continue`s silently — adding a debug log would aid attack
-  triage. Deferred (forward-compat behaviour is intentional).
+- ✅ **`DispatchFrame` decode-error handling verified (session 442).** This
+  entry's premise was stale: the V2 read loop does **not** `continue` on a
+  decode error — the reader goroutine forwards it as `poolMsg{err}` and the
+  main loop returns `engine: pool read: %w`, terminating the session (the
+  wrapped error is logged at the connect-retry layer, so attack triage
+  exists). The silent path that *does* exist is `m.Unknown` (unrecognised
+  msg type → captured as `UnknownMessage`, payload retained) — that is the
+  intentional forward-compat behaviour, and it is correct.
 - ⏸ `OpenMiningChannel(.Success).MaxTargetNBits` wire-encoding: an audit pass
   suggested a missing field, but the exact SV2 field set must be confirmed
   against the spec before touching the working round-trip — not changed (the
