@@ -19,8 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   保管庫でありノードではない）、Bitcoin Core データ（プール接続のみ）、
   docker-compose override（compose ファイル自体が非存在）、v2 クリーンアップ
   残骸（fix_*.sh）、マイニングキャッシュ（work-cache/ 等 — 生成コード無し）。
-- 死んだ許可リスト項目 `!config.production.yaml` / `!SHA256SUMS.example` と
-  SHA256SUMS グロブを削除 — リリースのチェックサムは `otedama_v*_checksums.txt`。
+- 死んだ許可リスト項目 `!config.production.yaml` / `!SHA256SUMS.example` を
+  削除（`SHA256SUMS*` グロブは release ジョブの生成物なので維持 —
+  session 429 で復元）。
 - 実際に生成される全て（wallet.dat、config.yaml、coverage、prof、リリース
   アーカイブ、ビルドバイナリ）は引き続き除外済み。
 
@@ -34,6 +35,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   release.yml は署名非生成）— Gap 表記に訂正。
 - `SUSTAINABILITY.md` 実装状況: §2 SV1/SV2「v3.2.0 スコープ」→ 実装済み、
   §5 「SHA pinning + cosign 実装済み」→ 未実施、に訂正。
+
+### 修正 (session 429 — Makefile の幻影ターゲットと未ガードツール)
+
+- `make migrate-from-v2` が非実在サブコマンド `otedama migrate-from-v2`
+  への手順を echo — docs/MIGRATING-FROM-V2.md への誘導に置き換え。
+- `make security` / `make licenses` が gosec・govulncheck・go-licenses を
+  未ガードで呼び未導入環境で即失敗 — `audit` ターゲットと同じ
+  「未導入なら install 手順を表示してスキップ」パターンに統一。
+- `SHA256SUMS*` グロブを復元 — release ジョブが `artifacts/*/SHA256SUMS`
+  を生成するため除去は誤り（Devin Review 指摘）。
 
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 

@@ -1000,3 +1000,28 @@ class as VERIFY.md's cosign section (session 407):
 
 Sources: `.github/workflows/*.yml`, `internal/stratum/*_test.go`,
 `internal/poolproto/`, go.mod.
+
+## Session 429 — Makefile ターゲットの監査 [HYGIENE]
+
+`Makefile` の残り未監査ターゲットを検証:
+
+- `migrate-from-v2` ターゲットが「otedama migrate-from-v2 を実行せよ」と
+  echo していた — そのサブコマンドは非実在（#513 が skills/、#523 が
+  SECURITY.md の同種幻影を修正済み）。docs/MIGRATING-FROM-V2.md への
+  誘導に置き換え。
+- `security` ターゲットが gosec・govulncheck をガードなしで呼んでおり、
+  未インストール環境では `make security` が即失敗。`audit` ターゲット
+  自身が govulncheck/golangci-lint に使う「未導入なら install 手順を
+  表示してスキップ」パターンに統一（`licenses` の go-licenses も同様）。
+- Devin Review 指摘を受理: release ジョブが `artifacts/*/SHA256SUMS` を
+  生成するため #426 の gitignore 整理で除去した `SHA256SUMS*` パターンは
+  dead ではなかった — 復元（`artifacts/` 自体は ignore 対象外のため
+  ローカル再現で trackable になる）。
+
+Clean-verdict: `audit`（8 ステップ・30-item 表記は master の実数と一致）、
+`fuzz`（Fuzz 関数を持つ pkg を動的列挙）、`docs`/`docs-serve`、
+`deps-graph`、docker 系、ISSUE_TEMPLATE 両 yml、PR テンプレートは
+全て実装と整合。
+
+Sources: `Makefile`, `.github/workflows/ci.yml` (release job),
+`.github/ISSUE_TEMPLATE/*.yml`, `git check-ignore`.
