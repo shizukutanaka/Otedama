@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 408)
+
+MIGRATING-FROM-V2.md の誤記を修正: 「v3 は V1 フォールバックなし・
+V2 専用」→ 実装は V1+V2 両対応（プール URL のスキーム選択）。
+「nightly fuzz・cosign 署名」の CI 主張も実態に訂正（スケジュール
+fuzz ジョブなし・署名未配線 — ROADMAP v3.1.0）。DEPLOYMENT.md の
+hardening checklist 2項目に署名リリース未提供の注記を追加。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
