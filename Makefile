@@ -10,7 +10,7 @@
 # Project metadata
 PROJECT := otedama
 MODULE := github.com/shizukutanaka/Otedama
-VERSION := $(shell cat VERSION 2>/dev/null || echo "v3.0.0-alpha.0-dev")
+VERSION := $(shell cat VERSION 2>/dev/null || echo "v3.0.0-alpha.1-dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
