@@ -25,7 +25,7 @@
 //     {SatsPerSecond:0, Confidence:0} rather than going silent, so that
 //     the arbitration engine can route away from the unavailable market.
 //
-//  3. Honour context cancellation: when ctx is cancelled, the quote
+//  3. Honor context cancellation: when ctx is canceled, the quote
 //     channel must be closed and all goroutines must exit.
 //
 // # Which external markets fit this interface

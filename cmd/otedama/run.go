@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -56,7 +57,7 @@ func parseRunFlags(name string, args []string, stdout, stderr io.Writer) (runFla
 		// its output belongs on stdout. This function returns a plain
 		// error rather than an exit code (its three call sites each need
 		// to do their own post-parse work), so the ErrHelp/exitOK
-		// decision is made by the caller checking err == flag.ErrHelp.
+		// decision is made by the caller checking errors.Is(err, flag.ErrHelp).
 		out = stdout
 	}
 	fs.SetOutput(out)
@@ -122,7 +123,7 @@ func applyRunEnvFallbacks(f *runFlags) {
 func cmdRun(args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags("run", args, stdout, stderr)
 	if err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
@@ -161,7 +162,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		return exitConfig
 	}
 
-	// Initialise i18n bundle.
+	// Initialize i18n bundle.
 	bundle, _ := messages.NewBundle()
 	lang := messages.DetectLang(cfg.Language)
 	if cfg.Language == "" {
@@ -204,7 +205,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 	// Start HTTP health/metrics server if requested.
 	metricsRegistry, httpSrv := startHTTPServer(ctx, cfg.HTTPAddr, f.pprofEnabled, stdout, stderr)
 	if httpSrv != nil {
-		defer httpSrv.Stop()
+		defer func() { _ = httpSrv.Stop() }()
 	}
 
 	// Bridge engine readiness to HTTP /readyz.
@@ -223,7 +224,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) int {
 		Logger:                   structlog.Adapter(),
 		Metrics:                  metricsRegistry,
 		OnReady:                  onReady,
-	}); err != nil && err != context.Canceled {
+	}); err != nil && !errors.Is(err, context.Canceled) {
 		structlog.Error("engine", "error", err.Error())
 		plain("error", err.Error())
 		return exitRuntime
@@ -269,7 +270,7 @@ func buildLogger(f runFlags, cfg config.Config, stdout io.Writer) (*logger.Logge
 	if f.logFile != "" {
 		// 0600: logs can include pool URLs and worker names; match the
 		// restrictive posture used for the wallet and data directory.
-		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		lf, err := os.OpenFile(f.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot open --log-file %q: %v\n", f.logFile, err)
 		} else {

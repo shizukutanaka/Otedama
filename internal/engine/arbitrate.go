@@ -57,7 +57,7 @@ const defaultHysteresisPct = 0.05
 const streamStaleTimeout = 3 * time.Minute
 
 // runArbitrationLoop re-evaluates device→stream assignment every 30s,
-// or whenever a fresh quote arrives. Blocks until ctx is cancelled or
+// or whenever a fresh quote arrives. Blocks until ctx is canceled or
 // the quote channel is closed.
 func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 	ticker := time.NewTicker(arbitrationInterval)
@@ -82,10 +82,11 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 			lastQuoteAt[key] = ts
 		case <-ticker.C:
 			opts.streamsMu.Lock()
-			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now(), streamStaleTimeout) {
+			for _, key := range pruneStaleStreams(opts.streamMap, lastQuoteAt, time.Now()) {
 				opts.log("info", fmt.Sprintf(
 					"arbitration: stream %q expired (no quote in %s); no longer routing to it",
-					key, streamStaleTimeout))
+					key, streamStaleTimeout,
+				))
 			}
 			streams := streamsSlice(opts.streamMap)
 			opts.streamsMu.Unlock()
@@ -143,7 +144,8 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 				if alloc.SkippedDevice > 0 {
 					opts.log("info", fmt.Sprintf(
 						"arbitration: %d device(s) now idle (no viable stream, or below min_yield_sats_per_sec floor)",
-						alloc.SkippedDevice))
+						alloc.SkippedDevice,
+					))
 				} else {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
@@ -154,14 +156,14 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 }
 
 // pruneStaleStreams removes from m (and seen) every stream whose last quote is
-// older than ttl, returning the pruned keys. Only entries that have a recorded
+// older than streamStaleTimeout, returning the pruned keys. Only entries that have a recorded
 // quote time are considered: a stream present in m but absent from seen (e.g.
 // pre-seeded directly, never quoted) is never pruned. now is passed in so the
 // logic is deterministically testable.
-func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time, ttl time.Duration) []string {
+func pruneStaleStreams(m map[string]arbitration.Stream, seen map[string]time.Time, now time.Time) []string {
 	var pruned []string
 	for key, ts := range seen {
-		if now.Sub(ts) > ttl {
+		if now.Sub(ts) > streamStaleTimeout {
 			delete(m, key)
 			delete(seen, key)
 			pruned = append(pruned, key)
@@ -212,7 +214,7 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 			// Merge YieldPerDevice from this entry into the representative so
 			// the arbitration engine has per-device yields for every device, not
 			// just whichever map entry happened to be iterated first.
-			// updateStream always initialises YieldPerDevice before inserting
+			// updateStream always initializes YieldPerDevice before inserting
 			// into the map, so rep.YieldPerDevice is never nil here.
 			for devID, y := range s.YieldPerDevice {
 				rep.YieldPerDevice[devID] = y

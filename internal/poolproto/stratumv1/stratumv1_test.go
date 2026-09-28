@@ -989,7 +989,7 @@ func TestSession_Close_CancelsPendingCalls(t *testing.T) {
 			t.Error("pending channel should be closed (not deliver a value) after Close")
 		}
 	case <-time.After(500 * time.Millisecond):
-		t.Error("pending call not cancelled within 500ms")
+		t.Error("pending call not canceled within 500ms")
 	}
 }
 
@@ -1127,9 +1127,8 @@ func TestSession_E2E_PoolClosedMidSession(t *testing.T) {
 	select {
 	case _, ok := <-sess.Jobs():
 		if ok {
-			// Got a job before close — acceptable.
+			t.Log("a job arrived before close — acceptable")
 		}
-		// Channel closed — expected.
 	case <-time.After(2 * time.Second):
 		t.Error("Jobs channel did not close after pool disconnect")
 	}
@@ -1244,10 +1243,7 @@ func TestConnection_Close_NilRaw_DocumentsBehavior(t *testing.T) {
 // ============================================================================
 
 func TestParseReconnect_FullParams(t *testing.T) {
-	d, ok := parseReconnect(json.RawMessage(`["us-east.pool.example",4444,30]`))
-	if !ok {
-		t.Fatal("parseReconnect returned ok=false")
-	}
+	d := parseReconnect(json.RawMessage(`["us-east.pool.example",4444,30]`))
 	if d.Host != "us-east.pool.example" {
 		t.Errorf("Host = %q, want us-east.pool.example", d.Host)
 	}
@@ -1261,10 +1257,7 @@ func TestParseReconnect_FullParams(t *testing.T) {
 
 func TestParseReconnect_PortAsString(t *testing.T) {
 	// Some pools encode the port as a string.
-	d, ok := parseReconnect(json.RawMessage(`["host","3333",5]`))
-	if !ok {
-		t.Fatal("ok=false")
-	}
+	d := parseReconnect(json.RawMessage(`["host","3333",5]`))
 	if d.Port != 3333 {
 		t.Errorf("Port = %d, want 3333", d.Port)
 	}
@@ -1273,10 +1266,7 @@ func TestParseReconnect_PortAsString(t *testing.T) {
 func TestParseReconnect_EmptyAndBareParams(t *testing.T) {
 	// A bare client.reconnect with no params is still a valid directive.
 	for _, raw := range []string{``, `[]`, `null`, `"garbage"`} {
-		d, ok := parseReconnect(json.RawMessage(raw))
-		if !ok {
-			t.Errorf("parseReconnect(%q) ok=false, want true", raw)
-		}
+		d := parseReconnect(json.RawMessage(raw))
 		if d.Host != "" || d.Port != 0 || d.Wait != 0 {
 			t.Errorf("parseReconnect(%q) = %+v, want zero directive", raw, d)
 		}
@@ -1687,7 +1677,7 @@ func TestNegotiate_ExtranonceSubscribe_MethodNotFound_HandshakeSucceeds(t *testi
 	if err != nil {
 		t.Fatalf("Negotiate should succeed even when pool rejects extranonce.subscribe: %v", err)
 	}
-	defer sess.Close()
+	_ = sess.Close()
 }
 
 func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) {
@@ -1718,17 +1708,17 @@ func TestNegotiate_ExtranonceSubscribe_Accepted_HandshakeSucceeds(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Negotiate should succeed when pool accepts extranonce.subscribe: %v", err)
 	}
-	defer sess.Close()
+	_ = sess.Close()
 }
 
 // ============================================================================
-// sendJob — clean_jobs purge and normal queueing behaviour
+// sendJob — clean_jobs purge and normal queueing behavior
 // ============================================================================
 
-// makeTestSession returns a bare *session with a jobsCh of capacity cap.
+// makeTestSession returns a bare *session with a jobsCh of the given capacity.
 // The conn field is nil; only jobsCh is used in sendJob.
-func makeTestSession(cap int) *session {
-	return &session{jobsCh: make(chan poolproto.Job, cap)}
+func makeTestSession(capacity int) *session {
+	return &session{jobsCh: make(chan poolproto.Job, capacity)}
 }
 
 func TestSendJob_NormalQueueingWhenChannelEmpty(t *testing.T) {

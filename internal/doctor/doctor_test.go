@@ -145,7 +145,7 @@ func TestCheckDataDir_Existing(t *testing.T) {
 	dir := t.TempDir()
 	// Make it properly restrictive.
 	if runtime.GOOS != "windows" {
-		_ = os.Chmod(dir, 0700)
+		_ = os.Chmod(dir, 0o700)
 	}
 	c := checkDataDir(dir)
 	r := c.Run(context.Background())
@@ -159,7 +159,7 @@ func TestCheckDataDir_LaxPermissions(t *testing.T) {
 		t.Skip("Unix permissions not applicable on Windows")
 	}
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0755); err != nil {
+	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Skip("cannot chmod in test environment")
 	}
 	c := checkDataDir(dir)

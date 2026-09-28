@@ -153,7 +153,7 @@ type Config struct {
 	// PowerWatts is the user's estimated total system power draw in watts.
 	// When set (> 0), Otedama computes and exposes
 	// `otedama_joules_per_terahash` (J/TH), the single efficiency metric
-	// miners optimise for. J/TH = PowerWatts × 1e12 / HashesPerSecond.
+	// miners optimize for. J/TH = PowerWatts × 1e12 / HashesPerSecond.
 	// Power measurement from hardware sensors is not yet available; this
 	// field lets users enter their measured TDP or wall-meter reading.
 	//
@@ -228,6 +228,11 @@ type WorkerConfig struct {
 	Name string `yaml:"name"`
 }
 
+const (
+	logLevelInfo  = "info"
+	logFormatText = "text"
+)
+
 // Defaults returns a Config populated with Otedama's built-in defaults.
 //
 // The returned Config is not usable for mining on its own (BitcoinAddress
@@ -239,8 +244,8 @@ func Defaults() Config {
 		Pools:                    nil, // resolved from built-in recommendations at startup
 		Workers:                  WorkerConfig{},
 		Language:                 "", // resolved from POSIX locale env at startup
-		LogLevel:                 "info",
-		LogFormat:                "text",
+		LogLevel:                 logLevelInfo,
+		LogFormat:                logFormatText,
 		DataDir:                  "", // resolved from XDG/platform conventions at startup
 		ArbitrationHysteresisPct: 0.05,
 		CurtailBelowBTCUSD:       0,  // disabled by default
@@ -378,7 +383,8 @@ func EnvWarnings(env map[string]string) []string {
 		}
 		if _, err := strconv.ParseFloat(v, 64); err != nil {
 			warnings = append(warnings, fmt.Sprintf(
-				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v))
+				"%s=%q is not a valid number; ignoring it and using the default", spec.key, v,
+			))
 		}
 	}
 	return warnings
@@ -604,7 +610,7 @@ func (c Config) Validate() error {
 	}
 
 	switch c.LogLevel {
-	case "debug", "info", "warn", "error":
+	case "debug", logLevelInfo, "warn", "error":
 		// ok
 	case "":
 		// empty LogLevel is unreachable post-Resolve (defaults supply "info"),
@@ -614,7 +620,7 @@ func (c Config) Validate() error {
 	}
 
 	switch c.LogFormat {
-	case "text", "json":
+	case logFormatText, "json":
 		// ok
 	case "":
 		// empty is unreachable post-Resolve (defaults supply "text").
@@ -638,23 +644,28 @@ func (c Config) Validate() error {
 
 	if c.ArbitrationHysteresisPct < 0 || c.ArbitrationHysteresisPct >= 1.0 {
 		issues = append(issues, fmt.Sprintf(
-			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct))
+			"arbitration_hysteresis_pct %.4f is out of range [0.0, 1.0)", c.ArbitrationHysteresisPct,
+		))
 	}
 	if c.CurtailBelowBTCUSD < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD))
+			"curtail_below_btc_usd %.2f must be >= 0 (0 = disabled)", c.CurtailBelowBTCUSD,
+		))
 	}
 	if c.MinYieldSatsPerSec < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec))
+			"min_yield_sats_per_sec %.4f must be >= 0 (0 = disabled)", c.MinYieldSatsPerSec,
+		))
 	}
 	if c.PowerWatts < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts))
+			"power_watts %.2f must be >= 0 (0 = disabled)", c.PowerWatts,
+		))
 	}
 	if c.ElectricityPricePerKWh < 0 {
 		issues = append(issues, fmt.Sprintf(
-			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh))
+			"electricity_price_per_kwh %.4f must be >= 0 (0 = disabled)", c.ElectricityPricePerKWh,
+		))
 	}
 
 	if len(issues) == 0 {

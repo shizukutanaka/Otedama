@@ -30,6 +30,7 @@ package engine
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -50,7 +51,7 @@ import (
 	"github.com/shizukutanaka/Otedama/internal/tui"
 )
 
-// Engine timing constants. Centralised here so the reconnection and
+// Engine timing constants. Centralized here so the reconnection and
 // re-arbitration cadence is documented in one place rather than buried
 // as magic numbers in the run loops.
 const (
@@ -120,7 +121,7 @@ type Options struct {
 // When the data is untrustworthy the engine holds the last trusted state.
 //
 // A threshold of 0 (or negative) disables curtailment entirely.
-func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (next bool, changed bool) {
+func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (next, changed bool) {
 	if threshold <= 0 || !fresh || rate <= 0 {
 		return curr, false
 	}
@@ -134,7 +135,7 @@ func curtailDecision(curr bool, rate float64, fresh bool, threshold float64) (ne
 	}
 }
 
-// Run starts a full mining session and blocks until ctx is cancelled.
+// Run starts a full mining session and blocks until ctx is canceled.
 // It orchestrates every subsystem: wallet, HAL, providers, arbitration,
 // TUI, and the Stratum V2 pool connection.
 func Run(ctx context.Context, opts Options) error {
@@ -241,14 +242,16 @@ func Run(ctx context.Context, opts Options) error {
 					}
 					log("info", fmt.Sprintf(
 						"engine: curtailed — BTC/USD $%.0f below threshold $%.0f; hashing paused",
-						rate, threshold))
+						rate, threshold,
+					))
 					if m != nil {
 						m.curtailed.Set(1)
 					}
 				} else {
 					log("info", fmt.Sprintf(
 						"engine: uncurtailed — BTC/USD $%.0f above threshold $%.0f; hashing resumes on next job",
-						rate, threshold))
+						rate, threshold,
+					))
 					if m != nil {
 						m.curtailed.Set(0)
 					}
@@ -363,7 +366,7 @@ type reconnectOpts struct {
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
-// exponential backoff (capped at reconnectBackoffMax) until ctx is cancelled, a fatal
+// exponential backoff (capped at reconnectBackoffMax) until ctx is canceled, a fatal
 // error occurs, or MaxReconnectAttempts is exceeded.
 func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 	pools := poolURLs(r.opts.Config)
@@ -487,7 +490,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 					"engine: payout address %s (%d/%d) could not establish a session on any pool; "+
 						"failing over to %s (%d/%d)",
 					maskAddr(addrs[prev]), prev+1, len(addrs),
-					maskAddr(addrs[addrIdx]), addrIdx+1, len(addrs)))
+					maskAddr(addrs[addrIdx]), addrIdx+1, len(addrs),
+				))
 				continue // try next address immediately, no backoff
 			}
 			// Wrapped through every address; none connected. Back off and
@@ -495,14 +499,15 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			addrConnected = false
 			r.log("warn", fmt.Sprintf(
 				"engine: none of the %d configured payout addresses could connect; "+
-					"backing off %v and retrying from the primary", len(addrs), backoff))
+					"backing off %v and retrying from the primary", len(addrs), backoff,
+			))
 		case len(pools) > 1:
 			r.log("warn", fmt.Sprintf("engine: all %d pools failed; backing off %v", len(pools), backoff))
 		default:
 			r.log("warn", fmt.Sprintf("engine: session ended: %v; reconnecting in %v", sessionErr, backoff))
 		}
 		// time.NewTimer + explicit Stop rather than time.After: when ctx is
-		// cancelled (shutdown) the timer is released immediately instead of
+		// canceled (shutdown) the timer is released immediately instead of
 		// lingering until backoff (up to reconnectBackoffMax) elapses — the
 		// documented time.After-in-select pitfall, since pre-Go-1.23 a pending
 		// timer cannot be garbage-collected until it fires.
@@ -567,7 +572,7 @@ func (o sessionOpts) isCurtailed() bool {
 }
 
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,
-// honouring curtailment. While curtailed the miner is intentionally idle, so a
+// honoring curtailment. While curtailed the miner is intentionally idle, so a
 // zero hashrate is *expected*, not a fault: the stall monitor is not advanced
 // (no false "hashrate stalled — check device health" warning) and otedama_up
 // stays 1 (healthy, deliberately paused). otedama_curtailed carries the paused
@@ -600,8 +605,8 @@ type poolMsg struct {
 
 // runSession runs one pool connection: dial, handshake, then stream
 // jobs to workers and shares back to the pool until the connection
-// drops or ctx is cancelled. Returns the error that ended the session
-// (nil if ctx was cancelled cleanly).
+// drops or ctx is canceled. Returns the error that ended the session
+// (nil if ctx was canceled cleanly).
 //
 // Stratum V1 URLs (stratum+tcp://, stratum+tls://) are handled via
 // poolproto.DialURL so the protocol abstraction is load-bearing for V1.
@@ -766,7 +771,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-					dropped-lastDropped))
+					dropped-lastDropped,
+				))
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
@@ -789,7 +795,8 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				opts.m.effectiveYieldSatsPerSec.Set(effectiveYield(
 					opts.m.arbitrationExpectedYieldSatsPerSec.Value(),
 					float64(opts.m.productiveSeconds.Value()),
-					opts.m.uptime.Value()))
+					opts.m.uptime.Value(),
+				))
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				// J/TH efficiency: only meaningful when power is configured and
 				// the miner is running (avoids division-by-zero and spurious 0).
@@ -807,13 +814,15 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
-						rate*100, opts.m.sharesAccepted.Value(), judged))
+						rate*100, opts.m.sharesAccepted.Value(), judged,
+					))
 				}
 			}
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
-					latency.Quantile(0.50), p95, latency.Quantile(0.99)))
+					latency.Quantile(0.50), p95, latency.Quantile(0.99),
+				))
 				if opts.m != nil {
 					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
 					opts.m.submitLatencyP95.Set(p95)
@@ -1032,7 +1041,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if dropped := totalDropped(opts.workers); dropped > lastDropped {
 				opts.log("warn", fmt.Sprintf(
 					"engine: dropped %d found share(s) — share submission is not keeping up with discovery",
-					dropped-lastDropped))
+					dropped-lastDropped,
+				))
 				lastDropped = dropped
 			}
 			stalled := opts.updateLiveness(hashMon, currentHashRate)
@@ -1053,7 +1063,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				opts.m.effectiveYieldSatsPerSec.Set(effectiveYield(
 					opts.m.arbitrationExpectedYieldSatsPerSec.Value(),
 					float64(opts.m.productiveSeconds.Value()),
-					opts.m.uptime.Value()))
+					opts.m.uptime.Value(),
+				))
 				// otedama_up is set by updateLiveness (curtailment-aware).
 				if opts.powerWatts > 0 {
 					opts.m.powerWatts.Set(opts.powerWatts)
@@ -1065,7 +1076,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 				if judged >= 20 && rate < 0.97 {
 					opts.log("warn", fmt.Sprintf(
 						"engine: share acceptance %.1f%% (%d/%d) — check the reject-reason breakdown",
-						rate*100, opts.m.sharesAccepted.Value(), judged))
+						rate*100, opts.m.sharesAccepted.Value(), judged,
+					))
 				}
 				// Publish pool difficulty and estimated share interval so
 				// operators can distinguish "hardware is slow" from "the pool
@@ -1075,7 +1087,8 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if p95 := latency.Quantile(0.95); p95 > 0 {
 				opts.log("info", fmt.Sprintf(
 					"engine: submit latency p50=%.0fms p95=%.0fms p99=%.0fms",
-					latency.Quantile(0.50), p95, latency.Quantile(0.99)))
+					latency.Quantile(0.50), p95, latency.Quantile(0.99),
+				))
 				if opts.m != nil {
 					opts.m.submitLatencyP50.Set(latency.Quantile(0.50))
 					opts.m.submitLatencyP95.Set(p95)
@@ -1269,7 +1282,8 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits, ntime uint32, shareTarget miner.Hash,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1307,7 +1321,7 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 // closes — means a worker essentially never produces a share the pool
 // credits, since ordinary hardware cannot solve a real block. A difficulty
 // of 0 (no set_difficulty received yet, e.g. the first job of a session)
-// falls back to the nBits target, matching pre-wiring behaviour. Extracted
+// falls back to the nBits target, matching pre-wiring behavior. Extracted
 // as a pure function so the target-selection logic is unit-testable without
 // a running Worker.
 func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
@@ -1371,7 +1385,7 @@ func parseHost(url string) (string, error) {
 	return host, nil
 }
 
-func isFatal(err error) bool { _, ok := err.(*fatalError); return ok }
+func isFatal(err error) bool { var fe *fatalError; return errors.As(err, &fe) }
 
 type fatalError struct{ msg string }
 

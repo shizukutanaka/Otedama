@@ -411,8 +411,10 @@ func TestCredentials_HoldsLargePubKey(t *testing.T) {
 }
 
 // Compile-time assertion that stubDialer satisfies Dialer.
-var _ Dialer = (*stubDialer)(nil)
-var _ Connection = (*fakeConn)(nil)
+var (
+	_ Dialer     = (*stubDialer)(nil)
+	_ Connection = (*fakeConn)(nil)
+)
 
 // Sanity: registry isolation actually works across tests.
 // (If withTestRegistry leaks, this test would observe stale state.)

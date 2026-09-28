@@ -42,7 +42,7 @@ type Share struct {
 	DeviceID string
 }
 
-// WorkerConfig controls the behaviour of a Worker.
+// WorkerConfig controls the behavior of a Worker.
 type WorkerConfig struct {
 	// Threads is the number of goroutines to spawn. Zero or negative
 	// values are replaced with runtime.NumCPU().
@@ -113,7 +113,7 @@ func NewWorker(cfg WorkerConfig) *Worker {
 		cfg.Threads = runtime.NumCPU()
 	}
 	if cfg.NonceStep == 0 {
-		cfg.NonceStep = uint32(cfg.Threads)
+		cfg.NonceStep = uint32(cfg.Threads) //nolint:gosec // Threads defaults to NumCPU and stays far below 2^32
 	}
 	return &Worker{cfg: cfg, done: make(chan struct{})}
 }
@@ -138,7 +138,7 @@ func (w *Worker) Start(ctx context.Context) <-chan Share {
 		wg.Add(1)
 		go func(threadID int) {
 			defer wg.Done()
-			w.grind(innerCtx, uint32(threadID), shares)
+			w.grind(innerCtx, uint32(threadID), shares) //nolint:gosec // threadID < Threads, far below 2^32
 		}(i)
 	}
 

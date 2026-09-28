@@ -30,7 +30,7 @@ type pollingProvider struct {
 // channel is closed when the provider stops.
 func (p *pollingProvider) Quotes() <-chan Quote { return p.quoteCh }
 
-// launch starts the polling goroutine. It returns an error labelled with
+// launch starts the polling goroutine. It returns an error labeled with
 // the given provider name if Start was already called. prepare runs under
 // the provider lock after the already-started check, so a concrete provider
 // can record its device set only when the start actually succeeds (a
@@ -57,7 +57,7 @@ func (p *pollingProvider) launch(ctx context.Context, label string, prepare func
 }
 
 // loop publishes an initial quote immediately, then republishes every
-// interval until the context is cancelled.
+// interval until the context is canceled.
 func (p *pollingProvider) loop(ctx context.Context, publish func(context.Context)) {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
@@ -95,7 +95,7 @@ func (p *pollingProvider) Stop() {
 
 // sendQuote publishes q, dropping the oldest buffered quote if the channel
 // is full so the freshest estimate always wins rather than blocking the
-// loop. It returns false if ctx was cancelled before the quote could be
+// loop. It returns false if ctx was canceled before the quote could be
 // sent.
 func (p *pollingProvider) sendQuote(ctx context.Context, q Quote) bool {
 	select {

@@ -939,3 +939,62 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 415 — Lint-debt cleanup: 350 → 65 findings [LINT]
+
+**動機.** `.golangci.yml` は errcheck・errorlint・gosec・gocritic・misspell
+(locale: US)・gofumpt・prealloc・goconst・unparam・dogsled・nilerr 等を必須と
+明記しているが、CI の Lint ジョブは setup 段階で常に失敗しており債務が不可視
+だった。手元で golangci-lint v1.64.8 を実行すると ~350 件。このセッションで
+機械的・意味的修正を一括適用した。
+
+**適用した修正（全てリポジトリ自身の lint 設定が要求する規則）.**
+
+- **gofumpt -extra（21ファイル）**: `0600`→`0o600` 8進リテラル、var グループ化、
+  composite literal の整形。
+- **misspell（locale US、~140件）**: コメント・godoc の英英式綴りを米式へ
+  （sanitises→sanitizes、recognises→recognizes、behaviour→behavior 等）。
+  i18n メッセージカタログと BIP-39 英語ワードリストは**除外** — カタログは
+  非英語文字列を破壊し、ワードリストの `artefact` は正規データ（SHA-256 の
+  init 時整合チェックが実際に検出した）。`english_wordlist.go` を misspell
+  対象から exclude-rules で恒久的に除外。
+- **errorlint**: `err == flag.ErrHelp` / `err == io.EOF` / `err != context.Canceled`
+  の等価比較を `errors.Is` へ（cmd/otedama ×4、configfile、coverage_test、
+  metrics_test、noise_test 群）。`isFatal` の型アサートを `errors.As` へ —
+  **これは意味変更を伴う**: ラップされた fatalError が従来「非 fatal＝無限再試行」
+  だったのを正しく fatal 判定へ（テストが将来の移行を明記していたため期待値を更新）。
+  `fmt.Errorf("%w: %v", a, b)` → 複数 `%w`。
+- **unparam**: `parseReconnect` の常に true の ok 戻り値を除去、`pruneStaleStreams`
+  の冗長 ttl パラメータを除去（呼び出し側・テスト3箇所を追従）。
+- **unused**: `remoteStatic` フィールド（noise.go）・テスト専用 `parseFloat` を削除。
+- **prealloc**: 8箇所のスライスに容量ヒント（arbitration candidates、setup workers、
+  metrics entries 等）。
+- **goconst**: 本番側の繰り返しリテラルを定数化（`helpFlag`/`displayDefault`、
+  `logLevelInfo`/`logFormatText`、daemon/doctor の `goosLinux` 等）。テスト内
+  リテラルは .golangci.yml 既存の除外方針どおり据え置き。
+- **gocritic（機械的なもの）**: 空の else/fallthrough 除去、unnecessaryDefer
+  （return 直前の defer → 直接呼出）、builtinShadow（`cap` パラメータ）、
+  stringXbytes、emptyStringTest（`len(name)==0`→`name==""`）、appendAssign、
+  ifElseChain→switch（wallet.go）、httpNoBody、emptyFallthrough。
+- **dogsled**: 3連ブランク代入を `_ = ferr` パターンへ。
+- **SA9003**: 空の許容ブランチを `t.Log`/コメントで明示。
+- **bodyclose**: テストの `http.Get` レスポンスボディを Close。
+- **gosec G306**: systemd unit / launchd plist の 0644 → 0600（serviceArgs を
+  埋め込むため厳格化が安全側）。
+- **gosec G115 ×18**: 全サイトを個別検証し、有界変換（5/8ビット群、BIP-39 チェック
+  サム bit、nBits 指数、maxNoiseFrame 検査済み ciphertext 長等）に根拠コメント付き
+  `//nolint:gosec` を付与。uintID は負値でも unmatched key 化するのみで安全。
+- **sprintfQuotedString**: `sc.exe` の `"%s"` と Prometheus ラベル `"%s"` は %q の
+  Go エスケープで意味が変わるため `//nolint:gocritic` と根拠を記録。
+
+**意図的に残した判定（65件）.**
+- **hugeParam ×53**: `Decide(in Input)` 等の値渡しは純粋関数の意図的設計で、
+  ポインタ化はシグネチャ・全呼出し・テストを巻き込む。単独 PR での判断が適切。
+- **gocyclo ×12**: chooseForDevice、ResolveWithOrigins、run 系等の分解は
+  振る舞いリスクを伴うリファクタ — 個別対応。
+
+**残課題.** CI の Lint ジョブ自体が setup（Go バージョン固定）で壊れており、
+債務の可視化には workflow 修正が別途必要。
+
+*検証: go build ./...、go test ./...（全24 pkg green）、go vet クリーン、
+golangci-lint 350→65 件（残りは hugeParam/gocyclo のみ）。*

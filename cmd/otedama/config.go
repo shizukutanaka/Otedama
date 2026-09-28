@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,11 @@ import (
 	"unicode"
 
 	"github.com/shizukutanaka/Otedama/internal/config"
+)
+
+const (
+	helpFlag       = "--help"
+	displayDefault = "(default)"
 )
 
 func cmdConfig(args []string, stdout, stderr io.Writer) int {
@@ -24,7 +30,7 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 		return cmdConfigShow(args[1:], stdout, stderr)
 	case "validate":
 		return cmdConfigValidate(args[1:], stdout, stderr)
-	case "help", "--help", "-h":
+	case "help", helpFlag, "-h":
 		// See cmdService's identical case: an explicit help request must
 		// not look like the "unknown subcommand" error path.
 		fmt.Fprintln(stdout, "otedama config: expected subcommand (show|validate)")
@@ -38,7 +44,7 @@ func cmdConfig(args []string, stdout, stderr io.Writer) int {
 func cmdConfigShow(args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags("config show", args, stdout, stderr)
 	if err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
@@ -166,7 +172,7 @@ func writeConfigJSON(stdout, stderr io.Writer, cfg config.Config, origins config
 func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	f, err := parseRunFlags("config validate", args, stdout, stderr)
 	if err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
 		return exitUsage
@@ -186,13 +192,13 @@ func cmdConfigValidate(args []string, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-// safeDisplay sanitises a config value for terminal output. It strips
+// safeDisplay sanitizes a config value for terminal output. It strips
 // control characters (ESC, newlines, DEL, …) so a malicious config value
 // cannot inject ANSI escape sequences or forge log lines when echoed to a
-// terminal, and renders the empty string as "(default)".
+// terminal, and renders the empty string as displayDefault.
 func safeDisplay(v string) string {
 	if v == "" {
-		return "(default)"
+		return displayDefault
 	}
 	if !strings.ContainsFunc(v, unicode.IsControl) {
 		return v
@@ -206,7 +212,7 @@ func safeDisplay(v string) string {
 	}
 	// If all characters were control chars, return the placeholder.
 	if b.Len() == 0 {
-		return "(default)"
+		return displayDefault
 	}
 	return b.String()
 }

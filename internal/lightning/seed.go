@@ -209,7 +209,7 @@ func EntropyToMnemonic(e Entropy, w *WordList) (Mnemonic, error) {
 		}
 	}
 	for i := 7; i >= 8-cs; i-- {
-		bits = append(bits, (checksumByte>>uint(i))&1)
+		bits = append(bits, (checksumByte>>uint(i))&1) //nolint:gosec // i ranges over the 8 bits of a byte
 	}
 
 	mnemonic := make(Mnemonic, 0, wordCount)
@@ -264,13 +264,13 @@ func MnemonicToEntropy(m Mnemonic, w *WordList) (Entropy, error) {
 	// Reassemble entropy bytes.
 	entropy := make(Entropy, entBits/8)
 	for i := 0; i < entBits; i++ {
-		entropy[i/8] |= bits[i] << uint(7-(i%8))
+		entropy[i/8] |= bits[i] << uint(7-(i%8)) //nolint:gosec // i%8 indexes a single byte (0-7)
 	}
 
 	// Verify checksum.
 	sum := sha256.Sum256(entropy)
 	for i := 0; i < cs; i++ {
-		want := (sum[0] >> uint(7-i)) & 1
+		want := (sum[0] >> uint(7-i)) & 1 //nolint:gosec // i is a checksum bit index (0-4)
 		if bits[entBits+i] != want {
 			return nil, errors.New("lightning: mnemonic checksum mismatch; check for transcription errors")
 		}

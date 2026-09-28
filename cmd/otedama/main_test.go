@@ -171,7 +171,8 @@ func TestConfigValidate_MissingAddress(t *testing.T) {
 
 func TestConfigValidate_ValidAddress(t *testing.T) {
 	var out, err bytes.Buffer
-	code := run([]string{"config", "validate",
+	code := run([]string{
+		"config", "validate",
 		"--bitcoin-address", "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
 	}, &out, &err)
 	if code != exitOK {
@@ -432,13 +433,13 @@ func TestBuildLogger_LogFilePermissionsAre0600(t *testing.T) {
 		t.Fatalf("stat log file: %v", err)
 	}
 	// The log file may contain pool URLs / worker names — keep it owner-only.
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("log file perms = %04o, want 0600", perm)
 	}
 }
 
 func TestBuildLogger_UnopenableLogFileDoesNotPanic(t *testing.T) {
-	// A bad path must degrade to the no-file behaviour (warning to stderr),
+	// A bad path must degrade to the no-file behavior (warning to stderr),
 	// not crash the run. Point at a file under a non-existent directory.
 	var out bytes.Buffer
 	path := filepath.Join(t.TempDir(), "no-such-dir", "audit.log")

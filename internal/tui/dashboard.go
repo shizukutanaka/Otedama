@@ -62,7 +62,7 @@ type Stats struct {
 	WalletFingerprint string
 	// EstSatsEarned is an ESTIMATE of cumulative earnings, integrated from
 	// the engine's forecast yield rate over productive time — not a figure
-	// from the pool. It is labelled "est." in the dashboard accordingly; the
+	// from the pool. It is labeled "est." in the dashboard accordingly; the
 	// pool's own accounting is authoritative. See docs/KNOWN_LIMITATIONS.md §9.
 	EstSatsEarned uint64
 
@@ -465,7 +465,7 @@ func visibleLen(s string) int {
 			// A CSI sequence ends at its final byte, any character in the
 			// range '@'..'~' (0x40-0x7E) — not only 'm'. The '[' introducer
 			// and the numeric/';' parameter bytes (< '@') are consumed
-			// silently. Ending on any final byte means a non-colour escape
+			// silently. Ending on any final byte means a non-color escape
 			// (e.g. "\x1b[2J") can't swallow the rest of the string.
 			if r >= '@' && r <= '~' && r != '[' {
 				inEsc = false

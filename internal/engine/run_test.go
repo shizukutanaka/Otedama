@@ -453,7 +453,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 
 func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// applyJob must accept a positive difficulty without error (SetWork is
-	// safe without Start; behavioural proof that the right target is chosen
+	// safe without Start; behavioral proof that the right target is chosen
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
@@ -465,7 +465,7 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 func TestV1JobTarget_ZeroDifficulty_FallsBackToNBitsTarget(t *testing.T) {
 	// Before any mining.set_difficulty, SuggestedDifficulty() is 0. The
 	// target must be the nBits-derived block target, matching pre-wiring
-	// behaviour.
+	// behavior.
 	const nBits = 0x1d00ffff
 	got, err := v1JobTarget(nBits, 0)
 	if err != nil {
@@ -2447,6 +2447,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }

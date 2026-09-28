@@ -277,8 +277,9 @@ func TestContextCancellation_TriggersShutdown(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// After shutdown, new requests should fail.
-	_, err := http.Get("http://127.0.0.1:19810/healthz")
+	resp, err := http.Get("http://127.0.0.1:19810/healthz")
 	if err == nil {
+		_ = resp.Body.Close()
 		t.Error("server still accepting connections after ctx cancel")
 	}
 }
