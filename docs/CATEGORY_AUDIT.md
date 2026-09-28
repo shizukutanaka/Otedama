@@ -179,7 +179,9 @@ and flagged, not changed this session:
   (UpdateChannel(.Error), SetExtranoncePrefix, ChannelEndpointChanged,
   0x22-0x25) verified as correctly ignored — each is extended-channel,
   proxy-extension, or group-channel scope that a standard-channel end
-  device never legitimately receives.
+  device never legitimately receives. Session 449: the client→server
+  half of CloseChannel implemented — both teardown paths send it
+  (write-deadline bounded) so pools free channel state promptly.
 
 ### E — Engine / orchestration
 - 🚩 Payout-address failover timing: `onConnected` (which marks the active

@@ -308,8 +308,20 @@ func (s *session) SuggestedDifficulty() float64 {
 	return float64FromBits(s.diff.Load())
 }
 
-// Close terminates the session's underlying connection.
-func (s *session) Close() error { return s.conn.Close() }
+// Close terminates the session's underlying connection. It first sends
+// CloseChannel so the pool frees channel state promptly (sv2-spec
+// §5.3.9: the client sends CloseChannel when it ends operation on a
+// channel) — best-effort, since the connection is going away anyway.
+func (s *session) Close() error {
+	// A write deadline is essential: a dead or un-drained peer must not
+	// hang Close.
+	_ = s.conn.raw.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	_ = sendMsg(s.conn.raw, stratum.MsgCloseChannel, true, &stratum.CloseChannel{
+		ChannelID: s.chanID,
+		Reason:    "client shutdown",
+	})
+	return s.conn.Close()
+}
 
 // ----- helpers -----
 

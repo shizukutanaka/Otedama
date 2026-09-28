@@ -663,6 +663,19 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 	if err != nil {
 		return err
 	}
+	// sv2-spec §5.3.9: the client sends CloseChannel when it ends
+	// operation on a channel — lets the pool free channel state
+	// immediately instead of on TCP timeout. Best-effort: the
+	// connection is going away regardless of write errors here.
+	defer func() {
+		// A write deadline is essential: a dead or un-drained peer
+		// (e.g. net.Pipe with no reader) must not hang shutdown.
+		_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+		_ = sendMsg(conn, stratum.MsgCloseChannel, true, &stratum.CloseChannel{
+			ChannelID: chanID,
+			Reason:    "client shutdown",
+		})
+	}()
 	opts.log("info", fmt.Sprintf("engine: channel %d opened", chanID))
 	if opts.m != nil {
 		opts.m.poolConnectionState.Set(2) // handshake complete → connected
