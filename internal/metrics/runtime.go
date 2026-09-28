@@ -126,7 +126,7 @@ func RuntimeCollector() CollectFunc {
 		for _, e := range entries {
 			if _, err := fmt.Fprintf(w,
 				"# HELP %s %s\n# TYPE %s %s\n%s%s %s\n",
-				e.name, e.help,
+				e.name, escapeHelp(e.help),
 				e.name, e.kind,
 				e.name, e.labels, e.value,
 			); err != nil {

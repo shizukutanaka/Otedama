@@ -961,3 +961,14 @@ one real violation: `otedama_rate_sources_total` was a Gauge named with
 the counter-reserved suffix (PromQL `rate()` would have returned
 nonsense). Renamed to `otedama_rate_sources`; the doc-parity guard
 test keeps catalog and code in lockstep.
+
+## Session 456
+
+Exposition-format audit of internal/metrics: HELP/TYPE emission, label
+and HELP escaping (correct character sets in both), canonical
+NaN/+Inf/-Inf rendering, single-block-per-name ordering, label sorting,
+and the `/metrics` content type (text/plain; version=0.0.4) all conform
+to the Prometheus text exposition format. One latent gap fixed:
+RuntimeCollector's HELP lines bypassed escapeHelp — harmless today
+(constant help strings) but a scrape-corruption trap for any future
+help containing a newline or backslash.

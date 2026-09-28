@@ -24,6 +24,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
    gauge への付与は `rate()` が無意味な値を返す等の誤用を招く。
    SPECIFICATION.md §6・API.md のカタログを同期（breaking: メトリクス名変更）。
 
+### 修正 (session 456)
+
+1. `metrics.RuntimeCollector` の HELP 行にも `escapeHelp` を適用 —
+   WriteText 側は既にエスケープ済みだがランタイムコレクタが未適用で、
+   将来の help 文字列に `\n`/`\\` が混入した場合に scrape 破損を招く
+   潜伏的不整合を解消。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
