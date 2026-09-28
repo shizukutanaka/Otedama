@@ -522,6 +522,22 @@ func TestRenderWith_BadTemplate_ReturnsParseError(t *testing.T) {
 	}
 }
 
+func TestRenderWith_MissingKey_ReturnsRawAndError(t *testing.T) {
+	// A placeholder absent from data must fail loudly per the godoc
+	// contract — never silently render "<no value>" into user output.
+	en, _ := NewCatalog(LangEnglish, map[ID]string{
+		ID("greet"): "Hello, {{.name}}!",
+	})
+	b, _ := NewBundle(en)
+	got, err := b.RenderWith(LangEnglish, ID("greet"), map[string]any{})
+	if err == nil {
+		t.Fatal("RenderWith with a missing key must return an execute error")
+	}
+	if got != "Hello, {{.name}}!" {
+		t.Errorf("got %q, want the raw template so the failure is visible", got)
+	}
+}
+
 func TestRenderWith_ExecuteError_ReturnsExecError(t *testing.T) {
 	// Use a template that calls a function that doesn't exist in the data.
 	// In Go templates, accessing a field that doesn't exist returns empty,

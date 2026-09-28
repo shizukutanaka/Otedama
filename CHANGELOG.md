@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### 修正 (session 453)
+
+1. `i18n.RenderWith` がテンプレートキー欠落時に `<no value>` を
+   沈黙で描画していた問題を修正 — godoc 契約通り raw 文字列＋エラーを
+   返すよう `missingkey=error` を指定（カタログのプレースホルダ誤記が
+   不可視のまま漏洩しない）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

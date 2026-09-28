@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 453
+
+`internal/i18n` contract audit: `Bundle.RenderWith` documented a loud
+failure mode (raw template + error on a missing data key) that
+`text/template`'s default `missingkey` semantics silently violated —
+`<no value>` was being rendered into user-facing strings. One-line
+`missingkey=error` option makes the code honor its own contract; a
+regression test pins the behavior. The hygiene sweep otherwise holds:
+deadcode reports only the previously-deferred unused-export class, and
+golangci-lint findings on master map entirely onto the classes owned
+by the open lint PRs (#526–#528) — no new debt to deliver.

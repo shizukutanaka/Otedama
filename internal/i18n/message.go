@@ -331,7 +331,7 @@ func (b *Bundle) RenderWith(lang Lang, id ID, data map[string]any) (string, erro
 	if data == nil || !strings.Contains(raw, "{{") {
 		return raw, nil
 	}
-	tmpl, parseErr := template.New("").Parse(raw)
+	tmpl, parseErr := template.New("").Option("missingkey=error").Parse(raw)
 	if parseErr != nil {
 		return raw, fmt.Errorf("i18n: parse template for %q: %w", id, parseErr)
 	}

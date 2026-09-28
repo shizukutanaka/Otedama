@@ -211,6 +211,12 @@ and flagged, not changed this session:
   language. Added `TestAllCatalogs_PlaceholdersMatchEnglish` and
   `TestAllCatalogs_TemplatesParse`. The current 10 catalogs pass — so this is a
   regression guard that finally backs the documented invariant. (session 69.)
+- ✅ **`RenderWith` silent `<no value>` diverged from its godoc.** The doc
+  promised a missing template key returns the raw string plus an execute
+  error — but `text/template` defaults `missingkey` to silently rendering
+  `<no value>` into user output. Added `missingkey=error` so a placeholder
+  typo in a catalog (or a caller dropping a data key) surfaces loudly
+  instead of emitting an invisible empty fragment. (session 453.)
 
 ### K — Configuration
 - ✅ **`FlagValues.ConfigFile` dead field.** The field was set by `cmdDoctor` in
