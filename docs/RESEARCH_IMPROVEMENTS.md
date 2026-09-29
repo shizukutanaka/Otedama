@@ -946,3 +946,11 @@ the arXiv listing; all API endpoints against current vendor documentation.*
 
 **対応（1件 — ADR-009 エビデンス更新）。**
 - ADR-009 の「production-viable」エビデンスに NexusPool を追記。特に価値があるのは同社ポストモーテムの教訓: **単体テストが通っても SRI 参照 JDC との実接続テストでしか見つからなかった欠陥が4件**（allocation メッセージの field-count 不一致・未配線 payout フィールド・JD 専用接続を殺す reaper）— これは ADR-009 のコスト見積が unit test だけでなく reference-implementation interop テスト工数を含むべき根拠として記録。
+
+## Session 504 — エコシステム再照合: BIP-110 と拡大した本番プールセット（2件）
+
+**Sweep.** Reddit/海外技術情報・公式エコシステム表の差分。
+
+**対応（2件 — ADR-009 エビデンス更新）。**
+1. **本番セットの拡充**: stratumprotocol.org 公式表で production プールが Blitzpool/MKPool/NexusPool/Public Pool/PyBlock（solo）+ Braiins/DMND（DMND は miner-selected templates）に拡大、Auradine FluxOS・Bitaxe・BraiinsOS の SV2 ネイティブファームウェアも稼働。
+2. **BIP-110 = 初のライブ template-signaling 展開**: Reduced Data Temporary Softfork が Knots ベース activation client で listening node の ~10% に到達。OCEAN は BIP110/非シグナルの2専用 endpoint を追加し split 時は「2つのプール」として運用すると発表（7月）。テンプレート所有が**どの consensus chain に着陸するか**を左右する初の実例 — ADR-009 の solo/JDP 提案が「プールではなく自ノードの consensus rule で検証」を要する根拠として記録。
