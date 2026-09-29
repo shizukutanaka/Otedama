@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 520 — Go 1.27 + sv2-ui)
+
+- Verified green under **go1.27.1** (`go test ./...`, 23/23; godebug
+  block parses under 1.27's removed-setting acceptance rule; no >1.22
+  stdlib symbols so `stdversion` vet is clean). Recorded upstream's
+  `stratum-mining/sv2-ui` orchestrated JDP stack in ADR-009; ESP-Miner
+  2.15.3 / DATUM v0.4.1beta unchanged.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

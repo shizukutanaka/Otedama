@@ -614,6 +614,25 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 520, September 2026)
+
+- **Upstream now ships an orchestrated JDP stack (`stratum-mining/sv2-ui`).**
+  A Docker-based setup wizard + monitoring dashboard that composes the
+  Translator Proxy, the JDC, and Bitcoin Core IPC (30.x/31.x) into solo,
+  pool-JD, and sovereign-solo deployments. The "hand-assembled stack"
+  gap this ADR prices into the effort estimate is closing upstream: a
+  future Otedama JDC integration can target the same component set
+  sv2-ui orchestrates rather than bespoke wiring.
+- **Go 1.27 released (August 2026); repo verified green under
+  go1.27.1.** `go test ./...` passes on all 23 packages under
+  go1.27.1; no stdlib symbols newer than the `go 1.22` directive are
+  used, so 1.27's new default `stdversion` vet check is clean, and the
+  godebug block parses under 1.27's rule accepting removed GODEBUG
+  settings at their final values. The toolchain-pin bump itself remains
+  owned by the closed-PR line (#369) and is not re-delivered here.
+
+---
+
 ## References
 
 - Stratum V2 Working Group expansion (May 7, 2026):
