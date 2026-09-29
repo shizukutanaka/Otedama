@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 491 — docs/TROUBLESHOOTING.md の phantom 2件を訂正)
+
+* 「`service` は idle scheduling class を自動設定」→ 全サービス定義にスケジューリングクラス/優先度設定なし。
+* 「`otedama --log-level=debug doctor`」→ サブコマンド前のフラグは `unknown subcommand` で失敗し、`doctor` は `--log-level` を持たない。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
