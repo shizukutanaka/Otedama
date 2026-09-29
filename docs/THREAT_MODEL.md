@@ -245,6 +245,28 @@ completeness (drop old jobs rather than queue indefinitely).
 
 ---
 
+**Threat (network adversary):** An on-path attacker corrupts a single
+SV2 ciphertext so the Noise nonce counters desynchronize — every
+subsequent frame fails to decrypt and the session silently dies while
+the miner keeps hashing stale jobs (the EROSION attack, Tran/von
+Arx/Vanbever, IEEE S&P 2024 — same endpoint behavior as dropping all
+V1 packets).
+
+**Mitigation:** Otedama treats any frame/decrypt error as session
+fatal: the read loop exits, the engine's reconnect loop re-dials, and
+a fresh Noise handshake re-synchronizes the nonce counters. There is
+no silent-degradation mode in which the miner continues on a broken
+session — the desync degrades into a bounded reconnect rather than
+persistent unrecoverable desynchronization.
+
+**Residual risk:** Sustained tampering produces a reconnect loop —
+bounded by the exponential reconnect backoff, but shares are lost
+during each gap. No client-side fix exists: the countermeasure is
+routing hygiene (pool-side RPKI/monitoring), which is the pool's and
+the network's responsibility, not the client's.
+
+---
+
 ### Elevation of privilege (E)
 
 **Threat:** A vulnerability in Otedama leads to code execution as root.
