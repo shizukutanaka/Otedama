@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 525 — gosec finding class triaged
+
+Classified all 20 gosec hits from the session-523 full-suite sweep:
+
+- **G115 ×18** (bounded int→uint casts in bech32/seed/bitmath/job-id
+  paths) — owned by the open #526 refactor ("bounded-cast nolints").
+- **G306 ×2** (`daemon/service.go` writes of the systemd unit and
+  launchd plist at 0644) — world-readable service definitions are the
+  OS convention, not secrets; annotated `//nolint:gosec` with the
+  reason inline so the finding stops masking real ones in local
+  sweeps.

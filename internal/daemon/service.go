@@ -155,7 +155,7 @@ func (m *Manager) installSystemd() error {
 	}
 
 	unit := m.systemdUnit()
-	if err := os.WriteFile(path, []byte(unit), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(unit), 0644); err != nil { //nolint:gosec // G306: service units are world-readable config, not secrets
 		return fmt.Errorf("daemon: write systemd unit: %w", err)
 	}
 	// Reload daemon and enable the unit.
@@ -256,7 +256,7 @@ func (m *Manager) installLaunchd() error {
 		return err
 	}
 	plist := m.launchdPlist()
-	if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(plist), 0644); err != nil { //nolint:gosec // G306: service plists are world-readable config, not secrets
 		return fmt.Errorf("daemon: write plist: %w", err)
 	}
 	return runCmd("launchctl", "load", "-w", path)
