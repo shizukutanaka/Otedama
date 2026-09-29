@@ -6,9 +6,12 @@ unavailable — through illness, life change, or simple burnout.
 
 The 2024 Tidelift maintainer survey found that 60% of open-source
 maintainers have considered quitting and 44% report active burnout.
-Several well-funded projects (Kubernetes Ingress NGINX, External
-Secrets Operator) have been declared end-of-life in 2025–2026 because
-their maintainer base collapsed faster than recovery was possible.
+Several well-funded projects (Kubernetes Ingress NGINX, which was
+declared end-of-life for 2026) have seen their maintainer base
+collapse faster than recovery was possible. (**Correction (session
+496):** this previously also named External Secrets Operator as EOL —
+ESO remains actively maintained, releasing through v2.10 in 2026;
+the citation was incorrect.)
 Otedama plans to outlast that pattern by writing down the recovery
 path before it is needed.
 
