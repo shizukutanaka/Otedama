@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 488 — docs/solo-operations.md の現在形虚偽記述3件を訂正）
+
+* Scorecard 行2件（Signed-Releases「cosign設定済み」→ release.yml が goreleaser を呼ばないため未設定、Fuzzing「CIで継続実行」→ CI にファズジョブ非存在）。
+* リスク1 の「govulncheck は週次で自動実行済み」→ CI に非存在で Makefile ローカルのみ。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
