@@ -10,8 +10,12 @@ Every number here must satisfy three tests:
 
 1. **Reproducible.** The exact command to reproduce the measurement is
    listed next to it. Anyone with the same hardware can verify.
-2. **Regression-resistant.** `go test -bench` is checked into CI. A PR
-   that regresses performance by >5% fails automatically.
+2. **Regression-resistant.** `go test -bench` runs in CI on every
+   push and PR, with results uploaded as a workflow artifact.
+   **Correction (session 484):** this item previously claimed a PR
+   regressing >5% fails automatically — no automated regression
+   gate exists; the CI job only runs the benchmarks and uploads
+   `benchmark-results.txt`.
 3. **Honest.** Cherry-picked best cases are not reported. Each number
    is the median of at least five runs on an idle machine.
 
@@ -68,13 +72,15 @@ deliver them. A slow decoder becomes a DoS vector.
 | Header decode          | ~50 M frames/s | ~20 ns     |
 | Full frame (1KB payload)| ~5 M frames/s | ~200 ns    |
 
-**Reproduce:**
-```bash
-go test -bench=BenchmarkDecoder_ReadFrame ./internal/stratum/
-```
-
-**Correctness:** The decoder is fuzzed continuously in CI. See
-`FuzzDecoder_ReadFrame` for the active corpus.
+**Correction (session 484):** this section previously gave
+`go test -bench=BenchmarkDecoder_ReadFrame ./internal/stratum/` as
+the reproduce command — no `BenchmarkDecoder_ReadFrame` function
+exists, so the throughput figures above are unverified estimates,
+not measurements (they violate this document's own reproducibility
+rule and should be replaced once a decoder benchmark lands). The
+statement that the decoder "is fuzzed continuously in CI" was also
+incorrect — CI has no fuzz job (`make fuzz` is a local target);
+`FuzzDecoder_ReadFrame` exists but runs only on local invocations.
 
 ## Economic comparison (2026-04-24 market data)
 
@@ -150,7 +156,10 @@ A PR that regresses any benchmark by >5% must include one of:
 2. A performance analysis showing the regression is within measurement
    noise (run the benchmark 20 times on a dedicated machine).
 
-CI runs benchmarks on every push to main and posts a comparison to PRs.
+CI runs benchmarks on every push to main and on every PR, uploading
+`benchmark-results.txt` as a workflow artifact. **Correction
+(session 484):** this item previously claimed CI posts a comparison
+to PRs — no comparison job or PR comment exists today.
 
 ## Hardware used for published numbers
 
@@ -160,6 +169,11 @@ Numbers above are measured on:
 - **macOS reference:** Apple M2 Pro (16", 2023), macOS 14, Go 1.22
 - **Windows reference:** Intel i7-12700K, Windows 11, Go 1.22
 - **Embedded reference:** Raspberry Pi 5 (8 GB), Raspberry Pi OS, Go 1.22
+
+**Note (session 484):** the published numbers were measured with Go
+1.22, but current master requires Go ≥1.24 (`godebug tlsmlkem` in
+`go.mod` fails to parse on older toolchains), so the reproduce
+commands above must be run with Go 1.24 or newer.
 
 Readers may see different numbers on different hardware; the relative
 rankings should remain stable.
