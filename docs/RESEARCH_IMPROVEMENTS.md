@@ -939,3 +939,10 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 503 — エコシステム再照合: NexusPool の JDP 本番稼働（新事実）
+
+**Sweep.** GitHub/海外技術情報の最新差分: SRI は 1.12.0（9/17、session 478 追跡済み）が最新で新リリースなし。Go は 1.26 系パッチ進行中でブートストラップ要件等の新規影響なし。**新事実: NexusPool が 2026-08-24 から native SV2 Job Declaration を本番稼働** — Braiins・DMND に続く3例目（5月ワーキンググループ発表後の初の実稼働追加）。
+
+**対応（1件 — ADR-009 エビデンス更新）。**
+- ADR-009 の「production-viable」エビデンスに NexusPool を追記。特に価値があるのは同社ポストモーテムの教訓: **単体テストが通っても SRI 参照 JDC との実接続テストでしか見つからなかった欠陥が4件**（allocation メッセージの field-count 不一致・未配線 payout フィールド・JD 専用接続を殺す reaper）— これは ADR-009 のコスト見積が unit test だけでなく reference-implementation interop テスト工数を含むべき根拠として記録。
