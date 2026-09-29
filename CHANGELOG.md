@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 525 — gosec class triaged)
+
+- Annotated the two intentional `0644` service-definition writes in
+  `internal/daemon/service.go` with `//nolint:gosec` (G306 —
+  world-readable unit/plist files are the OS convention, not secrets);
+  the remaining 18 G115 bounded-cast findings are owned by open #526.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
