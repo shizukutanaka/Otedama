@@ -939,3 +939,38 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 515 — metrics + clock + tui fully read
+
+**Audit milestones.** `internal/metrics` (both files), `internal/clock`,
+and `internal/tui` read end-to-end.
+
+**metrics verdicts.** Registry is RWMutex-guarded; counter/gauge
+cross-type name collisions panic at registration with a documented
+severity rationale (one bad name discards the whole Prometheus scrape).
+Exposition is sorted and deterministic; `escapeLabel`/`escapeHelp` cover
+the format's real specials; `formatFloat` renders NaN/±Inf canonically.
+Noted residual (recorded, not fixed): `metricKey` serializes label
+values without escaping `,`/`=`, so two distinct (name, labels) pairs
+could collide into one series key — requires a device ID containing `,`
+or `=`, which today's ID producers ("cpu-0", "gpu-<render-node>") cannot
+emit; worth revisiting if a user-controlled ID source ever lands.
+`RuntimeCollector`'s PauseTotalNs/GCCPUFraction are deprecated-but-still-
+populated MemStats fields — fine on go1.26.8.
+
+**clock verdicts.** Fake is RWMutex-guarded; Set/Advance deliberately
+allow backwards time with a documented non-monotonicity contract.
+Compile-time interface checks present. Clean.
+
+**tui verdicts.** Start/Stop are atomic-gated and Stop waits on the
+render-loop WaitGroup before writing to the (non-concurrent) writer —
+the race it documents is genuinely closed. `writeLine` truncates then
+pads to cols, keeping the cursor-home repaint model; `truncateVisible`
+preserves in-flight ANSI and appends reset. Two non-blocking findings
+(recorded, no code change): `truncateToBudget` and `shortenURL` are two
+near-identical truncators — a duplication candidate to file as an Issue
+per the dedupe convention, not fix inline; and the `⏸`/`⚠` badges in
+miningLine count as width-1 under `visibleLen` but render width-2 —
+self-consistent across frames since truncation uses the same count, so
+the residual is at most a one-column flicker on narrow terminals, not
+repaint corruption.
