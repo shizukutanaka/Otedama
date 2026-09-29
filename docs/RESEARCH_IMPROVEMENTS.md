@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 494 — docs/API.md 前半（1–206行）照合、未記載フラグ2件を追記
+
+**Sweep.** `docs/API.md` の CLI 節（`run` フラグ表・exit codes・`version`/`config`/`service`/`doctor` シグネチャ）を `cmd/otedama` の実 FlagSet と機械照合。
+
+**発見（2件追記）。**
+- **`run` フラグ表に `--pprof` が欠落**: run.go:84 で実在（`/debug/pprof/` マウント・loopback/private 推奨）— API.md には未記載。「non-loopback で警告」の記述は未作成（open #453 の未マージ面のため）。
+- **`service install` のフラグ記述が不完全**: `--config`/`--data-dir` のみ記載だが実 FlagSet は `--bitcoin-address`（config 無し時必須）・`--log-level`・`--log-format`・`--language` も受理。また Windows サービスを「Windows service」とのみ記載 — `sc.exe` SCM に明記（README と同じ訂正）。
+
+**検証済み・変更なし。** `run` の他11フラグ・exit codes（0/1/64/78）・`version --json` フィールド・`config show --origin/--json`・`doctor` フラグ+exit 0/1/2+JSON シェイプ（duration_ms/exit_code/elapsed_ms）・YAML KnownFields 振る舞い・設定優先度・env var 表 — 全て正確（env 欠落5件は open #517 担当域）。
