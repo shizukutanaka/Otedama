@@ -129,9 +129,15 @@ Otedama registers itself under the service name `Otedama` with
 
 To view logs:
 
-```powershell
-Get-EventLog -LogName Application -Source Otedama -Newest 50
-```
+**Correction (session 485):** this section previously suggested
+`Get-EventLog -LogName Application -Source Otedama`, but Otedama
+never registers a Windows event source — that command fails with
+"Cannot find source". The SCM-launched service's stdout is also
+discarded (the generated `binPath` passes no `--log-file`), so
+today there is no persistent log for the Windows service. To
+capture logs, run `otedama run --log-file C:\ProgramData\Otedama\otedama.log`
+in a console, or wrap the service binary in a redirecting
+launcher. Service-side log capture is a maintainer-owned gap.
 
 ---
 
@@ -336,8 +342,11 @@ trust docs/SPECIFICATION.md §6.
 
 ### Dashboards
 
-A reference Grafana dashboard lives at
-`contrib/grafana/otedama-dashboard.json` (TODO for v3.1.0).
+A reference Grafana dashboard is planned for `contrib/grafana/`
+in v3.1.0 — **correction (session 485):** this section previously
+said the dashboard "lives at" `contrib/grafana/otedama-dashboard.json`,
+but `contrib/` does not exist yet; the path is a target, not a
+current file.
 
 ### Alerts
 
@@ -406,11 +415,21 @@ recoverable from mnemonic. A lost mnemonic AND wallet.dat is not.
 For production deployments:
 
 - [ ] Binary SHA-256 verified against published checksums.
-- [ ] Binary cosign signature verified.
+  (Note, session 485: today's `release.yml` does not produce
+  checksums, signatures, or SBOMs — see KNOWN_LIMITATIONS. Until
+  the release pipeline ships them, verify provenance via the
+  GitHub Actions build log instead.)
+- [ ] Binary cosign signature verified — **not currently possible:**
+  no release pipeline signs binaries (correction, session 485).
 - [ ] Running as a dedicated, non-root user.
 - [ ] Wallet passphrase passed via secret store (not `--wallet-passphrase` on command line).
 - [ ] Data directory permissions are 0700.
 - [ ] Firewall restricts inbound traffic; only outbound to pool + rate sources.
 - [ ] Prometheus scrape port bound to localhost or private network.
-- [ ] Automatic updates via Dependabot for the Otedama container image tag.
+- [ ] Pin the deployed container image to an immutable tag/digest and
+  update it deliberately. (Correction, session 485: this item
+  previously suggested "Dependabot for the Otedama container image
+  tag" — the repo's Dependabot `docker` ecosystem only updates the
+  *build* base-image pins in `Dockerfile`; it does not update an
+  operator's deployed image.)
 - [ ] Monthly review of `otedama doctor` output.

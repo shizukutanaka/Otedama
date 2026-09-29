@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 485 — docs/DEPLOYMENT.md の phantom 指示・虚偽チェック項目を訂正)
+
+* Windows のログ参照手順 `Get-EventLog -Source Otedama` → イベントソース非登録の phantom（SCM で stdout 破棄・`--log-file` 非通過も併記）。
+* `contrib/grafana/otedama-dashboard.json`「lives at」→ `contrib/` 非実在のため v3.1.0 計画として訂正。
+* ハードニングチェック「Binary cosign signature verified」→ 署名リリース非実在（#562 で記録済みの release.yml 欠陥）と訂正。
+* 「Dependabot for the Otedama container image tag」→ dependabot docker エコシステムは Dockerfile のベースイメージ pin を更新するのみでデプロイ済みタグは更新しない、と訂正。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
