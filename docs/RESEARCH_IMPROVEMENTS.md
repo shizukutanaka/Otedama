@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 497 — ADR-009 にエラッタ2件（残 Proposed ADR 007–010 の現在形検証）
+
+**Sweep.** Accepted ADR（001–006, 011）は session 473 で全照合済みのため、残る Proposed ADR 007–010 の「今日の実装」現在形クレームを検証（Proposed 自体は未来設計で正当 — 陳腐な現在形のみ対象）。
+
+**発見（2件、ADR-009 にエラッタ追加）。**
+- **「Otedama's positioning today: hard-coded as a Stratum V2 client only (ADR-002)」→ 陳腐**: `internal/poolproto/stratumv1` + `DialURL` が alpha.1 から稼働 — ADR-002 エラッタ（session 472）と同クラスの決定記録 vs 実装乖離。V2-preference に訂正。
+- **「`internal/stratum/noise*.go` を Noise NX に再利用（already production-ready since alpha.1）」→ 虚偽**: KNOWN_LIMITATIONS §2 が証明する通り未配線・P-256（spec 必須は secp256k1+ElligatorSwift）・`mixKey` の HKDF 出力破棄・responder 認証なし。「production-ready」は帳簿と直接矛盾 — 再利用はギャップ継承＋コスト見積に Noise 手直し or ADR-011 依存を明記。
+
+**検証済み・変更なし。** ADR-007（passive receive endpoint・BOLT12 未署名）・ADR-008（orchestration gap 主張）・ADR-010（renumbering note）は現在形も正確。

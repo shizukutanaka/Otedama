@@ -20,7 +20,7 @@ The implications:
 3. **Profitability uplift is real but modest.** Braiins-published real-world tests show **up to 7.4% higher profit** from V2-native miners through lower latency and better fee capture. Spiderpool's CTO explicitly noted miner-constructed templates help operators with limited bandwidth.
 4. **Solo mining via decentralized templates is now production-viable.** Blitzpool runs Stratum V2 for solo miners; DMND was built on V2 from the ground up; Braiins Pool is 100% V2-capable; the SRI community pool continues testing.
 
-**Otedama's positioning today (v3.0.0-alpha.1):** Hard-coded as a Stratum V2 client only (ADR-002), but treats the pool as the authoritative source of block templates. The miner has no transaction-selection capability. This is a **strategic inconsistency**: ADR-002's commitment to V2-only was motivated by miner sovereignty, yet the engine doesn't actually exercise that sovereignty.
+**Otedama's positioning today (v3.0.0-alpha.1):** V2-preference client (ADR-002) — V1 sessions additionally work via `internal/poolproto/stratumv1` + `DialURL` since the alpha.1 import (**Erratum (session 497):** this paragraph previously said "hard-coded as a Stratum V2 client only", which predates the shipped V1 dialer; see also the ADR-002 erratum on the same point) — but treats the pool as the authoritative source of block templates. The miner has no transaction-selection capability. This is a **strategic inconsistency**: ADR-002's commitment to V2-only was motivated by miner sovereignty, yet the engine doesn't actually exercise that sovereignty.
 
 **The opportunity:** Otedama can become **the first Go-language implementation that supports BOTH the Stratum V2 JDP path AND the DATUM path** through a unified `TemplateSource` abstraction. Users choose their pool and protocol; Otedama transparently selects the right template-construction strategy. This is the natural completion of ADR-002.
 
@@ -179,7 +179,7 @@ func (c *Client) Run(ctx context.Context) error
 var _ TemplateSource = (*Client)(nil)
 ```
 
-The implementation reuses `internal/stratum/noise*.go` for the Noise NX handshake (already production-ready in Otedama since v3.0.0-alpha.1).
+The implementation reuses `internal/stratum/noise*.go` for the Noise NX handshake. (**Erratum (session 497):** the previous parenthetical claimed this code is "already production-ready" — it is not: `KNOWN_LIMITATIONS.md` §2 documents that it is never called by the live connect path, uses P-256 instead of spec-mandated secp256k1+ElligatorSwift, discards the `mixKey` cipher output, and performs no responder authentication. Reusing it would inherit those gaps; this ADR's cost estimate should be read as including a Noise rework or dependency on ADR-011.)
 
 **Cost:** ~150 hours. Protocol parsing + message orchestration + integration with existing Noise NX layer + error recovery semantics. The SRI Rust source serves as a reference implementation but we don't link against it.
 
