@@ -421,7 +421,7 @@ func TestApplyAllocation_LogsOnStreamChange(t *testing.T) {
 		}},
 	}
 	var workers []*miner.Worker // nil-safe: SetWork on nil slice is a no-op
-	applyAllocation(alloc, workers, log)
+	applyAllocation(alloc, workers, nil, nil, log)
 
 	joined := fmt.Sprint(lines)
 	if !strings.Contains(joined, "ai.akash") && !strings.Contains(joined, "AI") {
@@ -439,7 +439,7 @@ func TestApplyAllocation_IdleAssignment(t *testing.T) {
 			{DeviceID: "gpu-0", Stream: ""}, // Idle() is true when Stream is ""
 		},
 	}
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	joined := fmt.Sprint(lines)
 	if !strings.Contains(joined, "idle") {
@@ -460,7 +460,7 @@ func TestApplyAllocation_NoChangeProducesNoLog(t *testing.T) {
 			// SwitchedFromID empty → no change
 		}},
 	}
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	if len(lines) != 0 {
 		t.Errorf("steady-state assignment should not log; got %v", lines)

@@ -596,7 +596,7 @@ func TestUpdateWork_InvalidPrevNBitsNoShareTarget_IsNoOp(t *testing.T) {
 	// No share target (zero) forces the network-target fallback; an
 	// invalid prevNBits (0x00000000) makes TargetFromNBits error →
 	// early return. Must not panic; does nothing.
-	updateWork(nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{})
+	updateWork(nil, job, 1, prevHash, 0x00000000, 0x60000000, miner.Hash{}, nil)
 }
 
 // ============================================================================

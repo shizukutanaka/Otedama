@@ -289,6 +289,16 @@ func Run(ctx context.Context, opts Options) error {
 	activityMu := sync.Mutex{}
 	activity := make(map[string]float64)
 
+	// Shared arbitration-pause set: devices arbitration has idled or
+	// switched to AI inference. Written by applyAllocation inside
+	// runArbitrationLoop, read by the session loops' job handlers so a
+	// pool notify does not silently re-arm a paused worker — without it,
+	// SetWork(nil) only holds until the next NewMiningJob/mining.notify
+	// (~30–60 s), after which updateWork/applyJob re-issue work to every
+	// worker and the device flaps idle→mining→idle each cycle.
+	pausedMu := sync.Mutex{}
+	paused := make(map[string]bool)
+
 	// Arbitration loop: re-run Decide whenever quotes change.
 	go runArbitrationLoop(ctx, arbitrationLoopOpts{
 		devRefs:       devRefs,
@@ -302,6 +312,8 @@ func Run(ctx context.Context, opts Options) error {
 		minYield:      opts.Config.MinYieldSatsPerSec,
 		activityMu:    &activityMu,
 		activity:      activity,
+		pausedMu:      &pausedMu,
+		paused:        paused,
 	})
 
 	// ----- Phase 7: TUI dashboard -----
@@ -335,6 +347,8 @@ func Run(ctx context.Context, opts Options) error {
 		curtailGate: curtailGate,
 		activityMu:  &activityMu,
 		activity:    activity,
+		pausedMu:    &pausedMu,
+		paused:      paused,
 	})
 }
 
@@ -360,6 +374,10 @@ type reconnectOpts struct {
 	// the lifetime of Run(), independent of any one pool session.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// pausedMu/paused: the arbitration-owned per-device pause set
+	// (see sessionOpts.isDevicePaused). Same lifetime as activity.
+	pausedMu *sync.Mutex
+	paused   map[string]bool
 }
 
 // runReconnectLoop dials the pool, runs a session, and reconnects with
@@ -431,6 +449,8 @@ func runReconnectLoop(ctx context.Context, r reconnectOpts) error {
 			poolPassword: poolPassword,
 			activityMu:   r.activityMu,
 			activity:     r.activity,
+			pausedMu:     r.pausedMu,
+			paused:       r.paused,
 			onConnected: func() {
 				addrConnected = true
 				if r.opts.OnReady != nil {
@@ -558,12 +578,34 @@ type sessionOpts struct {
 	// provider renders inactive.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+	// pausedMu/paused are the shared, arbitration-owned set of devices
+	// arbitration has parked (idle assignment or AI stream). The job
+	// handlers consult isDevicePaused so a pool notify does not re-arm a
+	// parked worker between arbitration ticks. Either may be nil (no
+	// arbitration loop wired, e.g. some tests), in which case no device
+	// is ever paused.
+	pausedMu *sync.Mutex
+	paused   map[string]bool
 }
 
 // isCurtailed reports whether hashing is currently paused by the
 // curtail_below_btc_usd threshold. Safe to call with a nil gate.
 func (o sessionOpts) isCurtailed() bool {
 	return o.curtailGate != nil && o.curtailGate.Load()
+}
+
+// isDevicePaused reports whether arbitration has parked deviceID —
+// either because no viable stream accepts it (idle) or because it was
+// routed to an AI-inference stream. A paused worker keeps its work nil
+// across pool notifies until arbitration assigns it a mining stream
+// again. Safe to call when the pause set is unwired.
+func (o sessionOpts) isDevicePaused(deviceID string) bool {
+	if o.pausedMu == nil || o.paused == nil {
+		return false
+	}
+	o.pausedMu.Lock()
+	defer o.pausedMu.Unlock()
+	return o.paused[deviceID]
 }
 
 // updateLiveness feeds the stall monitor and sets the otedama_up gauge,
@@ -751,7 +793,7 @@ func runSession(ctx context.Context, opts sessionOpts) error {
 			opts.log("debug", fmt.Sprintf("engine: job %d ignored (curtailed)", j.JobID))
 			return
 		}
-		updateWork(opts.workers, j, chanID, prevHash, prevNBits, ntime, shareTarget)
+		updateWork(opts.workers, j, chanID, prevHash, prevNBits, ntime, shareTarget, opts.isDevicePaused)
 		opts.log("info", fmt.Sprintf("engine: job %d version=0x%08X active", j.JobID, j.Version))
 	}
 
@@ -1093,7 +1135,7 @@ func runSessionV1(ctx context.Context, opts sessionOpts) error {
 			if opts.isCurtailed() {
 				opts.log("debug", fmt.Sprintf("engine: V1 job %s ignored (curtailed)", job.JobID))
 			} else {
-				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty()); err != nil {
+				if err := applyJob(opts.workers, job, chanID, sess.SuggestedDifficulty(), opts.isDevicePaused); err != nil {
 					opts.log("warn", err.Error())
 					continue
 				}
@@ -1257,9 +1299,10 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // current chain tip (prevHash + network prevNBits) at timestamp ntime,
 // comparing hashes against shareTarget — the POOL-ASSIGNED share
 // difficulty from OpenMiningChannelSuccess/SetTarget, not the network
-// target. All five header inputs (version, prev-hash, merkle root, time,
-// bits) are populated; a header missing any of them hashes to a value no
-// pool can accept.
+// target — except workers arbitration has parked, which must stay idle
+// until arbitration routes them back to mining. All five header inputs
+// (version, prev-hash, merkle root, time, bits) are populated; a header
+// missing any of them hashes to a value no pool can accept.
 //
 // Grind to the pool-assigned share target, not the block target. The
 // share target is far easier; a hash meeting it is exactly what the pool
@@ -1269,7 +1312,9 @@ func sendMsg(conn net.Conn, msgType uint8, isChannel bool, enc encodable) error 
 // all. Fall back to the block target only when the pool assigned none
 // (zero target).
 func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint32,
-	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash) {
+	prevHash [32]byte, prevNBits uint32, ntime uint32, shareTarget miner.Hash,
+	paused func(string) bool,
+) {
 	target := shareTarget
 	if target == (miner.Hash{}) {
 		t, err := miner.TargetFromNBits(prevNBits)
@@ -1292,6 +1337,13 @@ func updateWork(workers []*miner.Worker, job *stratum.NewMiningJob, chanID uint3
 		Target: target,
 	}
 	for _, wr := range workers {
+		if paused != nil && paused(wr.DeviceID()) {
+			// Keep the parked worker empty rather than skipping it: a
+			// worker still carrying an earlier job would otherwise keep
+			// grinding stale work while marked idle.
+			wr.SetWork(nil)
+			continue
+		}
 		wr.SetWork(w)
 	}
 }
@@ -1337,7 +1389,7 @@ func v1JobTarget(nBits uint32, difficulty float64) (miner.Hash, error) {
 // value (poolproto.Job carries no difficulty field: V1 delivers it on a
 // separate notification that applies to every job until superseded, not
 // attached to mining.notify). See v1JobTarget for how it is applied.
-func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64) error {
+func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficulty float64, paused func(string) bool) error {
 	target, err := v1JobTarget(job.NBits, difficulty)
 	if err != nil {
 		return fmt.Errorf("engine: bad target for job %q: %w", job.JobID, err)
@@ -1358,6 +1410,10 @@ func applyJob(workers []*miner.Worker, job poolproto.Job, chanID uint32, difficu
 		Target: target,
 	}
 	for _, wr := range workers {
+		if paused != nil && paused(wr.DeviceID()) {
+			wr.SetWork(nil)
+			continue
+		}
 		wr.SetWork(w)
 	}
 	return nil

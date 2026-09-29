@@ -42,6 +42,17 @@ type arbitrationLoopOpts struct {
 	// exists. See buildStats/stats.go for the read side.
 	activityMu *sync.Mutex
 	activity   map[string]float64
+
+	// pausedMu/paused receive the per-device pause set: after each
+	// Decide() this loop marks every assigned device paused=true when its
+	// assignment is Idle or an AI stream and paused=false when routed to
+	// mining. The session loops read it (sessionOpts.isDevicePaused) so
+	// an incoming pool job does not re-arm a parked worker between
+	// arbitration ticks — SetWork(nil) alone only held until the next
+	// NewMiningJob/mining.notify overwrote it. Either may be nil (some
+	// tests), in which case no device is ever marked paused.
+	pausedMu *sync.Mutex
+	paused   map[string]bool
 }
 
 // defaultHysteresisPct matches the default in config.Defaults().
@@ -148,7 +159,7 @@ func runArbitrationLoop(ctx context.Context, opts arbitrationLoopOpts) {
 					opts.log("info", "arbitration: all devices now have a viable stream")
 				}
 			}
-			applyAllocation(alloc, opts.workers, opts.log)
+			applyAllocation(alloc, opts.workers, opts.pausedMu, opts.paused, opts.log)
 		}
 	}
 }
@@ -237,10 +248,23 @@ func streamsSlice(m map[string]arbitration.Stream) []arbitration.Stream {
 	return result
 }
 
-// applyAllocation applies a Decide result to the miner workers: pausing
-// SHA256d work on the specific device that was idled or switched to AI
-// inference, and logging every change of assignment.
-func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log func(string, string)) {
+// applyAllocation applies a Decide result to the miner workers: recording
+// each device's pause state in the shared paused set (which the session
+// loops consult before issuing new work), pausing SHA256d work on the
+// specific device that was idled or switched to AI inference, and logging
+// every change of assignment. Marking is done before SetWork(nil) so that
+// whichever ordering a racing pool notify takes, the worker ends idle.
+func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker,
+	pausedMu *sync.Mutex, paused map[string]bool, log func(string, string),
+) {
+	setPaused := func(deviceID string, p bool) {
+		if pausedMu == nil || paused == nil {
+			return
+		}
+		pausedMu.Lock()
+		paused[deviceID] = p
+		pausedMu.Unlock()
+	}
 	// pauseDevice stops only the worker whose DeviceID matches the
 	// assignment being processed. Correctness bug fixed session 247:
 	// this previously called SetWork(nil) on every element of workers,
@@ -261,6 +285,12 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 		}
 	}
 	for _, a := range alloc.Assignments {
+		// Publish this cycle's pause state unconditionally — a mining
+		// assignment clears the mark, an idle or AI assignment sets it.
+		// This is what makes the pause survive pool notifies between
+		// arbitration ticks (sessionOpts.isDevicePaused).
+		nowAI := strings.HasPrefix(string(a.Stream), "ai.")
+		setPaused(a.DeviceID, a.Idle() || nowAI)
 		switch {
 		case a.Idle():
 			// Device is idle: no stream accepts its family, or all compatible
@@ -276,7 +306,6 @@ func applyAllocation(alloc *arbitration.Allocation, workers []*miner.Worker, log
 			// Stream changed. If switching away from mining, signal workers to pause.
 			// Switching TO mining re-enables them; the pool connection delivers new work.
 			wasAI := strings.HasPrefix(string(a.SwitchedFromID), "ai.")
-			nowAI := strings.HasPrefix(string(a.Stream), "ai.")
 			switch {
 			case !wasAI && nowAI:
 				// Mining → AI: pause this device's SHA256d worker.

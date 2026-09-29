@@ -377,7 +377,7 @@ func TestUpdateWork_PopulatesFullHeaderAndShareTarget(t *testing.T) {
 		easiest[i] = 0xFF // every hash qualifies → share arrives instantly
 	}
 
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest)
+	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x60000000, easiest, nil)
 
 	select {
 	case s := <-shares:
@@ -405,7 +405,7 @@ func TestUpdateWork_ZeroShareTargetFallsBackToNetworkTarget(t *testing.T) {
 	var prevHash [32]byte
 
 	// Must not panic; genesis nBits is a valid (very hard) target.
-	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{})
+	updateWork([]*miner.Worker{w}, job, 1, prevHash, 0x1d00ffff, 0x495fab29, miner.Hash{}, nil)
 }
 
 func TestApplyJob_ValidJob(t *testing.T) {
@@ -418,7 +418,7 @@ func TestApplyJob_ValidJob(t *testing.T) {
 		NTime: 0x60000000,
 		NBits: 0x1d00ffff, // genesis nBits, valid
 	}
-	if err := applyJob(workers, job, 1, 0); err != nil {
+	if err := applyJob(workers, job, 1, 0, nil); err != nil {
 		t.Fatalf("applyJob(valid): %v", err)
 	}
 	// Non-panic + nil error is the success condition (SetWork is safe
@@ -431,7 +431,7 @@ func TestApplyJob_UnparseableJobID(t *testing.T) {
 		JobID: "not-a-number",
 		NBits: 0x1d00ffff,
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, job, 1, 0, nil)
 	if err == nil {
 		t.Error("applyJob should reject an unparseable job ID rather than mining job 0")
 	}
@@ -443,7 +443,7 @@ func TestApplyJob_BadNBits(t *testing.T) {
 		JobID: "1",
 		NBits: 0x00000000, // invalid target
 	}
-	err := applyJob([]*miner.Worker{w}, job, 1, 0)
+	err := applyJob([]*miner.Worker{w}, job, 1, 0, nil)
 	if err == nil {
 		t.Error("applyJob should reject nBits that produce an invalid target")
 	}
@@ -457,8 +457,67 @@ func TestApplyJob_PositiveDifficulty_NoError(t *testing.T) {
 	// lives in TestV1JobTarget below, which tests the pure decision function).
 	w := miner.NewWorker(miner.WorkerConfig{Threads: 1})
 	job := poolproto.Job{JobID: "1", NBits: 0x1d00ffff}
-	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001); err != nil {
+	if err := applyJob([]*miner.Worker{w}, job, 1, 0.001, nil); err != nil {
 		t.Fatalf("applyJob(difficulty=0.001): %v", err)
+	}
+}
+
+// TestJobPaths_HonorPausedDevices guards the arbitration-pause flap:
+// updateWork/applyJob previously called SetWork on EVERY worker, so a
+// device arbitration had parked (SetWork(nil)) resumed mining on the next
+// pool notify (~30–60 s) and flapped until the next arbitration tick
+// re-paused it — an "idle" device in fact hashed most of the interval.
+// A paused worker must now stay empty across notifies, and unpausing must
+// resume it on the next job.
+func TestJobPaths_HonorPausedDevices(t *testing.T) {
+	paused := map[string]bool{"dev-0": true}
+	isPaused := func(id string) bool { return paused[id] }
+
+	worker := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-0"})
+	bystander := miner.NewWorker(miner.WorkerConfig{Threads: 1, DeviceID: "dev-1"})
+	workers := []*miner.Worker{worker, bystander}
+
+	// Simulate "was mining" state: prior work present on both.
+	worker.SetWork(&miner.Work{})
+	bystander.SetWork(&miner.Work{})
+
+	v2Job := &stratum.NewMiningJob{ChannelID: 1, JobID: 7, Version: 0x20000000}
+	updateWork(workers, v2Job, 1, [32]byte{}, 0x1d00ffff, 0x60000000, miner.Hash{0xFF}, isPaused)
+	if worker.HasWork() {
+		t.Error("paused worker kept/received work on the V2 path")
+	}
+	if !bystander.HasWork() {
+		t.Error("unpaused bystander lost its work on the V2 path")
+	}
+
+	v1Job := poolproto.Job{JobID: "9", NTime: 0x60000000, NBits: 0x1d00ffff}
+	if err := applyJob(workers, v1Job, 1, 0, isPaused); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if worker.HasWork() {
+		t.Error("paused worker kept/received work on the V1 path")
+	}
+	if !bystander.HasWork() {
+		t.Error("unpaused bystander lost its work on the V1 path")
+	}
+
+	// Unpause: the next job must re-arm the worker (resume-on-next-job
+	// semantics, same as the pre-gate design intended).
+	paused["dev-0"] = false
+	updateWork(workers, v2Job, 1, [32]byte{}, 0x1d00ffff, 0x60000001, miner.Hash{0xFF}, isPaused)
+	if !worker.HasWork() {
+		t.Error("unpaused worker did not resume on the next V2 job")
+	}
+	paused["dev-0"] = true
+	if err := applyJob(workers, v1Job, 1, 0, isPaused); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	paused["dev-0"] = false
+	if err := applyJob(workers, v1Job, 1, 0, isPaused); err != nil {
+		t.Fatalf("applyJob: %v", err)
+	}
+	if !worker.HasWork() {
+		t.Error("unpaused worker did not resume on the next V1 job")
 	}
 }
 
@@ -1216,7 +1275,7 @@ func TestCurtailmentGate_BlocksWorkApplication(t *testing.T) {
 		if opts.isCurtailed() {
 			return // mirror runSession: skip arming while curtailed
 		}
-		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target)
+		updateWork(opts.workers, job, 0, prevHash, 0x207fffff, 0x60000000, target, nil)
 	}
 
 	// Gate raised: applying a job is skipped, so the worker never gets work
@@ -1709,7 +1768,7 @@ func TestApplyAllocation_EmptyAssignments(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	if len(logged) != 0 {
 		t.Errorf("empty allocation should log nothing; got %v", logged)
@@ -1726,7 +1785,7 @@ func TestApplyAllocation_IdleDevice(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, []*miner.Worker{w}, log)
+	applyAllocation(alloc, []*miner.Worker{w}, nil, nil, log)
 
 	if len(logged) == 0 {
 		t.Error("idle device should emit an info log")
@@ -1755,7 +1814,7 @@ func TestApplyAllocation_OnlyPausesTargetDevice(t *testing.T) {
 			{DeviceID: "cpu-0", Stream: ""}, // empty Stream → Idle()
 		},
 	}
-	applyAllocation(alloc, []*miner.Worker{target, bystander}, func(_, _ string) {})
+	applyAllocation(alloc, []*miner.Worker{target, bystander}, nil, nil, func(_, _ string) {})
 
 	if target.HasWork() {
 		t.Error("target device cpu-0 should have been paused (SetWork(nil))")
@@ -1779,7 +1838,7 @@ func TestApplyAllocation_MiningToAI(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, []*miner.Worker{w}, log)
+	applyAllocation(alloc, []*miner.Worker{w}, nil, nil, log)
 
 	if len(logged) == 0 {
 		t.Error("mining→AI switch should emit a log")
@@ -1802,7 +1861,7 @@ func TestApplyAllocation_AIToMining(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	if len(logged) == 0 {
 		t.Error("AI→mining switch should emit a log")
@@ -1825,7 +1884,7 @@ func TestApplyAllocation_GenericStreamSwitch(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	if len(logged) == 0 {
 		t.Error("generic stream switch should emit a log")
@@ -1842,7 +1901,7 @@ func TestApplyAllocation_NoChange(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	if len(logged) != 0 {
 		t.Errorf("no-change assignment should not log; got %v", logged)
@@ -1868,7 +1927,7 @@ func TestApplyAllocation_IdleDevice_FloorReason(t *testing.T) {
 	var logged []string
 	log := func(_, m string) { logged = append(logged, m) }
 
-	applyAllocation(alloc, nil, log)
+	applyAllocation(alloc, nil, nil, nil, log)
 
 	if len(logged) == 0 {
 		t.Fatal("floor-idle device should emit an info log")
@@ -2447,6 +2506,7 @@ type noSHA256dDevice struct{}
 func (d *noSHA256dDevice) Identity() hal.Identity {
 	return hal.Identity{ID: "gpu-0", Family: hal.FamilyGPU}
 }
+
 func (d *noSHA256dDevice) Capabilities() hal.Capabilities {
 	return hal.Capabilities{SHA256d: false, GeneralCompute: true}
 }

@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 510 — arbitration pause no longer flaps on pool job updates)
+
+- **Arbitration-driven idles were advisory-only.** `applyAllocation` parked a
+  device with a one-shot `SetWork(nil)`, but `updateWork` (V2) and `applyJob`
+  (V1) called `SetWork` on **every** worker on each pool notify — so a device
+  arbitration had idled or moved to AI inference resumed mining on the next
+  job (~30–60 s) and flapped until the next 30 s arbitration tick re-paused
+  it. An "idle" device in fact hashed most of the interval, burning power
+  the allocator had explicitly priced out.
+- A per-device **paused set** (mutex-guarded, same lifetime as the `activity`
+  map) is now marked by `applyAllocation` — `a.Idle() || strings.HasPrefix(string(a.Stream), "ai.")` —
+  and consulted by both job-application paths. A paused worker gets
+  `SetWork(nil)` rather than a skip so stale work cannot keep it hashing;
+  unpausing resumes it on the very next job (resume-on-next-job semantics
+  preserved). Mirrors the `curtailGate` semantics already used for
+  curtailment.
+- Covered by `TestJobPaths_HonorPausedDevices` (pause → job → unpause → job
+  on both the V1 and V2 paths, plus a bystander device that must keep
+  hashing throughout) and `go test -race` green.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

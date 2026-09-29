@@ -939,3 +939,35 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 510 — arbitration pause must survive pool job updates (real fix)
+
+**Sweep.** Following the session-509 shared-map race fix, every goroutine
+spawn site in `internal/engine` was re-audited for the same class
+(asynchronous access to shared state). All found clean except one
+correctness gap of a different flavour: ordering.
+
+**Bug.** `applyAllocation` (`internal/engine/arbitrate.go`) paused a device
+with a one-shot `w.SetWork(nil)`, but `updateWork` (V2 path, `run.go`) and
+`applyJob` (V1 path) called `wr.SetWork(w)` on **every** worker each time a
+pool job notify arrived — roughly every 30–60 s on a live pool. A device
+the allocator had parked (idle, or moved to an `ai.*` stream) resumed
+mining on the next notify and flapped until the 30 s arbitration tick
+re-paused it: an "idle" device hashed for most of the interval, defeating
+the power-breakeven floor arbitration had just priced in.
+
+**Fix.** A per-device paused set (`pausedMu` + `paused map[string]bool`,
+same lifetime as the `activity` map) is now maintained by
+`applyAllocation` — every assignment marks `a.Idle() || strings.HasPrefix(string(a.Stream), "ai.")`,
+which is idempotent and self-corrects each tick — and consulted by
+`sessionOpts.isDevicePaused` from both job-application paths. A paused
+worker receives `SetWork(nil)` (not a bare skip) so stale work cannot keep
+it hashing; unpausing re-arms it on the next job, preserving the
+resume-on-next-job semantics the one-shot pause implied. This mirrors the
+`curtailGate` atomic consulted at job time for curtailment — the
+arbitration pause simply had no equivalent gate until now.
+
+**Verified.** `TestJobPaths_HonorPausedDevices` covers pause → notify →
+unpause → notify on both V1 and V2 paths plus an always-unpaused bystander;
+`go test -race ./internal/engine/` green; all goroutine spawn sites and the
+`stratumv1` concurrent-submit path (writeMu/pendingMu/atomic IDs) audited.
