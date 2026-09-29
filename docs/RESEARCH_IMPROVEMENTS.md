@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 502 — 監査検証ラウンド（godoc 適合・panic サイト・全テスト実行 — 全件 clean）
+
+**Sweep.** (a) CLAUDE.md「主要型・公開関数に godoc 必須」の機械検査: exported func/type の doc コメント有無を全 internal/ で走査。(b) `panic(` サイトの正当性。(c) `go test ./...` 全実行。(d) LICENSE/NOTICE/CODEOWNERS/.editorconfig/CHANGELOG↔VERSION 整合。
+
+**発見なし（全件 clean）。**
+- godoc 欠落ヒット20件は全て正当: `Identity()`/`Capabilities()`/`Read()`/`Error()`/`Close()` 等の **interface 充足メソッド**（hal.Device・provider・io.Reader・error）で、interface 側に文書があるためメソッド毎の godoc は不要 — Go 慣行適合。
+- panic 11箇所は全て正当: `init()` の BIP-39 SHA 検証・registry 二重登録・worker 多重 Start のような programmer-error ガード — ライブラリ境界を越える panic なし。
+- `go test ./...` **24パッケージ全緑**（master 現状、18.3s engine 含む）。
+- CHANGELOG セクション構成（Unreleased → 3.0.0-alpha.1 → 2.1.9）と VERSION 一致、LICENSE 著作権行記入済み、CODEOWNERS noise* パターン実解決。
+
+本ラウンドは検証のみ（コード・ドキュメント変更なし）。
