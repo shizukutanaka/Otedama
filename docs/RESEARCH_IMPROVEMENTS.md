@@ -977,3 +977,30 @@ project shape that no longer exists — `internal/mining`,
 (`./fix_imports.sh`, `./cleanup_tests.sh`, `dos2unix`) — plus
 broad `Bash(rm:*)`/`Bash(git push:*)` grants. Removing it cannot break
 the tool: Claude Code regenerates the file locally on first use.
+
+## Session 482
+
+**ROADMAP.md reconciliation against shipped code — four stale entries
+corrected.** The v3.1.0/v3.2.0 milestone lists still described the
+pre-integration state:
+
+- `engine → poolproto 統合` claimed `engine.Run` was still on
+  `stratum.NewDecoder` + raw TCP and that "SV1 transport 等が使えない" —
+  false since the `runSessionV1` dispatch shipped: V1 connections go
+  through `poolproto.DialURL` and the `poolproto.Session` interface
+  (`Jobs()`/`Submit()`). The remaining gap is narrower: the V2 loop is
+  still on the native decoder path, and `internal/poolproto/stratumv2`
+  (registered dialer) has no engine caller — the open decision is
+  "migrate the V2 loop onto poolproto" vs "drop the unused dialer".
+- `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` —
+  "informational" was inaccurate: neither tool runs in any CI workflow;
+  govulncheck exists only in the local `security`/`audit`/`setup`
+  Makefile targets and osv-scanner is absent from the repo entirely.
+- `internal/poolproto/ 抽象化レイヤ` — marked partially complete: only
+  the SV1 switch actually dispatches through the abstraction.
+- `Stratum V1 互換の追加` — marked connection-complete: the dialer,
+  handshake, extranonce/difficulty notifications, and submit path all
+  ship, but V1 jobs hash a zero MerkleRoot (coinbase is never
+  reconstructed — `stratumv1/parse.go`), so pools cannot accept the
+  shares; V1 remains a connectivity/diagnostic path, SV2 is required
+  for real revenue.

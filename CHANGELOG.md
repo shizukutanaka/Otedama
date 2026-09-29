@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 482 — ROADMAP.md の陳腐化エントリ4件を実装状況と照合して訂正)
+
+* `engine → poolproto 統合` 項: 「SV1 transport が使えない」という前提は陳腐化 — V1 は `poolproto.DialURL` 経由で動作済み。残ギャップは V2 側の native `stratum.NewDecoder` パスと、engine から未参照の `poolproto/stratumv2` dialer のみと注記。
+* `govulncheck + osv-scanner を CI ゲートに昇格（現在 informational）` 項: 「informational」は不正確 — CI ワークフローに両者とも存在せず（Makefile ローカルのみ・osv-scanner は未導入）と訂正。
+* `internal/poolproto/ 抽象化レイヤ` 項: SV1 切替のみ部分完了と注記（SV2 native・DATUM 未実装）。
+* `Stratum V1 互換の追加` 項: 接続層は完了（stratum+tcp://・stratum+tls:// 動作）とマークし、coinbase 未再構成のため V1 シェアは pool 受理されない残ギャップを併記。
+
 ### Fixed (session 481 — コミット済み `.claude/settings.local.json`（古いコードベース構成の死んだパスを指す130超の許可エントリ）を削除し、`.gitignore` でローカル設定の再混入を防止)
 
 * SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。

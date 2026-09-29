@@ -15,18 +15,18 @@ This roadmap intentionally lists only technical milestones one solo maintainer c
 研究調査で「現在の実装は alpha placeholder が多い」と判明。実プロトコルへの差し替え。
 
 - **secp256k1 + Schnorr (BIP-340)** を `internal/btccrypto/` に統合。現在 P-256 alpha のNoise NXハンドシェイクを実機 secp256k1 + ElligatorSwift に置き換え。
-- **engine → poolproto 統合** `engine.Run` の pool 接続を `poolproto.DialURL` 経由に切り替え。現状 `stratum.NewDecoder` + raw TCP に直結しており、SV1 transport 等が使えない。この統合が dual-protocol 対応の前提条件。
+- **engine → poolproto 統合** `engine.Run` の pool 接続を `poolproto.DialURL` 経由に切り替え。~~現状 `stratum.NewDecoder` + raw TCP に直結しており、SV1 transport 等が使えない~~ **注記 (session 482, 検証済み)**: 前提は陳腐化 — V1 は既に `runSessionV1` が `poolproto.DialURL` + `poolproto.Session`（`Jobs()`/`Submit()`）経由で動作しており dual-protocol は実現済み。残ギャップは V2 側のみ: engine の V2 ループは今も native `stratum.NewDecoder` パスを使い、`internal/poolproto/stratumv2` dialer は登録済みだが engine から未参照（テスト以外の呼び出し元ゼロ）。残作業は「V2 ループの poolproto 移行」か「stratumv2 dialer の廃止」のどちらかの判断。
 - **Akash Network API** 実装。現在 simulated quotes を返している `internal/provider/ai_inference.go` を実APIに接続。**注記 (session 251, 検証済み)**: `akash-network/akash-api` は 2026-01-05 に deprecated/archived。後継の `akash-network/chain-sdk`（protobuf 定義、Go 参照クライアントあり）をターゲットとすること。また入札は provider daemon の on-chain "Bidengine" が行うため、REST 一発の bid submission ではなく bid-price policy を on-chain 設定へ渡すモデルになる（ADR-010 A4 参照）。ADR-003 の zero-dependency 方針との兼ね合いで、SDK 全体の vendoring ではなく必要な market/provider protobuf のみ生成する選択肢を評価する。
 - ~~**完全な BIP-39 English wordlist**~~ ✅ **完了 (session 32)**: 公式2048語リストを SHA-256 検証付きで埋め込み済み。Ledger/Trezor/Electrum と互換。
-- **govulncheck + osv-scanner** を CI ゲートに昇格（現在 informational）。
+- **govulncheck + osv-scanner** を CI ゲートに昇格。**訂正 (session 482, 検証済み)**: 「現在 informational」は不正確 — 両者とも CI ワークフローに一切存在しない（`.github/workflows/` に govulncheck/osv-scanner の参照ゼロ）。現状は Makefile `security`/`audit`/`setup` ターゲットのローカル実行のみ（govulncheck、best-effort）。osv-scanner はリポジトリ全体に未導入。
 - **Sigstore keyless signing** を release.yml に統合（cosign v3.x、Rekor v2 互換）。
 
 ### v3.2.0 — Stratum V2 maturity (target: 2026 Q4)
 
 研究調査で「production-quality な Go SV2 実装は存在しない」と判明。Otedamaが実用レベルの Go SV2 実装を提供する。**更新 (session 251, 検証済み)**: SRI (stratum-mining/stratum) は既に alpha を脱し v1.11.0 (2026-07-08)、ほぼ月次リリース。「SRI は alpha」という当初の前提は陳腐化。Go 実装が無い点は依然として有効なので Otedama の位置付けは変わらないが、SV2 適合性テストの interop リファレンスとして特定の SRI タグを pin すること。
 
-- **`internal/poolproto/` 抽象化レイヤ** を engine/ から完全分離。SV1/SV2/DATUM 切替可能に。
-- **Stratum V1 互換** の追加。研究調査の通り、>99%のプールはSV1のままなので、ユーザー基盤拡大のため必須。
+- **`internal/poolproto/` 抽象化レイヤ** を engine/ から完全分離。SV1/SV2/DATUM 切替可能に。**注記 (session 482)**: 部分完了 — SV1 切替は動作中（`poolproto.DialURL` dispatch）。SV2 は native パス経由（抽象化配下ではない）、DATUM は未実装。
+- ~~**Stratum V1 互換** の追加。研究調査の通り、>99%のプールはSV1のままなので、ユーザー基盤拡大のため必須。~~ ✅ **接続層は完了**: `internal/poolproto/stratumv1/` が出荷済み（JSON-RPC over TCP、TLS 対応、extranonce/difficulty 通知、submit 経路）。`stratum+tcp://`/`stratum+tls://` URL で動作。**残ギャップ (session 482)**: coinbase 再構成が未実装のため V1 job の MerkleRoot はゼロのまま hash される（`internal/poolproto/stratumv1/parse.go` コメント: "MerkleRoot remains zero in the V1 path"）— pool がシェアを受理しないので V1 経路は接続・診断用途のみで、実収益には SV2 が必要。
 - **DATUM (OCEAN) 互換** の追加（SV1 transport 上のbridgeとして実装）。
 - **Job Declaration Protocol (JDP)** opt-in 対応（Braiins と DEMAND のみ実用、ベータ機能として）。
 
