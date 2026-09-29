@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Performance (session 533 — field alignment)
+
+- Reordered pointer-containing fields to the front of hot structs in
+  `internal/miner` and `internal/stratum`: `Share` GC scan span
+  64→8 B, `HandshakeState` 104→32 B, `OpenMiningChannel` 32→24 B
+  (25% smaller), plus 10 other wire/worker structs. Field order
+  only — Encode/Decode is field-name explicit, no wire change.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
