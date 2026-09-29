@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 529 — benchmarks re-verified)
+
+- `BENCHMARKS.md`: added the measured Apple M4 single-thread rate
+  (~8.9 MH/s, ~112 ns/op under go1.27.1); corrected the frame-decode
+  section — the cited benchmark doesn't exist and the decoder is not
+  fuzzed in CI (fifth doc with this phantom).
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
