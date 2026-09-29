@@ -43,7 +43,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - **JDPは延期**: 3つのメジャープールが対応するまで実装しない（2026/Q2時点でBraiinsとDEMANDのみ）。
 - **SRI を cgo/FFI 経由で組み込まない**: pure-Go cross-compilationを失う。Go native実装を3-6エンジニアヶ月で書く。
 
-**実装状況:** `internal/poolproto/poolproto.go` 作成済み（インターフェース層のみ）。SV1/SV2 implementation は v3.2.0 スコープ。
+**実装状況:** `internal/poolproto/` はインターフェース層に加え `stratumv1/`・`stratumv2/` 両 dialer が実装済み — V1 セッションは engine で稼働中（**訂正 session 490**: 従来「インターフェース層のみ・SV1/SV2 implementation は v3.2.0 スコープ」と記載していたが実装済み）。
 
 ### 3. Bitcoin エコシステム longevity / Bitcoin Ecosystem Longevity
 
@@ -84,7 +84,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - OSS-Fuzz 統合申請（無料、Google運用）。
 - **action 更新は 7-day cooldown** で day-zero compromised tag 回避。
 
-**実装状況:** SHA pinning + Dependabot + cosign signing は v3.0.0-alpha で実装済み。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
+**実装状況:** Dependabot は配置済み。**訂正 (session 490)**: 従来「SHA pinning + cosign signing は v3.0.0-alpha で実装済み」と記載していたが両方未実施 — `.github/workflows/` の全 `uses:` はタグ/ブランチ参照で SHA pin ゼロ、`release.yml` は goreleaser/cosign を一切呼ばず `.goreleaser.yaml` の `signs:` は dead config。SLSA L3 と SBOM dual-format は v3.5.0 スコープ。
 
 ### 6. Solo Maintainer の現実 / Solo Maintainer Reality
 
@@ -156,7 +156,7 @@ The single highest-leverage observation: **the cost of building these foundation
 - LEGAL.md: OFAC/EAR 自己compliance期待を文書化。
 - 商標 free search を USPTO TESS / EUIPO eSearch / 主要 package registry で実施済み。`otedama.org`/`otedama.dev` 確保。USPTO Class 9 + 42 file は material adoption後 (~$700)。
 
-**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は本セッションで CONTRIBUTING.md に追加。SECURITY.md と LEGAL.md は v3.1.0 スコープ。
+**実装状況:** Apache 2.0 + DCO は採用済み。AI-assisted code clause は CONTRIBUTING.md に存在。SECURITY.md も作成済み（**訂正 session 490**: 従来「SECURITY.md と LEGAL.md は v3.1.0 スコープ」と記載）— v3.1.0 スコープに残るのは LEGAL.md のみ。
 
 ---
 
