@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 530 — sv2-spec drift: cert version now normative
+
+Recorded in ADR-009:
+
+- **sv2-spec #230 merged (Sep 10)**: Noise certificate `version` MUST
+  be 0; initiator MUST reject unsupported versions (was undefined;
+  implementations disagreed, #229). Forward requirement for Otedama:
+  `internal/stratum/noise*.go` does not yet parse the responder cert,
+  so when cert validation lands it must include the `version == 0`
+  check — recorded where implementers will look.
+- **sv2-spec #233 merged (Sep 23)**: upstream added `AGENTS.md` —
+  meta, no protocol impact.
+- SRI remains at v1.11.1 (no release since the V1-difficulty fix).

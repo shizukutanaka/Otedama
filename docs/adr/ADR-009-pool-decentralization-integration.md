@@ -614,6 +614,24 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 530, September 2026)
+
+Two sv2-spec merges since the last pass:
+
+- **#230 merged (2026-09-10): the Noise certificate `version` field is
+  now normative** — `version` MUST be 0, and the initiator MUST reject
+  a certificate whose version it does not support (closes #229: the
+  field previously had no defined value and implementations
+  disagreed). Otedama's `internal/stratum/noise*.go` does not yet
+  parse the responder certificate at all (responder authentication is
+  a recorded gap — KNOWN_LIMITATIONS §2 / ADR-009 errata), so this is
+  a forward requirement: when certificate validation lands, it must
+  include the `version == 0` check-and-reject, not just signature
+  verification. Also clarified: the authority-key base58 prefix
+  versions only the key encoding, unrelated to the cert `version`.
+- **#233 merged (2026-09-23):** upstream added `AGENTS.md` conventions
+  for coding agents — meta, no protocol impact.
+
 ## References
 
 - Stratum V2 Working Group expansion (May 7, 2026):
