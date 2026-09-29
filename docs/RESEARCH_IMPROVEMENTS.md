@@ -939,3 +939,27 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 512 — hal.Identity.Validate whitespace coverage + miner/hal complete
+
+**Bug (doc-vs-impl contract).** `hal.Identity.Validate` documented "no
+whitespace" for IDs but only rejected `' '`, `'\t'`, `'\n'` — `'\r'`,
+`'\v'`, `'\f'`, and all non-ASCII whitespace (U+00A0, U+2000–U+200A,
+U+3000, …) passed. Fixed with `unicode.IsSpace`; the ID is echoed into
+log lines (`Identity.String`) and used as a metrics device label, where
+whitespace/control characters corrupt output or split label values.
+Regression cases added for `\r`, `\v`, `\f`, and U+00A0.
+
+**Audit milestones.** `internal/miner` and `internal/hal` are now read
+end-to-end. `sha256d.go`: nBits decode rejects negative-mantissa bit,
+exp<3, zero mantissa, and >256-bit targets; `TargetFromDifficulty`
+rejects NaN/≤0/±Inf and uses 256-bit big.Float division; share target
+and hash share one little-endian layout so `LessOrEqual` is direct.
+`worker.go` grind tail: non-blocking share send with drop counter,
+atomic counters — clean; the only residual is the nonce-wrap/ntime-roll
+item owned by open PR #482. `hal`: Registry is RWMutex-guarded with a
+sorted snapshot; Detect fans out per-driver goroutines on a buffered
+results channel (no leak on ctx cancel), validates every returned
+Identity, and returns partial results + ctx.Err on cancel — clean.
+
+**Sources:** repo code only (audit session).

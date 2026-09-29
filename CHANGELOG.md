@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 512 — hal.Identity.Validate whitespace coverage)
+
+- **`Identity.Validate` now rejects all Unicode whitespace, matching its
+  documented contract.** The check covered only `' '`, `'\t'`, and
+  `'\n'`, so IDs containing `'\r'`, `'\v'`, `'\f'`, or non-ASCII
+  whitespace (e.g. U+00A0) passed validation despite the doc stating IDs
+  "must not contain whitespace". Replaced the explicit character list
+  with `unicode.IsSpace`. Driver-supplied IDs with such characters (a
+  sysfs entry name, say) would previously flow into log lines and metrics
+  labels where control/space characters corrupt output or split label
+  values. Also recorded the `internal/miner` + `internal/hal`
+  audit-complete verdicts (all files read; only residual is the
+  open-PR-owned nonce-wrap item).
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
