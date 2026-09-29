@@ -939,3 +939,24 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 523 — full linter sweep re-verified on master
+
+Re-ran the full golangci-lint suite under `GOTOOLCHAIN=go1.26.8`
+(go1.27.1's export data format is newer than golangci-lint v1.64.8's
+typecheck can decode — run it with the pinned toolchain):
+
+- **Bulk of findings = known lint backlog** already delivered by the
+  open #526–#528 refactor family (misspell, hugeParam, gocyclo,
+  errorlint, gofumpt, goconst, prealloc, unparam, dogsled).
+- **`daemon/service.go:375` nilerr** — false positive on a documented
+  contract: `statusWindowsService` treats sc.exe's non-zero exit as
+  "not installed" by design (comment lines 367–371; matches
+  statusLaunchd). No change.
+- **`stratum/noise.go` `remoteStatic` unused** — already recorded as
+  the CODEOWNERS-level noise*.go erratum; no change.
+- **Two actionable test-hygiene items fixed**: dead `parseFloat`
+  helper in `internal/rates/fetcher_test.go` and an unclosed response
+  body in `internal/httpserver/server_test.go` (bodyclose).
+- `govulncheck ./...` re-verified under go1.26.8: zero reachable
+  vulnerabilities.

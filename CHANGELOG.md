@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 523 — test-hygiene lint findings)
+
+- Removed the dead `parseFloat` helper in `internal/rates/fetcher_test.go`
+  (unused linter finding).
+- Closed the response body on the success path of the post-shutdown
+  probe in `internal/httpserver/server_test.go` (bodyclose finding).
+- Verified the remaining golangci-lint output maps to the open #526–#528
+  refactor family or documented false positives; govulncheck remains
+  zero-reachable under go1.26.8.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
