@@ -939,3 +939,34 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 513 — arbitration + logger + version fully read; core audit complete
+
+**Audit milestones.** With this session's reads of `internal/arbitration`
+(engine.go, 503 lines), `internal/logger`, and `internal/version`, every
+non-test file in the core path (engine, miner, hal, arbitration, logger,
+version) has now been read end-to-end across sessions 509–513.
+
+**arbitration verdicts.** `Decide` rejects invalid Policy, negative
+HysteresisMargin/MinYieldSatsPerSec, and duplicate device IDs up front;
+device order is sorted so identical inputs produce byte-identical
+allocations (the determinism contract tests and log-diffing rely on).
+`chooseForDevice` correctly computes `maxRaw` before the policy sort
+(ForegoneSatsPerSec measures raw yield, not policy score), compares
+hysteresis in the *policy-adjusted* score space so a worse-privacy
+higher-yield stream can't force a switch under MaximizePrivacy, and
+emits an assignment for every device. The only residual inputs are
+non-finite values (NaN hysteresis/floor/yield) — that class is owned by
+open PRs #437 (collapse non-finite yields) and #443 (reject non-finite
+margin/floor); no re-delivery here.
+
+**logger verdicts.** Default-logger singleton is a `sync/atomic.Pointer`
+with a CAS cold path (CAS-loser branch is unit-testable); `IntoContext`
+and `SetDefault` both no-op on nil so a typed-nil can never shadow the
+default; `Discard` uses a level above LevelError rather than a discarded
+writer alone. Clean.
+
+**version verdicts.** ldflags-injected vars + Info snapshot + stable
+`String()` format — clean. (The release.yml `-X main.Version` wrong-
+symbol defect is already recorded in docs/KNOWN_LIMITATIONS via #562 —
+different layer, not this file.)

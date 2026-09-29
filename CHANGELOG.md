@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 513 — arbitration/logger/version read; core audit complete)
+
+- **Core-path audit surface complete.** `internal/arbitration`,
+  `internal/logger`, and `internal/version` read end-to-end, finishing
+  the non-test sweep of the core packages (engine, miner, hal,
+  arbitration, logger, version) started in session 509. Verdicts:
+  arbitration `Decide` is deterministic (sorted device order, duplicate-
+  ID rejection, policy-space hysteresis, full-device assignment
+  coverage); logger's default singleton is race-free via
+  `atomic.Pointer` with nil-safe `IntoContext`/`SetDefault`; version's
+  ldflags layout matches the documented defaults. The only residual
+  class — non-finite arbitration inputs — is already owned by open PRs
+  #437 and #443.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
