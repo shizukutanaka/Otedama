@@ -606,3 +606,29 @@ decode-error propagation (live reader terminates the session on error
 rather than feeding zero-value job data to the miner).
 
 All 24 packages build, vet, and test green.
+
+## Session 519 update — rule-3 duplication candidates recorded
+
+Two residuals surfaced by the sessions 515–517 audit; recorded per
+CLAUDE.md rule 3 (record before fixing — consolidation is a contract
+decision, not a mechanical dedupe).
+
+- **`tui` truncator family — near-duplicate with divergent edge
+  semantics (same class as Issue #3).** `truncateToBudget` (dashboard.go:329)
+  hard-cuts `s[:budget]` when `budget < 4`; `shortenURL`
+  (dashboard.go:530) returns the **over-limit string intact** in the
+  same edge case — silently violating the caller's width bound.
+  `truncateVisible` (dashboard.go:490) is the third, ANSI-aware variant.
+  Consolidation must pick one edge-case contract: hard-bound always vs
+  never-distort. Today the divergence is harmless only because callers
+  pass budgets ≫4.
+- **`metrics.metricKey` label-value collision — latent, not
+  exploitable today.** `metricKey` (metrics.go:331) joins
+  `name,k=v` pairs with `,`/`=` unescaped, so two distinct label maps
+  produce the same key if a label *value* contains `,` or `=` (e.g.
+  `{dc:"a",rack:"b"}` vs `{dc:"a,rack=b"}`). Not reachable from current
+  producers (device IDs are `cpu-N`/`gpu-<render-node>`, provider names
+  are fixed literals), but `NewCounter`/`NewGauge` accept arbitrary
+  label values, so the collision exists on the API surface. A
+  length-prefix or escaping scheme would fix it; recorded for the next
+  metrics-API change rather than churning the wire format now.

@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 519 — duplication candidates recorded as ledger entries
+
+Recorded (not fixed, per CLAUDE.md rule 3 — consolidation is a contract
+decision) in `docs/CATEGORY_AUDIT.md`:
+
+- **`tui` truncator family**: `truncateToBudget` hard-cuts at `budget<4`
+  vs `shortenURL` returning the over-limit string intact — divergent
+  edge semantics, same class as Issue #3.
+- **`metrics.metricKey`**: label values join `,`/`=` unescaped —
+  collision possible only if a label value contains those characters;
+  unreachable from today's producers but live on the API surface.
