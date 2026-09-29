@@ -939,3 +939,17 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 532 — deadcode sweep: clean
+
+`deadcode -test ./...` (golang.org/x/tools, under go1.26.8): the sole
+unreachable function tree-wide is `parseFloat` in
+`internal/rates/fetcher_test.go` — already deleted by session 523
+(#605, still open). **Zero genuinely-dead code on master.**
+
+The plain `deadcode ./...` (main-only reachability) output is large
+but benign: every entry is either exported API surface
+(`btccrypto.Lookup`, `poolproto.Available`, `miner.MeetsTarget`),
+test-only helpers (`clock.NewFake` + methods), or the V2 dialer
+(`stratumv2.Dialer.*` + `session.start`) which is reachable only via
+the not-yet-wired V2 engine path — all already covered by tests.
