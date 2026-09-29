@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 481 — コミット済み `.claude/settings.local.json`（古いコードベース構成の死んだパスを指す130超の許可エントリ）を削除し、`.gitignore` でローカル設定の再混入を防止)
+
+* SRI 1.11.1（2026-07-22）の「Stratum V1 difficulty 変換で切り上げていた」不具合をエコシステム照合: Otedama の `miner.TargetFromDifficulty` は big.Float 256bit 精度の完全除算（切捨て誤差 <1 ULP）で、同クラスの不具合を持たないことを検証。
+* 監査スイープ: V1 通知パーサ（parseNotify/parseDifficulty/parseSetExtranonce）は全て境界済みで clean。`Makefile` の全ターゲットを棚卸し — 残る phantom は `docs-serve` の `golang.org/x/tools/cmd/godoc@latest` が `v0.1.0-deprecated` を指す非推奨モジュールである点のみ（起動はするが upstream 停止・将来 `@latest` 解決消失のリスク）。`.claude/settings.local.json` は `internal/mining`・`/mnt/c/...` WSL パス・実在しないスクリプト・未導入依存群を許可する旧構成の残留物で、コミット対象でないローカル設定ファイルのため削除＋`.gitignore` 追加。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
