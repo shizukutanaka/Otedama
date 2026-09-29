@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 500 — DEPLOYMENT.md: 実害2件（ジェネシスアドレス例・healthcheck 終了コード）+ i18n 未翻訳混入なし
+
+**Sweep.** (a) i18n カタログ10言語の未翻訳混入 → 全言語適切に翻訳済み（ru/ar/fr/de/pt 確認）で clean。(b) `.github/` 非ワークフロー: dependabot.yml の dead `automerge` キーは open #524 の担当域で重複せず。(c) doctor チェック数 = 17 件で CLAUDE.md と一致。(d) BIP-39 wordlist は init 時 SHA-256 検証済みの堅牢設計。(e) DEPLOYMENT.md の YAML 5ブロックをパース＋照合。
+
+**発見（2件訂正 — 後者は注意喚起）。**
+- **デプロイ例がジェネシスブロックの coinbase アドレスを実例として使用**（docker run・compose env・k8s Secret stringData の3箇所、計3回）→ 有効な bech32 でバリデーション通過＝コピー運用で報酬が使用不能アドレスへ送金される実害。失敗する `<your-bitcoin-address>` プレースホルダに置換（静かに動く最悪パターン → 叫んで止まる安全パターン）。
+- **compose healthcheck `otedama doctor` が Warn で exit 1** → 単一 pool 構成（「Pool diversity」が Warn する典型構成）でコンテナが unhealthy 扱い — distroless にはシェルがなく exit-2 ゲートに書き換えられないため、warn-as-degraded 意図の確認コメントを付記。
+
+**検証済み・変更なし。** Dockerfile `/usr/local/bin/otedama` パス一致・k8s マニフェストの liveness/readiness（/healthz・/readyz）は httpserver 実装と一致・ServiceMonitor の port 名は Deployment の port と一致・Secret の `stringData` 用法正しい。
