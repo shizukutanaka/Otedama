@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 529 — BENCHMARKS re-verified against go1.27.1/arm64
+
+- **Measured `BenchmarkHashHeader`**: ~112 ns/op, 0 allocs on
+  virtualized Apple M4 → ~8.9 MH/s/thread — added the missing M4 row
+  to the single-thread table (the existing rows predate M4).
+- **Frame-decode section corrected** (two stale claims surviving
+  session 484's pass): the cited `BenchmarkDecoder_ReadFrame` does not
+  exist in the tree (only `BenchmarkHmacSHA256_*` in `internal/stratum`)
+  so the reproduce command ran zero benchmarks; and "fuzzed
+  continuously in CI" is false (no fuzz job — KNOWN_LIMITATIONS §13;
+  fifth doc with this phantom). Table re-labeled as unverified
+  targets, not measurements.
