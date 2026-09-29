@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正)
+
+* 行1「Go 1.22+」→ go.mod は ≥1.24 必須（godebug tlsmlkem）。
+* 行11「SHA pinning」・行13「cosign 署名済み」→ 両方現状 fails と明記（uses: は全てタグ参照、release.yml は goreleaser 未呼出）。
+* CI gate 節を実態に書換 — 独立した `go vet`/`staticcheck`/`govulncheck`/5-OS ビルド行列は非存在（govet+staticcheck は golangci-lint 内で実行）、nightly ファズ・ベンチマーク比較ジョブも非存在。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

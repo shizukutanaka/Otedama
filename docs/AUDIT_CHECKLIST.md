@@ -20,7 +20,7 @@ If any row does not pass, open a security advisory.
 
 | # | Claim | Where to look | Verification |
 |---|-------|---------------|--------------|
-| 1 | Source builds without warnings on Go 1.22+ | `go build ./...` at repo root | Exit code 0, no output |
+| 1 | Source builds without warnings on Go 1.24+ | `go build ./...` at repo root | Exit code 0, no output — **Correction (session 488):** this row said "Go 1.22+" but `go.mod` requires ≥1.24 (`godebug tlsmlkem` fails to parse under older toolchains) |
 | 2 | Tests pass with the race detector | `go test -race -timeout 5m ./...` | Exit code 0 |
 | 3 | `go vet` is clean | `go vet ./...` | Exit code 0 |
 | 4 | `staticcheck` is clean | `staticcheck ./...` | Exit code 0 |
@@ -36,9 +36,9 @@ If any row does not pass, open a security advisory.
 |---|-------|---------------|--------------|
 | 9 | `go.sum` matches `go.mod` | `go mod verify` | All modules pass |
 | 10 | No known vulnerabilities in deps | `govulncheck ./...` | No high/critical findings |
-| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | Every `uses:` has `@<40-char-sha>` |
+| 11 | GitHub Actions pinned to SHA | `grep -r 'uses:' .github/workflows/` | **Correction (session 488): currently fails** — every `uses:` is a tag/branch ref (`@v4`, `@master`), none are SHA-pinned; this row is the target state, not the current state |
 | 12 | Dependabot enabled for Go, Actions, Docker | `.github/dependabot.yml` | Present, schedule: weekly |
-| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | `cosign sign-blob` invoked |
+| 13 | Release artefacts signed with cosign | `.github/workflows/release.yml` | **Correction (session 488): currently fails** — `release.yml` never invokes goreleaser or cosign; the `.goreleaser.yaml` `signs:` block is dead config and no signed artefact exists |
 | 14 | Runtime dependencies limited to audited set | `go mod graph \| awk '{print $2}' \| sort -u` | Only `golang.org/x/crypto`, `gopkg.in/yaml.v3`, stdlib |
 | 15 | No vendored code (vendored code is harder to audit) | `ls vendor/ 2>/dev/null` | No `vendor/` directory |
 
@@ -77,20 +77,24 @@ If any row does not pass, open a security advisory.
 ## CI gate summary
 
 This is the set of checks a PR must pass before merge. An auditor can
-verify these are enforced by inspecting `.github/workflows/ci.yml`:
+verify these are enforced by inspecting `.github/workflows/ci.yml`.
+**Correction (session 488):** the list below previously claimed standalone
+`go vet`, `staticcheck`, `govulncheck`, and a 5-OS/arch `go build` matrix —
+none of those jobs exist. `govet` and `staticcheck` run only as linters
+inside `golangci-lint run`; `govulncheck` is absent from all workflows
+(Makefile local target only). The accurate gate is:
 
-- `go vet ./...`
-- `staticcheck ./...`
-- `golangci-lint run`
-- `govulncheck ./...`
-- `gosec ./...`
-- `go test -race -timeout 5m ./...`
-- `go build ./...` on linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
+- `golangci-lint run` (Lint job; includes `govet` + `staticcheck` via `.golangci.yml`)
+- `gosec` (Security Scan job, SARIF upload)
+- `go fmt` check + `go mod tidy` check (Lint job)
+- `go test -v -timeout 10m -race ./...` on Linux/macOS; without `-race` on Windows
 
-Nightly additional checks:
-
-- 30-min fuzz of `FuzzDecodeHeader` and `FuzzDecoder_ReadFrame`
-- PR-time benchmark comparison vs main (5% regression threshold)
+Nightly additional checks: **none exist.** `FuzzDecodeHeader` and
+`FuzzDecoder_ReadFrame` are real fuzz targets in
+`internal/stratum/frame_fuzz_test.go`, but no workflow schedules them —
+`make fuzz` is local-only. The Benchmark job runs benchmarks and uploads
+`benchmark-results.txt` as an artifact; it does not compare against main
+or gate on a regression threshold.
 
 ---
 

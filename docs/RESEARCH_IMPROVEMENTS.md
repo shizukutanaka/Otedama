@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 489 — docs/AUDIT_CHECKLIST.md の監査人向け虚偽記述を訂正
+
+**Sweep.** `docs/AUDIT_CHECKLIST.md`（148行）全文精読 — 第三者監査人が「各行を検証せよ」と設計した文書ゆえに誤誘導の影響が大きい。全行を ci.yml/security.yml/.golangci.yml/go.mod/実装と照合。併せて `docs/API.md` 残節（HTTP エンドポイント・メトリクスカタログ・ウォレット形式・終了挙動・API 安定性）を照合 — 全 clean（env 変数表の欠落は open #517 の担当域）。
+
+**発見（4箇所訂正）。**
+- 行1「Go 1.22+ でビルド可」→ 虚偽: go.mod は実質 Go ≥1.24 必須（`godebug tlsmlkem` が旧ツールチェーンでパースエラー = CI の 1.22/1.23 マトリクス失敗の正体）。session 465 の GODEBUG_NOTES 訂正と同根拠。
+- 行11「GitHub Actions は SHA ピン留め」→ 虚偽: 全 `uses:` がタグ/ブランチ参照。行を「現状 fails・目標状態」と明記（#561 が solo-operations で直した虚偽と同クラス）。
+- 行13「リリース成果物は cosign 署名済み」→ 虚偽: `release.yml` は goreleaser/cosign を一切呼ばず `.goreleaser.yaml` の `signs:` は dead config（session 480 検証済み）。
+- 「CI gate summary」節を実態に書換: 独立 `go vet`/`staticcheck`/`govulncheck`/5-OS `go build` 行列は非存在（govet+staticcheck は `.golangci.yml` 経由で golangci-lint 内実行のみ）。実際のゲート: golangci-lint・gosec・gofmt・go mod tidy・test -race（Windows 除く）。「Nightly 30分ファズ + PR ベンチマーク比較(5%)」→ 両ジョブ非存在（ファズ関数名 FuzzDecodeHeader/FuzzDecoder_ReadFrame は実在するが `make fuzz` ローカルのみ、ベンチは artifact アップロードのみ — session 484 検証済み）。
+
+**検証済み・変更なし。** 行2-10/14-30 の残クレーム（vet/staticcheck クリーン・SPDX・go mod verify・Dependabot・wallet 0600・AES-256-GCM・Noise NX・ChaCha20-Poly1305・ADR/COC/SECURITY.md 存在）は実装と一致。行22 の scrypt 行（N=32768 記載・実際は N=2^17=131072・seedstore.go 所在）は虚偽だが closed #485 の担当域のため未修正として記録のみ。検証スクリプトは `|| true` で tolerant 設計、妥当。
