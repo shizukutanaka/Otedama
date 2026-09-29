@@ -939,3 +939,16 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 483 — skills/*.md の実在しない参照・虚偽 CI 記述を一括訂正
+
+**Sweep.** `skills/` 配下の全 markdown を機械照合（コマンド・パス・ビルドタグの実在性、CI ワークフローとの機能一致）し、6件の stale 記述を発見・訂正。open #513 が担当した領域（phantom テスト対象・v4.0 スコープ記述）との重複なし。
+
+**発見（全件訂正、検証済み）。**
+- `skills/tdd.md` 3件: (a) ファズテスト「CI上で継続的に30秒から数分間実行」→ `.github/workflows/` に `fuzz` の参照ゼロ（test.yml は benchmark のみ）。`make fuzz` ローカル実行を正しく記述。(b) 統合テスト「`//go:build integration` タグで分離」→ 宣言ファイルゼロ。実際の区別は `testing.Short()` ゲート。(c) E2Eテスト「`//go:build e2e` タグ・`make test-e2e`」→ スイート未実装・ターゲット削除済み・タグ宣言なし。
+- `skills/security-audit.md` 3件: (a) ファズ「CIで継続的に実行」→ 同上。(b) govulncheck「CIで毎回実行」→ CI 非存在（Makefile `security`/`audit` ローカルターゲットのみ — session 482 の ROADMAP 訂正と同じ虚偽クラス）。(c) 「Web管理インターフェース（`web/`配下）」→ CLAUDE.md のアーキテクチャマップで「存在しないパス（作成禁止）」と明示される phantom 参照。
+- `skills/release-procedure.md` 2件: `otedama migrate-from-v2` phantom コマンド（#523 が SECURITY.md、#543 が Makefile で同クラスを修正した残件 — dispatch に存在せず）→ `docs/MIGRATING-FROM-V2.md` 手順に言い換え。「E2Eテストの全てが通過」→ スイート未実装と訂正。
+
+**正しいと検証済みの記述（変更なし）。** CodeQL/Semgrep は security.yml に実在。カバレッジは test.yml が Codecov へアップロード（回帰警告は Codecov 側機能）。`make fuzz`/`make test-integration`/`make security`/`make audit` 全ターゲット実在。code-review.md・quality-pass-*.md・fuzz-runbook.md は s245/s253 訂正済み or スナップショット記録として正当。
+
+**帰納。** 同じ虚偽クラス（「X は CI で実行される」→ CI 非存在）が ROADMAP・tdd.md・security-audit.md の3箇所に分布 — ドキュメント記述の CI 実態照合は継続監査が必要。
