@@ -939,3 +939,20 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 527 — first end-to-end binary smoke
+
+Built the real binary under go1.27.1 and exercised the user-facing
+surface (everything prior was library-level testing):
+
+- `otedama version` — prints version + toolchain + arch correctly
+  (`unknown` commit/build is the documented no-ldflags behavior).
+- `otedama completion bash` — emits a working script.
+- `otedama doctor` — all 17 checks run (119ms), correct pass/fail/warn/
+  skip counts, exit code 2 with failures per the documented 0/1/2
+  contract. (Pool-reachability fail is sandbox DNS, not a defect.)
+- `otedama config show` / `config validate` — resolved config with
+  origins prints; validate fails with exit **78** exactly per the
+  §2.1 EX_CONFIG contract.
+
+The documented CLI contract holds end-to-end on the built artifact.
