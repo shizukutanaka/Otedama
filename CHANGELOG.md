@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 531 — coverage measured)
+
+- `docs/RESEARCH_IMPROVEMENTS.md`: per-package `go test -cover`
+  results — all 24 packages green, median ~97%; only `cmd/otedama`
+  (88%) below the 90% intent, its uncovered residue being the
+  integration-only `cmdRun` live path already exercised by the
+  binary E2E smokes.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
