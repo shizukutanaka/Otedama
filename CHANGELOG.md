@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 516 — doctor/config read; full tree complete)
+
+- **`internal/doctor` + `internal/config` read end-to-end — every
+  non-test `.go` file has now been audited.** doctor's 17 checks
+  (concurrency, exit codes, bounded body drain, fingerprint/masking)
+  verified; config's four-layer resolution + Origins + Validate
+  verified. Remaining items are owned by open PRs (non-finite env
+  floats → #492; pool-URL host/port strictness → #486).
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
