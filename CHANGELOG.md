@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 517 — test-code pass + ecosystem recheck)
+
+- **`go test -race ./...` green on all 23 packages** (go1.26.8);
+  33 K lines of test code mechanically audited — skips environmental,
+  error-swallows fixture-scoped, no tautological assertions. Ecosystem
+  recheck: SRI still at v1.12.0, go1.26.8 confirmed current; toolchain
+  bump remains closed-PR-owned (#369).
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
