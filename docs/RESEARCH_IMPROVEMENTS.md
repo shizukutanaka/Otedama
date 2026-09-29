@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 487 — docs/architecture.md の免責ブロックに残存乖離2件を追記
+
+**Sweep.** `docs/architecture.md`（112行）全文精読。session 243 の免責ブロックが主要乖離（provider 単数形・2系統収益・HAL ドライバ・lightning・observability・API層）を網羅済みだが、2件の未免責の虚偽主張を発見・免責へ追記。
+
+**発見（日英両免責に追記）。**
+- `internal/plugin/`・`pkg/plugin/`・`internal/api/`・`internal/auth/` の非実在が未免責 — プラグイン基盤・gRPC/REST API・ZKP 認証は全て未実装で、`internal/auth/` は CLAUDE.md 禁止パス（v4.0 スコープ）。
+- 「SRI（Stratum Reference Implementation）のGoバインディングを統合利用」（§44）および「自前実装ではなくSRIを選択」（§100）の理由付けは**実態と逆** — SRI（`stratum-mining/stratum`）は Rust 実装で Go バインディングは存在せず、`internal/stratum` は本プロジェクトの自前フレーム/コーデック/Noise 実装。LDK についても lightningdevkit のメンテ済み言語バインディング（Swift/Kotlin/Java/TypeScript 等）に Go は含まれない。
+
+**検証済み・変更なし（免責が既にカバー）。** providers 複数形、収益源4系統の内2系統未実装、asic/cuda/rocm ドライバ非実在、LDK 統合・チャネル管理・自動決済・LSP 未実装、observability パッケージ非実在、API 層非実在 — 全て session 243 免責済み。
