@@ -939,3 +939,10 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 499 — go.mod 依存選定理由コメント（CLAUDE.md ルール遵守）+ skills/docs 最終棚卸し
+
+**Sweep.** `docs/` 全ファイルの精読が本ラウンドで完結（adr/README 索引は11件・status 一致で clean）。残軸として (a) TODO/FIXME/XXX/HACK マーカー掃討 → **実コード 0件**（clean）、(b) skills/ 未精読3ファイル（code-review・quality-pass×2）→ 過去セッション記録で status は依然正確、(c) CLAUDE.md「go.mod コメントに追加理由と選定基準」遵守状況。
+
+**発見（1件対応）。**
+- **`go.mod` に依存根拠コメントが皆無** → CLAUDE.md 外部依存管理ルール違反状態を修正: `x/crypto`（scrypt — ウォレット KDF、BSD-3-Clause、ADR-003 予算内）と `gopkg.in/yaml.v3`（YAML デコーダ、MIT/Apache、上流 archived → go.yaml.in 移行は別途追跡中 ※open #444）に記録。`x/crypto` の実使用箇所は scrypt 単一と確認、`go mod verify` 緑。

@@ -17,7 +17,14 @@ godebug (
 )
 
 require (
+	// Rationale (CLAUDE.md dependency rule): stdlib has no scrypt
+	// implementation; required for the wallet KDF (AES-256-GCM key
+	// derivation in internal/lightning). BSD-3-Clause, actively
+	// maintained by the Go team. ADR-003 budget: stdlib + x/crypto + yaml.
 	golang.org/x/crypto v0.23.0
+	// Rationale: stdlib has no YAML decoder; required for the layered
+	// config file (internal/config). MIT/Apache-2.0. Upstream repo is
+	// archived; the go.yaml.in/yaml/v3 migration is tracked separately.
 	gopkg.in/yaml.v3 v3.0.1
 )
 
