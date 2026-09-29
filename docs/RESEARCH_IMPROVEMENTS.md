@@ -268,7 +268,9 @@ arXiv grounding (collected sessions 40–41 and here):
 
 1. ✅ **Subcommand structure** (run/version/config/service/doctor) with
    per-command `--help`; all 11 covered by tests.
-2. ✅ **Background-service install** (launchd/systemd/Task Scheduler).
+2. ✅ **Background-service install** (launchd/systemd/Windows SCM via `sc.exe`
+   — **correction session 486:** this item said "Task Scheduler"; nothing
+   invokes `schtasks.exe`, the Windows path is an SCM registration).
 3. ✅ **Structured logging** (text/JSON via slog-style adapter).
 4. ✅ **`doctor` self-diagnostics**.
 5. ✅ **`--version --json` machine-readable output** for CI/monitoring —
@@ -939,3 +941,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 486 — docs/SPECIFICATION.md §2/§7 の stale 記述を訂正
+
+**Sweep.** `docs/SPECIFICATION.md`（252行）の非メトリクス節を `internal/config/config.go`・`internal/daemon/service.go`・`internal/engine/run.go`・`.github/ISSUE_TEMPLATE/` と照合。
+
+**発見（2箇所訂正 + 帳簿1行）。**
+- §2 サービス行「systemd/launchd/Task Scheduler」→ Windows 経路は Task Scheduler（`schtasks.exe`）ではなく SCM の `sc.exe create` — 実装と不一致。同じ phantom が RESEARCH_IMPROVEMENTS Category 7 行2にも存在し訂正。
+- §7 (3)「engine does not yet route through the `poolproto` abstraction」→ stale: V1 セッションは session 91 から `poolproto.DialURL`+Session 経由（KNOWN_LIMITATIONS §3 自体が RESOLVED と宣言）— 実際の残ギャップは V2 native 経路のみ（run.go:609 が「V2 poolproto dialer completes Step 3b」を明示）。
+
+**正しいと検証済みの記述（変更なし）。** §2 コマンド表の全動詞・`--json`・exit-code 契約（0/1/64/78）、§3.1 スキーマ表の全フィールド（config 構造体と完全一致）、§3.2 優先順位・数値 env の malformed 報告、§4 ライフサイクル（share target 採用・failover 分離・backoff）、§5 フレームフォーマット・MaxFrameSize 事前検査・P-256 注記、§6 メトリクスカタログ（CI 整合ガード済み）、ISSUE_TEMPLATE（doctor 出力フォーマット `[✓]` 一致・必須項目妥当）。

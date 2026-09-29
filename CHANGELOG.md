@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed (session 486 — docs/SPECIFICATION.md の stale 記述2件を訂正)
+
+* §2 サービス行「Task Scheduler」→ 実際は `sc.exe` による SCM 登録（RESEARCH_IMPROVEMENTS Category 7 の同 phantom も併せて訂正）。
+* §7 (3)「engine does not yet route through poolproto」→ V1 は session 91 から DialURL 経由で解決済み（残は V2 native のみ）。
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
