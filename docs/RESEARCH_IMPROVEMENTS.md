@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 507 — skills/code-review.md の stale 参照2件（訂正）
+
+**Sweep.** パッケージ doc コメント網羅・main.go usage/exit-code 表と実 dispatch 照合の後、最後の未精読 skill ファイル code-review.md を精読。
+
+**対応（2件 — 訂正）。**
+1. **`pkg/` 参照**: ドキュメントチェックが「公開API（`pkg/`配下）」を挙げるが `pkg/` はアーキテクチャマップの作成禁止パスで存在し得ない — export された型・関数に言い換え（session 253 が直したパス phantom の残件）。
+2. **BOLT/LDK 観点**: Lightning レビューが「BOLT 仕様準拠・LDK バージョンアップ」を挙げるが LDK は非採用（出荷は BIP-39/scrypt/AES-256-GCM ウォレット）— 現行範囲に訂正し BOLT/LDK は ADR-007 着工まで適用外と明記（session 506 の competitive-analysis と同 drift クラス）。
+
+**検証 clean**: 全 internal/ パッケージに `// Package` doc（`package main` は `// Command` 規約適合）、main.go の usage 例と exit-code 表（0/1/64/78・doctor 0/1/2）が実 FlagSet・dispatch・doctor.go と一致。
