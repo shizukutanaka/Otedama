@@ -939,3 +939,13 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 505 — DEPLOYMENT.md の K8s 例に未解決参照2件（マニフェスト追記）
+
+**Sweep.** リポジトリメタ整合（gitignore 追跡逸脱・dependabot エコシステム・compose 参照）＋ DEPLOYMENT.md の埋め込み YAML を構造検証。
+
+**発見（2件 — 修正）。**
+1. **`otedama-data` PVC 未定義**: Deployment が `persistentVolumeClaim.claimName` を参照するがドキュメントに PVC マニフェストが存在せず、コピー運用で pod が mount 失敗。PVC を追記。
+2. **ServiceMonitor がセレクトする Service が非存在**: `app: otedama` を select する ServiceMonitor はあるが Service がなくスクレイプ対象ゼロ — ServiceMonitor は pod ではなく Service をセレクトするため必須。Service を追記（port 名 `metrics` を ServiceMonitor の `endpoints[].port` と一致、targetPort は pod の `metrics` ポートを指す）。
+
+**検証 clean**: gitignore 追跡逸脱ファイル 0件、dependabot エコシステム3種（gomod/github-actions/docker）整合、全埋め込み YAML 構造 parse 通過、Deployment の probe/securityContext/label 整合。
