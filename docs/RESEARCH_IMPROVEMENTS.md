@@ -939,3 +939,15 @@ sigstore/cosign + slsa.dev; OpenSSF Scorecard + osv-scanner;
 prometheus/client_golang v1.23 + OpenMetrics 1.0 + Prometheus naming practices;
 Go vuln advisories CVE-2025-22871, GO-2025-3563. All arXiv IDs verified against
 the arXiv listing; all API endpoints against current vendor documentation.*
+
+## Session 493 — README.md の phantom/陳腐クレーム4件を訂正
+
+**Sweep.** `README.md`（157行・バッジ〜フッター全節）を実コード・リモートブランチ・release.yml と照合。
+
+**発見（4件訂正）。**
+- **「`releases/latest/download/install.sh` でインストール」→ 404**: `release.yml` がアップロードするのは `otedama-<os>-<arch>.tar.gz` のみで install.sh はリリース資産として存在しない → `raw.githubusercontent.com` の実 URL に訂正。
+- **「v2.1.9 は `legacy-v2` ブランチに保全済み・2026-10 まで修正提供」→ phantom ブランチ**: `git ls-remote` で同ブランチ非実在 → 「保全が計画」に訂正（CLAUDE.md アーキテクチャマップ内の同趣旨記述も phantom — メンテナ自身のファイルのため帳簿記録のみ）。
+- **「Windows: Task Scheduler」×2箇所** → 実装は `sc.exe` SCM 登録（#568 が SPECIFICATION.md で直した phantom の README 残件）。
+- **バッジ「Go 1.22+」・要件「Go 1.22以上」** → `toolchain go1.24.0` + `godebug tlsmlkem` で実効 ≥1.24（#571 が AUDIT_CHECKLIST で直した同クレームの README 残件）。
+
+**検証済み・変更なし。** 機能一覧の「未実装」正直列挙（署名バイナリ・ASIC・ZKP等）・コマンド表（`completion` 行欠落は open #557 担当域）・market claims・i18n 部分は正確。
