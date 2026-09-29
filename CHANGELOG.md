@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 526 — fuzz smoke verification)
+
+- Ran both in-tree fuzz targets for 30s each under go1.27.1 (CI has no
+  fuzz job): `FuzzDecoder_ReadFrame` ~618K execs and `FuzzDecodeHeader`
+  ~3.97M execs, zero crashes. The protocol-parse boundary holds
+  against random input.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。
