@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation & audit (session 521 — ecosystem recheck)
+
+- ADR-009: SV2 adoption trajectory (~15–20% hashrate est.; WG forecast
+  40–60% by end-2026), `stratum` vs `sv2-apps` repo landscape
+  clarified, single-port SV1/SV2 auto-detection pattern noted.
+  Japanese-source recheck: no drift.
+
 ### Fixed (session 254 — First Principles Thinkingで過不足機能を洗い出し改善: **リカバリフレーズがユーザーに一度も表示されていなかった**——非カストディの中核的約束の未履行を是正)
 
 **第一原理からの導出.** CLAUDE.mdの製品定義（不変）は「非カストディ」である。

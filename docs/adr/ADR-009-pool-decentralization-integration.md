@@ -614,6 +614,25 @@ Even with the Lightning embedded-node cut, the schedule is tight. **The realisti
 
 ---
 
+## Ecosystem update (session 521, September 2026)
+
+- **Adoption trajectory:** third-party trackers put SV2 transport at an
+  estimated 15–20% of network hashrate in early 2026 (mostly for
+  encryption alone), with the SRI working group projecting 40–60% by
+  end of 2026 as V2-capable firmware becomes the ASIC default — a
+  forecast, not a measurement. The seven-pool working-group commitment
+  (May 2026) remains the load-bearing datapoint.
+- **Repository landscape clarified:** `stratum-mining/stratum` (SRI
+  monorepo, Rust) and `stratum-mining/sv2-apps` (application layer —
+  translator, JDC, sv2-ui) coexist; the JD tooling referenced by this
+  ADR lives in sv2-apps.
+- **Community pattern noted:** `cbyam/solo-pool-rs` auto-detects
+  SV1-vs-SV2 per connection on a single listen port from the first
+  frame byte — an existence proof that the two protocols can share a
+  transport surface, should Otedama ever expose a listening endpoint.
+
+---
+
 ## References
 
 - Stratum V2 Working Group expansion (May 7, 2026):
